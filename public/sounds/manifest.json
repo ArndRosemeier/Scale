@@ -485,5 +485,21 @@
     "loop": false,
     "gain": 0.8,
     "description": "woman crying help (procedural, tools/synthCrime.mjs)"
+  },
+  "metro_run": {
+    "files": [
+      "metro_run.wav"
+    ],
+    "loop": true,
+    "gain": 0.7,
+    "description": "inside a running metro carriage: rumble, wheel hiss, clack-clack over rail joints (procedural, tools/synthMetro.mjs)"
+  },
+  "metro_pass": {
+    "files": [
+      "metro_pass.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "oncoming metro train rushing past in the tunnel (procedural, tools/synthMetro.mjs)"
   }
 }

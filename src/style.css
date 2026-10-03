@@ -168,6 +168,9 @@ body.looking #crosshair { display: block; }
 #map .map-pop button { width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: #d8b56a; color: #1a1408; font-weight: 600; font-size: 13px; cursor: pointer; }
 #map .map-pop button:hover { background: #e8c57a; }
 #map .map-pop button small { font-weight: 500; opacity: 0.75; }
+#map .map-pop button + button { margin-top: 6px; background: #34404d; color: #e8ecf0; }
+#map .map-pop button + button:hover { background: #3f4d5c; }
+#map .map-key .pin { display: inline-block; width: 10px; height: 10px; margin: 0 2px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #e8483b; box-shadow: 0 0 0 1.5px #fff; }
 @media (max-width: 760px) { #map .map-legend { display: none; } #map .map-close { right: 16px; } #map .map-help { display: none; } }
 #minimap { position: fixed; right: 16px; bottom: 16px; width: 196px; height: 196px; border-radius: 14px; border: 2px solid rgba(20, 26, 34, 0.85); box-shadow: 0 6px 24px rgba(0,0,0,.35); z-index: 5; cursor: pointer; }
 /* Start screen: game mode */
@@ -205,7 +208,7 @@ body.looking #crosshair { display: block; }
 .pslot .cd { position: absolute; inset: 0; background: conic-gradient(rgba(8, 11, 15, 0.72) calc(var(--f, 0) * 360deg), transparent 0); pointer-events: none; }
 .pslot.cooling .ic { opacity: 0.55; }
 /* Toasts */
-#toasts { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 12; pointer-events: none; }
+#toasts { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 12; pointer-events: none; }
 .toast { padding: 8px 16px; border-radius: 18px; background: rgba(15, 20, 26, 0.86); border: 1px solid #3a4654; color: #e3e8ee; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.3); opacity: 0; transform: translateY(-8px); transition: opacity .3s, transform .3s; max-width: min(640px, 90vw); text-align: center; }
 .toast.in { opacity: 1; transform: none; }
 .toast.out { opacity: 0; transform: translateY(-6px); }
@@ -325,9 +328,36 @@ body.looking #crosshair { display: block; }
 #hurtvig { position: fixed; inset: 0; pointer-events: none; z-index: 3; opacity: 0; background: radial-gradient(ellipse at center, rgba(120,0,0,0) 55%, rgba(150,0,0,0.75) 100%); transition: opacity .15s; }
 #kofade { position: fixed; inset: 0; pointer-events: none; z-index: 20; background: #050506; opacity: 0; transition: opacity 1.2s ease; }
 #kofade.on { opacity: 0.94; }
-.crimecaret { position: fixed; left: 0; top: 0; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid rgba(255, 70, 58, 0.85); filter: drop-shadow(0 0 2px rgba(0,0,0,0.8)); pointer-events: none; z-index: 4; display: none; will-change: transform; }
+/* Tag over an active criminal (CrimeHud): pulsing red chevron and a health bar, scaled by distance. */
+.crimetag { position: fixed; left: 0; top: 0; width: 44px; display: none; flex-direction: column; align-items: center; gap: 3px; pointer-events: none; z-index: 4; will-change: transform; transform-origin: 50% 100%; filter: drop-shadow(0 0 2px rgba(0,0,0,0.85)); }
+.crimetag .chev { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 13px solid #ff463a; animation: crimepulse 0.9s ease-in-out infinite alternate; }
+.crimetag .bar { width: 40px; height: 5px; border-radius: 3px; background: rgba(20, 8, 8, 0.75); box-shadow: 0 0 0 1px rgba(255, 90, 80, 0.7); overflow: hidden; }
+.crimetag .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ff3b30, #ff7a5c); }
+@keyframes crimepulse { from { transform: translateY(0) scale(1); opacity: 0.85; } to { transform: translateY(-3px) scale(1.12); opacity: 1; } }
 #tmark i { border-color: var(--con, rgba(255, 236, 196, 0.92)); }
 #tmark b { border-top-color: var(--con, rgba(255, 236, 196, 0.92)); }
 #map .map-key .alert.crime { background: #ff3b30; color: #fff; }
 #map .map-key .crimeheat { display: inline-block; width: 14px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, rgba(230,140,40,0.35), rgba(240,40,30,0.5)); vertical-align: -1px; }
 .pw-rep { display: block; margin-top: 4px; color: #a9b4bf; }
+
+/* Compass strip (src/ui/Compass.ts): heading ticks, nearby points of interest, the player's marker. */
+#compass { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); width: min(560px, 62vw); height: 44px; overflow: hidden; z-index: 5; pointer-events: none;
+  background: linear-gradient(90deg, rgba(15,20,26,0) 0%, rgba(15,20,26,0.62) 14%, rgba(15,20,26,0.62) 86%, rgba(15,20,26,0) 100%); border-radius: 6px; font: 600 11px/1 system-ui, sans-serif; color: #c9d3dd; }
+#compass .tick { position: absolute; top: 0; width: 1px; height: 6px; background: rgba(220,228,236,0.5); }
+#compass .tick.major { height: 9px; background: rgba(220,228,236,0.8); }
+#compass .lbl { position: absolute; top: 11px; transform: translateX(-50%); letter-spacing: 0.04em; }
+#compass .lbl.n { color: #ff6b5e; font-weight: 800; }
+#compass .caret { position: absolute; left: 50%; bottom: 0; width: 0; height: 0; transform: translateX(-50%); border: 5px solid transparent; border-bottom-color: #e8ecf0; }
+#compass .poi { position: absolute; top: 22px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+#compass .poi i { display: block; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9); }
+#compass .poi.alert i { width: 11px; height: 11px; font: 800 8px/11px system-ui, sans-serif; color: #1a1408; text-align: center; font-style: normal; }
+#compass .poi.core i { border-radius: 1px; transform: rotate(45deg); width: 8px; height: 8px; }
+#compass .poi.metro i { width: 11px; height: 11px; border-radius: 2px; font: 800 8px/11px system-ui, sans-serif; color: #fff; text-align: center; font-style: normal; }
+#compass .poi.pin { top: 12px; }
+#compass .poi.pin i { width: 12px; height: 12px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #e8483b; }
+#compass .poi.pin b { margin-top: 3px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
+#compass .poi.pin.edge i { opacity: 0.75; }
+#compass .poi.goal { top: 13px; }
+#compass .poi.goal i { width: 13px; height: 13px; font: 800 9px/13px system-ui, sans-serif; }
+#compass .poi.goal b { margin-top: 3px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
+#map .map-key .alert.back { background: #4cd964; }

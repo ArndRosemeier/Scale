@@ -43,7 +43,7 @@ import { Traffic, VState, VehicleObstacles, type Vehicle, type VKind } from '../
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
-import { RagdollSystem } from '../physics/ragdoll/RagdollSystem';
+import { RagdollSystem, type CarBox } from '../physics/ragdoll/RagdollSystem';
 import { Birds } from '../fauna/Birds';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
@@ -54,6 +54,7 @@ import { terrainExtent } from '../world/boundary';
 import { FlightFX } from '../player/FlightFX';
 import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
+import { Compass } from '../ui/Compass';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -63,7 +64,7 @@ import { Progress } from './abilities/Progress';
 import { AbilitySystem } from './abilities/AbilitySystem';
 import { setAimCursor } from './aimRay';
 import { PowerFx } from './abilities/PowerFx';
-import { ABILITY } from './abilities/defs';
+import { ABILITY, ABILITIES } from './abilities/defs';
 import { PowerCores } from './abilities/PowerCores';
 import { planCoreSites, LOOT_INFO } from './abilities/cores';
 import { Deeds } from './Deeds';
@@ -120,6 +121,7 @@ export class Game {
   flightFx!: FlightFX;
   menu!: Menu;
   map!: GameMap;
+  compass!: Compass;
   progress!: Progress;
   abilities!: AbilitySystem;
   powerFx!: PowerFx;
@@ -191,6 +193,7 @@ export class Game {
     this.collision = new Collision(this.world, this.destruction, this.streamer);
     this.underground = new Underground(macro, this.terrain, tex, (x, z) => this.terrain.height(x, z) + this.world.surfaceOffset(x, z));
     this.collision.under = this.underground;
+    this.underground.onTrainSound = (id, x, y, z, gain) => this.audio.play(id, x, y, z, gain, 1, 10, this.renderer.camera.position);
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
     this.renderer.scene.add(this.underground.group);
@@ -318,6 +321,7 @@ export class Game {
     this.ragdolls = new RagdollSystem({
       physics: this.physics, ground: this.future.ground, peds: this.peds, crowd: this.crowd, player: this.player,
       groundAt: (x, y, z) => this.collision.groundAt(x, z, y, 0.3),
+      cars: () => this.carBoxes(),
     });
     const onLand = this.player.events.onLand;
     this.player.events.onLand = (x, y, z, e, h) => {
@@ -343,6 +347,7 @@ export class Game {
     });
     // The map listens to the skyline batches (building boxes, local streets, entrances for the whole city).
     this.map = new GameMap(this);
+    this.compass = new Compass(this);
     this.skyline.start(this.player.pos.x, this.player.pos.z);
     this.flightFx = new FlightFX(this.dust);
     this.renderer.scene.add(this.flightFx.group);
@@ -465,6 +470,7 @@ export class Game {
     this.T('crime', () => this.crime.update(dt));
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
+      this.rideFx(dt);
       this.updateHoles();
       this.manholeKey();
     });
@@ -502,7 +508,7 @@ export class Game {
       this.hud.update(dt);
       this.powerHud.update();
       this.targetHud.update();
-      this.T('map', () => this.map.update(dt));
+      this.T('map', () => { this.map.update(dt); this.compass.update(); });
       this.input.endFrame();
     }
   }
@@ -703,6 +709,12 @@ export class Game {
     this.deeds = new Deeds(this.peds, this.reactions, this.player, this.progress);
     this.deeds.hooks = {
       toast,
+      reachable: (a) => {
+        if (a.inside) return false;
+        const g = this.world.groundHeight(a.x, a.z, a.y + 0.5);
+        if (Math.abs(a.y - g) > 1.2) return false;
+        return !this.terrain.isWater(a.x, a.z, 0) || this.world.bridgeDeck(a.x, a.z) > -Infinity;
+      },
       sound: (id, x, y, z, g) => this.audio.play(id, x, y, z, g, 1, 8, cam.position),
       markers: (m) => this.map.setMarkers('deeds', m),
     };
@@ -716,10 +728,15 @@ export class Game {
       this.cores = cores;
       this.renderer.scene.add(cores.group);
       cores.onMarkers = (m) => this.map.setMarkers('cores', m);
-      cores.onDiscover = () => toast('You sense a <b>power core</b> nearby — it is marked on your map', 'info');
+      // Say what a core gives, how to take it, and (before any power uses energy) why energy matters.
+      cores.onDiscover = (site) => {
+        const L = LOOT_INFO[site.loot];
+        toast(`You sense a <b>${L.name}</b> nearby (${L.text}) — walk into its glow to take it. It is marked on your map`, 'info', 8000);
+      };
       cores.onCollect = (site, spot) => {
         const L = LOOT_INFO[site.loot];
-        if (site.loot !== 'karma') toast(`<b>${L.name}</b> collected — ${L.text}`, 'core');
+        const usesEnergy = ABILITIES.some((d) => d.kind === 'active' && d.id !== 'punch' && this.progress.unlocked(d.id));
+        if (site.loot !== 'karma') toast(`<b>${L.name}</b> collected — ${L.text}${usesEnergy ? '' : '. Powers you buy (<b>P</b>) run on energy'}`, 'core', 7000);
         this.audio.chime('core', 0.7);
         this.dust.burst(spot.x, spot.y + 1, spot.z, 24, 0.6, 3, 1.2, 1.2, new THREE.Color(L.color).multiplyScalar(3), 0, 0.6);
         this.abilities.energy = this.abilities.maxEnergy;
@@ -810,9 +827,8 @@ export class Game {
     const p = this.player.pos;
     // Manholes are climbed from the sewers only (not from metro halls, passages or trains).
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
-    if (!under && this.underground.isUnder(p.x, p.y + 0.5, p.z)) return null;
-    const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);
-    if (!m) return null;
+    const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
+    if (!m) return this.crime?.deeds.putDownHint() ?? null;
     if (under) return 'Manhole above — press <b>E</b> to climb out';
     if (this.player.height >= 2.4) return 'A manhole — you are too big to fit through';
     return 'Manhole — press <b>E</b> to open it and climb down into the sewer';
@@ -825,9 +841,9 @@ export class Game {
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     const p = this.player.pos;
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
-    if (!under && this.underground.isUnder(p.x, p.y + 0.5, p.z)) return;
-    const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);
-    if (!m) return;
+    const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
+    // Nothing else to do with E: put down what you carry (a rescued cat, a found wallet).
+    if (!m) { if (this.crime.deeds.putDown()) this.input.pressed.delete('KeyE'); return; }
     if (under) {
       const g = this.world.groundHeight(m.x, m.z);
       p.set(m.x + 0.8, g + 0.2, m.z);
@@ -839,6 +855,38 @@ export class Game {
       this.props.crush(m.x, m.z, 0.2); // the lid comes off
       p.set(m.x, p.y, m.z);
       this.audio.play('metal_bend', p.x, p.y, p.z, 0.5, 1.4, 4, this.renderer.camera.position);
+    }
+  }
+
+  /**
+   * Riding the metro: the running sound (faster with the speed), a knock through the car at every
+   * rail joint, a constant fine rattle, and a lurch when the train pulls away or brakes.
+   */
+  private rideLoop: ReturnType<Audio['loop']> = null;
+  private rideDist = 0;
+  private rideFx(dt: number): void {
+    const r = this.underground.riding, cam = this.renderer.camera.position;
+    if (!r) {
+      this.rideLoop?.set(cam.x, cam.y, cam.z, 0);
+      this.rideDist = 0;
+      return;
+    }
+    this.rideLoop ??= this.audio.loop('metro_run', 6);
+    const f = clamp(r.speed / 16, 0, 1.2);
+    this.rideLoop?.set(cam.x, cam.y, cam.z, 0.2 + 0.8 * Math.min(1, f), 0.55 + 0.45 * f);
+    const before = this.rideDist;
+    this.rideDist += r.speed * dt;
+    // Rail joints every 18 m: the front bogie, then the rear one 2.5 m later.
+    for (const off of [0, 2.5]) if (r.speed > 3 && Math.floor((this.rideDist - off) / 18) !== Math.floor((before - off) / 18)) this.camRig.addShake(0.3 + 0.15 * f);
+    this.camRig.addShake(0.35 * f * dt + Math.min(0.5, Math.abs(r.accel) * 0.25) * dt * 2);
+  }
+
+  /** Cars as boxes for the ragdolls (wrecks are physical bodies already). */
+  private *carBoxes(): Generator<CarBox> {
+    for (const list of [this.traffic.vehicles, this.parkedList]) for (const v of list) {
+      if (this.vehicles.extra(v).body) continue;
+      const h = v.kind === 'bus' || v.kind === 'truck' ? 3.0 : v.kind === 'van' || v.kind === 'delivery' || v.kind === 'shuttle' ? 2.3 : v.kind === 'suv' || v.kind === 'pickup' ? 1.8 : 1.5;
+      yield { ref: v, x: v.x, y: v.y, z: v.z, yaw: v.yaw, length: v.length, width: v.width, height: h };
     }
   }
 

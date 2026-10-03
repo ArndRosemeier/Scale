@@ -4,7 +4,7 @@
  */
 import {
   MAX_RANK, PUNCH_IMPULSE, JUMP_HEIGHT, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE, SHOCK_COOLDOWN, SHOCK_COST,
-  FLIGHT_SPEED, FLIGHT_CRUISE, FLIGHT_BOOST, SIZE_RANGE, JUMP, DASH, SPEED_TOP,
+  FLIGHT_SPEED, FLIGHT_CRUISE, flightBoost, SIZE_RANGE, JUMP, DASH, SPEED_TOP,
   LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, FIRE_COOLDOWN, NOVA, NOVA_RADIUS, NOVA_FREEZE, NOVA_COOLDOWN,
   ICE, ICE_WIDTH, ICE_LIFE, BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, BOLT_COOLDOWN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE,
   QUAKE_COOLDOWN, GUST, GUST_RADIUS, GUST_TIME, GUST_COOLDOWN, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
@@ -12,7 +12,7 @@ import {
 } from './tuning';
 import { wallBreakShare, windowShatterShare, WALL_CLASSES, type WallClass } from '../../destruction/wallStrength';
 
-export type AbilityId = 'strength' | 'superJump' | 'speed' | 'shockwave' | 'flight' | 'size'
+export type AbilityId = 'punch' | 'strength' | 'superJump' | 'speed' | 'shockwave' | 'flight' | 'size'
   | 'laser' | 'fireWave' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink';
 
 /** Ids of earlier versions (saved progress, hotbars) -> their current power. */
@@ -110,7 +110,14 @@ const cd = (s: number) => `${s} s cooldown`;
 
 export const ABILITIES: AbilityDef[] = [
   {
-    id: 'strength', name: 'Super strength', kind: 'passive', group: 'body', trigger: 'none', maxRank: MAX_RANK, key: 'Left click',
+    // Everyone can punch: always rank 1 and free (Progress.rank); Super strength makes it hit harder.
+    id: 'punch', name: 'Punch', kind: 'active', group: 'body', trigger: 'tap', maxRank: 1,
+    desc: 'Throw a punch at your target in reach, or where you look. Super strength makes it hit harder.',
+    icon: svg('<path d="M6 10.5V8a2 2 0 0 1 2-2h7.5a2.5 2.5 0 0 1 2.5 2.5V14a6 6 0 0 1-6 6h-1.5A4.5 4.5 0 0 1 6 15.5z"/><path d="M10 6v4M14 6v4M6 13h5.5a1.5 1.5 0 0 0 0-3H6"/>'),
+    rankText: () => 'A plain punch — Super strength raises its force',
+  },
+  {
+    id: 'strength', name: 'Super strength', kind: 'passive', group: 'body', trigger: 'none', maxRank: MAX_RANK,
     desc: 'Punches hit harder and running into walls smashes through them.',
     icon: svg('<path d="M7 11V7.5a1.5 1.5 0 0 1 3 0V10"/><path d="M10 9.5V6.5a1.5 1.5 0 0 1 3 0V10"/><path d="M13 9.5V7a1.5 1.5 0 0 1 3 0v3.5"/><path d="M16 10a1.5 1.5 0 0 1 3 0v3a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L4.2 14.6a1.6 1.6 0 0 1 2.6-1.8L8 14V11"/><path d="M3 5l1.5 1.5M6.5 2.5L7 4.5M2 9h2"/>'),
     rankText: (r) => `Punch ${fmtJ(PUNCH_IMPULSE[r])} N·s · ${punchEffect(r)}`,
@@ -126,7 +133,7 @@ export const ABILITIES: AbilityDef[] = [
     id: 'speed', name: 'Super speed', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK,
     desc: 'Hold to run faster than you can fly: up walls, over cars, across water; people you pass are spun aside. Tap for a dash burst.',
     icon: svg('<path d="M11 6l6 6-6 6"/><path d="M17 6l6 6-6 6" opacity="0.55"/><path d="M2 9h6M1 12h7M2 15h6"/>'),
-    rankText: (r) => `Run ${SPEED_TOP[r]} m/s (flight boost ${Math.round(FLIGHT_BOOST * FLIGHT_SPEED[r])} m/s) · tap: ${DASH_DIST[r]} m dash, ${cd(DASH_COOLDOWN[r])}`,
+    rankText: (r) => `Run ${SPEED_TOP[r]} m/s (flight boost ${Math.round(flightBoost(r))} m/s) · tap: ${DASH_DIST[r]} m dash, ${cd(DASH_COOLDOWN[r])}`,
     costText: () => `Running is free · dash ${DASH.cost} energy`,
   },
   {
@@ -140,7 +147,7 @@ export const ABILITIES: AbilityDef[] = [
     id: 'flight', name: 'Flight', kind: 'active', group: 'movement', trigger: 'toggle', maxRank: MAX_RANK, key: 'F',
     desc: 'Take to the sky. Shift to boost, Space / Ctrl to climb and sink.',
     icon: svg('<path d="M3 13c3-1 5-4 6-8 1 3 1 6-1 9"/><path d="M21 13c-3-1-5-4-6-8-1 3-1 6 1 9"/><path d="M12 8v9"/><path d="M9 19l3-2 3 2"/>'),
-    rankText: (r) => `Cruise ${Math.round(FLIGHT_CRUISE * FLIGHT_SPEED[r])} m/s · boost ${Math.round(FLIGHT_BOOST * FLIGHT_SPEED[r])} m/s`,
+    rankText: (r) => `Cruise ${Math.round(FLIGHT_CRUISE * FLIGHT_SPEED[r])} m/s · boost ${Math.round(flightBoost(r))} m/s`,
   },
   {
     id: 'size', name: 'Size shift', kind: 'passive', group: 'body', trigger: 'none', maxRank: MAX_RANK, key: 'Numpad + / −',

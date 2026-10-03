@@ -70,6 +70,40 @@ export interface PedAgent {
   actor?: Actor;
   /** A ragdoll owns the body (tumbling, lying or getting up: physics/ragdoll); no movement here. */
   ragdoll?: boolean;
+  /** Walking: nearest distance yet to the current waypoint, and seconds without getting closer. */
+  wpD?: number;
+  stall?: number;
+  /** Seconds spent gawking / filming lately (see gawkOver); it wears off while walking on. */
+  gawkT?: number;
+}
+
+/** Gawkers per incident (people already standing and looking within GAWK_R m count). */
+export const GAWK_CROWD = 24;
+export const GAWK_R = 25;
+/** Longest a gawker stays (s), whatever keeps happening; after that they walk on and are bored. */
+export const GAWK_MAX = 40;
+/** Bored of gawking (gawkT above this): new incidents no longer make them stop. */
+export const GAWK_BORED = 20;
+
+/** May this agent start gawking (not bored of it)? */
+export function canGawk(a: PedAgent): boolean {
+  return (a.gawkT ?? 0) < GAWK_BORED;
+}
+
+/**
+ * Gawking / filming bookkeeping per step: true when the agent should walk on (looked long
+ * enough and calm, or gawked GAWK_MAX s in all, re-triggered or not).
+ */
+export function gawkOver(a: PedAgent, dt: number): boolean {
+  a.gawkT = (a.gawkT ?? 0) + dt;
+  return (a.stateT > 6 + (a.look % 7) && a.fear < 0.3) || a.gawkT > GAWK_MAX;
+}
+
+/** Stopped-and-looking agents within r of a point. */
+export function gawkersNear(peds: { neighbours(x: number, z: number, r: number, out: PedAgent[]): PedAgent[] }, x: number, z: number, r: number, tmp: PedAgent[]): number {
+  let n = 0;
+  for (const o of peds.neighbours(x, z, r, tmp)) if ((o.state === PState.Gawk || o.state === PState.Film) && Math.hypot(o.x - x, o.z - z) < r) n++;
+  return n;
 }
 
 export type DownCause = 'player' | 'collapse' | 'accident' | 'other';
@@ -255,7 +289,7 @@ export class Pedestrians {
     // Place along the route by progress.
     if (this.pendingCarDest) { a.carDest = this.pendingCarDest; this.pendingCarDest = null; }
     if (progress > 0) this.advanceAlong(a, progress * routeLength(route));
-    a.y = this.groundY(a.x, a.z, a.onRoad);
+    a.y = this.groundY(a.x, a.z, a.onRoad, a.heading);
     this.agents.push(a);
     this.byId.set(c.id, a);
     this.stats.spawned++;
@@ -394,8 +428,17 @@ export class Pedestrians {
     }
   }
 
-  private groundY(x: number, z: number, onRoad: boolean): number {
-    return this.terrain.height(x, z) + (onRoad ? 0 : CURB_H);
+  /**
+   * Walking height: the street (or the kerb) — or a bridge deck when walking along the bridge or
+   * already up on it (`heading`, `yRef`); a path on the bank passing under a bridge stays below.
+   */
+  private groundY(x: number, z: number, onRoad: boolean, heading = NaN, yRef = NaN): number {
+    const g = this.terrain.height(x, z) + (onRoad ? 0 : CURB_H);
+    const deck = this.world.bridgeDeck(x, z);
+    if (deck === -Infinity || deck <= g) return g;
+    if (Math.abs(yRef - deck) < 1.5) return deck;
+    if (Number.isNaN(heading)) return g;
+    return this.world.bridgeDeck(x, z, -Math.sin(heading), -Math.cos(heading)) > -Infinity ? deck : g;
   }
 
   private rebuildGrid(): void {
@@ -443,7 +486,7 @@ export class Pedestrians {
       // Knocked down / flung: simple ballistic slide, then lie.
       a.vy -= 9.81 * dt;
       a.x += a.vx * dt; a.z += a.vz * dt; a.y += a.vy * dt;
-      const g = this.groundY(a.x, a.z, a.onRoad);
+      const g = this.groundY(a.x, a.z, a.onRoad, NaN, a.y);
       if (a.y < g) { a.y = g; a.vy = 0; a.vx *= 0.8; a.vz *= 0.8; }
       // Actors lie until their owner gets them up (or hands them back).
       if (!a.actor && a.stateT > (a.downBy === 'accident' ? ACCIDENTS.lieFor : 25) && a.fear < 100) a.alive = false;
@@ -465,7 +508,10 @@ export class Pedestrians {
       tx = a.x + (dx / d) * 10 + Math.cos(wob) * 2; tz = a.z + (dz / d) * 10 + Math.sin(wob) * 2;
       desired = a.pref * 3.2;
       if (a.fear < 0.15) { a.state = PState.Walk; this.rejoinRoute(a); }
-    } else if (a.state === PState.Gawk || a.state === PState.Film || a.state === PState.Idle) {
+    } else if (a.state === PState.Gawk || a.state === PState.Film) {
+      tx = a.x; tz = a.z; desired = 0;
+      if (gawkOver(a, dt)) a.state = PState.Walk;
+    } else if (a.state === PState.Idle) {
       tx = a.x; tz = a.z; desired = 0;
       if (a.stateT > 6 + (a.look % 7) && a.fear < 0.3) { a.state = PState.Walk; }
     } else if (a.state === PState.Wait) {
@@ -478,11 +524,19 @@ export class Pedestrians {
         if (a.carDest) this.onCarReady?.(a);
         return;
       }
+      if (a.gawkT) a.gawkT = Math.max(0, a.gawkT - dt * 0.5);
       tx = a.route[a.wp * 3]; tz = a.route[a.wp * 3 + 1];
       const d = Math.hypot(tx - a.x, tz - a.z);
-      if (d < 0.6) {
+      // Held up in a crowd: everyone bound for the same door or station entrance pressed
+      // around one point that only one at a time could reach, and the crowd grew by hundreds.
+      // No closer for 4 s near the waypoint counts as there (the last one: inside the crowd).
+      const last = a.wp === a.route.length / 3 - 1;
+      if (a.wpD === undefined || d < a.wpD - 0.3) { a.wpD = d; a.stall = 0; }
+      else a.stall = (a.stall ?? 0) + dt;
+      if (d < (last ? 1.2 : 0.6) || ((a.stall ?? 0) > 4 && d < (last ? 15 : 3))) {
         const nextRoad = a.route[a.wp * 3 + 2] > 0.5;
         a.wp++;
+        a.wpD = undefined;
         // Before stepping onto a road, wait briefly at the kerb (traffic check done by the traffic module).
         if (!a.onRoad && nextRoad && this.crossCheck && !this.crossCheck(a)) { a.state = PState.Wait; a.stateT = 0; }
         a.onRoad = a.wp < a.route.length / 3 ? a.route[a.wp * 3 + 2] > 0.5 : false;
@@ -496,7 +550,7 @@ export class Pedestrians {
     let dx = tx - a.x, dz = tz - a.z;
     const dl = Math.hypot(dx, dz);
     if (dl > 1e-3) { dx /= dl; dz /= dl; }
-    let sx = 0, sz = 0;
+    let sx = 0, sz = 0, behind = false;
     const nb = this.neighbours(a.x, a.z, 1.2, this.nb);
     for (const o of nb) {
       if (o === a || o.state === PState.Down) continue;
@@ -506,9 +560,10 @@ export class Pedestrians {
       const d = Math.sqrt(d2);
       const w = (1.2 - d) / 1.2;
       sx += (ox / d) * w * 1.6; sz += (oz / d) * w * 1.6;
-      // Slow down behind someone in front.
-      if (ox * dx + oz * dz < 0 && d < 0.9) desired *= 0.7;
+      // Slow down behind someone in front (once: compounded per neighbour a dense crowd froze).
+      if (ox * dx + oz * dz < 0 && d < 0.9) behind = true;
     }
+    if (behind) desired *= 0.7;
     if (a.sideT && a.sideT > 0) {
       // Making room for a robot (set by the robot, which sees who is in its way).
       a.sideT -= dt;
@@ -545,7 +600,7 @@ export class Pedestrians {
       a.heading += d * Math.min(1, dt * 3);
     }
     a.phase += a.speed * dt;
-    a.y += (this.groundY(a.x, a.z, a.onRoad) - a.y) * Math.min(1, dt * 10);
+    a.y += (this.groundY(a.x, a.z, a.onRoad, a.heading, a.y) - a.y) * Math.min(1, dt * 10);
   }
 
   /** After fleeing: new route from here to the destination (or vanish). */
@@ -596,7 +651,7 @@ export class Pedestrians {
     // Actors have a reserve above the population cap (a full street still gets its police).
     if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS + ACTOR_RESERVE) return null;
     const a: PedAgent = {
-      id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, onRoad), heading, speed: 0, pref: 1.4, state: PState.Idle,
+      id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, onRoad, heading), heading, speed: 0, pref: 1.4, state: PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: x, fearZ: z,
       lookX: x, lookZ: z, lookY: 0, stateT: 0, onRoad, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1,
     };

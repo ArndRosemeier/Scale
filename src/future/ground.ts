@@ -6,7 +6,8 @@
  * (GROUPS.smallBody) ignore the heightfield and collide with
  *   - street-level heightfield patches (terrain + kerb, low bridge decks; 1 m resolution), and
  *   - building prisms: each footprint as a closed trimesh from below the ground to its roof
- *     (walls stop them, flat roofs catch falling drones).
+ *     (walls stop them, flat roofs catch falling drones), plus its entrance steps (stoop boxes:
+ *     someone knocked onto a stoop lies on the steps, not at street level inside them).
  * Both are created on demand around a body and dropped when unused; prisms follow damage
  * (a building that collapsed or got shorter is rebuilt / removed). Last resort for anything
  * that still ends up in a footprint: `resolve` pushes a point out through the nearest wall.
@@ -15,6 +16,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import earcut from 'earcut';
 import { GROUPS } from '../physics/Physics';
 import { pointInPoly } from '../core/geom2';
+import { buildingEntrance } from '../build/buildingLayout';
 import type { BuildingRef } from '../world/WorldIndex';
 import type { FutureCtx } from './ctx';
 
@@ -23,7 +25,7 @@ const RES = 32;
 
 export class LocalGround {
   private patches = new Map<number, { c: RAPIER.Collider; used: number }>();
-  private prisms = new Map<BuildingRef, { c: RAPIER.Collider; used: number; top: number }>();
+  private prisms = new Map<BuildingRef, { c: RAPIER.Collider; steps: RAPIER.Collider[]; used: number; top: number }>();
   private t = 0;
   stats = { patches: 0, prisms: 0 };
 
@@ -58,12 +60,36 @@ export class LocalGround {
       if (!b.alive) continue;
       const p = this.prisms.get(b);
       if (p && Math.abs(p.top - b.top) < 0.05) { p.used = this.t; continue; }
-      if (p) { P.world.removeCollider(p.c, false); this.prisms.delete(b); }
+      if (p) { this.drop(p); this.prisms.delete(b); }
       const c = this.prism(b);
-      if (c) this.prisms.set(b, { c, used: this.t, top: b.top });
+      if (c) this.prisms.set(b, { c, steps: this.steps(b), used: this.t, top: b.top });
     }
     this.stats.patches = this.patches.size;
     this.stats.prisms = this.prisms.size;
+  }
+
+  private drop(p: { c: RAPIER.Collider; steps: RAPIER.Collider[] }): void {
+    const W = this.ctx.physics.world;
+    W.removeCollider(p.c, false);
+    for (const s of p.steps) W.removeCollider(s, false);
+  }
+
+  /** The building's entrance steps as boxes (from the stoop's buried foot to each step's top). */
+  private steps(b: BuildingRef): RAPIER.Collider[] {
+    const S = buildingEntrance(b.desc, this.ctx.terrain);
+    if (!S) return [];
+    const R = this.ctx.physics.R, out: RAPIER.Collider[] = [];
+    // Box axes: local x along the facade (ux, uz), local z outwards.
+    const th = Math.atan2(-S.uz, S.ux), q = { x: 0, y: Math.sin(th / 2), z: 0, w: Math.cos(th / 2) };
+    const B = S.boxes;
+    for (let k = 0; k < B.length; k += 5) {
+      const hy = (B[k + 4] - S.foot) / 2;
+      if (hy <= 0.01) continue;
+      const desc = R.ColliderDesc.cuboid(B[k + 2], hy, B[k + 3]).setTranslation(B[k], S.foot + hy, B[k + 1]).setRotation(q)
+        .setFriction(0.8).setCollisionGroups(GROUPS.localGround);
+      out.push(this.ctx.physics.world.createCollider(desc));
+    }
+    return out;
   }
 
   /** A footprint extruded from below the street to the roof as a closed trimesh. */
@@ -125,7 +151,7 @@ export class LocalGround {
     if (Math.floor(this.t) === Math.floor(this.t - dt)) return;
     const W = this.ctx.physics.world;
     for (const [k, p] of this.patches) if (this.t - p.used > 30) { W.removeCollider(p.c, false); this.patches.delete(k); }
-    for (const [b, p] of this.prisms) if (this.t - p.used > 30 || !b.alive) { W.removeCollider(p.c, false); this.prisms.delete(b); }
+    for (const [b, p] of this.prisms) if (this.t - p.used > 30 || !b.alive) { this.drop(p); this.prisms.delete(b); }
     this.stats.patches = this.patches.size;
     this.stats.prisms = this.prisms.size;
   }

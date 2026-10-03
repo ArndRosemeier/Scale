@@ -154,7 +154,9 @@ People and the player knocked flying, tumbling, lying, getting up — or staying
   once (the oldest tumbling person falls back to the simple knock-down); settled bodies drop
   their physics and keep the pose (accident/collapse victims, crime actors and hard KOs stay
   down until helped or stood up by their owner). `PedAgent.ragdoll` tells Pedestrians to
-  leave the body alone.
+  leave the body alone. Bodies land on entrance steps (`LocalGround` adds each building's stoop
+  boxes next to its prism) and hit cars: up to 10 cars near tumbling bodies get kinematic boxes
+  (`RagdollDeps.cars`; wrecks are physical already).
 
 ### Player & scale (`src/player`)
 * Height *H* ∈ [0.1, 100] m and *k* = *H*/1.8.
@@ -181,10 +183,13 @@ and car ownership.
 * **Local tier** (≈250 m): steering, collision avoidance, traffic rules (IDM car following,
   signals), and perception and reactions to stimuli. Stimuli are explosions, collapses,
   giants, flight, crashes and gunfire-like bangs. Reactions are flee, gawk/film, take
-  cover, help, abandon the car, honk, swerve and reverse.
+  cover, help, abandon the car, honk, swerve and reverse. People walk on bridge decks when
+  walking along a bridge (or already on it), like cars; paths passing under a bridge stay below.
 * Rendering tiers:
   * < 35 m: full Norgo skinned humans (LOD0/1)
-  * < 300 m: GPU-instanced crowd with baked vertex-animation textures
+  * < 300 m: GPU-instanced crowd with baked vertex-animation textures (`CrowdBaker`: body
+    vertices under a garment take its colour slot, so gaps in the decimated far-LOD garment
+    shells never show skin)
   * farther: none
   * cars: instanced procedural models with wheel animation and lights
 
@@ -259,7 +264,9 @@ migrated — dash was folded into super speed: tap = dash, hold = run).
   roofs, ground); `inSphere()` lists everything an area effect hits. `TargetHud` draws the corner brackets and the
   target frame (slots for the later con colour and health).
 * **AbilitySystem**: energy, cooldowns, input; tap powers fire through `Elements.fire`, held powers (laser, ice
-  path, hydrokinesis, super speed) run as a `channel` while the key / right mouse is held.
+  path, hydrokinesis, super speed) run as a `channel` while the key / right mouse is held. **Punch** is a hotbar power
+  like the others (always rank 1 and free, slot 1 by default; super strength sets its force): left click only targets.
+  Flight boost multiplies the cruise speed by a factor that grows with the rank (`FLIGHT_BOOST_MUL`).
 * **Elements**: the elemental powers in the world. With a target they go for it, without one along the crosshair.
   They reuse destruction impacts (laser heat accumulates per 60 cm spot, ≤ 10 impacts/s), debris, dust, props.hit,
   traffic wrecks, reactions.knockDown and the near-future knock. Ice-path sheets are walkable through
@@ -310,7 +317,12 @@ every frame) owns the parts and draws what belongs to them.
   chip and P screen. **Con** (`Consider.ts`): target vs player strength → grey … purple on the target frame and brackets.
 * **Small deeds** (`deeds/SmallDeeds`): seeded every few minutes — a cat up a tree (owner pointing up, meowing; climb with
   E, jump or fly), a runaway dog trailing its leash (catch it, it follows you back), a dropped wallet (the owner pats
-  their pockets later). Sounds: `tools/synthCrime.mjs` (siren, alarm bell, cuffs, meow, bark, cheer, shouts).
+  their pockets later). E while carrying puts the cat / wallet down (next to its owner it counts as returned; when E
+  has nothing else to do). Sounds: `tools/synthCrime.mjs` (siren, alarm bell, cuffs, meow, bark, cheer, shouts).
+* **HUD** (`ui/CrimeHud`): over every active criminal within 80 m a pulsing red chevron with a health bar (from the
+  moment the crime is committed until surrender / KO / arrest), health bar, reputation chip, wanted stars.
+* **Helping people up** (`game/Deeds`): fallen people within 160 m are marked; ones nobody can get to (indoors, in the
+  water, at a height that does not match the ground) get no marker and leave after a few seconds.
 
 ### Birds (`src/fauna`)
 `Birds` (constructed, updated and sent strikes by the game; it listens to stimuli itself) keeps at most 300 birds,
@@ -339,6 +351,14 @@ as distance LOD).
 ### Underground
 * Metro: tunnels (extruded profiles), stations with platforms, stairs to street kiosks,
   and trains on analytic timetables that stop and open doors.
+  * Departure boards over every platform (two, double-sided): line, destination, the next train
+    and the one after, from `layout.nextTrainAt` (the same timetable as `trainsOn`; checked in
+    `selftest.ts`). Redrawn on a canvas only when the text changes.
+  * Cars have window openings with tinted see-through glass (sides and both ends, a second
+    instanced mesh). Riding: a running sound that follows the speed, a knock at every rail joint,
+    rattle, a lurch pulling away / braking, the light flickering now and then (`Game.rideFx`,
+    `Underground.riding`); doors, arrival, departure and oncoming trains rushing past are heard
+    near the listener (`Underground.onTrainSound`). Sounds: `tools/synthMetro.mjs`.
 * Sewers: arched brick tunnels with channels and walkways under arterials, manholes with
   ladders, and outfalls.
 * Terrain holes: shader discard plus a collision query.
@@ -348,6 +368,13 @@ as distance LOD).
   interior, sewer, metro, flight.
 * Clips come from SoundStudio (`public/sounds`, see `docs/SOUNDS.md`), with procedural
   fallbacks.
+
+### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
+* Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the
+  minimap's edge when out of view; cleared on arrival); travel by clicking is a sandbox feature.
+* Compass strip at the top: heading ticks, nearby points of interest within ~320 m (metro
+  entrances, people needing help, crimes, small deeds, power cores — the map's marker layers)
+  and the player's marker with its distance, pinned to the edge when behind.
 
 ## Threads
 

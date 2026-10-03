@@ -407,7 +407,7 @@ export class Targeting {
     if (input) {
       if (input.hit('Tab')) this.tab(input.down('ShiftLeft') || input.down('ShiftRight') ? -1 : 1);
       if (input.hit('Escape')) this.set(null);
-      // Left click on someone / something under the cursor targets it (and does not punch).
+      // Left click on someone / something under the cursor targets it.
       const c = input.clicked & 1 ? input.cursorNdc() : null;
       const picked = c ? this.pickAt(c.x, c.y) : null;
       if (picked) { this.set(picked); input.clicked &= ~1; }

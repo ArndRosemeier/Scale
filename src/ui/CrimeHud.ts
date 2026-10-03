@@ -1,7 +1,7 @@
 /**
  * HUD of the street-crime layer: a health bar in the power bar (above energy; hidden while full
  * and calm), a small reputation chip next to karma, wanted stars, a red vignette when hurt, the
- * knock-out fade, and a small red caret over a fleeing criminal within 80 m (show, don't tell:
+ * knock-out fade, and a tag (red chevron, health bar) over each active criminal within 80 m (show, don't tell:
  * no text, no objective).
  */
 import * as THREE from 'three';
@@ -9,6 +9,7 @@ import type { Game } from '../game/Game';
 import type { CrimeSystem } from '../game/crime/CrimeSystem';
 
 const _p = new THREE.Vector3();
+const _q = new THREE.Vector3();
 
 export class CrimeHud {
   private hp: HTMLDivElement;
@@ -17,7 +18,7 @@ export class CrimeHud {
   private wanted: HTMLDivElement;
   private vignette: HTMLDivElement;
   private fadeEl: HTMLDivElement;
-  private carets: HTMLDivElement[] = [];
+  private tags: { el: HTMLDivElement; fill: HTMLElement }[] = [];
   private last = '';
   private shownHp = -1;
 
@@ -40,11 +41,13 @@ export class CrimeHud {
     this.fadeEl = document.createElement('div');
     this.fadeEl.id = 'kofade';
     document.body.append(this.vignette, this.fadeEl);
-    for (let i = 0; i < 4; i++) {
+    // Up to three crimes with up to three criminals each.
+    for (let i = 0; i < 9; i++) {
       const c = document.createElement('div');
-      c.className = 'crimecaret';
+      c.className = 'crimetag';
+      c.innerHTML = '<div class="chev"></div><div class="bar"><i></i></div>';
       document.body.appendChild(c);
-      this.carets.push(c);
+      this.tags.push({ el: c, fill: c.querySelector('i')! });
     }
   }
 
@@ -78,17 +81,22 @@ export class CrimeHud {
       this.wanted.innerHTML = w > 0 ? '★'.repeat(w) + '<i>' + '★'.repeat(3 - w) + '</i>' : '';
       this.wanted.style.display = w > 0 ? '' : 'none';
     }
-    // Carets over fleeing criminals.
+    // Tags over active criminals: unmistakable in a crowd, with their health.
     const cam = this.g.renderer.camera, W = window.innerWidth, Hh = window.innerHeight;
     let n = 0;
     for (const a of s.fleeing()) {
-      if (n >= this.carets.length) break;
-      _p.set(a.x, a.y + 2.25, a.z).project(cam);
+      if (n >= this.tags.length) break;
+      _p.set(a.x, a.y + 2.2, a.z).project(cam);
       if (_p.z > 1 || Math.abs(_p.x) > 1 || Math.abs(_p.y) > 1) continue;
-      const el = this.carets[n++];
-      el.style.display = 'block';
-      el.style.transform = `translate(${((_p.x * 0.5 + 0.5) * W - 6).toFixed(1)}px, ${((-_p.y * 0.5 + 0.5) * Hh - 10).toFixed(1)}px)`;
+      const t = this.tags[n++];
+      const d = cam.position.distanceTo(_q.set(a.x, a.y + 1.6, a.z));
+      const k = Math.max(0.55, Math.min(1.15, 14 / Math.max(1, d)));
+      t.el.style.display = 'flex';
+      t.el.style.transform = `translate(${((_p.x * 0.5 + 0.5) * W - 22).toFixed(1)}px, ${((-_p.y * 0.5 + 0.5) * Hh - 26).toFixed(1)}px) scale(${k.toFixed(2)})`;
+      const act = a.actor!;
+      const w = `${Math.round(100 * Math.max(0, act.hp) / Math.max(1, act.maxHp))}%`;
+      if (t.fill.style.width !== w) t.fill.style.width = w;
     }
-    for (; n < this.carets.length; n++) this.carets[n].style.display = 'none';
+    for (; n < this.tags.length; n++) this.tags[n].el.style.display = 'none';
   }
 }

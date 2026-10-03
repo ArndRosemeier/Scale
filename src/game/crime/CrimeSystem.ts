@@ -568,7 +568,7 @@ export class CrimeSystem {
   private playerStrength(): number {
     const g = this.g;
     let powers = 0;
-    for (const d of ABILITIES) if (d.kind === 'active' && d.id !== 'flight' && d.id !== 'superJump' && d.id !== 'speed' && g.abilities.rank(d.id) > 0) powers++;
+    for (const d of ABILITIES) if (d.kind === 'active' && d.id !== 'punch' && d.id !== 'flight' && d.id !== 'superJump' && d.id !== 'speed' && g.abilities.rank(d.id) > 0) powers++;
     return playerStrength(g.abilities.rank('strength'), g.player.k, this.health.frac, powers);
   }
 
@@ -711,6 +711,21 @@ export class CrimeSystem {
     return cands[0] ?? null;
   }
 
+  /**
+   * Where carried loot goes back: its owner / the shopkeeper; with nobody waiting any more, the
+   * police (the nearest officer, else a patrol car near by); else the spot of the crime (the shop).
+   */
+  private returnTarget(L: { loot: Loot; crime: Crime }): { x: number; z: number; who: PedAgent | null; kind: 'owner' | 'police' | 'site' } {
+    const who = this.returnTo(L);
+    if (who) return { x: who.x, z: who.z, who, kind: 'owner' };
+    const p = this.g.player.pos;
+    const o = this.police.nearestOfficer(p.x, p.z, Infinity);
+    if (o) return { x: o.x, z: o.z, who: o, kind: 'police' };
+    const car = this.police.nearestCar(p.x, p.z, 400);
+    if (car) return { x: car.x, z: car.z, who: null, kind: 'police' };
+    return { x: L.crime.x, z: L.crime.z, who: null, kind: 'site' };
+  }
+
   /** Text for E, or null. */
   hint(): string | null {
     const p = this.g.player.pos;
@@ -718,10 +733,15 @@ export class CrimeSystem {
       const l = L.loot;
       if (l.carrier === null && Number.isFinite(l.x) && Math.hypot(l.x - p.x, l.z - p.z) < 1.6) return `Press <b>E</b> to pick up the ${l.kind === 'cash' ? 'cash bag' : l.kind}`;
       if (l.carrier === 'player') {
-        const who = this.returnTo(L);
-        if (who && Math.hypot(who.x - p.x, who.z - p.z) < 2.8) return `Press <b>E</b> to give the ${l.kind === 'cash' ? 'money' : l.kind} back`;
-        const o = this.police.nearestOfficer(p.x, p.z, 2.6);
-        if (o && !who) return `Press <b>E</b> to hand the ${l.kind === 'cash' ? 'money' : l.kind} to the officer`;
+        const what = l.kind === 'cash' ? 'money' : l.kind;
+        const T = this.returnTarget(L);
+        const d = Math.hypot(T.x - p.x, T.z - p.z);
+        if (T.kind === 'owner' && d < 2.8) return `Press <b>E</b> to give the ${what} back`;
+        if (T.kind === 'police' && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4))) return `Press <b>E</b> to hand the ${what} to the police`;
+        if (T.kind === 'site' && d < 4) return `Press <b>E</b> to leave the ${what} ${l.kind === 'cash' ? 'at the shop' : 'here'}`;
+        // On the way: say where it goes (the green mark on the map and compass).
+        const to = T.kind === 'police' ? 'to the police' : l.kind === 'cash' ? 'back to the shop' : 'back to its owner';
+        return `Bring the ${what} ${to} — the green mark on your map and compass`;
       }
     }
     if (this.justice.hot && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4))) return 'Press <b>E</b> to turn yourself in';
@@ -739,9 +759,10 @@ export class CrimeSystem {
         return true;
       }
       if (l.carrier === 'player') {
-        const who = this.returnTo(L);
-        const officer = !who ? this.police.nearestOfficer(p.x, p.z, 2.6) : null;
-        if ((who && Math.hypot(who.x - p.x, who.z - p.z) < 2.8) || officer) {
+        const T = this.returnTarget(L);
+        const who = T.kind === 'owner' ? T.who : null;
+        const officer = T.kind === 'police' && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4)) ? true : null;
+        if ((who && Math.hypot(who.x - p.x, who.z - p.z) < 2.8) || officer || (T.kind === 'site' && Math.hypot(T.x - p.x, T.z - p.z) < 4)) {
           l.carrier = null;
           l.returned = true;
           L.crime.playerInvolved = true;
@@ -797,11 +818,17 @@ export class CrimeSystem {
       if (c instanceof Robbery && c.phase === 'getaway' && c.car) list.push({ x: c.car.x, z: c.car.z, color: '#ff3b30', kind: 'alert', title: '' });
     }
     for (const u of this.police.units) list.push({ x: u.car.x, z: u.car.z, color: '#3b82f6', kind: 'dot', title: '' });
+    // Carried loot: where it goes back (also on the compass at any distance).
+    for (const L of this.loots) {
+      if (L.loot.carrier !== 'player') continue;
+      const T = this.returnTarget(L);
+      list.push({ x: T.x, z: T.z, color: '#4cd964', kind: 'alert', title: 'Give it back here', always: true });
+    }
     const key = list.map((m) => `${m.kind[0]}${Math.round(m.x / 2)},${Math.round(m.z / 2)}`).join(';');
     if (key !== this.markKey) { this.markKey = key; this.g.map.setMarkers('crime', list); }
   }
 
-  /** Criminals for the HUD caret: committed, standing, within 80 m. */
+  /** Criminals for the HUD tags: committed, standing, within 80 m. */
   *fleeing(): Generator<PedAgent> {
     for (const c of this.crimes) {
       if (!c.committed || !c.active) continue;

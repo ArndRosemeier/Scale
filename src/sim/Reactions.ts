@@ -11,7 +11,7 @@
  *  - Fear decays; people resume their routes afterwards.
  */
 import type { Pedestrians, PedAgent, DownCause } from './Pedestrians';
-import { PState } from './Pedestrians';
+import { PState, GAWK_CROWD, GAWK_R, canGawk, gawkersNear } from './Pedestrians';
 import type { Stimuli, Stimulus } from '../game/Stimuli';
 import type { Player } from '../player/Player';
 import { statusOf } from '../shared/status';
@@ -36,6 +36,11 @@ export class Reactions {
     const H = player.height;
     const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
     const flyingFast = player.flying && player.vel.length() > 15 * Math.sqrt(player.k);
+    // Room for more gawkers per incident (and around a strange tall player): a crowd of
+    // GAWK_CROWD at most, counting those already standing there.
+    this.room.length = fresh.length;
+    for (let k = 0; k < fresh.length; k++) this.room[k] = GAWK_CROWD - gawkersNear(this.peds, fresh[k].x, fresh[k].z, GAWK_R, this.tmp);
+    this.playerRoom = H > 2.3 || flyingFast ? GAWK_CROWD + 6 - gawkersNear(this.peds, px, pz, Math.min(6 * H, 60), this.tmp) : 0;
     let screamers = 0;
     for (const a of this.peds.agents) {
       // Actors (crime, police, deeds) are staged by their owner.
@@ -46,7 +51,9 @@ export class Reactions {
       const nerve = 0.4 + a.cit.nerve * 0.9;
       const before = a.fear;
       // ---- events
-      for (const s of fresh) {
+      for (let k = 0; k < fresh.length; k++) {
+        const s = fresh[k];
+        this.cur = k;
         const d = Math.hypot(a.x - s.x, a.z - s.z);
         if (d > s.radius) continue;
         const prox = 1 - d / s.radius;
@@ -95,6 +102,7 @@ export class Reactions {
         }
       }
       // ---- the player's presence
+      this.cur = -1;
       const dp = Math.hypot(a.x - px, a.z - pz);
       if (H > 2.3 && dp < 14 * H) {
         const seen = 1 - dp / (14 * H);
@@ -104,9 +112,10 @@ export class Reactions {
         } else {
           // Strange tall person: curiosity, with some unease up close.
           if (dp < H * 1.6) a.fear = Math.min(2, a.fear + dt * 0.4 * nerve);
-          else if (a.cit.curiosity > 0.45 && a.state === PState.Walk && a.fear < 0.3 && dp < 6 * H) {
+          else if (a.cit.curiosity > 0.45 && a.state === PState.Walk && a.fear < 0.3 && dp < 6 * H && canGawk(a) && this.playerRoom > 0) {
             a.state = a.cit.curiosity > 0.7 ? PState.Film : PState.Gawk;
             a.stateT = 0;
+            this.playerRoom--;
             a.lookX = px; a.lookZ = pz; a.lookY = py + H * 0.8;
           }
           if (a.state === PState.Gawk || a.state === PState.Film) { a.lookX = px; a.lookZ = pz; a.lookY = py + H * 0.8; a.stateT = Math.min(a.stateT, 2); }
@@ -133,8 +142,22 @@ export class Reactions {
     if (a.state !== PState.Flee) { a.state = PState.Flee; a.stateT = 0; }
   }
 
+  /** Per fresh stimulus (index `cur`, −1: the player): gawkers it may still add. */
+  private room: number[] = [];
+  private playerRoom = 0;
+  private cur = -1;
+  private tmp: PedAgent[] = [];
+
+  /**
+   * Stop and look (the curious film). Someone already looking just turns to the new thing (a
+   * shout repeated every few seconds must not keep a crowd standing for ever); a full crowd
+   * or someone bored of gawking walks on.
+   */
   private gawk(a: PedAgent, x: number, y: number, z: number): void {
     if (a.state === PState.Flee || a.state === PState.Down) return;
+    if (a.state === PState.Gawk || a.state === PState.Film) { a.lookX = x; a.lookY = y; a.lookZ = z; return; }
+    if (!canGawk(a)) return;
+    if (this.cur >= 0 ? this.room[this.cur]-- <= 0 : this.playerRoom-- <= 0) return;
     a.state = a.cit.curiosity > 0.75 ? PState.Film : PState.Gawk;
     a.stateT = 0;
     a.lookX = x; a.lookY = y; a.lookZ = z;

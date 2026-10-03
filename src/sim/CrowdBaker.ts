@@ -99,8 +99,21 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     const slotName = m.userData.slot as string | undefined;
     meshes.push({ mesh: m, verts: [...set].sort((a, b) => a - b), slot: slotName ? (SLOT_OF[slotName] ?? Slot.Top) : -1 });
   });
-  // Compact vertex table.
+  // Body vertices under a garment take its slot (the outermost one wins): the decimated far-LOD
+  // shells have gaps where large triangles cross a garment edge, and the body showed through
+  // as skin — crowds looked half naked.
   const st = ch.geo.st;
+  const coverSlot = new Map<number, { slot: Slot; order: number }>();
+  for (const M of meshes) {
+    const covers = M.mesh.userData.covers as number[] | undefined;
+    if (M.slot < 0 || !covers) continue;
+    const order = (M.mesh.userData.order as number | undefined) ?? 0;
+    for (const v of covers) {
+      const c = coverSlot.get(v);
+      if (!c || c.order < order) coverSlot.set(v, { slot: M.slot as Slot, order });
+    }
+  }
+  // Compact vertex table.
   const scalp = BODY_REGIONS.indexOf('scalp');
   const vertRefs: { m: number; v: number; slot: Slot }[] = [];
   const remap: Map<number, number>[] = [];
@@ -108,7 +121,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     const map = new Map<number, number>();
     for (const v of M.verts) {
       map.set(v, vertRefs.length);
-      const slot = M.slot >= 0 ? (M.slot as Slot) : st.region[v] === scalp ? Slot.Hair : Slot.Skin;
+      const slot = M.slot >= 0 ? (M.slot as Slot) : coverSlot.get(v)?.slot ?? (st.region[v] === scalp ? Slot.Hair : Slot.Skin);
       vertRefs.push({ m: mi, v, slot });
     }
     remap.push(map);

@@ -366,6 +366,10 @@ export class EquipmentRig {
     const mesh = new THREE.SkinnedMesh(g, mat.material);
     mesh.userData.slot = slot;
     mesh.userData.color = l.material.color;
+    // Body vertices under this shell (shared topology, no copy) and its layer order: the crowd
+    // baker paints covered body vertices in the garment's colour (CrowdBaker).
+    mesh.userData.covers = src;
+    mesh.userData.order = order;
     mesh.bind(ch.skeleton, new THREE.Matrix4());
     mesh.boundingSphere = g.boundingSphere.clone();
     mesh.castShadow = true;
@@ -382,6 +386,8 @@ export class EquipmentRig {
       const far = new THREE.SkinnedMesh(gl, mat.material);
       far.userData.slot = slot;
       far.userData.color = mesh.userData.color;
+      far.userData.covers = src;
+      far.userData.order = order;
       far.bind(ch.skeleton, new THREE.Matrix4());
       far.boundingSphere = mesh.boundingSphere.clone();
       far.castShadow = l === 1;

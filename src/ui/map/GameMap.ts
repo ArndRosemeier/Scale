@@ -2,8 +2,9 @@
  * In-game city map (M) and corner minimap (N).
  *
  * The full map is a 2D canvas overlay: drag to pan, wheel / + − to zoom,
- * layer toggles, metro lines with stations and street entrances, and
- * click-to-travel (snapped to a safe spot on the street). The minimap is
+ * layer toggles, metro lines with stations and street entrances, a marker
+ * you set by clicking (the compass points to it; cleared on arrival) and, in
+ * sandbox mode, click-to-travel (snapped to a safe spot on the street). The minimap is
  * north-up with a rotating player arrow. Both blit cached tiles from
  * MapTiles; only markers and labels are drawn per frame.
  *
@@ -33,9 +34,11 @@ export interface MapMarker {
   z: number;
   /** CSS colour. */
   color: string;
-  /** core: glowing diamond; alert: ring with "!"; dot: plain dot. */
-  kind: 'core' | 'alert' | 'dot';
+  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; pin: the player's own marker. */
+  kind: 'core' | 'alert' | 'dot' | 'pin';
   title?: string;
+  /** The compass shows it at any distance (pinned to its edge when behind), with the distance. */
+  always?: boolean;
 }
 
 const DISTRICT_LABEL: Record<string, string> = {
@@ -89,6 +92,19 @@ export class GameMap {
   private markerSets = new Map<string, MapMarker[]>();
   private markerT = 0;
 
+  /** The player's own marker (set on the map; the compass points to it), null: none. */
+  waypoint: { x: number; z: number } | null = null;
+
+  setWaypoint(p: { x: number; z: number } | null): void {
+    this.waypoint = p;
+    this.setMarkers('waypoint', p ? [{ x: p.x, z: p.z, color: '#e8483b', kind: 'pin', title: 'Your marker' }] : []);
+  }
+
+  /** Every marker of every layer (the compass shows the nearby ones). */
+  allMarkers(): MapMarker[] {
+    return [...this.markerSets.values()].flat();
+  }
+
   /** Replace one marker layer (call on change, not per frame: it redraws the minimap). */
   setMarkers(layer: string, list: MapMarker[]): void {
     this.markerSets.set(layer, list);
@@ -131,8 +147,10 @@ export class GameMap {
         ${lines || '<div class="map-none">This town has no metro. Larger cities do.</div>'}
         ${lines ? '<div class="map-key"><span class="ent">M</span> street entrance (zoom in)</div>' : ''}
         <h3 style="margin-top:12px">Marks</h3>
+        <div class="map-key"><span class="pin"></span> your marker (the compass points to it)</div>
         <div class="map-key"><span class="alert">!</span> someone needs help (E)</div>
         <div class="map-key"><span class="alert crime">!</span> a crime happening</div>
+        <div class="map-key"><span class="alert back">!</span> where stolen goods go back</div>
         <div class="map-key"><span class="crimeheat"></span> rough area (crime layer)</div>
         ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
         <div class="map-status"></div>
@@ -144,7 +162,7 @@ export class GameMap {
         <button data-act="all" title="Whole city (0)">⤢</button>
       </div>
       <div class="map-scale"><div class="map-north" title="North">▲<span>N</span></div><div><div class="bar"></div><span class="lbl"></span></div></div>
-      <div class="map-help">Drag to pan · Wheel to zoom · Click to travel · <b>M</b> / <b>Esc</b> close</div>
+      <div class="map-help">Drag to pan · Wheel to zoom · Click to set a marker${game.mode === 'sandbox' ? ' or travel' : ''} · <b>M</b> / <b>Esc</b> close</div>
       <button class="map-close" title="Close (M)">×</button>
       <div class="map-pop"></div>`;
     document.body.appendChild(this.root);
@@ -333,6 +351,8 @@ export class GameMap {
     const m = this.game.macro;
     let x = this.cx + (sx - W / 2) / this.s, z = this.cz + (sy - H / 2) / this.s;
     if (st >= 0) { x = m.metroStations[st].x; z = m.metroStations[st].z; }
+    const w = this.waypoint;
+    if (w && st < 0 && Math.hypot(w.x - x, w.z - z) * this.s < 16) { x = w.x; z = w.z; }
     this.picked = { x, z, station: st };
     const p = this.focus();
     const dist = Math.hypot(x - p.x, z - p.z);
@@ -341,14 +361,14 @@ export class GameMap {
     if (st >= 0) {
       const s = m.metroStations[st];
       const chips = s.lines.map((l) => `<span class="chip" style="background:${hexColor(m.metroLines[l].color)}">${esc(m.metroLines[l].name)}</span>`).join('');
-      html = `<div class="t">${esc(s.name)}</div><div class="d">${chips} Metro station · ${far}</div><button>Travel to ${esc(s.name)} <small>(street entrance)</small></button>`;
+      html = `<div class="t">${esc(s.name)}</div><div class="d">${chips} Metro station · ${far}</div>${this.buttons(`Travel to ${esc(s.name)} <small>(street entrance)</small>`)}`;
     } else {
       const c = this.world.cellAt(x, z);
       const wet = this.game.terrain.isWater(x, z, 0) && this.game.world.bridgeDeck(x, z) === -Infinity;
       const road = this.nearestArterial(x, z);
       const what = wet ? (this.game.terrain.coastDistance(x, z) < 0 ? 'The sea' : 'The river') : c >= 0 ? DISTRICT_LABEL[m.cells[c].district] : 'Outskirts';
       const near = road && road.d < 250 ? ` · near ${esc(streetName(this.game.settings.seed, road.edge, m.edges[road.edge].cls))}` : '';
-      html = `<div class="t">${esc(what)}</div><div class="d">${far}${near}</div><button>${wet ? 'Travel to the nearest shore' : 'Travel here'}</button>`;
+      html = `<div class="t">${esc(what)}</div><div class="d">${far}${near}</div>${this.buttons(wet ? 'Travel to the nearest shore' : 'Travel here')}`;
     }
     this.pop.innerHTML = html;
     this.pop.style.display = 'block';
@@ -356,7 +376,22 @@ export class GameMap {
     const [px, py] = this.toScreen(x, z, W, H);
     this.pop.style.left = `${clamp(px - pw / 2, 8, W - pw - 8)}px`;
     this.pop.style.top = `${py - ph - 18 < 8 ? py + 18 : py - ph - 18}px`;
-    this.pop.querySelector('button')!.onclick = () => this.travel(this.picked!);
+    for (const b of this.pop.querySelectorAll<HTMLButtonElement>('button')) {
+      b.onclick = () => {
+        const pk = this.picked!;
+        if (b.dataset.act === 'travel') this.travel(pk);
+        else if (b.dataset.act === 'mark') { this.setWaypoint({ x: pk.x, z: pk.z }); this.hidePop(); }
+        else { this.setWaypoint(null); this.hidePop(); }
+      };
+    }
+  }
+
+  /** Popup buttons: set (or remove) the marker; travel only in sandbox mode. */
+  private buttons(travel: string): string {
+    const pk = this.picked!, w = this.waypoint;
+    const onMark = w && Math.hypot(w.x - pk.x, w.z - pk.z) * this.s < 16;
+    const mark = onMark ? '<button data-act="unmark">Remove marker</button>' : '<button data-act="mark">Set marker</button>';
+    return this.game.mode === 'sandbox' ? `${mark}<button data-act="travel">${travel}</button>` : mark;
   }
 
   private hidePop(): void {
@@ -500,6 +535,8 @@ export class GameMap {
 
   update(dt: number): void {
     this.updateSettle(dt);
+    const w = this.waypoint, f = this.focus();
+    if (w && Math.hypot(w.x - f.x, w.z - f.z) < Math.max(12, 3 * (this.game.player?.height ?? 1.8))) this.setWaypoint(null);
     this.tiles.beginFrame();
     if (this.open) this.drawFull();
     else if (this.miniOn && !this.game.menu?.paused) this.drawMini();
@@ -631,12 +668,15 @@ export class GameMap {
         if (!full) {
           const c = MINI_PX / 2, r = MINI_PX / 2 - 9;
           const dx = x - c, dy = y - c, d = Math.hypot(dx, dy);
-          if (d > r) { if (m.kind !== 'alert') continue; x = c + (dx / d) * r; y = c + (dy / d) * r; edge = true; }
+          if (d > r) { if (m.kind !== 'alert' && m.kind !== 'pin') continue; x = c + (dx / d) * r; y = c + (dy / d) * r; edge = true; }
         } else if (x < -12 || y < -12 || x > W + 12 || y > H + 12) continue;
         const r = full ? 8 : 5;
         g.save();
         g.translate(x, y);
-        if (m.kind === 'core') {
+        if (m.kind === 'pin') {
+          if (!full) g.scale(0.7, 0.7);
+          drawPin(g, 0, 0);
+        } else if (m.kind === 'core') {
           g.shadowColor = m.color;
           g.shadowBlur = full ? 12 : 8;
           g.beginPath();

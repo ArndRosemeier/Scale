@@ -44,6 +44,8 @@ import type { Animator } from '../../humanoid/client/anim/Animator';
 import type { Pose } from '../../humanoid/client/anim/pose';
 import { smooth } from '../../humanoid/client/anim/pose';
 import { statusOf } from '../../shared/status';
+import type RAPIER from '@dimforge/rapier3d-compat';
+import { GROUPS } from '../Physics';
 import { Ragdoll, qrot } from './Ragdoll';
 import { RigDriver } from './drive';
 import { GetUpPoser, getupEndZ } from './getup';
@@ -140,7 +142,15 @@ export interface RagdollDeps {
   player: Player;
   /** Walkable ground height below (x, y, z): street, floor, roof. */
   groundAt: (x: number, y: number, z: number) => number;
+  /** Cars on the road and parked (physical wrecks excluded): tumbling bodies hit them. */
+  cars?: () => Iterable<CarBox>;
 }
+
+/** A car as a box: the car itself (identity), base centre on the road, yaw (forward = −sin, −cos), size. */
+export interface CarBox { ref: object; x: number; y: number; z: number; yaw: number; length: number; width: number; height: number }
+
+/** Cars near tumbling bodies get a moving (kinematic) box collider from this pool. */
+const CAR_POOL = 10, CAR_NEAR = 14;
 
 export class RagdollSystem {
   private entries: Entry[] = [];
@@ -152,6 +162,7 @@ export class RagdollSystem {
   private camX = 0; private camY = 0; private camZ = 0;
   private playerDownT = 0;
   private frame = 0;
+  private carBodies: { body: RAPIER.RigidBody; col: RAPIER.Collider; key: object | null }[] = [];
   /** Called once a ragdoll comes to rest (lying). */
   onSettled: ((target: RagTarget, info: SettledInfo) => void) | null = null;
   /** Called when someone has got back up. */
@@ -239,6 +250,7 @@ export class RagdollSystem {
     this.frame++;
     this.scanPeople();
     this.watchPlayer();
+    this.updateCars();
     for (let i = this.entries.length - 1; i >= 0; i--) {
       const e = this.entries[i];
       e.t += dt;
@@ -529,6 +541,50 @@ export class RagdollSystem {
     // Fell through the ground somewhere: put it back on top.
     const g = this.streetY(rd.px, rd.py + 2 * rd.s, rd.pz);
     if (rd.py < g - 0.6 * rd.s) rd.translate(0, g + 0.3 * rd.s - rd.py, 0);
+  }
+
+  /**
+   * Boxes for the cars near tumbling bodies (kinematic: they move with the car and push, a body
+   * flung against a car hits it and slides down its side instead of passing through).
+   */
+  private updateCars(): void {
+    if (!this.d.cars) return;
+    const live = this.entries.filter((e) => e.phase === Phase.Tumble);
+    const near: { c: CarBox; d: number }[] = [];
+    if (live.length) {
+      for (const c of this.d.cars()) {
+        let d = Infinity;
+        for (const e of live) d = Math.min(d, Math.hypot(c.x - e.rd.px, c.z - e.rd.pz) - c.length / 2);
+        if (d < CAR_NEAR) near.push({ c, d });
+      }
+      near.sort((a, b) => a.d - b.d);
+    }
+    const P = this.d.physics, R = P.R;
+    for (let i = 0; i < Math.min(near.length, CAR_POOL); i++) {
+      const c = near[i].c;
+      let slot = this.carBodies[i];
+      if (!slot) {
+        const body = P.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(0, -1000, 0));
+        const col = P.world.createCollider(R.ColliderDesc.cuboid(1, 1, 1).setFriction(0.6).setCollisionGroups(GROUPS.localGround), body);
+        slot = this.carBodies[i] = { body, col, key: null };
+      }
+      if (slot.key !== c.ref) {
+        // A different car: resize and place it directly (no sweep from the old pose).
+        slot.key = c.ref;
+        slot.col.setHalfExtents({ x: c.width / 2, y: c.height / 2, z: c.length / 2 });
+        slot.body.setTranslation({ x: c.x, y: c.y + c.height / 2, z: c.z }, false);
+        slot.body.setRotation({ x: 0, y: Math.sin(c.yaw / 2), z: 0, w: Math.cos(c.yaw / 2) }, false);
+      }
+      slot.body.setNextKinematicTranslation({ x: c.x, y: c.y + c.height / 2, z: c.z });
+      slot.body.setNextKinematicRotation({ x: 0, y: Math.sin(c.yaw / 2), z: 0, w: Math.cos(c.yaw / 2) });
+    }
+    // Unused boxes wait far below the city.
+    for (let i = near.length; i < this.carBodies.length; i++) {
+      const s = this.carBodies[i];
+      if (!s.key) continue;
+      s.key = null;
+      s.body.setTranslation({ x: 0, y: -1000 - i * 10, z: 0 }, false);
+    }
   }
 
   /** Street-level ground (cheap; roofs and floors are not in it): LocalGround, else the exact query. */

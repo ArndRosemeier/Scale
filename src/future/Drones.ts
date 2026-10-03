@@ -81,6 +81,9 @@ const _s = new THREE.Vector3(1, 1, 1);
 const _Y = new THREE.Vector3(0, 1, 0);
 const _v = new THREE.Vector3();
 
+
+/** Seconds a delivered parcel stays where the winch set it down before it is taken in. */
+const PARCEL_STAY = 3;
 export class Drones {
   readonly group = new THREE.Group();
   readonly list: Drone[] = [];
@@ -96,7 +99,7 @@ export class Drones {
   private target = 0;
   private scanT = -10;
   private dests: BuildingRef[] = [];
-  /** Parcels left at doors / on roofs: x, y, z, yaw, time. */
+  /** Parcels just set down at doors / on roofs (gone after PARCEL_STAY s): x, y, z, yaw, time. */
   private dropped: number[] = [];
   stats = { drones: 0, target: 0, drawn: 0, swatted: 0, news: 0, police: 0, legs: 0, raised: 0, overTop: 0 };
   /** Exact ground and walls for falling drones (set by NearFuture). */
@@ -141,8 +144,8 @@ export class Drones {
       const far = Math.hypot(d.x - px, d.z - pz);
       if (!d.alive || far > DESPAWN_R || (d.state === DState.Down && d.stateT > 120 && far > 60)) this.remove(i);
     }
-    // Parcels at doors are collected after a while.
-    for (let k = this.dropped.length - 5; k >= 0; k -= 5) if (this.t - this.dropped[k + 4] > 90) this.dropped.splice(k, 5);
+    // Parcels are taken in right after they land (left lying about they read as loot for the player).
+    for (let k = this.dropped.length - 5; k >= 0; k -= 5) if (this.t - this.dropped[k + 4] > PARCEL_STAY) this.dropped.splice(k, 5);
     this.draw(dt, cam);
     this.stats.drones = this.list.length;
   }

@@ -19,7 +19,7 @@ import type { Progress } from './Progress';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
   ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE,
-  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, SIZE_RANGE, SPEED, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, NOVA, NOVA_COOLDOWN,
+  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, NOVA, NOVA_COOLDOWN,
   BOLT, BOLT_COOLDOWN, QUAKE, QUAKE_COOLDOWN, GUST, GUST_COOLDOWN, SHRINK, SHRINK_COOLDOWN,
 } from './tuning';
 
@@ -95,6 +95,7 @@ export class AbilitySystem {
     i.debugBlast = this.progress.sandbox;
     p.flightAllowed = rf > 0;
     p.flightSpeed = FLIGHT_SPEED[rf] || 1;
+    p.flightBoost = FLIGHT_BOOST_MUL[rf] || FLIGHT_BOOST_MUL[FLIGHT_BOOST_MUL.length - 1];
     [p.minHeight, p.maxHeight] = SIZE_RANGE[rz];
     for (const [id, c] of this.cooldown) { c.left -= dt; if (c.left <= 0) this.cooldown.delete(id); }
     this.energy = Math.min(this.maxEnergy, this.energy + this.regen * dt);
@@ -161,6 +162,8 @@ export class AbilitySystem {
       case 'flight':
         p.toggleFlight();
         return true;
+      case 'punch':
+        return this.interactions.punch();
       case 'speed':
         return this.dash(r);
       case 'shockwave': {

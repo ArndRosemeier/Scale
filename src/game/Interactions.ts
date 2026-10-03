@@ -18,6 +18,7 @@ import { pointInPoly } from '../core/geom2';
 export class Interactions {
   private punchT = -10;
   private punchDone = true;
+  private punchQueued = false;
   private smashCooldown = 0;
   private roofT = 0;
   /** Punch impulse at 1.8 m (N·s, × k²): set by the AbilitySystem from super strength. */
@@ -47,12 +48,23 @@ export class Interactions {
     player.events.onLand = (x, y, z, e, h) => this.land(x, y, z, e, h);
   }
 
+  /** Throw a punch on the next update (the Punch power); false while the last one is still out. */
+  punch(): boolean {
+    if (this.lastTime - this.punchT <= 0.5) return false;
+    this.punchQueued = true;
+    return true;
+  }
+  private lastTime = 0;
+
   update(dt: number, input: Input, time: number): void {
+    this.lastTime = time;
     const p = this.player;
     const k = p.k;
     this.smashCooldown -= dt;
-    // ---- punch (left mouse)
-    if (input.clicked & 1 && time - this.punchT > 0.5) {
+    // ---- punch (a hotbar power: AbilitySystem → punch())
+    const punchNow = this.punchQueued;
+    this.punchQueued = false;
+    if (punchNow && time - this.punchT > 0.5) {
       this.punchT = time;
       this.punchDone = false;
       p.action = { id: 'punch', t0: p.animClock, dur: 0.55 };

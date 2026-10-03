@@ -25,7 +25,7 @@ import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Vo
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
 import { pointInPoly } from '../core/geom2';
 import { G } from '../render/materials/globals';
-import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, carPose, type TrainState } from './layout';
+import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, nextTrainAt, carPose, DWELL, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
 
 const BUILD_R = 380;
@@ -38,12 +38,23 @@ export class Underground {
   readonly boxes: Box[] = [];
   readonly entrances = new Map<string, Entrance>();
   private built = new Map<string, THREE.Object3D>();
+  /** Departure boards of the built station halls (one canvas per platform side, see updateBoards). */
+  private boards: Board[] = [];
+  private boardT = 0;
   private mat: THREE.MeshStandardMaterial;
   /** Murky sewer water: no sky reflection down here. */
   private waterMat = (() => { const m = createWaterMaterial(true); m.envMapIntensity = 0.04; m.roughness = 0.12; return m; })();
   private safetyMat = new THREE.MeshStandardMaterial({ color: 0xd9b21a, roughness: 0.6 });
   private lightMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xfff4e0, emissiveIntensity: 0.9 });
   private trainMesh: THREE.InstancedMesh;
+  private glassMesh: THREE.InstancedMesh;
+  /** While riding: the car's speed (m/s) and its change (m/s²), for the ride's camera and sound. */
+  riding: { speed: number; accel: number; x: number; y: number; z: number } | null = null;
+  private rideTime = 0;
+  /** Train sounds near the listener (doors, arriving, departing, rushing past): set by the game. */
+  onTrainSound: ((id: string, x: number, y: number, z: number, gain: number) => void) | null = null;
+  private trainEv = new Map<string, { open: boolean; dwell: boolean; arriving: boolean; near: boolean }>();
+  private flicker = 0;
   private trainColor: THREE.InstancedBufferAttribute;
   private headlamp = new THREE.SpotLight(0xfff2dd, 0, 30, 0.7, 0.8, 1.5);
   private stationLights: THREE.PointLight[] = [];
@@ -85,6 +96,13 @@ export class Underground {
         .replace('#include <color_vertex>', '#include <color_vertex>\nvColor.rgb = mix(vColor.rgb, iLine, aStripe);');
     };
     this.trainMesh = new THREE.InstancedMesh(carGeo, trainMat, 400);
+    // Window glass: tinted, see-through (the tunnel lights stream past; lit cars are seen from outside).
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x8aa2b0, roughness: 0.08, metalness: 0.3, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+    this.glassMesh = new THREE.InstancedMesh(trainGlassGeometry(), glassMat, 400);
+    this.glassMesh.count = 0;
+    this.glassMesh.frustumCulled = false;
+    this.glassMesh.renderOrder = 2;
+    this.group.add(this.glassMesh);
     this.trainMesh.count = 0;
     this.trainMesh.frustumCulled = false;
     this.trainMesh.castShadow = false;
@@ -308,7 +326,9 @@ export class Underground {
     });
     this.time = time;
     this.updateTrains(time, cam.position);
-    void dt; void playerH; void G;
+    this.boardT -= dt;
+    if (this.boardT <= 0) { this.boardT = 0.5; this.updateBoards(cam.position); }
+    void playerH; void G;
   }
 
   private buildNear(x: number, z: number): void {
@@ -567,9 +587,39 @@ export class Underground {
         mb.set('aLayer', 4).set('aTint', 0.9, 0.88, 0.84);
       }
     }
+    // Departure boards hang over the middle of each platform at two points; rods to the ceiling.
+    const boardY = b.y0 + PLATFORM_H + 3.1, boardU = [-b.hu * 0.35, b.hu * 0.35];
+    const boardV = (sv: number) => sv * (b.hv + PLATFORM_EDGE) / 2;
+    const metroLine = this.macro.metroLines[b.line ?? -1];
+    if (metroLine) {
+      mb.set('aLayer', 11).set('aTint', 0.3, 0.3, 0.32);
+      for (const sv of [-1, 1]) for (const u of boardU) for (const dv of [-1, 1]) {
+        box(u, boardV(sv) + dv * 1.0, (boardY + BOARD_H / 2 + b.y1) / 2, 0.025, (b.y1 - boardY - BOARD_H / 2) / 2, 0.025);
+      }
+    }
     const mesh = new THREE.Mesh(toGeometry(mb.build()), this.mat);
     mesh.receiveShadow = true;
     g.add(mesh);
+    if (metroLine) {
+      const stop = metroLine.stations.indexOf(b.station ?? -1);
+      for (const sv of [-1, 1]) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 128;
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 4;
+        // Same material setup as the name signs (no new shader variant).
+        const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.9 });
+        for (const u of boardU) for (const face of [-1, 1]) {
+          const m = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W, BOARD_H), mat);
+          const p = P(u + face * 0.02, boardV(sv), boardY);
+          m.position.set(p[0], p[1], p[2]);
+          m.lookAt(p[0] + face * b.ux, p[1], p[2] + face * b.uz);
+          g.add(m);
+        }
+        this.boards.push({ bi, owner: g, dir: sv, line: metroLine, stop, x: b.cx, z: b.cz, canvas, tex, mat, key: '' });
+      }
+    }
     const sm = new MeshBuilder([]);
     for (const v of safety) {
       const p = P(0, v, b.y0 + PLATFORM_H + 0.006);
@@ -598,6 +648,33 @@ export class Underground {
     // Real platform lights come from a fixed pool (see update): the number of lights in
     // the scene must never change, or every lit shader recompiles.
     return g;
+  }
+
+  /** Departure boards: the next two trains for the platform (redrawn only when the text changes). */
+  private updateBoards(cam: THREE.Vector3): void {
+    this.boards = this.boards.filter((bd) => {
+      if (this.built.get(`b${bd.bi}`) === bd.owner) return true;
+      bd.tex.dispose();
+      bd.mat.dispose();
+      return false;
+    });
+    for (const bd of this.boards) {
+      if (Math.hypot(bd.x - cam.x, bd.z - cam.z) > 160) continue;
+      const line = bd.line, t = this.time;
+      const first = nextTrainAt(line, bd.stop, bd.dir, t);
+      if (!first) continue;
+      const t2 = t + (first.dwelling ? first.left : first.wait + DWELL) + 0.5;
+      const second = nextTrainAt(line, bd.stop, bd.dir, t2);
+      const dest = this.terminus(line, bd.dir);
+      const ends = line.stations[bd.dir > 0 ? line.stations.length - 1 : 0] === line.stations[bd.stop];
+      const when = first.dwelling ? (first.left < DOOR_CLOSE + 2 ? 'Departing' : 'Boarding') : first.wait < 25 ? 'Arriving' : `${Math.ceil(first.wait / 60)} min`;
+      const then = second ? `then ${Math.max(1, Math.ceil((t2 - t + second.wait) / 60))} min` : '';
+      const key = `${when}|${then}`;
+      if (key === bd.key) continue;
+      bd.key = key;
+      drawBoard(bd.canvas, line.name, `#${line.color.toString(16).padStart(6, '0')}`, ends ? 'Terminates here' : dest, when, then);
+      bd.tex.needsUpdate = true;
+    }
   }
 
   // ------------------------------------------------------------ trains
@@ -659,6 +736,44 @@ export class Underground {
     return DOOR_U.some((d) => Math.abs(u - d) < DOOR_HW - margin);
   }
 
+  /**
+   * Sounds of the trains near the listener, from each train's middle car: doors (open / close),
+   * the braking squeal pulling in, the departure, and a roaring rush past (in tunnels and through
+   * stations, or past the ridden train).
+   */
+  private trainSounds(cam: THREE.Vector3): void {
+    if (!this.onTrainSound) return;
+    const mine = this.ridden();
+    const seen = new Set<string>();
+    for (const c of this.cars) {
+      // One car per train: the one just ahead of the middle.
+      if (Math.abs(c.slot - c.dir * ((CARS - 1) / 2 - Math.floor((CARS - 1) / 2))) > 0.01) continue;
+      const key = `${c.line}:${c.k}`;
+      seen.add(key);
+      const d = Math.hypot(c.x - cam.x, c.y - cam.y, c.z - cam.z);
+      const speed = Math.hypot(c.vx, c.vz);
+      const line = this.macro.metroLines[c.line];
+      const toStop = Math.abs(c.s - (line.stationS[c.next] ?? c.s));
+      const own = !!mine && mine.line === c.line && mine.k === c.k;
+      const ev = this.trainEv.get(key);
+      if (!ev) { this.trainEv.set(key, { open: c.open, dwell: c.dwell, arriving: false, near: false }); continue; }
+      const y = c.y + 1.5;
+      if (d < 120) {
+        if (c.open !== ev.open) this.onTrainSound('metro_doors', c.x, y, c.z, own ? 0.8 : 1);
+        if (!c.dwell && ev.dwell) this.onTrainSound('metro_depart', c.x, y, c.z, own ? 0.7 : 1);
+        if (!c.dwell && !ev.arriving && toStop < 140 && toStop > 20) { ev.arriving = true; this.onTrainSound('metro_arrive', c.x, y, c.z, own ? 0.7 : 1); }
+      }
+      if (c.dwell) ev.arriving = false;
+      // Rushing past: a moving train comes within reach of the listener (not the one ridden).
+      const near = !own && speed > 7 && d < (mine ? 14 : 22);
+      if (near && !ev.near) this.onTrainSound('metro_pass', c.x, y, c.z, mine ? 1 : 0.8);
+      ev.near = near;
+      ev.open = c.open;
+      ev.dwell = c.dwell;
+    }
+    for (const k of this.trainEv.keys()) if (!seen.has(k)) this.trainEv.delete(k);
+  }
+
   private m4 = new THREE.Matrix4();
   private updateTrains(time: number, cam: THREE.Vector3): void {
     this.computeCars(time);
@@ -669,6 +784,7 @@ export class Underground {
       this.m4.makeRotationY(Math.atan2(c.dx, c.dz));
       this.m4.setPosition(c.x, c.y, c.z);
       this.trainMesh.setMatrixAt(k, this.m4);
+      this.glassMesh.setMatrixAt(k, this.m4);
       const col = _col.setHex(this.macro.metroLines[c.line].color);
       this.trainColor.setXYZ(k, col.r, col.g, col.b);
       // Door leaves: the platform side (local −x) slides open during the dwell.
@@ -682,8 +798,16 @@ export class Underground {
     this.leafMesh.instanceMatrix.needsUpdate = true;
     this.trainMesh.count = k;
     this.trainMesh.instanceMatrix.needsUpdate = true;
+    this.glassMesh.count = k;
+    this.glassMesh.instanceMatrix.needsUpdate = true;
     this.trainColor.needsUpdate = true;
+    const was = this.riding;
+    this.riding = null;
     this.carryBody();
+    const now = this.riding as Underground['riding'];
+    if (now && was) now.accel = (now.speed - was.speed) / Math.max(1e-3, time - this.rideTime);
+    this.rideTime = time;
+    this.trainSounds(cam);
   }
 
   /** Riding: the body moves with its car (its own steps inside the car are kept); trains shove bodies off the track. */
@@ -724,10 +848,15 @@ export class Underground {
       b.vel.y = 0;
       b.grounded = true;
       this.rideFrame = { x: car.x, z: car.z, fx: car.dx, fz: car.dz };
-      // The car's ceiling light (one of the pooled station lights: the light count never changes).
+      // The car's ceiling light (one of the pooled station lights: the light count never changes);
+      // now and then it flickers at speed.
+      const speed = Math.hypot(car.vx, car.vz);
+      this.riding = { speed, accel: 0, x: car.x, y: car.y, z: car.z };
+      if (this.flicker > 0) this.flicker--;
+      else if (speed > 10 && Math.random() < 0.004) this.flicker = 3 + Math.floor(Math.random() * 6);
       const l = this.stationLights[1];
       l.position.set(car.x, car.y + CAR_H - 0.4, car.z);
-      l.intensity = 2.5;
+      l.intensity = this.flicker > 0 && this.flicker % 2 === 0 ? 0.6 : 2.5;
       return;
     }
     // A train runs into anyone on its track (below its floor): shoved aside, thrown if it is moving.
@@ -1076,15 +1205,27 @@ function trainCarGeometry(): THREE.BufferGeometry {
   };
   const L2 = CAR_L / 2 - 0.25, body: [number, number, number] = [0.82, 0.83, 0.85], top = CAR_FLOOR + 1.9;
   for (const sx of [-1, 1]) {
-    run(0.06, 2.6, sx * 1.42, 1.75, -L2, L2, body);                                // side walls
+    // Side walls: below and above the window band (WIN_Y0 … WIN_Y1), pillars between the panes.
+    run(0.06, WIN_Y0 - 0.45, sx * 1.42, (0.45 + WIN_Y0) / 2, -L2, L2, body);
+    run(0.06, 3.05 - WIN_Y1, sx * 1.42, (WIN_Y1 + 3.05) / 2, -L2, L2, body);
+    for (const [a, b] of windowBays(L2)) {
+      for (const u of [a, b]) add(0.06, WIN_Y1 - WIN_Y0, 0.2, sx * 1.42, (WIN_Y0 + WIN_Y1) / 2, u === a ? u + 0.1 : u - 0.1, body);
+      const panes = Math.max(1, Math.round((b - a) / 2.3));
+      for (let k = 1; k < panes; k++) add(0.06, WIN_Y1 - WIN_Y0, 0.12, sx * 1.42, (WIN_Y0 + WIN_Y1) / 2, a + ((b - a) * k) / panes, body);
+    }
     run(0.02, 0.35, sx * 1.46, 1.15, -L2, L2, [1, 1, 1], 1);                       // line stripe
-    run(0.02, 0.9, sx * 1.465, 2.15, -8.25, 8.25, [0.06, 0.07, 0.09]);             // windows band
     for (const d of DOOR_U) {
       add(0.06, 3.05 - top, DOOR_HW * 2, sx * 1.42, (top + 3.05) / 2, d, body);   // over the door
       add(0.06, CAR_FLOOR - 0.45, DOOR_HW * 2, sx * 1.42, (CAR_FLOOR + 0.45) / 2, d, body); // under it
     }
   }
-  for (const sz of [-1, 1]) add(2.9, 2.6, 0.06, 0, 1.75, sz * (L2 - 0.03), body);  // ends
+  // Ends, with a window (the view down the tunnel from the first and last car).
+  for (const sz of [-1, 1]) {
+    const z = sz * (L2 - 0.03);
+    add(2.9, WIN_Y0 - 0.45, 0.06, 0, (0.45 + WIN_Y0) / 2, z, body);
+    add(2.9, 3.05 - WIN_Y1, 0.06, 0, (WIN_Y1 + 3.05) / 2, z, body);
+    for (const sx of [-1, 1]) add(1.45 - END_WIN, WIN_Y1 - WIN_Y0, 0.06, sx * (1.45 + END_WIN) / 2, (WIN_Y0 + WIN_Y1) / 2, z, body);
+  }
   add(2.9, 0.1, CAR_L - 0.5, 0, 3.1, 0, [0.75, 0.75, 0.77]);                         // ceiling
   add(2.6, 0.5, 17.6, 0, 0.35, 0, [0.15, 0.15, 0.16]);                               // underframe
   add(2.5, 0.25, 17.6, 0, 3.2, 0, [0.7, 0.7, 0.72]);                                 // roof
@@ -1100,6 +1241,47 @@ function trainCarGeometry(): THREE.BufferGeometry {
   return merged;
 }
 
+/** Window band of a carriage (height over the car's base) and the half width of the end windows. */
+const WIN_Y0 = 1.7, WIN_Y1 = 2.6, END_WIN = 0.85;
+
+/** Wall stretches between the doorways (car-local u), where the side windows go. */
+function windowBays(L2: number): [number, number][] {
+  const out: [number, number][] = [];
+  let a = -L2;
+  for (const d of [...DOOR_U, Infinity]) {
+    const b = Math.min(L2, d - DOOR_HW);
+    if (b - a > 0.8) out.push([a, b]);
+    a = Math.max(a, d + DOOR_HW);
+  }
+  return out;
+}
+
+/** The glass of a carriage's windows (side panes and both ends), drawn with a see-through material. */
+function trainGlassGeometry(): THREE.BufferGeometry {
+  const gs: THREE.BufferGeometry[] = [];
+  const L2 = CAR_L / 2 - 0.25, h = WIN_Y1 - WIN_Y0, y = (WIN_Y0 + WIN_Y1) / 2;
+  for (const sx of [-1, 1]) for (const [a, b] of windowBays(L2)) {
+    const g = new THREE.PlaneGeometry(b - a, h);
+    g.rotateY(Math.PI / 2);
+    g.translate(sx * 1.42, y, (a + b) / 2);
+    gs.push(g.toNonIndexed());
+  }
+  for (const sz of [-1, 1]) {
+    const g = new THREE.PlaneGeometry(END_WIN * 2, h);
+    g.translate(0, y, sz * (L2 - 0.03));
+    gs.push(g.toNonIndexed());
+  }
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal']) {
+    const parts = gs.map((g) => g.getAttribute(name).array as Float32Array);
+    const arr = new Float32Array(parts.reduce((n, a) => n + a.length, 0));
+    let o = 0;
+    for (const a of parts) { arr.set(a, o); o += a.length; }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, 3));
+  }
+  return out;
+}
+
 function mergeGeos(gs: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
   for (const name of ['position', 'normal', 'color', 'aStripe']) {
@@ -1111,6 +1293,37 @@ function mergeGeos(gs: THREE.BufferGeometry[]): THREE.BufferGeometry {
     out.setAttribute(name, new THREE.BufferAttribute(arr, size));
   }
   return out;
+}
+
+const BOARD_W = 3.3, BOARD_H = 0.66;
+
+interface Board {
+  /** Hall box index and the built object it belongs to (gone or rebuilt: the board is dropped). */
+  bi: number; owner: THREE.Object3D;
+  /** Train direction served by this platform side. */
+  dir: number; line: MetroLine; stop: number; x: number; z: number;
+  canvas: HTMLCanvasElement; tex: THREE.CanvasTexture; mat: THREE.MeshStandardMaterial; key: string;
+}
+
+/** A dot-matrix style departure board: line chip, destination and minutes; the train after below. */
+function drawBoard(c: HTMLCanvasElement, line: string, color: string, dest: string, when: string, then: string): void {
+  const g = c.getContext('2d')!;
+  const W = c.width, H = c.height;
+  g.fillStyle = '#0a0d11'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#2a3440'; g.lineWidth = 6; g.strokeRect(3, 3, W - 6, H - 6);
+  g.fillStyle = color;
+  g.beginPath(); g.arc(46, 48, 26, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#ffffff'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(line, 46, 50);
+  g.fillStyle = '#ffb43a'; g.textAlign = 'left'; g.font = 'bold 34px ui-monospace, Consolas, monospace';
+  const room = W - 86 - g.measureText(when).width - 44;
+  let d = dest;
+  while (g.measureText(d).width > room && d.length > 4) d = d.slice(0, -2) + '…';
+  g.fillText(d, 86, 50);
+  g.textAlign = 'right';
+  g.fillText(when, W - 20, 50);
+  g.fillStyle = '#b8862c'; g.font = 'bold 24px ui-monospace, Consolas, monospace';
+  g.fillText(then, W - 20, 98);
 }
 
 function signTexture(name: string, colors: number[]): THREE.CanvasTexture {

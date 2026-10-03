@@ -17,6 +17,8 @@ export interface DeedHooks {
   toast?: (html: string, kind?: 'karma' | 'info' | 'warn') => void;
   sound?: (id: string, x: number, y: number, z: number, gain: number) => void;
   markers?: (m: MapMarker[]) => void;
+  /** Can the player get to this person (not indoors, not in the water, lying on a real surface)? */
+  reachable?: (a: PedAgent) => boolean;
 }
 
 export class Deeds {
@@ -98,6 +100,9 @@ export class Deeds {
     for (const a of this.peds.agents) {
       if (a.state !== PState.Down || !a.alive || a.actor || a.downBy === 'player' || a.downBy === undefined) continue;
       if (Math.hypot(a.x - p.pos.x, a.z - p.pos.z) > 160) continue;
+      // Out of reach (indoors, in the river, stuck at a height where nobody can get to them): no
+      // marker that leads nowhere — they are looked after by someone else and leave.
+      if (!a.ragdoll && a.stateT > 3 && this.hooks.reachable && !this.hooks.reachable(a)) { a.alive = false; continue; }
       list.push({ x: a.x, z: a.z, color: '#ff9f43', kind: 'alert', title: 'Needs help' });
     }
     const key = list.map((m) => `${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(';');

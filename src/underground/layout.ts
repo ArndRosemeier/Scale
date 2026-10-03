@@ -107,6 +107,37 @@ export function trainsOn(line: MetroLine, t: number): TrainState[] {
   return out;
 }
 
+/**
+ * The next train at a stop for one direction (platform side), from the same timetable as
+ * trainsOn: seconds until it pulls in (0 while one dwells there) and, while dwelling, the
+ * seconds until it leaves. Used by the platform departure boards.
+ */
+export function nextTrainAt(line: MetroLine, stop: number, dir: number, t: number): { wait: number; dwelling: boolean; left: number } | null {
+  const v = TRAIN_V, dwell = DWELL;
+  const S = line.stationS;
+  if (S.length < 2 || stop < 0 || stop >= S.length) return null;
+  const legs: number[] = [];
+  for (let i = 0; i + 1 < S.length; i++) legs.push(Math.abs(S[i + 1] - S[i]) / v);
+  const oneWay = legs.reduce((a, l) => a + l, 0) + (S.length - 1) * dwell;
+  const cycle = oneWay * 2;
+  const n = Math.max(2, Math.round(Math.abs(S[S.length - 1] - S[0]) / 1400));
+  // Position of the stop in this direction's run, and when (in the cycle) trains start dwelling there.
+  const L = dir > 0 ? legs : legs.slice().reverse();
+  const idx = dir > 0 ? stop : S.length - 1 - stop;
+  let T = dir > 0 ? 0 : oneWay;
+  for (let li = 0; li < idx; li++) T += (li === 0 ? dwell / 2 : dwell) + L[li];
+  const here = idx === 0 || idx === S.length - 1 ? dwell / 2 : dwell;
+  let best: { wait: number; dwelling: boolean; left: number } | null = null;
+  for (let k = 0; k < n; k++) {
+    const tt = ((t + (cycle * k) / n) % cycle + cycle) % cycle;
+    const since = ((tt - T) % cycle + cycle) % cycle;
+    if (since < here) return { wait: 0, dwelling: true, left: here - since };
+    const wait = cycle - since;
+    if (!best || wait < best.wait) best = { wait, dwelling: false, left: 0 };
+  }
+  return best;
+}
+
 /** Arc-length position (s) of car c (0 = head) of a train at s, centred on s and kept on the track. */
 export function carS(tube: Tube, s: number, dir: number, c: number): number {
   const total = tube.cum[tube.cum.length - 1], half = (CARS * CAR_L) / 2;

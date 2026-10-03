@@ -3,7 +3,7 @@
  * glances at a drone passing low or lowering a parcel, a small crowd that stops to gawk at (or
  * film) a knocked-over robot or a drone falling out of the sky.
  */
-import { PState, type Pedestrians, type PedAgent } from '../sim/Pedestrians';
+import { PState, GAWK_CROWD, canGawk, gawkersNear, type Pedestrians, type PedAgent } from '../sim/Pedestrians';
 import { hash32 } from '../core/rng';
 
 const nb: PedAgent[] = [];
@@ -34,14 +34,15 @@ export function glanceAt(peds: Pedestrians, x: number, y: number, z: number, r: 
  */
 export function gawkAt(peds: Pedestrians, x: number, y: number, z: number, r: number, pull: number): number {
   let n = 0;
+  // At most GAWK_CROWD standing around it (those already looking count); the rest glance.
+  let room = GAWK_CROWD - gawkersNear(peds, x, z, r, nb);
   for (const a of peds.neighbours(x, z, r, nb)) {
     if (!free(a)) continue;
     const d = Math.hypot(a.x - x, a.z - z);
     if (d > r) continue;
     const c = a.cit.curiosity * pull * (1.15 - (d / r) * 0.5);
     a.lookX = x; a.lookY = y; a.lookZ = z;
-    if (c > 0.62) { a.state = PState.Film; a.stateT = 0; n++; }
-    else if (c > 0.42) { a.state = PState.Gawk; a.stateT = 0; n++; }
+    if (c > 0.42 && room > 0 && canGawk(a)) { a.state = c > 0.62 ? PState.Film : PState.Gawk; a.stateT = 0; n++; room--; }
     else a.glance = 1.5 + a.cit.curiosity * 2;
   }
   return n;

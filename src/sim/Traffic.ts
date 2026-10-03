@@ -45,8 +45,12 @@ export interface Vehicle {
   state: VState;
   /** World pose. */
   x: number; y: number; z: number; yaw: number;
-  /** Turning connector (Bezier) when crossing a junction: progress 0..1, null when on an edge. */
-  turn: { ax: number; az: number; cx: number; cz: number; bx: number; bz: number; len: number; t: number } | null;
+  /**
+   * Turning connector (Bezier) when crossing a junction: progress 0..1, null when on an edge.
+   * `node` is the junction, `enter` the time the car drove into it (who goes first in the box),
+   * `from` the lane key it came from (cars behind on that lane follow it into the box).
+   */
+  turn: { ax: number; az: number; cx: number; cz: number; bx: number; bz: number; len: number; t: number; node: number; enter: number; from: string } | null;
   brake: number;
   indicator: number;
   headlights: number;
@@ -72,11 +76,22 @@ export interface Vehicle {
   siren?: boolean;
   /** Pulled towards the kerb (+, yielding to a siren) or the centre line (−, overtaking), 0..1. */
   pull?: number;
+  /** Seconds standing still in traffic (the gridlock breaker removes long-stuck cars out of sight). */
+  jam?: number;
 }
 
 const RANGE = 650;
 const DESPAWN = 800;
 const MAX_VEHICLES = 320;
+/**
+ * Gridlock breaker: a car standing still this long (s) beyond SIGHT (m) from the player is
+ * removed (as if it had turned off somewhere); closer by it takes JAM_NEAR s and NEAR m.
+ */
+const JAM_FAR = 40, SIGHT = 180, JAM_NEAR = 150, NEAR = 70;
+/** Seconds a car stands in a junction box before it stops yielding to crossing cars. */
+const BOX_PATIENCE = 6;
+/** Seconds a car stands still before it stops yielding to cars off its own lane (see carAhead). */
+const CROSS_PATIENCE = 15;
 
 const DIMS: Record<VKind, [number, number]> = {
   sedan: [4.7, 1.85], hatch: [4.1, 1.78], wagon: [4.8, 1.85], suv: [4.8, 1.95], van: [5.2, 2.0], pickup: [5.4, 2.0],
@@ -90,6 +105,15 @@ export class Traffic {
   private t = 0;
   private spawnAcc = 0;
   private laneIndex = new Map<string, Vehicle[]>();
+  /** Cars in junction boxes by the lane they turn into, and by junction. */
+  private exitIndex = new Map<string, Vehicle[]>();
+  private boxIndex = new Map<number, Vehicle[]>();
+  /** Cars in junction boxes by the lane they came from. */
+  private fromIndex = new Map<string, Vehicle[]>();
+  /** All driving cars on a coarse grid (16 m), for the look-ahead across lanes and streets. */
+  private cellIndex = new Map<number, Vehicle[]>();
+  /** Wrecks and crushed cars: obstacles on the road like robots lying there. */
+  private readonly wrecks: { x: number; z: number; r: number }[] = [];
   private rng = new Rng(77);
   /** +1 right-hand traffic, −1 left-hand. */
   private hand: number;
@@ -169,16 +193,27 @@ export class Traffic {
       this.spawnRandom(px, pz);
     }
     if (this.spawnAcc > 1) this.spawnAcc = 1;
-    // ---- lane occupancy index
+    // ---- lane occupancy index; cars in junction boxes by junction and by the lane they turn into;
+    // wrecks as obstacles (their lane position is stale once physics moves them)
     this.laneIndex.clear();
+    this.exitIndex.clear();
+    this.boxIndex.clear();
+    this.fromIndex.clear();
+    this.cellIndex.clear();
+    this.wrecks.length = 0;
     for (const v of this.vehicles) {
-      if (v.turn || v.state >= VState.Wreck) continue;
-      const k = `${v.edge}:${v.fwd ? 1 : 0}:${v.lane}`;
-      let l = this.laneIndex.get(k);
-      if (!l) this.laneIndex.set(k, (l = []));
-      l.push(v);
+      if (v.state >= VState.Wreck) { this.wrecks.push({ x: v.x, z: v.z, r: v.length * 0.45 }); continue; }
+      push(this.cellIndex, cellKey(Math.floor(v.x / 16), Math.floor(v.z / 16)), v);
+      if (v.turn) {
+        push(this.exitIndex, this.exitKey(v), v);
+        push(this.boxIndex, v.turn.node, v);
+        push(this.fromIndex, v.turn.from, v);
+        continue;
+      }
+      push(this.laneIndex, `${v.edge}:${v.fwd ? 1 : 0}:${v.lane}`, v);
     }
     for (const l of this.laneIndex.values()) l.sort((a, b) => (a.fwd ? a.s - b.s : b.s - a.s));
+    this.resolveOverlaps(px, pz);
     this.sirens.length = 0;
     for (const v of this.vehicles) if (v.siren && v.state < VState.Abandoned && !v.task?.arrived) this.sirens.push(v);
     // ---- reactions to world events
@@ -196,7 +231,12 @@ export class Traffic {
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
       const v = this.vehicles[i];
       this.step(v, dt);
-      if (!v.alive || Math.hypot(v.x - px, v.z - pz) > DESPAWN) {
+      const d = Math.hypot(v.x - px, v.z - pz);
+      // Gridlock breaker (cars on a job wait as long as their job needs). Wears off while moving,
+      // so stop-and-creep (a few cm at a time against another car) still counts as stuck.
+      v.jam = v.state > VState.Fleeing || v.task ? 0 : v.speed < 0.3 ? (v.jam ?? 0) + dt : Math.max(0, (v.jam ?? 0) - dt * 2);
+      const stuck = (v.jam > JAM_FAR && d > SIGHT) || (v.jam > JAM_NEAR && d > NEAR);
+      if (!v.alive || d > DESPAWN || stuck) {
         this.vehicles[i] = this.vehicles[this.vehicles.length - 1];
         this.vehicles.pop();
       }
@@ -230,14 +270,16 @@ export class Traffic {
       // Prefer spawning out of sight (ring), occasionally closer to fill in.
       if (d > RANGE || (d < 180 && this.rng.chance(0.85))) continue;
       const fwd = this.rng.chance(0.5);
-      const s = this.rng.range(5, e.len - 5);
-      // Not on top of another car.
-      const k = `${ei}:${fwd ? 1 : 0}:0`;
-      if (this.laneIndex.get(k)?.some((o) => Math.abs(o.s - s) < 12)) continue;
+      // Out of the junction boxes at both ends.
+      const jb = junctionBack(e);
+      if (e.len - 2 * jb < 14) continue;
+      const s = this.rng.range(jb + 6, e.len - jb - 6);
       // Near future: a few driverless shuttles among the cars (main roads mostly).
       const kind = this.rng.weighted<VKind>(['sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle'],
         (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: 1.2, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4, shuttle: e.cls <= 1 ? 7 : 3 }[k2]));
       const v = this.makeVehicle(kind, ei, fwd, s, null);
+      // Not on top of another car (on the lane it really got).
+      if (!this.clearAt(v, 8)) continue;
       // Not on top of a robot on the road.
       if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 12 && Math.abs(o.z - v.z) < 12)) continue;
       // Route: random walk of a few edges ahead, preferring straight on.
@@ -256,6 +298,7 @@ export class Traffic {
     const fwd = ea.side * this.hand > 0;
     const v = this.makeVehicle(driver.seed % 5 === 0 ? 'suv' : driver.seed % 7 === 0 ? 'hatch' : 'sedan', ea.e, fwd, ea.s, driver);
     if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 8 && Math.abs(o.z - v.z) < 8)) return false;
+    if (!this.placeFree(v)) return false;
     v.dest = { x: bx, z: bz };
     if (eb) {
       const startNode = fwd ? E[ea.e].b : E[ea.e].a;
@@ -414,12 +457,14 @@ export class Traffic {
       if (!v.turn) { v.fwd = !v.fwd; v.route = this.randomRoute(v.edge, v.fwd, 10); v.ri = 0; this.onHorn?.(v); }
     }
     if (v.turn) {
-      // Junction connector at reduced speed (stopping for a robot in the way).
+      // Junction connector at reduced speed: stopping for a robot in the way, the queue on the
+      // lane it turns into and cars in the box that cross its path.
       let target = Math.min(v.vmax, 7);
-      const og = this.obstacleAhead(v, 10);
+      const og = Math.min(this.obstacleAhead(v, 10), this.boxGap(v));
       if (og < Infinity) target = Math.min(target, Math.sqrt(12 * Math.max(0, og - 0.3)));
-      if (target < v.speed - 0.5) { v.speed = Math.max(target, v.speed - 9 * dt); v.brake = 1; }
-      else v.speed += (target - v.speed) * Math.min(1, dt * 1.5);
+      if (og <= 0.3) { v.speed = 0; v.brake = 1; }
+      else if (target < v.speed - 0.5) { v.speed = Math.max(target, v.speed - 9 * dt); v.brake = 1; }
+      else { v.speed += (target - v.speed) * Math.min(1, dt * 1.5); v.brake = 0; }
       v.turn.t += (v.speed * dt) / v.turn.len;
       if (v.turn.t >= 1) {
         v.turn = null;
@@ -441,19 +486,38 @@ export class Traffic {
     const remaining = e.len - along;
     // ---- leader: next car in the same lane, or the stop line, or a pedestrian on the road
     let gap = Infinity, leadV = 0, passing = false;
-    const lane = this.laneIndex.get(`${v.edge}:${v.fwd ? 1 : 0}:${v.lane}`);
+    const laneKey = `${v.edge}:${v.fwd ? 1 : 0}:${v.lane}`;
+    const lane = this.laneIndex.get(laneKey);
     if (lane) {
       for (const o of lane) {
         if (o === v) continue;
         const oa = v.fwd ? o.s : e.len - o.s;
-        if (oa > along) {
+        // (Two cars on the same spot: the lower id leads, so the other one brakes.)
+        if (oa > along || (oa === along && o.id < v.id)) {
           // A siren car passes cars that pulled over.
           if (v.siren && (o.pull ?? 0) > 0.5) { if (oa - along < 30) passing = true; continue; }
           const g = oa - along - (o.length + v.length) / 2; if (g < gap) { gap = g; leadV = o.speed; } break;
         }
       }
     }
+    // Cars that left this lane into the junction and still stand or crawl in the box ahead:
+    // without this the next car turned in on top of them.
+    const ahead = this.fromIndex.get(laneKey);
+    if (ahead) for (const o of ahead) {
+      if (!o.turn) continue; // (out of the box earlier this frame: on the lane list next frame)
+      const g = Math.max(0, remaining - junctionBack(e)) + o.turn.t * o.turn.len - (o.length + v.length) / 2;
+      if (g < gap) { gap = g; leadV = o.speed; }
+    }
+    // Any other car really in the way, whatever lane or street it is on (streets meeting at a
+    // sharp angle, a car put down beside the lanes, one in the box from another approach).
+    const pg = this.carAhead(v, laneKey);
+    if (pg < gap) { gap = pg; leadV = 0; }
     const node = v.fwd ? e.b : e.a;
+    // Pick the way on before the junction (so the exit can be checked), unless on a job.
+    if (remaining < 45 && v.ri + 1 >= v.route.edges.length && !v.task) {
+      const more = this.randomRoute(v.edge, v.fwd, 8);
+      if (more.edges.length > 1) { v.route = more; v.ri = 0; }
+    }
     const hasNext = v.ri + 1 < v.route.edges.length;
     // Signals / yielding at the end of the edge.
     if (remaining < 45) {
@@ -464,7 +528,15 @@ export class Traffic {
         // Unsignalled junction: slow down; yield if something is in the box.
         if (this.junctionBusy(node, v)) mustStop = true;
       }
-      if (!hasNext) mustStop = mustStop || false;
+      // Don't block the box: only drive in when the lane it turns into has room for the car
+      // (sirens too). Otherwise cars came out of the junction on top of the queue there.
+      // Nor while a car stands in the box (waiting for others to clear its way): a box that
+      // only fills locks up.
+      if (!mustStop && this.boxIndex.get(node)?.some((o) => (o.jam ?? 0) > 1)) mustStop = true;
+      if (!mustStop && hasNext) {
+        const ne = this.net.edges[v.route.edges[v.ri + 1]];
+        if (ne && this.entryRoom(v.route.edges[v.ri + 1], v.route.fwd[v.ri + 1], Math.min(v.lane, ne.lanes - 1), v) < Math.min(v.length + 2, Math.max(0, ne.len - 2 * junctionBack(ne)))) mustStop = true;
+      }
       if (mustStop && stopAt > -1 && stopAt < gap) { gap = Math.max(0, stopAt); leadV = 0; }
     }
     // Pedestrians on the road ahead (within the lane corridor).
@@ -527,10 +599,10 @@ export class Traffic {
     const ne = this.net.edges[v.route.edges[v.ri + 1]];
     const nf = v.route.fwd[v.ri + 1];
     const a = { x: 0, z: 0, dx: 0, dz: 0 }, b = { x: 0, z: 0, dx: 0, dz: 0 };
-    // Exit point (end of this edge, pulled back from the junction) and entry point of the next edge.
-    const back = junctionBack(e);
+    // Start where the car is (a car that ran past the box border would otherwise jump back onto
+    // the one behind it) and end at the entry point of the next edge.
     const fwdIn = junctionBack(ne);
-    this.net.pointAt(e, v.fwd ? Math.min(v.s, e.len - back) : Math.max(v.s, back), this.laneOffset(e, v.fwd, v.lane), a);
+    this.net.pointAt(e, v.s, this.laneOffset(e, v.fwd, v.lane), a);
     const lane = Math.min(v.lane, ne.lanes - 1);
     this.net.pointAt(ne, nf ? fwdIn : ne.len - fwdIn, this.laneOffset(ne, nf, lane), b);
     const node = v.fwd ? e.b : e.a;
@@ -538,9 +610,138 @@ export class Traffic {
     // Control point: the node centre pulled towards the midpoint (smooth curve).
     const cx = (n.x * 2 + a.x + b.x) / 4, cz = (n.z * 2 + a.z + b.z) / 4;
     const len = Math.max(1, Math.hypot(cx - a.x, cz - a.z) + Math.hypot(b.x - cx, b.z - cz));
-    v.turn = { ax: a.x, az: a.z, cx, cz, bx: b.x, bz: b.z, len, t: 0 };
+    v.turn = { ax: a.x, az: a.z, cx, cz, bx: b.x, bz: b.z, len, t: 0, node, enter: this.t, from: `${v.edge}:${v.fwd ? 1 : 0}:${v.lane}` };
     // Skip the part of the edges inside the junction.
     void fwdIn;
+  }
+
+  /**
+   * Gap (m) to a car physically ahead in this car's path that the lane lists do not show (not on
+   * its own lane, not in the box from it). Oncoming cars are left out (on curves they swing
+   * through the corridor ahead). Of two cars in each other's way the lower id goes first; after
+   * CROSS_PATIENCE s standing a car stops looking (a cycle of three or more must not lock up).
+   */
+  private carAhead(v: Vehicle, laneKey: string): number {
+    if (v.siren || (v.jam ?? 0) > CROSS_PATIENCE) return Infinity;
+    const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+    const reach = v.length + 6 + v.speed * 1.5;
+    const cx = v.x + fx * reach * 0.5, cz = v.z + fz * reach * 0.5;
+    const i0 = Math.floor((cx - reach) / 16), i1 = Math.floor((cx + reach) / 16), j0 = Math.floor((cz - reach) / 16), j1 = Math.floor((cz + reach) / 16);
+    let best = Infinity;
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const l = this.cellIndex.get(cellKey(i, j));
+      if (l) for (const o of l) {
+        if (o === v || (o.turn ? o.turn.from === laneKey : o.edge === v.edge && o.fwd === v.fwd && o.lane === v.lane)) continue;
+        if (Math.cos(o.yaw - v.yaw) < -0.3) continue;
+        const g = pathGap(v, o);
+        if (g >= best || (v.id < o.id && pathGap(o, v) < Infinity)) continue;
+        best = g;
+      }
+    }
+    return best;
+  }
+
+  /** Lane key of the lane a car in a junction box turns into. */
+  private exitKey(v: Vehicle): string {
+    const ne = this.net.edges[v.route.edges[v.ri + 1]];
+    return `${v.route.edges[v.ri + 1]}:${v.route.fwd[v.ri + 1] ? 1 : 0}:${ne ? Math.min(v.lane, ne.lanes - 1) : 0}`;
+  }
+
+  /**
+   * Free length (m) of a lane behind the point where cars come out of the junction: up to the
+   * rear of the last car on it, less the cars already turning into it.
+   */
+  private entryRoom(ei: number, fwd: boolean, lane: number, self: Vehicle): number {
+    const e = this.net.edges[ei];
+    const entry = junctionBack(e);
+    let room = e.len - entry;
+    const l = this.laneIndex.get(`${ei}:${fwd ? 1 : 0}:${lane}`);
+    if (l) for (const o of l) {
+      if (o === self) continue;
+      room = (fwd ? o.s : e.len - o.s) - o.length / 2 - entry;
+      break;
+    }
+    const box = this.exitIndex.get(`${ei}:${fwd ? 1 : 0}:${lane}`);
+    if (box) for (const o of box) if (o !== self) room -= o.length + 2;
+    return room;
+  }
+
+  /**
+   * Gap (m) ahead of a car in a junction box: to the last car on the lane it turns into, to cars
+   * ahead turning into the same lane, and to cars in the box across its path. Of two cars in
+   * each other's way the one that drove in first goes on; a car held up in the box for a few
+   * seconds (a yield cycle of three or more) stops yielding to crossing cars and creeps on.
+   */
+  private boxGap(v: Vehicle): number {
+    const T = v.turn!;
+    const left = (1 - T.t) * T.len;
+    let gap = Infinity;
+    const ei = v.route.edges[v.ri + 1], ne = this.net.edges[ei];
+    if (!ne) return gap;
+    const key = this.exitKey(v);
+    const l = this.laneIndex.get(key);
+    if (l?.length) {
+      const o = l[0], nf = v.route.fwd[v.ri + 1];
+      gap = left + (nf ? o.s : ne.len - o.s) - junctionBack(ne) - (o.length + v.length) / 2;
+    }
+    for (const o of this.boxIndex.get(T.node) ?? []) {
+      if (o === v || !o.turn) continue;
+      if (this.exitKey(o) === key) {
+        // Turning into the same lane: follow the one nearer the exit.
+        const oLeft = (1 - o.turn.t) * o.turn.len;
+        if (oLeft < left || (oLeft === left && o.id < v.id)) gap = Math.min(gap, left - oLeft - (o.length + v.length) / 2);
+        continue;
+      }
+      if ((v.jam ?? 0) > BOX_PATIENCE) continue;
+      const g = pathGap(v, o);
+      if (g === Infinity) continue;
+      const first = o.turn.enter < T.enter || (o.turn.enter === T.enter && o.id < v.id);
+      if (first || pathGap(o, v) === Infinity) gap = Math.min(gap, g);
+    }
+    return gap;
+  }
+
+  /**
+   * Safety net: cars of a lane never stay inside each other (two cars put on the same spot by a
+   * road network rebuild, a car pushed by a siren's pull-in). The rear one is set back, or,
+   * out of sight, removed.
+   */
+  private resolveOverlaps(px: number, pz: number): void {
+    for (const l of this.laneIndex.values()) {
+      for (let i = l.length - 2; i >= 0; i--) {
+        const a = l[i], b = l[i + 1];
+        if (Math.abs(a.pull ?? 0) > 0.5 || Math.abs(b.pull ?? 0) > 0.5) continue;
+        const e = this.net.edges[a.edge];
+        if (!e) continue;
+        const over = (a.length + b.length) / 2 + 0.3 - (a.fwd ? b.s - a.s : a.s - b.s);
+        if (over <= 0.3) continue;
+        if (a.state >= VState.Abandoned || a.task) continue;
+        if (Math.hypot(a.x - px, a.z - pz) > SIGHT) { a.alive = false; l.splice(i, 1); continue; }
+        a.s = a.fwd ? Math.max(0, a.s - over) : Math.min(e.len, a.s + over);
+        a.speed = Math.min(a.speed, b.speed);
+      }
+    }
+  }
+
+  /** Is the spot of a (new) car free of other cars (r: extra clearance in m)? */
+  private clearAt(v: Vehicle, r: number): boolean {
+    for (const o of this.vehicles) {
+      const R = (v.length + o.length) / 2 + r;
+      if (Math.abs(o.x - v.x) < R && Math.abs(o.z - v.z) < R && Math.hypot(o.x - v.x, o.z - v.z) < R) return false;
+    }
+    return true;
+  }
+
+  /** Move a new car along its edge (up to ±16 m) to a free spot; false when there is none. */
+  private placeFree(v: Vehicle): boolean {
+    const e = this.net.edges[v.edge], s0 = v.s;
+    for (const ds of [0, 8, -8, 16, -16]) {
+      v.s = s0 + ds;
+      if (v.s < 2 || v.s > e.len - 2) continue;
+      this.pose(v);
+      if (this.clearAt(v, 1.5)) return true;
+    }
+    return false;
   }
 
   private junctionBusy(node: number, self: Vehicle): boolean {
@@ -581,12 +782,11 @@ export class Traffic {
   }
   /** Gap (m, from the front bumper) to the nearest obstacle in the lane corridor ahead. */
   private obstacleAhead(v: Vehicle, look: number): number {
-    const O = this.obstacles;
-    if (!O.length) return Infinity;
+    if (!this.obstacles.length && !this.wrecks.length) return Infinity;
     const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
     const reach = look + v.length;
     let best = Infinity;
-    for (const o of O) {
+    for (const O of [this.obstacles, this.wrecks]) for (const o of O) {
       const dx = o.x - v.x, dz = o.z - v.z;
       if (dx > reach || dx < -reach || dz > reach || dz < -reach) continue;
       const along = dx * fx + dz * fz;
@@ -659,6 +859,7 @@ export class Traffic {
     const v = this.makeVehicle(kind, ne.e, fwd, Math.max(2, Math.min(e.len - 2, ne.s)), null);
     v.lane = 0;
     this.pose(v);
+    if (!this.placeFree(v)) return null;
     v.route = this.randomRoute(ne.e, fwd, 6);
     this.vehicles.push(v);
     return v;
@@ -670,13 +871,16 @@ export class Traffic {
     const e = E[v.edge];
     const eb = this.net.nearestEdge(x, z, 300);
     if (!e || !eb) return false;
-    v.turn = null;
+    // In a junction box: finish the turn and route on from the street it turns into (dropping
+    // the turn put the car back at the stop line, often on top of the car behind).
+    const head = v.turn && E[v.route.edges[v.ri + 1]] ? { edges: [v.edge, v.route.edges[v.ri + 1]], fwd: [v.fwd, v.route.fwd[v.ri + 1]] } : { edges: [v.edge], fwd: [v.fwd] };
+    const le = head.edges[head.edges.length - 1], lf = head.fwd[head.fwd.length - 1];
     v.ri = 0;
-    if (eb.e === v.edge) { v.route = this.randomRoute(v.edge, v.fwd, 2); return true; }
+    if (eb.e === le) { const more = this.randomRoute(le, lf, 2); v.route = { edges: [...head.edges, ...more.edges.slice(1)], fwd: [...head.fwd, ...more.fwd.slice(1)] }; return true; }
     const end = this.net.edgeEndNear(eb.e, eb.s);
-    const r = this.net.route(v.fwd ? e.b : e.a, end, true, 6000);
+    const r = this.net.route(lf ? E[le].b : E[le].a, end, true, 6000);
     if (!r) return false;
-    v.route = { edges: [v.edge, ...r.edges], fwd: [v.fwd, ...r.fwd] };
+    v.route = { edges: [...head.edges, ...r.edges], fwd: [...head.fwd, ...r.fwd] };
     // Onto the target's street from the route's end node (unless the route came along it).
     if (r.edges[r.edges.length - 1] !== eb.e) { v.route.edges.push(eb.e); v.route.fwd.push(end === E[eb.e].a); }
     return true;
@@ -686,6 +890,33 @@ export class Traffic {
     return this.vehicles.filter((v) => Math.hypot(v.x - x, v.z - z) < r + v.length / 2);
   }
 }
+
+function cellKey(i: number, j: number): number {
+  return (i + 32768) * 65536 + (j + 32768);
+}
+
+function push<K, V>(m: Map<K, V[]>, k: K, v: V): void {
+  const l = m.get(k);
+  if (l) l.push(v); else m.set(k, [v]);
+}
+
+/**
+ * Gap (m, from the front bumper) from car a to car b when b is in a's way: within a's
+ * look-ahead and its width (b taken as a disc of its half length). Infinity otherwise.
+ */
+export function pathGap(a: CarBox & { speed: number }, b: CarBox): number {
+  const fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw);
+  const dx = b.x - a.x, dz = b.z - a.z;
+  // b's half extents along and across a's heading (its box turned by the yaw difference).
+  const c = Math.abs(Math.cos(b.yaw - a.yaw)), s = Math.abs(Math.sin(b.yaw - a.yaw));
+  const hAlong = c * b.length / 2 + s * b.width / 2, hLat = s * b.length / 2 + c * b.width / 2;
+  const along = dx * fx + dz * fz;
+  if (along <= 0 || along > a.length / 2 + hAlong + 3 + a.speed * 1.5) return Infinity;
+  if (Math.abs(dx * -fz + dz * fx) > a.width / 2 + hLat + 0.2) return Infinity;
+  return along - a.length / 2 - hAlong;
+}
+
+type CarBox = { x: number; z: number; yaw: number; length: number; width: number };
 
 /** Distance from an edge end at which the junction box begins. */
 export function junctionBack(e: REdge): number {

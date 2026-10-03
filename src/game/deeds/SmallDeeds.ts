@@ -57,7 +57,7 @@ interface Deed {
   kind: SmallDeedKind;
   rng: Rng;
   t: number;
-  phase: 'waiting' | 'carried' | 'following' | 'done';
+  phase: 'waiting' | 'carried' | 'set down' | 'following' | 'done';
   owner: PedAgent | null;
   x: number; y: number; z: number;
   critter: Critter | null;
@@ -239,9 +239,9 @@ export class SmallDeeds {
         this.climbT = 0;
         this.h.sound('cat_meow', d.x, d.y, d.z, 0.9, 1.2);
       }
-    } else if (d.phase === 'carried') {
+    } else if (d.phase === 'carried' || d.phase === 'set down') {
       stand(oa);
-      lookAt(oa, p.x, p.y + 1.2, p.z);
+      lookAt(oa, d.phase === 'carried' ? p.x : d.x, d.phase === 'carried' ? p.y + 1.2 : d.y, d.phase === 'carried' ? p.z : d.z);
       oa.mood = 'surprised';
       if (d.callT <= 0) { d.callT = 6 + d.rng.float() * 4; this.h.sound('cat_meow', p.x, p.y + 1.2, p.z, 0.4, 1.1); }
     }
@@ -322,6 +322,7 @@ export class SmallDeeds {
     if (d.kind === 'cat' && d.phase === 'waiting' && d.tree && Math.hypot(p.x - d.tree.x, p.z - d.tree.z) < 2.2 && p.y < d.y - 1 && this.climbT <= 0) return 'Press <b>E</b> to climb the tree';
     if (d.kind === 'wallet' && d.phase === 'waiting' && Math.hypot(p.x - d.x, p.z - d.z) < 1.6) return 'Press <b>E</b> to pick up the wallet';
     if (d.phase === 'carried' && d.owner && Math.hypot(p.x - d.owner.x, p.z - d.owner.z) < 2.6) return d.kind === 'cat' ? 'Press <b>E</b> to hand the cat back' : 'Press <b>E</b> to give the wallet back';
+    if (d.phase === 'set down' && Math.hypot(p.x - d.x, p.z - d.z) < 1.6) return `Press <b>E</b> to pick up the ${d.kind}`;
     return null;
   }
 
@@ -345,8 +346,40 @@ export class SmallDeeds {
       this.finish(d, d.kind === 'cat' ? 'Rescued a cat from a tree' : 'Returned a lost wallet');
       return true;
     }
+    if (d.phase === 'set down' && Math.hypot(p.x - d.x, p.z - d.z) < 1.6) {
+      P.action = { id: 'pickup', t0: P.animClock, dur: 0.8 };
+      d.phase = 'carried';
+      return true;
+    }
     return false;
   }
+
+  /** While carrying (and E does nothing else here): the hint to put it down. */
+  putDownHint(): string | null {
+    const d = this.current;
+    return d && d.phase === 'carried' ? `Press <b>E</b> to put the ${d.kind} down` : null;
+  }
+
+  /** E with nothing else to do: put what you carry down in front of you. True when used. */
+  putDown(): boolean {
+    const d = this.current;
+    if (!d || d.phase !== 'carried') return false;
+    const P = this.h.player, p = P.pos;
+    P.action = { id: 'pickup', t0: P.animClock, dur: 0.8 };
+    const h = P.height, fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
+    d.x = p.x + fx * 0.6 * h / 1.8; d.z = p.z + fz * 0.6 * h / 1.8; d.y = p.y;
+    const obj = d.critter?.object ?? d.item;
+    obj?.position.set(d.x, d.y, d.z);
+    // Next to its owner that is as good as handing it over.
+    if (d.owner && Math.hypot(d.x - d.owner.x, d.z - d.owner.z) < 6) {
+      this.finish(d, d.kind === 'cat' ? 'Rescued a cat from a tree' : 'Returned a lost wallet');
+      return true;
+    }
+    d.phase = 'set down';
+    if (d.kind === 'cat') this.h.sound('cat_meow', d.x, d.y, d.z, 0.6, 1.1);
+    return true;
+  }
+
 
   private finish(d: Deed, reason: string): void {
     d.phase = 'done';

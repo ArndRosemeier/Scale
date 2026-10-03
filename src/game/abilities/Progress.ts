@@ -30,10 +30,21 @@ export type KarmaListener = (amount: number, reason: string, balance: number) =>
 /** v2: ten slots and the elemental roster (v1 held eight, with dash). */
 const SANDBOX_SLOTS_KEY = 'scale.sandbox.slots.v2';
 /** Super jump (Space) and flight (F) have their own keys, so the sandbox bar starts with the rest. */
-const DEFAULT_SANDBOX_SLOTS: (AbilityId | null)[] = ['speed', 'laser', 'lightning', 'fireWave', 'frostNova', 'icePath', 'stomp', 'gust', 'hydro', 'shrink'];
+const DEFAULT_SANDBOX_SLOTS: (AbilityId | null)[] = ['punch', 'speed', 'laser', 'lightning', 'fireWave', 'frostNova', 'icePath', 'stomp', 'gust', 'hydro'];
 
 function fresh(): ProgressData {
-  return { v: 1, karma: KARMA.start, earned: 0, deeds: 0, ranks: {}, slots: new Array(HOTBAR_SLOTS).fill(null), cores: [], seen: [], bonusMax: 0, bonusRegen: 0 };
+  const slots: (AbilityId | null)[] = new Array(HOTBAR_SLOTS).fill(null);
+  slots[0] = 'punch';
+  return { v: 1, karma: KARMA.start, earned: 0, deeds: 0, ranks: {}, slots, cores: [], seen: [], bonusMax: 0, bonusRegen: 0 };
+}
+
+/** Punch used to be the left mouse button: hotbars saved before get it in the first free slot. */
+function withPunch(slots: (AbilityId | null)[]): (AbilityId | null)[] {
+  if (!slots.includes('punch')) {
+    const free = slots.indexOf(null);
+    if (free >= 0) slots[free] = 'punch';
+  }
+  return slots;
 }
 
 export class Progress {
@@ -60,6 +71,7 @@ export class Progress {
     // Robust for ids that are not (or no longer) abilities: an old save, a renamed power.
     const def = ABILITY[(LEGACY_IDS[id] ?? id) as AbilityId];
     if (!def) return 0;
+    if (def.id === 'punch') return 1;
     const r = this.d.ranks[def.id];
     return this.sandbox ? (r ?? def.maxRank) : (r ?? 0);
   }
@@ -161,7 +173,7 @@ export class Progress {
     try {
       if (this.sandbox) {
         const s = JSON.parse(localStorage.getItem(SANDBOX_SLOTS_KEY) ?? 'null');
-        d.slots = Array.isArray(s) ? sanitizeSlots(s) : DEFAULT_SANDBOX_SLOTS.slice();
+        d.slots = Array.isArray(s) ? withPunch(sanitizeSlots(s)) : DEFAULT_SANDBOX_SLOTS.slice();
         return d;
       }
       const raw = localStorage.getItem(this.key);
@@ -181,7 +193,7 @@ export class Progress {
       }
       return {
         v: 1, karma: Math.max(0, Number(o.karma) || 0), earned: Number(o.earned) || 0, deeds: Number(o.deeds) || 0, ranks,
-        slots: sanitizeSlots(o.slots ?? []), cores: (o.cores ?? []).filter(Number.isFinite), seen: (o.seen ?? []).filter(Number.isFinite),
+        slots: withPunch(sanitizeSlots(o.slots ?? [])), cores: (o.cores ?? []).filter(Number.isFinite), seen: (o.seen ?? []).filter(Number.isFinite),
         bonusMax: Number(o.bonusMax) || 0, bonusRegen: Number(o.bonusRegen) || 0,
       };
     } catch { return d; }

@@ -6,6 +6,8 @@ export const MAX_RANK = 5;
 
 /** Karma price of the next rank: COST[id][r] buys rank r + 1 (r = 0 is the unlock). */
 export const KARMA_COST = {
+  /** Everyone can punch: free and always unlocked (Progress.rank). */
+  punch: [0],
   strength: [20, 30, 45, 70, 100],
   superJump: [20, 30, 45, 70, 100],
   speed: [40, 50, 75, 105, 150],
@@ -68,14 +70,17 @@ export const SHOCK_RANGE = [0, 80, 150, 300, 500, 800];
 export const SHOCK_COST = [0, 40, 40, 45, 50, 55];
 export const SHOCK_COOLDOWN = [0, 10, 9, 8, 7, 6];
 
-/** Flight: speed multiplier on cruise (22 m/s) and boost (160 m/s) at 1.8 m. */
+/** Flight: speed multiplier on cruise (22 m/s at 1.8 m). */
 export const FLIGHT_SPEED = [0, 0.35, 0.5, 0.65, 0.8, 1];
 export const FLIGHT_CRUISE = 22;
-export const FLIGHT_BOOST = 160;
+/** Boost (Shift) multiplies the cruise speed, more with every rank: a first-rank boost is a brisk 14 m/s, the top rank ~160 m/s. */
+export const FLIGHT_BOOST_MUL = [0, 1.8, 2.6, 3.8, 5.2, 7.3];
+/** Flight boost speed (m/s at 1.8 m) at rank r. */
+export const flightBoost = (r: number): number => FLIGHT_CRUISE * FLIGHT_SPEED[r] * FLIGHT_BOOST_MUL[r];
 
 /**
  * Super speed, hold = run: top speed in m/s at 1.8 m (× √k, like every gait and like flight).
- * Always clearly above flight's boost at the same rank (FLIGHT_BOOST × FLIGHT_SPEED[r]).
+ * Always clearly above flight's boost at the same rank (flightBoost(r)).
  */
 export const SPEED_TOP = [0, 75, 110, 145, 185, 240];
 /** Super speed: hold longer than this (s) and it runs; a shorter tap dashes. */

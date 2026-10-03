@@ -254,7 +254,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     check(!/NaN|undefined|Infinity/.test(txt), `${d.id} rank ${r} text: ${txt}`);
     check((T.KARMA_COST as Record<string, readonly number[]>)[d.id]?.length === d.maxRank, `${d.id}: karma cost for every rank`);
   }
-  for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.FLIGHT_BOOST * T.FLIGHT_SPEED[r] * 1.1, `super speed rank ${r} clearly faster than flight boost`);
+  for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.flightBoost(r) * 1.1, `super speed rank ${r} clearly faster than flight boost`);
   check(LEGACY_IDS.dash === 'speed', 'dash folds into super speed');
   // A Normal save from before the fold: dash rank 3 on slot 2 becomes super speed rank 3 there.
   const store = new Map<string, string>();
@@ -265,6 +265,23 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   check(pg.rank('speed') === 3 && pg.slots[1] === 'speed' && pg.slots.length === 10 && pg.karma === 40, `old save migrates (speed ${pg.rank('speed')}, slot ${pg.slots[1]})`);
   check(pg.rank('dash' as never) === 3 && pg.rank('nonsense' as never) === 0, 'rank lookups are robust for unknown / legacy ids');
   console.log(`powers: ${ABILITIES.length} abilities checked`);
+}
+
+// ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
+{
+  const { nextTrainAt, trainsOn } = await import('../src/underground/layout');
+  const macro = buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.6 })));
+  let n = 0;
+  for (const line of macro.metroLines) for (let stop = 0; stop < line.stations.length; stop++) for (const dir of [1, -1]) {
+    for (const t of [0, 137.5, 1234, 5000.25]) {
+      const r = nextTrainAt(line, stop, dir, t);
+      const at = t + (r ? r.wait : 0) + 0.05;
+      const ok = !!r && trainsOn(line, at).some((tr) => tr.dwell && tr.dir === dir && tr.next === stop);
+      check(ok, `board: line ${line.name} stop ${stop} dir ${dir} t ${t}: a train dwells when announced (${JSON.stringify(r)})`);
+      n++;
+    }
+  }
+  console.log(`departure boards: ${n} announcements checked`);
 }
 
 // ---- street crime: district index and director are deterministic; a purse snatch runs
@@ -363,6 +380,91 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   check(events.join(',') === 'commit,ko,arrest,resolved' && policeCalls === 1, `snatch events ${events.join(',')}, police called ${policeCalls} times`);
   check(phases.join('>') === 'approach>escape>subdued>resolved', `snatch phases ${phases.join(' > ')}`);
   console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// ---- traffic at a six-way junction with one exit blocked (its queue backs up into the box):
+// cars never stay inside each other and the junction does not lock up; gawking crowds are capped.
+{
+  const t0 = performance.now();
+  const { Traffic, pathGap } = await import('../src/sim/Traffic');
+  const { RoadNet } = await import('../src/sim/RoadNet');
+  const { Stimuli } = await import('../src/game/Stimuli');
+  const net = new RoadNet(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.2 }))));
+  net.nodes = [{ x: 0, z: 0, edges: [], signal: true, macro: -1 }];
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + 0.2, x = Math.cos(a) * 160, z = Math.sin(a) * 160;
+    net.nodes.push({ x, z, edges: [k], signal: false, macro: -1 });
+    net.nodes[0].edges.push(k);
+    net.edges.push({ a: 0, b: k + 1, pts: [0, 0, x / 2, z / 2, x, z], len: 160, width: 16, sidewalk: 3, lanes: 2, cls: 1, cum: [0, 80, 160] });
+  }
+  net.version = 1;
+  const stimuli = new Stimuli();
+  const peds = { neighbours: (_x: number, _z: number, _r: number, out: unknown[]) => { out.length = 0; return out; }, crossCheck: null };
+  const tr = new Traffic(net, peds as never, stimuli, { height: () => 0 } as never, true, 42);
+  // Something lying across the outbound lanes of arm 0, 70 m out: its exit queue fills up.
+  const blk = { x: 0, z: 0, dx: 0, dz: 0 };
+  net.pointAt(net.edges[0], 70, 0, blk);
+  const overlap = (p: { x: number; z: number; yaw: number; length: number; width: number }, q: typeof p) => {
+    const ax = [[-Math.sin(p.yaw), -Math.cos(p.yaw)], [Math.cos(p.yaw), -Math.sin(p.yaw)], [-Math.sin(q.yaw), -Math.cos(q.yaw)], [Math.cos(q.yaw), -Math.sin(q.yaw)]];
+    const ext = (v: typeof p, ux: number, uz: number) => (v.length / 2) * 0.92 * Math.abs(-Math.sin(v.yaw) * ux - Math.cos(v.yaw) * uz) + (v.width / 2) * 0.92 * Math.abs(Math.cos(v.yaw) * ux - Math.sin(v.yaw) * uz);
+    return ax.every(([ux, uz]) => Math.abs((q.x - p.x) * ux + (q.z - p.z) * uz) <= ext(p, ux, uz) + ext(q, ux, uz));
+  };
+  const lasting = new Map<string, number>();
+  let worst = 0, maxBox = 0, maxStill = 0, n = 0;
+  for (let i = 0; i < 30 * 400; i++) {
+    tr.obstacles.length = 0;
+    // The blockage is cleared after 200 s.
+    if (i < 30 * 200) tr.obstacles.push({ x: blk.x - blk.dz * 4, z: blk.z + blk.dx * 4, r: 4.5 }, { x: blk.x + blk.dz * 4, z: blk.z - blk.dx * 4, r: 4.5 });
+    stimuli.update(1 / 30);
+    tr.update(1 / 30, 8.3, 0, 0);
+    if (i % 15) continue;
+    const V = tr.vehicles;
+    n = Math.max(n, V.length);
+    const now = new Set<string>();
+    for (let a = 0; a < V.length; a++) for (let b = a + 1; b < V.length; b++) {
+      if (Math.abs(V[a].x - V[b].x) > 14 || Math.abs(V[a].z - V[b].z) > 14 || !overlap(V[a], V[b])) continue;
+      const k = `${V[a].id}:${V[b].id}`;
+      now.add(k);
+      lasting.set(k, (lasting.get(k) ?? 0) + 0.5);
+      worst = Math.max(worst, lasting.get(k)!);
+    }
+    for (const k of lasting.keys()) if (!now.has(k)) lasting.delete(k);
+    const box = V.filter((v) => v.turn);
+    maxBox = Math.max(maxBox, box.length);
+    if (i >= 30 * 400 - 15) maxStill = Math.max(maxStill, ...box.map((v) => v.jam ?? 0), 0);
+  }
+  check(n > 40, `traffic: the junction gets busy (${n} cars)`);
+  // (Two cars crossing in the box can touch for a few seconds; before, piles at the box exit stayed for good.)
+  check(worst <= 20, `traffic: no two cars stay inside each other (longest overlap ${worst} s)`);
+  check(maxStill < 30, `traffic: the box is moving again after the blockage is gone (a car standing in it ${maxStill.toFixed(0)} s)`);
+  // pathGap: a car straight ahead in the corridor, one in the next lane, one behind.
+  const car = { x: 0, z: 0, yaw: 0, length: 4.7, width: 1.85, speed: 5 };
+  check(Math.abs(pathGap(car, { x: 0, z: -10, yaw: 0, length: 4.7, width: 1.85 }) - 5.3) < 1e-6 && pathGap(car, { x: 3, z: -10, yaw: 0, length: 4.7, width: 1.85 }) === Infinity && pathGap(car, { x: 0, z: 10, yaw: 0, length: 4.7, width: 1.85 }) === Infinity, 'traffic: pathGap sees only what is in the way');
+
+  // Gawkers: a cry repeated every 3 s for 2 minutes among 200 idle walkers.
+  const { Reactions } = await import('../src/sim/Reactions');
+  const P = await import('../src/sim/Pedestrians');
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.2 }))), 42);
+  const agents = Array.from({ length: 200 }, (_, k) => ({ id: k + 1, cit: { ...pop.synthetic(500 + k), curiosity: 0.9, nerve: 0.3 }, x: (k % 20) * 1.5 - 15, z: Math.floor(k / 20) * 1.5 - 7, y: 0, heading: 0, speed: 1.3, pref: 1.3, state: P.PState.Walk, route: Float32Array.from([0, 0, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: k, vy: 0, vx: 0, vz: 0, alive: true, slot: -1 } as unknown as import('../src/sim/Pedestrians').PedAgent));
+  const gp = { agents, neighbours: (x: number, z: number, r: number, out: typeof agents) => { out.length = 0; for (const a of agents) if (Math.abs(a.x - x) <= r && Math.abs(a.z - z) <= r) out.push(a); return out; } };
+  const st2 = new Stimuli();
+  const re = new Reactions(gp as never, st2);
+  const player = { height: 1.8, pos: { x: 500, y: 0, z: 500 }, flying: false, vel: { length: () => 0 }, k: 1 };
+  let maxG = 0, gawkingAtEnd = 0;
+  for (let i = 0; i < 30 * 150; i++) {
+    const dt = 1 / 30;
+    st2.update(dt);
+    if (i % 90 === 0 && i < 30 * 120) st2.emit('cry', 0, 1.6, 0, 1, 30);
+    re.update(dt, player as never);
+    // The pedestrians' own gawk bookkeeping (Pedestrians.step).
+    for (const a of agents) { a.stateT += dt; if ((a.state === P.PState.Gawk || a.state === P.PState.Film) && P.gawkOver(a, dt)) a.state = P.PState.Walk; }
+    const g = agents.filter((a) => a.state === P.PState.Gawk || a.state === P.PState.Film).length;
+    maxG = Math.max(maxG, g);
+    if (i === 30 * 119) gawkingAtEnd = g;
+  }
+  check(maxG > 5 && maxG <= P.GAWK_CROWD, `gawkers: a crowd forms but stays at most ${P.GAWK_CROWD} (${maxG})`);
+  check(agents.every((a) => (a.state !== P.PState.Gawk && a.state !== P.PState.Film) || a.stateT < P.GAWK_MAX + 1), 'gawkers: nobody stands longer than GAWK_MAX');
+  console.log(`traffic: six-way junction ${n} cars, longest overlap ${worst} s, ${maxBox} in the box at most; gawkers ≤ ${maxG} (${gawkingAtEnd} after 2 min of cries) in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }

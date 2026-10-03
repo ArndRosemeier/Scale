@@ -75,6 +75,8 @@ export class Player {
   flightAllowed = true;
   /** Flight speed multiplier. */
   flightSpeed = 1;
+  /** Boost = cruise × this (grows with the flight rank, see FLIGHT_BOOST_MUL). */
+  flightBoost = 7.3;
   /** Allowed body height range (size shift). */
   minHeight = MIN_HEIGHT;
   maxHeight = MAX_HEIGHT;
@@ -287,7 +289,7 @@ export class Player {
     if (input.down('Space')) w.y += 1;
     if (input.down('ControlLeft') || input.down('KeyC')) w.y -= 1;
     void wish;
-    const cruise = 22 * sk * this.flightSpeed, fast = 160 * sk * this.flightSpeed;
+    const cruise = 22 * sk * this.flightSpeed, fast = cruise * this.flightBoost;
     const target = w.lengthSq() > 0 ? w.normalize().multiplyScalar(boost ? fast : cruise) : new THREE.Vector3();
     const a = boost ? 1.4 : 2.2;
     this.vel.lerp(target, damp(a, dt));
