@@ -74,3 +74,9 @@ Generated locally with Stability AI's Stable Audio 3 Small-SFX model, used under
 | splash_small | splash_small.ogg | 1.0 | TrackType: SFX, small splash, object dropping into water, short plop and splash, close mic, no music, no voice | 1779610183 | small-sfx | `small-splash-ad8620e3e834/clip.wav` |
 | door_open | door_open.ogg | 1.0 | TrackType: SFX, modern interior door opening, handle click and latch release, door swinging, dry small room, no music, no voice | 712795224 | small-sfx | `door-opening-36a7a7ba9b2f/clip.wav` |
 | door_close | door_close.ogg | 1.0 | TrackType: SFX, modern interior door closing, solid thud and latch click, dry small room, short tail, no music, no voice | 809278613 | small-sfx | `door-closing-1c67595e18f2/clip.wav` |
+
+## Procedural clips
+
+| id | file | dur (s) | how |
+|---|---|---|---|
+| drone_buzz | drone_buzz.wav | 2.0 | `tools/synthDroneBuzz.mjs`: four rotors at slightly different blade-pass frequencies (176–193 Hz) with harmonics, blade-modulated low-passed airflow noise, slow wobble; whole-cycle partials and a crossfaded noise tail make it loop seamlessly. 22.05 kHz mono 16-bit. Played as one positional loop at the nearest drone. |

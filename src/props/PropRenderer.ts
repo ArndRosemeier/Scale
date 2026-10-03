@@ -17,6 +17,8 @@ import { CURB_H } from '../build/ground';
 import { G } from '../render/materials/globals';
 import { junctionBack } from '../sim/Traffic';
 import type { Obstacle } from '../world/Collision';
+import { hash32, hashToFloat } from '../core/rng';
+import type { StreetSeg } from '../plan/cell';
 
 interface Prop {
   kind: string;            // model key
@@ -118,6 +120,14 @@ export class PropRenderer {
         // Manhole lids come from the sewer layout (Underground), so every lid is a real entrance.
         case PropType.Manhole: break;
         case PropType.StopSign: list.push(this.furn('stopSign', 0, base)); break;
+        case PropType.ParkedCar: {
+          // Near-future kerbs: some parking bays have an EV charging post (more in dense districts).
+          const share = EV_SHARE[district] ?? 0.03;
+          if (hashToFloat(hash32(seed * 31 + i * 7 + 11)) >= share) break;
+          const ev = evChargerSpot(cs.plan.streets, x, z, yaw);
+          if (ev) list.push(this.furn('evCharger', v % 3 === 0 ? 1 : 0, { ...base, x: ev.x, y: this.terrain.height(ev.x, ev.z) + CURB_H, z: ev.z, yaw: ev.yaw, scale: 1 }));
+          break;
+        }
         default: break;
       }
     }
@@ -538,6 +548,35 @@ export class PropRenderer {
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
+
+/** Share of parking bays with an EV charging post, by district. */
+const EV_SHARE: Partial<Record<District, number>> = { downtown: 0.14, commercial: 0.12, apartments: 0.1, rowhouses: 0.07, oldtown: 0.05, suburban: 0.04, industrial: 0.04, port: 0.03 };
+
+/**
+ * Kerb spot beside a parked car (x, z, yaw: forward = (−sin, −cos)) for a charging post: level
+ * with the front wheels, on the side away from the carriageway (the farther point from every
+ * street centreline), facing the car.
+ */
+function evChargerSpot(streets: StreetSeg[], x: number, z: number, yaw: number): { x: number; z: number; yaw: number } | null {
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  const lx = -fz, lz = fx;
+  const dist = (px: number, pz: number) => {
+    let best = Infinity;
+    for (const s of streets) for (let k = 0; k + 3 < s.pts.length; k += 2) {
+      const ax = s.pts[k], az = s.pts[k + 1], dx = s.pts[k + 2] - ax, dz = s.pts[k + 3] - az, l2 = dx * dx + dz * dz;
+      const t = l2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l2)) : 0;
+      best = Math.min(best, Math.hypot(ax + dx * t - px, az + dz * t - pz));
+    }
+    return best;
+  };
+  const cx = x + fx * 1.2, cz = z + fz * 1.2;
+  const a = { x: cx + lx * 1.75, z: cz + lz * 1.75 }, b = { x: cx - lx * 1.75, z: cz - lz * 1.75 };
+  const da = dist(a.x, a.z), db = dist(b.x, b.z);
+  if (!isFinite(da) || Math.abs(da - db) < 0.5) return null;
+  const p = da > db ? a : b;
+  // Front (−Z) of the post towards the car.
+  return { x: p.x, z: p.z, yaw: Math.atan2(-(cx - p.x), -(cz - p.z)) };
+}
 
 /** Collision shape of a prop (see obstaclesIn). Box axis = the model's local x. */
 function propShape(p: Prop): Obstacle | null {

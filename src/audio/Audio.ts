@@ -133,6 +133,67 @@ export class Audio {
     else void this.load(id).then(go);
   }
 
+  /**
+   * Short synthesized UI tones (no clip needed): a power core pickup, karma, buying a
+   * power, a refused action.
+   */
+  chime(kind: 'core' | 'karma' | 'buy' | 'deny', gain = 0.5): void {
+    if (!this.ctx || !this.enabled) return;
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.01;
+    const notes: [number, number, number][] = kind === 'core' ? [[660, 0, 0.5], [990, 0.07, 0.55], [1320, 0.14, 0.7], [1980, 0.22, 0.9]]
+      : kind === 'karma' ? [[784, 0, 0.35], [1175, 0.09, 0.5]]
+      : kind === 'buy' ? [[523, 0, 0.4], [659, 0.06, 0.4], [784, 0.12, 0.45], [1047, 0.18, 0.7]]
+      : [[220, 0, 0.18], [185, 0.08, 0.22]];
+    for (const [f, dt, dur] of notes) {
+      const o = ctx.createOscillator();
+      o.type = kind === 'deny' ? 'square' : 'sine';
+      o.frequency.setValueAtTime(f, t0 + dt);
+      if (kind === 'core') o.frequency.exponentialRampToValueAtTime(f * 1.01, t0 + dt + dur);
+      const g = ctx.createGain();
+      const peak = gain * (kind === 'deny' ? 0.08 : 0.22);
+      g.gain.setValueAtTime(0.0001, t0 + dt);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + dt + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + dur);
+      o.connect(g).connect(this.sfxBus);
+      o.start(t0 + dt);
+      o.stop(t0 + dt + dur + 0.05);
+      o.onended = () => g.disconnect();
+    }
+  }
+
+  /**
+   * A positioned looping source (rotor buzz, motor hum) that its owner moves every frame.
+   * Null until audio has started and the clip is loaded (call again later).
+   */
+  loop(id: string, refDist = 5): { set(x: number, y: number, z: number, gain: number, rate?: number): void; stop(): void } | null {
+    if (!this.ctx || !this.enabled) return null;
+    const m = this.manifest[id];
+    const bufs = this.buffers.get(id);
+    if (!m || !bufs?.length) { if (m) void this.load(id); return null; }
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = bufs[0];
+    src.loop = true;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const pan = ctx.createPanner();
+    pan.panningModel = 'HRTF';
+    pan.distanceModel = 'inverse';
+    pan.refDistance = refDist;
+    pan.rolloffFactor = 1.2;
+    src.connect(g).connect(pan).connect(this.sfxBus);
+    src.start(0, Math.random() * bufs[0].duration);
+    return {
+      set: (x, y, z, gain, rate = 1) => {
+        const t = ctx.currentTime;
+        pan.positionX.setTargetAtTime(x, t, 0.05); pan.positionY.setTargetAtTime(y, t, 0.05); pan.positionZ.setTargetAtTime(z, t, 0.05);
+        g.gain.setTargetAtTime(gain * m.gain, t, 0.15);
+        src.playbackRate.setTargetAtTime(rate, t, 0.2);
+      },
+      stop: () => { try { src.stop(); } catch { /* not started */ } g.disconnect(); pan.disconnect(); },
+    };
+  }
+
   /** Set target levels for ambience layers (0..1); they crossfade smoothly. */
   setAmbience(levels: Partial<Record<AmbienceLayer, number>>, rates: Partial<Record<AmbienceLayer, number>> = {}): void {
     if (!this.ctx) return;

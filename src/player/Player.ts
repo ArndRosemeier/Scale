@@ -64,6 +64,21 @@ export class Player {
   /** Walking into walls: the obstacle hit this frame (for destruction). */
   blocked: { x: number; z: number; nx: number; nz: number; speed: number } | null = null;
 
+  // ---- power gates (set every frame by the AbilitySystem; defaults: everything allowed)
+  /** Flight available (F). */
+  flightAllowed = true;
+  /** Flight speed multiplier. */
+  flightSpeed = 1;
+  /** Allowed body height range (size shift). */
+  minHeight = MIN_HEIGHT;
+  maxHeight = MAX_HEIGHT;
+  /** Space jumps normally (false while an ability handles Space itself). */
+  jumpOnSpace = true;
+  /** Active dash: seconds left and velocity. */
+  private dashT = 0;
+  private readonly dashV = new THREE.Vector3();
+  get dashing(): boolean { return this.dashT > 0; }
+
   /** Character made in the creator, used by the next Player (null: random human from the seed). */
   static look: CharacterLook | null = null;
 
@@ -85,20 +100,17 @@ export class Player {
   update(dt: number, input: Input, camYaw: number, camPitch: number): void {
     // ---- size (numpad + / -): exponential growth, clamped.
     const grow = (input.down('NumpadAdd') || input.down('Equal') ? 1 : 0) - (input.down('NumpadSubtract') || input.down('Minus') ? 1 : 0);
-    if (grow !== 0) {
+    const lo = Math.max(MIN_HEIGHT, this.minHeight), hi = Math.min(MAX_HEIGHT, Math.max(lo, this.maxHeight));
+    if (grow !== 0 || this.height < lo || this.height > hi) {
       const before = this.height;
-      this.height = clamp(this.height * Math.exp(grow * dt * 0.9), MIN_HEIGHT, MAX_HEIGHT);
-      if (this.height !== before) this.events.onSizeChange?.(this.height, grow);
+      this.height = clamp(this.height * Math.exp(grow * dt * 0.9), lo, hi);
+      if (this.height !== before && grow !== 0) this.events.onSizeChange?.(this.height, grow);
     }
     const k = this.k;
     const sk = Math.sqrt(k);
     this.sinceToggle += dt;
-    if (input.hit('KeyF')) {
-      this.flying = !this.flying;
-      this.sinceToggle = 0;
-      if (this.flying) this.vel.y = Math.max(this.vel.y, 4 * sk);
-      this.events.onFlightToggle?.(this.flying);
-    }
+    if (input.hit('KeyF') && this.flightAllowed) this.toggleFlight();
+    else if (this.flying && !this.flightAllowed) this.toggleFlight();
 
     // ---- desired movement in camera space
     const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
@@ -138,7 +150,40 @@ export class Player {
     this.updateRig(dt);
   }
 
+  toggleFlight(): void {
+    this.flying = !this.flying;
+    this.sinceToggle = 0;
+    if (this.flying) this.vel.y = Math.max(this.vel.y, 4 * Math.sqrt(this.k));
+    this.events.onFlightToggle?.(this.flying);
+  }
+
+  /** Normal jump take-off speed (k^0.3 scaling). */
+  get jumpSpeed(): number { return 3.4 * Math.pow(this.k, 0.3); }
+
+  /** Leave the ground with an upward speed (jumps). */
+  launch(vy: number): void {
+    this.vel.y = Math.max(this.vel.y, vy);
+    this.grounded = false;
+  }
+
+  /** Burst along a direction: speed (m/s) held for `dur` seconds, collision as usual. */
+  dash(dx: number, dy: number, dz: number, speed: number, dur: number): void {
+    this.dashV.set(dx, this.flying ? dy : 0, dz).normalize().multiplyScalar(speed);
+    this.dashT = dur;
+    this.yaw = Math.atan2(-dx, -dz);
+  }
+
+  /** During a dash: the burst velocity, no gravity; afterwards the normal speed comes back gradually. */
+  private updateDash(dt: number): void {
+    this.dashT -= dt;
+    this.vel.x = this.dashV.x; this.vel.z = this.dashV.z;
+    this.vel.y = this.flying ? this.dashV.y : Math.max(0, this.vel.y);
+    this.integrate(dt);
+    if (this.dashT <= 0) this.vel.multiplyScalar(0.35);
+  }
+
   private updateGround(dt: number, input: Input, wish: THREE.Vector3, run: boolean, slow: boolean): void {
+    if (this.dashT > 0) { this.updateDash(dt); return; }
     const k = this.k, sk = Math.sqrt(k);
     const g = 9.81;
     const speed = (slow ? 0.8 : run ? 5.2 : 1.45) * sk;
@@ -156,14 +201,12 @@ export class Player {
     const vy = this.vel.y;
     if (vy < 0) this.vel.y += g * (vy / vt) * (vy / vt) * dt;
     // Jump.
-    if (this.grounded && input.hit('Space')) {
-      this.vel.y = 3.4 * Math.pow(k, 0.3);
-      this.grounded = false;
-    }
+    if (this.grounded && this.jumpOnSpace && input.hit('Space')) this.launch(this.jumpSpeed);
     this.integrate(dt);
   }
 
   private updateFlight(dt: number, input: Input, wish: THREE.Vector3, camYaw: number, camPitch: number, boost: boolean): void {
+    if (this.dashT > 0) { this.updateDash(dt); return; }
     const k = this.k, sk = Math.sqrt(k);
     // Forward follows the full camera direction (pitch included).
     const dir = new THREE.Vector3(-Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), -Math.cos(camYaw) * Math.cos(camPitch));
@@ -176,7 +219,7 @@ export class Player {
     if (input.down('Space')) w.y += 1;
     if (input.down('ControlLeft') || input.down('KeyC')) w.y -= 1;
     void wish;
-    const cruise = 22 * sk, fast = 160 * sk;
+    const cruise = 22 * sk * this.flightSpeed, fast = 160 * sk * this.flightSpeed;
     const target = w.lengthSq() > 0 ? w.normalize().multiplyScalar(boost ? fast : cruise) : new THREE.Vector3();
     const a = boost ? 1.4 : 2.2;
     this.vel.lerp(target, damp(a, dt));

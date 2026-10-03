@@ -42,6 +42,7 @@ import { bakeCrowdTemplates } from '../sim/CrowdBaker';
 import { Traffic, VState, VehicleObstacles, type Vehicle, type VKind } from '../sim/Traffic';
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
+import { NearFuture } from '../future/NearFuture';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
 import { Underground } from '../underground/Underground';
@@ -53,6 +54,15 @@ import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
 import type { CellState } from '../stream/CityStreamer';
+import type { GameMode } from './mode';
+import { Progress } from './abilities/Progress';
+import { AbilitySystem } from './abilities/AbilitySystem';
+import { ABILITY } from './abilities/defs';
+import { PowerCores } from './abilities/PowerCores';
+import { planCoreSites, LOOT_INFO } from './abilities/cores';
+import { Deeds } from './Deeds';
+import { PowerHud } from '../ui/PowerHud';
+import { PowersScreen } from '../ui/PowersScreen';
 
 export class Game {
   readonly renderer: Renderer;
@@ -86,6 +96,7 @@ export class Game {
   traffic!: Traffic;
   vehicles!: VehicleRenderer;
   props!: PropRenderer;
+  future!: NearFuture;
   interiors!: Interiors;
   underground!: Underground;
   gate!: ShaderGate;
@@ -93,6 +104,13 @@ export class Game {
   flightFx!: FlightFX;
   menu!: Menu;
   map!: GameMap;
+  progress!: Progress;
+  abilities!: AbilitySystem;
+  /** Power cores (Normal mode only). */
+  cores: PowerCores | null = null;
+  deeds!: Deeds;
+  powerHud!: PowerHud;
+  powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
   private parkedList: Vehicle[] = [];
   private clock = new THREE.Clock();
@@ -101,7 +119,7 @@ export class Game {
   private speed = 15;
   private running = false;
 
-  constructor(canvas: HTMLCanvasElement, readonly settings: CitySettings) {
+  constructor(canvas: HTMLCanvasElement, readonly settings: CitySettings, readonly mode: GameMode = 'normal') {
     this.renderer = new Renderer(canvas);
     hitch.attach(this.renderer.gl, this.renderer.scene);
     this.gate = new ShaderGate(this.renderer.gl, this.renderer.scene, this.renderer.camera, (fn) => this.renderer.asScenePass(fn));
@@ -253,6 +271,10 @@ export class Game {
     };
     this.traffic.onHorn = (v) => this.audio.play(Math.random() < 0.7 ? 'car_horn_short' : 'car_horn_long', v.x, v.y + 1, v.z, 0.7, 0.95 + Math.random() * 0.1, 8, cam.position);
     this.traffic.onCrash = (v, x, y, z) => { this.audio.play('car_crash', x, y, z, 0.9, 1, 10, cam.position); this.stimuli.emit('crash', x, y, z, 4, 80); };
+    // Near-future city: delivery robots, drones, animated signage (src/future).
+    this.future = new NearFuture({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, traffic: this.traffic, physics: this.physics, debris: this.debris, dust: this.dust, destruction: this.destruction, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
+    this.future.loop = (id, r) => this.audio.loop(id, r);
+    this.renderer.scene.add(this.future.group);
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
     this.crowd.rigGround = (x, y, z) => this.collision.groundAt(x, z, y + 0.4, 0.3);
@@ -260,7 +282,7 @@ export class Game {
     this.stimuli.on((s) => {
       if (s.kind === 'stomp') {
         const r = Math.max(0.6, this.player.height * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2);
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, 'player');
         if (this.player.height > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) if (Math.hypot(v.x - s.x, v.z - s.z) < r + v.length * 0.3) this.traffic.crush(v);
         if (this.player.height > 4) this.props.crush(s.x, s.z, r);
       } else if (s.kind === 'collapse') {
@@ -280,6 +302,7 @@ export class Game {
     this.renderer.scene.add(this.flightFx.group);
     this.hud = new Hud(this);
     this.menu = new Menu(this);
+    this.setupPowers();
     installDevtools(this);
     (window as unknown as { prof: Record<string, number> }).prof = this.prof;
     this.running = true;
@@ -363,6 +386,8 @@ export class Game {
     this.T('player', () => {
       if (this.freeCam) this.updateFreeCam(dt);
       else {
+        this.abilities.enabled = !this.powers.open && !this.map.open;
+        this.abilities.preUpdate(dt, this.input);
         this.player.update(dt, this.input, this.camRig.yaw, this.camRig.pitch);
         this.camRig.underground = this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z);
         this.camRig.update(dt, this.player, this.input);
@@ -370,6 +395,7 @@ export class Game {
         const hand = _hand.copy(this.player.pos); hand.y += this.player.height * 0.6;
         this.interiors.panels.external = this.usableHint();
         this.interiors.panels.update(this.renderer.camera, hand, this.player.height * 0.9 + 0.5, this.input);
+        this.abilities.postUpdate(this.input);
         this.interactions.update(dt, this.input, this.clock.elapsedTime);
       }
     });
@@ -386,6 +412,7 @@ export class Game {
     this.traffic.player = this.freeCam ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     if (!this.freeCam) this.bodyContacts(dt);
+    if (!this.freeCam) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
       this.updateHoles();
@@ -406,6 +433,8 @@ export class Game {
     this.sky.indoor = clamp(this.sky.indoor + (this.interiors.insideAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
     this.T('sky', () => this.sky.update(dt, focus, cam));
     this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
+    const P = this.player;
+    this.T('future', () => this.future.update(dt, this.sky.hoursAbs, focus, { active: !this.freeCam, x: P.pos.x, y: P.pos.y, z: P.pos.z, vx: P.vel.x, vy: P.vel.y, vz: P.vel.z, height: P.height, radius: P.radius, mass: P.mass }, cam));
     if (render) {
       this.T('crowd', () => this.crowd.update(dt, this.simT, this.peds.agents, this.renderer.camera));
       this.T('vehicles', () => this.vehicles.update(dt, this.traffic.vehicles, this.parkedList, this.renderer.camera));
@@ -413,6 +442,7 @@ export class Game {
       this.T('gate', () => this.gate.update());
       this.T('render', () => this.renderer.render());
       this.hud.update(dt);
+      this.powerHud.update();
       this.T('map', () => this.map.update(dt));
       this.input.endFrame();
     }
@@ -496,6 +526,60 @@ export class Game {
     }
   }
 
+  /** Powers: progression, abilities, HUD, powers screen (P), good deeds and power cores. */
+  private setupPowers(): void {
+    const cam = this.renderer.camera;
+    const normal = this.mode === 'normal';
+    this.progress = new Progress(this.settings.seed, this.settings.size, this.mode);
+    this.abilities = new AbilitySystem(this.progress, this.player, this.interactions, cam);
+    this.powerHud = new PowerHud(this.abilities);
+    this.powers = new PowersScreen(this, this.abilities);
+    const toast = this.powerHud.toast.bind(this.powerHud);
+    this.abilities.hooks = {
+      sound: (id, g, p) => this.audio.play2d(id, g, p),
+      deny: (msg) => { toast(msg, 'deny', 2200); this.audio.chime('deny', 0.4); },
+      dashFx: (x, y, z) => { const h = this.player.height; this.dust.burst(x, y + 0.2 * h, z, 10, h * 0.25, h * 0.6, h * 0.2 + 0.3, 1.5, new THREE.Color(0.75, 0.73, 0.7), 0.05, 0.3); },
+    };
+    this.progress.onKarma((amount, reason) => {
+      if (amount <= 0) return;
+      toast(`<b>+${amount} karma</b> — ${reason}`, 'karma');
+      this.audio.chime('karma');
+    });
+    this.powers.onBuy = (id, r) => {
+      toast(r === 1 ? `<b>${ABILITY[id].name}</b> unlocked!${ABILITY[id].kind === 'active' ? ` It's on your hotbar.` : ''}` : `<b>${ABILITY[id].name}</b> is now rank ${r}`, 'core');
+      this.audio.chime('buy');
+    };
+    this.deeds = new Deeds(this.peds, this.reactions, this.player, this.progress);
+    this.deeds.hooks = {
+      toast,
+      sound: (id, x, y, z, g) => this.audio.play(id, x, y, z, g, 1, 8, cam.position),
+      markers: (m) => this.map.setMarkers('deeds', m),
+    };
+    if (normal) {
+      const cores = new PowerCores(
+        planCoreSites(this.macro, this.terrain), this.terrain,
+        (cell) => { const c = this.streamer.cells.get(cell); return c && c.status === 'ready' ? c.plan : null; },
+        (x, y, z) => { const g = this.collision.groundAt(x, z, y + 0.6, 1.2); return Math.abs(g - y) < 1.5 ? g : NaN; },
+        this.progress,
+      );
+      this.cores = cores;
+      this.renderer.scene.add(cores.group);
+      cores.onMarkers = (m) => this.map.setMarkers('cores', m);
+      cores.onDiscover = () => toast('You sense a <b>power core</b> nearby — it is marked on your map', 'info');
+      cores.onCollect = (site, spot) => {
+        const L = LOOT_INFO[site.loot];
+        if (site.loot !== 'karma') toast(`<b>${L.name}</b> collected — ${L.text}`, 'core');
+        this.audio.chime('core', 0.7);
+        this.dust.burst(spot.x, spot.y + 1, spot.z, 24, 0.6, 3, 1.2, 1.2, new THREE.Color(L.color).multiplyScalar(3), 0, 0.6);
+        this.abilities.energy = this.abilities.maxEnergy;
+      };
+      this.powers.info = () => `Power cores found: <b>${this.progress.coresCollected}</b> of ${cores.total} (rare glowing loot — rooftops, parks, metro, sewers).`;
+    }
+    setTimeout(() => toast(normal
+      ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
+      : 'Sandbox: every power is yours. <b>1–8</b> / right mouse use the hotbar, <b>P</b> manages powers.', 'info', 10000), 9500);
+  }
+
   /** Parked cars from a cell's street plan. */
   private addParked(c: CellState): void {
     if (!c.plan || !this.traffic) return;
@@ -522,6 +606,7 @@ export class Game {
   strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): void {
     const J = Math.hypot(jx, jy, jz);
     this.props.hit(x, y, z, r, jx, jy, jz);
+    this.future.hit(x, y, z, r, jx, jy, jz);
     for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
       const d = Math.hypot(v.x - x, v.z - z);
       if (d > r + v.length / 2 || y > v.y + 3 + r) continue;
@@ -533,7 +618,7 @@ export class Game {
     }
     for (const a of this.peds.agents) {
       const d = Math.hypot(a.x - x, a.z - z);
-      if (d < r + 0.4 && J > 150) this.reactions.knockDown(a, x - jx * 0.001, z - jz * 0.001, Math.min(15, J / 400));
+      if (d < r + 0.4 && J > 150) this.reactions.knockDown(a, x - jx * 0.001, z - jz * 0.001, Math.min(15, J / 400), 'player');
     }
   }
 
@@ -558,6 +643,8 @@ export class Game {
     if (this.freeCam) return null;
     const metro = this.underground.metroHint();
     if (metro) return metro;
+    const deed = this.deeds?.hint();
+    if (deed) return deed;
     const p = this.player.pos;
     // Manholes are climbed from the sewers only (not from metro halls, passages or trains).
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
@@ -572,6 +659,7 @@ export class Game {
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
+    if (this.deeds.help()) { this.input.pressed.delete('KeyE'); return; }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     const p = this.player.pos;
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);

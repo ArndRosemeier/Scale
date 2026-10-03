@@ -18,6 +18,7 @@ import type { MacroPlan } from '../plan/types';
 import { MinHeap } from '../core/heap';
 import { CURB_H } from '../build/ground';
 import { hashToFloat, hash32 } from '../core/rng';
+import { ACCIDENTS } from '../game/abilities/tuning';
 
 export const enum PState { Walk = 0, Wait = 1, Idle = 2, Gawk = 3, Flee = 4, Down = 5, Enter = 6, Film = 7, Sit = 8, Sleep = 9 }
 
@@ -55,7 +56,14 @@ export interface PedAgent {
   /** Placed inside a building (interior): no street movement. */
   inside?: boolean;
   floorY?: number;
+  /** Why the agent is down (Down state): the player's doing, a collapse, an accident, other (cars). */
+  downBy?: DownCause;
+  /** Helped up by the player (thanks them: a wave while stateT is small). */
+  helped?: boolean;
 }
+
+export type DownCause = 'player' | 'collapse' | 'accident' | 'other';
+
 
 const MAX_AGENTS = 2600;
 const SCAN_R = 480;
@@ -421,7 +429,7 @@ export class Pedestrians {
       a.x += a.vx * dt; a.z += a.vz * dt; a.y += a.vy * dt;
       const g = this.groundY(a.x, a.z, a.onRoad);
       if (a.y < g) { a.y = g; a.vy = 0; a.vx *= 0.8; a.vz *= 0.8; }
-      if (a.stateT > 25 && a.fear < 100) a.alive = false;
+      if (a.stateT > (a.downBy === 'accident' ? ACCIDENTS.lieFor : 25) && a.fear < 100) a.alive = false;
       return;
     }
     let tx: number, tz: number, desired: number;

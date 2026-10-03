@@ -12,6 +12,14 @@ Brainstorm and phased roadmap (2026-10-03). Status: decisions taken (§0); detai
 6. **Crime frequency** — like real life and **district-based**: some districts are poorer and more crime-ridden (a deterministic crime/poverty index per district/cell), shown on a **crime map layer** in the map view.
 7. **Persistence** — per seed, reputation and stats (as proposed).
 8. **Offscreen crime** — not simulated; later supervillains may cause city-wide effects, not from the start.
+9. **Game modes** — *Normal*: start as an ordinary person (no flight, no size change, weak punch). *Sandbox*: all powers unlocked at full rank and freely assignable.
+10. **Progression = karma** — good deeds earn karma, spent freely on unlocking and ranking any power. Special loot (power cores etc.) gives other, optional effects. "Get better by playing the game as it's meant to be played."
+11. **Cheeky small deeds** alongside crime — e.g. get a cat down from a tree, catch a runaway dog, return a dropped wallet, help someone up, push a stalled car, rescue a balloon/kite, carry shopping. Light, funny, seeded in the city and noticed in the world (meowing, a worried owner pointing), each worth a little karma.
+12. **Crime fighting is viable without powers** — an ordinary person can tackle/punch a lone criminal (pickpocket, purse snatcher); groups, armed robbers and villains need powers or tactics.
+13. **Consideration ("con") system** — the player can assess a target's threat relative to themselves (EverQuest/City-of-Heroes style): colour-coded threat (trivial … deadly) from the target's level/strength/powers/group size vs. the player's current strength and size, shown on the target frame and as a subtle marker tint.
+14. **Tab targeting** — Tab cycles through nearby targets in view (hostiles first, then people of interest), with a target frame (name/role, con colour, health); soft-lock for punches/abilities.
+15. **No chat, no quests (for now)** — the world tells its stories: show, don't tell. Situations are readable from behaviour, sound and staging (a crowd backing off, someone pointing, a siren, a cat meowing in a tree), not from dialogue or quest logs. Only minimal hints for controls.
+16. **Near-future setting** — the city is a believable near future, not cyberpunk kitsch: sidewalk delivery robots, quadcopter drones (deliveries, news, police), autonomous shuttles/taxis among the cars, holographic/animated billboards and shop signs, EV chargers, maintenance and cleaning robots, a few humanoid service robots. Robots are part of the living world (they react, get knocked over, can be helped or broken — destructible like everything else) and later part of the threat ladder (malfunctioning/hacked robots → robot gangs → a villain's robot army → giant mechs as kaiju alternatives).
 
 ## 1. Vision
 

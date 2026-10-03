@@ -20,7 +20,7 @@ import { Rng, hash32 } from '../core/rng';
 import type { Citizen } from './Population';
 import type { Obstacle, ObstacleProvider } from '../world/Collision';
 
-export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery';
+export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle';
 
 export const enum VState { Drive = 0, Stopped = 1, Fleeing = 2, Abandoned = 3, Wreck = 4, Crushed = 5 }
 
@@ -67,7 +67,7 @@ const MAX_VEHICLES = 320;
 
 const DIMS: Record<VKind, [number, number]> = {
   sedan: [4.7, 1.85], hatch: [4.1, 1.78], wagon: [4.8, 1.85], suv: [4.8, 1.95], van: [5.2, 2.0], pickup: [5.4, 2.0],
-  taxi: [4.8, 1.85], police: [4.9, 1.9], sports: [4.4, 1.9], bus: [12, 2.55], truck: [8, 2.5], delivery: [6, 2.2],
+  taxi: [4.8, 1.85], police: [4.9, 1.9], sports: [4.4, 1.9], bus: [12, 2.55], truck: [8, 2.5], delivery: [6, 2.2], shuttle: [5.0, 2.06],
 };
 
 export class Traffic {
@@ -205,8 +205,9 @@ export class Traffic {
       // Not on top of another car.
       const k = `${ei}:${fwd ? 1 : 0}:0`;
       if (this.laneIndex.get(k)?.some((o) => Math.abs(o.s - s) < 12)) continue;
-      const kind = this.rng.weighted<VKind>(['sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery'],
-        (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: 1.2, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4 }[k2]));
+      // Near future: a few driverless shuttles among the cars (main roads mostly).
+      const kind = this.rng.weighted<VKind>(['sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle'],
+        (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: 1.2, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4, shuttle: e.cls <= 1 ? 7 : 3 }[k2]));
       const v = this.makeVehicle(kind, ei, fwd, s, null);
       // Route: random walk of a few edges ahead, preferring straight on.
       v.route = this.randomRoute(ei, fwd, 12);
@@ -573,7 +574,7 @@ export class VehicleObstacles {
       // Forward is (−sin yaw, −cos yaw) (see Traffic.pose).
       o.x = v.x; o.z = v.z; o.ux = -Math.sin(v.yaw); o.uz = -Math.cos(v.yaw);
       o.hx = v.length / 2; o.hz = v.width / 2;
-      const h = v.state === VState.Crushed ? 0.5 : v.kind === 'bus' || v.kind === 'truck' ? 3.1 : v.kind === 'van' || v.kind === 'delivery' ? 2.4 : v.kind === 'suv' || v.kind === 'pickup' ? 1.85 : 1.5;
+      const h = v.state === VState.Crushed ? 0.5 : v.kind === 'bus' || v.kind === 'truck' ? 3.1 : v.kind === 'van' || v.kind === 'delivery' || v.kind === 'shuttle' ? 2.5 : v.kind === 'suv' || v.kind === 'pickup' ? 1.85 : 1.5;
       o.y0 = v.y - 0.2; o.y1 = v.y + h;
       const k = (Math.floor(v.x / 16) + 32768) * 65536 + (Math.floor(v.z / 16) + 32768);
       let l = this.grid.get(k);

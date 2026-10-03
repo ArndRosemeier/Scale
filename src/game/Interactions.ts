@@ -19,6 +19,12 @@ export class Interactions {
   private punchDone = true;
   private smashCooldown = 0;
   private roofT = 0;
+  /** Punch impulse at 1.8 m (N·s, × k²): set by the AbilitySystem from super strength. */
+  punchImpulse = 380;
+  /** Body-momentum wall smashing multiplier (super strength). */
+  smashMul = 1;
+  /** B = test blast where the camera looks (debug; sandbox only). */
+  debugBlast = true;
   onSound?: (id: string, x: number, y: number, z: number, gain: number, pitch?: number) => void;
   /** Physical strike on movable things (cars, props, people): point, radius, impulse vector (N*s). */
   onStrike?: (x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number) => void;
@@ -54,7 +60,7 @@ export class Interactions {
       const reach = 0.75 * p.height * 0.55 + p.radius;
       const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
       const sx = p.pos.x + fx * reach, sz = p.pos.z + fz * reach, sy = p.pos.y + p.height * 0.72;
-      const impulse = 380 * k * k;
+      const impulse = this.punchImpulse * k * k;
       const n = this.destruction.impact(sx, sy, sz, 0.35 * p.height, impulse, fx, -0.05, fz, 'wall');
       this.onStrike?.(sx, sy, sz, 0.45 * p.height, fx * impulse, impulse * 0.25, fz * impulse);
       this.stimuli.emit('impact', sx, sy, sz, Math.log10(impulse * 10), noticeRadius(impulse * 20));
@@ -65,7 +71,7 @@ export class Interactions {
     }
     // ---- smashing through walls with body momentum (walking giants, fast flight)
     if (p.blocked && this.smashCooldown <= 0) {
-      const momentum = p.mass * p.blocked.speed;
+      const momentum = p.mass * p.blocked.speed * this.smashMul;
       if (momentum > 2000) {
         const b = p.blocked;
         const y = p.pos.y + p.height * 0.5;
@@ -97,13 +103,19 @@ export class Interactions {
       }
     }
     // ---- test blast (B): explosion where the camera looks
-    if (input.hit('KeyB')) {
-      const dir = new THREE.Vector3();
-      this.cam.getWorldDirection(dir);
-      const o = this.cam.position;
-      const hit = this.world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 800, 1);
-      if (hit.t < Infinity) this.blast(o.x + dir.x * hit.t, o.y + dir.y * hit.t, o.z + dir.z * hit.t, 2.5e5);
-    }
+    if (this.debugBlast && input.hit('KeyB')) this.blastAtView(800, 2.5e5, false);
+  }
+
+  /** Blast where the camera looks, up to `range` m (anywhere=true: also mid-air at the range). */
+  blastAtView(range: number, impulse: number, anywhere: boolean): boolean {
+    const dir = new THREE.Vector3();
+    this.cam.getWorldDirection(dir);
+    const o = this.cam.position;
+    const hit = this.world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, range, 1);
+    const t = hit.t < Infinity ? hit.t : anywhere ? range : -1;
+    if (t < 0) return false;
+    this.blast(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t, impulse);
+    return true;
   }
 
   blast(x: number, y: number, z: number, impulse: number): void {

@@ -27,6 +27,17 @@ type Queue = { L: number; tx: number; ty: number; d: number; stale: boolean }[];
 
 interface Pick { x: number; z: number; station: number }
 
+/** A point of interest drawn on the full map and the minimap (see GameMap.setMarkers). */
+export interface MapMarker {
+  x: number;
+  z: number;
+  /** CSS colour. */
+  color: string;
+  /** core: glowing diamond; alert: ring with "!"; dot: plain dot. */
+  kind: 'core' | 'alert' | 'dot';
+  title?: string;
+}
+
 const DISTRICT_LABEL: Record<string, string> = {
   downtown: 'Downtown', commercial: 'Commercial district', oldtown: 'Old town', apartments: 'Apartment blocks', rowhouses: 'Row houses',
   suburban: 'Suburbs', industrial: 'Industrial area', port: 'Port', park: 'Park', water: 'Waterfront',
@@ -74,6 +85,15 @@ export class GameMap {
   private miniKey = '';
   private shadeMs = 0;
   private closedAt = -1e9;
+  /** Marker layers from game systems (power cores, people needing help, …). */
+  private markerSets = new Map<string, MapMarker[]>();
+  private markerT = 0;
+
+  /** Replace one marker layer (call on change, not per frame: it redraws the minimap). */
+  setMarkers(layer: string, list: MapMarker[]): void {
+    this.markerSets.set(layer, list);
+    this.miniKey = '';
+  }
 
   /** Open, or just closed (the pointer-lock release of opening may arrive late): the pause menu stays away. */
   get holdsPointer(): boolean { return this.open || performance.now() - this.closedAt < 400; }
@@ -109,6 +129,9 @@ export class GameMap {
         <h3>Metro</h3>
         ${lines || '<div class="map-none">This town has no metro. Larger cities do.</div>'}
         ${lines ? '<div class="map-key"><span class="ent">M</span> street entrance (zoom in)</div>' : ''}
+        <h3 style="margin-top:12px">Marks</h3>
+        <div class="map-key"><span class="alert">!</span> someone needs help (E)</div>
+        ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
         <div class="map-status"></div>
       </div>
       <div class="map-tools">
@@ -501,6 +524,7 @@ export class GameMap {
     this.tiles.drawView(g, this.tiles.levelFor(s * dpr), s, ox, oy, W, H, this.queue);
     this.tiles.renderQueue(this.queue, 9);
     this.drawMarkers(g, W, H, s, ox, oy, true);
+    this.drawCustom(g, W, H, s, ox, oy, true);
     this.drawPlayer(g, ox + this.focus().x * s, oy + this.focus().z * s, 1);
     if (this.picked) {
       const [x, y] = [ox + this.picked.x * s, oy + this.picked.z * s];
@@ -596,6 +620,45 @@ export class GameMap {
     }
   }
 
+  /** Marker layers (screen space); on the minimap, markers outside are pinned to the edge. */
+  private drawCustom(g: CanvasRenderingContext2D, W: number, H: number, s: number, ox: number, oy: number, full: boolean): void {
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 300);
+    for (const list of this.markerSets.values()) {
+      for (const m of list) {
+        let x = ox + m.x * s, y = oy + m.z * s;
+        let edge = false;
+        if (!full) {
+          const c = MINI_PX / 2, r = MINI_PX / 2 - 9;
+          const dx = x - c, dy = y - c, d = Math.hypot(dx, dy);
+          if (d > r) { if (m.kind !== 'alert') continue; x = c + (dx / d) * r; y = c + (dy / d) * r; edge = true; }
+        } else if (x < -12 || y < -12 || x > W + 12 || y > H + 12) continue;
+        const r = full ? 8 : 5;
+        g.save();
+        g.translate(x, y);
+        if (m.kind === 'core') {
+          g.shadowColor = m.color;
+          g.shadowBlur = full ? 12 : 8;
+          g.beginPath();
+          g.moveTo(0, -r * 1.35); g.lineTo(r, 0); g.lineTo(0, r * 1.35); g.lineTo(-r, 0); g.closePath();
+          g.fillStyle = m.color; g.fill();
+          g.shadowBlur = 0;
+          g.lineWidth = 1.6; g.strokeStyle = '#ffffff'; g.stroke();
+        } else if (m.kind === 'alert') {
+          g.beginPath(); g.arc(0, 0, r + 3 + pulse * 3, 0, Math.PI * 2);
+          g.strokeStyle = m.color; g.globalAlpha = 0.5 + (1 - pulse) * 0.4; g.lineWidth = 2; g.stroke();
+          g.globalAlpha = edge ? 0.85 : 1;
+          g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();
+          g.lineWidth = 1.5; g.strokeStyle = '#ffffff'; g.stroke();
+          g.fillStyle = '#1a1408'; g.font = `800 ${full ? 10 : 8}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillText('!', 0, 0.5);
+        } else {
+          g.beginPath(); g.arc(0, 0, r * 0.6, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();
+        }
+        g.restore();
+      }
+    }
+  }
+
   private drawPlayer(g: CanvasRenderingContext2D, x: number, y: number, k: number): void {
     const cam = this.game.renderer.camera;
     cam.getWorldDirection(this.dir);
@@ -649,7 +712,8 @@ export class GameMap {
     this.game.renderer.camera.getWorldDirection(this.dir);
     // Skip identical frames (standing still).
     const key = `${p.x.toFixed(1)},${p.z.toFixed(1)},${this.dir.x.toFixed(2)},${this.dir.z.toFixed(2)},${s.toFixed(4)}`;
-    if (key === this.miniKey) return;
+    const alerts = [...this.markerSets.values()].some((l) => l.some((m) => m.kind === 'alert'));
+    if (key === this.miniKey && !(alerts && (this.markerT = (this.markerT + 1) % 3) === 0)) return;
     this.miniKey = key;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = MAP_COLORS.outside;
@@ -661,6 +725,7 @@ export class GameMap {
     // One tile per frame at most: the minimap must never cost a frame.
     if (this.tiles.renderQueue(this.queue, 2, 1)) this.miniKey = '';
     this.drawMarkers(g, MINI_PX, MINI_PX, s, ox, oy, false);
+    this.drawCustom(g, MINI_PX, MINI_PX, s, ox, oy, false);
     if (this.game.camRig?.underground) {
       g.fillStyle = 'rgba(20,24,40,0.35)';
       g.fillRect(0, 0, MINI_PX, MINI_PX);

@@ -195,7 +195,7 @@
       "collapse_big.ogg"
     ],
     "loop": false,
-    "gain": 1.0,
+    "gain": 1,
     "description": "large building collapse, deep rumble and crashing masonry"
   },
   "explosion": {
@@ -204,7 +204,7 @@
       "explosion_2.ogg"
     ],
     "loop": false,
-    "gain": 1.0,
+    "gain": 1,
     "description": "explosion"
   },
   "tree_crack_fall": {
@@ -257,7 +257,7 @@
       "step_giant_2.ogg"
     ],
     "loop": false,
-    "gain": 1.0,
+    "gain": 1,
     "description": "enormous footstep, deep boom and ground rumble, slight debris"
   },
   "land_thud": {
@@ -281,7 +281,7 @@
       "sonic_boom.ogg"
     ],
     "loop": false,
-    "gain": 1.0,
+    "gain": 1,
     "description": "sonic boom"
   },
   "punch_impact": {
@@ -365,5 +365,13 @@
     "loop": false,
     "gain": 0.65,
     "description": "door closing"
+  },
+  "drone_buzz": {
+    "files": [
+      "drone_buzz.wav"
+    ],
+    "loop": true,
+    "gain": 0.5,
+    "description": "quadcopter rotor buzz loop (procedural, tools/synthDroneBuzz.mjs)"
   }
 }

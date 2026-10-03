@@ -161,6 +161,24 @@ and car ownership.
   * farther: none
   * cars: instanced procedural models with wheel animation and lights
 
+### Near future (`src/future`)
+The city is a believable near future (PLAYGROUND_PLAN §0, decision 16). `NearFuture` owns it; the game
+constructs it, updates it, forwards strikes, and it listens to stimuli (stomp, collapse, crash, blast).
+* **Delivery robots** (`Robots`): six-wheeled sidewalk robots that leave shops in loaded cells (density
+  follows shop density), drive `Pedestrians.buildRoute` sidewalk routes to a door and back, slow down
+  and swerve for people, wait at the kerb until `Traffic.safeToCross`. A shove or punch makes them
+  Rapier boxes; a hard hit, a car or a giant's foot breaks them.
+* **Drones** (`Drones`): parcel quadcopters cruising in 25–55 m lanes by heading, routed round towers,
+  winching parcels to doors or flat roofs; news drones gather over collapses, police drones circle
+  crashes. Attitude follows acceleration; nav lights and strobes as glow dots (`NavGlows`); a swat or
+  a giant's body knocks them down (Rapier, break on impact). One positional rotor-buzz loop.
+* **Signage** (`Signs`, art in `signArt`): LED fascias, blade signs and billboard screens placed per
+  building from (seed, cell, building), attached to the wall elements behind them (they flicker when
+  hit and die when their wall breaks), plus holographic kiosks. One instanced quad mesh, own shader.
+* Robots and drones exist only near the player (≤ 150 / ≤ 60), in the furniture material (instanced).
+  EV charging posts are street furniture (`evCharger`, beside some parking bays); driverless
+  `shuttle`s are a vehicle kind in traffic with turquoise automated-driving marker lamps.
+
 ### Interiors (`src/interior`)
 * Generated on demand when the player approaches an entrance or a breach: floor plan by
   building use (apartments, offices, shops, restaurants, lobby, stair or elevator core),
@@ -202,6 +220,7 @@ src/stream     cell streaming, worker pool
 src/destruction elements, debris, structural collapse
 src/player     controller, camera, scale, flight
 src/sim        citizens, traffic, transit (worker) and the client-side crowd renderer
+src/future     near-future layer: delivery robots, drones, animated signage, holo kiosks
 src/humanoid   Norgo human pipeline (bodies, animator) plus modern clothing
 src/audio      audio engine
 src/ui         HUD, menu, map

@@ -25,10 +25,10 @@ import { Rng } from '../core/rng';
 // ---------------------------------------------------------------- public API
 
 export type VehicleKind =
-  | 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery';
+  | 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle';
 
 export const VEHICLE_KINDS: VehicleKind[] = [
-  'sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery',
+  'sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle',
 ];
 
 export interface VehicleModel {
@@ -59,6 +59,8 @@ export const enum VPart {
   Cargo = 14,
   /** Painted/machined alloy rims. */
   Alloy = 15,
+  /** Turquoise automated-driving marker lamps (SAE J3134), always lit on driverless vehicles. */
+  AdsLamp = 16,
 }
 
 // ---------------------------------------------------------------- math helpers
@@ -1445,6 +1447,85 @@ function buildBus(variant: number, rng: Rng): Built {
   return finishCar('bus', g, ctx, axles, 'steel', 12500, [-0.75, 1.15, zF + 0.95]);
 }
 
+// ---------------- driverless shuttle
+
+/**
+ * Autonomous shuttle pod: a short, symmetric box with glass at both ends and big side windows,
+ * a sliding double door on the right, no mirrors (sensor stalks instead), a lidar puck on the
+ * roof and turquoise automated-driving marker lamps along both ends. v1/v3 are a little longer.
+ */
+function buildShuttle(variant: number, rng: Rng): Built {
+  const g = new Geo();
+  const L = (variant % 2 ? 5.2 : 4.7) * (1 + rng.range(-0.01, 0.01)), W = 2.06, H = 2.62;
+  const R = 0.36, tw = 0.235, rimR = 0.24;
+  const zF = -L / 2, zR = L / 2;
+  const fo = 0.8, wb = L - 1.6;
+  const yb = 0.24, belt = 0.92;
+  const noseExt: [number, number][] = [[0.3, 0.1], [0.6, 0.13], [1.0, 0.12], [1.15, 0.08]];
+  const tailExt = noseExt;
+  const zF0 = zF + 0.14, zR0 = zR - 0.14;
+  const zA = zF0 + 0.03, zB = zA + 0.28;
+  const zD = zR0 - 0.03, zC = zD - 0.28;
+  const mid = 0;
+  const door: [number, number] = [mid - 0.7, mid + 0.7];
+  const inDoor = (z: number) => z > door[0] && z < door[1];
+  const doorPart = (z: number) => {
+    if (!inDoor(z)) return -1;
+    if (z < door[0] + 0.05 || z > door[1] - 0.05 || Math.abs(z - mid) < 0.015) return VPart.Rubber;
+    return VPart.Glass;
+  };
+  const pillars: { z: number; w: number; part: number }[] = [];
+  const winStart = zB + 0.1, winEnd = zC - 0.1;
+  const nWin = Math.max(2, Math.round((winEnd - winStart) / 1.15));
+  for (let i = 0; i <= nWin; i++) pillars.push({ z: lerp(winStart, winEnd, i / nWin), w: 0.12, part: VPart.Plastic });
+  const cuts = [door[0], door[0] + 0.05, mid - 0.015, mid + 0.015, door[1] - 0.05, door[1]];
+  const ends = (ym: number) => (ym > H - 0.2 ? VPart.AdsLamp : ym > belt + 0.12 ? VPart.Glass : -1);
+  const gh: GHDef = {
+    zA, zB, zC, zD,
+    roofF: [[zA, 0], [lerp(zA, zB, 0.3), 0.45], [lerp(zA, zB, 0.7), 0.88], [zB, 0.98], [zB + 0.25, 1], [zC - 0.25, 1], [zC, 0.98], [lerp(zC, zD, 0.3), 0.88], [lerp(zC, zD, 0.7), 0.45], [zD, 0]],
+    roofH: H, inset: 0.04, tumble: 0.05, topDrop: 0.22, crown: 0.05, bow: 0.0,
+    sideStart: zA + 0.08, sideEnd: zD - 0.08, pillars, trim: VPart.Plastic, aPillar: VPart.Plastic, roofPart: VPart.Paint, cPillar: VPart.Plastic, extraZ: cuts,
+    override: (zm, jj, side, ym) => {
+      if ((zm < zB || zm > zC) && jj >= 4) return ends(ym);
+      if (side > 0 && jj <= 3) { const d = doorPart(zm); if (d >= 0) return d; }
+      return -1;
+    },
+  };
+  const p: CarP = {
+    L, W, R, tw, rimR, fo, wb, flare: 0.004,
+    yb, ybF: yb + 0.04, ybR: yb + 0.04,
+    hoodF: belt - 0.04, cowl: belt - 0.02, belt, deck: belt, tailTop: belt, hoodMid: belt - 0.03,
+    wF: 0.97, wR: 0.97, crown: 0.0, shoulderDrop: 0.05, rockerIn: 0.012, tumbleLow: 0.01,
+    noseExt, rcF: 0.3, topRoundF: 0.02, tailExt, rcR: 0.3, topRoundR: 0.02, botRound: 0.04,
+    capLowF: yb + 0.1, capLowR: yb + 0.1,
+    gh, seams: [], topSeams: [], step: 0.6, cuts,
+    override: (zm, jj, side, _ym) => {
+      if (side > 0 && jj >= 2 && jj <= 10) { const d = doorPart(zm); if (d >= 0) return d; }
+      if (jj >= 3 && jj <= 4 && !inDoor(zm)) return VPart.Plastic; // skirt line
+      return -1;
+    },
+  };
+  const { B, axles } = makeBody(p);
+  const ctx = buildBody(g, B);
+  // Thin LED head / tail light bands and a turquoise ADS band low on both ends.
+  B.front.patches.push(
+    { u0: 0.15, u1: 1.85, yb0: 0.6, yb1: 0.6, yt0: 0.66, yt1: 0.66, part: VPart.Headlight, skirt: true, nx: 6 },
+    { u0: 0, u1: 0.26 / ctx.front.inner, yb0: 0.38, yb1: 0.38, yt0: 0.49, yt1: 0.49, part: VPart.Plate, centered: true, nx: 1, lift: 0.01 },
+  );
+  B.rear.patches.push(
+    { u0: 0.15, u1: 1.85, yb0: 0.6, yb1: 0.6, yt0: 0.67, yt1: 0.67, part: VPart.Taillight, skirt: true, nx: 6 },
+    { u0: 0, u1: 0.26 / ctx.rear.inner, yb0: 0.38, yb1: 0.38, yt0: 0.49, yt1: 0.49, part: VPart.Plate, centered: true, nx: 1, lift: 0.01 },
+  );
+  // Roof: sensor module with a spinning-lidar puck, corner sensor stalks.
+  rbox(g, 0, 0.42, H - 0.03, H + 0.09, -0.45, 0.45, 0.06, (n) => (n[1] < -0.5 ? VPart.Undercarriage : VPart.Paint), 2);
+  blob(g, [0, H + 0.17, 0], [0.13, 0.08, 0.13], 10, 6, 0.6, (d) => (Math.abs(d[1]) < 0.4 ? VPart.Glass : VPart.Plastic));
+  for (const sx of [1, -1]) for (const z of [zF + 0.25, zR - 0.25]) blob(g, [sx * (W / 2 - 0.02), H - 0.35, z], [0.05, 0.07, 0.05], 6, 4, 0.5, () => VPart.Plastic, 1);
+  // Bumpers.
+  rbox(g, 0, W / 2 - 0.03, yb + 0.02, yb + 0.18, zF - 0.02, zF + 0.1, 0.04, () => VPart.Plastic);
+  rbox(g, 0, W / 2 - 0.03, yb + 0.02, yb + 0.18, zR - 0.1, zR + 0.02, 0.04, () => VPart.Plastic);
+  return finishCar('shuttle', g, ctx, axles, 'cap', 3200, [-0.6, 0.85, 0]);
+}
+
 // ---------------- box truck
 
 function buildTruck(variant: number, rng: Rng): Built {
@@ -1628,6 +1709,7 @@ export function vehicleModel(kind: VehicleKind, variant = 0): VehicleModel {
     case 'bus': b = buildBus(v, rng); break;
     case 'truck': b = buildTruck(v, rng); break;
     case 'delivery': b = buildDelivery(v, rng); break;
+    case 'shuttle': b = buildShuttle(v, rng); break;
     default: b = buildPassenger({ kind, variant: v, rng }); break;
   }
   const bb = b.body.boundingBox!;
@@ -1835,6 +1917,9 @@ if (vp == 0 || vp == 13) {
     float strobe = step(0.45, fract(uTime * 9.0));
     vhEmis = lc * 16.0 * on * strobe * lightsAlive;
   }
+} else if (vp == 16) {
+  vhCol = vec3(0.05, 0.35, 0.33); vhRough = 0.1; vhCC = 1.0;
+  vhEmis = vec3(0.1, 1.0, 0.85) * (0.9 + 3.5 * uNight) * lightsAlive;
 } else if (vp == 14) {
   float rib = smoothstep(0.42, 0.5, abs(fract(vObjPos.z / 0.31) - 0.5));
   vhCol = vec3(0.8, 0.8, 0.78) * (1.0 - 0.12 * rib);
@@ -1942,6 +2027,10 @@ export function paintColor(kind: VehicleKind, seed: number): [number, number, nu
   }
   if (kind === 'bus') {
     return r.pick([hsl(0.13, 0.85, 0.5), [0.92, 0.92, 0.9] as [number, number, number], hsl(0.0, 0.72, 0.42), hsl(0.6, 0.6, 0.35), hsl(0.36, 0.55, 0.32), hsl(0.55, 0.5, 0.55)]);
+  }
+  if (kind === 'shuttle') {
+    // Operator liveries: white, warm grey, a few city-transit colours.
+    return r.pick([[0.93, 0.93, 0.92], [0.93, 0.93, 0.92], [0.78, 0.77, 0.74], hsl(0.5, 0.45, 0.42), hsl(0.6, 0.45, 0.35)] as [number, number, number][]);
   }
   if (kind === 'truck' || kind === 'delivery') {
     const t = r.float();

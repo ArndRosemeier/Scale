@@ -10,7 +10,7 @@
  *  - A tiny person (< 0.4 m) is mostly unnoticed.
  *  - Fear decays; people resume their routes afterwards.
  */
-import type { Pedestrians, PedAgent } from './Pedestrians';
+import type { Pedestrians, PedAgent, DownCause } from './Pedestrians';
 import { PState } from './Pedestrians';
 import type { Stimuli, Stimulus } from '../game/Stimuli';
 import type { Player } from '../player/Player';
@@ -48,13 +48,13 @@ export class Reactions {
             a.fear = Math.min(2, a.fear + prox * nerve * (s.kind === 'crash' ? 0.6 : 1.4));
             // Blast wave / falling debris knocks people down close by.
             const knock = s.kind === 'blast' ? s.radius * 0.12 : s.kind === 'collapse' ? Math.min(40, s.radius * 0.05) : 0;
-            if (d < knock) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9);
+            if (d < knock) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? 'player' : 'collapse');
             else this.flee(a, s.x, s.z);
             break;
           }
           case 'stomp':
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
-            if (d < Math.max(1.5, H * 0.12)) this.knockDown(a, s.x, s.z, 4);
+            if (d < Math.max(1.5, H * 0.12)) this.knockDown(a, s.x, s.z, 4, 'player');
             break;
           case 'impact':
           case 'glass':
@@ -113,7 +113,9 @@ export class Reactions {
     a.lookX = x; a.lookY = y; a.lookZ = z;
   }
 
-  knockDown(a: PedAgent, fx: number, fz: number, power: number): void {
+  knockDown(a: PedAgent, fx: number, fz: number, power: number, cause: DownCause = 'other'): void {
+    a.downBy = cause;
+    a.helped = false;
     const dx = a.x - fx, dz = a.z - fz;
     const d = Math.hypot(dx, dz) || 1;
     a.state = PState.Down;

@@ -193,8 +193,9 @@ export class CrowdRenderer {
       }
       const move = a.state === PState.Sit ? 'sit' : a.state === PState.Sleep ? 'sleep' : a.state === PState.Down ? 'dead' : a.state === PState.Flee ? 'run' : a.speed > 2.4 ? 'run' : a.speed > 0.15 ? 'walk' : 'idle';
       const vx = -Math.sin(a.heading) * a.speed, vz = -Math.cos(a.heading) * a.speed;
-      const action = a.state === PState.Film ? { id: 'gesture_point', t0: time - 0.3, dur: 10 } : undefined;
-      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading, anim: { move, action, mood: a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral', lookAt: a.state === PState.Gawk || a.state === PState.Film ? [a.lookX, a.lookY, a.lookZ] : undefined }, flags: 0 }, dt, time, cam.position);
+      const thanks = a.helped && a.state !== PState.Down && a.stateT < 3;
+      const action = a.state === PState.Film ? { id: 'gesture_point', t0: time - 0.3, dur: 10 } : thanks ? { id: 'gesture_wave', t0: time - a.stateT, dur: 3 } : undefined;
+      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading, anim: { move, action, mood: thanks ? 'happy' : a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral', lookAt: a.state === PState.Gawk || a.state === PState.Film ? [a.lookX, a.lookY, a.lookZ] : undefined }, flags: 0 }, dt, time, cam.position);
     }
     // Drop rigs no longer needed (keep a short while to avoid churn).
     for (const [id, r] of this.rigs) {

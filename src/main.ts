@@ -10,6 +10,7 @@ import { AvatarMenu, loadSelectedAvatar, loadSelectedLook } from './ui/AvatarMen
 import { disposeCreatorPreview } from './ui/CharacterCreator';
 import { Player } from './player/Player';
 import { normalizeLook } from './avatar/look';
+import { loadMode, saveMode, MODE_INFO, type GameMode } from './game/mode';
 
 const params = new URLSearchParams(location.search);
 const menu = document.getElementById('menu') as HTMLDivElement;
@@ -34,13 +35,26 @@ function refresh(): void {
 }
 // Character picker (imported models persist in the browser).
 startBtn.before(new AvatarMenu(startBtn.parentElement as HTMLElement).el);
+// Game mode (remembered; ?mode=sandbox|normal overrides for this start).
+let mode: GameMode = params.get('mode') === 'sandbox' ? 'sandbox' : params.get('mode') === 'normal' ? 'normal' : loadMode();
+const modeBtns = [...document.querySelectorAll<HTMLButtonElement>('#modes .mode')];
+function showMode(): void {
+  for (const b of modeBtns) {
+    const m = b.dataset.mode as GameMode;
+    b.classList.toggle('sel', m === mode);
+    b.setAttribute('aria-pressed', String(m === mode));
+    (b.querySelector('.mode-desc') as HTMLElement).textContent = MODE_INFO[m].desc;
+  }
+}
+for (const b of modeBtns) b.addEventListener('click', () => { mode = b.dataset.mode as GameMode; saveMode(mode); showMode(); });
+showMode();
 seedIn.addEventListener('input', refresh);
 sizeIn.addEventListener('input', refresh);
 refresh();
 
 async function start(): Promise<void> {
   const settings = { seed: parseSeed(seedIn.value), size: Number(sizeIn.value) };
-  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('auto') ? '&auto' : ''}`);
+  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}`);
   menu.style.display = 'none';
   loading.style.display = 'flex';
   disposeCreatorPreview();
@@ -53,7 +67,7 @@ async function start(): Promise<void> {
     console.error('[avatar] could not load the selected character', e);
   }
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  const game = new Game(canvas, settings);
+  const game = new Game(canvas, settings, mode);
   (window as unknown as { game: Game }).game = game;
   await game.start((msg, f) => {
     loadMsg.textContent = msg;

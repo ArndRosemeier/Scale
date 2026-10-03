@@ -9,7 +9,8 @@
  *  - aEmit  float 0..1 emissive mask (lamp lenses, signal lenses, back-lit signs)
  *  - aSub   float sub-material code (internal): 0 plain, 1 red / 2 amber / 3 green signal lens,
  *           4 pedestrian "don't walk" / 5 "walk" lens, 7 back-lit sign, 8 foliage, 9 fixed paint
- *           (ignores iColor)
+ *           (ignores iColor), 10 status LED / 11 strobe / 12 navigation light (near-future robots
+ *           and drones: always powered, iState.z = blink phase, iState.w = 0 ok / 1 alert / 2 off)
  *  - aColor vec3 default paint / plastic colour (linear). Per-instance iColor (sRGB) replaces it for
  *           PaintedMetal / Plastic vertices when non-zero.
  *
@@ -26,9 +27,9 @@ import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { Noise } from '../core/noise';
 
-export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth';
+export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth' | 'evCharger';
 
-export const FURNITURE_KINDS: FurnitureKind[] = ['lampModern', 'lampClassic', 'lampDouble', 'trafficLight', 'bench', 'bin', 'hydrant', 'mailbox', 'bollard', 'planter', 'busStop', 'fountain', 'statue', 'kiosk', 'stopSign', 'playground', 'manhole', 'metroEntrance', 'newsStand', 'bikeRack', 'phoneBooth'];
+export const FURNITURE_KINDS: FurnitureKind[] = ['lampModern', 'lampClassic', 'lampDouble', 'trafficLight', 'bench', 'bin', 'hydrant', 'mailbox', 'bollard', 'planter', 'busStop', 'fountain', 'statue', 'kiosk', 'stopSign', 'playground', 'manhole', 'metroEntrance', 'newsStand', 'bikeRack', 'phoneBooth', 'evCharger'];
 
 export interface FurnitureModel {
   kind: FurnitureKind;
@@ -51,15 +52,15 @@ export const furnitureUniforms = {
 // Builder
 // ---------------------------------------------------------------------------------------------
 
-type V = [number, number, number];
-interface PO { m: FMat; c?: V; e?: number; s?: number }
+export type V = [number, number, number];
+export interface PO { m: FMat; c?: V; e?: number; s?: number }
 
 const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 const _e = new THREE.Euler();
 const _q = new THREE.Quaternion();
 const _n3 = new THREE.Matrix3();
 
-function M(x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1): THREE.Matrix4 {
+export function M(x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1): THREE.Matrix4 {
   _e.set(rx, ry, rz, 'YXZ');
   _q.setFromEuler(_e);
   return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), _q, new THREE.Vector3(sx, sy, sz));
@@ -72,7 +73,7 @@ function cellRect(cell: number): [number, number, number, number] {
   return [cx / 4 + m, 1 - (cy + 1) / 4 + m, (cx + 1) / 4 - m, 1 - cy / 4 - m];
 }
 
-class FB {
+export class FB {
   pos: number[] = []; nrm: number[] = []; uv: number[] = []; mat: number[] = []; emit: number[] = []; sub: number[] = []; col: number[] = [];
   idx: number[] = [];
   get count() { return this.pos.length / 3; }
@@ -245,16 +246,16 @@ class FB {
 // Common parts / palette
 // ---------------------------------------------------------------------------------------------
 
-const METAL: PO = { m: FMat.Metal };
-const RUBBER: PO = { m: FMat.Rubber, c: [0.05, 0.05, 0.05] };
+export const METAL: PO = { m: FMat.Metal };
+export const RUBBER: PO = { m: FMat.Rubber, c: [0.05, 0.05, 0.05] };
 const CONCRETE: PO = { m: FMat.Concrete, c: [0.6, 0.59, 0.56] };
 const STONE: PO = { m: FMat.Stone };
-const GLASS: PO = { m: FMat.Glass };
+export const GLASS: PO = { m: FMat.Glass };
 const WOOD: PO = { m: FMat.Wood, c: [0.55, 0.36, 0.2] };
 const BRONZE: PO = { m: FMat.Bronze };
 const WATER: PO = { m: FMat.Water };
-const paint = (c: V, fixed = false): PO => ({ m: FMat.PaintedMetal, c, s: fixed ? 9 : 0 });
-const plastic = (c: V, fixed = false): PO => ({ m: FMat.Plastic, c, s: fixed ? 9 : 0 });
+export const paint = (c: V, fixed = false): PO => ({ m: FMat.PaintedMetal, c, s: fixed ? 9 : 0 });
+export const plastic = (c: V, fixed = false): PO => ({ m: FMat.Plastic, c, s: fixed ? 9 : 0 });
 const sign = (emit = 0): PO => ({ m: FMat.Signage, e: emit, s: emit > 0 ? 7 : 0, c: [1, 1, 1] });
 const LAMP = (e = 1): PO => ({ m: FMat.Light, e, s: 0, c: [1, 0.97, 0.9] });
 
@@ -1051,6 +1052,42 @@ function phoneBooth(fb: FB, v: number): number {
   return 2.25;
 }
 
+/**
+ * Kerbside EV charging post (front -Z faces the parking bay): a slim rounded column with a
+ * screen, a status light ring and the charging cable coiled on its holster. v1: a lower
+ * twin-socket bollard type.
+ */
+function evCharger(fb: FB, v: number): number {
+  const body = paint([0.9, 0.91, 0.9], true);
+  const dark = plastic([0.12, 0.13, 0.14], true);
+  const led: PO = { m: FMat.Light, e: 1, s: 10, c: [0.2, 0.9, 1] };
+  fb.box(CONCRETE, 0.5, 0.06, 0.4, 0, 0.03, 0);
+  if (v % 2 === 0) {
+    const H = 1.55;
+    fb.lathe(body, [[0, 0.06], [0.16, 0.06], [0.17, 0.1], [0.17, H - 0.12], [0.15, H - 0.03], [0.1, H], [0, H]], 20, 0, 0, 0, 0, 1, 0.72);
+    // Dark face with the screen and the status light band.
+    fb.box(dark, 0.22, 0.62, 0.03, 0, 1.08, -0.115);
+    fb.box(plastic([0.04, 0.1, 0.18], true), 0.16, 0.12, 0.01, 0, 1.25, -0.132);
+    fb.box(led, 0.1, 0.012, 0.012, 0, 1.22, -0.136);
+    fb.box(led, 0.17, 0.025, 0.012, 0, 1.43, -0.122);
+    fb.box(led, 0.022, 0.4, 0.012, -0.135, 0.75, -0.06, 0.55);
+    // Socket, holster and the cable hanging in a loop.
+    fb.box(dark, 0.09, 0.12, 0.06, 0, 0.88, -0.14);
+    fb.box(dark, 0.07, 0.16, 0.07, 0.15, 0.95, -0.02);
+    fb.tube(RUBBER, [[0.17, 0.9, -0.03], [0.24, 0.6, -0.08], [0.2, 0.32, -0.12], [0.06, 0.38, -0.16], [0.0, 0.82, -0.15]], 0.016, 6, 24);
+    return H;
+  }
+  const H = 1.05;
+  fb.box(body, 0.3, H - 0.06, 0.26, 0, 0.06 + (H - 0.06) / 2, 0);
+  fb.box(dark, 0.31, 0.06, 0.27, 0, H - 0.03, 0);
+  for (const z of [-1, 1]) {
+    fb.box(dark, 0.18, 0.2, 0.02, 0, 0.72, z * 0.135);
+    fb.box(led, 0.16, 0.02, 0.012, 0, 0.9, z * 0.14);
+  }
+  fb.box(led, 0.31, 0.015, 0.27, 0, H - 0.07, 0);
+  return H;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------------------------
@@ -1089,6 +1126,7 @@ export function furnitureModel(kind: FurnitureKind, variant = 0): FurnitureModel
     case 'newsStand': height = newsStand(fb, v); radius = 0.9; breakable = 'topple'; break;
     case 'bikeRack': height = bikeRack(fb, v); radius = v === 0 ? 1.9 : 1.1; breakable = 'bend'; break;
     case 'phoneBooth': height = phoneBooth(fb, v); radius = 0.6; breakable = 'shatter'; break;
+    case 'evCharger': height = evCharger(fb, v); radius = 0.22; breakable = 'topple'; break;
   }
   const model: FurnitureModel = { kind, geometry: fb.build(), height, radius, lights, breakable };
   furnCache.set(key, model);
@@ -1416,6 +1454,25 @@ export function createFurnitureMaterial(): THREE.MeshStandardMaterial {
               base = vec3(0.02) + vPaint * mask * 0.05;
               rough = 0.2;
               fEmis = vPaint * mask * lit * (3.0 + 4.0 * uNight);
+            } else if (sub >= 10 && sub <= 12) { // near-future LEDs (always powered; iState.z phase, .w mode: 0 ok, 1 alert, 2 off)
+              base = vPaint * 0.25;
+              rough = 0.2;
+              float off = vState.w > 1.5 ? 0.0 : 1.0;
+              if (sub == 10) { // status light: steady teal pulse, amber blink when waiting
+                bool alert = vState.w > 0.5 && vState.w < 1.5;
+                vec3 c = alert ? vec3(1.0, 0.5, 0.06) : vec3(0.12, 0.8, 1.0);
+                float k = alert ? step(0.45, fract(uTime * 1.6 + vState.z)) : 0.75 + 0.25 * sin(uTime * 2.5 + vState.z * 6.283);
+                base = c * 0.3;
+                fEmis = c * k * off * (1.4 + 2.6 * uNight);
+              } else if (sub == 11) { // anti-collision strobe (double flash); police: red / blue
+                float ph = fract(uTime * 0.9 + vState.z);
+                float k = step(ph, 0.04) + step(abs(ph - 0.13), 0.02);
+                vec3 c = vState.y > 2.5 ? (fract(uTime * 2.0 + vState.z) < 0.5 ? vec3(1.0, 0.05, 0.03) : vec3(0.05, 0.2, 1.0)) : vec3(1.0);
+                if (vState.y > 2.5) k = step(0.5, fract(uTime * 8.0)) * 0.8;
+                fEmis = c * k * off * (5.0 + 9.0 * uNight);
+              } else { // steady navigation light (colour from the model)
+                fEmis = vPaint * off * (0.6 + 3.4 * uNight);
+              }
             } else if (sub == 9) { // retro-reflective band
               base = vPaint; rough = 0.25; metal = 0.0;
             } else { // lamp: frosted diffuser

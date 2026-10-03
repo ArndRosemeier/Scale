@@ -6,17 +6,20 @@ import type { Game } from '../game/Game';
 const CONTROLS: [string, string][] = [
   ['W A S D', 'Walk (in flight: fly)'],
   ['Shift', 'Run / boost'],
-  ['Space', 'Jump (in flight: up)'],
+  ['Space', 'Jump · hold to charge a super jump (in flight: up)'],
   ['Ctrl / C', 'Down (in flight)'],
-  ['F', 'Toggle flight'],
-  ['Numpad + / −  (or = / −)', 'Grow / shrink (10 cm … 100 m)'],
+  ['F', 'Toggle flight (when unlocked)'],
+  ['Numpad + / −  (or = / −)', 'Grow / shrink (size shift; range grows with rank)'],
+  ['1 … 8', 'Use a hotbar power (and select its slot)'],
+  ['Right click', 'Use the selected hotbar power'],
+  ['P', 'Powers: buy, upgrade, assign to the hotbar'],
   ['Mouse', 'Look around'],
   ['Mouse wheel', 'Camera distance'],
   ['Left click', 'Punch / push'],
-  ['E', 'Open a manhole / climb out of the sewer'],
+  ['E', 'Help someone up · open a manhole / climb out of the sewer'],
   ['M', 'City map: metro, stations, travel'],
   ['N', 'Minimap on / off'],
-  ['B', 'Test blast where you look'],
+  ['B', 'Test blast where you look (sandbox)'],
   ['T', 'Fast time on/off'],
   ['[  ]', 'Time of day −1 h / +1 h'],
   ['F8', 'Free camera'],
@@ -48,7 +51,7 @@ export class Menu {
     document.body.appendChild(this.el);
     this.help = document.createElement('div');
     this.help.id = 'help';
-    this.help.innerHTML = `<div class="panel"><h2>Controls</h2><table>${CONTROLS.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('')}</table><p class="sub">Everything can be destroyed. People live their own days — and they notice what you do.</p></div>`;
+    this.help.innerHTML = `<div class="panel"><h2>Controls</h2><table>${CONTROLS.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('')}</table><p class="sub">Normal mode: help people to earn karma and buy powers with P. Everything can be destroyed. People live their own days — and they notice what you do.</p></div>`;
     document.body.appendChild(this.help);
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
     $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); };
@@ -64,10 +67,11 @@ export class Menu {
     let wasLocked = false;
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement) { wasLocked = true; this.close(); }
-      else if (wasLocked && !this.open && !this.game.map?.holdsPointer) this.show(); // Esc released the mouse (not the map opening)
+      else if (wasLocked && !this.open && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer) this.show(); // Esc released the mouse (not the map opening)
     });
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape') { if (this.open) this.close(); else this.show(); }
+      // (Esc that just closed the map or the powers screen does not open the pause menu.)
+      if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer) { if (this.open) this.close(); else this.show(); }
       if (e.code === 'KeyH') this.toggleHelp();
     });
     // First-time hint.
