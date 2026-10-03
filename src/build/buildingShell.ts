@@ -6,7 +6,7 @@
  */
 import earcut from 'earcut';
 import { Rng } from '../core/rng';
-import { type Poly, minAreaRect, polyArea, ensureCCW, polyCentroid, pointInPoly } from '../core/geom2';
+import { type Poly, minAreaRect, polyArea, ensureCCW, polyCentroid, pointInPoly, distPointPolyEdge, splitPolyByLine, segIntersect } from '../core/geom2';
 import { offset, shapesToPolys, intersection } from '../core/clip';
 import { gridPoint, type SlabGrid } from './buildingLayout';
 import type { Terrain } from '../world/terrain';
@@ -301,10 +301,13 @@ function band(mb: MeshBuilder, poly: Poly, y: number, h: number, out: number): v
 }
 
 /** Flat cap of (outer minus inner) at height y. */
-function capRing(mb: MeshBuilder, outer: Poly, inner: Poly, y: number, down = false): void {
+function capRing(mb: MeshBuilder, outer: Poly, inner: Poly | Poly[], y: number, down = false): void {
   const flat = outer.slice();
-  const holes = [flat.length / 2];
-  for (const v of ensureCCW(inner)) flat.push(v);
+  const holes: number[] = [];
+  for (const h of (typeof inner[0] === 'number' ? [inner as Poly] : (inner as Poly[]))) {
+    holes.push(flat.length / 2);
+    for (const v of ensureCCW(h)) flat.push(v);
+  }
   const tris = earcut(flat, holes, 2);
   emitFlat(mb, flat, tris, y, down);
 }
@@ -328,29 +331,33 @@ function emitFlat(mb: MeshBuilder, flat: number[], tris: number[], y: number, do
 }
 
 function parapet(mb: MeshBuilder, poly: Poly, y: number, h: number, b: BuildingDesc): void {
-  const sh = offset([poly], -0.3, 'miter');
-  if (!sh.length) return;
-  const inner = ensureCCW(sh[0].outer);
+  // A narrow neck can split the inset outline into several pieces.
+  const inner = offset([poly], -0.3, 'miter').map((s) => ensureCCW(s.outer));
+  if (!inner.length) return;
   mb.set('aFacade', 1, 1, 1, 0);
   walls(mb, poly, y, y + h, 0, null, -1);
-  // inner face (reverse ring so normals face inward)
-  const rev: number[] = [];
-  for (let i = (inner.length >> 1) - 1; i >= 0; i--) rev.push(inner[i * 2], inner[i * 2 + 1]);
-  walls(mb, rev, y, y + h, 0, null, -1);
+  // inner faces (reverse rings so normals face inward)
+  for (const ip of inner) {
+    const rev: number[] = [];
+    for (let i = (ip.length >> 1) - 1; i >= 0; i--) rev.push(ip[i * 2], ip[i * 2 + 1]);
+    walls(mb, rev, y, y + h, 0, null, -1);
+  }
   capRing(mb, poly, inner, y + h);
   void b;
 }
 
 function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, tint: [number, number, number], tiling: { grid: SlabGrid; tiles: Int32Array; roofElem: number } | null = null): void {
   const roofLayer = 16 + b.roofMat;
+  top = ensureCCW(top);
   const obb = minAreaRect(top);
   const rect = Math.abs(polyArea(top)) / Math.max(1e-6, 4 * obb.hu * obb.hv);
   let kind = b.roof;
   if ((kind === 'gable' || kind === 'hip' || kind === 'sawtooth' || kind === 'shed') && rect < 0.8) kind = 'flat';
   if (kind === 'flat') {
     mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
-    const inner = offset([top], -0.3, 'miter');
-    const ip = inner.length ? ensureCCW(inner[0].outer) : top;
+    // Inset under the parapet; a narrow neck can split it into several pieces.
+    const inner = offset([top], -0.3, 'miter').map((s) => ensureCCW(s.outer));
+    const ip = inner.length ? inner : [top];
     if (tiling) {
       const g = tiling.grid;
       for (let c = 0; c < tiling.tiles.length; c++) {
@@ -359,10 +366,10 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
         const u0 = g.u0 + i * g.size, v0 = g.v0 + j * g.size, u1 = u0 + g.size, v1 = v0 + g.size;
         const rect = [...gridPoint(g, u0, v0), ...gridPoint(g, u1, v0), ...gridPoint(g, u1, v1), ...gridPoint(g, u0, v1)];
         mb.set('aElem', tiling.tiles[c]);
-        for (const piece of shapesToPolys(intersection([ensureCCW(rect)], [ip]))) cap(mb, ensureCCW(piece), y + 0.05);
+        for (const piece of shapesToPolys(intersection([ensureCCW(rect)], ip))) cap(mb, ensureCCW(piece), y + 0.05);
       }
       mb.set('aElem', tiling.roofElem);
-    } else cap(mb, ip, y + 0.05);
+    } else for (const p of ip) cap(mb, p, y + 0.05);
     if (b.style !== 'house') {
       mb.set('aLayer', b.wall);
       parapet(mb, top, y, b.style === 'glass' ? 1.4 : 0.9, b);
@@ -372,11 +379,16 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
   }
   if (kind === 'mansard') {
     // Steep lower slope (with dormers drawn by the shader) then a flat top.
-    const inset = Math.min(2.2, Math.min(obb.hu, obb.hv) * 0.4);
-    const sh = offset([top], -inset, 'miter');
-    if (!sh.length) { mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof); cap(mb, top, y); return; }
-    const inner = ensureCCW(sh[0].outer);
+    // The inset ring keeps one vertex per outline vertex, so every wall edge gets its own
+    // slope; outlines too tight for that inset try a smaller one, else stay flat.
     const mh = 3.4;
+    let inset = Math.min(2.2, Math.min(obb.hu, obb.hv) * 0.4);
+    let inner: Poly | null = null;
+    for (let k = 0; k < 3 && !inner; k++, inset *= 0.55) {
+      const q = offsetEdges(top, new Array(top.length >> 1).fill(-inset));
+      if (offsetValid(top, q)) inner = q;
+    }
+    if (!inner) { mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof); cap(mb, top, y + 0.05); rooftop(mb, b, top, y, r); return; }
     mb.set('aLayer', roofLayer).set('aFacade', b.bay, mh, mh, FF.Roof | FF.Windows);
     slopedRing(mb, top, inner, y, y + mh);
     mb.set('aFacade', 1, 1, 1, FF.Roof);
@@ -384,144 +396,321 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
     rooftop(mb, b, inner, y + mh, r);
     return;
   }
-  // Gable / hip / shed / sawtooth on the OBB of the footprint.
+  // Gable / hip / shed / sawtooth: a height field of planar facets laid out in the frame of the
+  // footprint's OBB, but cut to the real outline (eaves follow its edges, and where the roof
+  // stands above the wall top a gable wall closes it), so trapezoids, pentagons and notched
+  // footprints are covered exactly instead of by their bounding rectangle.
   // Ridge direction: along the long axis, except attached houses: parallel to the street.
   let ux = obb.ux, uz = obb.uz, hu = obb.hu, hv = obb.hv;
   if (hv > hu) { ux = -obb.uz; uz = obb.ux; const t = hu; hu = hv; hv = t; }
+  let fdx = 1, fdz = 0; // street direction (attached houses)
   if (b.attached) {
     const n = b.poly.length >> 1;
     const j = (b.front + 1) % n;
     const fx = b.poly[j * 2] - b.poly[b.front * 2], fz = b.poly[j * 2 + 1] - b.poly[b.front * 2 + 1];
     const fl = Math.hypot(fx, fz) || 1;
+    fdx = fx / fl; fdz = fz / fl;
     if (Math.abs((fx / fl) * ux + (fz / fl) * uz) < 0.7) { const t = hu; hu = hv; hv = t; const ox = ux; ux = -uz; uz = ox; }
   }
   const vx = -uz, vz = ux;
   const ov = 0.35; // eave overhang
   const cx = obb.cx, cz = obb.cz;
-  const P = (u: number, v: number, yy: number): [number, number, number] => [cx + ux * u + vx * v, yy, cz + uz * u + vz * v];
-  const rise = hv * b.pitch;
-  mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
-  if (kind === 'gable' || kind === 'shed') {
-    const A = hu + (b.attached ? 0 : ov), V = hv + ov, yE = y - ov * b.pitch;
-    if (kind === 'gable') {
-      plane(mb, P(-A, -V, yE), P(A, -V, yE), P(A, 0, y + rise), P(-A, 0, y + rise));
-      plane(mb, P(A, V, yE), P(-A, V, yE), P(-A, 0, y + rise), P(A, 0, y + rise));
-      // Gable end walls (triangles) in wall material.
-      mb.set('aLayer', b.wall).set('aTint', ...tint).set('aFacade', 1, 1, 1, 0);
-      tri(mb, P(-hu, -hv, y), P(-hu, hv, y), P(-hu, 0, y + rise));
-      tri(mb, P(hu, hv, y), P(hu, -hv, y), P(hu, 0, y + rise));
-    } else {
-      const rise2 = hv * 2 * b.pitch * 0.5;
-      plane(mb, P(-A, -V, yE), P(A, -V, yE), P(A, V, y + rise2), P(-A, V, y + rise2));
-      mb.set('aLayer', b.wall).set('aFacade', 1, 1, 1, 0);
-      tri(mb, P(-hu, -hv, y), P(-hu, hv, y), P(-hu, hv, y + rise2));
-      tri(mb, P(hu, hv, y), P(hu, -hv, y), P(hu, hv, y + rise2));
-      plane(mb, P(hu, hv, y), P(-hu, hv, y), P(-hu, hv, y + rise2), P(hu, hv, y + rise2));
-    }
-    // Chimneys for houses / old town.
-    if (!SIMPLE && (b.style === 'house' || b.style === 'oldstone' || b.style === 'timber' || b.style === 'rowhouse')) {
-      mb.set('aLayer', 0).set('aFacade', 1, 1, 1, 0).set('aTint', 0.9, 0.85, 0.8);
-      const cu = r.range(-hu * 0.6, hu * 0.6), cv = r.range(-hv * 0.4, hv * 0.4);
-      const p = P(cu, cv, 0);
-      mb.box(p[0], y + rise * 0.6 + 0.8, p[2], 0.35, rise * 0.6 + 1.0, 0.45, Math.atan2(ux, uz));
-    }
-    return;
-  }
-  if (kind === 'hip') {
-    const A = hu + ov, V = hv + ov, yE = y - ov * b.pitch;
-    const ridge = Math.max(0, hu - hv);
-    plane(mb, P(-A, -V, yE), P(A, -V, yE), P(ridge, 0, y + rise), P(-ridge, 0, y + rise));
-    plane(mb, P(A, V, yE), P(-A, V, yE), P(-ridge, 0, y + rise), P(ridge, 0, y + rise));
-    tri(mb, P(A, -V, yE), P(A, V, yE), P(ridge, 0, y + rise));
-    tri(mb, P(-A, V, yE), P(-A, -V, yE), P(-ridge, 0, y + rise));
-    if (!SIMPLE && b.style === 'house' && r.chance(0.6)) {
-      mb.set('aLayer', 0).set('aFacade', 1, 1, 1, 0).set('aTint', 0.9, 0.85, 0.8);
-      const p = P(r.range(-ridge, ridge), 0, 0);
-      mb.box(p[0], y + rise + 0.4, p[2], 0.35, 1.0, 0.45, Math.atan2(ux, uz));
-    }
-    return;
-  }
-  // Sawtooth (industrial): teeth across the long axis with glazed north faces.
-  const teeth = Math.max(2, Math.round((hu * 2) / 8));
-  const tw = (hu * 2) / teeth;
-  const th = Math.min(3.5, tw * 0.45);
-  for (let k = 0; k < teeth; k++) {
-    const u0 = -hu + k * tw, u1 = u0 + tw;
-    mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
-    plane(mb, P(u0, hv, y), P(u0, -hv, y), P(u1, -hv, y + th), P(u1, hv, y + th));
-    // glazing (vertical)
-    mb.set('aLayer', 10).set('aFacade', 1.5, th, th, FF.Windows | FF.Curtain);
-    plane(mb, P(u1, -hv, y), P(u1, hv, y), P(u1, hv, y + th), P(u1, -hv, y + th));
-    // end triangles
-    mb.set('aLayer', b.wall).set('aFacade', 1, 1, 1, 0);
-    tri(mb, P(u0, -hv, y), P(u1, -hv, y), P(u1, -hv, y + th));
-    tri(mb, P(u1, hv, y), P(u0, hv, y), P(u1, hv, y + th));
-  }
-}
-
-function plane(mb: MeshBuilder, a: number[], b: number[], c: number[], d: number[]): void {
-  // Two triangles a-b-c, a-c-d; normal from (b-a)x(d-a); UVs in meters along edges.
-  const ex = b[0] - a[0], ey = b[1] - a[1], ez = b[2] - a[2];
-  const fx = d[0] - a[0], fy = d[1] - a[1], fz = d[2] - a[2];
-  let nx = ey * fz - ez * fy, ny = ez * fx - ex * fz, nz = ex * fy - ey * fx;
-  const l = Math.hypot(nx, ny, nz) || 1;
-  nx /= l; ny /= l; nz /= l;
-  // make normal face up/outward: if ny < 0 for roof planes flip winding
-  const flip = ny < -0.01;
-  if (flip) { nx = -nx; ny = -ny; nz = -nz; }
-  const le = Math.hypot(ex, ey, ez), lf = Math.hypot(fx, fy, fz);
-  const i0 = mb.v(a[0], a[1], a[2], nx, ny, nz, 0, 0);
-  mb.v(b[0], b[1], b[2], nx, ny, nz, le, 0);
-  mb.v(c[0], c[1], c[2], nx, ny, nz, le, lf);
-  mb.v(d[0], d[1], d[2], nx, ny, nz, 0, lf);
-  if (!flip) mb.quad(i0, i0 + 1, i0 + 2, i0 + 3);
-  else mb.quad(i0, i0 + 3, i0 + 2, i0 + 1);
-}
-
-function tri(mb: MeshBuilder, a: number[], b: number[], c: number[]): void {
-  const ex = b[0] - a[0], ey = b[1] - a[1], ez = b[2] - a[2];
-  const fx = c[0] - a[0], fy = c[1] - a[1], fz = c[2] - a[2];
-  let nx = ey * fz - ez * fy, ny = ez * fx - ex * fz, nz = ex * fy - ey * fx;
-  const l = Math.hypot(nx, ny, nz) || 1;
-  nx /= l; ny /= l; nz /= l;
-  const L = Math.hypot(ex, ez);
-  const i0 = mb.v(a[0], a[1], a[2], nx, ny, nz, 0, a[1] - a[1]);
-  mb.v(b[0], b[1], b[2], nx, ny, nz, L, b[1] - a[1]);
-  mb.v(c[0], c[1], c[2], nx, ny, nz, L / 2, c[1] - a[1]);
-  mb.tri(i0, i0 + 1, i0 + 2);
-}
-
-/** Sloped ring from an outer polygon at y0 to an inset polygon at y1 (mansard). Vertices must correspond. */
-function slopedRing(mb: MeshBuilder, outer: Poly, inner: Poly, y0: number, y1: number): void {
-  // Correspond vertices by nearest inner vertex to each outer vertex (miter offset preserves count usually).
-  const n = outer.length >> 1;
-  const m = inner.length >> 1;
-  const near = (x: number, z: number) => {
-    let bi = 0, bd = Infinity;
-    for (let k = 0; k < m; k++) { const d = (inner[k * 2] - x) ** 2 + (inner[k * 2 + 1] - z) ** 2; if (d < bd) { bd = d; bi = k; } }
-    return bi;
+  const P = (u: number, v: number): [number, number] => [cx + ux * u + vx * v, cz + uz * u + vz * v];
+  // Facet plane h = y + a + bu·u + bv·v and cut "cu·u + cv·v <= q", both given in the (u, v) frame.
+  const facet = (a: number, bu: number, bv: number, cuts: number[][] = []): Facet => {
+    const gx = bu * ux + bv * vx, gz = bu * uz + bv * vz;
+    return { gx, gz, h0: y + a - gx * cx - gz * cz, cuts: cuts.map(([cu, cv, q]) => halfPlane(cu * ux + cv * vx, cu * uz + cv * vz, q, cx, cz)) };
   };
+  const rise = hv * b.pitch;
+  // Eaves: every edge overhangs, except the party walls of attached houses (edges across the street front).
+  const eave = (k: number): number => {
+    if (!b.attached) return ov;
+    const n = top.length >> 1, j = (k + 1) % n;
+    const ex = top[j * 2] - top[k * 2], ez = top[j * 2 + 1] - top[k * 2 + 1], el = Math.hypot(ex, ez) || 1;
+    return Math.abs((ex / el) * fdx + (ez / el) * fdz) < 0.5 ? 0 : ov;
+  };
+  const eaves = offsetEdges(top, Array.from({ length: top.length >> 1 }, (_, k) => (kind === 'sawtooth' ? 0 : eave(k))));
+  const wallMat = () => mb.set('aLayer', b.wall).set('aTint', ...tint).set('aFacade', 1, 1, 1, 0);
+  let facets: Facet[];
+  if (kind === 'gable') facets = [facet(rise, 0, b.pitch, [[0, 1, 0]]), facet(rise, 0, -b.pitch, [[0, -1, 0]])];
+  else if (kind === 'shed') facets = [facet(rise * 0.5, 0, b.pitch * 0.5)];
+  else if (kind === 'hip') facets = hipFacets(top, y, b.pitch);
+  else {
+    // Sawtooth (industrial): teeth across the long axis with glazed north faces.
+    const teeth = Math.max(2, Math.round((hu * 2) / 8));
+    const tw = (hu * 2) / teeth;
+    const th = Math.min(3.5, tw * 0.45);
+    facets = [];
+    for (let k = 0; k < teeth; k++) {
+      const u0 = -hu + k * tw, cuts: number[][] = [];
+      if (k > 0) cuts.push([-1, 0, -u0]);
+      if (k < teeth - 1) cuts.push([1, 0, u0 + tw]);
+      facets.push(facet(-th * u0 / tw, th / tw, 0, cuts));
+    }
+    mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
+    for (const f of facets) facetSurface(mb, eaves, f);
+    // Glazing (vertical) where one tooth ends high and the next starts low, cut to the outline.
+    mb.set('aLayer', 10).set('aFacade', 1.5, th, th, FF.Windows | FF.Curtain);
+    for (let k = 1; k < teeth; k++) {
+      const o = P(-hu + k * tw, 0);
+      for (const ch of splitPolyByLine(top, o[0], o[1], vx, vz).chords) {
+        // Outward (+u, the low side of the next tooth) normal: wind the quad accordingly.
+        const sx = ch[2] - ch[0], sz = ch[3] - ch[1];
+        const fw = sz * ux - sx * uz > 0;
+        const [ax, az, bx, bz] = fw ? ch : [ch[2], ch[3], ch[0], ch[1]];
+        const L = Math.hypot(bx - ax, bz - az);
+        const i0 = mb.v(ax, y, az, ux, 0, uz, 0, 0);
+        mb.v(bx, y, bz, ux, 0, uz, L, 0);
+        mb.v(bx, y + th, bz, ux, 0, uz, L, th);
+        mb.v(ax, y + th, az, ux, 0, uz, 0, th);
+        mb.quad(i0, i0 + 3, i0 + 2, i0 + 1);
+      }
+    }
+    // End walls under the teeth; outline edges facing +u close the last tooth with glazing.
+    roofWalls(mb, top, y, facets, (nx, nz) => {
+      if (nx * ux + nz * uz > 0.7) mb.set('aLayer', 10).set('aTint', ...tint).set('aFacade', 1.5, th, th, FF.Windows | FF.Curtain);
+      else wallMat();
+    });
+    return;
+  }
+  mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
+  for (const f of facets) facetSurface(mb, eaves, f);
+  // Gable walls wherever the roof stands above the wall top (gable ends, notches, slanted edges).
+  roofWalls(mb, top, y, facets, wallMat);
+  // Chimneys for houses / old town, on the roof (not over an empty corner of the bounding box).
+  if (!SIMPLE && (b.style === 'house' || b.style === 'oldstone' || b.style === 'timber' || b.style === 'rowhouse') && kind !== 'hip') {
+    mb.set('aLayer', 0).set('aFacade', 1, 1, 1, 0).set('aTint', 0.9, 0.85, 0.8);
+    for (let t = 0; t < 6; t++) {
+      const p = P(r.range(-hu * 0.6, hu * 0.6), r.range(-hv * 0.4, hv * 0.4));
+      if (!pointInPoly(top, p[0], p[1]) || distPointPolyEdge(top, p[0], p[1]) < 0.8) continue;
+      mb.box(p[0], y + rise * 0.6 + 0.8, p[1], 0.35, rise * 0.6 + 1.0, 0.45, Math.atan2(ux, uz));
+      break;
+    }
+  }
+  if (!SIMPLE && kind === 'hip' && b.style === 'house' && r.chance(0.6)) {
+    mb.set('aLayer', 0).set('aFacade', 1, 1, 1, 0).set('aTint', 0.9, 0.85, 0.8);
+    const ridge = Math.max(0, hu - hv);
+    const p = P(r.range(-ridge, ridge), 0);
+    if (pointInPoly(top, p[0], p[1]) && distPointPolyEdge(top, p[0], p[1]) > 0.8) mb.box(p[0], fieldHeight(facets, p[0], p[1]) + 0.4, p[1], 0.35, 1.0, 0.45, Math.atan2(ux, uz));
+  }
+}
+
+/**
+ * Planar roof facet: height h0 + gx·x + gz·z over the part of the roof outline where every
+ * cut [nx, nz, d] (unit normal) holds: nx·x + nz·z <= d. The facets of a roof tile the plane.
+ */
+interface Facet { gx: number; gz: number; h0: number; cuts: number[][] }
+
+/** Half-plane "n·(p - c) <= q" in world coordinates, with a unit normal. */
+function halfPlane(nx: number, nz: number, q: number, cx: number, cz: number): number[] {
+  const l = Math.hypot(nx, nz) || 1;
+  return [nx / l, nz / l, (q + nx * cx + nz * cz) / l];
+}
+
+/** Roof height at (x, z): the facet whose cuts hold (the least violated one on boundaries). */
+function fieldHeight(facets: Facet[], x: number, z: number): number {
+  let best = facets[0], bv = Infinity;
+  for (const f of facets) {
+    let v = 0;
+    for (const c of f.cuts) v = Math.max(v, c[0] * x + c[1] * z - c[2]);
+    if (v < bv) { bv = v; best = f; }
+  }
+  return best.h0 + best.gx * x + best.gz * z;
+}
+
+/**
+ * Hip roof over any footprint: every edge of the convex hull carries a plane rising inwards at
+ * the pitch, the roof is their minimum (for a convex footprint that is its straight skeleton:
+ * ridge plus hips). Notches of a concave footprint get gable walls up to that surface.
+ */
+function hipFacets(poly: Poly, y: number, pitch: number): Facet[] {
+  const H = convexHull(poly);
+  const n = H.length >> 1;
+  // Inward unit normal m and offset c per hull edge: distance inside = m·p - c.
+  const m: number[][] = [];
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    const ia = near(outer[i * 2], outer[i * 2 + 1]), ib = near(outer[j * 2], outer[j * 2 + 1]);
+    const ex = H[j * 2] - H[i * 2], ez = H[j * 2 + 1] - H[i * 2 + 1], l = Math.hypot(ex, ez);
+    if (l < 1e-3) continue;
+    const mx = -ez / l, mz = ex / l;
+    m.push([mx, mz, mx * H[i * 2] + mz * H[i * 2 + 1]]);
+  }
+  return m.map((a, i) => ({
+    gx: a[0] * pitch, gz: a[1] * pitch, h0: y - a[2] * pitch,
+    // This plane is the lowest where (m_i - m_j)·p <= c_i - c_j for every other edge j.
+    cuts: m.filter((_, j) => j !== i && Math.hypot(a[0] - m[j][0], a[1] - m[j][1]) > 1e-4).map((o) => halfPlane(a[0] - o[0], a[1] - o[1], a[2] - o[2], 0, 0)),
+  }));
+}
+
+/** Convex hull (CCW) of a polygon's vertices, monotone chain. */
+function convexHull(p: Poly): Poly {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < p.length; i += 2) pts.push([p[i], p[i + 1]]);
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo: [number, number][] = [], hi: [number, number][] = [];
+  for (const q of pts) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 1e-9) lo.pop(); lo.push(q); }
+  for (let i = pts.length - 1; i >= 0; i--) { const q = pts[i]; while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], q) <= 1e-9) hi.pop(); hi.push(q); }
+  return lo.slice(0, -1).concat(hi.slice(0, -1)).flat();
+}
+
+/** The parts of a polygon where all of a facet's cuts hold. */
+function facetPieces(poly: Poly, cuts: number[][]): Poly[] {
+  let pieces = [poly];
+  for (const [nx, nz, d] of cuts) {
+    const next: Poly[] = [];
+    for (const p of pieces) {
+      for (const q of splitPolyByLine(p, nx * d, nz * d, -nz, nx).pieces) {
+        // Pieces lie on one side of the line: judge by the vertex farthest from it.
+        let s = 0;
+        for (let k = 0; k < q.length; k += 2) { const e = nx * q[k] + nz * q[k + 1] - d; if (Math.abs(e) > Math.abs(s)) s = e; }
+        if (s <= 0) next.push(q);
+      }
+    }
+    pieces = next;
+  }
+  return pieces;
+}
+
+/** Roof surface of one facet over the roof outline: triangulated, uv in metres (v up the slope). */
+function facetSurface(mb: MeshBuilder, outline: Poly, f: Facet): void {
+  const g = Math.hypot(f.gx, f.gz);
+  const l = Math.hypot(f.gx, f.gz, 1);
+  const nx = -f.gx / l, ny = 1 / l, nz = -f.gz / l;
+  const sx = g > 1e-6 ? f.gx / g : 1, sz = g > 1e-6 ? f.gz / g : 0, sl = Math.sqrt(1 + g * g);
+  for (const piece of facetPieces(outline, f.cuts)) {
+    const tris = earcut(piece, undefined, 2);
+    const base = mb.vcount;
+    for (let i = 0; i < piece.length; i += 2) {
+      const x = piece[i], z = piece[i + 1];
+      mb.v(x, f.h0 + f.gx * x + f.gz * z, z, nx, ny, nz, -x * sz + z * sx, (x * sx + z * sz) * sl);
+    }
+    for (let i = 0; i < tris.length; i += 3) {
+      const a = tris[i], b = tris[i + 1], c = tris[i + 2];
+      const cr = (piece[b * 2] - piece[a * 2]) * (piece[c * 2 + 1] - piece[a * 2 + 1]) - (piece[b * 2 + 1] - piece[a * 2 + 1]) * (piece[c * 2] - piece[a * 2]);
+      if (cr < 0) mb.tri(base + a, base + b, base + c);
+      else mb.tri(base + a, base + c, base + b);
+    }
+  }
+}
+
+/**
+ * Vertical walls on the edges of the wall-top polygon (at y) up to the roof surface where it
+ * stands above them: gable ends, sawtooth ends, notches and slanted edges under a pitched roof.
+ * `mat` sets the material per edge from its outward normal.
+ */
+function roofWalls(mb: MeshBuilder, poly: Poly, y: number, facets: Facet[], mat: (nx: number, nz: number) => void): void {
+  const n = poly.length >> 1;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = poly[i * 2], az = poly[i * 2 + 1], dx = poly[j * 2] - ax, dz = poly[j * 2 + 1] - az;
+    const L = Math.hypot(dx, dz);
+    if (L < 0.05) continue;
+    const nx = dz / L, nz = -dx / L;
+    // Breakpoints: where the edge crosses a facet boundary.
+    const ts = [0, 1];
+    for (const f of facets) for (const c of f.cuts) {
+      const den = c[0] * dx + c[1] * dz;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = (c[2] - c[0] * ax - c[1] * az) / den;
+      if (t > 1e-6 && t < 1 - 1e-6) ts.push(t);
+    }
+    ts.sort((p, q) => p - q);
+    let matSet = false;
+    for (let k = 0; k + 1 < ts.length; k++) {
+      const t0 = ts[k], t1 = ts[k + 1];
+      if (t1 - t0 < 1e-6) continue;
+      const tm = (t0 + t1) / 2;
+      // Facet under this stretch (by its midpoint), evaluated at both ends (sawtooth steps are discontinuous).
+      let f = facets[0], bv = Infinity;
+      for (const g of facets) {
+        let v = 0;
+        for (const c of g.cuts) v = Math.max(v, c[0] * (ax + dx * tm) + c[1] * (az + dz * tm) - c[2]);
+        if (v < bv) { bv = v; f = g; }
+      }
+      const x0 = ax + dx * t0, z0 = az + dz * t0, x1 = ax + dx * t1, z1 = az + dz * t1;
+      const h0 = Math.max(0, f.h0 + f.gx * x0 + f.gz * z0 - y), h1 = Math.max(0, f.h0 + f.gx * x1 + f.gz * z1 - y);
+      if (h0 < 0.01 && h1 < 0.01) continue;
+      if (!matSet) { mat(nx, nz); matSet = true; }
+      const i0 = mb.v(x0, y, z0, nx, 0, nz, t0 * L, 0);
+      mb.v(x1, y, z1, nx, 0, nz, t1 * L, 0);
+      mb.v(x1, y + h1, z1, nx, 0, nz, t1 * L, h1);
+      mb.v(x0, y + h0, z0, nx, 0, nz, t0 * L, h0);
+      mb.quad(i0, i0 + 3, i0 + 2, i0 + 1);
+    }
+  }
+}
+
+/**
+ * Offset each edge of a CCW polygon outwards by its own distance (mitred; negative = inwards).
+ * Vertex k of the result belongs to vertex k of the input. Outward mitres are capped.
+ */
+function offsetEdges(p: Poly, d: number[]): Poly {
+  const n = p.length >> 1;
+  const out: Poly = [];
+  let dmax = 0;
+  for (const v of d) dmax = Math.max(dmax, Math.abs(v));
+  for (let k = 0; k < n; k++) {
+    const i = (k + n - 1) % n, j = (k + 1) % n;
+    const px = p[k * 2], pz = p[k * 2 + 1];
+    const ax = px - p[i * 2], az = pz - p[i * 2 + 1], la = Math.hypot(ax, az) || 1;
+    const bx = p[j * 2] - px, bz = p[j * 2 + 1] - pz, lb = Math.hypot(bx, bz) || 1;
+    const n1x = az / la, n1z = -ax / la, n2x = bz / lb, n2z = -bx / lb;
+    const det = n1x * n2z - n1z * n2x;
+    let wx: number, wz: number;
+    if (Math.abs(det) < 1e-3) { const m = (d[i] + d[k]) / 2; wx = n2x * m; wz = n2z * m; }
+    else {
+      wx = (d[i] * n2z - n1z * d[k]) / det;
+      wz = (n1x * d[k] - d[i] * n2x) / det;
+      const wl = Math.hypot(wx, wz), cap = 3 * dmax;
+      if (d[i] >= 0 && d[k] >= 0 && wl > cap) { wx *= cap / wl; wz *= cap / wl; }
+    }
+    out.push(px + wx, pz + wz);
+  }
+  return out;
+}
+
+/** Is a ring simple (no two non-adjacent edges intersect), CCW, and has every edge kept its direction? */
+function offsetValid(src: Poly, p: Poly): boolean {
+  const n = p.length >> 1;
+  if (polyArea(p) <= 0) return false;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const dx = p[j * 2] - p[i * 2], dz = p[j * 2 + 1] - p[i * 2 + 1];
+    if (dx * (src[j * 2] - src[i * 2]) + dz * (src[j * 2 + 1] - src[i * 2 + 1]) <= 0.01) return false;
+    for (let k = i + 2; k < n; k++) {
+      if ((k + 1) % n === i) continue;
+      const l = (k + 1) % n;
+      if (segIntersect(p[i * 2], p[i * 2 + 1], p[j * 2], p[j * 2 + 1], p[k * 2], p[k * 2 + 1], p[l * 2], p[l * 2 + 1])) return false;
+    }
+  }
+  return true;
+}
+
+/** Sloped ring from an outer polygon at y0 to an inset polygon at y1 (mansard). Vertex k of inner belongs to vertex k of outer. */
+function slopedRing(mb: MeshBuilder, outer: Poly, inner: Poly, y0: number, y1: number): void {
+  const n = outer.length >> 1;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
     const a = [outer[i * 2], y0, outer[i * 2 + 1]], b = [outer[j * 2], y0, outer[j * 2 + 1]];
-    const c = [inner[ib * 2], y1, inner[ib * 2 + 1]], d = [inner[ia * 2], y1, inner[ia * 2 + 1]];
+    const c = [inner[j * 2], y1, inner[j * 2 + 1]], d = [inner[i * 2], y1, inner[i * 2 + 1]];
     // uv: u along edge, v up the slope; facade params let the shader draw dormers.
     const L = Math.hypot(b[0] - a[0], b[2] - a[2]);
+    if (L < 0.01) continue;
     const ex = b[0] - a[0], ez = b[2] - a[2];
-    const fx = d[0] - a[0], fy = d[1] - a[1], fz = d[2] - a[2];
-    let nx = 0 * fz - ez * fy, ny = ez * fx - ex * fz, nz = ex * fy - 0 * fx;
-    const l = Math.hypot(nx, ny, nz) || 1;
-    nx /= l; ny /= l; nz /= l;
-    if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+    // Normal: outward edge normal tilted up by the slope.
+    const ox = ez / L, oz = -ex / L;
+    const run = Math.max(1e-3, ((a[0] + b[0] - c[0] - d[0]) * ox + (a[2] + b[2] - c[2] - d[2]) * oz) / 2);
+    const nl = Math.hypot(y1 - y0, run);
+    const nx = (ox * (y1 - y0)) / nl, ny = run / nl, nz = (oz * (y1 - y0)) / nl;
+    // u of the inner corners: their position along the edge, so the shader's bays stay vertical.
+    const uc = ((c[0] - a[0]) * ex + (c[2] - a[2]) * ez) / L, ud = ((d[0] - a[0]) * ex + (d[2] - a[2]) * ez) / L;
     const i0 = mb.v(a[0], a[1], a[2], nx, ny, nz, 0, 0);
     mb.v(b[0], b[1], b[2], nx, ny, nz, L, 0);
-    mb.v(c[0], c[1], c[2], nx, ny, nz, L, y1 - y0);
-    mb.v(d[0], d[1], d[2], nx, ny, nz, 0, y1 - y0);
-    // winding so that the normal (outward/up) is front-facing
-    const crossY = ex * fz - ez * fx; // (b-a) x (d-a) y-component sign
-    if (crossY < 0) mb.quad(i0, i0 + 3, i0 + 2, i0 + 1);
-    else mb.quad(i0, i0 + 1, i0 + 2, i0 + 3);
+    mb.v(c[0], c[1], c[2], nx, ny, nz, uc, y1 - y0);
+    mb.v(d[0], d[1], d[2], nx, ny, nz, ud, y1 - y0);
+    // Outward/up-facing winding (same as the walls: a, d, c, b).
+    mb.quad(i0, i0 + 3, i0 + 2, i0 + 1);
   }
 }
 

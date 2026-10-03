@@ -7,7 +7,7 @@
 import type { Terrain } from '../src/world/terrain';
 import type { MetroLine } from '../src/plan/types';
 import { tubeAt, boxAt, type Tube, type Box } from '../src/underground/Volumes';
-import { TUNNEL_HW, TUNNEL_H, STATION_HW, STATION_H, PLATFORM_H, SEWER_HW, SEWER_H, TRACK_OFF, CAR_L, CARS, trainsOn, carPose } from '../src/underground/layout';
+import { TUNNEL_HW, TUNNEL_H, STATION_HW, STATION_H, PLATFORM_H, SEWER_HW, SEWER_H, TRACK_OFF, CAR_L, CARS, CAR_W, CAR_FLOOR, trainsOn, carPose } from '../src/underground/layout';
 
 export interface AuditLine { line: MetroLine; tube: Tube; stops: { s: number; hall: Box | null }[] }
 export interface AuditInput { terrain: Terrain; lines: AuditLine[]; sewers: Tube[]; halls: Box[]; passages?: { name: string; tube: Tube; hall: Box; ground: (x: number, z: number) => number }[] }
@@ -24,6 +24,8 @@ export interface LineReport {
   lineConflicts: number; sewerConflicts: number; minGap: number;
   /** Trains: dwelling cars outside the hall, car floor off the track bed/platform height (m). */
   carsOutside: number; carDy: number; carLateral: number;
+  /** Dwelling trains: gap from the car side to the platform edge (min/max, m), step from the platform to the car floor (m). */
+  platformGapMin: number; platformGapMax: number; floorStep: number;
 }
 
 const hwAt = (halls: Box[], x: number, y: number, z: number) => halls.some((b) => boxAt(b, x, y + 0.5, z, 0)) ? STATION_HW : TUNNEL_HW;
@@ -59,7 +61,7 @@ export function auditLines(inp: AuditInput): LineReport[] {
   const out: LineReport[] = [];
   inp.lines.forEach((L, li) => {
     const t = L.tube, P = t.pts, n = P.length / 3;
-    const r: LineReport = { name: L.line.name, hallLateral: 0, hallDy: 0, maxGrade: 0, minRadius: Infinity, maxGradeChange: 0, minCover: Infinity, lineConflicts: 0, sewerConflicts: 0, minGap: Infinity, carsOutside: 0, carDy: 0, carLateral: 0 };
+    const r: LineReport = { name: L.line.name, hallLateral: 0, hallDy: 0, maxGrade: 0, minRadius: Infinity, maxGradeChange: 0, minCover: Infinity, lineConflicts: 0, sewerConflicts: 0, minGap: Infinity, carsOutside: 0, carDy: 0, carLateral: 0, platformGapMin: Infinity, platformGapMax: -Infinity, floorStep: 0 };
     // Stations ↔ track.
     for (const st of L.stops) {
       const b = st.hall;
@@ -133,8 +135,14 @@ export function auditLines(inp: AuditInput): LineReport[] {
           if (!b) continue;
           const dx = p.x - b.cx, dz = p.z - b.cz;
           const u = dx * b.ux + dz * b.uz, v = -dx * b.uz + dz * b.ux;
-          if (Math.abs(u) > b.hu - CAR_L / 2 + 0.01 || Math.abs(v) > b.hv - PLATFORM_W_GAP) r.carsOutside++;
+          if (Math.abs(u) > b.hu - CAR_L / 2 + 0.01) r.carsOutside++;
           r.carDy = Math.max(r.carDy, Math.abs(p.y - b.y0));
+          // Platform edge to the car side, platform top to the car floor.
+          const edge = Math.min(...b.platforms.filter((q) => Math.sign(q[0] + q[1]) === Math.sign(v)).map((q) => Math.min(Math.abs(q[0]), Math.abs(q[1]))));
+          const g = edge - (Math.abs(v) + CAR_W / 2);
+          r.platformGapMin = Math.min(r.platformGapMin, g);
+          r.platformGapMax = Math.max(r.platformGapMax, g);
+          r.floorStep = Math.max(r.floorStep, Math.abs(p.y + CAR_FLOOR - (b.y0 + PLATFORM_H)));
         }
       }
     }
@@ -142,8 +150,6 @@ export function auditLines(inp: AuditInput): LineReport[] {
   });
   return out;
 }
-/** Cars must stay clear of the platform edges (platforms start at hv − 4.2; car half width 1.45 at ±1.9). */
-const PLATFORM_W_GAP = 4.2 + 1.45 - 1.9 - 1.45;
 
 export interface PassageReport { name: string; maxSlope: number; floorErr: number; ceilingOut: number; hits: number; endsOnPlatform: boolean }
 

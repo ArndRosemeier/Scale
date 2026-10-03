@@ -245,13 +245,14 @@ export class Pedestrians {
   /** Called when an agent reaches its parked car (trip continues by car). */
   onCarReady?: (a: PedAgent) => void;
 
+  /** Street end (top of the stairs) of the nearest metro entrance within r, from the loaded cells. */
+  entranceNear?: (x: number, z: number, r: number) => { x: number; z: number } | null;
+
+  /** Where metro riders vanish into / come out of the station: a real entrance's stair top. (The
+   *  station centre was used before; since halls follow the tracks it can lie inside a block, and
+   *  riders coming out there piled up by the hundreds.) */
   private nearestStation(x: number, z: number): { x: number; z: number } | null {
-    let best: { x: number; z: number } | null = null, bd = 900;
-    for (const s of this.macro.metroStations) {
-      const d = Math.hypot(s.x - x, s.z - z);
-      if (d < bd) { bd = d; best = { x: s.x + Math.cos(s.angle + 1.57) * 8, z: s.z + Math.sin(s.angle + 1.57) * 8 }; }
-    }
-    return best;
+    return this.entranceNear?.(x, z, 900) ?? null;
   }
 
   /** Sidewalk route between two points: along graph edges, offset to the sidewalk. */

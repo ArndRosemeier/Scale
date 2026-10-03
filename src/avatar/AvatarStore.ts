@@ -1,22 +1,40 @@
 /**
- * Imported avatars persist in the browser (IndexedDB; the browser is asked to keep the
- * storage persistent). The selected avatar id lives in localStorage.
+ * Characters persist in the browser (IndexedDB; the browser is asked to keep the storage
+ * persistent): imported models (the file itself) and characters made in the creator (their
+ * appearance + outfit JSON). The selected id lives in localStorage.
  */
-export interface StoredAvatar {
+import type { CharacterLook } from './look';
+
+interface StoredBase {
   id: string;
   name: string;
+  created: number;
+  /** Small PNG data URL rendered at import / save. */
+  thumb?: string;
+}
+
+/** An imported model file (GLB / glTF / VRM / FBX). */
+export interface StoredImport extends StoredBase {
+  kind?: 'import';
   /** Original file name (extension decides the loader). */
   file: string;
   data: ArrayBuffer;
   size: number;
-  created: number;
-  /** Small PNG data URL rendered at import. */
-  thumb?: string;
   /** What the mapper found: 'retarget' (full animation) | 'clips' | 'static', rig details. */
   info?: { mode: string; source: string; mapped: number; clips: number; note?: string };
   /** Play the model's own clips even if the rig could be retargeted. */
   forceClips?: boolean;
 }
+
+/** A character made in the creator. */
+export interface StoredGenerated extends StoredBase {
+  kind: 'generated';
+  look: CharacterLook;
+}
+
+export type StoredAvatar = StoredImport | StoredGenerated;
+
+export const isGenerated = (a: StoredAvatar): a is StoredGenerated => a.kind === 'generated';
 
 const DB = 'scale-avatars', STORE = 'avatars', SELECTED = 'scale.avatar';
 
@@ -48,7 +66,7 @@ export const avatarStore = {
   get: (id: string) => tx<StoredAvatar | undefined>('readonly', (s) => s.get(id) as IDBRequest<StoredAvatar | undefined>),
   async put(a: StoredAvatar): Promise<void> {
     await tx('readwrite', (s) => s.put(a));
-    // Ask the browser not to evict imported avatars under storage pressure.
+    // Ask the browser not to evict stored characters under storage pressure.
     try { await navigator.storage?.persist?.(); } catch { /* optional */ }
   },
   async remove(id: string): Promise<void> {

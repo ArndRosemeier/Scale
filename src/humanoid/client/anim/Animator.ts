@@ -76,6 +76,8 @@ const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vecto
 interface FingerRig { bones: THREE.Bone[]; axis: THREE.Vector3[]; thumb: boolean }
 
 /** Raised-torch arm pose (Pose.arm params), tuned so the shaft points straight up at head height. */
+/** Upper-body bones whose captured idle sway is toned down when standing. */
+const UPPER_BODY = /^(root$|spine0|neck0|head)/;
 const TORCH_RAISED = [1.7, 0.5, -0.4, 0.45, 0.3, -0.9, -0.4] as const;
 
 export class Animator {
@@ -143,6 +145,12 @@ export class Animator {
   private clipOn = 0;
   private crouchS = 0;
   private armClip = { L: 1, R: 1 };
+  /** Extra forward rotation of the collarbones over the motion-capture clips (rad). */
+  clipProtract = 0.7;
+  /** Share of the clips on the arms: full while walking, low when standing (see applyClipGait). */
+  private armClipW = 1;
+  /** Same for the upper body (spine, neck, head). */
+  private torsoClipW = 1;
   private idleClipT = 0;
   private talkS = 0;
   private swimU = 0;
@@ -512,6 +520,10 @@ export class Animator {
     p.neck(run * 0.12 + sprint * 0.12 + crouch * 0.4);
     // Clip locomotion replaces the procedural gait (arms holding something keep theirs).
     if (gait) {
+      // Standing: the captured idle sways the hanging arms back and forth (the hands never
+      // settle); let the calm procedural arms carry most of it. Walking keeps the clip's swing.
+      this.armClipW = 0.25 + 0.75 * moving;
+      this.torsoClipW = 0.3 + 0.7 * moving;
       this.applyClipGait(p, gait.w);
       this.landing(p, gait.w);
     }
@@ -623,14 +635,19 @@ export class Animator {
     const rig = this.clipRig!, src = this.clipPose, armM = this.masks.arms;
     for (const b of rig.bones) {
       let m = w;
-      if (armM[b] > 0) m *= this.ch.bones[b].name.endsWith('.L') ? this.armClip.L : this.armClip.R;
+      if (armM[b] > 0) m *= (this.ch.bones[b].name.endsWith('.L') ? this.armClip.L : this.armClip.R) * this.armClipW;
+      else if (UPPER_BODY.test(this.ch.bones[b].name)) m *= this.torsoClipW;
       if (m <= 0) continue;
       const i = b * 3;
       p.rot[i] += wrapPi(src.rot[i] - p.rot[i]) * m;
       p.rot[i + 1] += wrapPi(src.rot[i + 1] - p.rot[i + 1]) * m;
       p.rot[i + 2] += wrapPi(src.rot[i + 2] - p.rot[i + 2]) * m;
     }
-    p.root.lerp(src.root, w);
+    // Hips: the captured idle shifts them back and forth (the whole upper body and the hanging
+    // arms rocked with it); keep the height, tone the horizontal sway down when standing.
+    const y = p.root.y + (src.root.y - p.root.y) * w;
+    p.root.lerp(src.root, w * this.torsoClipW);
+    p.root.y = y;
   }
 
   private idlePersonality(p: Pose, w: number) {
@@ -834,6 +851,10 @@ export class Animator {
     p.add('spine01', 0.018 * b);
     p.addS('clavicle', 'L', 0, 0, -0.012 * b);
     p.addS('clavicle', 'R', 0, 0, -0.012 * b);
+    // Posture: the captured clips hold the shoulders pulled back (the arms hung from behind the
+    // chest); bring the collarbones forward as the procedural neutral does.
+    const cw = this.clipRig && clipSettings.enabled ? this.clipOn : 0;
+    if (cw > 0.01) for (const s of ['L', 'R'] as const) p.addS('clavicle', s, 0, -this.clipProtract * cw * this.armClip[s] * this.armClipW, 0);
     // Acceleration lean.
     p.add('root', this.lean.x, 0, -this.lean.y);
     // Tail: travelling sway wave, livelier when moving; droops when dead or asleep.
@@ -907,7 +928,7 @@ export class Animator {
       const sh = R(`shoulder01.${s}`), el = R(`lowerarm01.${s}`), wr = R(`wrist.${s}`);
       // Collarbones slightly forward (relaxed shoulders sit a little in front of the spine line;
       // the rest pose had them pulled back, so the arms hung from behind the chest).
-      const C = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.22);
+      const C = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.4);
       const Ci = C.clone().invert();
       this.neutral[this.map.idx(`clavicle.${s}`)] = C;
       const u = el.clone().sub(sh).applyQuaternion(C).normalize();

@@ -14,7 +14,6 @@ export const TUNNEL_H = 6.0;
 export const STATION_HW = 11;
 export const STATION_H = 7.5;
 export const PLATFORM_H = 1.05;
-export const PLATFORM_W = 4.2;
 export const SEWER_HW = 1.7;
 export const SEWER_H = 2.8;
 /** Tracks run at ±TRACK_OFF from the line's centreline. */
@@ -23,6 +22,15 @@ export const CAR_L = 18.5;
 export const CARS = 4;
 export const CAR_W = 2.9;
 export const CAR_H = 3.3;
+/** Car floor over the track bed = platform height: one steps level from the platform into a car. */
+export const CAR_FLOOR = PLATFORM_H;
+/** Platform edge from the line's centreline: 5 cm from the side of a car on its track. */
+export const PLATFORM_EDGE = TRACK_OFF + CAR_W / 2 + 0.05;
+export const PLATFORM_W = STATION_HW - PLATFORM_EDGE;
+/** Doors (car frame u of their centres, half width) and how long before departure they close (s). */
+export const DOOR_U = [-5.5, 0, 5.5];
+export const DOOR_HW = 0.65;
+export const DOOR_CLOSE = 1.5;
 
 /** Track tube of a metro line (floor = top of the track bed). */
 export function metroTube(line: MetroLine): Tube {

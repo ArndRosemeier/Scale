@@ -342,11 +342,15 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
       }
     }
   }
-  // Keep only furniture fully inside the storey (with a margin from the walls).
+  // Interior walls are laid out on the storey's rectangle: keep only their parts inside the
+  // real outline (cut or irregular footprints had walls standing out in the street).
+  plan.walls = plan.walls.flatMap((w) => clipWall(w, poly));
+  // Keep only furniture fully inside the storey (with a margin from the walls; edge midpoints
+  // too, so nothing reaches across an inner corner of an L-shaped storey).
   plan.furniture = plan.furniture.filter((f) => {
     const c = Math.cos(f.yaw), sn = Math.sin(f.yaw);
     const w = f.w / 2 + 0.05, d = f.d / 2 + 0.05;
-    for (const [lx, lz] of [[-w, -d], [w, -d], [w, d], [-w, d], [0, 0]]) {
+    for (const [lx, lz] of [[-w, -d], [w, -d], [w, d], [-w, d], [0, 0], [0, -d], [w, 0], [0, d], [-w, 0]]) {
       const x = f.x + lx * c + lz * sn, z = f.z - lx * sn + lz * c;
       if (!pointInPoly(poly, x, z)) return false;
     }
@@ -365,6 +369,45 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
   }
   void area;
   return plan;
+}
+
+/** The parts of a wall inside a polygon (shortened 5 cm at the outline), doors carried over. */
+function clipWall(w: IWall, poly: Poly): IWall[] {
+  const dx = w.bx - w.ax, dz = w.bz - w.az;
+  const L = Math.hypot(dx, dz);
+  if (L < 1e-3) return [];
+  // Crossings of the wall line with the outline, as parameters along the wall.
+  const ts = [0, 1];
+  const n = poly.length >> 1;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const px = poly[i * 2], pz = poly[i * 2 + 1], ex = poly[j * 2] - px, ez = poly[j * 2 + 1] - pz;
+    const den = dx * ez - dz * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((px - w.ax) * ez - (pz - w.az) * ex) / den;
+    const u = ((px - w.ax) * dz - (pz - w.az) * dx) / den;
+    if (t > 0 && t < 1 && u >= 0 && u <= 1) ts.push(t);
+  }
+  ts.sort((a, b) => a - b);
+  const out: IWall[] = [];
+  const m = 0.05 / L;
+  for (let k = 0; k + 1 < ts.length; k++) {
+    let t0 = ts[k], t1 = ts[k + 1];
+    if (t1 - t0 < 1e-4) continue;
+    const tm = (t0 + t1) / 2;
+    if (!pointInPoly(poly, w.ax + dx * tm, w.az + dz * tm)) continue;
+    if (t0 > 0) t0 += m;
+    if (t1 < 1) t1 -= m;
+    if ((t1 - t0) * L < 0.3) continue;
+    const span = t1 - t0;
+    const doors: [number, number][] = [];
+    for (const [d0, d1] of w.doors) {
+      const a = Math.max(d0, t0), b = Math.min(d1, t1);
+      if (b - a > 0.6 / L) doors.push([(a - t0) / span, (b - t0) / span]);
+    }
+    out.push({ ax: w.ax + dx * t0, az: w.az + dz * t0, bx: w.ax + dx * t1, bz: w.az + dz * t1, doors });
+  }
+  return out;
 }
 
 function wallLine(plan: FloorPlan, F: Frame, u0: number, v0: number, u1: number, v1: number, doors: [number, number][]): void {

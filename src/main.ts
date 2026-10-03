@@ -6,7 +6,10 @@ import { Game } from './game/Game';
 import { parseSeed } from './core/rng';
 import { cityRadius, cityClass } from './world/settings';
 import { cityName } from './plan/names';
-import { AvatarMenu, loadSelectedAvatar } from './ui/AvatarMenu';
+import { AvatarMenu, loadSelectedAvatar, loadSelectedLook } from './ui/AvatarMenu';
+import { disposeCreatorPreview } from './ui/CharacterCreator';
+import { Player } from './player/Player';
+import { normalizeLook } from './avatar/look';
 
 const params = new URLSearchParams(location.search);
 const menu = document.getElementById('menu') as HTMLDivElement;
@@ -40,6 +43,15 @@ async function start(): Promise<void> {
   history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('auto') ? '&auto' : ''}`);
   menu.style.display = 'none';
   loading.style.display = 'flex';
+  disposeCreatorPreview();
+  // Character made in the creator (if one is selected): the player is built with its look.
+  try {
+    const sel = await loadSelectedLook();
+    Player.look = sel ? normalizeLook(sel.look) : null;
+    if (sel) console.log(`[avatar] ${sel.name}: created character`);
+  } catch (e) {
+    console.error('[avatar] could not load the selected character', e);
+  }
   const canvas = document.getElementById('view') as HTMLCanvasElement;
   const game = new Game(canvas, settings);
   (window as unknown as { game: Game }).game = game;

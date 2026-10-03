@@ -16,6 +16,7 @@ import { WorldIndex } from '../world/WorldIndex';
 import { Player } from '../player/Player';
 import { CameraRig } from '../player/CameraRig';
 import { bridgeProfiles } from '../build/bridges';
+import { ENTRANCE_L } from '../plan/metroDims';
 import { BodyService } from '../humanoid/client/BodyService';
 import { clipLibraryReady } from '../humanoid/client/anim/clips';
 import { frameWork } from '../core/frameWork';
@@ -230,6 +231,16 @@ export class Game {
     for (const c of this.streamer.cells.values()) if (c.status === 'ready') { this.addParked(c); this.props.addCell(c, macro.cells[c.id].district); this.underground.addCell(c); }
     for (const e of this.underground.entrances.values()) this.props.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.peds.onCarReady = (a) => { if (a.carDest) this.traffic.spawnTrip(a.cit, a.x, a.z, a.carDest.x, a.carDest.z); };
+    this.peds.entranceNear = (x, z, r) => {
+      let best: { x: number; z: number } | null = null, bd = r;
+      for (const e of this.underground.entrances.values()) {
+        // Top of the stairs: half the opening against the descent direction, plus a step onto the sidewalk.
+        const tx = e.x - e.dx * (ENTRANCE_L / 2 + 0.8), tz = e.z - e.dz * (ENTRANCE_L / 2 + 0.8);
+        const d = Math.hypot(tx - x, tz - z);
+        if (d < bd) { bd = d; best = { x: tx, z: tz }; }
+      }
+      return best;
+    };
     this.traffic.onAbandon = (v) => {
       const c = v.driver ?? this.population.synthetic(hash32(v.id * 977));
       this.peds.spawnFleeing(c, v.x + Math.cos(v.yaw) * 1.2, v.z - Math.sin(v.yaw) * 1.2, this.player.pos.x, this.player.pos.z);
@@ -548,7 +559,9 @@ export class Game {
     const metro = this.underground.metroHint();
     if (metro) return metro;
     const p = this.player.pos;
-    const under = this.underground.isUnder(p.x, p.y + 0.5, p.z);
+    // Manholes are climbed from the sewers only (not from metro halls, passages or trains).
+    const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
+    if (!under && this.underground.isUnder(p.x, p.y + 0.5, p.z)) return null;
     const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);
     if (!m) return null;
     if (under) return 'Manhole above — press <b>E</b> to climb out';
@@ -559,9 +572,10 @@ export class Game {
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
-    if (this.underground.metroKey()) return;
+    if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     const p = this.player.pos;
-    const under = this.underground.isUnder(p.x, p.y + 0.5, p.z);
+    const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
+    if (!under && this.underground.isUnder(p.x, p.y + 0.5, p.z)) return;
     const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);
     if (!m) return;
     if (under) {

@@ -25,7 +25,7 @@ import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Vo
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
 import { pointInPoly } from '../core/geom2';
 import { G } from '../render/materials/globals';
-import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_W, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, carPose, type TrainState } from './layout';
+import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, carPose, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
 
 const BUILD_R = 380;
@@ -89,7 +89,12 @@ export class Underground {
     this.trainMesh.frustumCulled = false;
     this.trainMesh.castShadow = false;
     this.group.add(this.trainMesh);
+    this.leafMesh = new THREE.InstancedMesh(doorLeafGeometry(), new THREE.MeshStandardMaterial({ color: 0x8d9094, roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide }), 800);
+    this.leafMesh.count = 0;
+    this.leafMesh.frustumCulled = false;
+    this.group.add(this.leafMesh);
   }
+  private leafMesh: THREE.InstancedMesh;
 
   /** Register metro entrances of a loaded cell (from its plan). */
   addCell(cs: CellState): void {
@@ -145,11 +150,11 @@ export class Underground {
       const h = boxAt(b, x, y, z);
       if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor;
     }
-    // The floor of the car one rides in.
-    const c = this.ride && this.ridden();
-    if (c && this.inRiddenCar(x, Math.max(y, c.y + PLATFORM_H + 0.1), z, -0.3)) {
-      const f = c.y + PLATFORM_H;
-      if (f <= y + 0.6 && (best === null || f > best)) best = f;
+    // Car floors (level with the platforms).
+    for (const c of this.cars) {
+      if (Math.abs(c.x - x) > 10 || Math.abs(c.z - z) > 10) continue;
+      const L = this.carLocal(c, x, y, z), f = c.y + CAR_FLOOR;
+      if (Math.abs(L.u) < CAR_L / 2 && Math.abs(L.v) < CAR_W / 2 && f <= y + 0.6 && f > y - 1.5 && (best === null || f > best)) best = f;
     }
     return best;
   }
@@ -190,6 +195,11 @@ export class Underground {
     }
     for (const b of this.boxes) if (boxAt(b, x, y, z, -margin) && y > b.y0 + margin && y < b.y1 - margin) return true;
     return false;
+  }
+
+  /** Inside a sewer tube (not the metro): where a manhole above can be climbed. */
+  inSewer(x: number, y: number, z: number): boolean {
+    return this.sewerTubes.some((t) => !!tubeAt(t, x, y, z));
   }
 
   isUnder(x: number, y: number, z: number): boolean {
@@ -527,14 +537,14 @@ export class Underground {
     box(0, 0, b.y1, b.hu, 0.1, b.hv);
     // Track bed and platforms.
     mb.set('aLayer', 22).set('aTint', 0.5, 0.48, 0.45);
-    box(0, 0, b.y0 - 0.05, b.hu, 0.05, b.hv - 4.2 + 0.01); // track bed reaches the platform walls
+    box(0, 0, b.y0 - 0.05, b.hu, 0.05, PLATFORM_EDGE + 0.01); // track bed reaches the platform walls
     mb.set('aLayer', 13).set('aTint', 0.8, 0.79, 0.76);
     const safety: number[] = [];
     for (const sv of [-1, 1]) {
-      const vc = sv * (b.hv - 2.1);
-      box(0, vc, b.y0 + PLATFORM_H / 2, b.hu, PLATFORM_H / 2, 2.1);
+      const vc = sv * (b.hv + PLATFORM_EDGE) / 2;
+      box(0, vc, b.y0 + PLATFORM_H / 2, b.hu, PLATFORM_H / 2, (b.hv - PLATFORM_EDGE) / 2);
       // Yellow safety line at the platform edge (plain paint, see below).
-      safety.push(sv * (b.hv - 4.2 + 0.3));
+      safety.push(sv * (PLATFORM_EDGE + 0.4));
     }
     // Rails through the station.
     mb.set('aLayer', 11).set('aTint', 0.45, 0.4, 0.38);
@@ -609,7 +619,7 @@ export class Underground {
           if (!p) continue;
           const slot = tr.dir * ((CARS - 1) / 2 - c);
           const q = soon[k].dir === tr.dir ? carPose(tube, soon[k], c) : null;
-          this.cars.push({ line: li, k, slot, dir: tr.dir, x: p.x, y: p.y, z: p.z, dx: p.dx, dz: p.dz, vx: q ? (q.x - p.x) * 10 : 0, vz: q ? (q.z - p.z) * 10 : 0, dwell: tr.dwell, left: tr.left, next: tr.next, s: tr.s });
+          this.cars.push({ line: li, k, slot, dir: tr.dir, x: p.x, y: p.y, z: p.z, dx: p.dx, dz: p.dz, vx: q ? (q.x - p.x) * 10 : 0, vz: q ? (q.z - p.z) * 10 : 0, dwell: tr.dwell, left: tr.left, next: tr.next, s: tr.s, open: tr.dwell && tr.left > DOOR_CLOSE });
         }
       });
     });
@@ -621,10 +631,24 @@ export class Underground {
     return this.cars.find((c) => c.line === r.line && c.k === r.k && Math.abs(c.slot - r.slot) < 0.01) ?? null;
   }
 
-  /** Car-local coordinates of a point: along the car (u, in the tube direction), across (v), height over the car floor (h). */
+  /**
+   * Car-local coordinates of a point: along the car (u, in the direction of travel), across (v,
+   * positive towards the platform side: trains run on the right-hand track, platforms are outside
+   * the tracks), height over the car floor (h).
+   */
   private carLocal(c: TrainCar, x: number, y: number, z: number): { u: number; v: number; h: number } {
-    const fx = c.dx * c.dir, fz = c.dz * c.dir, ox = x - c.x, oz = z - c.z;
-    return { u: ox * fx + oz * fz, v: -ox * fz + oz * fx, h: y - (c.y + PLATFORM_H) };
+    const ox = x - c.x, oz = z - c.z;
+    return { u: ox * c.dx + oz * c.dz, v: -ox * c.dz + oz * c.dx, h: y - (c.y + CAR_FLOOR) };
+  }
+
+  /** World point of car-local (u, v). */
+  private carWorld(c: TrainCar, u: number, v: number): [number, number] {
+    return [c.x + c.dx * u - c.dz * v, c.z + c.dz * u + c.dx * v];
+  }
+
+  /** Is car-local u in a doorway (with a margin for the body)? */
+  private atDoor(u: number, margin: number): boolean {
+    return DOOR_U.some((d) => Math.abs(u - d) < DOOR_HW - margin);
   }
 
   private m4 = new THREE.Matrix4();
@@ -639,8 +663,15 @@ export class Underground {
       this.trainMesh.setMatrixAt(k, this.m4);
       const col = _col.setHex(this.macro.metroLines[c.line].color);
       this.trainColor.setXYZ(k, col.r, col.g, col.b);
+      // Door leaves: the platform side (local −x) slides open during the dwell.
+      for (const side of [-1, 1]) {
+        _m4b.makeScale(side, 1, 1).setPosition(0, 0, side === -1 && c.open ? 1.25 : 0);
+        this.leafMesh.setMatrixAt(k * 2 + (side + 1) / 2, _m4c.multiplyMatrices(this.m4, _m4b));
+      }
       k++;
     }
+    this.leafMesh.count = k * 2;
+    this.leafMesh.instanceMatrix.needsUpdate = true;
     this.trainMesh.count = k;
     this.trainMesh.instanceMatrix.needsUpdate = true;
     this.trainColor.needsUpdate = true;
@@ -651,40 +682,59 @@ export class Underground {
   private carryBody(): void {
     const b = this.body;
     if (!b) return;
-    const car = this.ridden();
+    let car = this.ridden();
     if (this.ride && !car) { this.ride = null; this.rideFrame = null; }
+    // Walking in through an open door (or standing inside a car): one rides it.
+    if (!this.ride && !b.flying && b.height < 2.4) {
+      for (const c of this.cars) {
+        if (Math.abs(c.x - b.pos.x) > 12 || Math.abs(c.z - b.pos.z) > 12) continue;
+        const L = this.carLocal(c, b.pos.x, b.pos.y, b.pos.z);
+        if (Math.abs(L.u) < CAR_L / 2 - 0.4 && Math.abs(L.v) < CAR_W / 2 - 0.35 && L.h > -0.3 && L.h < 1) {
+          this.ride = { line: c.line, k: c.k, slot: c.slot, u: L.u, v: L.v };
+          this.rideFrame = null;
+          car = c;
+          break;
+        }
+      }
+    }
     if (this.ride && car) {
       const r = this.ride;
       if (this.rideFrame) {
+        // The body's own steps inside the car (since the last update), in the car's frame.
         const f = this.rideFrame, ox = b.pos.x - f.x, oz = b.pos.z - f.z;
-        r.u = Math.max(-CAR_L / 2 + 1.2, Math.min(CAR_L / 2 - 1.2, ox * f.fx + oz * f.fz));
-        r.v = Math.max(-0.5, Math.min(0.5, -ox * f.fz + oz * f.fx)); // the aisle between the benches
+        const u = ox * f.fx + oz * f.fz, v = -ox * f.fz + oz * f.fx;
+        r.u = Math.max(-CAR_L / 2 + 0.5, Math.min(CAR_L / 2 - 0.5, u));
+        const door = this.atDoor(r.u, 0.25);
+        // Through an open door onto the platform: no longer riding.
+        if (car.open && door && v > CAR_W / 2 - 0.1) { this.ride = null; this.rideFrame = null; return; }
+        // Inside: the aisle between the benches, the vestibules at the doors.
+        const vmax = door ? CAR_W / 2 - 0.3 : 0.6;
+        r.v = Math.max(-vmax, Math.min(car.open && door ? CAR_W : vmax, v));
       }
-      const fx = car.dx * car.dir, fz = car.dz * car.dir;
-      b.pos.set(car.x + fx * r.u - fz * r.v, car.y + PLATFORM_H, car.z + fz * r.u + fx * r.v);
+      const [x, z] = this.carWorld(car, r.u, r.v);
+      b.pos.set(x, car.y + CAR_FLOOR, z);
       b.vel.y = 0;
       b.grounded = true;
-      this.rideFrame = { x: car.x, z: car.z, fx, fz };
+      this.rideFrame = { x: car.x, z: car.z, fx: car.dx, fz: car.dz };
       // The car's ceiling light (one of the pooled station lights: the light count never changes).
       const l = this.stationLights[1];
       l.position.set(car.x, car.y + CAR_H - 0.4, car.z);
       l.intensity = 2.5;
       return;
     }
-    // A train runs into anyone on its track: shoved aside (and thrown if it is moving).
+    // A train runs into anyone on its track (below its floor): shoved aside, thrown if it is moving.
     for (const c of this.cars) {
       if (Math.abs(c.x - b.pos.x) > 12 || Math.abs(c.z - b.pos.z) > 12) continue;
       const L = this.carLocal(c, b.pos.x, b.pos.y, b.pos.z);
-      if (L.h + PLATFORM_H > CAR_H || L.h + PLATFORM_H + b.height < 0.1) continue;
+      if (L.h > -0.3 || L.h + CAR_FLOOR + b.height < 0.1) continue;
       if (Math.abs(L.u) > CAR_L / 2 || Math.abs(L.v) > CAR_W / 2 + b.radius) continue;
       const side = Math.sign(L.v) || 1, push = CAR_W / 2 + b.radius + 0.05 - Math.abs(L.v);
-      const fx = c.dx * c.dir, fz = c.dz * c.dir;
-      b.pos.x += -fz * side * push;
-      b.pos.z += fx * side * push;
+      b.pos.x += -c.dz * side * push;
+      b.pos.z += c.dx * side * push;
       const sp = Math.hypot(c.vx, c.vz);
       if (sp > 0.5) {
-        b.vel.x = c.vx * 0.7 - fz * side * 3;
-        b.vel.z = c.vz * 0.7 + fx * side * 3;
+        b.vel.x = c.vx * 0.7 - c.dz * side * 3;
+        b.vel.z = c.vz * 0.7 + c.dx * side * 3;
         b.vel.y = Math.max(b.vel.y, 2.5);
         b.grounded = false;
         this.onTrainHit?.(b.pos.x, b.pos.y, b.pos.z, sp);
@@ -694,12 +744,29 @@ export class Underground {
   /** A moving train hit the body (for sound / effects). */
   onTrainHit?: (x: number, y: number, z: number, speed: number) => void;
 
-  /** Train cars as solid boxes for the walker (not the car one rides in). */
+  /**
+   * Train cars for the walker (not the car one rides in): solid boxes with the doors shut; with
+   * the doors open, the walls (thin boxes) around the doorways on the platform side.
+   */
   carObstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
     const own = this.ridden();
+    const wall = (c: TrainCar, u: number, v: number, hu: number, hv: number) => {
+      const [x, z] = this.carWorld(c, u, v);
+      out({ cyl: false, x, z, r: 0, hx: hu, hz: hv, ux: c.dx, uz: c.dz, y0: c.y + 0.1, y1: c.y + CAR_H });
+    };
     for (const c of this.cars) {
       if (c === own || c.x < x0 - 10 || c.x > x1 + 10 || c.z < z0 - 10 || c.z > z1 + 10) continue;
-      out({ cyl: false, x: c.x, z: c.z, r: 0, hx: CAR_L / 2 - 0.25, hz: CAR_W / 2, ux: c.dx, uz: c.dz, y0: c.y + 0.1, y1: c.y + CAR_H });
+      if (!c.open) { wall(c, 0, 0, CAR_L / 2 - 0.25, CAR_W / 2); continue; }
+      const t = 0.06, hw = CAR_W / 2 - t;
+      wall(c, 0, -hw, CAR_L / 2, t);
+      wall(c, CAR_L / 2 - t, 0, t, CAR_W / 2);
+      wall(c, -CAR_L / 2 + t, 0, t, CAR_W / 2);
+      let u0 = -CAR_L / 2;
+      for (const d of [...DOOR_U, CAR_L / 2 + DOOR_HW]) {
+        const u1 = d - DOOR_HW;
+        if (u1 > u0) wall(c, (u0 + u1) / 2, hw, (u1 - u0) / 2, t);
+        u0 = d + DOOR_HW;
+      }
     }
   }
 
@@ -724,7 +791,7 @@ export class Underground {
     // Anywhere on the platform beside the train (it reaches 7.7 m from the car side).
     let best: TrainCar | null = null, bd = 8;
     for (const c of this.cars) {
-      if (c.line !== hall.line || !c.dwell || c.next !== stop || c.left < 1.5) continue;
+      if (c.line !== hall.line || !c.open || c.next !== stop) continue;
       const L = this.carLocal(c, b.pos.x, b.pos.y, b.pos.z);
       if (Math.abs(L.u) > CAR_L / 2 + 1) continue;
       const d = Math.abs(L.v) - CAR_W / 2;
@@ -745,13 +812,14 @@ export class Underground {
     if (car) {
       const line = this.macro.metroLines[car.line];
       const name = this.stationNames.get(line.stations[car.next]) ?? '';
-      if (car.dwell) return `<b>${name}</b> — press <b>E</b> to get off (departs in ${Math.ceil(car.left)} s)`;
+      if (car.open) return `<b>${name}</b> — walk out through the doors or press <b>E</b> to get off (departs in ${Math.ceil(car.left)} s)`;
+      if (car.dwell) return `<b>${name}</b> — doors closing`;
       return `Line ${line.name} to ${this.terminus(line, car.dir)} — next stop <b>${name}</b>`;
     }
     const c = this.boardable();
     if (c) {
       const line = this.macro.metroLines[c.line];
-      return `Line ${line.name} to ${this.terminus(line, c.dir)} — press <b>E</b> to board (departs in ${Math.ceil(c.left)} s)`;
+      return `Line ${line.name} to ${this.terminus(line, c.dir)} — walk in or press <b>E</b> to board (departs in ${Math.ceil(c.left)} s)`;
     }
     const bi = this.platformAt(b.pos.x, b.pos.y, b.pos.z);
     if (bi < 0) return null;
@@ -774,17 +842,12 @@ export class Underground {
     if (!b) return false;
     const car = this.ridden();
     if (car) {
-      if (!car.dwell) return true; // no getting off between stations
-      const line = this.macro.metroLines[car.line];
-      const bi = this.hallBox(line.stations[car.next], this.macro.metroStations[line.stations[car.next]].halls.findIndex((h) => h.line === car.line));
-      const hall = this.boxes[bi];
-      if (!hall) return true;
-      // Step out onto the platform beside the car (the train's track is on its right-hand side).
-      const r = this.ride!, fx = car.dx * car.dir, fz = car.dz * car.dir;
-      const px = car.x + fx * r.u, pz = car.z + fz * r.u;
-      const u = (px - hall.cx) * hall.ux + (pz - hall.cz) * hall.uz;
-      const v = car.dir * (hall.hv - PLATFORM_W / 2);
-      b.pos.set(hall.cx + hall.ux * u - hall.uz * v, hall.y0 + PLATFORM_H, hall.cz + hall.uz * u + hall.ux * v);
+      if (!car.open) return true; // no getting off with the doors shut
+      // Step out through the nearest door onto the platform.
+      const r = this.ride!;
+      const d = DOOR_U.reduce((p, q) => (Math.abs(q - r.u) < Math.abs(p - r.u) ? q : p));
+      const [x, z] = this.carWorld(car, d, CAR_W / 2 + 0.6);
+      b.pos.set(x, car.y + CAR_FLOOR, z);
       b.vel.set(0, 0, 0);
       this.ride = null;
       this.rideFrame = null;
@@ -793,7 +856,7 @@ export class Underground {
     const c = this.boardable();
     if (!c) return false;
     const L = this.carLocal(c, b.pos.x, b.pos.y, b.pos.z);
-    this.ride = { line: c.line, k: c.k, slot: c.slot, u: Math.max(-7, Math.min(7, L.u)), v: 0 };
+    this.ride = { line: c.line, k: c.k, slot: c.slot, u: DOOR_U.reduce((p, q) => (Math.abs(q - L.u) < Math.abs(p - L.u) ? q : p)), v: 0 };
     this.rideFrame = null;
     b.vel.set(0, 0, 0);
     this.carryBody();
@@ -805,7 +868,7 @@ export class Underground {
     const c = this.ridden();
     if (!c) return null;
     const L = this.carLocal(c, x, y, z);
-    return Math.abs(L.u) < CAR_L / 2 - 0.3 - margin && Math.abs(L.v) < CAR_W / 2 - 0.1 - margin && L.h > margin - 0.05 && L.h < CAR_H - PLATFORM_H - 0.4 - margin;
+    return Math.abs(L.u) < CAR_L / 2 - 0.3 - margin && Math.abs(L.v) < CAR_W / 2 - 0.1 - margin && L.h > margin - 0.05 && L.h < CAR_H - CAR_FLOOR - 0.4 - margin;
   }
 
   /** Trains approaching a point (for sounds/collision): returns nearest car distance. */
@@ -829,6 +892,8 @@ export interface TrainCar {
   dwell: boolean;
   /** Seconds left in the dwell. */
   left: number;
+  /** Doors open (platform side). */
+  open: boolean;
   /** Index (in line.stations) of the stop dwelt at or next. */
   next: number;
   s: number;
@@ -836,6 +901,7 @@ export interface TrainCar {
 
 const FULL: [number, number][] = [[0, 1]];
 const _col = new THREE.Color();
+const _m4b = new THREE.Matrix4(), _m4c = new THREE.Matrix4();
 
 /**
  * Parameter intervals [t0, t1] along a section quad (A,B at t=0; D,C at t=1)
@@ -965,7 +1031,20 @@ function wallQuad(mb: MeshBuilder, a: [number, number, number], c: [number, numb
   mb.quad(i0, i0 + 3, i0 + 2, i0 + 1);
 }
 
-/** A metro carriage (18 m) with line-colour stripe, windows, doors and lights. */
+/** Door leaves of one side of a car (local +x); they slide along the car to open. */
+function doorLeafGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const d of DOOR_U) parts.push(new THREE.BoxGeometry(0.04, 1.9, DOOR_HW * 2).translate(1.475, CAR_FLOOR + 0.95, d));
+  const g = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal']) {
+    const arr: number[] = [];
+    for (const p of parts) arr.push(...(p.toNonIndexed().getAttribute(name).array as Float32Array));
+    g.setAttribute(name, new THREE.Float32BufferAttribute(arr, 3));
+  }
+  return g;
+}
+
+/** A metro carriage (18 m): walls with doorways, line-colour stripe, windows, benches and lights inside. */
 function trainCarGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const add = (w: number, h: number, d: number, x: number, y: number, z: number, col: [number, number, number], stripe = 0) => {
@@ -978,19 +1057,36 @@ function trainCarGeometry(): THREE.BufferGeometry {
     g.setAttribute('aStripe', new THREE.BufferAttribute(s, 1));
     parts.push(g);
   };
-  add(2.9, 2.6, 18, 0, 1.75, 0, [0.82, 0.83, 0.85]);
-  add(2.92, 0.35, 18.02, 0, 1.15, 0, [1, 1, 1], 1);                 // line stripe
-  add(2.94, 0.9, 16.5, 0, 2.15, 0, [0.06, 0.07, 0.09]);             // windows band
-  for (const z of [-5.5, 0, 5.5]) add(2.96, 2.0, 1.3, 0, 1.45, z, [0.55, 0.56, 0.58]); // doors
-  add(2.6, 0.5, 17.6, 0, 0.35, 0, [0.15, 0.15, 0.16]);              // underframe
-  add(2.5, 0.25, 17.6, 0, 3.15, 0, [0.7, 0.7, 0.72]);               // roof
-  // Inside: floor at platform height, bench rows along the walls, ceiling light strip.
-  add(2.8, 0.06, 17.8, 0, PLATFORM_H - 0.03, 0, [0.18, 0.19, 0.2]);
-  for (const x of [-1.12, 1.12]) {
-    add(0.5, 0.42, 16.2, x, PLATFORM_H + 0.21, 0, [0.25, 0.32, 0.5]);
-    add(0.12, 0.5, 16.2, x * 1.17, PLATFORM_H + 0.65, 0, [0.25, 0.32, 0.5]);
+  // Pieces along the car with gaps at the doorways.
+  const run = (w: number, h: number, x: number, y: number, z0: number, z1: number, col: [number, number, number], stripe = 0, gaps = true) => {
+    let a = z0;
+    for (const d of gaps ? [...DOOR_U, Infinity] : [Infinity]) {
+      const b = Math.min(z1, d - DOOR_HW);
+      if (b > a) add(w, h, b - a, x, y, (a + b) / 2, col, stripe);
+      a = Math.max(a, d + DOOR_HW);
+    }
+  };
+  const L2 = CAR_L / 2 - 0.25, body: [number, number, number] = [0.82, 0.83, 0.85], top = CAR_FLOOR + 1.9;
+  for (const sx of [-1, 1]) {
+    run(0.06, 2.6, sx * 1.42, 1.75, -L2, L2, body);                                // side walls
+    run(0.02, 0.35, sx * 1.46, 1.15, -L2, L2, [1, 1, 1], 1);                       // line stripe
+    run(0.02, 0.9, sx * 1.465, 2.15, -8.25, 8.25, [0.06, 0.07, 0.09]);             // windows band
+    for (const d of DOOR_U) {
+      add(0.06, 3.05 - top, DOOR_HW * 2, sx * 1.42, (top + 3.05) / 2, d, body);   // over the door
+      add(0.06, CAR_FLOOR - 0.45, DOOR_HW * 2, sx * 1.42, (CAR_FLOOR + 0.45) / 2, d, body); // under it
+    }
   }
-  add(0.5, 0.04, 16, 0, 2.98, 0, [1, 0.98, 0.9]);
+  for (const sz of [-1, 1]) add(2.9, 2.6, 0.06, 0, 1.75, sz * (L2 - 0.03), body);  // ends
+  add(2.9, 0.1, CAR_L - 0.5, 0, 3.1, 0, [0.75, 0.75, 0.77]);                         // ceiling
+  add(2.6, 0.5, 17.6, 0, 0.35, 0, [0.15, 0.15, 0.16]);                               // underframe
+  add(2.5, 0.25, 17.6, 0, 3.2, 0, [0.7, 0.7, 0.72]);                                 // roof
+  // Inside: floor level with the platform, bench rows along the walls (not across the doorways), light strip.
+  add(2.84, 0.06, CAR_L - 0.5, 0, CAR_FLOOR - 0.03, 0, [0.18, 0.19, 0.2]);
+  for (const x of [-1.12, 1.12]) {
+    run(0.5, 0.42, x, CAR_FLOOR + 0.21, -8.1, 8.1, [0.25, 0.32, 0.5]);
+    run(0.12, 0.5, x * 1.17, CAR_FLOOR + 0.65, -8.1, 8.1, [0.25, 0.32, 0.5]);
+  }
+  add(0.5, 0.04, 16, 0, 3.03, 0, [1, 0.98, 0.9]);
   const merged = mergeGeos(parts);
   merged.computeVertexNormals();
   return merged;

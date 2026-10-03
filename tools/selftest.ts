@@ -9,8 +9,11 @@ import { planCell } from '../src/plan/cell';
 import { buildingLayout, gridCell, stoopTop, type BuildingLayout } from '../src/build/buildingLayout';
 import { CURB_H } from '../src/build/ground';
 import type { BuildingDesc } from '../src/plan/building';
-import { pointInPoly } from '../src/core/geom2';
+import { pointInPoly, distPointPolyEdge } from '../src/core/geom2';
+import { buildBuildingShell, facadeSpecs } from '../src/build/buildingShell';
+import { MeshBuilder } from '../src/build/meshBuilder';
 import { Population } from '../src/sim/Population';
+import { planFloor, planLift } from '../src/interior/InteriorGen';
 import { metroInput } from './metroaudit';
 import { auditLines, auditPassages } from './metroAuditCore';
 
@@ -75,6 +78,57 @@ function groundFloorFaults(b: BuildingDesc, L: BuildingLayout, terrain: Terrain)
   return faults;
 }
 
+/**
+ * Roof over the top tier's outline: every up-facing roof triangle lies over the outline (plus
+ * the eaves), faces up by its winding, and every point of the outline is under the roof.
+ */
+/** Interior walls and furniture of the first storeys standing outside the storey outline (> 10 cm). */
+function interiorFaults(b: BuildingDesc, L: BuildingLayout): number {
+  let n = 0;
+  for (const fl of L.floors.slice(0, 2)) {
+    const poly = L.tiers[fl.tier].poly;
+    const fp = planFloor(b, poly, fl.f, fl.y0, fl.y1 - fl.y0, 0, planLift(b, poly));
+    for (const w of fp.walls) {
+      for (let t = 0; t <= 1.0001; t += 0.25) {
+        const x = w.ax + (w.bx - w.ax) * t, z = w.az + (w.bz - w.az) * t;
+        if (!pointInPoly(poly, x, z) && distPointPolyEdge(poly, x, z) > 0.1) { n++; break; }
+      }
+    }
+    for (const f of fp.furniture) if (!pointInPoly(poly, f.x, f.z)) n++;
+  }
+  return n;
+}
+
+function roofFaults(b: BuildingDesc, terrain: Terrain): number {
+  const mb = new MeshBuilder(facadeSpecs());
+  const info = buildBuildingShell(mb, b, 0, terrain, 0, 'shell');
+  const top = info.layout.tiers[info.layout.tiers.length - 1].poly;
+  const md = mb.build();
+  const P = md.attrs.position.array as Float32Array, N = md.attrs.normal.array as Float32Array, Ly = md.attrs.aLayer.array as Float32Array;
+  const [ox, oy, oz] = md.origin, I = md.index;
+  const tris: number[][] = [];
+  let faults = 0;
+  for (let t = 0; t < I.length; t += 3) {
+    const v = [I[t], I[t + 1], I[t + 2]];
+    if (Ly[v[0]] !== 16 + b.roofMat || N[v[0] * 3 + 1] < 0.05) continue;
+    const cy = (P[v[0] * 3 + 1] + P[v[1] * 3 + 1] + P[v[2] * 3 + 1]) / 3 + oy;
+    if (cy < info.topY - 1 || cy > info.topY + 25) continue;
+    const q = v.flatMap((k) => [P[k * 3] + ox, P[k * 3 + 2] + oz]);
+    tris.push(q);
+    const mx = (q[0] + q[2] + q[4]) / 3, mz = (q[1] + q[3] + q[5]) / 3;
+    if (!pointInPoly(top, mx, mz) && distPointPolyEdge(top, mx, mz) > 0.5) faults++;
+    if ((q[3] - q[1]) * (q[4] - q[0]) - (q[2] - q[0]) * (q[5] - q[1]) < 0) faults++;
+  }
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < top.length; i += 2) { x0 = Math.min(x0, top[i]); x1 = Math.max(x1, top[i]); z0 = Math.min(z0, top[i + 1]); z1 = Math.max(z1, top[i + 1]); }
+  for (let x = x0 + 0.5; x < x1; x += 2) for (let z = z0 + 0.5; z < z1; z += 2) {
+    if (!pointInPoly(top, x, z) || distPointPolyEdge(top, x, z) < 0.45) continue;
+    const s = (q: number[], a: number, c: number) => (x - q[c]) * (q[a + 1] - q[c + 1]) - (q[a] - q[c]) * (z - q[c + 1]);
+    if (!tris.some((q) => { const d = [s(q, 0, 2), s(q, 2, 4), s(q, 4, 0)]; return !(d.some((e) => e < -1e-9) && d.some((e) => e > 1e-9)); })) faults++;
+  }
+  return faults;
+}
+
 for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) {
   const t0 = performance.now();
   const profile = makeProfile({ seed, size });
@@ -87,7 +141,7 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
   // Cells near the centre.
   const c0 = macro.centres[0];
   const near = macro.cells.slice().sort((a, b) => Math.hypot(a.centroid[0] - c0.x, a.centroid[1] - c0.z) - Math.hypot(b.centroid[0] - c0.x, b.centroid[1] - c0.z)).slice(0, 6);
-  let buildings = 0, overlapRoad = 0, outside = 0, floorFaults = 0;
+  let buildings = 0, overlapRoad = 0, outside = 0, floorFaults = 0, roofs = 0, interiors = 0;
   for (const c of near) {
     const p1 = planCell(macro, c, terrain), p2 = planCell(macro, c, terrain);
     check(hashPlan(p1.buildings) === hashPlan(p2.buildings), `seed ${seed} cell ${c.id}: cell plan deterministic`);
@@ -101,10 +155,14 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
       const L = buildingLayout(b, terrain, 0);
       check(L.panels.length > 0 && L.elemCount > L.panels.length, `building layout has panels and elements`);
       floorFaults += groundFloorFaults(b, L, terrain);
+      roofs += roofFaults(b, terrain);
+      interiors += interiorFaults(b, L);
     }
   }
   check(buildings > 0, `seed ${seed}: buildings generated (${buildings})`);
   check(floorFaults === 0, `seed ${seed}: ground floors above the terrain, fully tiled and reachable from the street (${floorFaults} faults)`);
+  check(roofs === 0, `seed ${seed}: roofs cover their footprints exactly, facing up (${roofs} faults)`);
+  check(interiors === 0, `seed ${seed}: interior walls and furniture inside the storey outline (${interiors} outside)`);
   check(outside === 0, `seed ${seed}: buildings inside their cells (${outside} outside)`);
   check(overlapRoad < buildings * 0.01 + 1, `seed ${seed}: buildings off the road (${overlapRoad})`);
   // Metro stations are on land.
@@ -120,6 +178,7 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     check(r.minRadius >= 60, `${at}: curve radius ≥ 60 m (${r.minRadius.toFixed(0)} m)`);
     check(r.minCover >= 5.5, `${at}: ≥ 5.5 m of cover over tunnels and halls (${r.minCover.toFixed(2)} m)`);
     check(r.lineConflicts === 0 && r.sewerConflicts === 0, `${at}: clear of other lines and sewers (${r.lineConflicts} / ${r.sewerConflicts} conflicts)`);
+    check(r.platformGapMin >= 0.02 && r.platformGapMax <= 0.1 && r.floorStep < 0.01, `${at}: platform edge 2–10 cm from the car side, level with the car floor (gap ${r.platformGapMin.toFixed(3)}…${r.platformGapMax.toFixed(3)} m, step ${r.floorStep.toFixed(3)} m)`);
     check(r.carsOutside === 0 && r.carDy < 0.05 && r.carLateral < 0.3, `${at}: trains on the track, stopping inside the halls (${r.carsOutside} cars outside, ${r.carDy.toFixed(2)} m off the bed)`);
   }
   for (const p of auditPassages(mi, inHole)) {

@@ -18,6 +18,7 @@ import { clamp, lerp, damp } from '../core/math';
 import type { HumanoidAppearance } from '../humanoid/types';
 import type { Collision } from '../world/Collision';
 import { ImportedAvatar, type LoadedModel } from '../avatar/ImportedAvatar';
+import { outfitVisuals, type CharacterLook } from '../avatar/look';
 
 export const BASE_HEIGHT = 1.8;
 export const MIN_HEIGHT = 0.1;
@@ -63,11 +64,18 @@ export class Player {
   /** Walking into walls: the obstacle hit this frame (for destruction). */
   blocked: { x: number; z: number; nx: number; nz: number; speed: number } | null = null;
 
+  /** Character made in the creator, used by the next Player (null: random human from the seed). */
+  static look: CharacterLook | null = null;
+
   constructor(seed: number, private world: WorldIndex) {
-    this.app = randomAppearance('human', seed, {});
+    const look = Player.look;
+    this.app = look ? structuredClone(look.appearance) : randomAppearance('human', seed, {});
     this.rig = new HumanoidRig(this.app, { castShadow: true, priority: -10, ground: (x, y, z) => this.collision ? this.collision.groundAt(x, z, y + 0.4, 0.3) : this.world.groundHeight(x, z, y + 0.4) });
-    this.rig.setEquipment(cityOutfit(seed, this.app.gender, this.app.age, 0.2, 0.3));
-    this.rig.ready.then(() => { this.rigBaseHeight = this.rig.height; });
+    this.rig.setEquipment(look ? outfitVisuals(look.outfit) : cityOutfit(seed, this.app.gender, this.app.age, 0.2, 0.3));
+    // The random human is normalised to the 1.8 m base height; a created character keeps
+    // its own height relative to it (size mechanics still run on `height`, k = height / 1.8).
+    if (look) this.rigBaseHeight = BASE_HEIGHT;
+    else this.rig.ready.then(() => { this.rigBaseHeight = this.rig.height; });
   }
 
   get k(): number { return this.height / BASE_HEIGHT; }

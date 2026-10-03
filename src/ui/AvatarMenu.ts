@@ -1,10 +1,13 @@
 /**
- * Start-screen character picker: the default (generated) human or an imported model.
- * Imports (GLB / glTF / VRM / FBX) are analysed immediately (rig mapping, clips), get a
- * thumbnail and are stored in the browser; the selection is remembered.
+ * Start-screen character picker: the default (random) human, characters made in the
+ * creator, or an imported model. Imports (GLB / glTF / VRM / FBX) are analysed immediately
+ * (rig mapping, clips), get a thumbnail and are stored in the browser; created characters
+ * store their look (appearance + outfit). The selection is remembered.
  */
 import * as THREE from 'three';
-import { avatarStore, type StoredAvatar } from '../avatar/AvatarStore';
+import { avatarStore, isGenerated, type StoredAvatar, type StoredImport, type StoredGenerated } from '../avatar/AvatarStore';
+import type { CharacterLook } from '../avatar/look';
+import { CharacterCreator } from './CharacterCreator';
 import { loadModel, extOf, IMPORT_EXTENSIONS } from '../avatar/AvatarLoader';
 import { mapHumanoid } from '../avatar/HumanoidMap';
 import type { LoadedModel } from '../avatar/ImportedAvatar';
@@ -24,6 +27,7 @@ export class AvatarMenu {
       <div class="avatars-head">Your character</div>
       <div class="avatar-list"></div>
       <div class="avatar-actions">
+        <button type="button" class="avatar-create">Create character…</button>
         <button type="button" class="avatar-import">Import model…</button>
         <a class="avatar-converter" href="converter/" target="_blank" rel="noopener" title="Converts FBX, .blend, OBJ, DAE and more into GLB (Windows, uses Blender)">Other formats? Get the converter</a>
       </div>
@@ -36,6 +40,7 @@ export class AvatarMenu {
     this.input.accept = IMPORT_EXTENSIONS.join(',');
     this.input.onchange = () => { const f = this.input.files?.[0]; if (f) void this.importFile(f); this.input.value = ''; };
     (this.el.querySelector('.avatar-import') as HTMLButtonElement).onclick = () => this.input.click();
+    (this.el.querySelector('.avatar-create') as HTMLButtonElement).onclick = () => this.openCreator();
     // Drop a model anywhere on the start screen.
     const drop = parent.closest('#menu') ?? parent;
     drop.addEventListener('dragover', (e) => { e.preventDefault(); this.el.classList.add('drop'); });
@@ -60,23 +65,49 @@ export class AvatarMenu {
     const stored = avatarStore.selected();
     const active = stored && items.some((i) => i.id === stored) ? stored : null;
     this.list.innerHTML = '';
-    const card = (id: string | null, name: string, sub: string, thumb: string | null) => {
+    const card = (id: string | null, name: string, sub: string, thumb: string | null, edit?: () => void) => {
       const c = document.createElement('div');
       c.className = 'avatar-card' + (id === active ? ' sel' : '');
-      c.innerHTML = `<div class="thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span>👤</span>'}</div><div class="name"></div><div class="sub"></div>${id ? '<button type="button" class="del" title="Delete">×</button>' : ''}`;
+      c.innerHTML = `<div class="thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span>👤</span>'}</div><div class="name"></div><div class="sub"></div>${id ? '<button type="button" class="del" title="Delete">×</button>' : ''}${edit ? '<button type="button" class="edit" title="Edit">✎</button>' : ''}`;
       (c.querySelector('.name') as HTMLElement).textContent = name;
       (c.querySelector('.sub') as HTMLElement).textContent = sub;
       c.onclick = (e) => {
-        if ((e.target as HTMLElement).classList.contains('del')) return;
+        const t = e.target as HTMLElement;
+        if (t.classList.contains('del') || t.classList.contains('edit')) return;
         avatarStore.select(id);
         void this.render();
       };
       const del = c.querySelector('.del') as HTMLButtonElement | null;
-      if (del && id) del.onclick = async () => { await avatarStore.remove(id); void this.render(); };
+      if (del && id) del.onclick = async () => {
+        if (!confirm(`Delete "${name}"?`)) return;
+        await avatarStore.remove(id);
+        void this.render();
+      };
+      const ed = c.querySelector('.edit') as HTMLButtonElement | null;
+      if (ed && edit) ed.onclick = edit;
       this.list.appendChild(c);
     };
-    card(null, 'Default human', 'Generated, matches the city', null);
-    for (const a of items) card(a.id, a.name, describe(a), a.thumb ?? null);
+    card(null, 'Default human', 'Random, matches the city', null);
+    for (const a of items) card(a.id, a.name, describe(a), a.thumb ?? null, isGenerated(a) ? () => this.openCreator(a) : undefined);
+  }
+
+  /** Open the character creator for a new character or to edit a created one. */
+  openCreator(edit?: StoredGenerated): void {
+    new CharacterCreator({
+      name: edit?.name,
+      look: edit?.look,
+      onSave: async ({ name, look, thumb }) => {
+        const a: StoredGenerated = {
+          kind: 'generated',
+          id: edit?.id ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+          name, look, thumb: thumb ?? edit?.thumb, created: edit?.created ?? Date.now(),
+        };
+        await avatarStore.put(a);
+        avatarStore.select(a.id);
+        this.say(`${a.name}: saved and selected.`, 'ok');
+        void this.render();
+      },
+    });
   }
 
   async importFile(file: File): Promise<void> {
@@ -93,7 +124,7 @@ export class AvatarMenu {
       const map = mapHumanoid(model.scene, model.json, model.associations);
       const mode = map.ok ? 'retarget' : model.animations.length ? 'clips' : 'static';
       const note = map.ok ? undefined : map.notes[0] ?? (map.missing.length ? `missing ${map.missing.slice(0, 3).join(', ')}` : undefined);
-      const a: StoredAvatar = {
+      const a: StoredImport = {
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
         name: file.name.replace(/\.[^.]+$/, ''),
         file: file.name, data, size: file.size, created: Date.now(),
@@ -112,6 +143,10 @@ export class AvatarMenu {
 }
 
 function describe(a: StoredAvatar): string {
+  if (isGenerated(a)) {
+    const ap = a.look.appearance;
+    return `Created · ${ap.gender > 0.5 ? 'male' : 'female'}`;
+  }
   const i = a.info;
   if (!i) return a.file;
   if (i.mode === 'retarget') return `Full animation (${i.source === 'vrm' ? 'VRM' : i.source === 'names' ? 'named' : 'auto-detected'} rig)`;
@@ -119,13 +154,21 @@ function describe(a: StoredAvatar): string {
   return 'Static model';
 }
 
-/** Load the selected imported avatar (null: default human or nothing selected). */
-export async function loadSelectedAvatar(): Promise<{ model: LoadedModel; stored: StoredAvatar } | null> {
+/** Load the selected imported avatar (null: default human, a created character or nothing selected). */
+export async function loadSelectedAvatar(): Promise<{ model: LoadedModel; stored: StoredImport } | null> {
   const id = avatarStore.selected();
   if (!id) return null;
   const a = await avatarStore.get(id);
-  if (!a) return null;
+  if (!a || isGenerated(a)) return null;
   return { model: await loadModel(a.data.slice(0), a.file), stored: a };
+}
+
+/** The selected created character's look (null: default human, an import or nothing selected). */
+export async function loadSelectedLook(): Promise<{ name: string; look: CharacterLook } | null> {
+  const id = avatarStore.selected();
+  if (!id) return null;
+  const a = await avatarStore.get(id);
+  return a && isGenerated(a) ? { name: a.name, look: a.look } : null;
 }
 
 /** Small preview image of a model (front view, own lights, offscreen). */
