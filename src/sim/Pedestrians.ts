@@ -62,12 +62,14 @@ const SCAN_R = 480;
 const DESPAWN_R = 620;
 const HASH = 1 << 14;
 
-interface Pending { cit: Citizen; trip: Trip; origin: BuildingRef | null }
+interface Pending { cit: Citizen; trip: Trip }
 
 export class Pedestrians {
   readonly agents: PedAgent[] = [];
   private byId = new Map<number, PedAgent>();
-  private scanned = new Map<BuildingRef, number>(); // building → day scanned
+  // Building → day scanned. Weak: refs die with their cell (a strong map kept every unloaded
+  // cell - meshes, CPU geometry, plan - alive and ran big cities out of memory).
+  private scanned = new WeakMap<BuildingRef, number>();
   private events = new MinHeap();
   private pending: Pending[] = [];
   private freePending: number[] = [];
@@ -164,7 +166,7 @@ export class Pedestrians {
             if (this.agents.length < MAX_AGENTS && !this.byId.has(c.id)) this.spawnQueue.push({ cit: c, trip: tr, progress: (h - tr.depart) / Math.max(1e-6, end - tr.depart) });
           } else if (tr.depart > h && tr.depart < h + 6) {
             const idx = this.freePending.length ? this.freePending.pop()! : this.pending.length;
-            this.pending[idx] = { cit: c, trip: tr, origin: ref };
+            this.pending[idx] = { cit: c, trip: tr };
             this.events.push(tr.depart, idx);
           }
         }

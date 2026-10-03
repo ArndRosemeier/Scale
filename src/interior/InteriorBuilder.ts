@@ -143,7 +143,8 @@ function flat(geo: Geo, poly: number[], holes: number[][], y: number, up: boolea
   }
 }
 
-export function buildFloorMeshes(plan: FloorPlan, floorPoly: number[], stairHole: number[] | null, ceilingHole: number[] | null): THREE.Group {
+/** `slabPoly`: the storey's full slab outline (to the facade), so the floor reaches the door sill. */
+export function buildFloorMeshes(plan: FloorPlan, floorPoly: number[], stairHole: number[] | null, ceilingHole: number[] | null, slabPoly = floorPoly): THREE.Group {
   const M = interiorMaterials();
   const group = new THREE.Group();
   const y = plan.y;
@@ -162,7 +163,7 @@ export function buildFloorMeshes(plan: FloorPlan, floorPoly: number[], stairHole
   }
   // Structural floor under the finishes and the ceiling (with stair openings).
   const sg = new Geo();
-  const fp = stairHole ? difference([floorPoly], [stairHole]) : [{ outer: floorPoly, holes: [] }];
+  const fp = stairHole ? difference([slabPoly], [stairHole]) : [{ outer: slabPoly, holes: [] }];
   for (const p of fp) flat(sg, p.outer, p.holes, y + 0.02, true, 4, [0.6, 0.6, 0.58]);
   const cp = ceilingHole ? difference([floorPoly], [ceilingHole]) : [{ outer: floorPoly, holes: [] }];
   for (const p of cp) flat(sg, p.outer, p.holes, y + plan.height - 0.03, false, 4, [0.93, 0.93, 0.91]);

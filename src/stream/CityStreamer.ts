@@ -121,10 +121,11 @@ export class CityStreamer {
       if (d < R) wanted.push({ id: c.id, d });
     }
     wanted.sort((a, b) => a.d - b.d);
-    // Memory budget: nearest first; unknown cells count as the average loaded cell.
+    // Memory budget: nearest first; unknown cells count as the average loaded cell (before any
+    // has arrived, as a dense one: underestimating made the first wave of a big city overshoot).
     let ready = 0, readyBytes = 0;
     for (const cs of this.cells.values()) if (cs.status === 'ready') { ready++; readyBytes += cs.bytes; }
-    const avg = ready ? readyBytes / ready : 6e6;
+    const avg = ready >= 4 ? readyBytes / ready : Math.max(30e6, ready ? readyBytes / ready : 0);
     let acc = 0, keep = 0;
     for (const w of wanted) {
       const cs = this.cells.get(w.id);
@@ -148,6 +149,9 @@ export class CityStreamer {
     }
     this.pool.reprioritise((m, cur) => {
       if (m.type !== 'cell') return cur;
+      // Not wanted any more (the player moved on): cancel instead of building it for nothing.
+      const st = this.cells.get(m.cell);
+      if (!st || now - st.lastWanted > 1) return null;
       const c = this.macro.cells[m.cell];
       return Math.hypot(c.centroid[0] - cam.x, c.centroid[1] - cam.z);
     });
@@ -231,8 +235,16 @@ export class CityStreamer {
     this.root.remove(cs.group);
     cs.group.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.dispose(); });
     cs.facadeMat?.dispose();
+    (cs.lod0 as THREE.Mesh | undefined)?.customDepthMaterial?.dispose();
     cs.elemTex?.dispose();
     this.cells.delete(cs.id);
+  }
+
+  /** Geometry added to a loaded cell later (e.g. a damaged building's slabs) counts toward the budget. */
+  account(cs: CellState, g: THREE.BufferGeometry): void {
+    const b = geoBytes(g) * 2;
+    cs.bytes += b;
+    this.bytesLoaded += b;
   }
 
   /** Mark an element dead/alive in a cell (destruction). */

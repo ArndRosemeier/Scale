@@ -26,6 +26,8 @@ export class Skyline {
   private requested = false;
   private pendingJobs = 0;
   loaded = 0;
+  /** Every finished batch (records per cell in order, plus the cells' map items), e.g. for the map. */
+  onBatch?: (cells: number[], records: Float32Array, counts: number[], map: Float32Array, mapOff: Int32Array) => void;
 
   constructor(private macro: MacroPlan, private pool: WorkerPool, arrays: MaterialArrays) {
     const h = Math.ceil(Math.max(1, macro.cells.length) / this.maskW);
@@ -49,6 +51,7 @@ export class Skyline {
       this.pool.run<Extract<FromWorker, { type: 'skyline' }>>({ type: 'skyline', job: 0, cells: batch }, 1000 + i).then((r) => {
         this.pendingJobs--;
         hitch.measure('skyline:apply', () => this.add(r.records));
+        this.onBatch?.(r.cells, r.records, r.counts, r.map, r.mapOff);
       }, () => { this.pendingJobs--; });
     }
   }

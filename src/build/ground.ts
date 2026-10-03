@@ -30,6 +30,8 @@ export const GROUND_LAYER_COUNT = 13;
 
 export const CURB_H = 0.15;
 const MAX_EDGE = 5;
+/** Draped ground follows the terrain to within DRAPE_TOL, never splitting edges below DRAPE_MIN. */
+const DRAPE_MIN = 1.2, DRAPE_TOL = 0.02;
 
 export function groundSpecs() {
   return [
@@ -73,10 +75,10 @@ export function drapeShape(mb: MeshBuilder, sh: Shape, terrain: Terrain, dy: num
   };
   const hardMax = maxEdge * 5;
   const needs = (a: number, b: number, L: number): boolean => {
-    if (L <= 1.2) return false;
+    if (L <= DRAPE_MIN) return false;
     if (L > hardMax) return true;
     const mx = (pts[a * 2] + pts[b * 2]) / 2, mz = (pts[a * 2 + 1] + pts[b * 2 + 1]) / 2;
-    return Math.abs(hFn(mx, mz) - (hAt(a) + hAt(b)) / 2) > 0.02;
+    return Math.abs(hFn(mx, mz) - (hAt(a) + hAt(b)) / 2) > DRAPE_TOL;
   };
   const out: number[] = [];
   const stack: number[] = [];
@@ -87,6 +89,11 @@ export function drapeShape(mb: MeshBuilder, sh: Shape, terrain: Terrain, dy: num
     const lab = Math.hypot(pts[a * 2] - pts[b * 2], pts[a * 2 + 1] - pts[b * 2 + 1]);
     const lbc = Math.hypot(pts[b * 2] - pts[c * 2], pts[b * 2 + 1] - pts[c * 2 + 1]);
     const lca = Math.hypot(pts[c * 2] - pts[a * 2], pts[c * 2 + 1] - pts[a * 2 + 1]);
+    // Degenerate (collinear) triangles cover nothing; splitting them only makes more of them -
+    // endlessly, as they keep producing coincident midpoints (it ran into the guard with
+    // hundreds of thousands of useless vertices per shape).
+    const cr = (pts[b * 2] - pts[a * 2]) * (pts[c * 2 + 1] - pts[a * 2 + 1]) - (pts[b * 2 + 1] - pts[a * 2 + 1]) * (pts[c * 2] - pts[a * 2]);
+    if (Math.abs(cr) < 1e-4 * Math.max(lab, lbc, lca) ** 2) continue;
     const nab = needs(a, b, lab) ? lab : -1, nbc = needs(b, c, lbc) ? lbc : -1, nca = needs(c, a, lca) ? lca : -1;
     const m = Math.max(nab, nbc, nca);
     if (m < 0) { out.push(a, b, c); continue; }

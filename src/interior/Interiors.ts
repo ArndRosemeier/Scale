@@ -25,6 +25,8 @@ interface ActiveFloor {
   group: THREE.Group;
   walls: number[];
   poly: number[];
+  /** Full slab outline of the storey (to the facade): walkable up to the walls and the door sill. */
+  outline: number[];
   stairPoly: number[] | null;
 }
 
@@ -223,9 +225,9 @@ export class Interiors {
     const shaft = a.lift ? liftRect(a.lift) : null;
     const floorHole = shaft && f > 0 && this.serves(a, f) && this.serves(a, f - 1) ? shaft : null;
     const ceilHole = shaft && f < a.ref.desc.floors - 1 && this.serves(a, f) && this.serves(a, f + 1) ? shaft : null;
-    const group = buildFloorMeshes(plan, poly, floorHole, ceilHole);
+    const group = buildFloorMeshes(plan, poly, floorHole, ceilHole, L.tiers[fl.tier].poly);
     this.group.add(group);
-    a.floors.set(f, { plan, group, walls: wallCollisionSegments(plan), poly, stairPoly: null });
+    a.floors.set(f, { plan, group, walls: wallCollisionSegments(plan), poly, outline: L.tiers[fl.tier].poly, stairPoly: null });
     if (a.elevator && plan.lift) a.elevator.addLanding(f);
     // Hide the shell slab of this storey and open its windows (real interior visible both ways).
     for (const t of [fl.slab, ...Array.from(fl.tiles)]) {
@@ -330,7 +332,7 @@ export class Interiors {
           }
         }
         // Hole for the flight arriving from below, or a slab tile that broke.
-        if (pointInPoly(f.poly, x, z) && !this.inStairHoleFromBelow(a, f, x, z) && !this.tileBroken(a, f.plan.floor, x, z)) g = Math.max(g, y);
+        if (pointInPoly(f.outline, x, z) && !this.inStairHoleFromBelow(a, f, x, z) && !this.tileBroken(a, f.plan.floor, x, z)) g = Math.max(g, y);
       }
     }
     return g;

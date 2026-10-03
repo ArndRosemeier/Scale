@@ -256,6 +256,11 @@ export class Underground {
     return out;
   }
 
+  /** Every placed manhole lid (cells loaded so far), e.g. for the map. */
+  forEachManhole(fn: (x: number, z: number) => void): void {
+    for (const l of this.manholes.values()) for (const m of l) fn(m.x, m.z);
+  }
+
   /** Nearest manhole lid within r (for E and hints). */
   nearestManhole(x: number, z: number, r: number): { x: number; z: number; tube: Tube } | null {
     let best: { x: number; z: number; tube: Tube } | null = null, bd = r;

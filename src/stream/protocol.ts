@@ -38,8 +38,16 @@ export type FromWorker =
   | { type: 'terrain'; job: number; mesh: MeshData }
   | { type: 'water'; job: number; mesh: MeshData | null }
   | { type: 'bridges'; job: number; mesh: MeshData | null }
-  | { type: 'skyline'; job: number; cells: number[]; records: Float32Array; counts: number[] }
+  | { type: 'skyline'; job: number; cells: number[]; records: Float32Array; counts: number[]; map: Float32Array; mapOff: Int32Array }
   | { type: 'error'; job: number; message: string };
+
+/**
+ * Map data per cell (packed with the skyline records; the planner already ran):
+ * items [kind, a, b, n, x0, z0, … (n points)]. Kinds: 0 local street (a = class,
+ * b = width), 1 park outline, 2 metro entrance (a = station, b = end; points =
+ * centre and long axis), 3 plaza outline.
+ */
+export const enum MapItem { Street = 0, Park = 1, Entrance = 2, Plaza = 3 }
 
 /** Skyline record per building: cx, cz, hu, hv, yaw, base, height, wall layer, tint r, g, b, floorH, flags, cell. */
 export const SKY_STRIDE = 14;

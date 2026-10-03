@@ -47,8 +47,10 @@ $Files = $sorted
 $out = [IO.Path]::Combine([IO.Path]::GetDirectoryName($model), [IO.Path]::GetFileNameWithoutExtension($model) + '.glb')
 if ($out -eq $model) { $out = [IO.Path]::Combine([IO.Path]::GetDirectoryName($model), [IO.Path]::GetFileNameWithoutExtension($model) + '_scale.glb') }
 Write-Host "Converting $([IO.Path]::GetFileName($model)) ..."
-$log = & $Exe -b --factory-startup -P (Join-Path $here 'convert_avatar.py') -- $out @Files 2>&1
-$log | Where-Object { $_ -match '\[avatar\]|Error|Traceback' } | ForEach-Object { Write-Host $_ }
+# Blender prints harmless messages on stderr (e.g. rig drivers it may not run): never abort on them.
+$ErrorActionPreference = 'Continue'
+$log = & $Exe -b --factory-startup -P (Join-Path $here 'convert_avatar.py') -- $out @Files 2>&1 | ForEach-Object { "$_" }
+$log | Where-Object { $_ -match '\[avatar\]|Traceback|^Error:' } | ForEach-Object { Write-Host $_ }
 if (-not (Test-Path $out)) { Write-Host ''; Write-Host 'Conversion failed. Full log:'; $log | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }; Pause-Exit 1 }
 Write-Host ''
 Write-Host "Done: $out"

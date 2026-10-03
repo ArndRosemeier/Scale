@@ -14,6 +14,8 @@ const CONTROLS: [string, string][] = [
   ['Mouse wheel', 'Camera distance'],
   ['Left click', 'Punch / push'],
   ['E', 'Open a manhole / climb out of the sewer'],
+  ['M', 'City map: metro, stations, travel'],
+  ['N', 'Minimap on / off'],
   ['B', 'Test blast where you look'],
   ['T', 'Fast time on/off'],
   ['[  ]', 'Time of day −1 h / +1 h'],
@@ -62,7 +64,7 @@ export class Menu {
     let wasLocked = false;
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement) { wasLocked = true; this.close(); }
-      else if (wasLocked && !this.open) this.show(); // Esc released the mouse
+      else if (wasLocked && !this.open && !this.game.map?.holdsPointer) this.show(); // Esc released the mouse (not the map opening)
     });
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Escape') { if (this.open) this.close(); else this.show(); }
@@ -71,7 +73,7 @@ export class Menu {
     // First-time hint.
     const hint = document.createElement('div');
     hint.id = 'hint';
-    hint.textContent = 'Click to look around · H for controls · Esc for settings';
+    hint.textContent = 'Click to look around · M for the map · H for controls · Esc for settings';
     document.body.appendChild(hint);
     setTimeout(() => hint.classList.add('fade'), 9000);
   }

@@ -168,6 +168,13 @@ function fromNames(bones: THREE.Bone[]): Partial<Record<HumanBone, THREE.Bone>> 
       break;
     }
   }
+  // Exact standard names ("Hips", "LeftLowerArm" — what the avatar converter writes) win
+  // over look-alikes such as a stray helper "forearm.L".
+  const exact = new Map([...REQUIRED, ...OPTIONAL].map((k) => [k.toLowerCase(), k as HumanBone]));
+  for (const b of bones) {
+    const k = exact.get(b.name.toLowerCase().replace(/[^a-z]/g, ''));
+    if (k) out[k] = b;
+  }
   return out;
 }
 

@@ -6,7 +6,7 @@
 import type { WorldIndex, BuildingRef } from './WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer } from '../stream/CityStreamer';
-import { gridCell } from '../build/buildingLayout';
+import { gridCell, stoopTop, buildingEntrance, STOOP_REACH, type Stoop } from '../build/buildingLayout';
 import { pointInPoly } from '../core/geom2';
 
 /**
@@ -40,6 +40,8 @@ export interface CollideResult {
 }
 
 const res: CollideResult = { x: 0, z: 0, nx: 0, nz: 0, hit: false, building: null, cx: 0, cz: 0 };
+/** Scratch box for stoop steps. */
+const box = { cyl: false, x: 0, z: 0, r: 0, hx: 0, hz: 0, ux: 1, uz: 0 };
 
 export class Collision {
   /** Interior floors/stairs (ground) and walls (segments) supplied by the interiors manager. */
@@ -54,6 +56,17 @@ export class Collision {
     inHole(x: number, z: number): boolean;
     contains(x: number, y: number, z: number, margin: number): boolean;
   } | null = null;
+
+  private refsG: BuildingRef[] = [];
+  /** Entrance steps per building (refs die with their cell, so this frees itself). */
+  private stoops = new WeakMap<BuildingRef, Stoop | null>();
+
+  private stoopOf(b: BuildingRef): Stoop | null {
+    let s = this.stoops.get(b);
+    if (s === undefined) this.stoops.set(b, (s = buildingEntrance(b.desc, this.world.terrain)));
+    return s;
+  }
+  private refsC: BuildingRef[] = [];
 
   constructor(private world: WorldIndex, private destruction: Destruction, private streamer: CityStreamer) {}
 
@@ -82,9 +95,19 @@ export class Collision {
         if (insideObstacle(o, x, z, 0)) g = o.y1;
       });
     }
-    const refs = this.world.buildingsIn(x - 0.5, z - 0.5, x + 0.5, z + 0.5);
+    const refs = this.world.buildingsIn(x - STOOP_REACH, z - STOOP_REACH, x + STOOP_REACH, z + STOOP_REACH, this.refsG);
     for (const b of refs) {
-      if (!pointInPoly(b.poly, x, z)) continue;
+      const bb = b.bounds;
+      const inBounds = x >= bb[0] && x <= bb[2] && z >= bb[1] && z <= bb[3];
+      if (!inBounds || !pointInPoly(b.poly, x, z)) {
+        // Entrance steps outside the footprint.
+        const S = this.stoopOf(b);
+        if (S) {
+          const top = stoopTop(S, x, z);
+          if (top > g && top <= yRef + step && this.streamer.isAlive(b.cell, b.elemBase)) g = top;
+        }
+        continue;
+      }
       const L = this.destruction.layoutOf(b);
       const cs = b.cell;
       // Roof.
@@ -137,11 +160,35 @@ export class Collision {
         return res;
       }
     }
-    const refs = this.world.buildingsIn(x - r - 1, z - r - 1, x + r + 1, z + r + 1);
+    const step = Math.max(0.35, h * 0.28);
+    const refs = this.world.buildingsIn(x - r - STOOP_REACH, z - r - STOOP_REACH, x + r + STOOP_REACH, z + r + STOOP_REACH, this.refsC);
     for (const b of refs) {
+      // Entrance steps: solid below the step height (one walks up them, a giant over them).
+      const S = this.stoopOf(b);
+      if (S && x + r >= S.bounds[0] && x - r <= S.bounds[2] && z + r >= S.bounds[1] && z - r <= S.bounds[3] && this.streamer.isAlive(b.cell, b.elemBase)) {
+        const B = S.boxes;
+        for (let k = 0; k < B.length; k += 5) {
+          if (y >= B[k + 4] - step || y + h <= S.foot) continue;
+          box.x = B[k]; box.z = B[k + 1]; box.hx = B[k + 2]; box.hz = B[k + 3]; box.ux = S.ux; box.uz = S.uz;
+          const push = this.pushBox(box, r, px, pz);
+          if (push > best) { best = push; res.nx = this.cn[0]; res.nz = this.cn[1]; res.building = null; res.cx = this.cn[2]; res.cz = this.cn[3]; }
+        }
+      }
+      const bb = b.bounds;
+      if (x + r + 1 < bb[0] || x - r - 1 > bb[2] || z + r + 1 < bb[1] || z - r - 1 > bb[3]) continue;
       if (y > b.top + 0.05 || y + h < b.low) continue;
       const L = this.destruction.layoutOf(b);
       const cs = b.cell;
+      // Plinth under a raised ground floor: one cannot walk in under the floor (through the
+      // door or a broken wall from the street below) - only up the entrance steps.
+      if (b.alive && L.base > y + 0.25 && L.low < y + h && this.streamer.isAlive(cs, L.plinth)) {
+        const P = b.poly, n = P.length >> 1;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          const push = this.pushSeg(P[i * 2], P[i * 2 + 1], P[j * 2], P[j * 2 + 1], r, px, pz);
+          if (push > best) { best = push; res.nx = this.cn[0]; res.nz = this.cn[1]; res.building = b; res.cx = this.cn[2]; res.cz = this.cn[3]; }
+        }
+      }
       for (const fl of L.floors) {
         if (fl.y1 <= y + 0.25 || fl.y0 >= y + h) continue; // floor not overlapping the body (allow stepping onto low ledges)
         for (let k = fl.panelStart; k < fl.panelStart + fl.panelCount; k++) {
@@ -213,43 +260,72 @@ export class Collision {
     for (const prov of this.obstacleProviders) prov(res.x - R, res.z - R, res.x + R, res.z + R, (o) => {
       if (o.y1 - o.y0 < minH) return;
       if (y >= o.y1 - step || y + h <= o.y0) return;
-      let nx = 0, nz = 0, push = 0, cx = 0, cz = 0;
-      if (o.cyl) {
-        const dx = res.x - o.x, dz = res.z - o.z;
-        const d = Math.hypot(dx, dz), rr = r + o.r;
-        if (d >= rr) return;
-        if (d > 1e-5) { nx = dx / d; nz = dz / d; } else { const a = Math.hypot(px - o.x, pz - o.z) || 1; nx = (px - o.x) / a; nz = (pz - o.z) / a; }
-        push = rr - d;
-        cx = o.x + nx * o.r; cz = o.z + nz * o.r;
-      } else {
-        // Box frame: u along (ux, uz), w across.
-        const dx = res.x - o.x, dz = res.z - o.z;
-        const u = dx * o.ux + dz * o.uz, w = -dx * o.uz + dz * o.ux;
-        if (Math.abs(u) >= o.hx + r || Math.abs(w) >= o.hz + r) return;
-        const cu = Math.max(-o.hx, Math.min(o.hx, u)), cw = Math.max(-o.hz, Math.min(o.hz, w));
-        let lu = 0, lw = 0;
-        const d = Math.hypot(u - cu, w - cw);
-        if (d > 1e-5) {
-          if (d >= r) return;
-          lu = (u - cu) / d; lw = (w - cw) / d;
-          push = r - d;
-        } else {
-          // Inside: leave on the side we came from (previous position), least penetration.
-          const pu = (px - o.x) * o.ux + (pz - o.z) * o.uz, pw = -(px - o.x) * o.uz + (pz - o.z) * o.ux;
-          const penU = o.hx + r - Math.abs(u), penW = o.hz + r - Math.abs(w);
-          const outsideU = Math.abs(pu) >= o.hx, outsideW = Math.abs(pw) >= o.hz;
-          if ((outsideU && !outsideW) || (!outsideW && penU <= penW)) { lu = Math.sign(pu || u) || 1; push = penU; }
-          else { lw = Math.sign(pw || w) || 1; push = penW; }
-        }
-        nx = lu * o.ux - lw * o.uz; nz = lu * o.uz + lw * o.ux;
-        cx = o.x + cu * o.ux - cw * o.uz; cz = o.z + cu * o.uz + cw * o.ux;
-      }
-      if (push <= 0) return;
-      res.x += nx * push;
-      res.z += nz * push;
-      res.hit = true;
-      if (push > best) { best = push; res.nx = nx; res.nz = nz; res.cx = cx; res.cz = cz; res.building = null; }
+      const push = this.pushBox(o, r, px, pz);
+      if (push > best) { best = push; res.nx = this.cn[0]; res.nz = this.cn[1]; res.cx = this.cn[2]; res.cz = this.cn[3]; res.building = null; }
     });
+  }
+
+  /** Contact of the last push: normal (x, z) and contact point (x, z). */
+  private cn = [0, 0, 0, 0];
+
+  /** Push the body (res.x, res.z, radius r) out of an obstacle's footprint; returns the push depth. */
+  private pushBox(o: Pick<Obstacle, 'cyl' | 'x' | 'z' | 'r' | 'hx' | 'hz' | 'ux' | 'uz'>, r: number, px: number, pz: number): number {
+    let nx = 0, nz = 0, push = 0, cx = 0, cz = 0;
+    if (o.cyl) {
+      const dx = res.x - o.x, dz = res.z - o.z;
+      const d = Math.hypot(dx, dz), rr = r + o.r;
+      if (d >= rr) return 0;
+      if (d > 1e-5) { nx = dx / d; nz = dz / d; } else { const a = Math.hypot(px - o.x, pz - o.z) || 1; nx = (px - o.x) / a; nz = (pz - o.z) / a; }
+      push = rr - d;
+      cx = o.x + nx * o.r; cz = o.z + nz * o.r;
+    } else {
+      // Box frame: u along (ux, uz), w across.
+      const dx = res.x - o.x, dz = res.z - o.z;
+      const u = dx * o.ux + dz * o.uz, w = -dx * o.uz + dz * o.ux;
+      if (Math.abs(u) >= o.hx + r || Math.abs(w) >= o.hz + r) return 0;
+      const cu = Math.max(-o.hx, Math.min(o.hx, u)), cw = Math.max(-o.hz, Math.min(o.hz, w));
+      let lu = 0, lw = 0;
+      const d = Math.hypot(u - cu, w - cw);
+      if (d > 1e-5) {
+        if (d >= r) return 0;
+        lu = (u - cu) / d; lw = (w - cw) / d;
+        push = r - d;
+      } else {
+        // Inside: leave on the side we came from (previous position), least penetration.
+        const pu = (px - o.x) * o.ux + (pz - o.z) * o.uz, pw = -(px - o.x) * o.uz + (pz - o.z) * o.ux;
+        const penU = o.hx + r - Math.abs(u), penW = o.hz + r - Math.abs(w);
+        const outsideU = Math.abs(pu) >= o.hx, outsideW = Math.abs(pw) >= o.hz;
+        if ((outsideU && !outsideW) || (!outsideW && penU <= penW)) { lu = Math.sign(pu || u) || 1; push = penU; }
+        else { lw = Math.sign(pw || w) || 1; push = penW; }
+      }
+      nx = lu * o.ux - lw * o.uz; nz = lu * o.uz + lw * o.ux;
+      cx = o.x + cu * o.ux - cw * o.uz; cz = o.z + cu * o.uz + cw * o.ux;
+    }
+    if (push <= 0) return 0;
+    res.x += nx * push;
+    res.z += nz * push;
+    res.hit = true;
+    this.cn[0] = nx; this.cn[1] = nz; this.cn[2] = cx; this.cn[3] = cz;
+    return push;
+  }
+
+  /** Push the body out of a wall segment, staying on the side of its previous position (px, pz). */
+  private pushSeg(ax: number, az: number, bx: number, bz: number, r: number, px: number, pz: number): number {
+    const dx = bx - ax, dz = bz - az;
+    const l2 = dx * dx + dz * dz;
+    if (l2 < 1e-6) return 0;
+    const t = Math.max(0, Math.min(1, ((res.x - ax) * dx + (res.z - az) * dz) / l2));
+    const qx = ax + dx * t, qz = az + dz * t;
+    if ((res.x - qx) ** 2 + (res.z - qz) ** 2 >= r * r) return 0;
+    const l = Math.sqrt(l2);
+    let nx = dz / l, nz = -dx / l;
+    if ((px - ax) * nx + (pz - az) * nz < 0) { nx = -nx; nz = -nz; }
+    const push = r - ((res.x - qx) * nx + (res.z - qz) * nz);
+    if (push <= 0) return 0;
+    res.x += nx * push; res.z += nz * push;
+    res.hit = true;
+    this.cn[0] = nx; this.cn[1] = nz; this.cn[2] = qx; this.cn[3] = qz;
+    return push;
   }
 }
 

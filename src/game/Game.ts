@@ -47,6 +47,7 @@ import { Underground } from '../underground/Underground';
 import { Skyline } from '../stream/Skyline';
 import { FlightFX } from '../player/FlightFX';
 import { Menu } from '../ui/Menu';
+import { GameMap } from '../ui/map/GameMap';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -90,6 +91,7 @@ export class Game {
   skyline!: Skyline;
   flightFx!: FlightFX;
   menu!: Menu;
+  map!: GameMap;
   parked = new Map<number, Vehicle[]>();
   private parkedList: Vehicle[] = [];
   private clock = new THREE.Clock();
@@ -114,7 +116,9 @@ export class Game {
     const texP = tex.load((f) => progress('Generating materials', f * 0.5));
     progress('Planning the city', 0.05);
     this.terrain = new Terrain(this.profile);
-    this.pool = new WorkerPool(Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 2)));
+    // Each city worker holds the terrain and plan and builds whole cells: 4 keep streaming fast
+    // (more mainly multiplied memory - all workers live in the tab's process).
+    this.pool = new WorkerPool(Math.max(2, Math.min(4, (navigator.hardwareConcurrency || 4) - 2)));
     const macroP = this.pool.init(this.settings);
     const [macro] = await Promise.all([macroP, texP]);
     this.macro = macro;
@@ -256,6 +260,8 @@ export class Game {
         }
       }
     });
+    // The map listens to the skyline batches (building boxes, local streets, entrances for the whole city).
+    this.map = new GameMap(this);
     this.skyline.start(this.player.pos.x, this.player.pos.z);
     this.flightFx = new FlightFX(this.dust);
     this.renderer.scene.add(this.flightFx.group);
@@ -394,6 +400,7 @@ export class Game {
       this.T('gate', () => this.gate.update());
       this.T('render', () => this.renderer.render());
       this.hud.update(dt);
+      this.T('map', () => this.map.update(dt));
       this.input.endFrame();
     }
   }

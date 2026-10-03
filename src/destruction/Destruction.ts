@@ -15,7 +15,10 @@
  *  - Collapses hit their surroundings (neighbouring panels, props, people).
  */
 import * as THREE from 'three';
-import type { CityStreamer, CellState } from '../stream/CityStreamer';
+import { toGeometry, type CityStreamer, type CellState } from '../stream/CityStreamer';
+import { MeshBuilder } from '../build/meshBuilder';
+import { buildBuildingShell, facadeSpecs } from '../build/buildingShell';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import { buildingLayout, gridPoint, type BuildingLayout, type Panel, type FloorInfo } from '../build/buildingLayout';
 import type { Terrain } from '../world/terrain';
@@ -138,6 +141,33 @@ export class Destruction {
     return L;
   }
 
+  /**
+   * The storey slabs of a building. Cells stream without them (they are most of a tower's
+   * triangles and only show through broken walls); they are built here the first time the
+   * building is damaged, in the cell's facade material so element states apply.
+   */
+  private ensureSlabs(ref: BuildingRef): THREE.Mesh | null {
+    const cs = ref.cell;
+    const name = 'slabs:' + ref.index;
+    const have = cs.group.getObjectByName(name) as THREE.Mesh | undefined;
+    if (have) return have;
+    const facade = cs.group.children.find((o) => o.name === 'facade') as THREE.Mesh | undefined;
+    if (!facade || !cs.facadeMat) return null;
+    const mb = new MeshBuilder(facadeSpecs());
+    mb.setOrigin(facade.position.x, facade.position.y, facade.position.z);
+    buildBuildingShell(mb, ref.desc, ref.elemBase, this.terrain, 0, 'slabs');
+    if (mb.empty) return null;
+    const data = mb.build();
+    const mesh = new THREE.Mesh(toGeometry(data), cs.facadeMat);
+    mesh.position.set(...data.origin);
+    mesh.customDepthMaterial = facade.customDepthMaterial;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.name = name;
+    cs.group.add(mesh);
+    this.streamer.account(cs, mesh.geometry);
+    return mesh;
+  }
+
   /** Rubble height at (x,z) (for walking on it), 0 if none. */
   rubbleHeight(x: number, z: number): number {
     let h = -Infinity;
@@ -216,6 +246,7 @@ export class Destruction {
 
   private breakPanel(ref: BuildingRef, p: Panel, dx: number, dy: number, dz: number, power: number): void {
     const cs = ref.cell;
+    this.ensureSlabs(ref);
     this.streamer.setElement(cs, p.e, false);
     const w = Math.hypot(p.bx - p.ax, p.bz - p.az), h = p.y1 - p.y0;
     const tint = new THREE.Color(0.85, 0.82, 0.78);
@@ -490,9 +521,11 @@ export class Destruction {
       for (let k = fl.panelStart; k < fl.panelStart + fl.panelCount; k++) set.add(L.panels[k].e);
     }
     set.add(L.roof);
-    // Extract geometry of those elements.
-    const geo = extractElements(facade.geometry, set);
-    if (!geo) return;
+    // Extract geometry of those elements (shell, and the slabs if they were built).
+    const slabs = this.ensureSlabs(ref);
+    const parts = [extractElements(facade.geometry, set), slabs ? extractElements(slabs.geometry, set) : null].filter((g): g is THREE.BufferGeometry => !!g);
+    if (!parts.length) return;
+    const geo = parts.length > 1 ? mergeGeometries(parts) ?? parts[0] : parts[0];
     // Hide them in the static mesh; debris resting on the falling part comes down too.
     for (const e of set) this.streamer.setElement(cs, e, false);
     {
@@ -690,6 +723,7 @@ export class Destruction {
 
   /** A load from above broke the slab or roof at height y: drop it (and check the structure). */
   crushAt(ref: BuildingRef, y: number): void {
+    this.ensureSlabs(ref);
     const L = this.layoutOf(ref);
     const cs = ref.cell;
     if (Math.abs(L.base + L.height - y) < 0.8) this.streamer.setElement(cs, L.roof, false);

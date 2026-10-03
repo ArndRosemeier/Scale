@@ -12,7 +12,7 @@ import { gridPoint, type SlabGrid } from './buildingLayout';
 import type { Terrain } from '../world/terrain';
 import type { BuildingDesc } from '../plan/building';
 import { MeshBuilder } from './meshBuilder';
-import { buildingLayout, doorBayOf, type BuildingLayout } from './buildingLayout';
+import { buildingLayout, doorBayOf, type BuildingLayout, type FloorInfo } from './buildingLayout';
 
 /** Facade flags (bit field stored in aFacade.w). */
 export const enum FF {
@@ -65,7 +65,14 @@ let SIMPLE = false;
 
 const CLASSICAL = new Set(['rowhouse', 'tenement', 'haussmann', 'artdeco', 'oldstone', 'mediterranean', 'church']);
 
-export function buildBuildingShell(mb: MeshBuilder, b: BuildingDesc, elemBase: number, terrain: Terrain, lod = 0): BuildingGeomInfo & { layout: BuildingLayout } {
+/**
+ * Which part to build: the whole building, the visible shell without the storey slabs, or
+ * only the slabs. Slabs are ~60% of a tower's triangles but are seen only through broken
+ * walls, so cells stream the shell and a building's slabs are built when it is first damaged.
+ */
+export type ShellPart = 'all' | 'shell' | 'slabs';
+
+export function buildBuildingShell(mb: MeshBuilder, b: BuildingDesc, elemBase: number, terrain: Terrain, lod = 0, part: ShellPart = 'all'): BuildingGeomInfo & { layout: BuildingLayout } {
   SIMPLE = lod > 0;
   const r = new Rng(b.seed);
   const L = buildingLayout(b, terrain, elemBase);
@@ -104,11 +111,30 @@ export function buildBuildingShell(mb: MeshBuilder, b: BuildingDesc, elemBase: n
     walls(mb, b.poly, low, base, 0, null, -1);
     mb.set('aTint', ...tint);
   }
+  // ---- entrance steps up to a raised ground floor (same stone, breaks with the plinth)
+  if (L.stoop) {
+    const S = L.stoop;
+    mb.set('aLayer', 13).set('aFacade', 2, 3, 3, 0).set('aElem', L.plinth);
+    mb.set('aTint', tint[0] * 0.85, tint[1] * 0.85, tint[2] * 0.85);
+    // Local x along the facade, local -z outwards; no bottom face, no back face (against the plinth).
+    const yaw = Math.atan2(-S.uz, S.ux);
+    for (let k = 0; k < S.boxes.length; k += 5) {
+      const hy = (S.boxes[k + 4] - S.foot) / 2;
+      mb.box(S.boxes[k], S.foot + hy, S.boxes[k + 1], S.boxes[k + 2], hy, S.boxes[k + 3], yaw, 1 | 2 | 4 | 32);
+    }
+    mb.set('aTint', ...tint);
+  }
 
   // ---- wall panels (one element per bay group per floor) and floor slabs
   mb.set('aLayer', b.wall);
+  // Slab tile pieces per tier (clipped once, reused for every storey of the tier).
+  const tierPieces = new Map<number, { ip: number[]; tiles: Map<number, number[][]> }>();
   for (const fl of L.floors) {
     const poly = tiers[fl.tier].poly;
+    if (part === 'slabs') {
+      if (lod === 0) emitSlab(fl, poly);
+      continue;
+    }
     if (lod > 0) {
       // LOD1: one quad per edge and floor (element = the middle panel, so collapses still show).
       let k = fl.panelStart;
@@ -146,21 +172,30 @@ export function buildBuildingShell(mb: MeshBuilder, b: BuildingDesc, elemBase: n
       mb.v(p.ax, p.y1, p.az, p.nx, 0, p.nz, p.u0, v1);
       mb.quad(i0, i0 + 3, i0 + 2, i0 + 1);
     }
-    // Slab: floor surface of this storey (seen through broken walls and from inside).
-    // Slab: floor surface of this storey (seen through broken walls and from inside), one
-    // piece per slab tile so floors break up piece by piece.
-    mb.set('aLayer', 8).set('aFacade', 1, 1, 1, FF.Roof).set('aTint', 0.82, 0.8, 0.77);
-    const inner = offset([poly], -0.25, 'miter');
-    const ip = inner.length ? ensureCCW(inner[0].outer) : poly;
+    if (part === 'all') emitSlab(fl, poly);
+  }
+  if (part === 'slabs') return { base, low, height: H, elemCount: L.elemCount, topY: base + H, layout: L };
+
+  /** Slab: floor and ceiling of a storey, one piece per slab tile so floors break up piece by piece. */
+  function emitSlab(fl: FloorInfo, poly: number[]): void {
+    let tp = tierPieces.get(fl.tier);
+    if (!tp) {
+      const inner = offset([poly], -0.25, 'miter');
+      tierPieces.set(fl.tier, (tp = { ip: inner.length ? ensureCCW(inner[0].outer) : poly, tiles: new Map() }));
+    }
     const grid = L.tiers[fl.tier].grid;
+    mb.set('aLayer', 8).set('aFacade', 1, 1, 1, FF.Roof).set('aTint', 0.82, 0.8, 0.77);
     for (let c = 0; c < fl.tiles.length; c++) {
       if (fl.tiles[c] < 0) continue;
-      const i = Math.floor(c / grid.nv), j = c % grid.nv;
-      const u0 = grid.u0 + i * grid.size, v0 = grid.v0 + j * grid.size, u1 = u0 + grid.size, v1 = v0 + grid.size;
-      const rect = [...gridPoint(grid, u0, v0), ...gridPoint(grid, u1, v0), ...gridPoint(grid, u1, v1), ...gridPoint(grid, u0, v1)];
+      let polys = tp.tiles.get(c);
+      if (!polys) {
+        const i = Math.floor(c / grid.nv), j = c % grid.nv;
+        const u0 = grid.u0 + i * grid.size, v0 = grid.v0 + j * grid.size, u1 = u0 + grid.size, v1 = v0 + grid.size;
+        const rect = [...gridPoint(grid, u0, v0), ...gridPoint(grid, u1, v0), ...gridPoint(grid, u1, v1), ...gridPoint(grid, u0, v1)];
+        tp.tiles.set(c, (polys = shapesToPolys(intersection([ensureCCW(rect)], [tp.ip])).map(ensureCCW)));
+      }
       mb.set('aElem', fl.tiles[c]);
-      for (const piece of shapesToPolys(intersection([ensureCCW(rect)], [ip]))) {
-        const q = ensureCCW(piece);
+      for (const q of polys) {
         cap(mb, q, fl.y0 + 0.02);
         cap(mb, q, fl.y1 - 0.02, true);
       }

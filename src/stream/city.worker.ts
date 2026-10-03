@@ -6,7 +6,7 @@
 import { makeProfile } from '../world/settings';
 import { Terrain } from '../world/terrain';
 import { buildMacroPlan } from '../plan/macro';
-import { planCell } from '../plan/cell';
+import { planCell, type CellPlan } from '../plan/cell';
 import type { MacroPlan } from '../plan/types';
 import { buildGround } from '../build/ground';
 import { MeshBuilder, meshTransferables, type MeshData } from '../build/meshBuilder';
@@ -14,7 +14,7 @@ import { buildBuildingShell, facadeSpecs } from '../build/buildingShell';
 import { buildTerrainTile, buildWaterTile } from '../build/terrainMesh';
 import { riverChunks, seaPolygon } from '../plan/water';
 import { polyCentroid } from '../core/geom2';
-import { BINFO_STRIDE, SKY_STRIDE, type FromWorker, type ToWorker } from './protocol';
+import { BINFO_STRIDE, SKY_STRIDE, MapItem, type FromWorker, type ToWorker } from './protocol';
 import { minAreaRect } from '../core/geom2';
 import { buildingBase, buildingHeight } from '../build/buildingLayout';
 import { buildBridges } from '../build/bridges';
@@ -54,7 +54,8 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       const binfo = new Float32Array(plan.buildings.length * BINFO_STRIDE);
       let elem = 0;
       plan.buildings.forEach((b, i) => {
-        const info = buildBuildingShell(fb, b, elem, terrain!);
+        // Storey slabs are built on demand when a building gets damaged (Destruction.ensureSlabs).
+        const info = buildBuildingShell(fb, b, elem, terrain!, 0, 'shell');
         const c = polyCentroid(b.poly);
         let rad = 0;
         for (let k = 0; k < b.poly.length; k += 2) rad = Math.max(rad, Math.hypot(b.poly[k] - c[0], b.poly[k + 1] - c[1]));
@@ -85,9 +86,13 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
     if (m.type === 'skyline') {
       const out: number[] = [];
       const counts: number[] = [];
+      const map: number[] = [];
+      const mapOff: number[] = [];
       for (const id of m.cells) {
         const cell = macro.cells[id];
         const plan = planCell(macro, cell, terrain);
+        mapOff.push(map.length);
+        packMapItems(plan, map);
         let n = 0;
         for (const b of plan.buildings) {
           const o = minAreaRect(b.poly);
@@ -102,9 +107,11 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
         }
         counts.push(n);
       }
+      mapOff.push(map.length);
       const records = Float32Array.from(out);
+      const mapData = Float32Array.from(map);
       void SKY_STRIDE;
-      post({ type: 'skyline', job: m.job, cells: m.cells, records, counts }, [records.buffer]);
+      post({ type: 'skyline', job: m.job, cells: m.cells, records, counts, map: mapData, mapOff: Int32Array.from(mapOff) }, [records.buffer, mapData.buffer]);
       return;
     }
     if (m.type === 'bridges') {
@@ -117,3 +124,16 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
     post({ type: 'error', job: (m as { job?: number }).job ?? -1, message: String((e as Error)?.stack ?? e) });
   }
 };
+
+/** Local streets, parks, plazas and metro entrances of a cell for the in-game map. */
+function packMapItems(plan: CellPlan, out: number[]): void {
+  const poly = (kind: MapItem, a: number, b: number, pts: ArrayLike<number>) => {
+    out.push(kind, a, b, pts.length >> 1);
+    for (let i = 0; i < pts.length; i++) out.push(pts[i]);
+  };
+  for (const s of plan.streets) if (s.arterial < 0) poly(MapItem.Street, s.cls, s.width, s.pts);
+  for (const p of plan.parks) poly(MapItem.Park, 0, 0, p.outer);
+  for (const p of plan.plazas) poly(MapItem.Plaza, 0, 0, p.outer);
+  const E = plan.entrances;
+  for (let i = 0; i < E.length; i += 6) poly(MapItem.Entrance, E[i + 4], E[i + 5], [E[i], E[i + 1], E[i + 2], E[i + 3]]);
+}

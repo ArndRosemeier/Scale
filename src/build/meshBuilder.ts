@@ -17,10 +17,39 @@ export interface MeshData {
   bounds: [number, number, number, number, number, number];
 }
 
+type Store = Float32Array | Uint8Array | Uint16Array | Int8Array;
+
+/** Growable typed array of an attribute's final storage type (8-bit types quantised on write). */
+class AttrBuf {
+  arr: Store;
+  n = 0;
+  constructor(readonly type: NonNullable<AttrSpec['type']>, cap: number) { this.arr = this.alloc(cap); }
+  private alloc(n: number): Store {
+    return this.type === 'u8n' ? new Uint8Array(n) : this.type === 'i8n' ? new Int8Array(n) : this.type === 'u16' ? new Uint16Array(n) : new Float32Array(n);
+  }
+  reserve(k: number): void {
+    if (this.n + k <= this.arr.length) return;
+    const a = this.alloc(Math.max(this.n + k, this.arr.length * 2));
+    a.set(this.arr.subarray(0, this.n));
+    this.arr = a;
+  }
+  put(v: number): void {
+    const t = this.type;
+    this.arr[this.n++] = t === 'u8n' ? Math.max(0, Math.min(255, Math.round(v * 255))) : t === 'i8n' ? Math.max(-127, Math.min(127, Math.round(v * 127))) : v;
+  }
+  done(): Store { return this.arr.slice(0, this.n); }
+}
+
+/**
+ * Accumulates vertices straight into typed arrays: a downtown cell has millions of values,
+ * and plain number arrays (8+ bytes each plus growth slack, in every worker) cost gigabytes.
+ */
 export class MeshBuilder {
   readonly specs: AttrSpec[];
-  private data: Record<string, number[]> = {};
-  readonly index: number[] = [];
+  private data: Record<string, AttrBuf> = {};
+  private other: { s: AttrSpec; b: AttrBuf; c: number[] }[] = [];
+  private idx = new Uint32Array(1024);
+  private ni = 0;
   vcount = 0;
   ox = 0; oy = 0; oz = 0;
   /** Current values for constant-per-batch attributes. */
@@ -29,8 +58,9 @@ export class MeshBuilder {
   constructor(specs: AttrSpec[]) {
     this.specs = [{ name: 'position', size: 3 }, { name: 'normal', size: 3 }, ...specs];
     for (const s of this.specs) {
-      this.data[s.name] = [];
+      this.data[s.name] = new AttrBuf(s.type ?? 'f32', 256 * s.size);
       this.cur[s.name] = new Array(s.size).fill(0);
+      if (s.name !== 'position' && s.name !== 'normal' && s.name !== 'uv') this.other.push({ s, b: this.data[s.name], c: this.cur[s.name] });
     }
   }
 
@@ -47,24 +77,37 @@ export class MeshBuilder {
   /** Add a vertex with world position, normal and optional uv; other attrs from `cur`. */
   v(x: number, y: number, z: number, nx: number, ny: number, nz: number, u = 0, w = 0): number {
     const d = this.data;
-    d.position.push(x - this.ox, y - this.oy, z - this.oz);
-    d.normal.push(nx, ny, nz);
-    for (const s of this.specs) {
-      if (s.name === 'position' || s.name === 'normal') continue;
-      if (s.name === 'uv') { d.uv.push(u, w); continue; }
-      const c = this.cur[s.name];
-      const arr = d[s.name];
-      for (let i = 0; i < s.size; i++) arr.push(c[i]);
+    const P = d.position, N = d.normal;
+    P.reserve(3); N.reserve(3);
+    P.put(x - this.ox); P.put(y - this.oy); P.put(z - this.oz);
+    N.put(nx); N.put(ny); N.put(nz);
+    const uv = d.uv;
+    if (uv) { uv.reserve(2); uv.put(u); uv.put(w); }
+    for (const o of this.other) {
+      o.b.reserve(o.s.size);
+      for (let i = 0; i < o.s.size; i++) o.b.put(o.c[i]);
     }
     return this.vcount++;
   }
 
+  private ensureIdx(k: number): void {
+    if (this.ni + k <= this.idx.length) return;
+    const a = new Uint32Array(Math.max(this.ni + k, this.idx.length * 2));
+    a.set(this.idx.subarray(0, this.ni));
+    this.idx = a;
+  }
+
   tri(a: number, b: number, c: number): void {
-    this.index.push(a, b, c);
+    this.ensureIdx(3);
+    const I = this.idx;
+    I[this.ni++] = a; I[this.ni++] = b; I[this.ni++] = c;
   }
 
   quad(a: number, b: number, c: number, d: number): void {
-    this.index.push(a, b, c, a, c, d);
+    this.ensureIdx(6);
+    const I = this.idx;
+    I[this.ni++] = a; I[this.ni++] = b; I[this.ni++] = c;
+    I[this.ni++] = a; I[this.ni++] = c; I[this.ni++] = d;
   }
 
   /** Planar quad from 4 corners (CCW seen from the normal side); uv per corner. */
@@ -135,22 +178,19 @@ export class MeshBuilder {
   build(): MeshData {
     const attrs: MeshData['attrs'] = {};
     let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
-    const pos = this.data.position;
-    for (let i = 0; i < pos.length; i += 3) {
+    const pos = this.data.position.arr, n = this.data.position.n;
+    for (let i = 0; i < n; i += 3) {
       const x = pos[i], y = pos[i + 1], z = pos[i + 2];
       if (x < x0) x0 = x; if (x > x1) x1 = x;
       if (y < y0) y0 = y; if (y > y1) y1 = y;
       if (z < z0) z0 = z; if (z > z1) z1 = z;
     }
     for (const s of this.specs) {
-      const src = this.data[s.name];
       const t = s.type ?? 'f32';
-      if (t === 'f32') attrs[s.name] = { array: Float32Array.from(src), size: s.size, normalized: false };
-      else if (t === 'u8n') attrs[s.name] = { array: Uint8Array.from(src, (v) => Math.max(0, Math.min(255, Math.round(v * 255)))), size: s.size, normalized: true };
-      else if (t === 'i8n') attrs[s.name] = { array: Int8Array.from(src, (v) => Math.max(-127, Math.min(127, Math.round(v * 127)))), size: s.size, normalized: true };
-      else attrs[s.name] = { array: Uint16Array.from(src), size: s.size, normalized: false };
+      attrs[s.name] = { array: this.data[s.name].done(), size: s.size, normalized: t === 'u8n' || t === 'i8n' };
     }
-    const index = this.vcount < 65536 ? Uint16Array.from(this.index) : Uint32Array.from(this.index);
+    const I = this.idx.subarray(0, this.ni);
+    const index = this.vcount < 65536 ? Uint16Array.from(I) : I.slice();
     return { attrs, index, origin: [this.ox, this.oy, this.oz], bounds: [x0, y0, z0, x1, y1, z1] };
   }
 }

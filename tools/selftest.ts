@@ -6,7 +6,9 @@ import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
 import { planCell } from '../src/plan/cell';
-import { buildingLayout } from '../src/build/buildingLayout';
+import { buildingLayout, gridCell, stoopTop, type BuildingLayout } from '../src/build/buildingLayout';
+import { CURB_H } from '../src/build/ground';
+import type { BuildingDesc } from '../src/plan/building';
 import { pointInPoly } from '../src/core/geom2';
 import { Population } from '../src/sim/Population';
 
@@ -21,7 +23,57 @@ const hashPlan = (o: unknown) => {
   return h >>> 0;
 };
 
-for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7]] as const) {
+/**
+ * Ground floor of a building (on slopes too): the terrain stays below the floor everywhere
+ * under the footprint, every point of the footprint has a slab tile (no hole to sink
+ * through), and the door is reachable from the street in steps a walker can take
+ * (no rise over 0.31 m from the ground in front, up the stoop, through the door).
+ */
+function groundFloorFaults(b: BuildingDesc, L: BuildingLayout, terrain: Terrain): number {
+  let faults = 0;
+  const fl = L.floors[0], grid = L.tiers[fl.tier].grid;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < b.poly.length; i += 2) { x0 = Math.min(x0, b.poly[i]); x1 = Math.max(x1, b.poly[i]); z0 = Math.min(z0, b.poly[i + 1]); z1 = Math.max(z1, b.poly[i + 1]); }
+  for (let x = x0; x <= x1; x += 1.5) for (let z = z0; z <= z1; z += 1.5) {
+    if (!pointInPoly(b.poly, x, z)) continue;
+    if (terrain.height(x, z) > fl.y0 + 1e-3) faults++;
+    const c = gridCell(grid, x, z);
+    if (c < 0 || fl.tiles[c] < 0) faults++;
+  }
+  // Walk from the street to the door: past the lowest step, up the boxes, into the door.
+  const n = b.poly.length >> 1, i = L.door.edge, j = (i + 1) % n;
+  const ex = b.poly[j * 2] - b.poly[i * 2], ez = b.poly[j * 2 + 1] - b.poly[i * 2 + 1], el = Math.hypot(ex, ez);
+  const nx = ez / el, nz = -ex / el;
+  const S = L.stoop;
+  const h = (x: number, z: number) => pointInPoly(b.poly, x, z) ? fl.y0 : Math.max(terrain.height(x, z) + CURB_H, S ? stoopTop(S, x, z) : -Infinity);
+  const pts: [number, number][] = [];
+  if (S) {
+    const ord: number[] = [];
+    for (let k = 0; k < S.boxes.length; k += 5) ord.push(k);
+    ord.sort((p, q) => S.boxes[p + 4] - S.boxes[q + 4]);
+    const lo = ord[0], nx2 = ord[1] ?? lo;
+    let dx = S.boxes[lo] - S.boxes[nx2], dz = S.boxes[lo + 1] - S.boxes[nx2 + 1];
+    if (Math.hypot(dx, dz) < 1e-6) { dx = nx; dz = nz; }
+    const dl = Math.hypot(dx, dz);
+    pts.push([S.boxes[lo] + (dx / dl) * 1.5, S.boxes[lo + 1] + (dz / dl) * 1.5]);
+    for (const k of ord) pts.push([S.boxes[k], S.boxes[k + 1]]);
+  } else pts.push([L.door.x + nx * 1.5, L.door.z + nz * 1.5]);
+  pts.push([L.door.x + nx * 0.3, L.door.z + nz * 0.3], [L.door.x - nx * 0.8, L.door.z - nz * 0.8]);
+  let prev = h(pts[0][0], pts[0][1]), rise = 0;
+  for (let q = 0; q + 1 < pts.length; q++) {
+    const [ax, az] = pts[q], [bx, bz] = pts[q + 1];
+    const m = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.05);
+    for (let t = 1; t <= m; t++) {
+      const y = h(ax + ((bx - ax) * t) / m, az + ((bz - az) * t) / m);
+      rise = Math.max(rise, y - prev);
+      prev = y;
+    }
+  }
+  if (rise > 0.31) faults++;
+  return faults;
+}
+
+for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) {
   const t0 = performance.now();
   const profile = makeProfile({ seed, size });
   const terrain = new Terrain(profile);
@@ -33,7 +85,7 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7]] as const) {
   // Cells near the centre.
   const c0 = macro.centres[0];
   const near = macro.cells.slice().sort((a, b) => Math.hypot(a.centroid[0] - c0.x, a.centroid[1] - c0.z) - Math.hypot(b.centroid[0] - c0.x, b.centroid[1] - c0.z)).slice(0, 6);
-  let buildings = 0, overlapRoad = 0, outside = 0;
+  let buildings = 0, overlapRoad = 0, outside = 0, floorFaults = 0;
   for (const c of near) {
     const p1 = planCell(macro, c, terrain), p2 = planCell(macro, c, terrain);
     check(hashPlan(p1.buildings) === hashPlan(p2.buildings), `seed ${seed} cell ${c.id}: cell plan deterministic`);
@@ -46,9 +98,11 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7]] as const) {
       for (const s of p1.carriageway) if (pointInPoly(s.outer, cx, cz) && !s.holes.some((h) => pointInPoly(h, cx, cz))) { overlapRoad++; break; }
       const L = buildingLayout(b, terrain, 0);
       check(L.panels.length > 0 && L.elemCount > L.panels.length, `building layout has panels and elements`);
+      floorFaults += groundFloorFaults(b, L, terrain);
     }
   }
   check(buildings > 0, `seed ${seed}: buildings generated (${buildings})`);
+  check(floorFaults === 0, `seed ${seed}: ground floors above the terrain, fully tiled and reachable from the street (${floorFaults} faults)`);
   check(outside === 0, `seed ${seed}: buildings inside their cells (${outside} outside)`);
   check(overlapRoad < buildings * 0.01 + 1, `seed ${seed}: buildings off the road (${overlapRoad})`);
   // Metro stations are on land.
