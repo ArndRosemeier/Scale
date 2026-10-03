@@ -457,10 +457,11 @@ export class Traffic {
       if (!v.turn) { v.fwd = !v.fwd; v.route = this.randomRoute(v.edge, v.fwd, 10); v.ri = 0; this.onHorn?.(v); }
     }
     if (v.turn) {
-      // Junction connector at reduced speed: stopping for a robot in the way, the queue on the
-      // lane it turns into and cars in the box that cross its path.
+      // Junction connector at reduced speed: stopping for a robot in the way, people and the
+      // player on the crossing (a getaway car can be blocked here too), the queue on the lane it
+      // turns into and cars in the box that cross its path.
       let target = Math.min(v.vmax, 7);
-      const og = Math.min(this.obstacleAhead(v, 10), this.boxGap(v));
+      const og = Math.min(this.obstacleAhead(v, 10), this.boxGap(v), this.pedAhead(v, this.net.edges[v.edge]));
       if (og < Infinity) target = Math.min(target, Math.sqrt(12 * Math.max(0, og - 0.3)));
       if (og <= 0.3) { v.speed = 0; v.brake = 1; }
       else if (target < v.speed - 0.5) { v.speed = Math.max(target, v.speed - 9 * dt); v.brake = 1; }
