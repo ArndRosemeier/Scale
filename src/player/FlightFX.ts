@@ -44,7 +44,8 @@ export class FlightFX {
     const k = p.k, sk = Math.sqrt(k);
     const v = p.vel.length();
     const rel = v / sk; // speed in "body lengths" terms
-    const on = p.flying ? Math.min(1, Math.max(0, (rel - 18) / 60)) : 0;
+    // Streaks in fast flight and at super speed on foot.
+    const on = p.flying || p.speeding ? Math.min(1, Math.max(0, (rel - 18) / 60)) : 0;
     this.mat.opacity = on * 0.35;
     const R = 6 * p.height + 4;
     const dir = rel > 1 ? p.vel.clone().normalize() : new THREE.Vector3(0, 0, -1);

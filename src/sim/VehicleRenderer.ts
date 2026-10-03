@@ -8,6 +8,7 @@ import { VState, type Vehicle } from './Traffic';
 import type { Physics } from '../physics/Physics';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { G } from '../render/materials/globals';
+import { statusOf } from '../shared/status';
 
 const CAP = 160;
 const MOVE_RANGE = 420;
@@ -91,7 +92,7 @@ export class VehicleRenderer {
     const ex = this.extra(v);
     if (ex.body) { ex.body.applyImpulseAtPoint({ x: jx, y: jy, z: jz }, { x: ix, y: iy, z: iz }, true); return; }
     const m = this.bucket(v.kind as VehicleKind, v.variant).model;
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), v.yaw);
+    const q = new THREE.Quaternion().setFromEuler(_eul.set(v.pitch ?? 0, v.yaw, v.roll ?? 0, 'YXZ'));
     const body = this.physics.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(v.x, v.y + m.height / 2, v.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
       .setLinvel(-Math.sin(v.yaw) * v.speed, 0, -Math.cos(v.yaw) * v.speed).setAngularDamping(0.4));
     this.physics.world.createCollider(R.ColliderDesc.cuboid(m.width / 2, m.height / 2, m.length / 2).setMass(m.mass).setFriction(0.7).setRestitution(0.2), body);
@@ -136,10 +137,13 @@ export class VehicleRenderer {
       ex.spin += (v.speed * dt) / b.model.wheelRadius;
       if (v.paint[0] + v.paint[1] + v.paint[2] === 0) v.paint = paintColor(v.kind as VehicleKind, v.id);
       const crushed = v.state === VState.Crushed;
-      if (ex.q && ex.body) this.q.copy(ex.q);
-      else this.q.setFromAxisAngle(_up, v.yaw);
+      // A wreck keeps the attitude it came to rest in; cars sit on the road surface.
+      if (ex.q) this.q.copy(ex.q);
+      else this.q.setFromEuler(_eul.set(v.pitch ?? 0, v.yaw, v.roll ?? 0, 'YXZ'));
       this.p.set(v.x, v.y, v.z);
-      this.s.set(crushed ? 1.08 : 1, crushed ? 0.38 : 1, crushed ? 1.04 : 1);
+      // Shrink ray: a tiny car (it keeps driving).
+      const sc = statusOf(v)?.scale ?? 1;
+      this.s.set((crushed ? 1.08 : 1) * sc, (crushed ? 0.38 : 1) * sc, (crushed ? 1.04 : 1) * sc);
       this.m4.compose(this.p, this.q, this.s);
       b.body.setMatrixAt(k, this.m4);
       b.paint.setXYZ(k, v.paint[0], v.paint[1], v.paint[2]);
@@ -158,7 +162,7 @@ export class VehicleRenderer {
         _lp.set(w[0], w[1] * (crushed ? 0.6 : 1), w[2]);
         _ls.set(left ? -1 : 1, 1, 1);
         _local.compose(_lp, this.q2, _ls);
-        _world.compose(this.p, this.q, crushed ? this.s : _one).multiply(_local);
+        _world.compose(this.p, this.q, crushed || sc !== 1 ? this.s : _one).multiply(_local);
         b.wheels.setMatrixAt(j, _world);
         b.wPaint.setXYZ(j, 0.2, 0.2, 0.2);
         b.wState.setXYZW(j, 0, 0, 0, v.damage);
@@ -181,7 +185,6 @@ export class VehicleRenderer {
   }
 }
 
-const _up = new THREE.Vector3(0, 1, 0);
 const _one = new THREE.Vector3(1, 1, 1);
 const _eul = new THREE.Euler();
 const _lp = new THREE.Vector3();

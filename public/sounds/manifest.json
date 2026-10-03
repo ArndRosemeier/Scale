@@ -373,5 +373,45 @@
     "loop": true,
     "gain": 0.5,
     "description": "quadcopter rotor buzz loop (procedural, tools/synthDroneBuzz.mjs)"
+  },
+  "dash_whoosh": {
+    "files": [
+      "dash_whoosh.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "dash burst of air (procedural, tools/synthDashWhoosh.mjs)"
+  },
+  "bird_flutter": {
+    "files": [
+      "bird_flutter.wav"
+    ],
+    "loop": false,
+    "gain": 0.45,
+    "description": "a few pigeons flushing, wing claps (procedural, tools/synthBirds.mjs)"
+  },
+  "pigeon_coo": {
+    "files": [
+      "pigeon_coo.wav"
+    ],
+    "loop": false,
+    "gain": 0.3,
+    "description": "soft pigeon coo (procedural, tools/synthBirds.mjs)"
+  },
+  "gull_call": {
+    "files": [
+      "gull_call.wav"
+    ],
+    "loop": false,
+    "gain": 0.35,
+    "description": "gull call kyow-kyow (procedural, tools/synthBirds.mjs)"
+  },
+  "crow_caw": {
+    "files": [
+      "crow_caw.wav"
+    ],
+    "loop": false,
+    "gain": 0.35,
+    "description": "crow caw twice (procedural, tools/synthBirds.mjs)"
   }
 }

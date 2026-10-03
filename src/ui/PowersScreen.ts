@@ -6,7 +6,7 @@
  */
 import type { Game } from '../game/Game';
 import type { AbilitySystem } from '../game/abilities/AbilitySystem';
-import { ABILITIES, ABILITY, HOTBAR_SLOTS, type AbilityId } from '../game/abilities/defs';
+import { ABILITIES, ABILITY, HOTBAR_SLOTS, GROUP_NAMES, type AbilityId } from '../game/abilities/defs';
 import { KARMA } from '../game/abilities/tuning';
 
 export class PowersScreen {
@@ -42,7 +42,7 @@ export class PowersScreen {
         </div>
         <div class="pw-list"></div>
         <div class="pw-hot">
-          <div class="pw-hot-label">Hotbar <span>drag a power onto a slot · or click a power, then a slot · or hover a power and press 1–8 · right-click a slot to clear</span></div>
+          <div class="pw-hot-label">Hotbar <span>drag a power onto a slot · or click a power, then a slot · or hover a power and press 1–9, 0 · right-click a slot to clear · Tab picks a target</span></div>
           <div class="pw-slots"></div>
         </div>
         <div class="pw-foot"></div>
@@ -68,9 +68,10 @@ export class PowersScreen {
       e.stopImmediatePropagation();
       if (e.repeat) return;
       if (e.code === 'KeyP' || e.code === 'Escape') { this.toggle(false); return; }
-      const m = /^(Digit|Numpad)([1-8])$/.exec(e.code);
+      const m = /^(Digit|Numpad)([0-9])$/.exec(e.code);
       const id = this.hovered ?? this.picked;
-      if (m && id && ABILITY[id].kind === 'active') { this.abilities.progress.assign(Number(m[2]) - 1, id); this.flashSlot(Number(m[2]) - 1); }
+      const slot = m ? (Number(m[2]) + 9) % 10 : -1;
+      if (m && id && ABILITY[id].kind === 'active' && slot < HOTBAR_SLOTS) { this.abilities.progress.assign(slot, id); this.flashSlot(slot); }
     }, true);
   }
 
@@ -98,7 +99,17 @@ export class PowersScreen {
     const pr = this.abilities.progress, sandbox = pr.sandbox;
     this.karmaEl.innerHTML = sandbox ? '' : `<b>${pr.karma}</b><span>karma</span>`;
     this.list.innerHTML = '';
-    for (const def of ABILITIES) {
+    let group = '';
+    const order = ['body', 'movement', 'elemental', 'support'];
+    const sorted = ABILITIES.slice().sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
+    for (const def of sorted) {
+      if (def.group !== group) {
+        group = def.group;
+        const h = document.createElement('div');
+        h.className = 'pw-group';
+        h.textContent = GROUP_NAMES[def.group];
+        this.list.appendChild(h);
+      }
       const r = pr.rank(def.id);
       const cost = pr.nextCost(def.id);
       const card = document.createElement('div');
@@ -146,7 +157,7 @@ export class PowersScreen {
       const def = id ? ABILITY[id] : null;
       const s = document.createElement('div');
       s.className = `pw-slot${def ? '' : ' empty'}${this.picked ? ' target' : ''}`;
-      s.innerHTML = `<span class="k">${i + 1}</span>${def ? `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span>` : '<span class="nm">empty</span>'}`;
+      s.innerHTML = `<span class="k">${(i + 1) % 10}</span>${def ? `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span>` : '<span class="nm">empty</span>'}`;
       s.draggable = !!def;
       s.ondragstart = (e) => { if (def) e.dataTransfer?.setData('text/plain', def.id); };
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('over'); };

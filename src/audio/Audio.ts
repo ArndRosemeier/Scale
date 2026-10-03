@@ -194,6 +194,11 @@ export class Audio {
     };
   }
 
+  /** The effects bus for procedural sounds (PowerSynth); null until audio has started. */
+  synthOut(): { ctx: AudioContext; out: AudioNode } | null {
+    return this.ctx && this.enabled ? { ctx: this.ctx, out: this.sfxBus } : null;
+  }
+
   /** Set target levels for ambience layers (0..1); they crossfade smoothly. */
   setAmbience(levels: Partial<Record<AmbienceLayer, number>>, rates: Partial<Record<AmbienceLayer, number>> = {}): void {
     if (!this.ctx) return;

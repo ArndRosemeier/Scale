@@ -13,7 +13,7 @@ import { randomAppearance } from '../humanoid/appearance';
 import { cityOutfit } from '../humanoid/client/wardrobe';
 import type { WorldIndex } from '../world/WorldIndex';
 import type { Input } from '../game/Input';
-import type { MoveState } from '../shared/types';
+import type { MoveState, PowerAnim } from '../shared/types';
 import { clamp, lerp, damp } from '../core/math';
 import type { HumanoidAppearance } from '../humanoid/types';
 import type { Collision } from '../world/Collision';
@@ -21,6 +21,8 @@ import { ImportedAvatar, type LoadedModel } from '../avatar/ImportedAvatar';
 import { outfitVisuals, type CharacterLook } from '../avatar/look';
 
 export const BASE_HEIGHT = 1.8;
+/** Super speed carries the runner over water above this speed (m/s at 1.8 m, × √k). */
+export const SPEED_WATER = 16;
 export const MIN_HEIGHT = 0.1;
 export const MAX_HEIGHT = 100;
 
@@ -74,10 +76,31 @@ export class Player {
   maxHeight = MAX_HEIGHT;
   /** Space jumps normally (false while an ability handles Space itself). */
   jumpOnSpace = true;
+  /**
+   * Super speed: top running speed in m/s at 1.8 m (× √k like every gait), 0 = off. Set every
+   * frame by the AbilitySystem while the power is held. Running into a wall runs up it, low
+   * obstacles are vaulted, water carries the runner above SPEED_WATER × √k.
+   */
+  speedTop = 0;
+  /** Standing on ice (set every frame by the powers): almost no grip, the body slides. */
+  onIce = false;
+  /** Seconds of parkour climb grace left (super speed up a wall). */
+  private climbing = 0;
+  /** Running on water this frame (super speed). */
+  onWater = false;
+  get speeding(): boolean { return this.speedTop > 0 && !this.flying; }
   /** Active dash: seconds left and velocity. */
   private dashT = 0;
   private readonly dashV = new THREE.Vector3();
   get dashing(): boolean { return this.dashT > 0; }
+  /** Super jump charge 0..1 while held (-1: none), set by the AbilitySystem (body crouches). */
+  jumpCharge = -1;
+  /** Super jump in the air: its strength 0..1 (0: none) and take-off time (animation clock). */
+  leap = 0;
+  private leapT0 = 0;
+  /** Strength of the last super jump at its landing (for the landing effects), then 0. */
+  landedLeap = 0;
+  private readonly powerAnim: PowerAnim = { charge: -1, leap: 0, leapT: 0, dash: 0 };
 
   /** Character made in the creator, used by the next Player (null: random human from the seed). */
   static look: CharacterLook | null = null;
@@ -152,6 +175,7 @@ export class Player {
 
   toggleFlight(): void {
     this.flying = !this.flying;
+    this.leap = 0;
     this.sinceToggle = 0;
     if (this.flying) this.vel.y = Math.max(this.vel.y, 4 * Math.sqrt(this.k));
     this.events.onFlightToggle?.(this.flying);
@@ -164,6 +188,13 @@ export class Player {
   launch(vy: number): void {
     this.vel.y = Math.max(this.vel.y, vy);
     this.grounded = false;
+  }
+
+  /** Super jump take-off: upward speed and charge strength 0..1 (drives the leap poses). */
+  superLaunch(vy: number, strength: number): void {
+    this.launch(vy);
+    this.leap = Math.max(0.05, strength);
+    this.leapT0 = this.animTime;
   }
 
   /** Burst along a direction: speed (m/s) held for `dur` seconds, collision as usual. */
@@ -179,17 +210,29 @@ export class Player {
     this.vel.x = this.dashV.x; this.vel.z = this.dashV.z;
     this.vel.y = this.flying ? this.dashV.y : Math.max(0, this.vel.y);
     this.integrate(dt);
-    if (this.dashT <= 0) this.vel.multiplyScalar(0.35);
+    if (this.dashT <= 0) {
+      this.vel.multiplyScalar(0.35);
+      // On foot, come out of it at a sprint: the ground friction (≈ 12 m/s²) would otherwise
+      // let a third of the dash speed slide on for dozens of metres.
+      const hs = Math.hypot(this.vel.x, this.vel.z), vmax = 6 * Math.sqrt(this.k);
+      if (!this.flying && hs > vmax) { this.vel.x *= vmax / hs; this.vel.z *= vmax / hs; }
+    }
   }
 
   private updateGround(dt: number, input: Input, wish: THREE.Vector3, run: boolean, slow: boolean): void {
     if (this.dashT > 0) { this.updateDash(dt); return; }
     const k = this.k, sk = Math.sqrt(k);
     const g = 9.81;
-    const speed = (slow ? 0.8 : run ? 5.2 : 1.45) * sk;
-    if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(speed);
+    const fast = this.speedTop > 0;
+    const speed = fast ? this.speedTop * sk : (slow ? 0.8 : run ? 5.2 : 1.45) * sk;
+    const moving = wish.lengthSq() > 0;
+    if (moving) wish.normalize().multiplyScalar(speed);
     // Acceleration limited by friction (∝ g) — giants accelerate as fast in m/s² but feel heavy relative to size.
-    const accel = this.grounded ? 9 * (run ? 1.2 : 1) * Math.min(1, sk) + 3 : 2;
+    // A super-speed runner gets to top speed in about a second and a half (and stops as fast);
+    // on ice there is hardly any grip at all.
+    let accel = this.grounded ? 9 * (run ? 1.2 : 1) * Math.min(1, sk) + 3 : 2;
+    if (fast && (this.grounded || this.onWater)) accel = Math.max(accel, (moving ? 0.65 : 1.2) * this.speedTop);
+    if (this.onIce && this.grounded && !this.onWater) accel = fast ? accel * 0.35 : 1.1;
     const dvx = wish.x - this.vel.x, dvz = wish.z - this.vel.z;
     const dv = Math.hypot(dvx, dvz);
     const maxDv = accel * dt * Math.max(1, sk * 0.6);
@@ -203,6 +246,22 @@ export class Player {
     // Jump.
     if (this.grounded && this.jumpOnSpace && input.hit('Space')) this.launch(this.jumpSpeed);
     this.integrate(dt);
+    // Parkour at super speed: running into a wall carries on up it (up to the roof), running
+    // into a car or a bench vaults over it.
+    if (fast && this.blocked && moving) {
+      const hs = Math.hypot(this.vel.x, this.vel.z);
+      const into = this.blocked.speed;
+      if (into > 4 * sk || hs > 6 * sk) {
+        // Up the face at a brisk climb (not a launch): ~14 m/s for a 1.8 m runner.
+        this.vel.y = Math.max(this.vel.y, Math.min(14 * sk, 0.25 * this.speedTop * sk + 4 * sk));
+        this.grounded = false;
+        this.climbing = 0.15;
+      }
+    } else if (this.climbing > 0) {
+      // Over the top: a small hop onto the roof or the car, not a leap into the sky.
+      this.climbing -= dt;
+      if (!this.blocked && this.vel.y > 3 * sk) this.vel.y = 3 * sk;
+    }
   }
 
   private updateFlight(dt: number, input: Input, wish: THREE.Vector3, camYaw: number, camPitch: number, boost: boolean): void {
@@ -236,9 +295,12 @@ export class Player {
   private integrate(dt: number): void {
     const r = this.radius;
     const travel = this.vel.length() * dt;
-    const sub = Math.min(12, Math.max(1, Math.ceil(travel / Math.max(0.05, r * 0.8))));
+    // Substeps shorter than the body radius, so fast bodies (dash, super jump, boost) never step
+    // through a wall panel (the side test uses the previous position).
+    const sub = Math.min(this.speedTop > 0 ? 160 : 48, Math.max(1, Math.ceil(travel / Math.max(0.05, r * 0.8))));
     const h = dt / sub;
     this.blocked = null;
+    this.onWater = false;
     for (let s = 0; s < sub; s++) this.integrateStep(h, r);
   }
 
@@ -264,19 +326,35 @@ export class Player {
       ny = ground;
       if (this.vel.y < 0) this.vel.y = 0;
       this.grounded = true;
-      if (!wasGrounded && impactV > 2) this.events.onLand?.(px, ny, pz, 0.5 * this.mass * impactV * impactV, this.height);
+      if (!wasGrounded) {
+        this.landedLeap = this.leap;
+        this.leap = 0;
+        if (impactV > 2) this.events.onLand?.(px, ny, pz, 0.5 * this.mass * impactV * impactV, this.height);
+        this.landedLeap = 0;
+      }
     } else if (ny - ground > 0.05 * Math.max(1, this.k)) {
       // Step down small kerbs while walking instead of falling off them.
       if (wasGrounded && !this.flying && ny - ground < step && this.vel.y <= 0) { ny = ground; this.grounded = true; }
       else this.grounded = false;
     }
-    // Water: the body floats/wades (simple buoyancy).
+    // Water: the body floats/wades (simple buoyancy) — or, fast enough, runs across it.
     const wl = this.world.terrain.waterLevel(px, pz);
-    if (!this.flying && wl > ny + this.height * 0.6) {
+    if (!this.flying && this.speedTop > 0 && wl > ny - 0.05 * this.height && this.vel.y <= 0.5
+      && Math.hypot(this.vel.x, this.vel.z) > SPEED_WATER * Math.sqrt(this.k)) {
+      ny = wl;
+      if (this.vel.y < 0) this.vel.y = 0;
+      this.grounded = true;
+      this.onWater = true;
+      this.leap = 0;
+    } else if (!this.flying && wl > ny + this.height * 0.6) {
       ny = Math.max(ny, wl - this.height * 0.65);
       this.vel.y = Math.max(this.vel.y, 0);
       this.grounded = true;
+      this.leap = 0;
     }
+    // Underground ceilings (stations, tunnels) stop a jump instead of letting the head pass through.
+    const ceil = this.collision.ceilingAt(px, pz, this.pos.y);
+    if (ny + this.height > ceil) { ny = Math.max(ceil - this.height, Math.min(ny, this.pos.y)); if (this.vel.y > 0) this.vel.y = 0; }
     this.pos.set(px, ny, pz);
   }
 
@@ -296,7 +374,12 @@ export class Player {
     this.animVel.lerp(this.vel, damp(14, dt));
     const vl: [number, number, number] = [this.animVel.x / sk, this.animVel.y / sk, this.animVel.z / sk];
     const move = this.moveState();
-    this.rig.update({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: vl, yaw: this.yaw, anim: { move, action: this.action && this.animTime - this.action.t0 < this.action.dur ? this.action : undefined }, flags: 0, scale }, dt / sk, this.animTime);
+    const pw = this.powerAnim;
+    pw.charge = this.flying ? -1 : this.jumpCharge;
+    pw.leap = this.leap;
+    pw.leapT = this.animTime - this.leapT0;
+    pw.dash = this.dashT > 0 ? 1 : 0;
+    this.rig.update({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: vl, yaw: this.yaw, anim: { move, action: this.action && this.animTime - this.action.t0 < this.action.dur ? this.action : undefined, power: pw }, flags: 0, scale }, dt / sk, this.animTime);
     // Footsteps on the animation's heel strikes (gait phase 0.25 = left, 0.75 = right).
     const ph = this.rig.animator?.gaitPhase ?? 0;
     const prev = this.stepPhase;

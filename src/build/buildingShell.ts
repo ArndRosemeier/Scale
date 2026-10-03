@@ -346,13 +346,11 @@ function parapet(mb: MeshBuilder, poly: Poly, y: number, h: number, b: BuildingD
   void b;
 }
 
-function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, tint: [number, number, number], tiling: { grid: SlabGrid; tiles: Int32Array; roofElem: number } | null = null): void {
+function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, tint: [number, number, number], tiling: RoofTiling | null = null): void {
   const roofLayer = 16 + b.roofMat;
   top = ensureCCW(top);
-  const obb = minAreaRect(top);
-  const rect = Math.abs(polyArea(top)) / Math.max(1e-6, 4 * obb.hu * obb.hv);
-  let kind = b.roof;
-  if ((kind === 'gable' || kind === 'hip' || kind === 'sawtooth' || kind === 'shed') && rect < 0.8) kind = 'flat';
+  const F = roofFrame(b, top, y);
+  const { kind, obb } = F;
   if (kind === 'flat') {
     mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
     // Inset under the parapet; a narrow neck can split it into several pieces.
@@ -381,13 +379,8 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
     // Steep lower slope (with dormers drawn by the shader) then a flat top.
     // The inset ring keeps one vertex per outline vertex, so every wall edge gets its own
     // slope; outlines too tight for that inset try a smaller one, else stay flat.
-    const mh = 3.4;
-    let inset = Math.min(2.2, Math.min(obb.hu, obb.hv) * 0.4);
-    let inner: Poly | null = null;
-    for (let k = 0; k < 3 && !inner; k++, inset *= 0.55) {
-      const q = offsetEdges(top, new Array(top.length >> 1).fill(-inset));
-      if (offsetValid(top, q)) inner = q;
-    }
+    const ring = mansardRing(top, obb);
+    const mh = ring?.mh ?? 3.4, inner = ring?.inner ?? null;
     if (!inner) { mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof); cap(mb, top, y + 0.05); rooftop(mb, b, top, y, r); return; }
     mb.set('aLayer', roofLayer).set('aFacade', b.bay, mh, mh, FF.Roof | FF.Windows);
     slopedRing(mb, top, inner, y, y + mh);
@@ -396,32 +389,9 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
     rooftop(mb, b, inner, y + mh, r);
     return;
   }
-  // Gable / hip / shed / sawtooth: a height field of planar facets laid out in the frame of the
-  // footprint's OBB, but cut to the real outline (eaves follow its edges, and where the roof
-  // stands above the wall top a gable wall closes it), so trapezoids, pentagons and notched
-  // footprints are covered exactly instead of by their bounding rectangle.
-  // Ridge direction: along the long axis, except attached houses: parallel to the street.
-  let ux = obb.ux, uz = obb.uz, hu = obb.hu, hv = obb.hv;
-  if (hv > hu) { ux = -obb.uz; uz = obb.ux; const t = hu; hu = hv; hv = t; }
-  let fdx = 1, fdz = 0; // street direction (attached houses)
-  if (b.attached) {
-    const n = b.poly.length >> 1;
-    const j = (b.front + 1) % n;
-    const fx = b.poly[j * 2] - b.poly[b.front * 2], fz = b.poly[j * 2 + 1] - b.poly[b.front * 2 + 1];
-    const fl = Math.hypot(fx, fz) || 1;
-    fdx = fx / fl; fdz = fz / fl;
-    if (Math.abs((fx / fl) * ux + (fz / fl) * uz) < 0.7) { const t = hu; hu = hv; hv = t; const ox = ux; ux = -uz; uz = ox; }
-  }
-  const vx = -uz, vz = ux;
+  // Gable / hip / shed / sawtooth: planar facets (see roofFrame), cut to the real outline.
+  const { ux, uz, hu, hv, vx, vz, P, rise, fdx, fdz } = F;
   const ov = 0.35; // eave overhang
-  const cx = obb.cx, cz = obb.cz;
-  const P = (u: number, v: number): [number, number] => [cx + ux * u + vx * v, cz + uz * u + vz * v];
-  // Facet plane h = y + a + bu·u + bv·v and cut "cu·u + cv·v <= q", both given in the (u, v) frame.
-  const facet = (a: number, bu: number, bv: number, cuts: number[][] = []): Facet => {
-    const gx = bu * ux + bv * vx, gz = bu * uz + bv * vz;
-    return { gx, gz, h0: y + a - gx * cx - gz * cz, cuts: cuts.map(([cu, cv, q]) => halfPlane(cu * ux + cv * vx, cu * uz + cv * vz, q, cx, cz)) };
-  };
-  const rise = hv * b.pitch;
   // Eaves: every edge overhangs, except the party walls of attached houses (edges across the street front).
   const eave = (k: number): number => {
     if (!b.attached) return ov;
@@ -431,24 +401,11 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
   };
   const eaves = offsetEdges(top, Array.from({ length: top.length >> 1 }, (_, k) => (kind === 'sawtooth' ? 0 : eave(k))));
   const wallMat = () => mb.set('aLayer', b.wall).set('aTint', ...tint).set('aFacade', 1, 1, 1, 0);
-  let facets: Facet[];
-  if (kind === 'gable') facets = [facet(rise, 0, b.pitch, [[0, 1, 0]]), facet(rise, 0, -b.pitch, [[0, -1, 0]])];
-  else if (kind === 'shed') facets = [facet(rise * 0.5, 0, b.pitch * 0.5)];
-  else if (kind === 'hip') facets = hipFacets(top, y, b.pitch);
-  else {
-    // Sawtooth (industrial): teeth across the long axis with glazed north faces.
-    const teeth = Math.max(2, Math.round((hu * 2) / 8));
-    const tw = (hu * 2) / teeth;
-    const th = Math.min(3.5, tw * 0.45);
-    facets = [];
-    for (let k = 0; k < teeth; k++) {
-      const u0 = -hu + k * tw, cuts: number[][] = [];
-      if (k > 0) cuts.push([-1, 0, -u0]);
-      if (k < teeth - 1) cuts.push([1, 0, u0 + tw]);
-      facets.push(facet(-th * u0 / tw, th / tw, 0, cuts));
-    }
+  const facets = F.facets;
+  if (kind === 'sawtooth') {
+    const { teeth, tw, th } = F;
     mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
-    for (const f of facets) facetSurface(mb, eaves, f);
+    for (const f of facets) facetSurface(mb, eaves, f, tiling);
     // Glazing (vertical) where one tooth ends high and the next starts low, cut to the outline.
     mb.set('aLayer', 10).set('aFacade', 1.5, th, th, FF.Windows | FF.Curtain);
     for (let k = 1; k < teeth; k++) {
@@ -474,7 +431,7 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
     return;
   }
   mb.set('aLayer', roofLayer).set('aFacade', 1, 1, 1, FF.Roof);
-  for (const f of facets) facetSurface(mb, eaves, f);
+  for (const f of facets) facetSurface(mb, eaves, f, tiling);
   // Gable walls wherever the roof stands above the wall top (gable ends, notches, slanted edges).
   roofWalls(mb, top, y, facets, wallMat);
   // Chimneys for houses / old town, on the roof (not over an empty corner of the bounding box).
@@ -493,6 +450,81 @@ function roof(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng, ti
     const p = P(r.range(-ridge, ridge), 0);
     if (pointInPoly(top, p[0], p[1]) && distPointPolyEdge(top, p[0], p[1]) > 0.8) mb.box(p[0], fieldHeight(facets, p[0], p[1]) + 0.4, p[1], 0.35, 1.0, 0.45, Math.atan2(ux, uz));
   }
+}
+
+/** Kind, frame and facets of a building's roof (shared by the mesh and by collision). */
+function roofFrame(b: BuildingDesc, top: Poly, y: number) {
+  const obb = minAreaRect(top);
+  const rect = Math.abs(polyArea(top)) / Math.max(1e-6, 4 * obb.hu * obb.hv);
+  let kind = b.roof;
+  if ((kind === 'gable' || kind === 'hip' || kind === 'sawtooth' || kind === 'shed') && rect < 0.8) kind = 'flat';
+  // Facets are laid out in the frame of the footprint's OBB.
+  // Ridge direction: along the long axis, except attached houses: parallel to the street.
+  let ux = obb.ux, uz = obb.uz, hu = obb.hu, hv = obb.hv;
+  if (hv > hu) { ux = -obb.uz; uz = obb.ux; const t = hu; hu = hv; hv = t; }
+  let fdx = 1, fdz = 0; // street direction (attached houses)
+  if (b.attached) {
+    const n = b.poly.length >> 1;
+    const j = (b.front + 1) % n;
+    const fx = b.poly[j * 2] - b.poly[b.front * 2], fz = b.poly[j * 2 + 1] - b.poly[b.front * 2 + 1];
+    const fl = Math.hypot(fx, fz) || 1;
+    fdx = fx / fl; fdz = fz / fl;
+    if (Math.abs((fx / fl) * ux + (fz / fl) * uz) < 0.7) { const t = hu; hu = hv; hv = t; const ox = ux; ux = -uz; uz = ox; }
+  }
+  const vx = -uz, vz = ux;
+  const cx = obb.cx, cz = obb.cz;
+  const P = (u: number, v: number): [number, number] => [cx + ux * u + vx * v, cz + uz * u + vz * v];
+  // Facet plane h = y + a + bu·u + bv·v and cut "cu·u + cv·v <= q", both given in the (u, v) frame.
+  const facet = (a: number, bu: number, bv: number, cuts: number[][] = []): Facet => {
+    const gx = bu * ux + bv * vx, gz = bu * uz + bv * vz;
+    return { gx, gz, h0: y + a - gx * cx - gz * cz, cuts: cuts.map(([cu, cv, q]) => halfPlane(cu * ux + cv * vx, cu * uz + cv * vz, q, cx, cz)) };
+  };
+  const rise = hv * b.pitch;
+  let facets: Facet[] = [];
+  let teeth = 0, tw = 0, th = 0;
+  if (kind === 'gable') facets = [facet(rise, 0, b.pitch, [[0, 1, 0]]), facet(rise, 0, -b.pitch, [[0, -1, 0]])];
+  else if (kind === 'shed') facets = [facet(rise * 0.5, 0, b.pitch * 0.5)];
+  else if (kind === 'hip') facets = hipFacets(top, y, b.pitch);
+  else if (kind === 'sawtooth') {
+    // Sawtooth (industrial): teeth across the long axis with glazed north faces.
+    teeth = Math.max(2, Math.round((hu * 2) / 8));
+    tw = (hu * 2) / teeth;
+    th = Math.min(3.5, tw * 0.45);
+    for (let k = 0; k < teeth; k++) {
+      const u0 = -hu + k * tw, cuts: number[][] = [];
+      if (k > 0) cuts.push([-1, 0, -u0]);
+      if (k < teeth - 1) cuts.push([1, 0, u0 + tw]);
+      facets.push(facet(-th * u0 / tw, th / tw, 0, cuts));
+    }
+  }
+  return { kind, obb, ux, uz, hu, hv, vx, vz, P, rise, fdx, fdz, facets, teeth, tw, th };
+}
+
+/** Mansard geometry (steep ring, then a flat top), or null when the outline is too tight. */
+function mansardRing(top: Poly, obb: { hu: number; hv: number }): { inner: Poly; inset: number; mh: number } | null {
+  let inset = Math.min(2.2, Math.min(obb.hu, obb.hv) * 0.4);
+  for (let k = 0; k < 3; k++, inset *= 0.55) {
+    const q = offsetEdges(top, new Array(top.length >> 1).fill(-inset));
+    if (offsetValid(top, q)) return { inner: q, inset, mh: 3.4 };
+  }
+  return null;
+}
+
+/**
+ * Height of a building's roof surface at (x, z) inside its top outline (walls top `y`), for
+ * collision: pitched roofs (gable, hip, shed, sawtooth) and mansard slopes. Null for flat roofs.
+ */
+export function roofSurface(b: BuildingDesc, top: Poly, y: number): ((x: number, z: number) => number) | null {
+  top = ensureCCW(top);
+  const F = roofFrame(b, top, y);
+  if (F.kind === 'mansard') {
+    const m = mansardRing(top, F.obb);
+    if (!m) return null;
+    return (x, z) => y + m.mh * Math.min(1, distPointPolyEdge(top, x, z) / m.inset);
+  }
+  if (!F.facets.length) return null;
+  const facets = F.facets;
+  return (x, z) => Math.max(y, fieldHeight(facets, x, z));
 }
 
 /**
@@ -573,12 +605,48 @@ function facetPieces(poly: Poly, cuts: number[][]): Poly[] {
 }
 
 /** Roof surface of one facet over the roof outline: triangulated, uv in metres (v up the slope). */
-function facetSurface(mb: MeshBuilder, outline: Poly, f: Facet): void {
+/** Tile grid of the storey under a roof: roof parts take its tile elements so they break piecewise. */
+type RoofTiling = { grid: SlabGrid; tiles: Int32Array; roofElem: number };
+
+/** Tile rectangles of a grid (edge tiles reach 1.5 m further out where no tile follows: eaves). */
+function tileRects(t: RoofTiling): { e: number; rect: Poly }[] {
+  const g = t.grid, out: { e: number; rect: Poly }[] = [];
+  const has = (i: number, j: number) => i >= 0 && j >= 0 && i < g.nu && j < g.nv && t.tiles[i * g.nv + j] >= 0;
+  for (let c = 0; c < t.tiles.length; c++) {
+    if (t.tiles[c] < 0) continue;
+    const i = Math.floor(c / g.nv), j = c % g.nv;
+    const ext = 1.5;
+    const u0 = g.u0 + i * g.size - (has(i - 1, j) ? 0 : ext), u1 = g.u0 + (i + 1) * g.size + (has(i + 1, j) ? 0 : ext);
+    const v0 = g.v0 + j * g.size - (has(i, j - 1) ? 0 : ext), v1 = g.v0 + (j + 1) * g.size + (has(i, j + 1) ? 0 : ext);
+    out.push({ e: t.tiles[c], rect: ensureCCW([...gridPoint(g, u0, v0), ...gridPoint(g, u1, v0), ...gridPoint(g, u1, v1), ...gridPoint(g, u0, v1)]) });
+  }
+  return out;
+}
+
+function facetSurface(mb: MeshBuilder, outline: Poly, f: Facet, tiling: RoofTiling | null = null): void {
+  let pieces: { poly: Poly; e: number | null }[] = facetPieces(outline, f.cuts).map((poly) => ({ poly, e: null }));
+  if (tiling) {
+    // Cut into the storey's tiles (a hit breaks the roof where it lands, not the whole roof).
+    const rects = tileRects(tiling);
+    const split: { poly: Poly; e: number | null }[] = [];
+    for (const { poly } of pieces) {
+      for (const r of rects) for (const q of shapesToPolys(intersection([ensureCCW(poly)], [r.rect]))) split.push({ poly: ensureCCW(q), e: r.e });
+    }
+    pieces = split;
+  }
+  for (const { poly, e } of pieces) {
+    if (e !== null) mb.set('aElem', e);
+    emitFacet(mb, poly, f);
+  }
+  if (tiling) mb.set('aElem', tiling.roofElem);
+}
+
+function emitFacet(mb: MeshBuilder, piece: Poly, f: Facet): void {
   const g = Math.hypot(f.gx, f.gz);
   const l = Math.hypot(f.gx, f.gz, 1);
   const nx = -f.gx / l, ny = 1 / l, nz = -f.gz / l;
   const sx = g > 1e-6 ? f.gx / g : 1, sz = g > 1e-6 ? f.gz / g : 0, sl = Math.sqrt(1 + g * g);
-  for (const piece of facetPieces(outline, f.cuts)) {
+  {
     const tris = earcut(piece, undefined, 2);
     const base = mb.vcount;
     for (let i = 0; i < piece.length; i += 2) {

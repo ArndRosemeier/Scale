@@ -19,6 +19,7 @@ import { MinHeap } from '../core/heap';
 import { CURB_H } from '../build/ground';
 import { hashToFloat, hash32 } from '../core/rng';
 import { ACCIDENTS } from '../game/abilities/tuning';
+import { statusOf } from '../shared/status';
 
 export const enum PState { Walk = 0, Wait = 1, Idle = 2, Gawk = 3, Flee = 4, Down = 5, Enter = 6, Film = 7, Sit = 8, Sleep = 9 }
 
@@ -60,6 +61,10 @@ export interface PedAgent {
   downBy?: DownCause;
   /** Helped up by the player (thanks them: a wave while stateT is small). */
   helped?: boolean;
+  /** Stepping aside for a robot: extra sideways velocity (m/s) for sideT more seconds. */
+  sideX?: number; sideZ?: number; sideT?: number;
+  /** Glancing at something (lookX/Y/Z) while going on: seconds left. */
+  glance?: number;
 }
 
 export type DownCause = 'player' | 'collapse' | 'accident' | 'other';
@@ -423,6 +428,9 @@ export class Pedestrians {
       if (a.state === PState.Down) { a.vy -= 9.81 * dt; a.y += a.vy * dt; a.x += a.vx * dt * 0.3; a.z += a.vz * dt * 0.3; if (a.vy < 0 && a.y < (a.floorY ?? a.y)) { a.y = a.floorY ?? a.y; a.vy = 0; } }
       return;
     }
+    // Powers: frozen solid — held where it stands (the power layer keeps the pose).
+    const st = statusOf(a);
+    if (st && st.frozen > 0 && a.state !== PState.Down) { a.speed = 0; return; }
     if (a.state === PState.Down) {
       // Knocked down / flung: simple ballistic slide, then lie.
       a.vy -= 9.81 * dt;
@@ -432,6 +440,7 @@ export class Pedestrians {
       if (a.stateT > (a.downBy === 'accident' ? ACCIDENTS.lieFor : 25) && a.fear < 100) a.alive = false;
       return;
     }
+    if (a.glance) a.glance = Math.max(0, a.glance - dt);
     let tx: number, tz: number, desired: number;
     if (a.state === PState.Flee) {
       // Run away from the danger, roughly along the sidewalk, with noise.
@@ -466,6 +475,8 @@ export class Pedestrians {
       }
       desired = a.pref;
     }
+    // Shrunk: little legs, slower steps.
+    if (st && st.scale < 1) desired *= Math.sqrt(st.scale);
     // Steering with separation from neighbours.
     let dx = tx - a.x, dz = tz - a.z;
     const dl = Math.hypot(dx, dz);
@@ -482,6 +493,11 @@ export class Pedestrians {
       sx += (ox / d) * w * 1.6; sz += (oz / d) * w * 1.6;
       // Slow down behind someone in front.
       if (ox * dx + oz * dz < 0 && d < 0.9) desired *= 0.7;
+    }
+    if (a.sideT && a.sideT > 0) {
+      // Making room for a robot (set by the robot, which sees who is in its way).
+      a.sideT -= dt;
+      sx += a.sideX ?? 0; sz += a.sideZ ?? 0;
     }
     const po = this.playerObstacle;
     if (po && po.h > 0.6) {

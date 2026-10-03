@@ -11,6 +11,7 @@ import { Rng, deriveSeed } from '../core/rng';
 import { chaikin, resample } from '../core/geom2';
 import { smoothstep, clamp, lerp } from '../core/math';
 import type { WorldProfile } from './settings';
+import { makeBoundary, terrainExtent } from './boundary';
 
 export interface River {
   /** Centerline, resampled ~12 m. */
@@ -26,6 +27,12 @@ export interface River {
   width1: number;
   /** Index of the river this one flows into (-1 none). */
   joins: number;
+  /**
+   * Width wobble key: river index and arc-length offset. A countryside continuation uses its
+   * parent's key so the width runs on seamlessly across the junction.
+   */
+  wobR: number;
+  wobS: number;
 }
 
 export interface WaterQuery {
@@ -41,6 +48,10 @@ export interface WaterQuery {
 const HASH_CELL = 128;
 const NEAR_RANGE = 700;
 const RASTER_CELL = 160;
+/** Countryside rivers are indexed only this far beyond their banks (keeps the hash small). */
+const COUNTRY_RANGE = 320;
+/** Width of the band beyond the protected city zone where the countryside valley raster takes over. */
+const BLEND_BAND = 900;
 
 export class Terrain {
   readonly profile: WorldProfile;
@@ -51,17 +62,41 @@ export class Terrain {
   readonly seaLevel = 0;
   /** Extent of the precomputed rasters (half size). */
   readonly extent: number;
+  /**
+   * Rivers generated for the city (the first `baseRivers` entries). The rest continue them
+   * through the countryside to the edge of the world and add a few streams; those never come
+   * near the city, and inside the protected zone around it the terrain is computed from the
+   * city rivers alone, exactly as without them.
+   */
+  readonly baseRivers: number;
+  /** Half size of the streamed world (terrain tiles, countryside rivers, sea). */
+  readonly worldExtent: number;
+  /** Radius of the protected zone (city boundary plus a margin). */
+  readonly protectR: number;
+  private protectSq: number;
 
-  private segHash = new Map<number, number[]>(); // key -> [river, idx, ...]
+  private segHash = new Map<number, ArrayLike<number>>(); // key -> [river, idx, ...]
   private raster!: Float32Array; // per cell: d, level, halfWidth
   private rasterN = 0;
+  /** Coarse raster over the whole world with every river (countryside valleys). */
+  private outer!: Float32Array;
+  private outerN = 0;
+  private outerCell = 0;
+  /** Hash cells holding countryside river segments (there the nearest bank wins, see waterMixed). */
+  private mixed = new Set<number>();
 
-  constructor(profile: WorldProfile) {
+  constructor(profile: WorldProfile, countryRivers = true) {
     this.profile = profile;
     this.noise = new Noise(deriveSeed(profile.seed, 'terrain'));
     this.noise2 = new Noise(deriveSeed(profile.seed, 'terrain2'));
     this.extent = profile.radius * 1.6 + 2000;
+    const boundary = makeBoundary(profile);
+    this.protectR = Math.max(...boundary) + 500;
+    this.protectSq = this.protectR * this.protectR;
+    this.worldExtent = terrainExtent(boundary) + 1500;
     this.makeRivers();
+    this.baseRivers = this.rivers.length;
+    if (countryRivers) this.extendRivers();
     this.buildIndex();
   }
 
@@ -151,11 +186,154 @@ export class Terrain {
     return s;
   }
 
-  private makeRiver(pts: number[], level0: number, level1: number, width0: number, width1: number, joins: number): River {
+  private makeRiver(pts: number[], level0: number, level1: number, width0: number, width1: number, joins: number, wobR = this.rivers.length, wobS = 0): River {
     const n = pts.length >> 1;
     const s = new Float64Array(n);
     for (let i = 1; i < n; i++) s[i] = s[i - 1] + Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]);
-    return { pts: Float64Array.from(pts), s, length: s[n - 1], level0, level1, width0, width1, joins };
+    return { pts: Float64Array.from(pts), s, length: s[n - 1], level0, level1, width0, width1, joins, wobR, wobS };
+  }
+
+  // ------------------------------------------------------- countryside rivers
+
+  /**
+   * Continue the city's rivers beyond its terrain to the edge of the world (meandering on with
+   * the same gradient and width) and add a few streams joining them out in the country.
+   */
+  private extendRivers(): void {
+    const p = this.profile;
+    const rng = new Rng(deriveSeed(p.seed, 'rivers', 'country'));
+    const reach = this.worldExtent + 1500;
+    for (let r = 0; r < this.baseRivers; r++) {
+      const R = this.rivers[r];
+      const g = Math.max(0.0005, (R.level0 - R.level1) / Math.max(1, R.length));
+      // Upstream: from the edge of the world down to the river's source end.
+      const up = this.continuation(rng.fork('up', r), R, true, reach);
+      if (up) {
+        const L = this.lengthOf(up);
+        this.rivers.push(this.makeRiver(reversed(up), R.level0 + g * L, R.level0, R.width0 * 0.55, R.width0, r, R.wobR, R.wobS - L));
+      }
+      // Downstream (a river ending in the sea or in another river stops there).
+      if (r === 0 && !p.coastal) {
+        const dn = this.continuation(rng.fork('down', r), R, false, reach);
+        if (dn) {
+          const L = this.lengthOf(dn);
+          this.rivers.push(this.makeRiver(dn, R.level1, Math.max(1, R.level1 - g * L), R.width1, R.width1 * 1.2, -1, R.wobR, R.wobS + R.length));
+        }
+      }
+    }
+    // Streams: smaller rivers from the hills down to a confluence, out in the country.
+    const want = Math.max(2, Math.round((this.worldExtent / 9000) * 2.5));
+    const keepOut = this.protectR + BLEND_BAND + 1500;
+    const hosts = this.rivers.length;
+    const mouths: number[] = [];
+    for (let k = 0, tries = 0; k < want && tries < 80; tries++) {
+      const sr = rng.fork('stream', tries);
+      const hi = sr.int(0, hosts - 1);
+      const H = this.rivers[hi];
+      const n = H.pts.length >> 1;
+      if (n < 8) continue;
+      const i = sr.int(2, n - 3);
+      const cx = H.pts[i * 2], cz = H.pts[i * 2 + 1];
+      if (Math.hypot(cx, cz) < keepOut + 1000 || Math.max(Math.abs(cx), Math.abs(cz)) > this.worldExtent * 0.85) continue;
+      if (p.coastal && this.coastDistance(cx, cz) < 400) continue;
+      // Spread them out: one confluence per few kilometres.
+      let crowded = false;
+      for (let q = 0; q < mouths.length; q += 2) if (Math.hypot(mouths[q] - cx, mouths[q + 1] - cz) < Math.min(3500, this.worldExtent * 0.25)) crowded = true;
+      if (crowded) continue;
+      let tx = H.pts[i * 2 + 2] - H.pts[i * 2 - 2], tz = H.pts[i * 2 + 3] - H.pts[i * 2 - 1];
+      const tl = Math.hypot(tx, tz) || 1;
+      tx /= tl; tz /= tl;
+      // Leave from the bank facing away from the city.
+      let nx = -tz, nz = tx;
+      if (nx * cx + nz * cz < 0) { nx = -nx; nz = -nz; }
+      const a = sr.range(-0.6, 0.6);
+      const dx = nx * Math.cos(a) - nz * Math.sin(a), dz = nx * Math.sin(a) + nz * Math.cos(a);
+      const hw = this.riverHalfWidthAt(hi, H.s[i]);
+      const sx = cx + nx * (hw + 1), sz = cz + nz * (hw + 1);
+      const L = sr.range(3000, 8000);
+      let pts = this.wander(sr, [sx, sz], [sx + dx * L, sz + dz * L], 230, sr.range(50, 120), 0);
+      // Cut where it would approach the city, the sea, the world's edge or another river.
+      for (let q = 0; q < pts.length; q += 2) {
+        const x = pts[q], z = pts[q + 1];
+        if (Math.hypot(x, z) < keepOut || Math.max(Math.abs(x), Math.abs(z)) > reach || (p.coastal && this.coastDistance(x, z) < 250)
+          || this.nearRiver(x, z, q < 100 ? hi : -1, 500)) { pts = pts.slice(0, q); break; }
+      }
+      if (pts.length < 8 || this.lengthOf(pts) < 1500) continue;
+      const rev = reversed(pts);
+      const lvl = this.riverLevelAt(hi, H.s[i]) + 0.2;
+      const w1 = sr.range(9, 16);
+      this.rivers.push(this.makeRiver(rev, lvl + this.lengthOf(rev) * 0.0018, lvl, w1 * 0.45, w1, hi));
+      mouths.push(cx, cz);
+      k++;
+    }
+  }
+
+  /** Is (x,z) within d of any river other than `except`? (Coarse: every 4th point.) */
+  private nearRiver(x: number, z: number, except: number, d: number): boolean {
+    const d2 = d * d;
+    for (let r = 0; r < this.rivers.length; r++) {
+      if (r === except) continue;
+      const P = this.rivers[r].pts;
+      for (let k = 0; k < P.length; k += 8) if ((P[k] - x) ** 2 + (P[k + 1] - z) ** 2 < d2) return true;
+    }
+    return false;
+  }
+
+  /** Meandering continuation of a river from one of its ends, outward to `reach`. */
+  private continuation(rng: Rng, R: River, atStart: boolean, reach: number): number[] | null {
+    const n = R.pts.length >> 1;
+    if (n < 4) return null;
+    const ei = atStart ? 0 : n - 1, bi = atStart ? Math.min(n - 1, 20) : Math.max(0, n - 21);
+    const ex = R.pts[ei * 2], ez = R.pts[ei * 2 + 1];
+    if (this.profile.coastal && this.coastDistance(ex, ez) < 300) return null;
+    let dx = ex - R.pts[bi * 2], dz = ez - R.pts[bi * 2 + 1];
+    let l = Math.hypot(dx, dz) || 1;
+    dx /= l; dz /= l;
+    const lead: [number, number] = [dx, dz];
+    // Lean outward so it never turns back towards the city.
+    const el = Math.hypot(ex, ez) || 1;
+    dx += (ex / el) * 0.5; dz += (ez / el) * 0.5;
+    l = Math.hypot(dx, dz);
+    dx /= l; dz /= l;
+    let L = 0;
+    while (Math.max(Math.abs(ex + dx * L), Math.abs(ez + dz * L)) < reach && L < reach * 3) L += 200;
+    if (L < 400) return null;
+    const a = rng.range(-0.3, 0.3);
+    const tx = dx * Math.cos(a) - dz * Math.sin(a), tz = dx * Math.sin(a) + dz * Math.cos(a);
+    const step = Math.max(350, this.profile.riverWidth * 4.5);
+    let pts = this.wander(rng, [ex, ez], [ex + tx * L, ez + tz * L], step, 90 + this.profile.riverWidth * 2.2 + rng.range(0, 200), step, lead);
+    for (let q = 2; q < pts.length; q += 2) {
+      const x = pts[q], z = pts[q + 1];
+      if ((this.profile.coastal && this.coastDistance(x, z) < 250) || Math.hypot(x, z) < this.protectR + BLEND_BAND + 300) { pts = pts.slice(0, q); break; }
+    }
+    return pts.length >= 8 ? pts : null;
+  }
+
+  /**
+   * Meandering polyline from a to b (resampled to 12 m). With `lead`, the first control point
+   * continues along it (no kink at a junction); the meander amplitude ramps up from a.
+   */
+  private wander(rng: Rng, a: [number, number], b: [number, number], step: number, amp: number, leadLen: number, lead?: [number, number]): number[] {
+    const ctrl: number[] = [a[0], a[1]];
+    let sx = a[0], sz = a[1];
+    if (lead && leadLen > 0) { sx += lead[0] * leadLen; sz += lead[1] * leadLen; ctrl.push(sx, sz); }
+    const n = Math.max(2, Math.round(Math.hypot(b[0] - sx, b[1] - sz) / step));
+    for (let i = 1; i <= n; i++) ctrl.push(sx + ((b[0] - sx) * i) / n, sz + ((b[1] - sz) * i) / n);
+    const ph = rng.range(0, 100);
+    const m = ctrl.length >> 1, fixed = lead ? 2 : 1;
+    const out: number[] = [];
+    for (let i = 0; i < m; i++) {
+      const i0 = Math.max(0, i - 1), i1 = Math.min(m - 1, i + 1);
+      let dx = ctrl[i1 * 2] - ctrl[i0 * 2], dz = ctrl[i1 * 2 + 1] - ctrl[i0 * 2 + 1];
+      const l = Math.hypot(dx, dz) || 1;
+      dx /= l; dz /= l;
+      const w = i < fixed ? 0 : Math.min(1, (i - fixed + 1) / 2);
+      const off = this.noise2.fbm2(i * 0.3 + ph, ph * 0.5 + 41, 2) * amp * 2.2 * w;
+      out.push(ctrl[i * 2] - dz * off, ctrl[i * 2 + 1] + dx * off);
+    }
+    const pts = resample(chaikin(out, 4), 12);
+    pts[0] = a[0]; pts[1] = a[1];
+    return pts;
   }
 
   riverLevelAt(r: number, s: number): number {
@@ -166,26 +344,32 @@ export class Terrain {
     const R = this.rivers[r];
     const t = clamp(s / R.length, 0, 1);
     // Gentle width variation along the course.
-    const wob = 1 + 0.12 * this.noise2.n2(s * 0.0025 + r * 31, 7.3);
+    const wob = 1 + 0.12 * this.noise2.n2((s + R.wobS) * 0.0025 + R.wobR * 31, 7.3);
     return 0.5 * lerp(R.width0, R.width1, t) * wob;
   }
 
   private buildIndex(): void {
     for (let r = 0; r < this.rivers.length; r++) {
-      const pts = this.rivers[r].pts;
+      const R = this.rivers[r];
+      const pts = R.pts;
+      const country = r >= this.baseRivers;
       for (let i = 0; i + 3 < pts.length; i += 2) {
-        const x0 = Math.min(pts[i], pts[i + 2]) - NEAR_RANGE, x1 = Math.max(pts[i], pts[i + 2]) + NEAR_RANGE;
-        const z0 = Math.min(pts[i + 1], pts[i + 3]) - NEAR_RANGE, z1 = Math.max(pts[i + 1], pts[i + 3]) + NEAR_RANGE;
+        const range = country ? this.riverHalfWidthAt(r, R.s[i >> 1]) + COUNTRY_RANGE : NEAR_RANGE;
+        const x0 = Math.min(pts[i], pts[i + 2]) - range, x1 = Math.max(pts[i], pts[i + 2]) + range;
+        const z0 = Math.min(pts[i + 1], pts[i + 3]) - range, z1 = Math.max(pts[i + 1], pts[i + 3]) + range;
         for (let cx = Math.floor(x0 / HASH_CELL); cx <= Math.floor(x1 / HASH_CELL); cx++) {
           for (let cz = Math.floor(z0 / HASH_CELL); cz <= Math.floor(z1 / HASH_CELL); cz++) {
             const key = (cx + 32768) * 65536 + (cz + 32768);
-            let b = this.segHash.get(key);
+            let b = this.segHash.get(key) as number[] | undefined;
             if (!b) this.segHash.set(key, (b = []));
             b.push(r, i >> 1);
+            if (country) this.mixed.add(key);
           }
         }
       }
     }
+    // Compact buckets (every worker holds a copy).
+    for (const [k, b] of this.segHash) this.segHash.set(k, Int32Array.from(b as number[]));
     // Coarse raster of (distance, level, halfWidth) for valley shaping far from the water.
     const N = Math.ceil((this.extent * 2) / RASTER_CELL) + 1;
     this.rasterN = N;
@@ -195,7 +379,7 @@ export class Terrain {
       for (let i = 0; i < N; i++) {
         const x = -this.extent + i * RASTER_CELL, z = -this.extent + j * RASTER_CELL;
         let best = Infinity, bl = 0, bw = 0;
-        for (let r = 0; r < this.rivers.length; r++) {
+        for (let r = 0; r < this.baseRivers; r++) {
           const R = this.rivers[r];
           const pts = R.pts;
           for (let k = 0; k < pts.length; k += 2 * step) {
@@ -209,15 +393,87 @@ export class Terrain {
         this.raster[o + 2] = bw;
       }
     }
+    this.buildOuterRaster();
   }
 
+  /**
+   * (distance, level, halfWidth) of the nearest river over the whole world, coarse, by jump
+   * flooding from points along every river (exact enough at this cell size, and fast).
+   */
+  private buildOuterRaster(): void {
+    const W = this.worldExtent;
+    const C = Math.max(160, (W * 2) / 220);
+    const N = Math.ceil((W * 2) / C) + 1;
+    this.outerCell = C;
+    this.outerN = N;
+    const sx: number[] = [], sz: number[] = [], sl: number[] = [], sw: number[] = [];
+    const near = new Int32Array(N * N).fill(-1);
+    const dist2 = (q: number, i: number, j: number) => { const dx = sx[q] - (-W + i * C), dz = sz[q] - (-W + j * C); return dx * dx + dz * dz; };
+    const every = Math.max(1, Math.floor(C / 40));
+    for (let r = 0; r < this.rivers.length; r++) {
+      const R = this.rivers[r];
+      const n = R.pts.length >> 1;
+      for (let k = 0; k < n; k += every) {
+        const x = R.pts[k * 2], z = R.pts[k * 2 + 1];
+        const i = Math.round((x + W) / C), j = Math.round((z + W) / C);
+        if (i < 0 || j < 0 || i >= N || j >= N) continue;
+        const q = sx.length;
+        sx.push(x); sz.push(z); sl.push(this.riverLevelAt(r, R.s[k])); sw.push(this.riverHalfWidthAt(r, R.s[k]));
+        const o = j * N + i;
+        if (near[o] < 0 || dist2(q, i, j) < dist2(near[o], i, j)) near[o] = q;
+      }
+    }
+    if (sx.length) {
+      let step = 1;
+      while (step * 2 < N) step *= 2;
+      // Jump flooding, then one extra pass at step 1 (JFA+1) to fix the rare misses.
+      const steps: number[] = [];
+      for (let s = step; s >= 1; s >>= 1) steps.push(s);
+      steps.push(1);
+      for (const st of steps) {
+        for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+          const o = j * N + i;
+          let b = near[o], bd = b >= 0 ? dist2(b, i, j) : Infinity;
+          for (let dj = -st; dj <= st; dj += st) for (let di = -st; di <= st; di += st) {
+            const ii = i + di, jj = j + dj;
+            if ((di === 0 && dj === 0) || ii < 0 || jj < 0 || ii >= N || jj >= N) continue;
+            const q = near[jj * N + ii];
+            if (q < 0 || q === b) continue;
+            const d = dist2(q, i, j);
+            if (d < bd) { bd = d; b = q; }
+          }
+          near[o] = b;
+        }
+      }
+    }
+    this.outer = new Float32Array(N * N * 3);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const o = j * N + i, q = near[o];
+      this.outer[o * 3] = q >= 0 ? Math.sqrt(dist2(q, i, j)) : 1e5;
+      this.outer[o * 3 + 1] = q >= 0 ? sl[q] : this.profile.baseElevation;
+      this.outer[o * 3 + 2] = q >= 0 ? sw[q] : 0;
+    }
+  }
+
+  private btmp: [number, number, number] = [0, 0, 0];
+
   private sampleRaster(x: number, z: number, out: [number, number, number]): void {
-    const N = this.rasterN;
-    const fx = clamp((x + this.extent) / RASTER_CELL, 0, N - 1.001);
-    const fz = clamp((z + this.extent) / RASTER_CELL, 0, N - 1.001);
+    const r2 = x * x + z * z;
+    if (r2 < this.protectSq) { this.sampleGrid(this.raster, this.rasterN, this.extent, RASTER_CELL, x, z, out); return; }
+    // Countryside: the raster with every river, blended in beyond the protected zone.
+    this.sampleGrid(this.outer, this.outerN, this.worldExtent, this.outerCell, x, z, out);
+    const t = smoothstep(this.protectR, this.protectR + BLEND_BAND, Math.sqrt(r2));
+    if (t >= 1) return;
+    const a = this.btmp;
+    this.sampleGrid(this.raster, this.rasterN, this.extent, RASTER_CELL, x, z, a);
+    for (let c = 0; c < 3; c++) out[c] = lerp(a[c], out[c], t);
+  }
+
+  private sampleGrid(r: Float32Array, N: number, ext: number, cell: number, x: number, z: number, out: [number, number, number]): void {
+    const fx = clamp((x + ext) / cell, 0, N - 1.001);
+    const fz = clamp((z + ext) / cell, 0, N - 1.001);
     const i = Math.floor(fx), j = Math.floor(fz);
     const tx = fx - i, tz = fz - j;
-    const r = this.raster;
     for (let c = 0; c < 3; c++) {
       const a = r[(j * N + i) * 3 + c], b = r[(j * N + i + 1) * 3 + c];
       const d = r[((j + 1) * N + i) * 3 + c], e = r[((j + 1) * N + i + 1) * 3 + c];
@@ -234,6 +490,7 @@ export class Terrain {
     const key = (Math.floor(x / HASH_CELL) + 32768) * 65536 + (Math.floor(z / HASH_CELL) + 32768);
     const b = this.segHash.get(key);
     if (!b) return out;
+    if (this.mixed.has(key)) return this.waterMixed(x, z, b, out);
     let best = Infinity;
     for (let k = 0; k < b.length; k += 2) {
       const r = b[k], i = b[k + 1];
@@ -257,6 +514,35 @@ export class Terrain {
       out.halfWidth = this.riverHalfWidthAt(out.river, out.s);
       out.level = this.riverLevelAt(out.river, out.s);
     }
+    return out;
+  }
+
+  /**
+   * Nearest river where countryside rivers are indexed: the river whose bank is nearest wins,
+   * so a narrow stream never claims the water of the wide river it flows into.
+   */
+  private waterMixed(x: number, z: number, b: ArrayLike<number>, out: WaterQuery): WaterQuery {
+    let bestM = Infinity;
+    for (let k = 0; k < b.length; k += 2) {
+      const r = b[k], i = b[k + 1];
+      const R = this.rivers[r];
+      const pts = R.pts;
+      const ax = pts[i * 2], az = pts[i * 2 + 1], bx = pts[i * 2 + 2], bz = pts[i * 2 + 3];
+      const dx = bx - ax, dz = bz - az;
+      const l2 = dx * dx + dz * dz;
+      let t = l2 > 0 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const d = Math.hypot(ax + dx * t - x, az + dz * t - z);
+      const s = R.s[i] + Math.sqrt(l2) * t;
+      // Cheap bound first: the width wobbles at most ±12% around its linear course.
+      if (d - 0.5 * lerp(R.width0, R.width1, clamp(s / R.length, 0, 1)) * 1.13 > bestM) continue;
+      const hw = this.riverHalfWidthAt(r, s);
+      if (d - hw < bestM) {
+        bestM = d - hw;
+        out.river = r; out.s = s; out.d = d; out.halfWidth = hw;
+      }
+    }
+    if (out.river >= 0) out.level = this.riverLevelAt(out.river, out.s);
     return out;
   }
 
@@ -355,4 +641,11 @@ export class Terrain {
     const hz = this.height(x, z + e) - this.height(x, z - e);
     return Math.hypot(hx, hz) / (2 * e);
   }
+}
+
+/** Polyline (x,z,...) in reverse order. */
+function reversed(pts: number[]): number[] {
+  const out: number[] = [];
+  for (let i = pts.length - 2; i >= 0; i -= 2) out.push(pts[i], pts[i + 1]);
+  return out;
 }

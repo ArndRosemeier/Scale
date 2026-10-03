@@ -11,6 +11,7 @@ export type ToWorker =
   | { type: 'cell'; job: number; cell: number }
   | { type: 'terrain'; job: number; x0: number; z0: number; size: number; res: number; skirt: number }
   | { type: 'water'; job: number; x0: number; z0: number; size: number }
+  | { type: 'forest'; job: number; x0: number; z0: number; size: number }
   | { type: 'bridges'; job: number }
   | { type: 'skyline'; job: number; cells: number[] };
 
@@ -37,6 +38,8 @@ export type FromWorker =
   | CellResult
   | { type: 'terrain'; job: number; mesh: MeshData }
   | { type: 'water'; job: number; mesh: MeshData | null }
+  /** Countryside trees of a tile (FOREST_STRIDE floats per tree, see build/forest). */
+  | { type: 'forest'; job: number; trees: Float32Array }
   | { type: 'bridges'; job: number; mesh: MeshData | null }
   | { type: 'skyline'; job: number; cells: number[]; records: Float32Array; counts: number[]; map: Float32Array; mapOff: Int32Array }
   | { type: 'error'; job: number; message: string };

@@ -176,6 +176,14 @@ export class Underground {
     return false;
   }
 
+  /** Lowest ceiling of the volumes containing (x, y, z) (Infinity: none) - jumps stop there. */
+  ceilingAt(x: number, y: number, z: number): number {
+    let c = Infinity;
+    for (const t of this.tubes) { const h = tubeAt(t, x, y, z); if (h) c = Math.min(c, h.floor + t.height); }
+    for (const b of this.boxes) if (boxAt(b, x, y, z)) c = Math.min(c, b.y1);
+    return c;
+  }
+
   /** Inside any volume (with margin)? Used to keep bodies inside tunnels. */
   contains(x: number, y: number, z: number, margin: number): boolean {
     for (const t of this.tubes) if (tubeAt(t, x, y, z, -margin)) return true;

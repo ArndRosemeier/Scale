@@ -29,16 +29,7 @@ import type { TextureLibrary } from '../render/TextureLibrary';
 import { polyCentroid, polyArea, minAreaRect } from '../core/geom2';
 import { MinHeap } from '../core/heap';
 import { WallMat } from '../plan/building';
-
-/** Impulse (N·s) needed to break a panel per m² by wall material. */
-const STRENGTH: Record<number, number> = {
-  [WallMat.GlassCurtain]: 900, [WallMat.MetalPanel]: 4000, [WallMat.WoodSiding]: 3500, [WallMat.Timber]: 5000,
-  [WallMat.Plaster]: 9000, [WallMat.Stucco]: 9000, [WallMat.BrickRed]: 14000, [WallMat.BrickBrown]: 14000,
-  [WallMat.BrickYellow]: 14000, [WallMat.BrickWhite]: 14000, [WallMat.Brownstone]: 18000, [WallMat.Limestone]: 20000,
-  [WallMat.Sandstone]: 18000, [WallMat.Granite]: 24000, [WallMat.Concrete]: 26000, [WallMat.ConcretePanel]: 24000,
-};
-/** Glass alone breaks much more easily (windows shatter before walls). */
-const GLASS_IMPULSE = 120;
+import { WALL_STRENGTH as STRENGTH, GLASS_IMPULSE } from './wallStrength';
 
 export interface ImpactEvent {
   x: number; y: number; z: number;
@@ -179,6 +170,36 @@ export class Destruction {
   }
 
   /**
+   * First standing wall panel a horizontal ray (fist, body) meets within maxT: the distance
+   * along the ray and the panel's outward normal, or null. Panels facing away are ignored.
+   */
+  facadeHit(ox: number, oy: number, oz: number, dx: number, dz: number, maxT: number): { t: number; nx: number; nz: number } | null {
+    const ex = ox + dx * maxT, ez = oz + dz * maxT;
+    const refs = this.world.buildingsIn(Math.min(ox, ex) - 1, Math.min(oz, ez) - 1, Math.max(ox, ex) + 1, Math.max(oz, ez) + 1);
+    let best: { t: number; nx: number; nz: number } | null = null;
+    for (const ref of refs) {
+      if (!ref.alive || oy < ref.low - 0.5 || oy > ref.top + 0.5) continue;
+      const cs = ref.cell;
+      for (const p of this.layoutOf(ref).panels) {
+        if (oy < p.y0 - 0.05 || oy > p.y1 + 0.05) continue;
+        const dn = dx * p.nx + dz * p.nz;
+        if (dn > -0.15) continue;
+        // Plane crossing, then within the panel's extent (a little slack at the seams).
+        const t = ((p.ax - ox) * p.nx + (p.az - oz) * p.nz) / dn;
+        if (t < -0.15 || t > maxT || (best && t >= best.t)) continue;
+        const hx = ox + dx * t - p.ax, hz = oz + dz * t - p.az;
+        const ux = p.bx - p.ax, uz = p.bz - p.az, L2 = ux * ux + uz * uz;
+        const s = (hx * ux + hz * uz) / Math.max(1e-6, L2);
+        const slack = 0.05 / Math.sqrt(Math.max(1e-6, L2));
+        if (s < -slack || s > 1 + slack) continue;
+        if (!this.streamer.isAlive(cs, p.e) || this.doomed.has(cs.id * 16777216 + p.e)) continue;
+        best = { t: Math.max(0, t), nx: p.nx, nz: p.nz };
+      }
+    }
+    return best;
+  }
+
+  /**
    * Apply an impact: impulse (N·s) delivered at a point within radius, from direction (dx,dy,dz).
    * Returns the number of panels broken.
    */
@@ -188,7 +209,7 @@ export class Destruction {
     let glassBroken = 0;
     for (const ref of refs) {
       if (!ref.alive) continue;
-      if (y + radius < ref.low || y - radius > ref.top + 3) continue;
+      if (y + radius < ref.low || y - radius > ref.top + ROOF_RISE) continue;
       const cs = ref.cell;
       const L = this.layoutOf(ref);
       for (const p of L.panels) {
@@ -215,8 +236,12 @@ export class Destruction {
         }
       }
       // Slab tiles in reach (floors and ceilings seen through the blast).
+      const topF = L.floors[L.floors.length - 1], wallTop = L.base + L.height;
+      // Vertical distance to a storey's slab; the top storey's tiles also carry its roof (flat or
+      // pitched, up to the ridge), so hits on the roof break the roof piece they land on.
+      const dyOf = (fl: FloorInfo) => fl === topF ? (y < fl.y0 ? fl.y0 - y : y > wallTop + ROOF_RISE ? y - wallTop - ROOF_RISE : 0) : Math.abs(fl.y0 - y);
       for (const fl of L.floors) {
-        if (fl.f === 0 || Math.abs(fl.y0 - y) > radius) continue;
+        if (fl.f === 0 || dyOf(fl) > radius) continue;
         const g = L.tiers[fl.tier].grid;
         const ddx = x - g.cx, ddz = z - g.cz;
         const iu = (ddx * g.ux + ddz * g.uz - g.u0) / g.size, iv = (-ddx * g.uz + ddz * g.ux - g.v0) / g.size;
@@ -228,7 +253,7 @@ export class Destruction {
           const e = fl.tiles[c];
           if (e < 0 || !this.solid(cs, e)) continue;
           const [tx, tz] = this.tileCenter(g, c);
-          const d = Math.max(0, Math.hypot(tx - x, tz - z) - g.size * 0.6, Math.abs(fl.y0 - y) - 0.2);
+          const d = Math.max(0, Math.hypot(tx - x, tz - z) - g.size * 0.6, dyOf(fl) - 0.2);
           if (d > radius) continue;
           const area = g.size * g.size;
           const j = impulse * (1 - (d / Math.max(0.01, radius)) * 0.7);
@@ -801,6 +826,8 @@ function extractElements(src: THREE.BufferGeometry, elems: Set<number>): THREE.B
 
 export { polyCentroid };
 
+/** Height a pitched roof can rise above the wall top (for hits on roofs). */
+const ROOF_RISE = 9;
 const SLAB_STRENGTH = 26000; // N·s per m² of slab (reinforced concrete: tougher than walls)
 
 function distSeg(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {

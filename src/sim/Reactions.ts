@@ -14,6 +14,7 @@ import type { Pedestrians, PedAgent, DownCause } from './Pedestrians';
 import { PState } from './Pedestrians';
 import type { Stimuli, Stimulus } from '../game/Stimuli';
 import type { Player } from '../player/Player';
+import { statusOf } from '../shared/status';
 
 export class Reactions {
   private lastSeen = 0;
@@ -33,6 +34,9 @@ export class Reactions {
     let screamers = 0;
     for (const a of this.peds.agents) {
       if (a.state === PState.Down) continue;
+      // Frozen solid: no reactions until thawed.
+      const st = statusOf(a);
+      if (st && st.frozen > 0) continue;
       const nerve = 0.4 + a.cit.nerve * 0.9;
       const before = a.fear;
       // ---- events
@@ -52,6 +56,11 @@ export class Reactions {
             else this.flee(a, s.x, s.z);
             break;
           }
+          case 'power':
+            // Beams, flames, bolts, quakes: frightening, but they only hurt what they hit.
+            a.fear = Math.min(2, a.fear + prox * nerve * 0.8);
+            if (a.fear > 0.5) this.flee(a, s.x, s.z); else this.gawk(a, s.x, s.y, s.z);
+            break;
           case 'stomp':
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
             if (d < Math.max(1.5, H * 0.12)) this.knockDown(a, s.x, s.z, 4, 'player');

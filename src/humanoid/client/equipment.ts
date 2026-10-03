@@ -200,7 +200,9 @@ export class EquipmentRig {
    * A newer `set` makes jobs still pending from an older one skip themselves.
    */
   set(eq: EquipmentVisuals | undefined, schedule?: (job: () => void, label: string) => void, done?: () => void) {
-    const key = eq ? Object.entries(eq).filter(([, v]) => v).map(([k, v]) => `${k}:${v!.defId}:${v!.visual.seed}`).sort().join('|') : '';
+    // Everything visible counts (colours, pattern, cut), not only item and seed: a recoloured
+    // garment was ignored (the character creator's colour swatches did nothing).
+    const key = eq ? Object.entries(eq).filter(([, v]) => v).map(([k, v]) => `${k}:${v!.defId}:${JSON.stringify(v!.visual)}`).sort().join('|') : '';
     if (key === this.key) {
       done?.();
       return;

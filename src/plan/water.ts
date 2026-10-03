@@ -20,9 +20,9 @@ const CHUNK = 240; // m of river per chunk
  * River chunks: each chunk is the channel buffer (half width + margin) over a
  * stretch of the centerline. Chunks overlap slightly so their union is closed.
  */
-export function riverChunks(terrain: Terrain, margin: number): WaterChunk[] {
+export function riverChunks(terrain: Terrain, margin: number, rivers = terrain.rivers.length): WaterChunk[] {
   const out: WaterChunk[] = [];
-  terrain.rivers.forEach((R, ri) => {
+  terrain.rivers.slice(0, rivers).forEach((R, ri) => {
     const pts = R.pts;
     const n = pts.length >> 1;
     let i = 0;
@@ -52,11 +52,10 @@ export function riverChunks(terrain: Terrain, margin: number): WaterChunk[] {
  * Sea polygon by tracing the coastline (c = margin) along the coast tangent,
  * closed far out to sea. Islands/bays deeper than the trace are approximated.
  */
-export function seaPolygon(terrain: Terrain, margin: number, step = 30): Poly | null {
+export function seaPolygon(terrain: Terrain, margin: number, step = 30, ext = terrain.extent * 1.2): Poly | null {
   const p = terrain.profile;
   if (!p.coastal) return null;
   const perp: [number, number] = [-p.seaDir[1], p.seaDir[0]];
-  const ext = terrain.extent * 1.2;
   const coast: number[] = [];
   for (let t = -ext; t <= ext; t += step) {
     const ox = perp[0] * t, oz = perp[1] * t;

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { MaterialArrays } from '../TextureLibrary';
 import { G } from './globals';
 import { GLSL_COMMON } from './glsl';
+import { landGlsl, parcelParams } from '../../world/landuse';
 
 export function createGroundMaterial(arrays: MaterialArrays): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
@@ -57,7 +58,13 @@ export const terrainHoles = {
   uHoleN: { value: 0 },
 };
 
-export function createTerrainMaterial(arrays: MaterialArrays): THREE.MeshStandardMaterial {
+/**
+ * With a world seed, the terrain also shows the countryside land use from the tiles' aLand
+ * attribute (forest floor / canopy, crop parcels with rows and tramlines, meadows, green
+ * banks), soft at every distance.
+ */
+export function createTerrainMaterial(arrays: MaterialArrays, seed?: number): THREE.MeshStandardMaterial {
+  const land = seed !== undefined;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   const uniforms = {
     ...terrainHoles,
@@ -68,8 +75,8 @@ export function createTerrainMaterial(arrays: MaterialArrays): THREE.MeshStandar
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nvarying vec2 vMUv; varying vec3 vWPos; varying vec3 vWNrm;`)
-      .replace('#include <uv_vertex>', `#include <uv_vertex>\nvMUv = uv;`)
+      .replace('#include <common>', `#include <common>\nvarying vec2 vMUv; varying vec3 vWPos; varying vec3 vWNrm;${land ? '\nattribute vec4 aLand; varying vec4 vLand;' : ''}`)
+      .replace('#include <uv_vertex>', `#include <uv_vertex>\nvMUv = uv;${land ? ' vLand = aLand;' : ''}`)
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vWNrm = normalize(mat3(modelMatrix) * objectNormal);`);
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -79,7 +86,8 @@ uniform sampler2DArray uAlb; uniform sampler2DArray uNrm; uniform float uTile[16
 uniform vec4 uHoleA[16]; uniform vec4 uHoleB[16]; uniform int uHoleN;
 varying vec2 vMUv; varying vec3 vWPos; varying vec3 vWNrm;
 ${GLSL_COMMON}
-float gRough; vec2 gTn; vec2 gTuv;`,
+float gRough; vec2 gTn; vec2 gTuv;
+${land ? 'varying vec4 vLand;\n' + landGlsl(parcelParams(seed!)) + LAND_FRAG : ''}`,
       )
       .replace(
         '#include <map_fragment>',
@@ -99,6 +107,7 @@ float wRock = smoothstep(0.38, 0.6, slope);
 float wSand = 1.0 - smoothstep(0.6, 2.2, vWPos.y);
 vec4 a = mix(g, d, wDirt); vec4 nn = mix(gn, dn, wDirt);
 a = mix(a, r, wRock); nn = mix(nn, rn, wRock);
+${land ? 'landUse(a, nn, g, d, gn, dn, n, wRock);' : ''}
 a = mix(a, sa * vec4(1.15, 1.08, 0.9, 1.0), wSand); nn = mix(nn, sn, wSand);
 gRough = a.a; gTn = nn.xy * 2.0 - 1.0; gTuv = tg;
 diffuseColor.rgb = a.rgb * mix(0.85, 1.1, n) * mix(1.0, nn.a, 0.8);`,
@@ -107,9 +116,79 @@ diffuseColor.rgb = a.rgb * mix(0.85, 1.1, n) * mix(1.0, nn.a, 0.8);`,
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;')
       .replace('#include <normal_fragment_maps>', 'normal = perturbNormalUV(-vViewPosition, normal, gTuv, gTn, 1.0);');
   };
-  mat.customProgramCacheKey = () => 'terrain-v2';
+  mat.customProgramCacheKey = () => 'terrain-v3' + (land ? '-' + seed : '');
   return mat;
 }
+
+const srgb = (r: number, g: number, b: number) => `vec3(${[r, g, b].map((c) => Math.pow(c, 2.2).toFixed(4)).join(', ')})`;
+
+/** Countryside colouring of the terrain (after the slope blend, before the beach sand). */
+const LAND_FRAG = /* glsl */ `
+vec3 cropColor(float crop) {
+  return crop < 0.5 ? ${srgb(0.66, 0.56, 0.3)} : crop < 1.5 ? ${srgb(0.72, 0.66, 0.42)} : crop < 2.5 ? ${srgb(0.37, 0.49, 0.18)}
+    : crop < 3.5 ? ${srgb(0.25, 0.37, 0.13)} : crop < 4.5 ? ${srgb(0.38, 0.29, 0.2)} : crop < 5.5 ? ${srgb(0.4, 0.5, 0.22)}
+    : crop < 6.5 ? ${srgb(0.8, 0.74, 0.2)} : ${srgb(0.64, 0.58, 0.4)};
+}
+// Share of the ground the crop covers between its rows (pasture: closed sward).
+float cropCover(float crop) {
+  return crop < 0.5 ? 0.9 : crop < 1.5 ? 0.88 : crop < 2.5 ? 0.7 : crop < 3.5 ? 0.6 : crop < 4.5 ? 0.5 : crop < 5.5 ? 1.0 : crop < 6.5 ? 0.85 : 0.8;
+}
+// Row spacing (m): drilled cereals are fine, maize wide, ploughed land has furrows.
+float rowPeriod(float crop) {
+  return crop < 1.5 ? 0.17 : crop < 2.5 ? 0.22 : crop < 3.5 ? 0.75 : crop < 4.5 ? 0.6 : crop < 6.5 ? 0.35 : 0.2;
+}
+void landUse(inout vec4 a, inout vec4 nn, vec4 g, vec4 d, vec4 gn, vec4 dn, float n, float wRock) {
+  float rural = vLand.x + vLand.y + vLand.z;
+  if (rural < 0.003) return;
+  float camD = length(vWPos - cameraPosition);
+  // Ground footprint of a pixel (m): decides what can still be resolved.
+  float foot = length(fwidth(vWPos.xz));
+  vec3 lumW = vec3(0.3, 0.59, 0.11);
+  float gDet = clamp(dot(g.rgb, lumW) / max(1e-4, dot(textureLod(uAlb, vec3(0.5, 0.5, 3.0), 10.0).rgb, lumW)), 0.55, 1.5);
+  float dDet = clamp(dot(d.rgb, lumW) / max(1e-4, dot(textureLod(uAlb, vec3(0.5, 0.5, 11.0), 10.0).rgb, lumW)), 0.55, 1.5);
+  // The detail textures' tiling shows as a dot grid from afar: let it fade.
+  float far = smoothstep(25.0, 160.0, camD);
+  gDet = mix(gDet, 1.0, far); dDet = mix(dDet, 1.0, far);
+  float big = fbm2(vWPos.xz * 0.0021 + 3.7);
+  // Meadow: the grass, lusher or drier in large patches; banks lush.
+  vec3 meadow = g.rgb * mix(vec3(1.08, 1.02, 0.72), vec3(0.86, 1.08, 0.82), big);
+  vec3 bank = g.rgb * vec3(0.82, 1.08, 0.74);
+  // Forest: litter and moss up close, canopy colour from afar.
+  float moss = smoothstep(0.35, 0.65, fbm2(vWPos.xz * 0.09 + 11.0) + (n - 0.5) * 0.4);
+  vec3 floorC = mix(d.rgb * vec3(0.6, 0.5, 0.38), g.rgb * vec3(0.62, 0.78, 0.42), moss);
+  vec3 canopy = ${srgb(0.2, 0.29, 0.12)} * mix(0.75, 1.2, fbm2(vWPos.xz * 0.013)) * mix(0.9, 1.08, big);
+  vec3 forest = mix(floorC, canopy, smoothstep(120.0, 700.0, camD));
+  // Fields: the parcel patchwork, crop rows (fading out before they alias), tramlines, grass margins.
+  float crop;
+  vec4 pc = parcelAt(vWPos.xz, crop);
+  vec3 cc = cropColor(crop) * mix(0.86, 1.12, pc.y) * mix(0.93, 1.05, big);
+  bool pasture = crop > 4.5 && crop < 5.5, ploughed = crop > 3.5 && crop < 4.5;
+  if (pasture) cc = meadow * mix(0.92, 1.1, pc.y);
+  vec3 soil = ${srgb(0.34, 0.27, 0.19)} * dDet;
+  float rowM = pc.z / rowPeriod(crop);
+  float rows = 1.0 - smoothstep(0.2, 0.55, fwidth(rowM));
+  float stripe = 0.5 + 0.5 * sin(rowM * 6.2831853);
+  float cover = cropCover(crop);
+  float soilShare = mix(1.0 - cover, mix(1.0 - cover, smoothstep(cover - 0.15, cover + 0.15, stripe), 0.75), rows);
+  vec3 field = ploughed ? cc * dDet * mix(1.0, 0.78 + 0.4 * stripe, rows) : mix(cc * gDet, soil, soilShare);
+  if (!pasture && !ploughed) {
+    float tm = abs(fract(pc.z / 18.0) - 0.5) * 18.0;
+    float fwT = fwidth(pc.z);
+    field = mix(field, soil * 1.05, (1.0 - smoothstep(0.35, 0.35 + fwT * 1.5, tm)) * (1.0 - smoothstep(0.3, 1.2, fwT)) * 0.8);
+  }
+  float fwB = fwidth(pc.x);
+  field = mix(field, meadow * 0.95, (1.0 - smoothstep(1.1, 1.1 + fwB * 1.5, pc.x)) * (1.0 - smoothstep(2.0, 8.0, fwB)));
+  // Too far to resolve the parcels: their average colour.
+  field = mix(field, ${srgb(0.5, 0.52, 0.27)} * mix(0.85, 1.1, big), smoothstep(25.0, 70.0, foot));
+  vec3 c = (vLand.x * forest + vLand.y * field + vLand.z * meadow) / rural;
+  c = mix(c, bank, clamp(vLand.w / rural, 0.0, 1.0));
+  float wl = rural * (1.0 - wRock * 0.6);
+  a.rgb = mix(a.rgb, c, wl);
+  a.a = mix(a.a, 0.92, wl);
+  float soilN = (vLand.y * (ploughed ? 1.0 : soilShare) + vLand.x * 0.4) / rural;
+  nn = mix(nn, mix(gn, dn, soilN), wl * 0.85);
+}
+`;
 
 /** Animated water: procedural normal waves, fresnel reflection of the environment, depth tint. */
 export function createWaterMaterial(murky = false): THREE.MeshPhysicalMaterial {

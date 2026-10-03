@@ -5,6 +5,7 @@ import type { WorldIndex } from '../world/WorldIndex';
 import type { CityStreamer } from '../stream/CityStreamer';
 import type { Pedestrians } from '../sim/Pedestrians';
 import type { Traffic } from '../sim/Traffic';
+import type { RoadNet } from '../sim/RoadNet';
 import type { Physics } from '../physics/Physics';
 import type { Debris } from '../destruction/Debris';
 import type { Dust } from '../destruction/Dust';
@@ -18,6 +19,8 @@ export interface FutureCtx {
   streamer: CityStreamer;
   peds: Pedestrians;
   traffic: Traffic;
+  /** Road graph (junctions, signals) for the service robots' posts. */
+  net: RoadNet;
   physics: Physics;
   debris: Debris;
   dust: Dust;

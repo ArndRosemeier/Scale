@@ -6,7 +6,7 @@
  * Deeds report through `addKarma(amount, reason)` (negative amounts are the hook for
  * misdeeds later; they never take the balance below zero).
  */
-import { ABILITIES, ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
+import { ABILITIES, ABILITY, HOTBAR_SLOTS, LEGACY_IDS, type AbilityId } from './defs';
 import { KARMA, KARMA_COST } from './tuning';
 import type { GameMode } from '../mode';
 
@@ -27,8 +27,10 @@ interface ProgressData {
 
 export type KarmaListener = (amount: number, reason: string, balance: number) => void;
 
-const SANDBOX_SLOTS_KEY = 'scale.sandbox.slots';
-const DEFAULT_SANDBOX_SLOTS: (AbilityId | null)[] = ['superJump', 'dash', 'shockwave', 'flight', null, null, null, null];
+/** v2: ten slots and the elemental roster (v1 held eight, with dash). */
+const SANDBOX_SLOTS_KEY = 'scale.sandbox.slots.v2';
+/** Super jump (Space) and flight (F) have their own keys, so the sandbox bar starts with the rest. */
+const DEFAULT_SANDBOX_SLOTS: (AbilityId | null)[] = ['speed', 'laser', 'lightning', 'fireWave', 'frostNova', 'icePath', 'stomp', 'gust', 'hydro', 'shrink'];
 
 function fresh(): ProgressData {
   return { v: 1, karma: KARMA.start, earned: 0, deeds: 0, ranks: {}, slots: new Array(HOTBAR_SLOTS).fill(null), cores: [], seen: [], bonusMax: 0, bonusRegen: 0 };
@@ -55,7 +57,11 @@ export class Progress {
   get bonusRegen(): number { return this.d.bonusRegen; }
 
   rank(id: AbilityId): number {
-    return this.sandbox ? (this.d.ranks[id] ?? ABILITY[id].maxRank) : (this.d.ranks[id] ?? 0);
+    // Robust for ids that are not (or no longer) abilities: an old save, a renamed power.
+    const def = ABILITY[(LEGACY_IDS[id] ?? id) as AbilityId];
+    if (!def) return 0;
+    const r = this.d.ranks[def.id];
+    return this.sandbox ? (r ?? def.maxRank) : (r ?? 0);
   }
   unlocked(id: AbilityId): boolean { return this.rank(id) > 0; }
 
@@ -74,9 +80,10 @@ export class Progress {
 
   /** Karma price of the next rank (null: maxed). */
   nextCost(id: AbilityId): number | null {
+    const def = ABILITY[id];
     const r = this.rank(id);
-    if (r >= ABILITY[id].maxRank) return null;
-    return KARMA_COST[id][r];
+    if (!def || r >= def.maxRank) return null;
+    return KARMA_COST[id]?.[r] ?? null;
   }
 
   canBuy(id: AbilityId): boolean {
@@ -103,13 +110,14 @@ export class Progress {
   /** Sandbox: try any rank (0 … max). */
   setRank(id: AbilityId, r: number): void {
     if (!this.sandbox) return;
+    if (!ABILITY[id]) return;
     this.d.ranks[id] = Math.max(0, Math.min(ABILITY[id].maxRank, r));
     this.changed();
   }
 
   assign(slot: number, id: AbilityId | null): void {
     if (slot < 0 || slot >= HOTBAR_SLOTS) return;
-    if (id && ABILITY[id].kind !== 'active') return;
+    if (id && ABILITY[id]?.kind !== 'active') return;
     // An ability lives in one slot at a time: move it (swap with what was there).
     const from = id ? this.d.slots.indexOf(id) : -1;
     if (from >= 0) this.d.slots[from] = this.d.slots[slot];
@@ -165,6 +173,12 @@ export class Progress {
         const r = Number(o.ranks?.[a.id] ?? 0);
         if (r > 0) ranks[a.id] = Math.min(a.maxRank, Math.floor(r));
       }
+      // Powers that were folded into another (dash -> super speed): the rank carries over
+      // (the higher one wins), so no karma that was spent is lost.
+      for (const [old, now] of Object.entries(LEGACY_IDS)) {
+        const r = Number((o.ranks as Record<string, number> | undefined)?.[old] ?? 0);
+        if (r > 0) ranks[now] = Math.min(ABILITY[now].maxRank, Math.max(ranks[now] ?? 0, Math.floor(r)));
+      }
       return {
         v: 1, karma: Math.max(0, Number(o.karma) || 0), earned: Number(o.earned) || 0, deeds: Number(o.deeds) || 0, ranks,
         slots: sanitizeSlots(o.slots ?? []), cores: (o.cores ?? []).filter(Number.isFinite), seen: (o.seen ?? []).filter(Number.isFinite),
@@ -184,7 +198,7 @@ export class Progress {
 function sanitizeSlots(s: unknown[]): (AbilityId | null)[] {
   const out: (AbilityId | null)[] = new Array(HOTBAR_SLOTS).fill(null);
   for (let i = 0; i < HOTBAR_SLOTS; i++) {
-    const id = s[i] as AbilityId;
+    const id = (LEGACY_IDS[s[i] as string] ?? s[i]) as AbilityId;
     if (id && ABILITY[id]?.kind === 'active' && !out.includes(id)) out[i] = id;
   }
   return out;

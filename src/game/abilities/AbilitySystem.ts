@@ -1,11 +1,16 @@
 /**
- * Runs the player's powers: applies ranks to the existing mechanics (Player flight and
- * size, Interactions punch and blast), owns the energy pool and cooldowns, and routes
- * input — digits 1–8 trigger (and select) hotbar slots, right mouse uses the selected
+ * Runs the player's powers: applies ranks to the existing mechanics (Player flight, size and
+ * super speed, Interactions punch and blast), owns the energy pool and cooldowns, and routes
+ * input — digits 1–9, 0 trigger (and select) hotbar slots, right mouse uses the selected
  * slot, Space charges the super jump, F toggles flight.
  *
- * Call order per frame: `preUpdate` before Player.update (gates Space / F), `postUpdate`
- * after the in-world panels had their look at the digit keys.
+ * Trigger kinds: tap powers go off on the press (cooldown, energy); held powers (laser eyes,
+ * ice path, hydrokinesis) run while the key or button is held and drain energy per second;
+ * super speed dashes on a tap and runs while held.
+ *
+ * Call order per frame: `preUpdate` before Player.update (gates Space / F, sets the running
+ * speed), `postUpdate` after the in-world panels had their look at the digit keys. The
+ * elemental effects themselves run in Elements (it reads `channel`).
  */
 import * as THREE from 'three';
 import type { Player } from '../../player/Player';
@@ -15,17 +20,40 @@ import type { Progress } from './Progress';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
   ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE,
-  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, SIZE_RANGE,
+  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, SIZE_RANGE, SPEED, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, NOVA, NOVA_COOLDOWN,
+  BOLT, BOLT_COOLDOWN, QUAKE, QUAKE_COOLDOWN, GUST, GUST_COOLDOWN, SHRINK, SHRINK_COOLDOWN,
 } from './tuning';
 
 export interface AbilityHooks {
   sound?: (id: string, gain: number, pitch: number) => void;
   /** Feedback for a failed use (locked, no energy, cooldown). */
   deny?: (msg: string) => void;
-  dashFx?: (x: number, y: number, z: number) => void;
+  /** A dash starts: direction (unit), duration (s) and rank (trail, whoosh, camera kick, shoves). */
+  dashFx?: (dx: number, dy: number, dz: number, dur: number, rank: number) => void;
+  /** Super jump take-off with charge strength 0..1. */
+  leapFx?: (strength: number) => void;
 }
 
-const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'];
+/** The elemental layer: tap powers go off through it (true: it went off). */
+export interface PowerEffects {
+  fire(id: AbilityId, rank: number): boolean;
+}
+
+const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
+const NUMPAD = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6', 'Numpad7', 'Numpad8', 'Numpad9', 'Numpad0'];
+
+/** Tap powers of the elemental layer: energy and cooldown by rank. */
+const TAP: Partial<Record<AbilityId, { cost: number; cd: number[] }>> = {
+  fireWave: { cost: FIRE.cost, cd: FIRE_COOLDOWN },
+  frostNova: { cost: NOVA.cost, cd: NOVA_COOLDOWN },
+  lightning: { cost: BOLT.cost, cd: BOLT_COOLDOWN },
+  stomp: { cost: QUAKE.cost, cd: QUAKE_COOLDOWN },
+  gust: { cost: GUST.cost, cd: GUST_COOLDOWN },
+  shrink: { cost: SHRINK.cost, cd: SHRINK_COOLDOWN },
+};
+
+/** Held powers: energy per second (super speed runs for free, like flight). */
+const DRAIN: Partial<Record<AbilityId, number>> = { laser: LASER.drain, icePath: ICE.drain, hydro: HYDRO.drain, speed: SPEED.cost };
 
 export class AbilitySystem {
   energy = 0;
@@ -36,8 +64,12 @@ export class AbilitySystem {
   charge = -1;
   private chargeT = 0;
   private chargeSrc: string | null = null;
-  private slotHeld: string | null = null;
+  /** The held power this frame (laser, ice path, hydrokinesis, super speed): id, rank, seconds held. */
+  channel: { id: AbilityId; rank: number; t: number } | null = null;
+  private channelSrc: string | null = null;
   hooks: AbilityHooks = {};
+  /** The elemental layer (set by the game). */
+  effects: PowerEffects | null = null;
   /** Input disabled (UI open, free camera). */
   enabled = true;
 
@@ -48,6 +80,12 @@ export class AbilitySystem {
   get maxEnergy(): number { return this.progress.sandbox ? ENERGY.sandboxMax : ENERGY.max + this.progress.bonusMax; }
   get regen(): number { return this.progress.sandbox ? ENERGY.sandboxRegen : ENERGY.regen + this.progress.bonusRegen; }
   rank(id: AbilityId): number { return this.progress.rank(id); }
+
+  /** Is this power in use right now (held, running, flying, charging)? For the HUD. */
+  active(id: AbilityId): boolean {
+    if (this.channel?.id === id && (id !== 'speed' || this.player.speedTop > 0)) return true;
+    return (id === 'flight' && this.player.flying) || (id === 'superJump' && this.charge >= 0);
+  }
 
   /** Before Player.update: apply ranks to the mechanics and take over Space / F where needed. */
   preUpdate(dt: number, input: Input): void {
@@ -66,22 +104,28 @@ export class AbilitySystem {
     // Super jump on Space: tap = normal jump, hold = charge.
     const sj = this.rank('superJump') > 0;
     p.jumpOnSpace = !sj;
-    if (!this.enabled) { this.cancelCharge(); return; }
+    if (!this.enabled) { this.cancelCharge(); this.endChannel(); return; }
     if (sj && !p.flying) {
       if (input.hit('Space') && p.grounded && this.charge < 0) this.beginCharge('Space');
     }
     this.updateCharge(dt, input);
+    this.updateChannel(dt, input);
   }
 
   /** After the panels consumed their digits: hotbar keys and right mouse. */
   postUpdate(input: Input): void {
     if (!this.enabled) return;
     for (let s = 0; s < HOTBAR_SLOTS; s++) {
-      if (!input.hit(DIGITS[s]) && !input.hit(`Numpad${s + 1}`)) continue;
+      const src = input.hit(DIGITS[s]) ? DIGITS[s] : input.hit(NUMPAD[s]) ? NUMPAD[s] : null;
+      if (!src) continue;
       this.selected = s;
-      this.press(s, input.hit(DIGITS[s]) ? DIGITS[s] : `Numpad${s + 1}`);
+      this.press(s, src);
     }
     if (input.clicked & 4) this.press(this.selected, 'Mouse2');
+  }
+
+  private isHeld(src: string, input: Input): boolean {
+    return src === 'Mouse2' ? (input.buttons & 4) !== 0 : input.down(src);
   }
 
   private press(slot: number, src: string): void {
@@ -94,6 +138,7 @@ export class AbilitySystem {
       this.beginCharge(src);
       return;
     }
+    if (ABILITY[id].trigger === 'hold') { this.beginChannel(id, src); return; }
     this.use(id);
   }
 
@@ -108,19 +153,8 @@ export class AbilitySystem {
       case 'flight':
         p.toggleFlight();
         return true;
-      case 'dash': {
-        if (!this.spend(DASH.cost, id)) return false;
-        const dir = new THREE.Vector3();
-        this.cam.getWorldDirection(dir);
-        if (!p.flying) { dir.y = 0; if (dir.lengthSq() < 1e-6) dir.set(-Math.sin(p.yaw), 0, -Math.cos(p.yaw)); }
-        dir.normalize();
-        const k = p.k;
-        p.dash(dir.x, dir.y, dir.z, (DASH_DIST[r] * k) / DASH.time, DASH.time);
-        this.startCooldown(id, DASH_COOLDOWN[r]);
-        this.hooks.sound?.('whoosh_takeoff', 0.6, 1.5);
-        this.hooks.dashFx?.(p.pos.x, p.pos.y, p.pos.z);
-        return true;
-      }
+      case 'speed':
+        return this.dash(r);
       case 'shockwave': {
         if (this.energy < SHOCK_COST[r]) { this.hooks.deny?.('Not enough energy'); return false; }
         if (!this.interactions.blastAtView(SHOCK_RANGE[r] * Math.max(1, Math.sqrt(p.k)), SHOCK_IMPULSE[r], true)) return false;
@@ -129,12 +163,37 @@ export class AbilitySystem {
         p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.6 };
         return true;
       }
-      default:
-        return false;
+      default: {
+        const tap = TAP[id];
+        if (!tap || !this.effects) return false;
+        if (this.energy < tap.cost) { this.hooks.deny?.('Not enough energy'); return false; }
+        if (!this.effects.fire(id, r)) return false;
+        this.energy -= tap.cost;
+        this.startCooldown(id, tap.cd[r]);
+        return true;
+      }
     }
   }
 
-  private spend(cost: number, _id: AbilityId): boolean {
+  /** Super speed tapped: a dash burst where you look. */
+  private dash(r: number): boolean {
+    if (this.cooldown.get('speed')) { this.hooks.deny?.('Dash is recharging'); return false; }
+    if (!this.spend(DASH.cost)) return false;
+    const p = this.player;
+    const dir = new THREE.Vector3();
+    this.cam.getWorldDirection(dir);
+    if (!p.flying) { dir.y = 0; if (dir.lengthSq() < 1e-6) dir.set(-Math.sin(p.yaw), 0, -Math.cos(p.yaw)); }
+    dir.normalize();
+    // Distance ∝ size, duration ∝ √size (like every motion of the body): a giant's dash
+    // covers as many body lengths, in its own slow motion, instead of teleporting.
+    const k = p.k, dur = DASH.time * Math.max(0.6, Math.sqrt(k));
+    p.dash(dir.x, dir.y, dir.z, (DASH_DIST[r] * k) / dur, dur);
+    this.startCooldown('speed', DASH_COOLDOWN[r]);
+    this.hooks.dashFx?.(dir.x, p.flying ? dir.y : 0, dir.z, dur, r);
+    return true;
+  }
+
+  private spend(cost: number): boolean {
     if (this.energy < cost) { this.hooks.deny?.('Not enough energy'); return false; }
     this.energy -= cost;
     return true;
@@ -143,6 +202,39 @@ export class AbilitySystem {
   private startCooldown(id: AbilityId, s: number): void {
     if (this.progress.sandbox) s *= 0.25;
     if (s > 0) this.cooldown.set(id, { left: s, full: s });
+  }
+
+  // ---- held powers
+  private beginChannel(id: AbilityId, src: string): void {
+    if (this.channel) this.endChannel();
+    const drain = DRAIN[id] ?? 0;
+    if (drain > 0 && this.energy < drain * 0.25) { this.hooks.deny?.('Not enough energy'); return; }
+    this.channel = { id, rank: this.rank(id), t: 0 };
+    this.channelSrc = src;
+  }
+
+  private endChannel(): void {
+    const c = this.channel;
+    this.channel = null;
+    this.channelSrc = null;
+    this.player.speedTop = 0;
+    // A short press of super speed is a dash.
+    if (c && c.id === 'speed' && c.t < SPEED.tapTime && this.enabled) this.dash(c.rank);
+  }
+
+  private updateChannel(dt: number, input: Input): void {
+    const c = this.channel;
+    if (!c || !this.channelSrc) { this.player.speedTop = 0; return; }
+    if (!this.isHeld(this.channelSrc, input) || this.rank(c.id) <= 0) { this.endChannel(); return; }
+    c.t += dt;
+    c.rank = this.rank(c.id);
+    const drain = DRAIN[c.id] ?? 0;
+    if (drain > 0) {
+      if (this.energy < drain * dt) { this.hooks.deny?.('Out of energy'); this.channel = null; this.channelSrc = null; return; }
+      this.energy -= drain * dt;
+    }
+    // Super speed runs once the press is longer than a tap (on foot; in flight it only dashes).
+    this.player.speedTop = c.id === 'speed' && c.t >= SPEED.tapTime && !this.player.flying ? SPEED_TOP[c.rank] : 0;
   }
 
   // ---- super jump charge
@@ -156,6 +248,7 @@ export class AbilitySystem {
   private cancelCharge(): void {
     this.charge = -1;
     this.chargeSrc = null;
+    this.player.jumpCharge = -1;
   }
 
   private updateCharge(dt: number, input: Input): void {
@@ -164,8 +257,8 @@ export class AbilitySystem {
     if (p.flying) { this.cancelCharge(); return; }
     this.chargeT += dt;
     this.charge = Math.min(1, Math.max(0, (this.chargeT - JUMP.tapTime) / JUMP.chargeTime));
-    const held = this.chargeSrc === 'Mouse2' ? (input.buttons & 4) !== 0 : input.down(this.chargeSrc);
-    if (held) return;
+    p.jumpCharge = this.charge;
+    if (this.isHeld(this.chargeSrc, input)) return;
     // Released: a tap is an ordinary jump; a charge leaps (energy permitting).
     const f = this.charge, t = this.chargeT;
     this.cancelCharge();
@@ -177,8 +270,9 @@ export class AbilitySystem {
     this.energy -= cost;
     const normalH = (p.jumpSpeed * p.jumpSpeed) / (2 * 9.81);
     const h = normalH + (JUMP_HEIGHT[r] * p.k - normalH) * f;
-    p.launch(Math.sqrt(2 * 9.81 * h));
+    p.superLaunch(Math.sqrt(2 * 9.81 * h), f);
     this.startCooldown('superJump', JUMP.cooldown);
     this.hooks.sound?.('whoosh_takeoff', 0.35 + f * 0.4, 1.2 - f * 0.3);
+    this.hooks.leapFx?.(f);
   }
 }

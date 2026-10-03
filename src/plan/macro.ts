@@ -16,6 +16,7 @@ import type { WorldProfile } from '../world/settings';
 import { RoadClass, type ArterialEdge, type ArterialNode, type Bridge, type CellInfo, type Centre, type District, type MacroPlan } from './types';
 import { planUnderground } from './underground';
 import { MinHeap } from '../core/heap';
+import { makeBoundary, boundaryAt } from '../world/boundary';
 
 export const ROAD_SPEC: Record<RoadClass, { width: number; sidewalk: number; lanes: number }> = {
   [RoadClass.Boulevard]: { width: 24, sidewalk: 5.5, lanes: 3 },
@@ -43,10 +44,7 @@ export class CityField {
   }
 
   boundaryAt(x: number, z: number): number {
-    const a = Math.atan2(z, x);
-    const f = ((a / (Math.PI * 2)) + 1) % 1 * this.boundary.length;
-    const i = Math.floor(f), t = f - i;
-    return lerp(this.boundary[i % this.boundary.length], this.boundary[(i + 1) % this.boundary.length], t);
+    return boundaryAt(this.boundary, x, z);
   }
 
   inCity(x: number, z: number, margin = 0): boolean {
@@ -66,16 +64,6 @@ export class CityField {
     d *= smoothstep(edge * 1.02, edge * 0.82, Math.hypot(x, z));
     return clamp(d, 0, 1);
   }
-}
-
-function makeBoundary(p: WorldProfile): number[] {
-  const n = new Noise(deriveSeed(p.seed, 'boundary'));
-  const out: number[] = [];
-  for (let i = 0; i < 64; i++) {
-    const a = (i / 64) * Math.PI * 2;
-    out.push(p.radius * (1 + 0.2 * n.fbm2(Math.cos(a) * 1.3, Math.sin(a) * 1.3, 3)));
-  }
-  return out;
 }
 
 function makeCentres(terrain: Terrain, rng: Rng): { centres: Centre[]; core: [number, number] } {
@@ -657,7 +645,8 @@ function extractCells(nodes: ArterialNode[], edges: ArterialEdge[], field: CityF
 
 /** Remove water from cells; cells split by water become several cells. */
 function clipCellsByWater(cells: CellInfo[], terrain: Terrain): CellInfo[] {
-  const chunks = riverChunks(terrain, 0.5);
+  // The city's own rivers (countryside rivers never reach a cell).
+  const chunks = riverChunks(terrain, 0.5, terrain.baseRivers);
   const sea = seaPolygon(terrain, 0.5);
   const out: CellInfo[] = [];
   for (const c of cells) {

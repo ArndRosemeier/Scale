@@ -303,7 +303,7 @@ export function buildingTiers(b: BuildingDesc): { fromFloor: number; poly: Poly;
 }
 
 /** Max panel width for blind / plain walls (no bay rhythm). */
-const PLAIN_PANEL = 4;
+export const PLAIN_PANEL = 4;
 
 /** Entrance door on the front edge: same bay as the facade flags. */
 function doorOf(b: BuildingDesc): BuildingLayout['door'] {

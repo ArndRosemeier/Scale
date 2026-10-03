@@ -1,6 +1,7 @@
 /**
  * The near-future layer of the city (PLAYGROUND_PLAN §0 decision 16): sidewalk delivery
- * robots, drones, animated signage and holographic kiosks. One object for the game to
+ * and street-cleaning robots, humanoid service robots, drones, animated signage and
+ * holographic kiosks. One object for the game to
  * construct, update and forward strikes to; it listens to world stimuli (giant footsteps,
  * collapses, crashes, blasts) itself.
  */
@@ -11,6 +12,8 @@ import type { Stimuli } from '../game/Stimuli';
 import { Robots } from './Robots';
 import { Drones, DKind } from './Drones';
 import { Signs } from './Signs';
+import { ServiceBots } from './ServiceBots';
+import { LocalGround } from './ground';
 import type { FutureCtx, PlayerProbe } from './ctx';
 
 export type { FutureCtx, PlayerProbe } from './ctx';
@@ -22,6 +25,10 @@ export class NearFuture {
   readonly robots: Robots;
   readonly drones: Drones;
   readonly signs: Signs;
+  readonly service: ServiceBots;
+  /** Exact street level and building walls for the layer's knocked / falling bodies. */
+  readonly ground: LocalGround;
+  private traffic: FutureCtx['traffic'];
   private buzz: Loop | null = null;
   private buzzTry = 0;
   /** Positional loop factory (Audio.loop), optional. */
@@ -37,17 +44,25 @@ export class NearFuture {
     this.robots = new Robots(ctx, mat);
     this.drones = new Drones(ctx, mat);
     this.signs = new Signs(ctx, mat);
-    this.group.add(this.robots.group, this.drones.group, this.signs.group);
+    this.service = new ServiceBots(ctx, mat);
+    this.ground = new LocalGround(ctx);
+    this.robots.ground = this.drones.ground = this.service.ground = this.ground;
+    this.traffic = ctx.traffic;
+    this.group.add(this.robots.group, this.drones.group, this.signs.group, this.service.group);
     stimuli.on((s) => {
       switch (s.kind) {
         case 'stomp': {
           // A giant's foot flattens robots (and parcels' carriers) under it.
-          if (this.playerH > 2.5) this.robots.crush(s.x, s.z, Math.max(0.6, this.playerH * 0.09));
+          if (this.playerH > 2.5) {
+            this.robots.crush(s.x, s.z, Math.max(0.6, this.playerH * 0.09));
+            this.service.crush(s.x, s.z, Math.max(0.6, this.playerH * 0.09));
+          }
           break;
         }
         case 'collapse': {
           const r = Math.min(40, Math.max(8, s.radius * 0.04));
           this.robots.crush(s.x, s.z, r);
+          this.service.crush(s.x, s.z, r);
           this.signs.impact(s.x, s.y, s.z, r, true);
           this.drones.incident(DKind.News, s.x, s.z, this.px, this.pz);
           break;
@@ -58,6 +73,7 @@ export class NearFuture {
             const dx = r.x - s.x, dz = r.z - s.z, d = Math.hypot(dx, dz);
             if (d < 14 && d > 1e-3) this.robots.knock(r, (dx / d) * 3000 / Math.max(1, d), 800, (dz / d) * 3000 / Math.max(1, d));
           }
+          this.service.push(s.x, s.z, 14, 3000);
           this.drones.hit(s.x, s.y, s.z, 12, 0, 400, 0);
           break;
         }
@@ -74,6 +90,13 @@ export class NearFuture {
     hitch.measure('future:robots', () => this.robots.update(dt, hours, focus.x, focus.z, player, cam));
     hitch.measure('future:drones', () => this.drones.update(dt, hours, focus.x, focus.z, player, cam));
     hitch.measure('future:signs', () => this.signs.update(dt, cam));
+    hitch.measure('future:service', () => this.service.update(dt, hours, focus.x, focus.z, player, cam));
+    this.ground.update(dt);
+    // Robots on the carriageway for the cars to stop for (read by Traffic next frame).
+    const O = this.traffic.obstacles;
+    O.length = 0;
+    this.robots.obstacles(O);
+    this.service.obstacles(O);
     this.updateBuzz(dt, cam);
     this.stats.ms = this.stats.ms * 0.95 + (performance.now() - t0) * 0.05;
   }
@@ -98,6 +121,7 @@ export class NearFuture {
   /** A physical strike (punch, swat, thrown thing): robots, drones, signs and kiosks near it. */
   hit(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): void {
     this.robots.hit(x, y, z, r, jx, jy, jz);
+    this.service.hit(x, y, z, r, jx, jy, jz);
     this.drones.hit(x, y, z, r, jx, jy, jz);
     const J = Math.hypot(jx, jy, jz);
     if (J > 1200) this.signs.impact(x, y, z, r + 0.8, J > 3500);
@@ -105,8 +129,8 @@ export class NearFuture {
 
   /** Short debug summary (window.game.future.report()). */
   report(): string {
-    const r = this.robots.stats, d = this.drones.stats, s = this.signs.stats;
-    return `robots ${r.robots}/${r.target} (hubs ${r.hubs}, drawn ${r.drawn}, knocked ${r.knocked}, broken ${r.broken}) · drones ${d.drones}/${d.target} (drawn ${d.drawn}, swatted ${d.swatted}) · signs ${s.signs} in ${s.cells} cells (drawn ${s.drawn}, broken ${s.broken}), kiosks ${s.kiosks} · ${this.stats.ms.toFixed(2)} ms`;
+    const r = this.robots.stats, d = this.drones.stats, s = this.signs.stats, v = this.service.stats, g = this.ground.stats;
+    return `robots ${r.robots}/${r.target} (hubs ${r.hubs}, cleaners ${r.cleaners}, drawn ${r.drawn}, knocked ${r.knocked}, broken ${r.broken}, hit by cars ${r.carHits}) · service ${v.bots} at ${v.posts} posts (knocked ${v.knocked}) · drones ${d.drones}/${d.target} (drawn ${d.drawn}, swatted ${d.swatted}, legs ${d.legs}: raised ${d.raised}, over the top ${d.overTop}) · ground ${g.patches} patches, ${g.prisms} prisms · signs ${s.signs} in ${s.cells} cells (drawn ${s.drawn}, broken ${s.broken}), kiosks ${s.kiosks} · ${this.stats.ms.toFixed(2)} ms`;
   }
 
 }

@@ -2,7 +2,8 @@
  * Event bus of things that happen in the world, consumed by NPC perception,
  * traffic, audio and camera effects.
  */
-export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic';
+/** 'power': a frightening elemental power in use (beams, flames, bolts, quakes, vortices) — people flee, nothing breaks by itself. */
+export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power';
 
 export interface Stimulus {
   kind: StimulusKind;

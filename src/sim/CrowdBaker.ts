@@ -55,26 +55,32 @@ export async function bakeCrowdTemplates(onProgress?: (f: number) => void): Prom
   const out: CrowdTemplate[] = [];
   let i = 0;
   for (const def of TEMPLATE_DEFS) {
-    out.push(await bakeOne(def, 9100 + i * 17));
+    // A body that is not ready in time (busy machine) is retried once, then left out: the crowd
+    // uses the nearest remaining template rather than failing the start.
+    const t = (await bakeOne(def, 9100 + i * 17)) ?? (await bakeOne(def, 9100 + i * 17));
+    if (t) out.push(t);
+    else console.warn('[crowd] template skipped (body not ready):', def);
     onProgress?.(++i / TEMPLATE_DEFS.length);
   }
   return out;
 }
 
-async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promise<CrowdTemplate> {
+async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promise<CrowdTemplate | null> {
   const app = randomAppearance('human', seed, { gender: def.female ? 0.05 : 0.95, age: 0.35 });
   app.scale = 1;
   const rig = new HumanoidRig(app, { castShadow: false, fixedLod: 2, priority: -100 });
   rig.setEquipment(def.eq);
   let done = false;
   void rig.ready.then(() => { done = true; });
-  for (let k = 0; k < 20000 && !done; k++) { frameWork.pump(); await yieldNow(); }
+  // Waits are timed, not counted: a yield takes microseconds, so a count expired after a second or
+  // two and a slow body build (busy machine) then crashed the start on a missing character.
+  const t0 = performance.now();
+  while (!done && performance.now() - t0 < 60000) { frameWork.pump(); await yieldNow(); }
   // Wait until dressed (garments are built in budgeted jobs).
-  for (let k = 0; k < 4000 && !rig.char?.object.visible; k++) {
-    frameWork.pump();
-    await yieldNow();
-  }
-  const ch = rig.char!;
+  const t1 = performance.now();
+  while (!rig.char?.object.visible && performance.now() - t1 < 20000) { frameWork.pump(); await yieldNow(); }
+  if (!rig.char || !rig.animator) { rig.dispose(); return null; }
+  const ch = rig.char;
   const an = rig.animator!;
   ch.setLod(2);
   const root = rig.object;

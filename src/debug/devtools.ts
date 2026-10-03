@@ -3,6 +3,7 @@
  */
 import type { Game } from '../game/Game';
 import type { BuildingRef } from '../world/WorldIndex';
+import { statusOf } from '../shared/status';
 
 export function installDevtools(game: Game): void {
   const dev = {
@@ -56,6 +57,8 @@ export function installDevtools(game: Game): void {
     setSize(h: number): void { game.player.height = h; },
     teleport(x: number, z: number): void { game.player.pos.set(x, game.world.groundHeight(x, z) + 0.1, z); },
     hour(h: number): void { game.sky.hour = h; },
+    /** Power states on a person / car / robot / drone / prop (frozen, shrunk, burning …). */
+    status: statusOf,
   };
   (window as unknown as { dev: typeof dev }).dev = dev;
 }

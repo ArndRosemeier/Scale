@@ -4,10 +4,22 @@
  */
 import {
   MAX_RANK, PUNCH_IMPULSE, JUMP_HEIGHT, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE, SHOCK_COOLDOWN, SHOCK_COST,
-  FLIGHT_SPEED, SIZE_RANGE, JUMP, DASH,
+  FLIGHT_SPEED, FLIGHT_CRUISE, FLIGHT_BOOST, SIZE_RANGE, JUMP, DASH, SPEED_TOP,
+  LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, FIRE_COOLDOWN, NOVA, NOVA_RADIUS, NOVA_FREEZE, NOVA_COOLDOWN,
+  ICE, ICE_WIDTH, ICE_LIFE, BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, BOLT_COOLDOWN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE,
+  QUAKE_COOLDOWN, GUST, GUST_RADIUS, GUST_TIME, GUST_COOLDOWN, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
+  SHRINK_COOLDOWN,
 } from './tuning';
+import { wallBreakShare, windowShatterShare, WALL_CLASSES, type WallClass } from '../../destruction/wallStrength';
 
-export type AbilityId = 'strength' | 'superJump' | 'dash' | 'shockwave' | 'flight' | 'size';
+export type AbilityId = 'strength' | 'superJump' | 'speed' | 'shockwave' | 'flight' | 'size'
+  | 'laser' | 'fireWave' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink';
+
+/** Ids of earlier versions (saved progress, hotbars) -> their current power. */
+export const LEGACY_IDS: Record<string, AbilityId> = { dash: 'speed' };
+
+export type AbilityGroup = 'body' | 'movement' | 'elemental' | 'support';
+export const GROUP_NAMES: Record<AbilityGroup, string> = { body: 'Body', movement: 'Movement', elemental: 'Elemental', support: 'Support' };
 
 export interface AbilityDef {
   id: AbilityId;
@@ -18,7 +30,8 @@ export interface AbilityDef {
   icon: string;
   /** passive: always on (no hotbar); active: hotbar-assignable. */
   kind: 'active' | 'passive';
-  /** tap: fires on press; hold: charges while held, fires on release; toggle: on/off. */
+  group: AbilityGroup;
+  /** tap: fires on press; hold: works while held (super jump: charges, fires on release); toggle: on/off. */
   trigger: 'tap' | 'hold' | 'toggle' | 'none';
   maxRank: number;
   /** Native key besides the hotbar (shown in the UI). */
@@ -33,49 +46,175 @@ const svg = (body: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="curr
 
 const fmtJ = (j: number) => (j >= 1000 ? `${Math.round(j / 1000)}k` : `${j}`);
 const fmtH = (h: number) => (h < 1 ? `${Math.round(h * 100)} cm` : `${h} m`);
+const list = (a: string[]) => (a.length > 1 ? `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}` : a[0] ?? '');
+
+/**
+ * What a punch of rank r does to walls, from the real material strengths and street-level
+ * panel sizes (wallStrength.ts): "breaks" ≥ 90 % of a class's panels, "most" ≥ 50 %, "some" ≥ 20 %.
+ */
+function punchEffect(r: number): string {
+  const j = PUNCH_IMPULSE[r];
+  const by = (lo: number, hi: number) => WALL_CLASSES.filter((c: WallClass) => { const s = wallBreakShare(j, c); return s >= lo && s < hi; });
+  const all = by(0.9, 2), most = by(0.5, 0.9), some = by(0.2, 0.5);
+  const parts: string[] = [];
+  const name = (c: WallClass) => (c === 'glass' ? 'glass facades' : c);
+  if (all.length) parts.push(`breaks ${list(all.map(name))}${all.length === 1 && all[0] === 'glass' ? '' : ' walls'}`);
+  else {
+    const w = windowShatterShare(j);
+    parts.push(w >= 0.75 ? 'shatters windows' : w > 0.2 ? 'cracks some windows' : 'no damage to walls');
+  }
+  if (most.length) parts.push(`most ${list(most.map(name))}`);
+  if (some.length) parts.push(`some ${list(some.map(name))}`);
+  return parts.join(' · ');
+}
+
+/** Wall classes an impulse breaks at least half of (street-level panels). */
+function breaksClasses(j: number): WallClass[] {
+  return WALL_CLASSES.filter((c) => wallBreakShare(j, c) >= 0.5);
+}
+
+/** Impulse at which half of a class's street-level panels break (bisection over the real table). */
+const needCache = new Map<WallClass, number>();
+export function panelNeed(c: WallClass): number {
+  let v = needCache.get(c);
+  if (v !== undefined) return v;
+  let lo = 0, hi = 1e7;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (wallBreakShare(m, c) >= 0.5) hi = m; else lo = m; }
+  needCache.set(c, (v = hi));
+  return v;
+}
+
+/** How long the laser needs on one spot to cut through a typical panel of each class. */
+function laserCuts(r: number): string {
+  const dose = LASER_DOSE[r];
+  const parts: string[] = [];
+  for (const c of ['glass', 'wood', 'brick', 'concrete'] as WallClass[]) {
+    const t = panelNeed(c) / dose;
+    parts.push(`${c} ${t < 0.95 ? '<1' : t < 60 ? Math.round(t) : '60+'} s`);
+  }
+  return `cuts a wall panel: ${parts.join(' · ')}`;
+}
+
+function fireWalls(r: number): string {
+  const b = breaksClasses(FIRE_HEAT[r]);
+  if (b.length) return `burns through ${list(b)} walls`;
+  return windowShatterShare(FIRE_HEAT[r]) >= 0.75 ? 'bursts windows, scorches walls' : 'scorches walls';
+}
+
+function quakeWalls(r: number): string {
+  const b = breaksClasses(QUAKE_IMPULSE[r]);
+  return b.length ? `breaks ${list(b)} walls along it` : 'shatters windows along it';
+}
+
+const cd = (s: number) => `${s} s cooldown`;
 
 export const ABILITIES: AbilityDef[] = [
   {
-    id: 'strength', name: 'Super strength', kind: 'passive', trigger: 'none', maxRank: MAX_RANK, key: 'Left click',
+    id: 'strength', name: 'Super strength', kind: 'passive', group: 'body', trigger: 'none', maxRank: MAX_RANK, key: 'Left click',
     desc: 'Punches hit harder and running into walls smashes through them.',
     icon: svg('<path d="M7 11V7.5a1.5 1.5 0 0 1 3 0V10"/><path d="M10 9.5V6.5a1.5 1.5 0 0 1 3 0V10"/><path d="M13 9.5V7a1.5 1.5 0 0 1 3 0v3.5"/><path d="M16 10a1.5 1.5 0 0 1 3 0v3a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-2.7L4.2 14.6a1.6 1.6 0 0 1 2.6-1.8L8 14V11"/><path d="M3 5l1.5 1.5M6.5 2.5L7 4.5M2 9h2"/>'),
-    rankText: (r) => `Punch ${fmtJ(PUNCH_IMPULSE[r])} N·s · ${['', 'shatters windows', 'breaks glass facades', 'breaks wood and metal walls', 'breaks brick and stone', 'smashes concrete'][r]}`,
+    rankText: (r) => `Punch ${fmtJ(PUNCH_IMPULSE[r])} N·s · ${punchEffect(r)}`,
   },
   {
-    id: 'superJump', name: 'Super jump', kind: 'active', trigger: 'hold', maxRank: MAX_RANK, key: 'Hold Space',
+    id: 'superJump', name: 'Super jump', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK, key: 'Hold Space',
     desc: 'Hold Space to charge, release to leap onto rooftops. Heavy landings shake the ground.',
     icon: svg('<path d="M6 11l6-6 6 6"/><path d="M6 17l6-6 6 6"/><path d="M4 21h16"/>'),
     rankText: (r) => `Leap up to ${JUMP_HEIGHT[r]} m high`,
     costText: () => `${JUMP.cost} energy at full charge`,
   },
   {
-    id: 'dash', name: 'Dash', kind: 'active', trigger: 'tap', maxRank: MAX_RANK,
-    desc: 'A burst of speed where you look — through crowds, across gaps, into walls.',
+    id: 'speed', name: 'Super speed', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK,
+    desc: 'Hold to run faster than you can fly: up walls, over cars, across water; people you pass are spun aside. Tap for a dash burst.',
     icon: svg('<path d="M11 6l6 6-6 6"/><path d="M17 6l6 6-6 6" opacity="0.55"/><path d="M2 9h6M1 12h7M2 15h6"/>'),
-    rankText: (r) => `${DASH_DIST[r]} m burst · ${DASH_COOLDOWN[r]} s cooldown`,
-    costText: () => `${DASH.cost} energy`,
+    rankText: (r) => `Run ${SPEED_TOP[r]} m/s (flight boost ${Math.round(FLIGHT_BOOST * FLIGHT_SPEED[r])} m/s) · tap: ${DASH_DIST[r]} m dash, ${cd(DASH_COOLDOWN[r])}`,
+    costText: () => `Running is free · dash ${DASH.cost} energy`,
   },
   {
-    id: 'shockwave', name: 'Shockwave', kind: 'active', trigger: 'tap', maxRank: MAX_RANK,
+    id: 'shockwave', name: 'Shockwave', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
     desc: 'Detonate a concussive blast where you look.',
     icon: svg('<circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4"/><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/>'),
     rankText: (r) => `Blast ${fmtJ(SHOCK_IMPULSE[r])} N·s · reach ${SHOCK_RANGE[r]} m · ${SHOCK_COOLDOWN[r]} s cooldown`,
     costText: (r) => `${SHOCK_COST[Math.max(1, r)]} energy`,
   },
   {
-    id: 'flight', name: 'Flight', kind: 'active', trigger: 'toggle', maxRank: MAX_RANK, key: 'F',
+    id: 'flight', name: 'Flight', kind: 'active', group: 'movement', trigger: 'toggle', maxRank: MAX_RANK, key: 'F',
     desc: 'Take to the sky. Shift to boost, Space / Ctrl to climb and sink.',
     icon: svg('<path d="M3 13c3-1 5-4 6-8 1 3 1 6-1 9"/><path d="M21 13c-3-1-5-4-6-8-1 3-1 6 1 9"/><path d="M12 8v9"/><path d="M9 19l3-2 3 2"/>'),
-    rankText: (r) => `Cruise ${Math.round(22 * FLIGHT_SPEED[r])} m/s · boost ${Math.round(160 * FLIGHT_SPEED[r])} m/s`,
+    rankText: (r) => `Cruise ${Math.round(FLIGHT_CRUISE * FLIGHT_SPEED[r])} m/s · boost ${Math.round(FLIGHT_BOOST * FLIGHT_SPEED[r])} m/s`,
   },
   {
-    id: 'size', name: 'Size shift', kind: 'passive', trigger: 'none', maxRank: MAX_RANK, key: 'Numpad + / −',
+    id: 'size', name: 'Size shift', kind: 'passive', group: 'body', trigger: 'none', maxRank: MAX_RANK, key: 'Numpad + / −',
     desc: 'Grow into a giant or shrink to the size of a mouse.',
     icon: svg('<path d="M14 4h6v6"/><path d="M20 4l-6.5 6.5"/><path d="M10 20H4v-6"/><path d="M4 20l6.5-6.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1" opacity="0.55"/>'),
     rankText: (r) => `Size ${fmtH(SIZE_RANGE[r][0])} … ${fmtH(SIZE_RANGE[r][1])}`,
+  },
+  // ---------------------------------------------------------------- elemental
+  {
+    id: 'laser', name: 'Laser eyes', kind: 'active', group: 'elemental', trigger: 'hold', maxRank: MAX_RANK,
+    desc: 'Hold for a searing beam from your eyes: it cuts through walls, sets things smoking, wrecks cars and fries robots and drones.',
+    icon: svg('<path d="M2 8.5c2.4-2.8 5.2-4.2 7.7-4.2s5.3 1.4 7.7 4.2c-2.4 2.8-5.2 4.2-7.7 4.2S4.4 11.3 2 8.5z"/><circle cx="9.7" cy="8.5" r="1.7" fill="currentColor"/><path d="M11.5 14.5l9.5 6.5M7.5 15l5 7" stroke-width="2.2"/>'),
+    rankText: (r) => `Reach ${LASER_RANGE[r]} m · ${laserCuts(r)}`,
+    costText: () => `${LASER.drain} energy / s`,
+  },
+  {
+    id: 'fireWave', name: 'Fire wave', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'Breathe a cone of flame: people catch fire and run, cars smoke and burn out, light walls and windows give way.',
+    icon: svg('<path d="M12 21c-3.9 0-6.4-2.6-6.4-6 0-3.4 2.9-5.4 3.4-9 2 1.5 3 3.2 3 5 1-1 1.5-2.2 1.5-3.5 2.4 2 3.9 4.5 3.9 7.5 0 3.4-2.4 6-5.4 6z"/><path d="M12 21c-1.5 0-2.6-1.1-2.6-2.6 0-1.5 1.3-2.3 1.6-3.9 1.6 1 3.6 2.4 3.6 3.9 0 1.5-1.1 2.6-2.6 2.6z"/>'),
+    rankText: (r) => `Cone ${FIRE_RANGE[r]} m · burns ${FIRE_BURN[r]} s · ${fireWalls(r)}`,
+    costText: (r) => `${FIRE.cost} energy · ${cd(FIRE_COOLDOWN[Math.max(1, r)])}`,
+  },
+  {
+    id: 'frostNova', name: 'Frost nova', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'Everything around you freezes solid: people, cars, robots; drones drop, windows shatter, the ground ices over.',
+    icon: svg('<path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9.6 3.6L12 5.6l2.4-2M9.6 20.4L12 18.4l2.4 2M3.5 10.4l3.1-.7-.9-3M20.5 13.6l-3.1.7.9 3M3.5 13.6l3.1.7-.9 3M20.5 10.4l-3.1-.7.9-3"/>'),
+    rankText: (r) => `Radius ${NOVA_RADIUS[r]} m · frozen ${NOVA_FREEZE[r]} s · icy ground ${NOVA_FREEZE[r] * NOVA.iceLinger} s`,
+    costText: (r) => `${NOVA.cost} energy · ${cd(NOVA_COOLDOWN[Math.max(1, r)])}`,
+  },
+  {
+    id: 'icePath', name: 'Ice path', kind: 'active', group: 'elemental', trigger: 'hold', maxRank: MAX_RANK,
+    desc: 'Hold to freeze a sheet of ice ahead of you as you go: across rivers, the sea and gaps; look up to build a ramp. Slippery for everyone else.',
+    icon: svg('<path d="M2 18.5L21 11"/><path d="M2 18.5h19" opacity="0.5"/><path d="M6 17l.8 1.5M11 15l1 3.5M16 13l1.2 5.5"/><path d="M2 22c2-1 3.5 1 5.5 0s3.5 1 5.5 0 3.5 1 5.5 0" opacity="0.6"/><path d="M17 3l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/>'),
+    rankText: (r) => `Sheet ${ICE_WIDTH[r]} m wide · melts after ${ICE_LIFE[r]} s`,
+    costText: () => `${ICE.drain} energy / s`,
+  },
+  {
+    id: 'lightning', name: 'Chain lightning', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'A bolt that leaps from what it strikes to whatever is near: people, cars, robots, drones, lamps and signs alike.',
+    icon: svg('<path d="M13 2L6 13h5l-2 9 8-12h-5l3-8z"/><path d="M19 15l2 1.5M19.5 19l1.5.5M3 5l1.8 1M2.5 9h2" opacity="0.7"/>'),
+    rankText: (r) => `Strikes up to ${1 + BOLT_JUMPS[r]} targets · jumps ${BOLT_JUMP_RANGE[r]} m · reach ${BOLT_REACH[r]} m · stuns ${BOLT_STUN[r]} s`,
+    costText: (r) => `${BOLT.cost} energy · ${cd(BOLT_COOLDOWN[Math.max(1, r)])}`,
+  },
+  {
+    id: 'stomp', name: 'Seismic stomp', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'Stamp a fissure into the ground along your aim: props topple, cars and people are thrown, walls near the crack break.',
+    icon: svg('<path d="M2 20h20"/><path d="M12 20l-2-4 3-3-2-4 1.5-3"/><path d="M6 20l1.6-2.6M18 20l-1.3-2.9"/><path d="M7.5 5.5L5.5 3.5M16.5 5.5l2-2"/>'),
+    rankText: (r) => `Fissure ${QUAKE_LENGTH[r]} m · ${fmtJ(QUAKE_IMPULSE[r])} N·s · ${quakeWalls(r)}`,
+    costText: (r) => `${QUAKE.cost} energy · ${cd(QUAKE_COOLDOWN[Math.max(1, r)])}`,
+  },
+  {
+    id: 'gust', name: 'Whirlwind', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'Spin up a vortex where you aim: it lifts people, debris, props, robots and drones, scatters dust and smoke, and at high rank, cars.',
+    icon: svg('<path d="M3 5c4 1.6 14 1.6 18 0M5 9c3 1.3 10 1.3 13 0M7.5 13c2.5 1 6.5 1 8.5-.2M9.5 17c1.5.8 3.5.8 4.5 0M11 21h1.5"/>'),
+    rankText: (r) => `Vortex ${GUST_RADIUS[r]} m wide for ${GUST_TIME[r]} s · lifts people${r >= 5 ? ', cars (not buses or trucks)' : r >= 3 ? ', small cars' : ''}`,
+    costText: (r) => `${GUST.cost} energy · ${cd(GUST_COOLDOWN[Math.max(1, r)])}`,
+  },
+  {
+    id: 'hydro', name: 'Hydrokinesis', kind: 'active', group: 'elemental', trigger: 'hold', maxRank: MAX_RANK,
+    desc: 'Hold to conjure a pressure jet of water from your hands, anywhere. It knocks people over, shoves cars, puts out fires and leaves puddles.',
+    icon: svg('<path d="M10 2.5c2.6 3.4 4.6 5.8 4.6 8.2a4.6 4.6 0 0 1-9.2 0c0-2.4 2-4.8 4.6-8.2z"/><path d="M2 20c2-1.4 4-1.4 6 0s4 1.4 6 0 4-1.4 6 0"/><path d="M16 7.5h5M17 11h4" opacity="0.6"/>'),
+    rankText: (r) => `Jet ${HYDRO_RANGE[r]} m · ${fmtJ(HYDRO_FORCE[r])} N·s/s · ${r >= 3 ? 'shoves cars' : 'stops cars'}`,
+    costText: () => `${HYDRO.drain} energy / s`,
+  },
+  // ---------------------------------------------------------------- support
+  {
+    id: 'shrink', name: 'Shrink ray', kind: 'active', group: 'support', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'Zap a person, car, robot, drone or prop down to a fraction of its size for a while. It keeps working: tiny cars keep driving.',
+    icon: svg('<path d="M3.5 3.5l5 5M20.5 3.5l-5 5M3.5 20.5l5-5M20.5 20.5l-5-5"/><path d="M8.5 5v3.5H5M15.5 5v3.5H19M8.5 19v-3.5H5M15.5 19v-3.5H19"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'),
+    rankText: (r) => `Shrinks to ${Math.round(SHRINK_FACTOR[r] * 100)} % for ${SHRINK_TIME[r]} s · reach ${SHRINK.reach} m`,
+    costText: (r) => `${SHRINK.cost} energy · ${cd(SHRINK_COOLDOWN[Math.max(1, r)])}`,
   },
 ];
 
 export const ABILITY: Record<AbilityId, AbilityDef> = Object.fromEntries(ABILITIES.map((a) => [a.id, a])) as Record<AbilityId, AbilityDef>;
 
-export const HOTBAR_SLOTS = 8;
+export const HOTBAR_SLOTS = 10;

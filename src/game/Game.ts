@@ -43,10 +43,13 @@ import { Traffic, VState, VehicleObstacles, type Vehicle, type VKind } from '../
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
+import { Birds } from '../fauna/Birds';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
 import { Underground } from '../underground/Underground';
 import { Skyline } from '../stream/Skyline';
+import { Countryside } from '../stream/Countryside';
+import { terrainExtent } from '../world/boundary';
 import { FlightFX } from '../player/FlightFX';
 import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
@@ -57,12 +60,18 @@ import type { CellState } from '../stream/CityStreamer';
 import type { GameMode } from './mode';
 import { Progress } from './abilities/Progress';
 import { AbilitySystem } from './abilities/AbilitySystem';
+import { PowerFx } from './abilities/PowerFx';
 import { ABILITY } from './abilities/defs';
 import { PowerCores } from './abilities/PowerCores';
 import { planCoreSites, LOOT_INFO } from './abilities/cores';
 import { Deeds } from './Deeds';
 import { PowerHud } from '../ui/PowerHud';
 import { PowersScreen } from '../ui/PowersScreen';
+import { Targeting } from './Targeting';
+import { Elements } from './powers/Elements';
+import { Consequences } from './Consequences';
+import { PowerSynth } from '../audio/PowerSynth';
+import { TargetHud } from '../ui/TargetHud';
 
 export class Game {
   readonly renderer: Renderer;
@@ -97,15 +106,28 @@ export class Game {
   vehicles!: VehicleRenderer;
   props!: PropRenderer;
   future!: NearFuture;
+  birds!: Birds;
   interiors!: Interiors;
   underground!: Underground;
   gate!: ShaderGate;
   skyline!: Skyline;
+  countryside!: Countryside;
   flightFx!: FlightFX;
   menu!: Menu;
   map!: GameMap;
   progress!: Progress;
   abilities!: AbilitySystem;
+  powerFx!: PowerFx;
+  /** Tab targeting (what the powers go for). */
+  targeting!: Targeting;
+  /** The elemental powers in the world (laser, fire, frost, ice, lightning, quake, wind, water, shrink). */
+  elements!: Elements;
+  /** Collateral ledger: everything the player's powers did to whom (stub for reputation / karma). */
+  readonly consequences = new Consequences();
+  targetHud!: TargetHud;
+  synth!: PowerSynth;
+  /** Parked cars of the loaded cells. */
+  get parkedCars(): Vehicle[] { return this.parkedList; }
   /** Power cores (Normal mode only). */
   cores: PowerCores | null = null;
   deeds!: Deeds;
@@ -168,6 +190,8 @@ export class Game {
     this.net = new RoadNet(macro);
     this.skyline = new Skyline(macro, this.pool, tex.facade);
     this.renderer.scene.add(this.skyline.group);
+    this.countryside = new Countryside(this.pool, terrainExtent(macro.boundary));
+    this.renderer.scene.add(this.countryside.group);
     const syncSky = () => this.skyline.setLoaded([...this.streamer.cells.values()].filter((c) => c.status === 'ready').map((c) => c.id));
     this.streamer.onCellReady = (c) => {
       hitch.measure('cell:world', () => this.world.addCell(c));
@@ -234,12 +258,14 @@ export class Game {
     };
     this.renderer.scene.add(this.interiors.group);
     this.traffic = new Traffic(this.net, this.peds, this.stimuli, this.terrain, this.profile.rightHand, this.settings.seed);
+    this.traffic.surface = (x, z, hx, hz) => Math.max(this.terrain.height(x, z), this.world.bridgeDeck(x, z, hx, hz));
     this.vehicles = new VehicleRenderer(this.physics);
     this.renderer.scene.add(this.vehicles.group);
     this.props = new PropRenderer(this.terrain, this.profile.warmth, this.physics, this.net, (n, e, off) => this.traffic.signalGreen(n, this.net.edges[e], this.traffic.time + off));
     // Trees, street furniture and vehicles block the player (size-aware, see Collision).
     this.collision.obstacleProviders.push(
       (x0, z0, x1, z1, out) => this.props.obstaclesIn(x0, z0, x1, z1, out),
+      (x0, z0, x1, z1, out) => this.countryside.obstaclesIn(x0, z0, x1, z1, out),
       new VehicleObstacles(() => [...this.traffic.vehicles, ...this.parkedList]).provider,
       (x0, z0, x1, z1, out) => this.underground.carObstacles(x0, z0, x1, z1, out),
     );
@@ -272,9 +298,13 @@ export class Game {
     this.traffic.onHorn = (v) => this.audio.play(Math.random() < 0.7 ? 'car_horn_short' : 'car_horn_long', v.x, v.y + 1, v.z, 0.7, 0.95 + Math.random() * 0.1, 8, cam.position);
     this.traffic.onCrash = (v, x, y, z) => { this.audio.play('car_crash', x, y, z, 0.9, 1, 10, cam.position); this.stimuli.emit('crash', x, y, z, 4, 80); };
     // Near-future city: delivery robots, drones, animated signage (src/future).
-    this.future = new NearFuture({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, traffic: this.traffic, physics: this.physics, debris: this.debris, dust: this.dust, destruction: this.destruction, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
+    this.future = new NearFuture({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, traffic: this.traffic, net: this.net, physics: this.physics, debris: this.debris, dust: this.dust, destruction: this.destruction, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
     this.future.loop = (id, r) => this.audio.loop(id, r);
+    this.collision.obstacleProviders.push(this.future.service.provider);
     this.renderer.scene.add(this.future.group);
+    // Birds: pigeons and sparrows on the ground, flocks, gulls and crows (src/fauna).
+    this.birds = new Birds({ terrain: this.terrain, world: this.world, peds: this.peds, traffic: this.traffic, drones: this.future.drones, dust: this.dust, debris: this.debris, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
+    this.renderer.scene.add(this.birds.mesh);
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
     this.crowd.rigGround = (x, y, z) => this.collision.groundAt(x, z, y + 0.4, 0.3);
@@ -337,6 +367,7 @@ export class Game {
     this.gate.enabled = true;
     // Background: compile what appears later (all tree species, furniture, …) on driver threads.
     this.gate.precompile(this.props.warmupObject());
+    this.gate.precompile(this.countryside.warmupObject());
   }
 
   private raf = 0;
@@ -396,6 +427,7 @@ export class Game {
         this.interiors.panels.external = this.usableHint();
         this.interiors.panels.update(this.renderer.camera, hand, this.player.height * 0.9 + 0.5, this.input);
         this.abilities.postUpdate(this.input);
+        this.targeting.update(dt, this.abilities.enabled ? this.input : null);
         this.interactions.update(dt, this.input, this.clock.elapsedTime);
       }
     });
@@ -412,6 +444,7 @@ export class Game {
     this.traffic.player = this.freeCam ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     if (!this.freeCam) this.bodyContacts(dt);
+    this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
@@ -420,12 +453,14 @@ export class Game {
     });
     this.T('physics', () => this.physics.step(dt));
     this.T('debris', () => { this.debris.update(dt); this.dust.update(dt); this.destruction.update(dt); });
+    if (!this.freeCam) this.powerFx.update(dt, this.abilities.charge, this.abilities.rank('superJump'));
     if (!this.freeCam) this.flightFx.update(dt, this.player, this.renderer.camera, this.world.groundHeight(this.player.pos.x, this.player.pos.z));
     this.T('audio', () => this.updateAudio(dt));
     this.T('framework', () => frameWork.pump());
     this.timeKeys();
     const cam = this.renderer.camera;
     this.T('stream', () => this.streamer.update(dt, cam.position));
+    this.T('country', () => this.countryside.update(dt, cam));
     const focus = this.freeCam ? cam.position : this.player.pos;
     this.sky.setShadowExtent(this.freeCam ? 80 + Math.max(0, cam.position.y - this.terrain.height(cam.position.x, cam.position.z)) * 1.5 : 25 + this.player.height * 12 + cam.position.distanceTo(this.player.pos) * 1.2);
     this.sky.underground = clamp(this.sky.underground + (this.camRig.underground ? dt : -dt) * 2.5, 0, 1);
@@ -435,14 +470,18 @@ export class Game {
     this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
     const P = this.player;
     this.T('future', () => this.future.update(dt, this.sky.hoursAbs, focus, { active: !this.freeCam, x: P.pos.x, y: P.pos.y, z: P.pos.z, vx: P.vel.x, vy: P.vel.y, vz: P.vel.z, height: P.height, radius: P.radius, mass: P.mass }, cam));
+    this.elements.postFuture();
+    this.T('birds', () => this.birds.update(dt, this.sky.hour, focus, this.freeCam ? null : this.player, cam));
     if (render) {
       this.T('crowd', () => this.crowd.update(dt, this.simT, this.peds.agents, this.renderer.camera));
       this.T('vehicles', () => this.vehicles.update(dt, this.traffic.vehicles, this.parkedList, this.renderer.camera));
       this.T('props', () => this.props.update(dt, this.renderer.camera));
+      this.T('elementFx', () => this.elements.render(dt));
       this.T('gate', () => this.gate.update());
       this.T('render', () => this.renderer.render());
       this.hud.update(dt);
       this.powerHud.update();
+      this.targetHud.update();
       this.T('map', () => this.map.update(dt));
       this.input.endFrame();
     }
@@ -471,11 +510,70 @@ export class Game {
   }
 
   private kickCooldown = 0;
+  /** Dash in progress: rank, last position, and who/what it already hit. */
+  private dashRank = 0;
+  private readonly dashFrom = new THREE.Vector3();
+  private readonly dashHit = new Set<object>();
+  private speedHitT = 0;
+
+  /**
+   * A dash shoves what lies along its path, once per dash: people are knocked down (unless
+   * the dasher is much smaller), props and robots take a hit, cars get dented (a giant wrecks
+   * them). Strength grows with rank and body mass.
+   */
+  private dashSweep(dt: number): void {
+    const p = this.player;
+    // Super speed: people passed are spun aside (each once every 1.5 s), like a dash.
+    const running = p.speeding && Math.hypot(p.vel.x, p.vel.z) > 8 * Math.sqrt(p.k);
+    if (!p.dashing && !running) { this.dashRank = 0; this.dashFrom.copy(p.pos); return; }
+    if (running && !p.dashing) {
+      this.dashRank = this.abilities.rank('speed');
+      this.speedHitT -= dt;
+      if (this.speedHitT <= 0) { this.speedHitT = 1.5; this.dashHit.clear(); }
+    }
+    const x0 = this.dashFrom.x, z0 = this.dashFrom.z, x1 = p.pos.x, z1 = p.pos.z;
+    this.dashFrom.copy(p.pos);
+    const sx = x1 - x0, sz = z1 - z0, L = Math.hypot(sx, sz);
+    if (L < 1e-4) return;
+    const dx = sx / L, dz = sz / L, k = p.k, r = p.radius + 0.25 * p.height;
+    // Shove impulse (N·s): a fraction of the body's momentum at a run, by rank.
+    const J = 110 * k ** 3 * (2 + this.dashRank);
+    const segDist = (x: number, z: number) => {
+      const t = Math.max(0, Math.min(1, ((x - x0) * sx + (z - z0) * sz) / (L * L)));
+      return Math.hypot(x - (x0 + sx * t), z - (z0 + sz * t));
+    };
+    const y = p.pos.y + p.height * 0.5;
+    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    this.props.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
+    this.future.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
+    if (k > 0.45) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
+      if (this.dashHit.has(a) || a.state === 5 || a.inside || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
+      if (segDist(a.x, a.z) > r + 0.3) continue;
+      this.dashHit.add(a);
+      // Flung forward and aside: the "from" point lies behind them on the dash line (a runner
+      // spins them off to the side they stood on).
+      const side = Math.sign((a.x - x0) * -dz + (a.z - z0) * dx) || 1;
+      const fx = running ? a.x - (dx * 0.6 - dz * side) * 1.5 : a.x - dx * 1.5, fz = running ? a.z - (dz * 0.6 + dx * side) * 1.5 : a.z - dz * 1.5;
+      this.reactions.knockDown(a, fx, fz, Math.min(12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), 'player');
+      if (running) a.heading += side * 2.5;
+      this.consequences.record('speed', 'person', 'knockdown', a.x, a.z);
+      this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
+      this.stimuli.emit('impact', a.x, a.y + 1, a.z, 3, 30);
+    }
+    if (running && !p.dashing) return; // a runner vaults cars (Player parkour) instead of ramming them
+    for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
+      if (this.dashHit.has(v) || Math.abs(v.y - p.pos.y) > 2 + p.height || segDist(v.x, v.z) > r + v.length * 0.4) continue;
+      this.dashHit.add(v);
+      if (J > 2500) { this.traffic.wreckIt(v); this.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, dx * J, J * 0.3, dz * J); this.audio.play('car_crash', v.x, v.y, v.z, 0.8, 1, 10, this.renderer.camera.position); }
+      else v.damage = Math.min(1, v.damage + J / 5000);
+    }
+  }
 
   /** Mass-weighted contacts between the player and pedestrians / vehicles. */
   private bodyContacts(dt: number): void {
     const p = this.player;
     this.kickCooldown -= dt;
+    this.dashSweep(dt);
     const pm = p.mass, pr = p.radius;
     const near = this.peds.neighbours(p.pos.x, p.pos.z, pr + 1.5, []);
     for (const a of near) {
@@ -533,12 +631,44 @@ export class Game {
     this.progress = new Progress(this.settings.seed, this.settings.size, this.mode);
     this.abilities = new AbilitySystem(this.progress, this.player, this.interactions, cam);
     this.powerHud = new PowerHud(this.abilities);
+    this.powerFx = new PowerFx(this.renderer.scene, this.dust, this.player);
     this.powers = new PowersScreen(this, this.abilities);
+    // Targeting and the elemental powers.
+    this.synth = new PowerSynth(() => this.audio.synthOut());
+    this.targeting = new Targeting({
+      peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
+      destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
+    });
+    this.elements = new Elements({
+      player: this.player, camera: cam, camRig: this.camRig, targeting: this.targeting, synth: this.synth, destruction: this.destruction,
+      debris: this.debris, dust: this.dust, world: this.world, collision: this.collision, peds: this.peds, reactions: this.reactions,
+      traffic: this.traffic, vehicles: this.vehicles, parked: () => this.parkedList, future: this.future, props: this.props,
+      stimuli: this.stimuli, consequences: this.consequences,
+      sound: (id, x, y, z, g, pitch = 1, ref = 6) => this.audio.play(id, x, y, z, g, pitch, ref, cam.position),
+    });
+    this.renderer.scene.add(this.elements.fx.group);
+    this.abilities.effects = this.elements;
+    this.targetHud = new TargetHud(this.targeting, cam);
+    this.targeting.onChange = (t) => { if (t) this.audio.chime('karma', 0.12); };
     const toast = this.powerHud.toast.bind(this.powerHud);
     this.abilities.hooks = {
       sound: (id, g, p) => this.audio.play2d(id, g, p),
       deny: (msg) => { toast(msg, 'deny', 2200); this.audio.chime('deny', 0.4); },
-      dashFx: (x, y, z) => { const h = this.player.height; this.dust.burst(x, y + 0.2 * h, z, 10, h * 0.25, h * 0.6, h * 0.2 + 0.3, 1.5, new THREE.Color(0.75, 0.73, 0.7), 0.05, 0.3); },
+      dashFx: (_dx, _dy, _dz, dur, rank) => {
+        const p = this.player, h = p.height;
+        this.dust.burst(p.pos.x, p.pos.y + 0.2 * h, p.pos.z, 10, h * 0.25, h * 0.6, h * 0.2 + 0.3, 1.5, new THREE.Color(0.75, 0.73, 0.7), 0.05, 0.3);
+        this.powerFx.dash(dur, rank);
+        this.camRig.kickFov(7 + rank * 1.5, dur);
+        this.audio.play2d('dash_whoosh', 0.55 + rank * 0.07, 1.15 / Math.pow(p.k, 0.15));
+        this.dashRank = rank;
+        this.dashFrom.copy(p.pos);
+        this.dashHit.clear();
+      },
+      leapFx: (f) => {
+        const p = this.player, h = p.height, sk = Math.sqrt(p.k);
+        this.dust.burst(p.pos.x, p.pos.y + 0.05 * h, p.pos.z, Math.round(8 + 16 * f), h * 0.3, (1 + 3 * f) * sk, h * 0.15 + 0.1, 1.2, new THREE.Color(0.62, 0.6, 0.56), 0.1, 0.4);
+        this.camRig.addShake(0.15 * f);
+      },
     };
     this.progress.onKarma((amount, reason) => {
       if (amount <= 0) return;
@@ -577,7 +707,7 @@ export class Game {
     }
     setTimeout(() => toast(normal
       ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
-      : 'Sandbox: every power is yours. <b>1–8</b> / right mouse use the hotbar, <b>P</b> manages powers.', 'info', 10000), 9500);
+      : 'Sandbox: every power is yours. <b>1–9, 0</b> / right mouse use the hotbar (hold for beams and super speed), <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);
   }
 
   /** Parked cars from a cell's street plan. */
@@ -596,6 +726,7 @@ export class Game {
         x: P[i + 1], y: this.terrain.height(P[i + 1], P[i + 2]), z: P[i + 2], yaw: P[i + 3], turn: null, brake: 0, indicator: 0, headlights: 0,
         damage: 0, driver: null, stateT: 0, fear: 0, wait: 0, wreck: -1, alive: true,
       };
+      this.traffic.settle(v);
       list.push(v);
     }
     this.parked.set(c.id, list);
@@ -607,6 +738,7 @@ export class Game {
     const J = Math.hypot(jx, jy, jz);
     this.props.hit(x, y, z, r, jx, jy, jz);
     this.future.hit(x, y, z, r, jx, jy, jz);
+    this.birds.hit(x, y, z, r, jx, jy, jz);
     for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
       const d = Math.hypot(v.x - x, v.z - z);
       if (d > r + v.length / 2 || y > v.y + 3 + r) continue;

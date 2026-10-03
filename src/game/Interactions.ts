@@ -53,13 +53,20 @@ export class Interactions {
       this.punchT = time;
       this.punchDone = false;
       p.action = { id: 'punch', t0: p.animClock, dur: 0.55 };
+      // Punch where you look: standing (or walking) side-on to a wall, the fist still goes into it.
+      if (!p.flying) p.yaw = this.camRig.forwardYaw;
     }
     if (!this.punchDone && time - this.punchT > 0.22 * Math.sqrt(k)) {
       this.punchDone = true;
-      // Strike point: in front of the chest along the facing direction (or toward the aim if close).
+      // Strike point: in front of the chest along the facing direction, at arm's length — or on
+      // the facade the fist meets first. (A fixed point overshot a wall the body leant on by
+      // more than the impact radius, so a punch at a facade often broke nothing.)
       const reach = 0.75 * p.height * 0.55 + p.radius;
       const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-      const sx = p.pos.x + fx * reach, sz = p.pos.z + fz * reach, sy = p.pos.y + p.height * 0.72;
+      const sy = p.pos.y + p.height * 0.72;
+      const wall = this.destruction.facadeHit(p.pos.x, sy, p.pos.z, fx, fz, reach + p.radius * 0.5);
+      const t = wall ? wall.t + 0.02 * p.height : reach;
+      const sx = p.pos.x + fx * t, sz = p.pos.z + fz * t;
       const impulse = this.punchImpulse * k * k;
       const n = this.destruction.impact(sx, sy, sz, 0.35 * p.height, impulse, fx, -0.05, fz, 'wall');
       this.onStrike?.(sx, sy, sz, 0.45 * p.height, fx * impulse, impulse * 0.25, fz * impulse);

@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import type RAPIER from '@dimforge/rapier3d-compat';
-import type { Physics } from '../physics/Physics';
+import { GROUPS, type Physics } from '../physics/Physics';
 import type { MaterialArrays } from '../render/TextureLibrary';
 import { Rng } from '../core/rng';
 import { GLSL_COMMON } from '../render/materials/glsl';
@@ -142,7 +142,7 @@ export class Debris {
     for (let i = 0; i < hull.length; i += 3) { pts[i] = hull[i] * sx; pts[i + 1] = hull[i + 1] * sy; pts[i + 2] = hull[i + 2] * sz; }
     const desc = R.ColliderDesc.convexHull(pts);
     if (!desc) return;
-    desc.setDensity(1800).setFriction(0.8).setRestitution(0.15);
+    desc.setDensity(1800).setFriction(0.8).setRestitution(0.15).setCollisionGroups(GROUPS.debris);
     const body = this.physics.world.createRigidBody(
       R.RigidBodyDesc.dynamic().setTranslation(x, y, z).setRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w })
         .setLinvel(vx, vy, vz).setAngvel({ x: (Math.random() - 0.5) * spin, y: (Math.random() - 0.5) * spin, z: (Math.random() - 0.5) * spin })
@@ -292,6 +292,39 @@ export class Debris {
   }
 
   get activeCount(): number { return this.active.length; }
+
+  /**
+   * Wind (whirlwind): moving fragments and flying chips within r of the axis through (x, z)
+   * are spun round it at `spin` m/s, lifted at `lift` m/s and drawn in a little.
+   */
+  vortex(x: number, y: number, z: number, r: number, spin: number, lift: number): number {
+    let n = 0;
+    for (const f of this.active) {
+      const b = f.body!;
+      const t = b.translation();
+      const dx = t.x - x, dz = t.z - z, d = Math.hypot(dx, dz);
+      if (d > r || t.y < y - 2 || t.y > y + r * 3) continue;
+      const k = 1 - d / r;
+      const m = b.mass();
+      const v = b.linvel();
+      const tx = d > 1e-3 ? -dz / d : 0, tz = d > 1e-3 ? dx / d : 0;
+      const wantX = tx * spin * k - (d > 1e-3 ? dx / d : 0) * spin * 0.2, wantZ = tz * spin * k - (d > 1e-3 ? dz / d : 0) * spin * 0.2;
+      b.applyImpulse({ x: (wantX - v.x) * m * 0.2, y: Math.max(0, lift * k - v.y) * m * 0.25, z: (wantZ - v.z) * m * 0.2 }, true);
+      n++;
+    }
+    for (let i = 0; i < CHIP_CAP; i++) {
+      const o = i * 8;
+      if (this.chipData[o + 7] <= 0) continue;
+      const dx = this.chipData[o] - x, dz = this.chipData[o + 2] - z, d = Math.hypot(dx, dz);
+      if (d > r || d < 1e-3) continue;
+      const k = 1 - d / r;
+      this.chipData[o + 3] = -dz / d * spin * k;
+      this.chipData[o + 5] = dx / d * spin * k;
+      this.chipData[o + 4] = Math.max(this.chipData[o + 4], lift * k);
+      this.chipData[o + 7] = Math.max(this.chipData[o + 7], this.t - this.chipData[o + 6] + 1);
+    }
+    return n;
+  }
 }
 
 function debrisMaterial(arrays: MaterialArrays): THREE.MeshStandardMaterial {

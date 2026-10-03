@@ -20,6 +20,9 @@ import type { Obstacle } from '../world/Collision';
 import { hash32, hashToFloat } from '../core/rng';
 import type { StreetSeg } from '../plan/cell';
 
+/** A street prop (tree, lamp, bench, sign …) as the powers and targeting see it. */
+export type StreetProp = Prop;
+
 interface Prop {
   kind: string;            // model key
   tree: boolean;
@@ -33,6 +36,10 @@ interface Prop {
   height: number;
   /** Collision shape (lazily derived; null = walk-through). */
   solid?: Obstacle | null;
+  /** Lamp knocked out (lightning, a hit): no light. */
+  dark?: boolean;
+  /** Unscaled size while a power has resized it (shrink ray). */
+  base?: { scale: number; radius: number; height: number };
 }
 
 interface Batch { meshes: THREE.InstancedMesh[]; attrs: { color?: THREE.InstancedBufferAttribute; state?: THREE.InstancedBufferAttribute }; cap: number; n: number }
@@ -388,7 +395,7 @@ export class PropRenderer {
         this.m4.compose(this.v.set(p.x, p.y, p.z), this.q, this.s.setScalar(p.scale));
         for (const m of b.meshes) m.setMatrixAt(i, this.m4);
         b.attrs.color?.setXYZ(i, p.color[0], p.color[1], p.color[2]);
-        b.attrs.state?.setXYZW(i, 1, p.node !== undefined ? this.phase(p) : 0, 0, 0);
+        b.attrs.state?.setXYZW(i, p.dark ? 0 : 1, p.node !== undefined ? this.phase(p) : 0, 0, 0);
       });
       b.n = list.length;
       for (const m of b.meshes) { m.count = list.length; m.instanceMatrix.needsUpdate = true; }
@@ -422,7 +429,7 @@ export class PropRenderer {
     if (on < 0.05) { for (const l of this.lights) l.intensity = 0; return; }
     const lamps: { p: Prop; d: number }[] = [];
     this.near(cp.x, cp.z, 90, (p) => {
-      if (p.broken || !p.kind.includes('lamp')) return;
+      if (p.broken || p.dark || !p.kind.includes('lamp')) return;
       const d = Math.hypot(p.x - cp.x, p.z - cp.z);
       if (d < 90) lamps.push({ p, d });
     });
@@ -483,6 +490,46 @@ export class PropRenderer {
       n++;
     }
     return n;
+  }
+
+  /** Props near (x, z) within about r (grid cells), standing or not. */
+  query(x: number, z: number, r: number, fn: (p: Prop) => void): void {
+    this.near(x, z, r, (p) => { if (Math.abs(p.x - x) <= r + p.radius && Math.abs(p.z - z) <= r + p.radius) fn(p); });
+  }
+
+  /** Knock a lamp's light out (it stays standing). */
+  darken(p: Prop): void {
+    if (p.dark) return;
+    p.dark = true;
+    this.patch(p);
+  }
+
+  /**
+   * Resize a prop (shrink ray): f = factor of its own size (1 restores it). Collision follows;
+   * only its instance is rewritten, not the whole batch.
+   */
+  setScale(p: Prop, f: number): void {
+    if (!p.base) { if (f === 1) return; p.base = { scale: p.scale, radius: p.radius, height: p.height }; }
+    p.scale = p.base.scale * f;
+    p.radius = p.base.radius * f;
+    p.height = p.base.height * f;
+    p.solid = undefined;
+    if (f === 1) p.base = undefined;
+    this.patch(p);
+  }
+
+  /** Rewrite one prop's instance in place (matrix, light state). */
+  private patch(p: Prop): void {
+    for (const [k, b] of this.batches) {
+      if (k !== p.kind && k !== 'mid:' + p.kind) continue;
+      const list = (b as Batch & { list?: Prop[] }).list;
+      const i = list ? list.indexOf(p) : -1;
+      if (i < 0) continue;
+      this.q.setFromAxisAngle(_up, p.yaw);
+      this.m4.compose(this.v.set(p.x, p.y, p.z), this.q, this.s.setScalar(p.scale));
+      for (const m of b.meshes) { m.setMatrixAt(i, this.m4); m.instanceMatrix.needsUpdate = true; }
+      if (b.attrs.state) { b.attrs.state.setX(i, p.dark ? 0 : 1); b.attrs.state.needsUpdate = true; }
+    }
   }
 
   /** Crush props under a giant foot / debris. */

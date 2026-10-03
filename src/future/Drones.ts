@@ -3,8 +3,10 @@
  * 25–60 m, descend in front of a door or onto a flat roof, winch the parcel down, climb and
  * leave), news drones that gather over collapses and police drones that circle crashes.
  *
- * Flight is a simple kinematic model: arrival steering with acceleration limits, boids-like
- * separation, a climb when a building is ahead; the attitude follows the horizontal
+ * Routes keep to lanes by heading and are planned round towers on a coarse grid (skyPath);
+ * only when there is no way round within a wide search area do they climb over the top.
+ * Flight is a simple kinematic model: arrival steering with acceleration limits (climb and
+ * sink rates capped), boids-like separation, a climb when a low building is ahead; the attitude follows the horizontal
  * acceleration (a quadcopter tilts into the direction it accelerates), yaw turns smoothly
  * into the flight direction. Rotors spin (separate instanced mesh), nav lights and the
  * anti-collision strobe blink. A swat (any strike near it) or a giant's body knocks a drone
@@ -19,6 +21,11 @@ import { FurnBatch } from './batch';
 import { droneGeometry, rotorGeometry, parcelGeometry, DRONE, DRONE_MOTORS } from './models';
 import { FLEETS, type FutureCtx, type PlayerProbe } from './ctx';
 import { NavGlows } from './NavGlows';
+import { planAround } from './skyPath';
+import { glanceAt, gawkAt } from './attention';
+import type { LocalGround } from './ground';
+import { GROUPS } from '../physics/Physics';
+import { statusOf } from '../shared/status';
 
 export const enum DKind { Delivery = 0, News = 1, Police = 2 }
 const enum DState { Fly = 0, Fall = 1, Down = 2 }
@@ -51,6 +58,8 @@ export interface Drone {
   lastSpeed: number;
   broken: boolean;
   alive: boolean;
+  /** Seconds to the next look round for people below (glances). */
+  lookT: number;
 }
 
 const MAX_DRONES = 60;
@@ -59,6 +68,9 @@ const DESPAWN_R = 560;
 const DRAW_R = 520;
 const VMAX = 13;
 const AMAX = 3.5;
+/** Climb / sink rate limits (m/s). */
+const VUP = 5;
+const VDOWN = 4;
 
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
@@ -86,7 +98,9 @@ export class Drones {
   private dests: BuildingRef[] = [];
   /** Parcels left at doors / on roofs: x, y, z, yaw, time. */
   private dropped: number[] = [];
-  stats = { drones: 0, target: 0, drawn: 0, swatted: 0, news: 0, police: 0 };
+  stats = { drones: 0, target: 0, drawn: 0, swatted: 0, news: 0, police: 0, legs: 0, raised: 0, overTop: 0 };
+  /** Exact ground and walls for falling drones (set by NearFuture). */
+  ground: LocalGround | null = null;
 
   constructor(private ctx: FutureCtx, mat: THREE.Material) {
     this.bodyB = [new FurnBatch(droneGeometry(0), mat, MAX_DRONES + 8), new FurnBatch(droneGeometry(1), mat, 16)];
@@ -133,22 +147,11 @@ export class Drones {
     this.stats.drones = this.list.length;
   }
 
-  /** First building on the way a→b that reaches above y - 8 (ignoring the last skipEnd m). */
-  private blocker(ax: number, az: number, bx: number, bz: number, y: number, skipEnd: number): BuildingRef | null {
-    const L = Math.hypot(bx - ax, bz - az);
-    const n = Math.max(2, Math.ceil(L / 9));
-    for (let k = 1; k <= n; k++) {
-      if (L * (1 - k / n) < skipEnd) break;
-      const b = this.ctx.world.buildingAt(ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n);
-      if (b && b.top > y - 8) return b;
-    }
-    return null;
-  }
-
   /**
    * A cruise leg a→b: altitude from a lane by heading (25–55 m over the highest ground on
-   * the way) and detour points around towers that reach into it, like real drones keep to
-   * low corridors; over the top only when there is no way round.
+   * the way) and waypoints round the towers that reach into it, planned on a coarse grid
+   * (preferring the open air over streets). No way round: the next lane up (+12, +24 m);
+   * over the top only when even that fails.
    */
   private leg(ax: number, az: number, bx: number, bz: number, skipEnd: number): { y: number; via: number[] } {
     const lane = 25 + 10 * (Math.floor(((Math.atan2(bz - az, bx - ax) + Math.PI) / (Math.PI * 2)) * 4) % 4);
@@ -156,29 +159,29 @@ export class Drones {
     const n = Math.max(2, Math.ceil(L / 20));
     let ground = -Infinity;
     for (let k = 0; k <= n; k++) ground = Math.max(ground, this.ctx.terrain.height(ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n));
-    let y = ground + lane;
-    const via: number[] = [];
-    let cx = ax, cz = az;
-    for (let k = 0; k < 4; k++) {
-      const b = this.blocker(cx, cz, bx, bz, y, skipEnd);
-      if (!b) break;
-      const dl = Math.hypot(bx - cx, bz - cz) || 1;
-      const dx = (bx - cx) / dl, dz = (bz - cz) / dl, qx = -dz, qz = dx;
-      const [x0, z0, x1, z1] = b.bounds;
-      const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-      let lo = Infinity, hi = -Infinity;
-      for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) { const t = (x - mx) * qx + (z - mz) * qz; lo = Math.min(lo, t); hi = Math.max(hi, t); }
-      const along = (mx - cx) * dx + (mz - cz) * dz;
-      const base = [cx + dx * along, cz + dz * along];
-      const off = (mx - base[0]) * qx + (mz - base[1]) * qz;
-      const cands = [off + hi + 10, off + lo - 10].map((t) => [base[0] + qx * t, base[1] + qz * t]);
-      cands.sort((p, q) => Math.abs((p[0] - base[0]) * qx + (p[1] - base[1]) * qz) - Math.abs((q[0] - base[0]) * qx + (q[1] - base[1]) * qz));
-      const ok = cands.find((c) => !this.blocker(cx, cz, c[0], c[1], y, 0) && !this.ctx.world.buildingAt(c[0], c[1])) ?? cands[0];
-      via.push(ok[0], ok[1]);
-      cx = ok[0]; cz = ok[1];
+    this.stats.legs++;
+    for (const up of [0, 12, 24]) {
+      const y = ground + lane + up;
+      const via = planAround(this.ctx.world, ax, az, bx, bz, y, skipEnd);
+      if (!via) continue;
+      // A huge detour is worse than the next lane up.
+      let len = 0, px = ax, pz = az;
+      for (let k = 0; k <= via.length; k += 2) {
+        const qx = k < via.length ? via[k] : bx, qz = k < via.length ? via[k + 1] : bz;
+        len += Math.hypot(qx - px, qz - pz); px = qx; pz = qz;
+      }
+      if (up < 24 && len > L * 1.8 + 120) continue;
+      if (up) this.stats.raised++;
+      return { y: this.overTop({ y, via }, ax, az, bx, bz, skipEnd), via };
     }
-    // Still blocked: over the top.
-    const pts = [ax, az, ...via, bx, bz];
+    this.stats.overTop++;
+    return { y: this.overTop({ y: ground + lane, via: [] }, ax, az, bx, bz, skipEnd), via: [] };
+  }
+
+  /** The cruise altitude that clears every building along the route (y when nothing is in the way). */
+  private overTop(l: { y: number; via: number[] }, ax: number, az: number, bx: number, bz: number, skipEnd: number): number {
+    let y = l.y;
+    const pts = [ax, az, ...l.via, bx, bz];
     for (let i = 0; i + 3 < pts.length; i += 2) {
       const m = Math.max(2, Math.ceil(Math.hypot(pts[i + 2] - pts[i], pts[i + 3] - pts[i + 1]) / 9));
       const last = i + 4 === pts.length;
@@ -189,7 +192,7 @@ export class Drones {
         if (b && b.top > y - 8) y = b.top + 12;
       }
     }
-    return { y, via };
+    return y;
   }
 
   private spawnDelivery(px: number, pz: number, midway: boolean): void {
@@ -247,7 +250,7 @@ export class Drones {
       id: this.nextId++, kind, fleet: this.rng.int(0, FLEETS.length - 1), x: sx, y, z: sz,
       vx: -Math.sin(hd) * sp, vy: 0, vz: -Math.cos(hd) * sp, yaw: hd, up: new THREE.Vector3(0, 1, 0), q: new THREE.Quaternion(),
       plan, pi, drop: dropAt, holdT: 0, parcel: pi <= dropAt ? 1 : 0, winch: 0, orbit: null, rotor: this.rng.range(0, 6), phase: this.rng.float(),
-      state: DState.Fly, stateT: 0, body: null, lastSpeed: 0, broken: false, alive: true,
+      state: DState.Fly, stateT: 0, body: null, lastSpeed: 0, broken: false, alive: true, lookT: this.rng.float(),
     });
   }
 
@@ -268,7 +271,7 @@ export class Drones {
         id: this.nextId++, kind, fleet: kind === DKind.News ? 0 : 2, x: sx, y: orbit.y + 10, z: sz,
         vx: -Math.sin(hd) * 10, vy: 0, vz: -Math.cos(hd) * 10, yaw: hd, up: new THREE.Vector3(0, 1, 0), q: new THREE.Quaternion(),
         plan: [], pi: 0, drop: -9, holdT: 0, parcel: 0, winch: 0, orbit: { ...orbit, y: orbit.y + k * 7, dir: k ? -orbit.dir : orbit.dir }, rotor: 0, phase: this.rng.float(),
-        state: DState.Fly, stateT: 0, body: null, lastSpeed: 0, broken: false, alive: true,
+        state: DState.Fly, stateT: 0, body: null, lastSpeed: 0, broken: false, alive: true, lookT: this.rng.float(),
       });
       if (kind === DKind.News) this.stats.news++; else this.stats.police++;
     }
@@ -319,7 +322,11 @@ export class Drones {
     // ---- steering
     const want = Math.min(d.orbit ? 7 : VMAX, Math.sqrt(2 * AMAX * 0.6 * Math.max(0, dist - (d.orbit ? 0 : arriveR * 0.3))));
     const k = dist > 1e-3 ? want / dist : 0;
-    let ax = (ex * k - d.vx) * 1.6, ay = (ey * k - d.vy) * 1.6, az = (ez * k - d.vz) * 1.6;
+    // Climbs and descents at a limited rate: the horizontal speed waits for them (no lunges).
+    const climbT = Math.max(0, Math.abs(ey) - arriveR * 0.5) / (ey > 0 ? VUP : VDOWN);
+    const kh = climbT > 0.1 ? Math.min(k, 1 / climbT) : k;
+    const wantY = Math.max(-VDOWN, Math.min(VUP, ey * k));
+    let ax = (ex * kh - d.vx) * 1.6, ay = (wantY - d.vy) * 1.6, az = (ez * kh - d.vz) * 1.6;
     // Separation from other drones.
     for (const o of this.list) {
       if (o === d || o.state !== DState.Fly) continue;
@@ -347,6 +354,7 @@ export class Drones {
     if (ah > AMAX) { ax *= AMAX / ah; az *= AMAX / ah; }
     ay = Math.max(-2.5, Math.min(4, ay));
     d.vx += ax * dt; d.vy += ay * dt; d.vz += az * dt;
+    d.vy = Math.max(-VDOWN - 1, Math.min(VUP + 1, d.vy));
     d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt;
     // ---- attitude: tilt into the horizontal acceleration (plus drag), yaw into the flight direction
     const tX = (ax + d.vx * 0.12) / 9.81, tZ = (az + d.vz * 0.12) / 9.81;
@@ -366,6 +374,13 @@ export class Drones {
     _q2.setFromUnitVectors(_Y, d.up);
     d.q.copy(_q2).multiply(_q);
     d.rotor += dt * (95 + Math.hypot(ax, ay + 9.81, az) * 2);
+    // Low over the street (arriving, winching a parcel down): passers-by glance up at it.
+    d.lookT -= dt;
+    if (d.lookT <= 0) {
+      d.lookT = 0.7;
+      const agl = d.y - this.ctx.terrain.height(d.x, d.z);
+      if (agl < 16) glanceAt(this.ctx.peds, d.x, d.y, d.z, d.winch > 0 ? 9 : 12, d.winch > 0 ? 0.55 : 0.3, d.id * 31 + Math.floor(this.t));
+    }
     // ---- the player's body (giants, flying heroes) swats drones it touches
     if (player.active) {
       const ox = d.x - player.x, oz = d.z - player.z;
@@ -383,13 +398,23 @@ export class Drones {
     const b = d.body;
     if (!b) return;
     const t = b.translation(), r = b.rotation(), v = b.linvel();
-    const g = this.ctx.terrain.height(t.x, t.z);
+    const G = this.ground;
+    const g = G ? G.streetY(t.x, t.z, d.y) : this.ctx.terrain.height(t.x, t.z);
     if (t.y < g - 0.4) {
-      // Tunnelled under the ground heightfield (building edges): put it back where it was.
+      // Below the street (should not happen with the exact ground): put it back where it was.
       b.setTranslation({ x: d.x, y: Math.max(d.y, g + 0.5), z: d.z }, true);
       b.setLinvel({ x: 0, y: 0, z: 0 }, true);
       return;
     }
+    // Inside a building (squeezed through a wall): out through the nearest wall.
+    const out = G?.resolve(t.x, t.y, t.z, 0.6);
+    if (out) {
+      b.setTranslation({ x: out.x, y: t.y, z: out.z }, true);
+      const lv = b.linvel(), vn = lv.x * out.nx + lv.z * out.nz;
+      if (vn < 0) b.setLinvel({ x: lv.x - out.nx * vn * 1.3, y: lv.y, z: lv.z - out.nz * vn * 1.3 }, true);
+      return;
+    }
+    G?.ensure(t.x, t.z, 6, t.y);
     d.x = t.x; d.y = t.y; d.z = t.z;
     d.q.set(r.x, r.y, r.z, r.w);
     const sp = Math.hypot(v.x, v.y, v.z);
@@ -426,10 +451,14 @@ export class Drones {
       d.body = P.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(d.x, d.y, d.z).setRotation({ x: d.q.x, y: d.q.y, z: d.q.z, w: d.q.w })
         .setLinvel(d.vx, d.vy, d.vz).setAngvel({ x: (this.rng.float() - 0.5) * 8, y: (this.rng.float() - 0.5) * 12, z: (this.rng.float() - 0.5) * 8 })
         .setLinearDamping(0.15).setAngularDamping(0.3).setCcdEnabled(true));
-      P.world.createCollider(R.ColliderDesc.cuboid(DRONE.arm * 0.7, 0.1, DRONE.arm * 0.7).setDensity(DRONE.mass / (DRONE.arm * DRONE.arm * 1.96 * 0.2)).setFriction(0.6).setRestitution(0.25), d.body);
-      // Ground under the whole fall (it drifts while falling).
-      P.ensureGround(d.x, d.z, 20 + Math.hypot(d.vx, d.vz) * 2);
+      P.world.createCollider(R.ColliderDesc.cuboid(DRONE.arm * 0.7, 0.1, DRONE.arm * 0.7).setDensity(DRONE.mass / (DRONE.arm * DRONE.arm * 1.96 * 0.2)).setFriction(0.6).setRestitution(0.25)
+        .setCollisionGroups(this.ground ? GROUPS.smallBody : 0xffffffff), d.body);
+      // Ground and walls under the whole fall (it drifts while falling).
+      const gr = 20 + Math.hypot(d.vx, d.vz) * 2;
+      if (this.ground) this.ground.ensure(d.x, d.z, gr, d.y); else P.ensureGround(d.x, d.z, gr);
       this.ctx.sound('punch_impact', d.x, d.y, d.z, 0.5, 1.5, 6);
+      // People look up; some stop to watch (or film) where it comes down.
+      gawkAt(this.ctx.peds, d.x, Math.max(this.ctx.terrain.height(d.x, d.z) + 1, d.y * 0.5), d.z, 28, 0.9);
     }
     const J = Math.hypot(jx, jy, jz);
     const k = Math.min(1, (DRONE.mass * 9) / Math.max(1, J));
@@ -467,7 +496,8 @@ export class Drones {
     let drawn = 0;
     for (const d of this.list) {
       if (Math.abs(d.x - cp.x) > DRAW_R || Math.abs(d.z - cp.z) > DRAW_R) continue;
-      _m.compose(_p.set(d.x, d.y, d.z), d.q, _s.set(1, 1, 1));
+      const sc = statusOf(d)?.scale ?? 1; // shrink ray
+      _m.compose(_p.set(d.x, d.y, d.z), d.q, _s.set(sc, sc, sc));
       const c = d.kind === DKind.Police ? [0.08, 0.1, 0.16] : d.kind === DKind.News ? [0.85, 0.12, 0.1] : FLEETS[d.fleet];
       const mode = d.broken ? 2 : d.state !== DState.Fly ? 1 : 0;
       const police = d.kind === DKind.Police ? 3 : 0;

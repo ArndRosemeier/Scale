@@ -91,7 +91,7 @@ export class CityStreamer {
 
   constructor(readonly macro: MacroPlan, readonly pool: WorkerPool, readonly tex: TextureLibrary) {
     this.groundMat = createGroundMaterial(tex.ground);
-    this.terrainMat = createTerrainMaterial(tex.ground);
+    this.terrainMat = createTerrainMaterial(tex.ground, macro.seed);
     this.waterMat = createWaterMaterial();
     this.root.name = 'city';
   }

@@ -3,7 +3,7 @@
  * super-jump charge, karma balance, a small mode chip, and toasts for awards and events.
  */
 import type { AbilitySystem } from '../game/abilities/AbilitySystem';
-import { ABILITY, HOTBAR_SLOTS } from '../game/abilities/defs';
+import { ABILITY, ABILITIES, HOTBAR_SLOTS } from '../game/abilities/defs';
 
 export type ToastKind = 'karma' | 'info' | 'warn' | 'core' | 'deny';
 
@@ -80,7 +80,7 @@ export class PowerHud {
   update(): void {
     const a = this.abilities, pr = a.progress;
     // Slots: rebuild the content only on change.
-    const key = `${pr.slots.join(',')}|${a.selected}|${pr.karma}|${['superJump', 'dash', 'shockwave', 'flight'].map((id) => pr.rank(id as never)).join('')}`;
+    const key = `${pr.slots.join(',')}|${a.selected}|${pr.karma}|${ABILITIES.map((d) => pr.rank(d.id)).join('')}`;
     if (key !== this.shown) {
       this.shown = key;
       this.slots.forEach((el, i) => {
@@ -89,7 +89,7 @@ export class PowerHud {
         el.classList.toggle('sel', i === a.selected);
         el.classList.toggle('empty', !def);
         el.classList.toggle('locked', !!def && !pr.unlocked(def.id));
-        el.innerHTML = `<span class="k">${i + 1}</span>${def ? `<span class="ic">${def.icon}</span><span class="cd"></span>` : ''}`;
+        el.innerHTML = `<span class="k">${(i + 1) % 10}</span>${def ? `<span class="ic">${def.icon}</span><span class="cd"></span>` : ''}`;
         el.title = def ? `${def.name}${pr.unlocked(def.id) ? ` (rank ${pr.rank(def.id)})` : ' (locked)'}` : 'Empty slot — assign a power with P';
       });
       this.karmaEl.innerHTML = `<b>${pr.karma}</b> karma`;
@@ -103,7 +103,7 @@ export class PowerHud {
       const cd = el.querySelector<HTMLSpanElement>('.cd');
       if (cd) cd.style.setProperty('--f', String(f));
       el.classList.toggle('cooling', f > 0);
-      el.classList.toggle('on', (id === 'flight' && a.player.flying) || (id === 'superJump' && a.charge >= 0));
+      el.classList.toggle('on', a.active(id));
     });
     const e = `${Math.floor(a.energy)}/${Math.round(a.maxEnergy)}|${a.charge.toFixed(2)}`;
     if (e !== this.lastE) {

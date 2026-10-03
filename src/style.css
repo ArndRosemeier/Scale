@@ -265,7 +265,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 .pw-hot { padding: 12px 22px 10px; border-top: 1px solid #2c3846; background: rgba(15, 20, 26, 0.5); }
 .pw-hot-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #d8b56a; margin-bottom: 8px; }
 .pw-hot-label span { text-transform: none; letter-spacing: 0; font-weight: 400; color: #6f7f90; margin-left: 8px; }
-.pw-slots { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.pw-slots { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+.pw-group { grid-column: 1 / -1; margin: 8px 2px -2px; font: 600 11px/14px system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: #d8b56a; }
+.pw-group:first-child { margin-top: 0; }
 .pw-slot { position: relative; height: 70px; border-radius: 10px; background: #111820; border: 1px solid #2c3846; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; color: #e8ecf0; transition: border-color .15s, background .15s; }
 .pw-slot .k { position: absolute; left: 6px; top: 3px; font: 700 11px ui-monospace, Consolas, monospace; color: #8fa3b5; }
 .pw-slot .ic svg { width: 26px; height: 26px; display: block; color: #8fe4ff; }
@@ -283,6 +285,23 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 .pw-reset.danger { color: #ff8a7a; border-color: #8a3a32; }
 #map .map-key .core { display: inline-block; width: 10px; height: 10px; margin: 0 2px; background: #58d6ff; transform: rotate(45deg); box-shadow: 0 0 0 1.5px #fff, 0 0 6px #58d6ff; }
 #map .map-key .alert { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 7px; background: #ff9f43; color: #1a1408; font-weight: 800; font-size: 10px; box-shadow: 0 0 0 1.5px #fff; }
-@media (max-width: 760px) { .pw-list { grid-template-columns: 1fr; } .pw-slots { grid-template-columns: repeat(4, 1fr); } .pw-hot-label span { display: none; } }
+@media (max-width: 760px) { .pw-list { grid-template-columns: 1fr; } .pw-slots { grid-template-columns: repeat(5, 1fr); } .pw-hot-label span { display: none; } }
 #menu { overflow-y: auto; align-items: safe center; }
 #menu .panel { margin: 16px 0; }
+
+/* Targeting (Tab): corner brackets round the target, and the target frame (bottom left). */
+#tmark { position: fixed; left: 0; top: 0; width: 10px; height: 10px; pointer-events: none; z-index: 4; display: none; will-change: transform; }
+#tmark i { position: absolute; width: 9px; height: 9px; border: 0 solid rgba(255, 236, 196, 0.92); filter: drop-shadow(0 0 2px rgba(0,0,0,0.7)); }
+#tmark i:nth-child(1) { left: 0; top: 0; border-left-width: 2px; border-top-width: 2px; }
+#tmark i:nth-child(2) { right: 0; top: 0; border-right-width: 2px; border-top-width: 2px; }
+#tmark i:nth-child(3) { left: 0; bottom: 0; border-left-width: 2px; border-bottom-width: 2px; }
+#tmark i:nth-child(4) { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
+#tmark b { position: absolute; left: 50%; top: -11px; width: 0; height: 0; margin-left: -5px; border: 5px solid transparent; border-top-color: rgba(255, 236, 196, 0.92); filter: drop-shadow(0 0 2px rgba(0,0,0,0.7)); }
+#tmark.edge i { display: none; }
+#tframe { position: fixed; left: 16px; bottom: 16px; min-width: 190px; max-width: 260px; padding: 8px 12px 9px 14px; background: rgba(15, 20, 26, 0.8); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.3); color: #e8ecf0; font: 13px/1.3 system-ui, sans-serif; z-index: 6; pointer-events: none; display: none; }
+#tframe .con { position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: rgba(255,255,255,0.25); }
+#tframe .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tframe .sub { margin-top: 2px; font-size: 11px; color: #9aa8b6; display: flex; justify-content: space-between; gap: 12px; }
+#tframe .hp { margin-top: 6px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.1); overflow: hidden; display: none; }
+#tframe .hp > div { height: 100%; width: 100%; background: #7fc97f; }
+#tframe .st { color: #b8d8ff; }

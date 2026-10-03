@@ -6,12 +6,23 @@ import { MeshBuilder } from './meshBuilder';
 import { riverChunks } from '../plan/water';
 import { intersection, shapesToPolys } from '../core/clip';
 import { drapeShape } from './ground';
+import { newLandSample, type LandUse } from '../world/landuse';
 
 /** Natural terrain sits slightly below the urban ground meshes so it never pokes through. */
 export const TERRAIN_DROP = 0.35;
 
-export function buildTerrainTile(terrain: Terrain, x0: number, z0: number, size: number, res: number, skirt: number): MeshBuilder {
-  const mb = new MeshBuilder([{ name: 'uv', size: 2 }]);
+/**
+ * A terrain tile. With `land`, every vertex carries aLand = (forest, field, meadow, bank), each
+ * premultiplied by the countryside weight (all zero in the city), for the terrain shader.
+ */
+export function buildTerrainTile(terrain: Terrain, x0: number, z0: number, size: number, res: number, skirt: number, land?: LandUse): MeshBuilder {
+  const mb = new MeshBuilder(land ? [{ name: 'uv', size: 2 }, { name: 'aLand', size: 4, type: 'u8n' }] : [{ name: 'uv', size: 2 }]);
+  const ls = newLandSample();
+  const setLand = (x: number, z: number, slope: number) => {
+    if (!land) return;
+    land.sample(x, z, ls, slope);
+    mb.set('aLand', ls.rural * ls.forest, ls.rural * ls.field, ls.rural * ls.meadow, ls.rural * ls.bank);
+  };
   mb.setOrigin(x0 + size / 2, 0, z0 + size / 2);
   const n = res + 1;
   const h = new Float32Array(n * n);
@@ -25,6 +36,7 @@ export function buildTerrainTile(terrain: Terrain, x0: number, z0: number, size:
       const dx = (hr - hl) / ((Math.min(n - 1, i + 1) - Math.max(0, i - 1)) * step);
       const dz = (hu - hd) / ((Math.min(n - 1, j + 1) - Math.max(0, j - 1)) * step);
       const l = Math.hypot(dx, 1, dz);
+      setLand(x, z, Math.hypot(dx, dz));
       mb.v(x, h[j * n + i], z, -dx / l, 1 / l, -dz / l, x, z);
     }
   }
@@ -44,6 +56,7 @@ export function buildTerrainTile(terrain: Terrain, x0: number, z0: number, size:
         const vi = idx(k);
         const i = vi % n, j = Math.floor(vi / n);
         const x = x0 + i * step, z = z0 + j * step;
+        setLand(x, z, 0);
         mb.v(x, h[vi], z, nx, 0, nz, x, z);
         mb.v(x, h[vi] - skirt, z, nx, 0, nz, x, z);
       }

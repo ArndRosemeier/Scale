@@ -80,3 +80,7 @@ Generated locally with Stability AI's Stable Audio 3 Small-SFX model, used under
 | id | file | dur (s) | how |
 |---|---|---|---|
 | drone_buzz | drone_buzz.wav | 2.0 | `tools/synthDroneBuzz.mjs`: four rotors at slightly different blade-pass frequencies (176–193 Hz) with harmonics, blade-modulated low-passed airflow noise, slow wobble; whole-cycle partials and a crossfaded noise tail make it loop seamlessly. 22.05 kHz mono 16-bit. Played as one positional loop at the nearest drone. |
+| bird_flutter | bird_flutter.wav | 1.3 | `tools/synthBirds.mjs`: four overlapping trains of wing claps (noise bursts plus a soft 160 Hz down-stroke) slowing from ~15 to ~8 beats/s, band-passed to a feathery 0.6–4 kHz. A group of pigeons flushing; pitched up for sparrows and feather hits. |
+| pigeon_coo | pigeon_coo.wav | 1.15 | `tools/synthBirds.mjs`: two-part "hroo-coo", harmonic tone 330–410 Hz with a 28 Hz throaty tremolo and breath noise, low-passed. |
+| gull_call | gull_call.wav | 1.25 | `tools/synthBirds.mjs`: three nasal "kyow" calls (quick rise to ~1.2 kHz, long fall), strong upper harmonics plus a 2.4 kHz band. |
+| crow_caw | crow_caw.wav | 1.0 | `tools/synthBirds.mjs`: two harsh caws, ~550 Hz rich harmonic tone with pitch jitter and noise-modulated amplitude. |

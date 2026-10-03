@@ -18,6 +18,10 @@ export class CameraRig {
   private fov = 60;
   private shake = 0;
   private shakeT = 0;
+  /** FOV kick (dash): extra degrees, how long it holds, time since it started. */
+  private kickDeg = 0;
+  private kickHold = 0;
+  private kickT = 9;
   private pivot = new THREE.Vector3();
   private smoothPivot = new THREE.Vector3();
   private init = false;
@@ -31,6 +35,13 @@ export class CameraRig {
 
   addShake(amount: number): void {
     this.shake = Math.min(1.5, this.shake + amount);
+  }
+
+  /** Widen the view by `deg` for a burst of speed: snaps open, holds `hold` s, eases back. */
+  kickFov(deg: number, hold: number): void {
+    this.kickDeg = deg;
+    this.kickHold = hold;
+    this.kickT = 0;
   }
 
   update(dt: number, p: Player, input: Input): void {
@@ -86,14 +97,18 @@ export class CameraRig {
     this.cam.lookAt(origin);
     // FOV widens with flight speed.
     const speed = p.vel.length() / Math.sqrt(p.k);
-    const targetFov = 60 + (p.flying ? clamp((speed - 20) / 140, 0, 1) * 22 : 0);
+    // (Super speed on foot widens it more: everything else seems to stand still.)
+    const targetFov = 60 + (p.flying ? clamp((speed - 20) / 140, 0, 1) * 22 : p.speeding ? clamp((speed - 8) / 90, 0, 1) * 28 : 0);
     this.fov = lerp(this.fov, targetFov, damp(2, dt));
+    this.kickT += dt;
+    const kt = this.kickT, kick = this.kickDeg * Math.min(1, kt / 0.06) * (kt < this.kickHold ? 1 : Math.exp(-(kt - this.kickHold) * 6));
+    const fov = this.fov + (kick > 0.05 ? kick : 0);
     // Near/far planes follow the player's size (reversed depth keeps precision).
     const near = clamp(Math.min(h * 0.04, this.dist * 0.2), 0.004, 2);
-    if (Math.abs(this.cam.near - near) > near * 0.05 || this.cam.fov !== this.fov) {
+    if (Math.abs(this.cam.near - near) > near * 0.05 || this.cam.fov !== fov) {
       this.cam.near = near;
       this.cam.far = 60000;
-      this.cam.fov = this.fov;
+      this.cam.fov = fov;
       this.cam.updateProjectionMatrix();
     }
   }

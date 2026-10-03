@@ -10,7 +10,8 @@
  *     cycle runs backwards when backpedalling.
  *  2. Stance overlay: weapon-ready/relaxed carry poses per held item, idle
  *     personalities (arms crossed, hands on hips...).
- *  3. One-shot actions (actions.ts) masked to upper body / arms / full body.
+ *  3. One-shot actions (actions.ts) masked to upper body / arms / full body,
+ *     then the superpower layer (jump charge crouch, leap, landing, dash lean).
  *  4. Additive: breathing, look-at (spine→neck→head→eyes), hit-reaction
  *     springs, acceleration lean.
  *  5. Two-bone leg IK on terrain with pelvis drop and foot alignment.
@@ -19,7 +20,7 @@
  */
 import * as THREE from 'three';
 import type { Character } from '../Character';
-import type { AnimState, MoveState, ActionAnim, Vec3 } from '../../../shared/types';
+import type { AnimState, MoveState, ActionAnim, PowerAnim, Vec3 } from '../../../shared/types';
 import { Pose, makeBoneMap, kf, clamp, smooth, approach, wrapPi, type BoneMap, type Side } from './pose';
 import { ACTIONS, sitPose, type ActionCtx, type GripClass, type ActionDef } from './actions';
 import { hash32 } from '../../../core/rng';
@@ -132,7 +133,6 @@ export class Animator {
   private actionVariant = 0;
   private actionW = 0;
   private lastAction: { def: ActionDef; id: string; t0: number; dur: number; aim?: Vec3 } | null = null;
-  private idleStyle: number;
   private time = 0;
   /** Per-foot ground offsets from the last IK pass. */
   private footOff = [0, 0];
@@ -162,6 +162,16 @@ export class Animator {
   private landK = 0;
   /** Sandbox: show this library clip on its own (u = normalized time, < 0 plays in real time). */
   preview: { name: string; u: number } | null = null;
+  // Superpower layer: pose scratch, crouch/dash weights, the leap's last vertical speed, heavy landing.
+  private pw: Pose;
+  private pwTmp: Pose;
+  private chargeW = 0;
+  private chargeD = 0;
+  private dashW = 0;
+  private wasLeaping = false;
+  private leapVy = 0;
+  private heavyT = 9;
+  private heavyK = 0;
 
   constructor(readonly ch: Character) {
     this.map = makeBoneMap(ch.bones.map((b) => b.name));
@@ -170,8 +180,9 @@ export class Animator {
     this.act = new Pose(this.map);
     this.out = new Pose(this.map);
     this.clipPose = new Pose(this.map);
+    this.pw = new Pose(this.map);
+    this.pwTmp = new Pose(this.map);
     this.seed = ch.app.seed >>> 0;
-    this.idleStyle = hash32(this.seed ^ 0x1d1e) % 7;
     this.computeNeutral();
     this.tailBones = ch.bones.filter((b) => b.name.startsWith('tail')).length;
     this.hipH = (ch.rest[this.map.idx('upperleg01.L')].y + ch.rest[this.map.idx('upperleg01.R')].y) / 2;
@@ -327,6 +338,9 @@ export class Animator {
       if (w > 0.3) actionMood = def.mood;
     } else this.actionW = approach(this.actionW, 0, 10, dt);
 
+    // ---- superpowers (the player): over locomotion and actions
+    this.powerLayer(out, a.power, inp, fam, dt);
+
     // ---- sandbox clip preview (whole body from one clip)
     const pv = this.preview && this.clipRig?.clip(this.preview.name);
     if (pv) {
@@ -347,6 +361,164 @@ export class Animator {
       this.face(inp, actionMood, fam, dt);
       this.eyes(inp, dt);
     } else this.ch.exprW.fill(0);
+  }
+
+  // ------------------------------------------------------------------ superpowers
+
+  /**
+   * Super jump and dash body language, blended over everything below:
+   *  - charge: a progressive crouch (knees bend, torso dips, arms swing back), trembling at full;
+   *  - take-off: legs extend, arms thrown up and forward;
+   *  - the leap: superhero pose while rising fast, a tuck around the apex, arms out and legs
+   *    reaching for the ground on the way down;
+   *  - landing: a deep absorb, or a one-knee superhero landing after a big leap;
+   *  - dash: hard forward lean, arms swept back, a frozen sprinter's stride.
+   * Weights run in animation time (giants move in slow motion like the rest of their body).
+   */
+  private powerLayer(out: Pose, pw: PowerAnim | undefined, inp: AnimInput, fam: Family, dt: number) {
+    const charge = pw ? pw.charge : -1, leap = pw ? pw.leap : 0, leapT = pw ? pw.leapT : 9, dash = pw ? pw.dash : 0;
+    const L = this.legLen, t = this.time;
+    // Landing of a super jump (the player clears `leap` on touch-down).
+    if (leap > 0 && fam === 'air') this.leapVy = inp.vel[1];
+    if (this.wasLeaping && leap <= 0) {
+      this.heavyT = 0;
+      this.heavyK = Math.max(0.25, smooth(4, 20, -this.leapVy));
+    }
+    this.wasLeaping = leap > 0;
+    this.heavyT += dt;
+
+    // Charge crouch: depth follows the charge directly (it is already smooth); presence fades.
+    this.chargeW = approach(this.chargeW, charge >= 0 ? 1 : 0, charge >= 0 ? 16 : 22, dt);
+    if (charge >= 0) this.chargeD = 0.15 + 0.85 * charge;
+    if (this.chargeW > 0.002) {
+      const p = this.crouchPose(this.pw.clear(), this.chargeD);
+      const c = Math.max(0, charge);
+      // Arms swing back as the charge builds; a tremble of held-back power at full charge.
+      for (const s of ['L', 'R'] as const) p.arm(s, -(0.25 + 0.85 * c), 0.18 + 0.1 * c, 0, 0.3 + 0.25 * c, 0.3, -0.25 * c);
+      const tr = smooth(0.75, 1, c);
+      p.root.x += Math.sin(t * 53) * 0.006 * tr;
+      p.add('spine01', Math.sin(t * 61) * 0.02 * tr);
+      out.blend(p, this.chargeW);
+    }
+
+    // Take-off and the leap.
+    if (leap > 0) {
+      const launchW = smooth(0, 0.05, leapT) * (1 - smooth(0.22, 0.5, leapT));
+      const airW = (fam === 'air' ? this.famW.get('air')! : 0) * (1 - launchW) * Math.min(1, 0.5 + leap);
+      if (airW > 0.002) {
+        const vy = inp.vel[1];
+        const up = smooth(2, 9, vy), down = smooth(-1.5, -8, vy), mid = Math.max(0, 1 - up - down);
+        const p = this.pw.clear();
+        if (up > 0) p.addScaled(this.superheroAir(this.pwTmp.clear()), up);
+        if (mid > 0) p.addScaled(this.tuckAir(this.pwTmp.clear()), mid);
+        if (down > 0) p.addScaled(this.reachDown(this.pwTmp.clear()), down);
+        out.blend(p, airW);
+      }
+      if (launchW > 0.002) {
+        const p = this.pw.clear();
+        for (const s of ['L', 'R'] as const) {
+          p.leg(s, -0.08, 0.04, 0, 0.06, 0.65, 0.2);
+          p.arm(s, 2.55, 0.3, 0, 0.2, 0.2, 0.1);
+        }
+        p.spine(0.18);
+        p.neck(0.3);
+        out.blend(p, launchW);
+      }
+    }
+
+    // Landing reaction scaled to the leap (an absorb after a small one, a superhero landing after a big one).
+    const T = 0.2 + 0.55 * this.heavyK;
+    if (this.heavyT < T + 0.6 && fam === 'ground') {
+      const e = smooth(0, 0.05, this.heavyT) * (1 - smooth(T, T + 0.6, this.heavyT)) * (1 - smooth(1, 3.5, this.speed));
+      if (e > 0.002) {
+        const p = this.pw.clear();
+        const hero = smooth(0.55, 0.85, this.heavyK);
+        if (hero < 1) p.addScaled(this.crouchPose(this.pwTmp.clear(), 0.45 + 0.5 * this.heavyK), 1 - hero);
+        if (hero > 0) p.addScaled(this.heroLanding(this.pwTmp.clear()), hero);
+        out.blend(p, e);
+      }
+    }
+
+    // Dash: snaps in, eases out.
+    this.dashW = approach(this.dashW, dash > 0 ? 1 : 0, dash > 0 ? 30 : 7, dt);
+    if (this.dashW > 0.002) {
+      const p = this.pw.clear();
+      p.add('root', -0.6);
+      p.root.y -= 0.08 * L;
+      p.root.z += 0.05 * L;
+      p.spine(-0.15);
+      p.neck(0.6);
+      for (const s of ['L', 'R'] as const) p.arm(s, -1.15, 0.35, 0, 0.3, 0.3, 0.35);
+      p.leg('L', 1.45, 0.04, 0, 1.2, -0.1);
+      p.leg('R', -0.3, 0.04, 0, 0.55, 0.55);
+      out.blend(p, this.dashW);
+    }
+  }
+
+  /**
+   * Symmetric squat of depth d (0..1): thighs forward, knees bent, feet flat under the body
+   * (pelvis tipped forward, so the hip flexion includes the tilt), torso leaning to balance.
+   */
+  private crouchPose(p: Pose, d: number): Pose {
+    const L = this.legLen, tilt = 0.35 * d;
+    const th = 1.1 * d, kn = 1.9 * d, sh = kn - th;
+    p.add('root', -tilt);
+    // Hips drop and move back so the feet stay where they stand (thigh ~ shin ~ L / 2).
+    p.root.y -= (L / 2) * (2 - Math.cos(th) - Math.cos(sh));
+    p.root.z += (L / 2) * (Math.sin(th) - Math.sin(sh)) * 0.6;
+    for (const s of ['L', 'R'] as const) p.leg(s, th + tilt, 0.1 * d, 0.05 * d, kn, -sh);
+    p.spine(-0.38 * d);
+    p.neck(0.55 * d);
+    return p;
+  }
+
+  /** Rising fast: one fist up, the other arm along the body, legs straight, toes pointed. */
+  private superheroAir(p: Pose): Pose {
+    p.arm('R', 2.95, 0.12, 0, 0.05, 0.3, 0.1);
+    p.arm('L', -0.15, 0.14, 0, 0.18);
+    p.leg('L', 0, 0.02, 0, 0.05, 0.6, 0.2);
+    p.leg('R', 0.18, 0.02, 0, 0.4, 0.5, 0.2);
+    p.spine(0.06);
+    p.neck(0.35);
+    return p;
+  }
+
+  /** Around the apex: knees pulled up, arms around them. */
+  private tuckAir(p: Pose): Pose {
+    p.add('root', -0.25);
+    for (const s of ['L', 'R'] as const) {
+      p.leg(s, 1.35, 0.12, 0, 2.0, 0.3);
+      p.arm(s, 0.9, 0.3, 0, 1.45, 0.4);
+    }
+    p.spine(-0.4);
+    p.neck(0.25);
+    return p;
+  }
+
+  /** Coming down: arms out for balance, legs reaching for the ground, eyes on the landing. */
+  private reachDown(p: Pose): Pose {
+    for (const s of ['L', 'R'] as const) {
+      p.arm(s, 0.45, 1.15, 0, 0.35, 0.2);
+      p.leg(s, 0.4, 0.1, 0, 0.6, -0.1);
+    }
+    p.spine(-0.12);
+    p.neck(-0.2);
+    return p;
+  }
+
+  /** One knee down, fist on the ground, head up: the classic heavy landing. */
+  private heroLanding(p: Pose): Pose {
+    const L = this.legLen;
+    p.add('root', -0.3);
+    p.root.y -= 0.52 * L;
+    p.root.z += 0.06 * L;
+    p.leg('R', 1.75, 0.08, 0, 2.0, -0.45);
+    p.leg('L', 0.15, 0.06, 0, 2.15, 0.55, -0.6);
+    p.spine(-0.55);
+    p.neck(0.85);
+    p.arm('R', 0.55, 0.3, 0, 0.1, 0.4);
+    p.arm('L', -0.55, 0.85, 0, 0.45, 0.2);
+    return p;
   }
 
   // ------------------------------------------------------------------ families
@@ -531,7 +703,7 @@ export class Animator {
     p.add('root', 0, -this.hipYaw, 0);
     p.spine(0, this.hipYaw * 0.85, 0);
 
-    // ---- idle life: breathing, weight shift, personality
+    // ---- idle life: weight shift and one relaxed stance for everyone
     const idle = 1 - moving;
     if (idle > 0.01) {
       const t = this.time;
@@ -543,8 +715,7 @@ export class Animator {
       p.spine(0, 0, shift * 0.04 * life);
       p.leg('L', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, -shift) * 0.12) * life);
       p.leg('R', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, shift) * 0.12) * life);
-      const combat = inp.combat && inp.main !== 'none';
-      if (!combat && inp.main === 'none' && inp.off === 'none' && !crouch) this.idlePersonality(p, idle);
+      if (inp.main === 'none' && inp.off === 'none' && !crouch) this.idleArms(p, idle);
     }
     this.carryPose(p, inp, moving, run, crouch);
   }
@@ -635,7 +806,12 @@ export class Animator {
     const rig = this.clipRig!, src = this.clipPose, armM = this.masks.arms;
     for (const b of rig.bones) {
       let m = w;
-      if (armM[b] > 0) m *= (this.ch.bones[b].name.endsWith('.L') ? this.armClip.L : this.armClip.R) * this.armClipW;
+      if (armM[b] > 0) {
+        const n = this.ch.bones[b].name;
+        m *= (n.endsWith('.L') ? this.armClip.L : this.armClip.R) * this.armClipW;
+        // Forearm twist and wrist: barely any of the standing clip (it turned the palms back).
+        if (/^(lowerarm02|wrist)/.test(n)) m *= this.armClipW;
+      }
       else if (UPPER_BODY.test(this.ch.bones[b].name)) m *= this.torsoClipW;
       if (m <= 0) continue;
       const i = b * 3;
@@ -650,21 +826,15 @@ export class Animator {
     p.root.y = y;
   }
 
-  private idlePersonality(p: Pose, w: number) {
-    switch (this.idleStyle) {
-      case 1: // arms crossed (negative twist = internal rotation)
-        p.arm('L', 0.3 * w, -0.15 * w, -1.05 * w, 1.35 * w, 0.4 * w);
-        p.arm('R', 0.27 * w, -0.1 * w, -1.1 * w, 1.45 * w, 0.4 * w);
-        break;
-      case 2: // hands loosely folded in front of the belly (upper arms slightly forward:
-        // negative fwd = shoulder extension would put the hands behind the back)
-        p.arm('L', 0.32 * w, 0.06 * w, -0.85 * w, 1.05 * w, 0.3 * w, -0.2 * w);
-        p.arm('R', 0.32 * w, 0.06 * w, -0.85 * w, 1.05 * w, 0.3 * w, -0.2 * w);
-        break;
-      default:
-        p.arm('L', 0.04 * w, 0.02 * w, 0.1 * w, 0.18 * w, 0.4 * w);
-        p.arm('R', 0.04 * w, 0.02 * w, 0.1 * w, 0.18 * w, 0.4 * w);
-    }
+  /**
+   * The one standing idle: arms hang straight down along the body from the relaxed shoulders,
+   * elbows barely bent, palms toward the thighs (the neutral's forearm twist, thumbs forward).
+   */
+  private idleArms(p: Pose, w: number) {
+    // Takes back the gait's standing arm offsets (twist 0.15, elbow 0.18, pronation 0.5, wrist
+    // 0.1: they turned the palms backward and held the forearms out in front) down to a trace of
+    // elbow bend.
+    for (const s of ['L', 'R'] as const) p.arm(s, -0.02 * w, -0.02 * w, -0.15 * w, -0.13 * w, -0.5 * w, -0.1 * w);
   }
 
   /** How held items are carried (relaxed or combat-ready). */

@@ -32,6 +32,20 @@ export interface AnimState {
   talking?: boolean;
   /** Look-at target position. */
   lookAt?: Vec3;
+  /** Superpower body layer (the player): jump charge, leap, dash. */
+  power?: PowerAnim;
+}
+
+/** Superpower poses layered over locomotion (see Animator.powerLayer). */
+export interface PowerAnim {
+  /** Super jump charge 0..1 while held, < 0 when not charging. */
+  charge: number;
+  /** Strength 0..1 of the super jump in progress (0: none); cleared on landing. */
+  leap: number;
+  /** Animation-clock seconds since the super jump's take-off. */
+  leapT: number;
+  /** 1 while dashing (fades out after). */
+  dash: number;
 }
 
 /** Bitflags on snapshots. */

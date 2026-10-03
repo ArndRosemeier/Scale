@@ -11,6 +11,7 @@ import { HumanoidRig } from '../humanoid/client/HumanoidRig';
 import { randomAppearance } from '../humanoid/appearance';
 import type { EquipmentVisuals } from '../items/types';
 import { Role } from './Population';
+import { statusOf } from '../shared/status';
 
 const CAP = 1400;          // instances per template
 const CROWD_RANGE = 380;
@@ -137,6 +138,7 @@ export class CrowdRenderer {
     const kind = eq.back?.defId === 'suitjacket' ? 'suit' : eq.back?.defId === 'coat' ? 'coat' : eq.chest?.defId === 'dress' ? 'dress' : eq.legs?.defId === 'skirt' ? 'skirt' : eq.back?.defId === 'jacket' ? 'jacket' : 'casual';
     let ti = this.templates.findIndex((t) => t.female === female && t.outfit === kind);
     if (ti < 0) ti = this.templates.findIndex((t) => t.female === female && t.outfit === 'casual');
+    if (ti < 0) ti = Math.max(0, this.templates.findIndex((t) => t.female === female));
     const app = randomAppearance('human', c.seed, { gender: c.gender, age: c.age });
     const col = (rgb: [number, number, number] | undefined, fb: [number, number, number]) => {
       const cc = new THREE.Color().setRGB(...(rgb ?? fb), THREE.SRGBColorSpace);
@@ -164,7 +166,8 @@ export class CrowdRenderer {
     const near: { a: PedAgent; d: number }[] = [];
     for (const a of agents) {
       const d = Math.hypot(a.x - cx, a.y - cy, a.z - cz);
-      if (d < RIG_RANGE) near.push({ a, d });
+      // Frozen people are drawn as (ice-tinted, motionless) crowd instances, not rigs.
+      if (d < RIG_RANGE && !((statusOf(a)?.frozen ?? 0) > 0)) near.push({ a, d });
     }
     near.sort((p, q) => p.d - q.d);
     const rigSet = new Set<number>();
@@ -195,7 +198,10 @@ export class CrowdRenderer {
       const vx = -Math.sin(a.heading) * a.speed, vz = -Math.cos(a.heading) * a.speed;
       const thanks = a.helped && a.state !== PState.Down && a.stateT < 3;
       const action = a.state === PState.Film ? { id: 'gesture_point', t0: time - 0.3, dur: 10 } : thanks ? { id: 'gesture_wave', t0: time - a.stateT, dur: 3 } : undefined;
-      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading, anim: { move, action, mood: thanks ? 'happy' : a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral', lookAt: a.state === PState.Gawk || a.state === PState.Film ? [a.lookX, a.lookY, a.lookZ] : undefined }, flags: 0 }, dt, time, cam.position);
+      // Powers: shrunk people are small (and squeaky, see Elements); electrocuted ones twitch.
+      const st = statusOf(a);
+      const twitch = st && st.stunned > 0 ? Math.sin(time * 47 + a.id) * 0.18 : 0;
+      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood: thanks ? 'happy' : a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral', lookAt: a.state === PState.Gawk || a.state === PState.Film || (a.glance ?? 0) > 0 ? [a.lookX, a.lookY, a.lookZ] : undefined }, flags: 0 }, dt, time, cam.position);
     }
     // Drop rigs no longer needed (keep a short while to avoid churn).
     for (const [id, r] of this.rigs) {
@@ -217,6 +223,7 @@ export class CrowdRenderer {
       this.sphere.radius = 1.2;
       if (!this.frustum.intersectsSphere(this.sphere)) continue;
       const look = this.lookOf(a);
+      const st = statusOf(a);
       const ti = look.template;
       const k = counts[ti];
       if (k >= CAP) continue;
@@ -228,11 +235,18 @@ export class CrowdRenderer {
       else if (a.state === PState.Film) clip = t.clips.film;
       else if (a.speed > 2.4 || a.state === PState.Flee) clip = t.clips.run;
       else if (a.speed > 0.15) clip = t.clips.walk;
-      const phase = clip.cycleDist > 0 ? a.phase / (clip.cycleDist * look.scale) : (time + (a.look % 97)) / clip.cycleTime;
+      let phase = clip.cycleDist > 0 ? a.phase / (clip.cycleDist * look.scale) : (time + (a.look % 97)) / clip.cycleTime;
+      const frozen = !!st && st.frozen > 0;
+      if (frozen) {
+        // Held mid-stride (or mid-breath): no animation.
+        if (st.saved?.walk && a.state !== PState.Down) clip = t.clips.walk;
+        phase = clip.cycleDist > 0 ? st.hphase / (clip.cycleDist * look.scale) : (a.look % 97) / 97;
+      }
       this.anim[ti].setXYZW(k, clip.start, clip.frames, phase, 0);
-      for (let c = 0; c < 6; c++) this.cols[ti][c].setXYZ(k, look.colors[c * 3], look.colors[c * 3 + 1], look.colors[c * 3 + 2]);
-      this.q.setFromAxisAngle(_up, a.heading);
-      this.mat4.compose(this.p.set(a.x, a.y, a.z), this.q, this.s.setScalar(look.scale));
+      if (frozen) for (let c = 0; c < 6; c++) this.cols[ti][c].setXYZ(k, look.colors[c * 3] * 0.35 + 0.5, look.colors[c * 3 + 1] * 0.35 + 0.58, look.colors[c * 3 + 2] * 0.35 + 0.66);
+      else for (let c = 0; c < 6; c++) this.cols[ti][c].setXYZ(k, look.colors[c * 3], look.colors[c * 3 + 1], look.colors[c * 3 + 2]);
+      this.q.setFromAxisAngle(_up, a.heading + (st && st.stunned > 0 ? Math.sin(time * 47 + a.id) * 0.18 : 0));
+      this.mat4.compose(this.p.set(a.x, a.y, a.z), this.q, this.s.setScalar(look.scale * (st ? st.scale : 1)));
       this.meshes[ti].setMatrixAt(k, this.mat4);
     }
     let total = 0;

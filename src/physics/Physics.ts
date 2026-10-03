@@ -11,6 +11,24 @@ export type R = typeof RAPIER;
 const PATCH = 96;   // m per heightfield patch
 const RES = 48;     // cells per side
 
+/**
+ * Collision groups (Rapier: membership << 16 | filter). Everything defaults to all groups; only
+ * the near-future layer narrows it: its small bodies (robots, drones) skip the coarse city
+ * heightfield (it ramps up to the roofs over 2 m at building edges, which sent them through or
+ * onto walls) and collide instead with exact local ground: street-level patches and building
+ * prisms that debris (spawned inside breaking walls) must not touch.
+ */
+export const GROUPS = {
+  /** The city heightfield patches (terrain, roofs, bridges). */
+  cityGround: (0x0001 << 16) | 0xffff,
+  /** Exact local ground near small bodies: street patches, building walls and roofs. */
+  localGround: (0x0002 << 16) | 0xffff,
+  /** Robots, drones: everything but the city heightfield. */
+  smallBody: (0x0004 << 16) | 0xfffe,
+  /** Debris fragments: everything but the local ground. */
+  debris: (0xfffd << 16) | 0xfffd,
+};
+
 export class Physics {
   R!: R;
   world!: RAPIER.World;
@@ -45,7 +63,8 @@ export class Physics {
       }
       const desc = this.R.ColliderDesc.heightfield(RES, RES, heights, { x: PATCH, y: 1, z: PATCH })
         .setTranslation(x0 + PATCH / 2, 0, z0 + PATCH / 2)
-        .setFriction(0.9);
+        .setFriction(0.9)
+        .setCollisionGroups(GROUPS.cityGround);
       const collider = this.world.createCollider(desc);
       this.patches.set(key, { collider, used: this.t });
     }

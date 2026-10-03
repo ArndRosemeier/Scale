@@ -19,6 +19,7 @@ import type { Terrain } from '../world/terrain';
 import { Rng, hash32 } from '../core/rng';
 import type { Citizen } from './Population';
 import type { Obstacle, ObstacleProvider } from '../world/Collision';
+import { statusOf } from '../shared/status';
 
 export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle';
 
@@ -59,6 +60,9 @@ export interface Vehicle {
   alive: boolean;
   /** Trip destination (citizens' cars), kept so routes survive road-network rebuilds. */
   dest?: { x: number; z: number };
+  /** Body attitude on the road surface (rad): nose up +, right side up +. */
+  pitch?: number;
+  roll?: number;
 }
 
 const RANGE = 650;
@@ -80,6 +84,19 @@ export class Traffic {
   private rng = new Rng(77);
   /** +1 right-hand traffic, −1 left-hand. */
   private hand: number;
+  private px = 0;
+  private pz = 0;
+  private frame = 0;
+  /**
+   * Road surface height under a vehicle heading (hx, hz): terrain, or a bridge deck the car
+   * drives along (set by the game; terrain only when absent).
+   */
+  surface: ((x: number, z: number, hx: number, hz: number) => number) | null = null;
+  /**
+   * Small things on the carriageway that cars stop for (robots crossing or lying on the road),
+   * refilled every frame by their owner (the near-future layer).
+   */
+  readonly obstacles: { x: number; z: number; r: number }[] = [];
   onCrash?: (v: Vehicle, x: number, y: number, z: number, speed: number) => void;
   onHorn?: (v: Vehicle) => void;
   onAbandon?: (v: Vehicle) => void;
@@ -129,6 +146,7 @@ export class Traffic {
 
   update(dt: number, hours: number, px: number, pz: number): void {
     this.t += dt;
+    this.px = px; this.pz = pz; this.frame++;
     if (!this.net.edges.length) return;
     if (this.net.version !== this.netVersion) { this.netVersion = this.net.version; this.remap(); }
     // ---- spawn through traffic to keep a realistic density
@@ -209,6 +227,8 @@ export class Traffic {
       const kind = this.rng.weighted<VKind>(['sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle'],
         (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: 1.2, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4, shuttle: e.cls <= 1 ? 7 : 3 }[k2]));
       const v = this.makeVehicle(kind, ei, fwd, s, null);
+      // Not on top of a robot on the road.
+      if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 12 && Math.abs(o.z - v.z) < 12)) continue;
       // Route: random walk of a few edges ahead, preferring straight on.
       v.route = this.randomRoute(ei, fwd, 12);
       this.vehicles.push(v);
@@ -224,6 +244,7 @@ export class Traffic {
     const E = this.net.edges;
     const fwd = ea.side * this.hand > 0;
     const v = this.makeVehicle(driver.seed % 5 === 0 ? 'suv' : driver.seed % 7 === 0 ? 'hatch' : 'sedan', ea.e, fwd, ea.s, driver);
+    if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 8 && Math.abs(o.z - v.z) < 8)) return false;
     v.dest = { x: bx, z: bz };
     if (eb) {
       const startNode = fwd ? E[ea.e].b : E[ea.e].a;
@@ -309,7 +330,7 @@ export class Traffic {
   private tmp = { x: 0, z: 0, dx: 0, dz: 0 };
 
   /** World pose from lane position (or connector). */
-  private pose(v: Vehicle): void {
+  private pose(v: Vehicle, dt = 0): void {
     if (v.turn) {
       const T = v.turn, t = T.t, u = 1 - t;
       v.x = u * u * T.ax + 2 * u * t * T.cx + t * t * T.bx;
@@ -323,7 +344,34 @@ export class Traffic {
       const dx = v.fwd ? this.tmp.dx : -this.tmp.dx, dz = v.fwd ? this.tmp.dz : -this.tmp.dz;
       v.yaw = Math.atan2(-dx, -dz);
     }
-    v.y = this.terrain.height(v.x, v.z);
+    this.settle(v, dt);
+  }
+
+  private roadY(x: number, z: number, hx: number, hz: number): number {
+    return this.surface ? this.surface(x, z, hx, hz) : this.terrain.height(x, z);
+  }
+
+  /**
+   * Height, pitch and roll on the road surface from its height under the axles and the
+   * wheel tracks. Smoothed (dt > 0) so mesh seams and bridge joints do not make it twitch;
+   * cars far from the player (not drawn in detail) refresh their attitude every other frame.
+   */
+  settle(v: Vehicle, dt = 0): void {
+    const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+    const yc = this.roadY(v.x, v.z, fx, fz);
+    const far = dt > 0 && (Math.abs(v.x - this.px) > 260 || Math.abs(v.z - this.pz) > 260);
+    if (far && (v.id + this.frame) & 1) { v.y = yc; return; }
+    const hb = v.length * 0.31, ht = v.width * 0.4;
+    const yF = this.roadY(v.x + fx * hb, v.z + fz * hb, fx, fz), yB = this.roadY(v.x - fx * hb, v.z - fz * hb, fx, fz);
+    // Right is (cos yaw, −sin yaw) for a vehicle facing (−sin yaw, −cos yaw).
+    const rx = -fz, rz = fx;
+    const yR = this.roadY(v.x + rx * ht, v.z + rz * ht, fx, fz), yL = this.roadY(v.x - rx * ht, v.z - rz * ht, fx, fz);
+    const pitch = Math.atan2(yF - yB, hb * 2), roll = Math.atan2(yR - yL, ht * 2);
+    const k = dt > 0 ? Math.min(1, dt * 10) : 1;
+    v.pitch = (v.pitch ?? pitch) + (pitch - (v.pitch ?? pitch)) * k;
+    v.roll = (v.roll ?? roll) + (roll - (v.roll ?? roll)) * k;
+    // Wheels on the surface: over a crest the centre is the high point, in a dip the axles are.
+    v.y = Math.max(yc, (yF + yB) / 2, (yL + yR) / 2);
   }
 
   private step(v: Vehicle, dt: number): void {
@@ -333,6 +381,9 @@ export class Traffic {
       if (v.stateT > 120) v.alive = false;
       return;
     }
+    // Powers: frozen in place, or stalled by a lightning strike.
+    const st = statusOf(v);
+    if (st && (st.frozen > 0 || st.stunned > 0)) { v.speed = 0; v.brake = 1; return; }
     // Panic: some drivers abandon the car, others flee with a U-turn.
     if (v.fear > 0.8 && v.state === VState.Drive) {
       if (v.driver && (v.driver.nerve > 0.6 || v.speed < 2) && v.kind !== 'bus') {
@@ -348,9 +399,12 @@ export class Traffic {
       if (!v.turn) { v.fwd = !v.fwd; v.route = this.randomRoute(v.edge, v.fwd, 10); v.ri = 0; this.onHorn?.(v); }
     }
     if (v.turn) {
-      // Junction connector at reduced speed.
-      const target = Math.min(v.vmax, 7);
-      v.speed += (target - v.speed) * Math.min(1, dt * 1.5);
+      // Junction connector at reduced speed (stopping for a robot in the way).
+      let target = Math.min(v.vmax, 7);
+      const og = this.obstacleAhead(v, 10);
+      if (og < Infinity) target = Math.min(target, Math.sqrt(12 * Math.max(0, og - 0.3)));
+      if (target < v.speed - 0.5) { v.speed = Math.max(target, v.speed - 9 * dt); v.brake = 1; }
+      else v.speed += (target - v.speed) * Math.min(1, dt * 1.5);
       v.turn.t += (v.speed * dt) / v.turn.len;
       if (v.turn.t >= 1) {
         v.turn = null;
@@ -363,7 +417,7 @@ export class Traffic {
         v.s = v.fwd ? junctionBack(e) : e.len - junctionBack(e);
         v.indicator = 0;
       }
-      this.pose(v);
+      this.pose(v, dt);
       return;
     }
     const e = this.net.edges[v.edge];
@@ -427,7 +481,7 @@ export class Traffic {
       const cross = di[0] * dn[1] - di[1] * dn[0];
       v.indicator = Math.abs(cross) > 0.4 ? (cross > 0 ? 1 : -1) : 0;
     }
-    this.pose(v);
+    this.pose(v, dt);
   }
 
   private beginTurn(v: Vehicle): void {
@@ -477,12 +531,30 @@ export class Traffic {
       if (g < 0.3 && v.speed > 4) this.hitPedestrian(v, p);
     }
     void e;
+    best = Math.min(best, this.obstacleAhead(v, look));
     // The player counts as a pedestrian when on the road.
     if (this.player) {
       const dx = this.player.x - v.x, dz = this.player.z - v.z;
       const along = dx * fx + dz * fz;
       const lat = Math.abs(dx * -fz + dz * fx);
       if (along > 0 && along < look && lat < v.width / 2 + this.player.r && this.player.h > 0.25) best = Math.min(best, along - v.length / 2 - this.player.r);
+    }
+    return best;
+  }
+  /** Gap (m, from the front bumper) to the nearest obstacle in the lane corridor ahead. */
+  private obstacleAhead(v: Vehicle, look: number): number {
+    const O = this.obstacles;
+    if (!O.length) return Infinity;
+    const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+    const reach = look + v.length;
+    let best = Infinity;
+    for (const o of O) {
+      const dx = o.x - v.x, dz = o.z - v.z;
+      if (dx > reach || dx < -reach || dz > reach || dz < -reach) continue;
+      const along = dx * fx + dz * fz;
+      if (along < -v.length * 0.25 || along > look + v.length / 2 + o.r) continue;
+      if (Math.abs(dx * -fz + dz * fx) > v.width / 2 + o.r + 0.35) continue;
+      best = Math.min(best, along - v.length / 2 - o.r - 0.6);
     }
     return best;
   }

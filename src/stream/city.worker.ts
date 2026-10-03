@@ -18,6 +18,8 @@ import { BINFO_STRIDE, SKY_STRIDE, MapItem, type FromWorker, type ToWorker } fro
 import { minAreaRect } from '../core/geom2';
 import { buildingBase, buildingHeight } from '../build/buildingLayout';
 import { buildBridges } from '../build/bridges';
+import { LandUse } from '../world/landuse';
+import { ForestGen } from '../build/forest';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -25,6 +27,8 @@ let terrain: Terrain | null = null;
 let macro: MacroPlan | null = null;
 let water: ReturnType<typeof riverChunks> | null = null;
 let sea: number[] | null = null;
+let land: LandUse | null = null;
+let forest: ForestGen | null = null;
 
 function post(msg: FromWorker, transfer: Transferable[] = []): void {
   self.postMessage(msg, transfer);
@@ -37,8 +41,10 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       const t0 = performance.now();
       terrain = new Terrain(makeProfile(m.settings));
       macro = buildMacroPlan(terrain);
+      land = new LandUse(terrain);
       water = riverChunks(terrain, 0.0);
-      sea = seaPolygon(terrain, 0);
+      // The sea surface reaches along the whole coast of the streamed world.
+      sea = seaPolygon(terrain, 0, 40, terrain.worldExtent * 1.1);
       post({ type: 'ready', macro: m.sendMacro ? macro : undefined, ms: performance.now() - t0 });
       return;
     }
@@ -73,7 +79,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       return;
     }
     if (m.type === 'terrain') {
-      const mesh = buildTerrainTile(terrain, m.x0, m.z0, m.size, m.res, m.skirt).build();
+      const mesh = buildTerrainTile(terrain, m.x0, m.z0, m.size, m.res, m.skirt, land!).build();
       post({ type: 'terrain', job: m.job, mesh }, meshTransferables(mesh));
       return;
     }
@@ -81,6 +87,12 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       const mb = buildWaterTile(terrain, m.x0, m.z0, m.size, water!, sea);
       const mesh: MeshData | null = mb ? mb.build() : null;
       post({ type: 'water', job: m.job, mesh }, mesh ? meshTransferables(mesh) : []);
+      return;
+    }
+    if (m.type === 'forest') {
+      forest ??= new ForestGen(land!, macro);
+      const trees = forest.tile(m.x0, m.z0, m.size);
+      post({ type: 'forest', job: m.job, trees }, [trees.buffer]);
       return;
     }
     if (m.type === 'skyline') {

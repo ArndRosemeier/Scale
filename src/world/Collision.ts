@@ -7,6 +7,7 @@ import type { WorldIndex, BuildingRef } from './WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer } from '../stream/CityStreamer';
 import { gridCell, stoopTop, buildingEntrance, STOOP_REACH, type Stoop } from '../build/buildingLayout';
+import { roofSurface } from '../build/buildingShell';
 import { pointInPoly } from '../core/geom2';
 
 /**
@@ -49,17 +50,29 @@ export class Collision {
   interiorWalls: ((x: number, z: number, y: number, h: number, r: number, cb: (ax: number, az: number, bx: number, bz: number) => void) => void) | null = null;
   /** Street objects (props, vehicles): see Obstacle. */
   obstacleProviders: ObstacleProvider[] = [];
+  /** Extra walkable surfaces (ice-path sheets): top height at (x, z) not above yRef + step, or -Infinity. */
+  extraGround: ((x: number, z: number, yRef: number, step: number) => number) | null = null;
 
   /** Underground volumes (metro, sewers) - supplied by the game. */
   under: {
     floorAt(x: number, y: number, z: number): number | null;
     inHole(x: number, z: number): boolean;
     contains(x: number, y: number, z: number, margin: number): boolean;
+    ceilingAt(x: number, y: number, z: number): number;
   } | null = null;
 
   private refsG: BuildingRef[] = [];
   /** Entrance steps per building (refs die with their cell, so this frees itself). */
   private stoops = new WeakMap<BuildingRef, Stoop | null>();
+
+  /** Roof surface height per building (null: flat), shared with the roof mesh's geometry. */
+  private roofs = new WeakMap<BuildingRef, ((x: number, z: number) => number) | null>();
+
+  private roofOf(b: BuildingRef, L: { base: number; height: number; tiers: { poly: number[] }[] }): ((x: number, z: number) => number) | null {
+    let f = this.roofs.get(b);
+    if (f === undefined) this.roofs.set(b, (f = roofSurface(b.desc, L.tiers[L.tiers.length - 1].poly, L.base + L.height)));
+    return f;
+  }
 
   private stoopOf(b: BuildingRef): Stoop | null {
     let s = this.stoops.get(b);
@@ -70,19 +83,26 @@ export class Collision {
 
   constructor(private world: WorldIndex, private destruction: Destruction, private streamer: CityStreamer) {}
 
+  /** Ceiling over (x, z) for a body at y (underground halls and tunnels; Infinity in the open). */
+  ceilingAt(x: number, z: number, y: number): number {
+    if (!this.under || y > this.world.terrain.height(x, z) - 1.0) return Infinity;
+    return this.under.ceilingAt(x, y + 0.3, z);
+  }
+
   /** Highest walkable surface under (x,z) not above yRef + step. */
   groundAt(x: number, z: number, yRef: number, step: number): number {
     let g = this.world.terrain.height(x, z) + this.world.surfaceOffset(x, z);
     if (this.under) {
       const uf = this.under.floorAt(x, yRef + 0.3, z);
       if (this.under.inHole(x, z)) return uf ?? g - 8;
-      // Below the street: only underground floors count.
-      if (uf !== null && yRef < g - 1.0) return uf;
-      // Inside a tunnel or station but over no floor (track pit, gap): keep falling, never pop up to the street.
-      if (yRef < g - 1.0 && this.under.contains(x, yRef + 0.3, z, 0)) return yRef - 3;
+      // Below the street only underground floors count; over none (track pit, gap, or a jump that
+      // left the hall's volume) keep falling - never pop up to the street (a jump in a station
+      // used to land the player on the street above).
+      if (yRef < g - 1.0) return uf ?? yRef - 3;
     }
     const deck = this.world.bridgeDeck(x, z);
     if (deck > -Infinity && deck <= yRef + step) g = Math.max(g, deck);
+    if (this.extraGround) { const e = this.extraGround(x, z, yRef, step); if (e > g) g = e; }
     const rub = this.destruction.rubbleHeight(x, z);
     if (rub > g && rub <= yRef + step + 1) g = rub;
     if (this.interiorGround) g = Math.max(g, this.interiorGround(x, z, yRef, step));
@@ -111,13 +131,23 @@ export class Collision {
       const L = this.destruction.layoutOf(b);
       const cs = b.cell;
       // Roof.
-      if (b.alive && this.streamer.isAlive(cs, L.roof) && L.base + L.height <= yRef + step) {
+      const wallTop = L.base + L.height;
+      if (b.alive && this.streamer.isAlive(cs, L.roof) && wallTop <= yRef + step) {
         const tp = L.tiers[L.tiers.length - 1].poly;
-        // Flat roofs break with the top storey's slab tiles.
-        const tf = L.floors[L.floors.length - 1];
-        const tc = tf ? gridCell(L.tiers[tf.tier].grid, x, z) : -1;
-        const tileGone = b.desc.roof === 'flat' && tc >= 0 && tf.tiles[tc] >= 0 && this.destruction.isBroken(cs, tf.tiles[tc]);
-        if (pointInPoly(tp, x, z) && !tileGone) g = Math.max(g, L.base + L.height);
+        if (pointInPoly(tp, x, z)) {
+          // Pitched and mansard roofs: their actual surface (one walks up the slope; anyone who
+          // ends up inside the roof volume - flying or jumping into it - is put on top of it).
+          // Roofs (flat and pitched) break with the top storey's slab tiles.
+          const tf = L.floors[L.floors.length - 1];
+          const tc = tf ? gridCell(L.tiers[tf.tier].grid, x, z) : -1;
+          const tileGone = tc >= 0 && tf.tiles[tc] >= 0 && this.destruction.isBroken(cs, tf.tiles[tc]);
+          const surf = this.roofOf(b, L);
+          if (tileGone) { /* a hole: fall into the storey below */ }
+          else if (surf) {
+            const rh = surf(x, z);
+            if (rh <= yRef + step || yRef > wallTop - 0.3) g = Math.max(g, rh);
+          } else g = Math.max(g, wallTop);
+        }
       }
       // Slabs (floors inside).
       for (const fl of L.floors) {

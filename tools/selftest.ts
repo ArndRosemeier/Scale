@@ -16,6 +16,9 @@ import { Population } from '../src/sim/Population';
 import { planFloor, planLift } from '../src/interior/InteriorGen';
 import { metroInput } from './metroaudit';
 import { auditLines, auditPassages } from './metroAuditCore';
+import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
+import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
+import { terrainExtent } from '../src/world/boundary';
 
 let failures = 0;
 const check = (ok: boolean, msg: string) => {
@@ -198,6 +201,70 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     }
   }
   console.log(`seed ${seed} size ${size}: ${macro.cells.length} cells, ${macro.metroStations.length} stations, ${buildings} buildings checked in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Countryside: the land-use field and forest tiles are deterministic, the countryside rivers
+// leave the city's terrain untouched and run on to the edge of the world.
+for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
+  const t0 = performance.now();
+  const p = makeProfile({ seed, size });
+  const tA = new Terrain(p), tB = new Terrain(makeProfile({ seed, size })), tCity = new Terrain(p, false);
+  const macro = buildMacroPlan(tA);
+  const lA = new LandUse(tA), lB = new LandUse(tB);
+  const sA = newLandSample(), sB = newLandSample();
+  const par: Parcel = { i: 0, j: 0, strip: 0, id: 0, crop: 0, border: 0, fu: 0, fv: 0 };
+  let same = true, forest = 0, field = 0, n = 0, badParcel = 0;
+  for (let k = 0; k < 400; k++) {
+    const x = Math.sin(k * 12.9898) * 9000, z = Math.cos(k * 78.233) * 9000;
+    lA.sample(x, z, sA); lB.sample(x, z, sB);
+    if (JSON.stringify(sA) !== JSON.stringify(sB)) same = false;
+    if (sA.rural > 0.99) { n++; forest += sA.forest; field += sA.field; }
+    parcelAt(lA.parcels, x, z, par);
+    if (!(par.border >= 0) || par.crop < 0 || par.crop > 7) badParcel++;
+  }
+  check(same, `seed ${seed}: land use deterministic`);
+  check(n > 100 && forest / n > 0.08 && field / n > 0.08, `seed ${seed}: countryside has forests and fields (${(forest / n * 100).toFixed(0)}% / ${(field / n * 100).toFixed(0)}%)`);
+  check(badParcel === 0, `seed ${seed}: parcels valid`);
+  const gA = new ForestGen(lA, macro), gB = new ForestGen(lB, buildMacroPlan(tB));
+  let trees = 0;
+  for (const [x0, z0, sz] of [[4096, 4096, 256], [-5120, 2048, 256], [8192, -8192, 2048]]) {
+    const a = gA.tile(x0, z0, sz), b = gB.tile(x0, z0, sz);
+    check(a.length === b.length && a.every((v, i) => v === b[i]), `seed ${seed}: forest tile ${x0},${z0} deterministic`);
+    for (let o = 0; o < a.length; o += FOREST_STRIDE) if (!FOREST_KINDS[a[o + 5]] || a[o] < x0 || a[o] >= x0 + sz) trees = -1e9; else trees++;
+  }
+  check(trees > 0, `seed ${seed}: forest tiles hold valid trees (${trees})`);
+  let diff = 0;
+  for (let k = 0; k < 3000; k++) {
+    const r = tA.protectR * Math.sqrt((k % 997) / 997), a = k * 2.399963;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (tA.height(x, z) !== tCity.height(x, z) || tA.waterLevel(x, z) !== tCity.waterLevel(x, z)) diff++;
+  }
+  check(diff === 0, `seed ${seed}: countryside rivers leave the city terrain unchanged (${diff} differences)`);
+  const edge = terrainExtent(macro.boundary) * 0.95;
+  check(tA.rivers.slice(tA.baseRivers).some((R) => { for (let i = 0; i < R.pts.length; i += 2) if (Math.max(Math.abs(R.pts[i]), Math.abs(R.pts[i + 1])) > edge) return true; return false; }), `seed ${seed}: rivers reach the edge of the world`);
+  console.log(`seed ${seed} countryside: ${tA.rivers.length - tA.baseRivers} countryside rivers, ${trees} trees checked in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// ---- powers: every rank has truthful text, super speed outruns flight, old saves migrate
+{
+  const { ABILITIES, LEGACY_IDS } = await import('../src/game/abilities/defs');
+  const T = await import('../src/game/abilities/tuning');
+  for (const d of ABILITIES) for (let r = 1; r <= d.maxRank; r++) {
+    const txt = d.rankText(r) + (d.costText ? d.costText(r) : '');
+    check(!/NaN|undefined|Infinity/.test(txt), `${d.id} rank ${r} text: ${txt}`);
+    check((T.KARMA_COST as Record<string, readonly number[]>)[d.id]?.length === d.maxRank, `${d.id}: karma cost for every rank`);
+  }
+  for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.FLIGHT_BOOST * T.FLIGHT_SPEED[r] * 1.1, `super speed rank ${r} clearly faster than flight boost`);
+  check(LEGACY_IDS.dash === 'speed', 'dash folds into super speed');
+  // A Normal save from before the fold: dash rank 3 on slot 2 becomes super speed rank 3 there.
+  const store = new Map<string, string>();
+  (globalThis as unknown as { localStorage: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) };
+  store.set('scale.progress.v1.5.0.30', JSON.stringify({ v: 1, karma: 40, earned: 100, deeds: 3, ranks: { dash: 3, flight: 1 }, slots: ['flight', 'dash', null, null, null, null, null, null], cores: [], seen: [], bonusMax: 0, bonusRegen: 0 }));
+  const { Progress } = await import('../src/game/abilities/Progress');
+  const pg = new Progress(5, 0.3, 'normal');
+  check(pg.rank('speed') === 3 && pg.slots[1] === 'speed' && pg.slots.length === 10 && pg.karma === 40, `old save migrates (speed ${pg.rank('speed')}, slot ${pg.slots[1]})`);
+  check(pg.rank('dash' as never) === 3 && pg.rank('nonsense' as never) === 0, 'rank lookups are robust for unknown / legacy ids');
+  console.log(`powers: ${ABILITIES.length} abilities checked`);
 }
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }

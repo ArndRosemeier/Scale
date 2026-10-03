@@ -102,6 +102,31 @@ export class Dust {
     for (const at of [this.a0, this.a1, this.a2, this.a3]) at.needsUpdate = true;
   }
 
+  /**
+   * Blow away dust and smoke near (x, y, z) (whirlwind): puffs born within r end now. Approximate
+   * (positions drift after birth) but cheap: one pass over the pool.
+   */
+  clearNear(x: number, y: number, z: number, r: number): number {
+    const P = this.a0.array as Float32Array, L = this.a1.array as Float32Array;
+    const now = this.uTime.value, r2 = r * r;
+    let n = 0;
+    for (let i = 0; i < CAP; i++) {
+      const o = i * 4;
+      const life = L[o + 3];
+      if (life <= 0 || now - P[o + 3] > life) continue;
+      const age = now - P[o + 3];
+      // Rough current position (the shader adds drag-limited drift and buoyancy).
+      const k = (1 - Math.exp(-1.6 * age)) / 1.6;
+      const dx = P[o] + L[o] * k - x, dy = P[o + 1] + L[o + 1] * k - y, dz = P[o + 2] + L[o + 2] * k - z;
+      if (dx * dx + dz * dz > r2 || Math.abs(dy) > r * 2) continue;
+      // End it shortly (it fades out over the shader's last stretch).
+      L[o + 3] = Math.max(0.01, age + 0.05);
+      n++;
+    }
+    if (n) this.a1.needsUpdate = true;
+    return n;
+  }
+
   update(dt: number): void {
     this.uTime.value += dt;
   }

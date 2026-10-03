@@ -127,12 +127,16 @@ export class WorldIndex {
     return 0;
   }
 
-  /** Bridge deck height at (x,z) or -Infinity. */
-  bridgeDeck(x: number, z: number): number {
+  /**
+   * Bridge deck height at (x,z) or -Infinity. With a heading (hx, hz) only decks running
+   * that way count (a car on the bank road under a bridge stays on the bank road).
+   */
+  bridgeDeck(x: number, z: number, hx = 0, hz = 0): number {
     for (const b of this.bridges) {
       const dx = x - b.ax, dz = z - b.az;
       const s = dx * b.dx + dz * b.dz;
       if (s < b.s0 || s > b.s1) continue;
+      if ((hx || hz) && Math.abs(hx * b.dx + hz * b.dz) < 0.5) continue;
       const o = -dx * b.dz + dz * b.dx;
       if (Math.abs(o) > b.width / 2) continue;
       return b.y(s) + (Math.abs(o) > b.width / 2 - 2.5 ? CURB_H : 0);
