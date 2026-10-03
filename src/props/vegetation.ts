@@ -583,8 +583,10 @@ function tube(bld: VegBuilder, b: Branch, radial: number, strip: number, maxPath
   for (let i = 0; i < n - 1; i++) {
     for (let j = 0; j < radial; j++) {
       const a = base + i * rs + j, b2 = a + rs;
-      bld.tri(a, b2, a + 1);
-      bld.tri(a + 1, b2, b2 + 1);
+      // Counter-clockwise seen from outside (the ring runs counter-clockwise around the branch
+      // direction): the bark is front-sided, and the opposite winding showed the trunks inside-out.
+      bld.tri(a, a + 1, b2);
+      bld.tri(a + 1, b2 + 1, b2);
     }
   }
 }

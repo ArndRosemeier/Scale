@@ -51,6 +51,9 @@ export class Player {
   private bank = 0;
   private bodyPitch = 0;
   private flightBlend = 0;
+  /** Velocity as the animation sees it: lightly smoothed, so collision chatter (sliding along a
+   *  wall alternates direction frame to frame) does not shake the torso and limbs. */
+  private animVel = new THREE.Vector3();
   /** Seconds since takeoff (for the takeoff whoosh/pose). */
   private sinceToggle = 10;
   events: PlayerEvents = {};
@@ -106,7 +109,9 @@ export class Player {
     // ---- facing
     const hs = Math.hypot(this.vel.x, this.vel.z);
     if (!this.flying && hs > 0.1 * sk && wish.lengthSq() > 0) {
-      const target = Math.atan2(-this.vel.x, -this.vel.z);
+      // Face the movement, but against an obstacle face where one is going: the slide along a
+      // wall can flip direction every frame, and the body flickered with it.
+      const target = this.blocked ? Math.atan2(-wish.x, -wish.z) : Math.atan2(-this.vel.x, -this.vel.z);
       let d = target - this.yaw;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
@@ -237,7 +242,8 @@ export class Player {
     const k = this.k, sk = Math.sqrt(k);
     const scale = this.height / this.rigBaseHeight;
     // Velocity in the body frame: v / √k (a giant's slow-motion stride looks like a normal walk).
-    const vl: [number, number, number] = [this.vel.x / sk, this.vel.y / sk, this.vel.z / sk];
+    this.animVel.lerp(this.vel, damp(14, dt));
+    const vl: [number, number, number] = [this.animVel.x / sk, this.animVel.y / sk, this.animVel.z / sk];
     const move = this.moveState();
     this.rig.update({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: vl, yaw: this.yaw, anim: { move, action: this.action && this.animTime - this.action.t0 < this.action.dur ? this.action : undefined }, flags: 0, scale }, dt / sk, this.animTime);
     // Footsteps on the animation's heel strikes (gait phase 0.25 = left, 0.75 = right).
@@ -280,7 +286,7 @@ export class Player {
     // Imported avatar follows the (invisible) puppet's final pose.
     if (this.avatar) {
       const punching = !!this.action && this.action.id === 'punch' && this.animTime - this.action.t0 < this.action.dur;
-      this.avatar.update(dt / sk, move, Math.hypot(this.vel.x, this.vel.z) / sk, punching);
+      this.avatar.update(dt / sk, move, Math.hypot(this.animVel.x, this.animVel.z) / sk, punching);
     }
   }
 

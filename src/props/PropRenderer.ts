@@ -446,6 +446,35 @@ export class PropRenderer {
     return n;
   }
 
+  /**
+   * A big walker's body ploughs through: props it touches that are clearly shorter than it
+   * (trees, lamps, signs, bushes) are pushed over in its walking direction - not only the ones
+   * a footstep happens to land on. Returns the number pushed over.
+   */
+  shove(x: number, z: number, r: number, h: number, dirX: number, dirZ: number): number {
+    if (h < 3) return 0;
+    const cand: Prop[] = [];
+    this.near(x, z, r + 6, (p) => cand.push(p));
+    let n = 0;
+    for (const p of cand) {
+      if (p.broken || p.breakable === 'solid' || p.height > h * 0.75) continue;
+      const dx = p.x - x, dz = p.z - z;
+      const d = Math.hypot(dx, dz);
+      if (d > r + p.radius + 0.1) continue;
+      // Away from the body, leaning into the walking direction.
+      let fx = dirX * 0.7 + (d > 1e-3 ? dx / d : 0) * 0.5, fz = dirZ * 0.7 + (d > 1e-3 ? dz / d : 0) * 0.5;
+      const fl = Math.hypot(fx, fz) || 1;
+      fx /= fl; fz /= fl;
+      // Impulse sized to the prop's mass so it tips over at walking pace (topple() applies 5% at the top).
+      const rad = p.tree ? p.radius * 1.2 : Math.min(0.3, p.radius);
+      const mass = Math.PI * rad * rad * Math.max(0.3, p.height) * (p.tree ? 700 : 3000);
+      const J = mass * 3 / 0.05;
+      this.topple(p, fx * J, 0, fz * J);
+      n++;
+    }
+    return n;
+  }
+
   /** Crush props under a giant foot / debris. */
   crush(x: number, z: number, r: number): void {
     const cand: Prop[] = [];

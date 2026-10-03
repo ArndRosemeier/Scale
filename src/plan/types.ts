@@ -98,14 +98,26 @@ export interface Bridge {
 
 export interface MetroStation {
   id: number;
+  /** Centre and platform axis angle of the first line's hall. */
   x: number;
   z: number;
-  /** Platform axis angle. */
   angle: number;
-  /** Track depth below ground (m). */
+  /** Track depth below ground (m) at the first line's hall. */
   depth: number;
   lines: number[];
   name: string;
+  /** One platform hall per line calling here (a transfer station stacks them at different depths). */
+  halls: MetroHall[];
+}
+
+/** A line's station hall: straight and level, centred on the line's stop. */
+export interface MetroHall {
+  line: number;
+  x: number;
+  z: number;
+  angle: number;
+  /** Track-bed level (absolute y). */
+  y: number;
 }
 
 export interface MetroLine {
@@ -118,8 +130,10 @@ export interface MetroLine {
   pts: number[];
   /** Arc length of each station along pts. */
   stationS: number[];
-  /** Track depth along pts (one per point). */
+  /** Track depth below the terrain along pts (one per point). */
   depth: number[];
+  /** Track-bed level (absolute y) along pts (one per point): gradient-limited, level through the halls. */
+  y: number[];
 }
 
 export interface SewerTrunk {

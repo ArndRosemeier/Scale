@@ -26,6 +26,8 @@ export interface Box {
   /** Raised platforms: list of [v0, v1, height] bands across. */
   platforms: [number, number, number][];
   bounds: [number, number, number, number];
+  /** Station halls: station id, hall index within the station, metro line. */
+  station?: number; hall?: number; line?: number;
 }
 
 export function makeTube(kind: Tube['kind'], pts: number[], halfWidth: number, height: number, channel?: number, channelDepth?: number): Tube {
@@ -45,8 +47,8 @@ export function makeBox(kind: Box['kind'], cx: number, cz: number, y0: number, y
 
 export interface TubeHit { tube: Tube; s: number; lat: number; floor: number; seg: number }
 
-/** Nearest tube location for a point (within the tube's width), or null. */
-export function tubeAt(t: Tube, x: number, y: number, z: number, margin = 0): TubeHit | null {
+/** Nearest tube location for a point (within the tube's width), or null; anyY: at any height. */
+export function tubeAt(t: Tube, x: number, y: number, z: number, margin = 0, anyY = false): TubeHit | null {
   if (x < t.bounds[0] || x > t.bounds[2] || z < t.bounds[1] || z > t.bounds[3]) return null;
   let best: TubeHit | null = null, bd = Infinity;
   const P = t.pts;
@@ -60,7 +62,7 @@ export function tubeAt(t: Tube, x: number, y: number, z: number, margin = 0): Tu
     const d = Math.hypot(x - qx, z - qz);
     if (d > t.halfWidth + margin) continue;
     const floor = ay + (by - ay) * u;
-    if (y < floor - 1.5 || y > floor + t.height) continue;
+    if (!anyY && (y < floor - 1.5 || y > floor + t.height)) continue;
     if (d < bd) {
       bd = d;
       const L = Math.sqrt(l2) || 1;

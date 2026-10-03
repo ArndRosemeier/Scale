@@ -157,6 +157,8 @@ export class Collision {
           else { res.x = px; res.z = pz; }
           res.hit = true;
         }
+        // Solid things down here too (train cars).
+        if (this.obstacleProviders.length) this.collideObstacles(y, h, r, px, pz, 0);
         return res;
       }
     }

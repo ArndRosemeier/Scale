@@ -222,7 +222,9 @@ export class Game {
     this.collision.obstacleProviders.push(
       (x0, z0, x1, z1, out) => this.props.obstaclesIn(x0, z0, x1, z1, out),
       new VehicleObstacles(() => [...this.traffic.vehicles, ...this.parkedList]).provider,
+      (x0, z0, x1, z1, out) => this.underground.carObstacles(x0, z0, x1, z1, out),
     );
+    this.underground.body = this.player;
     this.renderer.scene.add(this.props.group);
     this.props.onBreak = (p) => this.audio.play(p.tree ? 'tree_crack_fall' : 'metal_bend', p.x, p.y + 1, p.z, 0.8, 1, 8, cam.position);
     for (const c of this.streamer.cells.values()) if (c.status === 'ready') { this.addParked(c); this.props.addCell(c, macro.cells[c.id].district); this.underground.addCell(c); }
@@ -456,6 +458,12 @@ export class Game {
         this.audio.play('punch_impact', p.pos.x, p.pos.y, p.pos.z, 0.25, 1.6, 2, this.renderer.camera.position);
       }
     }
+    // A giant's body pushes over trees, lamps and the like it walks into (not only under its feet).
+    if (p.height >= 3) {
+      const sp = Math.hypot(p.vel.x, p.vel.z);
+      const dx = sp > 0.1 ? p.vel.x / sp : -Math.sin(p.yaw), dz = sp > 0.1 ? p.vel.z / sp : -Math.cos(p.yaw);
+      this.props.shove(p.pos.x, p.pos.z, pr, p.height, dx, dz); // (props.onBreak plays the crack)
+    }
     // Vehicles: an unseen tiny player is hit; everyone else is pushed out of the car body.
     for (const v of this.traffic.vehicles) {
       const dx = p.pos.x - v.x, dz = p.pos.z - v.z;
@@ -537,6 +545,8 @@ export class Game {
   /** On-screen hint for something usable where the player stands (null: nothing). */
   private usableHint(): string | null {
     if (this.freeCam) return null;
+    const metro = this.underground.metroHint();
+    if (metro) return metro;
     const p = this.player.pos;
     const under = this.underground.isUnder(p.x, p.y + 0.5, p.z);
     const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);
@@ -549,6 +559,7 @@ export class Game {
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
+    if (this.underground.metroKey()) return;
     const p = this.player.pos;
     const under = this.underground.isUnder(p.x, p.y + 0.5, p.z);
     const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);

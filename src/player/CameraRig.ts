@@ -73,7 +73,9 @@ export class CameraRig {
     }
     // Shake (decays).
     this.shake = Math.max(0, this.shake - dt * 1.8);
-    this.shakeT += dt * 30;
+    // Big bodies shake slowly (like all their motion, by √size): a fast tremble on a giant's
+    // view read as jittery animation.
+    this.shakeT += (dt * 30) / Math.sqrt(Math.max(1, h / 1.8));
     if (this.shake > 0) {
       const s = this.shake * this.shake * h * 0.05;
       camPos.x += Math.sin(this.shakeT * 1.1) * s;

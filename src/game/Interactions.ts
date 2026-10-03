@@ -123,7 +123,8 @@ export class Interactions {
     if (h > 4) {
       const shake = Math.min(1, Math.log10(energy) / 9 - 0.3);
       const d = this.cam.position.distanceTo(this.player.pos) / h;
-      this.camRig.addShake(Math.max(0, shake) * Math.max(0.2, 1 - d * 0.05));
+      // One's own steps: a short thud per step, not a shake that builds up over the walk.
+      this.camRig.addShake(Math.min(0.3, Math.max(0, shake) * Math.max(0.2, 1 - d * 0.05)));
       this.dust.burst(x, y + 0.2, z, Math.min(16, Math.round(h * 0.5)), h * 0.08, h * 0.12, h * 0.06 + 0.4, 4, new THREE.Color(0.55, 0.52, 0.48), 0.1, 0.35);
       this.stimuli.emit('stomp', x, y, z, Math.log10(energy), noticeRadius(energy));
       this.onSound?.('step_giant', x, y, z, Math.min(1, h / 30), Math.max(0.4, 1.4 - h / 80));

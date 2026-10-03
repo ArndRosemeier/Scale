@@ -93,6 +93,10 @@ export class Animator {
   private hipYaw = 0;
   private lean = new THREE.Vector2();
   private prevVel = new THREE.Vector3();
+  /** Low-passed planar velocity: acceleration (lean) is taken from this, not from raw frame-to-frame
+   *  velocity, whose differences are mostly noise (collisions, ground steps, frame timing) and made
+   *  the torso and arms tremble. */
+  private smVel = new THREE.Vector3();
   /** Rest → neutral corrections (arms hanging straight, palms toward the thighs). */
   private neutral: (THREE.Quaternion | null)[] = [];
   private parentNeutral: (THREE.Quaternion | null)[] = [];
@@ -249,8 +253,10 @@ export class Animator {
     const hs = Math.hypot(vx, vz);
     this.speed = approach(this.speed, hs, 10, dt);
     // Acceleration lean.
-    const ax = (vx - this.prevVel.x) / Math.max(dt, 1e-3), az = (vz - this.prevVel.z) / Math.max(dt, 1e-3);
-    this.prevVel.set(vx, inp.vel[1], vz);
+    this.smVel.x = approach(this.smVel.x, vx, 6, dt);
+    this.smVel.z = approach(this.smVel.z, vz, 6, dt);
+    const ax = (this.smVel.x - this.prevVel.x) / Math.max(dt, 1e-3), az = (this.smVel.z - this.prevVel.z) / Math.max(dt, 1e-3);
+    this.prevVel.set(this.smVel.x, inp.vel[1], this.smVel.z);
     const af = ax * fx + az * fz, ar = ax * rx + az * rz;
     this.lean.x = approach(this.lean.x, clamp(-af * 0.03, -0.2, 0.2), 4, dt);
     this.lean.y = approach(this.lean.y, clamp(ar * 0.025, -0.15, 0.15), 4, dt);
@@ -443,7 +449,9 @@ export class Animator {
     const crouch = inp.anim.move === 'crouch' || inp.sneaking ? 1 : 0;
     const sp = this.speed;
     // Gait style weights by speed.
-    const moving = smooth(0.15, 0.6, sp);
+    // Wide fade: walking into standing over a broad speed range (a narrow one snapped the arms
+    // from mid-swing into the idle pose in a few frames).
+    const moving = smooth(0.05, 0.8, sp);
     const run = smooth(2.6, 4.0, sp);
     const sprint = smooth(5.2, 7.0, sp);
     // Stride (full cycle) length scales with the legs.
@@ -456,7 +464,9 @@ export class Animator {
     let dir = 1;
     if (Math.abs(ang) > 1.9) { ang = ang - Math.sign(ang) * Math.PI; dir = -1; }
     this.hipYaw = approach(this.hipYaw, hs > 0.3 ? clamp(ang, -1.1, 1.1) * 0.75 : 0, 6, dt);
-    this.phase = (this.phase + (dir * hs * dt) / Math.max(0.3, cycle) + 1) % 1;
+    // The cycle runs on with the (smoothed) speed, so a stop finishes the swing as it fades
+    // instead of freezing the limbs mid-stride.
+    this.phase = (this.phase + (dir * Math.max(hs, sp) * dt) / Math.max(0.3, cycle) + 1) % 1;
     const ph = this.phase;
     const A = (0.3 + run * 0.28 + sprint * 0.15) * moving * (crouch ? 0.8 : 1);
     const armA = (0.28 + run * 0.35 + sprint * 0.2) * moving;
@@ -895,21 +905,31 @@ export class Animator {
     for (const s of ['L', 'R'] as const) {
       const sg = s === 'L' ? -1 : 1;
       const sh = R(`shoulder01.${s}`), el = R(`lowerarm01.${s}`), wr = R(`wrist.${s}`);
-      const u = el.clone().sub(sh).normalize();
-      const t = new THREE.Vector3(sg * Math.sin(0.16), -Math.cos(0.16), 0.02).normalize();
+      // Collarbones slightly forward (relaxed shoulders sit a little in front of the spine line;
+      // the rest pose had them pulled back, so the arms hung from behind the chest).
+      const C = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.22);
+      const Ci = C.clone().invert();
+      this.neutral[this.map.idx(`clavicle.${s}`)] = C;
+      const u = el.clone().sub(sh).applyQuaternion(C).normalize();
+      // Relaxed arms hang slightly forward (forward is -z).
+      const t = new THREE.Vector3(sg * Math.sin(0.16), -Math.cos(0.16), -0.05).normalize();
       const qA = new THREE.Quaternion().setFromUnitVectors(u, t);
       const half = new THREE.Quaternion().slerp(qA, 0.5);
-      this.neutral[this.map.idx(`shoulder01.${s}`)] = half;
-      this.neutral[this.map.idx(`upperarm01.${s}`)] = half.clone();
+      // Split over shoulder and upper arm, expressed in the collarbone's (rotated) frame.
+      const halfLocal = Ci.clone().multiply(half).multiply(C);
+      this.neutral[this.map.idx(`shoulder01.${s}`)] = halfLocal;
+      this.neutral[this.map.idx(`upperarm01.${s}`)] = halfLocal.clone();
+      // World rotation of the upper arm in the neutral pose.
+      const W = qA.clone().multiply(C);
       // Forearm: nearly straight, a slight natural bend forward.
-      const f1 = wr.clone().sub(el).normalize().applyQuaternion(qA);
+      const f1 = wr.clone().sub(el).normalize().applyQuaternion(W);
       const t2 = t.clone().add(new THREE.Vector3(0, 0, -0.16)).normalize();
       const qB = new THREE.Quaternion().setFromUnitVectors(f1, t2);
-      const qAi = qA.clone().invert();
-      this.neutral[this.map.idx(`lowerarm01.${s}`)] = qAi.clone().multiply(qB).multiply(qA);
+      const Wi = W.clone().invert();
+      this.neutral[this.map.idx(`lowerarm01.${s}`)] = Wi.clone().multiply(qB).multiply(W);
       // Twist so the palm faces the thigh (thumb forward).
       const hb = ch.geo.build.body.sockets[`hand.${s}`].basis;
-      const qT = qB.clone().multiply(qA);
+      const qT = qB.clone().multiply(W);
       const n1 = new THREE.Vector3(-hb[6], -hb[7], -hb[8]).applyQuaternion(qT);
       const want = new THREE.Vector3(-sg, 0, 0.15);
       const proj = (v: THREE.Vector3) => v.clone().sub(t2.clone().multiplyScalar(v.dot(t2))).normalize();

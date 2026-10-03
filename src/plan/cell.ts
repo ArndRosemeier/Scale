@@ -17,6 +17,8 @@ import type { Terrain } from '../world/terrain';
 import { RoadClass, type CellInfo, type District, type MacroPlan } from './types';
 import { ROAD_SPEC } from './macro';
 import { STYLES, pickStyle, type BuildingDesc, type StyleId } from './building';
+import { STATION_HALF, ENTRANCE_L, ENTRANCE_W } from './metroDims';
+export { STATION_HALF, ENTRANCE_L, ENTRANCE_W };
 
 export interface StreetSeg {
   pts: number[];
@@ -80,12 +82,10 @@ export interface CellPlan {
   /** Junction points of local streets [x, z, degree] * n. */
   junctions: number[];
   bounds: [number, number, number, number];
-  /** Metro entrances: [cx, cz, ux, uz, station, end] * n (opening 2.2 × 5.5 m, long axis u). */
+  /** Metro entrances: [cx, cz, ux, uz, station, hall * 2 + end] * n (opening 2.2 × 5.5 m, long axis u). */
   entrances: number[];
 }
 
-export const ENTRANCE_W = 2.2;
-export const ENTRANCE_L = 5.5;
 
 interface Grammar {
   /** Target block dimensions (short, long) in m. */
@@ -857,19 +857,19 @@ function placeProps(plan: CellPlan, cell: CellInfo, macro: MacroPlan, g: Grammar
   void clamp; void lerp;
 }
 
-/** Station half-length (m) shared with the underground builder. */
-export const STATION_HALF = 62;
 
 /** Entrance rectangles on this cell's sidewalks near the ends of nearby metro stations. */
 function placeEntrances(plan: CellPlan, cell: CellInfo, macro: MacroPlan): void {
   const [bx0, bz0, bx1, bz1] = plan.bounds;
   const cuts: Poly[] = [];
-  for (const st of macro.metroStations) {
-    if (st.x < bx0 - 120 || st.x > bx1 + 120 || st.z < bz0 - 120 || st.z > bz1 + 120) continue;
-    const ax = Math.cos(st.angle), az = Math.sin(st.angle);
+  for (const st of macro.metroStations) for (let hi = 0; hi < st.halls.length; hi++) {
+    // Every hall (one per line calling here) gets an entrance near each end.
+    const hl = st.halls[hi];
+    if (hl.x < bx0 - 120 || hl.x > bx1 + 120 || hl.z < bz0 - 120 || hl.z > bz1 + 120) continue;
+    const ax = Math.cos(hl.angle), az = Math.sin(hl.angle);
     for (const end of [0, 1]) {
       const sgn = end ? 1 : -1;
-      const ex = st.x + ax * sgn * (STATION_HALF - 12), ez = st.z + az * sgn * (STATION_HALF - 12);
+      const ex = hl.x + ax * sgn * (STATION_HALF - 12), ez = hl.z + az * sgn * (STATION_HALF - 12);
       if (!pointInPoly(cell.poly, ex, ez)) continue;
       // Nearest sidewalk edge point to the station end.
       let best: { px: number; pz: number; dx: number; dz: number; d: number; sh: Shape } | null = null;
@@ -903,7 +903,7 @@ function placeEntrances(plan: CellPlan, cell: CellInfo, macro: MacroPlan): void 
           if (!pointInPoly(best.sh.outer, rect[k], rect[k + 1]) || best.sh.holes.some((h) => pointInPoly(h, rect[k], rect[k + 1]))) { ok = false; break; }
         }
         if (!ok) continue;
-        plan.entrances.push(cx, cz, best.dx, best.dz, st.id, end);
+        plan.entrances.push(cx, cz, best.dx, best.dz, st.id, hi * 2 + end);
         cuts.push(ensureCCW(rect));
         break;
       }

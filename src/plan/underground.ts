@@ -9,12 +9,13 @@
  */
 import { Rng, deriveSeed } from '../core/rng';
 import { MinHeap } from '../core/heap';
-import { chaikin, resample, closestOnPolyline } from '../core/geom2';
+import { chaikin, resample, closestOnPolyline, polylineLength } from '../core/geom2';
 import { clamp } from '../core/math';
 import type { Terrain } from '../world/terrain';
 import type { MacroPlan, MetroLine, MetroStation } from './types';
 import type { CityField } from './macro';
 import { stationName } from './names';
+import { STATION_HALF } from './metroDims';
 
 const LINE_COLORS = [0xe23b2e, 0x1f6fd1, 0x1d9a4a, 0xf2b705, 0x8e44ad, 0xf07c1b, 0x00a6b4, 0x8b5a2b, 0xd6338a];
 
@@ -115,7 +116,7 @@ function planMetro(plan: MacroPlan, field: CityField, terrain: Terrain): void {
     // Station selection along the path by spacing.
     const raw: number[] = [];
     for (const n of clean) raw.push(nodes[n].x, nodes[n].z);
-    const track = resample(chaikin(raw, 3), 10);
+    const track = smoothTrack(resample(chaikin(raw, 3), 10));
     const lineStations: number[] = [];
     let lastS = -1e9;
     let acc = 0;
@@ -132,7 +133,7 @@ function planMetro(plan: MacroPlan, field: CityField, terrain: Terrain): void {
       if (!st) {
         const i2 = Math.min(track.length - 2, q.seg * 2 + 2);
         const angle = Math.atan2(track[i2 + 1] - track[q.seg * 2 + 1], track[i2] - track[q.seg * 2]);
-        st = { id: stations.length, x: q.px, z: q.pz, angle, depth: 0, lines: [], name: stationName(p.seed, stations.length) };
+        st = { id: stations.length, x: q.px, z: q.pz, angle, depth: 0, lines: [], name: stationName(p.seed, stations.length), halls: [] };
         stations.push(st);
       }
       if (!st.lines.includes(lines.length)) st.lines.push(lines.length);
@@ -140,32 +141,259 @@ function planMetro(plan: MacroPlan, field: CityField, terrain: Terrain): void {
       lastS = acc;
     }
     if (lineStations.length < 2) continue;
-    // Depth along the track: deeper under water and for later lines (avoid crossings at equal depth).
-    const depth: number[] = [];
-    const baseDepth = 12 + (li % 3) * 7;
-    for (let i = 0; i < track.length; i += 2) {
-      const w = terrain.water(track[i], track[i + 1]);
-      let d = baseDepth;
-      if (w.river >= 0 && w.d < w.halfWidth + 60) {
-        const ground = terrain.height(track[i], track[i + 1]);
-        const bed = w.level - (2.5 + w.halfWidth * 0.06) - 10;
-        d = Math.max(d, ground - bed);
-      }
-      depth.push(d);
-    }
-    // Smooth depth (tunnels have limited gradient).
-    for (let it = 0; it < 30; it++) for (let i = 1; i < depth.length - 1; i++) depth[i] = Math.max(depth[i], (depth[i - 1] + depth[i + 1]) / 2 - 0.4);
     const stationS = lineStations.map((sid) => closestOnPolyline(track, stations[sid].x, stations[sid].z).s);
-    lines.push({ id: lines.length, color: LINE_COLORS[lines.length % LINE_COLORS.length], name: String(lines.length + 1), stations: lineStations, pts: track, stationS, depth });
+    lines.push({ id: lines.length, color: LINE_COLORS[lines.length % LINE_COLORS.length], name: String(lines.length + 1), stations: lineStations, pts: track, stationS, depth: [], y: [] });
   }
-  // Station depth = max line depth at that station.
-  for (const st of stations) {
-    for (const li of st.lines) {
-      const L = lines[li];
-      const q = closestOnPolyline(L.pts, st.x, st.z);
-      st.depth = Math.max(st.depth, L.depth[Math.min(L.depth.length - 1, q.seg)]);
-    }
-  }
+  for (const L of lines) alignStations(L, stations);
+  for (const L of lines) profileLine(L, lines, stations, plan, terrain);
   plan.metroLines = lines;
   plan.metroStations = stations;
+}
+
+// ------------------------------------------------------------ metro geometry
+
+/** Track/hall sizes (m), as the volumes in src/underground/layout.ts. */
+const TUNNEL_H = 6.0, TUNNEL_HW = 4.3, HALL_H = 7.5, HALL_HW = 11;
+/** Soil cover over tunnel and hall roofs (also keeps them under the sewers). */
+const COVER = 6;
+/** Steepest track gradient. */
+const MAX_GRADE = 0.035;
+/** Half length of the straight, level stretch through a station (hall + run-in). */
+export const HALL_SPAN = STATION_HALF + 6;
+
+/** Sewer invert (floor of the walkways) along a trunk: ~4.6 m under the street, smoothed. */
+export function sewerInvert(pts: number[], terrain: Terrain): number[] {
+  const y: number[] = [];
+  for (let i = 0; i < pts.length; i += 2) y.push(terrain.height(pts[i], pts[i + 1]) - 4.6);
+  for (let it = 0; it < 4; it++) for (let i = 1; i + 1 < y.length; i++) y[i] = (y[i - 1] + y[i] * 2 + y[i + 1]) / 4;
+  return y;
+}
+
+/** Laplacian smoothing (ends fixed) towards metro curve radii, then even 10 m spacing. */
+function smoothTrack(pts: number[]): number[] {
+  let p = pts;
+  for (let it = 0; it < 500; it++) {
+    const q = p.slice();
+    for (let i = 2; i + 2 < p.length; i += 2) {
+      q[i] = (p[i - 2] + p[i] * 2 + p[i + 2]) / 4;
+      q[i + 1] = (p[i - 1] + p[i + 1] * 2 + p[i + 3]) / 4;
+    }
+    p = q;
+  }
+  return resample(p, 10);
+}
+
+/** Point at arc length s on a 2D polyline (clamped to its ends). */
+function pointAt(pts: number[], s: number): [number, number] {
+  let acc = 0;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const L = Math.hypot(pts[i + 2] - pts[i], pts[i + 3] - pts[i + 1]);
+    if (acc + L >= s || i + 4 >= pts.length) {
+      const f = L > 0 ? Math.max(0, Math.min(1, (s - acc) / L)) : 0;
+      return [pts[i] + (pts[i + 2] - pts[i]) * f, pts[i + 1] + (pts[i + 3] - pts[i + 1]) * f];
+    }
+    acc += L;
+  }
+  return [pts[0], pts[1]];
+}
+
+/**
+ * Straight track through every station: tail tracks beyond the termini, and the track replaced
+ * by the chord over each stop's span, so the hall (a straight box) contains its track exactly.
+ * Sets the line's stop positions and the stations' halls.
+ */
+function alignStations(L: MetroLine, stations: MetroStation[]): void {
+  let pts = L.pts;
+  // Tail tracks so the termini's halls (and the trains standing in them) lie on the track.
+  const ext = HALL_SPAN + 20;
+  const n = pts.length >> 1;
+  const sx = pts[0] - pts[2], sz = pts[1] - pts[3], sl = Math.hypot(sx, sz) || 1;
+  const ex = pts[n * 2 - 2] - pts[n * 2 - 4], ez = pts[n * 2 - 1] - pts[n * 2 - 3], el = Math.hypot(ex, ez) || 1;
+  pts = resample([pts[0] + (sx / sl) * ext, pts[1] + (sz / sl) * ext, ...pts, pts[n * 2 - 2] + (ex / el) * ext, pts[n * 2 - 1] + (ez / el) * ext], 10);
+  // Stop targets: the first line's hall is at the station; other lines stop where they pass it.
+  const targets = L.stations.map((sid) => [stations[sid].x, stations[sid].z]);
+  let prevEnd: [number, number] | null = null;
+  L.stations.forEach((sid, k) => {
+    const st = stations[sid];
+    if (st.halls.some((h) => h.line === L.id)) return;
+    // Slide the stop (up to 150 m) to where the track is straightest, so the curves at the
+    // ends of the straight stretch stay gentle.
+    const s0 = closestOnPolyline(pts, targets[k][0], targets[k][1]).s, total = polylineLength(pts);
+    let s = s0, bestDev = Infinity;
+    for (let d = -150; d <= 150; d += 10) {
+      const sc = s0 + d;
+      if (sc - HALL_SPAN < 0 || sc + HALL_SPAN > total) continue;
+      const [ax, az] = pointAt(pts, sc - HALL_SPAN), [bx, bz] = pointAt(pts, sc + HALL_SPAN), cl = Math.hypot(bx - ax, bz - az) || 1;
+      let dev = 0;
+      for (let q = -HALL_SPAN; q <= HALL_SPAN; q += 10) {
+        const [x, z] = pointAt(pts, sc + q);
+        dev = Math.max(dev, Math.abs(((x - ax) * (bz - az) - (z - az) * (bx - ax)) / cl));
+      }
+      dev += Math.abs(d) * 0.01;
+      if (dev < bestDev) { bestDev = dev; s = sc; }
+    }
+    const [ax, az] = pointAt(pts, s - HALL_SPAN), [bx, bz] = pointAt(pts, s + HALL_SPAN);
+    // Chord vertices: its ends, the hall's end walls and ~10 m steps between (so no track segment
+    // straddles a hall wall).
+    const m = Math.round((2 * STATION_HALF) / 10), fr = [0];
+    for (let j = 0; j <= m; j++) fr.push((HALL_SPAN - STATION_HALF + (2 * STATION_HALF * j) / m) / (2 * HALL_SPAN));
+    fr.push(1);
+    const out: number[] = [];
+    let acc = 0, chord = false;
+    const pushChord = () => { for (const f of fr) out.push(ax + (bx - ax) * f, az + (bz - az) * f); chord = true; };
+    for (let i = 0; i < pts.length; i += 2) {
+      if (i > 0) acc += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);
+      if (acc < s - HALL_SPAN - 0.5) out.push(pts[i], pts[i + 1]);
+      else if (acc <= s + HALL_SPAN + 0.5) { if (!chord) pushChord(); }
+      else { if (!chord) pushChord(); out.push(pts[i], pts[i + 1]); }
+    }
+    if (!chord) pushChord();
+    // Ease the track into and out of the straight (tangent-continuous transition curves).
+    const ux = (bx - ax) / (2 * HALL_SPAN), uz = (bz - az) / (2 * HALL_SPAN);
+    pts = easeFrom(out, bx, bz, ux, uz);
+    // (Backwards only as far as the previous station's straight.)
+    const back = prevEnd ? closestOnPolyline(pts, ax, az).s - closestOnPolyline(pts, prevEnd[0], prevEnd[1]).s - 5 : Infinity;
+    pts = reversePolyline(easeFrom(reversePolyline(pts), ax, az, -ux, -uz, back));
+    prevEnd = [bx, bz];
+    const angle = Math.atan2(bz - az, bx - ax);
+    const hall = { line: L.id, x: (ax + bx) / 2, z: (az + bz) / 2, angle, y: 0 };
+    if (!st.halls.length) { st.x = hall.x; st.z = hall.z; st.angle = angle; }
+    st.halls.push(hall);
+  });
+  L.pts = pts;
+  L.stationS = L.stations.map((sid) => {
+    const h = stations[sid].halls.find((q) => q.line === L.id)!;
+    return closestOnPolyline(pts, h.x, h.z).s;
+  });
+}
+
+/** Length of the transition curve from a station's straight back into the route. */
+const EASE = 160;
+
+function reversePolyline(p: number[]): number[] {
+  const out: number[] = [];
+  for (let i = p.length - 2; i >= 0; i -= 2) out.push(p[i], p[i + 1]);
+  return out;
+}
+
+/**
+ * Replace the EASE metres of track after (x0, z0) (where the track leaves a straight in
+ * direction (dx, dz)) by a cubic Hermite curve that starts along the straight and ends along
+ * the track: no kink where the straight ends.
+ */
+function easeFrom(pts: number[], x0: number, z0: number, dx: number, dz: number, maxD = Infinity): number[] {
+  const s0 = closestOnPolyline(pts, x0, z0).s, total = polylineLength(pts);
+  const D = Math.min(EASE, maxD, total - s0 - 1);
+  if (D < 10) return pts;
+  const [x1, z1] = pointAt(pts, s0 + D), [xa, za] = pointAt(pts, s0 + D - 2), [xb, zb] = pointAt(pts, Math.min(total, s0 + D + 2));
+  const tl = Math.hypot(xb - xa, zb - za) || 1, tx = (xb - xa) / tl, tz = (zb - za) / tl;
+  const out: number[] = [];
+  let acc = 0, done = false;
+  for (let i = 0; i < pts.length; i += 2) {
+    if (i > 0) acc += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);
+    if (acc <= s0 + 0.01) { out.push(pts[i], pts[i + 1]); continue; }
+    if (!done) {
+      const n = Math.max(2, Math.round(D / 10));
+      for (let k = 1; k <= n; k++) {
+        const t = k / n, t2 = t * t, t3 = t2 * t;
+        const h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+        out.push(h00 * x0 + h10 * D * dx + h01 * x1 + h11 * D * tx, h00 * z0 + h10 * D * dz + h01 * z1 + h11 * D * tz);
+      }
+      done = true;
+    }
+    if (acc > s0 + D + 0.01) out.push(pts[i], pts[i + 1]);
+  }
+  return out;
+}
+
+/**
+ * Vertical alignment: the highest track (least digging) that keeps COVER of soil over the
+ * tunnel/hall roofs, passes under the sewers and under every earlier line with a slab between,
+ * stays level through the halls and never exceeds MAX_GRADE (upper gradient envelope).
+ */
+function profileLine(L: MetroLine, lines: MetroLine[], stations: MetroStation[], plan: MacroPlan, terrain: Terrain): void {
+  const P = L.pts, n = P.length >> 1;
+  const cum = [0];
+  for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(P[i * 2] - P[i * 2 - 2], P[i * 2 + 1] - P[i * 2 - 1]));
+  const hallOf = new Int32Array(n).fill(-1);
+  L.stationS.forEach((s, k) => { for (let i = 0; i < n; i++) if (Math.abs(cum[i] - s) <= HALL_SPAN + 0.5) hallOf[i] = k; });
+  const inv = plan.sewers.map((sw) => sewerInvert(sw.pts, terrain));
+  const ymax = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = P[i * 2], z = P[i * 2 + 1];
+    const inHall = hallOf[i] >= 0, hw = inHall ? HALL_HW : TUNNEL_HW, h = inHall ? HALL_H : TUNNEL_H;
+    // Cover over the roof across its whole width.
+    const j = Math.min(n - 1, i + 1), k0 = Math.max(0, i - 1);
+    const tx = P[j * 2] - P[k0 * 2], tz = P[j * 2 + 1] - P[k0 * 2 + 1], tl = Math.hypot(tx, tz) || 1;
+    let ground = Infinity;
+    for (const o of [-hw, 0, hw]) ground = Math.min(ground, terrain.height(x - (tz / tl) * o, z + (tx / tl) * o));
+    let y = ground - COVER - h;
+    // Under the sewers (their channel is 0.45 below the invert).
+    plan.sewers.forEach((sw, si) => {
+      const q = nearestOn(sw.pts, x, z, hw + 3);
+      if (q.d > hw + 1.7 + 1) return;
+      const I = inv[si], iv = I[q.seg] + (I[Math.min(I.length - 1, q.seg + 1)] - I[q.seg]) * q.f;
+      y = Math.min(y, iv - 0.45 - 1.0 - h);
+    });
+    // Under every earlier line (tunnel or hall), with a 1.5 m slab between.
+    for (const M of lines) {
+      if (M.id >= L.id) break;
+      const q = nearestOn(M.pts, x, z, hw + HALL_HW + 2);
+      if (q.d > hw + HALL_HW + 2) continue;
+      const mhw = hallNear(M, stations, q.px, q.pz) ? HALL_HW : TUNNEL_HW;
+      if (q.d > hw + mhw + 2) continue;
+      const my = M.y[q.seg] + (M.y[Math.min(M.y.length - 1, q.seg + 1)] - M.y[q.seg]) * q.f;
+      y = Math.min(y, my - 1.5 - h);
+    }
+    ymax[i] = y;
+  }
+  const envelope = (cap: Float64Array) => {
+    const e = Float64Array.from(cap);
+    for (let i = 1; i < n; i++) e[i] = Math.min(e[i], e[i - 1] + MAX_GRADE * (cum[i] - cum[i - 1]));
+    for (let i = n - 2; i >= 0; i--) e[i] = Math.min(e[i], e[i + 1] + MAX_GRADE * (cum[i + 1] - cum[i]));
+    return e;
+  };
+  // Level halls at the lowest envelope point of their span, then the final envelope.
+  // (A neighbouring hall pinned lower can pull a level down again: repeat until all are level.)
+  let e = envelope(ymax);
+  const hallY = L.stationS.map(() => Infinity);
+  for (let it = 0; it < 20; it++) {
+    for (let i = 0; i < n; i++) if (hallOf[i] >= 0) hallY[hallOf[i]] = Math.min(hallY[hallOf[i]], e[i]);
+    let level = true;
+    for (let i = 0; i < n; i++) if (hallOf[i] >= 0) { if (e[i] > hallY[hallOf[i]] + 1e-6) level = false; ymax[i] = hallY[hallOf[i]]; }
+    if (level && it > 0) break;
+    e = envelope(ymax);
+  }
+  L.y = Array.from(e);
+  L.depth = L.y.map((v, i) => terrain.height(P[i * 2], P[i * 2 + 1]) - v);
+  L.stations.forEach((sid, k) => {
+    const st = stations[sid], h = st.halls.find((q) => q.line === L.id)!;
+    h.y = hallY[k];
+    if (st.halls[0] === h) st.depth = terrain.height(st.x, st.z) - h.y;
+  });
+}
+
+/** Is (x, z) on line M's centreline inside one of its halls? */
+function hallNear(M: MetroLine, stations: MetroStation[], x: number, z: number): boolean {
+  for (const sid of M.stations) for (const h of stations[sid].halls) {
+    if (h.line !== M.id) continue;
+    const dx = x - h.x, dz = z - h.z, ux = Math.cos(h.angle), uz = Math.sin(h.angle);
+    if (Math.abs(dx * ux + dz * uz) <= HALL_SPAN && Math.abs(-dx * uz + dz * ux) < 1) return true;
+  }
+  return false;
+}
+
+/** Nearest point on a 2D polyline (segments farther than `reach` are skipped by bounding box). */
+function nearestOn(pts: number[], x: number, z: number, reach: number): { d: number; seg: number; f: number; px: number; pz: number } {
+  let bd = Infinity, bs = 0, bf = 0, bx = 0, bz = 0;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const ax = pts[i], az = pts[i + 1], cx = pts[i + 2], cz = pts[i + 3];
+    if (x < Math.min(ax, cx) - reach || x > Math.max(ax, cx) + reach || z < Math.min(az, cz) - reach || z > Math.max(az, cz) + reach) continue;
+    const dx = cx - ax, dz = cz - az, l2 = dx * dx + dz * dz;
+    let f = l2 > 0 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
+    f = Math.max(0, Math.min(1, f));
+    const px = ax + dx * f, pz = az + dz * f, d = Math.hypot(x - px, z - pz);
+    if (d < bd) { bd = d; bs = i >> 1; bf = f; bx = px; bz = pz; }
+  }
+  return { d: bd, seg: bs, f: bf, px: bx, pz: bz };
 }

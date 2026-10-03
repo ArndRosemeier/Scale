@@ -11,6 +11,8 @@ import { CURB_H } from '../src/build/ground';
 import type { BuildingDesc } from '../src/plan/building';
 import { pointInPoly } from '../src/core/geom2';
 import { Population } from '../src/sim/Population';
+import { metroInput } from './metroaudit';
+import { auditLines, auditPassages } from './metroAuditCore';
 
 let failures = 0;
 const check = (ok: boolean, msg: string) => {
@@ -107,6 +109,23 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
   check(overlapRoad < buildings * 0.01 + 1, `seed ${seed}: buildings off the road (${overlapRoad})`);
   // Metro stations are on land.
   for (const st of macro.metroStations) check(!terrain.isWater(st.x, st.z), `seed ${seed}: station ${st.name} on land`);
+  // Metro geometry (see tools/metroaudit.ts): tracks straight and level through their halls,
+  // gentle gradients and curves, covered, clear of each other and of the sewers; trains stop
+  // inside the halls on the track bed; every entrance walkable from the street to the platform.
+  const { input: mi, inHole } = metroInput(macro, terrain);
+  for (const r of auditLines(mi)) {
+    const at = `seed ${seed} line ${r.name}`;
+    check(r.hallLateral < 0.05 && r.hallDy < 0.05, `${at}: track on the hall axis at hall level (${r.hallLateral.toFixed(2)} m off, ${r.hallDy.toFixed(2)} m step)`);
+    check(r.maxGrade <= 0.0401, `${at}: gradient ≤ 4% (${(r.maxGrade * 100).toFixed(1)}%)`);
+    check(r.minRadius >= 60, `${at}: curve radius ≥ 60 m (${r.minRadius.toFixed(0)} m)`);
+    check(r.minCover >= 5.5, `${at}: ≥ 5.5 m of cover over tunnels and halls (${r.minCover.toFixed(2)} m)`);
+    check(r.lineConflicts === 0 && r.sewerConflicts === 0, `${at}: clear of other lines and sewers (${r.lineConflicts} / ${r.sewerConflicts} conflicts)`);
+    check(r.carsOutside === 0 && r.carDy < 0.05 && r.carLateral < 0.3, `${at}: trains on the track, stopping inside the halls (${r.carsOutside} cars outside, ${r.carDy.toFixed(2)} m off the bed)`);
+  }
+  for (const p of auditPassages(mi, inHole)) {
+    check(p.maxSlope <= 0.65 && p.floorErr <= 0.05 && p.ceilingOut <= 0 && p.hits === 0 && p.endsOnPlatform,
+      `seed ${seed} entrance ${p.name}: walkable to the platform (slope ${p.maxSlope.toFixed(2)}, floor err ${p.floorErr.toFixed(2)}, ceiling ${p.ceilingOut.toFixed(2)}, cuts ${p.hits}, on platform ${p.endsOnPlatform})`);
+  }
   // Population: plans are deterministic and every trip connects consecutive stays.
   const pop = new Population(macro, seed);
   const cp = planCell(macro, near[0], terrain);
