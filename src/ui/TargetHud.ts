@@ -1,8 +1,8 @@
 /**
  * Target marker and frame (Tab targeting): four corner brackets round the target on screen
  * (a small caret at the screen edge when it is out of view), and a frame at the bottom left
- * with its name, kind, distance and state. The frame keeps a slot for the threat colour
- * ("con") and a health bar for the crime phase (TargetInfo.con / .health).
+ * with its name, kind, distance and state, the threat colour ("con", also a tint on the brackets)
+ * and a health bar (TargetInfo.con / .health, filled in by the crime layer).
  */
 import * as THREE from 'three';
 import type { Targeting } from '../game/Targeting';
@@ -92,6 +92,9 @@ export class TargetHud {
     this.kind.innerHTML = st ? `${info.kind} · <span class="st">${st}</span>` : info.kind;
     this.dist.textContent = `${d} m`;
     this.con.style.background = info.con ?? 'rgba(255,255,255,0.25)';
+    // A subtle con tint on the brackets.
+    if (info.con) this.mark.style.setProperty('--con', `color-mix(in srgb, ${info.con} 70%, rgba(255, 236, 196, 0.92))`);
+    else this.mark.style.removeProperty('--con');
     this.hp.style.display = info.health === null ? 'none' : 'block';
     if (info.health !== null) this.hpFill.style.width = `${Math.round(info.health * 100)}%`;
   }

@@ -22,7 +22,7 @@ import { SKY_STRIDE, MapItem } from '../../stream/protocol';
 
 export const TILE_PX = 512;
 
-export interface MapLayers { metro: boolean; buildings: boolean; labels: boolean; sewers: boolean }
+export interface MapLayers { metro: boolean; buildings: boolean; labels: boolean; sewers: boolean; crime: boolean }
 
 /** A metro entrance as the cell planner placed it (opening centre, long axis u). */
 export interface MapEntrance { x: number; z: number; ux: number; uz: number; station: number; end: number }
@@ -119,6 +119,8 @@ export class MapWorld {
   readonly shade: HTMLCanvasElement;
   shadeDone = false;
   cellsKnown = 0;
+  /** Street-crime index per cell (0..1, game/crime/CrimeIndex), set by the crime layer. */
+  crimeIndex: Float32Array | null = null;
 
   constructor(readonly macro: MacroPlan, readonly terrain: Terrain) {
     const R = terrain.profile.radius;
@@ -415,6 +417,24 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
   g.globalAlpha = w.shadeDone ? 0.75 : 1;
   for (const [tint, p] of byTint) { g.fillStyle = tint; g.fill(p); }
   g.globalAlpha = 1;
+
+  // Crime layer: a subtle heat tint per district (safe: none; rough: amber to red).
+  if (layers.crime && w.crimeIndex) {
+    const bands = new Map<number, Path2D>();
+    for (const i of cellVis) {
+      const v = w.crimeIndex[i];
+      if (v < 0.3 || macro.cells[i].district === 'water') continue;
+      const b = Math.min(5, Math.floor((v - 0.3) / 0.12));
+      let p = bands.get(b);
+      if (!p) bands.set(b, (p = new Path2D()));
+      addPoly(p, macro.cells[i].poly, true);
+    }
+    for (const [b, p] of bands) {
+      const t = b / 5;
+      g.fillStyle = `rgba(${Math.round(225 + 15 * t)}, ${Math.round(150 - 110 * t)}, ${Math.round(40 - 10 * t)}, ${(0.1 + 0.2 * t).toFixed(3)})`;
+      g.fill(p);
+    }
+  }
 
   const detail = mpp <= DETAIL_MPP;
   // Parks and plazas inside the cells.

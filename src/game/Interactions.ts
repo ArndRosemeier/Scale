@@ -3,6 +3,7 @@
  * giant footsteps, landings, roof overloading and the test blast.
  */
 import * as THREE from 'three';
+import { aimDir } from './aimRay';
 import type { Player } from '../player/Player';
 import type { Destruction } from '../destruction/Destruction';
 import type { Dust } from '../destruction/Dust';
@@ -25,6 +26,8 @@ export class Interactions {
   smashMul = 1;
   /** B = test blast where the camera looks (debug; sandbox only). */
   debugBlast = true;
+  /** Soft lock: the facing for a punch (a target in reach), null = where the camera looks. */
+  aimYaw: (() => number | null) | null = null;
   onSound?: (id: string, x: number, y: number, z: number, gain: number, pitch?: number) => void;
   /** Physical strike on movable things (cars, props, people): point, radius, impulse vector (N*s). */
   onStrike?: (x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number) => void;
@@ -54,7 +57,7 @@ export class Interactions {
       this.punchDone = false;
       p.action = { id: 'punch', t0: p.animClock, dur: 0.55 };
       // Punch where you look: standing (or walking) side-on to a wall, the fist still goes into it.
-      if (!p.flying) p.yaw = this.camRig.forwardYaw;
+      if (!p.flying) p.yaw = this.aimYaw?.() ?? this.cursorYaw();
     }
     if (!this.punchDone && time - this.punchT > 0.22 * Math.sqrt(k)) {
       this.punchDone = true;
@@ -113,10 +116,15 @@ export class Interactions {
     if (this.debugBlast && input.hit('KeyB')) this.blastAtView(800, 2.5e5, false);
   }
 
-  /** Blast where the camera looks, up to `range` m (anywhere=true: also mid-air at the range). */
+  /** Yaw toward where the cursor points on the ground plane (camera forward without a cursor). */
+  private cursorYaw(): number {
+    const d = aimDir(this.cam, new THREE.Vector3());
+    return Math.hypot(d.x, d.z) > 0.05 ? Math.atan2(-d.x, -d.z) : this.camRig.forwardYaw;
+  }
+
+  /** Blast where the cursor points, up to `range` m (anywhere=true: also mid-air at the range). */
   blastAtView(range: number, impulse: number, anywhere: boolean): boolean {
-    const dir = new THREE.Vector3();
-    this.cam.getWorldDirection(dir);
+    const dir = aimDir(this.cam, new THREE.Vector3());
     const o = this.cam.position;
     const hit = this.world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, range, 1);
     const t = hit.t < Infinity ? hit.t : anywhere ? range : -1;

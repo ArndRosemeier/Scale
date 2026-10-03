@@ -413,5 +413,77 @@
     "loop": false,
     "gain": 0.35,
     "description": "crow caw twice (procedural, tools/synthBirds.mjs)"
+  },
+  "siren_loop": {
+    "files": [
+      "siren_loop.wav"
+    ],
+    "loop": true,
+    "gain": 0.8,
+    "description": "police siren wail, seamless loop (procedural, tools/synthCrime.mjs)"
+  },
+  "siren_short": {
+    "files": [
+      "siren_short.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "single siren whoop (procedural, tools/synthCrime.mjs)"
+  },
+  "alarm_bell": {
+    "files": [
+      "alarm_bell.wav"
+    ],
+    "loop": true,
+    "gain": 0.7,
+    "description": "shop alarm bell ringing, loop (procedural, tools/synthCrime.mjs)"
+  },
+  "cuffs": {
+    "files": [
+      "cuffs.wav"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "handcuffs ratcheting shut (procedural, tools/synthCrime.mjs)"
+  },
+  "cat_meow": {
+    "files": [
+      "cat_meow.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "cat meow (procedural, tools/synthCrime.mjs)"
+  },
+  "dog_bark": {
+    "files": [
+      "dog_bark.wav"
+    ],
+    "loop": false,
+    "gain": 0.75,
+    "description": "dog barking twice (procedural, tools/synthCrime.mjs)"
+  },
+  "crowd_cheer": {
+    "files": [
+      "crowd_cheer.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "small crowd cheering and clapping (procedural, tools/synthCrime.mjs)"
+  },
+  "shout_hey": {
+    "files": [
+      "shout_hey.wav"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "man shouting hey (procedural, tools/synthCrime.mjs)"
+  },
+  "cry_help": {
+    "files": [
+      "cry_help.wav"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "woman crying help (procedural, tools/synthCrime.mjs)"
   }
 }

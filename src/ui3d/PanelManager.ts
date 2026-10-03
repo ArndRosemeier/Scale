@@ -1,6 +1,7 @@
 /**
- * Routes the crosshair to world panels: hover highlight, and a left click on a button
- * within reach presses it (and is consumed, so it does not also punch).
+ * Routes the mouse cursor (or the crosshair while looking around) to world panels: hover
+ * highlight, and a left click on a button within reach presses it (and is consumed, so it
+ * does not also punch).
  */
 import * as THREE from 'three';
 import type { WorldPanel } from './WorldPanel';
@@ -30,7 +31,8 @@ export class PanelManager {
   update(camera: THREE.Camera, reachFrom: THREE.Vector3, reach: number, input: Input): void {
     let best: { p: WorldPanel; u: number; v: number } | null = null;
     if (this.panels.size) {
-      this.ray.setFromCamera(this.center, camera);
+      const c = input.cursorNdc();
+      this.ray.setFromCamera(c ? _ndc.set(c.x, c.y) : this.center, camera);
       this.ray.far = camera.position.distanceTo(reachFrom) + reach + 1;
       let bestD = Infinity;
       for (const p of this.panels) {
@@ -51,7 +53,9 @@ export class PanelManager {
     this.hovered = best?.p ?? null;
     if (best) best.p.setHover(b && !b.disabled ? b.id : null);
     this.crosshair?.classList.toggle('hot', !!(b && !b.disabled));
-    if (best && input.clicked & 1 && input.locked) {
+    const view = document.getElementById('view');
+    if (view) view.style.cursor = b && !b.disabled && !input.looking ? 'pointer' : '';
+    if (best && input.clicked & 1) {
       best.p.press(best.u, best.v);
       input.clicked &= ~1; // consumed: no punch
     }
@@ -88,6 +92,7 @@ export class PanelManager {
 }
 
 const _tmp = new THREE.Vector3();
+const _ndc = new THREE.Vector2();
 
 function isShown(o: THREE.Object3D): boolean {
   for (let q: THREE.Object3D | null = o; q; q = q.parent) if (!q.visible) return false;

@@ -17,6 +17,11 @@ const CAP = 1400;          // instances per template
 const CROWD_RANGE = 380;
 const RIG_RANGE = 20;
 const MAX_RIGS = 22;
+/** Ragdolled people get a full rig out to here (see forceRig). */
+const FORCE_RANGE = 50;
+/** Actors (crimes, police, deeds) get priority rigs out to here, at most ACTOR_RIGS of them. */
+const ACTOR_RIG_RANGE = 60;
+const ACTOR_RIGS = 8;
 
 interface Look {
   template: number;
@@ -75,7 +80,7 @@ export class CrowdRenderer {
   private anim: THREE.InstancedBufferAttribute[] = [];
   private cols: THREE.InstancedBufferAttribute[][] = [];
   private looks = new Map<number, Look>();
-  private rigs = new Map<number, { rig: HumanoidRig; used: number; agent: PedAgent; ready: 0 | 1 | 2 }>();
+  private rigs = new Map<number, { rig: HumanoidRig; used: number; agent: PedAgent; ready: 0 | 1 | 2; held?: string | null }>();
   /** Compile a new object's shaders off the critical path (set by the game); rigs show once ready. */
   prepare: ((o: THREE.Object3D) => Promise<unknown>) | null = null;
   private rigTime = 0;
@@ -86,6 +91,8 @@ export class CrowdRenderer {
   private p = new THREE.Vector3();
   private sphere = new THREE.Sphere();
   rigGround: ((x: number, y: number, z: number) => number | null) | null = null;
+  /** People who need a full rig first and out to FORCE_RANGE (ragdolls: physics/ragdoll). */
+  forceRig: ((a: PedAgent) => boolean) | null = null;
   stats = { crowd: 0, rigs: 0 };
 
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
@@ -132,7 +139,8 @@ export class CrowdRenderer {
     const c = a.cit;
     const female = c.gender < 0.5;
     const formal = c.role === Role.Worker ? 0.45 : 0.08;
-    const eq = cityOutfit(c.seed, c.gender, c.age, formal, 0.3);
+    // Actors may wear a uniform (police).
+    const eq = a.actor?.outfit ?? cityOutfit(c.seed, c.gender, c.age, formal, 0.3);
     const held = heldItem(c.seed);
     if (held) eq.mainhand = held;
     const kind = eq.back?.defId === 'suitjacket' ? 'suit' : eq.back?.defId === 'coat' ? 'coat' : eq.chest?.defId === 'dress' ? 'dress' : eq.legs?.defId === 'skirt' ? 'skirt' : eq.back?.defId === 'jacket' ? 'jacket' : 'casual';
@@ -157,6 +165,12 @@ export class CrowdRenderer {
     return l;
   }
 
+  /** The person's full rig when one is shown (built, dressed, visible), else null. */
+  rigFor(id: number): HumanoidRig | null {
+    const r = this.rigs.get(id);
+    return r && r.ready === 2 && r.rig.char && r.rig.char.object.visible && r.rig.object.visible ? r.rig : null;
+  }
+
   update(dt: number, time: number, agents: PedAgent[], cam: THREE.PerspectiveCamera): void {
     this.rigTime += dt;
     this.frustum.setFromProjectionMatrix(this.mat4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
@@ -164,11 +178,18 @@ export class CrowdRenderer {
     const cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
     // Nearest agents get real rigs.
     const near: { a: PedAgent; d: number }[] = [];
+    const actors: { a: PedAgent; d: number }[] = [];
     for (const a of agents) {
       const d = Math.hypot(a.x - cx, a.y - cy, a.z - cz);
       // Frozen people are drawn as (ice-tinted, motionless) crowd instances, not rigs.
-      if (d < RIG_RANGE && !((statusOf(a)?.frozen ?? 0) > 0)) near.push({ a, d });
+      const forced = d < FORCE_RANGE && this.forceRig !== null && this.forceRig(a);
+      if ((statusOf(a)?.frozen ?? 0) > 0) continue;
+      if (!forced && a.actor && d < ACTOR_RIG_RANGE && d >= RIG_RANGE) { actors.push({ a, d }); continue; }
+      if (d < RIG_RANGE || forced) near.push({ a, d: forced ? d - 1000 : a.actor ? d - 500 : d });
     }
+    // Actors farther out: the nearest few get rigs before ordinary people.
+    actors.sort((p, q) => p.d - q.d);
+    for (const n of actors.slice(0, ACTOR_RIGS)) near.push({ a: n.a, d: n.d - 500 });
     near.sort((p, q) => p.d - q.d);
     const rigSet = new Set<number>();
     for (const n of near.slice(0, MAX_RIGS)) rigSet.add(n.a.id);
@@ -194,14 +215,24 @@ export class CrowdRenderer {
         if (this.prepare) this.prepare(r.rig.object).then(() => { rr.ready = 2; }, () => { rr.ready = 2; });
         else r.ready = 2;
       }
-      const move = a.state === PState.Sit ? 'sit' : a.state === PState.Sleep ? 'sleep' : a.state === PState.Down ? 'dead' : a.state === PState.Flee ? 'run' : a.speed > 2.4 ? 'run' : a.speed > 0.15 ? 'walk' : 'idle';
+      const act = a.actor;
+      // Actors: the item in hand can change (a snatched bag, a knife drawn).
+      if (act && act.held !== undefined && act.held !== r.held) {
+        r.held = act.held;
+        const look = this.lookOf(a);
+        r.rig.setEquipment({ ...look.eq, mainhand: act.held ? { defId: act.held, visual: (look.eq.mainhand?.visual ?? look.eq.chest?.visual)! } : undefined });
+      }
+      const move = act?.move ?? (a.state === PState.Sit ? 'sit' : a.state === PState.Sleep ? 'sleep' : a.state === PState.Down ? (act && act.state === 'down' ? 'knockdown' : 'dead') : a.state === PState.Flee ? 'run' : a.speed > 2.4 ? 'run' : a.speed > 0.15 ? 'walk' : 'idle');
       const vx = -Math.sin(a.heading) * a.speed, vz = -Math.cos(a.heading) * a.speed;
       const thanks = a.helped && a.state !== PState.Down && a.stateT < 3;
-      const action = a.state === PState.Film ? { id: 'gesture_point', t0: time - 0.3, dur: 10 } : thanks ? { id: 'gesture_wave', t0: time - a.stateT, dur: 3 } : undefined;
+      const action = act ? (act.action && a.state !== PState.Down ? { id: act.action.id, t0: time - act.action.age, dur: act.action.dur } : undefined)
+        : a.state === PState.Film ? { id: 'gesture_point', t0: time - 0.3, dur: 10 } : thanks ? { id: 'gesture_wave', t0: time - a.stateT, dur: 3 } : undefined;
       // Powers: shrunk people are small (and squeaky, see Elements); electrocuted ones twitch.
       const st = statusOf(a);
       const twitch = st && st.stunned > 0 ? Math.sin(time * 47 + a.id) * 0.18 : 0;
-      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood: thanks ? 'happy' : a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral', lookAt: a.state === PState.Gawk || a.state === PState.Film || (a.glance ?? 0) > 0 ? [a.lookX, a.lookY, a.lookZ] : undefined }, flags: 0 }, dt, time, cam.position);
+      const mood = act ? act.mood : thanks ? 'happy' : a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral';
+      const lookAt: [number, number, number] | undefined = act ? (act.face ? [act.face.x, act.face.y, act.face.z] : undefined) : a.state === PState.Gawk || a.state === PState.Film || (a.glance ?? 0) > 0 ? [a.lookX, a.lookY, a.lookZ] : undefined;
+      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt }, flags: 0 }, dt, time, cam.position);
     }
     // Drop rigs no longer needed (keep a short while to avoid churn).
     for (const [id, r] of this.rigs) {

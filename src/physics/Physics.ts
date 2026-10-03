@@ -27,6 +27,10 @@ export const GROUPS = {
   smallBody: (0x0004 << 16) | 0xfffe,
   /** Debris fragments: everything but the local ground. */
   debris: (0xfffd << 16) | 0xfffd,
+  /** Ragdoll torso, head and legs (physics/ragdoll): like small bodies, and against each other. */
+  ragdoll: (0x0008 << 16) | 0xfffe,
+  /** Ragdoll arms: like small bodies, but not against any ragdoll part (they lie against the torso). */
+  ragdollArm: (0x0010 << 16) | (0xfffe & ~0x0018),
 };
 
 export class Physics {

@@ -22,7 +22,9 @@ export class Audio {
   private base = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
   private voices = 0;
   enabled = true;
-  volume = 0.8;
+  /** Master volume 0…1 and mute, remembered across sessions; `?mute` in the URL forces silence (tests). */
+  volume = readNum(VOL_KEY, 0.8);
+  muted = readNum(MUTE_KEY, 0) > 0 || new URLSearchParams(location.search).has('mute');
 
   async init(): Promise<void> {
     try {
@@ -32,7 +34,7 @@ export class Audio {
       if (this.ctx) return;
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.volume;
+      this.master.gain.value = this.gain;
       // Gentle limiter so explosions don't clip.
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -10; comp.ratio.value = 6; comp.attack.value = 0.003; comp.release.value = 0.25;
@@ -225,8 +227,29 @@ export class Audio {
     }
   }
 
+  private get gain(): number { return this.muted ? 0 : this.volume; }
+
   setVolume(v: number): void {
     this.volume = v;
-    if (this.master) this.master.gain.value = v;
+    if (v > 0) this.muted = false;
+    this.apply();
   }
+
+  setMuted(m: boolean): void {
+    this.muted = m;
+    this.apply();
+  }
+
+  private apply(): void {
+    if (this.master) this.master.gain.value = this.gain;
+    try {
+      localStorage.setItem(VOL_KEY, String(this.volume));
+      localStorage.setItem(MUTE_KEY, this.muted ? '1' : '0');
+    } catch { /* storage unavailable */ }
+  }
+}
+
+const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted';
+function readNum(key: string, def: number): number {
+  try { const v = localStorage.getItem(key); return v === null || isNaN(Number(v)) ? def : Number(v); } catch { return def; }
 }

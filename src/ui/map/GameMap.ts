@@ -101,7 +101,7 @@ export class GameMap {
   constructor(private game: Game) {
     const t0 = performance.now();
     this.world = new MapWorld(game.macro, game.terrain);
-    this.layers = loadJSON<MapLayers>(LAYERS_KEY, { metro: true, buildings: true, labels: true, sewers: false });
+    this.layers = loadJSON<MapLayers>(LAYERS_KEY, { metro: true, buildings: true, labels: true, sewers: false, crime: true });
     this.tiles = new MapTiles(this.world, this.layers);
     this.miniOn = loadJSON(MINI_KEY, { on: true }).on;
     game.skyline.onBatch = (cells, rec, counts, map, off) => { this.tiles.invalidate(this.world.addBatch(cells, rec, counts, map, off)); this.miniKey = ''; };
@@ -126,11 +126,14 @@ export class GameMap {
         <label><input type="checkbox" data-layer="buildings"> Buildings</label>
         <label><input type="checkbox" data-layer="labels"> Names</label>
         <label><input type="checkbox" data-layer="sewers"> Sewers &amp; manholes</label>
+        <label title="Street crime by district: the redder, the rougher the area"><input type="checkbox" data-layer="crime"> Crime</label>
         <h3>Metro</h3>
         ${lines || '<div class="map-none">This town has no metro. Larger cities do.</div>'}
         ${lines ? '<div class="map-key"><span class="ent">M</span> street entrance (zoom in)</div>' : ''}
         <h3 style="margin-top:12px">Marks</h3>
         <div class="map-key"><span class="alert">!</span> someone needs help (E)</div>
+        <div class="map-key"><span class="alert crime">!</span> a crime happening</div>
+        <div class="map-key"><span class="crimeheat"></span> rough area (crime layer)</div>
         ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
         <div class="map-status"></div>
       </div>
@@ -248,8 +251,6 @@ export class GameMap {
     } else {
       this.drag = null;
       this.closedAt = performance.now();
-      const view = document.getElementById('view') as HTMLCanvasElement | null;
-      try { const r = view?.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}); } catch { /* needs a gesture */ }
     }
   }
 

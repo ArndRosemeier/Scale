@@ -38,7 +38,7 @@ export class Deeds {
     const reach = p.radius + 1.6;
     let best: PedAgent | null = null, bd = reach;
     for (const a of this.peds.neighbours(p.pos.x, p.pos.z, reach, [])) {
-      if (a.state !== PState.Down || !a.alive || a.stateT < 0.8 || Math.abs(a.y - p.pos.y) > 1.5) continue;
+      if (a.state !== PState.Down || !a.alive || a.actor || a.stateT < 0.8 || Math.abs(a.y - p.pos.y) > 1.5) continue;
       const d = Math.hypot(a.x - p.pos.x, a.z - p.pos.z);
       if (d < bd) { bd = d; best = a; }
     }
@@ -79,8 +79,8 @@ export class Deeds {
       this.accidentT -= dt;
       if (this.accidentT <= 0) {
         this.accidentT = ACCIDENTS.minGap + Math.random() * (ACCIDENTS.maxGap - ACCIDENTS.minGap);
-        const c = this.peds.agents.filter((a) => a.alive && !a.inside && a.state === PState.Walk && a.onRoad === false && inRing(a, p.pos.x, p.pos.z));
-        const pool = c.length ? c : this.peds.agents.filter((a) => a.alive && !a.inside && a.state === PState.Walk && inRing(a, p.pos.x, p.pos.z));
+        const c = this.peds.agents.filter((a) => a.alive && !a.inside && !a.actor && a.state === PState.Walk && a.onRoad === false && inRing(a, p.pos.x, p.pos.z));
+        const pool = c.length ? c : this.peds.agents.filter((a) => a.alive && !a.inside && !a.actor && a.state === PState.Walk && inRing(a, p.pos.x, p.pos.z));
         if (pool.length) {
           const a = pool[Math.floor(Math.random() * pool.length)];
           this.reactions.knockDown(a, a.x + Math.sin(a.heading), a.z + Math.cos(a.heading), 1.2, 'accident');
@@ -96,7 +96,7 @@ export class Deeds {
     this.markT = 0.5;
     const list: MapMarker[] = [];
     for (const a of this.peds.agents) {
-      if (a.state !== PState.Down || !a.alive || a.downBy === 'player' || a.downBy === undefined) continue;
+      if (a.state !== PState.Down || !a.alive || a.actor || a.downBy === 'player' || a.downBy === undefined) continue;
       if (Math.hypot(a.x - p.pos.x, a.z - p.pos.z) > 160) continue;
       list.push({ x: a.x, z: a.z, color: '#ff9f43', kind: 'alert', title: 'Needs help' });
     }

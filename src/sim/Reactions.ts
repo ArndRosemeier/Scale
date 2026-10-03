@@ -20,6 +20,11 @@ export class Reactions {
   private lastSeen = 0;
   private screamCooldown = 0;
   onScream?: (x: number, y: number, z: number, crowd: boolean) => void;
+  /**
+   * After every knock-down (Combat applies damage and the collateral ledger from here; a
+   * ragdoll system can take the body over). `power` is the fling speed (m/s).
+   */
+  onKnockDown: ((a: PedAgent, fx: number, fz: number, power: number, cause: DownCause) => void) | null = null;
 
   constructor(private peds: Pedestrians, private stimuli: Stimuli) {}
 
@@ -33,7 +38,8 @@ export class Reactions {
     const flyingFast = player.flying && player.vel.length() > 15 * Math.sqrt(player.k);
     let screamers = 0;
     for (const a of this.peds.agents) {
-      if (a.state === PState.Down) continue;
+      // Actors (crime, police, deeds) are staged by their owner.
+      if (a.state === PState.Down || a.actor) continue;
       // Frozen solid: no reactions until thawed.
       const st = statusOf(a);
       if (st && st.frozen > 0) continue;
@@ -64,6 +70,18 @@ export class Reactions {
           case 'stomp':
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
             if (d < Math.max(1.5, H * 0.12)) this.knockDown(a, s.x, s.z, 4, 'player');
+            break;
+          case 'cry':
+          case 'alarm':
+            // Someone shouting for help / an alarm bell: turn, stop and watch (the curious film,
+            // the nervous back off a little). Witnesses look at the source (s.y: where to look).
+            if (prox > 0.15 && a.state !== PState.Flee) {
+              if (a.cit.nerve > 0.75 && prox > 0.6) { a.fear = Math.min(2, a.fear + 0.62); this.flee(a, s.x, s.z); }
+              else { a.fear = Math.min(0.45, a.fear + prox * 0.2); this.gawk(a, s.x, s.y, s.z); }
+            }
+            break;
+          case 'siren':
+            if (prox > 0.4 && a.state === PState.Walk && a.cit.curiosity > 0.5 && !a.glance) { a.glance = 2.5; a.lookX = s.x; a.lookY = s.y; a.lookZ = s.z; }
             break;
           case 'impact':
           case 'glass':
@@ -133,5 +151,6 @@ export class Reactions {
     a.vz = (dz / d) * power;
     a.vy = power * 0.4;
     a.fear = 2;
+    this.onKnockDown?.(a, fx, fz, power, cause);
   }
 }

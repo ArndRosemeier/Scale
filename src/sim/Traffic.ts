@@ -63,6 +63,15 @@ export interface Vehicle {
   /** Body attitude on the road surface (rad): nose up +, right side up +. */
   pitch?: number;
   roll?: number;
+  /**
+   * A job (police responding to a call, a getaway car): drive to (x, z) and stop there
+   * (`arrived`); `hold` keeps it standing where it is (doors open, waiting at the kerb).
+   */
+  task?: { x: number; z: number; arrived: boolean; hold?: boolean };
+  /** Siren and flashers: ignores red lights; cars ahead pull over to the kerb. */
+  siren?: boolean;
+  /** Pulled towards the kerb (+, yielding to a siren) or the centre line (−, overtaking), 0..1. */
+  pull?: number;
 }
 
 const RANGE = 650;
@@ -170,6 +179,8 @@ export class Traffic {
       l.push(v);
     }
     for (const l of this.laneIndex.values()) l.sort((a, b) => (a.fwd ? a.s - b.s : b.s - a.s));
+    this.sirens.length = 0;
+    for (const v of this.vehicles) if (v.siren && v.state < VState.Abandoned && !v.task?.arrived) this.sirens.push(v);
     // ---- reactions to world events
     for (const s of this.stimuli.recent) {
       if (this.t - 0 < 0) break;
@@ -276,6 +287,7 @@ export class Traffic {
       v.turn = null;
       v.ri = 0;
       v.route = this.randomRoute(v.edge, v.fwd, 12);
+      if (v.task && !v.task.arrived && !v.task.hold) { this.sendTo(v, v.task.x, v.task.z); continue; }
       if (v.dest) {
         const eb = this.net.nearestEdge(v.dest.x, v.dest.z, 300);
         if (eb) {
@@ -339,7 +351,8 @@ export class Traffic {
       v.yaw = Math.atan2(-dx, -dz);
     } else {
       const e = this.net.edges[v.edge];
-      this.net.pointAt(e, v.s, this.laneOffset(e, v.fwd, v.lane), this.tmp);
+      const off = this.laneOffset(e, v.fwd, v.lane);
+      this.net.pointAt(e, v.s, off + Math.sign(off) * (v.pull ?? 0) * 1.7, this.tmp);
       v.x = this.tmp.x; v.z = this.tmp.z;
       const dx = v.fwd ? this.tmp.dx : -this.tmp.dx, dz = v.fwd ? this.tmp.dz : -this.tmp.dz;
       v.yaw = Math.atan2(-dx, -dz);
@@ -384,8 +397,10 @@ export class Traffic {
     // Powers: frozen in place, or stalled by a lightning strike.
     const st = statusOf(v);
     if (st && (st.frozen > 0 || st.stunned > 0)) { v.speed = 0; v.brake = 1; return; }
+    // On a job and there (or told to wait): stand still.
+    if (v.task && (v.task.arrived || v.task.hold)) { v.speed = 0; v.brake = 1; v.pull = 0; return; }
     // Panic: some drivers abandon the car, others flee with a U-turn.
-    if (v.fear > 0.8 && v.state === VState.Drive) {
+    if (v.fear > 0.8 && v.state === VState.Drive && !v.task && !v.siren) {
       if (v.driver && (v.driver.nerve > 0.6 || v.speed < 2) && v.kind !== 'bus') {
         v.state = VState.Abandoned;
         v.speed = 0;
@@ -425,13 +440,17 @@ export class Traffic {
     const along = v.fwd ? v.s : e.len - v.s; // distance travelled on this edge
     const remaining = e.len - along;
     // ---- leader: next car in the same lane, or the stop line, or a pedestrian on the road
-    let gap = Infinity, leadV = 0;
+    let gap = Infinity, leadV = 0, passing = false;
     const lane = this.laneIndex.get(`${v.edge}:${v.fwd ? 1 : 0}:${v.lane}`);
     if (lane) {
       for (const o of lane) {
         if (o === v) continue;
         const oa = v.fwd ? o.s : e.len - o.s;
-        if (oa > along) { const g = oa - along - (o.length + v.length) / 2; if (g < gap) { gap = g; leadV = o.speed; } break; }
+        if (oa > along) {
+          // A siren car passes cars that pulled over.
+          if (v.siren && (o.pull ?? 0) > 0.5) { if (oa - along < 30) passing = true; continue; }
+          const g = oa - along - (o.length + v.length) / 2; if (g < gap) { gap = g; leadV = o.speed; } break;
+        }
       }
     }
     const node = v.fwd ? e.b : e.a;
@@ -440,8 +459,8 @@ export class Traffic {
     if (remaining < 45) {
       const stopAt = remaining - junctionBack(e) - v.length / 2 - 1.5;
       let mustStop = false;
-      if (!this.signalGreen(node, e, this.t)) mustStop = true;
-      else if (!this.net.nodes[node].signal && this.net.nodes[node].edges.length >= 3) {
+      if (!this.signalGreen(node, e, this.t)) mustStop = !v.siren;
+      else if (!v.siren && !this.net.nodes[node].signal && this.net.nodes[node].edges.length >= 3) {
         // Unsignalled junction: slow down; yield if something is in the box.
         if (this.junctionBusy(node, v)) mustStop = true;
       }
@@ -451,9 +470,25 @@ export class Traffic {
     // Pedestrians on the road ahead (within the lane corridor).
     const pedGap = this.pedAhead(v, e);
     if (pedGap < gap) { gap = pedGap; leadV = 0; }
+    // A job: brake to a stop at the destination.
+    if (v.task && !v.task.arrived) {
+      const dT = Math.hypot(v.x - v.task.x, v.z - v.task.z) - 14;
+      if (dT < gap) { gap = Math.max(0, dT); leadV = 0; }
+      if (dT < 2 && v.speed < 1) { v.task.arrived = true; v.speed = 0; v.brake = 1; this.pose(v, dt); return; }
+    }
+    // Yield to a siren behind on the same lane direction: slow down and pull over; the siren car
+    // swings out to pass.
+    let yieldTo = false;
+    if (!v.siren) for (const sv of this.sirens) {
+      if (sv.edge !== v.edge || sv.fwd !== v.fwd || sv.turn) continue;
+      const sa = v.fwd ? sv.s : e.len - sv.s;
+      if (sa < along && along - sa < 55) { yieldTo = true; break; }
+    }
+    const pullTo = yieldTo ? 1 : v.siren && passing ? -1 : 0;
+    v.pull = (v.pull ?? 0) + (pullTo - (v.pull ?? 0)) * Math.min(1, dt * 1.6);
     // ---- IDM acceleration
     const a0 = v.state === VState.Fleeing ? 3.5 : 1.8, b0 = 3.5, T = 1.3, s0 = 2.2;
-    const vmax = Math.min(v.vmax, this.speedLimit(e) * (v.state === VState.Fleeing ? 1.5 : 1)) * (remaining < 25 && hasNext ? 0.75 : 1);
+    const vmax = Math.min(v.vmax, this.speedLimit(e) * (v.siren ? 1.7 : v.state === VState.Fleeing ? 1.5 : 1)) * (remaining < 25 && hasNext ? 0.75 : 1) * (yieldTo ? 0.3 : 1);
     const sStar = s0 + Math.max(0, v.speed * T + (v.speed * (v.speed - leadV)) / (2 * Math.sqrt(a0 * b0)));
     let acc = a0 * (1 - Math.pow(v.speed / Math.max(0.1, vmax), 4) - (gap < Infinity ? (sStar / Math.max(0.1, gap)) ** 2 : 0));
     acc = Math.max(-9, Math.min(a0, acc));
@@ -465,7 +500,10 @@ export class Traffic {
     v.s += v.fwd ? ds : -ds;
     const remainingNow = v.fwd ? e.len - v.s : v.s;
     if (remainingNow <= junctionBack(e)) {
-      if (!hasNext) {
+      if (!hasNext && v.task && !v.task.arrived) {
+        // On a job: route on towards it (or stop here when there is no way).
+        if (!this.sendTo(v, v.task.x, v.task.z) || v.route.edges.length <= 1) { v.task.arrived = true; v.speed = 0; this.pose(v, dt); return; }
+      } else if (!hasNext) {
         // Extend the route or vanish.
         const more = this.randomRoute(v.edge, v.fwd, 8);
         if (more.edges.length <= 1) { v.alive = false; return; }
@@ -598,6 +636,50 @@ export class Traffic {
     v.state = VState.Wreck;
     v.stateT = 0;
     v.damage = Math.max(v.damage, 0.7);
+  }
+
+  private readonly sirens: Vehicle[] = [];
+
+  /**
+   * A vehicle of a kind on the nearest lane to (x, z) (police cars from out of view, a getaway
+   * car at the kerb). Null when there is no road nearby or traffic is full.
+   */
+  spawnVehicle(kind: VKind, x: number, z: number, maxR = 120, toward?: { x: number; z: number }): Vehicle | null {
+    if (this.vehicles.length >= MAX_VEHICLES + 8 || !this.net.edges.length) return null;
+    const ne = this.net.nearestEdge(x, z, maxR);
+    if (!ne) return null;
+    const e = this.net.edges[ne.e];
+    if (e.cls > 3) return null;
+    let fwd = ne.side * this.hand > 0;
+    if (toward) {
+      // Heading towards a destination: the lane in that direction.
+      this.net.pointAt(e, ne.s, 0, this.tmp);
+      fwd = this.tmp.dx * (toward.x - this.tmp.x) + this.tmp.dz * (toward.z - this.tmp.z) > 0;
+    }
+    const v = this.makeVehicle(kind, ne.e, fwd, Math.max(2, Math.min(e.len - 2, ne.s)), null);
+    v.lane = 0;
+    this.pose(v);
+    v.route = this.randomRoute(ne.e, fwd, 6);
+    this.vehicles.push(v);
+    return v;
+  }
+
+  /** Route a vehicle from where it is to the road end nearest (x, z). */
+  sendTo(v: Vehicle, x: number, z: number): boolean {
+    const E = this.net.edges;
+    const e = E[v.edge];
+    const eb = this.net.nearestEdge(x, z, 300);
+    if (!e || !eb) return false;
+    v.turn = null;
+    v.ri = 0;
+    if (eb.e === v.edge) { v.route = this.randomRoute(v.edge, v.fwd, 2); return true; }
+    const end = this.net.edgeEndNear(eb.e, eb.s);
+    const r = this.net.route(v.fwd ? e.b : e.a, end, true, 6000);
+    if (!r) return false;
+    v.route = { edges: [v.edge, ...r.edges], fwd: [v.fwd, ...r.fwd] };
+    // Onto the target's street from the route's end node (unless the route came along it).
+    if (r.edges[r.edges.length - 1] !== eb.e) { v.route.edges.push(eb.e); v.route.fwd.push(end === E[eb.e].a); }
+    return true;
   }
 
   near(x: number, z: number, r: number): Vehicle[] {

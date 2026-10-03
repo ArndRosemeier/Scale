@@ -127,7 +127,34 @@ Styles (facade grammar plus roof plus massing):
   * trees: break and fall
   * lamps and signs: bend or topple
   * roads: crack decals and craters
-  * NPCs: knock-back and ragdoll-lite
+  * people and the player: physical ragdolls (see Ragdolls)
+
+### Ragdolls (`src/physics/ragdoll`)
+People and the player knocked flying, tumbling, lying, getting up — or staying down.
+* `skeleton.ts`: 14 parts (pelvis, abdomen, chest, head, upper/fore arms, thighs, shins,
+  feet) mapped onto the MakeHuman bones, shapes sized from the rig's rest bone heads (or a
+  default 1.76 m plan for crowd people without a rig), mass shares, joint limits (ball joints
+  with per-axis limits for spine, neck, shoulders, hips, ankles; limited hinges for elbows and
+  knees) and a relaxed pose. Body frames are the rig's model axes at rest (rest bones carry no
+  rotation), so a body's rotation is its driver bone's world rotation.
+* `Ragdoll.ts`: the Rapier bodies and joints (`GROUPS.ragdoll` / `ragdollArm`: exact local
+  ground and building prisms from `future/ground.ts`, debris, robots, each other; arms skip
+  other ragdoll parts); joint motors give friction and a faint muscle tone; sizes 0.1–100 m
+  (mass ∝ k³, damping rates ∝ 1/√k).
+* `drive.ts`: seeds bodies from the animated pose; writes bodies back as bone rotations and
+  the root position, blended over the animation (no pops; copes with throttled animators).
+* `getup.ts`: procedural get-up key poses (from the back: elbows → sit → squat → stand; face
+  down: push-up → all fours → kneel → stand) through `Animator.override`.
+* `RagdollSystem.ts` (`game.ragdolls`): `knockout(target, { impulse, point, velocity,
+  stayDown, lie, source })`, `isActive`, `getUp`, `release`, `onSettled`, `onGotUp`. Every
+  knock-down of a person within 45 m of the camera (Down with a fresh fling velocity, i.e.
+  `Reactions.knockDown` and all powers, strikes, cars built on it) becomes a ragdoll; crowd
+  instances are promoted to rigs (`CrowdRenderer.forceRig`). The player: `Player.downT`
+  (combat), hard landings, or the API; `Player.ragdoll` blocks control. ≤ 8 simulated at
+  once (the oldest tumbling person falls back to the simple knock-down); settled bodies drop
+  their physics and keep the pose (accident/collapse victims, crime actors and hard KOs stay
+  down until helped or stood up by their owner). `PedAgent.ragdoll` tells Pedestrians to
+  leave the body alone.
 
 ### Player & scale (`src/player`)
 * Height *H* ∈ [0.1, 100] m and *k* = *H*/1.8.
@@ -242,6 +269,48 @@ migrated — dash was folded into super speed: tap = dash, hold = run).
   cars stall, crowd instances ice-tint and stop animating, cars / robots / drones / props draw scaled.
 * **ElementFx**: pooled beams (camera-facing ribbons), CPU particles (additive and alpha), procedural decals
   (scorch, ice, puddle, fissure), ice crystals and sheets; hidden when empty. `PowerSynth` makes the sounds.
+
+### Street crime (`src/game/crime`, `src/game/deeds`, `src/sim/actors`, `src/game/Combat.ts`)
+Phase 1 of PLAYGROUND_PLAN §5 ("Street Hero"), decisions 3–6 and 11–15. `CrimeSystem` (built by the game, updated
+every frame) owns the parts and draws what belongs to them.
+* **Crime index** (`CrimeIndex`): a deterministic 0..1 per macro cell from (seed, plan): district base (port .70,
+  industrial .64, apartments .58 … downtown .30, suburbs .14), density, the poorer inner ring, a seeded smooth noise.
+  `hourFactor` shifts it (nightlife and docks worse after dark, business districts calmer). Shown as a heat tint layer
+  ("Crime") on the full map.
+* **Director** (`CrimeDirector`): every 4 s a slot roll `deriveSeed(seed, 'crime', day, hour, slot, cell)` against
+  `crimesPerMinute` (index × hour × setting: average district ≈ one street crime per 2 min, bad ≈ 1/min, safe ≈ 1/10 min;
+  off / calm ×0.4 / normal / chaos ×3.5) picks whether and which crime starts (same seed + day + hour + district →
+  same rolls); site and outcome are live. At most 1 / 2 / 3 crimes at once (calm / normal / chaos), cooldowns between.
+* **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
+  surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
+  view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a
+  thief who sprints, looks back and slows to blend in, witnesses who turn and film, a shopkeeper shouting from the door,
+  an alarm bell, a getaway car with hazards on. Criminals weigh up the player (con): fight, flee, surrender. Loot drops
+  where they go down; E picks it up and gives it back (the victim waits for it). All world access goes through
+  `CrimeWorld`, so a crime runs headless in `selftest.ts`.
+* **Actors** (`sim/actors/Actor.ts`): `PedAgent.actor` (role, state, health, goal/speed, facing, held item, outfit,
+  one-shot animation). `Pedestrians.step` steers actors to their goal and keeps the physics; they are not despawned
+  while pinned, Reactions leaves them alone, `CrowdRenderer` gives up to 8 of them full rigs out to 60 m and plays
+  their actions (hands_up / cower poses), moods, look-at and held items (knife, bat, bag). Budget 40 actors.
+* **Combat** (`Combat.hitActor`): impulse → damage → stagger / knock-down / KO by health (an ordinary punch: 12 of a
+  thief's 30). Punches (`Game.strike`, one body per punch, soft-locked target first), tackles at a run and police
+  take-downs go through it; knock-downs from powers arrive via `Reactions.onKnockDown`. `onKnockdown` listeners get the
+  impulse (ragdolls detect fresh knock-downs themselves).
+* **Player health** (`PlayerHealth`): criminals' punches / knives / bats, cars, falls, collapses; regeneration out of
+  combat; a heavy hit knocks the player down (`Player.downT`), zero health knocks them out (fade, wake where they
+  fell, small karma / reputation cost). Sandbox: invulnerable by default (pause menu toggle).
+* **Police** (`Police`): a call sends the nearest patrol car (or one from out of view) with siren (`Vehicle.task`,
+  `.siren`: runs red lights, cars ahead pull over), two uniformed officers get out, cuff the knocked-out and the
+  surrendered, run down and tackle the rest, walk the arrested to the car.
+* **Justice** (`Justice`): reads the collateral ledger (`Consequences`, now with the hit object): hurting bystanders,
+  police or property in front of witnesses costs karma and reputation and builds heat → wanted 1–3 (officers chase and
+  arrest: a fine in karma); out of reach long enough drops a level; E next to an officer or police car turns the player
+  in (smaller fine); good deeds cool the heat.
+* **Reputation** (`Reputation`, −100…+100 per city and mode): crowds cheer / wave or step away, police suspicion; HUD
+  chip and P screen. **Con** (`Consider.ts`): target vs player strength → grey … purple on the target frame and brackets.
+* **Small deeds** (`deeds/SmallDeeds`): seeded every few minutes — a cat up a tree (owner pointing up, meowing; climb with
+  E, jump or fly), a runaway dog trailing its leash (catch it, it follows you back), a dropped wallet (the owner pats
+  their pockets later). Sounds: `tools/synthCrime.mjs` (siren, alarm bell, cuffs, meow, bark, cheer, shouts).
 
 ### Birds (`src/fauna`)
 `Birds` (constructed, updated and sent strikes by the game; it listens to stimuli itself) keeps at most 300 birds,

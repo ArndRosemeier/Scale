@@ -162,6 +162,11 @@ export class Animator {
   private landK = 0;
   /** Sandbox: show this library clip on its own (u = normalized time, < 0 plays in real time). */
   preview: { name: string; u: number } | null = null;
+  /**
+   * External full-body pose blended over locomotion and actions (the ragdoll get-up,
+   * physics/ragdoll): fills the pose, returns its weight 0..1. Foot IK is off while it leads.
+   */
+  override: ((p: Pose) => number) | null = null;
   // Superpower layer: pose scratch, crouch/dash weights, the leap's last vertical speed, heavy landing.
   private pw: Pose;
   private pwTmp: Pose;
@@ -347,6 +352,12 @@ export class Animator {
       out.clear();
       this.clipRig!.accumulate(pv, this.preview!.u >= 0 ? this.preview!.u : this.time / pv.meta.dur, 1, out);
     }
+    let ovW = 0;
+    if (this.override) {
+      const p = this.pw.clear();
+      ovW = Math.min(1, this.override(p));
+      if (ovW > 0) out.blend(p, ovW);
+    }
 
     // ---- additive layers
     this.additives(out, inp, dt, fam);
@@ -355,7 +366,7 @@ export class Animator {
     this.apply(out);
     this.fingerPose(inp, action?.def, dt);
     // ---- IK & face (near only)
-    if (lod === 0 && ground && (fam === 'ground' || fam === 'sit' || fam === 'stunned') && this.famW.get('ground')! > 0.5) this.footIK(ground, dt);
+    if (lod === 0 && ground && ovW < 0.5 && (fam === 'ground' || fam === 'sit' || fam === 'stunned') && this.famW.get('ground')! > 0.5) this.footIK(ground, dt);
     else { this.footOff[0] = this.footOff[1] = 0; this.pelvisOff = approach(this.pelvisOff, 0, 8, dt); }
     if (lod === 0) {
       this.face(inp, actionMood, fam, dt);

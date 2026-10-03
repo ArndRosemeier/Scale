@@ -1,8 +1,7 @@
 /**
  * Runs the player's powers: applies ranks to the existing mechanics (Player flight, size and
  * super speed, Interactions punch and blast), owns the energy pool and cooldowns, and routes
- * input — digits 1–9, 0 trigger (and select) hotbar slots, right mouse uses the selected
- * slot, Space charges the super jump, F toggles flight.
+ * input — digits 1–9, 0 trigger (and select) hotbar slots, Space charges the super jump, F toggles flight.
  *
  * Trigger kinds: tap powers go off on the press (cooldown, energy); held powers (laser eyes,
  * ice path, hydrokinesis) run while the key or button is held and drain energy per second;
@@ -112,7 +111,7 @@ export class AbilitySystem {
     this.updateChannel(dt, input);
   }
 
-  /** After the panels consumed their digits: hotbar keys and right mouse. */
+  /** After the panels consumed their digits: hotbar keys. */
   postUpdate(input: Input): void {
     if (!this.enabled) return;
     for (let s = 0; s < HOTBAR_SLOTS; s++) {
@@ -121,11 +120,20 @@ export class AbilitySystem {
       this.selected = s;
       this.press(s, src);
     }
-    if (input.clicked & 4) this.press(this.selected, 'Mouse2');
   }
 
+  /** A hotbar slot clicked with the mouse (held powers run until the button is released). */
+  click(slot: number): void {
+    if (!this.enabled) return;
+    this.selected = slot;
+    this.slotHeld = true;
+    window.addEventListener('mouseup', () => { this.slotHeld = false; }, { once: true });
+    this.press(slot, 'Mouse0');
+  }
+  private slotHeld = false;
+
   private isHeld(src: string, input: Input): boolean {
-    return src === 'Mouse2' ? (input.buttons & 4) !== 0 : input.down(src);
+    return src === 'Mouse0' ? this.slotHeld : input.down(src);
   }
 
   private press(slot: number, src: string): void {

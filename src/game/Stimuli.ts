@@ -2,8 +2,10 @@
  * Event bus of things that happen in the world, consumed by NPC perception,
  * traffic, audio and camera effects.
  */
-/** 'power': a frightening elemental power in use (beams, flames, bolts, quakes, vortices) — people flee, nothing breaks by itself. */
-export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power';
+/** 'power': a frightening elemental power in use (beams, flames, bolts, quakes, vortices) — people flee, nothing breaks by itself.
+ *  'cry': someone calls for help (a crime victim) — people stop, turn, film or back off. 'alarm': a shop alarm bell.
+ *  'siren': a police car responding — traffic yields, people look. */
+export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power' | 'cry' | 'alarm' | 'siren';
 
 export interface Stimulus {
   kind: StimulusKind;

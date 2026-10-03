@@ -90,8 +90,6 @@ export class PowersScreen {
       this.render();
     } else {
       this.closedAt = performance.now();
-      const view = document.getElementById('view') as HTMLCanvasElement | null;
-      try { const r = view?.requestPointerLock?.() as unknown as Promise<void> | undefined; r?.catch?.(() => {}); } catch { /* needs a gesture */ }
     }
   }
 

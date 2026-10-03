@@ -4,7 +4,8 @@
  * reputation phase reads it (karma penalties, reputation, news); for now it only counts.
  *
  * PLAYGROUND_PLAN §0 decision 18: area effects hit everything in the area — careless use near
- * crowds has consequences. Nothing here changes karma yet.
+ * crowds has consequences. The justice layer (crime/Justice.ts) listens: hurting bystanders,
+ * police or property in front of witnesses costs karma and reputation and draws the police.
  */
 export type HarmTarget = 'person' | 'car' | 'robot' | 'drone' | 'prop' | 'building' | 'ground';
 export type HarmEffect = 'knockdown' | 'burn' | 'freeze' | 'shrink' | 'stun' | 'wet' | 'wreck' | 'damage' | 'break' | 'topple' | 'stall' | 'lift' | 'facade';
@@ -18,6 +19,8 @@ export interface HarmEntry {
   x: number; z: number;
   /** Game time (s). */
   t: number;
+  /** What was hit (a PedAgent, Vehicle, …) when known: the crime layer tells criminals from bystanders. */
+  ref?: object;
 }
 
 const LOG = 256;
@@ -31,8 +34,8 @@ export class Consequences {
   /** Listener for the later reputation / karma system. */
   onRecord: ((e: HarmEntry) => void) | null = null;
 
-  record(power: string, target: HarmTarget, effect: HarmEffect, x: number, z: number): void {
-    const e: HarmEntry = { cause: 'player', power, target, effect, x, z, t: this.time };
+  record(power: string, target: HarmTarget, effect: HarmEffect, x: number, z: number, ref?: object): void {
+    const e: HarmEntry = { cause: 'player', power, target, effect, x, z, t: this.time, ref };
     if (this.log.length >= LOG) this.log.shift();
     this.log.push(e);
     const k = `${target}:${effect}`;

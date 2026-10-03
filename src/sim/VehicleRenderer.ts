@@ -148,7 +148,7 @@ export class VehicleRenderer {
       b.body.setMatrixAt(k, this.m4);
       b.paint.setXYZ(k, v.paint[0], v.paint[1], v.paint[2]);
       const head = v.state === VState.Abandoned || crushed ? 0 : Math.max(lamps, v.kind === 'police' ? 0.3 : 0);
-      const ind = v.state === VState.Abandoned ? 2 : v.kind === 'police' && v.fear > 0.3 ? 3 : v.indicator;
+      const ind = v.state === VState.Abandoned ? 2 : v.kind === 'police' && (v.fear > 0.3 || v.siren) ? 3 : v.task?.hold ? 2 : v.indicator;
       b.state.setXYZW(k, head, v.brake, ind, v.damage);
       // Wheels.
       const steerTarget = v.turn ? Math.max(-0.5, Math.min(0.5, (v.indicator || 0) * -0.35)) : 0;

@@ -16,6 +16,7 @@
  * Idle cost: one early-out per frame when no power, state or effect is running.
  */
 import * as THREE from 'three';
+import { aimDir } from '../aimRay';
 import type { Player } from '../../player/Player';
 import type { CameraRig } from '../../player/CameraRig';
 import type { Targeting, Target, ProbeHit } from '../Targeting';
@@ -101,6 +102,7 @@ const CHARRED: [number, number, number] = [0.05, 0.045, 0.04];
 const ICE_PAINT: [number, number, number] = [0.8, 0.9, 0.98];
 
 const _v = new THREE.Vector3();
+const _eyeL = new THREE.Vector3(), _eyeR = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _nb: PedAgent[] = [];
@@ -229,6 +231,7 @@ export class Elements {
   /** Eye or hand position of the player. */
   private origin(where: 'eyes' | 'hands', out: THREE.Vector3): THREE.Vector3 {
     const p = this.w.player, h = p.height;
+    if (where === 'eyes' && p.eyePositions(_eyeL, _eyeR)) return out.addVectors(_eyeL, _eyeR).multiplyScalar(0.5);
     const yaw = this.w.camRig.yaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
     if (p.flying) return out.set(p.pos.x + fx * 0.5 * h, p.pos.y + 0.6 * h, p.pos.z + fz * 0.5 * h);
     return where === 'eyes'
@@ -237,8 +240,8 @@ export class Elements {
   }
 
   /**
-   * Where a power goes: at the target (led by `lead` m/s; Infinity: instant), or along the
-   * crosshair to whatever is there. The probe then runs from the origin, so something in the
+   * Where a power goes: at the target (led by `lead` m/s; Infinity: instant), or through the
+   * cursor to whatever is there. The probe then runs from the origin, so something in the
    * way is what gets hit.
    */
   private aim(where: 'eyes' | 'hands', range: number, lead: number, out: Aim): Aim {
@@ -253,9 +256,9 @@ export class Elements {
       T.aimPoint(tgt, o.x, o.y, o.z, lead, _w);
       dx = _w.x - o.x; dy = _w.y - o.y; dz = _w.z - o.z;
     } else {
-      // Along the crosshair: what the camera ray meets beyond the player.
+      // Through the cursor (or the crosshair while looking): what the camera ray meets beyond the player.
       const cam = this.w.camera;
-      cam.getWorldDirection(_d);
+      aimDir(cam, _d);
       const c = cam.position;
       const t0 = Math.max(0, (p.pos.x - c.x) * _d.x + (p.pos.y + p.height * 0.6 - c.y) * _d.y + (p.pos.z - c.z) * _d.z);
       const sx = c.x + _d.x * t0, sy = c.y + _d.y * t0, sz = c.z + _d.z * t0;
@@ -283,6 +286,11 @@ export class Elements {
     if (!p.flying && Math.hypot(out.dx, out.dz) > 0.1) p.yaw = Math.atan2(-out.dx, -out.dz);
     return out;
   }
+  /** Yaw toward the cursor (camera yaw when the ray is near vertical or there is no cursor). */
+  private cursorYaw(): number {
+    aimDir(this.w.camera, _d);
+    return Math.hypot(_d.x, _d.z) > 0.05 ? Math.atan2(-_d.x, -_d.z) : this.w.camRig.yaw;
+  }
   private aimA: Aim = { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0, t: 0, hit: newHit() };
 
   // ================================================================== effects on targets
@@ -292,7 +300,7 @@ export class Elements {
   }
 
   private record(power: AbilityId, t: Target | 'building' | 'ground', effect: HarmEffect, x: number, z: number): void {
-    this.w.consequences.record(power, typeof t === 'string' ? t : this.harmKind(t), effect, x, z);
+    this.w.consequences.record(power, typeof t === 'string' ? t : this.harmKind(t), effect, x, z, typeof t === 'string' ? undefined : t.obj);
   }
 
   private track(t: Target): TargetStatus {
@@ -436,9 +444,10 @@ export class Elements {
     const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
     // Two beams from the eyes, converging on the spot.
     const yaw = this.w.camRig.yaw, rx = Math.cos(yaw) * 0.032 * h, rz = -Math.sin(yaw) * 0.032 * h;
+    if (!p.eyePositions(_eyeL, _eyeR)) { _eyeL.set(A.ox - rx, A.oy, A.oz - rz); _eyeR.set(A.ox + rx, A.oy, A.oz + rz); }
     const wdt = Math.max(0.012, 0.03 * Math.max(0.4, this.sk)) * Math.min(1, held * 6 + 0.3);
-    this.fx.seg(A.ox - rx, A.oy, A.oz - rz, ex, ey, ez, wdt, 2.6, 0.25, 0.12, 1.6, BeamStyle.Laser);
-    this.fx.seg(A.ox + rx, A.oy, A.oz + rz, ex, ey, ez, wdt, 2.6, 0.25, 0.12, 1.6, BeamStyle.Laser);
+    this.fx.seg(_eyeL.x, _eyeL.y, _eyeL.z, ex, ey, ez, wdt, 2.6, 0.25, 0.12, 1.6, BeamStyle.Laser);
+    this.fx.seg(_eyeR.x, _eyeR.y, _eyeR.z, ex, ey, ez, wdt, 2.6, 0.25, 0.12, 1.6, BeamStyle.Laser);
     // Sound.
     if (!this.laserLoop) this.laserLoop = this.w.synth.loop('laser', 4 * Math.max(1, this.sk));
     this.laserLoop?.set(A.ox, A.oy, A.oz, 0.55, 1 / Math.pow(Math.max(0.3, k), 0.12));
@@ -706,7 +715,7 @@ export class Elements {
     const hs = Math.hypot(p.vel.x, p.vel.z);
     let dx: number, dz: number;
     if (hs > 0.6 * this.sk) { dx = p.vel.x / hs; dz = p.vel.z / hs; }
-    else { const yaw = this.w.camRig.yaw; dx = -Math.sin(yaw); dz = -Math.cos(yaw); }
+    else { const yaw = this.cursorYaw(); dx = -Math.sin(yaw); dz = -Math.cos(yaw); }
     // Slope from the camera: look up for a ramp, down to come down.
     const pitch = this.w.camRig.pitch;
     const slope = pitch > 0.12 ? Math.min(0.5, (pitch - 0.12) * 1.2) : pitch < -0.45 ? -0.3 : 0;
@@ -972,7 +981,7 @@ export class Elements {
     let dx: number, dz: number;
     const tgt = T.current;
     if (tgt && T.alive(tgt)) { const c = T.centre(tgt, _w); dx = c.x - p.pos.x; dz = c.z - p.pos.z; }
-    else { const yaw = this.w.camRig.yaw; dx = -Math.sin(yaw); dz = -Math.cos(yaw); }
+    else { const yaw = this.cursorYaw(); dx = -Math.sin(yaw); dz = -Math.cos(yaw); }
     const L = Math.hypot(dx, dz) || 1;
     dx /= L; dz /= L;
     if (!p.flying) p.yaw = Math.atan2(-dx, -dz);
@@ -1069,7 +1078,7 @@ export class Elements {
     // A target up in the air (a drone): the vortex spins up there.
     const air = ty - gy > 4;
     const y = air ? ty - GUST_RADIUS[r] * sk * 0.6 : gy;
-    const yaw = this.w.camRig.yaw;
+    const yaw = this.cursorYaw();
     const loop = this.w.synth.loop('wind', 8 * sk);
     this.vortices.push({ x, y, z, dx: -Math.sin(yaw), dz: -Math.cos(yaw), r: GUST_RADIUS[r] * sk, t: 0, life: GUST_TIME[r], rank: r, k: p.k, tick: 0, hitT: new Map(), loop, air });
     p.action = { id: 'cast_up', t0: p.animClock, dur: 0.7 };

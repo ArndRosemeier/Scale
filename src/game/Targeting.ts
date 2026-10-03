@@ -83,6 +83,10 @@ const DRONE_R = 0.6;
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _ray = new THREE.Raycaster();
+const _ndc = new THREE.Vector2();
+/** Click picking: how close (px) to a target's centre still counts as clicking it. */
+const PICK_PX = 28;
 const _hit: ProbeHit = { what: 'none', target: null, building: null, t: Infinity, x: 0, y: 0, z: 0, nx: 0, ny: 1, nz: 0 };
 
 /** Ray (o, d unit) vs vertical cylinder: entry distance or Infinity. */
@@ -141,6 +145,10 @@ export class Targeting {
   private checkT = 0;
   /** Called when the target changes (UI, sounds). */
   onChange: ((t: Target | null) => void) | null = null;
+  /** The crime layer fills in con colour, health and actor names (decision 13). */
+  describe: ((t: Target) => { name?: string; con: string | null; health: number | null }) | null = null;
+  /** Tab order bias (negative = earlier): hostiles first, then people of interest (decision 14). */
+  priority: ((t: Target) => number) | null = null;
 
   constructor(private w: TargetWorld) {}
 
@@ -199,7 +207,8 @@ export class Targeting {
 
   info(t: Target): TargetInfo {
     const dist = this.centre(t, _v).distanceTo(this.w.player.pos);
-    return { name: this.name(t), kind: this.kindLabel(t), dist, con: null, health: null };
+    const d = this.describe?.(t);
+    return { name: d?.name ?? this.name(t), kind: this.kindLabel(t), dist, con: d?.con ?? null, health: d?.health ?? null };
   }
 
   kindLabel(t: Target): string {
@@ -398,6 +407,10 @@ export class Targeting {
     if (input) {
       if (input.hit('Tab')) this.tab(input.down('ShiftLeft') || input.down('ShiftRight') ? -1 : 1);
       if (input.hit('Escape')) this.set(null);
+      // Left click on someone / something under the cursor targets it (and does not punch).
+      const c = input.clicked & 1 ? input.cursorNdc() : null;
+      const picked = c ? this.pickAt(c.x, c.y) : null;
+      if (picked) { this.set(picked); input.clicked &= ~1; }
     }
     const t = this.current;
     if (!t) return;
@@ -440,6 +453,43 @@ export class Targeting {
     return _w.z < 1 && Math.abs(_w.x) < 1 && Math.abs(_w.y) < 1;
   }
 
+  /**
+   * The target under a screen point (NDC): what the camera ray meets first, else — forgiving
+   * for small or moving things — the visible target whose centre is within a few pixels.
+   */
+  pickAt(nx: number, ny: number): Target | null {
+    const cam = this.w.camera, p = this.w.player;
+    const k = Math.max(1, Math.sqrt(p.k));
+    const range = TARGET.range * k, propRange = TARGET.propRange * k;
+    _ray.setFromCamera(_ndc.set(nx, ny), cam);
+    const o = _ray.ray.origin, d = _ray.ray.direction;
+    const reach = range + cam.position.distanceTo(p.pos);
+    const h = this.probe(o.x, o.y, o.z, d.x, d.y, d.z, reach);
+    if (h.what === 'target' && h.target) {
+      const t = h.target;
+      const far = this.centre(t, _v).distanceTo(p.pos);
+      if (far <= (t.kind === 'prop' ? propRange : range)) return { ...t } as Target;
+    }
+    // Near miss: closest projected centre within PICK_PX, in line of sight.
+    const W = this.w.world, el = document.getElementById('view');
+    const halfW = (el?.clientWidth || window.innerWidth) / 2, halfH = (el?.clientHeight || window.innerHeight) / 2;
+    let best: Target | null = null, bestPx = PICK_PX;
+    this.each(p.pos.x, p.pos.z, range, (t) => {
+      const c = this.centre(t, _v);
+      const dc = c.distanceTo(cam.position);
+      if (c.distanceTo(p.pos) > (t.kind === 'prop' ? propRange : range)) return;
+      _w.copy(c).project(cam);
+      if (_w.z >= 1) return;
+      const px = Math.hypot((_w.x - nx) * halfW, (_w.y - ny) * halfH);
+      if (px >= bestPx) return;
+      const cx = c.x - cam.position.x, cy = c.y - cam.position.y, cz = c.z - cam.position.z;
+      const hit = W.raycast(cam.position.x, cam.position.y, cam.position.z, cx / dc, cy / dc, cz / dc, Math.max(0.1, dc - 1.5), Math.max(0.5, dc / 60));
+      if (hit.t < dc - 2) return;
+      bestPx = px; best = { ...t } as Target;
+    });
+    return best;
+  }
+
   /** Tab (dir 1) / Shift+Tab (-1). */
   tab(dir: number): void {
     // A fresh press (or a stale list): rank what is in view now.
@@ -476,7 +526,7 @@ export class Targeting {
       // Screen distance from the crosshair (aspect-corrected), with a slight preference for the
       // living and moving over furniture.
       const sx = _w.x * aspect, sy = _w.y;
-      const score = Math.hypot(sx, sy) + (t.kind === 'prop' ? 0.12 : 0) + d * 0.0006;
+      const score = Math.hypot(sx, sy) + (t.kind === 'prop' ? 0.12 : 0) + d * 0.0006 + (this.priority?.(t) ?? 0);
       list.push({ t, score });
     });
     list.sort((a, b) => a.score - b.score);

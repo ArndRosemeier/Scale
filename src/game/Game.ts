@@ -43,6 +43,7 @@ import { Traffic, VState, VehicleObstacles, type Vehicle, type VKind } from '../
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
+import { RagdollSystem } from '../physics/ragdoll/RagdollSystem';
 import { Birds } from '../fauna/Birds';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
@@ -60,6 +61,7 @@ import type { CellState } from '../stream/CityStreamer';
 import type { GameMode } from './mode';
 import { Progress } from './abilities/Progress';
 import { AbilitySystem } from './abilities/AbilitySystem';
+import { setAimCursor } from './aimRay';
 import { PowerFx } from './abilities/PowerFx';
 import { ABILITY } from './abilities/defs';
 import { PowerCores } from './abilities/PowerCores';
@@ -72,6 +74,7 @@ import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { PowerSynth } from '../audio/PowerSynth';
 import { TargetHud } from '../ui/TargetHud';
+import { CrimeSystem } from './crime/CrimeSystem';
 
 export class Game {
   readonly renderer: Renderer;
@@ -106,6 +109,8 @@ export class Game {
   vehicles!: VehicleRenderer;
   props!: PropRenderer;
   future!: NearFuture;
+  /** People and the player knocked flying, tumbling, getting up (physics/ragdoll). */
+  ragdolls!: RagdollSystem;
   birds!: Birds;
   interiors!: Interiors;
   underground!: Underground;
@@ -126,6 +131,8 @@ export class Game {
   readonly consequences = new Consequences();
   targetHud!: TargetHud;
   synth!: PowerSynth;
+  /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
+  crime!: CrimeSystem;
   /** Parked cars of the loaded cells. */
   get parkedCars(): Vehicle[] { return this.parkedList; }
   /** Power cores (Normal mode only). */
@@ -308,6 +315,15 @@ export class Game {
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
     this.crowd.rigGround = (x, y, z) => this.collision.groundAt(x, z, y + 0.4, 0.3);
+    this.ragdolls = new RagdollSystem({
+      physics: this.physics, ground: this.future.ground, peds: this.peds, crowd: this.crowd, player: this.player,
+      groundAt: (x, y, z) => this.collision.groundAt(x, z, y, 0.3),
+    });
+    const onLand = this.player.events.onLand;
+    this.player.events.onLand = (x, y, z, e, h) => {
+      onLand?.(x, y, z, e, h);
+      this.ragdolls.landed(Math.sqrt((2 * e) / this.player.mass));
+    };
     // Giants crush people and cars under their feet; collapses crush what is around them.
     this.stimuli.on((s) => {
       if (s.kind === 'stomp') {
@@ -446,12 +462,15 @@ export class Game {
     if (!this.freeCam) this.bodyContacts(dt);
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
+    this.T('crime', () => this.crime.update(dt));
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
       this.updateHoles();
       this.manholeKey();
     });
+    this.T('ragdoll', () => this.ragdolls.update(dt, this.renderer.camera.position));
     this.T('physics', () => this.physics.step(dt));
+    this.T('ragdollPost', () => this.ragdolls.post(dt));
     this.T('debris', () => { this.debris.update(dt); this.dust.update(dt); this.destruction.update(dt); });
     if (!this.freeCam) this.powerFx.update(dt, this.abilities.charge, this.abilities.rank('superJump'));
     if (!this.freeCam) this.flightFx.update(dt, this.player, this.renderer.camera, this.world.groundHeight(this.player.pos.x, this.player.pos.z));
@@ -474,6 +493,7 @@ export class Game {
     this.T('birds', () => this.birds.update(dt, this.sky.hour, focus, this.freeCam ? null : this.player, cam));
     if (render) {
       this.T('crowd', () => this.crowd.update(dt, this.simT, this.peds.agents, this.renderer.camera));
+      this.T('ragdollPose', () => this.ragdolls.pose());
       this.T('vehicles', () => this.vehicles.update(dt, this.traffic.vehicles, this.parkedList, this.renderer.camera));
       this.T('props', () => this.props.update(dt, this.renderer.camera));
       this.T('elementFx', () => this.elements.render(dt));
@@ -615,7 +635,7 @@ export class Game {
         p.vel.x = fx * v.speed * 1.2; p.vel.z = fz * v.speed * 1.2; p.vel.y = 2 + v.speed * 0.3;
         p.grounded = false;
         p.pos.x += fx * 0.3; p.pos.z += fz * 0.3;
-        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); }
+        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); this.crime?.health.damage(6 + v.speed * 3.2, 'car', v.x, v.z); }
       } else {
         const pushLat = (v.width / 2 + pr - Math.abs(lat)) * Math.sign(lat || 1);
         p.pos.x += -fz * pushLat; p.pos.z += fx * pushLat;
@@ -629,6 +649,7 @@ export class Game {
     const cam = this.renderer.camera;
     const normal = this.mode === 'normal';
     this.progress = new Progress(this.settings.seed, this.settings.size, this.mode);
+    setAimCursor(() => this.input.cursorNdc());
     this.abilities = new AbilitySystem(this.progress, this.player, this.interactions, cam);
     this.powerHud = new PowerHud(this.abilities);
     this.powerFx = new PowerFx(this.renderer.scene, this.dust, this.player);
@@ -705,9 +726,11 @@ export class Game {
       };
       this.powers.info = () => `Power cores found: <b>${this.progress.coresCollected}</b> of ${cores.total} (rare glowing loot — rooftops, parks, metro, sewers).`;
     }
+    // Street crime, police, justice, health and reputation (needs the map, HUD and targeting).
+    this.crime = new CrimeSystem(this);
     setTimeout(() => toast(normal
       ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
-      : 'Sandbox: every power is yours. <b>1–9, 0</b> / right mouse use the hotbar (hold for beams and super speed), <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);
+      : 'Sandbox: every power is yours. <b>1–9, 0</b> use the hotbar (hold for beams and super speed), click or <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);
   }
 
   /** Parked cars from a cell's street plan. */
@@ -748,10 +771,15 @@ export class Game {
         this.audio.play('car_crash', v.x, v.y, v.z, Math.min(1, J / 20000 + 0.3), 1, 10, this.renderer.camera.position);
       } else v.damage = Math.min(1, v.damage + J / 5000);
     }
-    for (const a of this.peds.agents) {
-      const d = Math.hypot(a.x - x, a.z - z);
-      if (d < r + 0.4 && J > 150) this.reactions.knockDown(a, x - jx * 0.001, z - jz * 0.001, Math.min(15, J / 400), 'player');
+    // People: through the combat model (stagger, knock-down, KO by impulse and health). A punch
+    // (small radius) lands on one body — the nearest, the soft-locked target first; a blast hits all.
+    const hit = this.peds.neighbours(x, z, r + 0.5, []).filter((a) => Math.hypot(a.x - x, a.z - z) < r + 0.4 && Math.abs(a.y + 0.9 - y) < r + 1.5);
+    if (r <= this.player.height * 0.5 && hit.length > 1) {
+      const cur = this.targeting.current?.kind === 'person' ? this.targeting.current.obj : null;
+      hit.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : 0) || (b.actor?.hostile ? 1 : 0) - (a.actor?.hostile ? 1 : 0) || Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
+      hit.length = 1;
     }
+    for (const a of hit) this.crime.combat.hitActor(a, jx, jy, jz, 'strike', 'player');
   }
 
   /** Nearest street holes -> terrain shader. */
@@ -775,6 +803,8 @@ export class Game {
     if (this.freeCam) return null;
     const metro = this.underground.metroHint();
     if (metro) return metro;
+    const crime = this.crime?.hint();
+    if (crime) return crime;
     const deed = this.deeds?.hint();
     if (deed) return deed;
     const p = this.player.pos;
@@ -791,7 +821,7 @@ export class Game {
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
-    if (this.deeds.help()) { this.input.pressed.delete('KeyE'); return; }
+    if (this.crime.use() || this.deeds.help()) { this.input.pressed.delete('KeyE'); return; }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     const p = this.player.pos;
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);

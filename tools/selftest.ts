@@ -267,5 +267,103 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   console.log(`powers: ${ABILITIES.length} abilities checked`);
 }
 
+// ---- street crime: district index and director are deterministic; a purse snatch runs
+// approach → escape → KO → arrested with scripted time (headless, mocked world).
+{
+  const { crimeIndex, crimesPerMinute } = await import('../src/game/crime/CrimeIndex');
+  const { planHour, rollSlot } = await import('../src/game/crime/CrimeDirector');
+  const t0 = performance.now();
+  const macro = buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.3 })));
+  const iA = crimeIndex(macro, 42), iB = crimeIndex(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.3 }))), 42), iC = crimeIndex(macro, 43);
+  check(iA.length === macro.cells.length && iA.every((v, i) => v === iB[i]), 'crime index deterministic for (seed, plan)');
+  check(iA.every((v) => v >= 0 && v <= 1), 'crime index in 0..1');
+  check(iA.some((v, i) => v !== iC[i]), 'crime index varies with the seed (poverty noise)');
+  const mean = (d: string) => { const v = macro.cells.map((c, i) => (c.district === d ? iA[i] : NaN)).filter((x) => !Number.isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  const rough = [mean('industrial'), mean('port'), mean('apartments')].filter((x) => !Number.isNaN(x));
+  const safe = [mean('suburban'), mean('downtown')].filter((x) => !Number.isNaN(x));
+  check(!rough.length || !safe.length || Math.max(...rough) > Math.min(...safe), `rough districts score higher than safe ones (${rough.map((x) => x.toFixed(2))} vs ${safe.map((x) => x.toFixed(2))})`);
+  const perMin = crimesPerMinute(0.5, 'apartments', 13, 'normal');
+  check(perMin > 0.33 && perMin < 1, `average district by day: one crime every 1–3 min (${(1 / perMin).toFixed(1)} min)`);
+  check(crimesPerMinute(0.5, 'apartments', 13, 'off') === 0 && crimesPerMinute(0.9, 'port', 1, 'normal') > crimesPerMinute(0.15, 'suburban', 13, 'normal') * 4, 'rate: off is off, bad district at night far above a safe suburb by day');
+  const cell = macro.cells.findIndex((c) => c.district !== 'water');
+  for (const [day, hour] of [[0, 14], [3, 22], [9, 2]]) {
+    const a = planHour(42, day, hour, cell, iA[cell], macro.cells[cell].district, 'chaos');
+    const b = planHour(42, day, hour, cell, iA[cell], macro.cells[cell].district, 'chaos');
+    check(JSON.stringify(a) === JSON.stringify(b), `director: same crime weather for seed / day ${day} / hour ${hour}`);
+  }
+  const all = Array.from({ length: 24 }, (_, h) => planHour(42, 1, h, cell, 0.6, 'apartments', 'chaos')).flat();
+  const other = Array.from({ length: 24 }, (_, h) => planHour(43, 1, h, cell, 0.6, 'apartments', 'chaos')).flat();
+  check(all.length > 10 && JSON.stringify(all) !== JSON.stringify(other), `director rolls crimes and the seed changes them (${all.length} in a day)`);
+  check(rollSlot(42, 1, 12, 5, cell, 0.6, 'apartments', 'off') === null, 'director: off rolls nothing');
+
+  // Snatch FSM with a mocked world.
+  const { Snatch } = await import('../src/game/crime/Snatch');
+  const { Combat } = await import('../src/game/Combat');
+  const pop = new Population(macro, 42);
+  type A = import('../src/sim/Pedestrians').PedAgent;
+  const agents: A[] = [];
+  const mk = (seed: number, x: number, z: number, heading: number, state = 0): A => {
+    const a = { id: agents.length + 1, cit: { ...pop.synthetic(seed), role: 1 }, x, z, y: 0, heading, speed: 1.3, pref: 1.3, state, route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1 } as unknown as A;
+    agents.push(a);
+    return a;
+  };
+  const victim = mk(7, 150, 0, -Math.PI / 2); // walking along +x
+  for (let k = 0; k < 4; k++) mk(100 + k, 150 + k * 3, 6, 0, 2); // bystanders standing
+  const combat = new Combat({ knockDown: (a, fx, fz, power) => { a.state = 5; a.stateT = 0; const d = Math.hypot(a.x - fx, a.z - fz) || 1; a.vx = ((a.x - fx) / d) * power; a.vz = ((a.z - fz) / d) * power; } });
+  const player = { x: 0, y: 0, z: 0, vx: 0, vz: 0, height: 1.8, flying: false, strength: 1 };
+  let time = 0, policeCalls = 0;
+  const world = {
+    get time() { return time; }, hour: 14, player,
+    agents: () => agents,
+    neighbours: (x: number, z: number, r: number) => agents.filter((a) => a.alive && Math.hypot(a.x - x, a.z - z) < r),
+    spawn: (seed: number, x: number, z: number, h: number) => mk(seed, x, z, h, 2),
+    route: (ax: number, az: number, bx: number, bz: number) => Float32Array.from([ax, az, 0, bx, bz, 0]),
+    visible: () => false, emit: () => {}, sound: () => {}, combat,
+    hurtPlayer: () => {}, callPolice: () => { policeCalls++; }, random: () => 0.5,
+  };
+  const crime = new Snatch(world, 12345);
+  check(crime.setup(), 'snatch: setup finds a victim and a thief');
+  const thief = crime.thief!;
+  const phases: string[] = [];
+  const events: string[] = [];
+  const step = (dt: number) => {
+    time += dt;
+    // Minimal movement: walkers walk on, actors go to their goal.
+    for (const a of agents) {
+      if (!a.alive || a.state === 5) continue;
+      const act = a.actor;
+      if (act) {
+        act.stateT += dt; act.attackT -= dt; act.replanT -= dt;
+        const g = act.goal;
+        if (g) { const dx = g.x - a.x, dz = g.z - a.z, d = Math.hypot(dx, dz); const s = Math.min(d, act.speed * dt); if (d > 1e-6) { a.x += (dx / d) * s; a.z += (dz / d) * s; a.heading = Math.atan2(-dx, -dz); } }
+      } else if (a.state === 0) { a.x += -Math.sin(a.heading) * a.speed * dt; a.z += -Math.cos(a.heading) * a.speed * dt; }
+    }
+    crime.update(dt);
+    for (const e of crime.events) events.push(e.type);
+    crime.events.length = 0;
+    if (phases[phases.length - 1] !== crime.phase) phases.push(crime.phase);
+  };
+  for (let i = 0; i < 600 && crime.phase === 'approach'; i++) step(0.05);
+  check(crime.phase === 'escape' && thief.actor?.held === 'bag' && crime.loot?.carrier === thief, `snatch: the thief grabs the bag and runs (${crime.phase})`);
+  for (let i = 0; i < 40; i++) step(0.05);
+  check(Math.hypot(thief.x - victim.x, thief.z - victim.z) > 5, 'snatch: the thief gets away from the victim');
+  // The hero catches up and punches until he is out.
+  let hits = 0;
+  for (let i = 0; i < 200 && thief.actor!.state !== 'ko'; i++) {
+    player.x = thief.x + 0.9; player.z = thief.z;
+    if (i % 12 === 0) { combat.hitActor(thief, -400, 80, 0, 'punch', 'player'); hits++; }
+    step(0.05);
+  }
+  check(thief.actor!.state === 'ko' && hits <= 4, `snatch: a few punches knock the thief out (${hits} hits, ${thief.actor!.state})`);
+  step(0.05);
+  check(crime.phase === 'subdued' && crime.loot?.carrier === null, `snatch: subdued, the bag drops (${crime.phase})`);
+  crime.arrest(thief);
+  step(0.05);
+  check(crime.phase === 'resolved' && crime.outcome === 'arrested' && thief.actor!.state === 'arrested', `snatch: arrested, resolved (${crime.phase}, ${crime.outcome})`);
+  check(events.join(',') === 'commit,ko,arrest,resolved' && policeCalls === 1, `snatch events ${events.join(',')}, police called ${policeCalls} times`);
+  check(phases.join('>') === 'approach>escape>subdued>resolved', `snatch phases ${phases.join(' > ')}`);
+  console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

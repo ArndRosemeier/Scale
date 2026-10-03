@@ -124,6 +124,23 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(m, strap);
       break;
     }
+    case 'knife': {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.13, 0.004), new THREE.MeshStandardMaterial({ color: 0xc8ccd0, roughness: 0.25, metalness: 0.8 }));
+      blade.position.set(0, 0.1, 0);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.08, 0.018), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 }));
+      g.add(blade, grip);
+      break;
+    }
+    case 'club_bat': {
+      const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.016, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.6 }));
+      bat.position.y = 0.32;
+      g.add(bat);
+      break;
+    }
+    case 'wallet': {
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.02), new THREE.MeshStandardMaterial({ color: 0x4a2e1a, roughness: 0.55 })));
+      break;
+    }
     case 'umbrella': {
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.85, 6), new THREE.MeshStandardMaterial({ color: 0x222222 }));
       shaft.position.y = 0.4;

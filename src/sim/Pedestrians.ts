@@ -20,6 +20,7 @@ import { CURB_H } from '../build/ground';
 import { hashToFloat, hash32 } from '../core/rng';
 import { ACCIDENTS } from '../game/abilities/tuning';
 import { statusOf } from '../shared/status';
+import type { Actor } from './actors/Actor';
 
 export const enum PState { Walk = 0, Wait = 1, Idle = 2, Gawk = 3, Flee = 4, Down = 5, Enter = 6, Film = 7, Sit = 8, Sleep = 9 }
 
@@ -65,12 +66,18 @@ export interface PedAgent {
   sideX?: number; sideZ?: number; sideT?: number;
   /** Glancing at something (lookX/Y/Z) while going on: seconds left. */
   glance?: number;
+  /** Actor layer (crimes, police, small deeds): driven by its owner, see sim/actors/Actor.ts. */
+  actor?: Actor;
+  /** A ragdoll owns the body (tumbling, lying or getting up: physics/ragdoll); no movement here. */
+  ragdoll?: boolean;
 }
 
 export type DownCause = 'player' | 'collapse' | 'accident' | 'other';
 
 
 const MAX_AGENTS = 2600;
+/** Extra room above MAX_AGENTS for actors (crime, police, deeds: budget 40). */
+const ACTOR_RESERVE = 48;
 const SCAN_R = 480;
 const DESPAWN_R = 620;
 const HASH = 1 << 14;
@@ -149,7 +156,7 @@ export class Pedestrians {
       if (d > 160 && a.state !== PState.Flee && a.state !== PState.Down) {
         if ((i + this.frame) % 4 === 0) this.step(a, dt * 4, gameDt * 4);
       } else this.step(a, dt, gameDt);
-      if (!a.alive || d > DESPAWN_R) this.remove(i);
+      if (!a.alive || (d > DESPAWN_R && !a.actor?.pinned)) this.remove(i);
     }
   }
 
@@ -421,6 +428,7 @@ export class Pedestrians {
   /** Behaviour + movement of one agent. Reactions are applied by the Reactions module (fear, look). */
   private step(a: PedAgent, dt: number, _gameDt: number): void {
     a.stateT += dt;
+    if (a.ragdoll) return;
     if (a.inside) {
       // Indoors: stay put; frightened people stand up and look towards the danger.
       if (a.fear > 0.5 && (a.state === PState.Sit || a.state === PState.Sleep)) { a.state = PState.Idle; a.stateT = -1e9; }
@@ -437,12 +445,19 @@ export class Pedestrians {
       a.x += a.vx * dt; a.z += a.vz * dt; a.y += a.vy * dt;
       const g = this.groundY(a.x, a.z, a.onRoad);
       if (a.y < g) { a.y = g; a.vy = 0; a.vx *= 0.8; a.vz *= 0.8; }
-      if (a.stateT > (a.downBy === 'accident' ? ACCIDENTS.lieFor : 25) && a.fear < 100) a.alive = false;
+      // Actors lie until their owner gets them up (or hands them back).
+      if (!a.actor && a.stateT > (a.downBy === 'accident' ? ACCIDENTS.lieFor : 25) && a.fear < 100) a.alive = false;
       return;
     }
     if (a.glance) a.glance = Math.max(0, a.glance - dt);
     let tx: number, tz: number, desired: number;
-    if (a.state === PState.Flee) {
+    const act = a.actor;
+    if (act) {
+      // Driven by its owner: a goal and a speed (null: stand), staggering slows it down.
+      if (act.goal) { tx = act.goal.x; tz = act.goal.z; desired = act.speed * (act.staggerT > 0 ? 0.35 : 1); }
+      else { tx = a.x; tz = a.z; desired = 0; }
+      a.state = desired > 0.05 ? PState.Walk : PState.Idle;
+    } else if (a.state === PState.Flee) {
       // Run away from the danger, roughly along the sidewalk, with noise.
       const dx = a.x - a.fearX, dz = a.z - a.fearZ;
       const d = Math.hypot(dx, dz) || 1;
@@ -522,8 +537,8 @@ export class Pedestrians {
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
       a.heading += d * Math.min(1, dt * 8);
-    } else if (a.state === PState.Gawk || a.state === PState.Film) {
-      const h = Math.atan2(-(a.lookX - a.x), -(a.lookZ - a.z));
+    } else if (act?.face || a.state === PState.Gawk || a.state === PState.Film) {
+      const h = act?.face ? Math.atan2(-(act.face.x - a.x), -(act.face.z - a.z)) : Math.atan2(-(a.lookX - a.x), -(a.lookZ - a.z));
       let d = h - a.heading;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
@@ -574,6 +589,20 @@ export class Pedestrians {
       const a = this.agents[i];
       if (a.inside && pointInPolyFast(poly, a.x, a.z)) this.remove(i);
     }
+  }
+
+  /** A citizen standing at a point (actor layer: criminals, police officers, owners). Null when full. */
+  spawnAt(c: Citizen, x: number, z: number, heading: number, onRoad = false): PedAgent | null {
+    // Actors have a reserve above the population cap (a full street still gets its police).
+    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS + ACTOR_RESERVE) return null;
+    const a: PedAgent = {
+      id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, onRoad), heading, speed: 0, pref: 1.4, state: PState.Idle,
+      route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: x, fearZ: z,
+      lookX: x, lookZ: z, lookY: 0, stateT: 0, onRoad, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1,
+    };
+    this.agents.push(a);
+    this.byId.set(c.id, a);
+    return a;
   }
 
   /** Spawn a pedestrian at a point fleeing (e.g. a driver abandoning a car). */

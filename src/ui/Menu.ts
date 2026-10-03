@@ -11,13 +11,12 @@ const CONTROLS: [string, string][] = [
   ['F', 'Toggle flight (when unlocked)'],
   ['Numpad + / −  (or = / −)', 'Grow / shrink (size shift; range grows with rank)'],
   ['1 … 9, 0', 'Use a hotbar power (and select its slot); hold for beams, jets, ice path, super speed'],
-  ['Right click', 'Use the selected hotbar power (hold for held powers)'],
   ['Tab / Shift+Tab', 'Pick a target near the crosshair / cycle; Esc clears it. Powers go for the target, or straight ahead'],
   ['P', 'Powers: buy, upgrade, assign to the hotbar'],
-  ['Mouse', 'Look around'],
+  ['Right mouse (hold)', 'Look around'],
   ['Mouse wheel', 'Camera distance'],
-  ['Left click', 'Punch / push'],
-  ['E', 'Help someone up · open a manhole / climb out of the sewer'],
+  ['Left click', 'On someone or something: target it · elsewhere: punch / push'],
+  ['E', 'Help someone up · pick up / give back · turn yourself in (next to an officer) · open a manhole / climb out of the sewer'],
   ['M', 'City map: metro, stations, travel'],
   ['N', 'Minimap on / off'],
   ['B', 'Test blast where you look (sandbox)'],
@@ -44,9 +43,14 @@ export class Menu {
         </select></div>
         <div class="row"><label>Time of day</label><input id="pHour" type="range" min="0" max="24" step="0.25"><span id="pHourV"></span></div>
         <div class="row"><label>Volume</label><input id="pVol" type="range" min="0" max="1" step="0.05"></div>
+        <div class="row"><label>Mute</label><input id="pMute" type="checkbox"></div>
         <div class="row"><label>Shadows</label><input id="pShadow" type="checkbox"></div>
         <div class="row"><label>Render scale</label><select id="pScale"><option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select></div>
         <div class="row"><label>Body size</label><span id="pSize"></span><button id="pReset">Normal size</button></div>
+        <div class="row"><label>Street crime</label><select id="pCrime" title="How often crimes happen near you (depends on the district and the hour)">
+          <option value="off">Off</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="chaos">Chaos</option>
+        </select></div>
+        <div class="row" id="pInvRow"><label>Invulnerable</label><input id="pInv" type="checkbox"></div>
         <div class="buttons"><button id="pResume">Resume</button><button id="pHelp">Controls</button><button id="pNew">New city…</button></div>
       </div>`;
     document.body.appendChild(this.el);
@@ -57,28 +61,29 @@ export class Menu {
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
     $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); };
     $<HTMLInputElement>('pHour').oninput = (e) => { game.sky.hour = Number((e.target as HTMLInputElement).value) % 24; this.sync(); };
-    $<HTMLInputElement>('pVol').oninput = (e) => game.audio.setVolume(Number((e.target as HTMLInputElement).value));
+    $<HTMLInputElement>('pVol').oninput = (e) => { game.audio.setVolume(Number((e.target as HTMLInputElement).value)); this.sync(); };
+    $<HTMLInputElement>('pMute').onchange = (e) => game.audio.setMuted((e.target as HTMLInputElement).checked);
     $<HTMLInputElement>('pShadow').onchange = (e) => { game.renderer.gl.shadowMap.enabled = (e.target as HTMLInputElement).checked; game.renderer.scene.traverse((o) => { const m = (o as { material?: { needsUpdate: boolean } }).material; if (m) m.needsUpdate = true; }); };
     $<HTMLSelectElement>('pScale').onchange = (e) => { game.renderer.gl.setPixelRatio(Number((e.target as HTMLSelectElement).value) * (window.devicePixelRatio > 1 ? 1 : 1)); game.renderer.resize(); };
     $<HTMLButtonElement>('pReset').onclick = () => { game.player.height = 1.8; this.sync(); };
+    $<HTMLSelectElement>('pCrime').onchange = (e) => { if (game.crime) game.crime.setting = (e.target as HTMLSelectElement).value as typeof game.crime.setting; };
+    $<HTMLInputElement>('pInv').onchange = (e) => { if (game.crime) { game.crime.health.invulnerable = (e.target as HTMLInputElement).checked; if (game.crime.health.invulnerable) game.crime.health.reset(); } };
     $<HTMLButtonElement>('pResume').onclick = () => this.close();
     $<HTMLButtonElement>('pHelp').onclick = () => this.toggleHelp(true);
     $<HTMLButtonElement>('pNew').onclick = () => { location.href = location.pathname; };
     this.help.onclick = () => this.toggleHelp(false);
-    let wasLocked = false;
-    document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement) { wasLocked = true; this.close(); }
-      else if (wasLocked && !this.open && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer) this.show(); // Esc released the mouse (not the map opening)
-    });
+    // Looking around (right mouse) closes the menu.
+    document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement) this.close(); });
     window.addEventListener('keydown', (e) => {
       // (Esc that just closed the map or the powers screen does not open the pause menu.)
-      if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer) { if (this.open) this.close(); else this.show(); }
+      // (With a target, Esc first clears the target — Targeting — and opens the menu next time.)
+      if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer) { if (this.open) this.close(); else if (!this.game.targeting?.current) this.show(); }
       if (e.code === 'KeyH') this.toggleHelp();
     });
     // First-time hint.
     const hint = document.createElement('div');
     hint.id = 'hint';
-    hint.textContent = 'Click to look around · M for the map · H for controls · Esc for settings';
+    hint.textContent = 'Hold right mouse to look around · click someone to target them · M for the map · H for controls · Esc for settings';
     document.body.appendChild(hint);
     setTimeout(() => hint.classList.add('fade'), 9000);
   }
@@ -90,7 +95,14 @@ export class Menu {
     const hh = Math.floor(g.sky.hour), mm = Math.floor((g.sky.hour - hh) * 60);
     document.getElementById('pHourV')!.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     (document.getElementById('pVol') as HTMLInputElement).value = String(g.audio.volume);
+    (document.getElementById('pMute') as HTMLInputElement).checked = g.audio.muted;
     (document.getElementById('pShadow') as HTMLInputElement).checked = g.renderer.gl.shadowMap.enabled;
+    if (g.crime) {
+      (document.getElementById('pCrime') as HTMLSelectElement).value = g.crime.setting;
+      (document.getElementById('pInv') as HTMLInputElement).checked = g.crime.health.invulnerable;
+      // Invulnerability is a sandbox toggle (Normal mode: the player can be hurt).
+      document.getElementById('pInvRow')!.style.display = g.mode === 'sandbox' ? '' : 'none';
+    }
     document.getElementById('pSize')!.textContent = `${g.player.height < 1 ? (g.player.height * 100).toFixed(0) + ' cm' : g.player.height.toFixed(1) + ' m'}`;
   }
 

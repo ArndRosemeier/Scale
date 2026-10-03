@@ -62,6 +62,10 @@ export class Player {
   events: PlayerEvents = {};
   /** One-shot action (punch, wave...) in animation-clock time. */
   action: { id: string; t0: number; dur: number } | undefined;
+  /** Knocked down (combat, a car, knocked out): seconds left on the ground; movement input is ignored. */
+  downT = 0;
+  /** Ragdoll (physics/ragdoll): 'limp' while the body tumbles or lies, 'getup' while it stands up; no control. */
+  ragdoll: '' | 'limp' | 'getup' = '';
   get animClock(): number { return this.animTime; }
   /** Walking into walls: the obstacle hit this frame (for destruction). */
   blocked: { x: number; z: number; nx: number; nz: number; speed: number } | null = null;
@@ -145,6 +149,11 @@ export class Player {
     if (input.down('KeyA')) wish.sub(right);
     const run = input.down('ShiftLeft') || input.down('ShiftRight');
     const walkSlow = input.down('AltLeft');
+    if (this.downT > 0 || this.ragdoll) {
+      this.downT = Math.max(0, this.downT - dt);
+      wish.set(0, 0, 0);
+      if (this.flying) this.toggleFlight();
+    }
 
     if (this.flying) this.updateFlight(dt, input, wish, camYaw, camPitch, run);
     else this.updateGround(dt, input, wish, run, walkSlow);
@@ -359,6 +368,8 @@ export class Player {
   }
 
   private moveState(): MoveState {
+    if (this.ragdoll) return this.ragdoll === 'limp' ? 'knockdown' : 'idle';
+    if (this.downT > 0) return 'knockdown';
     if (this.flying) return 'fly';
     if (!this.grounded) return this.vel.y > 0 ? 'jump' : 'fall';
     const wl = this.world.terrain.waterLevel(this.pos.x, this.pos.z);
@@ -460,6 +471,15 @@ export class Player {
     set('lowerleg01.R', -0.35, 0, 0);
     set('neck01', 0.6, 0, 0);
     set('head', 0.35, 0, 0);
+  }
+
+  /** World positions of the two eyes (false: no character yet). */
+  eyePositions(l: THREE.Vector3, r: THREE.Vector3): boolean {
+    const e = this.rig.char?.eyes;
+    if (!e || e.length < 2) return false;
+    e[0].getWorldPosition(l);
+    e[1].getWorldPosition(r);
+    return true;
   }
 
   /** Centre of the body (for the camera pivot). */

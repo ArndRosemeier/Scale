@@ -42,6 +42,8 @@ export class PowerHud {
     for (let i = 0; i < HOTBAR_SLOTS; i++) {
       const s = document.createElement('div');
       s.className = 'pslot';
+      // Clickable with the cursor: tap powers fire, held powers run while the button is down.
+      s.addEventListener('mousedown', (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); this.abilities.click(i); });
       bar.appendChild(s);
       this.slots.push(s);
     }

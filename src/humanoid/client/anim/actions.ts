@@ -430,7 +430,30 @@ function stagger(p: Pose, t: number, c: ActionCtx) {
   p.root.y -= 0.06 * f;
 }
 
+/** Hands up (surrender, held at gunpoint): long plateau, so a long `dur` holds the pose. */
+function handsUp(p: Pose, t: number) {
+  const u = kf(t, [[0, 0], [0.04, 1], [0.97, 1], [1, 0]]);
+  p.arm('R', 2.45 * u, 0.55 * u, 0, 1.5 * u, 0.6 * u);
+  p.arm('L', 2.45 * u, 0.55 * u, 0, 1.5 * u, 0.6 * u);
+  p.neck(-0.1 * u);
+}
+
+/** Cowering: crouched, head down, arms up over the head. */
+function cower(p: Pose, t: number) {
+  const u = kf(t, [[0, 0], [0.08, 1], [0.95, 1], [1, 0]]);
+  p.leg('L', 1.1 * u, 0.05, 0, 1.9 * u, 0.75 * u);
+  p.leg('R', 1.0 * u, 0.05, 0, 1.8 * u, 0.7 * u);
+  p.spine(0.55 * u);
+  p.neck(0.45 * u);
+  p.arm('R', 2.0 * u, 0.3 * u, 0.3 * u, 2.0 * u, 1.0 * u);
+  p.arm('L', 2.0 * u, 0.3 * u, 0.3 * u, 2.0 * u, 1.0 * u);
+  p.root.y -= 0.42 * u;
+  p.root.z += 0.08 * u;
+}
+
 export const ACTIONS: Record<string, ActionDef> = {
+  hands_up: { mask: 'upper', blendIn: 0.15, blendOut: 0.2, pose: handsUp, mood: 'afraid' },
+  cower: { mask: 'full', blendIn: 0.2, blendOut: 0.25, pose: cower, mood: 'afraid' },
   // Forehand cuts use the sword clip; backhands and heavy chops stay procedural for variety.
   swing_1h: { mask: 'upper', blendIn: 0.05, blendOut: 0.15, pose: swing1h, mood: 'angry', clip: (c) => (c.variant % 2 === 0 && c.main !== 'axe' && c.main !== 'blunt' ? { name: 'Sword_Attack', from: 0.12, to: 0.72 } : null) },
   swing_2h: { mask: 'full', blendIn: 0.05, blendOut: 0.15, pose: swing2h, mood: 'angry' },
