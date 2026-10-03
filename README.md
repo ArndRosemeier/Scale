@@ -13,7 +13,16 @@ npm install
 npm run dev          # http://localhost:5180
 npm test             # headless determinism / invariant checks
 npm run build        # type-check + production bundle
+npm run build:publish # the same, based for the shared host's /scale/ subpath
 ```
+
+**Publishing.** The app is served at `https://apps.futuremagic.de/scale/`, so the bundle
+must carry that base: publish with `npm run build:publish` (`vite --mode publish` → base
+`/scale/`; `SCALE_BASE` overrides it, e.g. to host under another folder name). The plain
+`npm run build` stays root-relative for local previews — served under the subpath its
+output is a blank page. `public/futuremagic.json` ships the hub manifesto (title, tagline,
+tags, screenshot) with every build; the app goes live by symlinking the shared host's app
+folder at this `dist`.
 
 **Your own character.** The start screen has an **Import model…** button (or drop a file on
 it): GLB, glTF, VRM and FBX load directly and are kept in the browser. Humanoid rigs
