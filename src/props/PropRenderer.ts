@@ -16,6 +16,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { CURB_H } from '../build/ground';
 import { G } from '../render/materials/globals';
 import { junctionBack } from '../sim/Traffic';
+import type { Obstacle } from '../world/Collision';
 
 interface Prop {
   kind: string;            // model key
@@ -28,6 +29,8 @@ interface Prop {
   breakable: 'bend' | 'topple' | 'shatter' | 'solid';
   radius: number;
   height: number;
+  /** Collision shape (lazily derived; null = walk-through). */
+  solid?: Obstacle | null;
 }
 
 interface Batch { meshes: THREE.InstancedMesh[]; attrs: { color?: THREE.InstancedBufferAttribute; state?: THREE.InstancedBufferAttribute }; cap: number; n: number }
@@ -85,7 +88,9 @@ export class PropRenderer {
       switch (t) {
         case PropType.Tree: {
           const park = district === 'park' || v >= 3;
-          const sp = park ? (this.warmth > 0.75 ? WARM_SPECIES : PARK_SPECIES)[(seed + v * 31 + Math.round(x)) % (this.warmth > 0.75 ? WARM_SPECIES : PARK_SPECIES).length] : cellSpecies;
+          const parkSp = this.warmth > 0.75 ? WARM_SPECIES : PARK_SPECIES;
+          // x can be negative: keep the index non-negative.
+          const sp = park ? parkSp[(((seed + v * 31 + Math.round(x)) % parkSp.length) + parkSp.length) % parkSp.length] : cellSpecies;
           const variant = (Math.round(x * 7 + z * 3) & 1);
           const m = treeModel(sp, variant);
           list.push({ ...base, kind: `tree:${sp}:${variant}`, tree: true, breakable: 'topple', radius: m.trunkRadius * sc, height: m.height * sc });
@@ -110,7 +115,8 @@ export class PropRenderer {
         case PropType.Statue: list.push(this.furn('statue', v & 1, base)); break;
         case PropType.Kiosk: list.push(this.furn('kiosk', v & 1, base)); break;
         case PropType.PlayGround: list.push(this.furn('playground', v & 1, base)); break;
-        case PropType.Manhole: list.push(this.furn('manhole', v & 1, { ...base, y: y - CURB_H + 0.01 })); break;
+        // Manhole lids come from the sewer layout (Underground), so every lid is a real entrance.
+        case PropType.Manhole: break;
         case PropType.StopSign: list.push(this.furn('stopSign', 0, base)); break;
         default: break;
       }
@@ -123,7 +129,8 @@ export class PropRenderer {
   addExtra(cellId: number, kind: FurnitureKind, x: number, z: number, yaw: number): void {
     const list = this.byCell.get(cellId);
     if (!list) return;
-    const y = this.terrain.height(x, z) + CURB_H;
+    // Railings stand on the sidewalk; manhole lids lie on the carriageway.
+    const y = this.terrain.height(x, z) + (kind === 'manhole' ? 0.01 : CURB_H);
     list.push(this.furn(kind, 0, { x, y, z, yaw, scale: 1, color: [0, 0, 0], broken: false }));
     this.needRebuild = true; // coalesced in update()
   }
@@ -155,6 +162,29 @@ export class PropRenderer {
   private needRebuild = false;
   private lastFar = -1;
   private lastRebuild = -1;
+
+  /**
+   * Solid props overlapping a box, for player collision: tree trunks, poles and lamps as
+   * cylinders, benches / shelters / stands as oriented boxes. Flat or walk-in things
+   * (manholes, playgrounds, metro entrances, bike racks, shrubs) and broken props are not
+   * obstacles.
+   */
+  obstaclesIn(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
+    const i0 = Math.floor((x0 - 8) / GRID), i1 = Math.floor((x1 + 8) / GRID), j0 = Math.floor((z0 - 8) / GRID), j1 = Math.floor((z1 + 8) / GRID);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const l = this.grid.get((i + 32768) * 65536 + (j + 32768));
+      if (!l) continue;
+      for (const p of l) {
+        if (p.broken) continue;
+        if (p.solid === undefined) p.solid = propShape(p);
+        const o = p.solid;
+        if (!o) continue;
+        const ext = o.cyl ? o.r : Math.max(o.hx, o.hz);
+        if (o.x + ext < x0 || o.x - ext > x1 || o.z + ext < z0 || o.z - ext > z1) continue;
+        out(o);
+      }
+    }
+  }
 
   private near(x: number, z: number, r: number, fn: (p: Prop) => void): void {
     const i0 = Math.floor((x - r) / GRID), i1 = Math.floor((x + r) / GRID), j0 = Math.floor((z - r) / GRID), j1 = Math.floor((z + r) / GRID);
@@ -479,3 +509,25 @@ export class PropRenderer {
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
+
+/** Collision shape of a prop (see obstaclesIn). Box axis = the model's local x. */
+function propShape(p: Prop): Obstacle | null {
+  const base = { x: p.x, z: p.z, y0: p.y, y1: p.y + p.height, ux: Math.cos(p.yaw), uz: -Math.sin(p.yaw) };
+  const cyl = (r: number): Obstacle => ({ ...base, cyl: true, r, hx: 0, hz: 0 });
+  const box = (hx: number, hz: number): Obstacle => ({ ...base, cyl: false, r: 0, hx, hz });
+  if (p.kind.startsWith('tree:')) return cyl(Math.max(0.12, p.radius));
+  if (!p.kind.startsWith('furn:')) return null; // shrubs, far impostors
+  const k = p.kind.split(':')[1];
+  const r = p.radius;
+  switch (k) {
+    case 'manhole': case 'playground': case 'metroEntrance': case 'bikeRack': return null;
+    case 'bench': return box(0.95 * p.scale, 0.3 * p.scale);
+    case 'busStop': return box(2.2 * p.scale, 0.75 * p.scale);
+    case 'newsStand': return box(0.9 * p.scale, 0.4 * p.scale);
+    case 'kiosk': return cyl(r * 0.8 * p.scale);
+    case 'statue': return cyl(r * 0.55 * p.scale);
+    case 'fountain': return cyl(r * 0.95 * p.scale);
+    case 'phoneBooth': return cyl(0.55 * p.scale);
+    default: return cyl(Math.max(0.08, r) * p.scale);
+  }
+}

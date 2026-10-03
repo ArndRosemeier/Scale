@@ -154,6 +154,8 @@ export class Elevator {
     call.buttons = [{ id: 'call', x: cw * 0.22, y: ch * 0.52, w: cw * 0.56, h: cw * 0.56, label: '●', round: true }];
     call.paint = (c, p) => this.paintIndicator(c, p.width, p.height * 0.42);
     call.onPress = (id) => { if (id === 'call') this.call(f); };
+    call.prompt = 'Elevator — press <b>E</b> to call it, or aim at the button and click';
+    call.onKey = (k) => { if (k !== 'E') return false; this.call(f); call.press(0.5, 0.25); return true; };
     g.add(call.object);
     this.panels.add(call);
     this.group.add(g);
@@ -293,6 +295,17 @@ export class Elevator {
       if (id === 'open') { if (this.target === null) { this.door = 'opening'; this.dwell = 0; } return; }
       if (id === 'close') { if (this.door === 'open') this.door = 'closing'; return; }
       this.call(Number(id.slice(1)));
+    };
+    p.prompt = 'Elevator — press <b>0</b>–<b>9</b> for a floor (0 = ground), <b>E</b> to open the doors, or click the keypad';
+    p.promptRange = 1.8;
+    p.onKey = (k) => {
+      if (k === 'E') { if (this.target === null) { this.door = 'opening'; this.dwell = 0; } return true; }
+      const f = Number(k);
+      if (this.levels[f] === null || this.levels[f] === undefined) return false;
+      this.call(f);
+      const b = p.buttons.find((x) => x.id === 'f' + f);
+      if (b) p.press((b.x + b.w / 2) / p.width, 1 - (b.y + b.h / 2) / p.height);
+      return true;
     };
     // On the inner side wall next to the doors, facing into the cabin.
     p.object.position.set(this.lift.hu - 0.42, 1.2, this.lift.hv - 0.1);

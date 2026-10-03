@@ -303,18 +303,20 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
   }
 
   // --- Water crossings → bridge candidates.
-  const crossesWater = (a: number, b: number): number => {
+  const crossesWater = (a: number, b: number, margin = 2): number => {
     const ax = pts[a * 2], az = pts[a * 2 + 1], bx = pts[b * 2], bz = pts[b * 2 + 1];
     const L = Math.hypot(bx - ax, bz - az);
-    const n = Math.max(4, Math.ceil(L / 8));
+    const n = Math.max(4, Math.ceil(L / (margin > 0 ? 8 : 3)));
     let wet = 0;
     for (let i = 1; i < n; i++) {
       const t = i / n;
-      if (terrain.isWater(ax + (bx - ax) * t, az + (bz - az) * t, 2)) wet++;
+      if (terrain.isWater(ax + (bx - ax) * t, az + (bz - az) * t, margin)) wet++;
     }
     return (wet / n) * L;
   };
   const bridgeCands: { k: number; a: number; b: number; wet: number; s: number; river: number; len: number }[] = [];
+  /** Every river crossing (also oblique ones): fallback links when the network falls apart. */
+  const crossings: typeof bridgeCands = [];
   for (const [k, [a, b]] of [...edgeSet]) {
     const wet = crossesWater(a, b);
     if (wet <= 0) continue;
@@ -325,9 +327,18 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
     if (p.coastal && terrain.coastDistance(mx, mz) < 0) continue; // never bridge the sea
     const w = terrain.water(mx, mz);
     if (w.river < 0) continue;
+    // Only real crossings: an edge that merely clips a bend has far less water than the river is wide.
+    if (crossesWater(a, b, 0) < w.halfWidth * 2 * 0.6) continue;
     const len = Math.hypot(bx - ax, bz - az);
-    // Must be roughly perpendicular: wet length close to river width.
-    if (wet > w.halfWidth * 2 * 1.7 + 20) continue;
+    // Angle to the river: |sin| of edge vs. river direction (1 = straight across).
+    const R = terrain.rivers[w.river];
+    let i = 0;
+    while (i < R.s.length - 2 && R.s[i + 1] < w.s) i++;
+    const tx = R.pts[i * 2 + 2] - R.pts[i * 2], tz = R.pts[i * 2 + 3] - R.pts[i * 2 + 1];
+    const across = Math.abs((bx - ax) * tz - (bz - az) * tx) / (len * Math.hypot(tx, tz) || 1);
+    if (across < 0.64) continue; // under ~40°: runs along the river
+    crossings.push({ k, a, b, wet, s: w.s, river: w.river, len });
+    if (across < 0.82) continue; // bridges proper cross at 55° or more
     bridgeCands.push({ k, a, b, wet, s: w.s, river: w.river, len });
   }
   // Pick bridges spaced along each river; denser downtown.
@@ -335,12 +346,13 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
   const chosen: typeof bridgeCands = [];
   for (const c of bridgeCands) {
     const mx = (pts[c.a * 2] + pts[c.b * 2]) / 2, mz = (pts[c.a * 2 + 1] + pts[c.b * 2 + 1]) / 2;
-    const gap = lerp(380, 1500, 1 - field.density(mx, mz)) * (0.8 + 0.4 * (p.riverWidth / 200));
+    const gap = lerp(260, 1100, Math.pow(1 - field.density(mx, mz), 1.5)) * (0.85 + 0.3 * (p.riverWidth / 200));
     if (chosen.some((o) => o.river === c.river && Math.abs(o.s - c.s) < gap)) continue;
     chosen.push(c);
   }
   for (const c of chosen) edgeSet.set(c.k, [c.a, c.b]);
   const bridgeKeys = new Set(chosen.map((c) => c.k));
+  crossings.sort((x, y) => x.wet - y.wet || x.len - y.len);
 
   // --- Prune steep edges and thin out the sparse outskirts.
   const pr = rng.fork('prune');
@@ -419,7 +431,7 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
       }
     }
   }
-  {
+  const components = () => {
     const m = adj();
     const comp = new Map<number, number>();
     let bestC = -1, bestSize = 0, c = 0;
@@ -436,6 +448,20 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
       if (size > bestSize) { bestSize = size; bestC = c; }
       c++;
     }
+    return { comp, bestC, count: c };
+  };
+  // A river can cut the network in two when the chosen bridges all land on one side:
+  // reconnect each detached part with its best crossing instead of dropping it.
+  for (let guard = 0; guard < 16; guard++) {
+    const { comp, bestC, count } = components();
+    if (count <= 1) break;
+    const link = crossings.find((c) => !edgeSet.has(c.k) && comp.has(c.a) && comp.has(c.b) && comp.get(c.a) !== comp.get(c.b) && (comp.get(c.a) === bestC || comp.get(c.b) === bestC));
+    if (!link) break;
+    edgeSet.set(link.k, [link.a, link.b]);
+    bridgeKeys.add(link.k);
+  }
+  {
+    const { comp, bestC } = components();
     for (const [k, [a]] of [...edgeSet]) if (comp.get(a) !== bestC) edgeSet.delete(k);
   }
 

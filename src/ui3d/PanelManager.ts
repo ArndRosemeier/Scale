@@ -12,6 +12,10 @@ export class PanelManager {
   private hovered: WorldPanel | null = null;
   private crosshair = document.getElementById('crosshair');
   private center = new THREE.Vector2(0, 0);
+  private promptEl: HTMLDivElement | null = null;
+  /** Hint for something usable that is not a panel (manholes …); panels near you take precedence. */
+  external: string | null = null;
+  private shownPrompt = '';
 
   add(p: WorldPanel): void { this.panels.add(p); }
   remove(p: WorldPanel): void {
@@ -52,6 +56,34 @@ export class PanelManager {
       input.clicked &= ~1; // consumed: no punch
     }
     for (const p of this.panels) p.update();
+    // Proximity: the nearest panel with a prompt shows it and gets keyboard shortcuts.
+    let near: WorldPanel | null = null, nd = Infinity;
+    const scale = Math.max(1, reach / 2.1);
+    for (const p of this.panels) {
+      if (!p.enabled || !p.prompt || !isShown(p.object)) continue;
+      p.object.getWorldPosition(_tmp);
+      const d = _tmp.distanceTo(reachFrom);
+      if (d < p.promptRange * scale && d < nd) { nd = d; near = p; }
+    }
+    this.showPrompt(near?.prompt ?? this.external ?? '');
+    if (near?.onKey) {
+      for (const code of input.pressed) {
+        const key = code === 'KeyE' ? 'E' : /^(Digit|Numpad)(\d)$/.exec(code)?.[2];
+        if (key && near.onKey(key)) input.pressed.delete(code); // consumed (no manhole, no other use)
+      }
+    }
+  }
+
+  private showPrompt(html: string): void {
+    if (html === this.shownPrompt) return;
+    this.shownPrompt = html;
+    if (!this.promptEl) {
+      this.promptEl = document.createElement('div');
+      this.promptEl.id = 'panel-prompt';
+      document.body.appendChild(this.promptEl);
+    }
+    this.promptEl.innerHTML = html;
+    this.promptEl.classList.toggle('show', !!html);
   }
 }
 

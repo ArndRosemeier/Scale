@@ -15,6 +15,14 @@ npm test             # headless determinism / invariant checks
 npm run build        # type-check + production bundle
 ```
 
+**Your own character.** The start screen has an **Import model…** button (or drop a file on
+it): GLB, glTF, VRM and FBX load directly and are kept in the browser. Humanoid rigs
+(Mixamo, VRM, Unreal-style, Rigify, most named or even unnamed humanoid skeletons) are
+driven by the game's own animation (walk/run, foot placement, flight pose, punches, size
+scaling) via retargeting from the built-in human; other rigs (robots, animals) play their
+own animation clips. For other formats (.blend, OBJ, DAE, or more reliable FBX) the start
+screen links a small Windows converter that installs a portable Blender on first use.
+
 Avatar converter (character models for the player, via headless Blender):
 
 ```bash
@@ -25,6 +33,8 @@ Converts FBX / glTF / OBJ / DAE / .blend into one GLB (metric, Y-up, PBR, embedd
 textures). Extra files are animations for the same rig and become named clips. A JSON
 report (rig kind: mixamo / vrm / unreal / makehuman / generic, bones, clips) is written
 next to it. Blender comes from `BLENDER_BIN` or AssetGenerator's pinned install.
+`npm run build-converter` packages the downloadable Windows version
+(`public/converter/ScaleAvatarConverter.zip`, from `tools/avatar/converter-package`).
 
 URL options: `?seed=<text or number>&size=<0..1>` (size 0 = town, 1 ≈ New York),
 `&auto` skips the menu. In the console `window.dev` has test helpers

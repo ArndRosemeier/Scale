@@ -38,7 +38,7 @@ import { Pedestrians } from '../sim/Pedestrians';
 import { Reactions } from '../sim/Reactions';
 import { CrowdRenderer } from '../sim/CrowdRenderer';
 import { bakeCrowdTemplates } from '../sim/CrowdBaker';
-import { Traffic, VState, type Vehicle, type VKind } from '../sim/Traffic';
+import { Traffic, VState, VehicleObstacles, type Vehicle, type VKind } from '../sim/Traffic';
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
 import { Interiors } from '../interior/Interiors';
@@ -140,6 +140,7 @@ export class Game {
     this.underground = new Underground(macro, this.terrain, tex, (x, z) => this.terrain.height(x, z) + this.world.surfaceOffset(x, z));
     this.collision.under = this.underground;
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
+    this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
     this.renderer.scene.add(this.underground.group);
     this.net = new RoadNet(macro);
     this.skyline = new Skyline(macro, this.pool, tex.facade);
@@ -213,6 +214,11 @@ export class Game {
     this.vehicles = new VehicleRenderer(this.physics);
     this.renderer.scene.add(this.vehicles.group);
     this.props = new PropRenderer(this.terrain, this.profile.warmth, this.physics, this.net, (n, e, off) => this.traffic.signalGreen(n, this.net.edges[e], this.traffic.time + off));
+    // Trees, street furniture and vehicles block the player (size-aware, see Collision).
+    this.collision.obstacleProviders.push(
+      (x0, z0, x1, z1, out) => this.props.obstaclesIn(x0, z0, x1, z1, out),
+      new VehicleObstacles(() => [...this.traffic.vehicles, ...this.parkedList]).provider,
+    );
     this.renderer.scene.add(this.props.group);
     this.props.onBreak = (p) => this.audio.play(p.tree ? 'tree_crack_fall' : 'metal_bend', p.x, p.y + 1, p.z, 0.8, 1, 8, cam.position);
     for (const c of this.streamer.cells.values()) if (c.status === 'ready') { this.addParked(c); this.props.addCell(c, macro.cells[c.id].district); this.underground.addCell(c); }
@@ -277,8 +283,9 @@ export class Game {
     let calm = 0;
     const tw = performance.now();
     while (calm < 20 && performance.now() - tw < 8000) {
+      // Wait on the game's own frames (they keep running in background tabs, page timers don't).
       const f0 = performance.now();
-      await new Promise((r) => setTimeout(r, 16));
+      await new Promise<void>((r) => this.frameWaiters.push(r));
       calm = performance.now() - f0 < 45 ? calm + 1 : 0;
       progress('Preparing shaders', 0.97 + Math.min(1, calm / 20) * 0.03);
     }
@@ -291,6 +298,7 @@ export class Game {
   }
 
   private raf = 0;
+  private frameWaiters: (() => void)[] = [];
   private timerPending = false;
   /** Next frame: animation frames when visible, a worker timer when hidden (rAF stops there). */
   private schedule = () => {
@@ -314,6 +322,7 @@ export class Game {
       this.tick(left, true);
     } else this.tick(Math.min(0.1, raw), true);
     hitch.endFrame();
+    if (this.frameWaiters.length) { const w = this.frameWaiters; this.frameWaiters = []; for (const r of w) r(); }
   };
 
   /** Per-subsystem frame cost (ms, smoothed) — window.prof. */
@@ -340,6 +349,7 @@ export class Game {
         this.camRig.update(dt, this.player, this.input);
         // In-world panels (elevator buttons) get the click first when the crosshair is on one in reach.
         const hand = _hand.copy(this.player.pos); hand.y += this.player.height * 0.6;
+        this.interiors.panels.external = this.usableHint();
         this.interiors.panels.update(this.renderer.camera, hand, this.player.height * 0.9 + 0.5, this.input);
         this.interactions.update(dt, this.input, this.clock.elapsedTime);
       }
@@ -376,7 +386,7 @@ export class Game {
     const cp = this.renderer.camera.position;
     this.sky.indoor = clamp(this.sky.indoor + (this.interiors.insideAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
     this.T('sky', () => this.sky.update(dt, focus, cam));
-    this.renderer.setBloom(lerp(0.35, 0.12, this.sky.underground));
+    this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
     if (render) {
       this.T('crowd', () => this.crowd.update(dt, this.simT, this.peds.agents, this.renderer.camera));
       this.T('vehicles', () => this.vehicles.update(dt, this.traffic.vehicles, this.parkedList, this.renderer.camera));
@@ -517,12 +527,24 @@ export class Game {
     terrainHoles.uHoleN.value = n;
   }
 
+  /** On-screen hint for something usable where the player stands (null: nothing). */
+  private usableHint(): string | null {
+    if (this.freeCam) return null;
+    const p = this.player.pos;
+    const under = this.underground.isUnder(p.x, p.y + 0.5, p.z);
+    const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);
+    if (!m) return null;
+    if (under) return 'Manhole above — press <b>E</b> to climb out';
+    if (this.player.height >= 2.4) return 'A manhole — you are too big to fit through';
+    return 'Manhole — press <b>E</b> to open it and climb down into the sewer';
+  }
+
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
     const p = this.player.pos;
     const under = this.underground.isUnder(p.x, p.y + 0.5, p.z);
-    const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 2.5);
+    const m = this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4);
     if (!m) return;
     if (under) {
       const g = this.world.groundHeight(m.x, m.z);
@@ -532,6 +554,7 @@ export class Game {
     } else if (this.player.height < 2.4) {
       this.underground.openManholes.push({ x: m.x, z: m.z });
       this.underground.holes.push(m.x, m.z, 1, 0, 0.45, 0.45);
+      this.props.crush(m.x, m.z, 0.2); // the lid comes off
       p.set(m.x, p.y, m.z);
       this.audio.play('metal_bend', p.x, p.y, p.z, 0.5, 1.4, 4, this.renderer.camera.position);
     }

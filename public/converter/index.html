@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scale avatar converter</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #0b0e12; color: #e8ecf0; font: 15px/1.55 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      main { max-width: 720px; margin: 0 auto; padding: 40px 16px 60px; }
+      h1 { font-weight: 600; font-size: 28px; margin: 0 0 6px; }
+      .sub { color: #9aa8b6; margin: 0 0 28px; }
+      .dl { display: inline-block; padding: 12px 20px; border-radius: 8px; background: #d8b56a; color: #1a1408; font-weight: 600; text-decoration: none; }
+      .dl:hover { background: #e8c57a; }
+      h2 { font-size: 17px; margin: 32px 0 8px; color: #d8dee6; }
+      ol, ul { padding-left: 22px; }
+      li { margin: 4px 0; }
+      code { background: #161c24; padding: 1px 6px; border-radius: 4px; }
+      .note { color: #9aa8b6; font-size: 14px; }
+      a { color: #d8b56a; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Avatar converter</h1>
+      <p class="sub">Turns characters in other formats into a GLB file you can import as your player in Scale.</p>
+      <a class="dl" href="ScaleAvatarConverter.zip" download>Download for Windows (ZIP, 6 KB)</a>
+      <h2>Formats</h2>
+      <p>FBX (e.g. Mixamo), Blender <code>.blend</code>, glTF/GLB, OBJ, DAE. GLB, glTF, VRM and FBX can also be imported in the game directly; the converter gives the most reliable result for FBX and is the only way for <code>.blend</code>.</p>
+      <h2>How to use</h2>
+      <ol>
+        <li>Unzip the folder anywhere.</li>
+        <li>Drag your character file onto <code>Convert.bat</code>. You can drag animation files for the same rig along with it (Mixamo: <code>character.fbx</code> + <code>Idle.fbx</code> + <code>Walking.fbx</code> …); they become named animations.</li>
+        <li>A <code>.glb</code> appears next to your file. In Scale's start screen, click <b>Import model…</b> or drag the <code>.glb</code> onto the start screen.</li>
+      </ol>
+      <h2>First run</h2>
+      <p>The converter downloads the official portable <b>Blender 4.5.12</b> (about 350 MB) from <a href="https://download.blender.org/release/Blender4.5/">download.blender.org</a>, checks its SHA-256 checksum and keeps it in a <code>blender</code> folder next to <code>Convert.bat</code>. Delete that folder to remove it. To use a Blender you already have, set the environment variable <code>BLENDER_BIN</code> to its <code>blender.exe</code>.</p>
+      <h2>Good to know</h2>
+      <ul>
+        <li>Windows may warn about running a downloaded script. <code>Convert.bat</code> only starts <code>convert.ps1</code> with PowerShell; both are plain text you can read.</li>
+        <li>Humanoid characters (Mixamo, VRM, Unreal-style, Rigify, most named rigs) get the game's full animation. Other rigs play their own animations if they have any.</li>
+        <li>Materials made from Blender's standard (Principled BSDF) setup and image textures convert; purely procedural shader materials do not.</li>
+      </ul>
+      <p class="note">macOS and Linux: not packaged yet. With Blender installed you can run <code>blender -b --factory-startup -P convert_avatar.py -- out.glb model.fbx</code> from the ZIP.</p>
+    </main>
+  </body>
+</html>

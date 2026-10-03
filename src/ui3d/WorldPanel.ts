@@ -54,6 +54,12 @@ export class WorldPanel {
   onPress: ((id: string | null, x: number, y: number) => void) | null = null;
   /** Panels can be switched off without removing them (no hits, not drawn). */
   enabled = true;
+  /** Shown on screen while the player stands near the panel (HTML allowed: <b>E</b>). */
+  prompt: string | null = null;
+  /** Keyboard shortcut handler while near ('E', '0'…'9'); return true if handled. */
+  onKey: ((key: string) => boolean) | null = null;
+  /** How close the player must be for the prompt and keys (m, scaled with player size). */
+  promptRange = 2.2;
   hover: string | null = null;
   private flash: string | null = null;
   private flashT = 0;

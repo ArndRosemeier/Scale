@@ -23,7 +23,7 @@ import type { TextureLibrary } from '../render/TextureLibrary';
 import { toGeometry } from '../stream/CityStreamer';
 import { makeTube, makeBox, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Volumes';
 import { STATION_HALF, ENTRANCE_L, ENTRANCE_W } from '../plan/cell';
-import { closestOnPolyline } from '../core/geom2';
+import { pointInPoly } from '../core/geom2';
 import { G } from '../render/materials/globals';
 
 const TUNNEL_HW = 4.3;
@@ -130,6 +130,7 @@ export class Underground {
 
   /** Register metro entrances of a loaded cell (from its plan). */
   addCell(cs: CellState): void {
+    this.placeManholes(cs.id);
     const E = cs.plan?.entrances;
     if (!E) return;
     for (let i = 0; i < E.length; i += 6) {
@@ -212,13 +213,60 @@ export class Underground {
     return y < this.ground(x, z) - 1.2 && this.floorAt(x, y, z) !== null;
   }
 
-  /** Nearest manhole above a sewer within reach (for E). */
-  nearestManhole(x: number, z: number, r: number): { x: number; z: number; tube: Tube } | null {
-    for (const t of this.sewerTubes) {
-      const q = closestOnPolyline(flat2(t.pts), x, z);
-      if (q.d < r) return { x: q.px, z: q.pz, tube: t };
+  /** Manhole lids above the sewers (placed per loaded cell, every ~45 m along each trunk). */
+  private manholes = new Map<number, { x: number; z: number; tube: Tube }[]>();
+  /** Lids per cell (generated once; re-announced whenever the cell's props are rebuilt). */
+  private manholeCells = new Map<number, { x: number; z: number; yaw: number }[]>();
+  /** A manhole lid was placed (the game adds the visible lid prop). */
+  onManhole?: (cell: number, x: number, z: number, yaw: number) => void;
+
+  private placeManholes(cellId: number): void {
+    let lids = this.manholeCells.get(cellId);
+    if (!lids) this.manholeCells.set(cellId, (lids = this.generateManholes(cellId)));
+    for (const m of lids) {
+      // An opened manhole keeps its hole and has no lid.
+      if (this.openManholes.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 0.5)) continue;
+      this.onManhole?.(cellId, m.x, m.z, m.yaw);
     }
-    return null;
+  }
+
+  private generateManholes(cellId: number): { x: number; z: number; yaw: number }[] {
+    const out: { x: number; z: number; yaw: number }[] = [];
+    const poly = this.macro.cells[cellId]?.poly;
+    if (!poly) return out;
+    const SPACING = 45;
+    for (const t of this.sewerTubes) {
+      const P = t.pts, C = t.cum;
+      const n = P.length / 3;
+      const total = C[n - 1];
+      for (let s = SPACING * 0.5; s < total; s += SPACING) {
+        let i = 0;
+        while (i < n - 2 && C[i + 1] < s) i++;
+        const f = (s - C[i]) / Math.max(1e-6, C[i + 1] - C[i]);
+        const x = P[i * 3] + (P[i * 3 + 3] - P[i * 3]) * f, z = P[i * 3 + 2] + (P[i * 3 + 5] - P[i * 3 + 2]) * f;
+        if (!pointInPoly(poly, x, z)) continue;
+        const key = Math.floor(x / 32) * 65536 + Math.floor(z / 32);
+        let l = this.manholes.get(key);
+        if (!l) this.manholes.set(key, (l = []));
+        if (l.some((m) => Math.hypot(m.x - x, m.z - z) < 10)) continue;
+        l.push({ x, z, tube: t });
+        out.push({ x, z, yaw: Math.atan2(P[i * 3 + 3] - P[i * 3], P[i * 3 + 5] - P[i * 3 + 2]) });
+      }
+    }
+    return out;
+  }
+
+  /** Nearest manhole lid within r (for E and hints). */
+  nearestManhole(x: number, z: number, r: number): { x: number; z: number; tube: Tube } | null {
+    let best: { x: number; z: number; tube: Tube } | null = null, bd = r;
+    const i0 = Math.floor((x - r) / 32), i1 = Math.floor((x + r) / 32), j0 = Math.floor((z - r) / 32), j1 = Math.floor((z + r) / 32);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      for (const m of this.manholes.get(i * 65536 + j) ?? []) {
+        const d = Math.hypot(m.x - x, m.z - z);
+        if (d < bd) { bd = d; best = m; }
+      }
+    }
+    return best;
   }
 
   // ------------------------------------------------------------ update
@@ -599,12 +647,6 @@ export class Underground {
     });
     return best;
   }
-}
-
-function flat2(p: number[]): number[] {
-  const o: number[] = [];
-  for (let i = 0; i < p.length; i += 3) o.push(p[i], p[i + 2]);
-  return o;
 }
 
 const FULL: [number, number][] = [[0, 1]];

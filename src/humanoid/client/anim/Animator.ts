@@ -71,7 +71,7 @@ const MOODS: Record<string, [string, number][]> = {
 
 const _e = new THREE.Euler();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
-const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3();
 
 interface FingerRig { bones: THREE.Bone[]; axis: THREE.Vector3[]; thumb: boolean }
 
@@ -982,13 +982,16 @@ export class Animator {
     // World-space feet level: the character object is parented under the rig's root,
     // so its local position is not the ground reference.
     const baseY = ch.object.getWorldPosition(_v).y;
+    // Work in the character's own units: a giant (or tiny) player is a scaled human, and the
+    // reach limits below are human proportions, not world metres.
+    const sc = Math.max(1e-4, ch.object.getWorldScale(_v5).y);
     const offs = [0, 0];
     const sides = ['L', 'R'] as const;
     for (let k = 0; k < 2; k++) {
       const foot = ch.bone(`foot.${sides[k]}`);
       foot.getWorldPosition(_v);
-      const g = ground(_v.x, baseY + 0.6, _v.z);
-      offs[k] = g === null ? 0 : clamp(g - baseY, -0.45, 0.45);
+      const g = ground(_v.x, baseY + 0.6 * sc, _v.z);
+      offs[k] = g === null ? 0 : clamp((g - baseY) / sc, -0.45, 0.45);
     }
     for (let k = 0; k < 2; k++) this.footOff[k] = approach(this.footOff[k], offs[k], 14, dt);
     // Lower the pelvis to reach the lower foot.
@@ -1001,7 +1004,7 @@ export class Animator {
       const hip = ch.bone(`upperleg01.${s}`), knee = ch.bone(`lowerleg01.${s}`), foot = ch.bone(`foot.${s}`);
       foot.getWorldPosition(_v);
       const target = _v3.copy(_v);
-      target.y += this.footOff[k] - this.pelvisOff;
+      target.y += (this.footOff[k] - this.pelvisOff) * sc;
       if (Math.abs(this.footOff[k] - this.pelvisOff) < 0.004) continue;
       this.twoBone(hip, knee, foot, target);
     }

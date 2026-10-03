@@ -37,7 +37,10 @@ uniform int uElemW;
 varying float vOpen;
 vec2 elemState() {
   int e = int(aElem + 0.5);
-  return texelFetch(uElemTex, ivec2(e % uElemW, e / uElemW), 0).rg;
+  ivec2 c = ivec2(e % uElemW, e / uElemW);
+  // Elements outside the state texture (e.g. the 1x1 "all alive" placeholder) are intact.
+  if (c.y >= textureSize(uElemTex, 0).y) return vec2(1.0);
+  return texelFetch(uElemTex, c, 0).rg;
 }
 `;
 export const GLSL_ELEM_VERTEX_MAIN = /* glsl */ `

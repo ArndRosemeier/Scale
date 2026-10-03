@@ -18,6 +18,7 @@ import type { Stimuli } from '../game/Stimuli';
 import type { Terrain } from '../world/terrain';
 import { Rng, hash32 } from '../core/rng';
 import type { Citizen } from './Population';
+import type { Obstacle, ObstacleProvider } from '../world/Collision';
 
 export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery';
 
@@ -534,4 +535,50 @@ export class Traffic {
 /** Distance from an edge end at which the junction box begins. */
 export function junctionBack(e: REdge): number {
   return Math.min(e.len * 0.3, e.width * 0.55 + 2.5);
+}
+
+/**
+ * Vehicles as player obstacles (oriented boxes): moving traffic, parked cars and wrecks.
+ * A coarse grid is rebuilt at most every 30 ms; queries are then a few cell lookups.
+ */
+export class VehicleObstacles {
+  private grid = new Map<number, Obstacle[]>();
+  private built = -1e9;
+  private pool: Obstacle[] = [];
+
+  constructor(private list: () => Vehicle[]) {}
+
+  readonly provider: ObstacleProvider = (x0, z0, x1, z1, out) => {
+    const now = performance.now();
+    if (now - this.built > 30) { this.built = now; this.rebuild(); }
+    const i0 = Math.floor((x0 - 8) / 16), i1 = Math.floor((x1 + 8) / 16), j0 = Math.floor((z0 - 8) / 16), j1 = Math.floor((z1 + 8) / 16);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const l = this.grid.get((i + 32768) * 65536 + (j + 32768));
+      if (!l) continue;
+      for (const o of l) {
+        const ext = Math.max(o.hx, o.hz);
+        if (o.x + ext < x0 || o.x - ext > x1 || o.z + ext < z0 || o.z - ext > z1) continue;
+        out(o);
+      }
+    }
+  };
+
+  private rebuild(): void {
+    this.grid.clear();
+    let n = 0;
+    for (const v of this.list()) {
+      if (!v.alive) continue;
+      const o = this.pool[n] ?? (this.pool[n] = { cyl: false, x: 0, z: 0, r: 0, hx: 0, hz: 0, ux: 1, uz: 0, y0: 0, y1: 0 });
+      n++;
+      // Forward is (−sin yaw, −cos yaw) (see Traffic.pose).
+      o.x = v.x; o.z = v.z; o.ux = -Math.sin(v.yaw); o.uz = -Math.cos(v.yaw);
+      o.hx = v.length / 2; o.hz = v.width / 2;
+      const h = v.state === VState.Crushed ? 0.5 : v.kind === 'bus' || v.kind === 'truck' ? 3.1 : v.kind === 'van' || v.kind === 'delivery' ? 2.4 : v.kind === 'suv' || v.kind === 'pickup' ? 1.85 : 1.5;
+      o.y0 = v.y - 0.2; o.y1 = v.y + h;
+      const k = (Math.floor(v.x / 16) + 32768) * 65536 + (Math.floor(v.z / 16) + 32768);
+      let l = this.grid.get(k);
+      if (!l) this.grid.set(k, (l = []));
+      l.push(o);
+    }
+  }
 }

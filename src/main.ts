@@ -6,6 +6,7 @@ import { Game } from './game/Game';
 import { parseSeed } from './core/rng';
 import { cityRadius, cityClass } from './world/settings';
 import { cityName } from './plan/names';
+import { AvatarMenu, loadSelectedAvatar } from './ui/AvatarMenu';
 
 const params = new URLSearchParams(location.search);
 const menu = document.getElementById('menu') as HTMLDivElement;
@@ -28,6 +29,8 @@ function refresh(): void {
   sizeLabel.textContent = `${cls} · ${(r * 2 / 1000).toFixed(1)} km across`;
   nameLabel.textContent = cityName(parseSeed(seedIn.value));
 }
+// Character picker (imported models persist in the browser).
+startBtn.before(new AvatarMenu(startBtn.parentElement as HTMLElement).el);
 seedIn.addEventListener('input', refresh);
 sizeIn.addEventListener('input', refresh);
 refresh();
@@ -45,6 +48,25 @@ async function start(): Promise<void> {
     loadBar.style.width = `${Math.round(f * 100)}%`;
   });
   loading.style.display = 'none';
+  // Imported character (if one is selected).
+  try {
+    const sel = await loadSelectedAvatar();
+    if (sel) {
+      const a = await game.player.setAvatar(sel.model, !!sel.stored.forceClips);
+      console.log(`[avatar] ${sel.stored.name}: ${a?.mode} (${a?.mapping.source})`);
+    }
+  } catch (e) {
+    console.error('[avatar] could not load the selected character', e);
+    flash('Your imported character could not be loaded — playing the default human.');
+  }
+}
+
+function flash(text: string): void {
+  const d = document.createElement('div');
+  d.id = 'hint';
+  d.textContent = text;
+  document.body.appendChild(d);
+  setTimeout(() => d.classList.add('fade'), 6000);
 }
 
 startBtn.addEventListener('click', () => void start());

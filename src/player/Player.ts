@@ -17,6 +17,7 @@ import type { MoveState } from '../shared/types';
 import { clamp, lerp, damp } from '../core/math';
 import type { HumanoidAppearance } from '../humanoid/types';
 import type { Collision } from '../world/Collision';
+import { ImportedAvatar, type LoadedModel } from '../avatar/ImportedAvatar';
 
 export const BASE_HEIGHT = 1.8;
 export const MIN_HEIGHT = 0.1;
@@ -276,6 +277,25 @@ export class Player {
       // so a tilted orientation would otherwise persist and mix with later turns).
       this.rig.object.rotation.set(0, this.yaw, 0, 'XYZ');
     }
+    // Imported avatar follows the (invisible) puppet's final pose.
+    if (this.avatar) {
+      const punching = !!this.action && this.action.id === 'punch' && this.animTime - this.action.t0 < this.action.dur;
+      this.avatar.update(dt / sk, move, Math.hypot(this.vel.x, this.vel.z) / sk, punching);
+    }
+  }
+
+  /** Imported character model shown instead of the built-in human (null: back to default). */
+  avatar: ImportedAvatar | null = null;
+
+  async setAvatar(model: LoadedModel | null, forceClips = false): Promise<ImportedAvatar | null> {
+    await this.rig.ready;
+    this.avatar?.dispose();
+    this.avatar = null;
+    if (!model) return null;
+    const a = new ImportedAvatar(model, this.rig, forceClips);
+    a.attach();
+    this.avatar = a;
+    return a;
   }
 
   /** Classic flight pose: one fist forward, the other arm along the body, legs together. */
