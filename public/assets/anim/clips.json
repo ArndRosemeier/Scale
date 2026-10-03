@@ -1,0 +1,691 @@
+{
+ "version": 1,
+ "source": "Quaternius Universal Animation Library (CC0) — https://github.com/J-Ponzo/gltf-universal-animation-library",
+ "fps": 30,
+ "bones": [
+  "hips",
+  "spine.001",
+  "spine.002",
+  "spine.003",
+  "neck",
+  "head",
+  "shoulder.L",
+  "upper_arm.L",
+  "forearm.L",
+  "hand.L",
+  "shoulder.R",
+  "upper_arm.R",
+  "forearm.R",
+  "hand.R",
+  "thigh.L",
+  "shin.L",
+  "foot.L",
+  "toe.L",
+  "thigh.R",
+  "shin.R",
+  "foot.R",
+  "toe.R"
+ ],
+ "rest": [
+  [
+   0,
+   0.99205,
+   -0.125841,
+   0
+  ],
+  [
+   0,
+   0.998114,
+   -0.061389,
+   0
+  ],
+  [
+   0,
+   0.999873,
+   0.015929,
+   0
+  ],
+  [
+   0,
+   0.999869,
+   0.016197,
+   0
+  ],
+  [
+   0,
+   0.995489,
+   -0.094874,
+   0
+  ],
+  [
+   0,
+   0.999868,
+   -0.016261,
+   0
+  ],
+  [
+   -0.351081,
+   0.613685,
+   0.614041,
+   0.350836
+  ],
+  [
+   0.707081,
+   -0.707081,
+   -0.006041,
+   0.006069
+  ],
+  [
+   -0.70708,
+   0.707081,
+   -0.006095,
+   0.006095
+  ],
+  [
+   0.707107,
+   -0.707107,
+   0,
+   0
+  ],
+  [
+   0.351081,
+   0.613685,
+   0.614041,
+   -0.350836
+  ],
+  [
+   0.707081,
+   0.707081,
+   0.00604,
+   0.00607
+  ],
+  [
+   0.707081,
+   0.70708,
+   -0.006095,
+   -0.006095
+  ],
+  [
+   0.707107,
+   0.707107,
+   0,
+   0
+  ],
+  [
+   0,
+   0.003497,
+   0.999994,
+   0
+  ],
+  [
+   0.000131,
+   0.040081,
+   0.999196,
+   0.000005
+  ],
+  [
+   0.00045,
+   -0.494635,
+   0.869101,
+   -0.000256
+  ],
+  [
+   -0.707107,
+   0,
+   0,
+   0.707107
+  ],
+  [
+   0,
+   0.003497,
+   0.999994,
+   0
+  ],
+  [
+   0.000131,
+   0.040081,
+   0.999196,
+   0.000005
+  ],
+  [
+   0.00045,
+   -0.494635,
+   0.869101,
+   -0.000256
+  ],
+  [
+   -0.707107,
+   0,
+   0,
+   0.707107
+  ]
+ ],
+ "restHead": [
+  [
+   0,
+   0.9167,
+   0.0501
+  ],
+  [
+   0,
+   1.0505,
+   0.0156
+  ],
+  [
+   0,
+   1.1736,
+   0.0004
+  ],
+  [
+   0,
+   1.3148,
+   0.0049
+  ],
+  [
+   0,
+   1.4876,
+   0.0105
+  ],
+  [
+   0,
+   1.5687,
+   -0.0051
+  ],
+  [
+   -0.0188,
+   1.4579,
+   -0.0714
+  ],
+  [
+   -0.1919,
+   1.4408,
+   0.0654
+  ],
+  [
+   -0.4663,
+   1.4408,
+   0.0701
+  ],
+  [
+   -0.7389,
+   1.4408,
+   0.0654
+  ],
+  [
+   0.0188,
+   1.4579,
+   -0.0714
+  ],
+  [
+   0.1919,
+   1.4408,
+   0.0654
+  ],
+  [
+   0.4663,
+   1.4408,
+   0.0701
+  ],
+  [
+   0.7389,
+   1.4408,
+   0.0654
+  ],
+  [
+   -0.089,
+   0.9321,
+   -0.0014
+  ],
+  [
+   -0.089,
+   0.5318,
+   0.0014
+  ],
+  [
+   -0.089,
+   0.1037,
+   0.0358
+  ],
+  [
+   -0.089,
+   0.0152,
+   -0.1132
+  ],
+  [
+   0.089,
+   0.9321,
+   -0.0014
+  ],
+  [
+   0.089,
+   0.5318,
+   0.0014
+  ],
+  [
+   0.089,
+   0.1037,
+   0.0358
+  ],
+  [
+   0.089,
+   0.0152,
+   -0.1132
+  ]
+ ],
+ "restTip": [
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  [
+   -0.1919,
+   1.4408,
+   0.0654
+  ],
+  [
+   -0.4663,
+   1.4408,
+   0.0701
+  ],
+  [
+   -0.7389,
+   1.4408,
+   0.0654
+  ],
+  [
+   -0.8605,
+   1.4412,
+   0.0602
+  ],
+  [
+   0.1919,
+   1.4408,
+   0.0654
+  ],
+  [
+   0.4663,
+   1.4408,
+   0.0701
+  ],
+  [
+   0.7389,
+   1.4408,
+   0.0654
+  ],
+  [
+   0.8605,
+   1.4412,
+   0.0602
+  ],
+  [
+   -0.089,
+   0.5318,
+   0.0014
+  ],
+  [
+   -0.089,
+   0.1037,
+   0.0358
+  ],
+  [
+   -0.089,
+   0.0152,
+   -0.1132
+  ],
+  [
+   -0.089,
+   0.0152,
+   -0.1732
+  ],
+  [
+   0.089,
+   0.5318,
+   0.0014
+  ],
+  [
+   0.089,
+   0.1037,
+   0.0358
+  ],
+  [
+   0.089,
+   0.0152,
+   -0.1132
+  ],
+  [
+   0.089,
+   0.0152,
+   -0.1732
+  ]
+ ],
+ "legLen": 0.8784,
+ "stride": 91,
+ "clips": [
+  {
+   "name": "Crouch_Fwd_Loop",
+   "frames": 60,
+   "loop": true,
+   "dur": 2,
+   "offset": 0,
+   "speed": 0.589,
+   "sync": 0
+  },
+  {
+   "name": "Crouch_Idle_Loop",
+   "frames": 88,
+   "loop": true,
+   "dur": 2.9167,
+   "offset": 5460,
+   "speed": 0,
+   "sync": 0.5
+  },
+  {
+   "name": "Dance_Loop",
+   "frames": 30,
+   "loop": true,
+   "dur": 1,
+   "offset": 13468,
+   "speed": 0.034,
+   "sync": 0.433
+  },
+  {
+   "name": "Death01",
+   "frames": 72,
+   "loop": false,
+   "dur": 2.375,
+   "offset": 16198,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Fixing_Kneeling",
+   "frames": 156,
+   "loop": false,
+   "dur": 5.1667,
+   "offset": 22750,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Hit_Chest",
+   "frames": 11,
+   "loop": false,
+   "dur": 0.3333,
+   "offset": 36946,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Hit_Head",
+   "frames": 13,
+   "loop": false,
+   "dur": 0.4167,
+   "offset": 37947,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Idle_Loop",
+   "frames": 75,
+   "loop": true,
+   "dur": 2.5,
+   "offset": 39130,
+   "speed": 0.001,
+   "sync": 0.787
+  },
+  {
+   "name": "Idle_Talking_Loop",
+   "frames": 88,
+   "loop": true,
+   "dur": 2.9167,
+   "offset": 45955,
+   "speed": 0.001,
+   "sync": 0.727
+  },
+  {
+   "name": "Idle_Torch_Loop",
+   "frames": 38,
+   "loop": true,
+   "dur": 1.25,
+   "offset": 53963,
+   "speed": 0.001,
+   "sync": 0.553
+  },
+  {
+   "name": "Interact",
+   "frames": 61,
+   "loop": false,
+   "dur": 2,
+   "offset": 57421,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Jog_Fwd_Loop",
+   "frames": 28,
+   "loop": true,
+   "dur": 0.9167,
+   "offset": 62972,
+   "speed": 5.015,
+   "sync": 0.964
+  },
+  {
+   "name": "Jump_Land",
+   "frames": 39,
+   "loop": false,
+   "dur": 1.25,
+   "offset": 65520,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Jump_Loop",
+   "frames": 75,
+   "loop": true,
+   "dur": 2.5,
+   "offset": 69069,
+   "speed": 0.003,
+   "sync": 0.893
+  },
+  {
+   "name": "Jump_Start",
+   "frames": 41,
+   "loop": false,
+   "dur": 1.3333,
+   "offset": 75894,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "PickUp_Table",
+   "frames": 26,
+   "loop": false,
+   "dur": 0.8333,
+   "offset": 79625,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Punch_Cross",
+   "frames": 31,
+   "loop": false,
+   "dur": 1,
+   "offset": 81991,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Punch_Enter",
+   "frames": 26,
+   "loop": false,
+   "dur": 0.8333,
+   "offset": 84812,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Punch_Jab",
+   "frames": 26,
+   "loop": false,
+   "dur": 0.8333,
+   "offset": 87178,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Push_Loop",
+   "frames": 80,
+   "loop": true,
+   "dur": 2.6667,
+   "offset": 89544,
+   "speed": 0.249,
+   "sync": 0.887
+  },
+  {
+   "name": "Roll",
+   "frames": 45,
+   "loop": false,
+   "dur": 1.4583,
+   "offset": 96824,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Sitting_Enter",
+   "frames": 40,
+   "loop": false,
+   "dur": 1.2917,
+   "offset": 100919,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Sitting_Exit",
+   "frames": 31,
+   "loop": false,
+   "dur": 1,
+   "offset": 104559,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Sitting_Idle_Loop",
+   "frames": 50,
+   "loop": true,
+   "dur": 1.6667,
+   "offset": 107380,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Sitting_Talking_Loop",
+   "frames": 88,
+   "loop": true,
+   "dur": 2.9167,
+   "offset": 111930,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Spell_Simple_Enter",
+   "frames": 16,
+   "loop": false,
+   "dur": 0.5,
+   "offset": 119938,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Spell_Simple_Exit",
+   "frames": 13,
+   "loop": false,
+   "dur": 0.4167,
+   "offset": 121394,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Spell_Simple_Idle_Loop",
+   "frames": 62,
+   "loop": true,
+   "dur": 2.0833,
+   "offset": 122577,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Spell_Simple_Shoot",
+   "frames": 16,
+   "loop": false,
+   "dur": 0.5,
+   "offset": 128219,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Sprint_Loop",
+   "frames": 20,
+   "loop": true,
+   "dur": 0.6667,
+   "offset": 129675,
+   "speed": 5.587,
+   "sync": 0.85
+  },
+  {
+   "name": "Swim_Fwd_Loop",
+   "frames": 40,
+   "loop": true,
+   "dur": 1.3333,
+   "offset": 131495,
+   "speed": 0,
+   "sync": 0.85
+  },
+  {
+   "name": "Swim_Idle_Loop",
+   "frames": 100,
+   "loop": true,
+   "dur": 3.3333,
+   "offset": 135135,
+   "speed": 0.426,
+   "sync": 0.11
+  },
+  {
+   "name": "Sword_Attack",
+   "frames": 46,
+   "loop": false,
+   "dur": 1.5,
+   "offset": 144235,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Sword_Idle",
+   "frames": 51,
+   "loop": false,
+   "dur": 1.6667,
+   "offset": 148421,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "Walk_Formal_Loop",
+   "frames": 40,
+   "loop": true,
+   "dur": 1.3333,
+   "offset": 153062,
+   "speed": 1.049,
+   "sync": 0
+  },
+  {
+   "name": "Walk_Loop",
+   "frames": 40,
+   "loop": true,
+   "dur": 1.3333,
+   "offset": 156702,
+   "speed": 1.049,
+   "sync": 0
+  }
+ ]
+}

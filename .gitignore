@@ -1,0 +1,7 @@
+node_modules
+dist
+*.log
+# Third-party avatar test models (mixed licences, see tools/avatar/test-models/SOURCES.md)
+tools/avatar/test-models/*
+!tools/avatar/test-models/SOURCES.md
+public/avatars/

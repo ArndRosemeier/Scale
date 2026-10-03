@@ -1,0 +1,32 @@
+{
+  "name": "scale",
+  "version": "1.0.0",
+  "description": "Scale - a seed-driven, walkable, destructible, living 3D city for the browser (TypeScript / three.js)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tools/selftest.ts",
+    "avatar": "node tools/avatar/convert.mjs"
+  },
+  "type": "module",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "clipper-lib": "^6.4.2",
+    "delaunator": "^5.1.0",
+    "earcut": "^3.2.4",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/clipper-lib": "^6.4.0",
+    "@types/delaunator": "^5.0.3",
+    "@types/earcut": "^3.0.0",
+    "@types/node": "^26.6.4",
+    "@types/three": "^0.186.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.0",
+    "vite": "^8.3.2"
+  },
+  "private": true
+}

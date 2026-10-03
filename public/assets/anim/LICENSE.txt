@@ -1,0 +1,13 @@
+Norgo animation clips
+=====================
+
+clips.bin and clips.json in this folder are derived (resampled to 30 fps, reduced to the body
+bones, converted to model-space rotations) by tools/build-anim-clips.ts from the
+
+  Quaternius Universal Animation Library (Standard), glTF edition
+  https://quaternius.com — https://github.com/J-Ponzo/gltf-universal-animation-library
+
+released by Quaternius under CC0 1.0 Universal (public domain dedication).
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Thank you, Quaternius. The derived data is likewise offered under CC0.

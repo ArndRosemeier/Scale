@@ -1,0 +1,369 @@
+{
+  "amb_city_day": {
+    "files": [
+      "amb_city_day.ogg"
+    ],
+    "loop": true,
+    "gain": 0.6,
+    "description": "busy city street ambience, distant traffic hum, occasional distant horns, footsteps and indistinct crowd murmur, outdoor"
+  },
+  "amb_city_night": {
+    "files": [
+      "amb_city_night.ogg"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "quiet city at night, distant traffic hum, faint distant siren, very subtle crickets"
+  },
+  "amb_park": {
+    "files": [
+      "amb_park.ogg"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "urban park, birdsong, leaves rustling in light wind, very distant city"
+  },
+  "amb_river": {
+    "files": [
+      "amb_river.ogg"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "river water flowing against stone quay walls, gentle lapping"
+  },
+  "amb_sea": {
+    "files": [
+      "amb_sea.ogg"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "waves on a harbor/shore, gulls distant"
+  },
+  "amb_wind_flight": {
+    "files": [
+      "amb_wind_flight.ogg"
+    ],
+    "loop": true,
+    "gain": 0.6,
+    "description": "strong rushing wind noise as when flying fast, no tones"
+  },
+  "amb_sewer": {
+    "files": [
+      "amb_sewer.ogg"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "underground sewer tunnel, water trickling in a channel, drips, reverberant"
+  },
+  "amb_metro": {
+    "files": [
+      "amb_metro.ogg"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "underground metro station hum, reverberant, distant announcements-like muffled murmur (no intelligible speech)"
+  },
+  "amb_interior": {
+    "files": [
+      "amb_interior.ogg"
+    ],
+    "loop": true,
+    "gain": 0.5,
+    "description": "quiet indoor room tone, muffled street traffic outside"
+  },
+  "amb_crowd": {
+    "files": [
+      "amb_crowd.ogg"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "dense crowd chatter on a busy pedestrian street, no intelligible words"
+  },
+  "car_idle": {
+    "files": [
+      "car_idle.ogg"
+    ],
+    "loop": true,
+    "gain": 0.6,
+    "description": "car engine idling, steady"
+  },
+  "car_passby": {
+    "files": [
+      "car_passby.ogg"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "car driving past"
+  },
+  "car_horn_short": {
+    "files": [
+      "car_horn_short_1.ogg",
+      "car_horn_short_2.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "short car horn honk"
+  },
+  "car_horn_long": {
+    "files": [
+      "car_horn_long.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "long car horn"
+  },
+  "tire_screech": {
+    "files": [
+      "tire_screech.ogg"
+    ],
+    "loop": false,
+    "gain": 0.75,
+    "description": "tire screech"
+  },
+  "car_crash": {
+    "files": [
+      "car_crash.ogg"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "car crash, metal crunch and glass"
+  },
+  "bus_airbrake": {
+    "files": [
+      "bus_airbrake.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "bus air brake release"
+  },
+  "metro_arrive": {
+    "files": [
+      "metro_arrive.ogg"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "train arriving at underground platform, braking squeal"
+  },
+  "metro_depart": {
+    "files": [
+      "metro_depart.ogg"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "train departing from underground platform"
+  },
+  "metro_doors": {
+    "files": [
+      "metro_doors.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "metro door chime and pneumatic doors"
+  },
+  "glass_shatter": {
+    "files": [
+      "glass_shatter_1.ogg",
+      "glass_shatter_2.ogg",
+      "glass_shatter_3.ogg"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "glass window shattering"
+  },
+  "concrete_break": {
+    "files": [
+      "concrete_break_1.ogg",
+      "concrete_break_2.ogg",
+      "concrete_break_3.ogg"
+    ],
+    "loop": false,
+    "gain": 0.85,
+    "description": "concrete breaking"
+  },
+  "debris_small": {
+    "files": [
+      "debris_small_1.ogg",
+      "debris_small_2.ogg",
+      "debris_small_3.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "small rubble and rocks falling"
+  },
+  "collapse_big": {
+    "files": [
+      "collapse_big.ogg"
+    ],
+    "loop": false,
+    "gain": 1.0,
+    "description": "large building collapse, deep rumble and crashing masonry"
+  },
+  "explosion": {
+    "files": [
+      "explosion_1.ogg",
+      "explosion_2.ogg"
+    ],
+    "loop": false,
+    "gain": 1.0,
+    "description": "explosion"
+  },
+  "tree_crack_fall": {
+    "files": [
+      "tree_crack_fall.ogg"
+    ],
+    "loop": false,
+    "gain": 0.85,
+    "description": "tree trunk cracking and falling"
+  },
+  "metal_bend": {
+    "files": [
+      "metal_bend.ogg"
+    ],
+    "loop": false,
+    "gain": 0.75,
+    "description": "lamp post bending, creaking metal"
+  },
+  "dust_settle": {
+    "files": [
+      "dust_settle.ogg"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "rubble settling"
+  },
+  "step_concrete": {
+    "files": [
+      "step_concrete_1.ogg",
+      "step_concrete_2.ogg",
+      "step_concrete_3.ogg",
+      "step_concrete_4.ogg"
+    ],
+    "loop": false,
+    "gain": 0.45,
+    "description": "single footstep, shoe on pavement, dry"
+  },
+  "step_grass": {
+    "files": [
+      "step_grass_1.ogg",
+      "step_grass_2.ogg"
+    ],
+    "loop": false,
+    "gain": 0.45,
+    "description": "single footstep on grass"
+  },
+  "step_giant": {
+    "files": [
+      "step_giant_1.ogg",
+      "step_giant_2.ogg"
+    ],
+    "loop": false,
+    "gain": 1.0,
+    "description": "enormous footstep, deep boom and ground rumble, slight debris"
+  },
+  "land_thud": {
+    "files": [
+      "land_thud.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "landing thud"
+  },
+  "whoosh_takeoff": {
+    "files": [
+      "whoosh_takeoff.ogg"
+    ],
+    "loop": false,
+    "gain": 0.75,
+    "description": "takeoff whoosh"
+  },
+  "sonic_boom": {
+    "files": [
+      "sonic_boom.ogg"
+    ],
+    "loop": false,
+    "gain": 1.0,
+    "description": "sonic boom"
+  },
+  "punch_impact": {
+    "files": [
+      "punch_impact.ogg"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "punch impact"
+  },
+  "grow_rumble": {
+    "files": [
+      "grow_rumble.ogg"
+    ],
+    "loop": false,
+    "gain": 0.85,
+    "description": "deep rising stretching rumble"
+  },
+  "shrink_whoosh": {
+    "files": [
+      "shrink_whoosh.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "descending airy whoosh"
+  },
+  "scream_crowd": {
+    "files": [
+      "scream_crowd_1.ogg",
+      "scream_crowd_2.ogg"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "crowd screaming and panicking"
+  },
+  "scream_single": {
+    "files": [
+      "scream_single_1.ogg",
+      "scream_single_2.ogg"
+    ],
+    "loop": false,
+    "gain": 0.75,
+    "description": "single person screaming"
+  },
+  "crowd_gasp": {
+    "files": [
+      "crowd_gasp.ogg"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "crowd oohs / gasp"
+  },
+  "splash_big": {
+    "files": [
+      "splash_big.ogg"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "big splash into water"
+  },
+  "splash_small": {
+    "files": [
+      "splash_small.ogg"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "small splash"
+  },
+  "door_open": {
+    "files": [
+      "door_open.ogg"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "door opening"
+  },
+  "door_close": {
+    "files": [
+      "door_close.ogg"
+    ],
+    "loop": false,
+    "gain": 0.65,
+    "description": "door closing"
+  }
+}

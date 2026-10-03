@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scale</title>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="menu">
+      <div class="panel">
+        <h1>Scale</h1>
+        <p class="sub">A living, destructible city. Every seed is a different place.</p>
+        <label>Seed <input id="seed" type="text" autocomplete="off" /></label>
+        <div class="name"><span id="cityName"></span></div>
+        <label>Size <input id="size" type="range" min="0" max="1" step="0.01" /></label>
+        <div class="hint"><span id="sizeLabel"></span></div>
+        <button id="start">Enter the city</button>
+      </div>
+    </div>
+    <div id="loading"><div class="box"><div id="loadMsg">Loading</div><div class="bar"><div id="loadBar"></div></div></div></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

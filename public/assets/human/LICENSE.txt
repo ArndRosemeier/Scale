@@ -1,0 +1,15 @@
+Norgo human base assets
+=======================
+
+human.bin and manifest.json in this folder are derived (converted, compressed,
+re-indexed) by tools/build-human-assets.ts from the MakeHuman 1.1 data assets:
+the base mesh (hm08), modelling targets, macro targets, expression units, the
+default skeleton and its weights.
+
+These MakeHuman assets were explicitly released under CC0 1.0 Universal
+(public domain dedication) in September 2020 by the copyright holders at the
+time: Data Collection AB, Joel Palmius, Jonas Hauquier.
+https://www.makehumancommunity.org — https://creativecommons.org/publicdomain/zero/1.0/
+
+We gratefully acknowledge the MakeHuman team. The derived data is likewise
+offered under CC0.

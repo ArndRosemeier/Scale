@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scale – vehicle preview</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font: 12px/1.4 system-ui, sans-serif; color: #eee; }
+      canvas { display: block; width: 100%; height: 100%; }
+      #hud { position: fixed; left: 8px; top: 8px; background: rgba(0,0,0,0.55); padding: 8px 10px; border-radius: 6px; max-height: 95vh; overflow: auto; pointer-events: none; }
+      #hud table { border-collapse: collapse; }
+      #hud td { padding: 0 6px; text-align: right; }
+      #hud td:first-child { text-align: left; }
+      #keys { position: fixed; right: 8px; top: 8px; background: rgba(0,0,0,0.55); padding: 8px 10px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+    <div id="keys">
+      <b>Keys</b><br />
+      N night / day<br />
+      H headlights · B brake<br />
+      L / R indicator · Z hazard · P emergency<br />
+      D damage cycle · W spin wheels<br />
+      C repaint · T traffic crowd (200)
+    </div>
+    <script type="module" src="/src/props/previewVehicles.ts"></script>
+  </body>
+</html>

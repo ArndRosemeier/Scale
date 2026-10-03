@@ -1,0 +1,39 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e8ecf0; }
+#view { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+#menu { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 30%, #1d2a38 0%, #0b0e12 70%); z-index: 10; }
+#menu .panel { width: min(420px, 90vw); padding: 32px; background: rgba(20, 26, 34, 0.85); border: 1px solid #2c3846; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+#menu h1 { margin: 0 0 4px; font-weight: 600; letter-spacing: 0.04em; font-size: 34px; }
+#menu .sub { margin: 0 0 24px; color: #9aa8b6; font-size: 14px; }
+#menu label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #b8c4d0; margin-top: 14px; }
+#menu input[type=text] { padding: 10px 12px; border-radius: 6px; border: 1px solid #34414f; background: #0f141a; color: #e8ecf0; font-size: 15px; }
+#menu input[type=range] { width: 100%; }
+#menu .name, #menu .hint { font-size: 13px; color: #d8b56a; margin-top: 6px; min-height: 18px; }
+#menu .hint { color: #8fa3b5; }
+#menu button { margin-top: 24px; width: 100%; padding: 12px; font-size: 16px; border: 0; border-radius: 6px; background: #d8b56a; color: #1a1408; font-weight: 600; cursor: pointer; }
+#menu button:hover { background: #e8c57a; }
+#loading { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #0b0e12; z-index: 9; }
+#loading .box { width: min(360px, 80vw); text-align: center; color: #9aa8b6; font-size: 14px; }
+#loading .bar { margin-top: 12px; height: 4px; background: #1f2832; border-radius: 2px; overflow: hidden; }
+#loadBar { height: 100%; width: 0%; background: #d8b56a; transition: width .2s; }
+#hud { position: fixed; left: 10px; top: 8px; font: 12px/1.4 ui-monospace, Consolas, monospace; color: #e8ecf0; text-shadow: 0 1px 2px #000; pointer-events: none; z-index: 5; }
+#pause, #help { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(8, 11, 15, 0.55); z-index: 20; backdrop-filter: blur(3px); }
+#pause.open, #help.open { display: flex; }
+#pause .panel, #help .panel { width: min(460px, 92vw); padding: 24px 28px; background: rgba(20, 26, 34, 0.94); border: 1px solid #2c3846; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+#pause h2, #help h2 { margin: 0 0 16px; font-weight: 600; font-size: 22px; }
+#pause .row { display: flex; align-items: center; gap: 12px; margin: 10px 0; font-size: 14px; color: #c8d2dc; }
+#pause .row label { width: 120px; color: #9aa8b6; }
+#pause .row input[type=range] { flex: 1; }
+#pause select, #pause button { background: #0f141a; color: #e8ecf0; border: 1px solid #34414f; border-radius: 6px; padding: 6px 10px; font-size: 14px; }
+#pause button { cursor: pointer; }
+#pause button:hover { border-color: #d8b56a; }
+#pause .buttons { display: flex; gap: 10px; margin-top: 18px; }
+#pause #pResume { background: #d8b56a; color: #1a1408; border: 0; font-weight: 600; }
+#help table { width: 100%; border-collapse: collapse; font-size: 14px; }
+#help td { padding: 5px 4px; border-bottom: 1px solid #222b36; color: #c8d2dc; }
+#help td.k { color: #d8b56a; white-space: nowrap; width: 46%; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+#help .sub { color: #8fa3b5; font-size: 13px; margin: 14px 0 0; }
+#hint { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); padding: 8px 16px; background: rgba(15, 20, 26, 0.75); border-radius: 20px; font-size: 13px; color: #d8dee6; z-index: 6; transition: opacity 1.5s; pointer-events: none; }
+#hint.fade { opacity: 0; }
+#crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 2px; background: rgba(255,255,255,0.7); z-index: 5; pointer-events: none; }
+#crosshair.hot { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 6px; background: transparent; border: 2px solid rgba(255, 210, 120, 0.95); }
