@@ -80,6 +80,7 @@ import { Targeting } from './Targeting';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { PowerSynth } from '../audio/PowerSynth';
+import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { ThreatDirector } from './threats/ThreatDirector';
@@ -113,6 +114,8 @@ export class Game {
   collision!: Collision;
   interactions!: Interactions;
   stimuli = new Stimuli();
+  /** Background music (src/audio/music): moods from the game state, stems loaded on first need. */
+  music = new Music(this);
   audio = new Audio();
   tex!: TextureLibrary;
   net!: RoadNet;
@@ -1003,6 +1006,7 @@ export class Game {
   private updateAudio(_dt: number): void {
     const cam = this.renderer.camera;
     this.audio.updateListener(cam);
+    this.music.update(_dt);
     const p = this.player;
     const night = G.uNight.value;
     // Context: water nearby, parks, flight, altitude.

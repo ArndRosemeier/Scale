@@ -26,6 +26,9 @@ import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
+import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
+import { parseStemManifest } from '../src/audio/music/StemPlayer';
+import { readFileSync, existsSync } from 'node:fs';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
 import { GUNS, DRONE_PLATING, hitChance, hitRate } from '../src/game/crime/Firearms';
 
@@ -1212,6 +1215,54 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   check(hitChance(GUNS.pistol, 5, false, 0) > hitChance(GUNS.pistol, 35, false, 0) && hitChance(GUNS.pistol, 20, true, 0) < hitChance(GUNS.pistol, 20, false, 0), 'guns: harder far off and in the air');
   check(GUNS.crook.player < 22 && GUNS.rifle.player < 22, 'guns: no single round knocks the player down (HEALTH.knockAt 22)');
   console.log(`actors & guns: stuck after ${STUCK.window} s, drone ${droneS.toFixed(1)} s, robot ${robotS.toFixed(1)} s, robber ${playerHp.toFixed(2)} hp/s`);
+}
+
+// Background music: mood selection (src/audio/music/mood.ts) and the stem manifest (public/music).
+{
+  let seed = 12345;
+  const rng = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+  const run = (d: MoodDirector, secs: number, s: Partial<MusicSignals> | ((t: number) => Partial<MusicSignals>)) => {
+    const moods: (string | null)[] = [];
+    for (let t = 0; t < secs; t += 0.1) moods.push(d.update(0.1, { ...CALM_SIGNALS, ...(typeof s === 'function' ? s(t) : s) }).mood);
+    return moods;
+  };
+  const d = new MoodDirector(rng);
+  const first = run(d, 60, {});
+  check(first[0] === null && first.includes('day'), `music: silence at first, then a calm day episode (${first.indexOf('day') / 10} s)`);
+  // Danger flapping in and out of range every 3 s: tension comes once and stays.
+  const flap = run(d, 40, (t) => ({ danger: Math.floor(t / 3) % 2 === 0 ? 1 : 0 }));
+  const firstT = flap.indexOf('tension');
+  const changes = flap.slice(firstT).filter((m, i, a) => i > 0 && m !== a[i - 1]).length;
+  check(firstT > 10 && firstT < 25 && changes === 0, `music: tension after ${firstT / 10} s and no flapping (${changes} changes)`);
+  const calmAgain = run(d, 30, {});
+  const off = calmAgain.findIndex((m) => m !== 'tension') / 10;
+  check(off > MOOD_TUNING.tensionHold - 3 && off < MOOD_TUNING.tensionHold + 1, `music: tension holds ${off} s after the danger ends`);
+  // The Strider: battle at once, an elegy after it when people wait for help.
+  const war = run(d, 5, { battle: 1 });
+  check(war.indexOf('battle') >= 0 && war.indexOf('battle') < 8, 'music: battle within a second');
+  const after = run(d, 60, { grief: true });
+  check(after.slice(0, 150).every((m) => m === 'battle') && after.includes('elegy'), `music: battle holds, then an elegy (${after.indexOf('elegy') / 10} s)`);
+  // Night with hysteresis; underground after a short delay.
+  const n = new MoodDirector(rng);
+  n.play();
+  check(run(n, 2, { night: 0.5 }).at(-1) === 'day' && run(n, 2, { night: 0.7 }).at(-1) === 'night' && run(n, 2, { night: 0.5 }).at(-1) === 'night' && run(n, 2, { night: 0.3 }).at(-1) === 'day', 'music: night comes and goes with hysteresis');
+  check(run(n, 1, { under: true }).at(-1) === 'day' && run(n, 3, { under: true }).at(-1) === 'under', 'music: underground after a moment');
+  check(run(n, 6, { flySpeed: 80 }).at(-1) === 'hero', 'music: flying fast');
+  // Sparse: over an hour of calm, music plays only part of the time.
+  const h = new MoodDirector(rng);
+  const hour = run(h, 3600, (t) => ({ night: t > 1800 ? 1 : 0 }));
+  const share = hour.filter((m) => m !== null).length / hour.length;
+  check(share > 0.3 && share < 0.75, `music: calm music plays ${Math.round(share * 100)} % of the time`);
+  // Manifest: every mood has a set, every file exists.
+  const man = parseStemManifest(JSON.parse(readFileSync('public/music/manifest.json', 'utf8')));
+  check(!!man && man.lead > 0, 'music: manifest parses');
+  let files = 0;
+  for (const m of MOODS) {
+    const set = man?.sets[m];
+    check(!!set, `music: a set for ${m}`);
+    for (const list of Object.values(set?.layers ?? {})) for (const f of list ?? []) { files++; check(existsSync(`public/music/${f}`), `music: ${f} exists`); }
+  }
+  console.log(`music: ${MOODS.length} moods, ${files} stems, calm share ${Math.round(share * 100)} %`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

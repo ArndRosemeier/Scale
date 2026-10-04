@@ -11,8 +11,9 @@ type Manifest = Record<string, ManifestEntry>;
 export type AmbienceLayer = 'amb_city_day' | 'amb_city_night' | 'amb_park' | 'amb_river' | 'amb_sea' | 'amb_wind_flight' | 'amb_sewer' | 'amb_metro' | 'amb_interior' | 'amb_crowd' | 'amb_rain_light' | 'amb_rain_heavy' | 'amb_wind_gust';
 
 /** Volume categories for the sound mix (pause menu): every sound belongs to one (see categoryOf). */
-export type SoundCategory = 'alarms' | 'voices' | 'traffic' | 'destruction' | 'powers' | 'monsters' | 'animals' | 'ambience' | 'steps' | 'ui';
+export type SoundCategory = 'music' | 'alarms' | 'voices' | 'traffic' | 'destruction' | 'powers' | 'monsters' | 'animals' | 'ambience' | 'steps' | 'ui';
 export const SOUND_CATEGORIES: { id: SoundCategory; name: string }[] = [
+  { id: 'music', name: 'Music' },
   { id: 'alarms', name: 'Alarms & sirens' },
   { id: 'voices', name: 'Voices & crowds' },
   { id: 'traffic', name: 'Traffic & trains' },
@@ -34,6 +35,9 @@ const CATEGORY_RULES: [RegExp, SoundCategory][] = [
   [/^(cat_|dog_|bird_|crow_|gull_|pigeon_|slime_)/, 'animals'],
   [/^(step_|door_)/, 'steps'],
 ];
+/** The level a category starts at (and goes back to on reset): the background music sits lower than the rest. */
+export function defaultMix(cat: SoundCategory): number { return cat === 'music' ? 0.65 : 1; }
+
 /** The category of a sound id (anything unlisted counts as powers & fighting: punches, whooshes, impacts). */
 export function categoryOf(id: string): SoundCategory {
   for (const [re, c] of CATEGORY_RULES) if (re.test(id)) return c;
@@ -59,6 +63,8 @@ export class Audio {
   /** Master volume 0…1 and mute, remembered across sessions; `?mute` in the URL forces silence (tests). */
   volume = readNum(VOL_KEY, 0.8);
   muted = readNum(MUTE_KEY, 0) > 0 || new URLSearchParams(location.search).has('mute');
+  /** Background music on/off (pause menu), remembered; its level is the 'music' category of the mix. */
+  musicOn = readNum(MUSIC_KEY, 1) > 0;
 
   async init(): Promise<void> {
     try {
@@ -80,7 +86,7 @@ export class Audio {
       for (const c of SOUND_CATEGORIES) {
         const g = this.ctx.createGain();
         g.gain.value = this.mix[c.id];
-        g.connect(c.id === 'ambience' ? this.ambBus : this.sfxBus);
+        g.connect(c.id === 'ambience' ? this.ambBus : c.id === 'music' ? this.master : this.sfxBus);
         this.cats.set(c.id, g);
       }
       for (const id of Object.keys(this.manifest)) if (id.startsWith('amb_')) void this.load(id);
@@ -273,6 +279,17 @@ export class Audio {
     }
   }
 
+  /** Where the background music plays into (the 'music' category of the mix), once audio runs. */
+  musicOut(): { ctx: AudioContext; out: AudioNode } | null {
+    const g = this.cats.get('music');
+    return this.ctx && g ? { ctx: this.ctx, out: g } : null;
+  }
+
+  setMusicOn(on: boolean): void {
+    this.musicOn = on;
+    try { localStorage.setItem(MUSIC_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ }
+  }
+
   /** The category gain a sound plays through. */
   private bus(id: string): AudioNode {
     return this.cats.get(categoryOf(id)) ?? (id.startsWith('amb_') ? this.ambBus : this.sfxBus);
@@ -308,10 +325,16 @@ export class Audio {
   }
 }
 
-const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted', MIX_KEY = 'scale.soundMix';
+const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted', MIX_KEY = 'scale.soundMix', MUSIC_KEY = 'scale.music';
+
+/** The stored master volume, mute, music switch and music level (the start screen's music reads them before the game's Audio exists). */
+export function storedMusicLevel(): number {
+  if (new URLSearchParams(location.search).has('mute') || readNum(MUTE_KEY, 0) > 0 || readNum(MUSIC_KEY, 1) <= 0) return 0;
+  return readNum(VOL_KEY, 0.8) * readMix().music;
+}
 
 function readMix(): Record<SoundCategory, number> {
-  const mix = Object.fromEntries(SOUND_CATEGORIES.map((c) => [c.id, 1])) as Record<SoundCategory, number>;
+  const mix = Object.fromEntries(SOUND_CATEGORIES.map((c) => [c.id, defaultMix(c.id)])) as Record<SoundCategory, number>;
   try {
     const o = JSON.parse(localStorage.getItem(MIX_KEY) ?? '{}') as Record<string, unknown>;
     for (const c of SOUND_CATEGORIES) { const v = Number(o[c.id]); if (Number.isFinite(v)) mix[c.id] = Math.max(0, Math.min(1.5, v)); }

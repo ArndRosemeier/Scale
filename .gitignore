@@ -5,3 +5,4 @@ dist
 tools/avatar/test-models/*
 !tools/avatar/test-models/SOURCES.md
 public/avatars/
+.cache/

@@ -17,6 +17,7 @@ import { avatarStore } from './avatar/AvatarStore';
 import type { CharacterLook } from './avatar/look';
 import { MainMenuSaves } from './ui/SaveUi';
 import { versionLink } from './ui/Changelog';
+import { MenuMusic } from './audio/music/MenuMusic';
 
 const params = new URLSearchParams(location.search);
 const menu = document.getElementById('menu') as HTMLDivElement;
@@ -61,6 +62,10 @@ seedIn.addEventListener('input', refresh);
 sizeIn.addEventListener('input', refresh);
 refresh();
 
+// The start screen's theme (after the first click or key; not for automatic starts).
+const menuMusic = params.has('auto') || params.get('load') ? null : new MenuMusic();
+(window as unknown as { menuMusic: MenuMusic | null }).menuMusic = menuMusic;
+
 let starting = false;
 
 async function start(save: SaveData | null = null): Promise<void> {
@@ -99,6 +104,7 @@ async function start(save: SaveData | null = null): Promise<void> {
     loadBar.style.width = `${Math.round(f * 100)}%`;
   });
   loading.style.display = 'none';
+  menuMusic?.stop(4);
   // Imported character (if one is selected).
   try {
     const sel = await loadSelectedAvatar();

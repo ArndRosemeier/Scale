@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.016 — 2026-10-04
+
+- **Background music**: eight new pieces for the city — a calm lo-fi day, noir jazz at night, a dark drone underground, tension when trouble is near (a robbery, robots, the creature on its way), battle when it fights, a quiet elegy afterwards, a heroic theme when you fly fast, and a menu theme. Calm music comes and goes (quiet stretches between pieces); the mood follows what happens. Darker in the rain, ducked in the pause menu.
+- **Music volume**: a *Music* slider in Sound mix (65 % by default) and a *Music* on/off switch in the pause menu.
+
 ## 0.015 — 2026-10-04
 
 - **Police carry guns**: officers have pistols, SWAT rifles. At a robot event they shoot down rogue drones and wear down machines from a firing spot (kneeling, aiming), and hold fire when people are in the line. Useful, but much weaker than your powers.
