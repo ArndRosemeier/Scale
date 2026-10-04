@@ -222,6 +222,11 @@ export class Drones {
       dx = door.x + door.nx * 0.4; dz = door.z + door.nz * 0.4;
       dy = this.ctx.world.groundHeight(dx, dz) + 4.5;
     }
+    // One drone per drop point at a time (two at the same door would push each other off it).
+    for (const o of this.list) {
+      const w = o.kind === DKind.Delivery && o.drop >= 0 ? o.plan[o.drop] : null;
+      if (w && o.pi <= o.drop + 1 && Math.hypot(w.x - dx, w.z - dz) < 6) return;
+    }
     const out = this.rng.range(0, Math.PI * 2);
     const ex = dx + Math.cos(out) * 700, ez = dz + Math.sin(out) * 700;
     const legIn = this.leg(sx, sz, dx, dz, 16), legOut = this.leg(dx, dz, ex, ez, 0);
@@ -336,7 +341,8 @@ export class Drones {
     const ex = tx - d.x, ey = ty - d.y, ez = tz - d.z;
     const dist = Math.hypot(ex, ey, ez);
     // ---- waypoint progress (hover holds, parcel winch)
-    if (!d.orbit && dist < arriveR) {
+    // (Once there, a hover nudged off the spot (another drone, a gust of the player) still counts.)
+    if (!d.orbit && (dist < arriveR || (d.holdT > 0 && dist < arriveR * 4 + 1.5))) {
       const w = d.plan[d.pi];
       d.holdT += dt;
       if (w.drop && d.parcel) {

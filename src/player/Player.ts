@@ -408,8 +408,16 @@ export class Player {
     const s = this.seat;
     if (!s) return;
     this.seat = null;
-    this.pos.x = s.x - Math.sin(s.yaw) * 0.65;
-    this.pos.z = s.z - Math.cos(s.yaw) * 0.65;
+    // A step off the seat: forward if that is free, else to a side or back (a café chair
+    // facing a shop window must not step through it).
+    const d = 0.3 + this.radius;
+    for (const a of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+      const x = s.x - Math.sin(s.yaw + a) * d, z = s.z - Math.cos(s.yaw + a) * d;
+      if (this.collision && this.collision.collide(x, z, this.pos.y, this.height, this.radius, s.x, s.z).hit) continue;
+      this.pos.x = x; this.pos.z = z;
+      return;
+    }
+    this.pos.x = s.x; this.pos.z = s.z;
   }
 
   private moveState(): MoveState {

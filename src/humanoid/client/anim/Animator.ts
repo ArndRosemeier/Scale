@@ -144,6 +144,8 @@ export class Animator {
   private pain = 0;
   // Death
   private deadT = -1;
+  /** Not updated yet (the first pose is taken at once, without blending in). */
+  private fresh = true;
   private deadDir = 1;
   // Actions
   private lastActionKey = '';
@@ -295,9 +297,12 @@ export class Animator {
     for (const f of FAMILIES) {
       const target = f === fam ? 1 : 0;
       const rate = f === 'dead' || fam === 'dead' ? 9 : 7;
-      this.famW.set(f, approach(this.famW.get(f)!, target, rate, dt));
+      // A character that comes into view (a crowd member getting its full body up close) is
+      // already in its pose: someone lying on the street does not stand up and fall again.
+      this.famW.set(f, this.fresh ? target : approach(this.famW.get(f)!, target, rate, dt));
     }
-    if (fam === 'dead' && this.deadT < 0) { this.deadT = 0; this.deadDir = hash32(this.seed + Math.floor(inp.time)) % 3 === 0 ? -1 : 1; }
+    if (fam === 'dead' && this.deadT < 0) { this.deadT = this.fresh ? 30 : 0; this.deadDir = hash32(this.seed + Math.floor(inp.time)) % 3 === 0 ? -1 : 1; }
+    this.fresh = false;
     if (fam !== 'dead') this.deadT = -1; else this.deadT += dt;
     if (fam === 'air' && this.prevFam !== 'air') { this.airT = 0; this.airJump = inp.vel[1] > 1; }
     if (fam === 'air') this.airT += dt;

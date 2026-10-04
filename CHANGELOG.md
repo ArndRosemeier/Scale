@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.012 — 2026-10-04
+
+- **Fix**: delivery drones could hang over a door for good — two drones delivering to the same door pushed each other off the drop point. Only one drone delivers to a door at a time now, and a drone nudged off its spot still finishes.
+- **Fix**: getting up from a café chair or bench facing a wall could put you inside the building; you now step off to a free side.
+- **Fix**: someone lying on the street briefly stood up and fell again when you came close.
+
 ## 0.011 — 2026-10-04
 
 - **New start screen**: full screen over an evening view of the city — the title and Continue on the left, a new city on the right. Works on small windows too (the Enter button stays in reach).
