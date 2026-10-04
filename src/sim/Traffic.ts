@@ -954,8 +954,13 @@ export class VehicleObstacles {
     }
   };
 
+  private rebuilds = 0;
+
   private rebuild(): void {
-    this.grid.clear();
+    // The cell lists are kept and refilled (this runs ~30 times a second); the map is dropped
+    // now and then so cells traffic has left do not pile up.
+    if (++this.rebuilds % 300 === 0) this.grid.clear();
+    else for (const l of this.grid.values()) l.length = 0;
     let n = 0;
     for (const v of this.list()) {
       if (!v.alive) continue;

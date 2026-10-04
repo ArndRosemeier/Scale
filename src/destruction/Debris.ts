@@ -16,6 +16,13 @@ const TEMPLATES = 8;
 const CAP = 1600;          // instances per template (moving + frozen)
 const MAX_BODIES = 350;    // simultaneous rigid bodies
 const SPAWN_PER_FRAME = 24; // new rigid bodies per frame (the rest become ballistic chips)
+/**
+ * New rigid bodies per second on average (a token bucket of BODY_BURST): a monster or a long
+ * fight breaking panel after panel would otherwise keep the physics pool full of tumbling
+ * hulls; beyond it fragments fly as ballistic chips (they bounce and fade the same way).
+ */
+const BODY_RATE = 40;
+const BODY_BURST = 60;
 const CHIP_CAP = 4000;
 
 interface Frag {
@@ -37,6 +44,7 @@ const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
+const _e = new THREE.Euler();
 
 export class Debris {
   readonly group = new THREE.Group();
@@ -96,12 +104,12 @@ export class Debris {
   /** Spawn one fragment. size = full extents in m. */
   spawn(x: number, y: number, z: number, sx: number, sy: number, sz: number, vx: number, vy: number, vz: number, layer: number, tint: THREE.Color, spin = 2, physics = true): void {
     // Budget: big bursts become cheap ballistic chips beyond a few rigid bodies per frame.
-    if (physics && this.spawnedThisFrame >= SPAWN_PER_FRAME) {
+    if (physics && (this.spawnedThisFrame >= SPAWN_PER_FRAME || this.bodyTokens < 1)) {
       const sp = Math.max(1.5, Math.hypot(vx, vy, vz));
       this.chipBurst(x, y, z, 2, sp, vx / sp, vy / sp, vz / sp, tint, Math.min(0.45, Math.max(sx, sy, sz) * 0.35), 4);
       return;
     }
-    if (physics) this.spawnedThisFrame++;
+    if (physics) { this.spawnedThisFrame++; this.bodyTokens--; }
     const tpl = (Math.random() * TEMPLATES) | 0;
     const im = this.meshes[tpl];
     const inst = this.next[tpl];
@@ -112,14 +120,14 @@ export class Debris {
     const f: Frag = { tpl, inst, body: null, sx, sy, sz, born: this.t, still: 0, x, y, z, q: new THREE.Quaternion(), fallV: 0, fallTo: NaN };
     this.slots[tpl][inst] = f;
     this.layerAttr[tpl].setX(inst, layer);
-    this.layerAttr[tpl].needsUpdate = true;
+    mark(this.layerAttr[tpl], inst, 1);
     im.setColorAt(inst, tint);
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
-    _q.setFromEuler(new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6));
+    if (im.instanceColor) mark(im.instanceColor, inst, 1);
+    _q.setFromEuler(_e.set(Math.random() * 6, Math.random() * 6, Math.random() * 6));
     f.q.copy(_q);
     _m.compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz));
     im.setMatrixAt(inst, _m);
-    im.instanceMatrix.needsUpdate = true;
+    mark(im.instanceMatrix, inst, 1);
     if (!physics) return;
     if (this.active.length >= MAX_BODIES) {
       // Retire a body that is at rest; if all are still moving, this piece flies ballistically
@@ -176,11 +184,20 @@ export class Debris {
       _s.setScalar(size * (0.5 + Math.random()));
       this.chipScale[i] = _s.x;
     }
-    if (this.chips.instanceColor) this.chips.instanceColor.needsUpdate = true;
+    if (this.chips.instanceColor) {
+      // The burst's slots (contiguous unless it wrapped round the ring).
+      const end = this.chipNext, start = (end - n + CHIP_CAP * 4) % CHIP_CAP;
+      if (n >= CHIP_CAP || start >= end) this.chips.instanceColor.needsUpdate = true;
+      else mark(this.chips.instanceColor, start, end - start);
+    }
   }
   private chipScale = new Float32Array(CHIP_CAP);
 
   private spawnedThisFrame = 0;
+  private bodyTokens = BODY_BURST;
+  /** Instances moved this frame per template: lowest and highest index (uploaded as one range). */
+  private lo = new Int32Array(TEMPLATES);
+  private hi = new Int32Array(TEMPLATES);
   private releases: [number, number, number, number, number, number][] = [];
   private falling: Frag[] = [];
 
@@ -202,8 +219,10 @@ export class Debris {
   update(dt: number): void {
     this.t += dt;
     this.spawnedThisFrame = 0;
+    this.bodyTokens = Math.min(BODY_BURST, this.bodyTokens + dt * BODY_RATE);
     // Sync moving fragments.
-    const touched = new Set<number>();
+    const lo = this.lo, hi = this.hi;
+    lo.fill(CAP); hi.fill(-1);
     for (let k = this.active.length - 1; k >= 0; k--) {
       const f = this.active[k];
       const b = f.body!;
@@ -212,7 +231,8 @@ export class Debris {
       f.q.set(rot.x, rot.y, rot.z, rot.w);
       _m.compose(_p.set(tr.x, tr.y, tr.z), _q.set(rot.x, rot.y, rot.z, rot.w), _s.set(f.sx, f.sy, f.sz));
       this.meshes[f.tpl].setMatrixAt(f.inst, _m);
-      touched.add(f.tpl);
+      if (f.inst < lo[f.tpl]) lo[f.tpl] = f.inst;
+      if (f.inst > hi[f.tpl]) hi[f.tpl] = f.inst;
       const v = b.linvel();
       const sp = Math.abs(v.x) + Math.abs(v.y) + Math.abs(v.z);
       f.still = sp < 0.15 ? f.still + dt : 0;
@@ -240,11 +260,12 @@ export class Debris {
       if (f.y <= f.fallTo) { f.y = f.fallTo; f.fallTo = NaN; this.falling.splice(k, 1); }
       _m.compose(_p.set(f.x, f.y, f.z), f.q, _s.set(f.sx, f.sy, f.sz));
       this.meshes[f.tpl].setMatrixAt(f.inst, _m);
-      touched.add(f.tpl);
+      if (f.inst < lo[f.tpl]) lo[f.tpl] = f.inst;
+      if (f.inst > hi[f.tpl]) hi[f.tpl] = f.inst;
     }
-    for (const t of touched) this.meshes[t].instanceMatrix.needsUpdate = true;
-    // Chips.
-    let any = false;
+    for (let t = 0; t < TEMPLATES; t++) if (hi[t] >= 0) mark(this.meshes[t].instanceMatrix, lo[t], hi[t] - lo[t] + 1);
+    // Chips (uploaded as the span of live ones).
+    let any = false, c0 = CHIP_CAP, c1 = -1;
     for (let i = 0; i < CHIP_CAP; i++) {
       const o = i * 8;
       const life = this.chipData[o + 7];
@@ -255,6 +276,8 @@ export class Debris {
         _m.makeScale(0, 0, 0);
         this.chips.setMatrixAt(i, _m);
         any = true;
+        if (i < c0) c0 = i;
+        c1 = i;
         continue;
       }
       // integrate
@@ -269,14 +292,16 @@ export class Debris {
         this.chipData[o + 5] *= 0.5;
       }
       this.chipData[o] = x; this.chipData[o + 1] = y; this.chipData[o + 2] = z;
-      _q.setFromEuler(new THREE.Euler(age * 7 + i, age * 5, 0));
+      _q.setFromEuler(_e.set(age * 7 + i, age * 5, 0));
       const sc = this.chipScale[i] * Math.min(1, (life - age) * 2);
       _m.compose(_p.set(x, y, z), _q, _s.setScalar(sc));
       this.chips.setMatrixAt(i, _m);
       any = true;
+      if (i < c0) c0 = i;
+      c1 = i;
       void x; void z;
     }
-    if (any) this.chips.instanceMatrix.needsUpdate = true;
+    if (any) mark(this.chips.instanceMatrix, c0, c1 - c0 + 1);
   }
 
   private freeze(f: Frag): void {
@@ -348,4 +373,10 @@ diffuseColor.rgb *= mix(a.rgb, a.rgb * 0.8 + vec3(0.06), core * 0.3);`,
   };
   mat.customProgramCacheKey = () => 'debris-v1';
   return mat;
+}
+
+/** Add instances [i, i + n) of an instanced attribute to its next upload. */
+function mark(a: THREE.BufferAttribute, i: number, n: number): void {
+  a.addUpdateRange(i * a.itemSize, n * a.itemSize);
+  a.needsUpdate = true;
 }

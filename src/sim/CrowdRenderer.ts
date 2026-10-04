@@ -22,6 +22,16 @@ const FORCE_RANGE = 50;
 /** Actors (crimes, police, deeds) get priority rigs out to here, at most ACTOR_RIGS of them. */
 const ACTOR_RIG_RANGE = 60;
 const ACTOR_RIGS = 8;
+/**
+ * New full rigs per frame (building one — body, clothes, hair, a shader check — costs ~1–3 ms):
+ * in a stampede the nearest people come and go faster than that; the rest stay crowd instances
+ * a few frames longer. Ragdolls (forced) are never held back.
+ */
+const NEW_RIGS_PER_FRAME = 2;
+/** Foot-IK ground queries are reused within a 0.2 m cell for this long (s). */
+const GROUND_CACHE_T = 0.25;
+
+interface Near { a: PedAgent; d: number }
 
 interface Look {
   template: number;
@@ -91,6 +101,27 @@ export class CrowdRenderer {
   private p = new THREE.Vector3();
   private sphere = new THREE.Sphere();
   rigGround: ((x: number, y: number, z: number) => number | null) | null = null;
+  /** rigGround through a short-lived cache (planted feet ask the same spot every frame). */
+  private groundCache = new Map<number, number>();
+  private groundCacheT = 0;
+  private readonly cachedGround = (x: number, y: number, z: number): number | null => {
+    const f = this.rigGround;
+    if (!f) return null;
+    const key = ((Math.round(x * 5) & 0xfffff) * 1048576 + (Math.round(z * 5) & 0xfffff)) * 64 + (Math.round(y) & 63);
+    const c = this.groundCache.get(key);
+    if (c !== undefined) return Number.isNaN(c) ? null : c;
+    const g = f(x, y, z);
+    this.groundCache.set(key, g === null ? NaN : g);
+    return g;
+  };
+  // Per-frame scratch (no garbage): candidates for rigs, the chosen ones, agents present.
+  private near: Near[] = [];
+  private actors: Near[] = [];
+  private nearPool: Near[] = [];
+  private nearUsed = 0;
+  private rigSet = new Set<number>();
+  private present = new Set<PedAgent>();
+  private counts: number[] = [];
   /** People who need a full rig first and out to FORCE_RANGE (ragdolls: physics/ragdoll). */
   forceRig: ((a: PedAgent) => boolean) | null = null;
   /** What a person holds (not actors: they say it themselves): an item id, null for nothing, undefined to keep their own (sim/Terraces: a cup at the café). */
@@ -175,41 +206,55 @@ export class CrowdRenderer {
     return r && r.ready === 2 && r.rig.char && r.rig.char.object.visible && r.rig.object.visible ? r.rig : null;
   }
 
+  private entry(a: PedAgent, d: number): Near {
+    const e = this.nearPool[this.nearUsed] ?? (this.nearPool[this.nearUsed] = { a, d });
+    this.nearUsed++;
+    e.a = a; e.d = d;
+    return e;
+  }
+
   update(dt: number, time: number, agents: PedAgent[], cam: THREE.PerspectiveCamera): void {
     this.rigTime += dt;
+    if (this.rigTime - this.groundCacheT > GROUND_CACHE_T) { this.groundCache.clear(); this.groundCacheT = this.rigTime; }
     this.frustum.setFromProjectionMatrix(this.mat4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
-    const counts = this.meshes.map(() => 0);
+    const counts = this.counts;
+    counts.length = this.meshes.length;
+    counts.fill(0);
     const cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
     // Nearest agents get real rigs.
-    const near: { a: PedAgent; d: number }[] = [];
-    const actors: { a: PedAgent; d: number }[] = [];
+    const near = this.near, actors = this.actors;
+    near.length = 0; actors.length = 0; this.nearUsed = 0;
     for (const a of agents) {
       const d = Math.hypot(a.x - cx, a.y - cy, a.z - cz);
       // Frozen people are drawn as (ice-tinted, motionless) crowd instances, not rigs.
       const forced = d < FORCE_RANGE && this.forceRig !== null && this.forceRig(a);
       if ((statusOf(a)?.frozen ?? 0) > 0) continue;
-      if (!forced && a.actor && d < ACTOR_RIG_RANGE && d >= RIG_RANGE) { actors.push({ a, d }); continue; }
-      if (d < RIG_RANGE || forced) near.push({ a, d: forced ? d - 1000 : a.actor ? d - 500 : d });
+      if (!forced && a.actor && d < ACTOR_RIG_RANGE && d >= RIG_RANGE) { actors.push(this.entry(a, d)); continue; }
+      if (d < RIG_RANGE || forced) near.push(this.entry(a, forced ? d - 1000 : a.actor ? d - 500 : d));
     }
     // Actors farther out: the nearest few get rigs before ordinary people.
-    actors.sort((p, q) => p.d - q.d);
-    for (const n of actors.slice(0, ACTOR_RIGS)) near.push({ a: n.a, d: n.d - 500 });
-    near.sort((p, q) => p.d - q.d);
-    const rigSet = new Set<number>();
-    for (const n of near.slice(0, MAX_RIGS)) rigSet.add(n.a.id);
-    // Update / create rigs.
-    for (const id of rigSet) {
-      const a = near.find((n) => n.a.id === id)!.a;
+    actors.sort(byD);
+    for (let k = 0; k < actors.length && k < ACTOR_RIGS; k++) { actors[k].d -= 500; near.push(actors[k]); }
+    near.sort(byD);
+    const rigSet = this.rigSet;
+    rigSet.clear();
+    // Update / create rigs (a few new ones a frame; see NEW_RIGS_PER_FRAME).
+    let fresh = 0;
+    for (let k = 0; k < near.length && k < MAX_RIGS; k++) {
+      const a = near[k].a, id = a.id;
       let r = this.rigs.get(id);
       if (!r) {
+        if (fresh >= NEW_RIGS_PER_FRAME && near[k].d > -500) continue;
+        fresh++;
         const look = this.lookOf(a);
         const app = randomAppearance('human', a.cit.seed, { gender: a.cit.gender, age: a.cit.age });
-        const rig = new HumanoidRig(app, { castShadow: true, ground: this.rigGround, priority: 5 });
+        const rig = new HumanoidRig(app, { castShadow: true, ground: this.rigGround ? this.cachedGround : null, priority: 5 });
         rig.setEquipment(look.eq);
         this.scene.add(rig.object);
         r = { rig, used: this.rigTime, agent: a, ready: 0 };
         this.rigs.set(id, r);
       }
+      rigSet.add(id);
       r.used = this.rigTime;
       r.agent = a;
       // New outfits can need new shader variants: compile them asynchronously first.
@@ -241,11 +286,15 @@ export class CrowdRenderer {
       r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
     }
     // Drop rigs no longer needed (keep a short while to avoid churn).
+    const present = this.present;
+    present.clear();
     for (const [id, r] of this.rigs) {
       if (rigSet.has(id)) continue;
-      if (this.rigTime - r.used > 3 || !agents.includes(r.agent)) { r.rig.dispose(); this.rigs.delete(id); }
+      if (this.rigTime - r.used <= 3 && !present.size) for (const a of agents) present.add(a);
+      if (this.rigTime - r.used > 3 || !present.has(r.agent)) { r.rig.dispose(); this.rigs.delete(id); }
       else r.rig.setVisible(false);
     }
+    present.clear();
     for (const id of rigSet) {
       const r = this.rigs.get(id);
       if (r) r.rig.setVisible(r.ready === 2);
@@ -288,15 +337,17 @@ export class CrowdRenderer {
       this.meshes[ti].setMatrixAt(k, this.mat4);
     }
     let total = 0;
-    this.meshes.forEach((m, i) => {
-      m.count = counts[i];
-      total += counts[i];
-      if (counts[i]) {
-        m.instanceMatrix.needsUpdate = true;
-        this.anim[i].needsUpdate = true;
-        for (const c of this.cols[i]) c.needsUpdate = true;
+    for (let i = 0; i < this.meshes.length; i++) {
+      const m = this.meshes[i], n = counts[i];
+      m.count = n;
+      total += n;
+      // Upload only the instances in use (the buffers hold CAP).
+      if (n) {
+        upload(m.instanceMatrix, n);
+        upload(this.anim[i], n);
+        for (const c of this.cols[i]) upload(c, n);
       }
-    });
+    }
     this.stats.crowd = total;
     this.stats.rigs = rigSet.size;
 
@@ -304,3 +355,11 @@ export class CrowdRenderer {
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
+const byD = (p: Near, q: Near) => p.d - q.d;
+
+/** Mark the first n instances of an instanced attribute for upload. */
+function upload(a: THREE.InstancedBufferAttribute | THREE.InstancedInterleavedBuffer | THREE.BufferAttribute, n: number): void {
+  a.clearUpdateRanges();
+  a.addUpdateRange(0, n * (a as THREE.BufferAttribute).itemSize);
+  a.needsUpdate = true;
+}

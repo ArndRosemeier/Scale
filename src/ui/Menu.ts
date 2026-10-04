@@ -2,6 +2,7 @@
  * Pause menu (Esc / pointer released), help overlay (H) and settings.
  */
 import type { Game } from '../game/Game';
+import { saveTimeScale } from '../render/SkySystem';
 
 const CONTROLS: [string, string][] = [
   ['W A S D', 'Walk (in flight: fly)'],
@@ -20,7 +21,6 @@ const CONTROLS: [string, string][] = [
   ['M', 'City map: metro, stations · click to set a marker the compass points to (travel in sandbox)'],
   ['N', 'Minimap on / off'],
   ['B', 'Test blast where you look (sandbox)'],
-  ['T', 'Fast time on/off'],
   ['[  ]', 'Time of day −1 h / +1 h'],
   ['F8', 'Free camera'],
   ['H', 'This help'],
@@ -62,7 +62,7 @@ export class Menu {
     this.help.innerHTML = `<div class="panel"><h2>Controls</h2><table>${CONTROLS.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('')}</table><p class="sub">Normal mode: help people to earn karma and buy powers with P. Everything can be destroyed. People live their own days — and they notice what you do.</p></div>`;
     document.body.appendChild(this.help);
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-    $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); };
+    $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); saveTimeScale(game.sky.timeScale); };
     $<HTMLInputElement>('pHour').oninput = (e) => { game.sky.hour = Number((e.target as HTMLInputElement).value) % 24; this.sync(); };
     $<HTMLInputElement>('pVol').oninput = (e) => { game.audio.setVolume(Number((e.target as HTMLInputElement).value)); this.sync(); };
     $<HTMLInputElement>('pMute').onchange = (e) => game.audio.setMuted((e.target as HTMLInputElement).checked);

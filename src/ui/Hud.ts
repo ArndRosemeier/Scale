@@ -32,7 +32,9 @@ export class Hud {
     const size = pl ? (pl.height < 1 ? `${(pl.height * 100).toFixed(0)} cm` : `${pl.height.toFixed(pl.height < 10 ? 2 : 1)} m`) : '';
     const day = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][g.sky.day % 7];
     if (!this.detail) {
-      this.el.textContent = `${day} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} · ${size}${pl?.flying ? ' · flying' : ''} · ${this.fps.toFixed(0)} fps`;
+      // The time speed only when it is not real time (stopped / faster), so it is never a surprise.
+      const ts = g.sky.timeScale, speed = ts === 1 ? '' : ts === 0 ? ' (stopped)' : ` (${ts}×)`;
+      this.el.textContent = `${day} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}${speed} · ${size}${pl?.flying ? ' · flying' : ''} · ${this.fps.toFixed(0)} fps`;
       return;
     }
     this.el.textContent =

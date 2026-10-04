@@ -116,7 +116,7 @@ export class VehicleRenderer {
       const t = ex.body.translation(), r = ex.body.rotation();
       const m = this.bucket(v.kind as VehicleKind, v.variant).model;
       ex.q!.set(r.x, r.y, r.z, r.w);
-      const off = new THREE.Vector3(0, -m.height / 2, 0).applyQuaternion(ex.q!);
+      const off = _off.set(0, -m.height / 2, 0).applyQuaternion(ex.q!);
       v.x = t.x + off.x; v.y = t.y + off.y; v.z = t.z + off.z;
       if (ex.body.isSleeping() || !v.alive) {
         if (!v.alive || v.stateT > 30) { this.physics.world.removeRigidBody(ex.body); ex.body = undefined; this.wrecks.splice(i, 1); }
@@ -154,7 +154,9 @@ export class VehicleRenderer {
       // Wheels.
       const steerTarget = v.turn ? Math.max(-0.5, Math.min(0.5, (v.indicator || 0) * -0.35)) : 0;
       ex.steer += (steerTarget - ex.steer) * Math.min(1, dt * 5);
-      b.model.wheels.forEach((w, wi) => {
+      const W = b.model.wheels;
+      for (let wi = 0; wi < W.length; wi++) {
+        const w = W[wi];
         const j = b.nw++;
         const left = w[0] < 0;
         const front = w[2] < 0;
@@ -167,7 +169,7 @@ export class VehicleRenderer {
         b.wheels.setMatrixAt(j, _world);
         b.wPaint.setXYZ(j, 0.2, 0.2, 0.2);
         b.wState.setXYZW(j, 0, 0, 0, v.damage);
-      });
+      }
     };
     for (const v of moving) draw(v, MOVE_RANGE);
     for (const v of parked) draw(v, PARK_RANGE);
@@ -177,9 +179,9 @@ export class VehicleRenderer {
       b.wheels.count = b.nw;
       total += b.n;
       if (b.n) {
-        b.body.instanceMatrix.needsUpdate = true;
-        b.wheels.instanceMatrix.needsUpdate = true;
-        b.paint.needsUpdate = b.state.needsUpdate = b.wPaint.needsUpdate = b.wState.needsUpdate = true;
+        // Upload only the instances in use (the buffers hold CAP).
+        upload(b.body.instanceMatrix, b.n); upload(b.paint, b.n); upload(b.state, b.n);
+        upload(b.wheels.instanceMatrix, b.nw); upload(b.wPaint, b.nw); upload(b.wState, b.nw);
       }
     }
     this.stats.drawn = total;
@@ -192,3 +194,11 @@ const _lp = new THREE.Vector3();
 const _ls = new THREE.Vector3();
 const _local = new THREE.Matrix4();
 const _world = new THREE.Matrix4();
+const _off = new THREE.Vector3();
+
+/** Mark the first n instances of an instanced attribute for upload. */
+function upload(a: THREE.BufferAttribute, n: number): void {
+  a.clearUpdateRanges();
+  a.addUpdateRange(0, n * a.itemSize);
+  a.needsUpdate = true;
+}

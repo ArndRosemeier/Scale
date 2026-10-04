@@ -80,6 +80,8 @@ export interface PedAgent {
    * of the usual pace, vanishing down the stairs at the end (set by the city response).
    */
   evac?: number;
+  /** Terrain height under the agent (`gh`) and where it was sampled (see Pedestrians.groundOf). */
+  gx?: number; gz?: number; gh?: number;
 }
 
 /** Gawkers per incident (people already standing and looking within GAWK_R m count). */
@@ -115,6 +117,8 @@ export type DownCause = 'player' | 'collapse' | 'accident' | 'threat' | 'police'
 
 
 const MAX_AGENTS = 2600;
+/** An agent's cached terrain height is reused within this distance (m) of where it was sampled. */
+const GROUND_REUSE = 0.4;
 /** Extra room above MAX_AGENTS for actors (crime, police, deeds: budget 40). */
 const ACTOR_RESERVE = 48;
 const SCAN_R = 480;
@@ -194,6 +198,9 @@ export class Pedestrians {
       const d = Math.hypot(a.x - px, a.z - pz);
       if (d > 160 && a.state !== PState.Flee && a.state !== PState.Down) {
         if ((i + this.frame) % 4 === 0) this.step(a, dt * 4, gameDt * 4);
+      } else if (d > 160 && a.state === PState.Flee) {
+        // A mass flight (a monster, an evacuation): the far runners at half the rate.
+        if ((i + this.frame) % 2 === 0) this.step(a, dt * 2, gameDt * 2);
       } else this.step(a, dt, gameDt);
       if (!a.alive || (d > DESPAWN_R && !a.actor?.pinned)) this.remove(i);
     }
@@ -291,7 +298,7 @@ export class Pedestrians {
     const pref = c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35;
     const a: PedAgent = {
       id, cit: c, x: route[0], z: route[1], y: 0, heading: 0, speed: pref, pref, state: PState.Walk, route, wp: 1, dest,
-      fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1,
+      fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
     };
     // Place along the route by progress.
     if (this.pendingCarDest) { a.carDest = this.pendingCarDest; this.pendingCarDest = null; }
@@ -446,7 +453,22 @@ export class Pedestrians {
    * already up on it (`heading`, `yRef`); a path on the bank passing under a bridge stays below.
    */
   private groundY(x: number, z: number, onRoad: boolean, heading = NaN, yRef = NaN): number {
-    const g = this.terrain.height(x, z) + (onRoad ? 0 : CURB_H);
+    return this.groundOver(this.terrain.height(x, z), x, z, onRoad, heading, yRef);
+  }
+
+  /**
+   * groundY for a walking agent: the terrain height is cached per agent while it stays within
+   * GROUND_REUSE of where it was sampled (terrain.height — noise, rivers, coast — was the
+   * single largest cost of stepping 2600 people, and most of the garbage).
+   */
+  private groundOf(a: PedAgent, heading = NaN, yRef = NaN): number {
+    const dx = a.x - (a.gx ?? 1e9), dz = a.z - (a.gz ?? 1e9);
+    if (!(dx * dx + dz * dz <= GROUND_REUSE * GROUND_REUSE)) { a.gx = a.x; a.gz = a.z; a.gh = this.terrain.height(a.x, a.z); }
+    return this.groundOver(a.gh!, a.x, a.z, a.onRoad, heading, yRef);
+  }
+
+  private groundOver(terrainY: number, x: number, z: number, onRoad: boolean, heading: number, yRef: number): number {
+    const g = terrainY + (onRoad ? 0 : CURB_H);
     const deck = this.world.bridgeDeck(x, z);
     if (deck === -Infinity || deck <= g) return g;
     if (Math.abs(yRef - deck) < 1.5) return deck;
@@ -499,7 +521,7 @@ export class Pedestrians {
       // Knocked down / flung: simple ballistic slide, then lie.
       a.vy -= 9.81 * dt;
       a.x += a.vx * dt; a.z += a.vz * dt; a.y += a.vy * dt;
-      const g = this.groundY(a.x, a.z, a.onRoad, NaN, a.y);
+      const g = this.groundOf(a, NaN, a.y);
       if (a.y < g) { a.y = g; a.vy = 0; a.vx *= 0.8; a.vz *= 0.8; }
       // Actors lie until their owner gets them up (or hands them back).
       if (!a.actor && a.stateT > (a.downBy === 'accident' ? ACCIDENTS.lieFor : 25) && a.fear < 100) a.alive = false;
@@ -618,7 +640,7 @@ export class Pedestrians {
       a.heading += d * Math.min(1, dt * 3);
     }
     a.phase += a.speed * dt;
-    a.y += (this.groundY(a.x, a.z, a.onRoad, a.heading, a.y) - a.y) * Math.min(1, dt * 10);
+    a.y += (this.groundOf(a, a.heading, a.y) - a.y) * Math.min(1, dt * 10);
   }
 
   /** After fleeing: new route from here to the destination (or vanish). */
@@ -650,7 +672,7 @@ export class Pedestrians {
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y, heading: yaw, speed: 0, pref: 1.3, state: pose === 'sit' ? PState.Sit : pose === 'sleep' ? PState.Sleep : PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: x, lookZ: z, lookY: y,
-      stateT: -1e9, onRoad: false, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, inside: true, floorY: y,
+      stateT: -1e9, onRoad: false, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0, inside: true, floorY: y,
     };
     this.agents.push(a);
     this.byId.set(c.id, a);
@@ -671,7 +693,7 @@ export class Pedestrians {
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, onRoad, heading), heading, speed: 0, pref: 1.4, state: PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: x, fearZ: z,
-      lookX: x, lookZ: z, lookY: 0, stateT: 0, onRoad, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1,
+      lookX: x, lookZ: z, lookY: 0, stateT: 0, onRoad, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
     };
     this.agents.push(a);
     this.byId.set(c.id, a);
@@ -684,7 +706,7 @@ export class Pedestrians {
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, true), heading: 0, speed: 0, pref: 1.4, state: PState.Flee,
       route: Float32Array.from([x, z, 0, x + 1, z, 0]), wp: 1, dest: null, fear: 1, fearX: fromX, fearZ: fromZ,
-      lookX: fromX, lookZ: fromZ, lookY: 0, stateT: 0, onRoad: true, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1,
+      lookX: fromX, lookZ: fromZ, lookY: 0, stateT: 0, onRoad: true, phase: 0, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
     };
     this.agents.push(a);
     this.byId.set(c.id, a);

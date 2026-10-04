@@ -170,7 +170,7 @@ const SECTIONS: [string, Btn[]][] = [
   ]],
   ['World', [
     ...[6, 12, 18, 22].map((h) => ({ label: `${h}:00`, run: (_g: Game, d: Dev) => call(d, 'hour', h) })),
-    { label: 'Fast time on/off', run: (g) => (g.sky.timeScale = g.sky.timeScale === 20 ? 600 : 20) },
+    { label: 'Fast time on/off', run: (g) => (g.sky.timeScale = g.sky.timeScale >= 600 ? 1 : 600) },
     ...[0, 1, 2].map((i) => ({ label: `Slime colony ${i}`, run: (_g: Game, d: Dev) => call(d, 'colony', i) })),
   ]],
 ];

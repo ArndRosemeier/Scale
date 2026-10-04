@@ -17,7 +17,8 @@ export class SkySystem {
   /** Days since the start (weekday = day % 7, 0 = Monday). */
   day = 0;
   /** Game seconds per real second. */
-  timeScale = 20;
+  /** Game seconds per real second: real time by default; the pause menu sets it (remembered). */
+  timeScale = loadTimeScale();
   private pmrem: THREE.PMREMGenerator;
   private envScene = new THREE.Scene();
   private envSky: Sky;
@@ -194,3 +195,14 @@ function makeSky(reversed: boolean): Sky {
 const _tunnelFill = new THREE.Color(0.9, 0.85, 0.75);
 const _tunnelGround = new THREE.Color(0.35, 0.3, 0.25);
 const _tunnelFog = new THREE.Color(0.02, 0.018, 0.015);
+
+const TIME_KEY = 'scale.timeScale';
+
+function loadTimeScale(): number {
+  try { const v = Number(localStorage.getItem(TIME_KEY)); return Number.isFinite(v) && v >= 0 && localStorage.getItem(TIME_KEY) !== null ? v : 1; } catch { return 1; }
+}
+
+/** Remember the chosen time speed (pause menu, admin console). */
+export function saveTimeScale(v: number): void {
+  try { localStorage.setItem(TIME_KEY, String(v)); } catch { /* storage unavailable */ }
+}

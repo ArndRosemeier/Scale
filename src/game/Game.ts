@@ -964,7 +964,6 @@ export class Game {
 
   private timeKeys(): void {
     const i = this.input;
-    if (i.hit('KeyT')) this.sky.timeScale = this.sky.timeScale === 20 ? 600 : 20;
     if (i.hit('BracketRight')) this.sky.hour = (this.sky.hour + 1) % 24;
     if (i.hit('BracketLeft')) this.sky.hour = (this.sky.hour + 23) % 24;
   }
