@@ -1,0 +1,176 @@
+/**
+ * Hidden admin console (Ctrl+Shift+F12): buttons for the things worth trying out — spawn the
+ * Strider or a robot malfunction, set the city response level, start crimes and small deeds,
+ * karma, health, size, time of day, the slime colonies — and a command line that runs any
+ * JavaScript with `game` and `dev` in scope (Up / Down for history).
+ *
+ * Built on the console helpers (`window.dev`, installed by the systems themselves); a button
+ * whose helper is missing just says so. While open, the game gets no keyboard input.
+ */
+import type { Game } from '../game/Game';
+
+type Dev = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+interface Btn { label: string; run: (g: Game, dev: Dev) => unknown }
+
+const HISTORY_KEY = 'scale.admin.history';
+
+export class AdminConsole {
+  private el: HTMLDivElement;
+  private log: HTMLDivElement;
+  private input: HTMLInputElement;
+  private history: string[] = [];
+  private hi = -1;
+  open = false;
+
+  constructor(private game: Game) {
+    this.el = document.createElement('div');
+    this.el.id = 'admin';
+    this.el.innerHTML = `<div class="adm-head"><b>Admin console</b><span>Ctrl+Shift+F12 / Esc to close</span></div><div class="adm-body"></div>
+      <div class="adm-log"></div><input class="adm-cmd" type="text" spellcheck="false" placeholder="JavaScript — game, dev in scope (e.g. dev.threat.strider.status())">`;
+    document.body.appendChild(this.el);
+    this.log = this.el.querySelector('.adm-log')!;
+    this.input = this.el.querySelector('.adm-cmd')!;
+    try { this.history = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]'); } catch { /* storage unavailable */ }
+    const body = this.el.querySelector('.adm-body')!;
+    for (const [title, btns] of SECTIONS) {
+      const sec = document.createElement('div');
+      sec.className = 'adm-sec';
+      sec.innerHTML = `<h4>${title}</h4>`;
+      for (const b of btns) {
+        const e = document.createElement('button');
+        e.textContent = b.label;
+        e.onclick = () => this.exec(b.label, () => b.run(this.game, this.dev()));
+        sec.appendChild(e);
+      }
+      body.appendChild(sec);
+    }
+    // Capture phase: the map and the game never see these keys.
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'F12' && e.ctrlKey && e.shiftKey) { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(); return; }
+      if (!this.open) return;
+      if (e.code === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(false); return; }
+      if (e.target !== this.input) return;
+      e.stopImmediatePropagation();
+      if (e.code === 'Enter') { e.preventDefault(); this.command(this.input.value); }
+      else if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+        e.preventDefault();
+        if (!this.history.length) return;
+        this.hi = Math.max(-1, Math.min(this.history.length - 1, this.hi + (e.code === 'ArrowUp' ? 1 : -1)));
+        this.input.value = this.hi < 0 ? '' : this.history[this.history.length - 1 - this.hi];
+      }
+    }, true);
+  }
+
+  toggle(on = !this.open): void {
+    this.open = on;
+    this.el.classList.toggle('open', on);
+    const g = this.game;
+    if (on) {
+      g.input.keys.clear();
+      g.input.buttons = 0;
+      if (document.pointerLockElement) document.exitPointerLock();
+      setTimeout(() => this.input.focus(), 0);
+    } else this.input.blur();
+  }
+
+  private dev(): Dev {
+    return ((window as unknown as { dev?: Dev }).dev ?? {}) as Dev;
+  }
+
+  private command(src: string): void {
+    const s = src.trim();
+    if (!s) return;
+    this.history = this.history.filter((h) => h !== s).concat(s).slice(-50);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(this.history)); } catch { /* storage unavailable */ }
+    this.hi = -1;
+    this.input.value = '';
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const fn = new Function('game', 'dev', `return (${s});`) as (g: Game, d: Dev) => unknown;
+    this.exec(s, () => fn(this.game, this.dev()));
+  }
+
+  private exec(label: string, f: () => unknown): void {
+    let out: string;
+    let bad = false;
+    try {
+      const r = f();
+      if (r instanceof Promise) { r.then((v) => this.print(`${label} → ${show(v)}`), (e) => this.print(`${label} → ${e}`, true)); return; }
+      out = show(r);
+    } catch (e) { out = String(e); bad = true; }
+    this.print(`${label} → ${out}`, bad);
+  }
+
+  private print(text: string, bad = false): void {
+    const line = document.createElement('div');
+    line.textContent = text;
+    if (bad) line.className = 'bad';
+    this.log.appendChild(line);
+    while (this.log.children.length > 60) this.log.firstElementChild!.remove();
+    this.log.scrollTop = this.log.scrollHeight;
+  }
+}
+
+function show(v: unknown): string {
+  if (v === undefined) return 'ok';
+  if (typeof v === 'string') return v;
+  try {
+    const s = JSON.stringify(v, (_k, x) => (typeof x === 'number' ? Math.round(x * 100) / 100 : x));
+    return s === undefined ? String(v) : s.length > 400 ? `${s.slice(0, 400)}…` : s;
+  } catch { return String(v); }
+}
+
+/** Calls a helper that may not exist (a system not built in this mode / build). */
+function call(dev: Dev, path: string, ...args: unknown[]): unknown {
+  let o: Dev | undefined = dev, parent: Dev | undefined;
+  for (const k of path.split('.')) { parent = o; o = o?.[k]; }
+  if (typeof o !== 'function') return `no dev.${path} here`;
+  return (o as (...a: unknown[]) => unknown).apply(parent, args);
+}
+
+const SECTIONS: [string, Btn[]][] = [
+  ['Strider', [
+    { label: 'Spawn (river)', run: (_g, d) => call(d, 'threat.spawn', 'strider', { from: 'river' }) },
+    { label: 'Spawn + go there', run: (_g, d) => { const r = call(d, 'threat.spawn', 'strider', { from: 'river' }); call(d, 'threat.strider.player', 120); return r; } },
+    { label: 'Roar', run: (_g, d) => call(d, 'threat.strider.roar') },
+    { label: 'Rear + roar', run: (_g, d) => call(d, 'threat.strider.roar', true) },
+    { label: 'Breathe', run: (_g, d) => call(d, 'threat.strider.breathe') },
+    { label: 'Tail swipe', run: (_g, d) => call(d, 'threat.strider.swipe') },
+    { label: 'Expose throat', run: (_g, d) => call(d, 'threat.strider.expose', 'throat') },
+    { label: 'Damage 300', run: (_g, d) => call(d, 'threat.strider.damage', 'back', 300) },
+    { label: 'Skip 100 m', run: (_g, d) => call(d, 'threat.strider.skip', 100) },
+    { label: 'Retreat', run: (_g, d) => call(d, 'threat.strider.retreat') },
+    { label: 'Kill', run: (_g, d) => call(d, 'threat.strider.die') },
+    { label: 'Status', run: (_g, d) => call(d, 'threat.strider.status') },
+  ]],
+  ['City events', [
+    { label: 'Robot malfunction', run: (_g, d) => call(d, 'threat.spawn', 'robots') },
+    { label: 'Omen: glitch', run: (_g, d) => call(d, 'threat.omen', 'glitch') },
+    { label: 'Omen: tremor', run: (_g, d) => call(d, 'threat.strider.omen', 'tremor') },
+    { label: 'Stop all events', run: (_g, d) => call(d, 'threat.stop') },
+    ...[0, 1, 2, 3, 4, 5].map((n) => ({ label: `Response ${n}`, run: (_g: Game, d: Dev) => call(d, 'response.level', n) })),
+    { label: 'Events status', run: (_g, d) => call(d, 'threat.events') },
+  ]],
+  ['Crime & deeds', [
+    { label: 'Snatch', run: (_g, d) => call(d, 'crime', 'snatch', 25) },
+    { label: 'Mugging', run: (_g, d) => call(d, 'crime', 'mugging', 25) },
+    { label: 'Robbery', run: (_g, d) => call(d, 'crime', 'robbery', 40) },
+    { label: 'Cat in tree', run: (_g, d) => call(d, 'deed', 'cat') },
+    { label: 'Runaway dog', run: (_g, d) => call(d, 'deed', 'dog') },
+    { label: 'Lost wallet', run: (_g, d) => call(d, 'deed', 'wallet') },
+    { label: 'Wanted 3', run: (_g, d) => call(d, 'wanted', 3) },
+    { label: 'Wanted 0', run: (_g, d) => call(d, 'wanted', 0) },
+  ]],
+  ['Player', [
+    { label: '+100 karma', run: (g) => { g.progress.addKarma(100, 'admin'); return g.progress.sandbox ? 'sandbox has no karma' : g.progress.karma; } },
+    { label: 'Heal', run: (g) => { g.crime.health.hp = g.crime.health.max; return 'healed'; } },
+    { label: 'Invulnerable on/off', run: (g) => (g.crime.health.invulnerable = !g.crime.health.invulnerable) },
+    ...[1.8, 10, 50, 100].map((h) => ({ label: `Size ${h} m`, run: (g: Game) => { g.player.height = h; return h; } })),
+    { label: 'Go to map marker', run: (g, d) => { const w = g.map.waypoint; if (!w) return 'set a marker on the map first'; return call(d, 'teleport', w.x, w.z); } },
+  ]],
+  ['World', [
+    ...[6, 12, 18, 22].map((h) => ({ label: `${h}:00`, run: (_g: Game, d: Dev) => call(d, 'hour', h) })),
+    { label: 'Fast time on/off', run: (g) => (g.sky.timeScale = g.sky.timeScale === 20 ? 600 : 20) },
+    ...[0, 1, 2].map((i) => ({ label: `Slime colony ${i}`, run: (_g: Game, d: Dev) => call(d, 'colony', i) })),
+  ]],
+];

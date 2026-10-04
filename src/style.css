@@ -373,3 +373,17 @@ body.looking #crosshair { display: block; }
 .bark { position: fixed; left: 0; top: 0; display: none; max-width: 200px; padding: 5px 10px 6px; margin-top: -6px; background: rgba(252, 251, 247, 0.94); color: #1d242b; border-radius: 12px; font: 600 12px/1.25 system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; z-index: 4; transform-origin: 50% 100%; white-space: nowrap; transition: opacity 0.35s; will-change: transform; }
 .bark::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(252, 251, 247, 0.94); }
 .bark.out { opacity: 0; }
+
+/* Hidden admin console (src/ui/AdminConsole.ts, Ctrl+Shift+F12). */
+#admin { position: fixed; right: 16px; top: 64px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 220px); display: none; flex-direction: column; background: rgba(14, 18, 24, 0.94); border: 1px solid #2c3846; border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,0.45); color: #d8dee6; font: 12px/1.35 system-ui, sans-serif; z-index: 40; }
+#admin.open { display: flex; }
+#admin .adm-head { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 12px; border-bottom: 1px solid #2c3846; }
+#admin .adm-head span { color: #8fa3b5; font-size: 11px; }
+#admin .adm-body { overflow-y: auto; padding: 4px 12px 8px; }
+#admin .adm-sec h4 { margin: 8px 0 5px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #d8b56a; }
+#admin .adm-sec button { margin: 0 5px 5px 0; padding: 4px 9px; border: 1px solid #3a4756; border-radius: 5px; background: #222c37; color: #e8ecf0; font-size: 12px; cursor: pointer; }
+#admin .adm-sec button:hover { background: #2d3a48; border-color: #d8b56a; }
+#admin .adm-log { min-height: 48px; max-height: 140px; overflow-y: auto; margin: 0 12px; padding: 6px 8px; background: #0a0d11; border-radius: 6px; font: 11px/1.4 ui-monospace, Consolas, monospace; color: #a8d8a0; white-space: pre-wrap; word-break: break-all; }
+#admin .adm-log .bad { color: #ff8a80; }
+#admin .adm-cmd { margin: 8px 12px 12px; padding: 7px 9px; border: 1px solid #3a4756; border-radius: 6px; background: #0a0d11; color: #e8ecf0; font: 12px ui-monospace, Consolas, monospace; outline: none; }
+#admin .adm-cmd:focus { border-color: #d8b56a; }

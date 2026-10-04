@@ -57,6 +57,7 @@ import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
 import { Compass } from '../ui/Compass';
 import { Barks } from '../ui/Barks';
+import { AdminConsole } from '../ui/AdminConsole';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -129,6 +130,7 @@ export class Game {
   map!: GameMap;
   compass!: Compass;
   barks!: Barks;
+  admin!: AdminConsole;
   progress!: Progress;
   abilities!: AbilitySystem;
   powerFx!: PowerFx;
@@ -372,6 +374,7 @@ export class Game {
     this.map = new GameMap(this);
     this.compass = new Compass(this);
     this.barks = new Barks(this);
+    this.admin = new AdminConsole(this);
     this.skyline.start(this.player.pos.x, this.player.pos.z);
     this.flightFx = new FlightFX(this.dust);
     this.renderer.scene.add(this.flightFx.group);
