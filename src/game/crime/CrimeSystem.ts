@@ -53,6 +53,9 @@ export const CRIME_KARMA = {
   returned: 8,
 };
 
+/** Map / compass descriptions of a crime in progress. */
+const CRIME_TITLE: Record<CrimeKind, string> = { snatch: 'Purse snatching — a thief on the run', mugging: 'A mugging — someone is being threatened', robbery: 'A robbery' };
+
 export const ACTOR_BUDGET = 40;
 const SETTING_KEY = 'scale.crime.setting';
 
@@ -819,16 +822,17 @@ export class CrimeSystem {
       for (const a of c.criminals) {
         const act = a.actor;
         if (!a.alive || !act || act.state === 'gone' || act.state === 'arrested') continue;
-        list.push({ x: a.x, z: a.z, color: '#ff3b30', kind: act.state === 'ko' || act.state === 'surrender' ? 'dot' : 'alert', title: '' });
+        const down = act.state === 'ko' || act.state === 'surrender';
+        list.push({ x: a.x, z: a.z, color: '#ff3b30', kind: down ? 'dot' : 'alert', title: down ? 'A criminal, stopped — the police will take over' : CRIME_TITLE[c.kind] });
       }
-      if (c instanceof Robbery && c.phase === 'getaway' && c.car) list.push({ x: c.car.x, z: c.car.z, color: '#ff3b30', kind: 'alert', title: '' });
+      if (c instanceof Robbery && c.phase === 'getaway' && c.car) list.push({ x: c.car.x, z: c.car.z, color: '#ff3b30', kind: 'alert', title: 'Getaway car — block it or stop it' });
     }
-    for (const u of this.police.units) list.push({ x: u.car.x, z: u.car.z, color: '#3b82f6', kind: 'dot', title: '' });
+    for (const u of this.police.units) list.push({ x: u.car.x, z: u.car.z, color: '#3b82f6', kind: 'dot', title: 'Police' });
     // Carried loot: where it goes back (also on the compass at any distance).
     for (const L of this.loots) {
       if (L.loot.carrier !== 'player') continue;
       const T = this.returnTarget(L);
-      list.push({ x: T.x, z: T.z, color: '#4cd964', kind: 'alert', title: 'Give it back here', always: true });
+      list.push({ x: T.x, z: T.z, color: '#4cd964', kind: 'alert', title: 'The stolen goods go back here (E)', always: true });
     }
     const key = list.map((m) => `${m.kind[0]}${Math.round(m.x / 2)},${Math.round(m.z / 2)}`).join(';');
     if (key !== this.markKey) { this.markKey = key; this.g.map.setMarkers('crime', list); }

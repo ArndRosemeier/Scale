@@ -277,10 +277,10 @@ export class ThreatDirector {
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
       if (!ev.active) continue;
-      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots' : ev.archetype === 'strider' ? 'Giant creature' : 'Threat', always: true });
+      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : 'Threat', always: true });
       if (ev instanceof RobotMalfunction) for (const m of ev.units) {
         if (m.out || m.mode !== 'hostile' || Math.hypot(m.obj.x - p.x, m.obj.z - p.z) > 250) continue;
-        list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: '' });
+        list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: 'A rogue machine' });
       }
     }
     const key = list.map((m) => `${Math.round(m.x / 3)},${Math.round(m.z / 3)}`).join(';');

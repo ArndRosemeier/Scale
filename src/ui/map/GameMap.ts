@@ -90,6 +90,10 @@ export class GameMap {
   private closedAt = -1e9;
   /** Marker layers from game systems (power cores, people needing help, …). */
   private markerSets = new Map<string, MapMarker[]>();
+  /** Where the described markers were drawn last (canvas px), for the hover tooltip. */
+  private hitsFull: { x: number; y: number; t: string }[] = [];
+  private hitsMini: { x: number; y: number; t: string }[] = [];
+  private tip: HTMLDivElement;
   private markerT = 0;
 
   /** The player's own marker (set on the map; the compass points to it), null: none. */
@@ -97,7 +101,7 @@ export class GameMap {
 
   setWaypoint(p: { x: number; z: number } | null): void {
     this.waypoint = p;
-    this.setMarkers('waypoint', p ? [{ x: p.x, z: p.z, color: '#e8483b', kind: 'pin', title: 'Your marker' }] : []);
+    this.setMarkers('waypoint', p ? [{ x: p.x, z: p.z, color: '#e8483b', kind: 'pin', title: 'Your marker — the compass points to it' }] : []);
   }
 
   /** Every marker of every layer (the compass shows the nearby ones). */
@@ -181,6 +185,14 @@ export class GameMap {
     document.body.appendChild(this.mini);
     this.mg = this.mini.getContext('2d')!;
     this.mini.addEventListener('click', () => this.toggle(true));
+    this.tip = document.createElement('div');
+    this.tip.className = 'map-tip';
+    document.body.appendChild(this.tip);
+    this.mini.addEventListener('mousemove', (e) => {
+      const k = MINI_PX / (this.mini.clientWidth || MINI_PX);
+      this.hover(this.hitsMini, e.offsetX * k, e.offsetY * k, e.clientX, e.clientY, -1);
+    });
+    this.mini.addEventListener('mouseleave', () => { this.tip.style.display = 'none'; });
 
     for (const cb of this.root.querySelectorAll<HTMLInputElement>('input[data-layer]')) {
       const k = cb.dataset.layer as keyof MapLayers;
@@ -205,6 +217,7 @@ export class GameMap {
         return;
       }
       this.hoverStation = this.stationNear(e.offsetX, e.offsetY);
+      this.hover(this.hitsFull, e.offsetX, e.offsetY, e.clientX, e.clientY, this.hoverStation);
       this.canvas.style.cursor = this.hoverStation >= 0 ? 'pointer' : '';
     });
     this.canvas.addEventListener('pointerup', (e) => {
@@ -219,6 +232,7 @@ export class GameMap {
       this.zoomAt(Math.pow(1.0018, -dy), e.offsetX, e.offsetY);
     }, { passive: false });
     this.canvas.addEventListener('dblclick', (e) => this.zoomAt(2, e.offsetX, e.offsetY));
+    this.canvas.addEventListener('pointerleave', () => { this.tip.style.display = 'none'; });
 
     // ---- keyboard: capture phase, so the game never sees keys while the map is open
     window.addEventListener('keydown', (e) => {
@@ -254,6 +268,7 @@ export class GameMap {
     this.open = on;
     this.root.classList.toggle('open', on);
     this.hidePop();
+    this.tip.style.display = 'none';
     if (on) {
       // Release the mouse and drop held keys: the player stops while the map is open.
       this.game.input.keys.clear();
@@ -661,6 +676,8 @@ export class GameMap {
   /** Marker layers (screen space); on the minimap, markers outside are pinned to the edge. */
   private drawCustom(g: CanvasRenderingContext2D, W: number, H: number, s: number, ox: number, oy: number, full: boolean): void {
     const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 300);
+    const hits = full ? this.hitsFull : this.hitsMini;
+    hits.length = 0;
     for (const list of this.markerSets.values()) {
       for (const m of list) {
         let x = ox + m.x * s, y = oy + m.z * s;
@@ -673,6 +690,7 @@ export class GameMap {
         const r = full ? 8 : 5;
         g.save();
         g.translate(x, y);
+        if (m.title) hits.push({ x, y: m.kind === 'pin' ? y - (full ? 14 : 10) : y, t: m.title });
         if (m.kind === 'pin') {
           if (!full) g.scale(0.7, 0.7);
           drawPin(g, 0, 0);
@@ -698,6 +716,25 @@ export class GameMap {
         g.restore();
       }
     }
+  }
+
+  /** Hovering a described marker (or a metro station on the full map): a short tooltip by the cursor. */
+  private hover(hits: { x: number; y: number; t: string }[], x: number, y: number, cx: number, cy: number, station: number): void {
+    let best: string | null = null, bd = 12;
+    for (const h of hits) {
+      const d = Math.hypot(h.x - x, h.y - y);
+      if (d < bd) { bd = d; best = h.t; }
+    }
+    if (!best && station >= 0) {
+      const m = this.game.macro, st = m.metroStations[station];
+      best = `${st.name} — metro, line${st.lines.length > 1 ? 's' : ''} ${st.lines.map((l) => m.metroLines[l].name).join(', ')}`;
+    }
+    if (!best) { this.tip.style.display = 'none'; return; }
+    if (this.tip.textContent !== best) this.tip.textContent = best;
+    this.tip.style.display = 'block';
+    const w = this.tip.offsetWidth;
+    this.tip.style.left = `${Math.min(cx + 14, window.innerWidth - w - 8)}px`;
+    this.tip.style.top = `${cy + 16}px`;
   }
 
   private drawPlayer(g: CanvasRenderingContext2D, x: number, y: number, k: number): void {

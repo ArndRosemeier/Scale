@@ -136,7 +136,7 @@ export class PowerCores {
 
   private publishMarkers(): void {
     const list: MapMarker[] = [];
-    for (const l of this.live) if (l.spot && this.progress.seenCore(l.site.id)) list.push({ x: l.spot.x, z: l.spot.z, color: LOOT_INFO[l.site.loot].color, kind: 'core', title: LOOT_INFO[l.site.loot].name });
+    for (const l of this.live) if (l.spot && this.progress.seenCore(l.site.id)) list.push({ x: l.spot.x, z: l.spot.z, color: LOOT_INFO[l.site.loot].color, kind: 'core', title: `${LOOT_INFO[l.site.loot].name} — ${LOOT_INFO[l.site.loot].text} (walk into it)` });
     const key = list.map((m) => `${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(';');
     if (key === this.markerKey) return;
     this.markerKey = key;

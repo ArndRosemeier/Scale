@@ -419,7 +419,7 @@ export class SmallDeeds {
     const list: MapMarker[] = [];
     if (d && d.phase !== 'done') {
       const tx = d.phase === 'carried' || d.phase === 'following' ? d.owner!.x : d.x, tz = d.phase === 'carried' || d.phase === 'following' ? d.owner!.z : d.z;
-      if (Math.hypot(tx - p.x, tz - p.z) < SMALL_DEEDS.notice || d.phase !== 'waiting') list.push({ x: tx, z: tz, color: '#ffc04d', kind: 'dot', title: '' });
+      if (Math.hypot(tx - p.x, tz - p.z) < SMALL_DEEDS.notice || d.phase !== 'waiting') list.push({ x: tx, z: tz, color: '#ffc04d', kind: 'dot', title: d.phase !== 'waiting' ? (d.kind === 'dog' ? 'The dog’s owner' : 'The owner') : d.kind === 'cat' ? 'A cat stuck in a tree' : d.kind === 'dog' ? 'A runaway dog' : 'Someone lost their wallet' });
     }
     const key = list.map((m) => `${Math.round(m.x / 3)},${Math.round(m.z / 3)}`).join(';');
     if (key !== this.markKey) { this.markKey = key; this.h.markers(list); }

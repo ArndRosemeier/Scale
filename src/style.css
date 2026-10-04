@@ -387,3 +387,6 @@ body.looking #crosshair { display: block; }
 #admin .adm-log .bad { color: #ff8a80; }
 #admin .adm-cmd { margin: 8px 12px 12px; padding: 7px 9px; border: 1px solid #3a4756; border-radius: 6px; background: #0a0d11; color: #e8ecf0; font: 12px ui-monospace, Consolas, monospace; outline: none; }
 #admin .adm-cmd:focus { border-color: #d8b56a; }
+
+/* Map / minimap hover tooltip (GameMap.hover). */
+.map-tip { position: fixed; display: none; max-width: 260px; padding: 5px 9px; background: rgba(14, 18, 24, 0.94); border: 1px solid #2c3846; border-radius: 6px; color: #e8ecf0; font: 12px/1.35 system-ui, sans-serif; pointer-events: none; z-index: 60; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }

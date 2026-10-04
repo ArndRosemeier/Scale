@@ -103,7 +103,7 @@ export class Deeds {
       // Out of reach (indoors, in the river, stuck at a height where nobody can get to them): no
       // marker that leads nowhere — they are looked after by someone else and leave.
       if (!a.ragdoll && a.stateT > 3 && this.hooks.reachable && !this.hooks.reachable(a)) { a.alive = false; continue; }
-      list.push({ x: a.x, z: a.z, color: '#ff9f43', kind: 'alert', title: 'Needs help' });
+      list.push({ x: a.x, z: a.z, color: '#ff9f43', kind: 'alert', title: 'Someone fell — help them up (E)' });
     }
     const key = list.map((m) => `${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(';');
     if (key !== this.markerKey) { this.markerKey = key; this.hooks.markers?.(list); }
