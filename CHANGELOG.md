@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.022 — 2026-10-04
+
+- **Sewers pass**: every trunk now has its own character — red, yellow or brown brick or concrete, stone ribs across the vault in some, a deep stone portal where one tunnel opens into another, a dark grime band along the foot of the walls and a darker channel.
+- Round pipes on brackets along the walls that stop properly at openings and turn into the wall — no more grey "railings" running straight across the junctions.
+- Outlet pipes dribble water into the channel; lamps are spaced differently per tunnel and some are dead; daylight falls through the manhole lids.
+- **Finding the slimes**: the Lumen's signs are now much easier to spot — their sign on both walls of the right branch at every junction, a big glowing arrow pointing the way, and glowing chevrons along the walkway on the last stretch. Close to a colony, a Lumen scout sometimes waits at a junction and flees down the right tunnel.
+
 ## 0.021 — 2026-10-04
 
 - **Characters in the streets**: a doomsayer with a sandwich board warning that the end is nigh, buskers, living statues (silver or gold) that come alive when you get too close, a mime trapped in an invisible box, jugglers, street dancers (sometimes a crew round a boombox), a chicken mascot handing out flyers for a café round the corner, a tinfoil-hat conspiracy theorist, the pigeon lady, a lost tourist asking the way, neon joggers — and at night a sleepwalker in pyjamas.

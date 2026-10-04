@@ -96,12 +96,12 @@ export class Slimes {
   }
 
   /** A trace room's lone one (key: room id); null removes it. */
-  setScout(key: string, s: { x: number; y: number; z: number; hx: number; hz: number } | null, seed: number): void {
+  setScout(key: string, s: { x: number; y: number; z: number; hx: number; hz: number } | null, seed: number, always = false): void {
     if (!s) { this.scouts.delete(key); return; }
     if (this.scouts.has(key)) return;
     const rng = new Rng(seed);
-    // Only now and then is one there at all.
-    const show = rng.chance(0.55);
+    // Only now and then is one there at all (the sewer junctions' scouts always are).
+    const show = always || rng.chance(0.55);
     const pal: [number, number, number][] = [[0.3, 0.95, 0.8], [0.75, 0.55, 1.0], [1.0, 0.75, 0.35]];
     this.scouts.set(key, { ...s, mode: 'sit', t: 0, col: rng.pick(pal), r: rng.range(0.15, 0.2), show, ph: rng.range(0, 6) });
   }
@@ -432,7 +432,8 @@ export class Slimes {
       let x = sc.x, z = sc.z, sx = 1, sy = 1, glow = 0.6;
       if (sc.mode === 'flee') {
         // Away into the crack in a second, squeezing through.
-        const q = Math.min(1, sc.t / 0.9), e = q * q * (3 - 2 * q);
+        // (A long way — a sewer scout leading down its branch — is glided at a readable pace.)
+        const q = Math.min(1, sc.t / Math.max(0.9, Math.hypot(sc.hx - sc.x, sc.hz - sc.z) / 4)), e = q * q * (3 - 2 * q);
         x = sc.x + (sc.hx - sc.x) * e; z = sc.z + (sc.hz - sc.z) * e;
         const w = Math.sin(sc.t * 14);
         sx = (1 - w * 0.1) * (1 - Math.max(0, q - 0.6) * 2); sy = (1 + w * 0.15) * (1 - Math.max(0, q - 0.6) * 1.5);

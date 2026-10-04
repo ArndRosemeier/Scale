@@ -863,11 +863,18 @@ as distance LOD).
   lower envelope with grade ≤ 0.3), so the whole city's sewers are one network (self test). No manhole lids over
   water; the player does not float in a tunnel under the river (`Collision.underground`).
 * The Lumen's signs (`underground/sewerHints.ts`, pure): Dijkstra over the sewer junctions from every colony room
-  off a sewer; at each junction the colony's sign (`CELL.mark + id % 4`) on the wall of the branch towards it, 7 m
-  in, fading with distance (1400 m); a dotted trail on the walkway within 450 m. One glow mesh for the city.
+  off a sewer; at each junction the colony's sign (`CELL.mark + id % 4`) on both walls of the branch towards it
+  (fading over `MARK_FADE` = 1600 m) and a large glowing arrow 3.2 m in; chevrons every 2.6 m along the walkway
+  within `TRAIL_REACH` (900 m); within `SCOUT_REACH` (650 m) a Lumen scout may wait at a junction and flee down
+  the right branch (`Slimes.setScout(…, always)`). One glow mesh for the city (`sewer-hints`).
+* Sewer looks (`sewerStyle`, per trunk, deterministic): red, yellow or brown brick or concrete (culverts always
+  concrete), a dark grime band at the foot of the walls (`GRIME`), worn walkways, a dark channel; 0–2 round pipes
+  (`pipe()`) on brackets, one straight run per tube segment, stopping at junction openings and doorways with an
+  elbow into the wall; stone ribs across the vault at 7–11 m (or none), a deeper stone portal at every junction
+  mouth; outlet pipes dribbling into the channel; lamp spacing 10–16 m with some dead lamps; additive daylight
+  shafts under the manhole lids (`shaftMat`, scaled by `G.uDayLight`).
 * Tunnel dressing (in the tube chunks): cable trays and a pipe along metro walls, a green
-  running-figure exit sign every 60 m with a maintenance ladder at every third, an old pipe along
-  one sewer wall.
+  running-figure exit sign every 60 m with a maintenance ladder at every third.
 * Side rooms (`underground/rooms.ts`, pure data, deterministic per seed): every ~240–520 m of sewer
   and ~160–320 m of metro tunnel a room opens off the tube through a doorway cut into its wall —
   sewers: alcove, overflow chamber (street grate, falling water, basin), cistern (lowered floor with

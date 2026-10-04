@@ -22,9 +22,11 @@ import type { RoomPlan } from './rooms';
 import { MinHeap } from '../core/heap';
 
 export interface SewerHint {
-  kind: 'mark' | 'dot';
+  /** mark: the colony's sign on a wall; arrow: a smear on the junction floor into the right branch;
+   *  chevron: a glowing V on the walkway pointing the way; scout: a lone Lumen who flees down the branch. */
+  kind: 'mark' | 'arrow' | 'chevron' | 'scout';
   x: number; y: number; z: number;
-  /** Facing (marks: into the tunnel; dots: a rotation in nx). */
+  /** Facing (marks: into the tunnel) or the way to the colony (arrows, chevrons, scouts: unit). */
   nx: number; nz: number;
   /** 0..1: how strong the glow is. */
   s: number;
@@ -32,8 +34,9 @@ export interface SewerHint {
   sign: number;
 }
 
-/** Trails within this distance (m along the sewers) of a colony's room; marks fade out over MARK_FADE. */
-export const TRAIL_REACH = 450, MARK_FADE = 1400;
+/** Chevron trails within this distance (m along the sewers) of a colony's room; marks fade out over
+ *  MARK_FADE; scouts wait at junctions within SCOUT_REACH. */
+export const TRAIL_REACH = 900, MARK_FADE = 1600, SCOUT_REACH = 650;
 
 /**
  * `tubes`: the Underground's tube list (metro lines first, then one per macro.sewers entry).
@@ -83,22 +86,36 @@ export function planSewerHints(macro: MacroPlan, tubes: Tube[], rooms: RoomPlan)
   };
   // Side rooms' doorways cut the walls: keep the marks clear of them.
   const doorNear = (k: number, s: number, side: number) => rooms.rooms.some((r) => r.tube === nMetro + k && r.side === side && Math.abs(r.s - s) < 5);
-  // Marks at the junctions.
+  // At every junction: the colony's sign on both walls of the branch that leads to it, a smear on
+  // the floor pointing into it; near the colonies a scout waiting there now and then.
   for (const [n, d] of dist) {
     const k = via.get(n)!, L = len[k], hw = T(k).halfWidth;
-    if ((at.get(n)?.length ?? 0) < 2 && d > 30) continue;
-    const s0 = Math.min(L / 2, 7);
-    const s = S[k].a === n ? s0 : L - s0;
+    const arms = at.get(n)?.length ?? 0;
+    if (arms < 2 && d > 30) continue;
+    const fromA = S[k].a === n;
+    const strength = Math.max(0.45, Math.min(1, 1.15 - d / MARK_FADE));
+    const sg = sign.get(n)!;
+    const s0 = Math.min(L / 2, 5.5);
+    const s = fromA ? s0 : L - s0;
     for (const side of [1, -1]) {
       if (doorNear(k, s, side)) continue;
       const q = spot(k, s, side * (hw - 0.03));
       if (!q) continue;
-      const strength = Math.max(0.22, Math.min(1, 1.1 - d / MARK_FADE));
-      out.push({ kind: 'mark', x: q.x, y: q.y + 1.25, z: q.z, nx: -side * q.lx, nz: -side * q.lz, s: strength, sign: sign.get(n)! });
-      break;
+      out.push({ kind: 'mark', x: q.x, y: q.y + 1.45, z: q.z, nx: -side * q.lx, nz: -side * q.lz, s: strength, sign: sg });
+    }
+    // The way into the branch (unit, along the trunk from the node).
+    const p0 = pointOnTube(T(k), fromA ? Math.min(L, 2) : Math.max(0, L - 2));
+    if (!p0) continue;
+    const dx = fromA ? p0.dx : -p0.dx, dz = fromA ? p0.dz : -p0.dz;
+    const qa = spot(k, fromA ? Math.min(L / 2, 3.2) : Math.max(L / 2, L - 3.2), 0);
+    if (qa) out.push({ kind: 'arrow', x: qa.x, y: qa.y, z: qa.z, nx: dx, nz: dz, s: strength, sign: sg });
+    if (d < SCOUT_REACH && arms >= 3 && hashf(n * 7919 + k) < 0.55) {
+      const sd = (n + k) % 2 ? 1 : -1;
+      const qs = spot(k, fromA ? Math.min(L / 2, 2.2) : Math.max(L / 2, L - 2.2), sd * (hw - 0.45));
+      if (qs) out.push({ kind: 'scout', x: qs.x, y: qs.y, z: qs.z, nx: dx, nz: dz, s: 1, sign: sg });
     }
   }
-  // Trails: along the way within reach, on one walkway.
+  // Chevrons: along the way within reach, on one walkway, pointing towards the colony.
   for (const [n, d] of dist) {
     if (d > TRAIL_REACH) continue;
     const k = via.get(n)!, L = len[k], hw = T(k).halfWidth;
@@ -107,15 +124,22 @@ export function planSewerHints(macro: MacroPlan, tubes: Tube[], rooms: RoomPlan)
     const own = src.find((q) => q.k === k);
     const span = own ? (fromA ? own.s : L - own.s) : L;
     const side = (n + k) % 2 ? 1 : -1;
-    for (let u = 1.5; u < span; u += 1.15) {
+    for (let u = 4; u < span - 1; u += 2.6) {
       const left = d - u;
       if (left > TRAIL_REACH) continue;
       const s = fromA ? u : L - u;
-      const wob = Math.sin(u * 0.7 + k) * 0.18;
-      const q = spot(k, s, side * (hw - 0.45 + wob));
+      const q = spot(k, s, side * (hw - 0.5));
       if (!q) continue;
-      out.push({ kind: 'dot', x: q.x, y: q.y, z: q.z, nx: Math.cos(u * 2.1), nz: Math.sin(u * 2.1), s: Math.max(0.15, 1 - Math.max(0, left) / TRAIL_REACH), sign: sign.get(n)! });
+      const p = pointOnTube(T(k), s);
+      if (!p) continue;
+      out.push({ kind: 'chevron', x: q.x, y: q.y, z: q.z, nx: fromA ? p.dx : -p.dx, nz: fromA ? p.dz : -p.dz, s: Math.max(0.2, 1 - Math.max(0, left) / TRAIL_REACH), sign: sign.get(n)! });
     }
   }
   return out;
+}
+
+function hashf(n: number): number {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }

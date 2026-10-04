@@ -146,13 +146,33 @@ export class Underground {
       const hints = planSewerHints(macro, this.tubes, this.rooms);
       if (hints.length) {
         const mb = new MeshBuilder([{ name: 'uv', size: 2 }, { name: 'color', size: 3, type: 'u8n' }]);
+        /** A glowing stroke on the floor: centre, direction (unit), half length, half width. */
+        const stroke = (x: number, y: number, z: number, ax: number, az: number, hl: number, hwid: number) => decal(mb, x, y + 0.016, z, ax, 0, az, az, 0, -ax, hl, hwid, CELL.dot);
+        /** A V pointing along (dx, dz) with its tip at (x, z). */
+        const vee = (x: number, y: number, z: number, dx: number, dz: number, size: number) => {
+          for (const a of [0.62, -0.62]) {
+            const c = Math.cos(a), sn = Math.sin(a);
+            // The arm runs back from the tip, turned by ±a.
+            const bx = -(dx * c - dz * sn), bz = -(dx * sn + dz * c);
+            stroke(x + bx * size * 0.5, y, z + bz * size * 0.5, bx, bz, size * 0.55, size * 0.11);
+          }
+        };
+        let scouts = 0;
         for (const h of hints) {
           if (h.kind === 'mark') {
-            mb.set('color', 0.16 * h.s, 0.62 * h.s, 0.5 * h.s);
-            decal(mb, h.x + h.nx * 0.012, h.y, h.z + h.nz * 0.012, h.nz, 0, -h.nx, 0, 1, 0, 0.28, 0.28, CELL.mark + h.sign);
-          } else {
-            mb.set('color', 0.12 * h.s, 0.36 * h.s, 0.3 * h.s);
-            decal(mb, h.x, h.y + 0.016, h.z, h.nx, 0, h.nz, h.nz, 0, -h.nx, 0.05, 0.04, CELL.dot);
+            mb.set('color', 0.2 * h.s, 0.85 * h.s, 0.7 * h.s);
+            decal(mb, h.x + h.nx * 0.012, h.y, h.z + h.nz * 0.012, h.nz, 0, -h.nx, 0, 1, 0, 0.42, 0.42, CELL.mark + h.sign);
+          } else if (h.kind === 'arrow') {
+            // Three chevrons and a smear on the junction floor, into the branch.
+            mb.set('color', 0.18 * h.s, 0.75 * h.s, 0.62 * h.s);
+            for (let k = 0; k < 3; k++) vee(h.x + h.nx * (0.6 + k * 0.55), h.y, h.z + h.nz * (0.6 + k * 0.55), h.nx, h.nz, 0.55);
+            stroke(h.x - h.nx * 0.4, h.y, h.z - h.nz * 0.4, h.nx, h.nz, 0.7, 0.16);
+          } else if (h.kind === 'chevron') {
+            mb.set('color', 0.15 * h.s, 0.62 * h.s, 0.52 * h.s);
+            vee(h.x, h.y, h.z, h.nx, h.nz, 0.36);
+          } else if (h.kind === 'scout') {
+            // A lone Lumen waiting at the junction: it slips off down the right branch when someone comes.
+            this.slimes.setScout(`sewer${scouts++}`, { x: h.x, y: h.y, z: h.z, hx: h.x + h.nx * 9, hz: h.z + h.nz * 9 }, (h.x * 13.7 + h.z * 7.1) | 0, true);
           }
         }
         const m = new THREE.Mesh(toGeometry(mb.build()), this.mats.glow);
@@ -481,6 +501,7 @@ export class Underground {
     const snd = this.sound;
     if (snd && !this.slimes.sound) this.slimes.sound = { play: (id, x, y, z, g) => snd.play(id, x, y, z, g, 1, 3), loop: (id) => snd.loop(id, 3) };
     this.slimes.update(dt, player, under);
+    this.shaftMat.color.setScalar(0.035 * G.uDayLight.value);
     if (this.deep) {
       const c = cam.position, D = this.deep.plan;
       const camUnder = under || this.isUnder(c.x, c.y, c.z);
@@ -618,12 +639,13 @@ export class Underground {
     // Cross-section profile (lateral offset, height) — counter-clockwise when looking along the tube.
     const hw = t.halfWidth, h = t.height;
     const profile: [number, number][] = sewer
-      ? [[-hw, 0.0], [-0.6, 0.0], [-0.6, -0.45], [0.6, -0.45], [0.6, 0], [hw, 0], [hw, 1.6], ...arch(hw, 1.6, h, 8)]
+      ? [[-hw, 0.0], [-0.6, 0.0], [-0.6, -0.45], [0.6, -0.45], [0.6, 0], [hw, 0], [hw, GRIME], [hw, 1.6], ...arch(hw, 1.6, h, 8), [-hw, GRIME]]
       : [[-hw, 0], [hw, 0], [hw, h], [-hw, h]];
     const layer = sewer ? 1 : passage ? 15 : 8;
     // Crossing sewers near this chunk (junctions).
     let others: { o: Tube; idx: number }[] = [];
     const myIdx = this.sewerTubes.indexOf(t);
+    const sty = sewer ? sewerStyle(myIdx, !!this.macro.sewers[myIdx]?.culvert) : null;
     if (sewer) {
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
       for (let i = i0; i <= i1; i++) { x0 = Math.min(x0, P[i * 3]); x1 = Math.max(x1, P[i * 3]); z0 = Math.min(z0, P[i * 3 + 2]); z1 = Math.max(z1, P[i * 3 + 2]); }
@@ -631,7 +653,7 @@ export class Underground {
         if (o !== t && o.bounds[0] < x1 + hw && o.bounds[2] > x0 - hw && o.bounds[1] < z1 + hw && o.bounds[3] > z0 - hw) others.push({ o, idx });
       });
     }
-    mb.set('aLayer', layer).set('aTint', ...(sewer ? [0.75, 0.68, 0.6] as const : passage ? [0.95, 0.95, 0.95] as const : [0.8, 0.8, 0.78] as const)).set('aFacade', 1, 1, 1, 0).set('aSeed', 0.3).set('aElem', 0);
+    mb.set('aLayer', sty ? sty.layer : layer).set('aTint', ...(sty ? sty.tint : passage ? [0.95, 0.95, 0.95] as const : [0.8, 0.8, 0.78] as const)).set('aFacade', 1, 1, 1, 0).set('aSeed', 0.3).set('aElem', 0);
     // Texture v runs along the perimeter of the section so the vault never smears.
     const perim = [0];
     for (let k = 0; k < profile.length; k++) {
@@ -664,6 +686,11 @@ export class Underground {
           const ga = this.ground(ax, az) - lid, gb = this.ground(bx, bz) - lid;
           for (const V of [A, B]) V[1] = Math.min(V[1], ga);
           for (const V of [C, D]) V[1] = Math.min(V[1], gb);
+        }
+        if (sty) {
+          // The channel dark and slimy, the walkways worn, a band of grime and moss at the foot of the walls.
+          const tn = h0 < 0 || h1 < 0 ? sty.channel : h0 === 0 && h1 === 0 ? sty.walk : Math.max(h0, h1) <= GRIME + 1e-3 ? sty.grime : sty.tint;
+          mb.set('aTint', tn[0], tn[1], tn[2]);
         }
         // inward normal ~ toward the centre of the section
         const ml = (l0 + l1) / 2, mh = (h0 + h1) / 2;
@@ -750,15 +777,6 @@ export class Underground {
         }
         mb.set('aLayer', 8).set('aTint', 0.8, 0.8, 0.78);
       }
-      if (sewer) {
-        // An old pipe along one wall, under the springing (not across doorways).
-        if (!segCuts.some((c) => c.side === -1)) {
-          mb.set('aLayer', 11).set('aTint', 0.3, 0.25, 0.2);
-          const o = -(hw - 0.12);
-          mb.beam(ax - d0[1] * o, ay + 1.25, az + d0[0] * o, bx - d1[1] * o, by + 1.25, bz + d1[0] * o, 0.07, 0.07);
-          mb.set('aLayer', 1).set('aTint', 0.75, 0.68, 0.6);
-        }
-      }
       if (passage) {
         // Stairs on the slope (steps every ~0.3 m of rise).
         const rise = ay - by;
@@ -776,6 +794,8 @@ export class Underground {
         }
       }
     }
+    const wet = new MeshBuilder([{ name: 'uv', size: 2 }]);
+    if (sty) this.sewerDressing(t, i0, i1, mb, wet, others.map((q) => q.o), cuts, sty);
     // Dead ends get a brick end wall (ends that open into another sewer stay open).
     if (sewer) {
       const n = P.length / 3;
@@ -786,6 +806,7 @@ export class Underground {
         const px = ex + d[0] * sign * 0.6, pz = ez + d[1] * sign * 0.6;
         if (others.some(({ o }) => tubeAt(o, px, ey + 1, pz, 0))) continue;
         const nx = -d[0] * sign, nz = -d[1] * sign;
+        if (sty) mb.set('aTint', ...sty.tint);
         const c = mb.v(ex, ey + 1.2, ez, nx, 0, nz, 0, 1.2);
         for (const [l, hh] of profile) mb.v(ex - d[1] * l, ey + hh, ez + d[0] * l, nx, 0, nz, l, hh);
         for (let k = 0; k < profile.length; k++) {
@@ -801,7 +822,9 @@ export class Underground {
     const lg = new MeshBuilder([]);
     for (let i = i0; i < i1; i++) {
       const segL = t.cum[i + 1] - t.cum[i];
-      for (let s = (12 - (t.cum[i] % 12)) % 12; s < segL; s += 12) {
+      const every = sty ? sty.lightEvery : 12;
+      for (let s = (every - (t.cum[i] % every)) % every; s < segL; s += every) {
+        if (sty && hash01(myIdx * 131 + Math.round((t.cum[i] + s) / every)) < sty.dead) continue;
         const f = s / segL;
         const d = dirAt(P, i);
         const cx = P[i * 3] + (P[i * 3 + 3] - P[i * 3]) * f, cy = P[i * 3 + 1] + (P[i * 3 + 4] - P[i * 3 + 1]) * f, cz = P[i * 3 + 2] + (P[i * 3 + 5] - P[i * 3 + 2]) * f;
@@ -835,8 +858,149 @@ export class Underground {
         quadFlat(wg, P[i * 3], P[i * 3 + 1] - 0.15, P[i * 3 + 2], P[i * 3 + 3], P[i * 3 + 4] - 0.15, P[i * 3 + 5], d0, d1, -0.6, 0.6);
       }
       g.add(new THREE.Mesh(toGeometry(wg.build()), this.waterMat));
+      if (!wet.empty) g.add(new THREE.Mesh(toGeometry(wet.build()), this.waterMat));
+      // Daylight falling through the manhole lids (fades with the day).
+      const sh = new MeshBuilder([{ name: 'color', size: 3, type: 'u8n' }]);
+      const total = t.cum[t.cum.length - 1];
+      for (let s = 22.5; s < total; s += 45) {
+        if (s < t.cum[i0] || s >= t.cum[i1]) continue;
+        const q = pointOnTube(t, s);
+        if (!q || this.terrain.isWater(q.x, q.z, 3)) continue;
+        const top = q.y + t.height, r0 = 0.32, r1 = 0.75;
+        for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
+          const cx = Math.cos(a), cz = Math.sin(a);
+          // Bright under the lid, gone by the floor.
+          sh.set('color', 1, 0.95, 0.85);
+          const i = sh.v(q.x - cx * r0, top, q.z - cz * r0, 0, 0, 1);
+          sh.v(q.x + cx * r0, top, q.z + cz * r0, 0, 0, 1);
+          sh.set('color', 0, 0, 0);
+          sh.v(q.x + cx * r1, q.y + 0.1, q.z + cz * r1, 0, 0, 1);
+          sh.v(q.x - cx * r1, q.y + 0.1, q.z - cz * r1, 0, 0, 1);
+          sh.quad(i, i + 1, i + 2, i + 3);
+        }
+      }
+      if (!sh.empty) { const m = new THREE.Mesh(toGeometry(sh.build()), this.shaftMat); m.renderOrder = 3; g.add(m); }
     }
     return g;
+  }
+
+  /** Daylight shafts under the manholes: additive, scaled by the daylight each frame. */
+  private shaftMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, color: 0x000000, fog: false });
+
+  /**
+   * A sewer chunk's furnishings by its trunk's style: pipes on brackets along the walls (stopping
+   * at junction openings and doorways, turning into the wall there), ribs across the vault at
+   * intervals and a stone portal at every junction mouth, outlet pipes dribbling into the channel.
+   */
+  private sewerDressing(t: Tube, i0: number, i1: number, mb: MeshBuilder, wet: MeshBuilder, others: Tube[], cuts: { s0: number; s1: number; top: number; side: number }[], sty: SewerStyle): void {
+    const hw = t.halfWidth, h = t.height, sA = t.cum[i0], sB = t.cum[i1];
+    const total = t.cum[t.cum.length - 1];
+    const inOther = (x: number, y: number, z: number, m = 0.25) => others.some((o) => !!tubeAt(o, x, y, z, m));
+    const at = (s: number, lat: number, y: number) => {
+      const q = pointOnTube(t, s);
+      if (!q) return null;
+      return { x: q.x - q.dz * lat, y: q.y + y, z: q.z + q.dx * lat, dx: q.dx, dz: q.dz, fy: q.y };
+    };
+    const door = (s: number, side: number, pad = 0.4) => cuts.some((c) => c.side === side && s > c.s0 - pad && s < c.s1 + pad);
+    // Pipes: one straight run per tube segment and free stretch, turning into the wall where they stop.
+    for (const pp of sty.pipes) {
+      const lat = pp.side * (hw - 0.05 - pp.r);
+      mb.set('aLayer', 8).set('aTint', ...pp.tint);
+      const free = (s: number) => {
+        const q = at(s, lat, pp.y);
+        return !!q && !door(s, pp.side) && !inOther(q.x, q.y, q.z);
+      };
+      const elbow = (s: number) => {
+        const q = at(s, lat, pp.y), w = at(s, pp.side * (hw + 0.05), pp.y);
+        if (q && w) pipe(mb, w.x, q.y, w.z, q.x + (q.x - w.x) * 0.3, q.y, q.z + (q.z - w.z) * 0.3, pp.r);
+      };
+      for (let k = i0; k < i1; k++) {
+        const k0 = Math.max(t.cum[k], 0.3), k1 = Math.min(t.cum[k + 1], total - 0.3);
+        let r0 = -1;
+        const n = Math.max(1, Math.ceil((k1 - k0) / 0.5));
+        for (let j = 0; j <= n; j++) {
+          const s = k0 + ((k1 - k0) * j) / n, ok = free(s);
+          if (ok && r0 < 0) { r0 = s; if (!free(s - 0.5) && s > 0.4) elbow(s); }
+          if (r0 >= 0 && (!ok || j === n)) {
+            const e = ok ? s : s - (k1 - k0) / n;
+            const A = at(r0, lat, pp.y), B = at(e, lat, pp.y);
+            // A little past the joint so neighbouring segments meet without a gap.
+            if (A && B && e > r0 + 0.05) pipe(mb, A.x - A.dx * 0.02, A.y, A.z - A.dz * 0.02, B.x + B.dx * 0.02, B.y, B.z + B.dz * 0.02, pp.r);
+            if (!ok) elbow(e);
+            r0 = -1;
+          }
+        }
+      }
+      // Brackets holding it to the wall.
+      mb.set('aTint', 0.06, 0.055, 0.05);
+      for (let s = Math.ceil(sA / 2.5) * 2.5; s < sB; s += 2.5) {
+        if (!free(s)) continue;
+        const q = at(s, lat, pp.y), w = at(s, pp.side * (hw + 0.02), pp.y);
+        if (q && w) mb.beam(w.x, q.y, w.z, q.x, q.y, q.z, 0.03, pp.r + 0.015);
+      }
+    }
+    // Ribs: rings across walls and vault (a slightly lighter, stone-dressed band).
+    const ring = (s: number, inset: number, half: number, tint: readonly [number, number, number]) => {
+      const c = at(s, 0, 0);
+      if (!c || inOther(c.x, c.y + 1.2, c.z, 0.6)) return;
+      if (cuts.some((q) => s > q.s0 - half - 0.3 && s < q.s1 + half + 0.3)) return;
+      const pts: [number, number][] = [[hw, 0], [hw, 1.6], ...arch(hw, 1.6, h, 10).slice(0, -1), [-hw, 1.6], [-hw, 0]];
+      const inner = pts.map(([l, y]): [number, number] => y <= 1.6 ? [l - Math.sign(l) * inset, y] : [l * (1 - inset / hw), 1.6 + (y - 1.6) * (1 - inset / (h - 1.6))]);
+      mb.set('aLayer', sty.ribLayer).set('aTint', ...tint);
+      const W = (lat: number, y: number, ds: number) => [c.x - c.dz * lat + c.dx * ds, c.fy + y, c.z + c.dx * lat + c.dz * ds];
+      const quad = (A: number[], B: number[], C: number[], D: number[]) => {
+        const i = mb.v(A[0], A[1], A[2], 0, 1, 0, 0, 0); mb.v(B[0], B[1], B[2], 0, 1, 0, 1, 0); mb.v(C[0], C[1], C[2], 0, 1, 0, 1, 1); mb.v(D[0], D[1], D[2], 0, 1, 0, 0, 1);
+        mb.quad(i, i + 1, i + 2, i + 3); mb.quad(i, i + 3, i + 2, i + 1);
+      };
+      for (let k = 0; k + 1 < pts.length; k++) {
+        const [la, ya] = pts[k], [lb, yb] = pts[k + 1], [ia, ja] = inner[k], [ib, jb] = inner[k + 1];
+        quad(W(ia, ja, -half), W(ib, jb, -half), W(ib, jb, half), W(ia, ja, half));
+        quad(W(la, ya, -half), W(lb, yb, -half), W(ib, jb, -half), W(ia, ja, -half));
+        quad(W(la, ya, half), W(lb, yb, half), W(ib, jb, half), W(ia, ja, half));
+      }
+    };
+    if (sty.ribEvery > 0) for (let s = Math.ceil(sA / sty.ribEvery) * sty.ribEvery; s < sB; s += sty.ribEvery) ring(s, 0.12, 0.18, sty.rib);
+    // Portals at the junction mouths: a deeper stone arch where this trunk opens into another.
+    for (const end of [0, 1]) {
+      const s0 = end ? total : 0;
+      if (s0 < sA - 0.01 || s0 > sB + 0.01) continue;
+      const e = at(end ? total - 0.01 : 0.01, 0, 1);
+      if (!e) continue;
+      const o = others.find((q) => !!tubeAt(q, e.x, e.y, e.z, 0));
+      if (!o) continue;
+      const s = end ? total - o.halfWidth - 0.55 : o.halfWidth + 0.55;
+      if (s > 0.5 && s < total - 0.5) ring(s, 0.22, 0.3, [0.62, 0.6, 0.55]);
+    }
+    // Outlets: a pipe mouth low in the wall, a thin stream across the walkway into the channel.
+    for (let s = sty.outletFirst; s < total; s += sty.outletEvery) {
+      if (s < sA || s >= sB) continue;
+      const side = hash01(Math.round(s) + sty.seed) < 0.5 ? 1 : -1;
+      if (door(s, side, 1)) continue;
+      const m = at(s, side * (hw - 0.05), 0.55), o = at(s, side * (hw - 0.32), 0.55);
+      if (!m || !o || inOther(m.x, m.y, m.z, 0.5)) continue;
+      mb.set('aLayer', 8).set('aTint', 0.28, 0.24, 0.2);
+      pipe(mb, m.x, m.y, m.z, o.x, o.y, o.z, 0.13);
+      // The dark mouth.
+      mb.set('aTint', 0.03, 0.03, 0.03);
+      mb.box(o.x, o.y, o.z, 0.1, 0.1, 0.1, Math.atan2(o.dx, o.dz));
+      // The stream: falling from the lip, then a wet streak to the channel.
+      const lx = -o.dz * side, lz = o.dx * side;
+      const ex = o.x - lx * 0.02, ez = o.z - lz * 0.02;
+      const i = wet.v(ex - o.dx * 0.04, o.y - 0.08, ez - o.dz * 0.04, -lx, 0, -lz, 0, 0);
+      wet.v(ex + o.dx * 0.04, o.y - 0.08, ez + o.dz * 0.04, -lx, 0, -lz, 1, 0);
+      wet.v(ex + o.dx * 0.07, o.fy + 0.01, ez + o.dz * 0.07, -lx, 0, -lz, 1, 1);
+      wet.v(ex - o.dx * 0.07, o.fy + 0.01, ez - o.dz * 0.07, -lx, 0, -lz, 0, 1);
+      wet.quad(i, i + 1, i + 2, i + 3); wet.quad(i, i + 3, i + 2, i + 1);
+      const c0 = at(s, side * 0.62, 0.012);
+      if (c0) {
+        const j = wet.v(ex - o.dx * 0.12, o.fy + 0.012, ez - o.dz * 0.12, 0, 1, 0, 0, 0);
+        wet.v(ex + o.dx * 0.12, o.fy + 0.012, ez + o.dz * 0.12, 0, 1, 0, 1, 0);
+        wet.v(c0.x + o.dx * 0.2, c0.y, c0.z + o.dz * 0.2, 0, 1, 0, 1, 1);
+        wet.v(c0.x - o.dx * 0.2, c0.y, c0.z - o.dz * 0.2, 0, 1, 0, 0, 1);
+        wet.quad(j, j + 1, j + 2, j + 3); wet.quad(j, j + 3, j + 2, j + 1);
+      }
+    }
+    mb.set('aLayer', sty.layer).set('aTint', ...sty.tint);
   }
 
   private buildStation(b: Box, bi: number): THREE.Object3D {
@@ -1688,3 +1852,89 @@ function signTexture(name: string, colors: number[]): THREE.CanvasTexture {
 }
 
 
+
+/** Height of the grime band at the foot of the sewer walls (m over the walkway). */
+const GRIME = 0.45;
+
+/** A sewer trunk's look: walls, pipes, ribs, lighting, outlets (deterministic per trunk). */
+interface SewerStyle {
+  seed: number;
+  layer: number;
+  ribLayer: number;
+  tint: readonly [number, number, number];
+  grime: readonly [number, number, number];
+  walk: readonly [number, number, number];
+  channel: readonly [number, number, number];
+  rib: readonly [number, number, number];
+  ribEvery: number;
+  lightEvery: number;
+  dead: number;
+  outletFirst: number;
+  outletEvery: number;
+  pipes: { side: number; y: number; r: number; tint: readonly [number, number, number] }[];
+}
+
+function hash01(n: number): number {
+  let h = Math.imul((n | 0) ^ 0x27d4eb2d, 0x165667b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca77);
+  return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+}
+
+function sewerStyle(idx: number, culvert: boolean): SewerStyle {
+  const r = (k: number) => hash01(idx * 97 + k);
+  // Old red brick, yellow brick, dark engineering brick, or concrete (culverts, newer trunks).
+  const kind = culvert ? 3 : Math.floor(r(1) * 10) < 4 ? 0 : Math.floor(r(1) * 10) < 6 ? 1 : Math.floor(r(1) * 10) < 8 ? 2 : 3;
+  const base: [number, number, number] = kind === 0 ? [0.8, 0.74, 0.7] : kind === 1 ? [0.85, 0.82, 0.76] : kind === 2 ? [0.62, 0.58, 0.56] : [0.66, 0.66, 0.63];
+  const v = 0.9 + r(2) * 0.2;
+  const tint: [number, number, number] = [base[0] * v, base[1] * v, base[2] * v];
+  const moss = r(3);
+  const grime: [number, number, number] = [tint[0] * 0.42, tint[1] * (0.42 + moss * 0.08), tint[2] * 0.34];
+  const pipeTints: [number, number, number][] = [[0.16, 0.12, 0.09], [0.1, 0.11, 0.12], [0.14, 0.17, 0.11], [0.24, 0.12, 0.07]];
+  const pipes: SewerStyle['pipes'] = [];
+  const np = r(4) < 0.2 ? 0 : r(4) < 0.65 ? 1 : 2;
+  const side = r(5) < 0.5 ? -1 : 1;
+  if (np >= 1) pipes.push({ side, y: 1.2 + r(6) * 0.15, r: 0.07 + r(7) * 0.04, tint: pipeTints[Math.floor(r(8) * 4)] });
+  if (np >= 2) pipes.push(r(9) < 0.5 ? { side, y: 0.85, r: 0.06, tint: pipeTints[Math.floor(r(10) * 4)] } : { side: -side, y: 1.3, r: 0.09, tint: pipeTints[Math.floor(r(11) * 4)] });
+  return {
+    // Facade layers: 0 red brick, 2 yellow brick, 1 brown (Flemish) brick, 8 concrete.
+    seed: idx * 7 + 3, layer: [0, 2, 1, 8][kind], ribLayer: kind === 3 ? 8 : 4, tint, grime,
+    walk: [tint[0] * 0.8, tint[1] * 0.78, tint[2] * 0.75], channel: [tint[0] * 0.35, tint[1] * 0.38, tint[2] * 0.33],
+    rib: kind === 3 ? [0.58, 0.58, 0.56] : [0.62, 0.6, 0.56],
+    ribEvery: kind === 3 ? 6 : r(12) < 0.45 ? 0 : 7 + Math.floor(r(13) * 3) * 2,
+    lightEvery: kind === 2 ? 16 : 10 + Math.floor(r(14) * 3) * 2, dead: 0.08 + r(15) * 0.2,
+    outletFirst: 9 + r(16) * 15, outletEvery: 22 + r(17) * 18, pipes,
+  };
+}
+
+/** The point at arc length s along a tube's centreline (floor level) and its unit direction. */
+function pointOnTube(t: Tube, s: number): { x: number; y: number; z: number; dx: number; dz: number } | null {
+  const n = t.cum.length;
+  if (n < 2 || s < 0 || s > t.cum[n - 1]) return null;
+  let i = 0;
+  while (i < n - 2 && t.cum[i + 1] < s) i++;
+  const L = t.cum[i + 1] - t.cum[i] || 1, u = (s - t.cum[i]) / L, P = t.pts;
+  const dx = P[i * 3 + 3] - P[i * 3], dz = P[i * 3 + 5] - P[i * 3 + 2], dl = Math.hypot(dx, dz) || 1;
+  return { x: P[i * 3] + dx * u, y: P[i * 3 + 1] + (P[i * 3 + 4] - P[i * 3 + 1]) * u, z: P[i * 3 + 2] + dz * u, dx: dx / dl, dz: dz / dl };
+}
+
+/** A round pipe (an n-sided prism with smooth normals) from A to B, without end caps. */
+function pipe(mb: MeshBuilder, ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number, n = 8): void {
+  let dx = bx - ax, dy = by - ay, dz = bz - az;
+  const L = Math.hypot(dx, dy, dz);
+  if (L < 1e-4) return;
+  dx /= L; dy /= L; dz /= L;
+  // u ⟂ axis (horizontal unless the pipe is vertical), w = axis × u.
+  let ux = -dz, uy = 0, uz = dx;
+  if (Math.hypot(ux, uz) < 1e-3) { ux = 1; uz = 0; }
+  const ul = Math.hypot(ux, uy, uz); ux /= ul; uz /= ul;
+  const wx = dy * uz - dz * uy, wy = dz * ux - dx * uz, wz = dx * uy - dy * ux;
+  let base = -1;
+  for (let k = 0; k <= n; k++) {
+    const a = (k / n) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    const nx = ux * c + wx * s, ny = uy * c + wy * s, nz = uz * c + wz * s;
+    const i = mb.v(ax + nx * r, ay + ny * r, az + nz * r, nx, ny, nz, (k / n) * r * 6.3, 0);
+    if (base < 0) base = i;
+    mb.v(bx + nx * r, by + ny * r, bz + nz * r, nx, ny, nz, (k / n) * r * 6.3, L);
+  }
+  for (let k = 0; k < n; k++) mb.quad(base + k * 2, base + k * 2 + 2, base + k * 2 + 3, base + k * 2 + 1);
+}
