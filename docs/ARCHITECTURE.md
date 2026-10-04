@@ -374,7 +374,7 @@ every frame) owns the parts and draws what belongs to them.
   water, at a height that does not match the ground) get no marker and leave after a few seconds.
 
 ### Threats and city response (`src/game/threats`, `src/game/response`)
-THREATS_PLAN Phase A ("Robot malfunction") and Phase B stage 1 (the Strider), PLAYGROUND_PLAN §0 decisions 15 and 19.
+THREATS_PLAN Phase A ("Robot malfunction"), Phase B stage 1 (the Strider) and stage 2 (the army), PLAYGROUND_PLAN §0 decisions 15 and 19.
 `ThreatDirector` (`game.threats`) and `ResponseDirector` (`game.response`) are built after the crime layer and updated
 every frame (`prof.threats`).
 * **Threat clock** (`ThreatClock`, pure, tested in `selftest.ts`): pressure = played time + karma earned × 6 s + the
@@ -477,7 +477,7 @@ every frame (`prof.threats`).
   impacts, windows burst, `FacadeFires`, people and cars there burn and are thrown; at whoever hurt it most when in
   reach, else at the tallest building ahead), **tail swipe** (the tail's capsules sweep a side: facades, cars flung as
   wrecks, people knocked flying, props, the player), **lean** (a forefoot pinned on a facade, pushes; low buildings
-  come down), **swat** (drones near its head; helicopters later through `airTargets`). Its feet come down through
+  come down), **swat** (drones near its head; the army's helicopters through `airTargets`). Its feet come down through
   `GiantSteps` (cause `threat`, size 40, stomp stimulus capped at 420 m, a `tremor` every second step to 1.1 km); its
   torso and knees shoulder into facades. All its destruction impacts draw on a budget (3 tokens/s, a burst of 6;
   softened after many panels broke lately). Hurt: a hard hit staggers it, a heavy hit on the glowing throat chokes the
@@ -491,7 +491,9 @@ every frame (`prof.threats`).
 * **Facade fires** (`FacadeFires`, `threats.fires`): ≤ 32 fires on walls (flames and smoke in the powers' particle pool,
   no lights; now and then the heat bursts a window), 90–150 s; `douse` (hydrokinesis now, fire trucks later).
 * **Map / compass**: layer `threat` — the incident as a red alert marker with `always` (compass at any distance), its
-  machines within 250 m as red dots, a fallen creature as a grey dot; police units as blue dots (crime layer).
+  machines within 250 m as red dots, a fallen creature as a grey dot; police units as blue dots (crime layer); the
+  army's squads as green-grey dots (layer `army`, the tooltip says what it is and whether it holds, moves up or is
+  breaking).
 * **Targeting**: big threats are a target kind `threat` (Tab first, three times the range); the frame shows the con
   ('deadly' unless the hero is a giant too), its health and its weak spots (rings on the body, pulsing while exposed;
   the soft lock aims at an exposed weak spot). Every power lands on it as damage in the zone it hits (`Elements.hurtThreat`:
@@ -499,14 +501,80 @@ every frame (`prof.threats`).
 * **Response to a major threat**: up the ladder sooner (level 1 after 10 s, 2 after 25 s more), wider (cordon 260 m,
   evacuation siren 520 m, alert screens 800 m), units stop well beyond its reach and never go in on foot
   (`engageOnFoot: false`). Under an alert people shelter in place (`Pedestrians.shelter`: no trip starts or ends
-  within the siren's reach). Levels above 2 plug in with `registerLevel(n, { when, up, step, down })` (stage 2:
-  National Guard, army and air; the last resort).
+  within the siren's reach). Levels above 2 plug in with `registerLevel(n, { when, up, step, down })` (3 and 4: the
+  army, below; 5, the last resort, is stage 3). `setLevel` (dev, saves) climbs one level at a time.
+* **The army** (`response/forces`, `game.forces`, prof `army`; Phase B stage 2) — levels 3 and 4 for a major threat
+  with a body (the Strider). **3 National Guard** (`ARMY.up3`: 30 s at level 2 with it above half strength, or 25 people
+  hurt): four infantry squads riding in army trucks and two APCs, from ~720 m beyond the monster (ahead of it, towards
+  downtown) along the streets. **4 Army & air** (`ARMY.up4`: 55 s at level 3, or the guard's lines breaking with it above
+  40 %): three tank platoons (2 each), three attack helicopters, two strike jets, an artillery battery 3.2 km beyond the
+  route's end (beyond the city edge). Stand down with the incident (level 4 then 3 go 4 s after it is over: units drive /
+  walk / fly off, then go).
+  * **Battle model** (`BattleModel.ts`, pure, shared with the headless battle): `ForceUnit {kind, squad, pos, hp, morale
+    (per squad), ammo, task}`, squads as the monster's aggro keys. `stepForces`: units hold **slots** ahead of the
+    monster's projected position along its route (`slotFor`: tanks ~360 m on the avenue itself, APCs ~280, rifle squads
+    ~230 on its flanks, as far as the route runs straight — a line of sight down the avenue; a ring round the route's end
+    in downtown), a rifle squad rides in its truck, gets out at its slot and digs in, falls back on foot away from the
+    monster when it comes within `danger`, and once it has gone by its truck takes it to the next line; vehicles fall back
+    to the next slot. **Fire**: a volley = rounds × hit chance (falling off with range, lower when shaken) × damage before
+    armour on a body zone picked by exposed surface; an exposed weak spot (the throat while charging / breathing, the
+    belly while rearing) only when the volley is aimed at it **and** has line of sight — army fire mostly chips armour
+    and staggers; `ARMY.firepower` (0.16) is the balance knob. **Morale**: −0.17 per soldier / vehicle lost, breath close
+    by, roars within 300 m; recovers after 20 s quiet; below 0.38 the squad falls back ("the line is breaking"), below
+    0.1 it routs. Helicopters circle at 230 m and make rocket runs that pass 40–115 m from its head (inside 54 m it can swat
+    them); jets and the artillery strike on timers (50 s, 30 s).
+  * **The monster answers** through the Strider's hooks: `unitAt(key)` (its breath goes for the squad that hurt it most
+    within reach — `angriestInReach`, the player included), `onBlow(kind, x, y, z, r)` (breath ticks, tail sweeps,
+    footfalls, slams, its fall hurt the units there: `hurtUnit`; vehicles are wrecked / crushed, soldiers knocked flat;
+    a roar shakes morale), `airTargets` (helicopters near its head, reach × 1.7). Its own swipes, breath and feet wreck
+    and crush materialised vehicles in traffic too.
+  * **Tiered simulation**: units within 600 m of the player (`ARMY.matR`, out at 700) are **materialised** — vehicles
+    as traffic vehicles (kinds `army_truck`, `apc`, `tank` with a turret: `Vehicle.gun` yaw / pitch / recoil, drawn by
+    VehicleRenderer as two more instanced meshes; tasks, `sendTo`, stuck → hold), soldiers as crowd actors (role
+    `soldier`: olive uniform, helmet, rifle, `aim_rifle` pose, crouched behind sandbag walls between bursts; their own
+    budget, not the crime layer's; knocked down = out of the fight, they get up and walk off — stage 3: medics) — and
+    fire with rays: one world probe per volley (≤ 2 Hz a squad; blocked → the high back over the roofs; three blocked
+    volleys → a new spot), tracers, flashes, the tank turning its turret and recoiling, shells / rockets / bombs
+    resolved where they land (a hit on the body, else a facade or the street: explosion, scorch, a destruction impact).
+    Farther units are **abstract** (straight-line moves, chance-based volleys on the real Strider) and only map pings;
+    helicopters and jets are always drawn (instanced flyers). Helicopters fly after their unit drone-style (arrival
+    steering, tilt into the acceleration, yaw into the flight / at the monster); swatted they become a Rapier body that
+    spins down, crashes (explosion, a destruction impact, a 'collapse' stimulus) and burns. Jets fly straight dive-and-climb
+    runs, bombs released ahead of the target, a flyby roar with a crack. The artillery: a flash on the horizon (drawn
+    1.3 km out in its direction), the boom later (343 m/s, ≤ 12 s), a whistle, three shells.
+  * **Look and sound, cheaply** (`ArmyFx`): tracers are the powers' beam ribbons (≤ 256), flashes / smoke / fire their
+    particles, debris chips and dust the existing pools; destruction impacts from army fire draw on a token bucket
+    (≤ 6 / s); searchlights at night are emissive beam ribbons from trucks / APCs sweeping over the monster (≤ 4, faded
+    near the camera; no real lights); sandbag walls are one instanced mesh. Every new model (`props/military.ts`: truck,
+    APC, tank + turret + gun, helicopter body / rotor / tail rotor, jet, sandbags) uses the shared vehicle material (new
+    parts `VPart.Matte` / `Canvas`), so nothing compiles a new program; the models are built at start. `gunfire`
+    stimulus (people near it run, farther ones start and look), barks ("Open fire!", "Fall back!"). Stray splash can hurt
+    the player a little (`HurtKind` 'military', no karma cost when it knocks them out); soldiers never aim at people.
+    Collateral is booked with cause `military` (never the player's karma).
+  * **Budgets** (THREATS_PLAN §4): ≤ 24 materialised military vehicles, ≤ 48 soldiers (24 sent), ≤ 4 helicopters (3
+    sent), ≤ 2 jets, ≤ 256 tracers, ≤ 6 impacts / s; checked by the headless battle (peaks per run) and `levelSquads`.
+    Measured (seed 42, size 0.6, Strider at level 4 vs. the same with the army off, fixed camera, fair weather, 120 s):
+    the `army` section ~0.09 ms; whole-frame CPU about +1.2 ms (sum of `window.prof`, noisy ±0.8 ms).
+  * **Headless "no player" battle** (`simulateBattle`, `SimMonster`: the Strider's rules along its route — emerge, pace,
+    slower when hurt, roar / rear, breath at the angriest in reach, swipes, steps, swats, stagger, back to the river at
+    30 %, a 260 s rampage downtown): deterministic per seed; `selftest.ts` runs this city's route for 50 seeds — the army
+    drives it off / brings it down in 25–55 % (now ~46 %), units within the budgets.
+  * **Saves**: the army is not kept; a resumed Strider brings the response back to its saved level (`SaveStrider.level`)
+    and the units come in anew.
+  * Stage 3 / E hooks: `Forces.onOutcome` (the battle's end: outcome, whether the army did it, losses — for the aftermath,
+    triage, the nuke countdown at level 5), `rally(x, z)` and `airstrike(x, z)` (reputation unlocks, not wired to the
+    player), `hostilePlayer` (the army against a rampaging giant player with a very low reputation after a warning
+    sequence — not implemented: needs a ThreatEvent for the player and a target adapter instead of the Strider).
 * Dev console: `dev.threat.spawn('robots', { dist, at, robots, bots, drones, duration })`, `dev.threat.spawn('strider',
   { from: 'river' })`, `dev.threat.strider.status() | roar(rear) | breathe() | swipe(side) | damage(zone, amount) |
   expose(zone) | die() | retreat() | skip(m) | route() | player(dist)`, `dev.threat.clock(seconds | { setting, played,
   pressure })`, `dev.threat.omen(kind)`, `dev.threat.events()`, `dev.threat.stop()`, `dev.response.level(n)`,
-  `dev.response.status()`. Sounds: `tools/synthThreats.mjs` (civil siren, glitch, hostile), `tools/synthStrider.mjs`
-  (footsteps, two-tone roar, breath charge, breath, tremor rumble, car alarm).
+  `dev.response.status()`, `dev.army.status() | spawn('tank' | 'heli' | 'rifles' | 'apc' | 'truck', dist) | airstrike(x, z) |
+  sim(seed) | enabled(on) | level(n) | log()` (admin console: "Army" — battle status, spawn tank / helicopter / squad /
+  APC, airstrike, the no-player battle). Sounds: `tools/synthThreats.mjs` (civil siren, glitch, hostile),
+  `tools/synthStrider.mjs` (footsteps, two-tone roar, breath charge, breath, tremor rumble, car alarm),
+  `tools/synthArmy.mjs` (rifle bursts, autocannon, tank gun, rotor loop, jet flyby, rockets, explosions, bomb, a hit on
+  the hide, distant artillery, incoming whistle).
 
 ### Cafés, restaurants and terraces (`src/plan/eatery.ts`, `src/plan/terrace.ts`, `src/sim/Terraces.ts`)
 Part of the cell plan (pure, in the workers, checked in `selftest.ts`), lived in near the player.

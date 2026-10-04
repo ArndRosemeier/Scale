@@ -21,14 +21,17 @@
  */
 import * as THREE from 'three';
 import { Rng } from '../core/rng';
+import { buildArmyTruck, buildApc, buildTank } from './military';
 
 // ---------------------------------------------------------------- public API
 
 export type VehicleKind =
-  | 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle' | 'swat';
+  | 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle' | 'swat'
+  | 'army_truck' | 'apc' | 'tank';
 
 export const VEHICLE_KINDS: VehicleKind[] = [
   'sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle', 'swat',
+  'army_truck', 'apc', 'tank',
 ];
 
 export interface VehicleModel {
@@ -48,6 +51,11 @@ export interface VehicleModel {
   mass: number;
   /** Driver seat (hip point) in body space. Left-hand drive (driver at x<0). */
   driverSeat: [number, number, number];
+  /**
+   * A turret (the tank): its geometry turns about Y round `pivot` (body space); the gun pitches about X
+   * round `gunPivot` (turret space) and recoils along +Z. See props/military.ts.
+   */
+  turret?: { geo: THREE.BufferGeometry; pivot: [number, number, number]; gun: THREE.BufferGeometry; gunPivot: [number, number, number] };
 }
 
 export const enum VPart {
@@ -61,6 +69,10 @@ export const enum VPart {
   Alloy = 15,
   /** Turquoise automated-driving marker lamps (SAE J3134), always lit on driverless vehicles. */
   AdsLamp = 16,
+  /** Military paint: the paint colour, matte and dusty (army vehicles, aircraft). */
+  Matte = 17,
+  /** Canvas covers and sandbags: the paint colour, cloth-rough with folds. */
+  Canvas = 18,
 }
 
 // ---------------------------------------------------------------- math helpers
@@ -900,13 +912,14 @@ function makeBody(p: CarP): { B: BodyDef; axles: Axle[] } {
   return { B, axles };
 }
 
-interface Built {
+export interface Built {
   body: THREE.BufferGeometry;
   wheel: THREE.BufferGeometry;
   wheelRadius: number;
   wheels: [number, number, number][];
   mass: number;
   driverSeat: [number, number, number];
+  turret?: VehicleModel['turret'];
 }
 
 /** Mirror, handles and the usual car details that depend on the body context. */
@@ -1719,6 +1732,9 @@ export function vehicleModel(kind: VehicleKind, variant = 0): VehicleModel {
     case 'delivery': b = buildDelivery(v, rng); break;
     case 'swat': b = buildDelivery(v === 1 ? 0 : v, rng, true); break;
     case 'shuttle': b = buildShuttle(v, rng); break;
+    case 'army_truck': b = buildArmyTruck(); break;
+    case 'apc': b = buildApc(); break;
+    case 'tank': b = buildTank(); break;
     default: b = buildPassenger({ kind, variant: v, rng }); break;
   }
   const bb = b.body.boundingBox!;
@@ -1733,6 +1749,7 @@ export function vehicleModel(kind: VehicleKind, variant = 0): VehicleModel {
     wheels: b.wheels,
     mass: b.mass,
     driverSeat: b.driverSeat,
+    turret: b.turret,
   };
   modelCache.set(key, m);
   return m;
@@ -1936,6 +1953,17 @@ if (vp == 0 || vp == 13) {
   vhCol = mix(vhCol, vec3(0.3, 0.28, 0.25), dirt);
   vhRough = 0.45; vhMetal = 0.2;
 }
+if (vp == 17 || vp == 18) {
+  // Military paint and canvas: matte, dusty low down, mottled; canvas in folds; scorched when hit.
+  vec3 pc = vp == 18 ? vPaint * 0.85 + vec3(0.03, 0.028, 0.0) : vPaint;
+  float dirt = smoothstep(1.4, 0.2, vObjPos.y) * (0.4 + 0.6 * vhNoise(vObjPos * 2.5));
+  pc = mix(pc, vec3(0.1, 0.085, 0.06), dirt * 0.5);
+  pc *= 0.86 + 0.28 * vhNoise(vObjPos * 5.0 + 1.7);
+  if (vp == 18) pc *= 1.0 - 0.2 * smoothstep(0.3, 0.5, abs(fract(vObjPos.z / 0.85 + vObjPos.x * 0.3) - 0.5));
+  float scr = smoothstep(0.45, 0.8, vhNoise(vObjPos * 7.0 + 3.1) * 0.6 + vhNoise(vObjPos * 23.0) * 0.4) * dmg;
+  pc = mix(pc, pc * 0.25 + vec3(0.02, 0.018, 0.016), scr);
+  vhCol = pc; vhRough = vp == 18 ? 0.95 : 0.7; vhMetal = vp == 18 ? 0.0 : 0.12; vhCC = 0.0;
+}
 diffuseColor.rgb = vhCol;
 `;
 
@@ -1944,7 +1972,7 @@ function patchFragmentNormal(): string {
     'float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;',
     'float faceDirection = (gl_FrontFacing ? 1.0 : - 1.0) * vMirror;',
   ) + /* glsl */ `
-if (dmg > 0.01 && (vp == 0 || vp == 13 || vp == 14)) {
+if (dmg > 0.01 && (vp == 0 || vp == 13 || vp == 14 || vp == 17)) {
   vec3 q = vObjPos * 3.5;
   vec3 dn = vec3(vhNoise(q), vhNoise(q + 11.3), vhNoise(q + 27.1)) - 0.5;
   normal = normalize(normal + dn * dmg * 1.1);
@@ -2037,6 +2065,8 @@ export function paintColor(kind: VehicleKind, seed: number): [number, number, nu
   if (kind === 'bus') {
     return r.pick([hsl(0.13, 0.85, 0.5), [0.92, 0.92, 0.9] as [number, number, number], hsl(0.0, 0.72, 0.42), hsl(0.6, 0.6, 0.35), hsl(0.36, 0.55, 0.32), hsl(0.55, 0.5, 0.55)]);
   }
+  // Military: olive drab in a few shades (a desert-sand tank now and then).
+  if (kind === 'army_truck' || kind === 'apc' || kind === 'tank') return kind === 'tank' && r.chance(0.25) ? hsl(0.1, 0.28, 0.42 + v(0.03)) : hsl(0.2 + v(0.02), 0.26 + v(0.04), 0.2 + v(0.025));
   if (kind === 'swat') return r.pick([[0.05, 0.055, 0.065], hsl(0.62, 0.45, 0.12)] as [number, number, number][]);
   if (kind === 'shuttle') {
     // Operator liveries: white, warm grey, a few city-transit colours.
@@ -2064,3 +2094,7 @@ export function paintColor(kind: VehicleKind, seed: number): [number, number, nu
   if (kind === 'sports' && r.chance(0.5)) return hsl(r.float(), 0.85, 0.48);
   return hsl(r.float(), 0.45, 0.4); // rare others
 }
+
+// Builders shared with the military models (props/military.ts).
+export { Geo, rbox, blob, tubeZ, finalize, buildWheel, v3 };
+export type { V3 };

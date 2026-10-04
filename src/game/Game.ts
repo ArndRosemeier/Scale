@@ -82,6 +82,7 @@ import { TargetHud } from '../ui/TargetHud';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { ResponseDirector } from './response/ResponseDirector';
+import { Forces } from './response/forces/Forces';
 import { SaveSystem } from './save/SaveSystem';
 import type { SaveData } from './save/model';
 import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
@@ -153,6 +154,8 @@ export class Game {
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
   threats!: ThreatDirector;
   response!: ResponseDirector;
+  /** The army: response levels 3 (National Guard) and 4 (army & air) against a major threat (response/forces). */
+  forces!: Forces;
   /** Saves: autosave, named saves, loading (src/game/save). */
   saves!: SaveSystem;
   /** A save to put into the city once it has started (set before `start`, by main.ts). */
@@ -382,7 +385,8 @@ export class Game {
         for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           const d = Math.hypot(v.x - s.x, v.z - s.z);
           if (d < r) this.traffic.crush(v);
-          else if (d < r * 2) { this.vehicles.makeWreck(v, v.x, v.y + 1, v.z, ((v.x - s.x) / d) * 6000, 9000, ((v.z - s.z) / d) * 6000); this.traffic.wreckIt(v); }
+          // (Armour shrugs off the blast round a collapse; only what falls on it crushes it.)
+          else if (d < r * 2 && v.kind !== 'tank' && v.kind !== 'apc') { this.vehicles.makeWreck(v, v.x, v.y + 1, v.z, ((v.x - s.x) / d) * 6000, 9000, ((v.z - s.z) / d) * 6000); this.traffic.wreckIt(v); }
         }
       }
     });
@@ -518,6 +522,7 @@ export class Game {
     if (!this.freeCam) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
+    this.T('army', () => this.forces.update(dt));
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
       this.rideFx(dt);
@@ -801,6 +806,7 @@ export class Game {
     this.crime = new CrimeSystem(this);
     this.response = new ResponseDirector(this);
     this.threats = new ThreatDirector(this);
+    this.forces = new Forces(this);
     // (Not when a save is loaded: the player has been here before.)
     if (!this.pendingSave) setTimeout(() => toast(normal
       ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'

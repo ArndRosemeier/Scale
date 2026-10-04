@@ -231,6 +231,18 @@ function channel(p: Pose, t: number, c: ActionCtx) {
   void t;
 }
 
+/** A soldier aiming a rifle (held while firing): both arms forward, the head down to the sights, a slight recoil. */
+function aimRifle(p: Pose, t: number, c: ActionCtx) {
+  const w = Math.min(1, c.elapsed * 5);
+  const kick = Math.max(0, Math.sin(c.elapsed * 31)) * 0.04;
+  const ap = c.aimPitch;
+  p.arm('R', (1.25 + ap) * w, 0.55 * w, -0.5 * w, 1.55 * w, 0.6 * w, 0, 0, kick);
+  p.arm('L', (1.4 + ap) * w, -0.1 * w, 0.4 * w, 0.55 * w, 0.8 * w);
+  p.spine(0.04 * w, 0.35 * w, 0);
+  p.neck((ap * 0.6 + 0.12) * w, -0.3 * w, 0.1 * w);
+  void t;
+}
+
 /** Repeating two-handed tool strokes (dig, chop, mine, hammer). */
 function toolStroke(p: Pose, t: number, c: ActionCtx, kind: 'dig' | 'chop' | 'mine' | 'hammer' | 'saw') {
   const cycles = kind === 'hammer' ? Math.max(1, Math.round(c.dur / 0.6)) : kind === 'saw' ? Math.max(1, Math.round(c.dur / 0.7)) : 1;
@@ -468,6 +480,7 @@ export const ACTIONS: Record<string, ActionDef> = {
   cast_up: { mask: 'upper', blendIn: 0.08, blendOut: 0.15, pose: (p, t, c) => cast(p, t, c, 'up'), mood: 'focused' },
   cast_ground: { mask: 'full', blendIn: 0.08, blendOut: 0.15, pose: (p, t, c) => cast(p, t, c, 'ground'), mood: 'focused' },
   cast_self: { mask: 'upper', blendIn: 0.08, blendOut: 0.15, pose: (p, t, c) => cast(p, t, c, 'self'), mood: 'focused' },
+  aim_rifle: { mask: 'upper', blendIn: 0.08, blendOut: 0.1, pose: aimRifle, mood: 'focused', loop: true },
   channel: { mask: 'upper', blendIn: 0.1, blendOut: 0.1, pose: channel, mood: 'focused', loop: true, clip: (c) => (c.main === 'none' || c.main === 'wand' ? { name: 'Spell_Simple_Idle_Loop' } : null) },
   dig: { mask: 'full', blendIn: 0.08, blendOut: 0.1, pose: (p, t, c) => toolStroke(p, t, c, 'dig'), mood: 'focused' },
   chop: { mask: 'upper', blendIn: 0.08, blendOut: 0.1, pose: (p, t, c) => toolStroke(p, t, c, 'chop'), mood: 'focused' },

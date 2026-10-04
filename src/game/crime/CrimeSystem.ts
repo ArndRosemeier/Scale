@@ -60,7 +60,7 @@ export const ACTOR_BUDGET = 40;
 const SETTING_KEY = 'scale.crime.setting';
 
 /** Names shown on the target frame for actors (the frame is the one place a role is named). */
-const ROLE_NAME: Record<string, string> = { police: 'Police officer', shopkeeper: 'Shopkeeper' };
+const ROLE_NAME: Record<string, string> = { police: 'Police officer', shopkeeper: 'Shopkeeper', soldier: 'Soldier' };
 const CRIMINAL_NAME: Record<CrimeKind, string> = { snatch: 'Thief', mugging: 'Mugger', robbery: 'Robber' };
 
 const _v = new THREE.Vector3();
@@ -485,13 +485,15 @@ export class CrimeSystem {
     for (const a of this.g.peds.agents) {
       const act = a.actor;
       if (!act) continue;
-      n++;
+      // (Soldiers have their own budget: response/forces.)
+      const uniformed = act.role === 'police' || act.role === 'soldier';
+      if (act.role !== 'soldier') n++;
       tickActor(act, dt);
-      if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && act.role === 'police'))) {
+      if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && uniformed))) {
         act.upT -= dt;
         if (act.upT <= (act.state === 'ko' ? -18 : 0)) {
           a.state = PState.Idle; a.vx = a.vz = a.vy = 0; a.stateT = 0;
-          if (act.role === 'police') act.hp = Math.max(act.hp, act.maxHp * 0.5);
+          if (uniformed) act.hp = Math.max(act.hp, act.maxHp * 0.5);
           setState(act, act.role === 'criminal' ? 'run' : 'idle');
         }
       } else if (a.state !== PState.Down && (act.state === 'down')) setState(act, act.role === 'criminal' ? 'run' : 'idle');
@@ -589,7 +591,7 @@ export class CrimeSystem {
     this.wake = { x: p.x, y: p.y, z: p.z };
     this.hud.fade(true);
     if (kind === 'police' || this.justice.wanted > 0) return; // the officers cuff them (arrest) or not
-    if (kind === 'robot' || kind === 'monster') return; // a threat knocked them out: no karma penalty (THREATS_PLAN §5.6)
+    if (kind === 'robot' || kind === 'monster' || kind === 'military') return; // a threat (or the army's stray fire) knocked them out: no karma penalty (THREATS_PLAN §5.6)
     this.g.progress.addKarma(-5, 'knocked out');
     this.rep.add(-1, 'knocked out');
   }

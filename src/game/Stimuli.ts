@@ -9,10 +9,11 @@
  *  'threat': hostile machines at work (rogue robots ramming, drones diving) — people near it flee.
  *  'roar': a monster's roar — people flee (the far ones stop, turn and film), drivers panic, birds flush.
  *  'tremor': the ground shaking (a giant's steps far off, an omen) — birds flush, people stop and look round.
- *  'thunder': a close thunderclap (render/Weather) — people flinch a little and look up, birds lift. */
-export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power' | 'cry' | 'alarm' | 'siren' | 'threat' | 'roar' | 'tremor' | 'thunder';
+ *  'thunder': a close thunderclap (render/Weather) — people flinch a little and look up, birds lift.
+ *  'gunfire': the army firing (bursts, a tank's gun, rockets) — people near it run, the farther ones duck and look. */
+export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power' | 'cry' | 'alarm' | 'siren' | 'threat' | 'roar' | 'tremor' | 'thunder' | 'gunfire';
 
-/** Who caused something (THREATS_PLAN §4: stimuli and the collateral ledger carry it; 'military': the army, later). */
+/** Who caused something (THREATS_PLAN §4: stimuli and the collateral ledger carry it; 'military': the army). */
 export type Cause = 'player' | 'threat' | 'police' | 'military';
 
 export interface Stimulus {

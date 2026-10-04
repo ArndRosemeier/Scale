@@ -18,6 +18,9 @@ interface Bucket {
   model: VehicleModel;
   body: THREE.InstancedMesh;
   wheels: THREE.InstancedMesh;
+  /** A tank's turret and gun (models with one). */
+  turret: THREE.InstancedMesh | null;
+  gun: THREE.InstancedMesh | null;
   paint: THREE.InstancedBufferAttribute;
   state: THREE.InstancedBufferAttribute;
   wPaint: THREE.InstancedBufferAttribute;
@@ -54,6 +57,9 @@ export class VehicleRenderer {
     this.mat = createVehicleMaterial(true);
   }
 
+  /** The shared instanced vehicle material (the army's aircraft and sandbags draw with it too: one program). */
+  get material(): THREE.Material { return this.mat; }
+
   private bucket(kind: VehicleKind, variant: number): Bucket {
     const key = `${kind}:${variant}`;
     let b = this.buckets.get(key);
@@ -63,7 +69,10 @@ export class VehicleRenderer {
     const wg = createInstancedVehicleGeometry(model.wheel, CAP * model.wheels.length);
     const body = new THREE.InstancedMesh(bg, this.mat, CAP);
     const wheels = new THREE.InstancedMesh(wg, this.mat, CAP * model.wheels.length);
-    for (const m of [body, wheels]) {
+    const T = model.turret;
+    const turret = T ? new THREE.InstancedMesh(createInstancedVehicleGeometry(T.geo, TURRET_CAP), this.mat, TURRET_CAP) : null;
+    const gun = T ? new THREE.InstancedMesh(createInstancedVehicleGeometry(T.gun, TURRET_CAP), this.mat, TURRET_CAP) : null;
+    for (const m of [body, wheels, ...(turret && gun ? [turret, gun] : [])]) {
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.count = 0;
       m.frustumCulled = false;
@@ -72,7 +81,7 @@ export class VehicleRenderer {
       this.group.add(m);
     }
     b = {
-      model, body, wheels, n: 0, nw: 0,
+      model, body, wheels, turret, gun, n: 0, nw: 0,
       paint: bg.getAttribute('iPaint') as THREE.InstancedBufferAttribute,
       state: bg.getAttribute('iState') as THREE.InstancedBufferAttribute,
       wPaint: wg.getAttribute('iPaint') as THREE.InstancedBufferAttribute,
@@ -103,6 +112,22 @@ export class VehicleRenderer {
     ex.q = new THREE.Quaternion();
     this.physics.ensureGround(v.x, v.z, 40);
     this.wrecks.push(v);
+  }
+
+  /** A tank's turret (yaw about its pivot) and gun (pitch about the mantlet, recoil) on top of the body matrix (this.m4). */
+  private turret(b: Bucket, k: number, v: Vehicle): void {
+    const T = b.model.turret!, gun = v.gun ?? NO_GUN;
+    _tq.setFromAxisAngle(_Yax, gun.yaw);
+    _tm.compose(_lp.set(T.pivot[0], T.pivot[1], T.pivot[2]), _tq, _one).premultiply(this.m4);
+    b.turret!.setMatrixAt(k, _tm);
+    _tq.setFromAxisAngle(_X, gun.pitch);
+    _gm.compose(_lp.set(T.gunPivot[0], T.gunPivot[1], T.gunPivot[2]), _tq, _one);
+    _gm.multiply(_local.makeTranslation(0, 0, gun.recoil)).premultiply(_tm);
+    b.gun!.setMatrixAt(k, _gm);
+    for (const m of [b.turret!, b.gun!]) {
+      (m.geometry.getAttribute('iPaint') as THREE.InstancedBufferAttribute).setXYZ(k, v.paint[0], v.paint[1], v.paint[2]);
+      (m.geometry.getAttribute('iState') as THREE.InstancedBufferAttribute).setXYZW(k, 0, 0, 0, v.damage);
+    }
   }
 
   update(dt: number, moving: Vehicle[], parked: Vehicle[], cam: THREE.PerspectiveCamera): void {
@@ -151,6 +176,7 @@ export class VehicleRenderer {
       b.body.setMatrixAt(k, this.m4);
       b.paint.setXYZ(k, v.paint[0], v.paint[1], v.paint[2]);
       const blue = v.kind === 'police' || v.kind === 'swat';
+      if (b.turret && b.gun && k < TURRET_CAP) this.turret(b, k, v);
       // Parked cars stand dark at night (nobody in them); traffic and police drive with lights.
       const head = v.state === VState.Abandoned || crushed || parkedCar ? 0 : Math.max(lamps, blue ? 0.3 : 0);
       const ind = v.state === VState.Abandoned ? 2 : blue && (v.fear > 0.3 || v.siren) ? 3 : v.task?.hold ? 2 : v.indicator;
@@ -163,7 +189,7 @@ export class VehicleRenderer {
         const w = W[wi];
         const j = b.nw++;
         const left = w[0] < 0;
-        const front = w[2] < 0;
+        const front = w[2] < 0 && v.kind !== 'tank';
         _eul.set(-ex.spin, front ? ex.steer : 0, 0, 'YXZ');
         this.q2.setFromEuler(_eul);
         _lp.set(w[0], w[1] * (crushed ? 0.6 : 1), w[2]);
@@ -181,6 +207,11 @@ export class VehicleRenderer {
     for (const b of this.buckets.values()) {
       b.body.count = b.n;
       b.wheels.count = b.nw;
+      if (b.turret && b.gun) {
+        const nt = Math.min(b.n, TURRET_CAP);
+        b.turret.count = b.gun.count = nt;
+        if (nt) for (const m of [b.turret, b.gun]) { upload(m.instanceMatrix, nt); upload(m.geometry.getAttribute('iPaint') as THREE.BufferAttribute, nt); upload(m.geometry.getAttribute('iState') as THREE.BufferAttribute, nt); }
+      }
       total += b.n;
       if (b.n) {
         // Upload only the instances in use (the buffers hold CAP).
@@ -193,12 +224,20 @@ export class VehicleRenderer {
 }
 
 const _one = new THREE.Vector3(1, 1, 1);
+/** Tanks drawn at once (the army's budget is far below). */
+const TURRET_CAP = 32;
+const _tq = new THREE.Quaternion();
+const _tm = new THREE.Matrix4();
+const _gm = new THREE.Matrix4();
+const _X = new THREE.Vector3(1, 0, 0);
+const _Yax = new THREE.Vector3(0, 1, 0);
 const _eul = new THREE.Euler();
 const _lp = new THREE.Vector3();
 const _ls = new THREE.Vector3();
 const _local = new THREE.Matrix4();
 const _world = new THREE.Matrix4();
 const _off = new THREE.Vector3();
+const NO_GUN = { yaw: 0, pitch: 0, recoil: 0 };
 
 /** Mark the first n instances of an instanced attribute for upload. */
 function upload(a: THREE.BufferAttribute, n: number): void {

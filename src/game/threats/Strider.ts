@@ -14,7 +14,7 @@
  *   swipe     the tail sweeps a side (a capsule sweep): facades, cars and people flung.
  *   roar      two-tone; people flee, drivers abandon their cars, birds lift off; half the time it
  *             rears up (the soft belly shown) and comes down on its forefeet.
- *   swat      drones near its head are snapped out of the air (helicopters: `airTargets`, stage 2).
+ *   swat      drones near its head are snapped out of the air, and the army's helicopters (`airTargets`).
  *   breath    the ridge lights up plate by plate for 2 s, the throat glows (a weak spot, exposed),
  *             then a blue-white beam sweeps a facade: windows burst, panels break, it burns.
  *
@@ -41,6 +41,10 @@ import type { ThreatActor, ThreatEvent, ThreatOutcome, ThreatTarget, ThreatZone,
 import { DAMAGE_PER_IMPULSE } from './ThreatEvent';
 import type { Cause } from '../Stimuli';
 import type { BuildingRef } from '../../world/WorldIndex';
+import { angriestInReach } from '../response/forces/BattleModel';
+
+/** Its blows as the army's units feel them (response/forces): breath ticks, tail sweeps, footfalls, slams, roars, its fall. */
+export type StriderBlow = 'breath' | 'swipe' | 'step' | 'slam' | 'roar' | 'fall';
 
 export const STRIDER = {
   height: 40,
@@ -128,7 +132,8 @@ const _v = new THREE.Vector3();
 const _r = { x: 0, z: 0, dx: 0, dz: 0 };
 const NO_KINDS = {};
 
-const ZONES: { id: string; name: string; armour: number; weak: boolean }[] = [
+/** Body zones: armour (share of the damage stopped) and weak spots (the army's battle model reads them too). */
+export const STRIDER_ZONES: { id: string; name: string; armour: number; weak: boolean }[] = [
   { id: 'head', name: 'Head', armour: 0.6, weak: false },
   { id: 'throat', name: 'Throat', armour: 0.85, weak: true },
   { id: 'neck', name: 'Neck', armour: 0.75, weak: false },
@@ -163,8 +168,12 @@ export class Strider implements ThreatEvent, ThreatActor {
   readonly aggro = new Map<string, number>();
   /** Stage 3: called once when it is brought down (the body stays). */
   onDefeated: ((s: Strider) => void) | null = null;
-  /** Things in the air it can swat besides drones (stage 2: helicopters). */
+  /** Things in the air it can swat besides drones (the army's helicopters). */
   airTargets: AirProvider[] = [];
+  /** The army (response/forces): where a squad (an aggro key) stands now — its breath and roars go for them. */
+  unitAt: ((key: string) => { x: number; y: number; z: number } | null) | null = null;
+  /** The army: its blows, for the units standing there. */
+  onBlow: ((kind: StriderBlow, x: number, y: number, z: number, r: number) => void) | null = null;
   mode: Mode = 'emerge';
   act: Act = null;
   private actT = 0;
@@ -215,7 +224,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     const route = planStriderRoute(g.macro, g.terrain, opts.at);
     if (!route) throw new Error('strider: no route from the river');
     this.route = route;
-    this.zones = ZONES.map((z) => ({ ...z, exposed: false, x: 0, y: 0, z: 0, r: 4, recent: 0 }));
+    this.zones = STRIDER_ZONES.map((z) => ({ ...z, exposed: false, x: 0, y: 0, z: 0, r: 4, recent: 0 }));
     const rig = new CreatureRig(STRIDER_RIG, STRIDER.height / 40);
     rig.ground = (x, z) => g.terrain.height(x, z) + g.world.surfaceOffset(x, z);
     routeAt(route, 0, _r);
@@ -510,6 +519,7 @@ export class Strider implements ThreatEvent, ThreatActor {
           const E = stepEnergy(this.mass, this.height) * 3;
           this.stats.broken += this.g.interactions.steps.land(L.foot.x, L.foot.y, L.foot.z, E, this.height, { cause: 'threat', own: false, sound: 'strider_step', ref: 90, maxR: 500, foot: 5 });
           this.hurtPlayerNear(L.foot.x, L.foot.z, 9, 40, 9);
+          this.onBlow?.('slam', L.foot.x, L.foot.y, L.foot.z, 9);
         }
       }
     }
@@ -535,6 +545,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     const h = this.rig.headPos;
     g.audio.play('strider_roar', h.x, h.y, h.z, 1, 0.95 + this.rng.range(0, 0.1), 140, g.renderer.camera.position);
     g.stimuli.emit('roar', h.x, h.y, h.z, 9, 700, { cause: 'threat', size: this.height });
+    this.onBlow?.('roar', h.x, h.y, h.z, 300);
     const d = Math.hypot(g.player.pos.x - h.x, g.player.pos.z - h.z);
     if (d < 350) g.camRig.addShake(0.35 * (1 - d / 350));
   }
@@ -595,6 +606,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.beamTick -= dt;
     if (this.beamTick > 0 || on < 0.5) return;
     this.beamTick = STRIDER.breathTick;
+    this.onBlow?.('breath', ex, ey, ez, 9);
     if (h.what === 'building' || h.what === 'roof' || h.what === 'ground') {
       if (h.what !== 'ground') this.smash(ex - h.nx * 0.2, ey, ez - h.nz * 0.2, STRIDER.breathR, STRIDER.breathHeat, dx, dy, dz);
       this.igniteT -= STRIDER.breathTick;
@@ -701,6 +713,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       }
       g.props.hit(mx, my, mz, r, sx * J, J * 0.3, sz * J);
       g.future.hit(mx, my, mz, r, sx * J * 0.2, J * 0.1, sz * J * 0.2);
+      this.onBlow?.('swipe', mx, my, mz, r + 2);
       // The player.
       const p = g.player.pos;
       if (!this.swipeHit.has(g.player) && Math.hypot(p.x - mx, p.z - mz) < r + g.player.radius && p.y < my + r) {
@@ -822,16 +835,15 @@ export class Strider implements ThreatEvent, ThreatActor {
 
   // ---------------------------------------------------------------- targets and choices
 
-  /** Whoever hurt it most, if near enough to go for (the player now; the army's units later). */
+  /**
+   * Whoever hurt it most among those near enough to go for: the player, or one of the army's squads
+   * (`unitAt`; tanks far down the avenue are out of reach — then the next one).
+   */
   private hostileTarget(): { kind: 'player' | 'point'; x: number; y: number; z: number } | null {
-    const top = this.topAggro();
-    if (!top || top.v < 25) return null;
-    if (top.key === 'player') {
-      const p = this.g.player.pos;
-      if (Math.hypot(p.x - this.x, p.z - this.z) > STRIDER.breathRange * 0.95) return null;
-      return { kind: 'player', x: p.x, y: p.y + this.g.player.height * 0.5, z: p.z };
-    }
-    return null;
+    const g = this.g, p = g.player.pos;
+    const at = (key: string) => (key === 'player' ? { x: p.x, y: p.y + g.player.height * 0.5, z: p.z } : this.unitAt?.(key) ?? null);
+    const t = angriestInReach(this.aggro, at, this.x, this.z, STRIDER.breathRange * 0.95);
+    return t ? { kind: t.key === 'player' ? 'player' : 'point', x: t.x, y: t.y, z: t.z } : null;
   }
 
   /** A tall building ahead to breathe fire at: a point on its facade, two thirds up. */
@@ -961,6 +973,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     // Far away it is a tremor (birds lift, people look round).
     if (this.stepN % 2 === 0) g.stimuli.emit('tremor', x, y, z, 5, 1100, { cause: 'threat', size: this.height });
     this.hurtPlayerNear(x, z, 7, 30, 6);
+    this.onBlow?.('step', x, y, z, this.height * 0.12);
     void leg;
   }
 
@@ -1147,6 +1160,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       for (let i = 0; i < 4; i++) {
         const x = sp[i * 3], z = sp[i * 3 + 2], y = rig.ground(x, z);
         this.stats.broken += g.interactions.steps.land(x, y, z, stepEnergy(this.mass, this.height) * 4, this.height, { cause: 'threat', own: false, sound: 'strider_step', ref: 120, maxR: 600, foot: 8 });
+        this.onBlow?.('fall', x, y, z, 14);
       }
       g.stimuli.emit('collapse', this.x, this.y, this.z, 9, 900, { cause: 'threat', size: this.height });
       for (const c of rig.caps) {

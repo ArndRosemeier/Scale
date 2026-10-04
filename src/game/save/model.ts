@@ -60,8 +60,8 @@ export interface SaveWeather { setting: string; wet: number; skipH: number }
 
 /** A defeated monster's body lying in the city. */
 export interface SaveBody { kind: string; x: number; z: number; yaw: number; side: number; s: number }
-/** A Strider on the move (resumed at its route position). */
-export interface SaveStrider { s: number; hp: number; mode: string }
+/** A Strider on the move (resumed at its route position; the response back at its level — the army's units come in anew). */
+export interface SaveStrider { s: number; hp: number; mode: string; level?: number }
 
 export interface SaveThreats {
   /** ThreatClock state (ClockState v1). */
@@ -211,7 +211,7 @@ export function parseSave(input: string | unknown): SaveData {
       remains: (Array.isArray(thr.remains) ? thr.remains : []).map(obj).filter((b) => Number.isFinite(b.x) && Number.isFinite(b.z)).slice(0, 8).map((b) => ({
         kind: str(b.kind, 'strider', 20), x: num(b.x, 0), z: num(b.z, 0), yaw: num(b.yaw, 0), side: num(b.side, 1) < 0 ? -1 : 1, s: num(b.s, 0, 0),
       })),
-      strider: thr.strider ? (() => { const s = obj(thr.strider); return { s: num(s.s, 0, 0), hp: num(s.hp, 1, 0), mode: str(s.mode, 'advance', 20) }; })() : null,
+      strider: thr.strider ? (() => { const s = obj(thr.strider); return { s: num(s.s, 0, 0), hp: num(s.hp, 1, 0), mode: str(s.mode, 'advance', 20), ...(s.level !== undefined ? { level: Math.min(4, Math.round(num(s.level, 0, 0))) } : {}) }; })() : null,
     },
     waypoint: wp && Number.isFinite(wp.x) && Number.isFinite(wp.z) ? { x: wp.x as number, z: wp.z as number } : null,
     settings: { crime: oneOf(set.crime, CRIME_SETTINGS, 'normal'), events: oneOf(set.events ?? thr.setting, EVENT_SETTINGS, 'normal') },

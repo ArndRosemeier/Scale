@@ -35,6 +35,8 @@ const L = {
   shopkeeper: ['Help! Robbery!', 'Call the police!'],
   policeChase: ['Stop! Police!', 'Freeze!'],
   policeArrest: ['On the ground!', 'Hands behind your back!'],
+  soldierFire: ['Open fire!', 'Keep it busy!', 'Aim for the throat!', 'Hit it!'],
+  soldierBack: ['Fall back!', 'The line is breaking!', 'Move, move!'],
   ownerCall: ['Please, help!', 'Come back!', 'Oh no, oh no…'],
   ownerHappy: ['Thank you so much!', 'You found it!'],
   chat: ['Morning.', 'Excuse me.', 'Nice day, huh?', 'I\'m on my way.', 'Yeah, I\'ll call you back.', 'Did you see the news?', 'Running late again…', 'Sorry!'],
@@ -103,6 +105,7 @@ export class Barks {
           if (state === 'arrested') return chance(0.5) ? pick(L.crookCuffed) : null;
           return state === 'fight' && chance(0.5) ? pick(L.crookFight) : null;
         case 'police': return state === 'run' && chance(0.6) ? pick(L.policeChase) : state === 'fight' ? pick(L.policeArrest) : null;
+        case 'soldier': return state === 'run' && chance(0.5) ? pick(L.soldierBack) : state === 'fight' && chance(0.2) ? pick(L.soldierFire) : null;
         case 'shopkeeper': return state === 'point' ? pick(L.shopkeeper) : null;
         case 'owner': return state === 'point' || state === 'run' ? (chance(0.6) ? pick(L.ownerCall) : null) : state === 'cheer' ? pick(L.ownerHappy) : null;
         default: return null;

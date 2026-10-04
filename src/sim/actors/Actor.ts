@@ -16,7 +16,7 @@ import type { PedAgent } from '../Pedestrians';
 import type { MoveState } from '../../shared/types';
 import type { EquipmentVisuals } from '../../items/types';
 
-export type ActorRole = 'criminal' | 'victim' | 'police' | 'shopkeeper' | 'owner' | 'bystander';
+export type ActorRole = 'criminal' | 'victim' | 'police' | 'shopkeeper' | 'owner' | 'bystander' | 'soldier';
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';

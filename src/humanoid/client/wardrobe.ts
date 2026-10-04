@@ -53,6 +53,7 @@ export function resolveWearable(defId: string, v: ItemVisual): WearableSpec | nu
     case 'shoes': return L({ kind: 'shell', regions: [{ region: 'foot.L' }, { region: 'foot.R' }], offset: 0.01, layer: 1, material: mat(c, 'leather', { roughness: 0.4 }) });
     case 'boots': return L({ kind: 'shell', regions: [{ region: 'foot.L' }, { region: 'foot.R' }, { region: 'shin.L', from: 0.65 }, { region: 'shin.R', from: 0.65 }], offset: 0.012, layer: 2, material: mat(c, 'leather', { roughness: 0.5 }) });
     case 'cap': return { layers: [capPart(c)] };
+    case 'helmet': return { layers: [helmetPart(c)] };
     case 'beanie': return { layers: [beaniePart(c)] };
     default: return null;
   }
@@ -73,6 +74,22 @@ function capPart(c: C3): RigidPart {
       brim.scale.set(1, 1, 1.3);
       g.add(dome, brim);
       return g;
+    },
+  };
+}
+
+/** A combat helmet: a deep dome with a rim, matte. */
+function helmetPart(c: C3): RigidPart {
+  return {
+    kind: 'rigid',
+    socket: 'head',
+    build(fit: BodyFit) {
+      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...c, THREE.SRGBColorSpace), roughness: 0.9 });
+      const r = fit.headRadius * 1.2;
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), m);
+      dome.position.set(0, fit.headRadius * 0.22, -0.01);
+      dome.scale.set(1, 0.92, 1.06);
+      return dome;
     },
   };
 }
@@ -136,6 +153,20 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.016, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.6 }));
       bat.position.y = 0.32;
       g.add(bat);
+      break;
+    }
+    case 'rifle': {
+      // Held at the grip: the barrel forward along +Y, the stock back.
+      const dark = new THREE.MeshStandardMaterial({ color: 0x1b1d1a, roughness: 0.6, metalness: 0.3 });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.09), dark);
+      body.position.set(0, 0.08, 0.03);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.38, 6), dark);
+      barrel.position.set(0, 0.47, 0.05);
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.24, 0.11), dark);
+      stock.position.set(0, -0.24, 0.0);
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.14), dark);
+      mag.position.set(0, 0.12, -0.06);
+      g.add(body, barrel, stock, mag);
       break;
     }
     case 'wallet': {

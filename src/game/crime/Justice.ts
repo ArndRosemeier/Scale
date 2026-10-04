@@ -89,6 +89,7 @@ export class Justice {
         return;
       }
       if (role === 'police') { this.offence(2.6, -6, -4, e, 'Assaulting a police officer', true); return; }
+      if (role === 'soldier') { this.offence(2.6, -6, -4, e, 'Attacking a soldier', true); return; }
       const lvl = e.effect === 'damage' ? 0.7 : e.effect === 'wet' ? 0.25 : e.effect === 'shrink' ? 0.5 : 1;
       this.offence(lvl * 1.15, -3 * lvl, -2 * lvl, e, 'You hurt a bystander');
       return;

@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.006 — 2026-10-04
+
+- **The army fights the giant creature** (city response levels 3 and 4):
+  - **National Guard**: convoys of trucks and armoured cars, squads behind sandbag walls firing at it (tracers, muzzle flashes), searchlights at night.
+  - **Army and air power**: tanks on the avenues, attack helicopters with rockets — it swats them out of the air — jets on bombing runs, artillery flashes on the horizon.
+  - **A battle without you**: it goes after whoever hurts it most, wrecks vehicles and breaks squads ("the line is breaking"). The army drives it off in a bit under half of the fights — help them, or face it yourself.
+  - Squads on the map and compass; Army section in the admin console.
+
 ## 0.005 — 2026-10-04
 
 - **People's faces**: city people now vary in cheek fullness (fuller with more weight), face width and resting expression — most look neutral to friendly, a few stern.

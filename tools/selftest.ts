@@ -735,6 +735,54 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   check(!!rA && !!rB && hashPlan(rA.pts) === hashPlan(rB.pts), 'strider route: deterministic per seed');
   console.log(`strider routes (20 seeds, size 0.6): ${lens.join(' ')} m`);
 
+  // The army (Phase B stage 2): the headless "no player" battle — the Strider along this city's route
+  // against the response's levels 3 and 4 — deterministic per seed, the army wins in 25–55 % of runs.
+  {
+    const { simulateBattle, levelSquads, hitChance, pickZone, hurtUnit, makeUnit, makeSquad, moraleStep, ARMY, FORCE } = await import('../src/game/response/forces/BattleModel');
+    const { STRIDER, STRIDER_ZONES } = await import('../src/game/threats/Strider');
+    const { Rng } = await import('../src/core/rng');
+    const spec = { ...STRIDER, zones: STRIDER_ZONES } as unknown as Parameters<typeof simulateBattle>[0];
+    const t0 = performance.now();
+    let wins = 0, runs = 0, nondet = 0, overBudget = 0, defeated = 0;
+    const lost: Record<string, number> = {};
+    for (let seed = 1; seed <= 50; seed++) {
+      const terrain = new Terrain(makeProfile({ seed, size: 0.6 }));
+      const R = planStriderRoute(buildMacroPlan(terrain), terrain);
+      if (!R) continue;
+      const a = simulateBattle(spec, R, seed * 7919 + 13);
+      runs++;
+      if (a.winner === 'army') wins++;
+      if (a.outcome === 'defeated') defeated++;
+      for (const [k, v] of Object.entries(a.lost)) lost[k] = (lost[k] ?? 0) + v;
+      const P = a.peak;
+      if ((P.truck ?? 0) + (P.apc ?? 0) + (P.tank ?? 0) > ARMY.maxVehicles || (P.rifles ?? 0) > ARMY.maxSoldiers || (P.heli ?? 0) > ARMY.maxHelis || (P.jet ?? 0) > ARMY.maxJets) overBudget++;
+      if (seed <= 8) { const b = simulateBattle(spec, R, seed * 7919 + 13); if (b.hash !== a.hash || b.winner !== a.winner || b.t !== a.t) nondet++; }
+    }
+    check(nondet === 0, `army battle: deterministic per seed (8 seeds run twice, ${nondet} differ)`);
+    check(runs === 50 && wins >= 0.25 * runs && wins <= 0.55 * runs, `army battle: the army drives the Strider off / brings it down in 25–55 % of 50 runs without the player (${wins}/${runs})`);
+    check(overBudget === 0, `army battle: units on the field within the budgets (vehicles ≤ ${ARMY.maxVehicles}, soldiers ≤ ${ARMY.maxSoldiers}, helicopters ≤ ${ARMY.maxHelis}, jets ≤ ${ARMY.maxJets}; ${overBudget} runs over)`);
+    console.log(`army battle (50 seeds, no player): army wins ${wins}/${runs} (${defeated} brought down), losses ${JSON.stringify(lost)}, ${Math.round(performance.now() - t0)} ms`);
+    // What a level sends fits the budgets on its own, too.
+    const l3 = levelSquads(3, () => ({ x: 0, z: 0 })), l4 = levelSquads(4, () => ({ x: 0, z: 0 }));
+    const all = [...l3, ...l4].flatMap((q) => q.units);
+    const veh = all.filter((u) => u.kind === 'truck' || u.kind === 'apc' || u.kind === 'tank').length;
+    const sol = all.filter((u) => u.kind === 'rifles').reduce((n, u) => n + u.crew, 0);
+    check(veh <= ARMY.maxVehicles && sol <= ARMY.maxSoldiers && all.filter((u) => u.kind === 'heli').length <= ARMY.maxHelis && all.filter((u) => u.kind === 'jet').length <= ARMY.maxJets,
+      `army: levels 3 + 4 send ${veh} vehicles, ${sol} soldiers, ${all.filter((u) => u.kind === 'heli').length} helicopters, ${all.filter((u) => u.kind === 'jet').length} jets (within the budgets)`);
+    // Fire and morale rules.
+    const W = FORCE.tank.weapon!;
+    check(hitChance(W, 100, 1) > hitChance(W, 800, 1) && hitChance(W, 300, 1) > hitChance(W, 300, 0.2), 'army: hit chance falls off with range and when shaken');
+    const zr = new Rng(5);
+    const zsT = STRIDER_ZONES.map((z) => ({ ...z, exposed: z.id === 'throat' }));
+    let throat = 0, throatNoLos = 0;
+    for (let i = 0; i < 2000; i++) { if (pickZone(zr, zsT, true, 0.5)?.id === 'throat') throat++; if (pickZone(zr, zsT, false, 0.5)?.id === 'throat') throatNoLos++; }
+    check(throat > 900 && throatNoLos < 300, `army: an exposed weak spot is hit when aimed at with line of sight (${throat}/2000), rarely without (${throatNoLos}/2000)`);
+    const u = makeUnit('rifles', 'q', 0, 0, 1, 0), q = makeSquad('q', 'rifles', 3, [u]);
+    const hr = new Rng(9);
+    for (let i = 0; i < 12 && q.morale >= ARMY.breakAt; i++) hurtUnit(u, q, 260, hr);
+    check(u.crew < 6 && u.crew > 0 && q.morale < ARMY.breakAt && moraleStep(q, 0.5) !== 'ok', `army: losses drop a squad's morale until the line breaks (${u.crew} left, morale ${q.morale.toFixed(2)})`);
+  }
+
   // Rig math.
   const { twoBone, follow, reach, lengths, layStraight } = await import('../src/game/threats/rig/chain');
   const { rayCapsule, capsuleDist } = await import('../src/game/threats/rig/CreatureRig');
@@ -960,7 +1008,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     justice: { heat: 3.2, wanted: 1, stats: { offences: 3, arrests: 0, turnIns: 1, escapes: 2 } },
     threats: {
       clock: { v: 1, played: 5400, pressure: 7300, n: 2, lastAt: 4100, lastP: 5000, last: 'robots', armedAt: null, omensDone: 0, karma: 320, majors: 0, lastMajorAt: 0, armedMajor: false },
-      setting: 'frequent', remains: [{ kind: 'strider', x: 410.5, z: -220.25, yaw: 0.75, side: -1, s: 812 }], strider: { s: 455.5, hp: 3800, mode: 'advance' },
+      setting: 'frequent', remains: [{ kind: 'strider', x: 410.5, z: -220.25, yaw: 0.75, side: -1, s: 812 }], strider: { s: 455.5, hp: 3800, mode: 'advance', level: 4 },
     },
     waypoint: { x: -500, z: 260.5 },
     settings: { crime: 'chaos', events: 'frequent' },

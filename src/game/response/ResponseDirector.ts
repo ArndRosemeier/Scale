@@ -151,11 +151,13 @@ export class ResponseDirector {
   /** The highest level of any open incident (HUD, tests). */
   get level(): number { return this.incidents.reduce((m, i) => Math.max(m, i.closed ? 0 : i.level), 0); }
 
-  /** Dev: force the latest incident to a level (0 … top). */
+  /** Dev and saves: force the latest incident to a level (0 … top), going up one level at a time. */
   setLevel(n: number): number {
     const inc = this.incidents[this.incidents.length - 1];
     if (!inc) return -1;
-    this.goTo(inc, Math.max(0, Math.min(this.top, n)));
+    const to = Math.max(0, Math.min(this.top, n));
+    if (to > inc.level) for (let l = inc.level + 1; l <= to; l++) this.goTo(inc, l);
+    else this.goTo(inc, to);
     return inc.level;
   }
 

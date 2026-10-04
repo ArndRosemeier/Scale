@@ -375,16 +375,16 @@ export class ThreatDirector {
    * one just brought down) and a Strider on the move (resumed at its route position). Robot
    * malfunctions and omens are not kept: they end with the session.
    */
-  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string } | null } {
+  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string; level: number } | null } {
     const remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[] = [];
-    let strider: { s: number; hp: number; mode: string } | null = null;
+    let strider: { s: number; hp: number; mode: string; level: number } | null = null;
     for (const b of [...this.remains, ...this.events.filter((e): e is Strider => e instanceof Strider && e.defeated)]) remains.push({ kind: 'strider', ...b.saveState() });
-    for (const e of this.events) if (e instanceof Strider && e.active && (e.mode === 'emerge' || e.mode === 'advance' || e.mode === 'rampage')) { const st = e.saveState(); strider = { s: st.s, hp: st.hp, mode: st.mode }; }
+    for (const e of this.events) if (e instanceof Strider && e.active && (e.mode === 'emerge' || e.mode === 'advance' || e.mode === 'rampage')) { const st = e.saveState(); strider = { s: st.s, hp: st.hp, mode: st.mode, level: this.g.response.incidents.find((i) => i.ev === e)?.level ?? 0 }; }
     return { clock: { ...this.clock.state }, setting: this.setting, remains, strider };
   }
 
   /** Saves: restore what `saveState` kept (on a fresh city: no events running yet). */
-  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string } | null }): void {
+  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string; level?: number } | null }): void {
     const S = this.clock.state as unknown as Record<string, unknown>;
     if (o.clock && o.clock.v === 1) for (const k of Object.keys(S)) if (k in o.clock && (typeof o.clock[k] === typeof S[k] || o.clock[k] === null || S[k] === null)) S[k] = o.clock[k];
     if (o.setting === 'off' || o.setting === 'rare' || o.setting === 'normal' || o.setting === 'frequent') this.setting = o.setting;
@@ -401,6 +401,8 @@ export class ThreatDirector {
     if (o.strider) {
       const ev = this.start('strider', deriveSeed(this.g.settings.seed, 'threat', this.clock.state.n, 'resumed'), {}, null);
       if (ev instanceof Strider) ev.restoreWalking(o.strider);
+      // The response back at its level (the army's units come in anew: they are not kept).
+      if (ev && (o.strider.level ?? 0) > 0) this.g.response.setLevel(o.strider.level ?? 0);
     }
     this.save();
   }

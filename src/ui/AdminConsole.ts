@@ -151,6 +151,15 @@ const SECTIONS: [string, Btn[]][] = [
     ...[0, 1, 2, 3, 4, 5].map((n) => ({ label: `Response ${n}`, run: (_g: Game, d: Dev) => call(d, 'response.level', n) })),
     { label: 'Events status', run: (_g, d) => call(d, 'threat.events') },
   ]],
+  ['Army', [
+    { label: 'Battle status', run: (_g, d) => call(d, 'army.status') },
+    { label: 'Spawn tank', run: (_g, d) => call(d, 'army.spawn', 'tank', 40) },
+    { label: 'Spawn helicopter', run: (_g, d) => call(d, 'army.spawn', 'heli', 60) },
+    { label: 'Spawn squad', run: (_g, d) => call(d, 'army.spawn', 'rifles', 25) },
+    { label: 'Spawn APC', run: (_g, d) => call(d, 'army.spawn', 'apc', 40) },
+    { label: 'Airstrike', run: (_g, d) => call(d, 'army.airstrike') },
+    { label: 'No-player battle (sim)', run: (g, d) => { const r = call(d, 'army.sim', g.settings.seed) as Record<string, unknown> | string; return typeof r === 'string' ? r : { winner: r.winner, outcome: r.outcome, t: Math.round(r.t as number), hp: r.hp, lost: r.lost }; } },
+  ]],
   ['Crime & deeds', [
     { label: 'Snatch', run: (_g, d) => call(d, 'crime', 'snatch', 25) },
     { label: 'Mugging', run: (_g, d) => call(d, 'crime', 'mugging', 25) },

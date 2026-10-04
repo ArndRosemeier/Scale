@@ -120,6 +120,11 @@ export class Reactions {
             if (s.evac) { if (!a.evac) this.onEvacuate?.(a, s); break; }
             if (prox > 0.4 && a.state === PState.Walk && a.cit.curiosity > 0.5 && !a.glance) { a.glance = 2.5; a.lookX = s.x; a.lookY = s.y; a.lookZ = s.z; }
             break;
+          case 'gunfire':
+            // The army firing: close by, run (away from the guns); farther off, start, look and hurry on.
+            a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
+            if (a.fear > 0.4) this.flee(a, s.x, s.z); else if (prox > 0.3) this.gawk(a, s.x, s.y, s.z);
+            break;
           case 'threat':
             // Rogue machines ramming and diving at people: run (the bolder keep their distance and film).
             a.fear = Math.min(2, a.fear + prox * nerve * 1.1);

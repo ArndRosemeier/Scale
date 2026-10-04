@@ -685,5 +685,93 @@
     "loop": false,
     "gain": 0.9,
     "description": "distant thunder: a low roll, no crack (procedural, tools/synthWeather.mjs)"
+  },
+  "army_rifle": {
+    "files": [
+      "army_rifle.wav"
+    ],
+    "loop": false,
+    "gain": 0.75,
+    "description": "a rifle squad firing: a ragged burst of sharp cracks with a short slap off the facades (procedural, tools/synthArmy.mjs)"
+  },
+  "army_autocannon": {
+    "files": [
+      "army_autocannon.wav"
+    ],
+    "loop": false,
+    "gain": 0.85,
+    "description": "an APC autocannon: four heavy thuds with a metallic ring and street echo (procedural, tools/synthArmy.mjs)"
+  },
+  "army_tank": {
+    "files": [
+      "army_tank.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a tank gun firing: a hard crack, a deep boom rolling through the streets (procedural, tools/synthArmy.mjs)"
+  },
+  "army_rotor": {
+    "files": [
+      "army_rotor.wav"
+    ],
+    "loop": true,
+    "gain": 0.8,
+    "description": "attack helicopter rotor loop: blade slap over turbine whine (procedural, tools/synthArmy.mjs)"
+  },
+  "army_jet": {
+    "files": [
+      "army_jet.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a jet flyby: rising roar, a crack overhead, falling rumble (procedural, tools/synthArmy.mjs)"
+  },
+  "army_rocket": {
+    "files": [
+      "army_rocket.wav"
+    ],
+    "loop": false,
+    "gain": 0.85,
+    "description": "a rocket salvo leaving the pods: a string of whooshes and hiss (procedural, tools/synthArmy.mjs)"
+  },
+  "army_explosion": {
+    "files": [
+      "army_explosion.wav"
+    ],
+    "loop": false,
+    "gain": 0.95,
+    "description": "a shell or rocket exploding: crack, boom, debris rattle (procedural, tools/synthArmy.mjs)"
+  },
+  "army_bomb": {
+    "files": [
+      "army_bomb.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a bomb: a big deep explosion with a long rumble (procedural, tools/synthArmy.mjs)"
+  },
+  "army_hit": {
+    "files": [
+      "army_hit.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "a shell striking the monster hide: a dull thud and a ringing crack (procedural, tools/synthArmy.mjs)"
+  },
+  "army_artillery": {
+    "files": [
+      "army_artillery.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "artillery far off: a deep muffled thump rolling over the city (procedural, tools/synthArmy.mjs)"
+  },
+  "army_whistle": {
+    "files": [
+      "army_whistle.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "an incoming shell whistle falling in pitch (procedural, tools/synthArmy.mjs)"
   }
 }
