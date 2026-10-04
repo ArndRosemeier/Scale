@@ -614,7 +614,7 @@ export class Animator {
         this.talkS = approach(this.talkS, inp.anim.talking ? 1 : 0, 3, dt);
         rig.accumulate(idle, this.time / idle.meta.dur, 1 - this.talkS, p);
         rig.accumulate(talk, this.time / talk.meta.dur, this.talkS, p);
-        p.root.y -= 0.19 * k;
+        this.onSeat(p);
         return true;
       }
       case 'air': {
@@ -642,6 +642,32 @@ export class Animator {
     }
   }
 
+  /**
+   * Seated: the hips go onto the seat, wherever the clip or pose put them. Seats are made
+   * for people (top about 0.47 m, whatever the sitter's size), and the sitter is placed at
+   * the seat's centre facing out, so the hip joints sit a bit behind the centre, a cushion
+   * of flesh above the seat. A tall sitter's shins angle forward instead of going through
+   * the floor; a short one's feet dangle.
+   */
+  private onSeat(p: Pose) {
+    const ch = this.ch, k = this.hipH / 0.9;
+    const sc = Math.max(1e-4, ch.object.getWorldScale(_v5).y);
+    const rest = ch.rest[0];
+    const hipOverRoot = this.hipH - rest.y; // hip joints relative to the root bone (local)
+    const hip = 0.47 / sc + 0.09 * k; // hip joints above the floor (local units)
+    p.root.y = hip - hipOverRoot - rest.y;
+    p.root.z = 0.11 / sc + 0.02 * k - rest.z; // (root z points backward)
+    // Knee to ankle hangs about straight down in the seated pose; if that reaches under the
+    // floor, swing the shins forward until the ankles clear it.
+    const shin = ch.rest[this.map.idx('lowerleg01.L')].y - ch.rest[this.map.idx('foot.L')].y;
+    const ankle = hip - 0.04 * k - shin; // ankle height with hanging shins
+    const under = 0.08 * k - ankle;
+    if (under > 0) {
+      const a = 0.6 * Math.acos(clamp(1 - under / shin, 0, 1));
+      for (const s of ['L', 'R'] as const) { p.add(`lowerleg01.${s}`, a, 0, 0); p.add(`foot.${s}`, -a * 0.7, 0, 0); }
+    }
+  }
+
   private familyProcedural(f: Family, p: Pose, inp: AnimInput, vf: number, vr: number, hs: number, dt: number) {
     switch (f) {
       case 'ground': return this.ground(p, inp, vf, vr, hs, dt);
@@ -651,8 +677,7 @@ export class Animator {
       case 'glide': return inp.anim.move === 'fly' ? this.flight(p, inp.anim.power?.fly, dt) : this.glide(p, false);
       case 'sit': {
         sitPose(p, 1);
-        p.root.y -= this.hipH - 0.13 * (this.hipH / 0.9);
-        p.root.z += 0.08;
+        this.onSeat(p);
         p.spine(0.02 * Math.sin(this.time * 1.6));
         return;
       }

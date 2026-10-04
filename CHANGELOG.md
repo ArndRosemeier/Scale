@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.010 — 2026-10-04
+
+- **Fix**: sitting put the body too far back and too low, so the chair stuck through it (worse for tall characters). The hips now rest on the seat for every body size; tall sitters angle their shins forward, short ones let their feet dangle. For you and for city people.
+
 ## 0.009 — 2026-10-04
 
 - **Fix**: rooftop equipment (air-conditioning units, elevator housings, water tanks) was walk-through; it is solid now — walk around it, or jump on top. (The equipment on each roof is laid out once more, slightly differently than before.)
