@@ -163,6 +163,23 @@ export class Justice {
     } else if (this.unseen === 0) H.pursue(this.wanted);
   }
 
+  /** Saves: heat, wanted level and the statistics. */
+  serialize(): { heat: number; wanted: number; stats: Justice['stats'] } {
+    return { heat: this.heat, wanted: this.wanted, stats: { ...this.stats } };
+  }
+
+  /** Saves: restore them; a wanted player is pursued again (with the usual grace before they can get away). */
+  restore(o: { heat?: number; wanted?: number; stats?: Partial<Record<string, number>> } | null): void {
+    if (!o) return;
+    this.heat = Math.max(0, Number(o.heat) || 0);
+    this.wanted = Math.max(0, Math.min(JUSTICE.levels.length, Math.floor(Number(o.wanted) || 0)));
+    if (o.stats) for (const k of Object.keys(this.stats) as (keyof Justice['stats'])[]) this.stats[k] = Number(o.stats[k]) || 0;
+    this.unseen = 0;
+    this.since = this.h.time;
+    if (this.wanted > 0) this.h.pursue(this.wanted);
+    this.onChange?.(this.wanted);
+  }
+
   /** A good deed cools things down. */
   atone(amount: number): void {
     if (this.wanted > 0) return;

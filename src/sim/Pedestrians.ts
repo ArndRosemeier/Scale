@@ -144,6 +144,10 @@ export class Pedestrians {
   private nextId = 1;
   private hours = 0;
   stats = { scannedBuildings: 0, citizens: 0, spawned: 0 };
+  /** Share of walks that still happen (render/Weather: fewer people set out in the rain). */
+  outdoorShare = 1;
+  /** Walking pace factor (people hurry in the rain). */
+  paceK = 1;
 
   constructor(
     readonly pop: Population,
@@ -289,6 +293,9 @@ export class Pedestrians {
     }
     // Skip legs that never come near the player.
     if (distSegPoint(ax, az, bx, bz, px, pz) > DESPAWN_R * 0.9) return;
+    // Bad weather: some walks are not made (taken by car or metro, or put off; unseen) and fewer
+    // walk to the car or the station.
+    if (this.outdoorShare < 1 && hashToFloat(hash32(c.seed * 31 + Math.floor(trip.depart * 60))) > (trip.mode === Mode.Walk ? this.outdoorShare : 1 - (1 - this.outdoorShare) * 0.5)) return;
     // Shelter in place: nobody sets out into a district under a civil-defence alert.
     if (this.shelter?.(ax, az, bx, bz)) return;
     const route = this.buildRoute(ax, az, bx, bz);
@@ -582,7 +589,7 @@ export class Pedestrians {
         a.onRoad = a.wp < a.route.length / 3 ? a.route[a.wp * 3 + 2] > 0.5 : false;
         return;
       }
-      desired = a.pref * (a.evac ?? 1);
+      desired = a.pref * (a.evac ?? this.paceK);
     }
     // Shrunk: little legs, slower steps.
     if (st && st.scale < 1) desired *= Math.sqrt(st.scale);

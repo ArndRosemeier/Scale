@@ -8,7 +8,7 @@ import * as THREE from 'three';
 interface ManifestEntry { files: string[]; loop: boolean; gain: number; description?: string }
 type Manifest = Record<string, ManifestEntry>;
 
-export type AmbienceLayer = 'amb_city_day' | 'amb_city_night' | 'amb_park' | 'amb_river' | 'amb_sea' | 'amb_wind_flight' | 'amb_sewer' | 'amb_metro' | 'amb_interior' | 'amb_crowd';
+export type AmbienceLayer = 'amb_city_day' | 'amb_city_night' | 'amb_park' | 'amb_river' | 'amb_sea' | 'amb_wind_flight' | 'amb_sewer' | 'amb_metro' | 'amb_interior' | 'amb_crowd' | 'amb_rain_light' | 'amb_rain_heavy' | 'amb_wind_gust';
 
 export class Audio {
   ctx: AudioContext | null = null;

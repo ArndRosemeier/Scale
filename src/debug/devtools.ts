@@ -4,6 +4,7 @@
 import type { Game } from '../game/Game';
 import type { BuildingRef } from '../world/WorldIndex';
 import { statusOf } from '../shared/status';
+import type { WeatherSetting } from '../render/Weather';
 
 export function installDevtools(game: Game): void {
   const dev = {
@@ -69,6 +70,15 @@ export function installDevtools(game: Game): void {
       return { room: r.id, kind: r.kind, x: Math.round(x), z: Math.round(z) };
     },
     hour(h: number): void { game.sky.hour = h; },
+    /** Weather: set('rain' | 'storm' | … | 'auto'), next(), status(), forecast(n), strike(distance m). */
+    weather: {
+      set: (k: WeatherSetting) => game.weather.set(k),
+      next: () => game.weather.next(),
+      auto: () => game.weather.set('auto'),
+      status: () => game.weather.status(),
+      forecast: (n?: number) => game.weather.forecast(n),
+      strike: (d?: number) => game.weather.strike(d),
+    },
     /** Power states on a person / car / robot / drone / prop (frozen, shrunk, burning …). */
     status: statusOf,
   };

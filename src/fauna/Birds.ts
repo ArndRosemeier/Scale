@@ -139,7 +139,7 @@ const GROUND_DRAW_R = 220;
 const GRAV = 9.81;
 
 /** Scare radii (m) of stimuli for birds on the ground (capped by the stimulus' own radius). */
-const SCARE: Partial<Record<Stimulus['kind'], number>> = { impact: 35, glass: 25, collapse: 260, blast: 200, stomp: 140, giant: 150, crash: 60, scream: 18, horn: 16, sonic: 500, flyby: 40, threat: 25, roar: 420, tremor: 300 };
+const SCARE: Partial<Record<Stimulus['kind'], number>> = { impact: 35, glass: 25, collapse: 260, blast: 200, stomp: 140, giant: 150, crash: 60, scream: 18, horn: 16, sonic: 500, flyby: 40, threat: 25, roar: 420, tremor: 300, thunder: 120 };
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -178,6 +178,8 @@ export class Birds {
   private fz = 0;
   private night = 0;
   private hour = 12;
+  /** Rain 0..1 (render/Weather): no flocks, gulls or crows aloft; fewer groups on the street. */
+  rain = 0;
   stats = { birds: 0, ground: 0, groups: 0, flocks: 0, gulls: 0, crows: 0, drawn: 0, flushes: 0, hits: 0, ms: 0 };
 
   constructor(private ctx: BirdCtx, stimuli: Stimuli) {
@@ -275,7 +277,8 @@ export class Birds {
     if (this.spawnT <= 0) {
       this.spawnT = 0.35;
       const street = this.streetGroups(), roof = this.roofGroups();
-      const wantStreet = Math.round(9 * (1 - night) + 1 * night), wantRoof = Math.round(3 + night * 2);
+      const wet = Math.min(1, this.rain * 1.6);
+      const wantStreet = Math.round((9 * (1 - night) + 1 * night) * (1 - 0.6 * wet)), wantRoof = Math.round(3 + night * 2);
       if (street < wantStreet && this.free.length > 24) this.spawnStreetGroup(focus, cam, 14 * Math.min(k, 2), far);
       else if (roof < wantRoof && this.free.length > 16) this.spawnRoofGroup(focus, cam, far);
     }
@@ -288,7 +291,8 @@ export class Birds {
       const dusk = smoothstep(16.2, 16.9, h) * (1 - smoothstep(18.1, 18.6, h));
       let pigeons = 0, starlings = 0;
       for (const f of this.flocks) if (f.on && !f.leave) { if (f.sp === Sp.Starling) starlings++; else pigeons++; }
-      const wantStar = dusk > 0.3 ? 2 : 0, wantPig = night < 0.3 && dusk < 0.5 ? 1 : 0;
+      const dry = this.rain < 0.15;
+      const wantStar = dusk > 0.3 && dry ? 2 : 0, wantPig = night < 0.3 && dusk < 0.5 && dry ? 1 : 0;
       for (const f of this.flocks) {
         if (!f.on || f.leave) continue;
         if ((f.sp === Sp.Starling && starlings > wantStar) || (f.sp === Sp.Pigeon && pigeons > wantPig)) {
@@ -306,14 +310,14 @@ export class Birds {
       if (this.t - this.water.t > 6 || Math.hypot(this.water.x - focus.x, this.water.z - focus.z) > 450) this.findWater(focus);
       let gulls = 0;
       for (const b of this.birds) if (b.on && b.mode === Mode.Soar) gulls++;
-      const want = this.water.ok ? Math.round(7 * (1 - night)) : 0;
+      const want = this.water.ok ? Math.round(7 * (1 - night) * (1 - Math.min(1, this.rain * 1.4))) : 0;
       if (gulls < want && this.free.length > 8) this.spawnGull(focus);
     }
     // A crow (or two) crossing now and then by day.
     this.crowT -= dt;
     if (this.crowT <= 0) {
       this.crowT = 15 + Math.random() * 35;
-      if (night < 0.3 && this.free.length > 10) this.spawnCrows(focus);
+      if (night < 0.3 && this.rain < 0.3 && this.free.length > 10) this.spawnCrows(focus);
     }
   }
 

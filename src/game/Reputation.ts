@@ -65,6 +65,19 @@ export class Reputation {
     return v >= 70 ? 'City hero' : v >= 35 ? 'Well liked' : v >= 10 ? 'Known for good deeds' : v > -10 ? 'Unknown' : v > -35 ? 'Troublemaker' : v > -70 ? 'Feared' : 'Public menace';
   }
 
+  /** Saves: the value and the statistics. */
+  serialize(): { v: number; stats: Reputation['stats'] } {
+    return { v: this.v, stats: { ...this.stats } };
+  }
+
+  /** Saves: take a saved value (written back to the per-city store; no listeners fire). */
+  restore(o: { v?: number; stats?: Partial<Record<string, number>> } | null): void {
+    if (!o) return;
+    if (Number.isFinite(o.v)) this.v = Math.max(REP.min, Math.min(REP.max, Number(o.v)));
+    if (o.stats) for (const k of Object.keys(this.stats) as (keyof Reputation['stats'])[]) this.stats[k] = Number(o.stats[k]) || 0;
+    this.save();
+  }
+
   reset(): void {
     this.v = 0;
     for (const k of Object.keys(this.stats) as (keyof Reputation['stats'])[]) this.stats[k] = 0;

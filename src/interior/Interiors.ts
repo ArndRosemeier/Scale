@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
-import type { CityStreamer } from '../stream/CityStreamer';
+import type { CityStreamer, CellState } from '../stream/CityStreamer';
 import type { Collision } from '../world/Collision';
 import { planFloor, planLift, liftRect, type FloorPlan, type LiftShaft } from './InteriorGen';
 import { Elevator } from './Elevator';
@@ -84,6 +84,12 @@ export class Interiors {
       return false;
     };
     collision.interiorWalls = (x, z, y, h, r, cb) => this.walls(x, z, y, h, r, cb);
+  }
+
+  /** Saves: was this element's window opened by an active interior (not shattered)? */
+  opened(cs: CellState, e: number): boolean {
+    for (const a of this.active.values()) if (a.ref.cell === cs && a.opened.has(e)) return true;
+    return false;
   }
 
   /** Is (x,z,y) inside a building whose interior is active? */

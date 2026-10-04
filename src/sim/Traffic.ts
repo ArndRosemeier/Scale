@@ -152,6 +152,9 @@ export class Traffic {
     return (fwd ? 1 : -1) * this.hand * o;
   }
 
+  /** Speed factor for the weather (render/Weather: slower in rain and fog). */
+  weatherK = 1;
+
   speedLimit(e: REdge): number {
     return e.cls === 0 ? 15 : e.cls === 1 ? 13 : e.cls === 2 ? 9 : 6;
   }
@@ -564,7 +567,7 @@ export class Traffic {
     v.pull = (v.pull ?? 0) + (pullTo - (v.pull ?? 0)) * Math.min(1, dt * 1.6);
     // ---- IDM acceleration
     const a0 = v.state === VState.Fleeing ? 3.5 : 1.8, b0 = 3.5, T = 1.3, s0 = 2.2;
-    const vmax = Math.min(v.vmax, this.speedLimit(e) * (v.siren ? 1.7 : v.state === VState.Fleeing ? 1.5 : 1)) * (remaining < 25 && hasNext ? 0.75 : 1) * (yieldTo ? 0.3 : 1);
+    const vmax = Math.min(v.vmax, this.speedLimit(e) * (v.siren ? 1.7 : v.state === VState.Fleeing ? 1.5 : this.weatherK)) * (remaining < 25 && hasNext ? 0.75 : 1) * (yieldTo ? 0.3 : 1);
     const sStar = s0 + Math.max(0, v.speed * T + (v.speed * (v.speed - leadV)) / (2 * Math.sqrt(a0 * b0)));
     let acc = a0 * (1 - Math.pow(v.speed / Math.max(0.1, vmax), 4) - (gap < Infinity ? (sStar / Math.max(0.1, gap)) ** 2 : 0));
     acc = Math.max(-9, Math.min(a0, acc));

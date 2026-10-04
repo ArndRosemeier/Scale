@@ -641,5 +641,49 @@
     "loop": false,
     "gain": 0.45,
     "description": "a small soft glassy chime (procedural, tools/synthUnder.mjs)"
+  },
+  "amb_rain_light": {
+    "files": [
+      "amb_rain_light.wav"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "light rain / drizzle: soft hiss with fine pattering drops (procedural loop, tools/synthWeather.mjs)"
+  },
+  "amb_rain_heavy": {
+    "files": [
+      "amb_rain_heavy.wav"
+    ],
+    "loop": true,
+    "gain": 0.7,
+    "description": "a downpour: dense roar, splashing, gurgling gutters, low drumming (procedural loop, tools/synthWeather.mjs)"
+  },
+  "amb_wind_gust": {
+    "files": [
+      "amb_wind_gust.wav"
+    ],
+    "loop": true,
+    "gain": 0.45,
+    "description": "wind at street level: gusts swelling and dying away, a faint whistle (procedural loop, tools/synthWeather.mjs)"
+  },
+  "thunder_near": {
+    "files": [
+      "thunder_near_1.wav",
+      "thunder_near_2.wav",
+      "thunder_near_3.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a close lightning strike: the crack, then a rolling rumble (procedural, tools/synthWeather.mjs)"
+  },
+  "thunder_far": {
+    "files": [
+      "thunder_far_1.wav",
+      "thunder_far_2.wav",
+      "thunder_far_3.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "distant thunder: a low roll, no crack (procedural, tools/synthWeather.mjs)"
   }
 }

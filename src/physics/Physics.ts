@@ -10,6 +10,12 @@ export type R = typeof RAPIER;
 
 const PATCH = 96;   // m per heightfield patch
 const RES = 48;     // cells per side
+/**
+ * Sampling a patch's 49 × 49 heights (terrain, kerbs, bridges, roofs) costs 20–50 ms near the river:
+ * patches asked for ahead of need (`prefetchGround`) are sampled a column at a time within this
+ * budget per frame (ms); one needed before it is done is finished on the spot.
+ */
+const PREFETCH_MS = 0.6;
 
 /**
  * Collision groups (Rapier: membership << 16 | filter). Everything defaults to all groups; only
@@ -40,6 +46,9 @@ export class Physics {
   private patches = new Map<string, { collider: RAPIER.Collider; used: number }>();
   private t = 0;
   private extraStatics: { collider: RAPIER.Collider; until: number }[] = [];
+  /** Patches being sampled ahead of need: heights so far (column by column). */
+  private pending = new Map<string, { i: number; j: number; heights: Float32Array; col: number }>();
+  stats = { patches: 0, prefetched: 0, finishedEarly: 0 };
 
   constructor(private terrain: Terrain, private groundFn: (x: number, z: number) => number) {}
 
@@ -58,20 +67,48 @@ export class Physics {
       const key = `${i},${j}`;
       const p = this.patches.get(key);
       if (p) { p.used = this.t; continue; }
-      const n = RES + 1;
-      const heights = new Float32Array(n * n);
-      const x0 = i * PATCH, z0 = j * PATCH;
-      // Column-major: index = row(z) + col(x) * (nrows + 1)
-      for (let cx = 0; cx < n; cx++) for (let rz = 0; rz < n; rz++) {
-        heights[rz + cx * n] = this.groundFn(x0 + (cx / RES) * PATCH, z0 + (rz / RES) * PATCH);
-      }
-      const desc = this.R.ColliderDesc.heightfield(RES, RES, heights, { x: PATCH, y: 1, z: PATCH })
-        .setTranslation(x0 + PATCH / 2, 0, z0 + PATCH / 2)
-        .setFriction(0.9)
-        .setCollisionGroups(GROUPS.cityGround);
-      const collider = this.world.createCollider(desc);
-      this.patches.set(key, { collider, used: this.t });
+      const q = this.pending.get(key) ?? { i, j, heights: new Float32Array((RES + 1) * (RES + 1)), col: 0 };
+      if (q.col > 0) this.stats.finishedEarly++;
+      this.pending.delete(key);
+      this.sample(q, Infinity);
+      this.addPatch(key, q);
     }
+  }
+
+  /**
+   * Ground will be needed round (x, z) soon (a monster walking this way): sample those patches in
+   * the background (PREFETCH_MS a frame) so debris and wrecks there do not wait for them.
+   */
+  prefetchGround(x: number, z: number, r: number): void {
+    const i0 = Math.floor((x - r) / PATCH), i1 = Math.floor((x + r) / PATCH);
+    const j0 = Math.floor((z - r) / PATCH), j1 = Math.floor((z + r) / PATCH);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const key = `${i},${j}`;
+      if (this.patches.has(key) || this.pending.has(key)) continue;
+      this.pending.set(key, { i, j, heights: new Float32Array((RES + 1) * (RES + 1)), col: 0 });
+    }
+  }
+
+  /** Sample a patch's columns until done or past the time limit (ms); true when complete. */
+  private sample(q: { i: number; j: number; heights: Float32Array; col: number }, ms: number): boolean {
+    const n = RES + 1, x0 = q.i * PATCH, z0 = q.j * PATCH, t0 = performance.now();
+    // Column-major: index = row(z) + col(x) * (nrows + 1)
+    while (q.col < n) {
+      const cx = q.col++;
+      for (let rz = 0; rz < n; rz++) q.heights[rz + cx * n] = this.groundFn(x0 + (cx / RES) * PATCH, z0 + (rz / RES) * PATCH);
+      if (performance.now() - t0 > ms) break;
+    }
+    return q.col >= n;
+  }
+
+  private addPatch(key: string, q: { i: number; j: number; heights: Float32Array }): void {
+    const desc = this.R.ColliderDesc.heightfield(RES, RES, q.heights, { x: PATCH, y: 1, z: PATCH })
+      .setTranslation(q.i * PATCH + PATCH / 2, 0, q.j * PATCH + PATCH / 2)
+      .setFriction(0.9)
+      .setCollisionGroups(GROUPS.cityGround);
+    const collider = this.world.createCollider(desc);
+    this.patches.set(key, { collider, used: this.t });
+    this.stats.patches++;
   }
 
   /**
@@ -83,6 +120,8 @@ export class Physics {
     const i0 = Math.floor(x0 / PATCH), i1 = Math.floor(x1 / PATCH), j0 = Math.floor(z0 / PATCH), j1 = Math.floor(z1 / PATCH);
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       const key = `${i},${j}`;
+      const q = this.pending.get(key);
+      if (q) q.col = 0;
       const p = this.patches.get(key);
       if (!p) continue;
       this.world.removeCollider(p.collider, true);
@@ -109,6 +148,11 @@ export class Physics {
       steps++;
     }
     if (this.acc > h) this.acc = 0;
+    // Ground asked for ahead of need, a little each frame.
+    for (const [key, q] of this.pending) {
+      if (this.sample(q, PREFETCH_MS)) { this.pending.delete(key); this.addPatch(key, q); this.stats.prefetched++; }
+      break;
+    }
     // Drop idle ground patches and expired statics.
     if (Math.floor(this.t) !== Math.floor(this.t - dt)) {
       for (const [k, p] of this.patches) if (this.t - p.used > 60) { this.world.removeCollider(p.collider, false); this.patches.delete(k); }

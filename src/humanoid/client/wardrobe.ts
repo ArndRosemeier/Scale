@@ -94,7 +94,8 @@ function beaniePart(c: C3): RigidPart {
 // ---------------------------------------------------------------- held items
 
 export function itemDef(defId: string): { visual: { shape: string }; category?: string; twoHanded?: boolean; tool?: boolean } | undefined {
-  return { visual: { shape: defId }, category: 'trinket' };
+  // An umbrella is held up like a torch (the raised-arm grip, shaft upright).
+  return { visual: { shape: defId }, category: defId === 'umbrella' ? 'light' : 'trinket' };
 }
 
 export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
@@ -142,10 +143,11 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       break;
     }
     case 'umbrella': {
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.85, 6), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-      shaft.position.y = 0.4;
+      // Held up beside the head (raised grip): a short shaft to the canopy just above it.
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.75, 6), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+      shaft.position.y = 0.3;
       const canopy = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.22, 8, 1, true), new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, side: THREE.DoubleSide }));
-      canopy.position.y = 0.82;
+      canopy.position.y = 0.66;
       g.add(shaft, canopy);
       break;
     }

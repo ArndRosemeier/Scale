@@ -207,7 +207,7 @@ export class HumanoidRig {
     if (s.anim.action) this.lastCombat = time;
     eq.setDrawn(!!this.opts.alwaysDrawn || combat || time - this.lastCombat < 6);
     an.update(
-      { anim: s.anim, vel: s.vel, yaw: s.yaw, time, main: eq.drawn ? eq.main : 'none', off: eq.drawn ? eq.off : (eq.off === 'torch' ? 'torch' : 'none'), combat, sneaking: (s.flags & EntFlag.Sneaking) !== 0 },
+      { anim: s.anim, vel: s.vel, yaw: s.yaw, time, main: eq.drawn ? eq.main : (eq.main === 'torch' ? 'torch' : 'none'), off: eq.drawn ? eq.off : (eq.off === 'torch' ? 'torch' : 'none'), combat, sneaking: (s.flags & EntFlag.Sneaking) !== 0 },
       step,
       lod,
       lod === 0 ? this.opts.ground ?? null : null,

@@ -175,4 +175,20 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Fast time on/off', run: (g) => (g.sky.timeScale = g.sky.timeScale >= 600 ? 1 : 600) },
     ...[0, 1, 2].map((i) => ({ label: `Slime colony ${i}`, run: (_g: Game, d: Dev) => call(d, 'colony', i) })),
   ]],
+  ['Weather', [
+    ...(['clear', 'fair', 'cloudy', 'overcast', 'drizzle', 'rain', 'storm', 'fog'] as const).map((k) => ({ label: k[0].toUpperCase() + k.slice(1), run: (_g: Game, d: Dev) => call(d, 'weather.set', k) })),
+    { label: 'Next', run: (_g, d) => call(d, 'weather.next') },
+    { label: 'Clear (auto)', run: (_g, d) => call(d, 'weather.auto') },
+    { label: 'Lightning', run: (_g, d) => call(d, 'weather.strike', 800) },
+    { label: 'Status', run: (_g, d) => call(d, 'weather.status') },
+    { label: 'Forecast', run: (_g, d) => call(d, 'weather.forecast', 8) },
+  ]],
+  ['Saves', [
+    { label: 'Save now', run: (_g, d) => call(d, 'save.now', 'Quick save') },
+    { label: 'Autosave now', run: (_g, d) => call(d, 'save.auto') },
+    { label: 'Load latest', run: (_g, d) => call(d, 'save.load', 'latest') },
+    { label: 'List saves', run: (_g, d) => call(d, 'save.list') },
+    { label: 'Save sizes', run: (_g, d) => call(d, 'save.sizes') },
+    { label: 'Status', run: (_g, d) => call(d, 'save.status') },
+  ]],
 ];

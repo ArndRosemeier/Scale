@@ -113,8 +113,17 @@ Styles (facade grammar plus roof plus massing):
 * Element break:
   1. mark the element dead
   2. spawn debris from pre-fractured convex templates (Voronoi cells of a unit box) scaled to
-     the element; up to N rigid bodies in a Rapier ring pool
+     the element; up to N rigid bodies in a Rapier ring pool (≤ 350 at once, ≤ 24 new a frame and
+     on average ≤ 40 a second — a token bucket of 60 — so a monster breaking panel after panel
+     does not keep the pool full of tumbling hulls)
   3. the excess becomes GPU-only particles; dust uses sprites
+  * instanced fragments and chips upload only the instance range that changed this frame
+* Physics ground: heightfield patches (96 m, 49² samples of terrain, kerbs, bridges and roofs;
+  20–50 ms each near the river) are made on demand; `Physics.prefetchGround` (a monster
+  walking: 40 m ahead, 90 m round) samples them in the background, a column at a time within
+  0.6 ms a frame, so debris and wrecks find their ground ready (one needed early is finished on
+  the spot). `WorldIndex.surfaceOffset` (kerbs) rejects carriageway shapes and holes by bounds
+  before point-in-polygon.
 * Structure: element grid with support rules.
   * Floor *f* fails if its supporting elements below drop under a threshold or one side is
     gone.
@@ -191,7 +200,13 @@ and car ownership.
   cover, help, abandon the car, honk, swerve and reverse. People walk on bridge decks when
   walking along a bridge (or already on it), like cars; paths passing under a bridge stay below.
 * Rendering tiers:
-  * < 35 m: full Norgo skinned humans (LOD0/1)
+  * < 35 m: full Norgo skinned humans (LOD0/1); at most 2 new rigs a frame (a ragdoll is never
+    held back; the rest stay crowd instances a few frames longer), rig shadows only within
+    24 m, foot-IK ground queries cached for 0.25 s on a 0.2 m grid, no per-frame garbage;
+    instanced crowd and vehicle attributes upload only the instances in use
+  * walking people cache the terrain height under them while they stay within 0.4 m (it was
+    the largest cost of stepping 2600 people and most of their garbage); people fleeing more
+    than 160 m from the focus step at half rate (the rest of the far ones at a quarter)
   * < 300 m: GPU-instanced crowd with baked vertex-animation textures (`CrowdBaker`: body
     vertices under a garment take its colour slot, so gaps in the decimated far-LOD garment
     shells never show skin)
@@ -387,7 +402,7 @@ every frame (`prof.threats`).
   impulse)` (impulse × `DAMAGE_PER_IMPULSE`), `conStrength()`. The director lists the targetable ones (`actors()`), routes
   blows (`blow`: Game.strike — punches —, a giant player's own stomps), lets their bodies be obstacles for the player
   (Collision provider: leg and torso cylinders) and draws every creature in one batch.
-* **Creature rig** (`rig/chain.ts` pure math, tested in `selftest.ts`; `rig/CreatureRig.ts`; `rig/CreatureMesh.ts`): a
+* **Creature rig** (`rig/chain.ts` pure math, tested in `selftest.ts`; `rig/CreatureRig.ts`; `rig/skin.ts`; `rig/CreatureMesh.ts`): a
   `RigDef` in metres (spine from neck base to pelvis with joint heights, neck, head, jaw, tail, legs with hip offsets,
   bone lengths, gait phase, knee / elbow direction and sprawl, dorsal plates), scalable. The spine follows its leader
   along the path walked (follow-the-leader), feet stay planted on the terrain / street (`ground`) and are stepped by a
@@ -395,10 +410,33 @@ every frame (`prof.threats`).
   touch-down), two-bone IK with a pole for the knees, FABRIK aims the neck at `look`, the tail is drawn towards a bent
   curve (sweep angle, idle sway, droop) and kept above the ground. Pose controls: lift (sunk / risen), rear, slump
   (dying), jaw, sweep, glows (ridge with a wave from the tail to the head, throat, eyes), pinned feet (a forefoot on a
-  facade). Parts are instances of five procedural shapes (spindle, dorsal plate, head with eyes, jaw, clawed foot) in
-  one shared material (`creature-v1`: dark vertex-coloured hide, emissive where the vertex mask `aGlow` × instance
-  `iGlow`), ≤ 64 per creature (the Strider: 43); the director's batch holds two creatures; a speck of every shape is
-  drawn during the start-up warm-up so the program and its shadow variant compile behind the loading screen.
+  facade), wet (glossy after wading). **Skin** (`skin.ts`, pure, tested in `selftest.ts`): one continuous body per
+  creature kind, built once around the rig's bind pose (the rig standing `still` on flat ground) and skinned to its bones
+  (bone layout: 0 = per-creature parameters, spine, neck and tail segments, head, jaw, upper / lower leg and foot per
+  leg; linear blend, ≤ 4 influences): the body is ONE tube lofted (Catmull-Rom through the joints) from the snout over
+  the skull, neck and trunk to the tail tip — cross-sections change along it (skull with brow ridges, cheeks and a flat
+  palate, neck, deep belly, shoulder and hip bulges, a crest), weights blended half-and-half across every joint; the
+  lower jaw hinges under the skull (its back tucked into the throat), teeth on both; legs are lofted from inside the
+  trunk through knee to ankle onto columnar feet with four toes and curved claws; eyes under the brow, swept horns;
+  jagged dorsal plates (thick in the middle, thin at the edge) in a staggered double row on trunk and tail. Every part
+  is a closed, consistently wound, outward-facing surface and parts overlap where they meet, so no pose opens a gap
+  or a see-through spot (selftest: watertight per part, positive volume, the bind pose reproduces the mesh, poses
+  walking / rearing with the jaw open / tail swept both ways looking up / collapsed keep every part closed, out-facing
+  and its volume; weights sum to 1). Vertex attributes: colour (dark hide, paler banded belly, dark red mouth, teeth,
+  claws, bone-coloured plates), `glow` (plate mask, plate order tail → head, throat / mouth mask, eye mask), uv (square
+  scales: a fixed number of tiles round a tube, along it by girth). The Strider: ~14 k vertices, ~26 k triangles, 105
+  closed parts, 30 bones, built in ~40 ms at start. `CreatureRig.boneFrames` writes every bone's frame each frame
+  (segments: Y along, Z up the back — necks up-and-back so a raised neck keeps its twist; head; the jaw opened about
+  its hinge, `JAW_OPEN` 0.62 rad, a breath of movement at rest; legs; feet flat on the ground, rolling heel-up / toes-
+  down while they swing; the chest swells with the breath). `CreatureMesh` (the director's `mesh`): per kind a pool
+  of `THREE.SkinnedMesh`es sharing the geometry and ONE material (`creature-skin-v1`: MeshStandardMaterial, vertex
+  colours, a generated 256² tileable scale texture as normal map and as roughness / crevice-occlusion map; emissive
+  only from the glow mask: plates blue-white in a wave from the tail before the breath, throat and mouth blue-white
+  while charging, eyes amber); bone matrices are written straight into the skeleton's bone texture (cur × bind⁻¹),
+  the glow levels and wetness ride in bone 0, so creatures share the material and program; culled against a sphere
+  round the rig's capsules, never ray-cast. One draw call (+ its shadow) per creature; the pool holds two Striders
+  (a live one and a body in the city). A speck of a body is drawn during the start-up warm-up, so the skinned
+  program and its skinned shadow-depth variant compile behind the loading screen.
 * **The Strider** (`Strider.ts`, archetype `strider`, major, T3 40 m): rises from the river where `StriderRoute` says
   (pure, tested for 20 seeds: the city river about 750 m from the main centre, near a bridge or quay, off the bridge
   towards downtown; a landing up the bank that leaves the water once, then the cheapest way over the arterial graph —
@@ -500,6 +538,47 @@ as distance LOD).
 * Strikes, blasts and a giant's body knock birds out of their flight with a feather puff (dust + chips); they
   tumble, then flee.
 
+### Weather (`src/world/weather.ts`, `src/render/Weather.ts`, `game.weather`)
+* **Schedule** (`world/weather.ts`, pure, in `selftest.ts`): a Markov chain of states — clear, fair (sunny with
+  clouds), cloudy, overcast, drizzle, rain, storm, fog — seeded per city (`deriveSeed(seed, 'weather', i)`), each
+  lasting ~20 min to 8 h of game time. Transition weights depend on the hour (fog only starts 2:30–8:30 and burns
+  off by ~11, thunderstorms mostly 12–19:30) and the climate (`climateOf(profile)`: coastal → more fog, drizzle and
+  rain; warm → sunnier, more afternoon storms). Long run: clear + fair 52–60 %, rain of any kind 7–10 %, storms
+  0.5–1 %, fog 1.5–2.5 %. `at(h)` gives continuous parameters (cover, density, dark, rain, fog, wind, sun,
+  lightning): a state blends into the next over 9–27 game minutes (clouds first, the rain late; stopping, the
+  rain first), plus showers / drifting cover / gusts from smooth noise over game time. The past never depends on
+  how far ahead was queried.
+* **Runtime** (`render/Weather.ts`): follows the schedule (or the state picked in the pause menu / admin console,
+  remembered in `scale.weather`; blended over ~20 s, rain only once the sky has covered), smooths clock jumps,
+  and integrates wet ground (`stepWet`: soaked within ~10 min of rain, dry an hour or so after). Applies:
+  * sky / light / fog via `SkySystem.wx` (uniforms on the existing sky shader and the environment sky: cloud
+    cover, opacity, darkness, an overcast grey without blue or sun disc, fog towards the horizon; less sun, a
+    greyer sky light, adapted exposure; `FogExp2` density from 0.00012 to ~0.006 in thick fog; stars behind
+    clouds; the environment map refreshed when the weather changed noticeably) — no extra lights, no new shader
+    variants;
+  * wet streets: `G.uWet` in the ground (darker, glossier hard surfaces; puddles in the paving hollows with a
+    fog-coloured grazing sheen), terrain and facade materials (rain-darkened walls);
+  * wind: `vegetationUniforms.uWind` (trees);
+  * rain: one `LineSegments` of up to 12 000 streaks in a box round the camera, moved and wrapped in the vertex
+    shader (no CPU work per drop; drawn count by intensity); box, streak length and fall speed scale with the
+    player's size; hidden indoors and underground (`sky.indoor`, `camRig.underground`). Cost in heavy rain:
+    ≈ 0.02 ms CPU, no measurable GPU change (p50 frame time 22.23 vs 22.27 ms);
+  * lightning in storms: flash pulses on the clouds (towards the strike) and the hemisphere / environment light,
+    thunder (`thunder_near` / `thunder_far`) after distance / 343 m/s, muffled indoors and underground; a close one
+    emits the `thunder` stimulus (people glance up, a little startled; birds lift);
+  * ambience layers `amb_rain_light`, `amb_rain_heavy`, `amb_wind_gust` (`Game.updateAudio`, muffled indoors and
+    underground, the city layer quieter in rain); sounds from `tools/synthWeather.mjs`.
+* **The city reacts**: `peds.outdoorShare` (fewer walks are made; walkers who would not be out go in where nobody
+  sees it) and `peds.paceK` (the rest hurry); umbrellas for many walkers (`Weather.heldFor` after the terraces'
+  cups: the `umbrella` item, held up with the raised torch grip); when it starts some walkers without one detour
+  under the nearest awning or bus stop (≤ 3 each) for 15–60 s; terraces empty (`terraces.rain`: guests hurry in
+  at the café's door; under a square's parasols some sit out a drizzle) and fill again when it is dry; cars drive
+  slower (`traffic.weatherK`) with their lights on (`vehicles.weatherLights`); no flocks, gulls or crows aloft in
+  rain and fewer street birds (`birds.rain`).
+* **Controls**: pause menu "Weather" (auto / clear / fair / cloudy / rain / storm / fog), a glyph after the time in
+  the HUD, the admin console's Weather section, `dev.weather.set(kind) / next() / auto() / status() / forecast(n) /
+  strike(m)`.
+
 ### Interiors (`src/interior`)
 * Generated on demand when the player approaches an entrance or a breach: floor plan by
   building use (apartments, offices, shops, restaurants, lobby, stair or elevator core),
@@ -556,6 +635,7 @@ as distance LOD).
   interior, sewer, metro, flight.
 * Clips come from SoundStudio (`public/sounds`, see `docs/SOUNDS.md`), with procedural
   fallbacks.
+* Weather layers (rain light / heavy, gusts) and thunder: see "Weather".
 
 ### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
 * Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the
@@ -578,10 +658,10 @@ as distance LOD).
 
 ```
 src/core       rng, noise, math, geometry (polygons, splitting, offsetting), spatial hash
-src/world      terrain, water, settings, city outline, countryside land use
+src/world      terrain, water, settings, city outline, countryside land use, weather schedule
 src/plan       macro, cell, building descriptors (pure data)
 src/build      geometry builders (buildings, roads, terrain, props, interiors, underground)
-src/render     renderer, sky, materials, textures, post
+src/render     renderer, sky, weather (rain, wet streets, lightning), materials, textures, post
 src/stream     cell streaming, worker pool
 src/destruction elements, debris, structural collapse
 src/player     controller, camera, scale, flight

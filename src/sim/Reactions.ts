@@ -102,6 +102,11 @@ export class Reactions {
             if (a.state === PState.Walk && !a.glance) { a.glance = 1.5 + prox * 2; a.lookX = a.x + (Math.random() - 0.5) * 20; a.lookY = a.y + 1.6 + Math.random() * 6; a.lookZ = a.z + (Math.random() - 0.5) * 20; }
             a.fear = Math.min(2, a.fear + prox * nerve * 0.25);
             break;
+          case 'thunder':
+            // A thunderclap: a start, a glance at the sky (never a panic).
+            if ((a.state === PState.Walk || a.state === PState.Idle) && !a.glance && Math.random() < 0.6) { a.glance = 1 + prox * 1.5; a.lookX = a.x + (Math.random() - 0.5) * 30; a.lookY = a.y + 20 + Math.random() * 30; a.lookZ = a.z + (Math.random() - 0.5) * 30; }
+            a.fear = Math.max(a.fear, Math.min(0.35, a.fear + prox * nerve * 0.12));
+            break;
           case 'cry':
           case 'alarm':
             // Someone shouting for help / an alarm bell: turn, stop and watch (the curious film,

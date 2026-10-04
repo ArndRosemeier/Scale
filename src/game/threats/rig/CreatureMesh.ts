@@ -85,7 +85,7 @@ export function createCreatureMaterial(): THREE.MeshStandardMaterial {
         float ridge = gp[0][0], throat = gp[0][1], eyes = gp[0][2];
         // The ridge lights up as a wave from the tail to the head.
         float gl = clamp( ridge * 1.6 - ( 1.0 - glow.y ) * 0.6, 0.0, 1.0 );
-        vGlow = vec3( 0.6, 1.4, 3.2 ) * 4.0 * gl * gl * glow.x + vec3( 2.6, 1.1, 0.25 ) * throat * glow.z + vec3( 3.2, 1.6, 0.3 ) * eyes * glow.w;
+        vGlow = vec3( 0.6, 1.4, 3.2 ) * 4.0 * gl * gl * glow.x + vec3( 0.9, 1.8, 3.6 ) * throat * glow.z + vec3( 3.2, 1.6, 0.3 ) * eyes * glow.w;
         vWet = gp[0][3];
       }
       #else

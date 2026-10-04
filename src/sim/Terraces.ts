@@ -101,6 +101,8 @@ export class Terraces {
   private murmur: Loop | null = null;
   private murmurTry = 0;
   stats = { places: 0, tables: 0, guests: 0, seated: 0, waiters: 0, evicted: 0 };
+  /** Rain 0..1 (render/Weather): the terraces empty (guests go inside), and fill again once it is dry. */
+  rain = 0;
 
   constructor(private d: TerraceDeps) {
     const prev = d.peds.onArrive;
@@ -213,6 +215,13 @@ export class Terraces {
         // After dark people sit inside, except at bars and restaurants (and on warm squares).
         const outside = !dark || p.ep.kind === Eatery.Bar || p.ep.kind === Eatery.Restaurant || p.ep.kind === Eatery.Pizzeria
           ? true : hashToFloat(hash32(t.key + (v?.n ?? 0))) < (p.ep.terrace === TerraceKind.Square ? 0.55 : 0.3);
+        // Rain: up and inside (under a parasol on a square some sit out a drizzle); back when it has stopped.
+        const thr = 0.06 + hashToFloat(hash32(t.key * 7 + 3)) * (p.ep.terrace === TerraceKind.Square ? 0.3 : 0.12);
+        if (this.rain >= thr) {
+          for (const a of [...t.guests]) { const g = this.guests.get(a); if (g && g.phase !== Phase.Leaving) this.leaveInside(a); }
+          if (t.served !== -1e9) { t.served = -1e9; t.walkIn = true; }
+          continue;
+        }
         const want = v && outside ? Math.min(v.guests, t.seats.length) : 0;
         if (want > 0) busy++;
         if (!v || !outside) {
@@ -222,7 +231,7 @@ export class Terraces {
           t.fresh = false;
           continue;
         }
-        if (t.served === v.n || !near || this.now < t.calm) continue;
+        if (t.served === v.n || !near || this.now < t.calm || this.rain >= thr * 0.4) continue;
         if (t.guests.length >= want) { t.served = v.n; continue; }
         if (this.guests.size >= GUEST_CAP) continue;
         // Under way for a while already (or just come into range): they are sitting there.
@@ -332,6 +341,15 @@ export class Terraces {
     a.route = r; a.wp = 1;
     a.state = PState.Walk; a.stateT = 0;
     a.dest = to;
+  }
+
+  /** Rain: get up and hurry in at the café's own door (and in). */
+  private leaveInside(a: PedAgent): void {
+    const g = this.guests.get(a);
+    if (!g) return;
+    g.leaveTo = { x: g.place.ep.door[0], z: g.place.ep.door[1] };
+    a.pref = 1.9;
+    this.leave(a);
   }
 
   /** Let go of an agent: gone (out of range) or left to the street. */

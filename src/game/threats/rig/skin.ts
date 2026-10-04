@@ -133,9 +133,12 @@ function cr(p0: V3, p1: V3, p2: V3, p3: V3, t: number): { p: V3; d: V3 } {
 
 // ------------------------------------------------------------------ colours (linear RGB)
 
-const HIDE_D: V3 = [0.016, 0.019, 0.017], HIDE_S: V3 = [0.03, 0.031, 0.025], BELLY: V3 = [0.085, 0.074, 0.056];
-const MOUTH: V3 = [0.055, 0.012, 0.012], TONGUE: V3 = [0.11, 0.028, 0.026], TOOTH: V3 = [0.42, 0.38, 0.3];
+const HIDE_D: V3 = [0.016, 0.019, 0.017], HIDE_S: V3 = [0.03, 0.031, 0.025], BELLY: V3 = [0.058, 0.054, 0.045];
+const MOUTH: V3 = [0.035, 0.008, 0.008], TONGUE: V3 = [0.07, 0.018, 0.016], TOOTH: V3 = [0.42, 0.38, 0.3];
 const CLAW: V3 = [0.022, 0.02, 0.018], BONE: V3 = [0.11, 0.1, 0.085], EYE: V3 = [0.9, 0.55, 0.12];
+
+/** Scale-texture tiles round the body and round limbs (10 scales a tile). */
+const SC_BODY = 15, SC_LIMB = 9;
 
 type Weights = number[]; // [bone, w, bone, w, …]
 type Glow = [number, number, number, number];
@@ -332,15 +335,14 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
   const rN = nodeR[1], hw = H.w / 2, hh = H.h / 2;
   const n0 = neckSec(rN);
   function headSec(k: number): Section {
-    const w = keys([[0, n0.w], [0.18, hw * 0.92], [0.3, hw], [0.5, hw * 0.86], [0.75, hw * 0.62], [0.9, hw * 0.46], [1, hw * 0.34]], k);
-    const ht = keys([[0, n0.ht], [0.15, hh * 0.82], [0.35, hh * 0.8], [0.55, hh * 0.62], [0.8, hh * 0.46], [1, hh * 0.32]], k);
+    const w = keys([[0, n0.w], [0.18, hw * 0.94], [0.3, hw], [0.5, hw * 0.9], [0.75, hw * 0.7], [0.9, hw * 0.55], [1, hw * 0.42]], k);
+    const ht = keys([[0, n0.ht], [0.15, hh * 0.9], [0.35, hh * 0.86], [0.55, hh * 0.7], [0.8, hh * 0.55], [1, hh * 0.4]], k);
     const hb = keys([[0, n0.hb], [0.1, n0.hb * 0.95], [0.22, hh * 0.4], [0.3, hh * 0.25], [1, hh * 0.2]], k);
     const tip = k > 0.86 ? Math.sqrt(Math.max(0.02, 1 - ((k - 0.86) / 0.145) ** 2)) : 1;
     return { w: w * tip, ht: ht * tip, hb: hb * tip, nt: 2.4, nb: lerp(2.2, 5, sstep(0.14, 0.3, k)), crest: lerp(n0.crest, 0, sstep(0, 0.2, k)), brow: 0.42 * hh * Math.exp(-(((k - 0.37) / 0.09) ** 2)) };
   }
 
   // ---- the body tube
-  const order = (s: number) => 1 - s / along[spans]; // 1 at the snout … 0 at the tail tip
   const rings: Parameters<Builder['tube']>[0] = [];
   let uAcc = 0, lastS = 0;
   for (let k = 0; k < spans; k++) {
@@ -360,14 +362,14 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
       D = norm(madd(D, T, -dot(D, T)));
       const S = cross(D, T);
       const sec = bodySec(k, u, s);
-      uAcc += ((s - lastS) * 10) / girth(sec);
+      uAcc += ((s - lastS) * SC_BODY) / girth(sec);
       lastS = s;
       const kh = k === 0 ? 1 - u : -1; // position along the skull (head span only)
       const throatW = k === 0 ? 1 - sstep(0.18, 0.32, kh) : k === 1 ? sstep(0.2, 1, u) : 0;
       const pts: V3[] = [], vs: number[] = [], col: V3[] = [], glow: Glow[] = [];
       for (let j = 0; j <= NB; j++) {
         const th = (j / NB) * Math.PI * 2;
-        vs.push((j / NB) * 10);
+        vs.push((j / NB) * SC_BODY);
         if (j === NB) continue;
         const [x, y] = outline(sec, th);
         const pt = add(p, add(mul(S, x), mul(D, y)));
@@ -383,8 +385,8 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
         if (k === 0 && kh > 0.12 && tw > 0.66 * Math.PI) {
           // Under the skull: the palate and the back of the mouth (dark, lit from within when charging).
           c = MOUTH;
-          g = [0, 0, 0.55, 0];
-        } else if (throatW > 0) g = [0, 0, belly * throatW, 0];
+          g = [0, 0, 0.4 * (1 - sstep(0.3, 0.9, kh)), 0];
+        } else if (throatW > 0) g = [0, 0, sstep(0.72 * Math.PI, 0.95 * Math.PI, tw) * throatW * (0.6 + 0.4 * vnoise(pt[0] * 0.8, pt[1] * 0.8, pt[2] * 0.8)), 0];
         col.push(c);
         glow.push(g);
       }
@@ -392,14 +394,12 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
     }
   }
   const snout = madd(toW(head, [0, -hh * 0.05, H.len]), head.z, 0.15);
-  const tailEnd = rings[rings.length - 1];
   const tipDir = norm(sub(nodes[nodes.length - 1], nodes[nodes.length - 2]));
   B.begin();
   B.tube(rings, { p: snout, col: HIDE_S, glow: NO_GLOW }, { p: madd(joint(bind.tail, nT), tipDir, 0.25), col: HIDE_D, glow: NO_GLOW });
   B.end('body');
-  void tailEnd;
 
-  /** Weights and dorsal frame of the body at a chain joint fraction (for plates). */
+  /** Which span of the body path (and where on it) a chain's segment fraction is (for plates). */
   const spanAt = (chain: 'spine' | 'neck' | 'tail', seg: number, t: number): { k: number; u: number } =>
     chain === 'neck' ? { k: 1 + (nN - 1 - seg), u: 1 - t } : chain === 'spine' ? { k: 1 + nN + seg, u: t } : { k: 1 + nN + nS + seg, u: t };
 
@@ -415,18 +415,18 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
     for (let q = 0; q <= m; q++) {
       const kj = q / m, z = lerp(z0, z1, kj), ks = Math.max(0, z / H.len);
       const sk = headSec(ks);
-      const top = -sk.hb - 0.04 - (ks < 0.3 ? (0.3 - ks) * 0.6 : 0) * 0; // the palate's level
-      const yTop = Math.min(-hh * 0.2 - 0.04, top);
+      // The mouth floor just under the palate (and no higher than the palate's level further back).
+      const yTop = Math.min(-hh * 0.2 - 0.04, -sk.hb - 0.04);
       const depth = jd * keys([[0, 2.2], [0.15, 2.5], [0.35, 2.3], [0.65, 1.65], [0.88, 1.05], [1, 0.45]], kj);
       const tip = kj > 0.9 ? Math.sqrt(Math.max(0.04, 1 - ((kj - 0.9) / 0.105) ** 2)) : 1;
       const w = Math.min(sk.w * 0.95, jw * 1.25) * tip;
       const sec: Section = { w, ht: 0.12 * tip, hb: Math.max(0.15, depth - 0.12) * tip, nt: 6, nb: 2.3, crest: 0, brow: 0 };
       const cY = yTop - 0.12;
-      u += (((z1 - z0) / m) * 6) / girth(sec);
+      u += (((z1 - z0) / m) * SC_LIMB) / girth(sec);
       const pts: V3[] = [], vs: number[] = [], col: V3[] = [], glow: Glow[] = [];
       for (let j = 0; j <= NJ; j++) {
         const th = (j / NJ) * Math.PI * 2;
-        vs.push((j / NJ) * 6);
+        vs.push((j / NJ) * SC_LIMB);
         if (j === NJ) continue;
         const [x, y] = outline(sec, th);
         pts.push(toW(head, [x, cY + y, z]));
@@ -434,11 +434,11 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
         if (tw < 0.42 * Math.PI) {
           // The mouth floor and the tongue down its middle.
           col.push(lerp3(MOUTH, TONGUE, 1 - sstep(0.05, 0.25, tw / Math.PI)));
-          glow.push([0, 0, 0.5, 0]);
+          glow.push([0, 0, 0.35 * (1 - kj * 0.7), 0]);
         } else {
           const belly = sstep(0.6 * Math.PI, 0.9 * Math.PI, tw);
-          col.push(mul(lerp3(HIDE_S, BELLY, belly * 0.8), 0.85 + 0.3 * hash3(q, j, 7)));
-          glow.push([0, 0, belly * (1 - sstep(0.25, 0.6, kj)), 0]);
+          col.push(mul(lerp3(HIDE_S, BELLY, belly * 0.55), 0.85 + 0.3 * hash3(q, j, 7)));
+          glow.push([0, 0, belly * 0.5 * (1 - sstep(0.05, 0.25, kj)), 0]);
         }
       }
       jr.push({ pts, u, vs, col, glow, w: [L.jaw, 1] });
@@ -510,11 +510,11 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
         const sec: Section = { w: R, ht: R * deep, hb: R * deep, nt: 2.2, nb: 2.2, crest: 0, brow: 0 };
         // The kneecap (forward on hind legs, the elbow back on forelegs).
         const kb = 0.16 * r1 * Math.exp(-(((g - 2) / 0.18) ** 2));
-        u += (segL[k] / m) * 6 / girth(sec);
+        u += (segL[k] / m) * SC_LIMB / girth(sec);
         const pts: V3[] = [], vs: number[] = [], col: V3[] = [], glow: Glow[] = [];
         for (let j = 0; j <= NL; j++) {
           const th = (j / NL) * Math.PI * 2;
-          vs.push((j / NL) * 6);
+          vs.push((j / NL) * SC_LIMB);
           if (j === NL) continue;
           let [x, y] = outline(sec, th);
           const front = Math.cos(th) * kneeFront;
@@ -540,7 +540,6 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
       const c = pd.chain === 'spine' ? bind.spine : pd.chain === 'neck' ? bind.neck : bind.tail;
       const R = (pd.chain === 'spine' ? def.spineR : pd.chain === 'neck' ? def.neckR : def.tailR)[pd.seg];
       const a = joint(c, pd.seg), b = joint(c, pd.seg + 1);
-      const { k, u } = spanAt(pd.chain, pd.seg, pd.t);
       const rows = pd.chain === 'neck' ? [0] : [-1, 1];
       for (const side of rows) {
         const dt = side * 0.16 * (pd.len / Math.max(1e-3, len(sub(b, a))));
@@ -548,7 +547,8 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
         const at0 = lerp3(a, b, tt);
         let T = norm(sub(b, a));
         if (pd.chain === 'neck') T = mul(T, -1);
-        const w = spanWeights(spanAt(pd.chain, pd.seg, tt).k, spanAt(pd.chain, pd.seg, tt).u);
+        const at1 = spanAt(pd.chain, pd.seg, tt);
+        const w = spanWeights(at1.k, at1.u);
         let D: V3 = [0, 0, 0];
         for (let i = 0; i < w.length; i += 2) D = madd(D, dorsalOf(w[i]), w[i + 1]);
         D = norm(madd(D, T, -dot(D, T)));
@@ -557,7 +557,6 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
         const at = add(at0, add(mul(D, R * 0.78), mul(S, lat)));
         const sc = rows.length > 1 ? 0.92 : 1;
         list.push({ at, T, D, S, h: pd.h * sc, len: pd.len * sc, w, ord: 0, tilt: side * 0.14 });
-        void k; void u;
       }
     }
     // Glow order: from the tail (0) to the head (1), by position along the body.
@@ -567,7 +566,6 @@ export function buildCreatureSkin(def: RigDef, L: BoneLayout, bind: BindPose): S
     list.forEach((p, i) => { p.ord = 1 - (dist[i] - dMin) / Math.max(1e-3, dMax - dMin); });
     for (const p of list) plate(B, p);
   }
-  void order;
 
   const normal = B.normals();
   return {

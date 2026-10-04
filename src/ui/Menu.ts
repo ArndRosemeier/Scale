@@ -3,6 +3,7 @@
  */
 import type { Game } from '../game/Game';
 import { saveTimeScale } from '../render/SkySystem';
+import type { WeatherSetting } from '../render/Weather';
 
 const CONTROLS: [string, string][] = [
   ['W A S D', 'Walk (in flight: fly)'],
@@ -42,6 +43,9 @@ export class Menu {
           <option value="0">Stopped</option><option value="1">Real time</option><option value="20">20×</option><option value="60">60×</option><option value="600">600×</option>
         </select></div>
         <div class="row"><label>Time of day</label><input id="pHour" type="range" min="0" max="24" step="0.25"><span id="pHourV"></span></div>
+        <div class="row"><label>Weather</label><select id="pWeather" title="Auto: the city's own weather, mostly sunny with clouds">
+          <option value="auto">Auto</option><option value="clear">Clear</option><option value="fair">Fair</option><option value="cloudy">Cloudy</option><option value="rain">Rain</option><option value="storm">Storm</option><option value="fog">Fog</option>
+        </select></div>
         <div class="row"><label>Volume</label><input id="pVol" type="range" min="0" max="1" step="0.05"></div>
         <div class="row"><label>Mute</label><input id="pMute" type="checkbox"></div>
         <div class="row"><label>Shadows</label><input id="pShadow" type="checkbox"></div>
@@ -64,6 +68,7 @@ export class Menu {
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
     $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); saveTimeScale(game.sky.timeScale); };
     $<HTMLInputElement>('pHour').oninput = (e) => { game.sky.hour = Number((e.target as HTMLInputElement).value) % 24; this.sync(); };
+    $<HTMLSelectElement>('pWeather').onchange = (e) => { game.weather?.set((e.target as HTMLSelectElement).value as WeatherSetting); };
     $<HTMLInputElement>('pVol').oninput = (e) => { game.audio.setVolume(Number((e.target as HTMLInputElement).value)); this.sync(); };
     $<HTMLInputElement>('pMute').onchange = (e) => game.audio.setMuted((e.target as HTMLInputElement).checked);
     $<HTMLInputElement>('pShadow').onchange = (e) => { game.renderer.gl.shadowMap.enabled = (e.target as HTMLInputElement).checked; game.renderer.scene.traverse((o) => { const m = (o as { material?: { needsUpdate: boolean } }).material; if (m) m.needsUpdate = true; }); };
@@ -96,6 +101,8 @@ export class Menu {
     const g = this.game;
     (document.getElementById('pTime') as HTMLSelectElement).value = String(g.sky.timeScale);
     (document.getElementById('pHour') as HTMLInputElement).value = String(g.sky.hour);
+    // (Drizzle / overcast, set from the console, show as their nearest menu entry.)
+    if (g.weather) { const s = g.weather.setting; (document.getElementById('pWeather') as HTMLSelectElement).value = s === 'drizzle' ? 'rain' : s === 'overcast' ? 'cloudy' : s; }
     const hh = Math.floor(g.sky.hour), mm = Math.floor((g.sky.hour - hh) * 60);
     document.getElementById('pHourV')!.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     (document.getElementById('pVol') as HTMLInputElement).value = String(g.audio.volume);

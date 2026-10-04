@@ -23,6 +23,8 @@ import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
 import { terrainExtent } from '../src/world/boundary';
+import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
+import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 
 let failures = 0;
 const check = (ok: boolean, msg: string) => {
@@ -781,6 +783,234 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   const cap = { ax: 0, ay: 0, az: 0, bx: 0, by: 10, bz: 0, r: 2, zone: 'x' };
   const tHit = rayCapsule(-20, 5, 0, 1, 0, 0, cap, 100), tEnd = rayCapsule(0, 30, 0, 0, -1, 0, cap, 100), tMiss = rayCapsule(-20, 5, 3, 1, 0, 0, cap, 100);
   check(Math.abs(tHit - 18) < 1e-6 && Math.abs(tEnd - 18) < 1e-6 && tMiss === Infinity && Math.abs(capsuleDist(5, 5, 0, cap) - 3) < 1e-9, `rig: ray vs capsule (${tHit}, ${tEnd}, ${tMiss})`);
+
+  // The creature's skinned body (rig/skin.ts): closed surfaces, sane weights, poses that stay closed.
+  {
+    const THREE = await import('three');
+    const { STRIDER_RIG } = await import('../src/game/threats/Strider');
+    const { CreatureRig } = await import('../src/game/threats/rig/CreatureRig');
+    const { boneLayout, buildCreatureSkin } = await import('../src/game/threats/rig/skin');
+    const L = boneLayout(STRIDER_RIG);
+    const rig = new CreatureRig(STRIDER_RIG);
+    rig.still = true; rig.place();
+    for (let i = 0; i < 90; i++) rig.update(0.05, 0);
+    const bind = new Float32Array(L.count * 16);
+    rig.boneFrames(bind, L);
+    const sk = buildCreatureSkin(STRIDER_RIG, L, { frames: bind, spine: rig.spine, neck: rig.neck, tail: rig.tail, legs: rig.legs });
+    const nV = sk.position.length / 3, nT = sk.index.length / 3;
+    check(nV > 5000 && nV < 40000 && nT < 60000 && sk.parts.length >= 50, `skin: ${nV} vertices, ${nT} triangles, ${sk.parts.length} closed parts`);
+    console.log(`creature skin (Strider): ${nV} vertices, ${nT} triangles, ${sk.parts.length} closed parts`);
+    let nan = 0;
+    for (const a of [sk.position, sk.normal, sk.uv, sk.color, sk.glow, sk.skinWeight]) for (const v of a) if (!Number.isFinite(v)) nan++;
+    check(nan === 0, `skin: no NaN in any attribute (${nan})`);
+    let wBad = 0, iBad = 0;
+    for (let v = 0; v < nV; v++) {
+      let sum = 0;
+      for (let k = 0; k < 4; k++) {
+        const w = sk.skinWeight[v * 4 + k], b = sk.skinIndex[v * 4 + k];
+        sum += w;
+        if (b >= L.count || (w > 0 && b === 0)) iBad++;
+      }
+      if (Math.abs(sum - 1) > 1e-4) wBad++;
+    }
+    check(wBad === 0 && iBad === 0, `skin: weights sum to 1 (${wBad} off), bones in range and never the parameter bone (${iBad} off)`);
+    // Watertight, consistently wound, outward (positive volume): every part, so no pose shows a hole.
+    const volumes = (P: Float32Array) => sk.parts.map((part) => {
+      let V = 0;
+      for (let t = part.i0; t < part.i1; t += 3) {
+        const a = sk.index[t] * 3, b = sk.index[t + 1] * 3, c = sk.index[t + 2] * 3;
+        V += (P[a] * (P[b + 1] * P[c + 2] - P[b + 2] * P[c + 1]) - P[a + 1] * (P[b] * P[c + 2] - P[b + 2] * P[c]) + P[a + 2] * (P[b] * P[c + 1] - P[b + 1] * P[c])) / 6;
+      }
+      return V;
+    });
+    let open = 0;
+    for (const part of sk.parts) {
+      const id = new Map<string, number>();
+      const weld = (v: number) => { const k = `${Math.round(sk.position[v * 3] * 1e4)},${Math.round(sk.position[v * 3 + 1] * 1e4)},${Math.round(sk.position[v * 3 + 2] * 1e4)}`; let i = id.get(k); if (i === undefined) { i = id.size; id.set(k, i); } return i; };
+      const edges = new Map<string, number>();
+      for (let t = part.i0; t < part.i1; t += 3) {
+        const a = weld(sk.index[t]), b = weld(sk.index[t + 1]), c = weld(sk.index[t + 2]);
+        for (const [x, y] of [[a, b], [b, c], [c, a]]) if (x !== y) edges.set(`${x}>${y}`, (edges.get(`${x}>${y}`) ?? 0) + 1);
+      }
+      for (const [k, n] of edges) { const [x, y] = k.split('>'); if (n !== 1 || edges.get(`${y}>${x}`) !== 1) { open++; break; } }
+    }
+    const v0 = volumes(sk.position);
+    check(open === 0 && v0.every((v) => v > 0), `skin: every part is closed with one winding and faces out (${open} open, ${v0.filter((v) => !(v > 0)).length} inside-out)`);
+    // Linear blend skinning on the CPU (as the GPU does): the bind pose gives the mesh back; poses keep every part closed and the right way out.
+    const inv = Array.from({ length: L.count }, (_, b) => new THREE.Matrix4().fromArray(bind, b * 16).invert());
+    const F = new Float32Array(L.count * 16), out = new Float32Array(sk.position.length), M = new THREE.Matrix4(), p = new THREE.Vector3(), acc = new THREE.Vector3();
+    const skinned = () => {
+      const B = inv.map((iv, b) => b === 0 ? new THREE.Matrix4() : new THREE.Matrix4().fromArray(F, b * 16).multiply(iv));
+      for (let v = 0; v < nV; v++) {
+        acc.set(0, 0, 0);
+        for (let k = 0; k < 4; k++) {
+          const w = sk.skinWeight[v * 4 + k];
+          if (!w) continue;
+          M.copy(B[sk.skinIndex[v * 4 + k]]);
+          p.fromArray(sk.position, v * 3).applyMatrix4(M);
+          acc.addScaledVector(p, w);
+        }
+        acc.toArray(out, v * 3);
+      }
+      return out;
+    };
+    rig.boneFrames(F, L);
+    let err = 0;
+    const o0 = skinned();
+    for (let i = 0; i < o0.length; i++) err = Math.max(err, Math.abs(o0[i] - sk.position[i]));
+    check(err < 1e-3, `skin: the bind pose reproduces the mesh (worst ${err.toExponential(1)} m)`);
+    const poses: [string, () => void][] = [
+      ['walking', () => { rig.still = false; for (let i = 0; i < 120; i++) { rig.z -= 0.25; rig.update(1 / 30, 0.25); } }],
+      ['rearing, jaw open', () => { rig.rear = 1; rig.jaw = 1; for (let i = 0; i < 60; i++) rig.update(1 / 30, 0); }],
+      ['tail swept, looking up', () => { rig.rear = 0; rig.sweep = 1; rig.lookW = 1; rig.look.x = rig.x + 30; rig.look.y = 90; rig.look.z = rig.z - 20; for (let i = 0; i < 60; i++) rig.update(1 / 30, 0); }],
+      ['swept the other way, turning', () => { rig.sweep = -1; for (let i = 0; i < 60; i++) { rig.yaw += 0.02; rig.z -= 0.2; rig.update(1 / 30, 0.2); } }],
+      ['collapsed', () => { rig.sweep = 0; rig.lookW = 0; rig.slump = 1; for (let i = 0; i < 90; i++) rig.update(1 / 30, 0); }],
+    ];
+    for (const [name, pose] of poses) {
+      pose();
+      rig.boneFrames(F, L);
+      const P = skinned();
+      let bad = 0;
+      for (const v of P) if (!Number.isFinite(v)) bad++;
+      const vs = volumes(P);
+      const flipped = vs.filter((v, i) => !(v > 0) || v < v0[i] * 0.4 || v > v0[i] * 2.5).length;
+      check(bad === 0 && flipped === 0, `skin: ${name}: finite, every part still out-facing with its volume (${bad} NaN, ${flipped} parts off)`);
+    }
+  }
+}
+
+{
+  // Weather (src/world/weather.ts): deterministic per seed, mostly fair, storms rare, fog in the
+  // mornings, and continuous (no jumps in clouds, rain, fog or light).
+  const { WeatherSchedule, WEATHER_KINDS, stepWet } = await import('../src/world/weather');
+  const coast = { coastal: true, warmth: 0.3 }, inland = { coastal: false, warmth: 0.7 };
+  {
+    const a = new WeatherSchedule(42, coast), b = new WeatherSchedule(42, coast), far = new WeatherSchedule(42, coast), other = new WeatherSchedule(43, coast);
+    far.at(24 * 90); // queried far ahead first: the past must not change
+    let same = true, diff = 0;
+    for (let h = 0; h < 24 * 30; h += 0.37) {
+      const pa = a.at(h), pb = b.at(h), pf = far.at(h);
+      if (a.kindAt(h) !== b.kindAt(h) || a.kindAt(h) !== far.kindAt(h) || pa.rain !== pb.rain || pa.cover !== pf.cover) same = false;
+      if (a.kindAt(h) !== other.kindAt(h)) diff++;
+    }
+    check(same, 'weather: the schedule is deterministic per seed (and independent of the query order)');
+    check(diff > 300, `weather: another seed gives other weather (${diff} of ${Math.ceil(24 * 30 / 0.37)} samples differ)`);
+  }
+  for (const [name, cl] of [['coastal', coast], ['inland', inland]] as const) {
+    const n: Record<string, number> = {};
+    let total = 0, fogMorning = 0, stormAfternoon = 0;
+    for (const seed of [1, 7, 42, 99]) {
+      const s = new WeatherSchedule(seed, cl);
+      for (let h = 0; h < 24 * 200; h += 0.1) {
+        const k = s.kindAt(h), hr = h % 24;
+        n[k] = (n[k] ?? 0) + 1; total++;
+        if (k === 'fog' && hr >= 3 && hr < 11.5) fogMorning++;
+        if (k === 'storm' && hr >= 11.5 && hr < 21) stormAfternoon++;
+      }
+    }
+    const f = (k: string) => (n[k] ?? 0) / total;
+    const shares = WEATHER_KINDS.map((k) => `${k} ${(f(k) * 100).toFixed(1)}%`).join(', ');
+    check(f('clear') + f('fair') > 0.5 && f('fair') > f('cloudy') && f('fair') > f('clear'), `weather ${name}: sunny with clouds most of the time (${shares})`);
+    check(f('storm') > 0.001 && f('storm') < 0.025, `weather ${name}: thunderstorms rare (${(f('storm') * 100).toFixed(2)}%), mostly in the afternoon (${((stormAfternoon / Math.max(1, n.storm ?? 0)) * 100).toFixed(0)}%)`);
+    check(stormAfternoon / Math.max(1, n.storm ?? 0) > 0.75, `weather ${name}: storms mostly between 11:30 and 21:00`);
+    const wet = f('drizzle') + f('rain') + f('storm');
+    check(wet > 0.03 && wet < 0.2, `weather ${name}: some rain, not too much (${(wet * 100).toFixed(1)}%)`);
+    check(f('fog') > 0.002 && fogMorning / Math.max(1, n.fog ?? 0) > 0.95, `weather ${name}: fog now and then (${(f('fog') * 100).toFixed(1)}%), in the mornings (${((fogMorning / Math.max(1, n.fog ?? 0)) * 100).toFixed(0)}% between 3 and 11:30)`);
+  }
+  {
+    // Continuity: the largest change per game second over 20 days, every parameter.
+    const s = new WeatherSchedule(7, coast);
+    const keys = ['cover', 'density', 'dark', 'rain', 'fog', 'wind', 'sun', 'lightning'] as const;
+    const worst: Record<string, number> = {};
+    let prev = { ...s.at(0) };
+    for (let h = 1 / 3600; h < 24 * 20; h += 1 / 3600) {
+      const p = s.at(h);
+      for (const k of keys) worst[k] = Math.max(worst[k] ?? 0, Math.abs(p[k] - prev[k]));
+      prev = { ...p };
+    }
+    const max = Math.max(...keys.map((k) => worst[k]));
+    check(max < 0.01, `weather: continuous — largest change per game second ${max.toFixed(4)} (${keys.map((k) => `${k} ${worst[k].toFixed(4)}`).join(', ')})`);
+    // Rain only from a covered sky; transitions take game minutes.
+    let rainClear = 0;
+    for (let h = 0; h < 24 * 20; h += 0.05) { const p = s.at(h); if (p.rain > 0.05 && p.cover < 0.6) rainClear++; }
+    check(rainClear === 0, `weather: no rain from a clear sky (${rainClear} samples)`);
+    // Wet streets: soaked within ~15 minutes of rain, dry again within ~3 hours of sun.
+    let w = 0, t = 0;
+    while (w < 0.9 && t < 2) { w = stepWet(w, 0.62, 0.1, 1 / 60); t += 1 / 60; }
+    let t2 = 0;
+    while (w > 0.02 && t2 < 10) { w = stepWet(w, 0, 1, 1 / 60); t2 += 1 / 60; }
+    check(t < 0.25 && t2 > 0.5 && t2 < 3, `weather: streets wet after ${(t * 60).toFixed(0)} min of rain, dry ${(t2 * 60).toFixed(0)} min after it stops`);
+  }
+}
+
+// ------------------------------------------------------------------ saves (src/game/save)
+{
+  console.log('saves: model round trip, migrations, damage codec');
+  const full: SaveData = {
+    v: SAVE_VERSION, id: 'save-abc', name: 'Before the bridge', kind: 'manual', created: 1759580000000, playTime: 3725,
+    city: { seed: 42, size: 0.6 }, mode: 'normal',
+    character: { id: 'gen-123', look: { appearance: { gender: 0.3 }, outfit: { top: 'jacket' } } },
+    player: { x: 123.456, y: 7.25, z: -98.5, yaw: 1.25, height: 12.5, sizeOverride: true, flying: true, under: false, indoors: false, hp: 63.5, invulnerable: true, energy: 42.5, slot: 3 },
+    camera: { yaw: -2.5, pitch: -0.35, zoom: 4.2 },
+    sky: { day: 3, hour: 18.75, timeScale: 60 },
+    weather: { setting: 'rain', wet: 0.62, skipH: 1.5 },
+    progress: { v: 1, karma: 140, earned: 320, deeds: 17, ranks: { laser: 2, flight: 1 }, slots: ['punch', 'laser', null, null, null, null, null, null, null, null], cores: [3, 9], seen: [3, 9, 11], bonusMax: 20, bonusRegen: 1.5 },
+    reputation: { v: 37.5, stats: { stopped: 4, kos: 2, arrests: 1, returned: 3, deeds: 9, hurt: 1, busted: 0 } },
+    justice: { heat: 3.2, wanted: 1, stats: { offences: 3, arrests: 0, turnIns: 1, escapes: 2 } },
+    threats: {
+      clock: { v: 1, played: 5400, pressure: 7300, n: 2, lastAt: 4100, lastP: 5000, last: 'robots', armedAt: null, omensDone: 0, karma: 320, majors: 0, lastMajorAt: 0, armedMajor: false },
+      setting: 'frequent', remains: [{ kind: 'strider', x: 410.5, z: -220.25, yaw: 0.75, side: -1, s: 812 }], strider: { s: 455.5, hp: 3800, mode: 'advance' },
+    },
+    waypoint: { x: -500, z: 260.5 },
+    settings: { crime: 'chaos', events: 'frequent' },
+    damage: { cells: [{ id: 17, n: 50000, dead: encodeIndexSet([5, 6, 7, 900]), glass: encodeIndexSet([12, 13]), slabs: encodeIndexSet([7]) }], buildings: [[17, 4, -1], [17, 9, 31.5]], mounds: [[401.25, -230.5, 14.5, 6.25]] },
+  };
+  const back = parseSave(serializeSave(full));
+  check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
+  // Every top-level and player field present after parsing (nothing silently dropped).
+  const keys = (o: object) => Object.keys(o).sort().join(',');
+  check(keys(back) === keys(full) && keys(back.player) === keys(full.player) && keys(back.threats) === keys(full.threats), 'saves: all fields survive parsing');
+  // Garbage and partial saves load with defaults (no throw), a city is required, newer versions are refused.
+  const partial = parseSave({ v: 1, city: { seed: 7, size: 0.4 }, player: { x: 'nope', hp: 1e9 }, sky: { hour: 99 }, damage: { cells: [{ id: 'x' }, { id: 3, dead: 5 }], buildings: [[1, 2], [1, 2, 3]] } });
+  check(partial.player.x === 0 && partial.sky.hour < 24 && partial.player.height === 1.8 && partial.mode === 'normal' && partial.damage!.cells.length === 1 && partial.damage!.cells[0].dead === '' && partial.damage!.buildings.length === 1,
+    `saves: a partial / damaged save is sanitised to defaults (${JSON.stringify({ x: partial.player.x, hour: partial.sky.hour, cells: partial.damage?.cells.length })})`);
+  let threw = 0;
+  try { parseSave({ v: 1, player: {} }); } catch { threw++; }
+  try { parseSave({ v: SAVE_VERSION + 1, city: { seed: 1, size: 0.5 } }); } catch { threw++; }
+  check(threw === 2, 'saves: no city / a newer version is refused');
+  // Migration stub: a version-0 save (flat fields) upgrades to the current version.
+  const v0 = { v: 0, id: 'old', name: 'Old', seed: 99, size: 0.3, mode: 'sandbox', pos: [10, 2, -4], yaw: 0.5, height: 3, hp: 80, day: 2, hour: 7.5, timeScale: 20 };
+  const m = migrate(v0), up = parseSave(v0);
+  check(m.v === SAVE_VERSION && up.city.seed === 99 && up.city.size === 0.3 && up.mode === 'sandbox' && up.player.x === 10 && up.player.z === -4 && up.player.height === 3 && up.sky.day === 2 && up.sky.hour === 7.5,
+    `saves: version 0 migrates to ${SAVE_VERSION} (${JSON.stringify({ seed: up.city.seed, x: up.player.x, day: up.sky.day })})`);
+  // Damage codec: index sets round trip (empty, single, runs, gaps, big indices, unsorted with duplicates).
+  const sets: number[][] = [[], [0], [5], [0, 1, 2, 3], [1, 3, 5, 7], [100000, 100001, 4_000_000], [9, 3, 3, 4, 8, 2, 2]];
+  let rng = 12345;
+  const rnd = () => { rng = (rng * 1103515245 + 12345) & 0x7fffffff; return rng / 0x7fffffff; };
+  // A realistic damaged cell: 120 k elements, a few buildings with walls blown out (clustered) plus scattered panels.
+  const cell = new Uint8Array(120000 * 2).fill(255);
+  for (let b = 0; b < 6; b++) { const at = Math.floor(rnd() * 110000), n = 50 + Math.floor(rnd() * 600); for (let k = 0; k < n; k++) if (rnd() < 0.8) cell[(at + k) * 2] = 0; }
+  for (let k = 0; k < 300; k++) cell[Math.floor(rnd() * 120000) * 2] = 0;
+  for (let k = 0; k < 200; k++) cell[Math.floor(rnd() * 120000) * 2 + 1] = 0;
+  const dead = lowIndices(cell, 120000, 2, 0), glass = lowIndices(cell, 120000, 2, 1);
+  sets.push(dead, glass);
+  let bad = 0;
+  for (const set of sets) {
+    const want = [...new Set(set)].sort((a, b) => a - b);
+    const got = decodeIndexSet(encodeIndexSet(set));
+    if (got.length !== want.length || got.some((v, i) => v !== want[i])) bad++;
+  }
+  const enc = encodeIndexSet(dead);
+  check(bad === 0, `saves: damage index sets round trip (${sets.length} sets, ${bad} wrong)`);
+  check(enc.length < dead.length * 1.5, `saves: a damaged cell compacts (${dead.length} dead of 120 k elements → ${enc.length} chars, ${glass.length} windows → ${encodeIndexSet(glass).length})`);
+  check(decodeIndexSet('%%%').length === 0 && decodeIndexSet('').length === 0, 'saves: bad damage strings decode to nothing');
+  // A restored cell equals the saved one (both channels).
+  const restored = new Uint8Array(120000 * 2).fill(255);
+  for (const e of decodeIndexSet(encodeIndexSet(dead))) restored[e * 2] = 0;
+  for (const e of decodeIndexSet(encodeIndexSet(glass))) restored[e * 2 + 1] = 0;
+  let diff = 0;
+  for (let i = 0; i < cell.length; i++) if ((cell[i] < 128) !== (restored[i] < 128)) diff++;
+  check(diff === 0, `saves: cell element state restored exactly (${diff} differences)`);
 }
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }

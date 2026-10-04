@@ -304,6 +304,7 @@ export function createFacadeMaterial(arrays: MaterialArrays, elemTex: THREE.Text
     uShopLit: G.uShopLit,
     uEatLit: G.uEatLit,
     uTime: G.uTime,
+    uWet: G.uWet,
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -329,7 +330,7 @@ vWNrm = normalize(mat3(modelMatrix) * objectNormal);`,
       )
       .replace('#include <fog_vertex>', `#include <fog_vertex>\n${GLSL_ELEM_VERTEX_MAIN}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n#define BACK_PLASTER ${backPlaster ? 'true' : 'false'}\n${FRAG_DECL}\nSurf gS;`)
+      .replace('#include <common>', `#include <common>\n#define BACK_PLASTER ${backPlaster ? 'true' : 'false'}\n${FRAG_DECL}\nuniform float uWet;\nSurf gS;`)
       .replace(
         '#include <map_fragment>',
         `vec3 eyeDirW = normalize(cameraPosition - vWPos);
@@ -340,6 +341,12 @@ if (!gl_FrontFacing && BACK_PLASTER) {
   if (gS.glass > 0.5) { gS.albedo = vec3(0.03); gS.emis = vec3(0.25, 0.3, 0.35) * uDayLight; }
   else { gS.albedo = vec3(0.82, 0.8, 0.76) * (0.9 + 0.1 * vnoise(vMUv * 2.0)); gS.emis = vec3(0.0); }
   gS.tn = vec2(0.0); gS.rough = 0.9; gS.metal = 0.0; gS.ao = 0.8;
+}
+if (uWet > 0.001 && gl_FrontFacing && gS.glass < 0.5) {
+  // Rain-darkened walls, in streaks and patches.
+  float wW = uWet * (0.55 + 0.45 * vnoise(vec2(vWPos.x + vWPos.z, vWPos.y * 0.25) * 0.6));
+  gS.albedo *= 1.0 - 0.25 * wW;
+  gS.rough *= 1.0 - 0.35 * wW;
 }
 diffuseColor.rgb = gS.albedo * gS.ao;`,
       )
@@ -352,7 +359,7 @@ diffuseColor.rgb = gS.albedo * gS.ao;`,
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gS.emis;')
       .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= gS.ao;');
   };
-  mat.customProgramCacheKey = () => 'facade-v2' + (backPlaster ? '' : '-nb');
+  mat.customProgramCacheKey = () => 'facade-v3' + (backPlaster ? '' : '-nb');
   return mat;
 }
 

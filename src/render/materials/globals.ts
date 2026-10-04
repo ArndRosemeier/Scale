@@ -16,6 +16,8 @@ export const G = {
   uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.2) },
   /** Street light emission strength (0 day, 1 night). */
   uLampOn: { value: 0 },
+  /** Wet ground and walls after rain 0..1 (render/Weather): darker, glossier streets, puddles. */
+  uWet: { value: 0 },
 };
 
 /** A 1×1 "everything alive" element texture for meshes without destruction state. */

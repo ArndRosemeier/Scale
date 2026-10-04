@@ -469,6 +469,17 @@ export class GameMap {
     return { x: bx, z: bz };
   }
 
+  /**
+   * Put the player at a safe street spot near (x, z) (saves: when the saved spot cannot be
+   * restored as it was), pushed out of buildings that stream in during the next seconds.
+   */
+  placeSafely(x: number, z: number): { x: number; z: number } {
+    const sp = this.safeSpot(x, z);
+    this.teleport(sp.x, sp.z, null);
+    this.settle = { t: 8, x: sp.x, z: sp.z, station: -1 };
+    return sp;
+  }
+
   /** Street-level spot at the top of an entrance's stairs, facing down them. */
   private standAt(e: MapEntrance): { x: number; z: number; fx: number; fz: number } {
     const st = this.game.macro.metroStations[e.station];

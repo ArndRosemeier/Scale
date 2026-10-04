@@ -35,6 +35,8 @@ export interface VehicleExtra {
 
 export class VehicleRenderer {
   readonly group = new THREE.Group();
+  /** Rain or fog (render/Weather): moving cars drive with their lights on. */
+  weatherLights = false;
   private buckets = new Map<string, Bucket>();
   private mat: THREE.Material;
   private extras = new WeakMap<Vehicle, VehicleExtra>();
@@ -123,7 +125,8 @@ export class VehicleRenderer {
       }
     }
     const cp = cam.position;
-    const lamps = G.uNight.value > 0.3 ? 1 : 0;
+    // Lights on at night, and when driving in rain or fog (render/Weather).
+    const lamps = G.uNight.value > 0.3 || this.weatherLights ? 1 : 0;
     const draw = (v: Vehicle, range: number, parkedCar = false) => {
       const d = Math.hypot(v.x - cp.x, v.z - cp.z);
       if (d > range) return;

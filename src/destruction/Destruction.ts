@@ -760,6 +760,37 @@ export class Destruction {
     this.pendingChecks.add(ref);
   }
 
+  // ------------------------------------------------------------ saves
+
+  /** Saves: broken slab tiles of a cell (element ids). */
+  brokenTiles(cellId: number): number[] {
+    const out: number[] = [], lo = cellId * 16777216, hi = lo + 16777216;
+    for (const k of this.broken) if (k >= lo && k < hi) out.push(k - lo);
+    return out;
+  }
+
+  /** Saves: mark slab tiles of a cell broken (their elements are dead in the cell state). */
+  restoreBroken(cellId: number, elems: Iterable<number>): void {
+    for (const e of elems) this.broken.add(cellId * 16777216 + e);
+  }
+
+  /** Saves: a damaged building as it was (its storey slabs show through the holes; collapsed: gone / lower). */
+  restoreBuilding(ref: BuildingRef, top: number | null): void {
+    this.ensureSlabs(ref);
+    if (top === null) return;
+    if (top < 0) ref.alive = false;
+    else ref.top = Math.min(ref.top, top);
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i < ref.poly.length; i += 2) { x0 = Math.min(x0, ref.poly[i]); x1 = Math.max(x1, ref.poly[i]); z0 = Math.min(z0, ref.poly[i + 1]); z1 = Math.max(z1, ref.poly[i + 1]); }
+    this.debris.groundChanged(x0 - 1, z0 - 1, x1 + 1, z1 + 1, ref.low - 1, ref.base + 400);
+  }
+
+  /** Saves: a rubble mound back in place. */
+  restoreMound(x: number, z: number, r: number, h: number): void {
+    if (this.mounds.some((m) => Math.abs(m.x - x) < 0.5 && Math.abs(m.z - z) < 0.5)) return;
+    this.addMound(x, z, r, h);
+  }
+
   /** Is a building (index) visible as damaged? */
   isCollapsing(): boolean {
     return this.collapses.length > 0;

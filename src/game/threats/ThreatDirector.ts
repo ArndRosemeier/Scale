@@ -368,6 +368,43 @@ export class ThreatDirector {
     }
   }
 
+  // ================================================================== saves
+
+  /**
+   * Saves: the clock, the setting, the bodies of defeated monsters (those lying in the city and
+   * one just brought down) and a Strider on the move (resumed at its route position). Robot
+   * malfunctions and omens are not kept: they end with the session.
+   */
+  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string } | null } {
+    const remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[] = [];
+    let strider: { s: number; hp: number; mode: string } | null = null;
+    for (const b of [...this.remains, ...this.events.filter((e): e is Strider => e instanceof Strider && e.defeated)]) remains.push({ kind: 'strider', ...b.saveState() });
+    for (const e of this.events) if (e instanceof Strider && e.active && (e.mode === 'emerge' || e.mode === 'advance' || e.mode === 'rampage')) { const st = e.saveState(); strider = { s: st.s, hp: st.hp, mode: st.mode }; }
+    return { clock: { ...this.clock.state }, setting: this.setting, remains, strider };
+  }
+
+  /** Saves: restore what `saveState` kept (on a fresh city: no events running yet). */
+  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string } | null }): void {
+    const S = this.clock.state as unknown as Record<string, unknown>;
+    if (o.clock && o.clock.v === 1) for (const k of Object.keys(S)) if (k in o.clock && (typeof o.clock[k] === typeof S[k] || o.clock[k] === null || S[k] === null)) S[k] = o.clock[k];
+    if (o.setting === 'off' || o.setting === 'rare' || o.setting === 'normal' || o.setting === 'frequent') this.setting = o.setting;
+    this.earned = this.chaos = -1;
+    for (const r of this.remains.splice(0)) r.dispose();
+    o.remains.forEach((b, i) => {
+      if (b.kind !== 'strider') return;
+      try {
+        const s = new Strider(this.g, deriveSeed(this.g.settings.seed, 'remains', i));
+        s.restoreDead(b);
+        this.remains.push(s);
+      } catch (err) { console.warn('[threats] could not lay the body back', err); }
+    });
+    if (o.strider) {
+      const ev = this.start('strider', deriveSeed(this.g.settings.seed, 'threat', this.clock.state.n, 'resumed'), {}, null);
+      if (ev instanceof Strider) ev.restoreWalking(o.strider);
+    }
+    this.save();
+  }
+
   // ================================================================== dev console
 
   /** The running (or latest) Strider. */

@@ -11,6 +11,11 @@ import { disposeCreatorPreview } from './ui/CharacterCreator';
 import { Player } from './player/Player';
 import { normalizeLook } from './avatar/look';
 import { loadMode, saveMode, MODE_INFO, type GameMode } from './game/mode';
+import { saveStore } from './game/save/SaveStore';
+import type { SaveData } from './game/save/model';
+import { avatarStore } from './avatar/AvatarStore';
+import type { CharacterLook } from './avatar/look';
+import { MainMenuSaves } from './ui/SaveUi';
 
 const params = new URLSearchParams(location.search);
 const menu = document.getElementById('menu') as HTMLDivElement;
@@ -48,20 +53,38 @@ function showMode(): void {
 }
 for (const b of modeBtns) b.addEventListener('click', () => { mode = b.dataset.mode as GameMode; saveMode(mode); showMode(); });
 showMode();
+// Saves: Continue (the newest) and Load game, above the choice for a new city.
+const menuPanel = menu.querySelector('.panel') as HTMLElement;
+new MainMenuSaves(menuPanel, menuPanel.querySelector('label'), (m) => void startFromSave(m.id));
 seedIn.addEventListener('input', refresh);
 sizeIn.addEventListener('input', refresh);
 refresh();
 
-async function start(): Promise<void> {
-  const settings = { seed: parseSeed(seedIn.value), size: Number(sizeIn.value) };
-  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}`);
+let starting = false;
+
+async function start(save: SaveData | null = null): Promise<void> {
+  if (starting) return;
+  starting = true;
+  const settings = save ? { ...save.city } : { seed: parseSeed(seedIn.value), size: Number(sizeIn.value) };
+  if (save) mode = save.mode;
+  // (The load flag is dropped: a reload later starts from the menu, not from that old save again.)
+  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') || save ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}${params.has('mute') ? '&mute' : ''}`);
   menu.style.display = 'none';
   loading.style.display = 'flex';
   disposeCreatorPreview();
   // Character made in the creator (if one is selected): the player is built with its look.
+  // A save brings its character back (the stored one when it still exists, else the look it kept).
+  let savedLook: CharacterLook | null = null;
+  if (save) {
+    try {
+      const id = save.character.id;
+      if (id && await avatarStore.get(id)) avatarStore.select(id);
+      else { avatarStore.select(null); savedLook = save.character.look as CharacterLook | null; }
+    } catch (e) { console.warn('[saves] character', e); }
+  }
   try {
     const sel = await loadSelectedLook();
-    Player.look = sel ? normalizeLook(sel.look) : null;
+    Player.look = sel ? normalizeLook(sel.look) : savedLook ? normalizeLook(savedLook) : null;
     if (sel) console.log(`[avatar] ${sel.name}: created character`);
   } catch (e) {
     console.error('[avatar] could not load the selected character', e);
@@ -69,6 +92,7 @@ async function start(): Promise<void> {
   const canvas = document.getElementById('view') as HTMLCanvasElement;
   const game = new Game(canvas, settings, mode);
   (window as unknown as { game: Game }).game = game;
+  if (save) { game.pendingSave = save; game.startAt = { x: save.player.x, z: save.player.z }; }
   await game.start((msg, f) => {
     loadMsg.textContent = msg;
     loadBar.style.width = `${Math.round(f * 100)}%`;
@@ -95,5 +119,17 @@ function flash(text: string): void {
   setTimeout(() => d.classList.add('fade'), 6000);
 }
 
+/** Start the city of a save, with the save (Continue, Load game, `?load=<id>`). */
+async function startFromSave(id: string): Promise<void> {
+  let d: SaveData | null = null;
+  try { await saveStore.recover(); d = await saveStore.get(id); } catch (e) { console.warn('[saves]', e); }
+  if (!d) { flash('That saved game could not be read — choose a city to start a new game.'); menu.style.display = ''; return; }
+  seedIn.value = String(d.city.seed);
+  sizeIn.value = String(d.city.size);
+  refresh();
+  await start(d);
+}
+
 startBtn.addEventListener('click', () => void start());
-if (params.has('auto')) void start();
+if (params.get('load')) void startFromSave(params.get('load')!);
+else if (params.has('auto')) void start();

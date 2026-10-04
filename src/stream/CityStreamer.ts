@@ -261,6 +261,37 @@ export class CityStreamer {
     cs.elemTex.needsUpdate = true;
   }
 
+  /**
+   * Saves: element state of every cell that has some (loaded cells and evicted damaged ones):
+   * cell id → [element count, interleaved bytes (alive, closed) per element].
+   */
+  elementStates(): Map<number, { count: number; data: Uint8Array; cell: CellState | null }> {
+    const out = new Map<number, { count: number; data: Uint8Array; cell: CellState | null }>();
+    for (const [id, data] of this.savedElems) if (!this.cells.get(id)?.elemData) out.set(id, { count: data.length / 2, data, cell: null });
+    for (const cs of this.cells.values()) if (cs.status === 'ready' && cs.elemData) out.set(cs.id, { count: cs.elemCount, data: cs.elemData, cell: cs });
+    return out;
+  }
+
+  /**
+   * Saves: put saved element bytes back — into a loaded cell at once (element count must match),
+   * else kept for when it streams in (like damage that survived eviction).
+   */
+  restoreElements(id: number, count: number, apply: (data: Uint8Array) => void): boolean {
+    const cs = this.cells.get(id);
+    if (cs && cs.status === 'ready' && cs.elemData && cs.elemTex) {
+      if (cs.elemCount !== count) return false;
+      apply(cs.elemData);
+      cs.elemTex.needsUpdate = true;
+      return true;
+    }
+    const w = 1024, h = Math.max(1, Math.ceil(Math.max(1, count) / w));
+    const data = this.savedElems.get(id) ?? new Uint8Array(w * h * 2).fill(255);
+    if (data.length !== w * h * 2) return false;
+    apply(data);
+    this.savedElems.set(id, data);
+    return true;
+  }
+
   isAlive(cs: CellState, elem: number): boolean {
     return !!cs.elemData && cs.elemData[elem * 2] > 127;
   }

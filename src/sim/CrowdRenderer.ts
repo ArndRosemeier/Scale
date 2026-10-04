@@ -28,6 +28,12 @@ const ACTOR_RIGS = 8;
  * a few frames longer. Ragdolls (forced) are never held back.
  */
 const NEW_RIGS_PER_FRAME = 2;
+/**
+ * Full rigs cast shadows only this close (m; hysteresis ±2): every rig's shadow is several more
+ * draw calls (body, garments, hair), and a stampede or a monster's ragdolls bring dozens of rigs
+ * out to FORCE_RANGE, where a person's own shadow is a few pixels.
+ */
+const RIG_SHADOW_RANGE = 24;
 /** Foot-IK ground queries are reused within a 0.2 m cell for this long (s). */
 const GROUND_CACHE_T = 0.25;
 
@@ -90,7 +96,7 @@ export class CrowdRenderer {
   private anim: THREE.InstancedBufferAttribute[] = [];
   private cols: THREE.InstancedBufferAttribute[][] = [];
   private looks = new Map<number, Look>();
-  private rigs = new Map<number, { rig: HumanoidRig; used: number; agent: PedAgent; ready: 0 | 1 | 2; held?: string | null }>();
+  private rigs = new Map<number, { rig: HumanoidRig; used: number; agent: PedAgent; ready: 0 | 1 | 2; held?: string | null; shadow?: boolean; shadowT?: number }>();
   /** Compile a new object's shaders off the critical path (set by the game); rigs show once ready. */
   prepare: ((o: THREE.Object3D) => Promise<unknown>) | null = null;
   private rigTime = 0;
@@ -284,6 +290,15 @@ export class CrowdRenderer {
       const lookAt: [number, number, number] | undefined = act ? (act.face ? [act.face.x, act.face.y, act.face.z] : undefined) : a.state === PState.Gawk || a.state === PState.Film || (a.glance ?? 0) > 0 ? [a.lookX, a.lookY, a.lookZ] : undefined;
       const talking = !act && a.state === PState.Sit && !!this.talking?.(a, time);
       r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
+      // Shadows only up close (re-applied now and then: clothes and held items come and go).
+      const dc = Math.hypot(a.x - cx, a.y - cy, a.z - cz);
+      const sh = r.shadow === undefined ? dc < RIG_SHADOW_RANGE : r.shadow ? dc < RIG_SHADOW_RANGE + 2 : dc < RIG_SHADOW_RANGE - 2;
+      r.shadowT = (r.shadowT ?? 0) - dt;
+      if (sh !== r.shadow || r.shadowT <= 0) {
+        r.shadow = sh;
+        r.shadowT = 0.5;
+        r.rig.object.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = sh; });
+      }
     }
     // Drop rigs no longer needed (keep a short while to avoid churn).
     const present = this.present;

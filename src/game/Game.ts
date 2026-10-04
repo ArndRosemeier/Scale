@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { Renderer } from '../render/Renderer';
 import { SkySystem } from '../render/SkySystem';
+import { Weather } from '../render/Weather';
 import { TextureLibrary } from '../render/TextureLibrary';
 import { WorkerPool } from '../stream/WorkerPool';
 import { CityStreamer } from '../stream/CityStreamer';
@@ -81,11 +82,16 @@ import { TargetHud } from '../ui/TargetHud';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { ResponseDirector } from './response/ResponseDirector';
+import { SaveSystem } from './save/SaveSystem';
+import type { SaveData } from './save/model';
+import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
 
 export class Game {
   readonly renderer: Renderer;
   readonly input: Input;
   sky!: SkySystem;
+  /** Weather: the seeded schedule, sky / light / rain / wet streets, sounds, the city's reaction (render/Weather). */
+  weather!: Weather;
   streamer!: CityStreamer;
   pool!: WorkerPool;
   terrain!: Terrain;
@@ -147,6 +153,12 @@ export class Game {
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
   threats!: ThreatDirector;
   response!: ResponseDirector;
+  /** Saves: autosave, named saves, loading (src/game/save). */
+  saves!: SaveSystem;
+  /** A save to put into the city once it has started (set before `start`, by main.ts). */
+  pendingSave: SaveData | null = null;
+  /** Where to stream in and put the player (a loaded save's spot; default: the main centre). */
+  startAt: { x: number; z: number } | null = null;
   /** Parked cars of the loaded cells. */
   get parkedCars(): Vehicle[] { return this.parkedList; }
   /** Power cores (Normal mode only). */
@@ -233,8 +245,8 @@ export class Game {
     this.crowd.prepare = (o) => this.renderer.compileAsync(o);
     this.population = new Population(macro, this.settings.seed);
     await this.streamer.loadBridges();
-    // Start at the main centre, at street level.
-    const c = macro.centres[0];
+    // Start at the main centre (or a loaded save's spot), at street level.
+    const c = this.startAt ?? macro.centres[0];
     const cam = this.renderer.camera;
     cam.position.set(c.x, this.terrain.height(c.x, c.z) + 1.7, c.z);
     // Wait for the nearest cells.
@@ -330,7 +342,9 @@ export class Game {
     this.birds = new Birds({ terrain: this.terrain, world: this.world, peds: this.peds, traffic: this.traffic, drones: this.future.drones, dust: this.dust, debris: this.debris, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
     this.renderer.scene.add(this.birds.mesh);
     this.terraces = new Terraces({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, pop: this.population, props: this.props, destruction: this.destruction, loop: (id, r) => this.audio.loop(id, r) });
-    this.crowd.heldFor = (a) => this.terraces.heldFor(a);
+    this.weather = new Weather(this);
+    // Cups at the terraces first, then umbrellas in the rain.
+    this.crowd.heldFor = (a) => { const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
     this.crowd.talking = (a, t) => this.terraces.talking(a, t);
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
@@ -382,6 +396,10 @@ export class Game {
     this.menu = new Menu(this);
     this.setupPowers();
     installDevtools(this);
+    this.saves = new SaveSystem(this);
+    new PauseSaves(this);
+    new SaveIndicator(this);
+    if (this.pendingSave) this.saves.apply(this.pendingSave);
     (window as unknown as { prof: Record<string, number> }).prof = this.prof;
     this.running = true;
     this.clock.start();
@@ -521,6 +539,7 @@ export class Game {
     this.sky.underground = clamp(this.sky.underground + (this.camRig.underground ? dt : -dt) * 2.5, 0, 1);
     const cp = this.renderer.camera.position;
     this.sky.indoor = clamp(this.sky.indoor + (this.interiors.insideAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
+    this.T('weather', () => this.weather.update(dt));
     this.T('sky', () => this.sky.update(dt, focus, cam));
     this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
     const P = this.player;
@@ -780,7 +799,8 @@ export class Game {
     this.crime = new CrimeSystem(this);
     this.response = new ResponseDirector(this);
     this.threats = new ThreatDirector(this);
-    setTimeout(() => toast(normal
+    // (Not when a save is loaded: the player has been here before.)
+    if (!this.pendingSave) setTimeout(() => toast(normal
       ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
       : 'Sandbox: every power is yours. <b>1–9, 0</b> use the hotbar (hold for beams and super speed), click or <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);
   }
@@ -969,14 +989,21 @@ export class Game {
     const ug = this.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z);
     const inStation = ug && this.underground.boxes.some((b) => b.kind === 'station' && Math.hypot(b.cx - p.pos.x, b.cz - p.pos.z) < b.hu + 5);
     const surf = ug ? 0.08 : 1;
+    // Weather: rain (light / heavy) and gusts, muffled indoors and underground; a wet city is quieter.
+    const W = this.weather.p, rain = W.rain;
+    const shut = (1 - 0.75 * this.sky.indoor) * (ug ? 0.05 : 1);
+    const quiet = 1 - 0.3 * smoothstep(0.1, 0.7, rain);
     this.audio.setAmbience({
       amb_sewer: ug && !inStation ? 0.9 : 0,
       amb_metro: inStation ? 0.9 : 0,
-      amb_city_day: (1 - night) * 0.9 * altFade * surf,
-      amb_city_night: night * 0.9 * altFade * surf,
+      amb_city_day: (1 - night) * 0.9 * altFade * surf * quiet,
+      amb_city_night: night * 0.9 * altFade * surf * quiet,
       amb_river: nearWater * 0.8,
       amb_sea: nearSea * 0.8,
       amb_wind_flight: wind,
+      amb_rain_light: clamp(rain * 4, 0, 1) * (1 - smoothstep(0.35, 0.8, rain) * 0.6) * shut,
+      amb_rain_heavy: smoothstep(0.25, 0.85, rain) * shut,
+      amb_wind_gust: smoothstep(0.3, 0.9, W.wind) * 0.8 * shut,
     }, { amb_wind_flight: 0.8 + clamp(speed / 120, 0, 0.6) });
     // Sonic boom when crossing Mach 1.
     const v = p.vel.length();

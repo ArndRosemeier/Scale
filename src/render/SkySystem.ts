@@ -74,8 +74,14 @@ export class SkySystem {
   underground = 0;
   /** 0..1 while the camera is inside a building: sky ambient is mostly shut out (light comes through windows). */
   indoor = 0;
+  /**
+   * Weather (written by render/Weather before update): cloud cover / opacity / darkness, direct
+   * sun left, fog, rain, and a lightning flash (0..~1.5) lighting the clouds towards flashDir.
+   */
+  readonly wx = { cover: 0.35, density: 0.45, dark: 0, sun: 1, fog: 0, rain: 0, flash: 0, flashDir: new THREE.Vector3(0, 0.5, 1) };
   private cloudT = 0;
   private envBase = 0.1;
+  private envWx = -1;
 
   /** Absolute game time in hours. */
   get hoursAbs(): number { return this.day * 24 + this.hour; }
@@ -101,7 +107,17 @@ export class SkySystem {
     this.envSky.material.uniforms.sunPosition.value.copy(this.sunDir);
     this.sky.position.copy(camera.position);
     this.stars.position.copy(camera.position);
-    (this.stars.material as THREE.PointsMaterial).opacity = night;
+    // Weather in the sky shader (the environment sky too, without the flash); stars behind clouds.
+    const wx = this.wx;
+    const overcast = smoothstep(0.55, 1, wx.cover) * 0.9;
+    const skyFog = clamp(wx.fog * 1.1 + wx.rain * 0.25, 0, 1);
+    for (const s of [this.sky, this.envSky]) {
+      const U = s.material.uniforms;
+      U.cloudCoverage.value = wx.cover; U.cloudDensity.value = wx.density; U.cloudDark.value = wx.dark; U.overcast.value = overcast; U.skyFog.value = skyFog;
+    }
+    this.sky.material.uniforms.flash.value = wx.flash;
+    this.sky.material.uniforms.flashDir.value.copy(wx.flashDir);
+    (this.stars.material as THREE.PointsMaterial).opacity = night * (1 - smoothstep(0.4, 0.85, wx.cover)) * (1 - skyFog);
 
     // Sun / moon light.
     const lightDir = sunUp > -0.05 ? this.sunDir : new THREE.Vector3(-this.sunDir.x, -this.sunDir.y, -this.sunDir.z);
@@ -121,18 +137,29 @@ export class SkySystem {
     const sunCol = new THREE.Color().setRGB(1, lerp(0.95, 0.62, golden), lerp(0.9, 0.42, golden));
     if (sunUp > -0.05) {
       this.sun.color.copy(sunCol);
-      this.sun.intensity = 3.2 * smoothstep(-0.05, 0.12, sunUp);
+      this.sun.intensity = 3.2 * smoothstep(-0.05, 0.12, sunUp) * wx.sun;
     } else {
       this.sun.color.setRGB(0.55, 0.65, 0.9);
-      this.sun.intensity = 0.25 * night;
+      this.sun.intensity = 0.25 * night * wx.sun;
     }
-    this.hemi.intensity = lerp(0.06, 0.75, day);
+    // Under clouds the light is diffuse: less sun, a little more (greyer) sky light; a flash lights everything.
+    const dull = 1 - wx.sun;
+    this.hemi.intensity = lerp(0.06, 0.75, day) * (1 + 0.35 * dull) * (1 - 0.4 * wx.dark) + wx.flash * 1.4;
     this.hemi.color.setRGB(lerp(0.25, 0.75, day), lerp(0.3, 0.84, day), lerp(0.5, 1.0, day));
+    this.hemi.color.lerp(_grey.setScalar((this.hemi.color.r + this.hemi.color.g + this.hemi.color.b) / 3), dull * 0.75);
+    this.hemi.color.lerp(_flashCol, clamp(wx.flash, 0, 1));
     this.hemi.groundColor.setRGB(lerp(0.06, 0.38, day), lerp(0.06, 0.34, day), lerp(0.08, 0.28, day));
 
     // Fog colour follows the horizon.
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.setRGB(lerp(0.03, 0.72, day) + golden * 0.15, lerp(0.04, 0.8, day) + golden * 0.05, lerp(0.07, 0.9, day) - golden * 0.1);
+    // Weather: grey haze under clouds, in fog and rain (lit up by a flash).
+    const g = lerp(0.035, 0.66 * (1 - 0.6 * wx.dark), day);
+    fog.color.lerp(_grey.setRGB(g * 0.96, g, g * 1.03), Math.max(overcast, Math.min(1, wx.fog * 1.3)));
+    fog.color.addScalar(wx.flash * 0.2);
+    const fogD = 0.00012 + 0.0062 * Math.pow(wx.fog, 2.2) + 0.0011 * wx.rain;
+    this.sky.material.uniforms.fogCol.value.copy(fog.color);
+    this.envSky.material.uniforms.fogCol.value.copy(fog.color);
 
     // Shared material uniforms.
     G.uNight.value = night;
@@ -147,21 +174,23 @@ export class SkySystem {
     G.uLampOn.value = smoothstep(0.08, -0.06, sunUp);
 
     // Exposure: compensate darkness a bit at night.
-    this.renderer.toneMappingExposure = lerp(1.6, 0.55, day);
+    this.renderer.toneMappingExposure = lerp(1.6, 0.55, day) * (1 + 0.45 * dull * day) * (1 - 0.45 * wx.dark * day);
 
     // Environment map refresh when the sun moved noticeably.
-    if (this.lastEnvSun.distanceTo(this.sunDir) > 0.02) {
+    const envWx = wx.cover + wx.dark + skyFog;
+    if (this.lastEnvSun.distanceTo(this.sunDir) > 0.02 || Math.abs(envWx - this.envWx) > 0.08) {
       this.lastEnvSun.copy(this.sunDir);
+      this.envWx = envWx;
       const rt = this.pmrem.fromScene(this.envScene, 0, 1, 2000);
       if (this.envRT) this.envRT.dispose();
       this.envRT = rt;
       this.scene.environment = rt.texture;
-      this.envBase = lerp(0.05, 0.22, day);
+      this.envBase = lerp(0.05, 0.22, day) * (1 - 0.3 * wx.dark);
     }
     // Underground: no sun or sky; a faint neutral fill, dense dark haze, slightly higher exposure.
     const u = this.underground;
     const ind = this.indoor * (1 - u);
-    this.scene.environmentIntensity = this.envBase * (1 - 0.92 * u) * (1 - 0.6 * ind);
+    this.scene.environmentIntensity = (this.envBase + wx.flash * 0.25) * (1 - 0.92 * u) * (1 - 0.6 * ind);
     if (ind > 0) {
       this.hemi.intensity *= 1 - 0.7 * ind;
     }
@@ -171,9 +200,9 @@ export class SkySystem {
       this.hemi.color.lerp(_tunnelFill, u);
       this.hemi.groundColor.lerp(_tunnelGround, u);
       fog.color.lerp(_tunnelFog, u);
-      fog.density = lerp(0.00012, 0.012, u);
+      fog.density = lerp(fogD, 0.012, u);
       this.renderer.toneMappingExposure = lerp(this.renderer.toneMappingExposure, 0.85, u);
-    } else fog.density = 0.00012;
+    } else fog.density = fogD;
   }
 }
 
@@ -186,12 +215,32 @@ function makeSky(reversed: boolean): Sky {
   u.mieDirectionalG.value = 0.8;
   u.cloudCoverage.value = 0.35;
   u.cloudDensity.value = 0.45;
+  // Weather: darker / greyer clouds, an overcast sky without blue or sun disc, fog towards the
+  // horizon (everywhere in thick fog), lightning lighting the clouds.
+  Object.assign(u, { cloudDark: { value: 0 }, overcast: { value: 0 }, flash: { value: 0 }, flashDir: { value: new THREE.Vector3(0, 0.5, 1) }, skyFog: { value: 0 }, fogCol: { value: new THREE.Color() } });
+  const fs = (a: string, b: string) => {
+    if (!sky.material.fragmentShader.includes(a)) throw new Error(`Sky shader changed: ${a}`);
+    sky.material.fragmentShader = sky.material.fragmentShader.replace(a, b);
+  };
+  fs('uniform float time;', 'uniform float time;\nuniform float cloudDark; uniform float overcast; uniform float flash; uniform vec3 flashDir; uniform float skyFog; uniform vec3 fogCol;');
+  fs('vec3 sundiscColor = ( 760.0 * sundisc )', 'vec3 sundiscColor = ( 760.0 * sundisc * ( 1.0 - overcast ) )');
+  fs('cloudColor *= max( dayFactor, 0.03 );', `cloudColor *= max( dayFactor, 0.03 );
+				cloudColor *= 1.0 - 0.72 * cloudDark;
+				cloudColor += vec3( 0.75, 0.8, 1.0 ) * flash * ( 0.25 + 2.5 * pow( max( dot( direction, flashDir ), 0.0 ), 8.0 ) ) * 3.0;`);
+  fs('gl_FragColor = vec4( texColor, 1.0 );', `float skyLum = dot( texColor, vec3( 0.2126, 0.7152, 0.0722 ) );
+			texColor = mix( texColor, vec3( skyLum ) * ( 0.72 - 0.4 * cloudDark ), overcast );
+			texColor += vec3( 0.7, 0.75, 0.9 ) * flash * 0.5 * ( 0.3 + pow( max( dot( direction, flashDir ), 0.0 ), 4.0 ) );
+			float hz = 1.0 - smoothstep( -0.02, 0.4, direction.y );
+			texColor = mix( texColor, fogCol, clamp( skyFog * mix( hz, 1.0, skyFog * skyFog ), 0.0, 1.0 ) );
+			gl_FragColor = vec4( texColor, 1.0 );`);
   if (reversed) {
     sky.material.vertexShader = sky.material.vertexShader.replace('gl_Position.z = gl_Position.w;', 'gl_Position.z = 0.0;');
   }
   return sky;
 }
 
+const _grey = new THREE.Color();
+const _flashCol = new THREE.Color(0.8, 0.85, 1.0);
 const _tunnelFill = new THREE.Color(0.9, 0.85, 0.75);
 const _tunnelGround = new THREE.Color(0.35, 0.3, 0.25);
 const _tunnelFog = new THREE.Color(0.02, 0.018, 0.015);

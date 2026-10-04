@@ -15,6 +15,7 @@ export function createGroundMaterial(arrays: MaterialArrays): THREE.MeshStandard
     uNrm: { value: arrays.normal },
     uTile: { value: arrays.tileMeters.slice(0, 16).concat(new Array(Math.max(0, 16 - arrays.tileMeters.length)).fill(2)) },
     uNight: G.uNight,
+    uWet: G.uWet,
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -27,8 +28,9 @@ export function createGroundMaterial(arrays: MaterialArrays): THREE.MeshStandard
         `#include <common>
 uniform sampler2DArray uAlb; uniform sampler2DArray uNrm; uniform float uTile[16];
 varying vec2 vMUv; varying float vLayer;
+uniform float uWet;
 ${GLSL_COMMON}
-vec4 gAR; vec4 gNH; vec2 gTuv;`,
+vec4 gAR; vec4 gNH; vec2 gTuv; float gPud;`,
       )
       .replace(
         '#include <map_fragment>',
@@ -42,11 +44,32 @@ vec3 alb = gAR.rgb * mix(0.86, 1.1, macroV);
 if (layer == 3) alb *= mix(vec3(0.92, 0.95, 0.85), vec3(1.05, 1.0, 1.02), fbm2(vMUv * 0.11));
 diffuseColor.rgb = alb * mix(1.0, gNH.a, 0.85);`,
       )
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gAR.a;')
+      .replace('#include <roughnessmap_fragment>', `float roughnessFactor = gAR.a;
+gPud = 0.0;
+if (uWet > 0.001) {
+  // Wet: darker and glossier (hard surfaces more than grass, gravel and dirt); puddles in the
+  // hollows of the paving and in large shallow dips once it is properly wet.
+  bool hard = layer != 3 && layer != 6 && layer != 11;
+  float dip = fbm2(vMUv * 0.21 + 7.3) + (1.0 - gNH.a) * 0.35;
+  gPud = hard ? smoothstep(0.7, 0.76, dip + uWet * 0.2 - 0.14) * smoothstep(0.45, 0.9, uWet) : 0.0;
+  diffuseColor.rgb *= mix(1.0, hard ? 0.62 : 0.78, uWet) * (1.0 - 0.35 * gPud);
+  roughnessFactor = mix(roughnessFactor, hard ? roughnessFactor * 0.38 : roughnessFactor * 0.8, uWet);
+  roughnessFactor = mix(roughnessFactor, 0.06, gPud);
+}`)
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;')
-      .replace('#include <normal_fragment_maps>', 'normal = perturbNormalUV(-vViewPosition, normal, gTuv, gNH.xy * 2.0 - 1.0, 1.0);');
+      .replace('#include <normal_fragment_maps>', 'normal = perturbNormalUV(-vViewPosition, normal, gTuv, gNH.xy * 2.0 - 1.0, 1.0 - 0.9 * gPud);')
+      // Wet sheen: puddles (and a wet street, less) mirror the grey sky at grazing angles (the
+      // fog colour stands in for the sky there; the environment map alone is too faint for it).
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+#ifdef USE_FOG
+if (uWet > 0.001) {
+  float nv = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);
+  float fres = pow(1.0 - nv, 4.0);
+  totalEmissiveRadiance += fogColor * (gPud * (0.02 + 0.3 * fres) + uWet * 0.08 * fres);
+}
+#endif`);
   };
-  mat.customProgramCacheKey = () => 'ground-v1';
+  mat.customProgramCacheKey = () => 'ground-v2';
   return mat;
 }
 
@@ -68,6 +91,7 @@ export function createTerrainMaterial(arrays: MaterialArrays, seed?: number): TH
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   const uniforms = {
     ...terrainHoles,
+    uWet: G.uWet,
     uAlb: { value: arrays.albedo },
     uNrm: { value: arrays.normal },
     uTile: { value: arrays.tileMeters.slice(0, 16).concat(new Array(Math.max(0, 16 - arrays.tileMeters.length)).fill(2)) },
@@ -83,7 +107,7 @@ export function createTerrainMaterial(arrays: MaterialArrays, seed?: number): TH
         '#include <common>',
         `#include <common>
 uniform sampler2DArray uAlb; uniform sampler2DArray uNrm; uniform float uTile[16];
-uniform vec4 uHoleA[16]; uniform vec4 uHoleB[16]; uniform int uHoleN;
+uniform vec4 uHoleA[16]; uniform vec4 uHoleB[16]; uniform int uHoleN; uniform float uWet;
 varying vec2 vMUv; varying vec3 vWPos; varying vec3 vWNrm;
 ${GLSL_COMMON}
 float gRough; vec2 gTn; vec2 gTuv;
@@ -112,11 +136,11 @@ a = mix(a, sa * vec4(1.15, 1.08, 0.9, 1.0), wSand); nn = mix(nn, sn, wSand);
 gRough = a.a; gTn = nn.xy * 2.0 - 1.0; gTuv = tg;
 diffuseColor.rgb = a.rgb * mix(0.85, 1.1, n) * mix(1.0, nn.a, 0.8);`,
       )
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gRough;')
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gRough * (1.0 - 0.25 * uWet);\ndiffuseColor.rgb *= 1.0 - 0.25 * uWet;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;')
       .replace('#include <normal_fragment_maps>', 'normal = perturbNormalUV(-vViewPosition, normal, gTuv, gTn, 1.0);');
   };
-  mat.customProgramCacheKey = () => 'terrain-v3' + (land ? '-' + seed : '');
+  mat.customProgramCacheKey = () => 'terrain-v4' + (land ? '-' + seed : '');
   return mat;
 }
 

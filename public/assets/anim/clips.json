@@ -1,6 +1,6 @@
 {
  "version": 1,
- "source": "Quaternius Universal Animation Library (CC0) — https://github.com/J-Ponzo/gltf-universal-animation-library",
+ "source": "Quaternius Universal Animation Library (CC0) — https://github.com/J-Ponzo/gltf-universal-animation-library; CMU Graphics Lab Motion Capture Database (mocap.cs.cmu.edu, cgspeed BVH conversion) for the CMU_ clips",
  "fps": 30,
  "bones": [
   "hips",
@@ -685,6 +685,51 @@
    "dur": 1.3333,
    "offset": 156702,
    "speed": 1.049,
+   "sync": 0
+  },
+  {
+   "name": "A",
+   "frames": 195,
+   "loop": true,
+   "dur": 6.5,
+   "offset": 160342,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "B",
+   "frames": 294,
+   "loop": true,
+   "dur": 9.8,
+   "offset": 178087,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "C",
+   "frames": 78,
+   "loop": true,
+   "dur": 2.6,
+   "offset": 204841,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "D",
+   "frames": 48,
+   "loop": true,
+   "dur": 1.6,
+   "offset": 211939,
+   "speed": 0,
+   "sync": 0
+  },
+  {
+   "name": "E",
+   "frames": 117,
+   "loop": true,
+   "dur": 3.9,
+   "offset": 216307,
+   "speed": 0,
    "sync": 0
   }
  ]

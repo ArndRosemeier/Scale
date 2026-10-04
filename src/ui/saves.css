@@ -1,0 +1,55 @@
+/* Saves: Continue / Load game on the start screen, Save / Load in the pause menu, the HUD indicator. */
+.sv-main { margin: 4px 0 6px; }
+#menu .sv-main .sv-continue { margin-top: 0; display: flex; align-items: center; gap: 14px; text-align: left; padding: 10px 12px; }
+#menu .sv-main .sv-continue img, #menu .sv-main .sv-continue .sv-noimg { width: 96px; height: 54px; border-radius: 4px; object-fit: cover; flex: none; background: #2a2416; box-shadow: 0 0 0 1px rgba(26, 20, 8, 0.35); }
+.sv-continue .sv-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sv-continue .sv-big { font-size: 17px; font-weight: 700; }
+.sv-continue .sv-line { font-size: 12px; font-weight: 500; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#menu .sv-main .sv-loadbtn { margin-top: 8px; padding: 8px; font-size: 14px; background: #2c3846; color: #e8ecf0; font-weight: 500; }
+#menu .sv-main .sv-loadbtn:hover { background: #3a4757; }
+.sv-or { margin: 16px 0 0; font-size: 12px; color: #8fa3b5; text-align: center; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.sv-list { margin-top: 8px; max-height: 280px; overflow-y: auto; border: 1px solid #2c3846; border-radius: 8px; background: rgba(11, 14, 18, 0.6); }
+.sv-list:empty::after { content: 'No saved games yet'; display: block; padding: 14px; color: #8fa3b5; font-size: 13px; text-align: center; }
+.sv-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-bottom: 1px solid #1f2832; }
+.sv-row:last-child { border-bottom: 0; }
+.sv-row:hover { background: rgba(216, 181, 106, 0.06); }
+.sv-row img, .sv-row .sv-noimg { width: 80px; height: 45px; border-radius: 4px; object-fit: cover; flex: none; background: #1a222c; }
+.sv-row .sv-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sv-row .sv-name { font-size: 13px; font-weight: 600; color: #e8ecf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-row .sv-name .sv-tag { margin-left: 6px; font-size: 10px; font-weight: 500; color: #8fa3b5; border: 1px solid #34414f; border-radius: 3px; padding: 0 4px; }
+.sv-row .sv-sub { font-size: 11px; color: #9aa8b6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-row .sv-sub b { color: #d8b56a; font-weight: 500; }
+.sv-row .sv-acts { display: flex; gap: 4px; flex: none; align-items: center; }
+#menu .sv-row button, #pause .sv-row button { margin: 0; width: auto; padding: 5px 10px; font-size: 12px; border-radius: 5px; border: 1px solid #34414f; background: #1c2430; color: #e8ecf0; font-weight: 500; cursor: pointer; }
+#menu .sv-row button.sv-load, #pause .sv-row button.sv-load { background: #d8b56a; color: #1a1408; border-color: #d8b56a; font-weight: 600; }
+#menu .sv-row button.sv-load:hover, #pause .sv-row button.sv-load:hover { background: #e8c57a; }
+#menu .sv-row button.sv-del:hover, #pause .sv-row button.sv-del:hover { border-color: #e8483b; color: #ff8a80; }
+.sv-row .sv-ask { font-size: 12px; color: #ff8a80; }
+#menu .sv-row button.sv-yes, #pause .sv-row button.sv-yes { border-color: #e8483b; color: #ff8a80; }
+
+#pause .panel { max-height: 94vh; overflow-y: auto; }
+.sv-pause { margin: -4px 0 12px; padding-bottom: 12px; border-bottom: 1px solid #222b36; }
+.sv-pause .sv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 14px; color: #9aa8b6; }
+.sv-pause .sv-status { font-size: 12px; color: #8fa3b5; }
+.sv-pause .sv-status.ok b { color: #9fd49a; font-weight: 500; }
+.sv-pause .sv-saverow { display: flex; gap: 8px; margin-top: 8px; }
+.sv-pause .sv-saverow input { flex: 1; min-width: 0; background: #0f141a; color: #e8ecf0; border: 1px solid #34414f; border-radius: 6px; padding: 6px 10px; font-size: 14px; }
+.sv-pause .sv-saverow input:focus { outline: none; border-color: #d8b56a; }
+.sv-pause .sv-confirm { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(216, 181, 106, 0.08); border: 1px solid rgba(216, 181, 106, 0.4); font-size: 13px; color: #e8ecf0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sv-pause .sv-confirm[hidden], .sv-list[hidden] { display: none; }
+.sv-pause .sv-confirm span { flex: 1; min-width: 160px; }
+.sv-pause .sv-msg { margin-top: 6px; min-height: 16px; font-size: 12px; color: #9aa8b6; }
+.sv-pause .sv-msg.err { color: #ff8a80; }
+
+#sv-ind { position: fixed; left: 18px; bottom: 18px; z-index: 15; padding: 5px 12px 5px 26px; border-radius: 14px; background: rgba(15, 20, 26, 0.72); border: 1px solid #2c3846; color: #c8d2dc; font-size: 12px; pointer-events: none; opacity: 0; transition: opacity .4s; }
+#sv-ind.on { opacity: 1; }
+#sv-ind::before { content: ''; position: absolute; left: 10px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: #d8b56a; }
+#sv-ind.saving::before { animation: sv-pulse 0.9s ease-in-out infinite; }
+#sv-ind.saved::before { background: #7bc67a; }
+#sv-ind.failed { color: #ff8a80; }
+#sv-ind.failed::before { background: #e8483b; }
+@keyframes sv-pulse { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }
+/* The start screen is narrower: smaller pictures, the lines wrap. */
+#menu .sv-row img, #menu .sv-row .sv-noimg { width: 64px; height: 36px; }
+#menu .sv-row .sv-sub { white-space: normal; line-height: 1.3; }

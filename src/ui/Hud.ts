@@ -1,5 +1,6 @@
 /** Minimal on-screen info: fps, time of day, position, streaming stats. */
 import type { Game } from '../game/Game';
+import { WEATHER_ICON } from '../render/Weather';
 
 export class Hud {
   private el: HTMLDivElement;
@@ -34,7 +35,10 @@ export class Hud {
     if (!this.detail) {
       // The time speed only when it is not real time (stopped / faster), so it is never a surprise.
       const ts = g.sky.timeScale, speed = ts === 1 ? '' : ts === 0 ? ' (stopped)' : ` (${ts}×)`;
-      this.el.textContent = `${day} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}${speed} · ${size}${pl?.flying ? ' · flying' : ''} · ${this.fps.toFixed(0)} fps`;
+      // The weather as a small glyph after the time.
+      const wk = g.weather?.kind;
+      const wx = wk ? ` ${WEATHER_ICON[wk]}` : '';
+      this.el.textContent = `${day} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}${wx}${speed} · ${size}${pl?.flying ? ' · flying' : ''} · ${this.fps.toFixed(0)} fps`;
       return;
     }
     this.el.textContent =

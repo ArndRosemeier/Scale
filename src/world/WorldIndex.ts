@@ -12,6 +12,9 @@ import { CURB_H } from '../build/ground';
 import type { BridgeProfile } from '../build/bridges';
 import { BINFO_STRIDE } from '../stream/protocol';
 
+/** A carriageway shape with its bounds and its holes' bounds (min x, min z, max x, max z). */
+interface BoxedShape { outer: number[]; ob: [number, number, number, number]; holes: { poly: number[]; b: [number, number, number, number] }[] }
+
 export interface BuildingRef {
   cell: CellState;
   index: number;
@@ -33,7 +36,7 @@ const key = (i: number, j: number) => (i + 32768) * 65536 + (j + 32768);
 export class WorldIndex {
   private grid = new Map<number, BuildingRef[]>();
   private cellRefs = new Map<number, BuildingRef[]>();
-  private cellShapes = new Map<number, { cell: CellState; bounds: [number, number, number, number]; carr: Shape[]; poly: number[] }>();
+  private cellShapes = new Map<number, { cell: CellState; bounds: [number, number, number, number]; carr: BoxedShape[]; poly: number[] }>();
   bridges: BridgeProfile[] = [];
 
   constructor(readonly terrain: Terrain, private cellPolys: (id: number) => number[]) {}
@@ -60,7 +63,10 @@ export class WorldIndex {
     });
     this.cellRefs.set(cs.id, refs);
     const poly = this.cellPolys(cs.id);
-    this.cellShapes.set(cs.id, { cell: cs, bounds: polyBounds(poly), carr: cs.plan.carriageway, poly });
+    // Carriageway shapes with their bounds (and their holes'): surfaceOffset is asked for every
+    // sample of a physics ground patch, and point-in-polygon on every hole was most of it.
+    const carr = cs.plan.carriageway.map((sh: Shape) => ({ outer: sh.outer, ob: polyBounds(sh.outer), holes: sh.holes.map((h) => ({ poly: h, b: polyBounds(h) })) }));
+    this.cellShapes.set(cs.id, { cell: cs, bounds: polyBounds(poly), carr, poly });
   }
 
   removeCell(cs: CellState): void {
@@ -80,6 +86,11 @@ export class WorldIndex {
     }
     this.cellRefs.delete(cs.id);
     this.cellShapes.delete(cs.id);
+  }
+
+  /** The buildings of a loaded cell (saves: collapsed buildings). */
+  cellBuildings(id: number): readonly BuildingRef[] {
+    return this.cellRefs.get(id) ?? [];
   }
 
   buildingsIn(x0: number, z0: number, x1: number, z1: number, out: BuildingRef[] = []): BuildingRef[] {
@@ -116,9 +127,15 @@ export class WorldIndex {
       if (x < b[0] || x > b[2] || z < b[1] || z > b[3]) continue;
       if (!pointInPoly(s.poly, x, z)) continue;
       for (const sh of s.carr) {
+        const ob = sh.ob;
+        if (x < ob[0] || x > ob[2] || z < ob[1] || z > ob[3]) continue;
         if (pointInPoly(sh.outer, x, z)) {
           let inHole = false;
-          for (const h of sh.holes) if (pointInPoly(h, x, z)) { inHole = true; break; }
+          for (const h of sh.holes) {
+            const hb = h.b;
+            if (x < hb[0] || x > hb[2] || z < hb[1] || z > hb[3]) continue;
+            if (pointInPoly(h.poly, x, z)) { inHole = true; break; }
+          }
           if (!inHole) return 0;
         }
       }

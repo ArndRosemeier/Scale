@@ -82,8 +82,8 @@ export const STRIDER = {
 export const STRIDER_RIG: RigDef = {
   spine: [6.5, 10, 10], spineR: [6.4, 7.4, 6.6], spineH: [19, 17, 15.5, 15],
   neck: [5.5, 5, 4.5], neckR: [4.4, 3.6, 3.0],
-  head: { len: 12, w: 7, h: 5.6 },
-  jaw: { len: 10, w: 5.6, h: 3.2 },
+  head: { len: 11.5, w: 7.6, h: 6.4 },
+  jaw: { len: 10, w: 6, h: 3.6 },
   tail: [7, 7, 6.5, 6, 5.5, 5, 4.5, 4, 3.5], tailR: [5.6, 4.8, 4.1, 3.5, 2.9, 2.3, 1.8, 1.3, 0.9],
   legs: [
     { at: 'front', side: -1, out: 6.2, down: 3, fwd: -1, upper: 9, lower: 8.5, foot: 6, r: [3.4, 2.6, 2.4], phase: 0.25, knee: -1, spread: 2.5, zone: 'foreL' },
@@ -987,6 +987,8 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.stimT -= dt;
     if (this.stimT <= 0 && this.mode !== 'dead') {
       this.stimT = 1.5;
+      // The ground its debris and wrecks will need, sampled ahead in the background.
+      g.physics.prefetchGround(this.x + this.rig.fx * 40, this.z + this.rig.fz * 40, 90);
       g.stimuli.emit('threat', this.x, g.terrain.height(this.x, this.z) + 10, this.z, 6, 160, { cause: 'threat' });
       // Drivers near it turn round or leave their cars.
       for (const v of g.traffic.vehicles) if (v.state === VState.Drive && !v.task && Math.hypot(v.x - this.x, v.z - this.z) < 150) v.fear = Math.max(v.fear, 1);
@@ -1172,6 +1174,42 @@ export class Strider implements ThreatEvent, ThreatActor {
     p.yaw = Math.atan2(-(this.x - x), -(this.z - z));
     g.camRig.yaw = p.yaw;
     return { x: Math.round(x), z: Math.round(z) };
+  }
+
+  // ================================================================== saves
+
+  /** Saves: where it is (a body lying in the city, or how far along its route a live one walked). */
+  saveState(): { x: number; z: number; yaw: number; side: number; s: number; hp: number; mode: string } {
+    return { x: this.rig.x, z: this.rig.z, yaw: this.yaw, side: this.rig.slumpSide, s: this.s, hp: this.hp, mode: this.mode };
+  }
+
+  /** Saves: lie as a body already brought down (no impact, no rewards), settled on the ground. */
+  restoreDead(st: { x: number; z: number; yaw: number; side: number; s: number }): void {
+    const rig = this.rig;
+    this.s = Math.min(this.route.length, st.s);
+    this.emergeK = 1;
+    rig.lift = 0;
+    rig.x = st.x; rig.z = st.z;
+    this.yaw = rig.yaw = st.yaw;
+    rig.slumpSide = st.side < 0 ? -1 : 1;
+    rig.slump = 1;
+    rig.place();
+    for (const L of rig.legs) L.pin = null;
+    this.hp = 0;
+    this.mode = 'dead';
+    this.active = false;
+    this.outcome = 'defeated';
+    this.dieT = 6;
+    for (let i = 0; i < 40; i++) rig.update(0.15, 0);
+    const sp = rig.spine;
+    this.x = sp[3]; this.y = sp[4]; this.z = sp[5];
+    this.updateZones();
+  }
+
+  /** Saves: a live one resumes at its route position with its hit points (the emergence skipped). */
+  restoreWalking(st: { s: number; hp: number }): void {
+    if (st.s > 0) this.devSkip(st.s);
+    this.hp = Math.max(1, Math.min(this.maxHp, st.hp));
   }
 
   /** Push the body's parts (the director's batch). */
