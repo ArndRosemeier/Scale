@@ -9,10 +9,10 @@ import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer, CellState } from '../stream/CityStreamer';
 import type { Collision } from '../world/Collision';
-import { planFloor, planLift, liftRect, type FloorPlan, type LiftShaft } from './InteriorGen';
+import { planFloor, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore } from './InteriorGen';
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
-import { buildFloorMeshes, wallCollisionSegments } from './InteriorBuilder';
+import { buildFloorMeshes, wallCollisionSegments, furnitureCollision } from './InteriorBuilder';
 import { pointInPoly, distSqPointSeg, distPointPolyEdge } from '../core/geom2';
 import { offset } from '../core/clip';
 import { gridCell, type BuildingLayout } from '../build/buildingLayout';
@@ -27,7 +27,10 @@ interface ActiveFloor {
   poly: number[];
   /** Full slab outline of the storey (to the facade): walkable up to the walls and the door sill. */
   outline: number[];
+  /** The opening in this storey's slab where the stairs come up from below (null: none). */
   stairPoly: number[] | null;
+  /** Solid furniture: [ax, az, bx, bz, top] per edge. */
+  furn: number[];
 }
 
 interface ActiveBuilding {
@@ -42,6 +45,8 @@ interface ActiveBuilding {
   door: EntranceDoor | null;
   lift: LiftShaft | null;
   elevator: Elevator | null;
+  /** The building's stair core (InteriorGen.planStair), or null. */
+  stair: StairCore | null;
 }
 
 interface EntranceDoor {
@@ -123,9 +128,11 @@ export class Interiors {
         if (!inside && !nearDoor && !nearHole) continue;
         let a = this.active.get(ref);
         if (!a) {
-          a = { ref, L, floors: new Map(), hidden: new Set(), opened: new Set(), lastNear: this.t, peopleFloors: new Set(), door: null, lift: null, elevator: null };
+          a = { ref, L, floors: new Map(), hidden: new Set(), opened: new Set(), lastNear: this.t, peopleFloors: new Set(), door: null, lift: null, elevator: null, stair: null };
           this.active.set(ref, a);
           this.makeElevator(a);
+          const maxH = Math.max(...L.floors.map((q) => q.y1 - q.y0));
+          a.stair = planStair(ref.desc, this.floorPoly(a, 0), a.lift, maxH);
         }
         a.lastNear = this.t;
         // Storeys around the player.
@@ -171,6 +178,11 @@ export class Interiors {
     const poly = this.floorPoly(a, f), r = liftRect(a.lift, 0.05);
     for (let k = 0; k < r.length; k += 2) if (!pointInPoly(poly, r[k], r[k + 1])) return false;
     return true;
+  }
+
+  /** Does the stair core reach storey f (inside its outline)? */
+  private stairs(a: ActiveBuilding, f: number): boolean {
+    return !!a.stair && f >= 0 && f < a.ref.desc.floors && !!a.L.floors.find((x) => x.f === f) && coreFits(a.stair, this.floorPoly(a, f));
   }
 
   /** Lift for a newly active building (planned on the ground floor, levels per storey). */
@@ -228,14 +240,23 @@ export class Interiors {
     // Cafés and restaurants (plan/eatery.ts) get the café layout (shopKind % 3 == 0), other shops never do.
     const sk = (a.ref.desc.seed >>> 7) % 9;
     const shopKind = a.ref.desc.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
-    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift);
-    // The elevator shaft runs through the slabs between floors it serves.
+    // Stairs up from this storey, and arriving from the one below.
+    const up = this.stairs(a, f) && this.stairs(a, f + 1);
+    const below = f > 0 && this.stairs(a, f) && this.stairs(a, f - 1);
+    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift, a.stair, up, below);
+    // Nothing standing in the way just inside the entrance (furniture is solid).
+    if (f === 0) plan.furniture = plan.furniture.filter((q) => q.kind === 'rug' || q.kind === 'painting' || Math.hypot(q.x - L.door.x, q.z - L.door.z) > 2.4 + Math.max(q.w, q.d) / 2);
+    // The elevator shaft runs through the slabs between floors it serves; the stairs cut their well.
     const shaft = a.lift ? liftRect(a.lift) : null;
-    const floorHole = shaft && f > 0 && this.serves(a, f) && this.serves(a, f - 1) ? shaft : null;
-    const ceilHole = shaft && f < a.ref.desc.floors - 1 && this.serves(a, f) && this.serves(a, f + 1) ? shaft : null;
-    const group = buildFloorMeshes(plan, poly, floorHole, ceilHole, L.tiers[fl.tier].poly);
+    const floorHoles: number[][] = [], ceilHoles: number[][] = [];
+    if (shaft && f > 0 && this.serves(a, f) && this.serves(a, f - 1)) floorHoles.push(shaft);
+    if (shaft && f < a.ref.desc.floors - 1 && this.serves(a, f) && this.serves(a, f + 1)) ceilHoles.push(shaft);
+    const well = below && a.stair ? coreRect(a.stair, a.stair.near - 0.02) : null;
+    if (well) floorHoles.push(well);
+    if (plan.stairHole) ceilHoles.push(plan.stairHole);
+    const group = buildFloorMeshes(plan, poly, floorHoles, ceilHoles, L.tiers[fl.tier].poly);
     this.group.add(group);
-    a.floors.set(f, { plan, group, walls: wallCollisionSegments(plan), poly, outline: L.tiers[fl.tier].poly, stairPoly: null });
+    a.floors.set(f, { plan, group, walls: wallCollisionSegments(plan), poly, outline: L.tiers[fl.tier].poly, stairPoly: well, furn: furnitureCollision(plan) });
     if (a.elevator && plan.lift) a.elevator.addLanding(f);
     // Hide the shell slab of this storey and open its windows (real interior visible both ways).
     for (const t of [fl.slab, ...Array.from(fl.tiles)]) {
@@ -328,19 +349,20 @@ export class Interiors {
       for (const f of a.floors.values()) {
         const y = f.plan.y + 0.04;
         if (y > yRef + step) continue;
-        // Stairs: a ramp along the flight.
-        const st = f.plan.stair;
-        if (st) {
+        // Stairs: a ramp along each flight; the landing between them.
+        let onStairs = false;
+        for (const st of f.plan.flights) {
           const dx = x - st.x, dz = z - st.z;
           const along = dx * st.dx + dz * st.dz, lat = Math.abs(-dx * st.dz + dz * st.dx);
-          if (along >= 0 && along <= st.run + 0.3 && lat <= st.width / 2) {
-            const ys = f.plan.y + Math.min(1, along / st.run) * f.plan.height;
-            if (ys <= yRef + step + 0.05) g = Math.max(g, ys);
-            continue;
+          if (along >= -0.05 && along <= st.run + 0.05 && lat <= st.width / 2 + 0.07) {
+            const ys = st.y0 + Math.max(0, Math.min(1, along / st.run)) * (st.y1 - st.y0);
+            if (ys <= yRef + step + 0.05) { g = Math.max(g, ys); onStairs = true; }
           }
         }
-        // Hole for the flight arriving from below, or a slab tile that broke.
-        if (pointInPoly(f.outline, x, z) && !this.inStairHoleFromBelow(a, f, x, z) && !this.tileBroken(a, f.plan.floor, x, z)) g = Math.max(g, y);
+        for (const l of f.plan.landings) if (l.y <= yRef + step + 0.05 && pointInPoly(l.poly, x, z)) { g = Math.max(g, l.y); onStairs = true; }
+        if (onStairs) continue;
+        // The stairwell coming up from below, or a slab tile that broke.
+        if (pointInPoly(f.outline, x, z) && !(f.stairPoly && pointInPoly(f.stairPoly, x, z)) && !this.tileBroken(a, f.plan.floor, x, z)) g = Math.max(g, y);
       }
     }
     return g;
@@ -353,12 +375,6 @@ export class Interiors {
     return c >= 0 && fl.tiles[c] >= 0 && this.destruction.isBroken(a.ref.cell, fl.tiles[c]);
   }
 
-  private inStairHoleFromBelow(a: ActiveBuilding, f: ActiveFloor, x: number, z: number): boolean {
-    const below = a.floors.get(f.plan.floor - 1);
-    if (!below || !below.stairPoly) return false;
-    return pointInPoly(below.stairPoly, x, z);
-  }
-
   private walls(x: number, z: number, y: number, h: number, r: number, cb: (ax: number, az: number, bx: number, bz: number) => void): void {
     for (const a of this.active.values()) {
       const b = a.ref.bounds;
@@ -368,6 +384,12 @@ export class Interiors {
         const w = f.walls;
         for (let i = 0; i < w.length; i += 4) {
           if (distSqPointSeg(x, z, w[i], w[i + 1], w[i + 2], w[i + 3]) < (r + 0.2) ** 2) cb(w[i], w[i + 1], w[i + 2], w[i + 3]);
+        }
+        // Solid furniture (not once one stands on top of it).
+        const fu = f.furn;
+        for (let i = 0; i < fu.length; i += 5) {
+          if (y > f.plan.y + fu[i + 4] - 0.1) continue;
+          if (distSqPointSeg(x, z, fu[i], fu[i + 1], fu[i + 2], fu[i + 3]) < (r + 0.2) ** 2) cb(fu[i], fu[i + 1], fu[i + 2], fu[i + 3]);
         }
         // Closed elevator doors close the doorway (from the landing and from the cabin).
         if (a.elevator && f.plan.lift && a.elevator.landingBlocked(f.plan.floor)) {
@@ -414,6 +436,32 @@ export class Interiors {
       return false;
     }
     return true;
+  }
+
+  /**
+   * A free seat within reach (chairs, sofas, benches of an active interior) for a walker at
+   * (x, y, z): where to sit and which way to face. Sofas offer one place per cushion.
+   */
+  seatNear(x: number, y: number, z: number, r = 1.3): { x: number; z: number; yaw: number } | null {
+    let best: { x: number; z: number; yaw: number } | null = null, bd = r;
+    for (const a of this.active.values()) {
+      if (!pointInPoly(a.ref.poly, x, z)) continue;
+      for (const f of a.floors.values()) {
+        if (Math.abs(f.plan.y - y) > 0.6) continue;
+        for (const fu of f.plan.furniture) {
+          if (fu.use !== 'sit') continue;
+          const c = Math.cos(fu.yaw), s = Math.sin(fu.yaw);
+          const n = fu.kind === 'sofa' ? Math.max(1, Math.round(fu.w / 0.7)) : 1;
+          for (let k = 0; k < n; k++) {
+            const lx = n > 1 ? -fu.w / 2 + (k + 0.5) * (fu.w / n) : 0, lz = fu.kind === 'sofa' || fu.kind === 'armchair' ? 0.08 : 0;
+            const sx = fu.x + lx * c + lz * s, sz = fu.z - lx * s + lz * c;
+            const d = Math.hypot(sx - x, sz - z);
+            if (d < bd && !this.peds.agents.some((p) => p.inside && Math.hypot(p.x - sx, p.z - sz) < 0.35)) { bd = d; best = { x: sx, z: sz, yaw: fu.yaw + Math.PI }; }
+          }
+        }
+      }
+    }
+    return best;
   }
 
   /** Drop everything (e.g. when the building collapses). */

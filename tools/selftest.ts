@@ -17,7 +17,7 @@ import { pointInPoly, distPointPolyEdge } from '../src/core/geom2';
 import { buildBuildingShell, facadeSpecs } from '../src/build/buildingShell';
 import { MeshBuilder } from '../src/build/meshBuilder';
 import { Population } from '../src/sim/Population';
-import { planFloor, planLift } from '../src/interior/InteriorGen';
+import { planFloor, planLift, planStair, coreFits } from '../src/interior/InteriorGen';
 import { metroInput } from './metroaudit';
 import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
@@ -99,12 +99,24 @@ function groundFloorFaults(b: BuildingDesc, L: BuildingLayout, terrain: Terrain)
  * Roof over the top tier's outline: every up-facing roof triangle lies over the outline (plus
  * the eaves), faces up by its winding, and every point of the outline is under the roof.
  */
+/** Multi-storey buildings / with stairs; stair flights that do not reach the next floor or leave the outline. */
+const stairStats = { multi: 0, stairs: 0, faults: 0 };
 /** Interior walls and furniture of the first storeys standing outside the storey outline (> 10 cm). */
 function interiorFaults(b: BuildingDesc, L: BuildingLayout): number {
   let n = 0;
+  const lift0 = planLift(b, L.tiers[0].poly);
+  const stair = planStair(b, L.tiers[0].poly, lift0, Math.max(...L.floors.map((q) => q.y1 - q.y0)));
+  if (b.floors >= 2 && b.style !== 'church') { stairStats.multi++; if (stair) stairStats.stairs++; }
   for (const fl of L.floors.slice(0, 2)) {
     const poly = L.tiers[fl.tier].poly;
-    const fp = planFloor(b, poly, fl.f, fl.y0, fl.y1 - fl.y0, 0, planLift(b, poly));
+    const next = L.floors.find((q) => q.f === fl.f + 1);
+    const up = !!stair && !!next && coreFits(stair, poly) && coreFits(stair, L.tiers[next.tier].poly);
+    const fp = planFloor(b, poly, fl.f, fl.y0, fl.y1 - fl.y0, 0, planLift(b, poly), stair, up, fl.f > 0 && !!stair && coreFits(stair, poly));
+    if (up) {
+      const top = fp.flights[fp.flights.length - 1];
+      if (fp.flights.length !== 2 || Math.abs(top.y1 - next!.y0) > 0.05) stairStats.faults++;
+      for (const f of fp.flights) for (const t of [0, 1]) if (!pointInPoly(poly, f.x + f.dx * f.run * t, f.z + f.dz * f.run * t)) stairStats.faults++;
+    }
     for (const w of fp.walls) {
       for (let t = 0; t <= 1.0001; t += 0.25) {
         const x = w.ax + (w.bx - w.ax) * t, z = w.az + (w.bz - w.az) * t;
@@ -180,6 +192,9 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
   check(floorFaults === 0, `seed ${seed}: ground floors above the terrain, fully tiled and reachable from the street (${floorFaults} faults)`);
   check(roofs === 0, `seed ${seed}: roofs cover their footprints exactly, facing up (${roofs} faults)`);
   check(interiors === 0, `seed ${seed}: interior walls and furniture inside the storey outline (${interiors} outside)`);
+  console.log(`seed ${seed}: stairs in ${stairStats.stairs} of ${stairStats.multi} multi-storey buildings`);
+  check(stairStats.faults === 0 && stairStats.stairs >= stairStats.multi * 0.75, `seed ${seed}: stairs in ${stairStats.stairs} of ${stairStats.multi} multi-storey buildings, every flight inside and reaching the next floor (${stairStats.faults} faults)`);
+  stairStats.multi = stairStats.stairs = stairStats.faults = 0;
   check(outside === 0, `seed ${seed}: buildings inside their cells (${outside} outside)`);
   check(overlapRoad < buildings * 0.01 + 1, `seed ${seed}: buildings off the road (${overlapRoad})`);
   // Metro stations are on land.

@@ -788,6 +788,24 @@ as distance LOD).
   then rooms, doors and furniture by room type.
 * Only the current floor ±1 is built.
 * Uses the same element mechanism, so interiors are destructible too.
+* Stairs (`InteriorGen.planStair`, once per building like the lift): a switchback core at the end of the long axis
+  away from the lift, along a side wall — two half flights per storey (lane A up to a landing at the far end, lane B
+  back to the next floor's near landing), a wall between the lanes and along the stair hall; a compact core
+  (narrower, steeper) for narrow houses. Every storey the core fits gets a stair hall across that end (rooms are laid
+  out short of it); flights and landings are collision ramps (`Interiors.ground`), their well is cut out of the slab
+  above (`FloorPlan.stairHole`, `ActiveFloor.stairPoly`) and the ceiling below. Self test: flights inside the outline
+  and reaching the next floor.
+* Office ground floors: a lobby at the front (reception, waiting area), offices behind a wall; residential towers
+  have flats on the ground floor too.
+* Looks (`InteriorBuilder`): walls painted per room on each side (plaster texture), baseboards along every wall and
+  the outline, frames round doorways, tiles to 1.35 m in baths; switchback steps with nosings and handrails;
+  detailed furniture (cushioned sofas, made beds with pillows, kitchens with hob, sink, tap, wall cabinets and hood,
+  bookshelves with books, plants with leaves, tables with vases and bowls, glowing lamp shades, screens), patterned
+  rugs; ceiling fixtures per room (pendants in homes and cafés, round lamps in halls and baths, panels in offices).
+  All deterministic per plan (seeded by position).
+* Function: solid furniture blocks walking (`furnitureCollision`: footprint edges up to the piece's height;
+  rugs, pictures, chairs, lamps excepted); the entrance is kept clear; **E** sits down on chairs, sofas and
+  armchairs (`Interiors.seatNear`, one place per sofa cushion).
 
 ### Underground
 * Metro: tunnels (extruded profiles), stations with platforms, stairs to street kiosks,

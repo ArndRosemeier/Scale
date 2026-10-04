@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.020 — 2026-10-04
+
+- **Stairs everywhere**: almost every building with more than one storey now has a real stairwell — a stair hall at one end of each floor with a switchback staircase (two flights and a landing per storey, handrails). Walk up as far as the building goes; no more being stuck on the ground floor without a lift.
+- **Furniture is solid**: you no longer walk through beds, sofas, tables, shelves and counters. The way in through the front door is always kept clear.
+- **Sit down indoors**: **E** next to a chair, sofa or armchair.
+- **Prettier rooms**: walls painted per room on each side, with plaster texture, baseboards and door frames; tiled bathrooms; pendant lamps with glowing shades over tables, ceiling lamps in halls; patterned rugs; much more detailed furniture — cushioned sofas, made beds with pillows, kitchens with hob, sink, tap, wall cabinets and hood, bookshelves full of books, plants with leaves, vases and bowls, bedside lamps, TVs and monitors that glow.
+- **Better layouts**: office lobbies take the front of the ground floor with offices behind; residential towers have flats on the ground floor instead of a vast empty hall; offices get filing cabinets, a water cooler, plants and a meeting room with chairs and a screen; bedrooms get a second bedside table and a desk chair; baths a mirror.
+
 ## 0.019 — 2026-10-04
 
 - **Saves: your own saves first.** The load list now shows the games you saved by name on top, and the autosaves in a section of their own below (folded away unless they are all there is).

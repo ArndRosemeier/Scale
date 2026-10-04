@@ -953,7 +953,8 @@ export class Game {
       bd = d;
       best = { x: pr.x, z: pr.z, yaw: pr.yaw };
     });
-    return best;
+    // Indoors: chairs, sofas, armchairs of the open interior.
+    return best ?? this.interiors.seatNear(P.pos.x, P.pos.y, P.pos.z, 1.3);
   }
 
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
