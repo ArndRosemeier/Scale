@@ -69,7 +69,7 @@ async function start(save: SaveData | null = null): Promise<void> {
   const settings = save ? { ...save.city } : { seed: parseSeed(seedIn.value), size: Number(sizeIn.value) };
   if (save) mode = save.mode;
   // (The load flag is dropped: a reload later starts from the menu, not from that old save again.)
-  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') || save ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}${params.has('mute') ? '&mute' : ''}`);
+  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') || save ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}${params.has('mute') ? '&mute' : ''}${['intro', 'warm'].map((k) => (params.has(k) ? `&${k}${params.get(k) ? `=${params.get(k)}` : ''}` : '')).join('')}`);
   menu.style.display = 'none';
   loading.style.display = 'flex';
   disposeCreatorPreview();

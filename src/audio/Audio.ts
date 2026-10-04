@@ -65,7 +65,7 @@ export class Audio {
       this.manifest = await (await fetch(`${this.base}sounds/manifest.json`)).json();
     } catch { this.manifest = {}; }
     const start = () => {
-      if (this.ctx) return;
+      if (this.ctx) { if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => {}); return; }
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
       this.master.gain.value = this.gain;
@@ -87,7 +87,13 @@ export class Audio {
     };
     window.addEventListener('pointerdown', start, { once: false });
     window.addEventListener('keydown', start, { once: false });
+    this.wake = start;
+    // After a gesture on the page (the start menu's click) the context may start right away.
+    if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) start();
   }
+
+  /** Start (or resume) the audio context now — allowed once the page has had a user gesture. */
+  wake: () => void = () => {};
 
   private load(id: string): Promise<AudioBuffer[]> {
     const m = this.manifest[id];

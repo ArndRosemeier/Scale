@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.014 — 2026-10-04
+
+- **Origin scene**: a new game in Normal mode opens with the night it all began — a falling star breaks apart over the city, a shard lands in front of you, you touch it … and the next morning you can feel when someone needs help. About 45 seconds; hold Space to skip (after the first time, one press skips). Not on Continue or Load, not in Sandbox.
+- **Smoother start**: all shaders and textures are prepared behind the loading screen, so the first seconds of play (and turning round for the first time) no longer stutter. The very first launch on a computer loads a few seconds longer; later launches about the same as before.
+- Sound starts right with the game (it used to wait for the first key press).
+
 ## 0.013 — 2026-10-04
 
 - **Consequences of the giant creature's attacks**:

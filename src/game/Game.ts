@@ -34,6 +34,8 @@ import { clamp, lerp, smoothstep } from '../core/math';
 import { installDevtools } from '../debug/devtools';
 import { hitch } from '../debug/HitchLog';
 import { ShaderGate } from '../render/ShaderGate';
+import { warmUp } from '../render/WarmUp';
+import { OriginIntro } from './intro/OriginIntro';
 import { RoadNet } from '../sim/RoadNet';
 import { Population } from '../sim/Population';
 import { Pedestrians, PState } from '../sim/Pedestrians';
@@ -159,6 +161,8 @@ export class Game {
   forces!: Forces;
   /** Consequences and the last resort (src/game/aftermath): casualty ledger, rescues and triage, the nuke countdown, smoke, the news feed, the carcass cleanup. */
   aftermath!: Aftermath;
+  /** The origin scene of a new Normal game (src/game/intro); drives the player and camera while active. */
+  intro: OriginIntro | null = null;
   /** Saves: autosave, named saves, loading (src/game/save). */
   saves!: SaveSystem;
   /** A save to put into the city once it has started (set before `start`, by main.ts). */
@@ -410,33 +414,25 @@ export class Game {
     new PauseSaves(this);
     new SaveIndicator(this);
     if (this.pendingSave) this.saves.apply(this.pendingSave);
+    if (OriginIntro.wanted(this)) {
+      try { this.intro = new OriginIntro(this); this.intro.prepare(); } catch (e) { console.error('[intro]', e); this.intro = null; }
+    }
     (window as unknown as { prof: Record<string, number> }).prof = this.prof;
     this.running = true;
     this.clock.start();
     document.addEventListener('visibilitychange', this.schedule);
-    this.loop();
-    // Warm-up behind the loading screen: compile every material in the scene (in parallel
-    // where the driver supports it), then keep simulating until frames are calm, so shader
-    // variants (shadows, first agents and cars) compile before the player sees anything.
+    // Warm-up behind the loading screen (render/WarmUp): textures uploaded, every material compiled
+    // in parallel before the first frame (then the frame loop starts), the start looked at from all
+    // round, content that only appears later (interiors, trees, furniture) staged via small meshes,
+    // then simulating until frames are calm — so nothing compiles or uploads once the player sees it.
     progress('Preparing shaders', 0.97);
-    const tc = performance.now();
-    // Content that only appears later (interiors) is compiled now via stand-in meshes.
-    const warm = interiorWarmup();
-    warm.add(this.gate.warmStandins());
-    warm.position.copy(this.player.pos).y -= 50;
-    this.renderer.scene.add(warm);
-    await this.renderer.compileAsync(this.renderer.scene);
-    this.renderer.scene.remove(warm);
-    console.log(`[warm-up] compileAsync ${(performance.now() - tc).toFixed(0)} ms`);
-    let calm = 0;
-    const tw = performance.now();
-    while (calm < 20 && performance.now() - tw < 8000) {
-      // Wait on the game's own frames (they keep running in background tabs, page timers don't).
-      const f0 = performance.now();
-      await new Promise<void>((r) => this.frameWaiters.push(r));
-      calm = performance.now() - f0 < 45 ? calm + 1 : 0;
-      progress('Preparing shaders', 0.97 + Math.min(1, calm / 20) * 0.03);
-    }
+    const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
+      staging: [interiorWarmup(), this.gate.warmStandins()],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
+      views: this.intro?.warmViews(),
+    });
+    (window as unknown as { warmReport: unknown }).warmReport = warm;
+    console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms, ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs`);
     hitch.clear();
     // From now on nothing new may stall a frame on a shader compile.
     this.gate.adoptScene();
@@ -444,10 +440,15 @@ export class Game {
     // Background: compile what appears later (all tree species, furniture, …) on driver threads.
     this.gate.precompile(this.props.warmupObject());
     this.gate.precompile(this.countryside.warmupObject());
+    void this.intro?.play();
   }
 
   private raf = 0;
   private frameWaiters: (() => void)[] = [];
+  /** Resolves after the next game frame (frames keep running in background tabs, page timers don't). */
+  nextFrame(): Promise<void> { return new Promise<void>((r) => this.frameWaiters.push(r)); }
+  /** Start the frame loop (the warm-up does, once the scene's shaders are compiled). */
+  startLoop(): void { if (!this.raf && !this.timerPending) this.loop(); }
   private timerPending = false;
   /** Next frame: animation frames when visible, a worker timer when hidden (rAF stops there). */
   private schedule = () => {
@@ -491,7 +492,8 @@ export class Game {
   private tick(dt: number, render: boolean): void {
     if (this.input.hit('F8')) this.freeCam = !this.freeCam;
     this.T('player', () => {
-      if (this.freeCam) this.updateFreeCam(dt);
+      if (this.intro?.active) this.intro.update(dt);
+      else if (this.freeCam) this.updateFreeCam(dt);
       else {
         this.abilities.enabled = !this.powers.open && !this.map.open;
         this.abilities.preUpdate(dt, this.input);
@@ -523,7 +525,7 @@ export class Game {
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     if (!this.freeCam) this.bodyContacts(dt);
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
-    if (!this.freeCam) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
+    if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     this.T('army', () => this.forces.update(dt));
@@ -814,7 +816,8 @@ export class Game {
     this.forces = new Forces(this);
     this.aftermath = new Aftermath(this);
     // (Not when a save is loaded: the player has been here before.)
-    if (!this.pendingSave) setTimeout(() => toast(normal
+    // (Nor after the origin scene: it tells the story and gives the hint itself.)
+    if (!this.pendingSave && !OriginIntro.wanted(this)) setTimeout(() => toast(normal
       ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
       : 'Sandbox: every power is yours. <b>1–9, 0</b> use the hotbar (hold for beams and super speed), click or <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);
   }
