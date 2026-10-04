@@ -31,6 +31,9 @@ import { planRooms, type RoomPlan } from './rooms';
 import { buildRoom, buildCrawl, buildChamber, colonyLayout, type BuiltRoom, type RoomMats, type EmitterId } from './RoomMeshes';
 import { roomAtlas, decal, CELL } from './roomArt';
 import { Slimes } from './Slimes';
+import { planDeep, type DeepPlan } from './deep/plan';
+import { DeepField } from './deep/field';
+import { DeepMeshes } from './deep/DeepMeshes';
 
 const BUILD_R = 380;
 /** Side rooms and hidden chambers are built within these distances (m). */
@@ -112,6 +115,21 @@ export class Underground {
     for (const c of this.rooms.colonies) { this.boxes.push(c.chamber); this.tubes.push(c.crawl); }
     for (const t of this.tubes) this.indexTube(t);
     for (const b of this.boxes) this.indexBox(b);
+    // The deep realm below the colonies (its own field; meshes streamed by its worker).
+    try {
+      const halls = this.boxes.filter((b) => b.kind === 'station');
+      const plan = planDeep({
+        seed: macro.seed, colonies: this.rooms.colonies, ground: (x, z) => terrain.height(x, z),
+        blocked: (x, y, z) => this.occupied(x, y, z, 1.0) || halls.some((h) => Math.hypot(h.cx - x, h.cz - z) < h.hu + 80 && y > h.y0 - 4),
+      });
+      if (plan) {
+        const field = new DeepField(plan.prims, plan.seed);
+        for (const r of plan.roads) field.barriers.push({ x: r.gate.x, y: r.gate.y, z: r.gate.z, nx: r.gate.nx, nz: r.gate.nz, r: r.gate.r + 0.4, closed: true });
+        const skip = plan.roads.map((r) => this.rooms.colonies[r.colony].chamber).map((b) => ({ cx: b.cx, cz: b.cz, y0: b.y0, y1: b.y1, ux: b.ux, uz: b.uz, hu: b.hu, hv: b.hv }));
+        this.deep = { plan, field, meshes: new DeepMeshes(plan, skip) };
+        this.group.add(this.deep.meshes.group);
+      }
+    } catch (err) { console.warn('[deep]', err); }
     const atlas = roomAtlas();
     this.mats = {
       lit: this.mat,
@@ -167,6 +185,10 @@ export class Underground {
   private mats: RoomMats;
   private builtRooms = new Map<string, BuiltRoom>();
   readonly slimes = new Slimes();
+  /** The deep realm (deep/plan.ts): its plan, its rock as a field, its meshes; null when the city has none. */
+  deep: { plan: DeepPlan; field: DeepField; meshes: DeepMeshes } | null = null;
+  /** What the deep realm's look follows (set by the game's slime civilisation): the lift running, the kin mosaic. */
+  readonly deepState = { murk: 0, lift: false, kin: false };
   /** The game's audio (set by the game): drips, hums, the slimes. */
   sound: UnderSound | null = null;
   private loops = new Map<EmitterId, ReturnType<UnderSound['loop']>>();
@@ -228,6 +250,12 @@ export class Underground {
       const h = boxAt(b, x, y, z);
       if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor;
     }
+    // The deep realm's caves.
+    const F = this.deep?.field;
+    if (F && F.near(x, y, z)) {
+      const f = F.floorAt(x, y + 0.6, z) ?? F.floorAt(x, y, z);
+      if (f !== null && (best === null || f > best)) best = f;
+    }
     // Car floors (level with the platforms).
     for (const c of this.cars) {
       if (Math.abs(c.x - x) > 10 || Math.abs(c.z - z) > 10) continue;
@@ -260,6 +288,8 @@ export class Underground {
     const n = this.near(x, z);
     for (const t of n.tubes) { const h = tubeAt(t, x, y, z); if (h) c = Math.min(c, h.floor + t.height); }
     for (const b of n.boxes) if (boxAt(b, x, y, z)) c = Math.min(c, b.y1);
+    const F = this.deep?.field;
+    if (F && F.near(x, y, z) && F.air(x, y, z)) c = Math.min(c, F.ceilingAt(x, y, z));
     return c;
   }
 
@@ -268,7 +298,31 @@ export class Underground {
     const n = this.near(x, z);
     for (const t of n.tubes) if (tubeAt(t, x, y, z, -margin)) return true;
     for (const b of n.boxes) if (boxAt(b, x, y, z, -margin)) return true;
+    const F = this.deep?.field;
+    return !!F && F.near(x, y, z) && F.contains(x, y, z, margin);
+  }
+
+  /** Is a point inside a tunnel, room, chamber or cave (margin m inside its walls)? (Planning the deep realm.) */
+  private occupied(x: number, y: number, z: number, margin: number): boolean {
+    const n = this.near(x, z);
+    for (const t of n.tubes) { const h = tubeAt(t, x, y, z, margin); if (h && y > h.floor - 1 - margin && y < h.floor + t.height + margin) return true; }
+    for (const b of n.boxes) if (boxAt(b, x, y, z, margin) && y > b.y0 - 1 - margin && y < b.y1 + margin) return true;
     return false;
+  }
+
+  /** Line of sight underground: through the caves' air (null: not in the caves, ask someone else). */
+  caveLine(ax: number, ay: number, az: number, bx: number, by: number, bz: number, pad = 0): boolean | null {
+    const F = this.deep?.field;
+    if (!F || !F.near(ax, ay, az) || !F.near(bx, by, bz)) return null;
+    if (!F.air(ax, ay, az) && !F.air(bx, by, bz)) return null;
+    return F.lineClear(ax, ay, az, bx, by, bz, pad);
+  }
+
+  /** First cave rock along a ray from a point in the caves (Infinity: none within maxT; null: not in the caves). */
+  caveRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): number | null {
+    const F = this.deep?.field;
+    if (!F || !F.near(ox, oy, oz) || !F.air(ox, oy, oz)) return null;
+    return F.ray(ox, oy, oz, dx, dy, dz, maxT);
   }
 
   /** Strict interior test for the camera boom (vaults, vertical margins). */
@@ -283,7 +337,8 @@ export class Underground {
       if (t.kind !== 'passage' || y < this.ground(x, z) - 0.15 - margin || this.inHole(x, z)) return true;
     }
     for (const b of n.boxes) if (boxAt(b, x, y, z, -margin) && y > b.y0 + margin && y < b.y1 - margin) return true;
-    return false;
+    const F = this.deep?.field;
+    return !!F && F.near(x, y, z) && F.sdf(x, y, z) < -margin;
   }
 
   /** Spatial index of the volumes (cells of GRID m): tubes by their segments, boxes by their bounds. */
@@ -401,6 +456,12 @@ export class Underground {
     const snd = this.sound;
     if (snd && !this.slimes.sound) this.slimes.sound = { play: (id, x, y, z, g) => snd.play(id, x, y, z, g, 1, 3), loop: (id) => snd.loop(id, 3) };
     this.slimes.update(dt, player, under);
+    if (this.deep) {
+      const c = cam.position, D = this.deep.plan;
+      const camUnder = under || this.isUnder(c.x, c.y, c.z);
+      this.deepState.murk = Math.max(0, Math.min(1, ((D.yGlow + D.yDeep) / 2 + 6 - c.y) / 12));
+      this.deep.meshes.update(dt, c, camUnder, this.deepState);
+    }
     if (under && !inStation) {
       this.headlamp.intensity = 3;
       this.headlamp.position.copy(cam.position);
@@ -469,7 +530,8 @@ export class Underground {
       want.add(key);
       if (this.built.has(key)) continue;
       const L = colonyLayout(c);
-      const br = buildChamber(c, L, this.mats);
+      const road = this.deep?.plan.roads.find((r) => r.colony === c.id) ?? null;
+      const br = buildChamber(c, L, this.mats, road?.hole ?? null);
       br.obj.add(buildCrawl(c, this.mats));
       this.builtRooms.set(key, br);
       this.built.set(key, br.obj);

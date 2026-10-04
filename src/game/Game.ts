@@ -85,6 +85,7 @@ import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { ThreatDirector } from './threats/ThreatDirector';
+import { SlimeRealm } from './slimes/SlimeRealm';
 import { ResponseDirector } from './response/ResponseDirector';
 import { Forces } from './response/forces/Forces';
 import { Aftermath } from './aftermath/Aftermath';
@@ -162,6 +163,8 @@ export class Game {
   crime!: CrimeSystem;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
   threats!: ThreatDirector;
+  /** The slime civilisation under the city: the Lumen and the Murk, their war, the Lumen's trust. */
+  slimeRealm!: SlimeRealm;
   response!: ResponseDirector;
   /** The army: response levels 3 (National Guard) and 4 (army & air) against a major threat (response/forces). */
   forces!: Forces;
@@ -534,6 +537,7 @@ export class Game {
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
+    if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
     this.T('army', () => this.forces.update(dt));
     this.T('aftermath', () => this.aftermath.update(dt));
     this.T('underground', () => {
@@ -557,6 +561,14 @@ export class Game {
     const focus = this.freeCam ? cam.position : this.player.pos;
     this.sky.setShadowExtent(this.freeCam ? 80 + Math.max(0, cam.position.y - this.terrain.height(cam.position.x, cam.position.z)) * 1.5 : 25 + this.player.height * 12 + cam.position.distanceTo(this.player.pos) * 1.2);
     this.sky.underground = clamp(this.sky.underground + (this.camRig.underground ? dt : -dt) * 2.5, 0, 1);
+    {
+      // In the deep realm's caves: their own light (teal haze in the Glow, a red one in the Deep).
+      const F = this.underground.deep?.field, c = this.renderer.camera.position;
+      const inDeep = !!F && this.camRig.underground && F.near(c.x, c.y, c.z) && F.air(c.x, c.y, c.z);
+      this.sky.deep = clamp(this.sky.deep + (inDeep ? dt : -dt) * 1.5, 0, 1);
+      const m = this.underground.deepState.murk;
+      this.sky.deepTint.setRGB(lerp(0.004, 0.022, m), lerp(0.013, 0.003, m), lerp(0.014, 0.006, m));
+    }
     const cp = this.renderer.camera.position;
     this.sky.indoor = clamp(this.sky.indoor + (this.interiors.insideAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
     this.T('weather', () => this.weather.update(dt));
@@ -735,7 +747,11 @@ export class Game {
     this.targeting = new Targeting({
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
-      threats: () => this.threats?.actors() ?? [],
+      threats: () => { const a = this.threats?.actors() ?? []; const b = this.slimeRealm?.actors() ?? []; return b.length ? [...a, ...b] : a; },
+      cave: {
+        ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT),
+        line: (ax, ay, az, bx, by, bz) => this.underground.caveLine(ax, ay, az, bx, by, bz, 1.0),
+      },
     });
     this.elements = new Elements({
       player: this.player, camera: cam, camRig: this.camRig, targeting: this.targeting, synth: this.synth, destruction: this.destruction,
@@ -821,6 +837,7 @@ export class Game {
     this.threats = new ThreatDirector(this);
     this.forces = new Forces(this);
     this.aftermath = new Aftermath(this);
+    this.slimeRealm = new SlimeRealm(this);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)
     if (!this.pendingSave && !OriginIntro.wanted(this)) setTimeout(() => toast(normal
@@ -856,6 +873,7 @@ export class Game {
     const J = Math.hypot(jx, jy, jz);
     // A monster in reach takes the blow (armour, weak spots).
     this.threats?.blow(x, y, z, r, jx, jy, jz, { cause: 'player', x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z });
+    this.slimeRealm?.blow(x, y, z, r, jx, jy, jz);
     this.props.hit(x, y, z, r, jx, jy, jz);
     this.future.hit(x, y, z, r, jx, jy, jz);
     this.birds.hit(x, y, z, r, jx, jy, jz);
@@ -906,6 +924,8 @@ export class Game {
     if (crime) return crime;
     const deed = this.deeds?.hint();
     if (deed) return deed;
+    const slime = this.slimeRealm?.hint();
+    if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
     const p = this.player.pos;
@@ -939,7 +959,7 @@ export class Game {
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
-    if (this.aftermath.use() || this.crime.use() || this.deeds.help()) { this.input.pressed.delete('KeyE'); return; }
+    if (this.aftermath.use() || this.crime.use() || this.deeds.help() || this.slimeRealm?.use()) { this.input.pressed.delete('KeyE'); return; }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Sit down on a bench or café chair in reach, or get up again.
     if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }

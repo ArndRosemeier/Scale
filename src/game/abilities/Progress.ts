@@ -51,6 +51,8 @@ export class Progress {
   private d: ProgressData;
   private readonly key: string;
   private listeners: KarmaListener[] = [];
+  /** Powers given by something in the world (not bought): their rank now. */
+  granted: Partial<Record<AbilityId, () => number>> = {};
   /** Any change (ranks, slots, karma, cores): UI refresh. */
   onChange: (() => void)[] = [];
 
@@ -72,6 +74,9 @@ export class Progress {
     const def = ABILITY[(LEGACY_IDS[id] ?? id) as AbilityId];
     if (!def) return 0;
     if (def.id === 'punch') return 1;
+    // Granted powers: their rank comes from the world (the sandbox has them all).
+    const g = this.granted[def.id];
+    if (g) return this.sandbox ? def.maxRank : Math.min(def.maxRank, g());
     const r = this.d.ranks[def.id];
     return this.sandbox ? (r ?? def.maxRank) : (r ?? 0);
   }
@@ -179,6 +184,15 @@ export class Progress {
     this.d = fresh();
     if (this.sandbox) this.d.slots = DEFAULT_SANDBOX_SLOTS.slice();
     this.save();
+    this.changed();
+  }
+
+  /** A granted power's rank changed (the world gave it): put a newly given active on the hotbar. */
+  grantedChanged(id: AbilityId): void {
+    if (this.rank(id) > 0 && ABILITY[id].kind === 'active' && !this.d.slots.includes(id)) {
+      const free = this.d.slots.indexOf(null);
+      if (free >= 0) { this.d.slots[free] = id; this.save(); }
+    }
     this.changed();
   }
 

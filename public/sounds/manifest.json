@@ -845,5 +845,95 @@
     "loop": false,
     "gain": 0.6,
     "description": "a round striking a machine: a bright metallic tick (procedural, tools/synthGuns.mjs)"
+  },
+  "deep_glow": {
+    "files": [
+      "deep_glow.wav"
+    ],
+    "loop": true,
+    "gain": 0.5,
+    "description": "the glowing caverns of the Lumen: a soft airy hum, far drips, glassy tones (procedural, tools/synthDeep.mjs)"
+  },
+  "deep_murk": {
+    "files": [
+      "deep_murk.wav"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "the depths of the Murk: a low rumble, wet movements, a distant beat (procedural, tools/synthDeep.mjs)"
+  },
+  "heart_pulse": {
+    "files": [
+      "heart_pulse.wav"
+    ],
+    "loop": true,
+    "gain": 0.6,
+    "description": "a star shard deep underground: a slow heavy throb under a shimmering crystal hum (procedural, tools/synthDeep.mjs)"
+  },
+  "murk_growl": {
+    "files": [
+      "murk_growl_1.wav",
+      "murk_growl_2.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a wet gurgling growl (procedural, tools/synthDeep.mjs)"
+  },
+  "murk_spit": {
+    "files": [
+      "murk_spit.wav"
+    ],
+    "loop": false,
+    "gain": 0.55,
+    "description": "a wet spit launched (procedural, tools/synthDeep.mjs)"
+  },
+  "murk_slam": {
+    "files": [
+      "murk_slam.wav"
+    ],
+    "loop": false,
+    "gain": 0.65,
+    "description": "a heavy wet blow (procedural, tools/synthDeep.mjs)"
+  },
+  "maw_roar": {
+    "files": [
+      "maw_roar.wav"
+    ],
+    "loop": false,
+    "gain": 0.85,
+    "description": "a huge gurgling roar (procedural, tools/synthDeep.mjs)"
+  },
+  "lumen_chime": {
+    "files": [
+      "lumen_chime_1.wav",
+      "lumen_chime_2.wav"
+    ],
+    "loop": false,
+    "gain": 0.4,
+    "description": "a soft bubbly chord, a small creature greeting (procedural, tools/synthDeep.mjs)"
+  },
+  "slime_battle": {
+    "files": [
+      "slime_battle.wav"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "a skirmish of many slimes: squelches, slaps, growls (procedural, tools/synthDeep.mjs)"
+  },
+  "slime_call": {
+    "files": [
+      "slime_call.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a rising swirl of bubbles and a bright chime (procedural, tools/synthDeep.mjs)"
+  },
+  "membrane": {
+    "files": [
+      "membrane.wav"
+    ],
+    "loop": false,
+    "gain": 0.5,
+    "description": "a wobbling, stretching membrane parting (procedural, tools/synthDeep.mjs)"
   }
 }

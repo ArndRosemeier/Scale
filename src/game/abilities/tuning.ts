@@ -23,6 +23,8 @@ export const KARMA_COST = {
   gust: [45, 50, 75, 105, 145],
   hydro: [40, 45, 65, 90, 125],
   shrink: [70, 60, 85, 120, 165],
+  /** Not bought: the Lumen's trust grants it (deep/Trust.callRank). */
+  slimeCall: [],
 } as const;
 
 export const KARMA = {
@@ -163,3 +165,13 @@ export const CORES = { perCells: 5, min: 6, max: 24, discoverRadius: 150 };
 
 /** Small accidents (someone trips and falls) near the player, as interim good deeds. */
 export const ACCIDENTS = { minGap: 50, maxGap: 110, near: 15, far: 60, lieFor: 120 };
+
+// ---------------------------------------------------------------- slime call (granted by the Lumen's trust)
+/** Energy, the sewer lid it needs within reach (m; underground in the sewers / caves: anywhere). */
+export const SLIME = { cost: 25 };
+export const SLIME_COOLDOWN = [0, 75, 55, 40];
+/** How many Lumen come, how long they stay (s), how far the nearest manhole may be (m), how long they hold someone (s). */
+export const SLIME_COUNT = [0, 6, 10, 16];
+export const SLIME_TIME = [0, 20, 28, 40];
+export const SLIME_REACH = [0, 25, 35, 45];
+export const SLIME_HOLD = [0, 8, 12, 18];

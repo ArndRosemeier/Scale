@@ -8,12 +8,12 @@ import {
   LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, FIRE_COOLDOWN, NOVA, NOVA_RADIUS, NOVA_FREEZE, NOVA_COOLDOWN,
   ICE, ICE_WIDTH, ICE_LIFE, BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, BOLT_COOLDOWN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE,
   QUAKE_COOLDOWN, GUST, GUST_RADIUS, GUST_TIME, GUST_COOLDOWN, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
-  SHRINK_COOLDOWN,
+  SHRINK_COOLDOWN, SLIME, SLIME_COOLDOWN, SLIME_COUNT, SLIME_TIME, SLIME_REACH, SLIME_HOLD,
 } from './tuning';
 import { wallBreakShare, windowShatterShare, WALL_CLASSES, type WallClass } from '../../destruction/wallStrength';
 
 export type AbilityId = 'punch' | 'strength' | 'superJump' | 'speed' | 'shockwave' | 'flight' | 'size'
-  | 'laser' | 'fireWave' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink';
+  | 'laser' | 'fireWave' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink' | 'slimeCall';
 
 /** Ids of earlier versions (saved progress, hotbars) -> their current power. */
 export const LEGACY_IDS: Record<string, AbilityId> = { dash: 'speed' };
@@ -26,6 +26,8 @@ export interface AbilityDef {
   name: string;
   /** One-line description. */
   desc: string;
+  /** Not bought with karma: given by something in the world (how it is earned, for the powers screen). */
+  granted?: string;
   /** Inline SVG (24×24, currentColor). */
   icon: string;
   /** passive: always on (no hotbar); active: hotbar-assignable. */
@@ -219,6 +221,14 @@ export const ABILITIES: AbilityDef[] = [
     icon: svg('<path d="M3.5 3.5l5 5M20.5 3.5l-5 5M3.5 20.5l5-5M20.5 20.5l-5-5"/><path d="M8.5 5v3.5H5M15.5 5v3.5H19M8.5 19v-3.5H5M15.5 19v-3.5H19"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'),
     rankText: (r) => `Shrinks to ${Math.round(SHRINK_FACTOR[r] * 100)} % for ${SHRINK_TIME[r]} s · reach ${SHRINK.reach} m`,
     costText: (r) => `${SHRINK.cost} energy · ${cd(SHRINK_COOLDOWN[Math.max(1, r)])}`,
+  },
+  {
+    id: 'slimeCall', name: 'Slime call', kind: 'active', group: 'support', trigger: 'tap', maxRank: 3,
+    desc: 'Call the Lumen up out of the sewers: they pour from the nearest manhole to your target — holding a criminal down, smothering a fire, tangling a machine, fighting the Murk.',
+    granted: 'Earned through the trust of the Lumen, the glowing slimes deep under the city',
+    icon: svg('<path d="M4 17c0-4.5 3.6-8 8-8s8 3.5 8 8c0 1.7-1.3 3-3 3H7c-1.7 0-3-1.3-3-3z"/><circle cx="9.5" cy="14.5" r="1" fill="currentColor"/><circle cx="14.5" cy="14.5" r="1" fill="currentColor"/><path d="M12 9V4M9 5.5L12 3l3 2.5" opacity="0.7"/>'),
+    rankText: (r) => `${SLIME_COUNT[r]} Lumen for ${SLIME_TIME[r]} s · hold someone ${SLIME_HOLD[r]} s · a manhole within ${SLIME_REACH[r]} m`,
+    costText: (r) => `${SLIME.cost} energy · ${cd(SLIME_COOLDOWN[Math.max(1, r)])}`,
   },
 ];
 

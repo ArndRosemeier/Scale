@@ -736,17 +736,26 @@ export function colonyLayout(c: Colony): ColonyLayout {
 }
 
 /** The hidden chamber: rough walls, moss gardens, little domes and stacks of salvaged things, fungus lamps. */
-export function buildChamber(c: Colony, L: ColonyLayout, mats: RoomMats): BuiltRoom {
+/**
+ * The opening of a colony's road out of its chamber (deep/plan.ts Road.hole): which wall, the
+ * centre along it (chamber frame: v on the u+ wall, u on the side walls), half width, height.
+ */
+export interface ChamberHole { wall: 'u+' | 'v+' | 'v-'; c: number; hw: number; h: number }
+
+export function buildChamber(c: Colony, L: ColonyLayout, mats: RoomMats, hole: ChamberHole | null = null): BuiltRoom {
   const f = L.frame, y = L.y, hu = L.hu, hv = L.hv, top = y + c.chamber.y1 - c.chamber.y0;
   const k = new Kit(f, new Rng(c.seed ^ 0x5151));
   const pal = L.palette;
   const dim = (col: [number, number, number], s: number): [number, number, number] => [col[0] * s, col[1] * s, col[2] * s];
-  // Shell: rough stone; the crawl comes in at the near end.
+  // Shell: rough stone; the crawl comes in at the near end, the road (if any) leaves through another wall.
+  const cut = (w: ChamberHole['wall'], start: number): [number, number, number, number][] => (hole && hole.wall === w ? [[hole.c + start - hole.hw, hole.c + start + hole.hw, y - 0.01, y + hole.h]] : []);
   k.m(8, 0.34, 0.27, 0.21);
   wall(k.lit, f, -hu, -hv, -hu, hv, y, top, [[hv - CRAWL_HW, hv + CRAWL_HW, y - 0.01, y + CRAWL_H]]);
-  wall(k.lit, f, hu, -hv, hu, hv, y, top);
-  wall(k.lit, f, -hu, -hv, hu, -hv, y, top);
-  wall(k.lit, f, -hu, hv, hu, hv, y, top);
+  wall(k.lit, f, hu, -hv, hu, hv, y, top, cut('u+', hv));
+  wall(k.lit, f, -hu, -hv, hu, -hv, y, top, cut('v-', hu));
+  wall(k.lit, f, -hu, hv, hu, hv, y, top, cut('v+', hu));
+  /** Near the road's opening (keep it clear of boulders). */
+  const nearHole = (u: number, v: number) => !!hole && (hole.wall === 'u+' ? Math.abs(u - hu) < 1.5 && Math.abs(v - hole.c) < hole.hw + 1 : Math.abs(v - (hole.wall === 'v+' ? hv : -hv)) < 1.5 && Math.abs(u - hole.c) < hole.hw + 1);
   k.m(8, 0.3, 0.24, 0.19); flat(k.lit, f, -hu, hu, -hv, hv, top, false);
   k.m(22, 0.4, 0.33, 0.26); flat(k.lit, f, -hu, hu, -hv, hv, y + 0.002);
   // Boulders along the foot of the walls, roots hanging from the ceiling.
@@ -755,7 +764,7 @@ export function buildChamber(c: Colony, L: ColonyLayout, mats: RoomMats): BuiltR
     const u = side < 2 ? k.rng.range(-hu + 1.5, hu - 0.5) : (side === 2 ? hu - s * 0.6 : -hu + s * 0.6);
     const v = side < 2 ? (side === 0 ? hv - s * 0.6 : -hv + s * 0.6) : k.rng.range(-hv + 0.5, hv - 0.5);
     if (side === 3 && Math.abs(v) < 1.4) continue;
-    if (L.crevices.some((q) => Math.hypot(q.u - u, q.v - v) < 0.8)) continue;
+    if (L.crevices.some((q) => Math.hypot(q.u - u, q.v - v) < 0.8) || nearHole(u, v)) continue;
     k.m(3, 0.42 + k.rng.range(-0.06, 0.06), 0.34, 0.27);
     fbox(k.lit, f, u, v, y + s * 0.5, s, s * 0.7, s * 0.9, k.rng.range(0, 3));
   }

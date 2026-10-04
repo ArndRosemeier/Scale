@@ -120,6 +120,7 @@ export class SaveSystem {
       settings: { crime: g.crime.setting, events: g.threats.setting },
       damage,
       aftermath: g.aftermath ? g.aftermath.saveState() : null,
+      slimes: g.slimeRealm ? g.slimeRealm.saveState() : null,
     };
   }
 
@@ -252,6 +253,7 @@ export class SaveSystem {
     step('the threats', () => g.threats.restoreState({ ...d.threats, setting: d.settings.events || d.threats.setting }));
     step('the city damage', () => { const n = this.damage.restore(d.damage); if (n) console.log(`[saves] damage restored in ${n} cells`); });
     step('the aftermath', () => g.aftermath.restore(d.aftermath));
+    step('the slimes', () => g.slimeRealm?.restore(d.slimes as Parameters<typeof g.slimeRealm.restore>[0]));
     step('the player', () => this.placePlayer(d.player));
     step('the camera', () => { g.camRig.yaw = d.camera.yaw; g.camRig.pitch = d.camera.pitch; g.camRig.zoom = d.camera.zoom; });
     step('health', () => {

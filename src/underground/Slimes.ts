@@ -66,6 +66,11 @@ export class Slimes {
   sound: SlimeSound | null = null;
   /** Debug (headless screenshots): they do not notice the player. */
   oblivious = false;
+  /** The Lumen trust the player (deep/Trust ≥ Welcome): they do not hide from them. */
+  friendly = false;
+  /** The brave one's pebble was taken (colony id); one was splattered by the player. */
+  onGift: ((colony: number) => void) | null = null;
+  onHurt: ((colony: number) => void) | null = null;
 
   constructor() {
     const g = blobGeometry();
@@ -136,6 +141,7 @@ export class Slimes {
         hit = true;
       }
       if (nearest) { this.splat(st, nearest); hit = true; }
+      if (hit) this.onHurt?.(st.c.id);
       // Anything violent nearby: they all hide, for a long while if one was hurt.
       st.alarm = true;
       st.awayT = 0;
@@ -209,7 +215,7 @@ export class Slimes {
     const nearMouth = under && !inside && Math.hypot(pu + L.hu, pv) < NOTICE_CRAWL && Math.abs(p.y - L.y) < 3;
     const hurt = this.time < st.hurtUntil;
     // Noticing: the nearest blob within reach of the player.
-    if (!this.oblivious && !st.alarm && (inside || nearMouth)) {
+    if (!this.oblivious && !this.friendly && !st.alarm && (inside || nearMouth)) {
       const lim = inside ? NOTICE : NOTICE_CRAWL + 2;
       if (st.slimes.some((s) => !s.dead && s.mode === 'calm' && Math.hypot(s.u - pu, s.v - pv) < lim)) {
         st.alarm = true;
@@ -306,6 +312,7 @@ export class Slimes {
     // The pebble: taken when walked over (a soft chime).
     if (st.gift && !st.gift.taken && inside && Math.hypot(pu - st.gift.u, pv - st.gift.v) < 0.45) {
       st.gift.taken = true;
+      this.onGift?.(st.c.id);
       const [x, z] = fw(f, st.gift.u, st.gift.v);
       this.sound?.play('slime_gift', x, L.y + 0.2, z, 0.45);
     }
@@ -475,7 +482,7 @@ const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _q = new THREE.Quatern
 const _c = new THREE.Color();
 
 /** A soft blob sitting on the ground (radius 1, height ~1.3): brighter on top, darker at the rim. */
-function blobGeometry(): THREE.BufferGeometry {
+export function blobGeometry(): THREE.BufferGeometry {
   const g = new THREE.SphereGeometry(1, 16, 10);
   const pos = g.getAttribute('position') as THREE.BufferAttribute;
   const col = new Float32Array(pos.count * 3);

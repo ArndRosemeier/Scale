@@ -2,6 +2,20 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.018 — 2026-10-04
+
+- **The slime civilisation**: behind the hidden slime colonies there is now a whole world, deep under the city — two peoples of slimes in a war that never ends.
+  - **The Lumen** (soft, glowing) live in the Glow, about 60 m down: a vast domed Hall with terraces full of their little domed homes round a pool and the Spire (a rock column ringed with glowing fungus shelves), a council sitting in a ring of standing stones, a nursery, the Gardens (a forest of giant glowing mushrooms), the Lake with a waterfall, and the Archive, where they keep the things they find in the city — and their mosaics.
+  - **The Murk** (dark, spiked, ember-cored) live in the Deep, 50 m further down: the Warrens with crystal spikes, hives and pens of captured Lumen, and the Heart chamber, where a shard of the falling star sits on a mound with glowing veins running to it. The Maw guards it.
+  - **The Front**: the Lumen hold a living barricade at the lip of the Throat, a 50 m shaft with a ramp spiralling down its wall and a natural bridge across it. The Murk raid it again and again — be there and fight with the Lumen, or the line falls back; if the Murk take the Hall and grow strong, at night some of them break out of the sewers into the city (the police come).
+  - **Getting there**: from a colony's chamber a gate (a living membrane) opens onto a broad road that winds down to the Hall. The gate only opens for someone the Lumen know.
+- **Lumen trust**: patience earns it (take the brave one's gift in a colony), and so does fighting the Murk, holding the Front, tearing open the Murk's pens (**E**) and bringing down the Maw. Hurting a Lumen costs a lot. Friends are greeted, followed by the little ones, given glow pebbles (full energy) and carried up the Throat by the Lumen lift (Ctrl / C to sink).
+- **New power: Slime call** — not bought with karma but given by the Lumen's trust (Ally: rank 1, Kin: rank 2, and rank 3 at full trust once the Maw has fallen). Near a manhole (or underground), the Lumen pour out to your target: they hold a criminal down, stall a car or a machine, gnaw at a monster, fight the Murk or smother a fire.
+- **Fighting slimes**: every Murk can be targeted (Tab) and hit by punches and every power; brutes and the Maw show a weak ember core when they strike, and they spit. Area powers and blasts hurt Lumen too — careful.
+- Powers and line of sight work in the caves (and the sewers): rock is what stops a shot down there.
+- New sounds for the caves, the Heart, the Murk and the Lumen; the music turns to tension and battle when the Murk fight you or a raid is on.
+- Saves keep the Lumen's trust and the state of the war.
+
 ## 0.017 — 2026-10-04
 
 - **Line of sight for everybody**: buildings, terrain and cars block shots — yours, the police's, criminals' and the army's (a hole blasted in a wall lets them through).

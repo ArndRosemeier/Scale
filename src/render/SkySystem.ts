@@ -72,6 +72,12 @@ export class SkySystem {
 
   /** 0..1 while the camera is underground: daylight, sky light and fog give way to tunnel lighting. */
   underground = 0;
+  /**
+   * 0..1 while the camera is in the deep realm's caves: no fill light at all (the caves glow by
+   * themselves), near-black haze tinted by where one is (`deepTint`), thinner so the big caverns read.
+   */
+  deep = 0;
+  readonly deepTint = new THREE.Color(0.004, 0.012, 0.013);
   /** 0..1 while the camera is inside a building: sky ambient is mostly shut out (light comes through windows). */
   indoor = 0;
   /**
@@ -202,6 +208,14 @@ export class SkySystem {
       fog.color.lerp(_tunnelFog, u);
       fog.density = lerp(fogD, 0.012, u);
       this.renderer.toneMappingExposure = lerp(this.renderer.toneMappingExposure, 0.85, u);
+      const dp = this.deep;
+      if (dp > 0) {
+        this.hemi.intensity = lerp(this.hemi.intensity, 0.004, dp);
+        fog.color.lerp(this.deepTint, dp);
+        fog.density = lerp(fog.density, 0.0075, dp);
+        this.scene.environmentIntensity *= 1 - dp;
+        this.renderer.toneMappingExposure = lerp(this.renderer.toneMappingExposure, 1.05, dp);
+      }
     } else fog.density = fogD;
   }
 }

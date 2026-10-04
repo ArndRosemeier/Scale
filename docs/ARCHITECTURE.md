@@ -830,6 +830,50 @@ as distance LOD).
   them into drops that flow away; the colony then hides for ten minutes. A few rooms near colonies
   have a faint glowing trail, sometimes with a lone one that slips into a crack. No markers, no
   text. `dev.colony(i)` puts a tester in the room with the gap.
+* The deep realm (`underground/deep`): the slime civilisation below the colonies.
+  * Plan (`plan.ts`, pure, deterministic per seed, ~0.1 s): a hub colony (nearest the centre) hosts the Glow
+    `GLOW_DEPTH` (64 m) under the lowest ground over the realm, the Deep `DEEP_DROP` (52 m) lower. Shapes in a frame
+    (origin at the Great Hall, u along the realm's axis): the Hall (ellipsoid, flat-cut, terraced `bowl` floor, pool,
+    the Spire rock column, hanging masses), Gardens, Lake (falls), Archive (mosaics), the Front gallery with the
+    barricade, the Throat (shaft cylinder + dome, a `helix` rock ramp, a rock bridge to a lookout niche), the Warrens
+    (pillars), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
+    `buildChamber`) a narrow neck with the gate, descending steeply until the wide gallery fits under the ground, then
+    a gallery (r 5.2 m, grade ≤ 0.16) to the Hall's rim, a spiral first where the way is too short for the drop.
+    Colonies within 950 m get roads. Tried over hub colonies / axes / distances until clear of every tube, box and
+    the station surroundings and ≥ 14 m under the ground. Decor (dwellings, mushrooms, fungus, crystals, shelves,
+    strands, stones, stalactites, hives, pens, salvaged things), ~500 baked light sources, water, falls, veins, the
+    lift column, and a waypoint graph whose edges are walked on the field (detour nodes round obstacles).
+  * Rock (`field.ts`): one signed distance field — smooth union of air shapes, smooth subtraction of rock shapes,
+    two octaves of 3D noise by the nearest shape's roughness (gentle on floors). Grid of 16 m cells listing shapes.
+    Queries: `floorAt` / `ceilingAt` (sphere traced), `contains` (air with margin, closed membranes solid, no
+    climbing faces steeper than 60°), `lineClear`, `ray`. Underground merges it into `floorAt`, `ceilingAt`,
+    `contains`, `cameraFree` and `isUnder`; `caveLine` / `caveRay` serve `Sight.clear` and `Targeting` (probe, LOS
+    in `inView`) so shots and powers work in the caves.
+  * Meshes (`mesher.ts` in `deep.worker.ts`, `DeepMeshes.ts`): naive surface nets over 24 m chunks at 1 m (a chunk
+    owns the edges at its base points: seamless), normals from the field, rock colour by region (moss in the Glow,
+    red seams in the Deep), occlusion from the field and the light of every source in reach baked per vertex
+    (`aGlow`, added as emission × albedo by the cave material); decor in the same chunk (lit parts and an unlit glow
+    mesh). Built nearest first within 230 m of the camera, dropped beyond 300 m (~5 ms a chunk in the worker, ~500
+    chunks for the whole realm). Faces inside the chambers the roads open into are skipped. Membranes (gates, the
+    barricade), water, falls, the Heart (the origin scene's shard shader), spores round the camera, the lift column,
+    the mosaics (canvas). No lights: `SkySystem.deep` (camera in the caves' air) drops the fill light to almost
+    nothing and tints the haze (teal in the Glow, red in the Deep).
+  * Slimes (`Factions.ts`): Lumen (dwellers with a dome to hide in, tenders, carriers, the council, children,
+    guards, caravans, captives, support) and Murk (drones, raiders, brutes, jailers, the Maw, breachers) as agents
+    of the areas near the player, walking on the field (turning aside at rock, steps ≤ 0.7 m) along the waypoint
+    graph; fights between them, lunges and spit at the player; every Murk a `MurkActor` (ThreatActor: body, an
+    exposed ember core on brutes and the Maw). Four instanced batches (Lumen blob shell / core, spiked Murk shell /
+    ember core).
+  * The war (`War.ts`, pure, saved): Murk strength (grows from the Heart, not while the Maw is down), Lumen strength,
+    the front line; raids every 2.5–5.5 game hours — fought out live by agents when the player is near the Front,
+    else decided by strength; breakouts at night when the Murk hold the Hall (`MurkBreach`, threat archetype
+    `murk`: police, compass, music).
+  * Trust (`Trust.ts`, per city, saved): tiers Shunned / Stranger / Noticed (gates) / Welcome (greetings, lift,
+    pebbles) / Ally / Kin; grants the Slime call (`Progress.granted`, `AbilitySystem.special`).
+  * The game side (`game/slimes/SlimeRealm.ts`): areas, raids, gates, pens (E), the lift, the Heart's resonance,
+    pebbles, ambience, the Slime call, breakouts, toasts, saves (`SaveData.slimes`, version 3), a safety net for
+    bodies below the realm. Sounds: `tools/synthDeep.mjs`. Admin console section "Slimes"; `dev.deep.go(place)`,
+    `dev.deep.status()`, `dev.slimes.status() | trust(v) | raid() | breach() | war(patch)`.
 * Volume queries (`floorAt`, `contains`, `cameraFree`, …) go through a 32 m grid of tubes and boxes.
 * Terrain holes: shader discard plus a collision query.
 
@@ -919,7 +963,7 @@ src/player     controller, camera, scale, flight
 src/sim        citizens, traffic, transit (worker) and the client-side crowd renderer
 src/future     near-future layer: delivery robots, drones, animated signage, holo kiosks
 src/fauna      birds: ground groups, flocks, gulls, crows (instanced, around the camera)
-src/underground metro, sewers, trains, side rooms, hidden colonies and their slimes
+src/underground metro, sewers, trains, side rooms, hidden colonies, their slimes and the deep realm (deep/)
 src/humanoid   Norgo human pipeline (bodies, animator) plus modern clothing
 src/audio      audio engine
 src/ui         HUD, menu, map

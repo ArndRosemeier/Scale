@@ -86,6 +86,11 @@ export interface TargetWorld {
   camera: THREE.PerspectiveCamera;
   /** Big threat bodies (the threat director's actors). */
   threats?: () => ThreatActor[];
+  /** The deep realm's caves: first rock along a ray / a clear line (null: the point is not in the caves). */
+  cave?: {
+    ray(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): number | null;
+    line(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean | null;
+  };
 }
 
 const VEH_H: Partial<Record<string, number>> = { bus: 3.1, truck: 3.1, van: 2.5, delivery: 2.5, shuttle: 2.5, suv: 1.85, pickup: 1.85 };
@@ -389,6 +394,12 @@ export class Targeting {
    * the far wall). Writes into h (t, what, normal, building) when something is nearer.
    */
   probeWorld(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, h: ProbeHit): void {
+    // In the caves: the rock.
+    const ct = this.w.cave?.ray(ox, oy, oz, dx, dy, dz, maxT);
+    if (ct !== null && ct !== undefined) {
+      if (ct < h.t) { h.t = ct; h.what = 'ground'; h.building = null; h.nx = -dx; h.ny = -dy; h.nz = -dz; }
+      return;
+    }
     const W = this.w.world;
     const step = Math.min(1.5, Math.max(0.4, maxT / 120));
     let t = 0;
@@ -627,6 +638,8 @@ export class Targeting {
       if (out.length >= 16) break;
       const c = this.centre(e.t, _v);
       const dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, d = Math.hypot(dx, dy, dz);
+      const cl = this.w.cave?.line(o.x, o.y, o.z, c.x, c.y, c.z);
+      if (cl !== null && cl !== undefined) { if (cl) out.push(e.t); continue; }
       const hit = W.raycast(o.x, o.y, o.z, dx / d, dy / d, dz / d, Math.max(0.1, d - 1.5), Math.max(0.5, d / 60));
       if (hit.t < d - 2) continue;
       out.push(e.t);

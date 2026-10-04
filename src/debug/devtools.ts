@@ -69,6 +69,31 @@ export function installDevtools(game: Game): void {
       game.camRig.yaw = Math.atan2(-r.nx, -r.nz);
       return { room: r.id, kind: r.kind, x: Math.round(x), z: Math.round(z) };
     },
+    /** The deep realm: go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …), places, status. */
+    deep: {
+      places: () => Object.keys(game.underground.deep?.plan.places ?? {}),
+      go(name = 'hall'): { x: number; y: number; z: number } | null {
+        const D = game.underground.deep;
+        if (!D) return null;
+        let p: { x: number; y: number; z: number } | null = D.plan.places[name] ?? null;
+        const g = /^gate(\d+)$/.exec(name);
+        if (g) { const r = D.plan.roads.find((q) => q.colony === Number(g[1])) ?? D.plan.roads[0]; p = r ? { x: r.pts[3], y: r.pts[4], z: r.pts[5] } : null; }
+        if (!p) return null;
+        (game as unknown as { freeCam: boolean }).freeCam = false;
+        game.player.pos.set(p.x, p.y + 0.2, p.z);
+        game.player.vel.set(0, 0, 0);
+        return { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z) };
+      },
+      status: () => ({ ...game.underground.deep?.meshes.stats, busy: game.underground.deep?.meshes.busy, roads: game.underground.deep?.plan.roads.length }),
+    },
+    /** The slime civilisation: status(), trust(v), raid(), breach(), war(patch). */
+    slimes: {
+      status: () => game.slimeRealm?.debug(),
+      trust: (v: number) => { const T = game.slimeRealm.trust; T.add(v - T.value, 'dev'); return T.value; },
+      raid: () => game.slimeRealm.devRaid(),
+      breach: () => game.slimeRealm.devBreach(),
+      war: (patch: Record<string, unknown> = {}) => Object.assign(game.slimeRealm.war, patch),
+    },
     hour(h: number): void { game.sky.hour = h; },
     /** Weather: set('rain' | 'storm' | … | 'auto'), next(), status(), forecast(n), strike(distance m). */
     weather: {

@@ -353,7 +353,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   for (const d of ABILITIES) for (let r = 1; r <= d.maxRank; r++) {
     const txt = d.rankText(r) + (d.costText ? d.costText(r) : '');
     check(!/NaN|undefined|Infinity/.test(txt), `${d.id} rank ${r} text: ${txt}`);
-    check((T.KARMA_COST as Record<string, readonly number[]>)[d.id]?.length === d.maxRank, `${d.id}: karma cost for every rank`);
+    if (!d.granted) check((T.KARMA_COST as Record<string, readonly number[]>)[d.id]?.length === d.maxRank, `${d.id}: karma cost for every rank`);
   }
   for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.flightBoost(r) * 1.1, `super speed rank ${r} clearly faster than flight boost`);
   check(LEGACY_IDS.dash === 'speed', 'dash folds into super speed');
@@ -632,6 +632,100 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     check(kinds.size >= 12, `rooms seed ${seed}: most kinds of rooms present (${[...kinds].join(' ')})`);
     console.log(`rooms seed ${seed}: ${plan.rooms.length} side rooms (${plan.rooms.filter((r) => r.trace).length} with traces), ${plan.colonies.length} colonies in ${ms.toFixed(0)} ms`);
   }
+}
+
+// ---- the deep realm (src/underground/deep): deterministic per seed; its caves clear of every tunnel,
+// station, room, crawl and entrance passage, deep under the ground; every waypoint edge walkable on
+// the field's floors (steps a walker can take, headroom); the war and the trust behave.
+{
+  const { planRooms } = await import('../src/underground/rooms');
+  const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
+  const { tubeAt, boxAt } = await import('../src/underground/Volumes');
+  const { planDeep } = await import('../src/underground/deep/plan');
+  const { DeepField, primBounds } = await import('../src/underground/deep/field');
+  for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const macro = buildMacroPlan(terrain);
+    const tubes = [...macro.metroLines.map(metroTube), ...macro.sewers.map((s) => sewerTube(s.pts, terrain))];
+    const halls = stationHalls(macro);
+    const rooms = planRooms(macro, terrain, tubes, halls);
+    const passages = (metroInput(macro, terrain).input.passages ?? []).map((p) => p.tube);
+    const allT = [...tubes, ...passages, ...rooms.colonies.map((c) => c.crawl)];
+    const allB = [...halls, ...rooms.rooms.flatMap((r) => r.boxes), ...rooms.colonies.map((c) => c.chamber)];
+    const occupied = (x: number, y: number, z: number) => allT.some((t) => { const h = tubeAt(t, x, y, z, 1.0); return !!h && y > h.floor - 2 && y < h.floor + t.height + 1; }) || allB.some((b) => !!boxAt(b, x, y, z, 1.0) && y > b.y0 - 2 && y < b.y1 + 1);
+    const blocked = (x: number, y: number, z: number) => occupied(x, y, z) || halls.some((h) => Math.hypot(h.cx - x, h.cz - z) < h.hu + 80 && y > h.y0 - 4);
+    const t0 = performance.now();
+    const inp = { seed: macro.seed, colonies: rooms.colonies, ground: (x: number, z: number) => terrain.height(x, z), blocked };
+    const plan = planDeep(inp);
+    const ms = performance.now() - t0;
+    check(!!plan, `deep seed ${seed}: a realm is planned (${rooms.colonies.length} colonies)`);
+    if (!plan) continue;
+    check(hashPlan(plan) === hashPlan(planDeep(inp)), `deep seed ${seed}: plan deterministic`);
+    const F = new DeepField(plan.prims, plan.seed);
+    const own = new Set(plan.roads.map((r) => rooms.colonies[r.colony].chamber));
+    // Air of the realm vs everything else (the roads' own chambers excepted), and its cover.
+    let cuts = 0, shallow = 0, samples = 0;
+    for (const p of plan.prims) {
+      if (p.rock) continue;
+      const b = primBounds(p);
+      for (let x = b[0]; x <= b[3]; x += 3) for (let z = b[2]; z <= b[5]; z += 3) for (let y = b[1]; y <= b[4]; y += 2) {
+        if (F.sdf(x, y, z) > -0.3) continue;
+        samples++;
+        if (allT.some((t) => { const h = tubeAt(t, x, y, z, 0); return !!h && y > h.floor - 0.3 && y < h.floor + t.height; }) || allB.some((bx) => !own.has(bx) && !!boxAt(bx, x, y, z, 0) && y > bx.y0 - 0.3 && y < bx.y1)) cuts++;
+        if (y > terrain.height(x, z) - 1.5) shallow++;
+      }
+    }
+    check(cuts === 0 && shallow === 0, `deep seed ${seed}: caves clear of the tunnels, stations, rooms and passages, under the ground (${cuts} cuts, ${shallow} shallow of ${samples} samples)`);
+    // Walking the waypoint graph on the field: half-metre steps, rises a walker takes, room for the body.
+    let bad = 0;
+    const why: string[] = [];
+    for (const [a, b] of plan.edges) {
+      const A = plan.nodes[a], B = plan.nodes[b];
+      const L = Math.hypot(B.x - A.x, B.z - A.z), n = Math.max(1, Math.ceil(L / 0.5));
+      let y = A.y, fail = '';
+      for (let i = 1; i <= n && !fail; i++) {
+        const x = A.x + ((B.x - A.x) * i) / n, z = A.z + ((B.z - A.z) * i) / n;
+        const f = F.floorAt(x, y + 0.85, z, 6);
+        if (f === null) fail = 'no floor';
+        else if (f - y > 0.55) fail = `step ${(f - y).toFixed(2)}`;
+        else if (!F.air(x, f + 1.7, z)) fail = 'low';
+        else y = f;
+      }
+      if (fail) { bad++; if (why.length < 6) why.push(`${A.name}→${B.name}: ${fail}`); }
+    }
+    check(bad === 0, `deep seed ${seed}: every waypoint edge walkable (${bad} of ${plan.edges.length} not${why.length ? ': ' + why.join('; ') : ''})`);
+    // Every road's gate connects to the Heart through the graph.
+    const adj: number[][] = plan.nodes.map(() => []);
+    for (const [a, b] of plan.edges) { adj[a].push(b); adj[b].push(a); }
+    const seen = new Set<number>([plan.nodes.find((q) => q.name === 'heart')!.id]);
+    const q = [...seen];
+    while (q.length) for (const m of adj[q.shift()!]) if (!seen.has(m)) { seen.add(m); q.push(m); }
+    const gates = plan.nodes.filter((q2) => q2.name.startsWith('gate'));
+    check(gates.length === plan.roads.length && gates.every((g2) => seen.has(g2.id)), `deep seed ${seed}: every gate (${gates.length}) leads down to the Heart`);
+    console.log(`deep seed ${seed}: ${plan.roads.length} roads, ${plan.prims.length} shapes, ${plan.decor.length} decor, ${plan.glows.length / 7} lights, ${plan.nodes.length} waypoints, Glow at ${plan.yGlow.toFixed(0)} m, Deep at ${plan.yDeep.toFixed(0)} m, in ${ms.toFixed(0)} ms`);
+  }
+  // The war: deterministic; left alone with strong Murk the line falls back; the Maw brought down stops them growing.
+  const { freshWar, stepWar, mawDown, parseWar, WAR } = await import('../src/underground/deep/War');
+  const seeded = (n: number) => () => { n = (n * 1664525 + 1013904223) >>> 0; return n / 4294967296; };
+  const wa = freshWar(0, 3, seeded(1)), wb = freshWar(0, 3, seeded(1));
+  stepWar(wa, 200, false, false, {}, seeded(2)); stepWar(wb, 200, false, false, {}, seeded(2));
+  check(JSON.stringify(wa) === JSON.stringify(wb), 'war: deterministic for a seed');
+  const strong = freshWar(0, 3, seeded(3)); strong.murk = 1; strong.lumen = 0.1;
+  stepWar(strong, 48, false, false, {}, seeded(4));
+  check(strong.front > 0.5 && strong.stats.lost > strong.stats.won, `war: strong Murk push the line back when nobody helps (front ${strong.front.toFixed(2)}, ${strong.stats.lost} lost / ${strong.stats.won} won)`);
+  const down = freshWar(0, 3, seeded(5)); down.murk = 0.8; mawDown(down); const m0 = down.murk;
+  stepWar(down, 24, false, false, {}, seeded(6));
+  check(down.murk <= m0 && down.mawBack === WAR.mawDown, `war: with the Maw down the Murk do not grow (${m0.toFixed(2)} → ${down.murk.toFixed(2)})`);
+  let breaches = 0;
+  const lost = freshWar(0, 3, seeded(7)); lost.front = 1; lost.murk = 1; lost.lumen = 0;
+  for (let h = 1; h <= 72; h++) stepWar(lost, h, false, true, { breach: () => { breaches++; } }, seeded(8 + h));
+  check(breaches >= 2, `war: the Murk holding the Hall break out at night (${breaches} in three nights)`);
+  const pw = parseWar({ ...JSON.parse(JSON.stringify(wa)), murk: 7, captives: [9, 'x'] }, 3, 0);
+  check(!!pw && pw.murk === 1 && pw.captives.length === 3 && pw.captives[0] === WAR.penMax && pw.captives[1] === 0, 'war: a saved state is sanitised');
+  const { tierOf, callRank, parseTrust, TRUST } = await import('../src/underground/deep/Trust');
+  check(tierOf(-50) === 'Shunned' && tierOf(0) === 'Stranger' && tierOf(10) === 'Noticed' && tierOf(30) === 'Welcome' && tierOf(55) === 'Ally' && tierOf(80) === 'Kin', 'trust: tiers');
+  check(callRank(54, true) === 0 && callRank(TRUST.ally, false) === 1 && callRank(TRUST.kin, false) === 2 && callRank(100, false) === 2 && callRank(100, true) === 3, 'trust: the Slime call rank follows trust (rank 3 after the Maw)');
+  check(parseTrust({ v: 500, gifts: [1, 'x'], marks: ['a', 3] })?.v === 100 && parseTrust('x') === null, 'trust: a saved value is sanitised');
 }
 
 // ---- city threats: the threat clock's schedule is deterministic per seed, the first minor event
@@ -1102,6 +1196,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
       zones: [[120.5, -64.25, 380, 96.5]], smoke: [[118, -60, 2.5, 120.25], [410, -221, 1, 104]], cordons: [[405.5, -218, 42, 106.5]],
       memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
     },
+    slimes: { trust: { v: 42.5, gifts: [0, 2], marks: ['heart'] }, war: { v: 1, murk: 0.5, lumen: 0.625, front: 0.25, at: 130.5, nextRaid: 133, mawBack: 0, raid: null, captives: [2, 4, 0], nextBreach: 150, stats: { won: 3, lost: 1, kills: 12, freed: 4, maw: 0, breaches: 0 } } },
   };
   const back = parseSave(serializeSave(full));
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
@@ -1115,6 +1210,11 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   const up1 = parseSave(v1);
   check(up1.v === SAVE_VERSION && up1.aftermath === null && up1.threats.remains[0].downAt === -1 && up1.threats.remains[0].cleared === 0,
     `saves: a version-1 save migrates (aftermath ${JSON.stringify(up1.aftermath)}, body ${JSON.stringify(up1.threats.remains[0])})`);
+  // A version-2 save (before the slimes): migrates with none (the city's stored trust and war stay).
+  const v2 = JSON.parse(serializeSave(full)) as Record<string, unknown>;
+  v2.v = 2; delete v2.slimes;
+  const up2 = parseSave(v2);
+  check(up2.v === SAVE_VERSION && up2.slimes === null && up2.aftermath !== null, `saves: a version-2 save migrates (slimes ${JSON.stringify(up2.slimes)})`);
   // The aftermath is sanitised: garbage rows dropped, counts whole and ≥ 0, the level-5 countdown never comes back (level ≤ 4).
   const junk = parseSave({ ...JSON.parse(serializeSave(full)), aftermath: { ledger: { evacuated: -5, injured: 'x', trapped: 2.7 }, zones: [[1, 2, 3], 'z', [1, 2, 3, NaN], [5, 6, 7, 8]], news: { kind: 7 } }, threats: { ...full.threats, strider: { s: 10, hp: 50, mode: 'rampage', level: 5 } } });
   check(junk.aftermath!.ledger.evacuated === 0 && junk.aftermath!.ledger.injured === 0 && junk.aftermath!.ledger.trapped === 2 && junk.aftermath!.zones.length === 1 && junk.aftermath!.news === null && junk.aftermath!.smoke.length === 0 && junk.threats.strider!.level === 4,

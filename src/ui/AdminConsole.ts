@@ -184,6 +184,14 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Fast time on/off', run: (g) => (g.sky.timeScale = g.sky.timeScale >= 600 ? 1 : 600) },
     ...[0, 1, 2].map((i) => ({ label: `Slime colony ${i}`, run: (_g: Game, d: Dev) => call(d, 'colony', i) })),
   ]],
+  ['Slimes', [
+    ...['hall', 'gardens', 'lake', 'archive', 'front', 'lookout', 'bottom', 'warrens', 'heart'].map((k) => ({ label: 'Go: ' + k, run: (_g: Game, d: Dev) => call(d, 'deep.go', k) })),
+    { label: 'Trust +25', run: (g) => { g.slimeRealm.trust.add(25, 'admin'); return g.slimeRealm.trust.value; } },
+    { label: 'Trust -25', run: (g) => { g.slimeRealm.trust.add(-25, 'admin'); return g.slimeRealm.trust.value; } },
+    { label: 'Raid now', run: (g) => { g.slimeRealm.devRaid(); return 'raid due'; } },
+    { label: 'Murk break out', run: (g) => { g.slimeRealm.devBreach(); return 'breach'; } },
+    { label: 'Status', run: (g) => g.slimeRealm.debug() },
+  ]],
   ['Weather', [
     ...(['clear', 'fair', 'cloudy', 'overcast', 'drizzle', 'rain', 'storm', 'fog'] as const).map((k) => ({ label: k[0].toUpperCase() + k.slice(1), run: (_g: Game, d: Dev) => call(d, 'weather.set', k) })),
     { label: 'Next', run: (_g, d) => call(d, 'weather.next') },

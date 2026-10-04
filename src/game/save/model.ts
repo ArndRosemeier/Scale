@@ -11,7 +11,7 @@
  */
 import type { GameMode } from '../mode';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export type SaveKind = 'auto' | 'manual';
 
@@ -139,6 +139,11 @@ export interface SaveData {
   settings: { crime: string; events: string };
   damage: SaveDamage | null;
   aftermath: SaveAftermath | null;
+  /**
+   * The slime civilisation (game/slimes): the Lumen's trust (deep/Trust TrustData) and the war
+   * (deep/War WarState), sanitised by their own parsers on restore.
+   */
+  slimes: { trust: unknown; war: unknown } | null;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -184,6 +189,8 @@ export const MIGRATIONS: Record<number, (o: Record<string, unknown>) => Record<s
   // 1 → 2: the aftermath (casualty ledger, levelled districts, smoke, cordons, memorials, news) and
   // the carcass cleanup per body; old saves start with none (a body lying there counts from the load).
   1: (o) => ({ ...o, v: 2, aftermath: null }),
+  // 2 → 3: the slime civilisation (trust and war); old saves take the city's stored ones.
+  2: (o) => ({ ...o, v: 3, slimes: null }),
 };
 
 /** Upgrade a raw save object to the current version (throws on a save from a newer game). */
@@ -263,6 +270,7 @@ export function parseSave(input: string | unknown): SaveData {
         news: nw && typeof nw.kind === 'string' ? { kind: str(nw.kind, 'lost', 12), until: num(nw.until, 0) } : null,
       };
     })() : null,
+    slimes: o.slimes && typeof o.slimes === 'object' ? { trust: obj(o.slimes).trust ?? null, war: obj(o.slimes).war ?? null } : null,
   };
 }
 

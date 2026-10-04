@@ -69,6 +69,9 @@ export class Music {
           if (d < 40 && (resp?.level ?? 0) >= 2) s.battle = Math.max(s.battle, 0.7);
         }
       }
+      // The war under the city: a Murk on the player, a raid at the Front, the Maw.
+      const sr = g.slimeRealm?.music;
+      if (sr) { s.danger = Math.max(s.danger, sr.danger); s.battle = Math.max(s.battle, sr.battle); }
       const lr = g.aftermath?.lastResort.state;
       if (lr === 'countdown') s.battle = 1;
       // Crime: a robbery or mugging under way near the player; the police after the player.

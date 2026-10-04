@@ -23,6 +23,8 @@ export class PowersScreen {
   /** Extra footer info (power cores found). */
   info: () => string = () => '';
   onBuy?: (id: AbilityId, rank: number) => void;
+  /** A granted power's progress line (how far to the next rank), or null. */
+  grantInfo: ((id: AbilityId) => string | null) | null = null;
 
   get holdsPointer(): boolean { return this.open || performance.now() - this.closedAt < 400; }
 
@@ -120,6 +122,7 @@ export class PowersScreen {
       const costLine = def.costText ? `<div class="pw-cost">${def.costText(Math.max(1, r))}</div>` : '';
       let action: string;
       if (sandbox) action = `<div class="pw-sb"><button data-act="down" ${r <= 0 ? 'disabled' : ''}>−</button><span>Rank ${r}</span><button data-act="up" ${r >= def.maxRank ? 'disabled' : ''}>+</button></div>`;
+      else if (def.granted) action = `<button class="pw-buy max" disabled>${r >= def.maxRank ? 'Max rank' : r > 0 ? `Rank ${r}` : 'Not yet'}</button>`;
       else if (cost === null) action = `<button class="pw-buy max" disabled>Max rank</button>`;
       else action = `<button class="pw-buy${pr.karma >= cost ? '' : ' poor'}" data-act="buy" ${pr.karma >= cost ? '' : 'disabled'}>${r > 0 ? `Rank ${r + 1}` : 'Unlock'} <b>${cost}</b> karma</button>`;
       const slotIdx = pr.slots.indexOf(def.id);
@@ -130,7 +133,7 @@ export class PowersScreen {
           <div class="pw-name">${def.name} <span class="pw-tag">${tag}${def.key ? ` · ${def.key}` : ''}</span>${where}</div>
           <div class="pw-desc">${def.desc}</div>
           ${now}${next}${costLine}
-          ${r > 0 || sandbox ? '' : `<div class="pw-how">Locked — earn karma by helping people (E next to someone who fell)</div>`}
+          ${def.granted && !sandbox ? `<div class="pw-how">${def.granted}${this.grantInfo?.(def.id) ? ` — ${this.grantInfo(def.id)}` : ''}</div>` : r > 0 || sandbox ? '' : `<div class="pw-how">Locked — earn karma by helping people (E next to someone who fell)</div>`}
         </div>
         <div class="pw-side"><div class="pw-pips">${pips}</div>${action}</div>`;
       card.onmouseenter = () => { this.hovered = def.id; };

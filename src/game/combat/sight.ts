@@ -68,6 +68,9 @@ export class Sight {
 
   /** A clear line from a to b (pad m short of b); `skip` / `skip2`: vehicles that do not count. */
   clear(ax: number, ay: number, az: number, bx: number, by: number, bz: number, pad?: number, skip: object | null = null, skip2: object | null = null): boolean {
+    // In the deep realm's caves the rock is the only thing in the way (the ground is far above).
+    const cave = this.g.underground?.caveLine(ax, ay, az, bx, by, bz, pad ?? 0);
+    if (cave !== null && cave !== undefined) return cave;
     return this.los.clear(ax, ay, az, bx, by, bz, pad, skip, skip2);
   }
 

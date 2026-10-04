@@ -98,7 +98,7 @@ void main() {
   gl_FragColor = vec4(vColor * a, 1.0);
 }`;
 
-const SHARD_VS = /* glsl */ `
+export const SHARD_VS = /* glsl */ `
 varying vec3 vN;
 varying vec3 vV;
 varying float vH;
@@ -109,7 +109,7 @@ void main() {
   vH = position.y;
   gl_Position = projectionMatrix * mv;
 }`;
-const SHARD_FS = /* glsl */ `
+export const SHARD_FS = /* glsl */ `
 uniform float uI;
 uniform float uT;
 varying vec3 vN;

@@ -71,6 +71,8 @@ export class AbilitySystem {
   hooks: AbilityHooks = {};
   /** The elemental layer (set by the game). */
   effects: PowerEffects | null = null;
+  /** Tap powers the game runs itself (the slime call): energy, cooldowns and a handler (true: it went off). */
+  special: Partial<Record<AbilityId, { cost: number; cd: number[]; run: (rank: number) => boolean }>> = {};
   /** Input disabled (UI open, free camera). */
   enabled = true;
 
@@ -177,6 +179,14 @@ export class AbilitySystem {
         return true;
       }
       default: {
+        const sp = this.special[id];
+        if (sp) {
+          if (this.energy < sp.cost) { this.hooks.deny?.('Not enough energy'); return false; }
+          if (!sp.run(r)) return false;
+          this.energy -= sp.cost;
+          this.startCooldown(id, sp.cd[r] ?? sp.cd[sp.cd.length - 1]);
+          return true;
+        }
         const tap = TAP[id];
         if (!tap || !this.effects) return false;
         if (this.energy < tap.cost) { this.hooks.deny?.('Not enough energy'); return false; }

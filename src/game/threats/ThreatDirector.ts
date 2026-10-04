@@ -53,6 +53,12 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
     },
     fallback: ['tremor'],
   },
+  // The Murk breaking out of the sewers (started by the slime realm's war, never by the clock).
+  murk: {
+    omen: () => false,
+    start: (d, site) => d.g.slimeRealm?.breachEvent(site) ?? null,
+    fallback: [],
+  },
 };
 
 /** A defeated monster's body as saves keep it (SaveBody). */
@@ -280,7 +286,7 @@ export class ThreatDirector {
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
       if (!ev.active) continue;
-      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : 'Threat', always: true });
+      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : 'Threat', always: true });
       if (ev instanceof RobotMalfunction) for (const m of ev.units) {
         if (m.out || m.mode !== 'hostile' || Math.hypot(m.obj.x - p.x, m.obj.z - p.z) > 250) continue;
         list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: 'A rogue machine' });
