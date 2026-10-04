@@ -5,7 +5,7 @@
  * reveals, frames, balconies, fire escapes…) is added by buildingDetail.ts.
  */
 import earcut from 'earcut';
-import { Rng } from '../core/rng';
+import { Rng, deriveSeed } from '../core/rng';
 import { type Poly, minAreaRect, polyArea, ensureCCW, polyCentroid, pointInPoly, distPointPolyEdge, splitPolyByLine, segIntersect } from '../core/geom2';
 import { offset, shapesToPolys, intersection } from '../core/clip';
 import { gridPoint, type SlabGrid } from './buildingLayout';
@@ -786,11 +786,28 @@ function slopedRing(mb: MeshBuilder, outer: Poly, inner: Poly, y0: number, y1: n
   }
 }
 
-/** Rooftop equipment: HVAC units, water tanks, elevator housings, skylights. */
-function rooftop(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng): void {
-  if (SIMPLE) return;
+/** One piece of rooftop equipment (shared by the roof mesh and collision): a box or a raised tank. */
+export interface RoofItem {
+  kind: 'unit' | 'housing' | 'tank';
+  x: number; z: number; yaw: number;
+  /** Box half extents (unit, housing) or the tank's radius in hx. */
+  hx: number; hz: number;
+  /** Bottom and top height (a tank stands on legs: its bottom is the roof). */
+  y0: number; y1: number;
+  /** Tank: body height and leg height. */
+  th?: number; legs?: number;
+}
+
+/**
+ * Rooftop equipment of a flat roof (top polygon at height y): HVAC units, an elevator / stair
+ * housing on tall buildings, a wooden water tank on legs. Pure and seeded per building, so the
+ * mesh (rooftop) and collision (Collision) see the same items.
+ */
+export function rooftopItems(b: BuildingDesc, top: Poly, y: number): RoofItem[] {
+  const out: RoofItem[] = [];
   const area = Math.abs(polyArea(top));
-  if (area < 40) return;
+  if (area < 40) return out;
+  const r = new Rng(deriveSeed(b.seed >>> 0, 'rooftop'));
   const obb = minAreaRect(top);
   const yaw = Math.atan2(obb.ux, obb.uz);
   const at = (fu: number, fv: number): [number, number] => {
@@ -815,37 +832,59 @@ function rooftop(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, r: Rng)
     }
     return null;
   };
-  mb.set('aFacade', 1, 1, 1, 0).set('aTint', 0.85, 0.85, 0.85);
   const units = Math.min(8, Math.floor(area / 120));
   for (let k = 0; k < units; k++) {
     const w = r.range(0.8, 2.2), d = r.range(0.8, 1.8), h = r.range(0.6, 1.4);
     const pu = place(r.range(-1, 1), r.range(-1, 1), Math.hypot(w, d) / 2);
-    if (!pu) continue;
-    const [x, z] = pu;
-    mb.set('aLayer', 11);
-    mb.box(x, y + h / 2, z, w / 2, h / 2, d / 2, yaw);
+    if (pu) out.push({ kind: 'unit', x: pu[0], z: pu[1], yaw, hx: w / 2, hz: d / 2, y0: y, y1: y + h });
   }
   if (b.floors >= 8 && area > 300) {
     // Elevator / stair housing.
     const hw = r.range(2.5, 4), hd = r.range(2.5, 4);
     const ph = place(r.range(-0.3, 0.3), r.range(-0.3, 0.3), Math.hypot(hw, hd));
-    if (ph) {
-      mb.set('aLayer', b.wall === 10 ? 9 : b.wall).set('aTint', 0.9, 0.9, 0.9);
-      mb.box(ph[0], y + 1.8, ph[1], hw, 1.8, hd, yaw);
-    }
+    if (ph) out.push({ kind: 'housing', x: ph[0], z: ph[1], yaw, hx: hw, hz: hd, y0: y, y1: y + 3.6 });
   }
   if (b.style === 'tenement' || (b.style === 'artdeco' && r.chance(0.3)) || (b.style === 'rowhouse' && r.chance(0.05))) {
     // Wooden water tank on steel legs (New York style).
     const tr = r.range(1.4, 2.0), th = r.range(2.8, 3.6), legs = 2.6;
     const pt = place(r.range(-0.6, 0.6), r.range(-0.6, 0.6), tr * 1.05);
-    if (!pt) return;
-    const [x, z] = pt;
-    mb.set('aLayer', 21).set('aTint', 0.5, 0.5, 0.5);
-    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) mb.box(x + dx * tr * 0.6, y + legs / 2, z + dz * tr * 0.6, 0.08, legs / 2, 0.08);
-    mb.set('aLayer', 12).set('aTint', 0.55, 0.42, 0.32);
-    cylinder(mb, x, y + legs, z, tr, th, 12);
-    mb.set('aLayer', 18).set('aTint', 0.6, 0.6, 0.6);
-    cone(mb, x, y + legs + th, z, tr * 1.05, 1.1, 12);
+    if (pt) out.push({ kind: 'tank', x: pt[0], z: pt[1], yaw, hx: tr, hz: tr, y0: y, y1: y + legs + th + 1.1, th, legs });
+  }
+  return out;
+}
+
+/** The rooftop equipment of a building's roof (flat or the flat top of a mansard), as rooftopItems. */
+export function roofEquipment(b: BuildingDesc, top: Poly, y: number): RoofItem[] {
+  // (Not gated by SIMPLE: that flag belongs to the mesh build in progress, collision always wants the items.)
+  top = ensureCCW(top);
+  const F = roofFrame(b, top, y);
+  if (F.kind === 'flat') return rooftopItems(b, top, y);
+  if (F.kind === 'mansard') {
+    const ring = mansardRing(top, F.obb);
+    return ring ? rooftopItems(b, ring.inner, y + ring.mh) : rooftopItems(b, top, y);
+  }
+  return [];
+}
+
+/** Rooftop equipment: HVAC units, water tanks, elevator housings (see rooftopItems). */
+function rooftop(mb: MeshBuilder, b: BuildingDesc, top: Poly, y: number, _r: Rng): void {
+  if (SIMPLE) return;
+  for (const it of rooftopItems(b, top, y)) {
+    if (it.kind === 'unit') {
+      mb.set('aFacade', 1, 1, 1, 0).set('aTint', 0.85, 0.85, 0.85).set('aLayer', 11);
+      mb.box(it.x, (it.y0 + it.y1) / 2, it.z, it.hx, (it.y1 - it.y0) / 2, it.hz, it.yaw);
+    } else if (it.kind === 'housing') {
+      mb.set('aFacade', 1, 1, 1, 0).set('aLayer', b.wall === 10 ? 9 : b.wall).set('aTint', 0.9, 0.9, 0.9);
+      mb.box(it.x, (it.y0 + it.y1) / 2, it.z, it.hx, (it.y1 - it.y0) / 2, it.hz, it.yaw);
+    } else {
+      const tr = it.hx, legs = it.legs!, th = it.th!;
+      mb.set('aFacade', 1, 1, 1, 0).set('aLayer', 21).set('aTint', 0.5, 0.5, 0.5);
+      for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) mb.box(it.x + dx * tr * 0.6, it.y0 + legs / 2, it.z + dz * tr * 0.6, 0.08, legs / 2, 0.08);
+      mb.set('aLayer', 12).set('aTint', 0.55, 0.42, 0.32);
+      cylinder(mb, it.x, it.y0 + legs, it.z, tr, th, 12);
+      mb.set('aLayer', 18).set('aTint', 0.6, 0.6, 0.6);
+      cone(mb, it.x, it.y0 + legs + th, it.z, tr * 1.05, 1.1, 12);
+    }
   }
 }
 

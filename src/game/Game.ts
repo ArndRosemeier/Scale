@@ -309,6 +309,7 @@ export class Game {
       (x0, z0, x1, z1, out) => this.countryside.obstaclesIn(x0, z0, x1, z1, out),
       new VehicleObstacles(() => [...this.traffic.vehicles, ...this.parkedList]).provider,
       (x0, z0, x1, z1, out) => this.underground.carObstacles(x0, z0, x1, z1, out),
+      this.collision.roofEquipmentIn,
     );
     this.underground.body = this.player;
     this.renderer.scene.add(this.props.group);

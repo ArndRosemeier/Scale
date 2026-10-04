@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.009 — 2026-10-04
+
+- **Fix**: rooftop equipment (air-conditioning units, elevator housings, water tanks) was walk-through; it is solid now — walk around it, or jump on top. (The equipment on each roof is laid out once more, slightly differently than before.)
+
 ## 0.008 — 2026-10-04
 
 - **Fix**: train rides got shakier and shakier — the rattle piled up over the ride. It now stays at a steady, light level, with a jolt at rail joints and a lurch when pulling away or braking.

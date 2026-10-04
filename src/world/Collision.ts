@@ -7,7 +7,7 @@ import type { WorldIndex, BuildingRef } from './WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer } from '../stream/CityStreamer';
 import { gridCell, stoopTop, buildingEntrance, STOOP_REACH, type Stoop } from '../build/buildingLayout';
-import { roofSurface } from '../build/buildingShell';
+import { roofSurface, roofEquipment } from '../build/buildingShell';
 import { pointInPoly } from '../core/geom2';
 
 /**
@@ -67,6 +67,31 @@ export class Collision {
 
   /** Roof surface height per building (null: flat), shared with the roof mesh's geometry. */
   private roofs = new WeakMap<BuildingRef, ((x: number, z: number) => number) | null>();
+
+  /** Rooftop equipment of a building as obstacles (cached; rebuilt when the building's height changes). */
+  private roofGear = new WeakMap<BuildingRef, { top: number; obs: Obstacle[] }>();
+
+  /**
+   * Obstacle provider for rooftop equipment (HVAC units, elevator housings, water tanks): walls
+   * stop the walker, and the tops can be stood on (see the obstacle rules). Registered by the game.
+   */
+  roofEquipmentIn = (x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void => {
+    for (const b of this.world.buildingsIn(x0, z0, x1, z1, this.refsR)) {
+      if (!b.alive) continue;
+      let e = this.roofGear.get(b);
+      if (!e || Math.abs(e.top - b.top) > 0.05) {
+        const L = this.destruction.layoutOf(b);
+        const items = roofEquipment(b.desc, L.tiers[L.tiers.length - 1].poly, L.base + L.height);
+        e = { top: b.top, obs: items.map((it) => ({ cyl: it.kind === 'tank', x: it.x, z: it.z, r: it.hx, hx: it.hx, hz: it.hz, ux: Math.cos(it.yaw), uz: -Math.sin(it.yaw), y0: it.y0, y1: Math.max(it.y1, it.y0 + 0.8) })) };
+        // (Low units count 0.8 m high: lower ones would be stepped over and stood in, not on.)
+        // A building cut lower (damage) loses what stood on the old roof.
+        if (b.top < L.base + L.height - 0.5) e.obs = [];
+        this.roofGear.set(b, e);
+      }
+      for (const o of e.obs) if (o.x + o.hx + o.hz >= x0 && o.x - o.hx - o.hz <= x1 && o.z + o.hx + o.hz >= z0 && o.z - o.hx - o.hz <= z1) out(o);
+    }
+  };
+  private refsR: BuildingRef[] = [];
 
   private roofOf(b: BuildingRef, L: { base: number; height: number; tiers: { poly: number[] }[] }): ((x: number, z: number) => number) | null {
     let f = this.roofs.get(b);
