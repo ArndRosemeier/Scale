@@ -15,7 +15,7 @@ const CONTROLS: [string, string][] = [
   ['F', 'Toggle flight (when unlocked)'],
   ['Numpad + / −  (or = / −)', 'Grow / shrink (size shift; range grows with rank)'],
   ['1 … 9, 0', 'Use a hotbar power (and select its slot); hold for beams, jets, ice path, super speed'],
-  ['Tab / Shift+Tab', 'Pick a target near the crosshair / cycle; Esc clears it. Powers go for the target, or straight ahead'],
+  ['Tab / Shift+Tab', 'Pick a target near the crosshair / cycle; on a giant creature: cycle its body parts (weak spots first). Esc clears. Powers go for the target, or straight ahead'],
   ['P', 'Powers: buy, upgrade, assign to the hotbar'],
   ['Right mouse (hold)', 'Look around'],
   ['Mouse wheel', 'Camera distance'],

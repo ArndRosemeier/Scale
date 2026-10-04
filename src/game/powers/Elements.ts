@@ -19,6 +19,7 @@
  */
 import * as THREE from 'three';
 import { aimDir } from '../aimRay';
+import type { ThreatZone } from '../threats/ThreatEvent';
 import type { Player } from '../../player/Player';
 import type { CameraRig } from '../../player/CameraRig';
 import type { Targeting, Target, ProbeHit } from '../Targeting';
@@ -317,9 +318,24 @@ export class Elements {
   private hurtThreat(t: Target, amount: number, x?: number, y?: number, z?: number): void {
     if (t.kind !== 'threat' || amount <= 0) return;
     const p = this.w.player;
-    const px = x ?? p.pos.x, py = y ?? p.pos.y + p.height * 0.6, pz = z ?? p.pos.z;
-    const zr = t.obj.zoneAt(px, py, pz);
-    const res = t.obj.damage(zr?.zone ?? null, amount, { cause: 'player', x: p.pos.x, y: p.pos.y, z: p.pos.z });
+    // The zone hit: at the impact point when the power has one; otherwise what it was aimed at —
+    // an exposed weak spot (the aim locks onto it), else the part the view ray meets. (It used to
+    // be the zone nearest the player: from the ground almost always a leg, so aimed hits on the
+    // glowing throat never counted.)
+    let zone: ThreatZone | null = null;
+    let px = x, py = y, pz = z;
+    if (px !== undefined && py !== undefined && pz !== undefined) zone = t.obj.zoneAt(px, py, pz)?.zone ?? null;
+    else {
+      zone = this.w.targeting.zoneOf(t.obj) ?? t.obj.zones.find((zn) => zn.weak && zn.exposed) ?? null;
+      if (!zone) {
+        const cam = this.w.camera;
+        aimDir(cam, _d);
+        zone = t.obj.ray(cam.position.x, cam.position.y, cam.position.z, _d.x, _d.y, _d.z, 4000)?.zone ?? null;
+      }
+      if (zone) { px = zone.x; py = zone.y; pz = zone.z; }
+    }
+    px ??= t.obj.x; py ??= t.obj.y; pz ??= t.obj.z;
+    const res = t.obj.damage(zone, amount, { cause: 'player', x: p.pos.x, y: p.pos.y, z: p.pos.z });
     this.stats.threat += res.dealt;
     if (res.weak && Math.random() < 0.5) this.sparks(px, py, pz, 8);
   }

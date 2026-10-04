@@ -415,3 +415,8 @@ body.looking #crosshair { display: block; }
 #pause .mix-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
 #pause .mix-foot .mix-reset { width: auto; margin: 0; padding: 4px 10px; font-size: 12px; }
 #pause .mix-foot .sub { margin: 0; font-size: 12px; color: #8fa3b5; }
+#tframe .zn { flex-direction: column; gap: 2px; }
+#tframe .zn .aim { color: #b8c4d0; }
+#tframe .zn .aim b { color: #e8ecf0; }
+#tzones i.sel { width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 2px dashed #7fd3ff; }
+#tzones i.sel.on { border-style: solid; border-color: #ffcf6e; }

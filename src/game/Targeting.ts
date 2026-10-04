@@ -68,7 +68,9 @@ export interface TargetInfo {
   /** Health 0..1 — null until the combat model exists. */
   health: number | null;
   /** A threat's body zones (weak spots marked, glowing while exposed). */
-  zones?: { x: number; y: number; z: number; r: number; name: string; weak: boolean; exposed: boolean }[];
+  zones?: { x: number; y: number; z: number; r: number; name: string; weak: boolean; exposed: boolean; sel: boolean }[];
+  /** The body part picked with Tab (powers aim there), null: the whole body. */
+  zone?: { name: string; weak: boolean; exposed: boolean; armour: number } | null;
 }
 
 export interface TargetWorld {
@@ -147,6 +149,8 @@ export function rayBox(ox: number, oy: number, oz: number, dx: number, dy: numbe
 
 export class Targeting {
   current: Target | null = null;
+  /** A big threat's body part picked with Tab (zone id), null: the whole body (powers go for an exposed weak spot). */
+  zone: string | null = null;
   /** Seconds the current target has been out of view. */
   private unseen = 0;
   private cycle: Target[] = [];
@@ -216,6 +220,12 @@ export class Targeting {
     }
   }
 
+  /** The body part of this threat picked with Tab, or null. */
+  zoneOf(obj: ThreatActor): ThreatActor['zones'][number] | null {
+    if (!this.zone || this.current?.obj !== obj) return null;
+    return obj.zones.find((z) => z.id === this.zone) ?? null;
+  }
+
   /** Same target? */
   same(a: Target | null, b: Target | null): boolean { return !!a && !!b && a.obj === b.obj; }
 
@@ -225,7 +235,10 @@ export class Targeting {
     const info: TargetInfo = { name: d?.name ?? this.name(t), kind: this.kindLabel(t), dist, con: d?.con ?? null, health: d?.health ?? null };
     if (t.kind === 'threat') {
       info.health = d?.health ?? t.obj.hp / t.obj.maxHp;
-      info.zones = t.obj.zones.map((z) => ({ x: z.x, y: z.y, z: z.z, r: z.r, name: z.name, weak: z.weak, exposed: z.exposed }));
+      const sel = this.current?.obj === t.obj ? this.zone : null;
+      info.zones = t.obj.zones.map((z) => ({ x: z.x, y: z.y, z: z.z, r: z.r, name: z.name, weak: z.weak, exposed: z.exposed, sel: z.id === sel }));
+      const zs = sel ? t.obj.zones.find((z) => z.id === sel) : null;
+      info.zone = zs ? { name: zs.name, weak: zs.weak, exposed: zs.exposed, armour: zs.armour } : null;
     }
     return info;
   }
@@ -462,6 +475,7 @@ export class Targeting {
   set(t: Target | null): void {
     if (this.same(t, this.current) || (!t && !this.current)) return;
     this.current = t;
+    this.zone = null;
     this.unseen = 0;
     this.checkT = 0.5;
     this.onChange?.(t);
@@ -522,8 +536,17 @@ export class Targeting {
     return best;
   }
 
-  /** Tab (dir 1) / Shift+Tab (-1). */
+  /** Tab (dir 1) / Shift+Tab (-1). On a giant creature: its body parts in turn (weak spots first), then the whole body again; Esc lets go. */
   tab(dir: number): void {
+    if (this.current?.kind === 'threat') {
+      const Z = this.current.obj.zones;
+      const order = [...Z.filter((z) => z.weak), ...Z.filter((z) => !z.weak)].map((z) => z.id);
+      const i = this.zone ? order.indexOf(this.zone) : -1;
+      const n = order.length + 1, j = ((i + 1 + dir) % n + n) % n;
+      this.zone = j === 0 ? null : order[j - 1];
+      this.onChange?.(this.current);
+      return;
+    }
     // A fresh press (or a stale list): rank what is in view now.
     if (this.time - this.cycleT > 2.5 || !this.cycle.length) {
       this.cycle = this.inView();
@@ -583,6 +606,8 @@ export class Targeting {
   aimPoint(t: Target, fromX: number, fromY: number, fromZ: number, speed: number, out: THREE.Vector3): THREE.Vector3 {
     // A big threat: an exposed weak spot if there is one (the soft lock goes for it).
     if (t.kind === 'threat') {
+      const picked = this.zoneOf(t.obj);
+      if (picked) return out.set(picked.x, picked.y, picked.z);
       const w = t.obj.zones.find((z) => z.weak && z.exposed);
       return w ? out.set(w.x, w.y, w.z) : this.centre(t, out);
     }

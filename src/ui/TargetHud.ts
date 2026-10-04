@@ -94,7 +94,8 @@ export class TargetHud {
     const info = T.info(t);
     // Weak spots on the body.
     let zi = 0;
-    const weak = info.zones?.filter((z) => z.weak) ?? [];
+    // Rings on the weak spots and on the part picked with Tab.
+    const weak = info.zones?.filter((z) => z.weak || z.sel) ?? [];
     for (const z of weak) {
       if (zi >= this.zoneEls.length) break;
       _t.set(z.x, z.y, z.z).project(this.camera);
@@ -103,12 +104,13 @@ export class TargetHud {
       e.style.display = 'block';
       e.style.transform = `translate(${(_t.x * 0.5 + 0.5) * W}px, ${(-_t.y * 0.5 + 0.5) * H}px)`;
       e.classList.toggle('on', z.exposed);
+      e.classList.toggle('sel', z.sel);
     }
     for (; zi < this.zoneEls.length; zi++) if (this.zoneEls[zi].style.display !== 'none') this.zoneEls[zi].style.display = 'none';
     const s = statusOf(t.obj);
     const st = s ? [s.frozen > 0 && 'frozen', s.burning > 0 && 'burning', s.stunned > 0 && 'stunned', s.shrink > 0 && 'shrunk', s.wet > 0 && 'wet'].filter(Boolean).join(', ') : '';
     const d = info.dist < 10 ? info.dist.toFixed(1) : Math.round(info.dist).toString();
-    const zkey = weak.map((z) => `${z.name}${z.exposed ? '!' : ''}`).join(',');
+    const zkey = weak.map((z) => `${z.name}${z.exposed ? '!' : ''}${z.sel ? '*' : ''}`).join(',');
     const key = `${info.name}|${info.kind}|${d}|${st}|${info.con}|${info.health}|${zkey}`;
     if (key === this.last) return;
     this.last = key;
@@ -122,6 +124,11 @@ export class TargetHud {
     this.hp.style.display = info.health === null ? 'none' : 'block';
     if (info.health !== null) this.hpFill.style.width = `${Math.round(info.health * 100)}%`;
     this.zn.style.display = weak.length ? 'flex' : 'none';
-    if (weak.length) this.zn.innerHTML = 'Weak spots: ' + weak.map((z) => `<span class="${z.exposed ? 'on' : ''}">${z.name}</span>`).join(' · ');
+    if (weak.length) {
+      const spots = weak.filter((z) => z.weak);
+      const z = info.zone;
+      const aim = z ? `Aiming at: <b>${z.name}</b> ${z.weak ? (z.exposed ? '<span class="on">open — hit it!</span>' : '(weak spot, closed)') : `(armour ${Math.round(z.armour * 100)} %)`}` : 'Tab: pick a body part';
+      this.zn.innerHTML = `<div>Weak spots: ${spots.map((s) => `<span class="${s.exposed ? 'on' : ''}">${s.name}</span>`).join(' · ')}</div><div class="aim">${aim}</div>`;
+    }
   }
 }

@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.003 — 2026-10-04
+
+- **Weak spots**: with the giant creature targeted, Tab cycles its body parts (weak spots first: throat, belly, then head, legs, tail); the target frame shows what you aim at and whether a weak spot is open. Powers hit the part you picked — or an open weak spot, or what you look at.
+- **Fix**: power hits on the creature counted on the body part nearest to you (mostly a leg), so aimed hits on the glowing throat never counted as weak-spot hits.
+
 ## 0.002 — 2026-10-04
 
 - **Calmer standing**: the motion-captured idle now plays at half speed (also for distant crowds).
