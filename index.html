@@ -8,19 +8,30 @@
   <body>
     <canvas id="view"></canvas>
     <div id="menu">
-      <div class="panel">
-        <h1>Scale</h1>
-        <p class="sub">A living, destructible city. Every seed is a different place.</p>
-        <label>Seed <input id="seed" type="text" autocomplete="off" /></label>
-        <div class="name"><span id="cityName"></span></div>
-        <label>Size <input id="size" type="range" min="0" max="1" step="0.01" /></label>
-        <div class="hint"><span id="sizeLabel"></span></div>
-        <div class="modes" id="modes">
-          <div class="modes-head">Game mode</div>
-          <button type="button" class="mode" data-mode="normal"><span class="mode-name">Normal</span><span class="mode-desc"></span></button>
-          <button type="button" class="mode" data-mode="sandbox"><span class="mode-name">Sandbox</span><span class="mode-desc"></span></button>
+      <div class="menu-bg"></div>
+      <div class="menu-inner">
+        <div class="menu-left">
+          <header class="menu-head">
+            <h1>Scale</h1>
+            <p class="sub">A living, destructible city. Every seed is a different place.</p>
+          </header>
+          <div class="menu-resume" id="menuResume"></div>
         </div>
-        <button id="start">Enter the city</button>
+        <div class="panel menu-new">
+          <h2>New city</h2>
+          <div class="city-row">
+            <label>Seed <input id="seed" type="text" autocomplete="off" /></label>
+            <div class="name"><span id="cityName"></span></div>
+          </div>
+          <label>Size <input id="size" type="range" min="0" max="1" step="0.01" /></label>
+          <div class="hint"><span id="sizeLabel"></span></div>
+          <div class="modes" id="modes">
+            <div class="modes-head">Game mode</div>
+            <button type="button" class="mode" data-mode="normal"><span class="mode-name">Normal</span><span class="mode-desc"></span></button>
+            <button type="button" class="mode" data-mode="sandbox"><span class="mode-name">Sandbox</span><span class="mode-desc"></span></button>
+          </div>
+          <button id="start">Enter the city</button>
+        </div>
       </div>
     </div>
     <div id="loading"><div class="box"><div id="loadMsg">Loading</div><div class="bar"><div id="loadBar"></div></div></div></div>

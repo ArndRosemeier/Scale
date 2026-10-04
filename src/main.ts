@@ -56,8 +56,7 @@ function showMode(): void {
 for (const b of modeBtns) b.addEventListener('click', () => { mode = b.dataset.mode as GameMode; saveMode(mode); showMode(); });
 showMode();
 // Saves: Continue (the newest) and Load game, above the choice for a new city.
-const menuPanel = menu.querySelector('.panel') as HTMLElement;
-new MainMenuSaves(menuPanel, menuPanel.querySelector('label'), (m) => void startFromSave(m.id));
+new MainMenuSaves(document.getElementById('menuResume') as HTMLElement, null, (m) => void startFromSave(m.id));
 seedIn.addEventListener('input', refresh);
 sizeIn.addEventListener('input', refresh);
 refresh();
