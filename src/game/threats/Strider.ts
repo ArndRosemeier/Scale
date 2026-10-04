@@ -73,6 +73,8 @@ export const STRIDER = {
   retreatAt: 0.3,
   /** In downtown: attack towers this long (s), then go back. */
   rampageT: 260,
+  /** A visit ends: after this long (s) it heads back to the river whatever it is doing. */
+  visitMax: 720,
   /** The incident radius (m) and its far stimulus radius. */
   radius: 95,
   karma: { weak: 2, retreat: 60, defeated: 120 },
@@ -375,6 +377,9 @@ export class Strider implements ThreatEvent, ThreatActor {
       return;
     }
     if (this.hp <= 0) { this.startDying(); return; }
+    // (Timers and the stuck check run while it is busy too: swatting the drones round its head
+    // back to back used to freeze the rampage clock, and it stayed in town for good.)
+    this.watch(dt);
     if (this.act) return;
     if ((this.mode === 'advance' || this.mode === 'rampage') && this.hp < this.maxHp * STRIDER.retreatAt) { this.startRetreat(); this.startRoar(false); return; }
     // Interest: the tallest building ahead (it is drawn to them).
@@ -383,7 +388,6 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.mode === 'advance' && this.s >= this.route.length - 12) { this.mode = 'rampage'; this.rampage = { ref: null, t: 0, done: new Set(), x: this.x, z: this.z }; }
     if (this.mode === 'rampage' && this.rampage) {
       const R = this.rampage;
-      R.t += dt;
       if (R.t > STRIDER.rampageT || R.done.size >= 5) { this.startRetreat(); return; }
       if (!R.ref || !R.ref.alive) { R.ref = this.pickTower(R.done); if (R.ref) { const c = nearestOnPoly(R.ref.poly, this.x, this.z); R.x = c.x; R.z = c.z; } }
     }
@@ -710,7 +714,7 @@ export class Strider implements ThreatEvent, ThreatActor {
 
   private locomote(dt: number): number {
     const rig = this.rig;
-    if (this.mode === 'emerge' || this.mode === 'sink') { rig.x = this.route.start.x; rig.z = this.route.start.z; return 0; }
+    if (this.mode === 'emerge' || this.mode === 'sink') { if (!this.sinkHere) { rig.x = this.route.start.x; rig.z = this.route.start.z; } return 0; }
     const factor = this.act === null ? 1 : this.act === 'swipe' ? 0.35 : this.act === 'swat' ? 0.5 : 0;
     const pace = walkSpeed(this.height, STRIDER.pace) * factor * (this.mode === 'retreat' ? 1.1 : 1) * (0.55 + 0.45 * Math.max(0.3, this.hp / this.maxHp));
     // Goal: along the route ahead (back on retreat), or the tower it is after.
@@ -720,6 +724,9 @@ export class Strider implements ThreatEvent, ThreatActor {
       const R = this.rampage;
       gx = R.x; gz = R.z;
       if (!R.ref || Math.hypot(gx - this.x, gz - this.z) < 28) stop = true;
+    } else if (this.mode === 'retreat' && this.direct) {
+      gx = this.route.start.x; gz = this.route.start.z;
+      if (Math.hypot(gx - this.x, gz - this.z) < 25) { this.mode = 'sink'; this.g.audio.play('splash_big', rig.x, 2, rig.z, 1, 0.5, 80, this.g.renderer.camera.position); return 0; }
     } else if (this.mode === 'retreat') {
       routeAt(this.route, Math.max(0, this.s - 24), _r); gx = _r.x; gz = _r.z;
       if (this.s <= Math.max(this.route.landS, 6) + 4) { this.mode = 'sink'; this.g.audio.play('splash_big', rig.x, 2, rig.z, 1, 0.5, 80, this.g.renderer.camera.position); return 0; }
@@ -749,6 +756,38 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.mode !== 'rampage') this.s = nearestS(this.route, rig.x, rig.z, this.s);
     return step;
   }
+
+  /**
+   * Never stuck in one place: walking (in or back) but hardly getting anywhere for a while — busy
+   * swatting the drones round its head, a route doubling back on itself — it moves on: into town,
+   * or straight for the river; still stuck, it sinks where it stands. Every visit also ends after
+   * STRIDER.visitMax.
+   */
+  private watch(dt: number): void {
+    if ((this.mode === 'advance' || this.mode === 'rampage') && this.t > STRIDER.visitMax) { this.startRetreat(); return; }
+    if (this.mode === 'rampage' && this.rampage) {
+      this.rampage.t += dt;
+      if (this.rampage.t > STRIDER.rampageT + 30) { this.startRetreat(); return; }
+    }
+    if (this.mode !== 'advance' && this.mode !== 'retreat') { this.watchT = 0; this.watchX = this.x; this.watchZ = this.z; return; }
+    this.watchT += dt;
+    if (this.watchT < 40) return;
+    const moved = Math.hypot(this.x - this.watchX, this.z - this.watchZ);
+    this.watchT = 0; this.watchX = this.x; this.watchZ = this.z;
+    if (moved > 20) { this.stuckN = 0; return; }
+    this.stuckN++;
+    if (this.mode === 'advance') { this.mode = 'rampage'; this.rampage = { ref: null, t: 0, done: new Set(), x: this.x, z: this.z }; }
+    else if (!this.direct) this.direct = true;
+    else { this.mode = 'sink'; this.sinkHere = true; this.g.audio.play('tremor_rumble', this.x, 2, this.z, 1, 0.6, 80, this.g.renderer.camera.position); }
+  }
+  private watchT = 0;
+  private watchX = 0;
+  private watchZ = 0;
+  private stuckN = 0;
+  /** Retreat straight for the river (the route back got it nowhere). */
+  private direct = false;
+  /** Sinking where it stands (stuck on the way back), not at the river spot it rose from. */
+  private sinkHere = false;
 
   private startRetreat(): void {
     if (this.mode === 'retreat' || this.mode === 'sink' || this.defeated) return;

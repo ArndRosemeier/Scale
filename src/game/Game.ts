@@ -290,7 +290,9 @@ export class Game {
       if (inside) return this.interiors.solidIndoors(inside, x, y, z);
       if (y < this.terrain.height(x, z) + 0.05) return true;
       const b = this.world.buildingAt(x, z);
-      return !!b && y < b.top && y > b.low && !this.interiors.insideAt(x, y, z);
+      // (Outside, a building is solid even when its interior is loaded — the camera stayed free
+      // in there and swung through the wall into the rooms.)
+      return !!b && y < b.top && y > b.low;
     };
     this.renderer.scene.add(this.interiors.group);
     this.traffic = new Traffic(this.net, this.peds, this.stimuli, this.terrain, this.profile.rightHand, this.settings.seed);

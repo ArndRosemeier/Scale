@@ -16,9 +16,11 @@ import type { SaveData } from './game/save/model';
 import { avatarStore } from './avatar/AvatarStore';
 import type { CharacterLook } from './avatar/look';
 import { MainMenuSaves } from './ui/SaveUi';
+import { versionLink } from './ui/Changelog';
 
 const params = new URLSearchParams(location.search);
 const menu = document.getElementById('menu') as HTMLDivElement;
+menu.querySelector('.sub')?.after(versionLink());
 const seedIn = document.getElementById('seed') as HTMLInputElement;
 const sizeIn = document.getElementById('size') as HTMLInputElement;
 const sizeLabel = document.getElementById('sizeLabel') as HTMLSpanElement;

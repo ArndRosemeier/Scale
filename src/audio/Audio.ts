@@ -10,11 +10,45 @@ type Manifest = Record<string, ManifestEntry>;
 
 export type AmbienceLayer = 'amb_city_day' | 'amb_city_night' | 'amb_park' | 'amb_river' | 'amb_sea' | 'amb_wind_flight' | 'amb_sewer' | 'amb_metro' | 'amb_interior' | 'amb_crowd' | 'amb_rain_light' | 'amb_rain_heavy' | 'amb_wind_gust';
 
+/** Volume categories for the sound mix (pause menu): every sound belongs to one (see categoryOf). */
+export type SoundCategory = 'alarms' | 'voices' | 'traffic' | 'destruction' | 'powers' | 'monsters' | 'animals' | 'ambience' | 'steps' | 'ui';
+export const SOUND_CATEGORIES: { id: SoundCategory; name: string }[] = [
+  { id: 'alarms', name: 'Alarms & sirens' },
+  { id: 'voices', name: 'Voices & crowds' },
+  { id: 'traffic', name: 'Traffic & trains' },
+  { id: 'destruction', name: 'Destruction & explosions' },
+  { id: 'powers', name: 'Powers & fighting' },
+  { id: 'monsters', name: 'Monsters & machines' },
+  { id: 'animals', name: 'Animals' },
+  { id: 'ambience', name: 'City ambience & weather' },
+  { id: 'steps', name: 'Footsteps & doors' },
+  { id: 'ui', name: 'Interface chimes' },
+];
+const CATEGORY_RULES: [RegExp, SoundCategory][] = [
+  [/^(siren_|civil_siren|alarm_bell|car_alarm)/, 'alarms'],
+  [/^(scream_|cry_|shout_|crowd_|terrace_murmur|amb_crowd)/, 'voices'],
+  [/^(amb_|thunder_|under_)/, 'ambience'],
+  [/^(strider_|robot_|tremor_|step_giant)/, 'monsters'],
+  [/^(car_|bus_|tire_|metro_|drone_)/, 'traffic'],
+  [/^(explosion|collapse_|concrete_|glass_|debris_|dust_|metal_|tree_|splash_)/, 'destruction'],
+  [/^(cat_|dog_|bird_|crow_|gull_|pigeon_|slime_)/, 'animals'],
+  [/^(step_|door_)/, 'steps'],
+];
+/** The category of a sound id (anything unlisted counts as powers & fighting: punches, whooshes, impacts). */
+export function categoryOf(id: string): SoundCategory {
+  for (const [re, c] of CATEGORY_RULES) if (re.test(id)) return c;
+  return 'powers';
+}
+
 export class Audio {
   ctx: AudioContext | null = null;
   private master!: GainNode;
   private sfxBus!: GainNode;
   private ambBus!: GainNode;
+  /** One gain per category between the sources and the buses (the sound mix). */
+  private cats = new Map<SoundCategory, GainNode>();
+  /** Category levels 0…1.5 (1 = as designed), remembered across sessions. */
+  readonly mix: Record<SoundCategory, number> = readMix();
   private manifest: Manifest = {};
   private buffers = new Map<string, AudioBuffer[]>();
   private loading = new Map<string, Promise<AudioBuffer[]>>();
@@ -43,6 +77,12 @@ export class Audio {
       this.ambBus = this.ctx.createGain();
       this.sfxBus.connect(this.master);
       this.ambBus.connect(this.master);
+      for (const c of SOUND_CATEGORIES) {
+        const g = this.ctx.createGain();
+        g.gain.value = this.mix[c.id];
+        g.connect(c.id === 'ambience' ? this.ambBus : this.sfxBus);
+        this.cats.set(c.id, g);
+      }
       for (const id of Object.keys(this.manifest)) if (id.startsWith('amb_')) void this.load(id);
     };
     window.addEventListener('pointerdown', start, { once: false });
@@ -104,7 +144,7 @@ export class Audio {
       pan.rolloffFactor = 1;
       pan.maxDistance = 20000;
       pan.positionX.value = x; pan.positionY.value = y; pan.positionZ.value = z;
-      src.connect(g).connect(pan).connect(this.sfxBus);
+      src.connect(g).connect(pan).connect(this.bus(id));
       const delay = listener ? Math.min(3, listener.distanceTo(new THREE.Vector3(x, y, z)) / 343) : 0;
       src.start(ctx.currentTime + delay);
       this.voices++;
@@ -127,7 +167,7 @@ export class Audio {
       src.playbackRate.value = pitch;
       const g = this.ctx.createGain();
       g.gain.value = gain * m.gain;
-      src.connect(g).connect(this.sfxBus);
+      src.connect(g).connect(this.bus(id));
       src.start();
     };
     const b = this.buffers.get(id);
@@ -156,7 +196,7 @@ export class Audio {
       g.gain.setValueAtTime(0.0001, t0 + dt);
       g.gain.exponentialRampToValueAtTime(peak, t0 + dt + 0.012);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + dur);
-      o.connect(g).connect(this.sfxBus);
+      o.connect(g).connect(this.cats.get('ui') ?? this.sfxBus);
       o.start(t0 + dt);
       o.stop(t0 + dt + dur + 0.05);
       o.onended = () => g.disconnect();
@@ -183,7 +223,7 @@ export class Audio {
     pan.distanceModel = 'inverse';
     pan.refDistance = refDist;
     pan.rolloffFactor = 1.2;
-    src.connect(g).connect(pan).connect(this.sfxBus);
+    src.connect(g).connect(pan).connect(this.bus(id));
     src.start(0, Math.random() * bufs[0].duration);
     return {
       set: (x, y, z, gain, rate = 1) => {
@@ -198,7 +238,7 @@ export class Audio {
 
   /** The effects bus for procedural sounds (PowerSynth); null until audio has started. */
   synthOut(): { ctx: AudioContext; out: AudioNode } | null {
-    return this.ctx && this.enabled ? { ctx: this.ctx, out: this.sfxBus } : null;
+    return this.ctx && this.enabled ? { ctx: this.ctx, out: this.cats.get('powers') ?? this.sfxBus } : null;
   }
 
   /** Set target levels for ambience layers (0..1); they crossfade smoothly. */
@@ -215,7 +255,7 @@ export class Audio {
         src.loop = true;
         const gain = ctx.createGain();
         gain.gain.value = 0;
-        src.connect(gain).connect(this.ambBus);
+        src.connect(gain).connect(this.bus(id));
         src.start(0, Math.random() * bufs[0].duration);
         a = { src, gain, target: 0 };
         this.amb.set(id, a);
@@ -225,6 +265,19 @@ export class Audio {
       const r = rates[id];
       if (r !== undefined) a.src.playbackRate.setTargetAtTime(r, ctx.currentTime, 0.2);
     }
+  }
+
+  /** The category gain a sound plays through. */
+  private bus(id: string): AudioNode {
+    return this.cats.get(categoryOf(id)) ?? (id.startsWith('amb_') ? this.ambBus : this.sfxBus);
+  }
+
+  /** Set one category's level (0…1.5) of the sound mix; remembered. */
+  setMix(cat: SoundCategory, v: number): void {
+    this.mix[cat] = Math.max(0, Math.min(1.5, v));
+    const g = this.cats.get(cat);
+    if (g && this.ctx) g.gain.setTargetAtTime(this.mix[cat], this.ctx.currentTime, 0.05);
+    try { localStorage.setItem(MIX_KEY, JSON.stringify(this.mix)); } catch { /* storage unavailable */ }
   }
 
   private get gain(): number { return this.muted ? 0 : this.volume; }
@@ -249,7 +302,16 @@ export class Audio {
   }
 }
 
-const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted';
+const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted', MIX_KEY = 'scale.soundMix';
+
+function readMix(): Record<SoundCategory, number> {
+  const mix = Object.fromEntries(SOUND_CATEGORIES.map((c) => [c.id, 1])) as Record<SoundCategory, number>;
+  try {
+    const o = JSON.parse(localStorage.getItem(MIX_KEY) ?? '{}') as Record<string, unknown>;
+    for (const c of SOUND_CATEGORIES) { const v = Number(o[c.id]); if (Number.isFinite(v)) mix[c.id] = Math.max(0, Math.min(1.5, v)); }
+  } catch { /* storage unavailable */ }
+  return mix;
+}
 function readNum(key: string, def: number): number {
   try { const v = localStorage.getItem(key); return v === null || isNaN(Number(v)) ? def : Number(v); } catch { return def; }
 }

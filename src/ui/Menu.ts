@@ -2,6 +2,8 @@
  * Pause menu (Esc / pointer released), help overlay (H) and settings.
  */
 import type { Game } from '../game/Game';
+import { versionLink } from './Changelog';
+import { SOUND_CATEGORIES, type SoundCategory } from '../audio/Audio';
 import { saveTimeScale } from '../render/SkySystem';
 import type { WeatherSetting } from '../render/Weather';
 
@@ -48,6 +50,8 @@ export class Menu {
         </select></div>
         <div class="row"><label>Volume</label><input id="pVol" type="range" min="0" max="1" step="0.05"></div>
         <div class="row"><label>Mute</label><input id="pMute" type="checkbox"></div>
+        <div class="row"><label>Sound mix</label><button type="button" id="pMixBtn" class="mix-btn">Adjust…</button></div>
+        <div id="pMix" class="mix-panel"></div>
         <div class="row"><label>Shadows</label><input id="pShadow" type="checkbox"></div>
         <div class="row"><label>Render scale</label><select id="pScale"><option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select></div>
         <div class="row"><label>Body size</label><span id="pSize"></span><button id="pReset">Normal size</button></div>
@@ -60,6 +64,7 @@ export class Menu {
         <div class="row" id="pInvRow"><label>Invulnerable</label><input id="pInv" type="checkbox"></div>
         <div class="buttons"><button id="pResume">Resume</button><button id="pHelp">Controls</button><button id="pNew">New city…</button></div>
       </div>`;
+    this.el.querySelector('h2')?.after(versionLink());
     document.body.appendChild(this.el);
     this.help = document.createElement('div');
     this.help.id = 'help';
@@ -71,6 +76,20 @@ export class Menu {
     $<HTMLSelectElement>('pWeather').onchange = (e) => { game.weather?.set((e.target as HTMLSelectElement).value as WeatherSetting); };
     $<HTMLInputElement>('pVol').oninput = (e) => { game.audio.setVolume(Number((e.target as HTMLInputElement).value)); this.sync(); };
     $<HTMLInputElement>('pMute').onchange = (e) => game.audio.setMuted((e.target as HTMLInputElement).checked);
+    // Sound mix: one slider per category (0–150 %, 100 % = as designed), and a reset.
+    const mix = $<HTMLDivElement>('pMix');
+    mix.innerHTML = SOUND_CATEGORIES.map((c) => `<div class="mix-row"><span>${c.name}</span><input type="range" min="0" max="1.5" step="0.05" data-cat="${c.id}"><b></b></div>`).join('')
+      + '<div class="mix-foot"><span class="sub">100 % is the normal level</span><button type="button" class="mix-reset">Reset all</button></div>';
+    const syncMix = () => {
+      for (const inp of mix.querySelectorAll<HTMLInputElement>('input[data-cat]')) {
+        const v = game.audio.mix[inp.dataset.cat as SoundCategory];
+        inp.value = String(v);
+        inp.nextElementSibling!.textContent = `${Math.round(v * 100)} %`;
+      }
+    };
+    for (const inp of mix.querySelectorAll<HTMLInputElement>('input[data-cat]')) inp.oninput = () => { game.audio.setMix(inp.dataset.cat as SoundCategory, Number(inp.value)); syncMix(); };
+    mix.querySelector<HTMLButtonElement>('.mix-reset')!.onclick = () => { for (const c of SOUND_CATEGORIES) game.audio.setMix(c.id, 1); syncMix(); };
+    $<HTMLButtonElement>('pMixBtn').onclick = () => { syncMix(); mix.classList.toggle('open'); };
     $<HTMLInputElement>('pShadow').onchange = (e) => { game.renderer.gl.shadowMap.enabled = (e.target as HTMLInputElement).checked; game.renderer.scene.traverse((o) => { const m = (o as { material?: { needsUpdate: boolean } }).material; if (m) m.needsUpdate = true; }); };
     $<HTMLSelectElement>('pScale').onchange = (e) => { game.renderer.gl.setPixelRatio(Number((e.target as HTMLSelectElement).value) * (window.devicePixelRatio > 1 ? 1 : 1)); game.renderer.resize(); };
     $<HTMLButtonElement>('pReset').onclick = () => { game.player.height = 1.8; this.sync(); };
