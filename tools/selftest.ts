@@ -26,6 +26,8 @@ import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
+import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
+import { GUNS, DRONE_PLATING, hitChance, hitRate } from '../src/game/crime/Firearms';
 
 let failures = 0;
 const check = (ok: boolean, msg: string) => {
@@ -1153,6 +1155,63 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   let diff = 0;
   for (let i = 0; i < cell.length; i++) if ((cell[i] < 128) !== (restored[i] < 128)) diff++;
   check(diff === 0, `saves: cell element state restored exactly (${diff} differences)`);
+}
+
+// ------------------------------------------------------------------ actors that cannot get anywhere; small arms
+// (sim/actors/Actor watchProgress / pursue, crime/Firearms): running in place under an unreachable
+// target counts as stuck, a pursuit re-plans once and then gives up; a goal flipping back and forth
+// every frame (the old "move in / hold" flip at an incident) is caught too; guns stay weaker than powers.
+{
+  const act = makeActor('police', 0);
+  const a = { x: 0, z: 0 };
+  // Running hard at a point 10 m off without getting anywhere (blocked): stuck after the window.
+  act.goal = { x: 10, z: 0 }; act.speed = 5.45;
+  let t = 0;
+  for (; t < 6 && act.stuckT <= 0; t += 1 / 60) watchProgress(a, act, 1 / 60);
+  check(act.stuckT > 0 && Math.abs(t - STUCK.window) < 0.1, `actors: running in place is noticed after ${t.toFixed(2)} s (window ${STUCK.window} s)`);
+  // A goal that flips between two points every frame (jitter on the spot): stuck as well.
+  const b = makeActor('police', 0), pb = { x: 0, z: 0 };
+  let flips = 0;
+  for (t = 0; t < 6 && b.stuckT <= 0; t += 1 / 60) {
+    b.goal = flips++ & 1 ? { x: 14, z: 0 } : { x: -30, z: 0 }; b.speed = 3.8;
+    pb.x += (flips & 1 ? 0.05 : -0.05);
+    watchProgress(pb, b, 1 / 60);
+  }
+  check(b.stuckT > 0, `actors: a goal flipping every frame (running in place) is caught (${t.toFixed(2)} s)`);
+  // Real progress keeps it at zero; standing still (no goal) is never stuck.
+  const c = makeActor('police', 0), pc = { x: 0, z: 0 };
+  c.goal = { x: 100, z: 0 }; c.speed = 4;
+  let worst = 0;
+  for (t = 0; t < 10; t += 1 / 60) { pc.x += 4 / 60; worst = Math.max(worst, watchProgress(pc, c, 1 / 60)); }
+  const d = makeActor('police', 0);
+  for (t = 0; t < 10; t += 1 / 60) worst = Math.max(worst, watchProgress({ x: 0, z: 0 }, d, 1 / 60));
+  check(worst === 0, 'actors: moving on, or standing still, is never stuck');
+  // Pursuit: stuck → re-plan once → stuck again → give up (unreachable); a time cap gives up too.
+  const e = makeActor('police', 0), pe = { x: 0, z: 0 };
+  e.goal = { x: 20, z: 0 }; e.speed = 5;
+  const steps: string[] = [];
+  for (t = 0; t < 20; t += 1 / 60) {
+    watchProgress(pe, e, 1 / 60);
+    const r = pursue(e, 1 / 60);
+    if (r !== 'go') steps.push(`${r}@${t.toFixed(1)}`);
+    if (r === 'give_up') break;
+  }
+  check(steps.length === 2 && steps[0].startsWith('replan') && steps[1].startsWith('give_up'), `actors: an unreachable target is re-planned once, then given up (${steps.join(', ')})`);
+  const f = makeActor('police', 0);
+  let capped = '';
+  for (t = 0; t < 40 && !capped; t += 0.1) if (pursue(f, 0.1, 30) === 'give_up') capped = t.toFixed(1);
+  check(capped !== '' && Math.abs(+capped - 30) < 0.3, `actors: a pursuit gives up at its time cap (${capped} s)`);
+  // Guns: a pair of officers brings a drone down in a few seconds; a robot takes them longer; a
+  // robber's gun stings the player only a little; all well short of a power (one blow).
+  const droneS = Math.ceil(DRONE_PLATING / GUNS.pistol.drone) / hitRate(GUNS.pistol, 2, 20, true, 3);
+  const robotS = 600 / (hitRate(GUNS.pistol, 2, 15, false, 3) * GUNS.pistol.machine);
+  const playerHp = hitRate(GUNS.crook, 1, 10, false, 5) * GUNS.crook.player;
+  check(droneS > 2 && droneS < 9, `guns: two officers' pistols bring a hovering drone down in ${droneS.toFixed(1)} s`);
+  check(robotS > 6 && robotS < 30, `guns: two officers wear a rogue robot down in ${robotS.toFixed(1)} s`);
+  check(playerHp > 0.3 && playerHp < 2, `guns: an armed robber costs the player ${playerHp.toFixed(2)} hp/s (regen ${7} hp/s out of a fight)`);
+  check(hitChance(GUNS.pistol, 5, false, 0) > hitChance(GUNS.pistol, 35, false, 0) && hitChance(GUNS.pistol, 20, true, 0) < hitChance(GUNS.pistol, 20, false, 0), 'guns: harder far off and in the air');
+  check(GUNS.crook.player < 22 && GUNS.rifle.player < 22, 'guns: no single round knocks the player down (HEALTH.knockAt 22)');
+  console.log(`actors & guns: stuck after ${STUCK.window} s, drone ${droneS.toFixed(1)} s, robot ${robotS.toFixed(1)} s, robber ${playerHp.toFixed(2)} hp/s`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

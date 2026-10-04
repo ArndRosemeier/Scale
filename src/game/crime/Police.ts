@@ -6,6 +6,11 @@
  * rest and tackle them, walk the arrested to the car and drive off. A wanted player is chased the
  * same way; an officer who gets them on the ground cuffs them (the justice layer settles it).
  *
+ * Officers carry pistols (crime/Firearms): against a criminal with a gun who has fired (or is
+ * aiming) they stop at a distance, aim and shoot back — never through bystanders; the others they
+ * run down as before. A target they cannot get to (no progress for a few seconds after a re-plan:
+ * Actor `pursue`) they let go for a while instead of running in place.
+ *
  * Incidents (THREATS_PLAN §2, the city response): the response director sends units with an
  * `IncidentJob` — a patrol car to the scene, a car to a roadblock, a SWAT van; the job says how
  * many get out and what they do there (`work`), and when to go (`done`).
@@ -18,7 +23,8 @@ import type { Combat } from '../Combat';
 import type { HurtKind } from '../PlayerHealth';
 import type { StimulusKind } from '../Stimuli';
 import type { Crime, PlayerView } from './Crime';
-import { setState, play, goTo, stand, lookAt, followRoute } from '../../sim/actors/Actor';
+import { setState, play, goTo, stand, lookAt, followRoute, pursue, endPursuit, hold, type Actor } from '../../sim/actors/Actor';
+import { GUNS, type Firearms, type GunSpec } from './Firearms';
 import type { EquipmentVisuals } from '../../items/types';
 
 export interface PoliceHost {
@@ -39,6 +45,10 @@ export interface PoliceHost {
   arrestPlayer(): void;
   /** Wanted level (0 = not wanted). */
   wanted(): number;
+  /** Small arms (effects, rules). */
+  guns?: Firearms;
+  /** An officer fires at a criminal ('held': no clear shot / someone in the line). */
+  gunAt?(o: PedAgent, c: PedAgent, spec: GunSpec): 'hit' | 'miss' | 'held';
 }
 
 /** A unit's work at an incident (the response director's): where, how many, what to do there. */
@@ -79,7 +89,15 @@ export interface Unit {
   boarded: number;
 }
 
-export const POLICE = { maxUnits: 4, maxIncident: 12, officerHp: 90, officerStrength: 1.45, run: 5.45, tackleR: 1.3, cuffTime: 1.8, respondR: 650, spawnMin: 300, spawnMax: 420 };
+export const POLICE = { maxUnits: 4, maxIncident: 12, officerHp: 90, officerStrength: 1.45, run: 5.45, tackleR: 1.3, cuffTime: 1.8, respondR: 650, spawnMin: 300, spawnMax: 420,
+  /** A criminal who could not be reached is let go this long (s); a chase gives up after this long without a tackle. */
+  skipT: 6, chaseMax: 90,
+  /** Shooting back at a gunman: from within this range (m); one hurt below this share may give up (chance per hit). */
+  fireR: 30, yieldBelow: 0.55, yieldChance: 0.45,
+  /** Closer than this to a gunman they go for the tackle instead (m). */
+  closeR: 3.5,
+  /** A gunman counts as shooting this long after a shot (s). */
+  shotMemory: 12 };
 
 /** The uniform: navy shirt, trousers and cap, a dark jacket. */
 export function policeOutfit(seed: number): EquipmentVisuals {
@@ -100,7 +118,7 @@ export class Police {
   readonly units: Unit[] = [];
   private calls: { crime: Crime | null; at: number }[] = [];
   private seed = 0x9e1;
-  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0 };
+  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0 };
 
   constructor(private h: PoliceHost) {}
 
@@ -309,7 +327,7 @@ export class Police {
     u.state = 'leaving';
     u.car.siren = false;
     u.idleT = 0;
-    for (const o of u.officers) if (o.actor) { o.actor.hostile = false; o.actor.action = null; }
+    for (const o of u.officers) if (o.actor) { o.actor.hostile = false; o.actor.action = null; o.actor.move = null; o.actor.held = null; }
   }
 
   /**
@@ -341,16 +359,19 @@ export class Police {
       }
       // The nearest criminal still on the loose or waiting to be cuffed.
       let tgt: PedAgent | null = null, bd = 160;
+      if (act.memo.skipT > 0) act.memo.skipT -= dt;
       for (const c of crime.criminals) {
         const ca = c.actor;
         if (!c.alive || !ca || ca.state === 'arrested' || ca.state === 'gone' || claimed.has(c)) continue;
+        if (act.memo.skipT > 0 && act.memo.skipId === c.id) continue;
         const d = Math.hypot(c.x - o.x, c.z - o.z);
         if (d < bd) { bd = d; tgt = c; }
       }
       if (!tgt) {
         // Nothing of their own: back up the partner.
+        lower(act);
         const mate = free.find((m) => m !== o && m.actor?.goal);
-        if (mate && Math.hypot(mate.x - o.x, mate.z - o.z) > 3) { this.chase(o, mate, mate.actor!.speed > 3 ? POLICE.run : 2); busy = true; } else stand(act);
+        if (mate && Math.hypot(mate.x - o.x, mate.z - o.z) > 3 && act.stuckT <= 0) { this.chase(o, mate, mate.actor!.speed > 3 ? POLICE.run : 2); busy = true; } else stand(act);
         continue;
       }
       busy = true;
@@ -359,7 +380,10 @@ export class Police {
       const down = tgt.state === PState.Down || ta.state === 'ko' || ta.state === 'surrender' || ta.state === 'down';
       lookAt(act, tgt.x, tgt.y + 1, tgt.z);
       act.hostile = false;
+      // A gunman (shooting, or aiming at someone): stop at a distance and shoot back.
+      if (!down && this.gunfight(o, tgt, crime, bd, dt)) continue;
       if (down) {
+        lower(act);
         // (Hysteresis: once kneeling to cuff, a little drift does not interrupt it.)
         if (bd > ((act.memo.cuff ?? 0) > 0 ? 1.9 : 1.2)) { this.chase(o, tgt, bd > 8 ? POLICE.run : 2.2); act.memo.cuff = 0; continue; }
         stand(act);
@@ -374,9 +398,12 @@ export class Police {
           H.sound('cuffs', tgt.x, tgt.y + 0.9, tgt.z, 0.9);
         }
       } else {
-        // Running away or fighting: run them down and tackle.
+        // Running away or fighting: run them down and tackle (let go of one that cannot be reached).
+        lower(act);
         this.chase(o, tgt, POLICE.run);
+        if (pursue(act, dt, POLICE.chaseMax) === 'give_up') { act.memo.skipId = tgt.id; act.memo.skipT = POLICE.skipT; stand(act); this.stats.gaveUp++; continue; }
         if (bd < POLICE.tackleR && act.attackT <= 0) {
+          endPursuit(act);
           act.attackT = 1.2;
           const dx = tgt.x - o.x, dz = tgt.z - o.z, l = Math.hypot(dx, dz) || 1;
           H.combat.hitActor(tgt, (dx / l) * 700, 120, (dz / l) * 700, 'tackle', 'police', o.x, o.z);
@@ -391,14 +418,19 @@ export class Police {
     return busy || crime.active;
   }
 
-  /** Run after a point along the sidewalks (straight in the last 28 m). */
+  /**
+   * Run after a point along the sidewalks (straight in the last 28 m — getting nowhere on the
+   * straight bit: by the sidewalks after all for a few seconds). Callers watch `act.stuckT` /
+   * `pursue` to give up.
+   */
   chase(o: PedAgent, tgt: { x: number; z: number }, speed: number): void {
     const act = o.actor!;
     const d = Math.hypot(tgt.x - o.x, tgt.z - o.z);
     setState(act, 'run');
-    if (d < 28) { goTo(act, tgt.x, tgt.z, speed); return; }
+    if (act.stuckT > 0 && !(act.memo.viaT > this.h.time)) { act.route = null; act.memo.viaT = this.h.time + 4; act.replanT = 0; }
+    if (d < 28 && !(act.memo.viaT > this.h.time)) { goTo(act, tgt.x, tgt.z, speed); return; }
     const R0 = act.route;
-    const endMoved = R0 ? Math.hypot(R0[R0.length - 3] - tgt.x, R0[R0.length - 2] - tgt.z) > 15 : true;
+    const endMoved = R0 ? Math.hypot(R0[R0.length - 3] - tgt.x, R0[R0.length - 2] - tgt.z) > (d < 28 ? 4 : 15) : true;
     if (!R0 || act.wp >= R0.length / 3 || (act.replanT <= 0 && endMoved)) {
       act.replanT = 4;
       const R = this.h.route(o.x, o.z, tgt.x, tgt.z);
@@ -408,6 +440,53 @@ export class Police {
       if (R) for (let k = 2; k < Math.min(6, R.length / 3); k++) if (Math.hypot(R[k * 3] - o.x, R[k * 3 + 1] - o.z) < Math.hypot(R[act.wp * 3] - o.x, R[act.wp * 3 + 1] - o.z)) act.wp = k;
     }
     if (!act.route || !followRoute(o, act, speed)) goTo(act, tgt.x, tgt.z, speed);
+  }
+
+  /**
+   * Against a criminal with a gun who has fired lately or is aiming: draw, stop within range, aim
+   * and shoot back (cadence; no shot through people); one badly hurt may give up. Without a clear
+   * shot they close in. False when this is no gunfight (the caller runs them down as usual).
+   */
+  private gunfight(o: PedAgent, tgt: PedAgent, crime: Crime, bd: number, dt: number): boolean {
+    const H = this.h, act = o.actor!, ta = tgt.actor!;
+    if (ta.armed !== 'gun' || !H.gunAt) return false;
+    const shooting = crime.t - (ta.memo.shotAt ?? -99) < POLICE.shotMemory || ta.action?.id === 'aim_pistol';
+    // (Right there: tackle them instead.)
+    if (!shooting || bd > POLICE.fireR + 15 || bd < POLICE.closeR) return false;
+    act.held = 'pistol';
+    lookAt(act, tgt.x, tgt.y + 1.2, tgt.z);
+    if (!act.memo.warned) { act.memo.warned = 1; H.sound('shout_hey', o.x, o.y + 1.6, o.z, 0.9, 0.8); }
+    act.memo.gunT = (act.memo.gunT ?? 0.6 + Math.random() * 0.6) - dt;
+    // No clear shot lately (a corner, people in the way) or too far: close in for a bit (to
+    // fireR / 3 — not into the muzzle: from there a step to the side).
+    if (act.memo.closeT > 0 || bd > POLICE.fireR) {
+      act.memo.closeT = (act.memo.closeT ?? 0) - dt;
+      lower(act);
+      if (bd < POLICE.fireR / 3) {
+        const sx = -(tgt.z - o.z) / (bd || 1), sz = (tgt.x - o.x) / (bd || 1), k = o.id & 1 ? 1 : -1;
+        goTo(act, o.x + sx * 3 * k, o.z + sz * 3 * k, 3);
+        setState(act, 'run');
+        return true;
+      }
+      this.chase(o, tgt, POLICE.run);
+      if (pursue(act, dt, POLICE.chaseMax) === 'give_up') { act.memo.skipId = tgt.id; act.memo.skipT = POLICE.skipT; act.memo.closeT = 0; this.stats.gaveUp++; }
+      return true;
+    }
+    stand(act);
+    endPursuit(act);
+    setState(act, 'fight');
+    hold(act, 'aim_pistol');
+    if (act.memo.gunT > 0) return true;
+    act.memo.gunT = GUNS.pistol.gap * (1.1 + Math.random() * 0.5);
+    const r = H.gunAt(o, tgt, GUNS.pistol);
+    if (r === 'held') { act.memo.heldN = (act.memo.heldN ?? 0) + 1; if (act.memo.heldN >= 2) { act.memo.heldN = 0; act.memo.closeT = 2.5; } return true; }
+    act.memo.heldN = 0;
+    this.stats.shots++;
+    if (r === 'hit') {
+      this.stats.hits++;
+      if (ta.hp < ta.maxHp * POLICE.yieldBelow && Math.random() < POLICE.yieldChance) { crime.yieldTo(tgt); this.stats.yielded++; }
+    }
+    return true;
   }
 
   /** A wanted player: chase, take down, cuff. */
@@ -424,6 +503,8 @@ export class Police {
       const d = Math.hypot(p.x - o.x, p.z - o.z);
       lookAt(act, p.x, p.y + p.height * 0.8, p.z);
       if (p.flying && p.y - o.y > 4) { stand(act); continue; }
+      // Could not get to them (no progress): wait and watch a moment.
+      if (act.memo.waitT > 0) { act.memo.waitT -= dt; stand(act); if (d < 3) act.memo.waitT = 0; continue; }
       if (H.playerDown() && d < 2.3) {
         if (d > 1.0) goTo(act, p.x, p.z, 1.4); else stand(act);
         act.memo.cuff = (act.memo.cuff ?? 0) + dt;
@@ -432,8 +513,10 @@ export class Police {
         continue;
       }
       act.memo.cuff = 0;
-      if (d > 1.2) this.chase(o, p, POLICE.run);
-      else stand(act);
+      if (d > 1.2) {
+        this.chase(o, p, POLICE.run);
+        if (pursue(act, dt) === 'give_up') { act.memo.waitT = 5; stand(act); this.stats.gaveUp++; continue; }
+      } else { stand(act); endPursuit(act); }
       // Take-down: a wind-up, then a hard shove / baton if still in reach.
       if ((act.memo.windup ?? 0) > 0) {
         act.memo.windup -= dt;
@@ -451,4 +534,9 @@ export class Police {
   summary(): string {
     return this.units.map((u) => `#${u.id} ${u.job.kind}${u.job.kind === 'crime' ? ':' + u.job.crime.kind : u.job.kind === 'incident' ? ':' + u.car.kind : ''} ${u.state} car ${Math.round(Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z))} m, ${u.officers.filter((o) => o.alive).length} officers`).join(' · ') || 'none';
   }
+}
+
+/** Weapon down (no gunfight). */
+function lower(act: Actor): void {
+  if (act.action?.id === 'aim_pistol') act.action = null;
 }

@@ -821,5 +821,29 @@
     "loop": true,
     "gain": 0.7,
     "description": "a mobile crane at work: diesel idle, hydraulic whine, a chain clinking, seamless loop (procedural, tools/synthAftermath.mjs)"
+  },
+  "gun_pistol": {
+    "files": [
+      "gun_pistol.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "a single pistol shot: a sharp crack and a short slap off the facades (procedural, tools/synthGuns.mjs)"
+  },
+  "gun_rifle": {
+    "files": [
+      "gun_rifle.wav"
+    ],
+    "loop": false,
+    "gain": 0.72,
+    "description": "a rifle's three-round burst (procedural, tools/synthGuns.mjs)"
+  },
+  "gun_ricochet": {
+    "files": [
+      "gun_ricochet.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a round striking a machine: a bright metallic tick (procedural, tools/synthGuns.mjs)"
   }
 }

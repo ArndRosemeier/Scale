@@ -21,7 +21,7 @@ export type ActorRole = 'criminal' | 'victim' | 'police' | 'shopkeeper' | 'owner
 /** Owner id of the aftermath's actors (src/game/aftermath: medics, the injured, the trapped, cleanup crews): their own budget. */
 export const AFTERMATH_OWNER = -2;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
-export type Armed = 'none' | 'knife' | 'bat';
+export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';
 
 export interface ActorAction {
@@ -77,6 +77,11 @@ export interface Actor {
   hitByPlayer: boolean;
   /** Last damage source was the player. */
   koByPlayer: boolean;
+  /**
+   * Seconds this actor has wanted to move (a goal farther than STUCK.near, a speed) without getting
+   * anywhere (kept by Pedestrians.step through `watchProgress`): owners re-plan or give up on it.
+   */
+  stuckT: number;
   /** Free slot for the owner's FSM. */
   memo: Record<string, number>;
 }
@@ -85,7 +90,7 @@ export function makeActor(role: ActorRole, owner: number, o: Partial<Actor> = {}
   return {
     role, state: 'idle', stateT: 0, hp: 40, maxHp: 40, strength: 1, armed: 'none', hostile: false,
     goal: null, speed: 0, face: null, route: null, wp: 0, replanT: 0, action: null, move: null, mood: 'neutral',
-    pinned: true, owner, upT: 0, staggerT: 0, attackT: 0, hitByPlayer: false, koByPlayer: false, memo: {},
+    pinned: true, owner, upT: 0, staggerT: 0, attackT: 0, hitByPlayer: false, koByPlayer: false, stuckT: 0, memo: {},
     ...o,
   };
 }
@@ -114,6 +119,16 @@ export function setState(act: Actor, s: ActorState): void {
 
 export function play(act: Actor, id: string, dur: number): void {
   act.action = { id, age: 0, dur };
+}
+
+/**
+ * Keep a looping action (aiming) going without restarting it: started once, then its end is kept
+ * `dur` s ahead (the animator blends a loop in over a tenth of the duration it first sees, so a
+ * short one; restarting it every few seconds made the arms dip).
+ */
+export function hold(act: Actor, id: string, dur = 1.4): void {
+  if (act.action?.id !== id) act.action = { id, age: 0, dur };
+  else act.action.dur = act.action.age + dur;
 }
 
 /** Is the actor out of the fight (KO, arrested, gone)? */
@@ -168,4 +183,57 @@ export function stand(act: Actor): void {
 
 export function lookAt(act: Actor, x: number, y: number, z: number): void {
   act.face = { x, y, z };
+}
+
+/**
+ * No-progress watch (running in place: a goal that flips back and forth, a crowd or the player in
+ * the way, a target that cannot be reached): moving less than `move` m within `window` s while
+ * wanting to go somewhere more than `near` m away counts as stuck.
+ */
+export const STUCK = { window: 2.5, move: 0.9, near: 1.6, minSpeed: 0.8 };
+
+/**
+ * Called once a step for an actor (Pedestrians.step): advances `act.stuckT` while it wants to move
+ * and does not get anywhere, resets it as soon as it has covered `STUCK.move` m. Returns stuckT.
+ * (Anchor kept in the memo: pgX, pgZ, pgT.)
+ */
+export function watchProgress(a: { x: number; z: number }, act: Actor, dt: number): number {
+  const m = act.memo;
+  const g = act.goal;
+  const wants = !!g && act.speed > STUCK.minSpeed && (g.x - a.x) * (g.x - a.x) + (g.z - a.z) * (g.z - a.z) > STUCK.near * STUCK.near;
+  if (!wants || m.pgT === undefined || (a.x - m.pgX) * (a.x - m.pgX) + (a.z - m.pgZ) * (a.z - m.pgZ) > STUCK.move * STUCK.move) {
+    m.pgX = a.x; m.pgZ = a.z; m.pgT = 0;
+    if (!wants || act.stuckT > 0) act.stuckT = 0;
+    return act.stuckT;
+  }
+  m.pgT += dt;
+  act.stuckT = m.pgT > STUCK.window ? m.pgT - STUCK.window + 1e-3 : 0;
+  return act.stuckT;
+}
+
+/** Start the no-progress watch afresh (a new goal / plan). */
+export function resetProgress(act: Actor): void {
+  act.stuckT = 0;
+  act.memo.pgT = 0;
+}
+
+/**
+ * Pursuit bookkeeping for owners (police after a target): seconds of being stuck while going for
+ * it, give-ups. `pursue` returns 'go' (keep at it), 'replan' (stuck once: plan a new way / spot) or
+ * 'give_up' (stuck again after a re-plan, or at it for longer than `maxT`: treat as unreachable).
+ */
+export function pursue(act: Actor, dt: number, maxT = Infinity): 'go' | 'replan' | 'give_up' {
+  const m = act.memo;
+  m.puT = (m.puT ?? 0) + dt;
+  if (m.puT > maxT) { endPursuit(act); return 'give_up'; }
+  if (act.stuckT <= 0) return 'go';
+  if (!m.puRe) { m.puRe = 1; resetProgress(act); return 'replan'; }
+  endPursuit(act);
+  return 'give_up';
+}
+
+/** Pursuit over (reached, switched target, gave up). */
+export function endPursuit(act: Actor): void {
+  act.memo.puT = 0; act.memo.puRe = 0;
+  resetProgress(act);
 }

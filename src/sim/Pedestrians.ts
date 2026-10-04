@@ -20,7 +20,7 @@ import { CURB_H } from '../build/ground';
 import { hashToFloat, hash32 } from '../core/rng';
 import { ACCIDENTS } from '../game/abilities/tuning';
 import { statusOf } from '../shared/status';
-import type { Actor } from './actors/Actor';
+import { type Actor, watchProgress } from './actors/Actor';
 
 export const enum PState { Walk = 0, Wait = 1, Idle = 2, Gawk = 3, Flee = 4, Down = 5, Enter = 6, Film = 7, Sit = 8, Sleep = 9 }
 
@@ -539,9 +539,16 @@ export class Pedestrians {
     const act = a.actor;
     if (act) {
       // Driven by its owner: a goal and a speed (null: stand), staggering slows it down.
-      if (act.goal) { tx = act.goal.x; tz = act.goal.z; desired = act.speed * (act.staggerT > 0 ? 0.35 : 1); }
+      if (act.goal) {
+        tx = act.goal.x; tz = act.goal.z; desired = act.speed * (act.staggerT > 0 ? 0.35 : 1);
+        // Arrive: ease off over the last half metre (at full pace on top of a point it overshot and
+        // came back every frame: running in place).
+        const gd = Math.hypot(tx - a.x, tz - a.z);
+        if (gd < 0.7 && desired > gd * 7) desired = gd < 0.08 ? 0 : gd * 7;
+      }
       else { tx = a.x; tz = a.z; desired = 0; }
       a.state = desired > 0.05 ? PState.Walk : PState.Idle;
+      watchProgress(a, act, dt);
     } else if (a.state === PState.Flee) {
       // Run away from the danger, roughly along the sidewalk, with noise.
       const dx = a.x - a.fearX, dz = a.z - a.fearZ;

@@ -9,8 +9,15 @@
  *                 and go down — PedAgent.evac; cars inside the cordon turn round or are left
  *                 standing), the screens round about switch to a red alert pictogram.
  *   2 SWAT        an armoured van brings a tactical team, more patrol cars come, and the officers
- *                 go in on foot: they run the rogue machines down and strike them (batons and stun
- *                 batons, never guns at people), credited to the police.
+ *                 go in on foot: they move to where they have a clear shot and wear the rogue
+ *                 machines down with pistols and rifles (drones too), strike the ones that come
+ *                 close (batons and stun batons), credited to the police.
+ *
+ * Officers carry guns (crime/Firearms) from level 0: whatever of the threat comes within range and
+ * in sight of their post they shoot at — never through people (they hold fire), weaker than the
+ * player's powers by design. A target they cannot get a shot at or cannot reach (a drone over the
+ * roofs, the way blocked) they give up on for a while (`pursue` / `stuckT`, Actor) instead of
+ * running in place under it.
  *
  * Escalation by elapsed time and how the level before fares (the share of the threat still in
  * action, people hurt); de-escalation once the incident is over: the siren stops, the roadblocks
@@ -29,7 +36,8 @@ import { PState } from '../../sim/Pedestrians';
 import { VState, type Vehicle } from '../../sim/Traffic';
 import { DKind } from '../../future/Drones';
 import { ENTRANCE_L } from '../../plan/metroDims';
-import { play, goTo, stand, lookAt, setState } from '../../sim/actors/Actor';
+import { play, goTo, stand, lookAt, setState, pursue, endPursuit, hold } from '../../sim/actors/Actor';
+import { GUNS, MUZZLE_Y, hitChance, type GunSpec } from '../crime/Firearms';
 import { POLICE, policeOutfit, type IncidentJob, type Unit } from '../crime/Police';
 import type { ThreatEvent, ThreatTarget } from '../threats/ThreatEvent';
 import type { EquipmentVisuals } from '../../items/types';
@@ -46,10 +54,12 @@ export const RESPONSE = {
   cordonR: 115, sirenR: 210, alertR: 330, roadblocks: 4,
   /** Level 2: SWAT vans and extra patrol cars. */
   swat: 1, extraPatrol: 2, swatOfficers: 4,
-  /** Officers engage within this range of themselves (m); strike reach and impulses (N·s). */
-  engageR: 38, reach: 1.45, baton: 430, stunBaton: 720,
-  /** SWAT anti-drone jammer: range (m), seconds between shots. */
-  jamR: 32, jamGap: 2.4,
+  /** Strike reach (m) and impulses (N·s) of batons; machines closer than `meleeR` get the baton. */
+  reach: 1.45, baton: 430, stunBaton: 720, meleeR: 3.2,
+  /** Advancing officers look this much farther than their gun reaches for something to go after (m). */
+  seekR: 30,
+  /** A target given up on (no shot to be had, the way blocked) is left alone this long (s). */
+  ignoreT: 8,
   /** Units from out of view start this far out (m). */
   spawnR: 180,
   /** After the incident: stand down in steps (s). */
@@ -73,6 +83,31 @@ export interface LevelHandler {
 }
 
 type Role = 'patrol' | 'block' | 'swat';
+
+/** An officer's mind at an incident: the target, the line to it, where to shoot from. */
+interface Mind {
+  tgt: ThreatTarget | null;
+  /** Seconds to the next look round (target and line of sight). */
+  pickT: number;
+  /** A clear line to `tgt` from where they stand (as of the last look). */
+  los: boolean;
+  /** Where they are going to shoot `spotFor` from; tries at it. */
+  spot: { x: number; z: number } | null;
+  spotFor: ThreatTarget | null;
+  tries: number;
+  /** Given up on (each left alone for ignoreT s; the oldest dropped when full). */
+  ignore: ThreatTarget[];
+  ignoreT: number[];
+  fireT: number;
+  /** Seconds holding fire (people in the line). */
+  heldT: number;
+  /** Seconds with nothing to shoot (the weapon goes back). */
+  idleT: number;
+  /** Fires kneeling. */
+  kneel: boolean;
+  /** Holding where they stand (the way to their post blocked) for this long. */
+  stayT: number;
+}
 interface RJob extends IncidentJob { role: Role; inc: Incident; slot: number; turn?: { x0: number; z0: number; y0: number; x1: number; z1: number; y1: number; t: number } }
 
 export interface Incident {
@@ -110,7 +145,8 @@ export class ResponseDirector {
   private devDone = false;
   /** Levels 3+ (stage 2: National Guard, army and air; the last resort). */
   private levels = new Map<number, LevelHandler>();
-  stats = { incidents: 0, evacuated: 0, routed: 0, msAvg: 0 };
+  private minds = new WeakMap<PedAgent, Mind>();
+  stats = { incidents: 0, evacuated: 0, routed: 0, msAvg: 0, shots: 0, hits: 0, downed: 0, gaveUp: 0, spots: 0, heldFire: 0 };
 
   constructor(private g: Game) {
     g.reactions.onEvacuate = (a, s) => this.evacuate(a, s);
@@ -294,35 +330,27 @@ export class ResponseDirector {
       car.x = T.x0 + (T.x1 - T.x0) * k; car.z = T.z0 + (T.z1 - T.z0) * k; car.yaw = T.y0 + (T.y1 - T.y0) * k;
     }
     const fx = ev.x - car.x, fz = ev.z - car.z, fl = Math.hypot(fx, fz) || 1;
-    const engage = ev.active && ev.engageOnFoot !== false && (j.role === 'swat' || (j.role === 'patrol' && inc.level >= 2));
+    // Every officer shoots at what comes within range and in sight; at level 2 (SWAT: always) they go after it.
+    const armed = ev.active && ev.engageOnFoot !== false && !!ev.shoot;
+    const advance = armed && (j.role === 'swat' || (j.role === 'patrol' && inc.level >= 2));
     let i = 0;
     for (const o of u.officers) {
       const act = o.actor;
       if (!o.alive || !act || o.state === PState.Down) { i++; continue; }
       act.hostile = false;
       act.mood = 'focused';
-      if (engage && this.engage(j, o, dt)) { i++; continue; }
-      if (engage) {
-        // Nothing in reach: move in on the nearest of it (SWAT after drones too), else the centre.
-        let to: { x: number; z: number } = ev, bd = Infinity;
-        for (const t of ev.targetsNear(ev.x, ev.z, 140)) {
-          if (!t.grounded && j.role !== 'swat') continue;
-          const d = Math.hypot(t.x - o.x, t.z - o.z);
-          if (d < bd) { bd = d; to = t; }
-        }
-        if (Math.hypot(to.x - o.x, to.z - o.z) > (to === ev ? 14 : RESPONSE.jamR * 0.6)) {
-          this.g.crime.police.chase(o, to, 3.8);
-          lookAt(act, to.x, o.y + 1.5, to.z);
-          i++;
-          continue;
-        }
-      }
+      const M = this.mind(o, i);
+      if (armed && this.engage(j, o, M, dt, advance)) { i++; continue; }
+      this.lower(o, M, dt);
       // Hold: beside the car, facing the trouble (a roadblock faces out, towards the traffic).
       const side = i & 1 ? 1 : -1, row = i >> 1;
       const out = j.role === 'block' ? -1 : 1;
       const hx = car.x + (fx / fl) * (2.6 * out) + (-fz / fl) * side * (1.4 + row * 1.6);
       const hz = car.z + (fz / fl) * (2.6 * out) + (fx / fl) * side * (1.4 + row * 1.6);
-      if (Math.hypot(hx - o.x, hz - o.z) > 0.6) { goTo(act, hx, hz, 2.2); setState(act, 'walk'); }
+      // (The way there blocked — the player, a crowd: hold where they are for a while.)
+      if (act.stuckT > 0) M.stayT = 6;
+      if (M.stayT > 0) M.stayT -= dt;
+      if (Math.hypot(hx - o.x, hz - o.z) > 0.6 && M.stayT <= 0) { goTo(act, hx, hz, 2.2); setState(act, 'walk'); }
       else { stand(act); setState(act, 'idle'); }
       lookAt(act, car.x + (fx / fl) * 30 * out, o.y + 1.5, car.z + (fz / fl) * 30 * out);
       if (!act.action && Math.random() < dt * 0.25) play(act, 'gesture_wave', 1.6);
@@ -344,36 +372,178 @@ export class ResponseDirector {
     }
   }
 
-  /**
-   * An officer goes for the nearest rogue machine on the ground (a drone diving low within reach
-   * gets the baton too); SWAT bring down drones with a hand-held jammer. True while engaged.
-   */
-  private engage(j: RJob, o: PedAgent, _dt: number): boolean {
-    const ev = j.inc.ev, act = o.actor!, swat = j.role === 'swat';
-    let best: ThreatTarget | null = null, bd = RESPONSE.engageR, air: ThreatTarget | null = null, ad = RESPONSE.jamR;
-    for (const t of ev.targetsNear(o.x, o.z, Math.max(RESPONSE.engageR, RESPONSE.jamR))) {
-      const d = Math.hypot(t.x - o.x, t.z - o.z);
-      const low = !t.grounded && t.y - o.y < 2.6 && d < RESPONSE.reach;
-      if ((t.grounded || low) && d < bd) { bd = d; best = t; }
-      if (!t.grounded && d < ad) { ad = d; air = t; }
+  private mind(o: PedAgent, slot: number): Mind {
+    let M = this.minds.get(o);
+    if (!M) {
+      M = { tgt: null, pickT: Math.random() * 0.3, los: false, spot: null, spotFor: null, tries: 0, ignore: [], ignoreT: [], fireT: 0.4 + Math.random() * 0.8, heldT: 0, idleT: 99, kneel: (slot & 1) === 1, stayT: 0 };
+      this.minds.set(o, M);
     }
-    if (swat && air && act.attackT <= 0 && (!best || bd > 6)) {
-      // Jammer: aim, a crackle, and the drone tumbles out of the sky.
-      act.attackT = RESPONSE.jamGap;
-      stand(act);
-      lookAt(act, air.x, air.y, air.z);
-      play(act, 'cast_forward', 0.8);
-      ev.strike(air, 0, -60, 0, 'police');
-      const g = this.g;
-      g.debris.chipBurst(air.x, air.y, air.z, 8, 2.5, 0, 0.5, 0, BLUE, 0.02, 0.4);
-      g.synth.play('zap', air.x, air.y, air.z, 0.45, 8);
-      j.inc.stats.strikes++;
+    return M;
+  }
+
+  /**
+   * An officer and the threat: pick the nearest target in sight (the current one kept while it
+   * is), strike it with the baton when it is right there, else shoot from where they stand; with no
+   * shot to be had, move to a spot that gives one (advancing officers only) — or give up on it for
+   * a while when there is none or the way there does not get them anywhere. True while engaged.
+   */
+  private engage(j: RJob, o: PedAgent, M: Mind, dt: number, advance: boolean): boolean {
+    const ev = j.inc.ev, act = o.actor!, swat = j.role === 'swat';
+    const spec = swat ? GUNS.rifle : GUNS.pistol;
+    M.fireT -= dt;
+    M.pickT -= dt;
+    for (let k = M.ignoreT.length - 1; k >= 0; k--) if ((M.ignoreT[k] -= dt) <= 0) { M.ignore.splice(k, 1); M.ignoreT.splice(k, 1); }
+    if (M.tgt && M.tgt.on === false) { M.tgt = null; M.spot = null; M.pickT = 0; }
+    const eyeY = o.y + (M.kneel ? MUZZLE_Y.kneel : MUZZLE_Y.stand);
+    if (M.pickT <= 0) { M.pickT = 0.45 + Math.random() * 0.2; this.pick(M, o, ev, spec, advance, eyeY); }
+    const t = M.tgt;
+    if (!t) return false;
+    M.idleT = 0;
+    const dh = Math.hypot(t.x - o.x, t.z - o.z);
+    // Right here (a robot rolling up, a drone diving at head height): the baton.
+    if ((t.grounded && dh < RESPONSE.meleeR && advance) || (!t.grounded && dh < RESPONSE.reach * 1.3 && t.y - o.y < 2.6)) return this.melee(j, o, M, t, dh, swat, dt);
+    const ty = t.grounded ? t.y + 0.45 : t.y;
+    const d3 = Math.hypot(dh, ty - eyeY);
+    if (M.los && d3 <= spec.range) { M.spot = null; endPursuit(act); return this.shoot(j, o, M, t, spec, eyeY, ty, d3, advance); }
+    if (!advance) return false;
+    return this.reposition(o, M, t, spec, dt);
+  }
+
+  /** Look round: the current target while it stays in sight, else the nearest in range with a clear line (≤ 3 rays). */
+  private pick(M: Mind, o: PedAgent, ev: ThreatEvent, spec: GunSpec, advance: boolean, eyeY: number): void {
+    const guns = this.g.crime.guns;
+    const list = ev.targetsNear(o.x, o.z, spec.range + (advance ? RESPONSE.seekR : 0));
+    const dist = (t: ThreatTarget) => Math.hypot(t.x - o.x, (t.grounded ? t.y + 0.45 : t.y) - eyeY, t.z - o.z);
+    const sight = (t: ThreatTarget) => guns.los(o.x, eyeY, o.z, t.x, t.grounded ? t.y + 0.45 : t.y, t.z);
+    const cur = M.tgt;
+    const ok = (t: ThreatTarget | null) => !!t && t.on !== false && !M.ignore.includes(t);
+    if (ok(cur) && list.includes(cur!) && dist(cur!) <= spec.range && sight(cur!)) { M.los = true; return; }
+    list.sort((a, b) => dist(a) - dist(b));
+    let fallback: ThreatTarget | null = null, rays = 0;
+    for (const t of list) {
+      if (!ok(t)) continue;
+      if (!fallback) fallback = t;
+      if (dist(t) > spec.range || rays >= 3) continue;
+      rays++;
+      if (sight(t)) { this.setTarget(M, t, true); return; }
+    }
+    // Nothing in sight: the current one (still to get a shot at) or the nearest.
+    this.setTarget(M, ok(cur) && list.includes(cur!) ? cur : fallback, false);
+  }
+
+  private setTarget(M: Mind, t: ThreatTarget | null, los: boolean): void {
+    if (t !== M.tgt) { M.tries = 0; M.spot = null; M.spotFor = null; M.heldT = 0; }
+    M.tgt = t;
+    M.los = los;
+  }
+
+  /** Aim and fire (cadence, turned towards it, nobody in the line); rounds that hit wear it down. */
+  private shoot(j: RJob, o: PedAgent, M: Mind, t: ThreatTarget, spec: GunSpec, eyeY: number, ty: number, d3: number, advance: boolean): boolean {
+    const g = this.g, act = o.actor!, ev = j.inc.ev;
+    stand(act);
+    setState(act, 'fight');
+    lookAt(act, t.x, ty, t.z);
+    act.held = spec.item;
+    act.move = M.kneel ? 'crouch' : null;
+    hold(act, spec.aim);
+    // Turned towards it (standing actors turn to `face`)?
+    let da = Math.atan2(-(t.x - o.x), -(t.z - o.z)) - o.heading;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    if (Math.abs(da) > 0.35 || M.fireT > 0) return true;
+    M.fireT = spec.gap * (0.85 + Math.random() * 0.3);
+    const fx = -Math.sin(o.heading), fz = -Math.cos(o.heading);
+    const mx = o.x + fx * 0.55, mz = o.z + fz * 0.55;
+    const guns = g.crime.guns;
+    if (!guns.clear(o, mx, eyeY, mz, t.x, ty, t.z, null, t.grounded)) {
+      // People in the line: hold fire; after a while look for another angle (advancing officers).
+      M.heldT += M.fireT;
+      this.stats.heldFire++;
+      if (M.heldT > 3 && advance) { M.heldT = 0; M.los = false; M.tries++; }
       return true;
     }
-    if (!best) return false;
+    M.heldT = 0;
+    const p = hitChance(spec, d3, !t.grounded, t.speed ?? 0);
+    let hits = 0;
+    for (let k = 0; k < spec.burst; k++) if (Math.random() < p) hits++;
+    guns.fire(o, spec, mx, eyeY, mz, t.x, ty, t.z, hits, true, t.grounded, 'police');
+    this.stats.shots += spec.burst;
+    this.stats.hits += hits;
+    if (hits > 0 && ev.shoot) {
+      j.inc.stats.strikes++;
+      if (ev.shoot(t, hits * (t.grounded ? spec.machine : spec.drone), 'police', o.x, o.z)) { this.stats.downed++; M.tgt = null; M.pickT = 0.4; }
+    }
+    return true;
+  }
+
+  /** No shot from here: go to a spot that gives one (tried a few times, then given up on). */
+  private reposition(o: PedAgent, M: Mind, t: ThreatTarget, spec: GunSpec, dt: number): boolean {
+    const act = o.actor!;
+    if (!M.spot || M.spotFor !== t) {
+      M.spot = this.firingSpot(o, t, spec, M.tries);
+      M.spotFor = t;
+      endPursuit(act);
+      if (!M.spot) return this.giveUp(M, t);
+      this.stats.spots++;
+    }
+    const step = pursue(act, dt, 30);
+    if (step === 'give_up') return this.giveUp(M, t);
+    if (step === 'replan') { M.tries++; M.spot = this.firingSpot(o, t, spec, M.tries); if (!M.spot) return this.giveUp(M, t); this.stats.spots++; }
+    const sd = Math.hypot(M.spot.x - o.x, M.spot.z - o.z);
+    if (sd < 1) {
+      // There: look again (a clear shot now, or another spot — twice — then leave it be).
+      M.spot = null; M.spotFor = null; M.pickT = 0; M.tries++;
+      endPursuit(act);
+      if (M.tries > 2) return this.giveUp(M, t);
+      stand(act);
+      return true;
+    }
+    if (act.action?.id === 'aim_pistol' || act.action?.id === 'aim_rifle') act.action = null;
+    act.move = null;
+    this.g.crime.police.chase(o, M.spot, sd > 10 ? POLICE.run : 3.2);
+    lookAt(act, t.x, t.y, t.z);
+    return true;
+  }
+
+  private giveUp(M: Mind, t: ThreatTarget): false {
+    if (M.ignore.length >= 6) { M.ignore.shift(); M.ignoreT.shift(); }
+    M.ignore.push(t); M.ignoreT.push(RESPONSE.ignoreT);
+    M.tgt = null; M.spot = null; M.spotFor = null; M.tries = 0; M.pickT = 0.2; M.los = false;
+    this.stats.gaveUp++;
+    return false;
+  }
+
+  /**
+   * A spot about 9–16 m from the target (never right under a drone: a steep shot up is a poor
+   * one), out of the buildings, with a clear line to it; tried round from the officer's side
+   * (`tries` turns further).
+   */
+  private firingSpot(o: PedAgent, t: ThreatTarget, spec: GunSpec, tries: number): { x: number; z: number } | null {
+    const g = this.g, guns = g.crime.guns;
+    const bx = o.x - t.x, bz = o.z - t.z, bl = Math.hypot(bx, bz);
+    const base = bl > 0.5 ? Math.atan2(bz, bx) : Math.random() * Math.PI * 2;
+    const r = t.grounded ? Math.min(spec.range * 0.5, 12) : Math.max(9, Math.min(16, bl));
+    const ty = t.grounded ? t.y + 0.45 : t.y;
+    for (let k = 0; k < 4; k++) {
+      const a = base + SPOT_TURN[(k + tries * 2) % SPOT_TURN.length];
+      const x = t.x + Math.cos(a) * r, z = t.z + Math.sin(a) * r;
+      if (g.world.buildingAt(x, z)) continue;
+      if (!guns.los(x, g.terrain.height(x, z) + MUZZLE_Y.stand, z, t.x, ty, t.z)) continue;
+      return { x, z };
+    }
+    return null;
+  }
+
+  /** A machine right there: close in and strike (batons; SWAT stun batons). */
+  private melee(j: RJob, o: PedAgent, M: Mind, best: ThreatTarget, bd: number, swat: boolean, dt: number): boolean {
+    const ev = j.inc.ev, act = o.actor!;
     lookAt(act, best.x, best.y + 0.4, best.z);
-    if (bd > RESPONSE.reach * 0.8) this.g.crime.police.chase(o, best, POLICE.run);
-    else { stand(act); setState(act, 'fight'); }
+    act.move = null;
+    if (act.action?.id === 'aim_pistol' || act.action?.id === 'aim_rifle') act.action = null;
+    if (bd > RESPONSE.reach * 0.8) {
+      this.g.crime.police.chase(o, best, POLICE.run);
+      if (pursue(act, dt, 20) === 'give_up') return this.giveUp(M, best);
+    } else { stand(act); setState(act, 'fight'); endPursuit(act); }
     if (bd < RESPONSE.reach && act.attackT <= 0) {
       act.attackT = swat ? 0.9 : 1.3;
       play(act, swat || Math.random() < 0.5 ? 'punch' : 'kick', 0.6);
@@ -389,6 +559,15 @@ export class ResponseDirector {
       j.inc.stats.strikes++;
     }
     return true;
+  }
+
+  /** Nothing to shoot: lower the weapon (holstered after a while). */
+  private lower(o: PedAgent, M: Mind, dt: number): void {
+    const act = o.actor!;
+    M.idleT += dt;
+    if (act.action?.id === 'aim_pistol' || act.action?.id === 'aim_rifle') act.action = null;
+    if (act.move === 'crouch') act.move = null;
+    if (M.idleT > 6 && (act.held === 'pistol' || act.held === 'rifle')) act.held = null;
   }
 
   // ================================================================== level 1: perimeter and evacuation
@@ -541,6 +720,8 @@ export class ResponseDirector {
 }
 
 const BLUE = new THREE.Color(0.6, 1.4, 4);
+/** Angles (rad) round a target to try firing spots at, from the officer's side outwards. */
+const SPOT_TURN = [0, 0.7, -0.7, 1.4, -1.4, 2.3, -2.3, Math.PI];
 
 /** The tactical team: dark overalls, helmet-like cap, tougher and stronger. */
 function equipSwat(o: PedAgent): void {

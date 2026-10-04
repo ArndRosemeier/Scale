@@ -169,6 +169,17 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(body, barrel, stock, mag);
       break;
     }
+    case 'pistol': {
+      // Held at the grip (along the hand), the slide and barrel forward along +Y like the rifle's.
+      const dark = new THREE.MeshStandardMaterial({ color: 0x18191b, roughness: 0.45, metalness: 0.55 });
+      const slide = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.034, 0.19), dark);
+      slide.position.set(0, 0.045, 0.06);
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.1, 0.034), dark);
+      grip.position.set(0, -0.0, -0.005);
+      grip.rotation.x = 0.25;
+      g.add(slide, grip);
+      break;
+    }
     case 'wallet': {
       g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.02), new THREE.MeshStandardMaterial({ color: 0x4a2e1a, roughness: 0.55 })));
       break;

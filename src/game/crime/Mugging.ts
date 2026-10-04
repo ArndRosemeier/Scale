@@ -3,15 +3,15 @@
  * passer-by on a quiet street and corner them: the victim cowers with their hands up, the muggers
  * loom and jab, the wallet changes hands, a shove, and they walk off. Shouts for help carry down
  * the street. When the player shows up the muggers weigh them up (con): a weak-looking hero gets
- * the knife, a strong one sees them run; a lone mugger who is hurt gives up. The victim may be
+ * the knife (sometimes a gun: aimed, rarely fired — see Crime GUNMAN), a strong one sees them run; a lone mugger who is hurt gives up. The victim may be
  * left on the ground — help them up afterwards.
  */
-import { Crime, type CrimeWorld, play, setState, stand, lookAt, goTo, subdued } from './Crime';
+import { Crime, CRIME_DEV, type CrimeWorld, play, setState, stand, lookAt, goTo, subdued } from './Crime';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
-import { release } from '../../sim/actors/Actor';
+import { release, hold } from '../../sim/actors/Actor';
 
-export const MUGGING = { ringMin: 120, ringMax: 320, quietR: 22, quietMax: 3, approachTimeout: 50, hp: 55, strength: 1.05, threatenFor: 7, robFor: 13 };
+export const MUGGING = { ringMin: 120, ringMax: 320, quietR: 22, quietMax: 3, approachTimeout: 50, hp: 55, strength: 1.05, threatenFor: 7, robFor: 13, gunShare: 0.3 };
 
 export class Mugging extends Crime {
   readonly kind = 'mugging' as const;
@@ -48,7 +48,8 @@ export class Mugging extends Crime {
         });
       }
       if (!c) break;
-      c.actor!.held = c.actor!.armed === 'knife' ? 'knife' : null;
+      if (i === 0 && (CRIME_DEV.guns || (c.actor!.armed === 'knife' && this.rng.chance(MUGGING.gunShare)))) c.actor!.armed = 'gun';
+      c.actor!.held = c.actor!.armed === 'knife' ? 'knife' : c.actor!.armed === 'gun' ? 'pistol' : null;
       c.actor!.memo.brave = this.rng.chance(0.4) ? 1 : 0;
     }
     if (!this.criminals.length) return false;
@@ -92,18 +93,19 @@ export class Mugging extends Crime {
           setState(act, 'fight');
           act.mood = 'angry';
           act.memo.jab = (act.memo.jab ?? 1 + i) - dt;
-          if (act.memo.jab < 0) { act.memo.jab = 1.8 + this.rng.float() * 1.6; play(act, act.armed === 'knife' && this.rng.chance(0.5) ? 'stab' : 'gesture_point', 0.7); }
+          if (act.armed === 'gun') hold(act, 'aim_pistol');
+          else if (act.memo.jab < 0) { act.memo.jab = 1.8 + this.rng.float() * 1.6; play(act, act.armed === 'knife' && this.rng.chance(0.5) ? 'stab' : 'gesture_point', 0.7); }
         });
         if (this.phaseT > MUGGING.threatenFor && this.loot && this.loot.carrier === null && !this.loot.returned && crooks[0]) {
           // The wallet goes over.
           this.loot.carrier = crooks[0];
-          crooks[0].actor!.held = crooks[0].actor!.armed === 'knife' ? 'knife' : 'wallet';
+          crooks[0].actor!.held = crooks[0].actor!.armed === 'knife' ? 'knife' : crooks[0].actor!.armed === 'gun' ? 'pistol' : 'wallet';
           if (v.actor) play(v.actor, 'pickup', 0.9);
         }
         if (this.phaseT > MUGGING.robFor) {
           // A shove, and off they go (walking: nobody chases).
           if (v.actor && this.rng.chance(0.6)) this.w.combat.hitActor(v, (v.x - crooks[0].x) * 260, 80, (v.z - crooks[0].z) * 260, 'shove', 'npc', crooks[0].x, crooks[0].z);
-          for (const c of crooks) { setState(c.actor!, 'run'); c.actor!.face = null; c.actor!.memo.calm = 1; }
+          for (const c of crooks) { setState(c.actor!, 'run'); c.actor!.face = null; c.actor!.memo.calm = 1; if (c.actor!.action?.id === 'aim_pistol') c.actor!.action = null; }
           this.go('escape');
         }
         break;

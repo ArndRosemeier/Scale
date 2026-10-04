@@ -81,6 +81,10 @@ export interface ThreatTarget {
   readonly z: number;
   /** On the ground and within an officer's reach (flying ones are not). */
   readonly grounded: boolean;
+  /** Still in action (false once disabled: an officer drops it as a target). Absent: assume so. */
+  readonly on?: boolean;
+  /** Speed (m/s, for the aim). */
+  readonly speed?: number;
 }
 
 export interface ThreatEvent {
@@ -102,6 +106,11 @@ export interface ThreatEvent {
   targetsNear(x: number, z: number, r: number): ThreatTarget[];
   /** Strike a target (an officer's baton, a taser), credited to `cause`. */
   strike(t: ThreatTarget, jx: number, jy: number, jz: number, cause: Cause): void;
+  /**
+   * Small-arms hits on a target (police pistols and rifles: crime/Firearms), credited to `cause`:
+   * wear it down without knocking it about. True when that brought it down.
+   */
+  shoot?(t: ThreatTarget, dmg: number, cause: Cause, fromX: number, fromZ: number): boolean;
   update(dt: number): void;
   /** The response gave up on stopping it by force: power it down / drive it off now. */
   shutdown(): void;

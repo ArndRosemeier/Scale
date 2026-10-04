@@ -1154,7 +1154,7 @@ export class Animator {
         this.lastActionKey = key;
         this.actionVariant = (this.actionVariant + 1) % 4;
         this.lastAction = { def: ACTIONS[a.id], id: a.id, t0: a.t0, dur: Math.max(0.1, a.dur), aim: a.aim };
-      }
+      } else if (a.aim && this.lastAction) this.lastAction.aim = a.aim; // (a held aim follows its target)
     }
     const la = this.lastAction;
     if (!la) return null;

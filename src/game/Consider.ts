@@ -38,6 +38,7 @@ export function personStrength(a: PedAgent, friends = 0): number {
   if (act) {
     if (act.armed === 'knife') s += 0.8;
     else if (act.armed === 'bat') s += 0.6;
+    else if (act.armed === 'gun') s += 1.1;
     // Hurt people are less of a threat; the KO'd or cuffed none at all.
     s *= 0.4 + 0.6 * Math.max(0, act.hp / Math.max(1, act.maxHp));
     if (act.state === 'ko' || act.state === 'arrested' || act.state === 'surrender') s *= 0.1;

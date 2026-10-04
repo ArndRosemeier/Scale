@@ -281,7 +281,9 @@ export class CrowdRenderer {
       const move = act?.move ?? (a.state === PState.Sit ? 'sit' : a.state === PState.Sleep ? 'sleep' : a.state === PState.Down ? (act && act.state === 'down' ? 'knockdown' : 'dead') : a.state === PState.Flee ? 'run' : a.speed > 2.4 ? 'run' : a.speed > 0.15 ? 'walk' : 'idle');
       const vx = -Math.sin(a.heading) * a.speed, vz = -Math.cos(a.heading) * a.speed;
       const thanks = a.helped && a.state !== PState.Down && a.stateT < 3;
-      const action = act ? (act.action && a.state !== PState.Down ? { id: act.action.id, t0: time - act.action.age, dur: act.action.dur } : undefined)
+      // (Aiming: the arms follow the target up and down.)
+      const aim: [number, number, number] | undefined = act?.action && act.face && (act.action.id === 'aim_pistol' || act.action.id === 'aim_rifle') ? [act.face.x - a.x, act.face.y - a.y - 1.4, act.face.z - a.z] : undefined;
+      const action = act ? (act.action && a.state !== PState.Down ? { id: act.action.id, t0: time - act.action.age, dur: act.action.dur, aim } : undefined)
         : a.state === PState.Film ? { id: 'gesture_point', t0: time - 0.3, dur: 10 } : thanks ? { id: 'gesture_wave', t0: time - a.stateT, dur: 3 } : undefined;
       // Powers: shrunk people are small (and squeaky, see Elements); electrocuted ones twitch.
       const st = statusOf(a);

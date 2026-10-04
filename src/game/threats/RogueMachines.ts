@@ -28,6 +28,7 @@ import type { PlayerProbe } from '../../future/ctx';
 import type { Cause } from '../Stimuli';
 import { CURB_H } from '../../build/ground';
 import { statusOf } from '../../shared/status';
+import { DRONE_PLATING } from '../crime/Firearms';
 
 export type RogueRole = 'hunter' | 'blocker' | 'rammer';
 type Tgt = { kind: 'ped'; a: PedAgent } | { kind: 'player' } | { kind: 'car'; v: Vehicle } | null;
@@ -70,6 +71,8 @@ export interface Rogue extends Malfunction {
   voiceT: number;
   /** Drones: the altitude it glitched at. */
   baseY: number;
+  /** Drones: plating left against small-arms fire (crime/Firearms DRONE_PLATING). */
+  plating: number;
 }
 
 /** Tuning (m, m/s, s, N·s, damage points). */
@@ -120,7 +123,7 @@ export class RogueMachines implements MalfunctionCtl {
     const m: Rogue = {
       mode, t: 0, hp, maxHp: hp, swing: 0, kind, obj, owner, role: 'hunter', until: 0, spin: 0, tgt: null,
       scanT: Math.random() * 0.5, attackT: 0.5, onRoad: false, roadT: 0, heading: yaw, dive: 0, diveT: 0,
-      lastBy: null, lastT: -99, out: false, voiceT: 1 + Math.random() * 3, baseY: obj.y,
+      lastBy: null, lastT: -99, out: false, voiceT: 1 + Math.random() * 3, baseY: obj.y, plating: DRONE_PLATING,
     };
     obj.mal = m;
     if (!this.list.includes(m)) this.list.push(m);
@@ -207,6 +210,30 @@ export class RogueMachines implements MalfunctionCtl {
       else if (m.kind === 'bot') F.service.knock(m.obj as ServiceBot, jx, jy, jz);
       else F.drones.knock(m.obj as Drone, jx, jy, jz);
     });
+  }
+
+  /**
+   * Small-arms hits (police pistols and rifles, a robber's gun): wear the machine down without
+   * knocking it about — a drone's plating gives after a few rounds and it drops out of the sky, a
+   * ground machine breaks once its hit points are gone (one last knock, with the cause). True when
+   * this brought it down.
+   */
+  shoot(m: Rogue, dmg: number, cause: Cause, fromX: number, fromZ: number): boolean {
+    if (m.mode !== 'hostile' || this.disabled(m)) return false;
+    m.lastBy = cause;
+    m.lastT = this.time;
+    const o = m.obj, dx = o.x - fromX, dz = o.z - fromZ, l = Math.hypot(dx, dz) || 1;
+    if (m.kind === 'drone') {
+      m.plating -= dmg;
+      if (m.plating > 0) return false;
+      this.strike(m, (dx / l) * 25, -15, (dz / l) * 25, cause);
+      return true;
+    }
+    m.hp -= dmg;
+    if (m.hp > 0) return false;
+    // Taken enough: the last round knocks it over and it breaks (hit() sees no hit points left).
+    this.strike(m, (dx / l) * 260, 60, (dz / l) * 260, cause);
+    return true;
   }
 
   update(dt: number): void {

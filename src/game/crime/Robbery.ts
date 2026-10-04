@@ -3,14 +3,17 @@
  * burst out (one with a bat or a knife, one with the cash bag) while the shopkeeper shouts and
  * points after them from the doorway. Sometimes a car waits at the kerb with its hazards on: they
  * pile in and it tears off. Stop the car (wreck it, freeze it, stand in its way) and they bail out
- * on foot. Armed robbers in a group are dangerous for an ordinary person (the con colour shows
+ * on foot. The leader is sometimes armed with a gun (GUNMAN): mostly a threat, aimed at whoever
+ * comes close; they shoot at a player who hurts one of them and now and then at officers on their
+ * heels (the police shoot back). Armed robbers in a group are dangerous for an ordinary person (the con colour shows
  * it): tactics or powers. The police come with sirens.
  */
-import { Crime, type CrimeWorld, type GetawayCar, play, setState, stand, lookAt, goTo, subdued } from './Crime';
+import { Crime, CRIME_DEV, type CrimeWorld, type GetawayCar, play, setState, stand, lookAt, goTo, subdued } from './Crime';
+import type { Armed } from '../../sim/actors/Actor';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 
-export const ROBBERY = { ringMin: 120, ringMax: 450, hp: 80, strength: 1.25, carChance: 0.55, alarmFor: 45, insideFor: 2.2 };
+export const ROBBERY = { ringMin: 120, ringMax: 450, hp: 80, strength: 1.25, carChance: 0.55, alarmFor: 45, insideFor: 2.2, gunChance: 0.35 };
 
 export class Robbery extends Crime {
   readonly kind = 'robbery' as const;
@@ -40,10 +43,11 @@ export class Robbery extends Crime {
       // Just inside the door, side by side.
       const side = (i - (n - 1) / 2) * 0.7;
       const x = door.x - door.nx * 1.3 - door.nz * side, z = door.z - door.nz * 1.3 + door.nx * side;
-      const armed = i === 0 ? (this.rng.chance(0.5) ? 'bat' : 'knife') : i === 1 && this.rng.chance(0.4) ? 'knife' : 'none';
+      const lead: Armed = CRIME_DEV.guns || this.rng.chance(ROBBERY.gunChance) ? 'gun' : this.rng.chance(0.5) ? 'bat' : 'knife';
+      const armed: Armed = i === 0 ? lead : i === 1 && this.rng.chance(0.4) ? 'knife' : 'none';
       const a = this.spawnOwned(s, x, z, Math.atan2(-door.nx, -door.nz), 'criminal');
       if (!a) break;
-      Object.assign(a.actor!, { hp: ROBBERY.hp, maxHp: ROBBERY.hp, strength: ROBBERY.strength, armed, hostile: true, held: armed === 'none' ? (i === n - 1 ? 'bag' : null) : armed === 'bat' ? 'club_bat' : 'knife' });
+      Object.assign(a.actor!, { hp: ROBBERY.hp, maxHp: ROBBERY.hp, strength: ROBBERY.strength, armed, hostile: true, held: armed === 'none' ? (i === n - 1 ? 'bag' : null) : armed === 'bat' ? 'club_bat' : armed === 'gun' ? 'pistol' : 'knife' });
       a.actor!.memo.seed = s;
       a.actor!.memo.brave = armed !== 'none' ? 1 : 0;
       this.criminals.push(a);

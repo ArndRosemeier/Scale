@@ -50,6 +50,7 @@ export const ROBOT_EVENT = {
 let EVENT_ID = 1;
 
 interface Spot { x: number; z: number; yaw: number; taken: Rogue | null }
+type LiveTarget = ThreatTarget & { m: Rogue; x: number; y: number; z: number; grounded: boolean; on: boolean; speed: number };
 
 export class RobotMalfunction implements ThreatEvent, RogueOwner {
   readonly id = EVENT_ID++;
@@ -67,8 +68,8 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
   readonly stats = { robots: 0, bots: 0, drones: 0, recruited: 0, spawned: 0, playerHurt: 0, cars: 0 };
   private spots: Spot[] = [];
   /** The machines still in action as police targets (refreshed every frame, objects reused). */
-  private live: (ThreatTarget & { m: Rogue; x: number; y: number; z: number; grounded: boolean })[] = [];
-  private liveOf = new Map<Rogue, ThreatTarget & { m: Rogue; x: number; y: number; z: number; grounded: boolean }>();
+  private live: LiveTarget[] = [];
+  private liveOf = new Map<Rogue, LiveTarget>();
   private rng: Rng;
   private checkT = 0;
   private stimT = 0;
@@ -209,12 +210,14 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
     if (!this.active) return;
     // The incident's centre follows the swarm (the machines still in action on the ground).
     let cx = 0, cz = 0, n = 0;
+    for (const t of this.live) t.on = false;
     this.live.length = 0;
     for (const m of this.units) {
       if (m.out || m.mode !== 'hostile') continue;
       let t = this.liveOf.get(m);
-      if (!t) { t = { m, x: 0, y: 0, z: 0, grounded: m.kind !== 'drone' }; this.liveOf.set(m, t); }
-      t.x = m.obj.x; t.y = m.obj.y; t.z = m.obj.z;
+      if (!t) { t = { m, x: m.obj.x, y: 0, z: m.obj.z, grounded: m.kind !== 'drone', on: true, speed: 0 }; this.liveOf.set(m, t); }
+      t.speed = dt > 0 ? Math.hypot(m.obj.x - t.x, m.obj.z - t.z) / dt : 0;
+      t.x = m.obj.x; t.y = m.obj.y; t.z = m.obj.z; t.on = true;
       this.live.push(t);
       if (m.kind !== 'drone') { cx += m.obj.x; cz += m.obj.z; n++; }
     }
@@ -280,6 +283,12 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
   strike(t: ThreatTarget, jx: number, jy: number, jz: number, cause: Cause): void {
     const m = (t as ThreatTarget & { m?: Rogue }).m;
     if (m && !m.out) this.ctl.strike(m, jx, jy, jz, cause);
+  }
+
+  shoot(t: ThreatTarget, dmg: number, cause: Cause, fromX: number, fromZ: number): boolean {
+    const m = (t as ThreatTarget & { m?: Rogue }).m;
+    if (!m || m.out) return false;
+    return this.ctl.shoot(m, dmg, cause, fromX, fromZ);
   }
 
   shutdown(): void { this.finish('shutdown'); }

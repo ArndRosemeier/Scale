@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.015 — 2026-10-04
+
+- **Police carry guns**: officers have pistols, SWAT rifles. At a robot event they shoot down rogue drones and wear down machines from a firing spot (kneeling, aiming), and hold fire when people are in the line. Useful, but much weaker than your powers.
+- **Armed criminals**: some robbers and muggers carry a gun. They mostly threaten — they shoot at you only once you have hurt one of them, or at police who chase them. Police shoot back; a wounded gunman may surrender. Bystanders run from gunfire.
+- **Fix**: police at a robot event could run in place for good (two orders contradicted each other when only drones were left). People who get nowhere for a few seconds now take another way or give up the chase.
+
 ## 0.014 — 2026-10-04
 
 - **Origin scene**: a new game in Normal mode opens with the night it all began — a falling star breaks apart over the city, a shard lands in front of you, you touch it … and the next morning you can feel when someone needs help. About 45 seconds; hold Space to skip (after the first time, one press skips). Not on Continue or Load, not in Sandbox.

@@ -28,7 +28,7 @@ import { play, setState } from '../sim/actors/Actor';
 import { statusOf } from '../shared/status';
 import { Role } from '../sim/Population';
 
-export type HitKind = 'punch' | 'strike' | 'tackle' | 'power' | 'knife' | 'bat' | 'shove';
+export type HitKind = 'punch' | 'strike' | 'tackle' | 'power' | 'knife' | 'bat' | 'shove' | 'gun';
 export type HitSource = 'player' | 'npc' | 'police' | 'world';
 export type HitEffect = 'none' | 'stagger' | 'knockdown' | 'ko';
 

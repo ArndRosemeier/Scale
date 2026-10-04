@@ -30,12 +30,13 @@ import { Reputation } from '../Reputation';
 import { CON_COLOR, conLevel, personStrength, playerStrength } from '../Consider';
 import { crimeIndex, SETTING_MAX, type CrimeSetting } from './CrimeIndex';
 import { CrimeDirector, type CrimeRoll } from './CrimeDirector';
-import { Crime, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
+import { Crime, CRIME_DEV, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
 import { Snatch } from './Snatch';
 import { Mugging } from './Mugging';
 import { Robbery } from './Robbery';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
+import { Firearms, GUNS, MUZZLE_Y, hitChance, gunJ, type GunSpec } from './Firearms';
 import { SmallDeeds, type SmallDeedKind } from '../deeds/SmallDeeds';
 import { makeItem, makeGlint } from '../deeds/critters';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -67,6 +68,8 @@ const _v = new THREE.Vector3();
 
 export class CrimeSystem {
   readonly combat: Combat;
+  /** Small arms (police, SWAT, armed robbers): rules, effects (crime/Firearms). */
+  readonly guns: Firearms;
   readonly health: PlayerHealth;
   readonly rep: Reputation;
   readonly director: CrimeDirector;
@@ -109,6 +112,7 @@ export class CrimeSystem {
       // Knocked down by the player without a power entry (a giant's feet, a blast): on the ledger.
       if (cause === 'player') this.record('body', 'person', 'knockdown', a.x, a.z, a);
     };
+    this.guns = new Firearms(g);
     this.health = new PlayerHealth(g.player, g.mode === 'sandbox');
     this.rep = new Reputation(seed, g.settings.size, g.mode);
     this.world = this.makeWorld();
@@ -128,6 +132,8 @@ export class CrimeSystem {
       playerDown: () => g.player.downT > 0 || this.health.down,
       arrestPlayer: () => this.playerArrested(),
       wanted: () => this.justice.wanted,
+      guns: this.guns,
+      gunAt: (o, c, spec) => this.gunAt(o, c, spec),
     });
     this.justice = new Justice({
       get time() { return self.time; },
@@ -242,7 +248,62 @@ export class CrimeSystem {
       random: Math.random,
       shops: (rMin, rMax) => this.shops(rMin, rMax),
       getaway: (x, z) => this.getaway(x, z),
+      officers: (x, z, r) => this.officersAround(x, z, r),
+      gunfire: (c, at) => this.crookShot(c, at),
     };
+  }
+
+  /** Officers on foot near a point (armed criminals turn on them). */
+  private officersAround(x: number, z: number, r: number): PedAgent[] {
+    const out: PedAgent[] = [];
+    for (const u of this.police.units) for (const o of u.officers) {
+      if (!o.alive || !o.actor || o.state === PState.Down || Math.hypot(o.x - x, o.z - z) > r) continue;
+      out.push(o);
+    }
+    return out;
+  }
+
+  /** Where a person's chest is to a gun. */
+  private chest(a: PedAgent): number { return a.y + (a.state === PState.Down ? 0.35 : 1.25); }
+
+  /**
+   * A criminal fires at the player or an officer: a clear line and nobody else in it, or the shot
+   * is not taken ('held'); a hit hurts (the player through PlayerHealth — size, invulnerability —
+   * an officer through Combat).
+   */
+  private crookShot(c: PedAgent, at: PedAgent | 'player'): 'hit' | 'miss' | 'held' {
+    const g = this.g, S = GUNS.crook, P = g.player;
+    const tx = at === 'player' ? P.pos.x : at.x, tz = at === 'player' ? P.pos.z : at.z;
+    const ty = at === 'player' ? P.pos.y + Math.min(P.height * 0.7, 1.3) : this.chest(at);
+    const fx = tx - c.x, fz = tz - c.z, fl = Math.hypot(fx, fz) || 1;
+    const mx = c.x + (fx / fl) * 0.5, my = c.y + MUZZLE_Y.stand, mz = c.z + (fz / fl) * 0.5;
+    const d = Math.hypot(tx - mx, ty - my, tz - mz);
+    if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5)) return 'held';
+    if (!this.guns.clear(c, mx, my, mz, tx, ty, tz, at === 'player' ? null : at, false, at === 'player')) return 'held';
+    const speed = at === 'player' ? Math.hypot(P.vel.x, P.vel.z) : at.speed;
+    const hit = Math.random() < hitChance(S, d, at === 'player' && P.flying, speed);
+    this.guns.fire(c, S, mx, my, mz, tx, ty, tz, hit ? 1 : 0, false, false, undefined);
+    if (!hit) return 'miss';
+    if (at === 'player') this.hurtPlayer(S.player * (0.8 + Math.random() * 0.4), 'gun', c.x, c.z);
+    else this.combat.hitActor(at, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'npc', c.x, c.z);
+    return 'hit';
+  }
+
+  /**
+   * An officer fires at an armed criminal (Police.workCrime): as crookShot, from the officer's
+   * side. 'held' when there is no clear line or someone is in it.
+   */
+  private gunAt(o: PedAgent, c: PedAgent, S: GunSpec): 'hit' | 'miss' | 'held' {
+    const tx = c.x, tz = c.z, ty = this.chest(c);
+    const fx = tx - o.x, fz = tz - o.z, fl = Math.hypot(fx, fz) || 1;
+    const mx = o.x + (fx / fl) * 0.5, my = o.y + MUZZLE_Y.stand, mz = o.z + (fz / fl) * 0.5;
+    const d = Math.hypot(tx - mx, ty - my, tz - mz);
+    if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5)) return 'held';
+    if (!this.guns.clear(o, mx, my, mz, tx, ty, tz, c, true)) return 'held';
+    const hit = Math.random() < hitChance(S, d, false, c.speed);
+    this.guns.fire(o, S, mx, my, mz, tx, ty, tz, hit ? 1 : 0, false, true, 'police');
+    if (hit) this.combat.hitActor(c, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'police', o.x, o.z);
+    return hit ? 'hit' : 'miss';
   }
 
   /** In the player's view (camera frustum, within 220 m)? */
@@ -437,6 +498,7 @@ export class CrimeSystem {
     }
     this.linger(dt);
     this.police.update(dt);
+    this.guns.update(dt);
     this.justice.update(dt);
     this.deeds.update(dt);
     this.tackle(dt);
@@ -870,6 +932,11 @@ export class CrimeSystem {
       crimes: () => this.crimes.map((c) => c.snapshot()),
       crimeStats: () => ({ ...this.stats, actors: this.actorCount, director: this.director.stats, police: this.police.summary(), wanted: this.justice.wanted, heat: +this.justice.heat.toFixed(2), rep: this.rep.value, hp: Math.round(this.health.hp), combat: this.combat.stats }),
       deed: (kind: SmallDeedKind = 'cat') => this.deeds.start(kind),
+      /**
+       * Small arms: dev.guns() → stats; dev.guns(true) arms every robbery / mugging leader with a gun
+       * (false: back to chance).
+       */
+      guns: (on?: boolean) => { if (on !== undefined) CRIME_DEV.guns = on; return { force: CRIME_DEV.guns, ...this.guns.stats, police: { ...this.police.stats }, response: this.g.response ? { ...this.g.response.stats } : null }; },
       wanted: (n = 1) => { this.justice.heat = [0, 2.6, 6.1, 12.1][Math.max(0, Math.min(3, n))]; (this.justice as unknown as { levelUp(): void }).levelUp(); return this.justice.wanted; },
       setCrime: (s: CrimeSetting) => { this.setting = s; return s; },
       maxCrimes: SETTING_MAX,

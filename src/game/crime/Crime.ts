@@ -19,7 +19,7 @@ import { PState } from '../../sim/Pedestrians';
 import type { StimulusKind } from '../Stimuli';
 import type { Combat } from '../Combat';
 import type { HurtKind } from '../PlayerHealth';
-import { type Actor, type ActorRole, makeActor, attach, release, setState, play, followRoute, goTo, stand, lookAt, subdued } from '../../sim/actors/Actor';
+import { type Actor, type ActorRole, makeActor, attach, release, setState, play, followRoute, goTo, stand, lookAt, subdued, hold } from '../../sim/actors/Actor';
 import { personStrength } from '../Consider';
 
 export type CrimeKind = 'snatch' | 'mugging' | 'robbery';
@@ -82,7 +82,24 @@ export interface CrimeWorld {
   shops?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
   /** A getaway car waiting at the kerb near a point (null: no road). */
   getaway?(x: number, z: number): GetawayCar | null;
+  /** Officers on foot near a point (armed criminals turn on them). */
+  officers?(x: number, z: number, r: number): PedAgent[];
+  /**
+   * A criminal's gun fired at the player or an officer — effects, damage (the player's through
+   * PlayerHealth) and the stimulus are the world's. 'held': no clear shot (a wall, people in the line).
+   */
+  gunfire?(shooter: PedAgent, at: PedAgent | 'player'): 'hit' | 'miss' | 'held';
 }
+
+/** Dev switches (dev.guns): every robbery and mugging has a gun. */
+export const CRIME_DEV = { guns: false };
+
+/**
+ * Armed criminals with a gun (crime/Firearms GUNS.crook): mostly a threat — they aim, back off,
+ * keep their distance — and shoot rarely: at a player who has hurt one of them, now and then at an
+ * officer on their heels.
+ */
+export const GUNMAN = { keepMin: 4.5, keepMax: 13, gap: [2.6, 4.4], copEvery: [3, 6], copChance: 0.35, copR: 20, aimFor: 0.9 };
 
 /** A car the robbers flee in (a traffic vehicle under the crime's control). */
 export interface GetawayCar {
@@ -301,6 +318,8 @@ export abstract class Crime {
   protected flee(c: PedAgent, dt: number): boolean {
     const act = c.actor!;
     const p = this.w.player;
+    if (this.turnOnPolice(c, dt)) return true;
+    if (act.action?.id === 'aim_pistol') act.action = null;
     const d = this.distToPlayer(c);
     const ps = Math.hypot(p.vx, p.vz);
     // Chased: the player is close, or closing in at a run.
@@ -354,7 +373,10 @@ export abstract class Crime {
     const act = c.actor!;
     const p = this.w.player;
     // The player is down: done here, run (until hit again).
-    if (p.down) { act.memo.choice = 0; act.memo.decHp = act.hp; act.memo.panic = 3; setState(act, 'run'); return; }
+    if (p.down) { act.memo.choice = 0; act.memo.decHp = act.hp; act.memo.panic = 3; setState(act, 'run'); if (act.action?.id === 'aim_pistol') act.action = null; return; }
+    // A gun: keep off and aim (a pistol-whip only when the player is right there).
+    if (act.armed === 'gun' && this.distToPlayer(c) > 1.8) { this.gunFight(c, dt); return; }
+    if (act.action?.id === 'aim_pistol') act.action = null;
     setState(act, 'fight');
     act.mood = 'angry';
     act.hostile = true;
@@ -387,6 +409,81 @@ export abstract class Crime {
       act.memo.windup = 0.32;
       play(act, act.armed === 'knife' ? 'stab' : act.armed === 'bat' ? 'swing_1h' : this.w.random() < 0.7 ? 'punch' : 'kick', 0.7);
     }
+  }
+
+  /** An armed criminal gives up under police fire (Police.workCrime). */
+  yieldTo(c: PedAgent): void {
+    if (c.actor && !subdued(c.actor) && c.state !== PState.Down) this.surrender(c);
+  }
+
+  /** The player has hurt one of this crime's criminals (an armed one may shoot back). */
+  protected get playerAttacked(): boolean { return this.criminals.some((c) => c.actor?.hitByPlayer); }
+
+  /**
+   * A gunman facing the player: keeps a few metres off (backs away, comes on), aims, and shoots
+   * only at a player who has hurt one of them — otherwise the gun is a threat.
+   */
+  protected gunFight(c: PedAgent, dt: number): void {
+    const act = c.actor!, p = this.w.player, G = GUNMAN;
+    setState(act, 'fight');
+    act.mood = 'angry';
+    act.hostile = true;
+    act.held = 'pistol';
+    const d = this.distToPlayer(c);
+    // An officer closing in (nearer than the player) draws the gun instead (looked for once a second).
+    act.memo.copScanT = (act.memo.copScanT ?? 0) - dt;
+    if (act.memo.copScanT <= 0 && this.w.officers) {
+      act.memo.copScanT = 1;
+      const cop = this.w.officers(c.x, c.z, Math.min(G.copR, d)).sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z))[0];
+      act.memo.copId = cop ? cop.id : 0;
+    }
+    const cop = act.memo.copId && this.w.officers ? this.w.officers(c.x, c.z, G.copR + 4).find((o) => o.id === act.memo.copId) : undefined;
+    const tx = cop ? cop.x : p.x, tz = cop ? cop.z : p.z, td = cop ? Math.hypot(cop.x - c.x, cop.z - c.z) : d;
+    lookAt(act, tx, cop ? cop.y + 1.3 : p.y + Math.min(p.height * 0.7, 1.3), tz);
+    // Keep a few metres off the player: back away when they close in, come on when far.
+    const ax = c.x - p.x, az = c.z - p.z, al = Math.hypot(ax, az) || 1;
+    if (d < G.keepMin) { goTo(act, c.x + (ax / al) * 3, c.z + (az / al) * 3, 3.2); if (act.action?.id === 'aim_pistol') act.action = null; }
+    else if (d > G.keepMax && !cop) { goTo(act, p.x + (ax / al) * 9, p.z + (az / al) * 9, 3.4); if (act.action?.id === 'aim_pistol') act.action = null; }
+    else { stand(act); hold(act, 'aim_pistol'); }
+    act.memo.gunT = (act.memo.gunT ?? 0.8 + this.w.random() * 1.2) - dt;
+    if (act.memo.gunT > 0 || d < G.keepMin || td > 24 || !act.action) return;
+    act.memo.gunT = G.gap[0] + this.w.random() * (G.gap[1] - G.gap[0]);
+    if (!this.w.gunfire || act.staggerT > 0) return;
+    // Rarely: at an officer now and then, at the player only once they have hurt one of them.
+    if (cop) { if (this.w.random() < G.copChance + 0.15 && this.w.gunfire(c, cop) !== 'held') act.memo.shotAt = this.t + 1e-3; return; }
+    if (!this.playerAttacked) return;
+    if (this.w.gunfire(c, 'player') !== 'held') act.memo.shotAt = this.t + 1e-3;
+  }
+
+  /**
+   * On the run with a gun: now and then turn on an officer close behind and fire (true while
+   * doing so: the caller leaves the frame to it).
+   */
+  protected turnOnPolice(c: PedAgent, dt: number): boolean {
+    const act = c.actor!, G = GUNMAN;
+    if (act.armed !== 'gun' || !this.w.officers || !this.w.gunfire) return false;
+    act.memo.copT = (act.memo.copT ?? G.copEvery[0]) - dt;
+    if (act.memo.copT <= 0 && !(act.memo.aimT > 0)) {
+      act.memo.copT = G.copEvery[0] + this.w.random() * (G.copEvery[1] - G.copEvery[0]);
+      const cops = this.w.officers(c.x, c.z, G.copR);
+      if (cops.length && this.w.random() < G.copChance) { act.memo.aimT = G.aimFor; act.memo.copId = cops[0].id; act.memo.fired = 0; }
+    }
+    if (!(act.memo.aimT > 0)) return false;
+    const cop = this.w.officers(c.x, c.z, G.copR + 6).find((o) => o.id === act.memo.copId);
+    if (!cop) { act.memo.aimT = 0; return false; }
+    act.memo.aimT -= dt;
+    stand(act);
+    // ('point', not 'fight': the crimes send fighters after the player.)
+    setState(act, 'point');
+    act.held = 'pistol';
+    lookAt(act, cop.x, cop.y + 1.3, cop.z);
+    hold(act, 'aim_pistol');
+    if (act.memo.aimT < G.aimFor * 0.45 && !act.memo.fired) {
+      act.memo.fired = 1;
+      if (this.w.gunfire(c, cop) !== 'held') act.memo.shotAt = this.t + 1e-3;
+    }
+    if (act.memo.aimT <= 0) act.action = null;
+    return true;
   }
 
   /** Give up: hands up, stand still (the police cuff them). */
