@@ -81,6 +81,8 @@ export class Player {
   /** Allowed body height range (size shift). */
   minHeight = MIN_HEIGHT;
   maxHeight = MAX_HEIGHT;
+  /** Admin console: any size from MIN_HEIGHT to MAX_HEIGHT, whatever the size power's rank allows. */
+  sizeOverride = false;
   /** Space jumps normally (false while an ability handles Space itself). */
   jumpOnSpace = true;
   /**
@@ -130,7 +132,7 @@ export class Player {
   update(dt: number, input: Input, camYaw: number, camPitch: number): void {
     // ---- size (numpad + / -): exponential growth, clamped.
     const grow = (input.down('NumpadAdd') || input.down('Equal') ? 1 : 0) - (input.down('NumpadSubtract') || input.down('Minus') ? 1 : 0);
-    const lo = Math.max(MIN_HEIGHT, this.minHeight), hi = Math.min(MAX_HEIGHT, Math.max(lo, this.maxHeight));
+    const lo = this.sizeOverride ? MIN_HEIGHT : Math.max(MIN_HEIGHT, this.minHeight), hi = this.sizeOverride ? MAX_HEIGHT : Math.min(MAX_HEIGHT, Math.max(lo, this.maxHeight));
     if (grow !== 0 || this.height < lo || this.height > hi) {
       const before = this.height;
       this.height = clamp(this.height * Math.exp(grow * dt * 0.9), lo, hi);
