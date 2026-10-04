@@ -525,5 +525,121 @@
     "loop": false,
     "gain": 0.75,
     "description": "a machine turning hostile: servo whine winding up into a harsh two-tone chirp (procedural, tools/synthThreats.mjs)"
+  },
+  "strider_step": {
+    "files": [
+      "strider_step_1.wav",
+      "strider_step_2.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a 40 m creature's footfall: sub-bass boom, ground thump, debris rattle, long rumble (procedural, tools/synthStrider.mjs)"
+  },
+  "strider_roar": {
+    "files": [
+      "strider_roar.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the Strider’s two-tone roar: a bellow sliding into a rasping upper tone, guttural fall, city echo (procedural, tools/synthStrider.mjs)"
+  },
+  "strider_charge": {
+    "files": [
+      "strider_charge.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "breath charging: rising electric hum with building crackle (procedural, tools/synthStrider.mjs)"
+  },
+  "strider_breath": {
+    "files": [
+      "strider_breath.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "breath attack: roaring, tearing plasma rush with a sizzling top (procedural, tools/synthStrider.mjs)"
+  },
+  "tremor_rumble": {
+    "files": [
+      "tremor_rumble.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "omen: the ground trembling far off, low rumble with faint rattling (procedural, tools/synthStrider.mjs)"
+  },
+  "car_alarm": {
+    "files": [
+      "car_alarm.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "omen: a car alarm going off, whoop then warble (procedural, tools/synthStrider.mjs)"
+  },
+  "terrace_murmur": {
+    "files": [
+      "terrace_murmur.wav"
+    ],
+    "loop": true,
+    "gain": 0.5,
+    "description": "busy café terrace: indistinct talk at the tables, a laugh, cups and cutlery clinking (procedural loop, tools/synthTerrace.mjs)"
+  },
+  "under_drip": {
+    "files": [
+      "under_drip_1.wav",
+      "under_drip_2.wav",
+      "under_drip_3.wav"
+    ],
+    "loop": false,
+    "gain": 0.5,
+    "description": "a water drop falling into a puddle in a tunnel, short reverberant tail (procedural, tools/synthUnder.mjs)"
+  },
+  "under_falls": {
+    "files": [
+      "under_falls.wav"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "water falling through a street grate into a basin underground, gurgles and splashes (procedural, tools/synthUnder.mjs)"
+  },
+  "under_hum": {
+    "files": [
+      "under_hum.wav"
+    ],
+    "loop": true,
+    "gain": 0.35,
+    "description": "electrical cabinets or a pump: mains hum with a faint buzz (procedural, tools/synthUnder.mjs)"
+  },
+  "under_fan": {
+    "files": [
+      "under_fan.wav"
+    ],
+    "loop": true,
+    "gain": 0.5,
+    "description": "a big ventilation fan turning slowly: whooshing blade pulses over a low rumble (procedural, tools/synthUnder.mjs)"
+  },
+  "slime_burble": {
+    "files": [
+      "slime_burble.wav"
+    ],
+    "loop": true,
+    "gain": 0.3,
+    "description": "soft wet bubbling murmurs, small creatures talking in a cave (procedural, tools/synthUnder.mjs)"
+  },
+  "slime_squish": {
+    "files": [
+      "slime_squish_1.wav",
+      "slime_squish_2.wav"
+    ],
+    "loop": false,
+    "gain": 0.5,
+    "description": "a soft wet squelch (procedural, tools/synthUnder.mjs)"
+  },
+  "slime_gift": {
+    "files": [
+      "slime_gift.wav"
+    ],
+    "loop": false,
+    "gain": 0.45,
+    "description": "a small soft glassy chime (procedural, tools/synthUnder.mjs)"
   }
 }

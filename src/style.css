@@ -309,6 +309,13 @@ body.looking #crosshair { display: block; }
 #tframe .hp { margin-top: 6px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.1); overflow: hidden; display: none; }
 #tframe .hp > div { height: 100%; width: 100%; background: #7fc97f; }
 #tframe .st { color: #b8d8ff; }
+#tframe .zn { margin-top: 4px; font-size: 11px; color: #8d99a5; display: none; gap: 8px; }
+#tframe .zn span.on { color: #ffd27a; text-shadow: 0 0 6px rgba(255, 170, 60, 0.9); }
+/* Weak spots of a big threat: rings on its body (bright and pulsing while exposed). */
+#tzones { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 4; }
+#tzones i { position: absolute; display: none; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 2px solid rgba(255, 200, 120, 0.45); box-shadow: 0 0 3px rgba(0,0,0,0.6); }
+#tzones i.on { border-color: #ffcf6e; box-shadow: 0 0 10px 3px rgba(255, 170, 60, 0.75); animation: zonePulse 0.6s ease-in-out infinite; }
+@keyframes zonePulse { 50% { transform: scale(1.35); } }
 
 /* ---- street crime layer (CrimeHud, map legend, target con tint) */
 .pb-health { flex: 0 0 auto; width: 0; height: 8px; border-radius: 4px; background: rgba(15, 20, 26, 0.78); border: 1px solid rgba(255,255,255,0.14); overflow: hidden; opacity: 0; transition: opacity .4s, width .4s; align-self: center; }
@@ -361,3 +368,8 @@ body.looking #crosshair { display: block; }
 #compass .poi.goal i { width: 13px; height: 13px; font: 800 9px/13px system-ui, sans-serif; }
 #compass .poi.goal b { margin-top: 3px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
 #map .map-key .alert.back { background: #4cd964; }
+
+/* Barks (src/ui/Barks.ts): short speech bubbles over people. */
+.bark { position: fixed; left: 0; top: 0; display: none; max-width: 200px; padding: 5px 10px 6px; margin-top: -6px; background: rgba(252, 251, 247, 0.94); color: #1d242b; border-radius: 12px; font: 600 12px/1.25 system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; z-index: 4; transform-origin: 50% 100%; white-space: nowrap; transition: opacity 0.35s; will-change: transform; }
+.bark::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(252, 251, 247, 0.94); }
+.bark.out { opacity: 0; }

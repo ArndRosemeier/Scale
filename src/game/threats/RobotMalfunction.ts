@@ -63,7 +63,7 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
   hurt = 0;
   readonly units: Rogue[] = [];
   /** Disabled machines by whose doing. */
-  readonly credit: Record<Cause | 'other', number> = { player: 0, police: 0, threat: 0, other: 0 };
+  readonly credit: Record<Cause | 'other', number> = { player: 0, police: 0, threat: 0, military: 0, other: 0 };
   readonly stats = { robots: 0, bots: 0, drones: 0, recruited: 0, spawned: 0, playerHurt: 0, cars: 0 };
   private spots: Spot[] = [];
   /** The machines still in action as police targets (refreshed every frame, objects reused). */

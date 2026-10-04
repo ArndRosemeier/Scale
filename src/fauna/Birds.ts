@@ -139,7 +139,7 @@ const GROUND_DRAW_R = 220;
 const GRAV = 9.81;
 
 /** Scare radii (m) of stimuli for birds on the ground (capped by the stimulus' own radius). */
-const SCARE: Partial<Record<Stimulus['kind'], number>> = { impact: 35, glass: 25, collapse: 260, blast: 200, stomp: 140, giant: 150, crash: 60, scream: 18, horn: 16, sonic: 500, flyby: 40, threat: 25 };
+const SCARE: Partial<Record<Stimulus['kind'], number>> = { impact: 35, glass: 25, collapse: 260, blast: 200, stomp: 140, giant: 150, crash: 60, scream: 18, horn: 16, sonic: 500, flyby: 40, threat: 25, roar: 420, tremor: 300 };
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -1039,7 +1039,7 @@ export class Birds {
       if (!g.on) continue;
       if (Math.hypot(g.x - s.x, g.z - s.z) < r) this.flush(i, s.x, s.z, s.kind === 'horn' || s.kind === 'scream' ? 0.7 : 1.3);
     }
-    if (s.kind === 'blast' || s.kind === 'collapse' || s.kind === 'sonic' || s.kind === 'giant' || s.kind === 'stomp' || s.kind === 'impact') {
+    if (s.kind === 'blast' || s.kind === 'collapse' || s.kind === 'sonic' || s.kind === 'giant' || s.kind === 'stomp' || s.kind === 'impact' || s.kind === 'roar' || s.kind === 'tremor') {
       const fr = s.kind === 'impact' ? Math.min(r, 60) : r * 1.5;
       for (const f of this.flocks) {
         if (!f.on || Math.hypot(f.x - s.x, f.z - s.z) > fr + f.ax) continue;

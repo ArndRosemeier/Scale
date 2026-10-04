@@ -45,6 +45,7 @@ import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
 import { RagdollSystem, type CarBox } from '../physics/ragdoll/RagdollSystem';
 import { Birds } from '../fauna/Birds';
+import { Terraces } from '../sim/Terraces';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
 import { Underground } from '../underground/Underground';
@@ -55,6 +56,7 @@ import { FlightFX } from '../player/FlightFX';
 import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
 import { Compass } from '../ui/Compass';
+import { Barks } from '../ui/Barks';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -115,6 +117,8 @@ export class Game {
   /** People and the player knocked flying, tumbling, getting up (physics/ragdoll). */
   ragdolls!: RagdollSystem;
   birds!: Birds;
+  /** People at the café and restaurant terraces (sim/Terraces). */
+  terraces!: Terraces;
   interiors!: Interiors;
   underground!: Underground;
   gate!: ShaderGate;
@@ -124,6 +128,7 @@ export class Game {
   menu!: Menu;
   map!: GameMap;
   compass!: Compass;
+  barks!: Barks;
   progress!: Progress;
   abilities!: AbilitySystem;
   powerFx!: PowerFx;
@@ -201,6 +206,8 @@ export class Game {
     this.underground.onTrainSound = (id, x, y, z, gain) => this.audio.play(id, x, y, z, gain, 1, 10, this.renderer.camera.position);
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
+    this.underground.sound = this.audio;
+    this.stimuli.on((s) => this.underground.onStimulus(s.kind, s.x, s.y, s.z, s.radius));
     this.renderer.scene.add(this.underground.group);
     this.net = new RoadNet(macro);
     this.skyline = new Skyline(macro, this.pool, tex.facade);
@@ -246,7 +253,7 @@ export class Game {
     this.renderer.scene.add(this.player.rig.object);
     this.camRig = new CameraRig(cam, this.world);
     this.interactions = new Interactions(this.player, this.destruction, this.dust, this.debris, cam, this.camRig, this.world, this.collision, this.stimuli);
-    this.interactions.onSound = (id, x, y, z, gain, pitch) => this.audio.play(id, x, y, z, gain, pitch ?? 1, 4 * Math.max(1, this.player.height / 1.8), cam.position);
+    this.interactions.onSound = (id, x, y, z, gain, pitch, ref) => this.audio.play(id, x, y, z, gain, pitch ?? 1, ref ?? 4 * Math.max(1, this.player.height / 1.8), cam.position);
     this.destruction.onImpact = (e) => {
       this.stimuli.emit(e.kind === 'collapse' ? 'collapse' : e.kind === 'glass' ? 'glass' : 'impact', e.x, e.y, e.z, Math.log10(Math.max(1, e.energy)), noticeRadius(e.energy * 10));
       if (e.kind === 'collapse') {
@@ -320,6 +327,9 @@ export class Game {
     // Birds: pigeons and sparrows on the ground, flocks, gulls and crows (src/fauna).
     this.birds = new Birds({ terrain: this.terrain, world: this.world, peds: this.peds, traffic: this.traffic, drones: this.future.drones, dust: this.dust, debris: this.debris, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
     this.renderer.scene.add(this.birds.mesh);
+    this.terraces = new Terraces({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, pop: this.population, props: this.props, destruction: this.destruction, loop: (id, r) => this.audio.loop(id, r) });
+    this.crowd.heldFor = (a) => this.terraces.heldFor(a);
+    this.crowd.talking = (a, t) => this.terraces.talking(a, t);
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
     this.crowd.rigGround = (x, y, z) => this.collision.groundAt(x, z, y + 0.4, 0.3);
@@ -333,13 +343,21 @@ export class Game {
       onLand?.(x, y, z, e, h);
       this.ragdolls.landed(Math.sqrt((2 * e) / this.player.mass));
     };
-    // Giants crush people and cars under their feet; collapses crush what is around them.
+    // Giants crush people and cars under their feet (by the size of whoever stepped: the player or a
+    // monster, booked to it); collapses crush what is around them.
     this.stimuli.on((s) => {
       if (s.kind === 'stomp') {
-        const r = Math.max(0.6, this.player.height * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, 'player');
-        if (this.player.height > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) if (Math.hypot(v.x - s.x, v.z - s.z) < r + v.length * 0.3) this.traffic.crush(v);
-        if (this.player.height > 4) this.props.crush(s.x, s.z, r);
+        const h = s.size ?? this.player.height, threat = s.cause === 'threat';
+        const r = Math.max(0.6, h * 0.09);
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : 'player');
+        if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
+          if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
+          this.traffic.crush(v);
+          if (threat) this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, 'threat');
+        }
+        if (h > 4) this.props.crush(s.x, s.z, r);
+        // A giant hero stamping on a monster's foot or tail.
+        if (!threat && h > 8) this.threats?.blow(s.x, s.y + h * 0.05, s.z, r, 0, -Math.pow(10, s.intensity / 2) * 80, 0, { cause: 'player', x: s.x, y: s.y, z: s.z });
       } else if (s.kind === 'collapse') {
         const r = Math.min(40, Math.max(8, s.radius * 0.04));
         this.props.crush(s.x, s.z, r);
@@ -353,6 +371,7 @@ export class Game {
     // The map listens to the skyline batches (building boxes, local streets, entrances for the whole city).
     this.map = new GameMap(this);
     this.compass = new Compass(this);
+    this.barks = new Barks(this);
     this.skyline.start(this.player.pos.x, this.player.pos.z);
     this.flightFx = new FlightFX(this.dust);
     this.renderer.scene.add(this.flightFx.group);
@@ -466,6 +485,7 @@ export class Game {
     this.peds.playerObstacle = this.freeCam ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius + 0.25, h: this.player.height };
     this.T('peds', () => this.peds.update(dt, this.sky.hoursAbs, pp.x, pp.z, dt * this.sky.timeScale));
     this.T('react', () => this.reactions.update(dt, this.player));
+    this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs));
     this.traffic.player = this.freeCam ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
@@ -514,7 +534,7 @@ export class Game {
       this.hud.update(dt);
       this.powerHud.update();
       this.targetHud.update();
-      this.T('map', () => { this.map.update(dt); this.compass.update(); });
+      this.T('map', () => { this.map.update(dt); this.compass.update(); this.barks.update(dt); });
       this.input.endFrame();
     }
   }
@@ -671,6 +691,7 @@ export class Game {
     this.targeting = new Targeting({
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
+      threats: () => this.threats?.actors() ?? [],
     });
     this.elements = new Elements({
       player: this.player, camera: cam, camRig: this.camRig, targeting: this.targeting, synth: this.synth, destruction: this.destruction,
@@ -678,6 +699,7 @@ export class Game {
       traffic: this.traffic, vehicles: this.vehicles, parked: () => this.parkedList, future: this.future, props: this.props,
       stimuli: this.stimuli, consequences: this.consequences,
       sound: (id, x, y, z, g, pitch = 1, ref = 6) => this.audio.play(id, x, y, z, g, pitch, ref, cam.position),
+      douse: (x, y, z, r, amount) => { this.threats?.fires.douse(x, y, z, r, amount); },
     });
     this.renderer.scene.add(this.elements.fx.group);
     this.abilities.effects = this.elements;
@@ -784,6 +806,8 @@ export class Game {
   /** A physical strike at a point hits cars, people and props. */
   strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): void {
     const J = Math.hypot(jx, jy, jz);
+    // A monster in reach takes the blow (armour, weak spots).
+    this.threats?.blow(x, y, z, r, jx, jy, jz, { cause: 'player', x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z });
     this.props.hit(x, y, z, r, jx, jy, jz);
     this.future.hit(x, y, z, r, jx, jy, jz);
     this.birds.hit(x, y, z, r, jx, jy, jz);
@@ -914,7 +938,7 @@ export class Game {
     const speed = p.flying ? p.vel.length() / Math.sqrt(p.k) : 0;
     const wind = p.flying ? clamp(speed / 60, 0.08, 1) : clamp(alt / 300, 0, 0.4);
     const ug = this.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z);
-    const inStation = ug && this.underground.boxes.some((b) => Math.hypot(b.cx - p.pos.x, b.cz - p.pos.z) < b.hu + 5);
+    const inStation = ug && this.underground.boxes.some((b) => b.kind === 'station' && Math.hypot(b.cx - p.pos.x, b.cz - p.pos.z) < b.hu + 5);
     const surf = ug ? 0.08 : 1;
     this.audio.setAmbience({
       amb_sewer: ug && !inStation ? 0.9 : 0,

@@ -27,8 +27,23 @@ import { pointInPoly } from '../core/geom2';
 import { G } from '../render/materials/globals';
 import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, nextTrainAt, carPose, DWELL, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
+import { planRooms, type RoomPlan } from './rooms';
+import { buildRoom, buildCrawl, buildChamber, colonyLayout, type BuiltRoom, type RoomMats, type EmitterId } from './RoomMeshes';
+import { roomAtlas, decal, CELL } from './roomArt';
+import { Slimes } from './Slimes';
 
 const BUILD_R = 380;
+/** Side rooms and hidden chambers are built within these distances (m). */
+const ROOM_R = 200, COLONY_R = 150;
+/** Cell size (m) of the volume index. */
+const GRID = 32;
+const NONE: { tubes: Tube[]; boxes: Box[] } = { tubes: [], boxes: [] };
+
+/** Sounds the underground plays (the game's audio engine). */
+export interface UnderSound {
+  play(id: string, x: number, y: number, z: number, gain?: number, pitch?: number, refDist?: number): void;
+  loop(id: string, refDist?: number): { set(x: number, y: number, z: number, gain: number, rate?: number): void; stop(): void } | null;
+}
 
 export interface Entrance { x: number; z: number; ux: number; uz: number; station: number; /** hall * 2 + end */ end: number; passage: Tube | null; /** descent direction */ dx: number; dz: number; cell: number; /** index of the hall's box */ box: number }
 
@@ -85,6 +100,39 @@ export class Underground {
       this.tubes.push(t);
       this.sewerTubes.push(t);
     }
+    // Side rooms off the tunnels and the hidden chambers (volumes now, meshes when near).
+    this.rooms = planRooms(macro, terrain, this.tubes, this.boxes);
+    for (const r of this.rooms.rooms) {
+      this.boxes.push(...r.boxes);
+      const t = this.tubes[r.tube];
+      let l = this.roomCuts.get(t);
+      if (!l) this.roomCuts.set(t, (l = []));
+      for (const c of r.cuts) l.push({ ...c, side: r.side });
+    }
+    for (const c of this.rooms.colonies) { this.boxes.push(c.chamber); this.tubes.push(c.crawl); }
+    for (const t of this.tubes) this.indexTube(t);
+    for (const b of this.boxes) this.indexBox(b);
+    const atlas = roomAtlas();
+    this.mats = {
+      lit: this.mat,
+      light: this.lightMat,
+      glow: new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true, alphaTest: 0.4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+      decal: new THREE.MeshStandardMaterial({ map: atlas, transparent: true, depthWrite: false, roughness: 0.75, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+      water: this.waterMat,
+      veil: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    };
+    this.group.add(this.slimes.group);
+    // Stand-ins so the start-up warm-up compiles the room materials (a degenerate triangle each).
+    for (const m of [this.mats.glow, this.mats.decal, this.mats.veil]) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute([0, -1e4, 0, 0, -1e4, 0, 0, -1e4, 0], 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 2));
+      g.setAttribute('color', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0, 0, 0, 0], 3));
+      const w = new THREE.Mesh(g, m);
+      w.frustumCulled = false;
+      this.group.add(w);
+    }
     // Trains: one instanced mesh of carriages.
     const carGeo = trainCarGeometry();
     this.trainColor = new THREE.InstancedBufferAttribute(new Float32Array(400 * 3), 3);
@@ -113,6 +161,16 @@ export class Underground {
     this.group.add(this.leafMesh);
   }
   private leafMesh: THREE.InstancedMesh;
+  /** Side rooms and colonies (rooms.ts), the doorways they cut into their host tubes. */
+  readonly rooms: RoomPlan;
+  private roomCuts = new Map<Tube, { s0: number; s1: number; top: number; side: number }[]>();
+  private mats: RoomMats;
+  private builtRooms = new Map<string, BuiltRoom>();
+  readonly slimes = new Slimes();
+  /** The game's audio (set by the game): drips, hums, the slimes. */
+  sound: UnderSound | null = null;
+  private loops = new Map<EmitterId, ReturnType<UnderSound['loop']>>();
+  private dripT = 0;
 
   /** Register metro entrances of a loaded cell (from its plan). */
   addCell(cs: CellState): void {
@@ -129,6 +187,7 @@ export class Underground {
       const route = entranceRoute(this.boxes[bi], gx, gz, ux, uz, this.ground, routeEnv(this.tubes, this.boxes, this.boxes[bi]));
       const passage = makeTube('passage', route.pts, PASSAGE_HW, PASSAGE_H);
       this.tubes.push(passage);
+      this.indexTube(passage);
       this.entrances.set(key, { x: gx, z: gz, ux, uz, station: sid, end: E[i + 5], passage, dx: route.dx, dz: route.dz, cell: cs.id, box: bi });
       let D = this.doors.get(bi);
       if (!D) this.doors.set(bi, (D = []));
@@ -159,12 +218,13 @@ export class Underground {
   /** Underground floor at a point if the point is inside an underground volume, else null. */
   floorAt(x: number, y: number, z: number): number | null {
     let best: number | null = null;
-    for (const t of this.tubes) {
+    const n = this.near(x, z);
+    for (const t of n.tubes) {
       if (t.kind === 'sewer' && !this.sewerOpen(t, x, z, y)) continue;
       const h = tubeAt(t, x, y, z);
       if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor;
     }
-    for (const b of this.boxes) {
+    for (const b of n.boxes) {
       const h = boxAt(b, x, y, z);
       if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor;
     }
@@ -197,15 +257,17 @@ export class Underground {
   /** Lowest ceiling of the volumes containing (x, y, z) (Infinity: none) - jumps stop there. */
   ceilingAt(x: number, y: number, z: number): number {
     let c = Infinity;
-    for (const t of this.tubes) { const h = tubeAt(t, x, y, z); if (h) c = Math.min(c, h.floor + t.height); }
-    for (const b of this.boxes) if (boxAt(b, x, y, z)) c = Math.min(c, b.y1);
+    const n = this.near(x, z);
+    for (const t of n.tubes) { const h = tubeAt(t, x, y, z); if (h) c = Math.min(c, h.floor + t.height); }
+    for (const b of n.boxes) if (boxAt(b, x, y, z)) c = Math.min(c, b.y1);
     return c;
   }
 
   /** Inside any volume (with margin)? Used to keep bodies inside tunnels. */
   contains(x: number, y: number, z: number, margin: number): boolean {
-    for (const t of this.tubes) if (tubeAt(t, x, y, z, -margin)) return true;
-    for (const b of this.boxes) if (boxAt(b, x, y, z, -margin)) return true;
+    const n = this.near(x, z);
+    for (const t of n.tubes) if (tubeAt(t, x, y, z, -margin)) return true;
+    for (const b of n.boxes) if (boxAt(b, x, y, z, -margin)) return true;
     return false;
   }
 
@@ -214,18 +276,46 @@ export class Underground {
     // Riding: the camera stays inside the car.
     const inCar = this.inRiddenCar(x, y, z, margin);
     if (inCar !== null) return inCar;
-    for (const t of this.tubes) {
+    const n = this.near(x, z);
+    for (const t of n.tubes) {
       if (!tubeInterior(t, x, y, z, margin)) continue;
       // Passage ceilings stay under the street (see buildTubeChunk), except in the opening.
       if (t.kind !== 'passage' || y < this.ground(x, z) - 0.15 - margin || this.inHole(x, z)) return true;
     }
-    for (const b of this.boxes) if (boxAt(b, x, y, z, -margin) && y > b.y0 + margin && y < b.y1 - margin) return true;
+    for (const b of n.boxes) if (boxAt(b, x, y, z, -margin) && y > b.y0 + margin && y < b.y1 - margin) return true;
     return false;
+  }
+
+  /** Spatial index of the volumes (cells of GRID m): tubes by their segments, boxes by their bounds. */
+  private grid = new Map<number, { tubes: Tube[]; boxes: Box[] }>();
+  private cellOf(i: number, j: number): { tubes: Tube[]; boxes: Box[] } {
+    const k = (i + 32768) * 65536 + (j + 32768);
+    let c = this.grid.get(k);
+    if (!c) this.grid.set(k, (c = { tubes: [], boxes: [] }));
+    return c;
+  }
+  private indexTube(t: Tube): void {
+    const P = t.pts, r = t.halfWidth + 2;
+    for (let i = 0; i + 5 < P.length; i += 3) {
+      for (let a = Math.floor((Math.min(P[i], P[i + 3]) - r) / GRID); a <= Math.floor((Math.max(P[i], P[i + 3]) + r) / GRID); a++)
+        for (let b = Math.floor((Math.min(P[i + 2], P[i + 5]) - r) / GRID); b <= Math.floor((Math.max(P[i + 2], P[i + 5]) + r) / GRID); b++) {
+          const c = this.cellOf(a, b);
+          if (c.tubes[c.tubes.length - 1] !== t && !c.tubes.includes(t)) c.tubes.push(t);
+        }
+    }
+  }
+  private indexBox(b: Box): void {
+    const [x0, z0, x1, z1] = b.bounds;
+    for (let a = Math.floor(x0 / GRID); a <= Math.floor(x1 / GRID); a++) for (let c = Math.floor(z0 / GRID); c <= Math.floor(z1 / GRID); c++) this.cellOf(a, c).boxes.push(b);
+  }
+  /** Volumes that may contain a point at (x, z). */
+  private near(x: number, z: number): { tubes: Tube[]; boxes: Box[] } {
+    return this.grid.get((Math.floor(x / GRID) + 32768) * 65536 + (Math.floor(z / GRID) + 32768)) ?? NONE;
   }
 
   /** Inside a sewer tube (not the metro): where a manhole above can be climbed. */
   inSewer(x: number, y: number, z: number): boolean {
-    return this.sewerTubes.some((t) => !!tubeAt(t, x, y, z));
+    return this.near(x, z).tubes.some((t) => t.kind === 'sewer' && !!tubeAt(t, x, y, z));
   }
 
   isUnder(x: number, y: number, z: number): boolean {
@@ -303,7 +393,14 @@ export class Underground {
     }
     const under = this.isUnder(player.x, player.y + 0.5, player.z);
     // Headlamp underground (sewers are dark).
-    const inStation = under && this.boxes.some((b) => boxAt(b, player.x, player.y + 0.5, player.z, 2));
+    const inStation = under && this.boxes.some((b) => b.kind === 'station' && boxAt(b, player.x, player.y + 0.5, player.z, 2));
+    // Side rooms: animation, sounds; the slimes.
+    const day = 1 - G.uNight.value;
+    for (const br of this.builtRooms.values()) br.tick?.(time, day);
+    this.roomSounds(dt, cam.position, under);
+    const snd = this.sound;
+    if (snd && !this.slimes.sound) this.slimes.sound = { play: (id, x, y, z, g) => snd.play(id, x, y, z, g, 1, 3), loop: (id) => snd.loop(id, 3) };
+    this.slimes.update(dt, player, under);
     if (under && !inStation) {
       this.headlamp.intensity = 3;
       this.headlamp.position.copy(cam.position);
@@ -335,6 +432,7 @@ export class Underground {
     const want = new Set<string>();
     // Tube segments (chunks of ~60 m).
     this.tubes.forEach((t, ti) => {
+      if (t.kind === 'crawl') return;
       if (t.bounds[0] > x + BUILD_R || t.bounds[2] < x - BUILD_R || t.bounds[1] > z + BUILD_R || t.bounds[3] < z - BUILD_R) return;
       const P = t.pts;
       const n = P.length / 3;
@@ -349,17 +447,78 @@ export class Underground {
       }
     });
     this.boxes.forEach((b, bi) => {
-      if (Math.hypot(b.cx - x, b.cz - z) > BUILD_R + 60) return;
+      if (b.kind !== 'station' || Math.hypot(b.cx - x, b.cz - z) > BUILD_R + 60) return;
       const key = `b${bi}`;
       want.add(key);
       if (!this.built.has(key)) this.built.set(key, this.buildStation(b, bi));
     });
+    // Side rooms (a lone one may sit in a room with a trail), crawls and chambers.
+    for (const r of this.rooms.rooms) {
+      if (Math.abs(r.ox - x) > ROOM_R || Math.abs(r.oz - z) > ROOM_R || Math.hypot(r.ox - x, r.oz - z) > ROOM_R) continue;
+      const key = `r${r.id}`;
+      want.add(key);
+      if (this.built.has(key)) continue;
+      const br = buildRoom(r, this.mats);
+      this.builtRooms.set(key, br);
+      this.built.set(key, br.obj);
+      if (br.scout) this.slimes.setScout(key, br.scout, r.seed);
+    }
+    for (const c of this.rooms.colonies) {
+      if (Math.hypot(c.chamber.cx - x, c.chamber.cz - z) > COLONY_R) continue;
+      const key = `c${c.id}`;
+      want.add(key);
+      if (this.built.has(key)) continue;
+      const L = colonyLayout(c);
+      const br = buildChamber(c, L, this.mats);
+      br.obj.add(buildCrawl(c, this.mats));
+      this.builtRooms.set(key, br);
+      this.built.set(key, br.obj);
+      this.slimes.setColony(c, L);
+    }
     for (const [k, o] of this.built) {
       if (want.has(k)) { if (!o.parent) this.group.add(o); continue; }
       this.group.remove(o);
-      o.traverse((c) => { const m = c as THREE.Mesh; if (m.isMesh && m !== this.trainMesh) m.geometry.dispose(); });
+      o.traverse((c) => {
+        const m = c as THREE.Mesh;
+        if (!m.isMesh || m === this.trainMesh) return;
+        m.geometry.dispose();
+        if ((m.material as THREE.Material).userData?.own) (m.material as THREE.Material).dispose();
+      });
       this.built.delete(k);
+      if (this.builtRooms.delete(k)) this.slimes.setScout(k, null, 0);
     }
+  }
+
+  /** Room sounds near the listener: drips now and then, the hum / fan / falling water as loops. */
+  private roomSounds(dt: number, cam: THREE.Vector3, under: boolean): void {
+    const snd = this.sound;
+    if (!snd) return;
+    const best = new Map<EmitterId, { d: number; x: number; y: number; z: number }>();
+    const drips: { x: number; y: number; z: number }[] = [];
+    if (under) for (const br of this.builtRooms.values()) for (const e of br.emitters) {
+      const d = Math.hypot(e.x - cam.x, e.y - cam.y, e.z - cam.z);
+      if (d > 35) continue;
+      if (e.id === 'under_drip') { drips.push(e); continue; }
+      const b = best.get(e.id);
+      if (!b || d < b.d) best.set(e.id, { d, x: e.x, y: e.y, z: e.z });
+    }
+    for (const id of ['under_falls', 'under_hum', 'under_fan'] as EmitterId[]) {
+      const b = best.get(id);
+      let l = this.loops.get(id);
+      if (!l && b) { l = snd.loop(id, 3); if (l) this.loops.set(id, l); }
+      if (l) { if (b) l.set(b.x, b.y, b.z, 1); else l.set(cam.x, cam.y, cam.z, 0); }
+    }
+    this.dripT -= dt;
+    if (drips.length && this.dripT <= 0) {
+      this.dripT = 0.6 + Math.random() * 2.2;
+      const e = drips[(Math.random() * drips.length) | 0];
+      snd.play('under_drip', e.x + (Math.random() - 0.5) * 2, e.y, e.z + (Math.random() - 0.5) * 2, 0.6 + Math.random() * 0.4, 0.85 + Math.random() * 0.3, 2);
+    }
+  }
+
+  /** Something violent happened (a punch, a power, a blast): the slimes near it react. */
+  onStimulus(kind: string, x: number, y: number, z: number, radius: number): void {
+    this.slimes.stimulus(kind, x, y, z, radius);
   }
 
   /** Extruded cross-section along a tube chunk; faces point inward. */
@@ -392,11 +551,16 @@ export class Underground {
       const [l0, h0] = profile[k], [l1, h1] = profile[(k + 1) % profile.length];
       perim.push(perim[k] + Math.hypot(l1 - l0, h1 - h0));
     }
+    const cuts = this.roomCuts.get(t) ?? [];
+    const halls = this.boxes.filter((bb) => bb.kind === 'station');
+    /** Exit signs: x, y, z, facing (fx, fz) each. */
+    const signs: number[] = [];
     for (let i = i0; i < i1; i++) {
       const ax = P[i * 3], ay = P[i * 3 + 1], az = P[i * 3 + 2], bx = P[i * 3 + 3], by = P[i * 3 + 4], bz = P[i * 3 + 5];
       const d0 = dirAt(P, i), d1 = dirAt(P, i + 1);
       const mx = (ax + bx) / 2, mz = (az + bz) / 2;
-      const inStation = !sewer && this.boxes.some((bb) => boxAt(bb, mx, (ay + by) / 2 + 0.5, mz, -0.05));
+      const segCuts = cuts.filter((c) => c.s1 > t.cum[i] && c.s0 < t.cum[i + 1]);
+      const inStation = !sewer && halls.some((bb) => boxAt(bb, mx, (ay + by) / 2 + 0.5, mz, -0.05));
       // Through a hall the station draws walls, track bed and rails itself.
       if (inStation && !passage) continue;
       const open = passage && this.inHole(mx, mz);
@@ -424,14 +588,27 @@ export class Underground {
         const v0 = perim[k], v1 = perim[k + 1];
         // At junctions, drop the parts of this section that lie inside a crossing sewer.
         const pieces = sewer && others.length ? keptPieces(others, myIdx, A, B, C, D, h0 <= 0 && h1 <= 0) : FULL;
-        for (const [ta, tb] of pieces) {
+        // Side room doorways: the wall on their side is cut out up to the door's top.
+        const wallSide = l0 >= hw - 0.2 && l1 >= hw - 0.2 ? 1 : l0 <= -(hw - 0.2) && l1 <= -(hw - 0.2) ? -1 : 0;
+        const doors = wallSide && segCuts.length ? segCuts.filter((c) => c.side === wallSide) : [];
+        for (const [pa, pb] of pieces) for (const [ta, tb, clip] of doors.length ? splitDoors(pa, pb, doors, s0, s1) : [[pa, pb, -Infinity] as [number, number, number]]) {
+          let PA = A, PB = B, PC = C, PD = D, V0 = v0, V1 = v1;
+          if (clip > -Infinity) {
+            // In a doorway only the part of the face above the door's top stays.
+            if (Math.max(h0, h1) <= clip + 1e-3) continue;
+            let L0 = l0, H0 = h0, L1 = l1, H1 = h1;
+            if (h0 < clip) { const q = (clip - h0) / (h1 - h0); L0 = l0 + (l1 - l0) * q; H0 = clip; V0 = v0 + (v1 - v0) * q; }
+            else if (h1 < clip) { const q = (clip - h1) / (h0 - h1); L1 = l1 + (l0 - l1) * q; H1 = clip; V1 = v1 + (v0 - v1) * q; }
+            PA = [ax - d0[1] * L0, ay + H0, az + d0[0] * L0]; PB = [ax - d0[1] * L1, ay + H1, az + d0[0] * L1];
+            PC = [bx - d1[1] * L1, by + H1, bz + d1[0] * L1]; PD = [bx - d1[1] * L0, by + H0, bz + d1[0] * L0];
+          }
           const lerp3 = (X: number[], Y: number[], f: number) => [X[0] + (Y[0] - X[0]) * f, X[1] + (Y[1] - X[1]) * f, X[2] + (Y[2] - X[2]) * f];
-          const A2 = lerp3(A, D, ta), B2 = lerp3(B, C, ta), C2 = lerp3(B, C, tb), D2 = lerp3(A, D, tb);
+          const A2 = lerp3(PA, PD, ta), B2 = lerp3(PB, PC, ta), C2 = lerp3(PB, PC, tb), D2 = lerp3(PA, PD, tb);
           const sa = s0 + (s1 - s0) * ta, sb = s0 + (s1 - s0) * tb;
-          const i0v = mb.v(A2[0], A2[1], A2[2], nx, nh, nz, sa, v0);
-          mb.v(B2[0], B2[1], B2[2], nx, nh, nz, sa, v1);
-          mb.v(C2[0], C2[1], C2[2], nx, nh, nz, sb, v1);
-          mb.v(D2[0], D2[1], D2[2], nx, nh, nz, sb, v0);
+          const i0v = mb.v(A2[0], A2[1], A2[2], nx, nh, nz, sa, V0);
+          mb.v(B2[0], B2[1], B2[2], nx, nh, nz, sa, V1);
+          mb.v(C2[0], C2[1], C2[2], nx, nh, nz, sb, V1);
+          mb.v(D2[0], D2[1], D2[2], nx, nh, nz, sb, V0);
           // Wind so the face is visible from inside.
           mb.quad(i0v, i0v + 3, i0v + 2, i0v + 1);
           mb.quad(i0v, i0v + 1, i0v + 2, i0v + 3);
@@ -453,7 +630,47 @@ export class Underground {
           const cx = ax + (bx - ax) * f, cy = ay + (by - ay) * f + 0.15, cz = az + (bz - az) * f;
           for (const tr of [-1.9, 1.9]) mb.box(cx - d0[1] * tr, cy, cz + d0[0] * tr, 0.12, 0.07, 1.25, Math.atan2(d0[0], d0[1]) + Math.PI / 2);
         }
+        // Cable trays along both walls and a pipe on one (not across the tall openings of side rooms).
+        mb.set('aLayer', 11).set('aTint', 0.32, 0.32, 0.33);
+        for (const sd of [-1, 1]) {
+          if (segCuts.some((c) => c.side === sd && c.top > 2.55)) continue;
+          for (const [hh, off] of [[2.75, 0.14], [3.05, 0.14]]) {
+            const o = sd * (hw - off);
+            mb.beam(ax - d0[1] * o, ay + hh, az + d0[0] * o, bx - d1[1] * o, by + hh, bz + d1[0] * o, 0.11, 0.02);
+          }
+          if (sd < 0) {
+            const o = sd * (hw - 0.12);
+            mb.set('aTint', 0.38, 0.3, 0.24);
+            mb.beam(ax - d0[1] * o, ay + 3.6, az + d0[0] * o, bx - d1[1] * o, by + 3.6, bz + d1[0] * o, 0.08, 0.08);
+            mb.set('aTint', 0.32, 0.32, 0.33);
+          }
+        }
+        // Every 60 m an emergency exit sign (running figure) and, now and then, a maintenance ladder.
+        const sA = t.cum[i], sB = t.cum[i + 1];
+        for (let s = Math.ceil(sA / 60) * 60; s < sB; s += 60) {
+          const f = (s - sA) / Math.max(1e-6, sB - sA), sd = (s / 60) % 2 ? 1 : -1;
+          if (cuts.some((c) => c.side === sd && s > c.s0 - 1.5 && s < c.s1 + 1.5)) continue;
+          const cx = ax + (bx - ax) * f, cy = ay + (by - ay) * f, cz = az + (bz - az) * f;
+          if (halls.some((bb) => boxAt(bb, cx, cy + 0.5, cz, 2))) continue;
+          const o = sd * (hw - 0.03);
+          signs.push(cx - d0[1] * o, cy + 2.3, cz + d0[0] * o, -sd * -d0[1], -sd * d0[0]);
+          if ((s / 60) % 3 === 0) {
+            mb.set('aLayer', 11).set('aTint', 0.5, 0.42, 0.12);
+            const o2 = sd * (hw - 0.18);
+            for (const e of [-0.22, 0.22]) mb.beam(cx - d0[1] * o2 + d0[0] * e, cy, cz + d0[0] * o2 + d0[1] * e, cx - d0[1] * o2 + d0[0] * e, cy + 4.6, cz + d0[0] * o2 + d0[1] * e, 0.025, 0.025);
+            for (let r = 0.3; r < 4.6; r += 0.3) mb.beam(cx - d0[1] * o2 - d0[0] * 0.22, cy + r, cz + d0[0] * o2 - d0[1] * 0.22, cx - d0[1] * o2 + d0[0] * 0.22, cy + r, cz + d0[0] * o2 + d0[1] * 0.22, 0.015, 0.015);
+          }
+        }
         mb.set('aLayer', 8).set('aTint', 0.8, 0.8, 0.78);
+      }
+      if (sewer) {
+        // An old pipe along one wall, under the springing (not across doorways).
+        if (!segCuts.some((c) => c.side === -1)) {
+          mb.set('aLayer', 11).set('aTint', 0.3, 0.25, 0.2);
+          const o = -(hw - 0.12);
+          mb.beam(ax - d0[1] * o, ay + 1.25, az + d0[0] * o, bx - d1[1] * o, by + 1.25, bz + d1[0] * o, 0.07, 0.07);
+          mb.set('aLayer', 1).set('aTint', 0.75, 0.68, 0.6);
+        }
       }
       if (passage) {
         // Stairs on the slope (steps every ~0.3 m of rise).
@@ -502,17 +719,27 @@ export class Underground {
         const d = dirAt(P, i);
         const cx = P[i * 3] + (P[i * 3 + 3] - P[i * 3]) * f, cy = P[i * 3 + 1] + (P[i * 3 + 4] - P[i * 3 + 1]) * f, cz = P[i * 3 + 2] + (P[i * 3 + 5] - P[i * 3 + 2]) * f;
         const off = sewer ? hw - 0.1 : 0;
-        if (!sewer && !passage && this.boxes.some((bb) => boxAt(bb, cx, cy + 0.5, cz, -0.05))) continue;
+        if (!sewer && !passage && halls.some((bb) => boxAt(bb, cx, cy + 0.5, cz, -0.05))) continue;
+        if (sewer && cuts.some((c) => c.side === 1 && t.cum[i] + s > c.s0 - 0.3 && t.cum[i] + s < c.s1 + 0.3)) continue;
         let top = cy + t.height;
         if (passage) {
           top = Math.min(top, this.ground(cx, cz) - 0.15);
-          if (top - cy < 2.4 || this.inHole(cx, cz) || this.boxes.some((bb) => boxAt(bb, cx, cy + 0.5, cz, -0.05))) continue;
+          if (top - cy < 2.4 || this.inHole(cx, cz) || halls.some((bb) => boxAt(bb, cx, cy + 0.5, cz, -0.05))) continue;
         }
         if (sewer && others.some(({ o }) => tubeAt(o, cx - d[1] * off, cy + 1.9, cz + d[0] * off, 0.2))) continue;
         lg.box(cx - d[1] * off, sewer ? cy + 1.9 : top - 0.1, cz + d[0] * off, sewer ? 0.06 : 0.6, 0.05, sewer ? 0.3 : 0.15, Math.atan2(d[0], d[1]));
       }
     }
     if (!lg.empty) g.add(new THREE.Mesh(toGeometry(lg.build()), this.lightMat));
+    if (signs.length) {
+      const sg = new MeshBuilder([{ name: 'uv', size: 2 }, { name: 'color', size: 3, type: 'u8n' }]);
+      sg.set('color', 0.85, 0.95, 0.85);
+      for (let k = 0; k < signs.length; k += 5) {
+        const [x, y, z, fx, fz] = signs.slice(k, k + 5), rx = fz, rz = -fx;
+        decal(sg, x + fx * 0.02, y, z + fz * 0.02, rx, 0, rz, 0, 1, 0, 0.3, 0.15, CELL.exit);
+      }
+      g.add(new THREE.Mesh(toGeometry(sg.build()), this.mats.glow));
+    }
     if (sewer) {
       // Flowing water in the channel.
       const wg = new MeshBuilder([{ name: 'uv', size: 2 }]);
@@ -886,6 +1113,11 @@ export class Underground {
    * the doors open, the walls (thin boxes) around the doorways on the platform side.
    */
   carObstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
+    // (Also the solid things in the built side rooms: piers, machines, shelves, pillars.)
+    for (const br of this.builtRooms.values()) for (const o of br.obstacles) {
+      const r = o.cyl ? o.r : Math.hypot(o.hx, o.hz);
+      if (o.x + r >= x0 && o.x - r <= x1 && o.z + r >= z0 && o.z - r <= z1) out(o);
+    }
     const own = this.ridden();
     const wall = (c: TrainCar, u: number, v: number, hu: number, hv: number) => {
       const [x, z] = this.carWorld(c, u, v);
@@ -909,7 +1141,10 @@ export class Underground {
 
   /** The hall (box index) whose platform the body stands on, or -1. */
   private platformAt(x: number, y: number, z: number): number {
+    const n = this.near(x, z);
+    if (!n.boxes.some((b) => b.kind === 'station')) return -1;
     return this.boxes.findIndex((b) => {
+      if (b.kind !== 'station') return false;
       const h = boxAt(b, x, y + 0.3, z);
       return !!h && h.floor > b.y0 + 0.5 && Math.abs(y - h.floor) < 0.4;
     });
@@ -1126,6 +1361,27 @@ function insideIntervals(others: { o: Tube; idx: number }[], myIdx: number, P0: 
   for (const c of cut) {
     const last = out[out.length - 1];
     if (last && c[0] <= last[1]) last[1] = Math.max(last[1], c[1]); else out.push([c[0], c[1]]);
+  }
+  return out;
+}
+
+/**
+ * A face's parameter range [ta, tb] along a tube segment (arc s0..s1) split at side-room
+ * doorways: [t0, t1, top] pieces, top = -Infinity outside the doorways (the face stays whole).
+ */
+function splitDoors(ta: number, tb: number, doors: { s0: number; s1: number; top: number }[], s0: number, s1: number): [number, number, number][] {
+  const L = Math.max(1e-6, s1 - s0);
+  const cuts = [ta, tb];
+  for (const d of doors) for (const s of [d.s0, d.s1]) { const t = (s - s0) / L; if (t > ta && t < tb) cuts.push(t); }
+  cuts.sort((a, b) => a - b);
+  const out: [number, number, number][] = [];
+  for (let k = 0; k + 1 < cuts.length; k++) {
+    const a = cuts[k], b = cuts[k + 1];
+    if (b - a < 1e-5) continue;
+    const sm = s0 + ((a + b) / 2) * L;
+    let top = -Infinity;
+    for (const d of doors) if (sm > d.s0 && sm < d.s1) top = Math.max(top, d.top);
+    out.push([a, b, top]);
   }
   return out;
 }

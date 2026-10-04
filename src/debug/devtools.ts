@@ -56,6 +56,18 @@ export function installDevtools(game: Game): void {
     },
     setSize(h: number): void { game.player.height = h; },
     teleport(x: number, z: number): void { game.player.pos.set(x, game.world.groundHeight(x, z) + 0.1, z); },
+    /** Put the player in the side room with the gap to hidden colony i (no hint in the game itself). */
+    colony(i = 0): { room: number; kind: string; x: number; z: number } | null {
+      const U = game.underground, c = U.rooms.colonies[i];
+      if (!c) return null;
+      const r = U.rooms.rooms[c.room], m = r.main, u = m.u0 + 0.6, v = (m.v0 + m.v1) / 2;
+      const x = r.ox + r.nx * u - r.nz * v, z = r.oz + r.nz * u + r.nx * v;
+      (game as unknown as { freeCam: boolean }).freeCam = false;
+      game.player.pos.set(x, r.y + 0.1, z);
+      game.player.vel.set(0, 0, 0);
+      game.camRig.yaw = Math.atan2(-r.nx, -r.nz);
+      return { room: r.id, kind: r.kind, x: Math.round(x), z: Math.round(z) };
+    },
     hour(h: number): void { game.sky.hour = h; },
     /** Power states on a person / car / robot / drone / prop (frozen, shrunk, burning …). */
     status: statusOf,

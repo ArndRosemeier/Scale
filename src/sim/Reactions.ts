@@ -8,6 +8,8 @@
  *  - A slightly oversized person (2.3–5 m) draws a curious crowd that keeps
  *    its distance and films; a real giant (>6 m) makes everyone run.
  *  - A tiny person (< 0.4 m) is mostly unnoticed.
+ *  - A monster's roar sends people running (the far, bold ones film it); a tremor makes them
+ *    stop and look round.
  *  - Fear decays; people resume their routes afterwards.
  */
 import type { Pedestrians, PedAgent, DownCause } from './Pedestrians';
@@ -58,7 +60,7 @@ export class Reactions {
       const before = a.fear;
       if (a.evac && a.state !== PState.Flee) {
         // Evacuating: on the way to the metro; only danger right next to them makes them run.
-        for (const s of fresh) if ((s.kind === 'threat' || s.kind === 'blast' || s.kind === 'collapse') && Math.hypot(a.x - s.x, a.z - s.z) < Math.min(14, s.radius * 0.3)) { a.fear = Math.min(2, a.fear + 0.9); this.flee(a, s.x, s.z); }
+        for (const s of fresh) if ((s.kind === 'threat' || s.kind === 'blast' || s.kind === 'collapse' || s.kind === 'roar') && Math.hypot(a.x - s.x, a.z - s.z) < Math.min(s.kind === 'roar' ? 120 : 14, s.radius * 0.3)) { a.fear = Math.min(2, a.fear + 0.9); this.flee(a, s.x, s.z); }
         continue;
       }
       // ---- events
@@ -86,8 +88,19 @@ export class Reactions {
             if (a.fear > 0.5) this.flee(a, s.x, s.z); else this.gawk(a, s.x, s.y, s.z);
             break;
           case 'stomp':
+            // By the size of whoever stepped (the player, a monster), booked to it.
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
-            if (d < Math.max(1.5, H * 0.12)) this.knockDown(a, s.x, s.z, 4, 'player');
+            if (d < Math.max(1.5, (s.size ?? H) * 0.12)) this.knockDown(a, s.x, s.z, 4, s.cause === 'threat' ? 'threat' : 'player');
+            break;
+          case 'roar':
+            // A monster's roar: run (far off, the bold stop, turn and film it).
+            a.fear = Math.min(2, a.fear + (0.35 + prox) * nerve * 1.1);
+            if (a.fear > 0.5 || prox > 0.45) this.flee(a, s.x, s.z); else this.gawk(a, s.x, s.y, s.z);
+            break;
+          case 'tremor':
+            // The ground shakes: stop and look round (the nervous hurry off).
+            if (a.state === PState.Walk && !a.glance) { a.glance = 1.5 + prox * 2; a.lookX = a.x + (Math.random() - 0.5) * 20; a.lookY = a.y + 1.6 + Math.random() * 6; a.lookZ = a.z + (Math.random() - 0.5) * 20; }
+            a.fear = Math.min(2, a.fear + prox * nerve * 0.25);
             break;
           case 'cry':
           case 'alarm':

@@ -1,6 +1,6 @@
 /**
  * Player ↔ world physical interactions: punches, smashing through walls,
- * giant footsteps, landings, roof overloading and the test blast.
+ * giant footsteps and landings (GiantBody), roof overloading and the test blast.
  */
 import * as THREE from 'three';
 import { aimDir } from './aimRay';
@@ -13,6 +13,7 @@ import type { Input } from './Input';
 import type { WorldIndex } from '../world/WorldIndex';
 import type { Collision } from '../world/Collision';
 import { Stimuli, noticeRadius } from './Stimuli';
+import { GiantSteps } from './GiantBody';
 import { pointInPoly } from '../core/geom2';
 
 export class Interactions {
@@ -29,7 +30,9 @@ export class Interactions {
   debugBlast = true;
   /** Soft lock: the facing for a punch (a target in reach), null = where the camera looks. */
   aimYaw: (() => number | null) | null = null;
-  onSound?: (id: string, x: number, y: number, z: number, gain: number, pitch?: number) => void;
+  onSound?: (id: string, x: number, y: number, z: number, gain: number, pitch?: number, ref?: number) => void;
+  /** Footsteps and landings of any heavy body (the player's own, a monster's): GiantBody. */
+  readonly steps: GiantSteps;
   /** Physical strike on movable things (cars, props, people): point, radius, impulse vector (N*s). */
   onStrike?: (x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number) => void;
 
@@ -44,8 +47,10 @@ export class Interactions {
     private collision: Collision,
     readonly stimuli: Stimuli,
   ) {
-    player.events.onFootstep = (x, y, z, e, h) => this.footstep(x, y, z, e, h);
-    player.events.onLand = (x, y, z, e, h) => this.land(x, y, z, e, h);
+    this.steps = new GiantSteps({ camera: cam, camRig, dust, destruction, stimuli, playerPos: player.pos });
+    this.steps.sound = (id, x, y, z, gain, pitch, ref) => this.onSound?.(id, x, y, z, gain, pitch, ref);
+    player.events.onFootstep = (x, y, z, e, h) => this.steps.footstep(x, y, z, e, h, { own: true });
+    player.events.onLand = (x, y, z, e, h) => this.steps.land(x, y, z, e, h, { own: true });
   }
 
   /** Throw a punch on the next update (the Punch power); false while the last one is still out. */
@@ -155,33 +160,6 @@ export class Interactions {
     this.stimuli.emit('blast', x, y, z, 7, noticeRadius(impulse * 200));
     this.camRig.addShake(Math.min(1.2, 30 / Math.max(5, Math.hypot(x - this.player.pos.x, z - this.player.pos.z))));
     this.onSound?.('explosion', x, y, z, 1);
-  }
-
-  private footstep(x: number, y: number, z: number, energy: number, h: number): void {
-    // Footsteps of a heavy body shake the ground and break what is under the foot.
-    if (h > 4) {
-      const shake = Math.min(1, Math.log10(energy) / 9 - 0.3);
-      const d = this.cam.position.distanceTo(this.player.pos) / h;
-      // One's own steps: a short thud per step, not a shake that builds up over the walk.
-      this.camRig.addShake(Math.min(0.3, Math.max(0, shake) * Math.max(0.2, 1 - d * 0.05)));
-      this.dust.burst(x, y + 0.2, z, Math.min(16, Math.round(h * 0.5)), h * 0.08, h * 0.12, h * 0.06 + 0.4, 4, new THREE.Color(0.55, 0.52, 0.48), 0.1, 0.35);
-      this.stimuli.emit('stomp', x, y, z, Math.log10(energy), noticeRadius(energy));
-      this.onSound?.('step_giant', x, y, z, Math.min(1, h / 30), Math.max(0.4, 1.4 - h / 80));
-      if (h > 8) this.destruction.impact(x, y + h * 0.05, z, h * 0.08, Math.sqrt(energy) * 80, 0, -1, 0, 'stomp');
-    } else {
-      this.onSound?.('step_concrete', x, y, z, Math.min(1, 0.25 + h * 0.15), Math.min(2.5, 1 / Math.pow(h / 1.8, 0.35)));
-      if (h > 2.5) this.stimuli.emit('giant', x, y, z, h, h * 30);
-    }
-  }
-
-  private land(x: number, y: number, z: number, energy: number, h: number): void {
-    if (energy < 2000 * (h / 1.8)) { this.onSound?.('land_thud', x, y, z, 0.5); return; }
-    this.camRig.addShake(Math.min(1.2, Math.log10(energy) / 8));
-    const r = h * 0.35 + Math.cbrt(energy) * 0.01;
-    this.dust.burst(x, y + 0.3, z, 30, r, r * 1.5, r * 0.5 + 1, 6, new THREE.Color(0.58, 0.55, 0.5), 0.15, 0.5);
-    this.destruction.impact(x, y + 1, z, r, Math.sqrt(energy) * 60, 0, -1, 0, 'stomp');
-    this.stimuli.emit('stomp', x, y, z, Math.log10(energy), noticeRadius(energy));
-    this.onSound?.(h > 6 ? 'step_giant' : 'land_thud', x, y, z, 1, Math.max(0.4, 1.2 - h / 100));
   }
 }
 

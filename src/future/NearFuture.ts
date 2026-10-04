@@ -53,10 +53,11 @@ export class NearFuture {
     stimuli.on((s) => {
       switch (s.kind) {
         case 'stomp': {
-          // A giant's foot flattens robots (and parcels' carriers) under it.
-          if (this.playerH > 2.5) {
-            this.robots.crush(s.x, s.z, Math.max(0.6, this.playerH * 0.09));
-            this.service.crush(s.x, s.z, Math.max(0.6, this.playerH * 0.09));
+          // A giant's foot (the player's or a monster's: its size) flattens robots under it.
+          const h = s.size ?? this.playerH;
+          if (h > 2.5) {
+            this.robots.crush(s.x, s.z, Math.max(0.6, h * 0.09));
+            this.service.crush(s.x, s.z, Math.max(0.6, h * 0.09));
           }
           break;
         }

@@ -5,7 +5,11 @@
 import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
-import { planCell } from '../src/plan/cell';
+import { planCell, PropType } from '../src/plan/cell';
+import { RoadClass } from '../src/plan/types';
+import { Eatery, eateryDemand, tableVisit } from '../src/plan/eatery';
+import { TerraceKind, frontDoor, junctionPoints, clearOfWalk, WALK_CLEAR, DOOR_CLEAR, CROSSING_CLEAR, PT } from '../src/plan/terrace';
+import { closestOnPolyline } from '../src/core/geom2';
 import { buildingLayout, gridCell, stoopTop, type BuildingLayout } from '../src/build/buildingLayout';
 import { CURB_H } from '../src/build/ground';
 import type { BuildingDesc } from '../src/plan/building';
@@ -201,6 +205,93 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     }
   }
   console.log(`seed ${seed} size ${size}: ${macro.cells.length} cells, ${macro.metroStations.length} stations, ${buildings} buildings checked in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Cafés, restaurants and their terraces (plan/eatery.ts, plan/terrace.ts): deterministic; outdoor
+// seating never on a footprint, in a doorway, at a crossing or in the walking corridor of a
+// sidewalk; parklets only in the parking strip of local streets; plausible counts per district;
+// busy hours that make sense.
+for (const [seed, size] of [[3, 0.5], [42, 0.4]] as const) {
+  const t0 = performance.now();
+  const terrain = new Terrain(makeProfile({ seed, size }));
+  const macro = buildMacroPlan(terrain);
+  const c0 = macro.centres[0];
+  const cells = macro.cells.slice().sort((a, b) => Math.hypot(a.centroid[0] - c0.x, a.centroid[1] - c0.z) - Math.hypot(b.centroid[0] - c0.x, b.centroid[1] - c0.z)).slice(0, 70);
+  const TERRACE = new Set<number>([PropType.CafeTable, PropType.CafeChair, PropType.Parasol, PropType.MenuBoard, PropType.TerraceRail, PropType.Parklet]);
+  const R: Record<number, number> = { [PropType.CafeTable]: 0.38, [PropType.CafeChair]: 0.24, [PropType.Parasol]: 0.05, [PropType.MenuBoard]: 0.25, [PropType.TerraceRail]: 0.1, [PropType.Parklet]: 0 };
+  const by: Record<string, { shops: number; eat: number; terr: number; seats: number; square: number; parklet: number }> = {};
+  let items = 0, onFootprint = 0, inCorridor = 0, inDoor = 0, atCrossing = 0, badParklet = 0, badSeats = 0;
+  for (const c of cells) {
+    const p = planCell(macro, c, terrain);
+    if (c === cells[0] || c === cells[5]) {
+      const q = planCell(macro, c, terrain);
+      check(hashPlan(p.eateries) === hashPlan(q.eateries) && hashPlan(p.props) === hashPlan(q.props), `seed ${seed} cell ${c.id}: eateries and terraces deterministic`);
+    }
+    const d = (by[c.district] ??= { shops: 0, eat: 0, terr: 0, seats: 0, square: 0, parklet: 0 });
+    d.shops += p.buildings.filter((b) => b.shopfront).length;
+    for (const e of p.eateries) {
+      d.eat++;
+      if (e.terrace !== TerraceKind.None) d.terr++;
+      if (e.terrace === TerraceKind.Square) d.square++;
+      if (e.terrace === TerraceKind.Parklet) d.parklet++;
+      d.seats += e.seats.length / 4;
+      check(p.buildings[e.b]?.eatery === e.kind, `seed ${seed} cell ${c.id}: eatery ${e.b} marked on its building`);
+      for (let k = 0; k < e.seats.length; k += 4) {
+        const t = e.seats[k + 3] * 3;
+        if (Math.hypot(e.seats[k] - e.tables[t], e.seats[k + 1] - e.tables[t + 1]) > 0.95) badSeats++;
+      }
+    }
+    const doors = p.buildings.map((b) => frontDoor(b));
+    const junc = junctionPoints(p, c, macro);
+    const open = [...p.plazas, ...p.parks];
+    for (let i = 0; i < p.props.length; i += 6) {
+      const t = p.props[i];
+      if (!TERRACE.has(t)) continue;
+      items++;
+      const x = p.props[i + 1], z = p.props[i + 2], r = R[t];
+      // On the road: a parklet (the parking strip of a local street) and what stands on it.
+      let road: (typeof p.streets)[number] | null = null;
+      for (const s of p.streets) if (closestOnPolyline(s.pts, x, z).d < s.width / 2) road = s;
+      if (road) {
+        const dd = closestOnPolyline(road.pts, x, z).d;
+        if (road.cls !== RoadClass.Street || road.arterial >= 0 || dd < road.width / 2 - 1.95) badParklet++;
+      } else if (t === PropType.Parklet) badParklet++;
+      if (t !== PropType.Parklet && p.buildings.some((b) => pointInPoly(b.poly, x, z) || distPointPolyEdge(b.poly, x, z) < r)) onFootprint++;
+      if (t !== PropType.Parklet && !clearOfWalk(p.streets, x, z, r, !!road)) inCorridor++;
+      if (t !== PropType.Parklet && doors.some((o) => Math.hypot(o.x - x, o.z - z) < (t === PropType.MenuBoard ? 0.75 : DOOR_CLEAR) + r - 1e-6)) inDoor++;
+      const onSquare = open.some((sh) => pointInPoly(sh.outer, x, z));
+      if (!onSquare && !road && junc.some((_, k) => k % 2 === 0 && Math.hypot(junc[k] - x, junc[k + 1] - z) < CROSSING_CLEAR - 1e-6)) atCrossing++;
+      if (road && junc.some((_, k) => k % 2 === 0 && Math.hypot(junc[k] - x, junc[k + 1] - z) < CROSSING_CLEAR)) atCrossing++;
+    }
+  }
+  check(items > 200, `seed ${seed}: terrace furniture planned (${items} items)`);
+  check(onFootprint === 0, `seed ${seed}: terrace furniture off building footprints (${onFootprint} on one)`);
+  check(inCorridor === 0, `seed ${seed}: terrace furniture clear of the ${(WALK_CLEAR * 2).toFixed(1)} m walking corridor and carriageways (${inCorridor} in the way)`);
+  check(inDoor === 0, `seed ${seed}: doorways kept clear (${inDoor} items in front of a door)`);
+  check(atCrossing === 0, `seed ${seed}: crossings kept clear (${atCrossing} items within ${CROSSING_CLEAR} m of a junction)`);
+  check(badParklet === 0, `seed ${seed}: parklets only in the parking strip of local streets (${badParklet} bad)`);
+  check(badSeats === 0, `seed ${seed}: every seat at its table (${badSeats} off)`);
+  let eat = 0, terr = 0;
+  const rows: string[] = [];
+  for (const [k, d] of Object.entries(by)) {
+    eat += d.eat; terr += d.terr;
+    if (d.shops >= 60) check(d.eat / d.shops > 0.08 && d.eat / d.shops < 0.6, `seed ${seed} ${k}: eateries a plausible share of the shop fronts (${d.eat} of ${d.shops})`);
+    if (d.terr) check(d.seats / d.terr >= 4 && d.seats / d.terr <= 60, `seed ${seed} ${k}: plausible seats per terrace (${(d.seats / d.terr).toFixed(1)})`);
+    rows.push(`${k} ${d.eat}/${d.shops} eat, ${d.terr} terraces (${d.square} square, ${d.parklet} parklet), ${d.seats} seats`);
+  }
+  check(eat > 30 && terr / eat > 0.25 && terr / eat < 0.85, `seed ${seed}: a good share of the eateries with outside seating (${terr} of ${eat})`);
+  console.log(`eateries seed ${seed} (${cells.length} central cells, ${(performance.now() - t0).toFixed(0)} ms): ${rows.join('; ')}`);
+}
+check(PT.Tree === PropType.Tree && PT.Mailbox === PropType.Mailbox && PT.ParkedCar === PropType.ParkedCar && PT.CafeTable === PropType.CafeTable && PT.Parklet === PropType.Parklet && PT.Awning === PropType.Awning, 'terrace planner prop numbers match PropType');
+{
+  // Busy hours: coffee in the morning, lunch and dinner peaks, bars at night, closed at 4 am.
+  const D = (k: Eatery, h: number, d: 'commercial' | 'suburban' = 'commercial') => eateryDemand(k, h, d);
+  check(D(Eatery.Cafe, 8.6) > D(Eatery.Cafe, 10.8) && D(Eatery.Cafe, 13) > 0.5 && D(Eatery.Cafe, 4) === 0, 'demand: cafés busy at breakfast and lunch, closed at night');
+  check(D(Eatery.Restaurant, 20) > D(Eatery.Restaurant, 16.5) && D(Eatery.Restaurant, 9) === 0, 'demand: restaurants busiest at dinner');
+  check(D(Eatery.Bar, 22.5) > 0.6 && D(Eatery.Bar, 0.5) > 0 && D(Eatery.Bar, 11) === 0 && D(Eatery.Bar, 0.5, 'suburban') === 0, 'demand: bars at night, later in nightlife districts');
+  let a = 0, b = 0;
+  for (let t = 0; t < 24 * 7; t += 0.25) { if (tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t)) a++; if (tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t) && tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t)!.n === tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t)!.n) b++; }
+  check(a > 40 && a === b && !tableVisit(5, 1234, Eatery.Cafe, 'oldtown', 24 * 3 + 3.5), `demand: tables come and go deterministically (${a} of ${24 * 7 * 4} quarter hours taken)`);
 }
 
 // Countryside: the land-use field and forest tiles are deterministic, the countryside rivers
@@ -467,6 +558,72 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   console.log(`traffic: six-way junction ${n} cars, longest overlap ${worst} s, ${maxBox} in the box at most; gawkers ≤ ${maxG} (${gawkingAtEnd} after 2 min of cries) in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
+// ---- side rooms and hidden colonies: deterministic per seed; rooms clear of every tube, station
+// hall, entrance passage and each other, under the ground; 2–5 colonies, each reachable on foot
+// from its side room (and every room from its tunnel) in steps a walker can take.
+{
+  const { planRooms, roomConflicts, roomW } = await import('../src/underground/rooms');
+  const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
+  const { tubeAt, boxAt } = await import('../src/underground/Volumes');
+  for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const macro = buildMacroPlan(terrain);
+    const tubes = [...macro.metroLines.map(metroTube), ...macro.sewers.map((s) => sewerTube(s.pts, terrain))];
+    const halls = stationHalls(macro);
+    const t0 = performance.now();
+    const plan = planRooms(macro, terrain, tubes, halls);
+    const ms = performance.now() - t0;
+    check(hashPlan(plan) === hashPlan(planRooms(macro, terrain, tubes, halls)), `rooms seed ${seed}: plan deterministic`);
+    const passages = metroInput(macro, terrain).input.passages ?? [];
+    const conf = roomConflicts(plan, terrain, tubes, halls, passages.map((p) => p.tube));
+    check(conf.cuts === 0 && conf.uncovered === 0, `rooms seed ${seed}: clear of tubes, halls, ${passages.length} entrance passages and each other, under the ground (${conf.cuts} cuts, ${conf.uncovered} uncovered)`);
+    check(plan.colonies.length >= 2 && plan.colonies.length <= 5, `rooms seed ${seed}: 2–5 colonies (${plan.colonies.length})`);
+    // Walking: floors as the game finds them (highest floor in reach of the feet), always inside a volume.
+    const allT = [...tubes, ...plan.colonies.map((c) => c.crawl)];
+    const allB = [...halls, ...plan.rooms.flatMap((r) => r.boxes), ...plan.colonies.map((c) => c.chamber)];
+    const floorAt = (x: number, y: number, z: number) => {
+      let best: number | null = null;
+      for (const t of allT) { const h = tubeAt(t, x, y, z); if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor; }
+      for (const b of allB) { const h = boxAt(b, x, y, z); if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor; }
+      return best;
+    };
+    const inside = (x: number, y: number, z: number) => allT.some((t) => tubeAt(t, x, y, z, -0.15)) || allB.some((b) => boxAt(b, x, y, z, -0.15));
+    /** Walk a polyline (x, z pairs) from floor y: the largest step up, or Infinity if the walker leaves the volumes. */
+    const walk = (pts: number[], y: number): number => {
+      let worst = 0;
+      for (let i = 0; i + 3 < pts.length; i += 2) {
+        const L = Math.hypot(pts[i + 2] - pts[i], pts[i + 3] - pts[i + 1]), n = Math.max(1, Math.ceil(L / 0.2));
+        for (let k = 1; k <= n; k++) {
+          const x = pts[i] + ((pts[i + 2] - pts[i]) * k) / n, z = pts[i + 1] + ((pts[i + 3] - pts[i + 1]) * k) / n;
+          const f = floorAt(x, y + 0.3, z);
+          if (f === null || !inside(x, f + 0.3, z)) return Infinity;
+          worst = Math.max(worst, f - y);
+          y = f;
+        }
+      }
+      return worst;
+    };
+    let unreachable = 0;
+    for (const r of plan.rooms) {
+      const v0 = r.kind === 'ghost' ? r.doors[0].v0 + 1.1 : 0, m = r.main;
+      const pts = [...roomW(r, -0.5, v0), ...roomW(r, r.kind === 'ghost' ? 2 : m.u0 + 0.4, v0), ...roomW(r, (m.u0 + m.u1) / 2, (m.v0 + m.v1) / 2)];
+      if (walk(pts, r.y) > 0.36) unreachable++;
+    }
+    check(unreachable === 0, `rooms seed ${seed}: every room reachable from its tunnel (${unreachable} not)`);
+    for (const c of plan.colonies) {
+      const r = plan.rooms[c.room], m = r.main, P = c.crawl.pts;
+      const pts = [...roomW(r, -0.5, 0), ...roomW(r, m.u0 + 0.4, 0), P[0], P[2]];
+      for (let i = 3; i < P.length; i += 3) pts.push(P[i], P[i + 2]);
+      pts.push(c.chamber.cx, c.chamber.cz);
+      const step = walk(pts, r.y);
+      check(!!r.gap && step <= 0.36, `rooms seed ${seed}: colony ${c.id} reachable from room ${r.id} (${r.kind}) through its gap (largest step ${step.toFixed(2)} m)`);
+    }
+    const kinds = new Set(plan.rooms.map((r) => r.kind));
+    check(kinds.size >= 12, `rooms seed ${seed}: most kinds of rooms present (${[...kinds].join(' ')})`);
+    console.log(`rooms seed ${seed}: ${plan.rooms.length} side rooms (${plan.rooms.filter((r) => r.trace).length} with traces), ${plan.colonies.length} colonies in ${ms.toFixed(0)} ms`);
+  }
+}
+
 // ---- city threats: the threat clock's schedule is deterministic per seed, the first minor event
 // comes no earlier than its minimum, omens always come first, "off" schedules nothing.
 {
@@ -513,6 +670,117 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   for (let t = 0; t < 4 * 3600 && fired < 0; t++) if (w.tick(1, 0, 0, t > 2 * 3600).some((s) => s.type === 'event')) fired = t;
   check(fired > 2 * 3600, `threat clock: a due event waits until it can be seen (fired at ${(fired / 60).toFixed(0)} min)`);
   console.log(`threat clock: seed 42 normal → events at ${evA.map((e) => (e.t / 60).toFixed(0)).join(', ')} min; omens ${a.filter((s) => s.type === 'omen').map((s) => `${(s.t / 60).toFixed(0)}:${s.kind}`).join(' ')}`);
+}
+
+// ---- the Strider (THREATS_PLAN Phase B): major events come no earlier than their floor and only after a
+// karma milestone, with their own omens; its route from the river to downtown exists for 20 seeds; the
+// rig's pure math (two-bone IK reach, follow-the-leader spacing, FABRIK, ray vs capsule) behaves.
+{
+  const { ThreatClock, CLOCK } = await import('../src/game/threats/ThreatClock');
+  type Sig = { t: number; type: string; arch: string; kind?: string; karma: number };
+  const run = (seed: number, hours: number, karmaFrom: number, karmaEvery: number) => {
+    const c = new ThreatClock(seed);
+    const out: Sig[] = [];
+    for (let t = 0; t < hours * 3600; t++) {
+      const k = karmaEvery && t >= karmaFrom && t % karmaEvery === 0 ? 1 : 0;
+      for (const s of c.tick(1, k, 0)) out.push({ t: Math.round(c.state.played), type: s.type, arch: s.archetype, kind: s.type === 'omen' ? s.kind : undefined, karma: c.state.karma });
+    }
+    return out;
+  };
+  const none = run(42, 6, 0, 0);
+  check(!none.some((s) => s.type === 'event' && s.arch === 'strider'), 'major events: none without the karma milestone (6 h, no karma)');
+  for (const seed of [42, 7, 1234]) {
+    const busy = run(seed, 7, 0, 20);
+    const majors = busy.filter((s) => s.type === 'event' && s.arch === 'strider');
+    check(majors.length >= 1 && majors[0].t >= CLOCK.firstMajor, `major events: seed ${seed}: the first Strider no earlier than ${CLOCK.firstMajor / 3600} h (${majors.map((m) => (m.t / 3600).toFixed(2) + ' h').join(', ') || 'none'})`);
+    check(majors.every((m) => m.karma >= CLOCK.majorKarma), `major events: seed ${seed}: only after the karma milestone (${majors.map((m) => m.karma).join(', ')})`);
+    const i0 = busy.indexOf(majors[0]);
+    const prevEv = busy.slice(0, i0).filter((s) => s.type === 'event').pop();
+    const om = busy.filter((s) => s.type === 'omen' && s.arch === 'strider' && s.t < (majors[0]?.t ?? 0) && s.t > (prevEv?.t ?? 0));
+    check(om.length >= CLOCK.majorOmensMin && om.every((o) => o.kind === 'tremor' || o.kind === 'wake'), `major events: seed ${seed}: ≥ ${CLOCK.majorOmensMin} Strider omens before it (${om.map((o) => o.kind).join(', ')})`);
+    // Minor events still come around it.
+    const evs = busy.filter((s) => s.type === 'event');
+    check(evs.filter((e) => e.arch === 'robots').length >= 4, `major events: seed ${seed}: minor events go on around them (${evs.map((e) => e.arch[0]).join('')})`);
+    if (seed === 42) console.log(`threat clock (busy hero, seed 42): ${evs.map((e) => `${(e.t / 60).toFixed(0)}:${e.arch}`).join(' ')}`);
+  }
+  // The milestone reached late (karma only from 4 h on): the Strider waits for it.
+  const late = run(42, 9, 4 * 3600, 20);
+  const reached = late.find((s) => s.karma >= CLOCK.majorKarma);
+  const firstLate = late.find((s) => s.type === 'event' && s.arch === 'strider');
+  check(!!firstLate && firstLate.t >= 4 * 3600 + CLOCK.majorKarma * 20 - 20, `major events: a late karma milestone delays the Strider (${firstLate ? (firstLate.t / 3600).toFixed(2) + ' h' : 'none'}, milestone at ${reached ? (reached.t / 3600).toFixed(2) : '?'} h)`);
+
+  // Route: start in the river, end in downtown, along the arterials, a reasonable length.
+  const { planStriderRoute } = await import('../src/game/threats/StriderRoute');
+  let routesOk = 0;
+  const lens: number[] = [];
+  for (let seed = 1; seed <= 20; seed++) {
+    const terrain = new Terrain(makeProfile({ seed, size: 0.6 }));
+    const macro = buildMacroPlan(terrain);
+    const R = planStriderRoute(macro, terrain);
+    if (!R) { check(false, `strider route: seed ${seed} has one`); continue; }
+    const c0 = macro.centres[0];
+    const straight = Math.hypot(R.end.x - R.start.x, R.end.z - R.start.z);
+    const inDowntown = Math.hypot(R.end.x - c0.x, R.end.z - c0.z) < 250 || macro.cells.some((c) => c.district === 'downtown' && pointInPoly(c.poly, R.end.x, R.end.z));
+    const ok = terrain.isWater(R.start.x, R.start.z, 2) && inDowntown && R.onArterials >= R.length * 0.75 && R.length >= 300 && R.length <= Math.max(2500, straight * 2.6) && R.landS < 200;
+    if (ok) routesOk++;
+    else check(false, `strider route: seed ${seed}: start in water ${terrain.isWater(R.start.x, R.start.z, 2)}, ends downtown ${inDowntown}, ${Math.round(R.onArterials)} of ${Math.round(R.length)} m on arterials (straight ${Math.round(straight)} m), lands at ${Math.round(R.landS)} m`);
+    lens.push(Math.round(R.length));
+  }
+  check(routesOk === 20, `strider route: river to downtown along the arterials for 20 seeds (${routesOk}/20)`);
+  const tA = new Terrain(makeProfile({ seed: 5, size: 0.6 })), tB = new Terrain(makeProfile({ seed: 5, size: 0.6 }));
+  const rA = planStriderRoute(buildMacroPlan(tA), tA), rB = planStriderRoute(buildMacroPlan(tB), tB);
+  check(!!rA && !!rB && hashPlan(rA.pts) === hashPlan(rB.pts), 'strider route: deterministic per seed');
+  console.log(`strider routes (20 seeds, size 0.6): ${lens.join(' ')} m`);
+
+  // Rig math.
+  const { twoBone, follow, reach, lengths, layStraight } = await import('../src/game/threats/rig/chain');
+  const { rayCapsule, capsuleDist } = await import('../src/game/threats/rig/CreatureRig');
+  let seedR = 99;
+  const rr = () => { seedR = (seedR * 1103515245 + 12345) & 0x7fffffff; return seedR / 0x7fffffff; };
+  let ikBad = 0, ikFar = 0;
+  for (let k = 0; k < 500; k++) {
+    const a = 3 + rr() * 8, b = 3 + rr() * 8;
+    const h = { x: rr() * 20 - 10, y: 10 + rr() * 10, z: rr() * 20 - 10 };
+    const dir = { x: rr() - 0.5, y: -rr() - 0.05, z: rr() - 0.5 }, dl = Math.hypot(dir.x, dir.y, dir.z);
+    const d = (Math.abs(a - b) + 0.05) + rr() * (a + b - Math.abs(a - b) - 0.1);
+    const f = { x: h.x + dir.x / dl * d, y: h.y + dir.y / dl * d, z: h.z + dir.z / dl * d };
+    const knee = { x: 0, y: 0, z: 0 }, foot = { x: 0, y: 0, z: 0 };
+    const ok = twoBone(h, f, a, b, { x: 1, y: 0.2, z: 0 }, knee, foot);
+    const e1 = Math.abs(Math.hypot(knee.x - h.x, knee.y - h.y, knee.z - h.z) - a), e2 = Math.abs(Math.hypot(foot.x - knee.x, foot.y - knee.y, foot.z - knee.z) - b);
+    if (!ok || e1 > 1e-6 || e2 > 1e-6 || Math.hypot(foot.x - f.x, foot.y - f.y, foot.z - f.z) > 1e-6) ikBad++;
+    // Out of reach: straight towards the target, as far as the bones go.
+    const far = { x: h.x + dir.x / dl * (a + b + 5), y: h.y + dir.y / dl * (a + b + 5), z: h.z + dir.z / dl * (a + b + 5) };
+    const ok2 = twoBone(h, far, a, b, { x: 1, y: 0.2, z: 0 }, knee, foot);
+    if (ok2 || Math.abs(Math.hypot(foot.x - h.x, foot.y - h.y, foot.z - h.z) - (a + b)) > 1e-4) ikFar++;
+  }
+  check(ikBad === 0, `rig: two-bone IK reaches reachable targets with exact bone lengths (${ikBad}/500 off)`);
+  check(ikFar === 0, `rig: two-bone IK stretches straight towards targets out of reach (${ikFar}/500 off)`);
+  const lens0 = [7, 7, 6.5, 6, 5.5, 5, 4.5, 4, 3.5];
+  const chain = new Float64Array((lens0.length + 1) * 3);
+  layStraight(chain, lens0, 0, 15, 0, 0, 0, 1);
+  let spacing = 0;
+  for (let k = 0; k < 400; k++) {
+    chain[0] += Math.sin(k * 0.05) * 1.5; chain[2] -= 1.2; chain[1] = 15 + Math.sin(k * 0.1) * 3;
+    follow(chain, lens0, 0.3, () => 1);
+    const L = lengths(chain);
+    for (let i = 0; i < L.length; i++) spacing = Math.max(spacing, Math.abs(L[i] - lens0[i]));
+  }
+  check(spacing < 1e-9, `rig: follow-the-leader keeps every segment's length (worst ${spacing.toExponential(1)} m)`);
+  const nl = [5, 5, 4.5];
+  const neck = new Float64Array(4 * 3);
+  layStraight(neck, nl, 0, 20, 0, 0, 0, -1);
+  let fabrikBad = 0;
+  for (let k = 0; k < 200; k++) {
+    const tx = rr() * 16 - 8, ty = 20 + rr() * 8, tz = -rr() * 10;
+    const miss = reach(neck, nl, tx, ty, tz, 8);
+    const dT = Math.hypot(tx, ty - 20, tz);
+    const L = lengths(neck);
+    if ((dT > 8 && dT < 13.5 && miss > 0.05) || neck[0] !== 0 || neck[1] !== 20 || neck[2] !== 0 || L.some((l, i) => Math.abs(l - nl[i]) > 1e-6)) fabrikBad++;
+  }
+  check(fabrikBad === 0, `rig: FABRIK reaches targets at a neck's working reach, root fixed, lengths kept (${fabrikBad}/200 off)`);
+  const cap = { ax: 0, ay: 0, az: 0, bx: 0, by: 10, bz: 0, r: 2, zone: 'x' };
+  const tHit = rayCapsule(-20, 5, 0, 1, 0, 0, cap, 100), tEnd = rayCapsule(0, 30, 0, 0, -1, 0, cap, 100), tMiss = rayCapsule(-20, 5, 3, 1, 0, 0, cap, 100);
+  check(Math.abs(tHit - 18) < 1e-6 && Math.abs(tEnd - 18) < 1e-6 && tMiss === Infinity && Math.abs(capsuleDist(5, 5, 0, cap) - 3) < 1e-9, `rig: ray vs capsule (${tHit}, ${tEnd}, ${tMiss})`);
 }
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }

@@ -11,6 +11,8 @@
  *  - `inSphere` lists everything within an area (area effects hit bystanders and cars too).
  *
  * The crime phase extends this with threat colours ("con") and health: see `TargetInfo`.
+ * Big threats (a monster: ThreatActor) are a target kind of their own, `threat`, with body zones and
+ * weak spots (TargetInfo.zones), targetable from much further off.
  */
 import * as THREE from 'three';
 import type { Pedestrians, PedAgent } from '../sim/Pedestrians';
@@ -28,17 +30,22 @@ import { statusOf } from '../shared/status';
 import { HUMANOID } from '../future/models';
 import { Role } from '../sim/Population';
 import { TARGET } from './abilities/tuning';
+import type { ThreatActor } from './threats/ThreatEvent';
 
 export type ServiceBot = NearFuture['service']['list'][number];
 
-export type TargetKind = 'person' | 'car' | 'robot' | 'bot' | 'drone' | 'prop';
+export type TargetKind = 'person' | 'car' | 'robot' | 'bot' | 'drone' | 'prop' | 'threat';
 export type Target =
   | { kind: 'person'; obj: PedAgent }
   | { kind: 'car'; obj: Vehicle }
   | { kind: 'robot'; obj: Robot }
   | { kind: 'bot'; obj: ServiceBot }
   | { kind: 'drone'; obj: Drone }
-  | { kind: 'prop'; obj: StreetProp };
+  | { kind: 'prop'; obj: StreetProp }
+  | { kind: 'threat'; obj: ThreatActor };
+
+/** Big threats are targetable this many times further than people and cars. */
+export const THREAT_RANGE = 3;
 
 /** What a ray met first. */
 export interface ProbeHit {
@@ -60,6 +67,8 @@ export interface TargetInfo {
   con: string | null;
   /** Health 0..1 — null until the combat model exists. */
   health: number | null;
+  /** A threat's body zones (weak spots marked, glowing while exposed). */
+  zones?: { x: number; y: number; z: number; r: number; name: string; weak: boolean; exposed: boolean }[];
 }
 
 export interface TargetWorld {
@@ -73,6 +82,8 @@ export interface TargetWorld {
   streamer: CityStreamer;
   player: Player;
   camera: THREE.PerspectiveCamera;
+  /** Big threat bodies (the threat director's actors). */
+  threats?: () => ThreatActor[];
 }
 
 const VEH_H: Partial<Record<string, number>> = { bus: 3.1, truck: 3.1, van: 2.5, delivery: 2.5, shuttle: 2.5, suv: 1.85, pickup: 1.85 };
@@ -164,6 +175,7 @@ export class Targeting {
       case 'bot': { const b = t.obj; return out.set(b.x, b.y + HUMANOID.height * 0.5 * s, b.z); }
       case 'drone': { const d = t.obj; return out.set(d.x, d.y, d.z); }
       case 'prop': { const p = t.obj; return out.set(p.x, p.y + p.height * 0.5, p.z); }
+      case 'threat': return out.set(t.obj.x, t.obj.y, t.obj.z);
     }
   }
 
@@ -177,6 +189,7 @@ export class Targeting {
       case 'bot': return HUMANOID.height * s;
       case 'drone': return 0.5 * s;
       case 'prop': return Math.max(0.5, t.obj.height);
+      case 'threat': return t.obj.height;
     }
   }
 
@@ -199,6 +212,7 @@ export class Targeting {
       case 'bot': return t.obj.alive && !t.obj.crushed;
       case 'drone': return t.obj.alive;
       case 'prop': return !t.obj.broken;
+      case 'threat': return t.obj.targetable;
     }
   }
 
@@ -208,7 +222,12 @@ export class Targeting {
   info(t: Target): TargetInfo {
     const dist = this.centre(t, _v).distanceTo(this.w.player.pos);
     const d = this.describe?.(t);
-    return { name: d?.name ?? this.name(t), kind: this.kindLabel(t), dist, con: d?.con ?? null, health: d?.health ?? null };
+    const info: TargetInfo = { name: d?.name ?? this.name(t), kind: this.kindLabel(t), dist, con: d?.con ?? null, health: d?.health ?? null };
+    if (t.kind === 'threat') {
+      info.health = d?.health ?? t.obj.hp / t.obj.maxHp;
+      info.zones = t.obj.zones.map((z) => ({ x: z.x, y: z.y, z: z.z, r: z.r, name: z.name, weak: z.weak, exposed: z.exposed }));
+    }
+    return info;
   }
 
   kindLabel(t: Target): string {
@@ -218,6 +237,7 @@ export class Targeting {
       case 'robot': case 'bot': return 'Robot';
       case 'drone': return 'Drone';
       case 'prop': return 'Object';
+      case 'threat': return 'Threat';
     }
   }
 
@@ -245,6 +265,7 @@ export class Targeting {
         const f = k.split(':')[1] ?? 'object';
         return f.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).replace(/ ([A-Z])/g, (_m, c: string) => ` ${c.toLowerCase()}`);
       }
+      case 'threat': return t.obj.name;
     }
   }
 
@@ -267,6 +288,8 @@ export class Targeting {
     }
     if (kinds.drone) for (const o of w.future.drones.list) if (o.alive && Math.abs(o.x - x) < r && Math.abs(o.z - z) < r) fn({ kind: 'drone', obj: o });
     if (kinds.prop) w.props.query(x, z, r, (p) => { if (!p.broken) fn({ kind: 'prop', obj: p }); });
+    // Big threats: their reach is their size.
+    if (kinds.threat && w.threats) for (const a of w.threats()) if (Math.abs(a.x - x) < r * THREAT_RANGE + a.height * 2 && Math.abs(a.z - z) < r * THREAT_RANGE + a.height * 2) fn({ kind: 'threat', obj: a });
   }
   private nb: PedAgent[] = [];
 
@@ -275,8 +298,15 @@ export class Targeting {
    * target and its distance to the point.
    */
   inSphere(x: number, y: number, z: number, r: number, fn: (t: Target, d: number) => void, kinds: KindMask = ALL_KINDS): void {
+    const z0 = z;
     this.each(x, z, r + 3, (t) => {
       const c = this.centre(t, _w);
+      if (t.kind === 'threat') {
+        // The nearest body surface.
+        const z = t.obj.zoneAt(x, y, z0);
+        if (z && z.d <= r) fn(t, Math.max(0, z.d));
+        return;
+      }
       const ext = t.kind === 'car' ? t.obj.length * 0.45 : t.kind === 'prop' ? t.obj.radius : 0.3;
       const hh = this.height(t) * 0.5;
       const dy = Math.max(0, Math.abs(c.y - y) - hh);
@@ -336,6 +366,7 @@ export class Targeting {
         const r = p.tree ? Math.max(0.25, p.radius * 1.5) : Math.max(0.15, p.radius * p.scale);
         return rayCylinder(ox, oy, oz, dx, dy, dz, p.x, p.z, p.y, p.y + Math.max(0.4, p.height), r, maxT);
       }
+      case 'threat': return t.obj.ray(ox, oy, oz, dx, dy, dz, maxT)?.t ?? Infinity;
     }
   }
 
@@ -423,7 +454,7 @@ export class Targeting {
     }
     const k = Math.max(1, Math.sqrt(this.w.player.k));
     const c = this.centre(t, _v);
-    if (c.distanceTo(this.w.player.pos) > TARGET.range * k * 1.6) { this.set(null); return; }
+    if (c.distanceTo(this.w.player.pos) > TARGET.range * k * 1.6 * (t.kind === 'threat' ? THREAT_RANGE : 1)) { this.set(null); return; }
     this.unseen = this.onScreen(c) ? 0 : this.unseen + dt;
     if (this.unseen > TARGET.lostAfter) this.set(null);
   }
@@ -445,6 +476,7 @@ export class Targeting {
       case 'bot': return this.w.future.service.list.includes(t.obj);
       case 'drone': return this.w.future.drones.list.includes(t.obj);
       case 'prop': return !t.obj.broken;
+      case 'threat': return t.obj.targetable;
     }
   }
 
@@ -463,12 +495,12 @@ export class Targeting {
     const range = TARGET.range * k, propRange = TARGET.propRange * k;
     _ray.setFromCamera(_ndc.set(nx, ny), cam);
     const o = _ray.ray.origin, d = _ray.ray.direction;
-    const reach = range + cam.position.distanceTo(p.pos);
+    const reach = range * (this.w.threats?.().length ? THREAT_RANGE : 1) + cam.position.distanceTo(p.pos);
     const h = this.probe(o.x, o.y, o.z, d.x, d.y, d.z, reach);
     if (h.what === 'target' && h.target) {
       const t = h.target;
       const far = this.centre(t, _v).distanceTo(p.pos);
-      if (far <= (t.kind === 'prop' ? propRange : range)) return { ...t } as Target;
+      if (far <= (t.kind === 'prop' ? propRange : t.kind === 'threat' ? range * THREAT_RANGE : range)) return { ...t } as Target;
     }
     // Near miss: closest projected centre within PICK_PX, in line of sight.
     const W = this.w.world, el = document.getElementById('view');
@@ -520,7 +552,7 @@ export class Targeting {
     this.each(p.pos.x, p.pos.z, range, (t) => {
       const c = this.centre(t, _v);
       const d = c.distanceTo(cam.position);
-      if (d > (t.kind === 'prop' ? propRange : range)) return;
+      if (d > (t.kind === 'prop' ? propRange : t.kind === 'threat' ? range * THREAT_RANGE : range)) return;
       _w.copy(c).project(cam);
       if (_w.z >= 1 || Math.abs(_w.x) > 0.95 || Math.abs(_w.y) > 0.95) return;
       // Screen distance from the crosshair (aspect-corrected), with a slight preference for the
@@ -545,10 +577,15 @@ export class Targeting {
   }
 
   /**
-   * Where to aim at a target from a point: its centre, led by its velocity for something
-   * travelling at `speed` m/s (Infinity: no lead).
+   * Where to aim at a target from a point: its centre (a threat's exposed weak spot), led by its
+   * velocity for something travelling at `speed` m/s (Infinity: no lead).
    */
   aimPoint(t: Target, fromX: number, fromY: number, fromZ: number, speed: number, out: THREE.Vector3): THREE.Vector3 {
+    // A big threat: an exposed weak spot if there is one (the soft lock goes for it).
+    if (t.kind === 'threat') {
+      const w = t.obj.zones.find((z) => z.weak && z.exposed);
+      return w ? out.set(w.x, w.y, w.z) : this.centre(t, out);
+    }
     this.centre(t, out);
     if (isFinite(speed) && speed > 0) {
       const d = Math.hypot(out.x - fromX, out.y - fromY, out.z - fromZ);
@@ -559,5 +596,5 @@ export class Targeting {
   }
 }
 
-export const ALL_KINDS = { person: true, car: true, robot: true, drone: true, prop: true } as const;
-export type KindMask = { person?: boolean; car?: boolean; robot?: boolean; drone?: boolean; prop?: boolean };
+export const ALL_KINDS = { person: true, car: true, robot: true, drone: true, prop: true, threat: true } as const;
+export type KindMask = { person?: boolean; car?: boolean; robot?: boolean; drone?: boolean; prop?: boolean; threat?: boolean };

@@ -19,6 +19,7 @@ uniform float uNight;
 uniform float uDayLight;
 uniform float uLitFrac;
 uniform float uShopLit;
+uniform float uEatLit;
 uniform float uTime;
 varying vec2 vMUv;
 varying float vLayer;
@@ -91,6 +92,7 @@ Surf facadeSurface(vec2 uv, vec4 fp, int flags, float layerF, vec3 eyeDirW, vec3
   bool curtain = (flags & 4) != 0;
   bool shop = (flags & 2) != 0;
   bool front = (flags & 256) != 0;
+  bool eatery = (flags & 2048) != 0;
   bool arched = (flags & 8) != 0;
   bool shutters = (flags & 32) != 0;
   bool balcony = (flags & 16) != 0;
@@ -123,7 +125,7 @@ Surf facadeSurface(vec2 uv, vec4 fp, int flags, float layerF, vec3 eyeDirW, vec3
     if (f == 0.0) { wy0 = max(0.9, fh - wh - 0.7); }
   }
   // Entrance door on the front facade (non-shop ground floor or within shop bays).
-  float doorBi = float(flags >> 9);
+  float doorBi = float((flags >> 9) & 3);
   if (front && f == 0.0 && bi == doorBi && !curtain) {
     isDoor = true;
     ww = min(1.3, bay * 0.62);
@@ -191,7 +193,7 @@ Surf facadeSurface(vec2 uv, vec4 fp, int flags, float layerF, vec3 eyeDirW, vec3
         s.rough = 0.7;
       }
       // Shop sign band above the display windows.
-      if (isShopFloor && ly > wy0 + wh + 0.15 && ly < fh - 0.15) {
+      if (isShopFloor && !eatery && ly > wy0 + wh + 0.15 && ly < fh - 0.15) {
         float sid = h11(seedB + bi * 0.0 + 21.0);
         vec3 sc = 0.15 + 0.7 * vec3(h11(sid * 3.0), h11(sid * 5.0), h11(sid * 7.0));
         float letters = step(0.45, vnoise(vec2(uv.x * 3.0, ly * 6.0) + sid * 10.0)) * step(abs(ly - (wy0 + wh + 0.15 + fh - 0.15) * 0.5), 0.18);
@@ -261,7 +263,7 @@ Surf facadeSurface(vec2 uv, vec4 fp, int flags, float layerF, vec3 eyeDirW, vec3
   vec3 vt = vec3(dot(-eyeDirW, T), dot(-eyeDirW, vec3(0, 1, 0)), dot(-eyeDirW, -nW));
   float dT;
   bool office = (flags & 4) != 0;
-  vec3 room = interiorRoom(vec2(lx, ly), vec2(bay * (isShopFloor ? 2.0 : 1.6), fh), winId + f * 0.13, vt, office || isShopFloor, dT);
+  vec3 room = interiorRoom(vec2(lx, ly), vec2(bay * (isShopFloor ? 2.0 : 1.6), fh), winId + f * 0.13, vt, office || (isShopFloor && !eatery), dT);
   // Blinds / curtains: per window fraction drawn down from the top.
   float blind = h11(winId * 17.0);
   blind = blind < 0.45 ? 0.0 : (blind - 0.45) * 1.4;
@@ -273,7 +275,8 @@ Surf facadeSurface(vec2 uv, vec4 fp, int flags, float layerF, vec3 eyeDirW, vec3
   }
   bool lit;
   vec3 lightCol;
-  if (isShopFloor || isDoor) { lit = h11(winId * 5.0) < uShopLit; lightCol = vec3(1.0, 0.92, 0.78) * 1.6; }
+  if (eatery && (isShopFloor || isDoor)) { lit = h11(winId * 5.0) < uEatLit; lightCol = vec3(1.0, 0.64, 0.34) * (1.2 + 0.3 * uNight); } // cafés: warm, open late
+  else if (isShopFloor || isDoor) { lit = h11(winId * 5.0) < uShopLit; lightCol = vec3(1.0, 0.92, 0.78) * 1.6; }
   else { lit = h11(winId * 13.0) < uLitFrac; lightCol = mix(vec3(1.0, 0.82, 0.58), vec3(0.85, 0.9, 1.0), step(0.8, h11(winId * 23.0))) * 1.3; }
   vec3 inside = room * (lit ? lightCol : vec3(uDayLight * 0.13 + 0.004));
   s.albedo = mix(s.albedo, vec3(0.015), detail);
@@ -299,6 +302,7 @@ export function createFacadeMaterial(arrays: MaterialArrays, elemTex: THREE.Text
     uDayLight: G.uDayLight,
     uLitFrac: G.uLitFrac,
     uShopLit: G.uShopLit,
+    uEatLit: G.uEatLit,
     uTime: G.uTime,
   };
   mat.userData.uniforms = uniforms;

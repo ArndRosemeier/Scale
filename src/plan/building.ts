@@ -61,6 +61,8 @@ export interface BuildingDesc {
   units: number;
   /** Is a landmark (church tower, notable tower). */
   landmark: boolean;
+  /** Place to eat or drink on the ground floor (plan/eatery.ts Eatery; 0 / absent: none). */
+  eatery?: number;
 }
 
 /** Wall material ids — must match render material atlas layers. */

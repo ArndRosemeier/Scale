@@ -1,11 +1,75 @@
 /**
  * What every threat event is to the rest of the game (THREATS_PLAN §4): the threat director runs
- * it, the response director escalates against it, the map marks it. Phase A has one archetype
- * (robot malfunction); later ones (swarms, the Strider, tripods) implement the same interface.
+ * it, the response director escalates against it, the map marks it. Archetypes: the robot
+ * malfunction (minor) and the Strider (major); later ones (swarms, tripods) implement the same
+ * interface.
+ *
+ * A big threat is also a `ThreatActor` (THREATS_PLAN §1 "common foundation"): one body with hit
+ * points, armour per body zone, weak spots and an aggro table. Everything that hurts it — the
+ * player's punches and powers now, the army's ForceUnits later — goes through `damage`.
  */
 import type { Cause } from '../Stimuli';
 
-export type ThreatOutcome = 'stopped' | 'shutdown' | 'abandoned';
+/** stopped: beaten by force · defeated: a monster brought down (its body stays) · retreated: driven off. */
+export type ThreatOutcome = 'stopped' | 'shutdown' | 'abandoned' | 'defeated' | 'retreated';
+
+/** A body zone of a threat actor: armour, weak spot, where it is now. */
+export interface ThreatZone {
+  readonly id: string;
+  readonly name: string;
+  /** Share of the damage its hide / plates stop (0 soft … 0.95). */
+  armour: number;
+  /** A weak spot: soft and multiplied while `exposed` (the throat while charging, the belly when rearing). */
+  readonly weak: boolean;
+  exposed: boolean;
+  /** Centre (world) and radius now (markers, area hits). */
+  x: number; y: number; z: number; r: number;
+  /** Damage taken there (recent, decays): a leg that took a lot buckles. */
+  recent: number;
+}
+
+/** Who did it: the cause (player / police / military later) and a key for the aggro table. */
+export interface DamageSource {
+  cause: Cause;
+  /** Aggro key ('player', a squad or unit id); default: the cause. */
+  key?: string;
+  /** Where it came from (the monster turns on it). */
+  x?: number; y?: number; z?: number;
+}
+
+export interface DamageResult { dealt: number; zone: ThreatZone | null; weak: boolean }
+
+export interface ThreatActor {
+  readonly name: string;
+  readonly hp: number;
+  readonly maxHp: number;
+  /** Brought down (the body stays until the aftermath removes it). */
+  readonly defeated: boolean;
+  /** Still in the world as something to target (alive and on the map). */
+  readonly targetable: boolean;
+  /** Body centre and height (targeting, markers). */
+  readonly x: number; readonly y: number; readonly z: number;
+  readonly height: number;
+  readonly zones: readonly ThreatZone[];
+  /** Ray against the body: distance and zone, or null. */
+  ray(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): { t: number; zone: ThreatZone } | null;
+  /** The zone whose surface is nearest a point, and the distance to it (area effects). */
+  zoneAt(x: number, y: number, z: number): { zone: ThreatZone; d: number } | null;
+  /**
+   * Damage before armour (points; the Strider has 3000): reduced by the zone's armour, multiplied on
+   * an exposed weak spot, booked to the aggro table. `zone` null: the zone nearest `src` / the body.
+   */
+  damage(zone: ThreatZone | string | null, amount: number, src: DamageSource): DamageResult;
+  /** A physical blow (punch, a giant's stomp, a thrown car): impulse (N·s) at a point within r of the body. */
+  blow(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, src: DamageSource): DamageResult | null;
+  /** Aggro table: damage dealt by each source, decaying. */
+  readonly aggro: ReadonlyMap<string, number>;
+  /** Fighting strength for the con (1 = an average adult). */
+  conStrength(): number;
+}
+
+/** Points of damage per N·s of impulse (punches, shoves, blows on a threat actor). */
+export const DAMAGE_PER_IMPULSE = 1 / 1500;
 
 /** Something of the threat the police can engage on foot (a rogue machine, a swarm creature). */
 export interface ThreatTarget {
@@ -42,4 +106,10 @@ export interface ThreatEvent {
   dispose(): void;
   /** Debug summary. */
   snapshot(): Record<string, unknown>;
+  /** 'minor' (robots, scouts) or 'major' (the Strider): the response escalates faster and further. */
+  readonly tier?: 'minor' | 'major';
+  /** Officers may go in on foot and strike it (rogue robots yes; a 40 m monster no: they hold the lines). */
+  readonly engageOnFoot?: boolean;
+  /** Big bodies of the event (targetable, damageable). */
+  readonly actors?: readonly ThreatActor[];
 }

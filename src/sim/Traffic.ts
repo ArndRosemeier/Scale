@@ -222,11 +222,12 @@ export class Traffic {
     for (const s of this.stimuli.recent) {
       if (this.t - 0 < 0) break;
       if (s.time < this.stimuli.time - 0.05) continue;
-      if (s.kind !== 'collapse' && s.kind !== 'blast' && s.kind !== 'stomp' && s.kind !== 'sonic' && s.kind !== 'giant') continue;
+      if (s.kind !== 'collapse' && s.kind !== 'blast' && s.kind !== 'stomp' && s.kind !== 'sonic' && s.kind !== 'giant' && s.kind !== 'roar' && s.kind !== 'tremor') continue;
       for (const v of this.vehicles) {
         const d = Math.hypot(v.x - s.x, v.z - s.z);
         if (d > s.radius) continue;
-        v.fear = Math.min(2, v.fear + (1 - d / s.radius) * (s.kind === 'giant' ? 0.3 : 1.2));
+        // A roar: drivers panic (turn round or leave the car); a tremor only unsettles them.
+        v.fear = Math.min(2, v.fear + (1 - d / s.radius) * (s.kind === 'giant' || s.kind === 'tremor' ? 0.3 : s.kind === 'roar' ? 2 : 1.2));
         if (s.kind === 'stomp' && d < Math.max(3, s.intensity)) this.crush(v);
       }
     }

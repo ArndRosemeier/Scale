@@ -28,9 +28,10 @@ import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { Noise } from '../core/noise';
 
-export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth' | 'evCharger';
+export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth' | 'evCharger'
+  | 'cafeTable' | 'cafeChair' | 'parasol' | 'awning' | 'menuBoard' | 'terraceRail' | 'parklet';
 
-export const FURNITURE_KINDS: FurnitureKind[] = ['lampModern', 'lampClassic', 'lampDouble', 'trafficLight', 'bench', 'bin', 'hydrant', 'mailbox', 'bollard', 'planter', 'busStop', 'fountain', 'statue', 'kiosk', 'stopSign', 'playground', 'manhole', 'metroEntrance', 'newsStand', 'bikeRack', 'phoneBooth', 'evCharger'];
+export const FURNITURE_KINDS: FurnitureKind[] = ['lampModern', 'lampClassic', 'lampDouble', 'trafficLight', 'bench', 'bin', 'hydrant', 'mailbox', 'bollard', 'planter', 'busStop', 'fountain', 'statue', 'kiosk', 'stopSign', 'playground', 'manhole', 'metroEntrance', 'newsStand', 'bikeRack', 'phoneBooth', 'evCharger', 'cafeTable', 'cafeChair', 'parasol', 'awning', 'menuBoard', 'terraceRail', 'parklet'];
 
 export interface FurnitureModel {
   kind: FurnitureKind;
@@ -1090,6 +1091,166 @@ function evCharger(fb: FB, v: number): number {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Café and restaurant terraces (plan/terrace.ts). Kept low-poly: there are many of them.
+// Fabric and chair paint take the café's colours through iColor.
+// ---------------------------------------------------------------------------------------------
+
+/** Low-detail foliage clump (planters on parklets). */
+function smallFoliage(fb: FB, r: number, x: number, y: number, z: number, col: V, seed: number) {
+  const g = new THREE.IcosahedronGeometry(r, 1);
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const vx = p.getX(i), vy = p.getY(i), vz = p.getZ(i);
+    const k = 1 + 0.16 * fNoise.n3(vx * 4 + seed, vy * 4, vz * 4);
+    p.setXYZ(i, vx * k, vy * k * 0.85, vz * k);
+  }
+  g.deleteAttribute('normal');
+  fb.add(mergeVertsNormals(g), M(x, y, z), { m: FMat.Plastic, c: col, s: 8 });
+}
+
+/** Round bistro table (cast-iron foot, marble top) or square timber table. Top at 0.74 m. */
+function cafeTable(fb: FB, v: number): number {
+  const iron = paint([0.07, 0.07, 0.07], true);
+  if (v % 2 === 0) {
+    fb.cyl(iron, 0.2, 0.24, 0.04, 0, 0, 0, 10);
+    fb.cyl(iron, 0.028, 0.034, 0.68, 0, 0.04, 0, 6);
+    fb.cyl({ m: FMat.Concrete, c: [0.9, 0.89, 0.86] }, 0.33, 0.33, 0.03, 0, 0.71, 0, 14);
+    fb.cyl(METAL, 0.335, 0.335, 0.012, 0, 0.705, 0, 14, true);
+    return 0.74;
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) fb.box(WOOD, 0.045, 0.7, 0.045, sx * 0.31, 0.35, sz * 0.31);
+  fb.box(WOOD, 0.72, 0.04, 0.72, 0, 0.72, 0);
+  fb.box(WOOD, 0.6, 0.06, 0.03, 0, 0.67, 0.31);
+  fb.box(WOOD, 0.6, 0.06, 0.03, 0, 0.67, -0.31);
+  return 0.74;
+}
+
+/** Bistro chair (painted frame, woven seat) or timber chair. The sitter faces -Z. */
+function cafeChair(fb: FB, v: number): number {
+  if (v % 2 === 0) {
+    const frame = paint([0.1, 0.1, 0.1]);
+    const weave: PO = { m: FMat.Wood, c: [0.62, 0.48, 0.3] };
+    for (const sx of [-1, 1]) {
+      fb.rod(frame, [sx * 0.18, 0, -0.19], [sx * 0.16, 0.45, -0.16], 0.012, 5);
+      fb.rod(frame, [sx * 0.18, 0, 0.21], [sx * 0.16, 0.45, 0.17], 0.012, 5);
+      fb.rod(frame, [sx * 0.16, 0.45, 0.17], [sx * 0.15, 0.86, 0.22], 0.012, 5);
+    }
+    fb.cyl(weave, 0.2, 0.2, 0.035, 0, 0.44, 0, 10);
+    fb.box(weave, 0.32, 0.12, 0.02, 0, 0.76, 0.21, 0, -0.12);
+    fb.box(weave, 0.32, 0.07, 0.02, 0, 0.6, 0.195, 0, -0.12);
+    return 0.86;
+  }
+  const wood: PO = { m: FMat.Wood, c: [0.42, 0.27, 0.15] };
+  for (const sx of [-1, 1]) {
+    fb.box(wood, 0.035, 0.45, 0.035, sx * 0.18, 0.225, -0.18);
+    fb.box(wood, 0.035, 0.9, 0.035, sx * 0.18, 0.45, 0.19);
+  }
+  fb.box(wood, 0.42, 0.035, 0.42, 0, 0.46, 0);
+  for (const y of [0.6, 0.72, 0.84]) fb.box(wood, 0.36, 0.06, 0.02, 0, y, 0.19);
+  return 0.9;
+}
+
+/** Market parasol: square (v0, 2.6 m) or round (v1, 2.3 m); LED strip under the canopy at night. */
+function parasol(fb: FB, v: number): number {
+  const fabric = plastic([0.92, 0.9, 0.84]);
+  const pole: PO = { m: FMat.Wood, c: [0.5, 0.36, 0.22] };
+  const led: PO = { m: FMat.Light, e: 0.4, c: [1, 0.8, 0.55] };
+  const H = 2.45, sq = v % 2 === 0;
+  fb.cyl(paint([0.08, 0.08, 0.08], true), 0.2, 0.22, 0.05, 0, 0, 0, 8);
+  fb.cyl(pole, 0.026, 0.026, H - 0.02, 0, 0.05, 0, 6);
+  const R = sq ? 1.84 : 1.15, segs = sq ? 4 : 8, h = sq ? 0.5 : 0.42;
+  const cone = new THREE.CylinderGeometry(0.04, R, h, segs, 1, true);
+  cone.translate(0, h / 2, 0);
+  fb.add(cone, M(0, H - h - 0.03, 0, 0, sq ? Math.PI / 4 : Math.PI / 8), fabric, undefined, true);
+  if (sq) {
+    for (const [x, z, w, d] of [[0, -1.3, 2.6, 0.01], [0, 1.3, 2.6, 0.01], [-1.3, 0, 0.01, 2.6], [1.3, 0, 0.01, 2.6]] as [number, number, number, number][]) fb.box(fabric, w, 0.16, d, x, H - h - 0.1, z);
+  } else {
+    const val = new THREE.CylinderGeometry(R * 0.995, R * 0.995, 0.13, 8, 1, true);
+    val.translate(0, -0.065, 0);
+    fb.add(val, M(0, H - h - 0.03, 0, 0, Math.PI / 8), fabric, undefined, true);
+  }
+  fb.cyl(pole, 0.04, 0.03, 0.12, 0, H - 0.06, 0, 6);
+  fb.add(new THREE.TorusGeometry(R * 0.42, 0.022, 3, sq ? 4 : 8), M(0, H - h + 0.04, 0, Math.PI / 2, 0, sq ? Math.PI / 4 : 0), led);
+  return H + 0.06;
+}
+
+/** Striped folding-arm awning over a shop window, 2.4 m (v0) or 3.2 m (v1) wide; top at 3 m, on the wall (z = 0). */
+function awning(fb: FB, v: number): number {
+  const W = v % 2 === 0 ? 2.4 : 3.2, top = 3.0, drop = 0.45, proj = 1.3;
+  const colour = plastic([0.9, 0.88, 0.82]);
+  const white = plastic([0.93, 0.92, 0.88], true);
+  const slope = Math.hypot(proj, drop), pitch = Math.atan2(drop, proj);
+  const n = Math.round(W / 0.3);
+  const sw = W / n;
+  for (let k = 0; k < n; k++) {
+    const x = -W / 2 + sw * (k + 0.5);
+    const po = k % 2 === 0 ? colour : white;
+    fb.box(po, sw, 0.012, slope, x, top - drop / 2, -proj / 2, 0, -pitch);
+    fb.box(po, sw, 0.24, 0.01, x, top - drop - 0.13, -proj - 0.005);
+  }
+  fb.box(METAL, W + 0.06, 0.06, 0.06, 0, top - drop - 0.01, -proj);
+  fb.box(paint([0.18, 0.18, 0.18], true), W + 0.1, 0.1, 0.08, 0, top + 0.03, -0.04);
+  for (const sx of [-1, 1]) {
+    fb.rod(METAL, [sx * (W / 2 - 0.25), top - 0.55, 0], [sx * (W / 2 - 0.45), top - 0.25, -proj * 0.55], 0.014, 5);
+    fb.rod(METAL, [sx * (W / 2 - 0.45), top - 0.25, -proj * 0.55], [sx * (W / 2 - 0.25), top - drop, -proj], 0.014, 5);
+  }
+  return top + 0.08;
+}
+
+/** A-board with a chalk menu (v0) or a lit menu lectern (v1). Faces ±Z. */
+function menuBoard(fb: FB, v: number): number {
+  if (v % 2 === 0) {
+    const frame: PO = { m: FMat.Wood, c: [0.45, 0.3, 0.17] };
+    const slate = paint([0.06, 0.08, 0.07], true);
+    const chalk = plastic([0.86, 0.86, 0.82], true);
+    for (const s of [-1, 1]) {
+      const a = s * 0.2, z = s * 0.11;
+      fb.box(frame, 0.62, 0.95, 0.025, 0, 0.47, z, 0, a);
+      fb.box(slate, 0.52, 0.72, 0.01, 0, 0.5, z + s * 0.016, 0, a);
+      for (let k = 0; k < 6; k++) {
+        const y = 0.76 - k * 0.1, w = k === 0 ? 0.34 : 0.22 + ((k * 37) % 13) / 60;
+        fb.box(chalk, w, 0.018, 0.004, (k === 0 ? 0 : -0.05), y, z + s * 0.024 - Math.sin(a) * (y - 0.5) * s * 0, 0, a);
+      }
+    }
+    return 0.97;
+  }
+  const dark = paint([0.1, 0.09, 0.08], true);
+  fb.cyl(dark, 0.18, 0.2, 0.03, 0, 0, 0, 8);
+  fb.box(dark, 0.05, 1.05, 0.05, 0, 0.53, 0);
+  fb.box(dark, 0.42, 0.56, 0.08, 0, 1.18, 0, 0, -0.25);
+  fb.box({ m: FMat.Light, e: 0.3, c: [1, 0.95, 0.85] }, 0.36, 0.48, 0.01, 0, 1.18, -0.045, 0, -0.25);
+  return 1.45;
+}
+
+/** Low glass windscreen with a fabric band in the café's colour, 2 m long (along X). */
+function terraceRail(fb: FB, _v: number): number {
+  const post = paint([0.12, 0.12, 0.12], true);
+  for (const x of [-0.97, 0.97]) fb.box(post, 0.05, 0.95, 0.05, x, 0.475, 0);
+  fb.box({ m: FMat.Wood, c: [0.5, 0.35, 0.2] }, 2.0, 0.04, 0.07, 0, 0.95, 0);
+  fb.box(plastic([0.85, 0.85, 0.8]), 1.9, 0.28, 0.02, 0, 0.26, 0);
+  fb.box(GLASS, 1.9, 0.52, 0.012, 0, 0.66, 0);
+  return 0.97;
+}
+
+/** Timber parklet deck module in a parking bay: 2.0 × 1.8 m (v0), or a 1.0 m end with a planter (v1). Top at 0 (sidewalk level). */
+function parklet(fb: FB, v: number): number {
+  const L = v % 2 === 0 ? 2.0 : 1.0, D = 1.8;
+  const deck: PO = { m: FMat.Wood, c: [0.58, 0.42, 0.27] };
+  fb.box(paint([0.16, 0.15, 0.14], true), L, 0.13, D - 0.04, 0, -0.085, 0);
+  const n = 9;
+  for (let k = 0; k < n; k++) fb.box(deck, L - 0.01, 0.035, D / n - 0.012, 0, -0.018, -D / 2 + (k + 0.5) * (D / n));
+  if (v % 2 === 1) {
+    fb.box({ m: FMat.Wood, c: [0.4, 0.28, 0.17] }, 0.8, 0.55, D - 0.1, 0, 0.275, 0);
+    fb.box({ m: FMat.Concrete, c: [0.2, 0.15, 0.1], s: 9 }, 0.72, 0.02, D - 0.2, 0, 0.53, 0);
+    smallFoliage(fb, 0.38, 0, 0.75, -0.42, [0.22, 0.38, 0.14], 4);
+    smallFoliage(fb, 0.33, 0.05, 0.72, 0.4, [0.26, 0.42, 0.15], 9);
+    smallFoliage(fb, 0.28, -0.1, 0.9, 0.02, [0.2, 0.34, 0.12], 2);
+    return 1.1;
+  }
+  return 0.02;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------------------------
 
@@ -1128,6 +1289,13 @@ export function furnitureModel(kind: FurnitureKind, variant = 0): FurnitureModel
     case 'bikeRack': height = bikeRack(fb, v); radius = v === 0 ? 1.9 : 1.1; breakable = 'bend'; break;
     case 'phoneBooth': height = phoneBooth(fb, v); radius = 0.6; breakable = 'shatter'; break;
     case 'evCharger': height = evCharger(fb, v); radius = 0.22; breakable = 'topple'; break;
+    case 'cafeTable': height = cafeTable(fb, v); radius = 0.36; breakable = 'topple'; break;
+    case 'cafeChair': height = cafeChair(fb, v); radius = 0.22; breakable = 'topple'; break;
+    case 'parasol': height = parasol(fb, v); radius = 0.06; breakable = 'topple'; break;
+    case 'awning': height = awning(fb, v); radius = 0.1; breakable = 'shatter'; break;
+    case 'menuBoard': height = menuBoard(fb, v); radius = 0.25; breakable = 'topple'; break;
+    case 'terraceRail': height = terraceRail(fb, v); radius = 0.1; breakable = 'topple'; break;
+    case 'parklet': height = parklet(fb, v); radius = v === 0 ? 1.0 : 0.5; breakable = 'solid'; break;
   }
   const model: FurnitureModel = { kind, geometry: fb.build(), height, radius, lights, breakable };
   furnCache.set(key, model);

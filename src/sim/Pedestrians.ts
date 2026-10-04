@@ -282,6 +282,8 @@ export class Pedestrians {
     }
     // Skip legs that never come near the player.
     if (distSegPoint(ax, az, bx, bz, px, pz) > DESPAWN_R * 0.9) return;
+    // Shelter in place: nobody sets out into a district under a civil-defence alert.
+    if (this.shelter?.(ax, az, bx, bz)) return;
     const route = this.buildRoute(ax, az, bx, bz);
     if (!route) return;
     const id = this.nextId++;
@@ -294,6 +296,8 @@ export class Pedestrians {
     // Place along the route by progress.
     if (this.pendingCarDest) { a.carDest = this.pendingCarDest; this.pendingCarDest = null; }
     if (progress > 0) this.advanceAlong(a, progress * routeLength(route));
+    // (Already under way: not where an alert keeps people indoors either.)
+    if (progress > 0 && this.shelter?.(a.x, a.z, a.x, a.z)) return;
     a.y = this.groundY(a.x, a.z, a.onRoad, a.heading);
     this.agents.push(a);
     this.byId.set(c.id, a);
@@ -301,8 +305,12 @@ export class Pedestrians {
   }
 
   private pendingCarDest: { x: number; z: number } | null = null;
+  /** At the end of its route: true when someone else takes the agent over (it is not removed). */
+  onArrive?: (a: PedAgent) => boolean;
   /** Called when an agent reaches its parked car (trip continues by car). */
   onCarReady?: (a: PedAgent) => void;
+  /** A trip from a to b is not started (people stay where they are: an alert over the district). */
+  shelter?: (ax: number, az: number, bx: number, bz: number) => boolean;
 
   /** Street end (top of the stairs) of the nearest metro entrance within r, from the loaded cells. */
   entranceNear?: (x: number, z: number, r: number) => { x: number; z: number } | null;
@@ -513,6 +521,10 @@ export class Pedestrians {
       tx = a.x + (dx / d) * 10 + Math.cos(wob) * 2; tz = a.z + (dz / d) * 10 + Math.sin(wob) * 2;
       desired = a.pref * 3.2;
       if (a.fear < 0.15) { a.state = PState.Walk; this.rejoinRoute(a); }
+    } else if (a.state === PState.Sit) {
+      // Seated outdoors (a café terrace, sim/Terraces): stays put until its owner or a scare gets it up.
+      a.speed = 0;
+      return;
     } else if (a.state === PState.Gawk || a.state === PState.Film) {
       tx = a.x; tz = a.z; desired = 0;
       if (gawkOver(a, dt)) a.state = PState.Walk;
@@ -525,6 +537,7 @@ export class Pedestrians {
     } else {
       // Walk the route.
       if (a.wp >= a.route.length / 3) {
+        if (this.onArrive?.(a)) return; // taken over at the end of the route (a café guest sits down)
         a.alive = false; // arrived (entered the building / reached the car or station)
         if (a.carDest) this.onCarReady?.(a);
         return;

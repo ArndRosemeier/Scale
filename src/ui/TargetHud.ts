@@ -2,7 +2,8 @@
  * Target marker and frame (Tab targeting): four corner brackets round the target on screen
  * (a small caret at the screen edge when it is out of view), and a frame at the bottom left
  * with its name, kind, distance and state, the threat colour ("con", also a tint on the brackets)
- * and a health bar (TargetInfo.con / .health, filled in by the crime layer).
+ * and a health bar (TargetInfo.con / .health, filled in by the crime layer). A big threat's weak
+ * spots are rings on its body (bright and pulsing while exposed) and named in the frame.
  */
 import * as THREE from 'three';
 import type { Targeting } from '../game/Targeting';
@@ -20,6 +21,9 @@ export class TargetHud {
   private con: HTMLDivElement;
   private hp: HTMLDivElement;
   private hpFill: HTMLDivElement;
+  private zn: HTMLDivElement;
+  private zones: HTMLDivElement;
+  private zoneEls: HTMLElement[] = [];
   private shown = false;
   private last = '';
 
@@ -29,8 +33,12 @@ export class TargetHud {
     this.mark.innerHTML = '<i></i><i></i><i></i><i></i><b></b>';
     this.frame = document.createElement('div');
     this.frame.id = 'tframe';
-    this.frame.innerHTML = '<div class="con"></div><div class="nm"></div><div class="sub"><span class="kd"></span><span class="ds"></span></div><div class="hp"><div></div></div>';
-    document.body.append(this.mark, this.frame);
+    this.frame.innerHTML = '<div class="con"></div><div class="nm"></div><div class="sub"><span class="kd"></span><span class="ds"></span></div><div class="hp"><div></div></div><div class="zn"></div>';
+    this.zones = document.createElement('div');
+    this.zones.id = 'tzones';
+    for (let i = 0; i < 6; i++) { const e = document.createElement('i'); this.zones.append(e); this.zoneEls.push(e); }
+    document.body.append(this.mark, this.frame, this.zones);
+    this.zn = this.frame.querySelector('.zn')!;
     this.nm = this.frame.querySelector('.nm')!;
     this.kind = this.frame.querySelector('.kd')!;
     this.dist = this.frame.querySelector('.ds')!;
@@ -40,13 +48,15 @@ export class TargetHud {
   }
 
   setVisible(v: boolean): void {
-    if (!v) { this.mark.style.display = 'none'; this.frame.style.display = 'none'; this.shown = false; }
+    if (!v) { this.mark.style.display = 'none'; this.frame.style.display = 'none'; this.shown = false; this.hideZones(); }
   }
+
+  private hideZones(): void { for (const e of this.zoneEls) if (e.style.display !== 'none') e.style.display = 'none'; }
 
   update(): void {
     const T = this.targeting, t = T.current;
     if (!t) {
-      if (this.shown) { this.mark.style.display = 'none'; this.frame.style.display = 'none'; this.shown = false; this.last = ''; }
+      if (this.shown) { this.mark.style.display = 'none'; this.frame.style.display = 'none'; this.shown = false; this.last = ''; this.hideZones(); }
       return;
     }
     if (!this.shown) { this.mark.style.display = 'block'; this.frame.style.display = 'block'; this.shown = true; }
@@ -82,10 +92,24 @@ export class TargetHud {
     }
     // Frame (text only when it changes).
     const info = T.info(t);
+    // Weak spots on the body.
+    let zi = 0;
+    const weak = info.zones?.filter((z) => z.weak) ?? [];
+    for (const z of weak) {
+      if (zi >= this.zoneEls.length) break;
+      _t.set(z.x, z.y, z.z).project(this.camera);
+      if (_t.z > 1 || Math.abs(_t.x) > 1 || Math.abs(_t.y) > 1) continue;
+      const e = this.zoneEls[zi++];
+      e.style.display = 'block';
+      e.style.transform = `translate(${(_t.x * 0.5 + 0.5) * W}px, ${(-_t.y * 0.5 + 0.5) * H}px)`;
+      e.classList.toggle('on', z.exposed);
+    }
+    for (; zi < this.zoneEls.length; zi++) if (this.zoneEls[zi].style.display !== 'none') this.zoneEls[zi].style.display = 'none';
     const s = statusOf(t.obj);
     const st = s ? [s.frozen > 0 && 'frozen', s.burning > 0 && 'burning', s.stunned > 0 && 'stunned', s.shrink > 0 && 'shrunk', s.wet > 0 && 'wet'].filter(Boolean).join(', ') : '';
     const d = info.dist < 10 ? info.dist.toFixed(1) : Math.round(info.dist).toString();
-    const key = `${info.name}|${info.kind}|${d}|${st}|${info.con}|${info.health}`;
+    const zkey = weak.map((z) => `${z.name}${z.exposed ? '!' : ''}`).join(',');
+    const key = `${info.name}|${info.kind}|${d}|${st}|${info.con}|${info.health}|${zkey}`;
     if (key === this.last) return;
     this.last = key;
     this.nm.textContent = info.name;
@@ -97,5 +121,7 @@ export class TargetHud {
     else this.mark.style.removeProperty('--con');
     this.hp.style.display = info.health === null ? 'none' : 'block';
     if (info.health !== null) this.hpFill.style.width = `${Math.round(info.health * 100)}%`;
+    this.zn.style.display = weak.length ? 'flex' : 'none';
+    if (weak.length) this.zn.innerHTML = 'Weak spots: ' + weak.map((z) => `<span class="${z.exposed ? 'on' : ''}">${z.name}</span>`).join(' · ');
   }
 }

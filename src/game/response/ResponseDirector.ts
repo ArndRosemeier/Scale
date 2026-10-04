@@ -15,6 +15,12 @@
  * Escalation by elapsed time and how the level before fares (the share of the threat still in
  * action, people hurt); de-escalation once the incident is over: the siren stops, the roadblocks
  * open, the units pack up and drive off.
+ *
+ * A major threat (the Strider: `ThreatEvent.tier === 'major'`) escalates faster, with a wider
+ * cordon, siren and alert area, and units keep their distance (scene points out beyond its
+ * radius); officers never go in on foot against something they cannot strike
+ * (`engageOnFoot === false`): they hold the lines and send people away. Levels above 2 (National
+ * Guard, army and air, the last resort — THREATS_PLAN §2) plug in through `registerLevel`.
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
@@ -50,12 +56,26 @@ export const RESPONSE = {
   calm: [8, 16, 30],
   /** Evacuation routing per frame (ms) and the farthest metro entrance worth walking to (m). */
   evacMs: 0.45, evacMaxWalk: 650,
+  /** A major threat: sooner up the ladder, wider areas (m). */
+  major: { up1: 10, up2: 25, cordonR: 260, sirenR: 520, alertR: 800 },
 };
+
+/**
+ * A response level above the built-in ones (3 National Guard, 4 army & air, 5 the last resort):
+ * when to go up to it from the level below, what to send, what to do every frame, how to stand down.
+ */
+export interface LevelHandler {
+  /** Ready to go up to this level now (from the one below)? */
+  when(inc: Incident): boolean;
+  up(inc: Incident): void;
+  step?(inc: Incident, dt: number): void;
+  down(inc: Incident): void;
+}
 
 type Role = 'patrol' | 'block' | 'swat';
 interface RJob extends IncidentJob { role: Role; inc: Incident; slot: number; turn?: { x0: number; z0: number; y0: number; x1: number; z1: number; y1: number; t: number } }
 
-interface Incident {
+export interface Incident {
   ev: ThreatEvent;
   level: number;
   maxLevel: number;
@@ -84,10 +104,23 @@ export class ResponseDirector {
   private queued = new WeakSet<PedAgent>();
   private carT = 0;
   private devDone = false;
+  /** Levels 3+ (stage 2: National Guard, army and air; the last resort). */
+  private levels = new Map<number, LevelHandler>();
   stats = { incidents: 0, evacuated: 0, routed: 0, msAvg: 0 };
 
   constructor(private g: Game) {
     g.reactions.onEvacuate = (a, s) => this.evacuate(a, s);
+    g.peds.shelter = (ax, az, bx, bz) => this.sheltered(ax, az, bx, bz);
+  }
+
+  /** Under an alert (level ≥ 1) people stay indoors: no trip starts or ends within the siren's reach. */
+  private sheltered(ax: number, az: number, bx: number, bz: number): boolean {
+    for (const inc of this.incidents) {
+      if (inc.closed || inc.level < 1) continue;
+      const ev = inc.ev, R = this.radii(inc).sirenR;
+      if (Math.hypot(ax - ev.x, az - ev.z) < R || Math.hypot(bx - ev.x, bz - ev.z) < R) return true;
+    }
+    return false;
   }
 
   /** A threat event began: the first calls come in. */
@@ -104,14 +137,25 @@ export class ResponseDirector {
     this.g.audio.loop('civil_siren')?.stop();
   }
 
+  /** Plug in a level above 2 (THREATS_PLAN §2: 3 National Guard, 4 army & air, 5 the last resort). */
+  registerLevel(level: number, h: LevelHandler): void { this.levels.set(level, h); }
+
+  /** The highest level there is (2 built in, more when registered in a row). */
+  get top(): number { let n = 2; while (this.levels.has(n + 1)) n++; return n; }
+
+  /** Radii for an incident (a major threat's are wider). */
+  private radii(inc: Incident): { cordonR: number; sirenR: number; alertR: number } {
+    return inc.ev.tier === 'major' ? RESPONSE.major : RESPONSE;
+  }
+
   /** The highest level of any open incident (HUD, tests). */
   get level(): number { return this.incidents.reduce((m, i) => Math.max(m, i.closed ? 0 : i.level), 0); }
 
-  /** Dev: force the latest incident to a level (0–2). */
+  /** Dev: force the latest incident to a level (0 … top). */
   setLevel(n: number): number {
     const inc = this.incidents[this.incidents.length - 1];
     if (!inc) return -1;
-    this.goTo(inc, Math.max(0, Math.min(2, n)));
+    this.goTo(inc, Math.max(0, Math.min(this.top, n)));
     return inc.level;
   }
 
@@ -146,12 +190,14 @@ export class ResponseDirector {
     // Patrol cars at the scene follow it as it moves.
     for (const j of inc.jobs) if (j.role !== 'block' && j.unit?.state === 'driving') { const p = this.scenePoint(inc, j.slot); j.x = p.x; j.z = p.z; }
     if (ev.active) {
-      const s = ev.strength(), U = RESPONSE;
-      if (inc.level === 0 && ((inc.t >= U.up1.after && s > U.up1.strength) || (inc.t >= U.up1.hurtAfter && ev.hurt >= U.up1.hurt))) this.goTo(inc, 1);
-      else if (inc.level === 1 && inc.levelT >= U.up2.after && s > U.up2.strength) this.goTo(inc, 2);
+      const s = ev.strength(), U = RESPONSE, major = ev.tier === 'major';
+      if (inc.level === 0 && ((inc.t >= (major ? U.major.up1 : U.up1.after) && s > U.up1.strength) || (inc.t >= U.up1.hurtAfter && ev.hurt >= U.up1.hurt))) this.goTo(inc, 1);
+      else if (inc.level === 1 && inc.levelT >= (major ? U.major.up2 : U.up2.after) && s > U.up2.strength) this.goTo(inc, 2);
+      else if (inc.level >= 2 && this.levels.get(inc.level + 1)?.when(inc)) this.goTo(inc, inc.level + 1);
     } else {
       // Over: stand down in steps.
       inc.calmT += dt;
+      if (inc.level > 2 && inc.calmT > RESPONSE.calm[0] * 0.5) this.goTo(inc, inc.level - 1);
       if (inc.level === 2 && inc.calmT > RESPONSE.calm[0]) this.goTo(inc, 1);
       if (inc.level === 1 && inc.calmT > RESPONSE.calm[1]) this.goTo(inc, 0);
       if (!inc.closed && inc.calmT > RESPONSE.calm[2]) {
@@ -160,6 +206,7 @@ export class ResponseDirector {
         inc.pending.length = 0;
       }
     }
+    for (const [n, h] of this.levels) if (inc.level >= n) h.step?.(inc, dt);
     this.perimeter(inc, dt);
   }
 
@@ -167,6 +214,9 @@ export class ResponseDirector {
   private goTo(inc: Incident, level: number): void {
     if (level === inc.level) return;
     const up = level > inc.level;
+    // Levels above 2 are the registered handlers' (up: the new one; down: every one left).
+    if (up && level > 2) this.levels.get(level)?.up(inc);
+    if (!up) for (let n = inc.level; n > level; n--) if (n > 2) this.levels.get(n)?.down(inc);
     inc.level = level;
     inc.levelT = 0;
     inc.maxLevel = Math.max(inc.maxLevel, level);
@@ -208,10 +258,10 @@ export class ResponseDirector {
     return true;
   }
 
-  /** Where patrol car `slot` stops: round the incident, ~30 m out. */
-  private scenePoint(inc: Incident, slot: number): { x: number; z: number } {
-    const a = slot * 2.1 + inc.ev.id;
-    return { x: inc.ev.x + Math.cos(a) * 30, z: inc.ev.z + Math.sin(a) * 30 };
+  /** Where patrol car `slot` stops: round the incident, ~30 m out (a major threat: well beyond its reach). */
+  scenePoint(inc: Incident, slot: number): { x: number; z: number } {
+    const a = slot * 2.1 + inc.ev.id, r = inc.ev.tier === 'major' ? inc.ev.radius * 1.6 : 30;
+    return { x: inc.ev.x + Math.cos(a) * r, z: inc.ev.z + Math.sin(a) * r };
   }
 
   // ================================================================== units on the scene
@@ -238,7 +288,7 @@ export class ResponseDirector {
       car.x = T.x0 + (T.x1 - T.x0) * k; car.z = T.z0 + (T.z1 - T.z0) * k; car.yaw = T.y0 + (T.y1 - T.y0) * k;
     }
     const fx = ev.x - car.x, fz = ev.z - car.z, fl = Math.hypot(fx, fz) || 1;
-    const engage = ev.active && (j.role === 'swat' || (j.role === 'patrol' && inc.level >= 2));
+    const engage = ev.active && ev.engageOnFoot !== false && (j.role === 'swat' || (j.role === 'patrol' && inc.level >= 2));
     let i = 0;
     for (const o of u.officers) {
       const act = o.actor;
@@ -342,19 +392,20 @@ export class ResponseDirector {
     const on = inc.level >= 1 && !inc.closed;
     // Civil-defence siren over the district (a slow rising and falling wail).
     inc.sirenGain += ((on ? 1 : 0) - inc.sirenGain) * Math.min(1, dt * (on ? 0.6 : 0.35));
-    if (on && !inc.siren) inc.siren = g.audio.loop('civil_siren', 32);
+    const R = this.radii(inc);
+    if (on && !inc.siren) inc.siren = g.audio.loop('civil_siren', inc.ev.tier === 'major' ? 60 : 32);
     if (inc.siren) {
       inc.siren.set(ev.x, g.terrain.height(ev.x, ev.z) + 14, ev.z, inc.sirenGain);
       if (!on && inc.sirenGain < 0.01) { inc.siren.stop(); inc.siren = null; }
     }
     // Screens round about: the red alert.
     inc.alert += ((on ? 1 : 0) - inc.alert) * Math.min(1, dt * 1.5);
-    if (inc === this.incidents[this.incidents.length - 1] || on) g.future.signs.alert(ev.x, ev.z, RESPONSE.alertR, inc.alert > 0.02 ? inc.alert : 0);
+    if (inc === this.incidents[this.incidents.length - 1] || on) g.future.signs.alert(ev.x, ev.z, R.alertR, inc.alert > 0.02 ? inc.alert : 0);
     if (!on) return;
     inc.sirenT -= dt;
     if (inc.sirenT <= 0) {
       inc.sirenT = 2;
-      g.stimuli.emit('siren', ev.x, g.terrain.height(ev.x, ev.z) + 10, ev.z, 4, RESPONSE.sirenR, { evac: true, cause: 'police' });
+      g.stimuli.emit('siren', ev.x, g.terrain.height(ev.x, ev.z) + 10, ev.z, 4, R.sirenR, { evac: true, cause: 'police' });
       inc.stats.sirens++;
     }
     // Traffic inside the cordon turns round or is left standing.
@@ -363,14 +414,14 @@ export class ResponseDirector {
       this.carT = 1;
       for (const v of g.traffic.vehicles) {
         if (v.state !== VState.Drive || v.task || v.siren || v.kind === 'police' || v.kind === 'swat' || v.kind === 'bus') continue;
-        if (Math.hypot(v.x - ev.x, v.z - ev.z) < RESPONSE.cordonR * 0.9) v.fear = Math.max(v.fear, 0.95);
+        if (Math.hypot(v.x - ev.x, v.z - ev.z) < R.cordonR * 0.9) v.fear = Math.max(v.fear, 0.95);
       }
     }
   }
 
   /** Points where streets cross the cordon ring (arterials first), well spread round it. */
   private cordon(inc: Incident): { x: number; z: number }[] {
-    const net = this.g.net, ev = inc.ev, R = RESPONSE.cordonR;
+    const net = this.g.net, ev = inc.ev, R = this.radii(inc).cordonR;
     const cands: { x: number; z: number; a: number; cls: number }[] = [];
     for (const e of net.edges) {
       if (e.cls > 3) continue;
@@ -439,7 +490,7 @@ export class ResponseDirector {
       let best: { x: number; z: number } | null = null, bs = RESPONSE.evacMaxWalk;
       for (const e of ents) {
         const d = Math.hypot(e.x - a.x, e.z - a.z);
-        const s = d + (Math.hypot(e.x - ev.x, e.z - ev.z) < 45 ? 400 : 0);
+        const s = d + (Math.hypot(e.x - ev.x, e.z - ev.z) < Math.max(45, ev.radius) ? 400 : 0);
         if (s < bs) { bs = s; best = e; }
       }
       const R = best ? g.peds.buildRoute(a.x, a.z, best.x, best.z) : null;
@@ -475,7 +526,7 @@ export class ResponseDirector {
     this.devDone = true;
     dev.response = {
       director: this,
-      /** Force the latest incident to a response level (0 patrol, 1 perimeter & evacuation, 2 SWAT). */
+      /** Force the latest incident to a response level (0 patrol, 1 perimeter & evacuation, 2 SWAT; 3+ when registered). */
       level: (n = 1) => this.setLevel(n),
       status: () => this.snapshot(),
     };

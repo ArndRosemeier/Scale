@@ -93,6 +93,10 @@ export class CrowdRenderer {
   rigGround: ((x: number, y: number, z: number) => number | null) | null = null;
   /** People who need a full rig first and out to FORCE_RANGE (ragdolls: physics/ragdoll). */
   forceRig: ((a: PedAgent) => boolean) | null = null;
+  /** What a person holds (not actors: they say it themselves): an item id, null for nothing, undefined to keep their own (sim/Terraces: a cup at the café). */
+  heldFor: ((a: PedAgent) => string | null | undefined) | null = null;
+  /** Seated people chatting (sim/Terraces). */
+  talking: ((a: PedAgent, time: number) => boolean) | null = null;
   stats = { crowd: 0, rigs: 0 };
 
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
@@ -217,10 +221,11 @@ export class CrowdRenderer {
       }
       const act = a.actor;
       // Actors: the item in hand can change (a snatched bag, a knife drawn).
-      if (act && act.held !== undefined && act.held !== r.held) {
-        r.held = act.held;
+      const held = act ? act.held : this.heldFor?.(a);
+      if (held !== undefined && held !== r.held) {
+        r.held = held;
         const look = this.lookOf(a);
-        r.rig.setEquipment({ ...look.eq, mainhand: act.held ? { defId: act.held, visual: (look.eq.mainhand?.visual ?? look.eq.chest?.visual)! } : undefined });
+        r.rig.setEquipment({ ...look.eq, mainhand: held ? { defId: held, visual: (look.eq.mainhand?.visual ?? look.eq.chest?.visual)! } : undefined });
       }
       const move = act?.move ?? (a.state === PState.Sit ? 'sit' : a.state === PState.Sleep ? 'sleep' : a.state === PState.Down ? (act && act.state === 'down' ? 'knockdown' : 'dead') : a.state === PState.Flee ? 'run' : a.speed > 2.4 ? 'run' : a.speed > 0.15 ? 'walk' : 'idle');
       const vx = -Math.sin(a.heading) * a.speed, vz = -Math.cos(a.heading) * a.speed;
@@ -232,7 +237,8 @@ export class CrowdRenderer {
       const twitch = st && st.stunned > 0 ? Math.sin(time * 47 + a.id) * 0.18 : 0;
       const mood = act ? act.mood : thanks ? 'happy' : a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral';
       const lookAt: [number, number, number] | undefined = act ? (act.face ? [act.face.x, act.face.y, act.face.z] : undefined) : a.state === PState.Gawk || a.state === PState.Film || (a.glance ?? 0) > 0 ? [a.lookX, a.lookY, a.lookZ] : undefined;
-      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt }, flags: 0 }, dt, time, cam.position);
+      const talking = !act && a.state === PState.Sit && !!this.talking?.(a, time);
+      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
     }
     // Drop rigs no longer needed (keep a short while to avoid churn).
     for (const [id, r] of this.rigs) {
@@ -264,6 +270,7 @@ export class CrowdRenderer {
       let clip = t.clips.idle;
       if (a.state === PState.Down) clip = t.clips.down;
       else if (a.state === PState.Film) clip = t.clips.film;
+      else if (a.state === PState.Sit) clip = t.clips.sit ?? t.clips.idle;
       else if (a.speed > 2.4 || a.state === PState.Flee) clip = t.clips.run;
       else if (a.speed > 0.15) clip = t.clips.walk;
       let phase = clip.cycleDist > 0 ? a.phase / (clip.cycleDist * look.scale) : (time + (a.look % 97)) / clip.cycleTime;

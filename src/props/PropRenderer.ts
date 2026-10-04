@@ -19,6 +19,7 @@ import { junctionBack } from '../sim/Traffic';
 import type { Obstacle } from '../world/Collision';
 import { hash32, hashToFloat } from '../core/rng';
 import type { StreetSeg } from '../plan/cell';
+import { TERRACE_PALETTE } from '../plan/terrace';
 
 /** A street prop (tree, lamp, bench, sign …) as the powers and targeting see it. */
 export type StreetProp = Prop;
@@ -40,6 +41,8 @@ interface Prop {
   dark?: boolean;
   /** Unscaled size while a power has resized it (shrink ray). */
   base?: { scale: number; radius: number; height: number };
+  /** Light terrace furniture (chairs, tables, parasols, boards): knocked over easily, drawn nearer. */
+  light?: boolean;
 }
 
 interface Batch { meshes: THREE.InstancedMesh[]; attrs: { color?: THREE.InstancedBufferAttribute; state?: THREE.InstancedBufferAttribute }; cap: number; n: number }
@@ -127,6 +130,14 @@ export class PropRenderer {
         // Manhole lids come from the sewer layout (Underground), so every lid is a real entrance.
         case PropType.Manhole: break;
         case PropType.StopSign: list.push(this.furn('stopSign', 0, base)); break;
+        // Café terraces (plan/terrace.ts): variant = colour scheme * 2 + model.
+        case PropType.CafeTable: list.push(this.terrace('cafeTable', v, base, -1)); break;
+        case PropType.CafeChair: list.push(this.terrace('cafeChair', v, base, 1)); break;
+        case PropType.Parasol: list.push(this.terrace('parasol', v, base, 0)); break;
+        case PropType.Awning: list.push(this.terrace('awning', v, base, 0)); break;
+        case PropType.MenuBoard: list.push(this.terrace('menuBoard', v, base, -1)); break;
+        case PropType.TerraceRail: list.push(this.terrace('terraceRail', v, base, 0)); break;
+        case PropType.Parklet: list.push(this.terrace('parklet', v, base, -1)); break;
         case PropType.ParkedCar: {
           // Near-future kerbs: some parking bays have an EV charging post (more in dense districts).
           const share = EV_SHARE[district] ?? 0.03;
@@ -160,6 +171,15 @@ export class PropRenderer {
   private furn(kind: FurnitureKind, variant: number, base: Omit<Prop, 'kind' | 'tree' | 'breakable' | 'radius' | 'height'>): Prop {
     const m = furnitureModel(kind, variant);
     return { ...base, kind: `furn:${kind}:${variant}`, tree: false, breakable: m.breakable, radius: m.radius, height: m.height };
+  }
+
+  /** Terrace furniture in the café's colours (`tint`: 0 fabric, 1 chair paint, -1 none). */
+  private terrace(kind: FurnitureKind, v: number, base: Omit<Prop, 'kind' | 'tree' | 'breakable' | 'radius' | 'height'>, tint: number): Prop {
+    const p = this.furn(kind, v & 1, base);
+    const pal = TERRACE_PALETTE[(v >> 1) % TERRACE_PALETTE.length];
+    if (tint >= 0 && !(kind === 'cafeChair' && (v & 1))) p.color = [...pal[tint]];
+    p.light = kind !== 'awning' && kind !== 'parklet';
+    return p;
   }
 
   private rebuildAll(): void {
@@ -369,7 +389,7 @@ export class PropRenderer {
       if (p.tree) {
         if (d < SHADOW_TREE) push(p.kind, p);
         else if (d < NEAR_TREE) push('mid:' + p.kind, p);
-      } else if (d < FURN_RANGE * (p.kind.includes('lamp') || p.kind.includes('traffic') ? 1.6 : 1)) push(p.kind, p);
+      } else if (d < FURN_RANGE * (p.kind.includes('lamp') || p.kind.includes('traffic') ? 1.6 : p.light ? 0.6 : 1)) push(p.kind, p);
     });
     this.fill(groups, (k) => !k.startsWith('far:'));
   }
@@ -455,7 +475,7 @@ export class PropRenderer {
       if (p.broken) continue;
       const d = Math.hypot(p.x - x, p.z - z);
       if (d > r + p.radius || y > p.y + p.height + r || y < p.y - r - 1) continue;
-      const need = p.breakable === 'solid' ? 1e9 : p.tree ? 2500 * p.scale ** 2 : p.breakable === 'shatter' ? 300 : 1200;
+      const need = p.breakable === 'solid' ? 1e9 : p.tree ? 2500 * p.scale ** 2 : p.light ? 150 : p.breakable === 'shatter' ? 300 : 1200;
       if (J < need) continue;
       this.topple(p, jx, jy, jz);
       n++;
@@ -635,7 +655,8 @@ function propShape(p: Prop): Obstacle | null {
   const k = p.kind.split(':')[1];
   const r = p.radius;
   switch (k) {
-    case 'manhole': case 'playground': case 'metroEntrance': case 'bikeRack': return null;
+    case 'manhole': case 'playground': case 'metroEntrance': case 'bikeRack': case 'awning': case 'parklet': return null;
+    case 'terraceRail': return box(1.0 * p.scale, 0.06 * p.scale);
     case 'bench': return box(0.95 * p.scale, 0.3 * p.scale);
     case 'busStop': return box(2.2 * p.scale, 0.75 * p.scale);
     case 'newsStand': return box(0.9 * p.scale, 0.4 * p.scale);

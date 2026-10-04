@@ -219,7 +219,9 @@ export class Interiors {
     const fl = L.floors.find((x) => x.f === f);
     if (!fl) return;
     const poly = this.floorPoly(a, f);
-    const shopKind = (a.ref.desc.seed >>> 7) % 9;
+    // Cafés and restaurants (plan/eatery.ts) get the café layout (shopKind % 3 == 0), other shops never do.
+    const sk = (a.ref.desc.seed >>> 7) % 9;
+    const shopKind = a.ref.desc.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
     const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift);
     // The elevator shaft runs through the slabs between floors it serves.
     const shaft = a.lift ? liftRect(a.lift) : null;

@@ -4,10 +4,16 @@
  * schedules near the player (or by hand: dev.threat.spawn), hands each to the city response and
  * marks it on the map and compass. Owns the rogue-machine controller of the near-future layer.
  *
- * Archetypes plug in through ARCHETYPE_IMPL (omens and the event itself); Phase A has one, the
- * robot malfunction. The clock is saved per city (seed, size) and mode, like Progress; the
- * "City events" setting (off / rare / normal / frequent) is a player preference.
+ * Archetypes plug in through ARCHETYPE_IMPL (omens and the event itself): the robot malfunction
+ * (minor) and the Strider (major). The clock is saved per city (seed, size) and mode, like
+ * Progress; the "City events" setting (off / rare / normal / frequent) is a player preference.
+ *
+ * Big threats are actors (ThreatActor): the director lists them for targeting, routes blows to
+ * them, draws every creature's rig parts in one shared batch (CreatureMesh), lets their bodies be
+ * obstacles, and keeps the body of a defeated monster in the city (`remains`, for the aftermath).
+ * Burning facades (FacadeFires) live here too.
  */
+import * as THREE from 'three';
 import type { Game } from '../Game';
 import { Rng, deriveSeed } from '../../core/rng';
 import { doorOf } from '../../sim/Population';
@@ -15,20 +21,42 @@ import type { MapMarker } from '../../ui/map/GameMap';
 import { ThreatClock, type CityEvents, type ClockSignal } from './ThreatClock';
 import { RogueMachines } from './RogueMachines';
 import { RobotMalfunction, robotOmen, type RobotEventOpts } from './RobotMalfunction';
-import type { ThreatEvent } from './ThreatEvent';
+import type { DamageResult, DamageSource, ThreatActor, ThreatEvent } from './ThreatEvent';
+import { Strider, STRIDER, type StriderOpts } from './Strider';
+import { planStriderRoute, type StriderRoute } from './StriderRoute';
+import { CreatureMesh, SHAPES, type Shape } from './rig/CreatureMesh';
+import { FacadeFires } from './FacadeFires';
+import type { Obstacle } from '../../world/Collision';
 
 /** How an archetype shows itself before it comes (omens) and how it starts. */
 interface ArchetypeImpl {
   omen(d: ThreatDirector, site: { x: number; z: number }, kind: string, rng: Rng): boolean;
   start(d: ThreatDirector, site: { x: number; z: number }, seed: number, opts: Record<string, unknown>): ThreatEvent | null;
+  /** Omen kinds to try when the planned one finds nothing to show itself on. */
+  fallback: string[];
 }
 
 const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
   robots: {
     omen: (d, site, kind, rng) => robotOmen(d.g, d.rogue, site, kind, rng),
     start: (d, site, seed, opts) => new RobotMalfunction(d.g, d.rogue, site, seed, opts as RobotEventOpts),
+    fallback: ['glitch', 'drone', 'billboard'],
+  },
+  strider: {
+    omen: (d, _site, kind, rng) => d.striderOmen(kind, rng),
+    start: (d, _site, seed, opts) => {
+      try {
+        const s = new Strider(d.g, seed, opts as StriderOpts);
+        s.onDefeated = (b) => d.onDefeated?.(b);
+        return s;
+      } catch (err) { console.warn('[threats]', err); return null; }
+    },
+    fallback: ['tremor'],
   },
 };
+
+/** A wake on the river (an omen): foam drifting downstream for a while. */
+interface Wake { x: number; z: number; dx: number; dz: number; t: number }
 
 const SETTING_KEY = 'scale.threat.setting';
 /** A finished event stays (powered-down machines, the response standing down) this long (s). */
@@ -38,6 +66,16 @@ export class ThreatDirector {
   readonly clock: ThreatClock;
   readonly rogue: RogueMachines;
   readonly events: ThreatEvent[] = [];
+  /** Bodies of defeated monsters lying in the city (the aftermath removes them: `removeRemains`). */
+  readonly remains: Strider[] = [];
+  /** Stage 3 hook: a monster was brought down (its body is in `remains` once the event is wound up). */
+  onDefeated: ((s: Strider) => void) | null = null;
+  /** Every creature's rig parts (one batch, one shared material). */
+  readonly mesh: CreatureMesh;
+  /** Facades set burning (breath, later crashes and shells). */
+  readonly fires: FacadeFires;
+  private wakes: Wake[] = [];
+  private striderRoute: StriderRoute | null | undefined;
   private readonly key: string;
   /** The site of the event being heralded (chosen with its first omen). */
   private site: { x: number; z: number; n: number } | null = null;
@@ -62,6 +100,12 @@ export class ThreatDirector {
     this.clock.setting = loadSetting();
     this.rogue = new RogueMachines(g);
     g.future.malfunction = this.rogue;
+    // Two creatures' worth of parts (the climax budget, THREATS_PLAN §4): the program compiles at start.
+    this.mesh = new CreatureMesh([80, 36, 4, 4, 10]);
+    g.renderer.scene.add(this.mesh.group);
+    this.fires = new FacadeFires(g.elements.fx, g.destruction, g.renderer.camera);
+    // Their bodies stand in the player's way.
+    g.collision.obstacleProviders.push((x0, z0, x1, z1, out) => this.obstacles(x0, z0, x1, z1, out));
   }
 
   get setting(): CityEvents { return this.clock.setting; }
@@ -70,10 +114,40 @@ export class ThreatDirector {
     try { localStorage.setItem(SETTING_KEY, s); } catch { /* storage unavailable */ }
   }
 
-  /** Is this object part of a threat (a machine gone rogue)? Fair game for the player. */
+  /** Is this object part of a threat (a machine gone rogue, a monster)? Fair game for the player. */
   isHostile(ref: object): boolean {
+    if (ref instanceof Strider) return true;
     const m = (ref as { mal?: { mode: string } }).mal;
     return !!m && m.mode === 'hostile';
+  }
+
+  /** The big threat bodies one can target and hurt now. */
+  actors(): ThreatActor[] {
+    const out: ThreatActor[] = [];
+    for (const ev of this.events) if (ev.actors) for (const a of ev.actors) if (a.targetable) out.push(a);
+    return out;
+  }
+
+  /** A physical blow at a point (a punch, a giant's stomp) on whichever threat body is there. */
+  blow(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, src: DamageSource): DamageResult | null {
+    let best: DamageResult | null = null;
+    for (const a of this.actors()) {
+      if (Math.hypot(a.x - x, a.z - z) > a.height * 3 + r) continue;
+      const res = a.blow(x, y, z, r, jx, jy, jz, src);
+      if (res && (!best || res.dealt > best.dealt)) best = res;
+    }
+    return best;
+  }
+
+  /** Stage 3: the aftermath has carted a body away. */
+  removeRemains(s: Strider): void {
+    const i = this.remains.indexOf(s);
+    if (i >= 0) this.remains.splice(i, 1);
+  }
+
+  private obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
+    for (const ev of this.events) if (ev instanceof Strider) ev.obstacles(x0, z0, x1, z1, out);
+    for (const r of this.remains) r.obstacles(x0, z0, x1, z1, out);
   }
 
   update(dt: number): void {
@@ -94,8 +168,15 @@ export class ThreatDirector {
       const was = ev.active;
       ev.update(dt);
       if (was && !ev.active) { this.note(`${ev.archetype} #${ev.id} ${ev.outcome}`); this.ended.set(ev, ev.t); }
-      if (!ev.active && ev.t > (this.ended.get(ev) ?? ev.t) + LINGER) { ev.dispose(); this.ended.delete(ev); this.events.splice(i, 1); }
+      if (!ev.active && ev.t > (this.ended.get(ev) ?? ev.t) + LINGER) {
+        // A defeated monster's body stays in the city.
+        if (ev instanceof Strider && ev.defeated) this.remains.push(ev);
+        ev.dispose(); this.ended.delete(ev); this.events.splice(i, 1);
+      }
     }
+    this.fires.update(dt);
+    this.updateWakes(dt);
+    this.draw();
     this.markers(dt);
     this.saveT -= dt;
     if (this.saveT <= 0) { this.saveT = 15; this.save(); }
@@ -119,7 +200,7 @@ export class ThreatDirector {
       if (!impl) { this.omens.splice(i, 1); continue; }
       const site = this.siteFor(o.s.n);
       const rng = new Rng(o.s.seed);
-      const kinds = [o.s.kind, 'glitch', 'drone', 'billboard'];
+      const kinds = [o.s.kind, ...impl.fallback];
       let shown = false;
       for (const k of kinds) if (impl.omen(this, site, k, rng)) { shown = true; this.note(`omen ${o.s.archetype}:${k}`); break; }
       // Nothing to show it on (an empty street): try again for a while, then let it pass.
@@ -191,9 +272,11 @@ export class ThreatDirector {
     this.markT = 0.5;
     const list: MapMarker[] = [];
     const p = this.g.player.pos;
+    for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
     for (const ev of this.events) {
+      if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
       if (!ev.active) continue;
-      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots' : 'Threat', always: true });
+      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots' : ev.archetype === 'strider' ? 'Giant creature' : 'Threat', always: true });
       if (ev instanceof RobotMalfunction) for (const m of ev.units) {
         if (m.out || m.mode !== 'hostile' || Math.hypot(m.obj.x - p.x, m.obj.z - p.z) > 250) continue;
         list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: '' });
@@ -207,7 +290,112 @@ export class ThreatDirector {
     try { localStorage.setItem(this.key, JSON.stringify(this.clock.state)); } catch { /* storage unavailable */ }
   }
 
+  /** Every creature's parts into the shared batch (living ones, bodies lying in the city). */
+  private draw(): void {
+    const M = this.mesh;
+    M.begin();
+    for (const ev of this.events) if (ev instanceof Strider) ev.draw(M);
+    for (const r of this.remains) r.draw(M);
+    // During the start-up warm-up one speck of every shape is drawn (under the player, too small to
+    // see), so the creature program and its shadow variant compile behind the loading screen.
+    if (!this.g.gate.enabled) {
+      const p = this.g.player.pos;
+      _m.makeScale(1e-3, 1e-3, 1e-3).setPosition(p.x, p.y - 2, p.z);
+      for (let k = 0; k < SHAPES; k++) M.push(k as Shape, _m);
+    }
+    M.end();
+  }
+
+  // ================================================================== the Strider's omens
+
+  /** Where this city's Strider would rise (the seed's river spot), cached. */
+  striderStart(): StriderRoute | null {
+    if (this.striderRoute === undefined) this.striderRoute = planStriderRoute(this.g.macro, this.g.terrain);
+    return this.striderRoute;
+  }
+
+  /**
+   * An omen of the Strider: 'tremor' — a micro-quake where the player is (a shudder, a low rumble,
+   * birds lifting off, people stopping to look round, car alarms going off); 'wake' — a strange wake
+   * on the river where it will rise, foam drifting downstream, felt as a faint tremor on the banks.
+   */
+  striderOmen(kind: string, rng: Rng): boolean {
+    const g = this.g, p = g.player.pos, cam = g.renderer.camera.position;
+    if (kind === 'wake') {
+      const R = this.striderStart();
+      if (!R) return false;
+      const r = g.terrain.rivers[R.river];
+      // Downstream along the river at the spot.
+      const w = g.terrain.water(R.start.x, R.start.z);
+      let dx = 1, dz = 0;
+      if (r && w.river === R.river) {
+        const P = r.pts;
+        let bi = 0, bd = Infinity;
+        for (let i = 0; i + 1 < P.length / 2; i++) { const d = Math.hypot(P[i * 2] - R.start.x, P[i * 2 + 1] - R.start.z); if (d < bd) { bd = d; bi = i; } }
+        dx = P[bi * 2 + 2] - P[bi * 2]; dz = P[bi * 2 + 3] - P[bi * 2 + 1];
+        const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      }
+      this.wakes.push({ x: R.start.x, z: R.start.z, dx, dz, t: 28 });
+      g.stimuli.emit('tremor', R.start.x, g.terrain.waterLevel(R.start.x, R.start.z), R.start.z, 3, 500, { cause: 'threat' });
+      return true;
+    }
+    // Tremor: a shudder, a rumble, birds, people looking round, car alarms.
+    g.camRig.addShake(0.18);
+    g.audio.play('tremor_rumble', p.x, p.y, p.z, 0.8, 0.9 + rng.range(0, 0.2), 30, cam);
+    g.stimuli.emit('tremor', p.x, p.y, p.z, 4, 420, { cause: 'threat' });
+    const cars = g.parkedCars.filter((v) => Math.hypot(v.x - p.x, v.z - p.z) < 110).sort(() => rng.float() - 0.5).slice(0, rng.int(2, 4));
+    for (const v of cars) setTimeout(() => g.audio.play('car_alarm', v.x, v.y + 1, v.z, 0.6, 0.95 + Math.random() * 0.1, 8, g.renderer.camera.position), rng.range(200, 1500));
+    return true;
+  }
+
+  private updateWakes(dt: number): void {
+    if (!this.wakes.length) return;
+    const g = this.g, fx = g.elements.fx, c = g.renderer.camera.position;
+    for (let i = this.wakes.length - 1; i >= 0; i--) {
+      const w = this.wakes[i];
+      w.t -= dt;
+      if (w.t <= 0) { this.wakes.splice(i, 1); continue; }
+      // Something big under the surface: a long V of foam moving slowly downstream.
+      w.x += w.dx * dt * 2.2; w.z += w.dz * dt * 2.2;
+      if (Math.hypot(w.x - c.x, w.z - c.z) > 1200) continue;
+      const wl = g.terrain.waterLevel(w.x, w.z);
+      if (!isFinite(wl)) continue;
+      for (let k = 0; k < 3; k++) {
+        const back = Math.random() * 30, side = (Math.random() < 0.5 ? -1 : 1) * back * 0.45;
+        const x = w.x - w.dx * back - w.dz * side, z = w.z - w.dz * back + w.dx * side;
+        fx.soft(x, wl + 0.15, z, w.dx * 0.5, 0.05, w.dz * 0.5, 4, 1.5, 3.5, WAKE_A, WAKE_B, 0.5, 0.3, 0);
+      }
+    }
+  }
+
   // ================================================================== dev console
+
+  /** The running (or latest) Strider. */
+  strider(): Strider | null {
+    for (let i = this.events.length - 1; i >= 0; i--) { const e = this.events[i]; if (e instanceof Strider) return e; }
+    return null;
+  }
+
+  private striderDev(): Record<string, unknown> {
+    const S = () => this.strider();
+    return {
+      status: () => S()?.snapshot() ?? 'no strider',
+      roar: (rear = false) => { const s = S(); if (!s) return 'no strider'; s.devRoar(rear); return s.act; },
+      breathe: () => { const s = S(); if (!s) return 'no strider'; s.devBreathe(); return s.act; },
+      swipe: (side = 1) => { const s = S(); if (!s) return 'no strider'; s.devSwipe(side); return s.act; },
+      damage: (zone: string | null = 'back', amount = 300) => { const s = S(); return s ? s.damage(zone, amount, { cause: 'player' }) : 'no strider'; },
+      expose: (zone = 'throat') => { const s = S(); if (!s) return 'no strider'; const z = s.zone(zone); z.exposed = true; return z; },
+      die: () => { const s = S(); if (!s) return 'no strider'; s.damage(null, 1e6, { cause: 'player' }); s.hp = 0; return s.mode; },
+      retreat: () => { const s = S(); if (!s) return 'no strider'; s.shutdown(); return s.mode; },
+      skip: (m = 100) => { const s = S(); if (!s) return 'no strider'; s.devSkip(m); return Math.round(s.s); },
+      /** Show one of its omens now ('tremor' | 'wake'). */
+      omen: (kind = 'tremor') => this.striderOmen(kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
+      route: () => { const R = S()?.route ?? this.striderStart(); return R ? { start: R.start, end: R.end, length: Math.round(R.length), landS: R.landS, onArterials: Math.round(R.onArterials), points: R.pts.length / 2 } : null; },
+      /** Put the player `dist` m from it (on the ground, facing it). */
+      player: (dist = 120) => { const s = S(); if (!s) return 'no strider'; return s.devPlayerNear(dist); },
+      tuning: STRIDER,
+    };
+  }
 
   private installDev(): void {
     const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
@@ -250,12 +438,21 @@ export class ThreatDirector {
       events: () => this.events.map((e) => e.snapshot()),
       /** Shut every running event down. */
       stop: () => { for (const e of this.events) if (e.active) e.shutdown(); return this.events.map((e) => e.outcome); },
+      /**
+       * The Strider: dev.threat.strider.status() · .roar(rear?) · .breathe() · .swipe(side) · .damage(zone, amount) ·
+       * .expose(zone) · .die() · .retreat() · .skip(m) (along its route) · .route() · .omen(kind) · .player(dist)
+       * (put the player near it, facing it).
+       */
+      strider: this.striderDev(),
       setting: (s?: CityEvents) => { if (s) this.setting = s; return this.setting; },
       log: () => this.log,
       stats: () => ({ ...this.stats, rogue: this.rogue.stats, machines: this.rogue.list.length }),
     };
   }
 }
+
+const WAKE_A = new THREE.Color(0.86, 0.9, 0.92), WAKE_B = new THREE.Color(0.6, 0.68, 0.72);
+const _m = new THREE.Matrix4();
 
 function loadSetting(): CityEvents {
   try { const s = localStorage.getItem(SETTING_KEY); if (s === 'off' || s === 'rare' || s === 'normal' || s === 'frequent') return s; } catch { /* storage unavailable */ }

@@ -168,6 +168,11 @@ People and the player knocked flying, tumbling, lying, getting up — or staying
   * crushing cars
   * cracking paving
   * breaking walls when the momentum exceeds element strength
+* **GiantBody** (`src/game/GiantBody.ts`, THREATS_PLAN §4.1): the scaling laws (`bodyMass`, `stepEnergy`, `walkSpeed`,
+  `gaitRate`) and `GiantSteps` (`interactions.steps`), the footfall and landing effects every body shares — the
+  player's own (a short thud on the camera) and a monster's (shake by distance from the camera): dust, a `stomp`
+  stimulus with the body's `size` and `cause` (Game, Reactions and the near-future layer crush people, cars, props and
+  robots by *its* size and book it to whoever stepped), the sound and a destruction impact under a heavy foot.
 * Perception radius (for NPCs) grows with *H*. Tiny players go unnoticed and can be bumped.
 * Camera: orbit distance in body heights (mouse wheel), collision-aware, and near/far scale with *H*.
 * Flight (F): a hover pose when slow, a prone superhero glide when fast, banking, speed FOV,
@@ -327,16 +332,21 @@ every frame) owns the parts and draws what belongs to them.
   water, at a height that does not match the ground) get no marker and leave after a few seconds.
 
 ### Threats and city response (`src/game/threats`, `src/game/response`)
-THREATS_PLAN Phase A ("Robot malfunction"), PLAYGROUND_PLAN §0 decisions 15 and 19. `ThreatDirector` (`game.threats`) and
-`ResponseDirector` (`game.response`) are built after the crime layer and updated every frame (`prof.threats`).
+THREATS_PLAN Phase A ("Robot malfunction") and Phase B stage 1 (the Strider), PLAYGROUND_PLAN §0 decisions 15 and 19.
+`ThreatDirector` (`game.threats`) and `ResponseDirector` (`game.response`) are built after the crime layer and updated
+every frame (`prof.threats`).
 * **Threat clock** (`ThreatClock`, pure, tested in `selftest.ts`): pressure = played time + karma earned × 6 s + the
   player's own ledger entries (chaos) × 1.5 s. Event n has a seeded gap (`deriveSeed(seed, 'threat', n)`: the first minor
   event no earlier than 45 min of play, then 20–30 min apart, × the "City events" setting: off / rare ×2 / normal /
   frequent ×½) and fires when played ≥ last + gap and pressure ≥ last + 1.4 × gap. A seeded 4–8 min before, the clock
   arms and schedules 2–3 omens of the coming archetype over that lead; the event never comes before them, and waits
   while the player is underground, indoors or a giant. Saved per city and mode (`scale.threat.v1.…`); the setting is a
-  pause-menu preference. Archetypes plug into the clock's table and the director's `ARCHETYPE_IMPL` (omens, start);
-  every event implements `ThreatEvent` (centre, strength, people hurt, targets for the police, shutdown).
+  pause-menu preference. Archetypes plug into the clock's table and the director's `ARCHETYPE_IMPL` (omens, start,
+  fallback omen kinds); every event implements `ThreatEvent` (centre, strength, people hurt, targets for the police,
+  shutdown; `tier`, `engageOnFoot`, `actors`). **Major events** (the Strider): none before 3 h of play (× the setting's
+  scale) and only once the karma earned in the city reaches a milestone (150, +250 per major; `ClockState.karma`,
+  `majors`, `lastMajorAt`), then 1.5–3 h apart; when one is due the next planned event is major, with a 10–16 min lead
+  and 3–4 omens of its own.
 * **Rogue machines** (`RogueMachines`, the near-future layer's `MalfunctionCtl`, `src/future/malfunction.ts`): a robot,
   service robot or drone with `mal` set is stepped by the controller (one early return in each class's step; knocks are
   reported to it; status LEDs in shader modes 3 hostile red / 4 glitch flicker / 2 dark, the livery parts red; kept
@@ -366,16 +376,112 @@ THREATS_PLAN Phase A ("Robot malfunction"), PLAYGROUND_PLAN §0 decisions 15 and
   patrol cars; officers go in on foot and strike the machines (baton 430 / stun baton 720 N·s, credited to the police;
   never guns, never at people), SWAT bring drones down with a hand-held jammer. Units stuck in a jam within 90 m get
   out and walk. When it is over: down a level after 8 s and 16 s, everyone packs up at 30 s.
-* **Cause-aware ledger**: `Consequences.record(…, cause)` (player / threat / police) with totals per cause; Justice only
+* **Cause-aware ledger**: `Consequences.record(…, cause)` (player / threat / police / military) with totals per cause; Justice only
   books the player's own entries and never a rogue machine (fair game); `Reactions.knockDown` causes `threat` and
   `police`; people knocked down by a threat are helped up for karma like accident victims; a robot knocking the player
   out costs nothing. `Stimuli` carry `seq` (Reactions takes everything emitted since it last ran, also what was
   emitted later in the frame), `cause` and `evac`.
+* **Threat actors** (`ThreatActor` in `ThreatEvent.ts`): a big threat's body — hit points, zones (`ThreatZone`: armour,
+  weak spot, exposed, where it is now), `ray` / `zoneAt` against its body capsules, `damage(zone, amount, source)` (points
+  before armour: × (1 − armour), × 4 on an exposed weak spot; booked to the aggro table by `source.key`), `blow(point, r,
+  impulse)` (impulse × `DAMAGE_PER_IMPULSE`), `conStrength()`. The director lists the targetable ones (`actors()`), routes
+  blows (`blow`: Game.strike — punches —, a giant player's own stomps), lets their bodies be obstacles for the player
+  (Collision provider: leg and torso cylinders) and draws every creature in one batch.
+* **Creature rig** (`rig/chain.ts` pure math, tested in `selftest.ts`; `rig/CreatureRig.ts`; `rig/CreatureMesh.ts`): a
+  `RigDef` in metres (spine from neck base to pelvis with joint heights, neck, head, jaw, tail, legs with hip offsets,
+  bone lengths, gait phase, knee / elbow direction and sprawl, dorsal plates), scalable. The spine follows its leader
+  along the path walked (follow-the-leader), feet stay planted on the terrain / street (`ground`) and are stepped by a
+  gait phase driven by the distance walked (a lateral-sequence walk, a settle step when standing; `onStep` at every
+  touch-down), two-bone IK with a pole for the knees, FABRIK aims the neck at `look`, the tail is drawn towards a bent
+  curve (sweep angle, idle sway, droop) and kept above the ground. Pose controls: lift (sunk / risen), rear, slump
+  (dying), jaw, sweep, glows (ridge with a wave from the tail to the head, throat, eyes), pinned feet (a forefoot on a
+  facade). Parts are instances of five procedural shapes (spindle, dorsal plate, head with eyes, jaw, clawed foot) in
+  one shared material (`creature-v1`: dark vertex-coloured hide, emissive where the vertex mask `aGlow` × instance
+  `iGlow`), ≤ 64 per creature (the Strider: 43); the director's batch holds two creatures; a speck of every shape is
+  drawn during the start-up warm-up so the program and its shadow variant compile behind the loading screen.
+* **The Strider** (`Strider.ts`, archetype `strider`, major, T3 40 m): rises from the river where `StriderRoute` says
+  (pure, tested for 20 seeds: the city river about 750 m from the main centre, near a bridge or quay, off the bridge
+  towards downtown; a landing up the bank that leaves the water once, then the cheapest way over the arterial graph —
+  boulevards preferred, bridges never — to the node nearest the main centre). Emerging (10 s): sunk under the bed it
+  comes up with water cascading off its back and plates and foam boiling round it, then roars. It walks its route at
+  a 40 m body's Froude pace (≈ 5 m/s, slower when hurt), turning towards the route ahead; in downtown it goes for
+  towers one by one (rampage, ~4 min) and then back to the river. Behaviours (cooldowns, one at a time): **roar**
+  (two-tone, a `roar` stimulus 700 m: people run, drivers abandon their cars, birds lift; half the time it rears up,
+  the belly exposed, and its forefeet slam down as a landing), **breath** (the ridge lights up plate by plate and the
+  throat glows for 2 s — the throat is an exposed weak spot — then a blue-white beam sweeps a facade for 3.4 s: heat
+  impacts, windows burst, `FacadeFires`, people and cars there burn and are thrown; at whoever hurt it most when in
+  reach, else at the tallest building ahead), **tail swipe** (the tail's capsules sweep a side: facades, cars flung as
+  wrecks, people knocked flying, props, the player), **lean** (a forefoot pinned on a facade, pushes; low buildings
+  come down), **swat** (drones near its head; helicopters later through `airTargets`). Its feet come down through
+  `GiantSteps` (cause `threat`, size 40, stomp stimulus capped at 420 m, a `tremor` every second step to 1.1 km); its
+  torso and knees shoulder into facades. All its destruction impacts draw on a budget (3 tokens/s, a burst of 6;
+  softened after many panels broke lately). Hurt: a hard hit staggers it, a heavy hit on the glowing throat chokes the
+  breath off, a battered leg (frost) buckles; at 30 % it turns back and sinks into the river (`retreated`); at 0 it
+  collapses — legs fold and splay, the body comes down and rolls, crushing what is under it — no gore; the event ends
+  `defeated`, `onDefeated` fires, and after the incident winds down the body moves to `ThreatDirector.remains` (drawn,
+  an obstacle, a grey map dot) until stage 3's aftermath removes it (`removeRemains`). Rewards: hits on an exposed
+  weak spot 2 karma, driving it off 60 karma +6 rep, bringing it down 120 karma +12 rep and cheers. Omens: `tremor`
+  (a shudder and rumble where the player is, birds lift, people look round, car alarms) and `wake` (foam drifting on
+  the river where it will rise). It pins news drones, a `threat` stimulus (160 m) and drivers' fear round it.
+* **Facade fires** (`FacadeFires`, `threats.fires`): ≤ 32 fires on walls (flames and smoke in the powers' particle pool,
+  no lights; now and then the heat bursts a window), 90–150 s; `douse` (hydrokinesis now, fire trucks later).
 * **Map / compass**: layer `threat` — the incident as a red alert marker with `always` (compass at any distance), its
-  machines within 250 m as red dots; police units as blue dots (crime layer).
-* Dev console: `dev.threat.spawn('robots', { dist, at, robots, bots, drones, duration })`, `dev.threat.clock(seconds |
-  { setting, played, pressure })`, `dev.threat.omen(kind)`, `dev.threat.events()`, `dev.threat.stop()`,
-  `dev.response.level(n)`, `dev.response.status()`. Sounds: `tools/synthThreats.mjs` (civil siren, glitch, hostile).
+  machines within 250 m as red dots, a fallen creature as a grey dot; police units as blue dots (crime layer).
+* **Targeting**: big threats are a target kind `threat` (Tab first, three times the range); the frame shows the con
+  ('deadly' unless the hero is a giant too), its health and its weak spots (rings on the body, pulsing while exposed;
+  the soft lock aims at an exposed weak spot). Every power lands on it as damage in the zone it hits (`Elements.hurtThreat`:
+  laser dose, fire heat, bolts, shoves; frost bites a leg), never as collateral.
+* **Response to a major threat**: up the ladder sooner (level 1 after 10 s, 2 after 25 s more), wider (cordon 260 m,
+  evacuation siren 520 m, alert screens 800 m), units stop well beyond its reach and never go in on foot
+  (`engageOnFoot: false`). Under an alert people shelter in place (`Pedestrians.shelter`: no trip starts or ends
+  within the siren's reach). Levels above 2 plug in with `registerLevel(n, { when, up, step, down })` (stage 2:
+  National Guard, army and air; the last resort).
+* Dev console: `dev.threat.spawn('robots', { dist, at, robots, bots, drones, duration })`, `dev.threat.spawn('strider',
+  { from: 'river' })`, `dev.threat.strider.status() | roar(rear) | breathe() | swipe(side) | damage(zone, amount) |
+  expose(zone) | die() | retreat() | skip(m) | route() | player(dist)`, `dev.threat.clock(seconds | { setting, played,
+  pressure })`, `dev.threat.omen(kind)`, `dev.threat.events()`, `dev.threat.stop()`, `dev.response.level(n)`,
+  `dev.response.status()`. Sounds: `tools/synthThreats.mjs` (civil siren, glitch, hostile), `tools/synthStrider.mjs`
+  (footsteps, two-tone roar, breath charge, breath, tremor rumble, car alarm).
+
+### Cafés, restaurants and terraces (`src/plan/eatery.ts`, `src/plan/terrace.ts`, `src/sim/Terraces.ts`)
+Part of the cell plan (pure, in the workers, checked in `selftest.ts`), lived in near the player.
+* **Eateries** (`eatery.ts`): a share of the shop fronts (old town 36 %, commercial 30 %, residential 24 %,
+  downtown 22 %; +32 % where the shop faces a plaza or park) are cafés, restaurants, bistros, bakery-cafés,
+  pizzerias, gelaterias or wine bars (`BuildingDesc.eatery`, kind weights per district), named in the city's
+  style ("Café Linden", "Trattoria Mercer", "Gelato Bramble"). Opening hours (later in nightlife districts)
+  and busy hours per kind (`eateryDemand`: coffee in the morning, lunch and dinner peaks, bars at night) drive
+  `tableVisit(seed, table, kind, district, hours)`: a deterministic timeline of visits per table (who sits
+  there when, group size 1–4).
+* **Terraces** (`terrace.ts`, `placeEateries` after the street furniture): a sidewalk row of small tables
+  against the facade where the sidewalk is wide; a parklet (timber deck modules, planter ends, a rail on
+  the traffic side) in the parking strip of local streets where it is narrow (the parked cars there go);
+  tables with parasols out on a plaza or park any facade of the building faces (old-town squares, the
+  plaza round a downtown tower). Hard rules, shared with the self test (`clearOfWalk`, `frontDoor`,
+  `junctionPoints`): nothing in the ±`WALK_CLEAR` (1 m) corridor round the sidewalk's walking line, on a
+  carriageway (except the parklet strip) or a park path, within 1.2 m of any door, 12 m of a junction
+  (crossings) or near a metro entrance or other furniture. Plus striped awnings over the windows (when no
+  lamp, tree or signal is in the way) and an A-board / lit menu lectern by the door. Everything is a street
+  prop (`PropType.CafeTable … Parklet`, variant = colour scheme × 2 + model; models in `props/furniture.ts`,
+  instanced in the furniture material with the café's colours as `iColor`): light pieces topple at 150 N·s
+  and are drawn within 156 m, the rail is a box obstacle, awnings and decks are walk-through. Cost: ≈ 2 ms
+  per cell of planning; ~550 instances / 120k triangles in view on a busy old-town square.
+* **Fronts** (`future/Signs.ts`, `future/eateryArt.ts`): the name board over the door (above the awnings)
+  in the sign shader on a separate 1024² name atlas (same program): the 24 nearest eateries get their own
+  names, the rest a generic board per kind; attached to the wall elements like every sign. The facade
+  shader lights café shop windows warm while open (`FF.Eatery`, `G.uEatLit`) with a homely room behind the
+  glass and no generic sign band. Interiors of eateries always get the café layout (tables, chairs, bar).
+* **People** (`sim/Terraces.ts`, `game.terraces`): within 150 m the visits become people (synthetic
+  citizens): a group walks in from a door 15–50 m away and sits down (`PState.Sit` on the street:
+  `Pedestrians` leaves them be; `onArrive` hands over the end of the route), chats (`Sitting_Talking_Loop`
+  via `CrowdRenderer.talking`), holds a cup at cafés (`CrowdRenderer.heldFor`), stays at least 25 s, then
+  walks off to another door. A table that comes into range mid-visit is filled at once; after dark most
+  sit inside (not at bars and restaurants). A waiter now and then walks between the door and the busy
+  tables. Seated crowd instances use a baked sitting pose (`CrowdBaker` clip `sit`). Guests are ordinary
+  pedestrians for `Reactions`: they run (knocking a chair over now and then), stand up to stare and sit
+  down again, get knocked down; a scared table is taken by new guests once it is calm (20 s). Budget:
+  ≤ 170 people, within the street population (`PEDS_ROOM`: a full street gives up its farthest walkers).
+  Awnings fall when the wall behind them breaks. Ambience: one positional loop `terrace_murmur` at the
+  nearest busy terrace (`tools/synthTerrace.mjs`). ≈ 0.02 ms/frame.
 
 ### Birds (`src/fauna`)
 `Birds` (constructed, updated and sent strikes by the game; it listens to stimuli itself) keeps at most 300 birds,
@@ -414,6 +520,35 @@ as distance LOD).
     near the listener (`Underground.onTrainSound`). Sounds: `tools/synthMetro.mjs`.
 * Sewers: arched brick tunnels with channels and walkways under arterials, manholes with
   ladders, and outfalls.
+* Tunnel dressing (in the tube chunks): cable trays and a pipe along metro walls, a green
+  running-figure exit sign every 60 m with a maintenance ladder at every third, an old pipe along
+  one sewer wall.
+* Side rooms (`underground/rooms.ts`, pure data, deterministic per seed): every ~240–520 m of sewer
+  and ~160–320 m of metro tunnel a room opens off the tube through a doorway cut into its wall —
+  sewers: alcove, overflow chamber (street grate, falling water, basin), cistern (lowered floor with
+  steps, piers, standing water), pump room, collapsed passage, bricked-up arch with a gap; metro:
+  refuge niche, cross-passage (shut steel door), staff room, ghost platform (old platform behind
+  arches, steps up from the track bed), ventilation room (turning fan, shaft with daylight),
+  electrical room, storage. Each room is a door box (reaching 0.75 m into its host so the walker
+  passes) plus a main box (`Box` kind `room`; steps are `Platform`s limited along u); clear of every
+  tube, hall, room and (via the hall distance) the entrance passages, ≥ 0.9 m under the ground,
+  sewer rooms under their street. Planned with a spatial grid in ~60 ms (seed 42, size 0.6).
+  Meshes (`RoomMeshes.ts`) are built within 200 m like the tube chunks, lit by emissive fixtures
+  only, with the facade atlas (`aLayer`/`aTint`), one unlit glow and one decal material on a canvas
+  atlas (`roomArt.ts`: signs, graffiti, markings, cracks, puddles) and an additive veil. Solid
+  props are obstacles (`carObstacles`). Drips, hum, fan and falling water: `tools/synthUnder.mjs`.
+* Hidden colonies (2–5 per city, far out): a gap in the back wall of a quiet side room opens into a
+  rough crawl passage (`Tube` kind `crawl`) sinking to a chamber at depth (under the lowest ground
+  within 32 m, so hillside foundations never reach it). Slimes live there (`Slimes.ts`, one
+  colony active at a time, two instanced meshes, one unlit material): moss gardens, domes and
+  stacks of salvaged things, fungus lamps, a spiral and a row of collected things, wall markings.
+  Calm they tend, carry, gather and sit pulsing in turn; they notice the player, freeze, dim and
+  squeeze into cracks; someone standing still is approached by a brave one that stretches up to
+  look and, once, leaves a glowing pebble. Hits (stimuli `impact`/`power`/`blast`/`stomp`) splatter
+  them into drops that flow away; the colony then hides for ten minutes. A few rooms near colonies
+  have a faint glowing trail, sometimes with a lone one that slips into a crack. No markers, no
+  text. `dev.colony(i)` puts a tester in the room with the gap.
+* Volume queries (`floorAt`, `contains`, `cameraFree`, …) go through a 32 m grid of tubes and boxes.
 * Terrain holes: shader discard plus a collision query.
 
 ### Audio (`src/audio`)
@@ -453,6 +588,7 @@ src/player     controller, camera, scale, flight
 src/sim        citizens, traffic, transit (worker) and the client-side crowd renderer
 src/future     near-future layer: delivery robots, drones, animated signage, holo kiosks
 src/fauna      birds: ground groups, flocks, gulls, crows (instanced, around the camera)
+src/underground metro, sewers, trains, side rooms, hidden colonies and their slimes
 src/humanoid   Norgo human pipeline (bodies, animator) plus modern clothing
 src/audio      audio engine
 src/ui         HUD, menu, map

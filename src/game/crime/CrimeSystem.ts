@@ -200,7 +200,7 @@ export class CrimeSystem {
     g.progress.onKarma((amount, reason) => { if (amount < 0 && !/turned yourself in|arrested|bystander|car|officer|gave up/.test(reason)) g.powerHud.toast(`<b>${amount} karma</b> — ${reason}`, 'warn'); });
     // Targeting: con colours, health, actor names, hostiles first; punches lock onto a close target.
     g.targeting.describe = (t) => this.describe(t);
-    g.targeting.priority = (t) => (t.kind === 'person' && t.obj.actor ? (t.obj.actor.hostile ? -0.6 : -0.08) : 0);
+    g.targeting.priority = (t) => (t.kind === 'threat' ? -1 : t.kind === 'person' && t.obj.actor ? (t.obj.actor.hostile ? -0.6 : -0.08) : 0);
     g.interactions.aimYaw = () => this.punchAim();
     // P screen: reputation.
     const info = g.powers.info;
@@ -527,7 +527,9 @@ export class CrimeSystem {
         this.rep.count('arrests');
         break;
       case 'resolved':
-        if (c.playerInvolved) {
+        // Involved: a KO, a surrender in front of the player, or any blow the player landed on one
+        // of them (a thief knocked down by the player and cuffed by the police counts).
+        if (c.playerInvolved || c.criminals.some((a) => a.actor?.hitByPlayer)) {
           const clean = c.collateral === 0;
           const k = Math.round(CRIME_KARMA.resolved[c.kind] * (clean ? 1 + CRIME_KARMA.cleanBonus : 1));
           g.progress.addKarma(k, `stopped a ${c.kind === 'snatch' ? 'purse snatching' : c.kind === 'mugging' ? 'mugging' : 'robbery'}${clean ? ' — nobody else hurt' : ''}`);
@@ -584,7 +586,7 @@ export class CrimeSystem {
     this.wake = { x: p.x, y: p.y, z: p.z };
     this.hud.fade(true);
     if (kind === 'police' || this.justice.wanted > 0) return; // the officers cuff them (arrest) or not
-    if (kind === 'robot') return; // a threat knocked them out: no karma penalty (THREATS_PLAN §5.6)
+    if (kind === 'robot' || kind === 'monster') return; // a threat knocked them out: no karma penalty (THREATS_PLAN §5.6)
     this.g.progress.addKarma(-5, 'knocked out');
     this.rep.add(-1, 'knocked out');
   }
@@ -650,6 +652,8 @@ export class CrimeSystem {
 
   /** Target frame: names for actors, con colour, health. */
   private describe(t: Target): { name?: string; con: string | null; health: number | null } {
+    // A monster: its strength against the player's (deadly, unless the hero is a giant too).
+    if (t.kind === 'threat') return { con: CON_COLOR[conLevel(t.obj.conStrength() / Math.max(0.05, this.view.strength))], health: t.obj.hp / t.obj.maxHp };
     if (t.kind !== 'person') return { con: null, health: null };
     const a = t.obj, act = a.actor;
     let name: string | undefined;

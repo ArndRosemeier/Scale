@@ -1,7 +1,7 @@
 /**
  * Bakes Norgo characters into vertex-animation textures (VAT) for instanced
  * crowds: per template the far-LOD body + garment shells are compacted into
- * one mesh; walk / run / idle / film / down are sampled from the real
+ * one mesh; walk / run / idle / film / down / sit are sampled from the real
  * animator into position + normal float textures.
  */
 import * as THREE from 'three';
@@ -21,7 +21,7 @@ export interface CrowdTemplate {
   nrm: THREE.DataTexture;
   verts: number;
   frames: number;
-  clips: { walk: ClipInfo; run: ClipInfo; idle: ClipInfo; film: ClipInfo; down: ClipInfo };
+  clips: { walk: ClipInfo; run: ClipInfo; idle: ClipInfo; film: ClipInfo; down: ClipInfo; sit: ClipInfo };
   height: number;
   female: boolean;
   outfit: string;
@@ -133,12 +133,14 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     for (let k = 0; k < idx.count; k++) index.push(remap[mi].get(idx.getX(k))!);
   });
   // Clips to bake.
-  const clipsSpec: { name: keyof CrowdTemplate['clips']; move: 'walk' | 'run' | 'idle' | 'dead'; speed: number; frames: number; film?: boolean; still?: boolean }[] = [
+  const clipsSpec: { name: keyof CrowdTemplate['clips']; move: 'walk' | 'run' | 'idle' | 'dead' | 'sit'; speed: number; frames: number; film?: boolean; still?: boolean }[] = [
     { name: 'walk', move: 'walk', speed: 1.35, frames: 24 },
     { name: 'run', move: 'run', speed: 4.2, frames: 18 },
     { name: 'idle', move: 'idle', speed: 0, frames: 20 },
     { name: 'film', move: 'idle', speed: 0, frames: 10, film: true },
     { name: 'down', move: 'dead', speed: 0, frames: 1, still: true },
+    // Seated (café terraces, interiors): one settled pose.
+    { name: 'sit', move: 'sit', speed: 0, frames: 1, still: true },
   ];
   const totalFrames = clipsSpec.reduce((a, c) => a + c.frames, 0);
   const posData = new Float32Array(nv * totalFrames * 4);

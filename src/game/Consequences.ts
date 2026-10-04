@@ -9,7 +9,7 @@
  * police or property in front of witnesses costs karma and reputation and draws the police.
  */
 export type HarmTarget = 'person' | 'car' | 'robot' | 'drone' | 'prop' | 'building' | 'ground';
-export type HarmCause = 'player' | 'threat' | 'police';
+export type HarmCause = 'player' | 'threat' | 'police' | 'military';
 export type HarmEffect = 'knockdown' | 'burn' | 'freeze' | 'shrink' | 'stun' | 'wet' | 'wreck' | 'damage' | 'break' | 'topple' | 'stall' | 'lift' | 'facade';
 
 export interface HarmEntry {
@@ -33,7 +33,7 @@ export class Consequences {
   /** Totals per "target:effect". */
   readonly counts: Record<string, number> = {};
   /** Entries per cause (the threat clock reads the player's share as chaos). */
-  readonly totals: Record<HarmCause, number> = { player: 0, threat: 0, police: 0 };
+  readonly totals: Record<HarmCause, number> = { player: 0, threat: 0, police: 0, military: 0 };
   time = 0;
   /** Listener for the later reputation / karma system. */
   onRecord: ((e: HarmEntry) => void) | null = null;

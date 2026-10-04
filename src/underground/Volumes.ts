@@ -5,7 +5,8 @@
  */
 
 export interface Tube {
-  kind: 'metro' | 'sewer' | 'passage';
+  /** crawl: the narrow, rough passages to the hidden chambers (drawn by RoomMeshes, not as tube chunks). */
+  kind: 'metro' | 'sewer' | 'passage' | 'crawl';
   /** Polyline x,y(floor),z per vertex. */
   pts: number[];
   halfWidth: number;
@@ -20,15 +21,20 @@ export interface Tube {
 }
 
 export interface Box {
-  kind: 'station' | 'chamber';
+  /** room: side rooms off the tunnels and the hidden chambers (rooms.ts). */
+  kind: 'station' | 'chamber' | 'room';
   cx: number; cz: number; y0: number; y1: number;
   ux: number; uz: number; hu: number; hv: number;
-  /** Raised platforms: list of [v0, v1, height] bands across. */
-  platforms: [number, number, number][];
+  /** Raised platforms: [v0, v1, height] bands across, optionally only over [u0, u1] along (steps); later ones win. */
+  platforms: Platform[];
   bounds: [number, number, number, number];
   /** Station halls: station id, hall index within the station, metro line. */
   station?: number; hall?: number; line?: number;
+  /** Side rooms: the room it belongs to; hidden chambers: their colony. */
+  room?: number; colony?: number;
 }
+
+export type Platform = [number, number, number] | [number, number, number, number, number];
 
 export function makeTube(kind: Tube['kind'], pts: number[], halfWidth: number, height: number, channel?: number, channelDepth?: number): Tube {
   const cum = [0];
@@ -39,7 +45,7 @@ export function makeTube(kind: Tube['kind'], pts: number[], halfWidth: number, h
   return { kind, pts, halfWidth, height, cum, bounds: [x0 - m, z0 - m, x1 + m, z1 + m], channel, channelDepth };
 }
 
-export function makeBox(kind: Box['kind'], cx: number, cz: number, y0: number, y1: number, angle: number, hu: number, hv: number, platforms: [number, number, number][] = []): Box {
+export function makeBox(kind: Box['kind'], cx: number, cz: number, y0: number, y1: number, angle: number, hu: number, hv: number, platforms: Platform[] = []): Box {
   const ux = Math.cos(angle), uz = Math.sin(angle);
   const r = Math.hypot(hu, hv) + 1;
   return { kind, cx, cz, y0, y1, ux, uz, hu, hv, platforms, bounds: [cx - r, cz - r, cx + r, cz + r] };
@@ -101,6 +107,6 @@ export function boxAt(b: Box, x: number, y: number, z: number, margin = 0): { u:
   const u = dx * b.ux + dz * b.uz, v = -dx * b.uz + dz * b.ux;
   if (Math.abs(u) > b.hu + margin || Math.abs(v) > b.hv + margin) return null;
   let floor = b.y0;
-  for (const [v0, v1, h] of b.platforms) if (v >= v0 && v <= v1) floor = b.y0 + h;
+  for (const p of b.platforms) if (v >= p[0] && v <= p[1] && (p.length === 3 || (u >= p[3] && u <= p[4]))) floor = b.y0 + p[2];
   return { u, v, floor };
 }

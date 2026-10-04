@@ -11,6 +11,8 @@ export const G = {
   uLitFrac: { value: 0.1 },
   /** Fraction of shop windows lit. */
   uShopLit: { value: 1 },
+  /** Fraction of café / restaurant windows lit (opening hours, warm light). */
+  uEatLit: { value: 1 },
   uSunDir: { value: new THREE.Vector3(0.3, 0.8, 0.2) },
   /** Street light emission strength (0 day, 1 night). */
   uLampOn: { value: 0 },

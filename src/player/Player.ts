@@ -19,6 +19,7 @@ import type { HumanoidAppearance } from '../humanoid/types';
 import type { Collision } from '../world/Collision';
 import { ImportedAvatar, type LoadedModel } from '../avatar/ImportedAvatar';
 import { outfitVisuals, type CharacterLook } from '../avatar/look';
+import { stepEnergy } from '../game/GiantBody';
 
 export const BASE_HEIGHT = 1.8;
 /** Super speed carries the runner over water above this speed (m/s at 1.8 m, × √k). */
@@ -402,8 +403,7 @@ export class Player {
       : (prev < m && ph >= m) || (ph < m && prev >= m);
     const hs = Math.hypot(this.vel.x, this.vel.z) / sk;
     if (this.grounded && !this.flying && hs > 0.3 && ph !== this.stepPhase && (crossed(0.25) || crossed(0.75))) {
-      const energy = 0.5 * this.mass * (0.25 * 9.81 * this.height);
-      this.events.onFootstep?.(this.pos.x, this.pos.y, this.pos.z, energy, this.height);
+      this.events.onFootstep?.(this.pos.x, this.pos.y, this.pos.z, stepEnergy(this.mass, this.height), this.height);
     }
     this.stepPhase = ph;
     // Flight body orientation: pitch forward with speed, bank into turns, superhero arms.

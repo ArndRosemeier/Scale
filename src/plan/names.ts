@@ -3,7 +3,7 @@
  */
 import { Rng, deriveSeed } from '../core/rng';
 
-const ROOTS = [
+export const ROOTS = [
   'Ash', 'Birch', 'Cedar', 'Elm', 'Hazel', 'Linden', 'Maple', 'Oak', 'Pine', 'Willow', 'Rowan', 'Alder',
   'Mill', 'Bridge', 'Church', 'Market', 'Castle', 'Harbor', 'King', 'Queen', 'Prince', 'Abbey', 'Chapel', 'Garden',
   'Hill', 'Brook', 'River', 'Lake', 'Spring', 'Stone', 'Iron', 'Copper', 'Silver', 'Gold', 'Union', 'Liberty',

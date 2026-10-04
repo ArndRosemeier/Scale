@@ -25,6 +25,8 @@ import { FurnBatch } from './batch';
 import { kioskPedestalGeometry } from './models';
 import { signAtlas, fasciaRect, bladeRect, holoRect, slideRect, ART } from './signArt';
 import type { FutureCtx } from './ctx';
+import { NameAtlas, NAME_SLOTS } from './eateryArt';
+import { eateryName, type Eatery } from '../plan/eatery';
 
 const enum SMode { Static = 0, Ticker = 1, Shine = 2, Slides = 3, Chase = 4 }
 
@@ -42,6 +44,8 @@ interface Sign {
   state: number;
   /** LED pitch: pixels across. */
   res: number;
+  /** A café's / restaurant's name board (drawn from the name atlas). */
+  eat?: { key: number; name: string; kind: Eatery; palette: number };
 }
 
 interface Kiosk { cell: number; x: number; y: number; z: number; yaw: number; art: number; seed: number; broken: boolean }
@@ -49,6 +53,9 @@ interface Kiosk { cell: number; x: number; y: number; z: number; yaw: number; ar
 const DENSITY: Partial<Record<District, number>> = { downtown: 1, commercial: 0.8, oldtown: 0.45, apartments: 0.22, rowhouses: 0.12, port: 0.1, industrial: 0.08, suburban: 0.03 };
 const DRAW_R = 950;
 const CAP = 4096;
+/** Café / restaurant name boards: drawn within NAME_R m, at most NAME_CAP. */
+const NAME_R = 420;
+const NAME_CAP = 768;
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
@@ -79,7 +86,13 @@ export class Signs {
   readonly uniforms = { uTime: { value: 0 }, uAtlas: { value: null as THREE.Texture | null }, uNight: G.uNight, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) } };
   /** Signs flickering for a while (an omen), back to normal after `until`. */
   private glitched: { s: Sign; until: number }[] = [];
-  stats = { cells: 0, signs: 0, kiosks: 0, drawn: 0, broken: 0 };
+  stats = { cells: 0, signs: 0, kiosks: 0, drawn: 0, broken: 0, names: 0 };
+  /** Name boards of the cafés and restaurants: the sign shader on their own atlas. */
+  private names: THREE.InstancedMesh;
+  private nRect: THREE.InstancedBufferAttribute;
+  private nSign: THREE.InstancedBufferAttribute;
+  private nameAtlas = new NameAtlas();
+  private nameSorted: { s: Sign; d: number }[] = [];
 
   constructor(private ctx: FutureCtx, furnMat: THREE.Material) {
     this.uniforms.uAtlas.value = signAtlas();
@@ -111,6 +124,18 @@ export class Signs {
     this.group.add(this.holo);
     this.pedestals = new FurnBatch(kioskPedestalGeometry(), furnMat, 256);
     this.group.add(this.pedestals.mesh);
+    // Name boards: the same sign shader (same program) on the name atlas.
+    const ng = new THREE.PlaneGeometry(1, 1);
+    ng.setAttribute('sUv', ng.getAttribute('uv').clone());
+    this.nRect = new THREE.InstancedBufferAttribute(new Float32Array(NAME_CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    this.nSign = new THREE.InstancedBufferAttribute(new Float32Array(NAME_CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    ng.setAttribute('iRect', this.nRect);
+    ng.setAttribute('iSign', this.nSign);
+    this.names = new THREE.InstancedMesh(ng, this.signMaterial({ ...this.uniforms, uAtlas: { value: this.nameAtlas.texture }, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) } }), NAME_CAP);
+    this.names.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.names.count = 0;
+    this.names.frustumCulled = false;
+    this.group.add(this.names);
   }
 
   // ------------------------------------------------------------------ placement
@@ -154,7 +179,8 @@ export class Signs {
     const d = ref.desc;
     const h = deriveSeed(this.ctx.seed, 'signs', ref.cell.id, ref.index);
     const r1 = hashToFloat(h), r2 = hashToFloat(hash32(h + 1)), r3 = hashToFloat(hash32(h + 2));
-    const wantFascia = d.shopfront && r1 < dens * 0.85;
+    const wantFascia = d.shopfront && !d.eatery && r1 < dens * 0.85;
+    if (d.eatery) this.placeName(ref, h, out);
     const wantBlade = d.shopfront && d.floors >= 3 && r2 < dens * 0.3;
     const wantScreen = (district === 'downtown' || district === 'commercial') && d.floors >= 5 && r3 < dens * 0.25;
     if (!wantFascia && !wantBlade && !wantScreen) return;
@@ -232,6 +258,49 @@ export class Signs {
     }
   }
 
+  /**
+   * A café's / restaurant's name board over the shop front, centred on the door (above the
+   * awnings when there are some), attached to the ground-floor wall elements behind it.
+   */
+  private placeName(ref: BuildingRef, h: number, out: Sign[]): void {
+    const d = ref.desc;
+    const ep = ref.cell.plan?.eateries.find((e) => e.b === ref.index);
+    if (!ep) return;
+    const L = this.ctx.destruction.layoutOf(ref);
+    const g0 = L.panels.filter((p) => p.edge === d.front && p.floor === 0);
+    if (!g0.length) return;
+    const e0 = g0[0];
+    const ex = e0.bx - e0.ax, ez = e0.bz - e0.az, el = Math.hypot(ex, ez) || 1;
+    const ux = ex / el, uz = ez / el, nx = e0.nx, nz = e0.nz;
+    const ox = e0.ax - ux * e0.u0, oz = e0.az - uz * e0.u0;
+    let s0 = Infinity, s1 = -Infinity;
+    for (const p of g0) { s0 = Math.min(s0, p.u0); s1 = Math.max(s1, p.u0 + p.bayW); }
+    // Board height: what is left between the awnings and the top of the ground floor.
+    const yTop = e0.y1 - 0.18;
+    let hh = 0.42;
+    if (ep.awnings.length) {
+      const sy = this.ctx.terrain.height(ep.ax + ep.ux * ep.awnings[0], ep.az + ep.uz * ep.awnings[0]) + CURB_H;
+      hh = Math.max(0.26, Math.min(0.42, yTop - (sy + ep.awnings[2] + 0.12)));
+    }
+    const w = Math.min(hh * 8, (s1 - s0) * 0.92);
+    hh = w / 8;
+    if (w < 1.6) return;
+    // Centred over the door, kept on the front.
+    const door = (ep.door[0] - ox) * ux + (ep.door[1] - oz) * uz;
+    const sc = Math.max(s0 + w / 2 + 0.05, Math.min(s1 - w / 2 - 0.05, door));
+    const x = ox + ux * sc + nx * 0.08, z = oz + uz * sc + nz * 0.08, y = yTop - hh / 2;
+    const elems = g0.filter((p) => p.u0 < sc + w / 2 && p.u0 + p.bayW > sc - w / 2).map((p) => p.e);
+    if (!elems.length) return;
+    _m.makeBasis(_p.set(nz, 0, -nx), _Y, _s.set(nx, 0, nz));
+    _m.scale(_s.set(w, hh, 1)).setPosition(x, y, z);
+    const key = ref.cell.id * 4096 + ref.index;
+    out.push({
+      cell: ref.cell.id, ref, elems, m: _m.clone(), x, y, z, rect: this.nameAtlas.generic(ep.kind), mode: hashToFloat(hash32(h + 31)) < 0.3 ? SMode.Shine : SMode.Static,
+      seed: hashToFloat(hash32(h + 32)), state: 1, res: 0,
+      eat: { key, name: eateryName(this.ctx.seed, ref.cell.id, ref.index, ep.kind), kind: ep.kind, palette: ep.palette },
+    });
+  }
+
   private placeKiosks(cs: CellState, dens: number, out: Kiosk[]): void {
     const n = Math.round(dens * 3 * hashToFloat(deriveSeed(this.ctx.seed, 'kiosks', cs.id)) + dens * 1.2);
     const streets = cs.plan!.streets.filter((s) => s.sidewalk >= 2.5 && s.pts.length >= 4);
@@ -271,6 +340,7 @@ export class Signs {
     this.syncCells();
     // A couple of cells per frame (layouts are cached by Destruction, cheap after the first).
     this.placeSome(0.8);
+    this.nameAtlas.flush(this.t);
     // Wall state: a few times per second.
     this.checkT -= dt;
     if (this.checkT <= 0) { this.checkT = 0.25; this.checkWalls(); }
@@ -306,7 +376,7 @@ export class Signs {
     let n = 0;
     for (const { signs } of this.byCell.values()) for (const s of signs) {
       if (n >= max) return n;
-      if (s.state !== 1 || Math.hypot(s.x - x, s.z - z) > r) continue;
+      if (s.state !== 1 || s.eat || Math.hypot(s.x - x, s.z - z) > r) continue;
       s.state = 0.5;
       this.glitched.push({ s, until: this.t + dur });
       this.dirty = true;
@@ -344,11 +414,14 @@ export class Signs {
   private fill(cp: THREE.Vector3): void {
     let n = 0, hn = 0, signs = 0, kiosks = 0;
     this.pedestals.begin();
+    const names = this.nameSorted;
+    names.length = 0;
     for (const { signs: list, kiosks: kl } of this.byCell.values()) {
       signs += list.length; kiosks += kl.length;
       for (const s of list) {
         if (s.state === 0 || n >= CAP) continue;
         if (Math.abs(s.x - cp.x) > DRAW_R || Math.abs(s.z - cp.z) > DRAW_R) continue;
+        if (s.eat) { if (Math.abs(s.x - cp.x) < NAME_R && Math.abs(s.z - cp.z) < NAME_R) names.push({ s, d: Math.hypot(s.x - cp.x, s.z - cp.z) }); continue; }
         this.mesh.setMatrixAt(n, s.m);
         this.aRect.setXYZW(n, s.rect[0], s.rect[1], s.rect[2], s.rect[3]);
         this.aSign.setXYZW(n, s.mode, s.seed, s.state, s.res);
@@ -368,6 +441,24 @@ export class Signs {
       }
     }
     this.pedestals.end();
+    // Name boards: the nearest ones get their own names, the rest a board saying what they are.
+    names.sort((a, b) => a.d - b.d);
+    this.nameAtlas.begin();
+    let nn = 0;
+    for (const { s, d } of names) {
+      if (nn >= NAME_CAP) break;
+      const e = s.eat!;
+      const rect = (nn < NAME_SLOTS && d < 170 ? this.nameAtlas.named(e.key, e.name, e.kind, e.palette) : null) ?? s.rect;
+      this.names.setMatrixAt(nn, s.m);
+      this.nRect.setXYZW(nn, rect[0], rect[1], rect[2], rect[3]);
+      this.nSign.setXYZW(nn, s.mode, s.seed, s.state, s.res);
+      nn++;
+    }
+    this.names.count = nn;
+    this.names.instanceMatrix.needsUpdate = true;
+    this.nRect.needsUpdate = true;
+    this.nSign.needsUpdate = true;
+    this.stats.names = nn;
     this.mesh.count = n;
     this.holo.count = hn;
     for (const a of [this.aRect, this.aSign, this.hRect, this.hSign]) a.needsUpdate = true;
@@ -378,9 +469,8 @@ export class Signs {
 
   // ------------------------------------------------------------------ materials
 
-  private signMaterial(): THREE.MeshBasicMaterial {
+  private signMaterial(u: Signs['uniforms'] = this.uniforms): THREE.MeshBasicMaterial {
     const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const u = this.uniforms;
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = u.uTime; sh.uniforms.uAtlas = u.uAtlas; sh.uniforms.uNight = u.uNight; sh.uniforms.uAlert = u.uAlert;
       sh.vertexShader = sh.vertexShader

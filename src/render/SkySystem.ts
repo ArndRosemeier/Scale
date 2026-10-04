@@ -142,6 +142,7 @@ export class SkySystem {
     G.uLitFrac.value = h < 5 ? 0.06 : h < 7 ? 0.25 : h < 9 ? 0.15 : h < 17 ? 0.05 : h < 19 ? 0.3 : h < 23 ? 0.55 : 0.25;
     G.uLitFrac.value = lerp(0.04, G.uLitFrac.value, Math.max(night, 0.15));
     G.uShopLit.value = h > 7.5 && h < 21.5 ? 0.92 : 0.12;
+    G.uEatLit.value = h > 6.5 && h < 22 ? 0.97 : h >= 22 ? 0.8 : h < 1.5 ? 0.45 : 0.06;
     G.uLampOn.value = smoothstep(0.08, -0.06, sunUp);
 
     // Exposure: compensate darkness a bit at night.

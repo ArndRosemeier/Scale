@@ -3,6 +3,7 @@
 Research and design brief (2026-10-03). Status: accepted with changes — see PLAYGROUND_PLAN.md §0 decision 19 (no player levels; army vs player uncapped; small-nuke countdown as last resort; carcasses removed by city crews after a while). Builds on docs/PLAYGROUND_PLAN.md §0 (binding decisions).
 
 Status (2026-10-04): Phase A "Robot malfunction" is implemented — ThreatClock with omens, rogue robots / service robots / drones, response levels 0–2 (patrol, perimeter & evacuation with civil-defence siren and roadblocks, SWAT), cause-aware consequences, incident marker; see ARCHITECTURE.md, "Threats and city response".
+Status (2026-10-04): Phase B stage 1 of 3 "the Strider" is implemented — GiantBody (shared footfalls with `size` / `cause`, `roar` / `tremor` stimuli), the segmented creature rig, ThreatActor (zones, weak spots, aggro, damage API), the Strider from the river along the arterials (walk, lean, tail swipe, roar and rear, swat, breath with burning facades; stagger, retreat, collapse — the body stays), major events on the clock (≥ 3 h and a karma milestone, tremor / wake omens), Tab target kind `threat`, faster and wider response for majors with `registerLevel` for levels 3+. Stage 2 (army, levels 3–4) and stage 3 (aftermath, rescues, nuke countdown) are open.
 
 ## 0. Research takeaways
 

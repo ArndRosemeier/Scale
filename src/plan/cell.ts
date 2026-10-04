@@ -18,6 +18,7 @@ import { RoadClass, type CellInfo, type District, type MacroPlan } from './types
 import { ROAD_SPEC } from './macro';
 import { STYLES, pickStyle, type BuildingDesc, type StyleId } from './building';
 import { STATION_HALF, ENTRANCE_L, ENTRANCE_W } from './metroDims';
+import { placeEateries, type EateryPlan } from './terrace';
 export { STATION_HALF, ENTRANCE_L, ENTRANCE_W };
 
 export interface StreetSeg {
@@ -59,6 +60,14 @@ export const enum PropType {
   MetroEntrance = 17,
   Manhole = 18,
   Mailbox = 19,
+  // Café and restaurant terraces (plan/terrace.ts): variant = colour scheme * 2 + model.
+  CafeTable = 20,
+  CafeChair = 21,
+  Parasol = 22,
+  Awning = 23,
+  MenuBoard = 24,
+  TerraceRail = 25,
+  Parklet = 26,
 }
 
 export interface CellPlan {
@@ -84,6 +93,8 @@ export interface CellPlan {
   bounds: [number, number, number, number];
   /** Metro entrances: [cx, cz, ux, uz, station, hall * 2 + end] * n (opening 2.2 × 5.5 m, long axis u). */
   entrances: number[];
+  /** Cafés, restaurants, … with their terraces (plan/terrace.ts). */
+  eateries: EateryPlan[];
 }
 
 
@@ -124,7 +135,7 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
   const g = GRAMMAR[cell.district];
   const plan: CellPlan = {
     id: cell.id, district: cell.district, streets: [], carriageway: [], sidewalks: [], blocks: [], promenade: [],
-    plazas: [], parks: [], yards: [], paved: [], lots: [], buildings: [], props: [], junctions: [], bounds: polyBounds(cell.poly), entrances: [],
+    plazas: [], parks: [], yards: [], paved: [], lots: [], buildings: [], props: [], junctions: [], bounds: polyBounds(cell.poly), entrances: [], eateries: [],
   };
 
   // ---------------------------------------------------------- 1. streets
@@ -232,6 +243,8 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
 
   // --------------------------------------------------------- 5. props
   placeProps(plan, cell, macro, g, rng.fork('props'), terrain);
+  // ------------------------------------------- 6. cafés, restaurants and their terraces
+  placeEateries(plan, cell, macro, terrain);
   return plan;
 }
 

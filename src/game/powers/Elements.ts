@@ -11,7 +11,9 @@
  * Effects reuse the world's own reactions: destruction impacts (facades), debris and dust,
  * props.hit (toppling), traffic wrecks, reactions.knockDown, the near-future layer's knock
  * (robots, drones). Temporary states (frozen, shrunk, burning, stunned, wet) live in the
- * shared status registry (src/shared/status.ts) that the renderers read.
+ * shared status registry (src/shared/status.ts) that the renderers read. A big threat (a
+ * monster, Target kind `threat`) takes every power as damage in the body zone it lands on
+ * (ThreatActor.damage: armour, weak spots); frost on a leg makes it buckle.
  *
  * Idle cost: one early-out per frame when no power, state or effect is running.
  */
@@ -39,6 +41,7 @@ import type { Consequences, HarmEffect, HarmTarget } from '../Consequences';
 import type { AbilityId } from '../abilities/defs';
 import { statusFor, statusOf, statusList, statusCount, tickStatus, type TargetStatus } from '../../shared/status';
 import { WallMat } from '../../plan/building';
+import { DAMAGE_PER_IMPULSE } from '../threats/ThreatEvent';
 import {
   LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE, ICE, ICE_WIDTH, ICE_LIFE,
   BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE, GUST, GUST_RADIUS, GUST_TIME, GUST_LIFT,
@@ -67,6 +70,8 @@ export interface PowerWorld {
   consequences: Consequences;
   /** Clip sound at a point (Audio.play). */
   sound: (id: string, x: number, y: number, z: number, gain: number, pitch?: number, ref?: number) => void;
+  /** Water on a spot: burning facades there die down (FacadeFires.douse). */
+  douse?: (x: number, y: number, z: number, r: number, amount: number) => void;
 }
 
 /** The power being held this frame (from the AbilitySystem). */
@@ -139,7 +144,7 @@ export class Elements {
   private squeakT = 0;
   private lastChannel: AbilityId | null = null;
   /** Debug counters (window.game.elements.stats). */
-  readonly stats = { impacts: 0, knocked: 0, frozen: 0, wrecked: 0, shrunk: 0, broken: 0 };
+  readonly stats = { impacts: 0, knocked: 0, frozen: 0, wrecked: 0, shrunk: 0, broken: 0, threat: 0 };
 
   constructor(private w: PowerWorld) {
     w.collision.extraGround = (x, z, yRef, step) => this.iceGround(x, z, yRef, step);
@@ -274,7 +279,7 @@ export class Elements {
     // Locked on: nothing in between, so it reaches the target (it may have moved off the
     // exact ray since the aim was taken — a fast drone, a running person).
     if (tgt && lock >= 0 && (out.hit.target?.obj !== tgt.obj) && out.t >= lock - 0.6 && lock <= range) {
-      const c = T.centre(tgt, _w);
+      const c = T.aimPoint(tgt, o.x, o.y, o.z, Infinity, _w);
       out.hit.what = 'target'; out.hit.target = tgt; out.hit.building = null;
       out.t = Math.max(0.1, c.distanceTo(o) - 0.3);
       out.hit.t = out.t;
@@ -296,11 +301,27 @@ export class Elements {
   // ================================================================== effects on targets
 
   private harmKind(t: Target): HarmTarget {
-    return t.kind === 'bot' ? 'robot' : t.kind;
+    return t.kind === 'bot' ? 'robot' : t.kind === 'threat' ? 'robot' : t.kind;
   }
 
   private record(power: AbilityId, t: Target | 'building' | 'ground', effect: HarmEffect, x: number, z: number): void {
+    // Hurting a monster is not collateral.
+    if (typeof t !== 'string' && t.kind === 'threat') return;
     this.w.consequences.record(power, typeof t === 'string' ? t : this.harmKind(t), effect, x, z, typeof t === 'string' ? undefined : t.obj);
+  }
+
+  /**
+   * A power lands on a big threat: damage (points before armour) in the zone at the point (default:
+   * the part of the body nearest the player). Sparks / steam where it hits.
+   */
+  private hurtThreat(t: Target, amount: number, x?: number, y?: number, z?: number): void {
+    if (t.kind !== 'threat' || amount <= 0) return;
+    const p = this.w.player;
+    const px = x ?? p.pos.x, py = y ?? p.pos.y + p.height * 0.6, pz = z ?? p.pos.z;
+    const zr = t.obj.zoneAt(px, py, pz);
+    const res = t.obj.damage(zr?.zone ?? null, amount, { cause: 'player', x: p.pos.x, y: p.pos.y, z: p.pos.z });
+    this.stats.threat += res.dealt;
+    if (res.weak && Math.random() < 0.5) this.sparks(px, py, pz, 8);
   }
 
   private track(t: Target): TargetStatus {
@@ -357,10 +378,13 @@ export class Elements {
         if (n) this.record(power, t, 'topple', p.x, p.z);
         return n > 0;
       }
+      case 'threat': this.hurtThreat(t, J * DAMAGE_PER_IMPULSE); return false;
     }
   }
 
   private freeze(t: Target, dur: number): void {
+    // A monster: the frost bites into the leg nearest the player (enough of it and the leg buckles).
+    if (t.kind === 'threat') { this.hurtThreat(t, dur * 18, t.obj.x + (this.w.player.pos.x - t.obj.x) * 0.3, t.obj.y * 0.4, t.obj.z + (this.w.player.pos.z - t.obj.z) * 0.3); return; }
     const s = this.track(t);
     const fresh = s.frozen <= 0;
     s.frozen = Math.max(s.frozen, dur);
@@ -387,6 +411,7 @@ export class Elements {
   }
 
   private burn(t: Target, dur: number): void {
+    if (t.kind === 'threat') { this.hurtThreat(t, dur * 5); return; }
     const s = this.track(t);
     if (s.frozen > 0) { s.frozen = Math.max(0, s.frozen - dur); return; } // thaws instead
     s.burning = Math.max(s.burning, dur * (s.wet > 0 ? 0.4 : 1));
@@ -394,11 +419,13 @@ export class Elements {
   }
 
   private stun(t: Target, dur: number): void {
+    if (t.kind === 'threat') { this.hurtThreat(t, dur * 22); return; }
     const s = this.track(t);
     s.stunned = Math.max(s.stunned, dur);
   }
 
   private wet(t: Target, dur: number): void {
+    if (t.kind === 'threat') return;
     const s = this.track(t);
     s.wet = Math.max(s.wet, dur);
     if (s.burning > 0) { s.burning = 0; const c = this.w.targeting.centre(t, _w); this.steam(c.x, c.y, c.z, 1); }
@@ -406,6 +433,7 @@ export class Elements {
   }
 
   private shrink(t: Target, factor: number, dur: number): void {
+    if (t.kind === 'threat') { this.hurtThreat(t, dur * 4 * (1 - factor)); return; }
     const s = this.track(t);
     if (s.shrink <= 0) this.stats.shrunk++;
     s.shrink = Math.max(s.shrink, dur);
@@ -519,6 +547,7 @@ export class Elements {
         case 'robot': this.w.future.robots.knock(t.obj, jx * acc, 80, jz * acc); this.sparks(ex, ey, ez, 6); if (acc > 900) this.record('laser', t, 'break', ex, ez); break;
         case 'bot': this.w.future.service.knock(t.obj, jx * acc, 0, jz * acc); this.sparks(ex, ey, ez, 6); if (acc > 1100) this.record('laser', t, 'break', ex, ez); break;
         case 'drone': this.w.future.drones.knock(t.obj, jx * 40, -20, jz * 40); this.sparks(ex, ey, ez, 8); this.record('laser', t, 'break', ex, ez); break;
+        case 'threat': this.hurtThreat(t, dose * DAMAGE_PER_IMPULSE, ex, ey, ez); this.dose.delete(t.obj); break;
         case 'prop': {
           const p = t.obj;
           if (p.kind.includes('lamp') && !p.dark) { this.w.props.darken(p); this.w.synth.play('pop', ex, ey, ez, 0.7, 6); }
@@ -641,6 +670,7 @@ export class Elements {
       }
       case 'robot': case 'bot': this.shove(t, b.dx * 500, 150, b.dz * 500, 'fireWave'); this.burn(t, burnT * 0.5); break;
       case 'drone': this.shove(t, b.dx * 60, 20, b.dz * 60, 'fireWave'); break;
+      case 'threat': this.hurtThreat(t, FIRE_HEAT[b.rank] * b.k * b.k * DAMAGE_PER_IMPULSE * 1.5, b.ox + b.dx * d, b.oy + b.dy * d, b.oz + b.dz * d); break;
       case 'prop': {
         const p = t.obj;
         if (p.tree || p.kind.includes('bench') || p.kind.includes('bin')) { this.burn(t, burnT * 1.5); this.record('fireWave', t, 'burn', c.x, c.z); }
@@ -924,6 +954,7 @@ export class Elements {
       case 'robot': this.w.future.robots.knock(t.obj, (Math.random() - 0.5) * 400, 1500, (Math.random() - 0.5) * 400); this.record('lightning', t, 'break', x, z); break;
       case 'bot': this.w.future.service.knock(t.obj, (Math.random() - 0.5) * 400, 1500, (Math.random() - 0.5) * 400); this.record('lightning', t, 'break', x, z); break;
       case 'drone': this.w.future.drones.knock(t.obj, 0, -60, 0); this.stun(t, stunT); this.record('lightning', t, 'break', x, z); break;
+      case 'threat': this.hurtThreat(t, stunT * 40 * this.reachK, x, y, z); break;
       case 'prop': {
         const p = t.obj;
         if (p.kind.includes('lamp') || p.kind.includes('traffic') || p.kind.includes('sign')) {
@@ -1163,6 +1194,7 @@ export class Elements {
           }
           case 'robot': case 'bot': this.shove(t, (tx + ox * 0.3) * 160 * lift * k, 120 * lift * k, (tz + oz * 0.3) * 160 * lift * k, 'gust'); break;
           case 'drone': this.shove(t, tx * 14 * lift * k, 8 * lift * k, tz * 14 * lift * k, 'gust'); break;
+          case 'threat': this.hurtThreat(t, 6 * lift * k); break;
           case 'prop': {
             const J = 250 * r * lift * k;
             this.shove(t, tx * J, 0, tz * J, 'gust');
@@ -1209,7 +1241,8 @@ export class Elements {
     const J = HYDRO_FORCE[r] * p.k * p.k * 0.1;
     const H = A.hit;
     const T = this.w.targeting;
-    // Fire out near the impact.
+    // Fire out near the impact (burning facades too).
+    if (A.hit.what !== 'none') this.w.douse?.(A.hit.x, A.hit.y, A.hit.z, 2.5 * Math.max(1, this.sk), 6 * r);
     for (const o of statusList()) {
       const s = statusOf(o), t = this.kinds.get(o);
       if (!s || !t || s.burning <= 0) continue;
@@ -1247,6 +1280,7 @@ export class Elements {
         }
         case 'robot': case 'bot': if (e.acc > 120) { this.shove(t, A.dx * e.acc, 80, A.dz * e.acc, 'hydro'); e.acc = 0; } break;
         case 'drone': this.shove(t, A.dx * J * 0.15, -J * 0.05, A.dz * J * 0.15, 'hydro'); break;
+        case 'threat': this.hurtThreat(t, J * DAMAGE_PER_IMPULSE * 0.3, ex, ey, ez); break;
         case 'prop': if (this.shove(t, A.dx * e.acc, 0, A.dz * e.acc, 'hydro')) e.acc = 0; break;
       }
     };
@@ -1417,7 +1451,7 @@ export class Elements {
   static carHeight(v: Vehicle): number { return vehicleHeight(v); }
 }
 
-const NO_TARGETS = { person: false, car: false, robot: false, drone: false, prop: false };
+const NO_TARGETS = { person: false, car: false, robot: false, drone: false, prop: false, threat: false };
 
 function newHit(): ProbeHit {
   return { what: 'none', target: null, building: null, t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 1, nz: 0 };

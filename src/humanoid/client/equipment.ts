@@ -283,7 +283,9 @@ export class EquipmentRig {
     const { sel, src, edge, nbStart, nbList, twins } = topo ?? empty;
     const n = src.length;
     // Positions: push out along the normal; outer layers are smoothed (cloth drapes over detail).
-    const off = Math.max(0.002, l.offset) + order * 0.0015;
+    // A little more room than the nominal offset (thin shirts let skin poke through in motion,
+    // where skinning bends body and shell slightly differently), and between stacked layers.
+    const off = Math.max(0.002, l.offset) * 1.25 + 0.004 + order * 0.002;
     const P = new Float32Array(n * 3), N = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const v = src[i];
