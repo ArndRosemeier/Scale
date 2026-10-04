@@ -83,6 +83,8 @@ export class Player {
   maxHeight = MAX_HEIGHT;
   /** Admin console: any size from MIN_HEIGHT to MAX_HEIGHT, whatever the size power's rank allows. */
   sizeOverride = false;
+  /** Sitting on a seat (bench, café chair …): the seat position on the ground and the way it faces. */
+  seat: { x: number; z: number; yaw: number } | null = null;
   /** Space jumps normally (false while an ability handles Space itself). */
   jumpOnSpace = true;
   /**
@@ -158,6 +160,25 @@ export class Player {
       this.downT = Math.max(0, this.downT - dt);
       wish.set(0, 0, 0);
       if (this.flying) this.toggleFlight();
+      this.seat = null;
+    }
+    // Seated: any move, a jump or growing / shrinking gets up; otherwise stay on the seat.
+    if (this.seat) {
+      if (wish.lengthSq() > 0 || input.hit('Space') || grow !== 0 || this.flying) this.standUp();
+      else {
+        const s = this.seat;
+        this.pos.x += (s.x - this.pos.x) * Math.min(1, dt * 8);
+        this.pos.z += (s.z - this.pos.z) * Math.min(1, dt * 8);
+        this.pos.y = this.world.groundHeight(this.pos.x, this.pos.z, this.pos.y + 0.5);
+        this.vel.set(0, 0, 0);
+        let d = s.yaw - this.yaw;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        this.yaw += d * Math.min(1, dt * 8);
+        this.grounded = true;
+        this.updateRig(dt);
+        return;
+      }
     }
 
     if (this.flying) this.updateFlight(dt, input, wish, camYaw, camPitch, run);
@@ -372,8 +393,24 @@ export class Player {
     this.pos.set(px, ny, pz);
   }
 
+  /** Sit down on a seat (the game finds it: benches, café chairs). */
+  sitOn(x: number, z: number, yaw: number): void {
+    if (this.flying || this.downT > 0 || this.ragdoll) return;
+    this.seat = { x, z, yaw };
+  }
+
+  /** Get up from the seat, a step forward off it. */
+  standUp(): void {
+    const s = this.seat;
+    if (!s) return;
+    this.seat = null;
+    this.pos.x = s.x - Math.sin(s.yaw) * 0.65;
+    this.pos.z = s.z - Math.cos(s.yaw) * 0.65;
+  }
+
   private moveState(): MoveState {
     if (this.ragdoll) return this.ragdoll === 'limp' ? 'knockdown' : 'idle';
+    if (this.seat) return 'sit';
     if (this.downT > 0) return 'knockdown';
     if (this.flying) return 'fly';
     if (!this.grounded) return this.vel.y > 0 ? 'jump' : 'fall';

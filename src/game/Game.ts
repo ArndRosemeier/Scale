@@ -35,7 +35,7 @@ import { hitch } from '../debug/HitchLog';
 import { ShaderGate } from '../render/ShaderGate';
 import { RoadNet } from '../sim/RoadNet';
 import { Population } from '../sim/Population';
-import { Pedestrians } from '../sim/Pedestrians';
+import { Pedestrians, PState } from '../sim/Pedestrians';
 import { Reactions } from '../sim/Reactions';
 import { CrowdRenderer } from '../sim/CrowdRenderer';
 import { bakeCrowdTemplates } from '../sim/CrowdBaker';
@@ -861,6 +861,8 @@ export class Game {
     if (crime) return crime;
     const deed = this.deeds?.hint();
     if (deed) return deed;
+    if (this.player.seat) return 'Move or press <b>E</b> to get up';
+    if (this.seatNear()) return 'Press <b>E</b> to sit down';
     const p = this.player.pos;
     // Manholes are climbed from the sewers only (not from metro halls, passages or trains).
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
@@ -871,11 +873,33 @@ export class Game {
     return 'Manhole — press <b>E</b> to open it and climb down into the sewer';
   }
 
+  /** A free seat within reach of an ordinary-sized player on foot (benches, café chairs), or null. */
+  private seatNear(): { x: number; z: number; yaw: number } | null {
+    const P = this.player;
+    if (P.flying || !P.grounded || P.height > 2.4 || P.height < 1.2 || P.downT > 0 || P.ragdoll) return null;
+    let best: { x: number; z: number; yaw: number } | null = null, bd = 1.3;
+    this.props.query(P.pos.x, P.pos.z, 1.6, (pr) => {
+      if (pr.broken || !/^furn:(bench|cafeChair):/.test(pr.kind)) return;
+      if (Math.abs(pr.y - P.pos.y) > 0.6) return;
+      const d = Math.hypot(pr.x - P.pos.x, pr.z - P.pos.z);
+      if (d >= bd) return;
+      // Someone sitting there already?
+      if (this.peds.neighbours(pr.x, pr.z, 0.45, []).some((a) => a.state === PState.Sit)) return;
+      bd = d;
+      best = { x: pr.x, z: pr.z, yaw: pr.yaw };
+    });
+    return best;
+  }
+
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
     if (this.crime.use() || this.deeds.help()) { this.input.pressed.delete('KeyE'); return; }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
+    // Sit down on a bench or café chair in reach, or get up again.
+    if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }
+    const seat = this.seatNear();
+    if (seat) { this.player.sitOn(seat.x, seat.z, seat.yaw); this.input.pressed.delete('KeyE'); return; }
     const p = this.player.pos;
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
     const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
