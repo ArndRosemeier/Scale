@@ -2,6 +2,15 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.017 — 2026-10-04
+
+- **Line of sight for everybody**: buildings, terrain and cars block shots — yours, the police's, criminals' and the army's (a hole blasted in a wall lets them through).
+- **Targeted powers never miss**: with a target picked (Tab or click), a power hits it — or, without a clear line or out of reach, does not go off at all (no energy spent; the target frame says why). Without a target, a power flies where you aim and hits whatever is there: a bystander, a car, a window.
+- **Explosions hurt bystanders**: army shells, rockets and bombs now knock down and injure people nearby (they count as injured, as with the creature).
+- **Police vs you**: at wanted level 3 officers shoot at you, and a SWAT van joins the pursuit; below that they still chase and arrest.
+- **Police vs the creature**: officers on foot fire at the Strider from a distance and run when it comes close — little damage, but it may turn on them.
+- Police shout what they are doing ("Take cover!", "Fall back!").
+
 ## 0.016 — 2026-10-04
 
 - **Background music**: eight new pieces for the city — a calm lo-fi day, noir jazz at night, a dark drone underground, tension when trouble is near (a robbery, robots, the creature on its way), battle when it fights, a quiet elegy afterwards, a heroic theme when you fly fast, and a menu theme. Calm music comes and goes (quiet stretches between pieces); the mood follows what happens. Darker in the rain, ducked in the pause menu.

@@ -38,6 +38,8 @@ export interface DamageSource {
   key?: string;
   /** Where it came from (the monster turns on it). */
   x?: number; y?: number; z?: number;
+  /** Extra aggro booked besides the damage (a distraction: small arms that barely scratch it). */
+  aggro?: number;
 }
 
 export interface DamageResult { dealt: number; zone: ThreatZone | null; weak: boolean }

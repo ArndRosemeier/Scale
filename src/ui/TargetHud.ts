@@ -22,6 +22,8 @@ export class TargetHud {
   private hp: HTMLDivElement;
   private hpFill: HTMLDivElement;
   private zn: HTMLDivElement;
+  /** "No line of sight" / "Out of reach" after a targeted power could not go off. */
+  private ls: HTMLDivElement;
   private zones: HTMLDivElement;
   private zoneEls: HTMLElement[] = [];
   private shown = false;
@@ -33,12 +35,13 @@ export class TargetHud {
     this.mark.innerHTML = '<i></i><i></i><i></i><i></i><b></b>';
     this.frame = document.createElement('div');
     this.frame.id = 'tframe';
-    this.frame.innerHTML = '<div class="con"></div><div class="nm"></div><div class="sub"><span class="kd"></span><span class="ds"></span></div><div class="hp"><div></div></div><div class="zn"></div>';
+    this.frame.innerHTML = '<div class="con"></div><div class="nm"></div><div class="sub"><span class="kd"></span><span class="ds"></span></div><div class="hp"><div></div></div><div class="zn"></div><div class="ls"></div>';
     this.zones = document.createElement('div');
     this.zones.id = 'tzones';
     for (let i = 0; i < 6; i++) { const e = document.createElement('i'); this.zones.append(e); this.zoneEls.push(e); }
     document.body.append(this.mark, this.frame, this.zones);
     this.zn = this.frame.querySelector('.zn')!;
+    this.ls = this.frame.querySelector('.ls')!;
     this.nm = this.frame.querySelector('.nm')!;
     this.kind = this.frame.querySelector('.kd')!;
     this.dist = this.frame.querySelector('.ds')!;
@@ -111,10 +114,13 @@ export class TargetHud {
     const st = s ? [s.frozen > 0 && 'frozen', s.burning > 0 && 'burning', s.stunned > 0 && 'stunned', s.shrink > 0 && 'shrunk', s.wet > 0 && 'wet'].filter(Boolean).join(', ') : '';
     const d = info.dist < 10 ? info.dist.toFixed(1) : Math.round(info.dist).toString();
     const zkey = weak.map((z) => `${z.name}${z.exposed ? '!' : ''}${z.sel ? '*' : ''}`).join(',');
-    const key = `${info.name}|${info.kind}|${d}|${st}|${info.con}|${info.health}|${zkey}`;
+    const refused = T.refused;
+    const key = `${info.name}|${info.kind}|${d}|${st}|${info.con}|${info.health}|${zkey}|${refused}`;
     if (key === this.last) return;
     this.last = key;
     this.nm.textContent = info.name;
+    this.ls.style.display = refused ? 'block' : 'none';
+    if (refused) this.ls.textContent = refused === 'sight' ? 'No line of sight' : 'Out of reach';
     this.kind.innerHTML = st ? `${info.kind} · <span class="st">${st}</span>` : info.kind;
     this.dist.textContent = `${d} m`;
     this.con.style.background = info.con ?? 'rgba(255,255,255,0.25)';

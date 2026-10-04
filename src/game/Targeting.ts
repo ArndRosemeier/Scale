@@ -443,6 +443,40 @@ export class Targeting {
     return bn ? { t: best, nx: bn.nx, nz: bn.nz } : null;
   }
 
+  /** As facadeRay, the distance only (Infinity: no standing panel) — the line-of-sight test's (no allocation). */
+  facadeT(ref: BuildingRef, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, tMin: number, maxT: number): number {
+    let L = this.layouts.get(ref);
+    if (!L) { L = this.w.destruction.layoutOf(ref); this.layouts.set(ref, L); }
+    const S = this.w.streamer, cs = ref.cell;
+    let best = Infinity;
+    for (const p of L.panels) {
+      const dn = dx * p.nx + dz * p.nz;
+      if (Math.abs(dn) < 1e-4) continue;
+      const t = ((p.ax - ox) * p.nx + (p.az - oz) * p.nz) / dn;
+      if (t < tMin || t >= maxT || t >= best) continue;
+      const y = oy + dy * t;
+      if (y < p.y0 || y > p.y1) continue;
+      const hx = ox + dx * t - p.ax, hz = oz + dz * t - p.az;
+      const ux = p.bx - p.ax, uz = p.bz - p.az, L2 = ux * ux + uz * uz;
+      const s = (hx * ux + hz * uz) / Math.max(1e-6, L2);
+      if (s < -0.01 || s > 1.01) continue;
+      if (!S.isAlive(cs, p.e)) continue;
+      best = t;
+    }
+    return best;
+  }
+
+  private layouts = new WeakMap<BuildingRef, ReturnType<Destruction['layoutOf']>>();
+
+  /** The last time a targeted power could not fire (no line of sight / out of reach): the target frame says so for a moment. */
+  blocked: { why: 'sight' | 'range'; t: number } | null = null;
+  /** Mark a refused shot at the current target (the frame shows it ~1.5 s). */
+  refuse(why: 'sight' | 'range'): void {
+    if (this.blocked) { this.blocked.why = why; this.blocked.t = this.time; } else this.blocked = { why, t: this.time };
+  }
+  /** Why the current target cannot be shot right now (null: it can / nothing tried lately). */
+  get refused(): 'sight' | 'range' | null { return this.blocked && this.time - this.blocked.t < 1.5 ? this.blocked.why : null; }
+
   // ------------------------------------------------------------------ Tab targeting
 
   /** Per frame (input already routed): Tab / Shift+Tab / Esc, validity, out-of-view timeout. */
@@ -476,6 +510,7 @@ export class Targeting {
     if (this.same(t, this.current) || (!t && !this.current)) return;
     this.current = t;
     this.zone = null;
+    this.blocked = null;
     this.unseen = 0;
     this.checkT = 0.5;
     this.onChange?.(t);

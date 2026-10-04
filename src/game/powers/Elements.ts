@@ -38,6 +38,7 @@ import type { VehicleRenderer } from '../../sim/VehicleRenderer';
 import type { NearFuture } from '../../future/NearFuture';
 import type { PropRenderer } from '../../props/PropRenderer';
 import type { Stimuli } from '../Stimuli';
+import type { Sight } from '../combat/sight';
 import type { Consequences, HarmEffect, HarmTarget } from '../Consequences';
 import type { AbilityId } from '../abilities/defs';
 import { statusFor, statusOf, statusList, statusCount, tickStatus, type TargetStatus } from '../../shared/status';
@@ -73,6 +74,10 @@ export interface PowerWorld {
   sound: (id: string, x: number, y: number, z: number, gain: number, pitch?: number, ref?: number) => void;
   /** Water on a spot: burning facades there die down (FacadeFires.douse). */
   douse?: (x: number, y: number, z: number, r: number, amount: number) => void;
+  /** The shared line of sight (combat/sight): a targeted power fires only with a clear line. */
+  sight?: Pick<Sight, 'clear'>;
+  /** Short feedback (a toast) for a power that could not go off. */
+  deny?: (msg: string) => void;
 }
 
 /** The power being held this frame (from the AbilitySystem). */
@@ -159,6 +164,7 @@ export class Elements {
    */
   update(dt: number, channel: Channel | null): void {
     this.time += dt;
+    this.idle = false;
     this.w.consequences.update(dt);
     const busy = channel || this.lastChannel || this.bolts.length || this.fires.length || this.quakes.length || this.vortices.length
       || this.novas.length || this.beams.length || this.patches.length || this.tiles.length || statusCount() || this.fx.active;
@@ -250,18 +256,35 @@ export class Elements {
    * cursor to whatever is there. The probe then runs from the origin, so something in the
    * way is what gets hit.
    */
-  private aim(where: 'eyes' | 'hands', range: number, lead: number, out: Aim): Aim {
+  private aim(where: 'eyes' | 'hands', range: number, lead: number, out: Aim): Aim | null {
     const T = this.w.targeting, p = this.w.player;
     const o = this.origin(where, _v);
     out.ox = o.x; out.oy = o.y; out.oz = o.z;
     const tgt = T.current;
     let dx: number, dy: number, dz: number;
-    let lock = -1;
-    if (tgt && T.alive(tgt) && T.centre(tgt, _w).distanceTo(o) < range * 1.15) {
-      lock = _w.distanceTo(o);
-      T.aimPoint(tgt, o.x, o.y, o.z, lead, _w);
+    if (tgt && T.alive(tgt)) {
+      // Targeted (combat/shot.ts): out of reach or no clear line → it does not go off; else it hits.
+      const c = T.aimPoint(tgt, o.x, o.y, o.z, Infinity, _w);
+      const cx = c.x, cy = c.y, cz = c.z;
+      const pad = this.padOf(tgt);
+      const d = c.distanceTo(o);
+      const why = d - pad > range * 1.15 ? 'range' : this.w.sight && !this.w.sight.clear(o.x, o.y, o.z, cx, cy, cz, pad, tgt.kind === 'car' ? tgt.obj : null) ? 'sight' : null;
+      if (why) { this.refuse(why); return null; }
+      const t = Math.max(0.1, d - Math.min(pad, 0.3));
+      if (isFinite(lead)) T.aimPoint(tgt, o.x, o.y, o.z, lead, _w);
       dx = _w.x - o.x; dy = _w.y - o.y; dz = _w.z - o.z;
-    } else {
+      const L = Math.hypot(dx, dy, dz) || 1;
+      out.dx = dx / L; out.dy = dy / L; out.dz = dz / L;
+      const h = out.hit;
+      h.what = 'target'; h.target = tgt; h.building = null; h.t = t; out.t = t;
+      // The impact point: on the body (unled), facing back along the line.
+      const k = Math.max(0, (d - Math.min(pad, 0.3)) / (d || 1));
+      h.x = o.x + (cx - o.x) * k; h.y = o.y + (cy - o.y) * k; h.z = o.z + (cz - o.z) * k;
+      h.nx = -out.dx; h.ny = -out.dy; h.nz = -out.dz;
+      if (!p.flying && Math.hypot(out.dx, out.dz) > 0.1) p.yaw = Math.atan2(-out.dx, -out.dz);
+      return out;
+    }
+    {
       // Through the cursor (or the crosshair while looking): what the camera ray meets beyond the player.
       const cam = this.w.camera;
       aimDir(cam, _d);
@@ -274,24 +297,40 @@ export class Elements {
     }
     const L = Math.hypot(dx, dy, dz) || 1;
     out.dx = dx / L; out.dy = dy / L; out.dz = dz / L;
+    // Untargeted: along the ray from the origin to whatever is there first (a bystander, a car, a
+    // drone, a facade, the ground) — what it meets is what it hits.
     const h = T.probe(o.x, o.y, o.z, out.dx, out.dy, out.dz, range);
     out.hit = copyHit(h, out.hit);
     out.t = h.what === 'none' ? range : h.t;
-    // Locked on: nothing in between, so it reaches the target (it may have moved off the
-    // exact ray since the aim was taken — a fast drone, a running person).
-    if (tgt && lock >= 0 && (out.hit.target?.obj !== tgt.obj) && out.t >= lock - 0.6 && lock <= range) {
-      const c = T.aimPoint(tgt, o.x, o.y, o.z, Infinity, _w);
-      out.hit.what = 'target'; out.hit.target = tgt; out.hit.building = null;
-      out.t = Math.max(0.1, c.distanceTo(o) - 0.3);
-      out.hit.t = out.t;
-      out.dx = (c.x - o.x) / (out.t + 0.3); out.dy = (c.y - o.y) / (out.t + 0.3); out.dz = (c.z - o.z) / (out.t + 0.3);
-      out.hit.x = o.x + out.dx * out.t; out.hit.y = o.y + out.dy * out.t; out.hit.z = o.z + out.dz * out.t;
-      out.hit.nx = -out.dx; out.hit.ny = -out.dy; out.hit.nz = -out.dz;
-    }
     // Face it.
     if (!p.flying && Math.hypot(out.dx, out.dz) > 0.1) p.yaw = Math.atan2(-out.dx, -out.dz);
     return out;
   }
+
+  /** How far short of a target's aim point a line may end (its body). */
+  private padOf(t: Target): number {
+    switch (t.kind) {
+      case 'car': return 0.5;
+      case 'threat': { const z = this.w.targeting.zoneOf(t.obj) ?? t.obj.zones.find((zn) => zn.weak && zn.exposed); return z ? z.r * 0.8 : 3; }
+      case 'prop': return Math.max(0.3, Math.min(1.5, t.obj.radius));
+      default: return 0.45;
+    }
+  }
+
+  /** A targeted power that cannot go off: the frame says why, a short toast (not every frame). */
+  private refuse(why: 'sight' | 'range'): void {
+    this.w.targeting.refuse(why);
+    this.refused++;
+    if (this.time - this.refuseToastT > 1.6) {
+      this.refuseToastT = this.time;
+      this.w.deny?.(why === 'sight' ? 'No line of sight to your target' : 'Your target is out of reach');
+    }
+  }
+  private refuseToastT = -9;
+  /** Targeted uses refused (no line of sight / out of reach), for the dev panel. */
+  refused = 0;
+  /** The held power did nothing this frame (refused): AbilitySystem drains no energy for it. */
+  idle = false;
   /** Yaw toward the cursor (camera yaw when the ray is near vertical or there is no cursor). */
   private cursorYaw(): number {
     aimDir(this.w.camera, _d);
@@ -484,6 +523,7 @@ export class Elements {
   private laser(dt: number, r: number, held: number): void {
     const range = LASER_RANGE[r] * this.reachK;
     const A = this.aim('eyes', range, Infinity, this.aimA);
+    if (!A) { this.idle = true; this.laserLoop?.stop(); this.laserLoop = null; return; }
     const p = this.w.player, h = p.height, k = p.k;
     const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
     // Two beams from the eyes, converging on the spot.
@@ -581,6 +621,7 @@ export class Elements {
     const k = this.w.player.k;
     const range = FIRE_RANGE[r] * this.reachK;
     const A = this.aim('hands', range, 25, this.aimA);
+    if (!A) return false;
     const b: FireBurst = { ox: A.ox, oy: A.oy, oz: A.oz, dx: A.dx, dy: A.dy, dz: A.dz, range, rank: r, t: 0, cand: [], walls: [], k };
     // Who and what is in the cone (with a line of sight from the hands).
     const cosA = Math.cos(FIRE.halfAngle);
@@ -896,6 +937,7 @@ export class Elements {
     const T = this.w.targeting;
     const reach = BOLT_REACH[r] * this.reachK;
     const A = this.aim('hands', reach, Infinity, this.aimA);
+    if (!A) return false;
     const pts: number[] = [A.ox, A.oy, A.oz];
     const struck = new Set<object>();
     let x: number, y: number, z: number;
@@ -1114,9 +1156,16 @@ export class Elements {
     const reach = GUST.reach * sk;
     let x: number, z: number, ty = -Infinity;
     const tgt = T.current;
-    if (tgt && T.alive(tgt) && T.centre(tgt, _w).distanceTo(p.pos) < reach * 1.5) { x = _w.x; z = _w.z; ty = _w.y; }
-    else {
+    if (tgt && T.alive(tgt)) {
+      // On a target: it spins up there — if the target is in reach and in sight (else it does not go off).
+      const c = T.centre(tgt, _w);
+      x = c.x; z = c.z; ty = c.y;
+      const o = this.origin('hands', _v);
+      if (c.distanceTo(p.pos) > reach * 1.5) { this.refuse('range'); return false; }
+      if (this.w.sight && !this.w.sight.clear(o.x, o.y, o.z, x, ty, z, this.padOf(tgt), tgt.kind === 'car' ? tgt.obj : null)) { this.refuse('sight'); return false; }
+    } else {
       const A = this.aim('hands', reach, Infinity, this.aimA);
+      if (!A) return false;
       // Not inside a wall: back off from a facade a little.
       const back = A.hit.what === 'building' ? GUST_RADIUS[r] * sk * 0.6 : 0;
       x = A.ox + A.dx * Math.max(2, A.t - back); z = A.oz + A.dz * Math.max(2, A.t - back);
@@ -1227,6 +1276,7 @@ export class Elements {
     const range = HYDRO_RANGE[r] * this.reachK;
     const jet = 32 * this.reachK;
     const A = this.aim('hands', range, jet, this.aimA);
+    if (!A) { this.idle = true; this.waterLoop?.stop(); this.waterLoop = null; return; }
     const sk = this.reachK;
     const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
     const grow = Math.min(1, held * 4 + 0.2);
@@ -1317,6 +1367,7 @@ export class Elements {
   private shrinkRay(r: number): boolean {
     const reach = SHRINK.reach * this.reachK;
     const A = this.aim('hands', reach, Infinity, this.aimA);
+    if (!A) return false;
     const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
     this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: 0.4, w: 0.12 * this.reachK });
     const p = this.w.player;

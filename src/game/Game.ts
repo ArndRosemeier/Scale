@@ -79,6 +79,7 @@ import { PowersScreen } from '../ui/PowersScreen';
 import { Targeting } from './Targeting';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
+import { Sight } from './combat/sight';
 import { PowerSynth } from '../audio/PowerSynth';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
@@ -114,9 +115,9 @@ export class Game {
   collision!: Collision;
   interactions!: Interactions;
   stimuli = new Stimuli();
+  audio = new Audio();
   /** Background music (src/audio/music): moods from the game state, stems loaded on first need. */
   music = new Music(this);
-  audio = new Audio();
   tex!: TextureLibrary;
   net!: RoadNet;
   population!: Population;
@@ -153,6 +154,8 @@ export class Game {
   elements!: Elements;
   /** Collateral ledger: everything the player's powers did to whom (stub for reputation / karma). */
   readonly consequences = new Consequences();
+  /** Line of sight for everybody who shoots (combat/sight). */
+  readonly sight = new Sight(this);
   targetHud!: TargetHud;
   synth!: PowerSynth;
   /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
@@ -738,7 +741,7 @@ export class Game {
       player: this.player, camera: cam, camRig: this.camRig, targeting: this.targeting, synth: this.synth, destruction: this.destruction,
       debris: this.debris, dust: this.dust, world: this.world, collision: this.collision, peds: this.peds, reactions: this.reactions,
       traffic: this.traffic, vehicles: this.vehicles, parked: () => this.parkedList, future: this.future, props: this.props,
-      stimuli: this.stimuli, consequences: this.consequences,
+      stimuli: this.stimuli, consequences: this.consequences, sight: this.sight, deny: (msg) => this.abilities.hooks.deny?.(msg),
       sound: (id, x, y, z, g, pitch = 1, ref = 6) => this.audio.play(id, x, y, z, g, pitch, ref, cam.position),
       douse: (x, y, z, r, amount) => { this.threats?.fires.douse(x, y, z, r, amount); },
     });

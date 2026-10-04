@@ -25,9 +25,16 @@
  *
  * A major threat (the Strider: `ThreatEvent.tier === 'major'`) escalates faster, with a wider
  * cordon, siren and alert area, and units keep their distance (scene points out beyond its
- * radius); officers never go in on foot against something they cannot strike
- * (`engageOnFoot === false`): they hold the lines and send people away. Levels above 2 (National
- * Guard, army and air, the last resort — THREATS_PLAN §2) plug in through `registerLevel`.
+ * radius); officers never go in to strike something that big (`engageOnFoot === false`). From
+ * level 2 (GIANT) patrol officers and SWAT on foot fire at it from a distance during its advance
+ * and rampage: they close to about GIANT.standR m of its nearest part, kneel and shoot at the part
+ * nearest them (its back over the roofs when that is hidden) with a clear line and nobody in it;
+ * they run when it comes within GIANT.fleeR, or when it charges, breathes or sweeps its tail near
+ * them. Damage is tiny against its 3000 hp — flavour and a distraction: it books to the aggro key
+ * 'police', and enough of it makes the monster turn its breath on them (Strider.keyAt).
+ *
+ * Levels above 2 (National Guard, army and air, the last resort — THREATS_PLAN §2) plug in
+ * through `registerLevel`.
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
@@ -37,10 +44,9 @@ import { VState, type Vehicle } from '../../sim/Traffic';
 import { DKind } from '../../future/Drones';
 import { ENTRANCE_L } from '../../plan/metroDims';
 import { play, goTo, stand, lookAt, setState, pursue, endPursuit, hold } from '../../sim/actors/Actor';
-import { GUNS, MUZZLE_Y, hitChance, type GunSpec } from '../crime/Firearms';
-import { POLICE, policeOutfit, type IncidentJob, type Unit } from '../crime/Police';
-import type { ThreatEvent, ThreatTarget } from '../threats/ThreatEvent';
-import type { EquipmentVisuals } from '../../items/types';
+import { GUNS, MUZZLE_Y, type GunSpec } from '../crime/Firearms';
+import { POLICE, equipSwat, type IncidentJob, type Unit } from '../crime/Police';
+import type { ThreatEvent, ThreatTarget, ThreatZone } from '../threats/ThreatEvent';
 import type { Stimulus } from '../Stimuli';
 
 export const RESPONSE = {
@@ -68,6 +74,22 @@ export const RESPONSE = {
   evacMs: 0.45, evacMaxWalk: 650,
   /** A major threat: sooner up the ladder, wider areas (m). */
   major: { up1: 10, up2: 25, cordonR: 260, sirenR: 520, alertR: 800 },
+};
+
+/** Police and SWAT on foot against a giant (the Strider): levels, distances, (tiny) damage. */
+export const GIANT = {
+  /** Response levels at which officers fire at it (2 SWAT … 4 army & air; at 5 everyone pulls out). */
+  from: 2, until: 4,
+  /** They close to about this far from its nearest body part (m), fire out to their gun's range + `extra`. */
+  standR: 48, extra: 30,
+  /** Run when its nearest part is this close (m), or while it charges / breathes / sweeps within `dangerR`; for `fleeFor` s. */
+  fleeR: 28, dangerR: 75, fleeFor: 6,
+  /** Damage per round before armour (most of its hide stops 60–85 %; it has 3000 hp). */
+  pistol: 0.5, rifle: 0.25,
+  /** Cadence: the gun's gap × this. Aggro each round books besides its damage (a nuisance: enough of it, ~25, and it turns on them). */
+  gapK: 1.5, aggro: 0.15,
+  /** It knows where the police are (its breath can go for them) this long after their last shot (s). */
+  spotT: 10,
 };
 
 /**
@@ -107,6 +129,9 @@ interface Mind {
   kneel: boolean;
   /** Holding where they stand (the way to their post blocked) for this long. */
   stayT: number;
+  /** A giant: running from it this long; the body part they shoot at (null: no clear line). */
+  fleeT: number;
+  gz: ThreatZone | null;
 }
 interface RJob extends IncidentJob { role: Role; inc: Incident; slot: number; turn?: { x0: number; z0: number; y0: number; x1: number; z1: number; y1: number; t: number } }
 
@@ -146,7 +171,11 @@ export class ResponseDirector {
   /** Levels 3+ (stage 2: National Guard, army and air; the last resort). */
   private levels = new Map<number, LevelHandler>();
   private minds = new WeakMap<PedAgent, Mind>();
-  stats = { incidents: 0, evacuated: 0, routed: 0, msAvg: 0, shots: 0, hits: 0, downed: 0, gaveUp: 0, spots: 0, heldFire: 0 };
+  stats = { incidents: 0, evacuated: 0, routed: 0, msAvg: 0, shots: 0, hits: 0, downed: 0, gaveUp: 0, spots: 0, heldFire: 0, giantShots: 0, giantDealt: 0, giantFled: 0 };
+  /** Where the police last fired at a giant from (its breath may go for them: Strider.keyAt). */
+  private giantSpot = { x: 0, y: 0, z: 0, t: -1e9 };
+  private giantAggro = 0;
+  private hookedGiants = new WeakSet<object>();
 
   constructor(private g: Game) {
     g.reactions.onEvacuate = (a, s) => this.evacuate(a, s);
@@ -333,6 +362,10 @@ export class ResponseDirector {
     // Every officer shoots at what comes within range and in sight; at level 2 (SWAT: always) they go after it.
     const armed = ev.active && ev.engageOnFoot !== false && !!ev.shoot;
     const advance = armed && (j.role === 'swat' || (j.role === 'patrol' && inc.level >= 2));
+    // A giant: from level GIANT.from the officers on foot (not the roadblocks) fire at it from a distance.
+    const mode = (ev as { mode?: string }).mode;
+    const giant = ev.active && ev.engageOnFoot === false && !!ev.actors?.length && j.role !== 'block' && inc.level >= GIANT.from && inc.level <= GIANT.until && !inc.tone && (mode === 'advance' || mode === 'rampage');
+    if (giant) this.hookGiant(ev);
     let i = 0;
     for (const o of u.officers) {
       const act = o.actor;
@@ -341,6 +374,8 @@ export class ResponseDirector {
       act.mood = 'focused';
       const M = this.mind(o, i);
       if (armed && this.engage(j, o, M, dt, advance)) { i++; continue; }
+      if (giant && this.giant(j, o, M, dt)) { i++; continue; }
+      if (M.fleeT > 0) M.fleeT = 0;
       this.lower(o, M, dt);
       // Hold: beside the car, facing the trouble (a roadblock faces out, towards the traffic).
       const side = i & 1 ? 1 : -1, row = i >> 1;
@@ -375,7 +410,7 @@ export class ResponseDirector {
   private mind(o: PedAgent, slot: number): Mind {
     let M = this.minds.get(o);
     if (!M) {
-      M = { tgt: null, pickT: Math.random() * 0.3, los: false, spot: null, spotFor: null, tries: 0, ignore: [], ignoreT: [], fireT: 0.4 + Math.random() * 0.8, heldT: 0, idleT: 99, kneel: (slot & 1) === 1, stayT: 0 };
+      M = { tgt: null, pickT: Math.random() * 0.3, los: false, spot: null, spotFor: null, tries: 0, ignore: [], ignoreT: [], fireT: 0.4 + Math.random() * 0.8, heldT: 0, idleT: 99, kneel: (slot & 1) === 1, stayT: 0, fleeT: 0, gz: null };
       this.minds.set(o, M);
     }
     return M;
@@ -414,7 +449,8 @@ export class ResponseDirector {
     const guns = this.g.crime.guns;
     const list = ev.targetsNear(o.x, o.z, spec.range + (advance ? RESPONSE.seekR : 0));
     const dist = (t: ThreatTarget) => Math.hypot(t.x - o.x, (t.grounded ? t.y + 0.45 : t.y) - eyeY, t.z - o.z);
-    const sight = (t: ThreatTarget) => guns.los(o.x, eyeY, o.z, t.x, t.grounded ? t.y + 0.45 : t.y, t.z);
+    const car = this.carOf(o);
+    const sight = (t: ThreatTarget) => guns.los(o.x, eyeY, o.z, t.x, t.grounded ? t.y + 0.45 : t.y, t.z, 0.7, car);
     const cur = M.tgt;
     const ok = (t: ThreatTarget | null) => !!t && t.on !== false && !M.ignore.includes(t);
     if (ok(cur) && list.includes(cur!) && dist(cur!) <= spec.range && sight(cur!)) { M.los = true; return; }
@@ -437,7 +473,13 @@ export class ResponseDirector {
     M.los = los;
   }
 
-  /** Aim and fire (cadence, turned towards it, nobody in the line); rounds that hit wear it down. */
+  /** The car an officer came in (their cover: it never blocks their own line). */
+  private carOf(o: PedAgent): object | null {
+    for (const inc of this.incidents) for (const j of inc.jobs) if (j.unit && j.unit.officers.includes(o)) return j.unit.car;
+    return null;
+  }
+
+  /** Aim and fire (cadence, turned towards it, nobody in the line); every round fired hits (combat/shot.ts) and wears it down. */
   private shoot(j: RJob, o: PedAgent, M: Mind, t: ThreatTarget, spec: GunSpec, eyeY: number, ty: number, d3: number, advance: boolean): boolean {
     const g = this.g, act = o.actor!, ev = j.inc.ev;
     stand(act);
@@ -463,9 +505,8 @@ export class ResponseDirector {
       return true;
     }
     M.heldT = 0;
-    const p = hitChance(spec, d3, !t.grounded, t.speed ?? 0);
-    let hits = 0;
-    for (let k = 0; k < spec.burst; k++) if (Math.random() < p) hits++;
+    void d3;
+    const hits = spec.burst;
     guns.fire(o, spec, mx, eyeY, mz, t.x, ty, t.z, hits, true, t.grounded, 'police');
     this.stats.shots += spec.burst;
     this.stats.hits += hits;
@@ -558,6 +599,123 @@ export class ResponseDirector {
       }
       j.inc.stats.strikes++;
     }
+    return true;
+  }
+
+  // ================================================================== officers against a giant
+
+  /** Tell the monster where the police are (its breath may go for whoever hurt it most: Strider.keyAt). */
+  private hookGiant(ev: ThreatEvent): void {
+    if (this.hookedGiants.has(ev)) return;
+    this.hookedGiants.add(ev);
+    const S = ev as { keyAt?: ((key: string) => { x: number; y: number; z: number } | null) | null };
+    if (!('keyAt' in S)) return;
+    const spot = this.giantSpot, out = { x: 0, y: 0, z: 0 };
+    S.keyAt = (key) => {
+      if (key !== 'police' || this.g.response !== this) return null;
+      const t = this.incidents.reduce((m, i) => Math.max(m, i.t), 0);
+      if (t - spot.t > GIANT.spotT) return null;
+      out.x = spot.x; out.y = spot.y; out.z = spot.z;
+      return out;
+    };
+  }
+
+  /**
+   * An officer and a giant (GIANT): run when it is close or lashing out near them; else close to
+   * about GIANT.standR of its nearest part, kneel and fire at that part (its back when that is
+   * hidden) — a clear line (the shared line of sight; their own car is cover) and nobody in it.
+   * False: nothing to do about it from here (they hold their post as usual).
+   */
+  private giant(j: RJob, o: PedAgent, M: Mind, dt: number): boolean {
+    const inc = j.inc, ev = inc.ev, A = ev.actors![0], act = o.actor!;
+    if (!A.targetable) return false;
+    const swat = j.role === 'swat';
+    const spec = swat ? GUNS.rifle : GUNS.pistol;
+    const eyeY = o.y + (M.kneel ? MUZZLE_Y.kneel : MUZZLE_Y.stand);
+    // Its nearest body part.
+    let nd = Infinity, nz: ThreatZone | null = null;
+    for (const z of A.zones) {
+      const d = Math.hypot(z.x - o.x, z.y - eyeY, z.z - o.z) - z.r;
+      if (d < nd) { nd = d; nz = z; }
+    }
+    if (!nz) return false;
+    // Run: it is right there, or it charges / breathes / sweeps its tail near them.
+    const mon = ev as { act?: string | null; topAggro?: () => { key: string } | null };
+    const lash = mon.act;
+    const busy = lash === 'charge' || lash === 'breath' || lash === 'swipe';
+    // (Its breath coming their way: the police are whom it is angriest with.)
+    const atUs = (lash === 'charge' || lash === 'breath') && mon.topAggro?.()?.key === 'police';
+    if (M.fleeT <= 0 && (nd < GIANT.fleeR || (busy && nd < GIANT.dangerR) || atUs)) { M.fleeT = GIANT.fleeFor; this.stats.giantFled++; }
+    if (M.fleeT > 0) {
+      M.fleeT -= dt;
+      const dx = o.x - A.x, dz = o.z - A.z, l = Math.hypot(dx, dz) || 1;
+      if (act.action?.id === 'aim_pistol' || act.action?.id === 'aim_rifle') act.action = null;
+      act.move = null;
+      act.mood = 'afraid';
+      endPursuit(act);
+      goTo(act, o.x + (dx / l) * 14, o.z + (dz / l) * 14, POLICE.run);
+      setState(act, 'run');
+      M.gz = null;
+      return true;
+    }
+    act.mood = 'focused';
+    const reach = spec.range + GIANT.extra;
+    // Too far to matter: hold the post; within a run of it: close in (along the sidewalks, given up when stuck).
+    if (nd > reach) {
+      if (nd > reach + 70 || M.stayT > 0) { M.stayT = Math.max(0, M.stayT - dt); return false; }
+      const dx = o.x - nz.x, dz = o.z - nz.z, l = Math.hypot(dx, dz) || 1;
+      const sx = nz.x + (dx / l) * (GIANT.standR + nz.r), sz = nz.z + (dz / l) * (GIANT.standR + nz.r);
+      if (act.action?.id === 'aim_pistol' || act.action?.id === 'aim_rifle') act.action = null;
+      act.move = null;
+      this.g.crime.police.chase(o, { x: sx, z: sz }, POLICE.run);
+      if (pursue(act, dt, 30) === 'give_up') { endPursuit(act); M.stayT = 8; }
+      lookAt(act, nz.x, nz.y, nz.z);
+      return true;
+    }
+    endPursuit(act);
+    // What to shoot at: the nearest part, else its back over the roofs (one or two rays, twice a second).
+    M.pickT -= dt;
+    if (M.pickT <= 0) {
+      M.pickT = 0.5 + Math.random() * 0.25;
+      const guns = this.g.crime.guns, car = this.carOf(o);
+      M.gz = null;
+      if (guns.los(o.x, eyeY, o.z, nz.x, nz.y, nz.z, nz.r * 0.8, car)) M.gz = nz;
+      else {
+        const back = A.zones.find((z) => z.id === 'back');
+        if (back && back !== nz && guns.los(o.x, eyeY, o.z, back.x, back.y + back.r * 0.5, back.z, back.r * 0.8, car)) M.gz = back;
+      }
+    }
+    const Z = M.gz;
+    stand(act);
+    lookAt(act, Z ? Z.x : nz.x, Z ? Z.y : nz.y, Z ? Z.z : nz.z);
+    if (!Z) { this.lower(o, M, dt); return true; }
+    M.idleT = 0;
+    setState(act, 'fight');
+    act.held = spec.item;
+    act.move = M.kneel ? 'crouch' : null;
+    hold(act, spec.aim);
+    M.fireT -= dt;
+    let da = Math.atan2(-(Z.x - o.x), -(Z.z - o.z)) - o.heading;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    if (Math.abs(da) > 0.35 || M.fireT > 0) return true;
+    M.fireT = spec.gap * GIANT.gapK * (0.85 + Math.random() * 0.3);
+    const fx = -Math.sin(o.heading), fz = -Math.cos(o.heading);
+    const mx = o.x + fx * 0.55, mz = o.z + fz * 0.55;
+    const guns = this.g.crime.guns;
+    const ty = Z.id === 'back' ? Z.y + Z.r * 0.5 : Z.y;
+    if (!guns.clear(o, mx, eyeY, mz, Z.x, ty, Z.z, null, false)) { this.stats.heldFire++; return true; }
+    guns.fire(o, spec, mx, eyeY, mz, Z.x, ty, Z.z, spec.burst, true, false, 'police');
+    guns.stats.atGiant += spec.burst;
+    // (The nuisance is handed over in lumps: its aggro table forgets entries under 1.)
+    this.giantAggro += GIANT.aggro * spec.burst;
+    const lump = this.giantAggro >= 1.5 ? this.giantAggro : 0;
+    if (lump) this.giantAggro = 0;
+    const r = A.damage(Z, (swat ? GIANT.rifle : GIANT.pistol) * spec.burst, { cause: 'police', key: 'police', x: o.x, y: o.y + 1, z: o.z, aggro: lump });
+    this.stats.giantShots += spec.burst;
+    this.stats.giantDealt += r.dealt;
+    const sp = this.giantSpot;
+    sp.x = o.x; sp.y = o.y + 1; sp.z = o.z; sp.t = inc.t;
     return true;
   }
 
@@ -722,24 +880,6 @@ export class ResponseDirector {
 const BLUE = new THREE.Color(0.6, 1.4, 4);
 /** Angles (rad) round a target to try firing spots at, from the officer's side outwards. */
 const SPOT_TURN = [0, 0.7, -0.7, 1.4, -1.4, 2.3, -2.3, Math.PI];
-
-/** The tactical team: dark overalls, helmet-like cap, tougher and stronger. */
-function equipSwat(o: PedAgent): void {
-  const act = o.actor;
-  if (!act) return;
-  const seed = o.cit.seed;
-  const dark: [number, number, number] = [0.03, 0.035, 0.045], grey: [number, number, number] = [0.12, 0.13, 0.15];
-  const v = (primary: [number, number, number], secondary: [number, number, number], k: number) => ({ shape: 'cloth', seed: seed + k, primary, secondary, accent: [0.2, 0.22, 0.25], material: 'plain', glow: 0 });
-  act.outfit = {
-    ...policeOutfit(seed),
-    chest: { defId: 'shirt', visual: v(grey, dark, 1) },
-    back: { defId: 'jacket', visual: v(dark, grey, 2) },
-    legs: { defId: 'trousers', visual: v(dark, dark, 3) },
-    head: { defId: 'cap', visual: v(dark, dark, 5) },
-  } as unknown as EquipmentVisuals;
-  act.hp = act.maxHp = 160;
-  act.strength = 2.2;
-}
 
 function angle(a: number): number {
   while (a > Math.PI) a -= Math.PI * 2;

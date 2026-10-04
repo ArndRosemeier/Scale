@@ -113,7 +113,7 @@ export function gawkersNear(peds: { neighbours(x: number, z: number, r: number, 
   return n;
 }
 
-export type DownCause = 'player' | 'collapse' | 'accident' | 'threat' | 'police' | 'other';
+export type DownCause = 'player' | 'collapse' | 'accident' | 'threat' | 'police' | 'military' | 'other';
 
 
 const MAX_AGENTS = 2600;

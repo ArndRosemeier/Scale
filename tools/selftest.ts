@@ -26,11 +26,13 @@ import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
+import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
+import { GUNS, DRONE_PLATING, hitRate } from '../src/game/crime/Firearms';
+import { LineOfSight, LOS, type LosCar, type LosWorld } from '../src/game/combat/los';
+import { resolveShot, newShot, type ShotTrace } from '../src/game/combat/shot';
 import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
 import { parseStemManifest } from '../src/audio/music/StemPlayer';
 import { readFileSync, existsSync } from 'node:fs';
-import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
-import { GUNS, DRONE_PLATING, hitChance, hitRate } from '../src/game/crime/Firearms';
 
 let failures = 0;
 const check = (ok: boolean, msg: string) => {
@@ -1205,15 +1207,18 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   for (t = 0; t < 40 && !capped; t += 0.1) if (pursue(f, 0.1, 30) === 'give_up') capped = t.toFixed(1);
   check(capped !== '' && Math.abs(+capped - 30) < 0.3, `actors: a pursuit gives up at its time cap (${capped} s)`);
   // Guns: a pair of officers brings a drone down in a few seconds; a robot takes them longer; a
-  // robber's gun stings the player only a little; all well short of a power (one blow).
-  const droneS = Math.ceil(DRONE_PLATING / GUNS.pistol.drone) / hitRate(GUNS.pistol, 2, 20, true, 3);
-  const robotS = 600 / (hitRate(GUNS.pistol, 2, 15, false, 3) * GUNS.pistol.machine);
-  const playerHp = hitRate(GUNS.crook, 1, 10, false, 5) * GUNS.crook.player;
-  check(droneS > 2 && droneS < 9, `guns: two officers' pistols bring a hovering drone down in ${droneS.toFixed(1)} s`);
-  check(robotS > 6 && robotS < 30, `guns: two officers wear a rogue robot down in ${robotS.toFixed(1)} s`);
-  check(playerHp > 0.3 && playerHp < 2, `guns: an armed robber costs the player ${playerHp.toFixed(2)} hp/s (regen ${7} hp/s out of a fight)`);
-  check(hitChance(GUNS.pistol, 5, false, 0) > hitChance(GUNS.pistol, 35, false, 0) && hitChance(GUNS.pistol, 20, true, 0) < hitChance(GUNS.pistol, 20, false, 0), 'guns: harder far off and in the air');
-  check(GUNS.crook.player < 22 && GUNS.rifle.player < 22, 'guns: no single round knocks the player down (HEALTH.knockAt 22)');
+  // robber's gun stings the player only a little; all well short of a power (one blow). Every
+  // round fired hits (a clear line or no shot), so these are the plain rates.
+  const droneS = Math.ceil(DRONE_PLATING / GUNS.pistol.drone) / hitRate(GUNS.pistol, 2);
+  const robotS = 600 / (hitRate(GUNS.pistol, 2) * GUNS.pistol.machine);
+  // (A robber fires every 2.6–4.4 s: GUNMAN.gap; officers at the player: their gap × POLICE.playerGapK 2.5.)
+  const playerHp = GUNS.crook.player / 3.5;
+  const copHp = hitRate(GUNS.pistol, 1) / 2.5 * GUNS.pistol.player, swatHp = hitRate(GUNS.rifle, 1) / 2.5 * GUNS.rifle.player;
+  check(droneS > 2.5 && droneS < 6, `guns: two officers' pistols bring a hovering drone down in ${droneS.toFixed(1)} s (≈ 4)`);
+  check(robotS > 8 && robotS < 14, `guns: two officers wear a rogue robot down in ${robotS.toFixed(1)} s (≈ 11)`);
+  check(playerHp > 0.6 && playerHp < 1.5, `guns: an armed robber costs the player ${playerHp.toFixed(2)} hp/s (≈ 1; regen 7 hp/s out of a fight)`);
+  check(copHp < 2.5 && swatHp < 2.5, `guns: an officer at wanted 3 costs the player ${copHp.toFixed(2)} hp/s, SWAT ${swatHp.toFixed(2)} hp/s`);
+  check(GUNS.crook.player < 22 && GUNS.rifle.player * GUNS.rifle.burst < 22 && GUNS.pistol.player < 22, 'guns: no single trigger pull knocks the player down (HEALTH.knockAt 22)');
   console.log(`actors & guns: stuck after ${STUCK.window} s, drone ${droneS.toFixed(1)} s, robot ${robotS.toFixed(1)} s, robber ${playerHp.toFixed(2)} hp/s`);
 }
 
@@ -1263,6 +1268,96 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     for (const list of Object.values(set?.layers ?? {})) for (const f of list ?? []) { files++; check(existsSync(`public/music/${f}`), `music: ${f} exists`); }
   }
   console.log(`music: ${MOODS.length} moods, ${files} stems, calm share ${Math.round(share * 100)} %`);
+}
+
+// ------------------------------------------------------------------ line of sight and shots (combat/los, combat/shot)
+// One rule for everybody: buildings, terrain and cars block a line (people never do); a holed
+// facade lets it through; a targeted shot without a clear line does not fire, with one it always
+// hits; an untargeted one hits whatever is on its ray — the bystander behind a miss.
+{
+  const cacheT = LOS.cacheT;
+  LOS.cacheT = 0;
+  const box = { low: 0, top: 20 };
+  const cars: LosCar[] = [];
+  let hill = 0, holes = false;
+  const world: LosWorld = {
+    building: (x, z) => (x > 10 && x < 20 && z > -5 && z < 5 ? box : null),
+    ground: (_x, z) => (z > 30 && z < 34 ? hill : 0),
+    cars: (x0, z0, x1, z1, out) => { let n = 0; for (const c of cars) if (c.x > x0 - 3 && c.x < x1 + 3 && c.z > z0 - 3 && c.z < z1 + 3) out[n++] = c; return n; },
+  };
+  const holed: LosWorld = { ...world, panel: () => (holes ? Infinity : 0) };
+  const los = new LineOfSight(world, () => 0), losH = new LineOfSight(holed, () => 0);
+  const car = (kind: string, x: number, z: number): LosCar => ({ x, y: 0, z, yaw: 0, length: 4.5, width: 1.8, kind, state: 0, alive: true });
+  // Open street.
+  check(los.clear(0, 1.42, 0, 0, 1.25, 25), 'los: an open street is a clear line');
+  // Buildings block; a line up over the roof to a drone does not touch it.
+  check(!los.clear(0, 1.42, 0, 30, 1.25, 0) && los.last === 'building', `los: a building blocks the line (${los.last})`);
+  check(los.clear(0, 1.42, 0, 30, 60, 0), 'los: a line over the roof (to a drone) is clear');
+  // A hole blasted in the wall lets it through (no facade panel standing there); intact: blocked.
+  holes = true;
+  check(losH.clear(0, 5, 0, 30, 5, 0), 'los: a line through a holed facade is clear');
+  holes = false;
+  check(!losH.clear(0, 5, 0, 30, 5, 0), 'los: an intact facade blocks it');
+  // Cars block at chest height (parked or moving: the same boxes); a line up to a drone passes over.
+  cars.push(car('sedan', 0, 10));
+  check(!los.clear(0, 1.42, 0, 0, 1.25, 20) && los.last === 'car', `los: a car in between blocks the line (${los.last})`);
+  check(los.clear(0, 1.42, 0, 0, 12, 20), 'los: a line up over the car (to a drone) is clear');
+  check(los.clear(0, 1.42, 0, 0, 1.25, 20, LOS.pad, cars[0]), "los: the shooter's own car (cover) does not block their line");
+  check(los.clear(0, 1.42, 0, 0, 0.75, 10, 0.5), 'los: a car does not hide itself (it is the target)');
+  check(los.clear(0, 1.42, -2, 3, 1.25, 20), 'los: a line past the car is clear');
+  cars[0] = car('bus', 0, 10);
+  check(!los.clear(0, 2.4, 0, 0, 2.4, 20), 'los: a bus stands taller than a car (blocks at 2.4 m)');
+  cars[0] = car('sedan', 0, 10);
+  check(los.clear(0, 2.4, 0, 0, 2.4, 20), 'los: …a sedan does not (1.5 m)');
+  cars.length = 0;
+  // Terrain: a bank of earth between.
+  hill = 4;
+  check(!los.clear(0, 1.42, 25, 0, 1.25, 40) && los.last === 'terrain', `los: a bank of earth blocks it (${los.last})`);
+  hill = 0;
+  // Shots. A target behind the building: no shot at all ('sight'); beyond reach: 'range'.
+  type Body = { name: string; x: number; z: number };
+  const target: Body = { name: 'target', x: 30, z: 0 }, bystander: Body = { name: 'bystander', x: 3, z: 25 }, inLine: Body = { name: 'in line', x: 0, z: 12 };
+  const bodies: Body[] = [target, bystander, inLine];
+  const trace: ShotTrace<Body> = {
+    trace(ox, oy, oz, dx, dy, dz, maxT) {
+      const wall = los.block(ox, oy, oz, ox + dx * maxT, oy + dy * maxT, oz + dz * maxT, 0);
+      let best = Math.min(wall, maxT), hit: Body | null = null;
+      for (const b of bodies) {
+        const t = (b.x - ox) * dx + (b.z - oz) * dz;
+        if (t <= 0 || t >= best) continue;
+        const px = ox + dx * t - b.x, pz = oz + dz * t - b.z, y = oy + dy * t;
+        if (Math.hypot(px, pz) < 0.4 && y > 0 && y < 1.8) { best = t; hit = b; }
+      }
+      return { t: hit || wall < maxT ? best : Infinity, body: hit };
+    },
+  };
+  const out = newShot<Body>();
+  resolveShot(los, trace, 0, 1.42, 0, { body: target, x: 30, y: 1.2, z: 0, pad: 0.45 }, 0, 0, 1, 60, out);
+  check(!out.fired && out.why === 'sight', `shot: targeted without a line of sight does not fire (${out.fired} ${out.why})`);
+  resolveShot(los, trace, 0, 1.42, 0, { body: target, x: 30, y: 1.2, z: 0, pad: 0.45 }, 0, 0, 1, 20, out);
+  check(!out.fired && out.why === 'range', `shot: targeted beyond reach does not fire (${out.why})`);
+  // A target out in the open with someone standing in the line: it fires and hits the target.
+  target.x = 0; target.z = 25;
+  resolveShot(los, trace, 0, 1.42, 0, { body: target, x: 0, y: 1.2, z: 25, pad: 0.45 }, 0, 0, 1, 60, out);
+  check(out.fired && out.body === target, `shot: targeted with a clear line always hits the target (${out.body?.name})`);
+  // Untargeted, aimed a little off the target: on along the ray into the bystander behind it.
+  inLine.x = -5;
+  const ax = 3, az = 25, al = Math.hypot(ax, az);
+  resolveShot(los, trace, 0, 1.42, 0, null, ax / al, -0.17 / al, az / al, 60, out);
+  check(out.fired && out.body === bystander, `shot: an untargeted miss hits the bystander behind (${out.body?.name ?? 'nothing'})`);
+  // …and with nobody there it ends on the wall (a surface, no body).
+  resolveShot(los, trace, 0, 1.42, 0, null, 1, 0, 0, 60, out);
+  check(out.fired && out.body === null && Math.abs(out.t - 10) < 1.3, `shot: an untargeted shot into a wall stops there (${out.t.toFixed(1)} m)`);
+  // Cost (no cache), and the cache.
+  const t0 = performance.now();
+  let n = 0;
+  for (let k = 0; k < 2000; k++) { los.clear(Math.sin(k) * 30, 1.4, Math.cos(k) * 30, Math.cos(k) * 25, 1.2, Math.sin(k * 1.3) * 25); n++; }
+  const per = (performance.now() - t0) / n;
+  LOS.cacheT = cacheT;
+  const lc = new LineOfSight(world, () => 1);
+  for (let k = 0; k < 10; k++) lc.clear(0, 1.42, 0, 30, 1.25, 0);
+  check(lc.stats.rays === 1 && lc.stats.cached === 9, `los: the same line is cached (${lc.stats.rays} traced, ${lc.stats.cached} cached)`);
+  console.log(`line of sight: ${(per * 1000).toFixed(1)} µs a line (headless boxes)`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

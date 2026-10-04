@@ -6,8 +6,10 @@
  *    ≤ ARMY.maxTracers at once), muzzle flashes and smoke puffs (its particles);
  *  - projectiles: tank shells, rockets with smoke trails, bombs, artillery shells — each resolves
  *    where it lands (a hit on the monster, else the street or a facade);
- *  - explosions: a fireball, smoke, chips and dust, a `gunfire` stimulus; destruction impacts from
- *    the army's fire draw on a token bucket (≤ ARMY.impactsPerS a second);
+ *  - explosions: a fireball, smoke, chips and dust, a `gunfire` stimulus; people within the blast
+ *    are knocked down and hurt (an area effect hits bystanders: injured on the casualty ledger,
+ *    cause 'military'; never dead); destruction impacts from the army's fire draw on a token
+ *    bucket (≤ ARMY.impactsPerS a second);
  *  - searchlights at night: emissive beam ribbons from the vehicles, sweeping over the monster;
  *  - sandbag walls (instanced, the shared vehicle material: one draw call);
  *  - the artillery's flashes on the horizon, the boom arriving later (sound at 343 m/s).
@@ -18,6 +20,7 @@ import { BeamStyle, DecalKind } from '../../powers/ElementFx';
 import { createInstancedVehicleGeometry } from '../../../props/vehicles';
 import { sandbagWall } from '../../../props/military';
 import { ARMY } from './BattleModel';
+import { PState, type PedAgent } from '../../../sim/Pedestrians';
 
 const FIRE_HOT = new THREE.Color(3.2, 1.6, 0.45), FIRE_END = new THREE.Color(0.6, 0.12, 0.02);
 const SMOKE = new THREE.Color(0.16, 0.15, 0.14), SMOKE_L = new THREE.Color(0.42, 0.41, 0.4);
@@ -51,7 +54,7 @@ export class ArmyFx {
   private fires: { x: number; y: number; z: number; t: number }[] = [];
   private _m = new THREE.Matrix4();
   private _q = new THREE.Quaternion();
-  stats = { tracers: 0, peakTracers: 0, projectiles: 0, impacts: 0, impactsSkipped: 0, explosions: 0 };
+  stats = { tracers: 0, peakTracers: 0, projectiles: 0, impacts: 0, impactsSkipped: 0, explosions: 0, knocked: 0 };
 
   constructor(private g: Game) {
     const geo = createInstancedVehicleGeometry(sandbagWall(), SANDBAG_CAP);
@@ -103,7 +106,17 @@ export class ArmyFx {
     // Stray splash only: the army never aims at the player (a near miss stings a little).
     const r = 3 + size * 2.5;
     if (d < r && g.player.pos.y < y + r) g.crime.health.damage(6 * size * (1 - d / r), 'military', x, z);
+    // People in the blast (an area effect hits bystanders): knocked down, injured.
+    for (const a of g.peds.neighbours(x, z, r, this.nb)) {
+      if (!a.alive || a.inside || a.state === PState.Down || Math.abs(a.y + 0.9 - y) > r) continue;
+      const da = Math.hypot(a.x - x, a.z - z);
+      if (da > r) continue;
+      g.reactions.knockDown(a, x, z, 3 + 8 * (1 - da / r), 'military');
+      g.consequences.record('army', 'person', 'knockdown', a.x, a.z, a, 'military');
+      this.stats.knocked++;
+    }
   }
+  private nb: PedAgent[] = [];
 
   /** A destruction impact from the army's fire, within the budget (−1: none left this moment). */
   impact(x: number, y: number, z: number, r: number, J: number, dx: number, dy: number, dz: number, kind: 'wall' | 'stomp' = 'wall'): number {

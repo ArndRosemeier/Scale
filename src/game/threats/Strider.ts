@@ -181,6 +181,8 @@ export class Strider implements ThreatEvent, ThreatActor {
   airTargets: AirProvider[] = [];
   /** The army (response/forces): where a squad (an aggro key) stands now — its breath and roars go for them. */
   unitAt: ((key: string) => { x: number; y: number; z: number } | null) | null = null;
+  /** Others it can turn on by aggro key (the police on foot: ResponseDirector GIANT). */
+  keyAt: ((key: string) => { x: number; y: number; z: number } | null) | null = null;
   /** The army: its blows, for the units standing there. */
   onBlow: ((kind: StriderBlow, x: number, y: number, z: number, r: number) => void) | null = null;
   mode: Mode = 'emerge';
@@ -293,7 +295,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.stats.damage += dealt;
     if (weak) this.stats.weakHits++;
     const key = src.key ?? src.cause;
-    this.aggro.set(key, (this.aggro.get(key) ?? 0) + dealt + amount * 0.02);
+    this.aggro.set(key, (this.aggro.get(key) ?? 0) + dealt + amount * 0.02 + (src.aggro ?? 0));
     if (src.cause === 'player' && weak && dealt > 20) this.g.progress.addKarma(STRIDER.karma.weak, 'hit the monster where it hurts');
     this.react(Z, dealt, weak, src);
     return { dealt, zone: Z, weak };
@@ -853,7 +855,7 @@ export class Strider implements ThreatEvent, ThreatActor {
    */
   private hostileTarget(): { kind: 'player' | 'point'; x: number; y: number; z: number } | null {
     const g = this.g, p = g.player.pos;
-    const at = (key: string) => (key === 'player' ? { x: p.x, y: p.y + g.player.height * 0.5, z: p.z } : this.unitAt?.(key) ?? null);
+    const at = (key: string) => (key === 'player' ? { x: p.x, y: p.y + g.player.height * 0.5, z: p.z } : this.unitAt?.(key) ?? this.keyAt?.(key) ?? null);
     const t = angriestInReach(this.aggro, at, this.x, this.z, STRIDER.breathRange * 0.95);
     return t ? { kind: t.key === 'player' ? 'player' : 'point', x: t.x, y: t.y, z: t.z } : null;
   }

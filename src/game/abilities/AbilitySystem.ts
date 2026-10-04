@@ -36,6 +36,8 @@ export interface AbilityHooks {
 /** The elemental layer: tap powers go off through it (true: it went off). */
 export interface PowerEffects {
   fire(id: AbilityId, rank: number): boolean;
+  /** The held power did nothing last frame (a target out of sight / reach): no energy for it. */
+  readonly idle?: boolean;
 }
 
 const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
@@ -240,7 +242,7 @@ export class AbilitySystem {
     c.t += dt;
     c.rank = this.rank(c.id);
     const drain = DRAIN[c.id] ?? 0;
-    if (drain > 0) {
+    if (drain > 0 && !this.effects?.idle) {
       if (this.energy < drain * dt) { this.hooks.deny?.('Out of energy'); this.channel = null; this.channelSrc = null; return; }
       this.energy -= drain * dt;
     }

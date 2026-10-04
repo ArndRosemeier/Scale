@@ -336,6 +336,7 @@ body.looking #crosshair { display: block; }
 #tframe .hp { margin-top: 6px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.1); overflow: hidden; display: none; }
 #tframe .hp > div { height: 100%; width: 100%; background: #7fc97f; }
 #tframe .st { color: #b8d8ff; }
+#tframe .ls { display: none; margin-top: 4px; font-size: 11px; font-weight: 600; color: #ff9a7a; }
 #tframe .zn { margin-top: 4px; font-size: 11px; color: #8d99a5; display: none; gap: 8px; }
 #tframe .zn span.on { color: #ffd27a; text-shadow: 0 0 6px rgba(255, 170, 60, 0.9); }
 /* Weak spots of a big threat: rings on its body (bright and pulsing while exposed). */

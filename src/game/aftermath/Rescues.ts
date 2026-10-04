@@ -106,11 +106,11 @@ export class Rescues {
 
   constructor(private g: Game, private A: Aftermath) {
     this.rng = new Rng(deriveSeed(g.settings.seed, 'rescues'));
-    // Knocked down by a monster, a collapse in an incident, a blast: injured (counted; looked after).
+    // Knocked down by a monster, a collapse in an incident, a blast (the army's shells, rockets, bombs): injured (counted; looked after).
     const prev = g.reactions.onKnockDown;
     g.reactions.onKnockDown = (a, fx, fz, power, cause) => {
       prev?.(a, fx, fz, power, cause);
-      if ((cause === 'threat' || cause === 'collapse') && !a.actor && A.rescueArea(a.x, a.z)) this.knocked(a);
+      if ((cause === 'threat' || cause === 'collapse' || cause === 'military') && !a.actor && A.rescueArea(a.x, a.z)) this.knocked(a);
     };
   }
 

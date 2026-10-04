@@ -42,7 +42,7 @@ import { Strider, STRIDER, STRIDER_ZONES, type StriderBlow } from '../../threats
 import type { ThreatZone } from '../../threats/ThreatEvent';
 import type { Incident } from '../ResponseDirector';
 import {
-  ARMY, FORCE, hurtUnit, land, levelSquads, makeSquad, makeUnit, pathAt, pickZone, simulateBattle, stepForces, volley,
+  ARMY, FORCE, aimedVolley, hurtUnit, land, levelSquads, makeSquad, makeUnit, pathAt, pickZone, simulateBattle, stepForces, volley,
   type ForceKind, type ForceOps, type ForceUnit, type MonsterSpec, type MonsterView, type Squad,
 } from './BattleModel';
 import { ArmyFx } from './ArmyFx';
@@ -88,7 +88,7 @@ export class Forces {
   private devDone = false;
   private idle = true;
   readonly log: { t: number; what: string }[] = [];
-  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
+  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
   /** Stage 3: the battle is over (the monster defeated or driven off by the army, or it got away). */
   onOutcome: ((o: { outcome: string; byArmy: boolean; lost: Record<string, number> }) => void) | null = null;
   /** Stage E: a rampaging giant player with a very low reputation is the army's target (not wired yet). */
@@ -559,37 +559,36 @@ export class Forces {
     const mz = this.muzzle(u, b);
     // (A tank sights from its turret: its long gun may poke past a corner.)
     const o = u.kind === 'tank' && b.car ? { x: b.car.x, y: b.car.y + 2.4, z: b.car.z } : mz;
-    // Line of sight (one world ray per volley): the zone it aims at, buildings in the way?
-    // (Blocked: the high back over the roofs in front instead.)
+    // Line of sight (the shared rule, combat/sight: buildings, terrain, cars — their own vehicle
+    // aside): the zone it aims at, else the high back over the roofs in front. Targeted fire
+    // (combat/shot.ts): no clear line, no volley; a clear one, every round hits.
+    const sight = this.g.sight, own = b.car ?? null;
     let aimZ = pickZone(this.rng, S.zones, true, W.aimWeak) as ThreatZone;
     let ax = aimZ.x, ay = aimZ.y, az = aimZ.z;
-    let dx = ax - o.x, dy = ay - o.y, dz = az - o.z, L = Math.hypot(dx, dy, dz) || 1;
-    let hit = this.g.targeting.probe(o.x, o.y, o.z, dx / L, dy / L, dz / L, L, null, NO_KINDS);
+    let blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
     this.stats.rays++;
-    let blocked = hit.what !== 'none' && hit.t < L - aimZ.r - 1;
     if (blocked && aimZ.id !== 'back') {
       aimZ = S.zones.find((z) => z.id === 'back') ?? aimZ;
       ax = aimZ.x; ay = aimZ.y + aimZ.r * 0.5; az = aimZ.z;
-      dx = ax - o.x; dy = ay - o.y; dz = az - o.z; L = Math.hypot(dx, dy, dz) || 1;
-      hit = this.g.targeting.probe(o.x, o.y, o.z, dx / L, dy / L, dz / L, L, null, NO_KINDS);
+      blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
       this.stats.rays++;
-      blocked = hit.what !== 'none' && hit.t < L - aimZ.r - 1;
     }
+    const dx = ax - o.x, dy = ay - o.y, dz = az - o.z, L = Math.hypot(dx, dy, dz) || 1;
     // No line of sight from here, volley after volley: shift along the line to another spot.
     const nb = blocked ? (this.blockedN.get(u.id) ?? 0) + 1 : 0;
     this.blockedN.set(u.id, nb);
     if (nb >= 3) { this.blockedN.set(u.id, 0); u.slot = (u.slot + 1) % 6; if (u.task === 'hold') u.task = 'inbound'; return true; }
-    if (u.kind === 'tank') return this.tankShot(u, q, b.car!, mz, aimZ, blocked ? hit : null, dist);
+    if (blocked) { this.stats.held++; u.cool = Math.min(u.cool, 1.5); return true; }
+    if (u.kind === 'tank') return this.tankShot(u, q, b.car!, mz, aimZ, dist);
     q.fired++;
     this.stats.volleys++;
-    const hits = blocked ? [] : volley(this.rng, W, dist, q.morale, S.zones, true);
+    const hits = aimedVolley(this.rng, W, dist, q.morale, S.zones);
     const crewK = u.kind === 'rifles' ? u.crew / FORCE.rifles.crew : 1;
     for (const h of hits) if (crewK >= 1 || this.rng.chance(crewK)) land(u, q, this.view!, h.zone, h.dmg, () => {});
     // What it looks like: bursts with tracers (every third round lights up), flashes, sparks on the hide.
     const cam = this.g.renderer.camera.position;
     const endFor = (k: number) => {
       const h = hits[k % Math.max(1, hits.length)];
-      if (blocked) return { x: hit.x, y: hit.y, z: hit.z };
       if (h && k < hits.length) { const z = h.zone as ThreatZone; return { x: z.x + (this.rng.float() - 0.5) * z.r, y: z.y + (this.rng.float() - 0.5) * z.r, z: z.z + (this.rng.float() - 0.5) * z.r }; }
       // A miss: past it, on into the sky or the street beyond.
       return { x: ax + dx / L * 60 + (this.rng.float() - 0.5) * 30, y: ay + dy / L * 60 + (this.rng.float() - 0.3) * 20, z: az + dz / L * 60 + (this.rng.float() - 0.5) * 30 };
@@ -631,17 +630,15 @@ export class Forces {
   }
 
   /** A tank: turn the turret first; then the shot (recoil, flash, the shell flies; it lands on the body, a facade or the street). */
-  private tankShot(u: ForceUnit, q: Squad, car: Vehicle, o: { x: number; y: number; z: number }, zone: ThreatZone, blocked: { x: number; y: number; z: number } | null, dist: number): boolean {
+  private tankShot(u: ForceUnit, q: Squad, car: Vehicle, o: { x: number; y: number; z: number }, zone: ThreatZone, dist: number): boolean {
     this.aimAt.set(u.id, { x: zone.x, y: zone.y, z: zone.z });
     const a = this.tankAim(car, zone), G2 = car.gun!;
     if (Math.abs(angle(a.yaw - G2.yaw)) > 0.06 || Math.abs(a.pitch - G2.pitch) > 0.05) { u.cool = 0.4; return true; }
-    // A building in the way: mostly hold fire (find a gap); now and then the shell goes into the facade.
-    if (blocked && this.rng.chance(0.6)) { u.cool = 1.5; return true; }
     q.fired++;
     this.stats.volleys++;
     G2.recoil = 0.55;
     const S = this.mon!, W = FORCE.tank.weapon!;
-    const hits = blocked ? [] : volley(this.rng, W, dist, q.morale, S.zones, true);
+    const hits = aimedVolley(this.rng, W, dist, q.morale, S.zones);
     const dx = zone.x - o.x, dy = zone.y - o.y, dz = zone.z - o.z, L = Math.hypot(dx, dy, dz) || 1;
     const cam = this.g.renderer.camera.position;
     this.fx.flash(o.x, o.y, o.z, dx / L, dy / L, dz / L, 2.6);
@@ -652,11 +649,10 @@ export class Forces {
     if (d < 120) this.g.camRig.addShake(Math.min(0.25, 6 / Math.max(15, d)));
     let end: { x: number; y: number; z: number };
     const h = hits[0];
-    if (blocked) end = blocked;
-    else if (h) { const z = h.zone as ThreatZone; end = { x: z.x, y: z.y, z: z.z }; }
+    if (h) { const z = h.zone as ThreatZone; end = { x: z.x, y: z.y, z: z.z }; }
     else end = this.missPoint(o, zone, 20);
     this.fx.projectile('shell', o.x, o.y, o.z, end.x, end.y, end.z, Math.hypot(end.x - o.x, end.y - o.y, end.z - o.z) / 900, () => {
-      if (h && !blocked && this.view) { land(u, q, this.view, h.zone, h.dmg, () => {}); this.fx.explosion(end.x, end.y, end.z, 1.4, true); this.g.audio.play('army_hit', end.x, end.y, end.z, 1, 1, 40, cam); }
+      if (h && this.view) { land(u, q, this.view, h.zone, h.dmg, () => {}); this.fx.explosion(end.x, end.y, end.z, 1.4, true); this.g.audio.play('army_hit', end.x, end.y, end.z, 1, 1, 40, cam); }
       else this.groundHit(end.x, end.y, end.z, 1.5, dx / L, dy / L, dz / L);
     });
     return true;
@@ -690,10 +686,14 @@ export class Forces {
   private rockets(u: ForceUnit, q: Squad, dist: number): boolean {
     const S = this.mon!, from = this.air.heliPos(u);
     if (!from) return false;
+    const W = FORCE.heli.weapon!;
+    const hits = aimedVolley(this.rng, W, dist, q.morale, S.zones);
+    // Targeted: a clear line from the helicopter to the part it goes for, or the run is held (the rockets kept).
+    const z0 = (hits[0]?.zone ?? S.zones[0]) as ThreatZone;
+    this.stats.rays++;
+    if (!this.g.sight.clear(from.x, from.y - 0.4, from.z, z0.x, z0.y, z0.z, z0.r)) { this.stats.held++; u.ammo++; return true; }
     q.fired++;
     this.stats.volleys++;
-    const W = FORCE.heli.weapon!;
-    const hits = volley(this.rng, W, dist, q.morale, S.zones, true);
     const cam = this.g.renderer.camera.position;
     this.g.audio.play('army_rocket', from.x, from.y, from.z, 1, 1, 40, cam);
     for (let k = 0; k < W.shots; k++) {

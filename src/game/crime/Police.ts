@@ -4,7 +4,11 @@
  * flashers: it runs red lights and the cars ahead pull over. At the scene two officers get out and
  * go for the criminals: they cuff the knocked-out and the ones with their hands up, run after the
  * rest and tackle them, walk the arrested to the car and drive off. A wanted player is chased the
- * same way; an officer who gets them on the ground cuffs them (the justice layer settles it).
+ * same way; an officer who gets them on the ground cuffs them (the justice layer settles it). At
+ * wanted level POLICE.shootAt (3) they draw: from a distance, with a clear line (the shared line of
+ * sight — buildings, terrain, cars) and nobody else in it, they shoot at the player (pistols; a
+ * SWAT van with rifles joins the pursuit) — modest damage per round, every round fired hits;
+ * close in they still go for the tackle. Below that they stay non-lethal.
  *
  * Officers carry pistols (crime/Firearms): against a criminal with a gun who has fired (or is
  * aiming) they stop at a distance, aim and shoot back — never through bystanders; the others they
@@ -49,6 +53,8 @@ export interface PoliceHost {
   guns?: Firearms;
   /** An officer fires at a criminal ('held': no clear shot / someone in the line). */
   gunAt?(o: PedAgent, c: PedAgent, spec: GunSpec): 'hit' | 'miss' | 'held';
+  /** An officer fires at the wanted player ('held': no clear shot / someone in the line); `car`: their own car (cover). */
+  gunAtPlayer?(o: PedAgent, spec: GunSpec, car: object | null): 'hit' | 'held';
 }
 
 /** A unit's work at an incident (the response director's): where, how many, what to do there. */
@@ -71,7 +77,7 @@ export interface IncidentJob {
   spawnR?: number;
 }
 
-type Job = { kind: 'crime'; crime: Crime } | { kind: 'player' } | { kind: 'incident'; job: IncidentJob };
+type Job = { kind: 'crime'; crime: Crime } | { kind: 'player'; swat?: boolean } | { kind: 'incident'; job: IncidentJob };
 
 export interface Unit {
   id: number;
@@ -97,7 +103,32 @@ export const POLICE = { maxUnits: 4, maxIncident: 12, officerHp: 90, officerStre
   /** Closer than this to a gunman they go for the tackle instead (m). */
   closeR: 3.5,
   /** A gunman counts as shooting this long after a shot (s). */
-  shotMemory: 12 };
+  shotMemory: 12,
+  /**
+   * A wanted player: from this wanted level on officers shoot at them (and a SWAT van joins the
+   * pursuit with `swatOfficers` rifles); between `closeR` and `playerFireR` m, the cadence their
+   * gun's gap × `playerGapK` (a pistol ≈ 1.1 hp/s, a rifle ≈ 0.7 hp/s before size; a full
+   * wanted-3 pursuit in the open ≈ 8 hp/s; regen 7 hp/s out of a fight).
+   */
+  shootAt: 3, playerFireR: 34, playerGapK: 2.5, swatOfficers: 3 };
+
+/** The tactical team: dark overalls, helmet-like cap, tougher and stronger (SWAT rifles). */
+export function equipSwat(o: PedAgent): void {
+  const act = o.actor;
+  if (!act) return;
+  const seed = o.cit.seed;
+  const dark: [number, number, number] = [0.03, 0.035, 0.045], grey: [number, number, number] = [0.12, 0.13, 0.15];
+  const v = (primary: [number, number, number], secondary: [number, number, number], k: number) => ({ shape: 'cloth', seed: seed + k, primary, secondary, accent: [0.2, 0.22, 0.25], material: 'plain', glow: 0 });
+  act.outfit = {
+    ...policeOutfit(seed),
+    chest: { defId: 'shirt', visual: v(grey, dark, 1) },
+    back: { defId: 'jacket', visual: v(dark, grey, 2) },
+    legs: { defId: 'trousers', visual: v(dark, dark, 3) },
+    head: { defId: 'cap', visual: v(dark, dark, 5) },
+  } as unknown as EquipmentVisuals;
+  act.hp = act.maxHp = 160;
+  act.strength = 2.2;
+}
 
 /** The uniform: navy shirt, trousers and cap, a dark jacket. */
 export function policeOutfit(seed: number): EquipmentVisuals {
@@ -116,9 +147,9 @@ let UNIT_ID = 1;
 
 export class Police {
   readonly units: Unit[] = [];
-  private calls: { crime: Crime | null; at: number }[] = [];
+  private calls: { crime: Crime | null; at: number; swat?: boolean }[] = [];
   private seed = 0x9e1;
-  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0 };
+  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0, atPlayer: 0, heldAtPlayer: 0 };
 
   constructor(private h: PoliceHost) {}
 
@@ -137,6 +168,8 @@ export class Police {
       if (u.job.kind === 'crime' && u.state === 'scene' && !u.job.crime.active && Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z) < 250) { u.job = { kind: 'player' }; have++; }
     }
     for (; have < want; have++) this.calls.push({ crime: null, at: this.h.time + 2 + have * 6 });
+    // Wanted enough to be shot at: a SWAT van joins (once).
+    if (level >= POLICE.shootAt && !this.units.some((u) => u.job.kind === 'player' && u.job.swat && u.state !== 'leaving') && !this.calls.some((c) => c.swat)) this.calls.push({ crime: null, at: this.h.time + 8, swat: true });
   }
 
   /** Officers and cars near a point (turning yourself in). */
@@ -173,7 +206,7 @@ export class Police {
       this.calls.splice(i, 1);
       if (c.crime && !c.crime.active) continue;
       if (!c.crime && H.wanted() <= 0) continue;
-      this.dispatch(c.crime ? { kind: 'crime', crime: c.crime } : { kind: 'player' });
+      this.dispatch(c.crime ? { kind: 'crime', crime: c.crime } : { kind: 'player', swat: c.swat });
     }
     for (let i = this.units.length - 1; i >= 0; i--) {
       const u = this.units[i];
@@ -195,9 +228,9 @@ export class Police {
   private dispatch(job: Job): boolean {
     const H = this.h;
     const incident = job.kind === 'incident';
-    if (!incident && this.units.filter((u) => u.job.kind !== 'incident').length >= POLICE.maxUnits) return false;
+    if (!incident && this.units.filter((u) => u.job.kind !== 'incident').length >= POLICE.maxUnits + (job.kind === 'player' && job.swat ? 1 : 0)) return false;
     const t = job.kind === 'crime' ? job.crime.hot : job.kind === 'incident' ? { x: job.job.x, z: job.job.z } : { x: H.player.x, z: H.player.z };
-    const kind: VKind = job.kind === 'incident' ? job.job.vehicle : 'police';
+    const kind: VKind = job.kind === 'incident' ? job.job.vehicle : job.kind === 'player' && job.swat ? 'swat' : 'police';
     // The nearest free patrol car in traffic, else one coming in from out of view.
     let car: Vehicle | null = null, bd = POLICE.respondR;
     if (kind === 'police') for (const v of H.traffic.vehicles) {
@@ -309,7 +342,8 @@ export class Police {
 
   private spawnOfficers(u: Unit): void {
     const H = this.h, car = u.car;
-    const n = u.job.kind === 'incident' ? u.job.job.officers : 2;
+    const swat = u.job.kind === 'player' && u.job.swat;
+    const n = u.job.kind === 'incident' ? u.job.job.officers : swat ? POLICE.swatOfficers : 2;
     const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw);
     for (let i = 0; i < n; i++) {
       const side = i & 1 ? 1 : -1;
@@ -318,6 +352,7 @@ export class Police {
       const o = H.spawnOfficer((this.seed = (this.seed * 1103515245 + 12345) >>> 0), x, z, car.yaw);
       if (!o) continue;
       if (u.job.kind === 'incident') u.job.job.equip?.(o);
+      else if (swat) equipSwat(o);
       u.officers.push(o);
       H.sound('door_open', x, 1, z, 0.6);
     }
@@ -502,6 +537,8 @@ export class Police {
       act.mood = 'angry';
       const d = Math.hypot(p.x - o.x, p.z - o.z);
       lookAt(act, p.x, p.y + p.height * 0.8, p.z);
+      // Wanted enough: shoot from where they are (a clear line, out of tackling reach).
+      if (this.shootPlayer(u, o, d, dt)) continue;
       if (p.flying && p.y - o.y > 4) { stand(act); continue; }
       // Could not get to them (no progress): wait and watch a moment.
       if (act.memo.waitT > 0) { act.memo.waitT -= dt; stand(act); if (d < 3) act.memo.waitT = 0; continue; }
@@ -530,10 +567,50 @@ export class Police {
     return any;
   }
 
+  /**
+   * At wanted level POLICE.shootAt: an officer with a shot at the player (out of tackling reach,
+   * within POLICE.playerFireR) stops, aims and fires — their pistol (SWAT: rifle). No clear line
+   * twice running: they close in for a while (the chase). True while handling it.
+   */
+  private shootPlayer(u: Unit, o: PedAgent, d: number, dt: number): boolean {
+    const H = this.h, act = o.actor!, p = H.player;
+    if (H.wanted() < POLICE.shootAt || !H.gunAtPlayer || H.playerDown()) return lowerAny(act);
+    const swat = u.car.kind === 'swat';
+    const spec = swat ? GUNS.rifle : GUNS.pistol;
+    act.held = spec.item;
+    if (act.memo.closeT > 0) { act.memo.closeT -= dt; return lowerAny(act); }
+    const dy = Math.max(0, p.y - o.y);
+    if ((d < POLICE.closeR && dy < 3) || d > POLICE.playerFireR) return lowerAny(act);
+    stand(act);
+    endPursuit(act);
+    setState(act, 'fight');
+    hold(act, spec.aim);
+    act.memo.pgunT = (act.memo.pgunT ?? 0.5 + Math.random() * 0.8) - dt;
+    if (act.memo.pgunT > 0) return true;
+    act.memo.pgunT = spec.gap * POLICE.playerGapK * (0.85 + Math.random() * 0.3);
+    const r = H.gunAtPlayer(o, spec, u.car);
+    if (r === 'held') {
+      this.stats.heldAtPlayer++;
+      act.memo.pheld = (act.memo.pheld ?? 0) + 1;
+      if (act.memo.pheld >= 2) { act.memo.pheld = 0; act.memo.closeT = 3; act.action = null; }
+      return true;
+    }
+    act.memo.pheld = 0;
+    this.stats.atPlayer += spec.burst;
+    if (!act.memo.warnedP) { act.memo.warnedP = 1; H.sound('shout_hey', o.x, o.y + 1.6, o.z, 0.9, 0.8); }
+    return true;
+  }
+
   /** Units for the dev console. */
   summary(): string {
     return this.units.map((u) => `#${u.id} ${u.job.kind}${u.job.kind === 'crime' ? ':' + u.job.crime.kind : u.job.kind === 'incident' ? ':' + u.car.kind : ''} ${u.state} car ${Math.round(Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z))} m, ${u.officers.filter((o) => o.alive).length} officers`).join(' · ') || 'none';
   }
+}
+
+/** Pistol or rifle down (not shooting now). */
+function lowerAny(act: Actor): false {
+  if (act.action?.id === 'aim_pistol' || act.action?.id === 'aim_rifle') act.action = null;
+  return false;
 }
 
 /** Weapon down (no gunfight). */

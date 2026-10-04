@@ -175,6 +175,22 @@ function zoneW(z: ZoneView): number {
   return z.weak && z.exposed ? w * 3 : w;
 }
 
+/**
+ * A volley at the monster in sight (the targeted rule, combat/shot.ts — the in-game army's direct
+ * fire): every round hits; each does what a round of the chance-based volley did on average (hit
+ * chance × damage), so the battle's balance stays where `volley` tuned it.
+ */
+export function aimedVolley(rng: Rng, w: Weapon, dist: number, morale: number, zones: readonly ZoneView[]): { zone: ZoneView; dmg: number }[] {
+  const out: { zone: ZoneView; dmg: number }[] = [];
+  if (dist > w.range) return out;
+  const p = hitChance(w, dist, morale);
+  for (let i = 0; i < w.shots; i++) {
+    const z = pickZone(rng, zones, true, w.aimWeak);
+    if (z) out.push({ zone: z, dmg: w.dmg * ARMY.firepower * p * rng.range(0.8, 1.2) });
+  }
+  return out;
+}
+
 /** One volley: the hits (zone, damage before armour) it lands. */
 export function volley(rng: Rng, w: Weapon, dist: number, morale: number, zones: readonly ZoneView[], los: boolean): { zone: ZoneView; dmg: number }[] {
   const out: { zone: ZoneView; dmg: number }[] = [];

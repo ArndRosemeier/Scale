@@ -2,17 +2,20 @@
  * Small arms (police pistols, SWAT rifles, a robber's gun): what a shot is, whether it may be
  * fired, and what it looks and sounds like.
  *
- *  - Specs per gun (GUNS): range, cadence, accuracy falling off with range (air targets and fast
- *    movers are harder), damage to people, to rogue machines (their impulse hit points: a punch is
- *    200, a robot has 600) and to a drone's plating. Deliberately modest: a pair of officers needs
- *    some seconds for a drone and keeps wearing a robot down; the player's powers do it at once.
- *  - The rules: a clear line through the world (buildings, terrain) and nobody in it — officers
- *    hold fire when a person stands in the line or right by a target on the ground (`clear`).
+ *  - Specs per gun (GUNS): range, cadence, damage per round to people, to rogue machines (their
+ *    impulse hit points: a punch is 200, a robot has 600), to a drone's plating and to the player.
+ *    Deliberately modest: a pair of officers needs some seconds for a drone and keeps wearing a
+ *    robot down; the player's powers do it at once.
+ *  - The rules (combat/shot.ts): every shooter here has a chosen target, so a round is only fired
+ *    with a clear line (`los`: the shared line of sight, combat/sight — buildings, terrain, cars)
+ *    and then it hits (no stray rounds; the damage per round is what a round used to do on
+ *    average, so the time to bring something down is as before); nobody in the line either —
+ *    officers hold fire when a person stands in it or right by a target on the ground (`clear`).
  *  - The look: a muzzle flash (the powers' particle pool), a short faint tracer streak (its beam
  *    ribbons, a pooled list — no allocation per shot), sparks where a round hits a machine, a
  *    `gunfire` stimulus (bystanders run, the farther ones duck and look; throttled), the sound.
  *
- * `hitChance` and the specs are pure (headless tests); the class needs the game.
+ * The specs and `hitRate` are pure (headless tests); the class needs the game.
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
@@ -34,10 +37,7 @@ export interface GunSpec {
   gap: number;
   burst: number;
   burstGap: number;
-  /** Hit chance on a still target on the ground at point blank and at full range. */
-  acc0: number;
-  acc1: number;
-  /** Damage per hit: a person (hp), a ground machine (RogueMachines hp: impulse points), a drone's plating, the player (before size). */
+  /** Damage per round (every round fired hits): a person (hp), a ground machine (RogueMachines hp: impulse points), a drone's plating, the player (before size). */
   person: number;
   machine: number;
   drone: number;
@@ -47,9 +47,12 @@ export interface GunSpec {
 }
 
 export const GUNS: Record<GunId, GunSpec> = {
-  pistol: { item: 'pistol', aim: 'aim_pistol', range: 38, gap: 0.75, burst: 1, burstGap: 0, acc0: 0.85, acc1: 0.3, person: 20, machine: 40, drone: 34, player: 7, sound: 'gun_pistol', gain: 0.8 },
-  rifle: { item: 'rifle', aim: 'aim_rifle', range: 55, gap: 1.35, burst: 3, burstGap: 0.09, acc0: 0.9, acc1: 0.42, person: 18, machine: 14, drone: 14, player: 8, sound: 'gun_rifle', gain: 0.85 },
-  crook: { item: 'pistol', aim: 'aim_pistol', range: 26, gap: 2.8, burst: 1, burstGap: 0, acc0: 0.6, acc1: 0.15, person: 16, machine: 30, drone: 25, player: 8, sound: 'gun_pistol', gain: 0.8 },
+  // (Was: 20/40/34 hp at 50–60 % hits on the ground, ~35 % in the air. Every round hits now: the
+  // same damage a second. Against the player: officers at wanted level 3 only — PlayerHealth
+  // regenerates 7 hp/s out of a fight.)
+  pistol: { item: 'pistol', aim: 'aim_pistol', range: 38, gap: 0.75, burst: 1, burstGap: 0, person: 10, machine: 22, drone: 12, player: 2, sound: 'gun_pistol', gain: 0.8 },
+  rifle: { item: 'rifle', aim: 'aim_rifle', range: 55, gap: 1.35, burst: 3, burstGap: 0.09, person: 12, machine: 9, drone: 6, player: 0.8, sound: 'gun_rifle', gain: 0.85 },
+  crook: { item: 'pistol', aim: 'aim_pistol', range: 26, gap: 2.8, burst: 1, burstGap: 0, person: 7, machine: 15, drone: 10, player: 3.5, sound: 'gun_pistol', gain: 0.8 },
 };
 
 /** A hostile drone's plating: pistol rounds to bring it down ≈ 3, rifle rounds ≈ 4. */
@@ -58,21 +61,12 @@ export const DRONE_PLATING = 100;
 /** Muzzle height when standing / kneeling (m above the feet). */
 export const MUZZLE_Y = { stand: 1.42, kneel: 1.0 };
 
-/** Chance one round hits: falls off with range; air targets and fast movers are harder. */
-export function hitChance(s: GunSpec, dist: number, air: boolean, speed: number): number {
-  const k = Math.min(1, Math.max(0, dist / s.range));
-  let p = s.acc0 + (s.acc1 - s.acc0) * k;
-  if (air) p *= 0.65;
-  p /= 1 + Math.max(0, speed) * 0.08;
-  return Math.min(0.95, Math.max(0.03, p));
-}
-
 /** The impulse (N·s) a round carries into Combat.hitActor to do `dmg` damage to a person. */
 export function gunJ(dmg: number): number { return dmg / COMBAT.dmgPerNs; }
 
-/** Expected hits a second of `shooters` firing this gun (tuning, tests). */
-export function hitRate(s: GunSpec, shooters: number, dist: number, air: boolean, speed: number): number {
-  return shooters * (s.burst / s.gap) * hitChance(s, dist, air, speed);
+/** Hits a second of `shooters` firing this gun with a clear line (every round hits; tuning, tests). */
+export function hitRate(s: GunSpec, shooters: number): number {
+  return shooters * (s.burst / s.gap);
 }
 
 const TRACER_CAP = 64;
@@ -89,31 +83,22 @@ export class Firearms {
   private stimX = 0;
   private stimZ = 0;
   private time = 0;
-  stats = { shots: 0, hits: 0, heldFire: 0, noLos: 0, losRays: 0, tracers: 0, peakTracers: 0, msAvg: 0 };
+  stats = { shots: 0, hits: 0, heldFire: 0, noLos: 0, losRays: 0, tracers: 0, peakTracers: 0, msAvg: 0, atPlayer: 0, atGiant: 0 };
 
   constructor(private g: Game) {
     for (let i = 0; i < TRACER_CAP; i++) this.tracers.push({ ax: 0, ay: 0, az: 0, dx: 0, dy: 0, dz: 0, L: 0, s: 0, on: false });
   }
 
   /**
-   * A clear line through the world from a to b (buildings, terrain), ending `pad` m short of b
-   * (the target's own body). Steps of 1.2 m against the footprints, the terrain every 4th step.
+   * A clear line from a to b, ending `pad` m short of b (the target's own body): the shared line
+   * of sight (combat/sight — buildings with their holes, terrain, cars parked and moving).
+   * `skip`: the shooter's own car (cover), a target that is a car.
    */
-  los(ax: number, ay: number, az: number, bx: number, by: number, bz: number, pad = 0.7): boolean {
+  los(ax: number, ay: number, az: number, bx: number, by: number, bz: number, pad = 0.7, skip: object | null = null, skip2: object | null = null): boolean {
     this.stats.losRays++;
-    const dx = bx - ax, dy = by - ay, dz = bz - az, L = Math.hypot(dx, dy, dz);
-    const end = L - pad;
-    if (end <= 0.5) return true;
-    const W = this.g.world, T = this.g.terrain, step = 1.2;
-    const n = Math.ceil(end / step);
-    for (let i = 1; i <= n; i++) {
-      const t = Math.min(end, i * step) / L;
-      const x = ax + dx * t, y = ay + dy * t, z = az + dz * t;
-      const b = W.buildingAt(x, z);
-      if (b && y < b.top && y > b.low) { this.stats.noLos++; return false; }
-      if ((i & 3) === 0 && y < T.height(x, z) - 0.3) { this.stats.noLos++; return false; }
-    }
-    return true;
+    if (this.g.sight.clear(ax, ay, az, bx, by, bz, pad, skip, skip2)) return true;
+    this.stats.noLos++;
+    return false;
   }
 
   /**
@@ -160,7 +145,7 @@ export class Firearms {
 
   /**
    * One trigger pull from `shooter` at a point: `hits` of the burst's rounds land (sparks on a
-   * machine), the rest fly past. Effects only — the caller deals the damage.
+   * machine; with a clear line all of them do), any others fly past. Effects only — the caller deals the damage.
    */
   fire(shooter: PedAgent, s: GunSpec, mx: number, my: number, mz: number, tx: number, ty: number, tz: number, hits: number, onMachine: boolean, ground: boolean, cause: Cause | undefined): void {
     const g = this.g, fx = g.elements.fx, cam = g.renderer.camera.position;

@@ -36,7 +36,7 @@ import { Mugging } from './Mugging';
 import { Robbery } from './Robbery';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
-import { Firearms, GUNS, MUZZLE_Y, hitChance, gunJ, type GunSpec } from './Firearms';
+import { Firearms, GUNS, MUZZLE_Y, gunJ, type GunSpec } from './Firearms';
 import { SmallDeeds, type SmallDeedKind } from '../deeds/SmallDeeds';
 import { makeItem, makeGlint } from '../deeds/critters';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -134,6 +134,7 @@ export class CrimeSystem {
       wanted: () => this.justice.wanted,
       guns: this.guns,
       gunAt: (o, c, spec) => this.gunAt(o, c, spec),
+      gunAtPlayer: (o, spec, car) => this.gunAtPlayer(o, spec, car),
     });
     this.justice = new Justice({
       get time() { return self.time; },
@@ -266,24 +267,24 @@ export class CrimeSystem {
   /** Where a person's chest is to a gun. */
   private chest(a: PedAgent): number { return a.y + (a.state === PState.Down ? 0.35 : 1.25); }
 
+  /** Where the player's chest is to a gun (a giant: the shins). */
+  private playerChest(): number { const P = this.g.player; return P.pos.y + Math.min(P.height * 0.7, 1.3); }
+
   /**
-   * A criminal fires at the player or an officer: a clear line and nobody else in it, or the shot
-   * is not taken ('held'); a hit hurts (the player through PlayerHealth — size, invulnerability —
-   * an officer through Combat).
+   * A criminal fires at the player or an officer (the target they chose — combat/shot.ts): a clear
+   * line and nobody else in it, or the shot is not taken ('held'); fired, it hits (the player
+   * through PlayerHealth — size, invulnerability — an officer through Combat).
    */
   private crookShot(c: PedAgent, at: PedAgent | 'player'): 'hit' | 'miss' | 'held' {
     const g = this.g, S = GUNS.crook, P = g.player;
     const tx = at === 'player' ? P.pos.x : at.x, tz = at === 'player' ? P.pos.z : at.z;
-    const ty = at === 'player' ? P.pos.y + Math.min(P.height * 0.7, 1.3) : this.chest(at);
+    const ty = at === 'player' ? this.playerChest() : this.chest(at);
     const fx = tx - c.x, fz = tz - c.z, fl = Math.hypot(fx, fz) || 1;
     const mx = c.x + (fx / fl) * 0.5, my = c.y + MUZZLE_Y.stand, mz = c.z + (fz / fl) * 0.5;
     const d = Math.hypot(tx - mx, ty - my, tz - mz);
     if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5)) return 'held';
     if (!this.guns.clear(c, mx, my, mz, tx, ty, tz, at === 'player' ? null : at, false, at === 'player')) return 'held';
-    const speed = at === 'player' ? Math.hypot(P.vel.x, P.vel.z) : at.speed;
-    const hit = Math.random() < hitChance(S, d, at === 'player' && P.flying, speed);
-    this.guns.fire(c, S, mx, my, mz, tx, ty, tz, hit ? 1 : 0, false, false, undefined);
-    if (!hit) return 'miss';
+    this.guns.fire(c, S, mx, my, mz, tx, ty, tz, 1, false, false, undefined);
     if (at === 'player') this.hurtPlayer(S.player * (0.8 + Math.random() * 0.4), 'gun', c.x, c.z);
     else this.combat.hitActor(at, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'npc', c.x, c.z);
     return 'hit';
@@ -291,7 +292,7 @@ export class CrimeSystem {
 
   /**
    * An officer fires at an armed criminal (Police.workCrime): as crookShot, from the officer's
-   * side. 'held' when there is no clear line or someone is in it.
+   * side. 'held' when there is no clear line or someone is in it; fired, it hits.
    */
   private gunAt(o: PedAgent, c: PedAgent, S: GunSpec): 'hit' | 'miss' | 'held' {
     const tx = c.x, tz = c.z, ty = this.chest(c);
@@ -300,10 +301,28 @@ export class CrimeSystem {
     const d = Math.hypot(tx - mx, ty - my, tz - mz);
     if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5)) return 'held';
     if (!this.guns.clear(o, mx, my, mz, tx, ty, tz, c, true)) return 'held';
-    const hit = Math.random() < hitChance(S, d, false, c.speed);
-    this.guns.fire(o, S, mx, my, mz, tx, ty, tz, hit ? 1 : 0, false, true, 'police');
-    if (hit) this.combat.hitActor(c, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'police', o.x, o.z);
-    return hit ? 'hit' : 'miss';
+    this.guns.fire(o, S, mx, my, mz, tx, ty, tz, 1, false, true, 'police');
+    this.combat.hitActor(c, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'police', o.x, o.z);
+    return 'hit';
+  }
+
+  /**
+   * An officer fires at the wanted player (Police.workPlayer, wanted level ≥ POLICE.shootAt): the
+   * same rules — a clear line (their own car is cover, not a wall), nobody else in it; every round
+   * fired hits, through PlayerHealth (size, sandbox invulnerability).
+   */
+  private gunAtPlayer(o: PedAgent, S: GunSpec, car: object | null): 'hit' | 'held' {
+    const P = this.g.player;
+    const tx = P.pos.x, tz = P.pos.z, ty = this.playerChest();
+    const fx = tx - o.x, fz = tz - o.z, fl = Math.hypot(fx, fz) || 1;
+    const mx = o.x + (fx / fl) * 0.5, my = o.y + MUZZLE_Y.stand, mz = o.z + (fz / fl) * 0.5;
+    const d = Math.hypot(tx - mx, ty - my, tz - mz);
+    if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5, car)) return 'held';
+    if (!this.guns.clear(o, mx, my, mz, tx, ty, tz, null, false, true)) return 'held';
+    this.guns.fire(o, S, mx, my, mz, tx, ty, tz, S.burst, false, false, 'police');
+    this.guns.stats.atPlayer += S.burst;
+    this.hurtPlayer(S.player * S.burst, 'police', o.x, o.z);
+    return 'hit';
   }
 
   /** In the player's view (camera frustum, within 220 m)? */
