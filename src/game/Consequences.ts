@@ -10,7 +10,7 @@
  */
 export type HarmTarget = 'person' | 'car' | 'robot' | 'drone' | 'prop' | 'building' | 'ground';
 export type HarmCause = 'player' | 'threat' | 'police' | 'military';
-export type HarmEffect = 'knockdown' | 'burn' | 'freeze' | 'shrink' | 'stun' | 'wet' | 'wreck' | 'damage' | 'break' | 'topple' | 'stall' | 'lift' | 'facade';
+export type HarmEffect = 'knockdown' | 'burn' | 'freeze' | 'shrink' | 'stun' | 'wet' | 'wreck' | 'damage' | 'break' | 'topple' | 'stall' | 'lift' | 'facade' | 'collapse';
 
 export interface HarmEntry {
   cause: HarmCause;
@@ -23,6 +23,8 @@ export interface HarmEntry {
   t: number;
   /** What was hit (a PedAgent, Vehicle, …) when known: the crime layer tells criminals from bystanders. */
   ref?: object;
+  /** A collapse: the storeys that came down. */
+  size?: number;
 }
 
 const LOG = 256;
@@ -38,8 +40,8 @@ export class Consequences {
   /** Listener for the later reputation / karma system. */
   onRecord: ((e: HarmEntry) => void) | null = null;
 
-  record(power: string, target: HarmTarget, effect: HarmEffect, x: number, z: number, ref?: object, cause: HarmCause = 'player'): void {
-    const e: HarmEntry = { cause, power, target, effect, x, z, t: this.time, ref };
+  record(power: string, target: HarmTarget, effect: HarmEffect, x: number, z: number, ref?: object, cause: HarmCause = 'player', size?: number): void {
+    const e: HarmEntry = { cause, power, target, effect, x, z, t: this.time, ref, size };
     if (this.log.length >= LOG) this.log.shift();
     this.log.push(e);
     const k = cause === 'player' ? `${target}:${effect}` : `${cause}:${target}:${effect}`;

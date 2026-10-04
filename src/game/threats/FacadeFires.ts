@@ -90,7 +90,7 @@ export class FacadeFires {
       f.heatT -= dt;
       if (f.heatT <= 0) {
         f.heatT = 4 + Math.random() * 6;
-        const n = this.destruction.impact(f.x - f.nx * 0.3, f.y + (Math.random() - 0.3) * f.size, f.z - f.nz * 0.3, f.size * 0.6, 9000 * f.size, -f.nx, 0, -f.nz, 'wall');
+        const n = this.destruction.as('fire', () => this.destruction.impact(f.x - f.nx * 0.3, f.y + (Math.random() - 0.3) * f.size, f.z - f.nz * 0.3, f.size * 0.6, 9000 * f.size, -f.nx, 0, -f.nz, 'wall'));
         if (n) this.stats.windows += n;
       }
     }

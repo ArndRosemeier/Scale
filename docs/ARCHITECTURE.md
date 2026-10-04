@@ -364,6 +364,11 @@ every frame) owns the parts and draws what belongs to them.
   police or property in front of witnesses costs karma and reputation and builds heat → wanted 1–3 (officers chase and
   arrest: a fine in karma); out of reach long enough drops a level; E next to an officer or police car turns the player
   in (smaller fine); good deeds cool the heat.
+  Buildings: `Destruction` remembers who broke each building last (`as(cause, fn)` around the monster's, the army's
+  and fires' impacts; the player otherwise) and reports `onDamage` / `onCollapse` (blamed within 120 s); Game books the
+  player's into the ledger (`building:facade`, `building:collapse` with the storeys as `size`). Facade damage before
+  witnesses costs a little (`JUSTICE.facade`, every 2 s at most); a collapse the player caused is always known and
+  costs heat, karma and reputation by storeys (`JUSTICE.collapse`), once per building.
 * **Reputation** (`Reputation`, −100…+100 per city and mode): crowds cheer / wave or step away, police suspicion; HUD
   chip and P screen. **Con** (`Consider.ts`): target vs player strength → grey … purple on the target frame and brackets.
 * **Small deeds** (`deeds/SmallDeeds`): seeded every few minutes — a cat up a tree (owner pointing up, meowing; climb with

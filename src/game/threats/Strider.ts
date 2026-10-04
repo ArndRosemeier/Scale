@@ -951,7 +951,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.tokens < cost) return -1;
     this.tokens -= cost;
     const soft = this.recentBroken > STRIDER.panelsSoft ? 0.35 : 1;
-    const n = this.g.destruction.impact(x, y, z, r * (soft < 1 ? 0.7 : 1), J * soft, dx, dy, dz, kind);
+    const n = this.g.destruction.as('threat', () => this.g.destruction.impact(x, y, z, r * (soft < 1 ? 0.7 : 1), J * soft, dx, dy, dz, kind));
     this.stats.impacts++;
     this.stats.broken += n;
     this.recentBroken += n;
@@ -977,7 +977,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (g.world.buildingsIn(x - 6, z - 6, x + 6, z + 6).length) this.smash(x, y + 2, z, 3.6, Math.sqrt(E) * 80, 0, -1, 0, 'stomp', 0.5);
     // A foot coming down on a low building: through the roof.
     const ref = g.world.buildingAt(x, z);
-    if (ref && ref.alive && this.smash(x, ref.base + 3, z, 4.5, 7e5, 0, -1, 0, 'stomp', 1.5) >= 0 && ref.top - ref.base < 14) g.destruction.crushAt(ref, ref.top);
+    if (ref && ref.alive && this.smash(x, ref.base + 3, z, 4.5, 7e5, 0, -1, 0, 'stomp', 1.5) >= 0 && ref.top - ref.base < 14) g.destruction.as('threat', () => g.destruction.crushAt(ref, ref.top));
     if (wet > y) {
       // In the water: a splash and foam.
       g.dust.burst(x, wet + 0.5, z, 18, 4, 6, 3, 2.5, FOAM, -0.2, 0.7);

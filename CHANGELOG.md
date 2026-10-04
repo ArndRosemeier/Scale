@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.023 — 2026-10-04
+
+- **Wrecking buildings has consequences**: smashing facades in front of people costs reputation and karma and draws the police; bringing a building down is seen by everyone — a big hit to reputation and karma (the taller, the worse) and the police come for you.
+- Applies however it happens — punches, slamming through walls, a giant's footsteps, landing on a roof, any power. What the monster, the army or a fire wrecks is never blamed on you; a building you damaged that falls within two minutes is.
+
 ## 0.022 — 2026-10-04
 
 - **Sewers pass**: every trunk now has its own character — red, yellow or brown brick or concrete, stone ribs across the vault in some, a deep stone portal where one tunnel opens into another, a dark grime band along the foot of the walls and a darker channel.

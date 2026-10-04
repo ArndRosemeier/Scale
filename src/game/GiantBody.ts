@@ -109,7 +109,7 @@ export class GiantSteps {
     W.stimuli.emit('stomp', x, y, z, Math.log10(energy), Math.min(o.maxR ?? Infinity, noticeRadius(energy)), { cause, size: h });
     this.sound?.(o.sound ?? 'step_giant', x, y, z, Math.min(1, h / 30), Math.max(0.4, 1.4 - h / 80), o.ref);
     let n = 0;
-    if (h > 8 && o.impact !== false) n = W.destruction.impact(x, y + h * 0.05, z, o.foot ?? h * 0.08, Math.sqrt(energy) * 80, 0, -1, 0, 'stomp');
+    if (h > 8 && o.impact !== false) n = W.destruction.as(cause === 'player' ? 'player' : 'threat', () => W.destruction.impact(x, y + h * 0.05, z, o.foot ?? h * 0.08, Math.sqrt(energy) * 80, 0, -1, 0, 'stomp'));
     this.stats.broken += n;
     return n;
   }
@@ -122,7 +122,7 @@ export class GiantSteps {
     W.camRig.addShake(own ? Math.min(1.2, Math.log10(energy) / 8) : Math.min(0.9, this.shakeAt(x, y, z, energy, h) * 1.6));
     const r = h * 0.35 + Math.cbrt(energy) * 0.01;
     W.dust.burst(x, y + 0.3, z, 30, r, r * 1.5, r * 0.5 + 1, 6, LAND_DUST, 0.15, 0.5);
-    const n = W.destruction.impact(x, y + 1, z, o.foot ?? r, Math.sqrt(energy) * 60, 0, -1, 0, 'stomp');
+    const n = W.destruction.as(cause === 'player' ? 'player' : 'threat', () => W.destruction.impact(x, y + 1, z, o.foot ?? r, Math.sqrt(energy) * 60, 0, -1, 0, 'stomp'));
     W.stimuli.emit('stomp', x, y, z, Math.log10(energy), Math.min(o.maxR ?? Infinity, noticeRadius(energy)), { cause, size: h });
     this.sound?.(o.sound ?? (h > 6 ? 'step_giant' : 'land_thud'), x, y, z, 1, Math.max(0.4, 1.2 - h / 100), o.ref);
     this.stats.broken += n;

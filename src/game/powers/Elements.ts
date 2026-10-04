@@ -571,7 +571,7 @@ export class Elements {
       s.acc += dose; s.t = this.time;
       const n = this.w.destruction.impact(ex - H.nx * 0.05, ey, ez - H.nz * 0.05, 0.5 * this.reachK, s.acc, A.dx, A.dy, A.dz, 'wall');
       this.stats.impacts++;
-      if (n > 0) { this.laserSpots.delete(key); this.record('laser', 'building', 'facade', ex, ez); this.stats.broken += n; }
+      if (n > 0) { this.laserSpots.delete(key); this.stats.broken += n; }
       if (this.laserSpots.size > 64) for (const [kk, v] of this.laserSpots) if (this.time - v.t > 3) this.laserSpots.delete(kk);
     } else if (H.what === 'target' && H.target) {
       const t = H.target;
@@ -697,7 +697,7 @@ export class Elements {
         if (wl.building) {
           const n = this.w.destruction.impact(wl.x - wl.nx * 0.05, wl.y, wl.z - wl.nz * 0.05, 1.1 * sk, FIRE_HEAT[b.rank] * b.k * b.k, b.dx, b.dy, b.dz, 'wall');
           this.stats.impacts++;
-          if (n) { this.record('fireWave', 'building', 'facade', wl.x, wl.z); this.stats.broken += n; }
+          if (n) this.stats.broken += n;
         }
       }
       if (b.t > sw + 0.4) this.fires.splice(i, 1);
@@ -752,8 +752,7 @@ export class Elements {
       this.record('frostNova', t, 'freeze', c.x, c.z);
     });
     // Windows shatter in the cold snap (walls hold).
-    const n = this.w.destruction.impact(cx, cy, cz, R, NOVA.glass * p.k * p.k, 0, 0.1, 0, 'blast');
-    if (n) this.record('frostNova', 'building', 'facade', cx, cz);
+    this.w.destruction.impact(cx, cy, cz, R, NOVA.glass * p.k * p.k, 0, 0.1, 0, 'blast');
     // Icy ground.
     const g = this.w.collision.groundAt(cx, cz, p.pos.y + 0.3, 0.5);
     this.patches.push({ x: cx, y: g, z: cz, r: R * 0.92, until: this.time + dur * NOVA.iceLinger });
@@ -950,8 +949,7 @@ export class Elements {
     } else {
       x = A.ox + A.dx * A.t; y = A.oy + A.dy * A.t; z = A.oz + A.dz * A.t;
       if (H.what === 'building' || H.what === 'roof') {
-        const n = this.w.destruction.impact(x, y, z, 1.2 * this.reachK, 2500 * this.w.player.k ** 2, A.dx, A.dy, A.dz, 'wall');
-        if (n) this.record('lightning', 'building', 'facade', x, z);
+        this.w.destruction.impact(x, y, z, 1.2 * this.reachK, 2500 * this.w.player.k ** 2, A.dx, A.dy, A.dz, 'wall');
         this.w.future.signs.impact(x, y, z, 3, true);
       }
       if (H.what !== 'none') {
@@ -1135,7 +1133,7 @@ export class Elements {
         if (this.w.world.buildingsIn(mx - R, mz - R, mx + R, mz + R).length) {
           const n = this.w.destruction.impact(mx, g + 1.4 * sk, mz, 2.6 * sk, J, 0, 1, 0, 'stomp');
           this.stats.impacts++;
-          if (n) { this.record('stomp', 'building', 'facade', mx, mz); this.stats.broken += n; }
+          if (n) this.stats.broken += n;
         }
         if ((Math.round(d1 / step) & 3) === 0) {
           this.w.stimuli.emit('power', mx, g, mz, 6, 80);
@@ -1358,7 +1356,7 @@ export class Elements {
       const e = this.hydroAcc.get(key.obj) ?? { acc: 0, t: this.time };
       e.acc += J; e.t = this.time;
       this.hydroAcc.set(key.obj, e);
-      if (e.acc > 1200) { if (this.w.destruction.impact(ex - H.nx * 0.05, ey, ez - H.nz * 0.05, 0.7 * sk, Math.min(e.acc, 2000), A.dx, A.dy, A.dz, 'wall')) this.record('hydro', 'building', 'facade', ex, ez); e.acc = 0; }
+      if (e.acc > 1200) { this.w.destruction.impact(ex - H.nx * 0.05, ey, ez - H.nz * 0.05, 0.7 * sk, Math.min(e.acc, 2000), A.dx, A.dy, A.dz, 'wall'); e.acc = 0; }
     }
   }
 

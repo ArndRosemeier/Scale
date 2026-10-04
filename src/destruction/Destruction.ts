@@ -28,6 +28,11 @@ import { createFacadeMaterial, createElemDepthMaterial } from '../render/materia
 import type { TextureLibrary } from '../render/TextureLibrary';
 import { polyCentroid, polyArea, minAreaRect } from '../core/geom2';
 import { MinHeap } from '../core/heap';
+
+/** Who broke a building: the player, a threat (monster, rogue machines), the army, a fire. */
+export type DamageCause = 'player' | 'threat' | 'military' | 'fire';
+/** Seconds a building remembers who broke it (a later collapse is theirs). */
+const BLAME_S = 120;
 import { WallMat } from '../plan/building';
 import { WALL_STRENGTH as STRENGTH, GLASS_IMPULSE } from './wallStrength';
 
@@ -95,6 +100,29 @@ export class Destruction {
   readonly mounds: RubbleMound[] = [];
   private moundMesh: THREE.InstancedMesh;
   onImpact?: (e: ImpactEvent) => void;
+  /**
+   * Who the impacts are for right now: the player unless a threat, the army or a fire is acting
+   * (they wrap their calls in `as`). Each building remembers who broke it last; a collapse within
+   * `BLAME_S` of that is theirs (crime/Justice books the player's).
+   */
+  private cause: DamageCause = 'player';
+  private blame = new WeakMap<BuildingRef, { cause: DamageCause; t: number }>();
+  /** Panels or slab tiles of a building broken (by `cause`). */
+  onDamage?: (e: { ref: BuildingRef; cause: DamageCause; n: number; x: number; y: number; z: number }) => void;
+  /** A building (or its upper part) coming down: `cause` the last one to break it, null if nobody lately. */
+  onCollapse?: (e: { ref: BuildingRef; cause: DamageCause | null; x: number; z: number; floors: number }) => void;
+
+  /** Run `fn` with its impacts booked to `cause`. */
+  as<T>(cause: DamageCause, fn: () => T): T {
+    const was = this.cause;
+    this.cause = cause;
+    try { return fn(); } finally { this.cause = was; }
+  }
+
+  private damaged(ref: BuildingRef, n: number, x: number, y: number, z: number): void {
+    this.blame.set(ref, { cause: this.cause, t: this.clock });
+    this.onDamage?.({ ref, cause: this.cause, n, x, y, z });
+  }
 
   constructor(
     private streamer: CityStreamer,
@@ -209,6 +237,7 @@ export class Destruction {
     let glassBroken = 0;
     for (const ref of refs) {
       if (!ref.alive) continue;
+      const before = broken;
       if (y + radius < ref.low || y - radius > ref.top + ROOF_RISE) continue;
       const cs = ref.cell;
       const L = this.layoutOf(ref);
@@ -263,7 +292,7 @@ export class Destruction {
           }
         }
       }
-      if (broken) this.pendingChecks.add(ref);
+      if (broken > before) { this.pendingChecks.add(ref); this.damaged(ref, broken - before, x, y, z); }
     }
     if (broken || glassBroken) this.onImpact?.({ x, y, z, energy: impulse, kind: broken ? kind : 'glass' });
     return broken;
@@ -551,6 +580,8 @@ export class Destruction {
     const parts = [extractElements(facade.geometry, set), slabs ? extractElements(slabs.geometry, set) : null].filter((g): g is THREE.BufferGeometry => !!g);
     if (!parts.length) return;
     const geo = parts.length > 1 ? mergeGeometries(parts) ?? parts[0] : parts[0];
+    const b = this.blame.get(ref);
+    this.onCollapse?.({ ref, cause: b && this.clock - b.t < BLAME_S ? b.cause : null, x: L.centroid[0], z: L.centroid[1], floors: L.floors.length - fromFloor });
     // Hide them in the static mesh; debris resting on the falling part comes down too.
     for (const e of set) this.streamer.setElement(cs, e, false);
     {
@@ -758,6 +789,7 @@ export class Destruction {
     }
     this.debris.chipBurst(L.centroid[0], y, L.centroid[1], 30, 4, 0, -0.5, 0, new THREE.Color(0.6, 0.58, 0.55), 0.1, 3);
     this.pendingChecks.add(ref);
+    this.damaged(ref, 1, L.centroid[0], y, L.centroid[1]);
   }
 
   // ------------------------------------------------------------ saves

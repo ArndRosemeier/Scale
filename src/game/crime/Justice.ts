@@ -47,6 +47,10 @@ export const JUSTICE = {
   grace: 40,
   fineBase: 10, finePer: 10,
   turnInBase: 5, turnInPer: 6,
+  /** Breaking a facade in front of witnesses (at most every 2 s). */
+  facade: { heat: 0.45, karma: 1, rep: 0.6 },
+  /** A collapse the player caused (always known): base + per storey that came down (≤ 12). */
+  collapse: { heat: 2.6, heatPer: 0.35, karma: 6, karmaPer: 1.5, rep: 3, repPer: 0.7 },
 };
 
 export class Justice {
@@ -59,7 +63,8 @@ export class Justice {
   private recent = new WeakMap<object, number>();
   private propT = 0;
   private hurtT = -99;
-  stats = { offences: 0, arrests: 0, turnIns: 0, escapes: 0 };
+  stats = { offences: 0, arrests: 0, turnIns: 0, escapes: 0, collapses: 0 };
+  private felled = new WeakSet<object>();
   /** Called when the wanted level changes (HUD). */
   onChange: ((wanted: number) => void) | null = null;
 
@@ -73,6 +78,16 @@ export class Justice {
     if (e.ref && H.hostileThing?.(e.ref)) return;
     const now = H.time;
     const ref = e.ref as (PedAgent | Vehicle | undefined);
+    if (e.target === 'building' && e.effect === 'collapse') {
+      // Bringing a building down: everyone sees it, and a block of homes and shops is gone. Once per
+      // building (an upper part coming down first and the rest after is one deed).
+      if (this.felled.has(e.ref ?? e)) return;
+      this.felled.add(e.ref ?? e);
+      const f = Math.min(12, e.size ?? 1);
+      this.stats.collapses++;
+      this.offence(JUSTICE.collapse.heat + f * JUSTICE.collapse.heatPer, -(JUSTICE.collapse.karma + f * JUSTICE.collapse.karmaPer), -(JUSTICE.collapse.rep + f * JUSTICE.collapse.repPer), e, 'You brought a building down', true);
+      return;
+    }
     // Repeated hits on the same thing within 3 s (beams, area ticks) count once.
     if (ref) {
       const last = this.recent.get(ref);
@@ -105,7 +120,8 @@ export class Justice {
       // Property damage: rate-limited (a beam on a facade is many entries).
       if (now - this.propT < 2) return;
       this.propT = now;
-      const lvl = e.target === 'building' ? 0.35 : e.target === 'robot' || e.target === 'drone' ? 0.3 : 0.15;
+      if (e.target === 'building') { this.offence(JUSTICE.facade.heat, -JUSTICE.facade.karma, -JUSTICE.facade.rep, e, 'You are wrecking a building'); return; }
+      const lvl = e.target === 'robot' || e.target === 'drone' ? 0.3 : 0.15;
       this.offence(lvl, 0, -lvl, e, '');
     }
   }

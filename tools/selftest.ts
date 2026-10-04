@@ -34,6 +34,8 @@ import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } fro
 import { parseStemManifest } from '../src/audio/music/StemPlayer';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
+import { Justice } from '../src/game/crime/Justice';
+import type { HarmEntry } from '../src/game/Consequences';
 import { readFileSync, existsSync } from 'node:fs';
 
 let failures = 0;
@@ -1563,6 +1565,30 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   check(STREET_KIND_LIST.every((k) => (['own', 'greet', 'panic', 'hit', 'leave', 'fly', 'giant'] as const).every((t) => !!lineFor(k, t, () => 0.5, 'X'))), 'street: every character has a line for every common moment');
   check(lineFor('tourist', 'greet', () => 0, 'Linden station')!.includes('Linden station'), 'street: places filled into the lines');
   console.log(`street: ${n} sites in ${cells.length} cells (${(performance.now() - t0).toFixed(0)} ms), ${seen.size} kinds cast`);
+}
+
+// Justice: wrecking buildings is not free (facade damage before witnesses; a collapse always known).
+{
+  let rep = 0, karma = 0, called = 0, witnesses = 0;
+  const host = { time: 0, player: { x: 0, z: 0 }, witnesses: () => witnesses, officersNear: () => 0, karma: (n: number) => { karma += n; }, rep: (d: number) => { rep += d; }, repValue: () => rep, pursue: () => { called++; }, toast: () => {}, sound: () => {} };
+  const J = new Justice(host);
+  const e = (effect: HarmEntry['effect'], ref: object, size?: number, t = 0): HarmEntry => ({ cause: 'player', power: 'impact', target: 'building', effect, x: 0, z: 0, t, ref, size });
+  const house = {}, tower = {};
+  J.record(e('facade', house));
+  const unseen = rep;
+  witnesses = 3; host.time = 5;
+  J.record(e('facade', house, undefined, 5));
+  const seen = rep;
+  J.record(e('collapse', house, 4, 5.5));
+  const afterOne = rep;
+  J.record(e('collapse', house, 4, 6));
+  witnesses = 0; host.time = 20;
+  J.record(e('collapse', tower, 12, 20));
+  check(unseen === 0 && seen < 0 && afterOne < seen - 5 && rep < afterOne - 10 && karma < -30 && J.wanted >= 2 && called > 0 && J.stats.collapses === 2,
+    `justice: unseen facade damage free, seen costs (${seen}), a collapse costs a lot and always counts (${afterOne.toFixed(1)}, then ${rep.toFixed(1)}, karma ${karma}, wanted ${J.wanted}), once per building`);
+  const m = new Justice({ ...host, witnesses: () => 5 });
+  m.record({ ...e('collapse', {}, 6), cause: 'threat' });
+  check(m.stats.collapses === 0 && m.heat === 0, "justice: a monster's collapse is not booked to the player");
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

@@ -123,7 +123,7 @@ export class ArmyFx {
     if (this.tokens < 1) { this.stats.impactsSkipped++; return -1; }
     this.tokens -= 1;
     this.stats.impacts++;
-    const n = this.g.destruction.impact(x, y, z, r, J, dx, dy, dz, kind);
+    const n = this.g.destruction.as('military', () => this.g.destruction.impact(x, y, z, r, J, dx, dy, dz, kind));
     if (n) this.g.consequences.record('army', 'building', 'facade', x, z, undefined, 'military');
     return n;
   }

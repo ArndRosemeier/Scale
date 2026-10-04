@@ -298,6 +298,12 @@ export class Game {
         this.camRig.addShake(Math.min(0.8, 60 / Math.max(20, d)));
       } else if (e.kind === 'glass') this.audio.play('glass_shatter', e.x, e.y, e.z, 0.8, 1, 6, cam.position);
     };
+    // Buildings: every panel the player breaks and every collapse go into the ledger, booked to
+    // whoever broke the building last (crime/Justice prices the player's share).
+    this.destruction.onDamage = (e) => { if (e.cause === 'player') this.consequences.record('impact', 'building', 'facade', e.x, e.z, e.ref); };
+    this.destruction.onCollapse = (e) => {
+      if (e.cause) this.consequences.record('impact', 'building', 'collapse', e.x, e.z, e.ref, e.cause === 'fire' ? 'threat' : e.cause, e.floors);
+    };
     this.player.events.onSizeChange = (_h, dir) => { if (Math.random() < 0.05) this.audio.play2d(dir > 0 ? 'grow_rumble' : 'shrink_whoosh', 0.5); };
     this.player.events.onFlightToggle = (f) => { if (f) this.audio.play2d('whoosh_takeoff', 0.7); };
     this.net.build([...this.streamer.cells.values()].filter((c) => c.status === 'ready'));
