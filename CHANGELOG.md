@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.008 — 2026-10-04
+
+- **Fix**: train rides got shakier and shakier — the rattle piled up over the ride. It now stays at a steady, light level, with a jolt at rail joints and a lurch when pulling away or braking.
+
 ## 0.007 — 2026-10-04
 
 - **Fix**: in fast flight the forward arm drifted across the body and the fists crossed in front of the head; the arms now reach ahead and slightly outward (one fist ahead, both in a V when boosting).

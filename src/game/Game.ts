@@ -953,21 +953,30 @@ export class Game {
    */
   private rideLoop: ReturnType<Audio['loop']> = null;
   private rideDist = 0;
+  private rideV = 0;
+  private rideA = 0;
   private rideFx(dt: number): void {
     const r = this.underground.riding, cam = this.renderer.camera.position;
     if (!r) {
       this.rideLoop?.set(cam.x, cam.y, cam.z, 0);
-      this.rideDist = 0;
+      this.rideDist = 0; this.rideV = 0; this.rideA = 0;
       return;
     }
     this.rideLoop ??= this.audio.loop('metro_run', 6);
+    // Speed and its change smoothed (the per-frame acceleration is noisy and grows with speed:
+    // fed to the shake every frame it piled up until the view shook wildly late in a ride).
+    const prevV = this.rideV;
+    this.rideV += (r.speed - this.rideV) * Math.min(1, dt * 2);
+    this.rideA += ((this.rideV - prevV) / Math.max(1e-3, dt) - this.rideA) * Math.min(1, dt * 2);
     const f = clamp(r.speed / 16, 0, 1.2);
     this.rideLoop?.set(cam.x, cam.y, cam.z, 0.2 + 0.8 * Math.min(1, f), 0.55 + 0.45 * f);
     const before = this.rideDist;
     this.rideDist += r.speed * dt;
     // Rail joints every 18 m: the front bogie, then the rear one 2.5 m later.
     for (const off of [0, 2.5]) if (r.speed > 3 && Math.floor((this.rideDist - off) / 18) !== Math.floor((before - off) / 18)) this.camRig.addShake(0.3 + 0.15 * f);
-    this.camRig.addShake(0.35 * f * dt + Math.min(0.5, Math.abs(r.accel) * 0.25) * dt * 2);
+    // A fine rattle at speed and a lurch pulling away / braking: a level the shake is held at, not an increment.
+    const lurch = Math.min(0.35, Math.max(0, Math.abs(this.rideA) - 0.4) * 0.3);
+    this.camRig.shakeFloor(0.12 * Math.min(1, f) + lurch);
   }
 
   /** Cars as boxes for the ragdolls (wrecks are physical bodies already). */

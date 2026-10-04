@@ -37,6 +37,11 @@ export class CameraRig {
     this.shake = Math.min(1.5, this.shake + amount);
   }
 
+  /** A steady rattle: keeps the shake at least this high (it never piles up like addShake). */
+  shakeFloor(level: number): void {
+    this.shake = Math.max(this.shake, Math.min(1.5, level));
+  }
+
   /** Widen the view by `deg` for a burst of speed: snaps open, holds `hold` s, eases back. */
   kickFov(deg: number, hold: number): void {
     this.kickDeg = deg;
