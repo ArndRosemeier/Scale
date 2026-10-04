@@ -124,7 +124,7 @@ export class VehicleRenderer {
     }
     const cp = cam.position;
     const lamps = G.uNight.value > 0.3 ? 1 : 0;
-    const draw = (v: Vehicle, range: number) => {
+    const draw = (v: Vehicle, range: number, parkedCar = false) => {
       const d = Math.hypot(v.x - cp.x, v.z - cp.z);
       if (d > range) return;
       this.sphere.center.set(v.x, v.y + 1, v.z);
@@ -148,7 +148,8 @@ export class VehicleRenderer {
       b.body.setMatrixAt(k, this.m4);
       b.paint.setXYZ(k, v.paint[0], v.paint[1], v.paint[2]);
       const blue = v.kind === 'police' || v.kind === 'swat';
-      const head = v.state === VState.Abandoned || crushed ? 0 : Math.max(lamps, blue ? 0.3 : 0);
+      // Parked cars stand dark at night (nobody in them); traffic and police drive with lights.
+      const head = v.state === VState.Abandoned || crushed || parkedCar ? 0 : Math.max(lamps, blue ? 0.3 : 0);
       const ind = v.state === VState.Abandoned ? 2 : blue && (v.fear > 0.3 || v.siren) ? 3 : v.task?.hold ? 2 : v.indicator;
       b.state.setXYZW(k, head, v.brake, ind, v.damage);
       // Wheels.
@@ -172,7 +173,7 @@ export class VehicleRenderer {
       }
     };
     for (const v of moving) draw(v, MOVE_RANGE);
-    for (const v of parked) draw(v, PARK_RANGE);
+    for (const v of parked) draw(v, PARK_RANGE, true);
     let total = 0;
     for (const b of this.buckets.values()) {
       b.body.count = b.n;
