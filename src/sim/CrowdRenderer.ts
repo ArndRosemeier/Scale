@@ -297,7 +297,7 @@ export class CrowdRenderer {
       if (sh !== r.shadow || r.shadowT <= 0) {
         r.shadow = sh;
         r.shadowT = 0.5;
-        r.rig.object.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = sh; });
+        r.rig.object.traverse(sh ? restoreShadow : dropShadow);
       }
     }
     // Drop rigs no longer needed (keep a short while to avoid churn).
@@ -371,6 +371,15 @@ export class CrowdRenderer {
 
 const _up = new THREE.Vector3(0, 1, 0);
 const byD = (p: Near, q: Near) => p.d - q.d;
+/** A far rig's meshes stop casting shadows; each remembers whether it did (eyes, lashes, hair shells never do). */
+const dropShadow = (o: THREE.Object3D) => {
+  if (!(o as THREE.Mesh).isMesh) return;
+  if (o.userData.castShadow === undefined) o.userData.castShadow = o.castShadow;
+  o.castShadow = false;
+};
+const restoreShadow = (o: THREE.Object3D) => {
+  if ((o as THREE.Mesh).isMesh && o.userData.castShadow !== undefined) o.castShadow = o.userData.castShadow;
+};
 
 /** Mark the first n instances of an instanced attribute for upload. */
 function upload(a: THREE.InstancedBufferAttribute | THREE.InstancedInterleavedBuffer | THREE.BufferAttribute, n: number): void {
