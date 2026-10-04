@@ -113,7 +113,7 @@ export class PowerCores {
         this.progress.collectCore(l.site.id, loot === 'energy' ? { max: ENERGY.coreMax } : loot === 'regen' ? { regen: ENERGY.coreRegen } : {});
         if (loot === 'karma') this.progress.addKarma(KARMA.coreKarma, 'power core');
         this.onCollect?.(l.site, l.spot);
-        this.markerKey = '';
+        this.markerKey = '#stale'; // ('' would equal the key of an empty list: the last core's marker stayed)
         this.publishMarkers();
       }
     }

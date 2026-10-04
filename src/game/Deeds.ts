@@ -70,7 +70,8 @@ export class Deeds {
       if (cause === 'player') this.hooks.toast?.('You helped them up — no karma for someone <b>you</b> knocked down', 'info');
       else this.progress.addKarma(cause === 'collapse' ? KARMA.helpUpCollapse : KARMA.helpUp, 'helped someone up');
     }
-    this.markerKey = '';
+    // (Not '': with nobody left to mark the new key is '' too, and the old marker stayed.)
+    this.markerKey = '#stale';
     return true;
   }
 
