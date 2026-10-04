@@ -23,6 +23,7 @@ import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
 import { terrainExtent } from '../src/world/boundary';
+import { cmuBvhChecks } from './cmuBvhTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 
@@ -1012,6 +1013,9 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   for (let i = 0; i < cell.length; i++) if ((cell[i] < 128) !== (restored[i] < 128)) diff++;
   check(diff === 0, `saves: cell element state restored exactly (${diff} differences)`);
 }
+
+// Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
+cmuBvhChecks(check);
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

@@ -74,12 +74,27 @@ const _e = new THREE.Euler();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3();
 
-interface FingerRig { bones: THREE.Bone[]; axis: THREE.Vector3[]; thumb: boolean }
+interface FingerRig {
+  bones: THREE.Bone[];
+  axis: THREE.Vector3[];
+  thumb: boolean;
+  /** Base joint: draws the finger in toward the middle finger (the rest hand is spread). */
+  close: THREE.Quaternion;
+}
 
 /** Raised-torch arm pose (Pose.arm params), tuned so the shaft points straight up at head height. */
+/** Relaxed hand: curl factor per finger (thumb → little finger) and per joint (base → tip). */
+const RELAXED_FINGER = [1.1, 1.15, 1.35, 1.6, 1.85];
+const RELAXED_JOINT = [0.85, 1.45, 1.1];
 /** Upper-body bones whose captured idle sway is toned down when standing. */
 const UPPER_BODY = /^(root$|spine0|neck0|head)/;
 const TORCH_RAISED = [1.7, 0.5, -0.4, 0.45, 0.3, -0.9, -0.4] as const;
+/**
+ * Motion-captured standing idles (CMU, tools/cmu-bvh.ts), one picked per character seed so a
+ * crowd doesn't breathe and shift its weight in step. Characters fall back to the Quaternius
+ * Idle_Loop (with the calmer procedural arms) when the library lacks them.
+ */
+export const MOCAP_IDLES = ['CMU_Idle_1', 'CMU_Idle_2', 'CMU_Idle_3'];
 
 export class Animator {
   readonly map: BoneMap;
@@ -152,6 +167,10 @@ export class Animator {
   /** Same for the upper body (spine, neck, head). */
   private torsoClipW = 1;
   private idleClipT = 0;
+  /** The standing idle clip of this character (a MOCAP_IDLES entry, or the Quaternius Idle_Loop). */
+  private idleName = '';
+  /** Weight of the motion-captured idle in the current blend (it drives the arms and torso fully). */
+  private mocapW = 0;
   private talkS = 0;
   private swimU = 0;
   // Air and landing (clip families): time in the air, whether it began with a jump, landing.
@@ -177,6 +196,10 @@ export class Animator {
   private leapVy = 0;
   private heavyT = 9;
   private heavyK = 0;
+  // Flight: smoothed boost and bank, hand curl per side.
+  private flyBoost = 0;
+  private flyBank = 0;
+  private flyCurl = { L: 0.35, R: 0.35 };
 
   constructor(readonly ch: Character) {
     this.map = makeBoneMap(ch.bones.map((b) => b.name));
@@ -188,6 +211,8 @@ export class Animator {
     this.pw = new Pose(this.map);
     this.pwTmp = new Pose(this.map);
     this.seed = ch.app.seed >>> 0;
+    // Idle clips start somewhere into their loop (crowds out of step).
+    this.idleClipT = (hash32(this.seed ^ 0x5bd1) % 10000) / 100;
     this.computeNeutral();
     this.tailBones = ch.bones.filter((b) => b.name.startsWith('tail')).length;
     this.hipH = (ch.rest[this.map.idx('upperleg01.L')].y + ch.rest[this.map.idx('upperleg01.R')].y) / 2;
@@ -223,7 +248,18 @@ export class Animator {
           bones.push(ch.bones[i]);
           axis.push(new THREE.Vector3().crossVectors(d, n).normalize());
         }
-        this.fingers[s].push({ bones, axis, thumb: f === 1 });
+        this.fingers[s].push({ bones, axis, thumb: f === 1, close: new THREE.Quaternion() });
+      }
+      // Fingers 2..5 lean a little toward the middle finger (MakeHuman rests with them splayed).
+      const dir = (f: number) => ch.rest[this.map.idx(`finger${f}-2.${s}`)].clone().sub(ch.rest[this.map.idx(`finger${f}-1.${s}`)]).normalize();
+      const mid = dir(3);
+      // (About the palm normal only: the fingers' rest curl differs, and that must not open a fist.)
+      const flat = (v: THREE.Vector3) => v.clone().addScaledVector(palm, -v.dot(palm)).normalize();
+      const m = flat(mid);
+      for (const f of [2, 4, 5]) {
+        const d = flat(dir(f));
+        const ang = Math.atan2(new THREE.Vector3().crossVectors(d, m).dot(palm), d.dot(m));
+        this.fingers[s][f - 1].close.setFromAxisAngle(palm, ang * (f === 5 ? 0.5 : 0.4));
       }
     }
     // Expression unit indices.
@@ -610,7 +646,7 @@ export class Animator {
       case 'swim': return this.swim(p, hs, dt);
       case 'climb': return this.climb(p, inp.vel[1], dt);
       case 'air': return this.air(p, inp.vel[1]);
-      case 'glide': return this.glide(p, inp.anim.move === 'fly');
+      case 'glide': return inp.anim.move === 'fly' ? this.flight(p, inp.anim.power?.fly, dt) : this.glide(p, false);
       case 'sit': {
         sitPose(p, 1);
         p.root.y -= this.hipH - 0.13 * (this.hipH / 0.9);
@@ -703,10 +739,12 @@ export class Animator {
     p.neck(run * 0.12 + sprint * 0.12 + crouch * 0.4);
     // Clip locomotion replaces the procedural gait (arms holding something keep theirs).
     if (gait) {
-      // Standing: the captured idle sways the hanging arms back and forth (the hands never
-      // settle); let the calm procedural arms carry most of it. Walking keeps the clip's swing.
-      this.armClipW = 0.25 + 0.75 * moving;
-      this.torsoClipW = 0.3 + 0.7 * moving;
+      // Standing: the Quaternius idle sways the hanging arms back and forth (the hands never
+      // settle); the calm procedural arms carry most of it. The motion-captured idles and
+      // walking keep the clip's arms and torso.
+      const full = Math.min(1, moving + this.mocapW);
+      this.armClipW = 0.25 + 0.75 * full;
+      this.torsoClipW = 0.3 + 0.7 * full;
       this.applyClipGait(p, gait.w);
       this.landing(p, gait.w);
     }
@@ -726,7 +764,13 @@ export class Animator {
       p.spine(0, 0, shift * 0.04 * life);
       p.leg('L', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, -shift) * 0.12) * life);
       p.leg('R', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, shift) * 0.12) * life);
-      if (inp.main === 'none' && inp.off === 'none' && !crouch) this.idleArms(p, idle);
+      // (Not over a motion-captured idle: its arms already hang as captured.)
+      const calm = idle * (1 - this.mocapW * this.clipOn);
+      if (inp.main === 'none' && inp.off === 'none' && !crouch && calm > 0.01) this.idleArms(p, calm);
+      // The captured arms hang close to a slim actor's thighs: give the hands room past broader
+      // hips, thighs and clothes.
+      const room = this.mocapW * this.clipOn * (0.09 + 0.1 * this.ch.app.weight);
+      if (room > 0.002) for (const s of ['L', 'R'] as const) p.arm(s, 0, room * this.armClip[s]);
     }
     this.carryPose(p, inp, moving, run, crouch);
   }
@@ -745,7 +789,7 @@ export class Animator {
     this.clipOn = approach(this.clipOn, this.clipRig && clipSettings.enabled ? 1 : 0, 4, dt);
     const rig = this.clipRig;
     if (!rig || this.clipOn < 0.002) return null;
-    const idle = rig.clip('Idle_Loop'), walk = rig.clip('Walk_Loop'), jog = rig.clip('Jog_Fwd_Loop'), sprint = rig.clip('Sprint_Loop');
+    const idle = this.standingIdle(rig), walk = rig.clip('Walk_Loop'), jog = rig.clip('Jog_Fwd_Loop'), sprint = rig.clip('Sprint_Loop');
     const cIdle = rig.clip('Crouch_Idle_Loop'), cWalk = rig.clip('Crouch_Fwd_Loop');
     if (!idle || !walk || !jog || !sprint || !cIdle || !cWalk) return null;
     this.crouchS = approach(this.crouchS, crouch, 8, dt);
@@ -755,6 +799,7 @@ export class Animator {
     const jogT = smooth(1.9, 3.6, sp), sprT = smooth(5.6, 7.6, sp);
     const stand = 1 - cr;
     const talk = talkIdle ? this.talkS : 0;
+    this.mocapW = this.idleName.startsWith('CMU_') ? (1 - moving) * stand * (1 - talk) : 0;
     const ws = [
       [idle, (1 - moving) * stand * (1 - talk)],
       [talkIdle ?? idle, (1 - moving) * stand * talk],
@@ -792,6 +837,21 @@ export class Animator {
     this.armClip.R = approach(this.armClip.R, rFree ? 1 : 0, 8, dt);
     this.armClip.L = approach(this.armClip.L, lFree ? 1 : 0, 8, dt);
     return { cycle, w: this.clipOn };
+  }
+
+  /** This character's standing idle clip (picked by seed among the motion-captured ones). */
+  private standingIdle(rig: ClipRig) {
+    if (!this.idleName) {
+      const have = MOCAP_IDLES.filter((n) => rig.clip(n));
+      this.idleName = have.length ? have[hash32(this.seed ^ 0x1d1e) % have.length] : 'Idle_Loop';
+    }
+    return rig.clip(this.idleName);
+  }
+
+  /** Length of the standing idle loop (s): the crowd baker samples one whole cycle. */
+  get idleCycle(): number {
+    const c = this.clipRig && this.idleName ? this.clipRig.clip(this.idleName) : null;
+    return c ? c.meta.dur : 2.5;
   }
 
   /** Landing from a jump or fall: the landing clip's knee bend, faded out when running on. */
@@ -944,17 +1004,72 @@ export class Animator {
     p.neck(-0.1 * flail);
   }
 
+  /**
+   * Superhero flight, relative to the body the player pitches (tilt 0 upright .. 1 horizontal)
+   * and banks:
+   *  - hover: upright, arms relaxed a little out from the sides, legs together with one knee
+   *    bent, toes pointed, a slow drift in the limbs;
+   *  - slow flight: arms along the body, legs trailing straight, head up to see ahead;
+   *  - cruise: one fist stretched ahead (the right), the other arm along the body;
+   *  - boost: both fists ahead, the head tucked between the arms;
+   *  - banking: head turned and torso curled into the turn, legs trailing out of it.
+   * Fists close on the stretched arms, the other hands stay relaxed (see fingerPose).
+   */
+  private flight(p: Pose, fly: { tilt: number; bank: number; boost: number } | undefined, dt: number) {
+    const t = this.time;
+    const tilt = clamp(fly?.tilt ?? 0, 0, 1);
+    this.flyBoost = approach(this.flyBoost, fly?.boost ?? 0, 3, dt);
+    this.flyBank = approach(this.flyBank, clamp(fly?.bank ?? 0, -0.9, 0.9) * tilt, 5, dt);
+    const fast = smooth(0.45, 0.95, tilt), hover = 1 - smooth(0.05, 0.5, tilt), slow = Math.max(0, 1 - fast - hover);
+    const boost = this.flyBoost * fast;
+    const tmp = this.pwTmp;
+    if (hover > 0.001) {
+      const q = tmp.clear();
+      for (const s of ['L', 'R'] as const) {
+        const o = s === 'R' ? 1.7 : 0;
+        q.arm(s, 0.16 + 0.05 * Math.sin(t * 0.9 + o), 0.3 + 0.05 * Math.sin(t * 0.7 + o), 0, 0.35 + 0.05 * Math.sin(t * 1.1 + o), 0.25, 0.06);
+      }
+      q.leg('L', 0.1 + 0.03 * Math.sin(t * 0.8), 0.02, 0, 0.16, 0.5, 0.15);
+      q.leg('R', 0.02 + 0.03 * Math.sin(t * 0.8 + 2), 0.02, 0, 0.45, 0.55, 0.15);
+      q.spine(0.02 * Math.sin(t * 0.6));
+      q.neck(-0.06);
+      p.addScaled(q, hover);
+    }
+    if (slow > 0.001) {
+      const q = tmp.clear();
+      for (const s of ['L', 'R'] as const) q.arm(s, -0.28, 0.14, 0, 0.14, 0.3, 0.08);
+      q.leg('L', -0.04, 0.02, 0, 0.06, 0.6, 0.15);
+      q.leg('R', -0.1, 0.02, 0, 0.3, 0.6, 0.15);
+      q.spine(0.06);
+      q.neck(0.45);
+      p.addScaled(q, slow);
+    }
+    if (fast > 0.001) {
+      const q = tmp.clear();
+      // Right fist ahead; the left arm along the body, or also ahead when boosting.
+      q.arm('R', 2.86, 0.1, 0, 0.08, 0.15, 0);
+      q.arm('L', -0.22 + 3.1 * boost, 0.1 - 0.02 * boost, 0, 0.14 - 0.08 * boost, 0.3 - 0.15 * boost, 0.06 * (1 - boost));
+      q.leg('L', -0.04, 0, 0, 0.05, 0.65, 0.2);
+      q.leg('R', -0.06, 0, 0, 0.22 * (1 - boost) + 0.05, 0.65, 0.2);
+      q.spine(0.1 + 0.04 * boost);
+      q.neck(0.85 - 0.15 * boost);
+      p.addScaled(q, fast);
+    }
+    // Banking into a turn (the player rolls the body by `bank`): look and curl into it.
+    const b = this.flyBank;
+    p.neck(0, -b * 0.35, 0);
+    p.spine(0, -b * 0.15, -b * 0.12);
+    p.leg('L', 0, b * 0.08, 0);
+    p.leg('R', 0, -b * 0.08, 0);
+    // Fists on the stretched arms.
+    this.flyCurl.R = 0.35 + 1.15 * fast;
+    this.flyCurl.L = 0.35 + 0.2 * slow + 1.15 * boost + 0.15 * fast * (1 - boost);
+  }
+
   private glide(p: Pose, fly: boolean) {
     const t = this.time;
     const s = Math.sin(t * 1.3) * 0.05;
-    if (fly) {
-      // Levitation: upright, arms slightly out, legs dangling.
-      p.arm('L', 0.15, 0.55 + s, 0, 0.3);
-      p.arm('R', 0.15, 0.55 - s, 0, 0.3);
-      p.leg('L', 0.15 + s, 0.05, 0, 0.35, -0.5);
-      p.leg('R', 0.05 - s, 0.05, 0, 0.25, -0.5);
-      return;
-    }
+    void fly;
     p.add('root', -0.95, 0, s);
     p.arm('L', 0.15, 1.45 + s, 0, 0.1);
     p.arm('R', 0.15, 1.45 - s, 0, 0.1);
@@ -1032,9 +1147,10 @@ export class Animator {
     p.add('spine01', 0.018 * b);
     p.addS('clavicle', 'L', 0, 0, -0.012 * b);
     p.addS('clavicle', 'R', 0, 0, -0.012 * b);
-    // Posture: the captured clips hold the shoulders pulled back (the arms hung from behind the
-    // chest); bring the collarbones forward as the procedural neutral does.
-    const cw = this.clipRig && clipSettings.enabled ? this.clipOn : 0;
+    // Posture: the Quaternius clips hold the shoulders pulled back (the arms hung from behind the
+    // chest); bring the collarbones forward as the procedural neutral does. The motion-captured
+    // idles stand with relaxed shoulders already (protracted, their hands met in front).
+    const cw = this.clipRig && clipSettings.enabled ? this.clipOn * (1 - this.mocapW) : 0;
     if (cw > 0.01) for (const s of ['L', 'R'] as const) p.addS('clavicle', s, 0, -this.clipProtract * cw * this.armClip[s] * this.armClipW, 0);
     // Acceleration lean.
     p.add('root', this.lean.x, 0, -this.lean.y);
@@ -1182,14 +1298,23 @@ export class Animator {
     if (def && inp.main === 'none' && (def === ACTIONS.punch || def === ACTIONS.block)) { cR = 1.5; cL = 1.5; }
     if (def === ACTIONS.gesture_wave || def === ACTIONS.cast_forward || def === ACTIONS.channel) cR = 0.1;
     if (def === ACTIONS.gesture_point) cR = 1.3;
+    // Flight: fists ahead, relaxed hands otherwise (empty hands only).
+    const fw = inp.anim.move === 'fly' ? this.famW.get('glide')! : 0;
+    if (fw > 0.01 && inp.main === 'none') cR += (this.flyCurl.R - cR) * fw;
+    if (fw > 0.01 && inp.off === 'none') cL += (this.flyCurl.L - cL) * fw;
     for (const s of ['L', 'R'] as const) {
       const c = s === 'L' ? cL : cR;
+      // An open hand (the relaxed curl or less) curls more toward the little finger and in the
+      // middle joints, as a hanging hand does; grips and fists curl evenly.
+      const open = 1 - smooth(relaxed, relaxed + 0.4, c);
       this.fingers[s].forEach((f, fi) => {
         const spread = (fi - 2.5) * 0.02;
+        const grade = 1 + open * (RELAXED_FINGER[fi] - 1);
         f.bones.forEach((b, k) => {
-          let amt = c * (k === 0 ? 0.75 : 1) * (f.thumb ? 0.45 : 1);
+          let amt = c * (k === 0 ? 0.75 : 1) * (f.thumb ? 0.45 + 0.4 * smooth(0.9, 1.45, c) : 1) * grade * (1 + open * (RELAXED_JOINT[k] - 1));
           if (def === ACTIONS.gesture_point && fi === 1) amt = 0.05;
           b.quaternion.setFromAxisAngle(f.axis[k], amt + spread * (k === 0 ? 1 : 0));
+          if (k === 0) b.quaternion.premultiply(f.close);
         });
       });
     }

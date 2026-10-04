@@ -165,7 +165,13 @@ export function libSkeleton(j: { bones: string[]; rest: number[][]; restHead: nu
 
 type Mode = 'rest' | 'segment' | 'parent' | 'follow';
 /** Library bone ← CMU joint(s) [a, b, t: slerp], how it is retargeted, and the segment end joint. */
-interface MapEntry { src: [string, string?, number?]; mode: Mode; segEnd?: string }
+interface MapEntry {
+  src: [string, string?, number?];
+  mode: Mode;
+  segEnd?: string;
+  /** Joint whose twist about this segment is added to it (the CMU wrist carries the forearm's pronation). */
+  twistFrom?: string;
+}
 export const CMU_MAP: Record<string, MapEntry> = {
   hips: { src: ['Hips'], mode: 'rest' },
   'spine.001': { src: ['LowerBack'], mode: 'rest' },
@@ -178,7 +184,7 @@ for (const [s, S] of [['L', 'Left'], ['R', 'Right']] as const) {
   Object.assign(CMU_MAP, {
     [`shoulder.${s}`]: { src: [`${S}Shoulder`], mode: 'rest' },
     [`upper_arm.${s}`]: { src: [`${S}Arm`], mode: 'segment', segEnd: `${S}ForeArm` },
-    [`forearm.${s}`]: { src: [`${S}ForeArm`], mode: 'segment', segEnd: `${S}Hand` },
+    [`forearm.${s}`]: { src: [`${S}ForeArm`], mode: 'segment', segEnd: `${S}Hand`, twistFrom: `${S}Hand` },
     // The CMU hands carry little and noisy data (a marker or two): they follow the forearm, and the
     // animator gives them their relaxed wrist and finger curl.
     [`hand.${s}`]: { src: [`${S}Hand`], mode: 'follow' },
@@ -207,6 +213,9 @@ export class CmuRetarget {
   readonly scale: number;
   private jIdx = new Map<string, number>();
   private align: THREE.Quaternion[] = [];
+  /** Twist source joint and the CMU rest segment axis it twists about (−1: none). */
+  private twistSrc: number[] = [];
+  private twistAxis: THREE.Vector3[] = [];
   private srcA: number[] = [];
   private srcB: number[] = [];
   private srcT: number[] = [];
@@ -240,12 +249,14 @@ export class CmuRetarget {
       this.mode[b] = m.mode;
       this.parentLib[b] = LIB_PARENT[name] ? li(LIB_PARENT[name]) : -1;
       this.align[b] = new THREE.Quaternion();
+      this.twistSrc[b] = m.twistFrom ? J(m.twistFrom) : -1;
       if (m.mode === 'segment') {
         const tip = lib.restTip[b];
         if (!tip) throw new Error('library bone without a rest segment: ' + name);
         const ds = tip.clone().sub(lib.restHead[b]).normalize();
         const dc = restPos[J(m.segEnd!)].clone().sub(restPos[this.srcA[b]]).normalize();
         this.align[b].setFromUnitVectors(ds, dc);
+        this.twistAxis[b] = dc;
       }
     });
     const mid = lib.restHead[li('thigh.L')].clone().add(lib.restHead[li('thigh.R')]).multiplyScalar(0.5);
@@ -274,6 +285,15 @@ export class CmuRetarget {
           const c = W[this.srcB[b]].clone();
           if (d.dot(c) < 0) c.set(-c.x, -c.y, -c.z, -c.w);
           d.slerp(c, this.srcT[b]);
+        }
+        const ts = this.twistSrc[b];
+        if (ts >= 0) {
+          // Swing-twist split of the child's rotation against this joint (rest axes): keep the twist.
+          const l = _qb.copy(W[a]).invert().multiply(W[ts]);
+          const ax = this.twistAxis[b];
+          const dot = l.x * ax.x + l.y * ax.y + l.z * ax.z;
+          const tw = new THREE.Quaternion(ax.x * dot, ax.y * dot, ax.z * dot, l.w);
+          if (tw.lengthSq() > 1e-10) d.multiply(tw.normalize());
         }
         d.multiply(this.align[b]);
       }

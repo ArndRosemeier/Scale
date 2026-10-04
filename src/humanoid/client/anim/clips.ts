@@ -1,6 +1,7 @@
 /**
  * Motion-captured-style animation clips (Quaternius Universal Animation Library, CC0; built by
- * tools/build-anim-clips.ts) retargeted onto MakeHuman characters.
+ * tools/build-anim-clips.ts) and motion capture (CMU_* clips: CMU Graphics Lab Motion Capture
+ * Database, appended by tools/cmu-bvh.ts) retargeted onto MakeHuman characters.
  *
  * The library stores model-space bone rotations of a 22-bone Rigify body in Norgo axes. Each
  * character bakes the clips it uses into the animator's own pose space (Euler angles relative

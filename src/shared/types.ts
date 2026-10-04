@@ -46,6 +46,9 @@ export interface PowerAnim {
   leapT: number;
   /** 1 while dashing (fades out after). */
   dash: number;
+  /** Flight (the body is pitched and banked by the player, see Player.updateRig): body tilt 0 (upright
+   *  hover) .. 1 (horizontal), bank (rad, the roll into a turn), boost 0/1 while boosting. */
+  fly?: { tilt: number; bank: number; boost: number };
 }
 
 /** Bitflags on snapshots. */

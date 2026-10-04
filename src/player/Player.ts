@@ -112,6 +112,9 @@ export class Player {
   /** Strength of the last super jump at its landing (for the landing effects), then 0. */
   landedLeap = 0;
   private readonly powerAnim: PowerAnim = { charge: -1, leap: 0, leapT: 0, dash: 0 };
+  /** Flight pose input for the animator (tilt, bank, boost). */
+  private readonly flyAnim = { tilt: 0, bank: 0, boost: 0 };
+  private flyBoost = false;
 
   /** Character made in the creator, used by the next Player (null: random human from the seed). */
   static look: CharacterLook | null = null;
@@ -314,6 +317,7 @@ export class Player {
     if (input.down('ControlLeft') || input.down('KeyC')) w.y -= 1;
     void wish;
     const cruise = 22 * sk * this.flightSpeed, fast = cruise * this.flightBoost;
+    this.flyBoost = boost && w.lengthSq() > 0 && this.flightBoost > 1.05;
     const target = w.lengthSq() > 0 ? w.normalize().multiplyScalar(boost ? fast : cruise) : new THREE.Vector3();
     const a = boost ? 1.4 : 2.2;
     this.vel.lerp(target, damp(a, dt));
@@ -432,6 +436,9 @@ export class Player {
     pw.leap = this.leap;
     pw.leapT = this.animTime - this.leapT0;
     pw.dash = this.dashT > 0 ? 1 : 0;
+    const fa = this.flyAnim;
+    fa.tilt = this.flightBlend; fa.bank = this.bank; fa.boost = this.flying && this.flyBoost ? 1 : 0;
+    pw.fly = this.flying || this.flightBlend > 0.01 ? fa : undefined;
     this.rig.update({ pos: [this.pos.x, this.pos.y, this.pos.z], vel: vl, yaw: this.yaw, anim: { move, action: this.action && this.animTime - this.action.t0 < this.action.dur ? this.action : undefined, power: pw }, flags: 0, scale }, dt / sk, this.animTime);
     // Footsteps on the animation's heel strikes (gait phase 0.25 = left, 0.75 = right).
     const ph = this.rig.animator?.gaitPhase ?? 0;
@@ -445,7 +452,8 @@ export class Player {
       this.events.onFootstep?.(this.pos.x, this.pos.y, this.pos.z, stepEnergy(this.mass, this.height), this.height);
     }
     this.stepPhase = ph;
-    // Flight body orientation: pitch forward with speed, bank into turns, superhero arms.
+    // Flight body orientation: pitch forward with speed, bank into turns (the animator poses the
+    // limbs for it: Animator.flight).
     const speed = this.vel.length() / sk;
     const fb = this.flying ? clamp((speed - 4) / 10, 0, 1) : 0;
     this.flightBlend = lerp(this.flightBlend, fb, damp(3, dt));
@@ -462,7 +470,6 @@ export class Player {
       _v.set(0, centre, 0).applyQuaternion(q);
       obj.position.set(this.pos.x, this.pos.y + centre - _v.y, this.pos.z);
       obj.position.x -= _v.x; obj.position.z -= _v.z;
-      this.superheroArms(this.flightBlend);
     } else {
       this.bodyPitch = 0;
       // Back on the feet: drop any leftover pitch/bank from flight (the rig only sets yaw,
@@ -488,30 +495,6 @@ export class Player {
     a.attach();
     this.avatar = a;
     return a;
-  }
-
-  /** Classic flight pose: one fist forward, the other arm along the body, legs together. */
-  private superheroArms(w: number): void {
-    const ch = this.rig.char;
-    if (!ch || w <= 0.01) return;
-    const set = (name: string, x: number, y: number, z: number) => {
-      const i = ch.boneIndex.get(name);
-      if (i === undefined) return;
-      const b = ch.bones[i];
-      const e = new THREE.Euler(x, y, z, 'XZY');
-      const q = new THREE.Quaternion().setFromEuler(e);
-      b.quaternion.slerp(q, w);
-    };
-    set('upperarm01.R', 2.9, 0, -0.15);
-    set('lowerarm01.R', 0.15, 0, 0);
-    set('upperarm01.L', -0.25, 0, 0.12);
-    set('lowerarm01.L', 0.25, 0, 0);
-    set('upperleg01.L', 0.02, 0, 0.03);
-    set('upperleg01.R', 0.12, 0, -0.03);
-    set('lowerleg01.L', -0.05, 0, 0);
-    set('lowerleg01.R', -0.35, 0, 0);
-    set('neck01', 0.6, 0, 0);
-    set('head', 0.35, 0, 0);
   }
 
   /** World positions of the two eyes (false: no character yet). */

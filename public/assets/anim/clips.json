@@ -688,47 +688,29 @@
    "sync": 0
   },
   {
-   "name": "A",
-   "frames": 195,
+   "name": "CMU_Idle_1",
+   "frames": 294,
    "loop": true,
-   "dur": 6.5,
+   "dur": 9.8,
    "offset": 160342,
    "speed": 0,
    "sync": 0
   },
   {
-   "name": "B",
+   "name": "CMU_Idle_2",
    "frames": 294,
    "loop": true,
    "dur": 9.8,
-   "offset": 178087,
+   "offset": 187096,
    "speed": 0,
    "sync": 0
   },
   {
-   "name": "C",
-   "frames": 78,
+   "name": "CMU_Idle_3",
+   "frames": 195,
    "loop": true,
-   "dur": 2.6,
-   "offset": 204841,
-   "speed": 0,
-   "sync": 0
-  },
-  {
-   "name": "D",
-   "frames": 48,
-   "loop": true,
-   "dur": 1.6,
-   "offset": 211939,
-   "speed": 0,
-   "sync": 0
-  },
-  {
-   "name": "E",
-   "frames": 117,
-   "loop": true,
-   "dur": 3.9,
-   "offset": 216307,
+   "dur": 6.5,
+   "offset": 213850,
    "speed": 0,
    "sync": 0
   }

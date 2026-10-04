@@ -11,3 +11,21 @@ released by Quaternius under CC0 1.0 Universal (public domain dedication).
 https://creativecommons.org/publicdomain/zero/1.0/
 
 Thank you, Quaternius. The derived data is likewise offered under CC0.
+
+
+Motion-captured clips (CMU_*)
+-----------------------------
+
+The clips named CMU_* (the standing idles) are derived by tools/cmu-bvh.ts (retargeted onto the
+body bones above, cut, looped, resampled to 30 fps) from takes of the
+
+  CMU Graphics Lab Motion Capture Database — http://mocap.cs.cmu.edu
+  The data used in this project was obtained from mocap.cs.cmu.edu.
+  The database was created with funding from NSF EIA-0196217.
+
+  CMU_Idle_1, CMU_Idle_2 (mirrored): subject 113, trial 21 ("Standing Still")
+  CMU_Idle_3:                         subject 77, trial 2 ("standing")
+
+in the BVH conversion by B. Hahne (cgspeed.com; mirrored at https://github.com/Shriinivas/cmubvh).
+CMU places no restrictions on the use of the data (commercial use included; see the FAQ at
+mocap.cs.cmu.edu), and the BVH conversion adds none. Thank you, Carnegie Mellon University.

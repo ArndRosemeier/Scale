@@ -10,7 +10,8 @@
  *   npx tsx tools/cmu-bvh.ts <dir> Name=140_07@1.2-8.5[~0.8][h0.6][m]   extra / trial cuts
  *
  * BVH files: Sequence-XXX-YYY/<subject>/Data/<subject>_<trial>.zip in the cmubvh repository,
- * e.g. https://raw.githubusercontent.com/Shriinivas/cmubvh/main/Sequence-131-144/140/Data/140_07.zip
+ * e.g. https://raw.githubusercontent.com/Shriinivas/cmubvh/main/Sequence-113-128/113/Data/113_21.zip
+ * (CMU_Idle_1/2) and .../Sequence-076-080/77/Data/77_02.zip (CMU_Idle_3).
  *
  * Every take is cut to [from, to] seconds, smoothed lightly (CMU marker jitter), resampled to the
  * library's 30 fps and turned to face −Z (the mean heading of the hips). The hips keep their
@@ -18,7 +19,13 @@
  * out; the height is measured from the standing ankles, so straight legs give the library's rest
  * height. Loops close with a cross-fade: the last `fade` seconds blend into the frames just
  * before the cut's start, so the last frame runs straight into the first. `m` mirrors the take
- * (left ↔ right), which makes a distinct variant from the same capture.
+ * (left ↔ right), which makes a distinct variant from the same capture. Two clean-ups for a
+ * calm, repeatable idle: the head's motion against the chest is centred and scaled down
+ * (calmHead), and the upper body's mean forward tilt is set to a relaxed upright (straighten).
+ *
+ * Credit (public/assets/anim/LICENSE.txt): the data was obtained from mocap.cs.cmu.edu; the
+ * database was created with funding from NSF EIA-0196217. BVH conversion by B. Hahne
+ * (cgspeed.com). CMU places no restrictions on use; the conversion adds none.
  */
 import * as THREE from 'three';
 import { readFileSync, writeFileSync } from 'fs';
@@ -41,7 +48,11 @@ interface Take {
  * "wait" and "standing still" takes for calm weight shifts, relaxed hanging arms and no gestures
  * that would stand out when repeated.
  */
-export const TAKES: Take[] = [];
+export const TAKES: Take[] = [
+  { name: 'CMU_Idle_1', file: '113_21', from: 1, to: 10.8, fade: 0.8, head: 0.45 },
+  { name: 'CMU_Idle_2', file: '113_21', from: 1, to: 10.8, fade: 0.8, head: 0.45, mirror: true },
+  { name: 'CMU_Idle_3', file: '77_02', from: 1, to: 7.5, fade: 0.8 },
+];
 
 const dir = process.argv[2];
 if (!dir) {
@@ -106,11 +117,28 @@ function calmHead(frames: RetargetFrame[], k: number) {
   });
 }
 
+/**
+ * Posture: actors lean back or hunch a little, and in a loop that becomes the character's
+ * build. The chest's mean forward tilt is brought to POSTURE by turning the upper body (from the
+ * mid spine up, collarbones included) about the lateral axis; the arms keep hanging as captured.
+ */
+const POSTURE = -0.04;
+const UPPER = ['spine.002', 'spine.003', 'neck', 'head', 'shoulder.L', 'shoulder.R'];
+function straighten(frames: RetargetFrame[]) {
+  const C = lib.bones.indexOf('spine.003');
+  const e = new THREE.Euler();
+  let sum = 0;
+  for (const fr of frames) sum += e.setFromQuaternion(fr.q[C].clone().multiply(lib.rest[C].clone().invert()), 'YXZ').x;
+  const fix = POSTURE - sum / frames.length;
+  const r = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), fix);
+  for (const fr of frames) for (const n of UPPER) fr.q[lib.bones.indexOf(n)].premultiply(r);
+  return fix;
+}
+
 function buildTake(t: Take): Int16Array {
   const bvh = parseBvh(readFileSync(`${dir}/${t.file}.bvh`, 'utf8'));
   const rt = new CmuRetarget(bvh, lib);
   const src = 1 / bvh.dt;
-  const step = src / FPS;
   const n = Math.round((t.to - t.from) * FPS);
   const nf = Math.round(t.fade * FPS);
   // Source frames needed: the fade lead-in before `from` through `to` (+ the smoothing margin).
@@ -129,7 +157,6 @@ function buildTake(t: Take): Int16Array {
     const sf = Math.round((t.from + outF / FPS) * src) - first;
     return { q: perBone.map((seq) => smoothQ(seq, sf, 2)), hips: raw[sf].hips.clone(), ankles: [raw[sf].ankles[0].clone(), raw[sf].ankles[1].clone()] };
   };
-  void step;
   const frames: RetargetFrame[] = [];
   for (let f = 0; f < n; f++) frames.push(sample(f));
   // Loop: the last nf frames cross-fade into the nf frames before the start.
@@ -164,6 +191,7 @@ function buildTake(t: Take): Int16Array {
     fr.hips.applyQuaternion(turn);
     fr.ankles.forEach((a) => a.applyQuaternion(turn));
   }
+  straighten(frames);
   // Hips: sway around the cut's mean, height above the standing ankles.
   const mean = new THREE.Vector3();
   frames.forEach((fr) => mean.add(fr.hips));

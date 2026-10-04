@@ -138,6 +138,33 @@ Styles (facade grammar plus roof plus massing):
   * roads: crack decals and craters
   * people and the player: physical ragdolls (see Ragdolls)
 
+### Humanoid animation (`src/humanoid/client/anim`)
+* `Animator`: locomotion families (ground, swim, climb, air, glide/fly, sit, sleep, dead, stunned) cross-faded by
+  weight, carry poses, actions, the superpower layer, additive breathing / look-at / hit springs, foot IK, face and
+  fingers. Poses are Euler angles over a neutral (arms hanging, palms to the thighs; `pose.ts`).
+* Clips (`clips.ts`, `public/assets/anim/clips.{json,bin}`): model-space rotations of a 22-bone Rigify body,
+  retargeted per character at runtime. Quaternius clips (CC0, `tools/build-anim-clips.ts`) for walk / jog / sprint,
+  crouch, swim, sit, jump, actions; motion capture for standing (`CMU_*`, below). `LICENSE.txt` holds the credits.
+* **Standing idle = CMU motion capture** (`tools/cmu-bvh.ts` + `tools/cmuBvh.ts`): BVH takes of the CMU Graphics
+  Lab database are retargeted onto the library skeleton (torso and collarbones by rotation from rest, long limb
+  bones by matching the rest segments — the CMU rest stands with spread legs —, feet and toes against their
+  parent, hands rigid with the forearm, which takes the wrist's pronation), smoothed, resampled to 30 fps, turned
+  to face −Z, the head's motion centred and damped, the upper body set to a relaxed upright, hips sway kept
+  (weight shifts) around the mean, and looped by cross-fading the end into the frames before the cut.
+  Clips: `CMU_Idle_1` (113_21 "Standing Still", 1–10.8 s), `CMU_Idle_2` (the same, mirrored), `CMU_Idle_3`
+  (77_02 "standing", 1–7.5 s). Each character picks one by seed (`MOCAP_IDLES`) and starts at a seeded point in
+  it. Over a mocap idle the clip drives arms and torso fully (no collarbone protraction or procedural calm arms,
+  which the Quaternius `Idle_Loop` still gets as a fallback); the arms get a little room by body weight so hands
+  clear hips and skirts. Talking blends to `Idle_Talking_Loop`; walking, carry poses, look-at, moods and sitting
+  work as before. Relaxed hands curl more toward the little finger, fingers drawn together; fists wrap the thumb.
+  `CrowdBaker` bakes one whole idle cycle (`Animator.idleCycle`, sub-stepped, eyes fixed ahead) so baked crowds
+  loop without a seam. `npm test` checks the parser and retarget math (`tools/cmuBvhTest.ts`).
+* **Flight** (`Animator.flight`, move `fly`): the player pitches and banks the body (`Player.updateRig`) and passes
+  `PowerAnim.fly` (tilt 0–1, bank, boost); the animator poses the limbs for it — hover (upright, arms a little out,
+  legs together with one knee bent, toes pointed, slow drift), slow flight (arms along the body, head up), cruise
+  (right fist ahead, left arm along the body), boost (both fists ahead), banking (head and torso into the turn),
+  blended by tilt; fists close on stretched arms.
+
 ### Ragdolls (`src/physics/ragdoll`)
 People and the player knocked flying, tumbling, lying, getting up — or staying down.
 * `skeleton.ts`: 14 parts (pelvis, abdomen, chest, head, upper/fore arms, thighs, shins,
@@ -184,7 +211,7 @@ People and the player knocked flying, tumbling, lying, getting up — or staying
   robots by *its* size and book it to whoever stepped), the sound and a destruction impact under a heavy foot.
 * Perception radius (for NPCs) grows with *H*. Tiny players go unnoticed and can be bumped.
 * Camera: orbit distance in body heights (mouse wheel), collision-aware, and near/far scale with *H*.
-* Flight (F): a hover pose when slow, a prone superhero glide when fast, banking, speed FOV,
+* Flight (F): hover, slow, cruise and boost poses (see Humanoid animation), banking, speed FOV,
   wind streaks, a sonic boom over Mach 1, and the downwash kicks up dust near the ground.
 
 ### Life simulation (`src/sim`, in a worker)
