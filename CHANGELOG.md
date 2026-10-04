@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.002 — 2026-10-04
+
+- **Calmer standing**: the motion-captured idle now plays at half speed (also for distant crowds).
+
 ## 0.001 — 2026-10-04
 
 The first versioned build.

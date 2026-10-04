@@ -95,6 +95,8 @@ const TORCH_RAISED = [1.7, 0.5, -0.4, 0.45, 0.3, -0.9, -0.4] as const;
  * Idle_Loop (with the calmer procedural arms) when the library lacks them.
  */
 export const MOCAP_IDLES = ['CMU_Idle_1', 'CMU_Idle_2', 'CMU_Idle_3'];
+/** The motion-captured idles play slower than captured: calmer standing (the baked crowd follows, see idleCycle). */
+const MOCAP_IDLE_RATE = 0.5;
 
 export class Animator {
   readonly map: BoneMap;
@@ -820,7 +822,8 @@ export class Animator {
     for (const [c, w] of ws) {
       if (w < 0.002) continue;
       // Procedural phase: left leg furthest forward at 0.25. Clip: at its sync point.
-      const u = c.speed > 0.05 ? this.phase - 0.25 + c.meta.sync : this.idleClipT / c.meta.dur;
+      const rate = MOCAP_IDLES.includes(c.meta.name) ? MOCAP_IDLE_RATE : 1;
+      const u = c.speed > 0.05 ? this.phase - 0.25 + c.meta.sync : (this.idleClipT * rate) / c.meta.dur;
       rig.accumulate(c, u, w, out);
       sum += w;
     }
@@ -851,7 +854,7 @@ export class Animator {
   /** Length of the standing idle loop (s): the crowd baker samples one whole cycle. */
   get idleCycle(): number {
     const c = this.clipRig && this.idleName ? this.clipRig.clip(this.idleName) : null;
-    return c ? c.meta.dur : 2.5;
+    return c ? c.meta.dur / (MOCAP_IDLES.includes(c.meta.name) ? MOCAP_IDLE_RATE : 1) : 2.5;
   }
 
   /** Landing from a jump or fall: the landing clip's knee bend, faded out when running on. */
