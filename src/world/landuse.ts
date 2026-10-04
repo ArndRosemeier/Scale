@@ -16,6 +16,7 @@ import { Rng, deriveSeed, hash2i, hashToFloat } from '../core/rng';
 import { smoothstep } from '../core/math';
 import { makeBoundary, boundaryAt } from './boundary';
 import type { Terrain, WaterQuery } from './terrain';
+import { airfieldEdge } from './airfield';
 
 export interface LandSample {
   /** Countryside weight: 0 in the city … 1 out in the country. */
@@ -163,6 +164,9 @@ export class LandUse {
     const e = this.edge(x, z);
     out.edge = e;
     out.rural = smoothstep(-40, 160, e);
+    // The airfield (big cities): mown grass, no forest, fields or hedges on it.
+    const af = this.terrain.airfield;
+    if (af && out.rural > 0) out.rural *= smoothstep(20, 120, airfieldEdge(af, x, z));
     if (out.rural <= 0) { out.forest = 0; out.field = 0; out.meadow = 1; out.bank = 0; out.water = Infinity; return out; }
     if (slope < 0) slope = this.terrain.slope(x, z, 6);
     const n = this.noise;

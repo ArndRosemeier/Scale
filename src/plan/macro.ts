@@ -15,6 +15,7 @@ import type { Terrain } from '../world/terrain';
 import type { WorldProfile } from '../world/settings';
 import { RoadClass, type ArterialEdge, type ArterialNode, type Bridge, type CellInfo, type Centre, type District, type MacroPlan } from './types';
 import { planUnderground } from './underground';
+import { planLandmarks } from './landmarks';
 import { MinHeap } from '../core/heap';
 import { makeBoundary, boundaryAt } from '../world/boundary';
 
@@ -576,9 +577,10 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
 
   const plan: MacroPlan = {
     seed: p.seed, centres, core, nodes, edges, cells, bridges,
-    metroLines: [], metroStations: [], sewers: [], boundary,
+    metroLines: [], metroStations: [], sewers: [], boundary, landmarks: [],
   };
   planUnderground(plan, field, terrain);
+  plan.landmarks = planLandmarks(plan, field, terrain);
   return plan;
 }
 

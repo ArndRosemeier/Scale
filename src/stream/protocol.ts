@@ -13,6 +13,7 @@ export type ToWorker =
   | { type: 'water'; job: number; x0: number; z0: number; size: number }
   | { type: 'forest'; job: number; x0: number; z0: number; size: number }
   | { type: 'bridges'; job: number }
+  | { type: 'landmarks'; job: number }
   | { type: 'skyline'; job: number; cells: number[] };
 
 /** Per building: base y, height, element base, element count, footprint centroid x,z, radius. */
@@ -41,6 +42,8 @@ export type FromWorker =
   /** Countryside trees of a tile (FOREST_STRIDE floats per tree, see build/forest). */
   | { type: 'forest'; job: number; trees: Float32Array }
   | { type: 'bridges'; job: number; mesh: MeshData | null }
+  /** Per landmark (macro.landmarks order): the near mesh and the far one. */
+  | { type: 'landmarks'; job: number; meshes: [MeshData, MeshData][] }
   | { type: 'skyline'; job: number; cells: number[]; records: Float32Array; counts: number[]; map: Float32Array; mapOff: Int32Array }
   | { type: 'error'; job: number; message: string };
 

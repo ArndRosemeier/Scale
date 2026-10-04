@@ -36,6 +36,11 @@ import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
+import { ATTRACTION_KINDS, inSite, siteToWorld } from '../src/plan/landmarks';
+import { landmarkParts, partOutline, solidFootprints } from '../src/plan/landmarkParts';
+import { buildLandmarkMesh } from '../src/build/landmarks';
+import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
+import { intersection } from '../src/core/clip';
 import { readFileSync, existsSync } from 'node:fs';
 
 let failures = 0;
@@ -1589,6 +1594,116 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   const m = new Justice({ ...host, witnesses: () => 5 });
   m.record({ ...e('collapse', {}, 6), cause: 'threat' });
   check(m.stats.collapses === 0 && m.heat === 0, "justice: a monster's collapse is not booked to the player");
+}
+
+// Landmarks (plan/landmarks.ts, plan/landmarkParts.ts): deterministic; a town hall and a stadium in
+// every city, 1–4 attractions by size, an airport only for big ones; sites clear of each other, of
+// water, roads, buildings and sewer manholes, the structures inside their sites, no furniture on them;
+// the airfield levelled, outside the city and free of forest; different from city to city.
+{
+  const t0 = performance.now();
+  const sigs: string[] = [];
+  const kinds = new Set<string>();
+  const thLooks = new Set<string>();
+  for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2], [42, 0.6], [3, 0.5], [5, 0.3]] as const) {
+    const at = `landmarks seed ${seed} size ${size}`;
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const macro = buildMacroPlan(terrain);
+    const again = buildMacroPlan(new Terrain(makeProfile({ seed, size })));
+    const L = macro.landmarks;
+    check(hashPlan(L) === hashPlan(again.landmarks), `${at}: deterministic`);
+    const R = terrain.profile.radius;
+    const count = (k: string) => L.filter((l) => l.kind === k).length;
+    check(count('townhall') === 1 && count('stadium') === 1, `${at}: a town hall and a stadium (${L.map((l) => l.kind).join(', ')})`);
+    const nAttr = L.filter((l) => (ATTRACTION_KINDS as string[]).includes(l.kind)).length;
+    check(nAttr >= 1 && nAttr <= 4 && nAttr >= (R >= 3200 ? 2 : 1), `${at}: ${nAttr} attractions for a ${terrain.profile.cls}`);
+    check(count('airport') === (R >= AIRPORT_MIN_RADIUS ? 1 : 0), `${at}: airport only for big cities (${count('airport')}, radius ${R.toFixed(0)} m)`);
+    for (const l of L) kinds.add(l.kind);
+    sigs.push(L.map((l) => `${l.kind}${l.style}:${Object.values(l.p).map((v) => v.toFixed(1)).join('/')}`).join(' '));
+    const th = L.find((l) => l.kind === 'townhall');
+    if (th) thLooks.add(`${th.style}/${th.p.w}/${th.p.tower}/${th.p.wings}`);
+    // Sites: apart, dry, inside their cells.
+    let overlaps = 0, wet = 0, outside = 0;
+    for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) if (intersection([L[i].site], [L[j].site]).length) overlaps++;
+    for (const l of L) {
+      if (l.cell < 0) continue;
+      for (let i = 0; i < l.site.length; i += 2) if (!pointInPoly(macro.cells[l.cell].poly, l.site[i], l.site[i + 1])) outside++;
+      for (let u = -1; u <= 1; u += 0.25) for (let v = -1; v <= 1; v += 0.25) {
+        const [x, z] = siteToWorld(l, u * l.hu, v * l.hv);
+        if (terrain.isWater(x, z)) wet++;
+      }
+    }
+    check(overlaps === 0 && wet === 0 && outside === 0, `${at}: sites apart (${overlaps} overlaps), dry (${wet}) and inside their cells (${outside} corners out)`);
+    // Sewer manholes (every 45 m along the trunks, as Underground lays them) stay off the sites.
+    let lids = 0;
+    for (const sw of macro.sewers) {
+      let acc = 0;
+      for (let i = 0; i + 3 < sw.pts.length; i += 2) {
+        const ax = sw.pts[i], az = sw.pts[i + 1], bx = sw.pts[i + 2], bz = sw.pts[i + 3], d = Math.hypot(bx - ax, bz - az);
+        for (let s = Math.ceil((acc - 22.5) / 45) * 45 + 22.5; s < acc + d; s += 45) {
+          const f = (s - acc) / d, x = ax + (bx - ax) * f, z = az + (bz - az) * f;
+          if (L.some((l) => inSite(l, x, z, 1))) lids++;
+        }
+        acc += d;
+      }
+    }
+    check(lids === 0, `${at}: no sewer manhole on a landmark site (${lids})`);
+    // The host cells: no street, sidewalk or building on the site, no furniture on the structure;
+    // the structure inside its site, meshes for both LODs.
+    let onRoad = 0, onBld = 0, onSolid = 0, partsOut = 0, meshes = 0;
+    for (const l of L) {
+      const parts = landmarkParts(l, terrain);
+      for (const p of parts) {
+        if (p.map === 5) continue; // the airport's access road
+        const o = partOutline(p);
+        if (o) for (let i = 0; i < o.length; i += 2) if (!inSite(l, o[i], o[i + 1], 1)) partsOut++;
+      }
+      const m0 = buildLandmarkMesh(l, terrain, 0).build(), m1 = buildLandmarkMesh(l, terrain, 1).build();
+      if (m0.index.length > 0 && m1.index.length > 0 && m1.index.length <= m0.index.length) meshes++;
+      if (l.cell < 0) continue;
+      const cp = planCell(macro, macro.cells[l.cell], terrain);
+      check(cp.landmarks.includes(l.id), `${at}: ${l.kind} known to its cell`);
+      const solids = solidFootprints(l, parts, 0);
+      for (let u = -1; u <= 1; u += 0.1) for (let v = -1; v <= 1; v += 0.1) {
+        const [x, z] = siteToWorld(l, u * l.hu, v * l.hv);
+        if ([...cp.carriageway, ...cp.sidewalks].some((s) => pointInPoly(s.outer, x, z) && !s.holes.some((h) => pointInPoly(h, x, z)))) onRoad++;
+      }
+      for (const b of cp.buildings) {
+        let hit = false;
+        for (let i = 0; i < b.poly.length && !hit; i += 2) hit = inSite(l, b.poly[i], b.poly[i + 1], -0.3);
+        for (let i = 0; i < l.site.length && !hit; i += 2) hit = pointInPoly(b.poly, l.site[i], l.site[i + 1]);
+        if (hit) onBld++;
+      }
+      for (let i = 0; i < cp.props.length; i += 6) {
+        if (cp.props[i] === PropType.Manhole) continue;
+        if (solids.some((q) => pointInPoly(q, cp.props[i + 1], cp.props[i + 2]))) onSolid++;
+      }
+    }
+    check(onRoad === 0 && onBld === 0, `${at}: sites clear of streets and sidewalks (${onRoad} samples) and of buildings (${onBld})`);
+    check(onSolid === 0, `${at}: no street furniture on a landmark (${onSolid})`);
+    check(partsOut === 0, `${at}: every structure inside its site (${partsOut} points out)`);
+    check(meshes === L.length, `${at}: near and far meshes for every landmark (${meshes} of ${L.length})`);
+    // The airport: outside the city (and its protected terrain), level, without forest, a road into town.
+    const ap = L.find((l) => l.kind === 'airport');
+    if (ap) {
+      const land = new LandUse(terrain), ls = newLandSample();
+      let inCity = 0, lo = Infinity, hi = -Infinity, rural = 0;
+      for (let u = -1; u <= 1; u += 0.1) for (let v = -1; v <= 1; v += 0.2) {
+        const [x, z] = siteToWorld(ap, u * ap.hu, v * ap.hv);
+        if (Math.hypot(x, z) < terrain.protectR) inCity++;
+        const h = terrain.height(x, z);
+        lo = Math.min(lo, h); hi = Math.max(hi, h);
+        rural = Math.max(rural, land.sample(x, z, ls).rural);
+      }
+      check(inCity === 0, `${at}: airport outside the city's protected zone (${inCity} samples in)`);
+      check(hi - lo < 0.01 && rural === 0, `${at}: airfield level (${(hi - lo).toFixed(3)} m) and free of forest and fields (rural ${rural.toFixed(2)})`);
+      check(!!ap.road && ap.road.length >= 4, `${at}: a road from the airport into town`);
+    }
+  }
+  check(new Set(sigs).size === sigs.length, `landmarks: every city's set is its own (${new Set(sigs).size} of ${sigs.length})`);
+  check(thLooks.size >= 5, `landmarks: town halls differ (${thLooks.size} looks in ${sigs.length} cities)`);
+  check([...ATTRACTION_KINDS].filter((k) => kinds.has(k)).length >= 5, `landmarks: varied attractions (${[...kinds].join(', ')})`);
+  console.log(`landmarks: ${sigs.length} cities, kinds ${[...kinds].join(', ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

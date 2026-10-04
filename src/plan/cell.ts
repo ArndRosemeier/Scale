@@ -5,12 +5,14 @@
  *  2. Surfaces by polygon booleans: carriageway, sidewalks, blocks, quay promenades.
  *  3. Lots: perimeter lots (urban), free lots (suburban/industrial), tower lots (downtown).
  *  4. Buildings, plazas, parks, courtyards and street furniture.
+ *  5. Landmark sites (plan/landmarks): no streets, lots or furniture of their own in them; their
+ *     ground (square, lawn, car park, with holes for the structure) and their props instead.
  */
 import { Rng, deriveSeed } from '../core/rng';
 import { clamp, lerp } from '../core/math';
 import {
   type Poly, polyArea, polyCentroid, minAreaRect, splitPolyByLine, ensureCCW, cleanPoly, pointInPoly,
-  distSqPointSeg, polyBounds, resample, polylineLength, simplifyClosed,
+  distSqPointSeg, polyBounds, resample, polylineLength, simplifyClosed, segIntersect,
 } from '../core/geom2';
 import { difference, intersection, offset, strokePolylines, union, shapesToPolys, type Shape, shapeArea } from '../core/clip';
 import type { Terrain } from '../world/terrain';
@@ -19,6 +21,8 @@ import { ROAD_SPEC } from './macro';
 import { STYLES, pickStyle, type BuildingDesc, type StyleId } from './building';
 import { STATION_HALF, ENTRANCE_L, ENTRANCE_W } from './metroDims';
 import { placeEateries, type EateryPlan } from './terrace';
+import { landmarksOfCell, siteRect, siteToWorld, siteZones, worldToSite, SITE_STREET_CLEAR, type Landmark, type ZoneKind } from './landmarks';
+import { landmarkParts, solidFootprints } from './landmarkParts';
 export { STATION_HALF, ENTRANCE_L, ENTRANCE_W };
 
 export interface StreetSeg {
@@ -95,6 +99,8 @@ export interface CellPlan {
   entrances: number[];
   /** Cafés, restaurants, … with their terraces (plan/terrace.ts). */
   eateries: EateryPlan[];
+  /** Landmarks standing in this cell (their sites are kept clear of streets and lots). */
+  landmarks: number[];
 }
 
 
@@ -136,11 +142,16 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
   const plan: CellPlan = {
     id: cell.id, district: cell.district, streets: [], carriageway: [], sidewalks: [], blocks: [], promenade: [],
     plazas: [], parks: [], yards: [], paved: [], lots: [], buildings: [], props: [], junctions: [], bounds: polyBounds(cell.poly), entrances: [], eateries: [],
+    landmarks: [],
   };
+  const sites = landmarksOfCell(macro, cell.id);
+  plan.landmarks = sites.map((l) => l.id);
+  // Streets keep a street's width (and its sidewalk) away from landmark sites.
+  const keepOut = sites.map((l) => siteRect(l, -l.hu - SITE_STREET_CLEAR, -l.hv - SITE_STREET_CLEAR, l.hu + SITE_STREET_CLEAR, l.hv + SITE_STREET_CLEAR));
 
   // ---------------------------------------------------------- 1. streets
   const chords: { pts: number[]; cls: RoadClass }[] = [];
-  if (g.layout !== 'none') splitStreets(cell, g, rng.fork('streets'), chords);
+  if (g.layout !== 'none') splitStreets(cell, g, rng.fork('streets'), chords, keepOut);
   // Curvy suburbs: bend chords (keeping endpoints).
   for (const c of chords) {
     if (cell.district === 'suburban' && cell.gridness < 0.5) {
@@ -155,7 +166,8 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
           const o = Math.sin(Math.PI * t) * amp;
           pts.push(c.pts[0] + (c.pts[2] - c.pts[0]) * t - dz * o, c.pts[1] + (c.pts[3] - c.pts[1]) * t + dx * o);
         }
-        c.pts = pts;
+        // (A bend into a landmark site stays straight.)
+        if (!lineHits(pts, keepOut)) c.pts = pts;
       }
     }
   }
@@ -216,6 +228,22 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
   for (const blk of plan.blocks) {
     const area = shapeArea(blk);
     const b = br.fork(bid++);
+    // A block holding a landmark site: the site is cut out (its ground comes later), the rest as usual.
+    const hit = sites.filter((l) => shapeTouchesSite(blk, l));
+    if (hit.length) {
+      const rest = difference(shapesToPolys([blk]), hit.map((l) => siteRect(l, -l.hu - 1.5, -l.hv - 1.5, l.hu + 1.5, l.hv + 1.5)));
+      // (Lots are cut from outlines alone: a site inside the block must not stay a hole.)
+      for (const piece of rest.flatMap((sh) => withoutHoles(sh))) {
+        const a = shapeArea(piece);
+        if (a < 60) continue;
+        const o = minAreaRect(piece.outer);
+        if (cell.district === 'park') plan.parks.push(piece);
+        // Small or thin leftovers (between a site and the street) are paved, not built on.
+        else if (a < 250 || Math.min(o.hu, o.hv) < 7) plan.plazas.push(piece);
+        else makeLots(piece, g, cell, b, plan, terrain);
+      }
+      continue;
+    }
     if (cell.district === 'park') { plan.parks.push(blk); continue; }
     // Occasional plaza / pocket park.
     const plazaP = cell.district === 'oldtown' ? 0.1 : cell.district === 'downtown' || cell.district === 'commercial' ? 0.07 : 0.05;
@@ -243,8 +271,12 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
 
   // --------------------------------------------------------- 5. props
   placeProps(plan, cell, macro, g, rng.fork('props'), terrain);
+  // ------------------------------------------------------ 5b. landmark props
+  for (const lm of sites) placeLandmarkProps(plan, lm, terrain);
   // ------------------------------------------- 6. cafés, restaurants and their terraces
   placeEateries(plan, cell, macro, terrain);
+  // (The sites' ground comes last: terraces are for the cafés' own squares, not a landmark's.)
+  for (const lm of sites) placeLandmarkGround(plan, lm, terrain);
   return plan;
 }
 
@@ -255,7 +287,7 @@ function closeShapes(shapes: Shape[], r: number): Shape[] {
 
 // ------------------------------------------------------------- streets
 
-function splitStreets(cell: CellInfo, g: Grammar, rng: Rng, out: { pts: number[]; cls: RoadClass }[]): void {
+function splitStreets(cell: CellInfo, g: Grammar, rng: Rng, out: { pts: number[]; cls: RoadClass }[], keepOut: Poly[] = []): void {
   const useGrid = rng.chance(g.grid * (0.4 + cell.gridness * 0.8));
   const ang = cell.gridAngle;
   const ux = Math.cos(ang), uz = Math.sin(ang);
@@ -304,7 +336,28 @@ function splitStreets(cell: CellInfo, g: Grammar, rng: Rng, out: { pts: number[]
       ox = c[0] + nx * shift;
       oz = c[1] + nz * shift;
     }
-    const { pieces, chords } = splitPolyByLine(poly, ox, oz, dx, dz);
+    let { pieces, chords } = splitPolyByLine(poly, ox, oz, dx, dz);
+    if (keepOut.length && chords.some((ch) => lineHits(ch, keepOut))) {
+      // A cut through a landmark site: move it to run along the site's edge instead (either
+      // side, the nearer first); if neither works the piece stays whole around the site.
+      const nx = -dz, nz = dx;
+      const alt: number[] = [];
+      for (const k of keepOut) {
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < k.length; i += 2) { const t = (k[i] - ox) * nx + (k[i + 1] - oz) * nz; lo = Math.min(lo, t); hi = Math.max(hi, t); }
+        alt.push(lo - 0.5, hi + 0.5);
+      }
+      alt.sort((a, b) => Math.abs(a) - Math.abs(b));
+      let ok = false;
+      for (const t of alt) {
+        const r2 = splitPolyByLine(poly, ox + nx * t, oz + nz * t, dx, dz);
+        if (r2.pieces.length < 2 || r2.chords.some((ch) => lineHits(ch, keepOut))) continue;
+        if (r2.pieces.some((q) => Math.abs(polyArea(q)) < shortT * shortT * 0.35)) continue;
+        pieces = r2.pieces; chords = r2.chords; ok = true;
+        break;
+      }
+      if (!ok) continue;
+    }
     if (pieces.length < 2) continue;
     // Reject slivers.
     if (pieces.some((q) => Math.abs(polyArea(q)) < shortT * shortT * 0.35)) {
@@ -312,7 +365,7 @@ function splitStreets(cell: CellInfo, g: Grammar, rng: Rng, out: { pts: number[]
         // Retry once with a centred cut.
         const c = polyCentroid(poly);
         const r2 = splitPolyByLine(poly, c[0], c[1], -lz, lx);
-        if (r2.pieces.length >= 2 && !r2.pieces.some((q) => Math.abs(polyArea(q)) < shortT * shortT * 0.35)) {
+        if (r2.pieces.length >= 2 && !r2.pieces.some((q) => Math.abs(polyArea(q)) < shortT * shortT * 0.35) && !r2.chords.some((ch) => lineHits(ch, keepOut))) {
           for (const ch of r2.chords) if (Math.hypot(ch[2] - ch[0], ch[3] - ch[1]) > 20) out.push({ pts: ch, cls: chordClass(g, ch, depth) });
           for (const q of r2.pieces) queue.push({ poly: q, depth: depth + 1 });
         }
@@ -322,6 +375,42 @@ function splitStreets(cell: CellInfo, g: Grammar, rng: Rng, out: { pts: number[]
     for (const ch of chords) if (Math.hypot(ch[2] - ch[0], ch[3] - ch[1]) > 20) out.push({ pts: ch, cls: chordClass(g, ch, depth) });
     for (const q of pieces) queue.push({ poly: q, depth: depth + 1 });
   }
+}
+
+/** Does a polyline cross or enter any of the polygons? */
+function lineHits(pts: number[], polys: Poly[]): boolean {
+  for (const k of polys) {
+    for (let i = 0; i < pts.length; i += 2) if (pointInPoly(k, pts[i], pts[i + 1])) return true;
+    const n = k.length >> 1;
+    for (let i = 0; i + 3 < pts.length; i += 2) {
+      for (let a = 0; a < n; a++) {
+        const b = (a + 1) % n;
+        if (segIntersect(pts[i], pts[i + 1], pts[i + 2], pts[i + 3], k[a * 2], k[a * 2 + 1], k[b * 2], k[b * 2 + 1])) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** A shape cut into pieces without holes (split through each hole). */
+function withoutHoles(sh: Shape, depth = 0): Shape[] {
+  if (!sh.holes.length || depth > 3) return [sh];
+  const h = sh.holes[0], c = polyCentroid(h), o = minAreaRect(h);
+  const out: Shape[] = [];
+  for (const half of splitPolyByLine(sh.outer, c[0], c[1], -o.uz, o.ux).pieces) {
+    for (const s of difference([ensureCCW(half)], sh.holes)) out.push(...withoutHoles(s, depth + 1));
+  }
+  return out;
+}
+
+/** Does a block overlap a landmark's site? */
+function shapeTouchesSite(blk: Shape, lm: Landmark): boolean {
+  for (let i = 0; i < blk.outer.length; i += 2) {
+    const [u, v] = worldToSite(lm, blk.outer[i], blk.outer[i + 1]);
+    if (Math.abs(u) < lm.hu && Math.abs(v) < lm.hv) return true;
+  }
+  for (let i = 0; i < lm.site.length; i += 2) if (pointInPoly(blk.outer, lm.site[i], lm.site[i + 1]) && !blk.holes.some((h) => pointInPoly(h, lm.site[i], lm.site[i + 1]))) return true;
+  return lineHits([...lm.site, lm.site[0], lm.site[1]], [blk.outer]);
 }
 
 function chordClass(g: Grammar, ch: number[], depth: number): RoadClass {
@@ -923,4 +1012,124 @@ function placeEntrances(plan: CellPlan, cell: CellInfo, macro: MacroPlan): void 
     }
   }
   if (cuts.length) plan.sidewalks = difference(shapesToPolys(plan.sidewalks), cuts);
+}
+
+// ------------------------------------------------------------ landmark sites
+
+/**
+ * A landmark's site ground: the landmark's zones (square, lawn, car park) with holes where the
+ * structure stands. Its furniture (below) keeps off the structure and inside the site.
+ */
+function placeLandmarkGround(plan: CellPlan, lm: Landmark, terrain: Terrain): void {
+  const solids = solidFootprints(lm, landmarkParts(lm, terrain), 0.8);
+  const { base, zones } = siteZones(lm);
+  const lists: Record<ZoneKind, Shape[]> = { plaza: plan.plazas, park: plan.parks, paved: plan.paved };
+  const zonePolys = zones.map((z) => z.poly);
+  for (const s of difference([lm.site], [...zonePolys, ...solids])) if (shapeArea(s) > 20) lists[base].push(s);
+  for (const z of zones) {
+    const inSite = intersection([z.poly], [lm.site]);
+    for (const s of difference(shapesToPolys(inSite), solids)) if (shapeArea(s) > 20) lists[z.kind].push(s);
+  }
+}
+
+/** A landmark's own furniture: lamps, benches, trees, a fountain on its square, cars in its car parks. */
+function placeLandmarkProps(plan: CellPlan, lm: Landmark, terrain: Terrain): void {
+  const parts = landmarkParts(lm, terrain);
+  const P = plan.props, r = new Rng(deriveSeed(lm.seed, 'site-props'));
+  const clearR = solidFootprints(lm, parts, 1.6);
+  const n0 = P.length;
+  const ok = (x: number, z: number, rad: number) => {
+    const [u, v] = worldToSite(lm, x, z);
+    if (Math.abs(u) > lm.hu - 1.2 || Math.abs(v) > lm.hv - 1.2) return false;
+    if (clearR.some((q) => pointInPoly(q, x, z))) return false;
+    for (let i = n0; i < P.length; i += 6) if (Math.abs(P[i + 1] - x) < rad && Math.abs(P[i + 2] - z) < rad) return false;
+    return !terrain.isWater(x, z, 1);
+  };
+  const put = (t: PropType, u: number, v: number, yaw: number, rad: number, scale = 1, variant = 0): boolean => {
+    const [x, z] = siteToWorld(lm, u, v);
+    if (!ok(x, z, rad)) return false;
+    P.push(t, x, z, yaw, scale, variant);
+    return true;
+  };
+  // World yaw facing the local direction (du, dv): props face along (sin yaw, cos yaw).
+  const face = (du: number, dv: number) => {
+    const c = Math.cos(lm.angle), s = Math.sin(lm.angle);
+    return Math.atan2(du * c - dv * s, du * s + dv * c);
+  };
+  const hu = lm.hu, hv = lm.hv;
+  /** Lamps along the site's edges. */
+  const edgeLamps = (step: number, inset = 2) => {
+    for (let u = -hu + inset; u <= hu - inset; u += step) for (const sv of [-1, 1]) put(PropType.Lamp, u, sv * (hv - inset), face(0, -sv), 1.5, 1, 0);
+    for (let v = -hv + inset + step; v <= hv - inset - step; v += step) for (const su of [-1, 1]) put(PropType.Lamp, su * (hu - inset), v, face(-su, 0), 1.5, 1, 0);
+  };
+  /** Trees (and bushes) scattered over the free ground. */
+  const scatter = (n: number, bush = 0.25, m = 3) => {
+    for (let k = 0; k < n * 3 && n > 0; k++) {
+      if (put(r.chance(bush) ? PropType.Bush : PropType.Tree, r.range(-hu + m, hu - m), r.range(-hv + m, hv - m), r.range(0, 6.28), 3, r.range(0.8, 1.3), r.int(0, 5))) n--;
+    }
+  };
+  const L = lm.p;
+  switch (lm.kind) {
+    case 'townhall': {
+      const front = hv - 4 - L.d - L.wingD;
+      const sq = (-hv + front) / 2;
+      put(r.chance(0.6) ? PropType.Fountain : PropType.Statue, 0, sq, r.range(0, 6.28), 4, 1, r.int(0, 3));
+      for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; put(PropType.Bench, Math.cos(a) * 9, sq + Math.sin(a) * 7, face(-Math.cos(a), -Math.sin(a)), 1.6); }
+      for (let v = -hv + 4; v < front - 2; v += 9) for (const su of [-1, 1]) put(PropType.Tree, su * (hu - 3), v, r.range(0, 6.28), 3, r.range(0.9, 1.15), 1);
+      edgeLamps(15, 5);
+      for (let k = 0; k < 6; k++) put(r.pick([PropType.Planter, PropType.Bin, PropType.Bench]), r.range(-hu + 6, hu - 6), r.range(-hv + 4, front - 3), 0, 3);
+      break;
+    }
+    case 'stadium': {
+      const oa = L.ia + L.tiers * L.depth;
+      if (L.park) for (const su of [-1, 1]) {
+        const u0 = oa + 13, u1 = hu - 3;
+        for (let u = u0; u < u1 - 2; u += 6.2) for (let v = -hv + 6; v < hv - 6; v += 2.8) if (r.chance(0.7)) put(PropType.ParkedCar, su * u, v, face(1, 0) + (r.chance(0.5) ? Math.PI : 0), 1.2, 1, r.int(0, 1 << 20));
+        for (let v = -hv + 8; v < hv - 8; v += 24) put(PropType.Lamp, su * ((u0 + u1) / 2), v, 0, 2, 1, 1);
+      }
+      for (let u = -oa; u <= oa; u += 14) for (const sv of [-1, 1]) put(PropType.Tree, u, sv * (hv - 3), r.range(0, 6.28), 3, r.range(0.9, 1.2), 2);
+      for (let k = 0; k < 10; k++) put(r.pick([PropType.Bin, PropType.Bench, PropType.Kiosk]), r.range(-oa, oa), r.chance(0.5) ? -hv + 6 : hv - 6, face(0, 1), 3);
+      break;
+    }
+    case 'tower': case 'monument': case 'lighthouse': {
+      const R = Math.min(hu, hv) - 5;
+      const n = lm.kind === 'lighthouse' ? 3 : 10;
+      for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2 + 0.3; put(PropType.Bench, Math.cos(a) * R, Math.sin(a) * R, face(-Math.cos(a), -Math.sin(a)), 1.6); }
+      for (let k = 0; k < n; k++) { const a = ((k + 0.5) / n) * Math.PI * 2 + 0.3; put(lm.kind === 'lighthouse' ? PropType.Bush : k % 2 ? PropType.Planter : PropType.Lamp, Math.cos(a) * (R + 1.5), Math.sin(a) * (R + 1.5), face(-Math.cos(a), -Math.sin(a)), 1.6, 1, 1); }
+      if (lm.kind === 'monument' && L.ring) for (const su of [-1, 1]) put(PropType.Fountain, su * R * 0.6, 0, 0, 4, 1, r.int(0, 3));
+      if (lm.kind === 'tower') scatter(8, 0.3, 4);
+      if (lm.kind === 'lighthouse') scatter(4, 0.7, 3);
+      break;
+    }
+    case 'cathedral': case 'museum': {
+      const fc = lm.kind === 'museum' ? -hv + L.fc / 2 + 2 : -hv + 8;
+      if (lm.kind === 'museum' && lm.style === 0) for (const su of [-1, 1]) put(PropType.Fountain, su * hu * 0.45, fc, 0, 4, 1, r.int(0, 3));
+      for (let u = -hu + 4; u <= hu - 4; u += 10) put(PropType.Lamp, u, -hv + 2.5, face(0, 1), 1.5, 1, 1);
+      for (let v = -hv + 6; v < hv - 4; v += 9) for (const su of [-1, 1]) put(PropType.Tree, su * (hu - 3), v, r.range(0, 6.28), 3, r.range(0.85, 1.2), 3);
+      for (let k = 0; k < 6; k++) put(PropType.Bench, r.range(-hu + 5, hu - 5), r.range(-hv + 4, fc + 4), face(0, 1), 2);
+      break;
+    }
+    case 'wheel': {
+      put(PropType.Kiosk, -hu * 0.55, -hv + 5, face(0, 1), 3);
+      put(PropType.Kiosk, hu * 0.55, -hv + 5, face(0, 1), 3);
+      for (let k = 0; k < 8; k++) put(PropType.Bench, r.range(-hu + 4, hu - 4), r.range(-hv + 3, hv - 3), r.range(0, 6.28), 2);
+      edgeLamps(16, 2);
+      scatter(10, 0.35, 3);
+      break;
+    }
+    case 'fortress': {
+      scatter(Math.round((hu * hv) / 180), 0.5, 3);
+      for (let k = 0; k < 4; k++) put(PropType.Bench, r.range(-hu + 4, hu - 4), -hv + r.range(3, 8), face(0, 1), 2);
+      break;
+    }
+    case 'glasshouse': {
+      put(PropType.Fountain, 0, -hv + 10, 0, 4, 1, r.int(0, 3));
+      for (let u = -hu + 3; u <= hu - 3; u += 3.2) for (const sv of [-1, 1]) if (r.chance(0.8)) put(PropType.Hedge, u, sv * (hv - 2), face(1, 0), 1.4, 1, 0);
+      for (let k = 0; k < 8; k++) put(PropType.Bench, r.range(-hu + 5, hu - 5), r.range(-hv + 4, -hv + 16), face(0, 1), 2);
+      edgeLamps(18, 4);
+      scatter(Math.round((hu * hv) / 140), 0.35, 4);
+      break;
+    }
+    case 'airport': break;
+  }
 }

@@ -1,0 +1,1057 @@
+/**
+ * Landmark structures as lists of primitive parts (pure data): boxes, cylinders and cones,
+ * domes, gable and pyramid roofs, sloped stands, beams, tubes, barrel vaults and flat surfaces,
+ * each with a facade material (atlas layer, tint, window grammar).
+ *
+ * One description serves everything: the mesh (build/landmarks.ts, two LODs: parts flagged
+ * `detail` are left out far away), collision (`partObstacles`: the solid parts become the
+ * walker's boxes and cylinders), the map (`partFootprints`) and the cell planner (ground holes,
+ * props kept off the structure). It is a pure function of the landmark (and the terrain under
+ * walls that follow the ground), so workers and the main thread agree.
+ *
+ * Local frame: u = (cos angle, sin angle), v = (-sin, cos), origin at the site centre, the
+ * front (entrance, square) towards -v. Heights are absolute (y up); `lm.base` is the floor level.
+ */
+import { Rng } from '../core/rng';
+import type { Poly } from '../core/geom2';
+import type { Terrain } from '../world/terrain';
+import type { Landmark } from './landmarks';
+
+export const enum PK { Box = 0, Cyl = 1, Dome = 2, Gable = 3, Pyramid = 4, Ramp = 5, Beam = 6, Tube = 7, Vault = 8, Flat = 9, Quad = 10 }
+
+/** Surface material: facade atlas layer (walls 0–15, roofs 16–23), tint, facade flags and window grammar. */
+export interface PartMat { layer: number; tint: [number, number, number]; flags: number; bay: number; fh: number; gh: number }
+
+export interface LmPart {
+  k: PK;
+  /** Centre (Beam: start point) and the axis angle of the part (its u = (cos a, sin a)). */
+  x: number;
+  z: number;
+  a: number;
+  /** Half sizes along u and v. Ramp: hx at the front (low) edge, hx2 at the back (high) edge. Vault: hz = radius across. Dome: radii. */
+  hx: number;
+  hz: number;
+  hx2?: number;
+  /** Bottom and top. Ramp: front edge top yLo, back edge top y1. Dome: y1 = apex (below y0: hanging). Tube: y0/y1 = centre ∓ radius. */
+  y0: number;
+  y1: number;
+  yLo?: number;
+  /** Cylinder bottom / top radius (cone: r2 = 0). Tube: radius at -u / +u. Pyramid: r2 = top scale (0 = apex). */
+  r?: number;
+  r2?: number;
+  /** Segments around (cylinders, domes, tubes, vaults). */
+  seg?: number;
+  /** Ramp: seat rows (stepped top in the near LOD). */
+  rows?: number;
+  /** Beam end and half thickness. */
+  bx?: number;
+  by?: number;
+  bz?: number;
+  w?: number;
+  /** Quad: corners (x, y, z) × 4. Ramp: ground corners (x, z) × 4 — front left, front right, back right, back left. */
+  q?: number[];
+  m: PartMat;
+  /** Material of top surfaces and roof slopes (default: m without openings). */
+  top?: PartMat;
+  /** Ramp: material of the back face (the outer facade of a stand). */
+  back?: PartMat;
+  /** Collision solid. */
+  solid?: boolean;
+  /** Close-range detail (left out of the far LOD and the map). */
+  detail?: boolean;
+  /** Foundation from this height up to y0 (walls standing on uneven ground). */
+  foot?: number;
+  /** Map category: 0 none, 1 building, 2 paving, 3 lawn / pitch, 4 running track, 5 road. */
+  map?: number;
+  /** Ramp: no end faces (segments of a ring). */
+  noSides?: boolean;
+  /** Collision only (a simple volume standing in for an open structure): not drawn. */
+  hidden?: boolean;
+}
+
+/** A solid for the walker (same shape as world/Collision's Obstacle). */
+export interface PartObstacle {
+  cyl: boolean;
+  x: number; z: number;
+  r: number;
+  hx: number; hz: number;
+  ux: number; uz: number;
+  y0: number; y1: number;
+}
+
+// Facade flags (build/buildingShell FF): windows, curtain wall, arched, roof, front.
+const WIN = 1, CURTAIN = 4, ARCH = 8, ROOF = 128;
+// Wall layers (plan/building WallMat) and roof layers (16 + RoofMat).
+const BRICK = 0, BRICK_BROWN = 1, LIME = 4, SAND = 5, PLASTER = 6, STUCCO = 7, CONC = 8, PANEL = 9, GLASS = 10, METAL = 11, GRANITE = 13, BRICK_WHITE = 15;
+const TAR = 16, CLAY = 17, SLATE = 18, ZINC = 19, ASPHALT = 20, METAL_ROOF = 21, GRAVEL = 22, GREEN_ROOF = 23;
+
+type RGB = [number, number, number];
+const mat = (layer: number, tint: RGB = [1, 1, 1], flags = 0, bay = 3, fh = 4, gh = 4.5): PartMat => ({ layer, tint, flags, bay, fh, gh });
+const WHITE: RGB = [1, 1, 1];
+const COPPER: RGB = [0.48, 0.72, 0.62];
+const GOLD: RGB = [1.25, 1.0, 0.45];
+const BRONZE: RGB = [0.55, 0.42, 0.3];
+/** Paint colours (team colours, wheels, liveries). */
+const PAINT: RGB[] = [[0.85, 0.15, 0.12], [0.15, 0.3, 0.75], [0.95, 0.8, 0.15], [0.15, 0.6, 0.3], [0.95, 0.95, 0.95], [0.55, 0.15, 0.55], [0.95, 0.45, 0.1], [0.12, 0.12, 0.14]];
+const STONES = [LIME, SAND, GRANITE, BRICK_WHITE];
+
+interface Opt {
+  /** Turn relative to the current frame. */
+  rot?: number;
+  top?: PartMat;
+  back?: PartMat;
+  solid?: boolean;
+  detail?: boolean;
+  /** true: a foundation down to the site's lowest ground; a number: down to that height. */
+  foot?: boolean | number;
+  map?: number;
+  seg?: number;
+}
+
+/** Builds parts in a local frame (nested frames for sub-assemblies like planes). */
+class Kit {
+  readonly parts: LmPart[] = [];
+  private ox: number;
+  private oz: number;
+  private oa: number;
+  /** Floor level and the foundation bottom. */
+  readonly B: number;
+  readonly F: number;
+
+  constructor(readonly lm: Landmark, readonly T: Terrain) {
+    this.ox = lm.x; this.oz = lm.z; this.oa = lm.angle;
+    this.B = lm.base;
+    this.F = lm.low - 0.4;
+  }
+
+  W(u: number, v: number): [number, number] {
+    const c = Math.cos(this.oa), s = Math.sin(this.oa);
+    return [this.ox + u * c - v * s, this.oz + u * s + v * c];
+  }
+
+  /** Natural ground at a local point. */
+  ground(u: number, v: number): number {
+    const [x, z] = this.W(u, v);
+    return this.T.height(x, z);
+  }
+
+  /** Lowest ground under a local rectangle (for walls that follow the terrain). */
+  groundMin(u: number, v: number, hu: number, hv: number, rot = 0): number {
+    let m = Infinity;
+    const c = Math.cos(rot), s = Math.sin(rot);
+    for (const [a, b] of [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) m = Math.min(m, this.ground(u + a * hu * c - b * hv * s, v + a * hu * s + b * hv * c));
+    return m;
+  }
+
+  groundMax(u: number, v: number, hu: number, hv: number, rot = 0): number {
+    let m = -Infinity;
+    const c = Math.cos(rot), s = Math.sin(rot);
+    for (const [a, b] of [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]]) m = Math.max(m, this.ground(u + a * hu * c - b * hv * s, v + a * hu * s + b * hv * c));
+    return m;
+  }
+
+  /** Run `fn` in a sub-frame at (u, v) turned by rot. */
+  sub(u: number, v: number, rot: number, fn: () => void): void {
+    const [x, z] = this.W(u, v);
+    const s = [this.ox, this.oz, this.oa] as const;
+    this.ox = x; this.oz = z; this.oa += rot;
+    fn();
+    [this.ox, this.oz, this.oa] = s;
+  }
+
+  private foot(o: Opt): number | undefined {
+    return o.foot === true ? this.F : typeof o.foot === 'number' ? o.foot : undefined;
+  }
+
+  private add(k: PK, u: number, v: number, p: Partial<LmPart> & { hx: number; hz: number; y0: number; y1: number; m: PartMat }, o: Opt, solid: boolean, map: number): LmPart {
+    const [x, z] = this.W(u, v);
+    const part: LmPart = {
+      k, x, z, a: this.oa + (o.rot ?? 0), ...p,
+      top: o.top, back: o.back, solid: o.solid ?? (solid && !o.detail), detail: o.detail, foot: this.foot(o),
+      map: o.map ?? (o.detail ? 0 : map), seg: o.seg ?? p.seg,
+    };
+    this.parts.push(part);
+    return part;
+  }
+
+  box(u: number, v: number, hu: number, hv: number, y0: number, y1: number, m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Box, u, v, { hx: hu, hz: hv, y0, y1, m }, o, true, 1);
+  }
+
+  cyl(u: number, v: number, r: number, r2: number, y0: number, y1: number, m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Cyl, u, v, { hx: r, hz: r, r, r2, y0, y1, m, seg: 20 }, o, true, 1);
+  }
+
+  /** Half ellipsoid with radii (rx, rz), springing at y0, apex at y1 (below y0: hanging). */
+  dome(u: number, v: number, rx: number, rz: number, y0: number, y1: number, m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Dome, u, v, { hx: rx, hz: rz, y0, y1, m, seg: 20 }, o, false, 0);
+  }
+
+  /** Gable roof over a rectangle, ridge along the part's u (hu along it; with rot π/2 along the frame's v): eaves at y0, ridge at y1 (gable ends in m, slopes in top). */
+  gable(u: number, v: number, hu: number, hv: number, y0: number, y1: number, m: PartMat, top: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Gable, u, v, { hx: hu, hz: hv, y0, y1, m }, { ...o, top }, false, 0);
+  }
+
+  /** Pyramid / spire / hipped roof: rectangle at y0 tapering to `t` of its size at y1. */
+  pyramid(u: number, v: number, hu: number, hv: number, y0: number, y1: number, t: number, m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Pyramid, u, v, { hx: hu, hz: hv, y0, y1, r2: t, m }, o, false, 0);
+  }
+
+  /** Sloped stand: front edge (-v) of half length hu at yLo, back edge (+v) of half length hu2 at y1. */
+  ramp(u: number, v: number, hu: number, hu2: number, hv: number, y0: number, yLo: number, y1: number, rows: number, m: PartMat, o: Opt & { noSides?: boolean } = {}): LmPart {
+    const p = this.add(PK.Ramp, u, v, { hx: hu, hx2: hu2, hz: hv, y0, yLo, y1, rows, m }, o, true, 1);
+    p.noSides = o.noSides;
+    return p;
+  }
+
+  /** Sloped stand on a quadrilateral (local corners: front left, front right, back right, back left). */
+  rampQ(c: [number, number][], y0: number, yLo: number, y1: number, rows: number, m: PartMat, o: Opt & { noSides?: boolean } = {}): LmPart {
+    const w = c.map(([u, v]) => this.W(u, v));
+    const fx = (w[1][0] - w[0][0]), fz = (w[1][1] - w[0][1]);
+    const cu = (c[0][0] + c[1][0] + c[2][0] + c[3][0]) / 4, cv = (c[0][1] + c[1][1] + c[2][1] + c[3][1]) / 4;
+    const dm = Math.hypot((w[2][0] + w[3][0] - w[0][0] - w[1][0]) / 2, (w[2][1] + w[3][1] - w[0][1] - w[1][1]) / 2);
+    const p = this.add(PK.Ramp, cu, cv, {
+      hx: Math.hypot(fx, fz) / 2, hx2: Math.hypot(w[2][0] - w[3][0], w[2][1] - w[3][1]) / 2, hz: dm / 2, y0, yLo, y1, rows, m,
+      q: w.flat(),
+    }, { ...o, rot: Math.atan2(fz, fx) - this.oa }, true, 1);
+    p.noSides = o.noSides;
+    return p;
+  }
+
+  beam(u0: number, v0: number, y0: number, u1: number, v1: number, y1: number, w: number, m: PartMat, o: Opt = {}): LmPart {
+    const [bx, bz] = this.W(u1, v1);
+    return this.add(PK.Beam, u0, v0, { hx: 0, hz: 0, y0, y1: y0, bx, by: y1, bz, w, m }, o, false, 0);
+  }
+
+  /** Horizontal cylinder along u (centre height y, half length hu), radius r at -u and r2 at +u. */
+  tube(u: number, v: number, y: number, hu: number, r: number, r2: number, m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Tube, u, v, { hx: hu, hz: Math.max(r, r2), r, r2, y0: y - Math.max(r, r2), y1: y + Math.max(r, r2), m, seg: 14 }, o, false, 0);
+  }
+
+  /** Barrel vault along u over a strip 2 hv wide, springing at y0, crown at y1. */
+  vault(u: number, v: number, hu: number, hv: number, y0: number, y1: number, m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Vault, u, v, { hx: hu, hz: hv, y0, y1, m, seg: 14 }, o, true, 1);
+  }
+
+  /** Flat horizontal surface at height y (pavement, pitch, markings). */
+  flat(u: number, v: number, hu: number, hv: number, y: number, m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Flat, u, v, { hx: hu, hz: hv, y0: y, y1: y, m }, o, false, 2);
+  }
+
+  /** An invisible solid box (collision volume of an open structure: a wheel, a sphere). */
+  solidBox(u: number, v: number, hu: number, hv: number, y0: number, y1: number, map = 0): void {
+    const p = this.box(u, v, hu, hv, y0, y1, mat(CONC), { solid: true, map });
+    p.hidden = true;
+  }
+
+  solidCyl(u: number, v: number, r: number, y0: number, y1: number): void {
+    const p = this.cyl(u, v, r, r, y0, y1, mat(CONC), { solid: true, map: 0 });
+    p.hidden = true;
+  }
+
+  /** Free quad (world corners, x y z × 4, counter-clockwise from above). */
+  quad(q: number[], m: PartMat, o: Opt = {}): LmPart {
+    const part: LmPart = { k: PK.Quad, x: (q[0] + q[6]) / 2, z: (q[2] + q[8]) / 2, a: 0, hx: 0, hz: 0, y0: Math.min(q[1], q[4], q[7], q[10]), y1: Math.max(q[1], q[4], q[7], q[10]), q, m, map: o.map ?? 5, detail: o.detail };
+    this.parts.push(part);
+    return part;
+  }
+}
+
+// ---------------------------------------------------------------------- kinds
+
+function townhall(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B;
+  const st = lm.style;
+  const wallL = st === 0 ? STONES[P.wall % 4] : st === 1 ? [BRICK, SAND, BRICK_BROWN, LIME][P.wall % 4] : st === 2 ? [PLASTER, STUCCO, PLASTER, SAND][P.wall % 4] : [CONC, PANEL, CONC, LIME][P.wall % 4];
+  const pastel: RGB = st === 2 ? r.pick<RGB>([[0.96, 0.88, 0.7], [0.92, 0.8, 0.72], [0.95, 0.93, 0.86], [0.85, 0.88, 0.8]]) : WHITE;
+  const fh = 4.6, gh = 5.4, H = gh + (P.floors - 1) * fh;
+  const flags = WIN | (st === 1 ? ARCH : 0);
+  const wall = mat(wallL, pastel, flags, st === 3 ? 2.2 : 3.2, fh, gh);
+  const plain = mat(wallL, [pastel[0] * 0.92, pastel[1] * 0.92, pastel[2] * 0.92]);
+  const roofM = st === 1 ? mat(r.pick([SLATE, CLAY]), WHITE, ROOF) : st === 2 ? mat(SLATE, WHITE, ROOF) : mat(st === 3 ? GRAVEL : ZINC, WHITE, ROOF);
+  const vb = lm.hv - 4 - P.d / 2;
+  const hw = P.w / 2, hd = P.d / 2;
+  // Main block.
+  if (st === 3) {
+    // Modern: a glazed ground floor under a solid slab, the council chamber a drum beside it.
+    k.box(0, vb, hw, hd, B, B + gh, mat(GLASS, WHITE, WIN | CURTAIN, 1.6, gh, gh), { foot: true, top: plain });
+    k.box(0, vb + 1.5, hw + 1, hd + 1.5, B + gh, B + H, mat(wallL, WHITE, WIN, 2.0, fh, fh), { top: mat(GRAVEL, WHITE, ROOF) });
+  } else {
+    k.box(0, vb, hw, hd, B, B + H, wall, { foot: true, top: roofM });
+  }
+  if (st === 1) k.gable(0, vb, hw, hd, B + H, B + H + P.d * 0.55, plain, roofM);
+  if (st === 2) k.pyramid(0, vb, hw + 0.3, hd + 0.3, B + H, B + H + 5, 0.75, roofM);
+  if (st === 0 || st === 3) {
+    // Balustrade / parapet.
+    k.box(0, vb - hd + 0.3, hw, 0.3, B + H, B + H + 1.1, plain, { detail: true });
+    k.box(0, vb + hd - 0.3, hw, 0.3, B + H, B + H + 1.1, plain, { detail: true });
+    for (const s of [-1, 1]) k.box(s * (hw - 0.3), vb, 0.3, hd, B + H, B + H + 1.1, plain, { detail: true });
+  }
+  // Wings reaching forward around the square (a U).
+  if (P.wings) {
+    const ww = Math.min(12, P.w * 0.2), wv = vb - hd - P.wingD / 2;
+    for (const s of [-1, 1]) {
+      k.box(s * (hw - ww / 2), wv, ww / 2, P.wingD / 2 + 0.5, B, B + H - fh, wall, { foot: true, top: roofM });
+      if (st === 1) k.gable(s * (hw - ww / 2), wv, P.wingD / 2 + 0.5, ww / 2, B + H - fh, B + H - fh + ww * 0.5, plain, roofM, { rot: Math.PI / 2 });
+    }
+  }
+  const fv = vb - hd; // front facade line
+  // Entrance steps across the middle.
+  for (let i = 0; i < 3; i++) k.box(0, fv - 1.2 - i * 0.9, P.w * 0.18 + 1 - i * 0.3, 0.45, k.F, B - i * 0.18, mat(GRANITE, [0.85, 0.85, 0.85]), { detail: i > 0, solid: false });
+  // Portico (classical): columns, entablature and pediment.
+  if (st === 0) {
+    const n = r.pick([6, 6, 8]), pw = Math.min(P.w * 0.45, n * 3.6), cv = fv - 3.2;
+    const colM = mat(wallL, WHITE);
+    for (let i = 0; i < n; i++) k.cyl(-pw / 2 + (i + 0.5) * (pw / n), cv, 0.75, 0.65, B, B + H - 2.2, colM, { seg: 12 });
+    k.box(0, cv + 0.6, pw / 2 + 0.8, 2.6, B + H - 2.2, B + H, plain, { solid: false });
+    k.gable(0, cv + 0.6, 2.6, pw / 2 + 0.8, B + H, B + H + pw * 0.16, plain, roofM, { rot: Math.PI / 2, detail: false });
+  }
+  // Tower: clock tower (belfry, spire or cupola) or a dome on a drum.
+  if (P.tower === 2) {
+    const dr = Math.min(P.w, P.d) * 0.24;
+    k.cyl(0, vb, dr, dr, B + H, B + H + 7, mat(wallL, pastel, WIN | ARCH, 2.4, 7, 7), { solid: false });
+    k.dome(0, vb, dr + 0.4, dr + 0.4, B + H + 7, B + H + 7 + dr * 1.15, mat(r.pick([ZINC, SLATE, METAL_ROOF]), r.chance(0.5) ? COPPER : r.chance(0.5) ? GOLD : WHITE, ROOF));
+    k.cyl(0, vb, 1.4, 1.4, B + H + 7 + dr * 1.1, B + H + 11 + dr * 1.1, mat(wallL, pastel), { solid: false, detail: true });
+    k.dome(0, vb, 1.7, 1.7, B + H + 11 + dr * 1.1, B + H + 13 + dr * 1.1, mat(ZINC, COPPER, ROOF), { detail: true });
+  } else if (P.tower === 1) {
+    // (Modern: a campanile on the square beside the slab's end.)
+    const ts = st === 3 ? 4.5 : r.range(4, 5.2), tv = st === 3 ? fv - 8 : fv + ts * 0.6, tu = st === 3 ? hw - 5 : 0;
+    const th = B + Math.max(P.towerH, H + 14);
+    k.box(tu, tv, ts, ts, B, th, mat(wallL, pastel, WIN | (st === 1 ? ARCH : 0), ts, 6, gh), { foot: true, top: roofM });
+    // Clock faces near the top.
+    const cy = th - 4;
+    for (const [du, dv, rot] of [[0, -ts - 0.12, 0], [0, ts + 0.12, 0], [-ts - 0.12, 0, Math.PI / 2], [ts + 0.12, 0, Math.PI / 2]] as const) {
+      k.box(tu + du, tv + dv, 1.9, 0.12, cy - 1.9, cy + 1.9, mat(PLASTER, [1.15, 1.12, 1.02]), { rot, detail: true, solid: false });
+      k.box(tu + du * 1.03, tv + dv * 1.03, 0.12, 0.06, cy - 0.1, cy + 1.5, mat(METAL, [0.1, 0.1, 0.1]), { rot, detail: true, solid: false });
+    }
+    if (st === 1) k.pyramid(tu, tv, ts + 0.3, ts + 0.3, th, th + ts * 3.2, 0, mat(r.pick([SLATE, ZINC]), r.chance(0.4) ? COPPER : WHITE, ROOF));
+    else if (st === 2) {
+      k.cyl(tu, tv, ts * 0.8, ts * 0.8, th, th + 4, mat(wallL, pastel, WIN | ARCH, 2, 4, 4), { solid: false });
+      k.dome(tu, tv, ts * 0.85, ts * 0.85, th + 4, th + 4 + ts * 1.4, mat(ZINC, r.chance(0.6) ? COPPER : WHITE, ROOF));
+      k.cyl(tu, tv, 0.25, 0.05, th + 4 + ts * 1.3, th + 9 + ts * 1.3, mat(METAL, GOLD), { detail: true, solid: false });
+    } else k.box(tu, tv, ts + 0.4, ts + 0.4, th, th + 0.8, plain, { solid: false });
+  }
+  if (st === 3) k.cyl(-hw + 10, fv - 12, 9, 9, B, B + 9, mat(GLASS, WHITE, WIN | CURTAIN, 1.8, 9, 9), { foot: true, top: mat(METAL_ROOF, WHITE, ROOF) });
+  // Flagpoles in front.
+  const flagC = r.pick(PAINT);
+  for (const s of [-1, 0, 1]) {
+    const u = s * P.w * 0.22, v = fv - 9;
+    k.cyl(u, v, 0.12, 0.08, B - 0.1, B + 12, mat(METAL, [0.85, 0.85, 0.85]), { detail: true, solid: false, seg: 6 });
+    k.box(u + 1.3, v, 1.2, 0.03, B + 10.2, B + 11.8, mat(PLASTER, s === 0 ? WHITE : flagC), { detail: true, solid: false });
+  }
+}
+
+/** Point on a superellipse |x/a|^n + |z/b|^n = 1 at angle t. */
+function superE(a: number, b: number, n: number, t: number): [number, number] {
+  const c = Math.cos(t), s = Math.sin(t);
+  return [a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n)];
+}
+
+function stadium(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B;
+  const n = P.shape ? 6 : 2, N = 48;
+  const wallL = [CONC, METAL, BRICK][P.wall % 3];
+  const facade = mat(wallL, wallL === METAL ? r.pick<RGB>([[0.9, 0.9, 0.92], [0.55, 0.6, 0.68], PAINT[P.seatA]]) : WHITE, WIN, 5, 4.5, 6);
+  const under = mat(CONC, [0.8, 0.8, 0.8]);
+  const seatA = mat(PANEL, PAINT[P.seatA]), seatB = mat(PANEL, PAINT[P.seatB === P.seatA ? (P.seatB + 3) % 8 : P.seatB]);
+  // Bowl: tiers of sloped stands around the field, stepped seat rows near.
+  const rise = 0.52;
+  const tierY = (t: number) => B + 1.4 + t * (P.depth * rise + 3.2);
+  const ring: { u: number; v: number; nu: number; nv: number }[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const [u, v] = superE(P.ia, P.ib, n, t);
+    const [u1, v1] = superE(P.ia, P.ib, n, t + 0.01), [u0, v0] = superE(P.ia, P.ib, n, t - 0.01);
+    const tu = u1 - u0, tv = v1 - v0, tl = Math.hypot(tu, tv) || 1;
+    ring.push({ u, v, nu: tv / tl, nv: -tu / tl });
+  }
+  let topY = B;
+  for (let i = 0; i < N; i++) {
+    const p0 = ring[i], p1 = ring[i + 1];
+    // Gates at the ends of the long axis (the players' tunnel, the marathon gate).
+    const t = ((i + 0.5) / N) * Math.PI * 2;
+    if (Math.abs(Math.sin(t)) < 0.07) continue;
+    const seat = (Math.floor(i / 4) % 3 === 2) ? seatB : seatA;
+    // Offsets along each ring vertex's own normal: tiers and segments meet without gaps.
+    const at = (q: typeof p0, o: number): [number, number] => [q.u + q.nu * o, q.v + q.nv * o];
+    for (let tr = 0; tr < P.tiers; tr++) {
+      const o0 = tr * P.depth, o1 = o0 + P.depth;
+      const y0 = tierY(tr), y1 = y0 + P.depth * rise;
+      topY = Math.max(topY, y1);
+      k.rampQ([at(p1, o0), at(p0, o0), at(p0, o1), at(p1, o1)], B, y0, y1, Math.round(P.depth / 0.85), under,
+        { top: seat, back: tr === P.tiers - 1 ? facade : under, noSides: true, foot: true });
+    }
+  }
+  // Roof: a canopy over the long sides, over the whole ring, or closed over the field too.
+  if (P.roof > 0) {
+    const roofM = mat(METAL_ROOF, r.pick<RGB>([[0.95, 0.95, 0.95], [0.75, 0.78, 0.8], [0.6, 0.62, 0.66]]));
+    const ry = topY + 6, out = P.tiers * P.depth;
+    for (let i = 0; i < N; i++) {
+      const t = ((i + 0.5) / N) * Math.PI * 2;
+      if (P.roof === 1 && Math.abs(Math.sin(t)) < 0.6) continue;
+      const p0 = ring[i], p1 = ring[i + 1];
+      const nu = (p0.nu + p1.nu) / 2, nv = (p0.nv + p1.nv) / 2, nl = Math.hypot(nu, nv);
+      const at = (q: typeof p0, o: number): [number, number] => [q.u + q.nu * o, q.v + q.nv * o];
+      const o0 = out * 0.15, o1 = out + 1;
+      k.rampQ([at(p1, o0), at(p0, o0), at(p0, o1), at(p1, o1)], ry - 0.6, ry - 0.1, ry + 3, 0, roofM, { top: roofM, noSides: true, solid: false, map: 0 });
+      // Columns at the back (every other segment).
+      if (i % 2 === 0) {
+        const cu = (p0.u + p1.u) / 2 + (nu / nl) * (out + 1.2), cv = (p0.v + p1.v) / 2 + (nv / nl) * (out + 1.2);
+        k.cyl(cu, cv, 0.6, 0.6, B, ry + 3, mat(METAL, [0.8, 0.8, 0.82]), { detail: true, solid: false, seg: 8 });
+      }
+    }
+    if (P.roof === 3) k.dome(0, 0, P.ia + out * 0.5, P.ib + out * 0.5, ry + 2.5, ry + 2.5 + Math.min(P.ia, P.ib) * 0.25, mat(METAL_ROOF, [0.92, 0.92, 0.94], ROOF));
+  }
+  // Floodlight masts on the diagonals.
+  if (P.lights) {
+    const out = P.tiers * P.depth + 6, mh = topY - B + 22;
+    for (const [su, sv] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      const [cu, cv] = superE(P.ia + out, P.ib + out, n, Math.atan2(sv, su * 1.3));
+      k.cyl(cu, cv, 0.9, 0.6, B, B + mh, mat(METAL, [0.75, 0.76, 0.78]), { seg: 10 });
+      k.box(cu, cv, 3.4, 0.9, B + mh, B + mh + 4.2, mat(GLASS, [1.3, 1.3, 1.25], WIN | CURTAIN, 1.1, 1.4, 1.4), { rot: Math.atan2(cv, cu) + Math.PI / 2, solid: false });
+    }
+  }
+  // Scoreboard over the stand at one end.
+  k.box(-(P.ia + P.depth * P.tiers * 0.6), 0, 1, 9, topY + 1, topY + 8, mat(GLASS, [0.3, 0.32, 0.35], WIN | CURTAIN, 1.2, 1.2, 1.2), { solid: false, detail: true });
+  // The field: grass in mown stripes, a running track around it, markings and goals.
+  const gy = B + 0.02;
+  const grass = (t: number): PartMat => mat(GREEN_ROOF, [0.5 * t, 0.85 * t, 0.42 * t]);
+  k.flat(0, 0, P.ia, P.ib, gy, grass(0.9), { foot: true, map: 3 });
+  for (let s = 0; s < 10; s++) k.flat(-52.5 + (s + 0.5) * 10.5, 0, 5.25, 34, gy + 0.015, grass(s % 2 ? 0.92 : 1.04), { detail: true });
+  const line = mat(PLASTER, [1.3, 1.3, 1.3]);
+  const L = (u0: number, v0: number, u1: number, v1: number) => k.flat((u0 + u1) / 2, (v0 + v1) / 2, Math.max(0.06, Math.abs(u1 - u0) / 2), Math.max(0.06, Math.abs(v1 - v0) / 2), gy + 0.03, line, { detail: true });
+  L(-52.5, -34, 52.5, -34); L(-52.5, 34, 52.5, 34); L(-52.5, -34, -52.5, 34); L(52.5, -34, 52.5, 34); L(0, -34, 0, 34);
+  for (const s of [-1, 1]) { L(s * 52.5, -20, s * 36, -20); L(s * 52.5, 20, s * 36, 20); L(s * 36, -20, s * 36, 20); }
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    k.flat(Math.cos(a) * 9.15, Math.sin(a) * 9.15, 1.2, 0.06, gy + 0.03, line, { rot: a + Math.PI / 2, detail: true });
+  }
+  for (const s of [-1, 1]) {
+    const post = mat(PLASTER, [1.2, 1.2, 1.2]);
+    k.box(s * 52.6, -3.66, 0.06, 0.06, gy, gy + 2.44, post, { detail: true });
+    k.box(s * 52.6, 3.66, 0.06, 0.06, gy, gy + 2.44, post, { detail: true });
+    k.box(s * 52.6, 0, 0.06, 3.72, gy + 2.38, gy + 2.5, post, { detail: true });
+  }
+  if (P.track) {
+    const tr = mat(TAR, [0.78, 0.36, 0.26]);
+    for (let i = 0; i < N; i++) {
+      const t0 = (i / N) * Math.PI * 2, t1 = ((i + 1) / N) * Math.PI * 2;
+      const [a0, b0] = superE(P.ia - 0.5, P.ib - 0.5, 2, t0), [a1, b1] = superE(P.ia - 0.5, P.ib - 0.5, 2, t1);
+      const [c0, d0] = superE(P.ia - 10, P.ib - 10, 2, t0), [c1, d1] = superE(P.ia - 10, P.ib - 10, 2, t1);
+      const W = (u: number, v: number) => k.W(u, v);
+      const q = [...W(a0, b0), ...W(a1, b1), ...W(c1, d1), ...W(c0, d0)];
+      k.quad([q[0], gy + 0.025, q[1], q[2], gy + 0.025, q[3], q[4], gy + 0.025, q[5], q[6], gy + 0.025, q[7]], tr, { map: 4 });
+    }
+  }
+}
+
+function tower(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B, H = B + P.h;
+  const conc = mat(CONC, [0.93, 0.93, 0.92]);
+  const glass = mat(GLASS, WHITE, WIN | CURTAIN, 1.6, 3.2, 3.2);
+  const stripe = PAINT[[0, 4, 6, 0][P.colour % 4]];
+  if (lm.style === 0) {
+    // Concrete TV tower: tapering shaft, a pod (sphere, disc stack or saucer), antenna.
+    const pr = P.podR, py = B + P.h * P.pod;
+    k.cyl(0, 0, 16, 16, B, B + 6, glass, { foot: true, top: mat(GRAVEL, WHITE, ROOF) });
+    k.cyl(0, 0, P.r * 1.7, P.r, B, py, conc, { seg: 24 });
+    if (P.tiers === 1) {
+      k.dome(0, 0, pr, pr, py + pr, py + 2 * pr, mat(METAL_ROOF, [0.85, 0.86, 0.9], ROOF), { seg: 24 });
+      k.dome(0, 0, pr, pr, py + pr, py, mat(METAL_ROOF, [0.85, 0.86, 0.9], ROOF), { seg: 24 });
+      k.cyl(0, 0, pr + 0.05, pr + 0.05, py + pr - 1.4, py + pr + 1.4, glass, { seg: 24 });
+      k.solidCyl(0, 0, pr, py, py + 2 * pr);
+      k.cyl(0, 0, P.r, P.r * 0.7, py + 2 * pr, B + P.h * 0.86, conc, { seg: 16 });
+    } else {
+      // Stacked discs: a restaurant ring of glass between concrete rims.
+      for (let t = 0; t < P.tiers; t++) {
+        const y = py + t * 7, rr = pr * (1 - t * 0.12);
+        k.cyl(0, 0, rr * 0.55, rr, y, y + 1.6, conc, { seg: 24 });
+        k.cyl(0, 0, rr - 0.4, rr - 0.4, y + 1.6, y + 5.2, glass, { seg: 24 });
+        k.cyl(0, 0, rr, rr * 0.8, y + 5.2, y + 6.4, conc, { seg: 24 });
+      }
+      k.cyl(0, 0, P.r, P.r * 0.7, py + P.tiers * 7, B + P.h * 0.86, conc, { seg: 16 });
+    }
+    k.cyl(0, 0, 1.2, 0.35, B + P.h * 0.86, H, mat(METAL, stripe), { seg: 8 });
+    for (let s = 0; s < 3; s++) k.cyl(0, 0, 1.15 - s * 0.25, 1.1 - s * 0.25, B + P.h * (0.89 + s * 0.035), B + P.h * (0.9 + s * 0.035), mat(PLASTER, [1.2, 1.2, 1.2]), { detail: true, solid: false, seg: 8 });
+  } else if (lm.style === 1) {
+    // Steel lattice tower: four curved legs meeting at the top, platforms, bracing.
+    const col = P.colour % 2 ? mat(METAL, [0.62, 0.45, 0.32]) : mat(METAL, [0.82, 0.36, 0.22]);
+    const s0 = P.h * 0.13, legs = 7;
+    const sAt = (y: number) => 1.6 + (s0 - 1.6) * Math.pow(1 - y, 1.9);
+    for (const [su, sv] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+      for (let i = 0; i < legs; i++) {
+        const ya = i / legs, yb = (i + 1) / legs;
+        k.beam(su * sAt(ya), sv * sAt(ya), B + P.h * 0.85 * ya, su * sAt(yb), sv * sAt(yb), B + P.h * 0.85 * yb, 0.9 * (1 - ya * 0.6), col, { detail: false });
+      }
+      k.box(su * s0, sv * s0, 2.2, 2.2, B, B + 4, mat(GRANITE, [0.8, 0.78, 0.74]), { foot: true });
+    }
+    // Bracing on each face per level (near only).
+    for (let i = 0; i < legs; i++) {
+      const ya = i / legs, yb = (i + 1) / legs, sa = sAt(ya), sb = sAt(yb);
+      const y0 = B + P.h * 0.85 * ya, y1 = B + P.h * 0.85 * yb;
+      for (const [a, b] of [[[1, 1], [-1, 1]], [[-1, 1], [-1, -1]], [[-1, -1], [1, -1]], [[1, -1], [1, 1]]] as const) {
+        k.beam(a[0] * sa, a[1] * sa, y0, b[0] * sb, b[1] * sb, y1, 0.25, col, { detail: true });
+        k.beam(b[0] * sa, b[1] * sa, y0, a[0] * sb, a[1] * sb, y1, 0.25, col, { detail: true });
+      }
+    }
+    for (const f of [0.2, 0.45]) {
+      const y = B + P.h * 0.85 * f, s = sAt(f) + 1.5;
+      k.box(0, 0, s, s, y - 1.2, y + 1.6, col, { solid: true, map: 0 });
+      k.box(0, 0, s - 0.6, s - 0.6, y + 1.6, y + 4.5, glass, { detail: true, solid: false });
+    }
+    k.box(0, 0, 3, 3, B + P.h * 0.85, B + P.h * 0.88, glass, { solid: false });
+    k.cyl(0, 0, 0.8, 0.2, B + P.h * 0.88, H, col, { seg: 6 });
+    k.box(0, 0, s0 * 0.9, s0 * 0.9, B, B + 0.4, mat(GRANITE), { solid: false, detail: true });
+  } else {
+    // Slender glass tower: square shaft, an observation box, a spire.
+    const w = P.r * 1.3, oy = B + P.h * P.pod;
+    k.box(0, 0, w, w, B, oy, mat(GLASS, [0.85, 0.92, 1], WIN | CURTAIN, 1.5, 3.6, 5), { foot: true });
+    k.box(0, 0, w + 0.4, 0.4, B, oy, mat(PANEL, WHITE), { solid: false, rot: Math.PI / 4, detail: true });
+    k.box(0, 0, w + 5, w + 5, oy, oy + 12, glass, { top: mat(GRAVEL, WHITE, ROOF) });
+    k.box(0, 0, w + 5.5, w + 5.5, oy + 12, oy + 13, mat(PANEL, WHITE), { solid: false });
+    k.pyramid(0, 0, w * 0.8, w * 0.8, oy + 13, H, 0, mat(METAL, [0.9, 0.9, 0.92]));
+  }
+}
+
+function cathedral(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B;
+  const wallL = [SAND, LIME, GRANITE, BRICK][P.wall % 4];
+  const tint: RGB = wallL === GRANITE ? [0.85, 0.83, 0.8] : wallL === BRICK ? [0.92, 0.85, 0.8] : [0.96, 0.93, 0.86];
+  const wall = mat(wallL, tint, WIN | ARCH, 5.2, P.H, P.H);
+  const plain = mat(wallL, tint);
+  const roofM = mat([SLATE, ZINC, CLAY][P.roof % 3], P.roof % 3 === 1 ? COPPER : WHITE, ROOF);
+  const vc = 6, L = P.L, W = P.W, H = B + P.H;
+  const nw = W * 0.28, aw = W * 0.12;
+  const front = vc - L / 2;
+  // Nave (west front at -v), aisles, transept, apse.
+  k.box(0, vc, nw, L / 2, B, H, wall, { foot: true });
+  k.gable(0, vc, L / 2, nw, H, H + nw * 1.5, plain, roofM, { rot: Math.PI / 2 });
+  for (const s of [-1, 1]) {
+    k.box(s * (nw + aw), vc + 2, aw, L / 2 - 4, B, B + P.H * 0.5, mat(wallL, tint, WIN | ARCH, 5.2, P.H * 0.5, P.H * 0.5), { foot: true });
+    k.gable(s * (nw + aw), vc + 2, L / 2 - 4, aw, B + P.H * 0.5, B + P.H * 0.5 + aw * 0.6, plain, roofM, { rot: Math.PI / 2 });
+    // Buttresses along the aisles.
+    for (let v = front + 8; v < vc + L / 2 - 6; v += 7) k.box(s * (nw + 2 * aw + 0.7), v, 0.7, 0.9, B, B + P.H * 0.55, plain, { detail: true, solid: false });
+  }
+  if (lm.style !== 2) {
+    const tl = W * P.transept / 2, tv = vc + L * 0.18;
+    k.box(0, tv, tl, nw * 0.95, B, H, wall, { foot: true });
+    k.gable(0, tv, tl, nw * 0.95, H, H + nw * 1.4, plain, roofM);
+    k.cyl(0, vc + L / 2, nw, nw, B, H - 2, wall, { foot: true, seg: 16 });
+    k.cyl(0, vc + L / 2, nw + 0.3, 0, H - 2, H + nw * 1.2, roofM, { seg: 16, solid: false });
+    if (lm.style === 0) {
+      // Twin west towers with spires.
+      const ts = W * 0.17, th = B + P.towerH * 0.62;
+      for (const s of [-1, 1]) {
+        k.box(s * (W / 2 - ts), front - ts * 0.4, ts, ts, B, th, mat(wallL, tint, WIN | ARCH, ts, 8, P.H), { foot: true });
+        k.pyramid(s * (W / 2 - ts), front - ts * 0.4, ts * 0.9, ts * 0.9, th, B + P.towerH, 0, roofM);
+        for (const c of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.pyramid(s * (W / 2 - ts) + c[0] * ts * 0.85, front - ts * 0.4 + c[1] * ts * 0.85, 0.6, 0.6, th, th + 5, 0, plain, { detail: true });
+      }
+    } else {
+      // A single west tower and spire, a flèche over the crossing.
+      const ts = W * 0.2, th = B + P.towerH * 0.55;
+      k.box(0, front - ts * 0.5, ts, ts, B, th, mat(wallL, tint, WIN | ARCH, ts, 8, P.H), { foot: true });
+      k.pyramid(0, front - ts * 0.5, ts * 0.85, ts * 0.85, th, B + P.towerH, 0, roofM);
+      k.pyramid(0, tv, 1.6, 1.6, H + nw * 1.3, H + nw * 1.3 + 16, 0, roofM, { detail: true });
+    }
+  } else {
+    // Domed: a Greek cross with a great dome on a drum and two bell towers with cupolas.
+    const tl = L * 0.36, tv = vc + L * 0.08;
+    k.box(0, tv, tl, nw * 1.1, B, H, wall, { foot: true });
+    k.gable(0, tv, tl, nw * 1.1, H, H + nw * 0.7, plain, roofM);
+    const dr = nw * 1.15;
+    k.cyl(0, tv, dr, dr, H, H + P.H * 0.45, mat(wallL, tint, WIN | ARCH, 3.2, P.H * 0.45, P.H * 0.45), { solid: false });
+    k.dome(0, tv, dr + 0.5, dr + 0.5, H + P.H * 0.45, H + P.H * 0.45 + dr * 1.25, roofM, { seg: 24 });
+    k.cyl(0, tv, 1.8, 1.8, H + P.H * 0.45 + dr * 1.2, H + P.H * 0.45 + dr * 1.2 + 4, plain, { detail: true, solid: false });
+    k.dome(0, tv, 2.1, 2.1, H + P.H * 0.45 + dr * 1.2 + 4, H + P.H * 0.45 + dr * 1.2 + 6.5, mat(ZINC, GOLD, ROOF), { detail: true });
+    const ts = W * 0.13, th = B + P.towerH * 0.5;
+    for (const s of [-1, 1]) {
+      k.box(s * (W / 2 - ts), front + ts, ts, ts, B, th, mat(wallL, tint, WIN | ARCH, ts, 7, P.H), { foot: true });
+      k.cyl(s * (W / 2 - ts), front + ts, ts * 0.8, ts * 0.8, th, th + 5, mat(wallL, tint, WIN | ARCH, 2.4, 5, 5), { solid: false });
+      k.dome(s * (W / 2 - ts), front + ts, ts * 0.85, ts * 0.85, th + 5, th + 5 + ts * 1.3, roofM);
+    }
+    k.cyl(0, vc + L / 2, nw, nw, B, H - 3, wall, { foot: true, seg: 16 });
+    k.dome(0, vc + L / 2, nw, nw, H - 3, H - 3 + nw * 0.8, roofM, { seg: 16 });
+  }
+  // Steps up to the west door.
+  for (let i = 0; i < 3; i++) k.box(0, front - 1.4 - i * 0.9, nw + 2 - i * 0.4, 0.45, k.F, B - i * 0.18, mat(GRANITE, [0.85, 0.85, 0.85]), { solid: false, detail: i > 0 });
+  void r;
+}
+
+function wheel(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B, R = P.D / 2, hy = B + R + 4.5, hw = P.w / 2;
+  const col = mat(METAL, PAINT[[4, 0, 1, 2, 3, 4][P.colour % 6]]);
+  const steel = mat(METAL, [0.82, 0.83, 0.86]);
+  const N = 36;
+  // Two rims, spokes, cross ties, gondolas.
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < N; i++) {
+      const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
+      k.beam(Math.cos(a0) * R, s * hw, hy + Math.sin(a0) * R, Math.cos(a1) * R, s * hw, hy + Math.sin(a1) * R, 0.45, col);
+      if (i % 2 === 0) k.beam(0, s * 1.2, hy, Math.cos(a0) * R, s * hw, hy + Math.sin(a0) * R, 0.12, steel, { detail: i % 4 !== 0 });
+    }
+  }
+  for (let i = 0; i < N; i += 2) {
+    const a = (i / N) * Math.PI * 2;
+    k.beam(Math.cos(a) * R, -hw, hy + Math.sin(a) * R, Math.cos(a) * R, hw, hy + Math.sin(a) * R, 0.15, col, { detail: true });
+  }
+  const pod = mat(lm.style ? GLASS : PANEL, lm.style ? [0.9, 0.95, 1] : PAINT[r.int(0, 7)], lm.style ? WIN | CURTAIN : 0, 1.2, 2.4, 2.4);
+  for (let i = 0; i < P.n; i++) {
+    const a = (i / P.n) * Math.PI * 2;
+    const gu = Math.cos(a) * (R + (lm.style ? 1.6 : 0)), gy = hy + Math.sin(a) * (R + (lm.style ? 1.6 : 0)) - (lm.style ? 1.2 : 2.6);
+    if (lm.style) k.tube(gu, 0, gy, 1.5, 1.4, 1.4, pod, { rot: Math.PI / 2, detail: false, seg: 10 });
+    else {
+      k.box(gu, 0, 1.0, 1.3, gy - 1.1, gy + 1.0, pod, { solid: false, detail: false });
+      k.beam(gu, 0, gy + 1.0, gu, 0, gy + 2.6, 0.08, steel, { detail: true });
+    }
+  }
+  // Hub and A-frame legs on both sides.
+  k.tube(0, 0, hy, hw + 1.5, 1.6, 1.6, steel, { rot: Math.PI / 2 });
+  for (const s of [-1, 1]) for (const lu of [-1, 1]) {
+    const fu = lu * R * 0.42, fv = s * (hw + 2.5);
+    k.beam(fu, fv, B, 0, s * (hw + 0.8), hy, 0.8, steel);
+    k.box(fu, fv, 1.4, 1.4, B, B + 1.2, mat(CONC, [0.8, 0.8, 0.8]), { foot: true });
+  }
+  // Boarding platform and a ticket booth.
+  k.box(0, 0, 9, hw + 4, B, B + 1.2, mat(CONC, [0.85, 0.85, 0.83]), { foot: true });
+  k.box(0, -(hw + 9), 2.5, 1.8, B, B + 2.8, mat(PANEL, PAINT[r.int(0, 7)], WIN, 1.5, 2.8, 2.8), { top: mat(METAL_ROOF, WHITE, ROOF) });
+  // The wheel itself is a solid for flyers (above the heads of people on the ground).
+  k.solidBox(0, 0, R, hw + 0.6, hy - R + 0.5, hy + R, 1);
+}
+
+function monument(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B, h = P.h;
+  const stoneL = [LIME, GRANITE, SAND][P.stone % 3];
+  const stone = mat(stoneL, [0.95, 0.93, 0.9]);
+  const step = mat(GRANITE, [0.82, 0.82, 0.82]);
+  const statue = r.pick<RGB>([COPPER, BRONZE, GOLD, [0.92, 0.92, 0.9]]);
+  const fig = mat(METAL, statue);
+  // Plinth steps.
+  const base = lm.style === 2 ? 0 : 3;
+  for (let i = 0; i < base; i++) k.box(0, 0, 7 - i * 1.6, 7 - i * 1.6, i === 0 ? k.F : B + i * 0.6, B + (i + 1) * 0.6, step, { foot: i === 0 });
+  const y0 = B + base * 0.6;
+  if (lm.style === 0) {
+    k.box(0, 0, 2.8, 2.8, y0, y0 + 4, stone);
+    k.pyramid(0, 0, 2.1, 2.1, y0 + 4, B + h * 0.93, 0.62, stone, { solid: true });
+    k.pyramid(0, 0, 1.3, 1.3, B + h * 0.93, B + h, 0, mat(METAL, GOLD));
+  } else if (lm.style === 1) {
+    k.box(0, 0, 3.2, 3.2, y0, y0 + 6, stone);
+    k.cyl(0, 0, 2.0, 2.0, y0 + 6, y0 + 7, stone, { seg: 16 });
+    k.cyl(0, 0, 1.6, 1.35, y0 + 7, B + h * 0.86, stone, { seg: 16 });
+    k.box(0, 0, 2.0, 2.0, B + h * 0.86, B + h * 0.88, stone, { solid: false });
+    figure(k, 0, 0, B + h * 0.88, h * 0.12, fig, r.chance(0.5));
+  } else if (lm.style === 2) {
+    // Triumphal arch: two piers, the span, an attic with a quadriga.
+    const W = Math.min(h * 0.9, P.R * 1.3), D = W * 0.32, ah = Math.min(h, W * 1.1);
+    const pw = W * 0.3;
+    for (const s of [-1, 1]) k.box(s * (W / 2 - pw / 2), 0, pw / 2, D / 2, B, B + ah * 0.62, mat(stoneL, [0.95, 0.93, 0.9], WIN | ARCH, pw, ah * 0.3, ah * 0.3), { foot: true });
+    k.box(0, 0, W / 2, D / 2, B + ah * 0.62, B + ah * 0.82, stone);
+    k.box(0, 0, W / 2 + 0.4, D / 2 + 0.4, B + ah * 0.82, B + ah * 0.85, stone, { solid: false });
+    k.box(0, 0, W / 2 - 1, D / 2 - 0.5, B + ah * 0.85, B + ah, stone);
+    k.box(0, 0, W * 0.12, D * 0.25, B + ah, B + ah + 2.5, fig, { detail: true, solid: false });
+    for (const s of [-1, 1]) k.box(s * W * 0.07, 0, W * 0.04, D * 0.2, B + ah, B + ah + 3.5, fig, { detail: true, solid: false });
+  } else {
+    // A figure on a high pedestal, a torch raised.
+    const ph = h * 0.38;
+    k.box(0, 0, 4, 4, y0, y0 + ph * 0.25, stone);
+    k.pyramid(0, 0, 3.4, 3.4, y0 + ph * 0.25, y0 + ph, 0.8, stone, { solid: true });
+    figure(k, 0, 0, y0 + ph, h - ph - base * 0.6, fig, true);
+  }
+}
+
+/** A stylised standing figure (robe, torso, head, a raised arm with a torch or wreath) of height h. */
+function figure(k: Kit, u: number, v: number, y: number, h: number, m: PartMat, torch: boolean): void {
+  k.cyl(u, v, h * 0.17, h * 0.1, y, y + h * 0.55, m, { seg: 12 });
+  k.cyl(u, v, h * 0.1, h * 0.09, y + h * 0.55, y + h * 0.8, m, { seg: 10, solid: false });
+  k.dome(u, v, h * 0.075, h * 0.075, y + h * 0.8, y + h * 0.92, m, { seg: 10 });
+  k.dome(u, v, h * 0.075, h * 0.075, y + h * 0.82, y + h * 0.8, m, { seg: 10 });
+  k.beam(u + h * 0.08, v, y + h * 0.75, u + h * 0.15, v, y + h * 1.02, h * 0.035, m);
+  if (torch) {
+    k.cyl(u + h * 0.16, v, h * 0.03, h * 0.05, y + h * 1.0, y + h * 1.08, m, { detail: true, solid: false, seg: 8 });
+    k.dome(u + h * 0.16, v, h * 0.05, h * 0.05, y + h * 1.08, y + h * 1.16, mat(METAL, GOLD), { detail: true, seg: 8 });
+  }
+}
+
+function museum(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B, H = B + P.h;
+  const vb = lm.hv - 3 - P.d / 2, hw = P.w / 2, hd = P.d / 2, fv = vb - hd;
+  if (lm.style === 0) {
+    const wallL = [LIME, SAND, BRICK_WHITE][P.wall % 3];
+    const wall = mat(wallL, [0.96, 0.94, 0.9], WIN | ARCH, 5.5, P.h * 0.5, P.h * 0.5);
+    const plain = mat(wallL, [0.94, 0.92, 0.88]);
+    const roofM = mat(ZINC, r.chance(0.5) ? COPPER : WHITE, ROOF);
+    k.box(0, vb, hw, hd, B, H, wall, { foot: true, top: mat(GRAVEL, WHITE, ROOF) });
+    k.box(0, vb - hd + 0.3, hw, 0.3, H, H + 1.2, plain, { detail: true, solid: false });
+    // Colonnade across the front, entablature, pediment.
+    const cw = P.w * 0.62, cv = fv - 4.5, n = P.cols;
+    for (let i = 0; i < n; i++) k.cyl(-cw / 2 + (i + 0.5) * (cw / n), cv, 0.85, 0.72, B, H - 2.4, mat(wallL, WHITE), { seg: 12 });
+    k.box(0, cv + 0.8, cw / 2 + 1, 3.3, H - 2.4, H, plain, { solid: false });
+    k.gable(0, cv + 0.8, 3.3, cw / 2 + 1, H, H + cw * 0.14, plain, roofM, { rot: Math.PI / 2 });
+    if (P.dome) {
+      const dr = Math.min(P.d * 0.3, 11);
+      k.cyl(0, vb + 2, dr, dr, H, H + 5, mat(wallL, WHITE, WIN | ARCH, 2.4, 5, 5), { solid: false });
+      k.dome(0, vb + 2, dr + 0.3, dr + 0.3, H + 5, H + 5 + dr, roofM, { seg: 24 });
+    }
+    for (let i = 0; i < 4; i++) k.box(0, fv - 7.5 - i * 0.9, cw / 2 + 2 - i * 0.2, 0.45, k.F, B - i * 0.17, mat(GRANITE, [0.85, 0.85, 0.85]), { solid: false, detail: i > 0 });
+  } else {
+    // Modern: a glazed hall, a closed block cantilevered over it, a glass pyramid in the forecourt.
+    const clad = mat(r.pick([PANEL, METAL, LIME]), r.pick<RGB>([[0.95, 0.95, 0.95], [0.7, 0.72, 0.75], [0.88, 0.82, 0.72]]));
+    k.box(0, vb, hw, hd, B, B + 7, mat(GLASS, WHITE, WIN | CURTAIN, 1.8, 7, 7), { foot: true, top: mat(GRAVEL, WHITE, ROOF) });
+    k.box(-hw * 0.2, vb - 4, hw * 0.75, hd * 0.8, B + 7, H + 4, clad, { top: mat(GRAVEL, WHITE, ROOF) });
+    k.box(-hw * 0.2, vb - 4 - hd * 0.8 - 0.1, hw * 0.5, 0.1, B + 10, B + 12, mat(GLASS, [0.5, 0.55, 0.6], WIN | CURTAIN, 1.5, 2, 2), { detail: true, solid: false });
+    const pv = fv - P.fc / 2, ps = Math.min(P.fc * 0.32, 11);
+    k.pyramid(0, pv, ps, ps, B, B + ps * 1.3, 0, mat(GLASS, [0.92, 0.97, 1], WIN | CURTAIN, 1.4, 1.4, 1.4), { solid: true, foot: true });
+    for (const s of [-1, 1]) k.flat(s * (ps + 9), pv, 6, ps * 0.9, B + 0.05, mat(GLASS, [0.25, 0.4, 0.5]), { map: 2 });
+  }
+}
+
+function lighthouse(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B, H = B + P.h;
+  const bands = P.stripes ? 6 : 1;
+  const c1: RGB = [1, 1, 1], c2: RGB = P.stripes === 1 ? [0.85, 0.15, 0.12] : [0.15, 0.15, 0.16];
+  for (let i = 0; i < bands; i++) {
+    const y0 = B + (P.h * i) / bands, y1 = B + (P.h * (i + 1)) / bands;
+    const ra = P.r * (1.35 - 0.35 * (i / bands)), rb = P.r * (1.35 - 0.35 * ((i + 1) / bands));
+    k.cyl(0, 0, ra, rb, y0, y1, mat(PLASTER, i % 2 ? c2 : c1, WIN, 9, 7, 7), { foot: i === 0, seg: 18 });
+  }
+  k.cyl(0, 0, P.r + 1.3, P.r + 1.3, H, H + 0.5, mat(METAL, [0.2, 0.2, 0.22]), { seg: 18 });
+  k.cyl(0, 0, P.r * 0.75, P.r * 0.75, H + 0.5, H + 3.8, mat(GLASS, [1.3, 1.25, 1.1], WIN | CURTAIN, 1.2, 3.3, 3.3), { seg: 12 });
+  k.cyl(0, 0, P.r * 0.9, 0, H + 3.8, H + 6, mat(METAL_ROOF, PAINT[[0, 3, 7][P.colour % 3]], ROOF), { seg: 12, solid: false });
+  k.dome(0, 0, 0.4, 0.4, H + 5.9, H + 6.6, mat(METAL, [0.2, 0.2, 0.2]), { detail: true, seg: 6 });
+  // Keeper's house.
+  const hv = P.r * 1.5 + 5;
+  k.box(0, -hv, 5, 3.5, B, B + 3.2, mat(PLASTER, WHITE, WIN, 2.5, 3.2, 3.2), { foot: true });
+  k.gable(0, -hv, 5, 3.5, B + 3.2, B + 5.6, mat(PLASTER, WHITE), mat(CLAY, WHITE, ROOF));
+  void r;
+}
+
+function fortress(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, n = P.sides, R = P.R;
+  const ruin = lm.style === 1;
+  const stoneL = [GRANITE, SAND, LIME][P.stone % 3];
+  const tint: RGB = ruin ? [0.78, 0.76, 0.72] : [0.88, 0.85, 0.8];
+  const wall = mat(stoneL, tint);
+  const wallW = mat(stoneL, tint, WIN | ARCH, 6.5, 9, 9);
+  const roofM = mat(SLATE, WHITE, ROOF);
+  const a0 = r.range(0, Math.PI * 2 / n) - Math.PI / 2;
+  const corners: [number, number][] = [];
+  for (let i = 0; i < n; i++) { const a = a0 + (i / n) * Math.PI * 2; corners.push([Math.cos(a) * R, Math.sin(a) * R]); }
+  // Gate in the edge whose middle faces -v most.
+  let gate = 0, gv = Infinity;
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n, mv = (corners[i][1] + corners[j][1]) / 2; if (mv < gv) { gv = mv; gate = i; } }
+  for (let i = 0; i < n; i++) {
+    const [ua, va] = corners[i], [ub, vb] = corners[(i + 1) % n];
+    const L = Math.hypot(ub - ua, vb - va), rot = Math.atan2(vb - va, ub - ua);
+    const pieces = ruin ? r.int(2, 4) : 1;
+    for (let p = 0; p < pieces; p++) {
+      const t0 = p / pieces, t1 = (p + 1) / pieces;
+      // The gate: a gap in the middle of the gate wall with a gatehouse.
+      if (i === gate && t0 < 0.55 && t1 > 0.45 && pieces > 1) continue;
+      const tm = (t0 + t1) / 2, mu = ua + (ub - ua) * tm, mv = va + (vb - va) * tm, hl = (L * (t1 - t0)) / 2 - (pieces > 1 ? 0.4 : 0);
+      if (ruin && r.chance(0.18)) continue; // fallen
+      const gmin = k.groundMin(mu, mv, hl, 1.3, rot), gmax = k.groundMax(mu, mv, hl, 1.3, rot);
+      const h = P.wallH * (ruin ? r.range(0.35, 1) : 1);
+      if (i === gate && pieces === 1) {
+        // Intact: the gate passage through the middle.
+        for (const s of [-1, 1]) {
+          const su = ua + (ub - ua) * (0.5 + s * 0.27), sv = va + (vb - va) * (0.5 + s * 0.27);
+          k.box(su, sv, L * 0.23, 1.3, gmin - 0.5, gmax + h, wall, { rot });
+        }
+        const gu = (ua + ub) / 2, gvv = (va + vb) / 2;
+        k.box(gu, gvv, 3.4, 1.3, gmax + 4.2, gmax + h + 1, wall, { rot });
+        for (const s of [-1, 1]) {
+          const tu = gu + Math.cos(rot) * s * 5.5, tv = gvv + Math.sin(rot) * s * 5.5;
+          k.cyl(tu, tv, 3.2, 3.0, k.groundMin(tu, tv, 3, 3) - 0.5, gmax + h + 4, wallW, { seg: 12 });
+          k.cyl(tu, tv, 3.5, 0, gmax + h + 4, gmax + h + 10, roofM, { seg: 12, solid: false });
+        }
+        continue;
+      }
+      k.box(mu, mv, hl, 1.3, gmin - 0.5, gmax + h, wall, { rot });
+      // Crenellations on intact stretches.
+      if (!ruin || h > P.wallH * 0.95) for (let s = -hl + 0.8; s < hl - 0.4; s += 2.4) k.box(mu + Math.cos(rot) * s, mv + Math.sin(rot) * s, 0.6, 1.3, gmax + h, gmax + h + 1.1, wall, { rot, detail: true, solid: false });
+    }
+  }
+  // Towers at the corners.
+  for (const [u, v] of corners) {
+    if (ruin && r.chance(0.2)) continue;
+    const g = k.groundMin(u, v, 5, 5), gt = k.groundMax(u, v, 5, 5);
+    const th = (P.wallH + 6) * (ruin ? r.range(0.45, 1) : 1);
+    const tr = r.range(4.2, 5.6);
+    k.cyl(u, v, tr + 0.4, tr, g - 0.5, gt + th, wallW, { seg: 14 });
+    if (!ruin) k.cyl(u, v, tr + 0.5, 0, gt + th, gt + th + tr * 1.6, roofM, { seg: 14, solid: false });
+  }
+  // The keep at the back.
+  const kv = R * 0.25, ks = R * 0.22;
+  const g = k.groundMin(0, kv, ks, ks), gt = k.groundMax(0, kv, ks, ks);
+  const kh = P.keepH * (ruin ? 0.7 : 1);
+  k.box(0, kv, ks, ks, g - 0.5, gt + kh, wallW, { top: ruin ? wall : roofM });
+  if (!ruin) {
+    k.pyramid(0, kv, ks + 0.3, ks + 0.3, gt + kh, gt + kh + ks * 1.1, 0, roofM);
+    for (const [cu, cv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      k.cyl(cu * ks, kv + cv * ks, 1.6, 1.6, gt + kh - 4, gt + kh + 3, wall, { detail: true, solid: false, seg: 8 });
+      k.cyl(cu * ks, kv + cv * ks, 1.8, 0, gt + kh + 3, gt + kh + 7, roofM, { detail: true, solid: false, seg: 8 });
+    }
+  } else {
+    // Broken top: a few jagged blocks.
+    for (let i = 0; i < 5; i++) k.box(r.range(-ks, ks) * 0.8, kv + r.range(-ks, ks) * 0.8, r.range(1, 2.5), r.range(1, 2.5), gt + kh, gt + kh + r.range(1, 4), wall, { detail: true, solid: false });
+  }
+}
+
+function glasshouse(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B;
+  const frame: RGB = [[1.15, 1.15, 1.12], [0.35, 0.55, 0.42], [0.25, 0.26, 0.28]][P.frame % 3] as RGB;
+  const glass = mat(GLASS, [0.88 * frame[0] * 0.5 + 0.5, 0.95 * frame[1] * 0.4 + 0.6, 0.95], WIN | CURTAIN, 1.6, 2.2, 2.2);
+  const plinth = mat(BRICK, [0.9, 0.85, 0.8]);
+  const hw = P.W / 2, hl = P.L / 2;
+  if (lm.style === 0) {
+    // Palm house: a domed middle, vaulted wings either side.
+    const dr = hw * 1.1;
+    k.cyl(0, 0, dr, dr, B, B + 1, plinth, { foot: true });
+    k.cyl(0, 0, dr, dr, B + 1, B + P.H * 0.5, glass, { seg: 20 });
+    k.dome(0, 0, dr, dr, B + P.H * 0.5, B + P.H * 0.5 + dr, glass, { seg: 20 });
+    k.cyl(0, 0, 1.5, 1.2, B + P.H * 0.5 + dr - 0.3, B + P.H * 0.5 + dr + 2.5, mat(METAL, frame), { detail: true, solid: false, seg: 8 });
+    for (const s of [-1, 1]) {
+      const wu = s * (dr + (hl - dr) / 2 - 1), wl = (hl - dr) / 2 + 1.5;
+      k.box(wu, 0, wl, hw * 0.75, B, B + 1, plinth, { foot: true });
+      k.box(wu, 0, wl, hw * 0.75, B + 1, B + P.H * 0.28, glass, { solid: false });
+      k.vault(wu, 0, wl, hw * 0.75, B + P.H * 0.28, B + P.H * 0.28 + hw * 0.7, glass);
+    }
+    k.solidBox(0, 0, hl - 1, hw * 0.75, B, B + P.H * 0.28 + hw * 0.7);
+  } else if (lm.style === 1) {
+    const dr = Math.min(hl, hw * 1.6);
+    k.cyl(0, 0, dr, dr, B, B + 1.2, plinth, { foot: true });
+    k.cyl(0, 0, dr, dr * 0.96, B + 1.2, B + P.H * 0.4, glass, { seg: 24 });
+    k.dome(0, 0, dr * 0.96, dr * 0.96, B + P.H * 0.4, B + P.H * 0.4 + dr * 0.75, glass, { seg: 24 });
+  } else {
+    for (const [i, s] of [[0, -1], [1, 0], [2, 1]] as const) {
+      const len = hl * (i === 1 ? 1 : 0.75), w = hw * 0.36, h = P.H * (i === 1 ? 0.8 : 0.6);
+      k.box(0, s * w * 2.05, len, w, B, B + 1, plinth, { foot: true });
+      k.box(0, s * w * 2.05, len, w, B + 1, B + h * 0.35, glass, { solid: false });
+      k.vault(0, s * w * 2.05, len, w, B + h * 0.35, B + h * 0.35 + w * 1.1, glass);
+      // Glass end walls.
+      for (const e of [-1, 1]) k.box(e * len, s * w * 2.05, 0.05, w, B + 1, B + h * 0.35, glass, { detail: true, solid: false });
+    }
+  }
+  void r;
+}
+
+function airport(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B, hv = lm.hv, len = P.len;
+  const asph = mat(TAR, [0.55, 0.55, 0.56]), asphD = mat(ASPHALT, [0.6, 0.6, 0.62]);
+  const conc = mat(CONC, [0.95, 0.95, 0.92]);
+  const white = mat(PLASTER, [1.35, 1.35, 1.35]), yellow = mat(PLASTER, [1.3, 1.05, 0.25]);
+  // Along v (front, landside at -v): car park, terminal, apron, taxiway, runway(s).
+  const tw = P.tw, vT0 = -hv + 70, vT1 = vT0 + 58, vA0 = vT1 + 8, vA1 = vA0 + 170;
+  const vTx = vA1 + 22, vRw = vTx + 190;
+  const apronHu = tw / 2 + 190;
+  k.flat(0, -hv + 34, tw / 2 + 40, 28, B + 0.02, asphD);
+  k.flat(0, (vA0 + vA1) / 2, apronHu, (vA1 - vA0) / 2, B + 0.03, conc);
+  k.flat(0, vTx, len / 2 - 60, 12, B + 0.03, asph);
+  for (let i = 0; i < P.runways; i++) {
+    const v = vRw + i * 270;
+    k.flat(0, v, len / 2, 30, B + 0.03, asph, { map: 2 });
+    k.flat(0, v, len / 2 - 2, 22.5, B + 0.04, asphD, { detail: false });
+    // Centre line, threshold bars, touchdown zone, edge lines.
+    for (let u = -len / 2 + 80; u < len / 2 - 80; u += 50) k.flat(u + 15, v, 15, 0.45, B + 0.06, white, { detail: true });
+    for (const s of [-1, 1]) {
+      for (let b = 0; b < 8; b++) k.flat(s * (len / 2 - 25), v - 19 + b * 5.4, 22, 0.9, B + 0.06, white, { detail: true });
+      for (const o of [-1, 1]) k.flat(s * (len / 2 - 330), v + o * 10, 25, 1.5, B + 0.06, white, { detail: true });
+      k.flat(0, v + s * 21.8, len / 2 - 5, 0.4, B + 0.06, white, { detail: true });
+    }
+    // Links from the taxiway (or from the runway before).
+    const prev = i ? vRw + (i - 1) * 270 : vTx;
+    for (const f of [-0.48, -0.2, 0.2, 0.48]) k.flat(f * len, (prev + v) / 2, 12, (v - prev) / 2, B + 0.025, asph);
+  }
+  for (let u = -len / 2 + 70; u < len / 2 - 70; u += 30) k.flat(u, vTx, 9, 0.2, B + 0.05, yellow, { detail: true });
+  for (const f of [-0.35, 0, 0.35]) k.flat(f * apronHu * 1.4, (vA1 + vTx) / 2, 12, (vTx - vA1) / 2 + 1, B + 0.025, asph);
+  // Terminal: a long glazed hall under a flat, waved or saw-tooth roof; piers out onto the apron.
+  const tc = (vT0 + vT1) / 2, th = 18 + r.range(0, 6);
+  const glassT = mat(GLASS, [0.85, 0.92, 1], WIN | CURTAIN, 2.2, 4.5, 6);
+  k.box(0, tc, tw / 2, (vT1 - vT0) / 2, B, B + th, glassT, { top: mat(METAL_ROOF, [0.9, 0.9, 0.92], ROOF) });
+  if (lm.style === 1) k.vault(0, tc, tw / 2 + 4, (vT1 - vT0) / 2 + 6, B + th, B + th + 9, mat(METAL_ROOF, [0.92, 0.92, 0.94], ROOF), { solid: false });
+  else if (lm.style === 2) {
+    const nb = Math.max(3, Math.round(tw / 70));
+    for (let i = 0; i < nb; i++) k.vault(-tw / 2 + (i + 0.5) * (tw / nb), tc, 2 + (vT1 - vT0) / 2, tw / nb / 2, B + th, B + th + 7, mat(METAL_ROOF, [0.88, 0.9, 0.92], ROOF), { rot: Math.PI / 2, solid: false });
+  } else k.box(0, tc - 3, tw / 2 + 6, (vT1 - vT0) / 2 + 6, B + th, B + th + 1.2, mat(PANEL, WHITE), { solid: false });
+  // Landside canopy over the kerb.
+  k.box(0, vT0 - 7, tw * 0.4, 5, B + 6, B + 6.6, mat(PANEL, WHITE), { solid: false });
+  const gates = P.gates, gw = tw / gates;
+  const planesU: number[] = [];
+  for (let g = 0; g < gates; g++) {
+    const u = -tw / 2 + (g + 0.5) * gw;
+    // Jet bridge from the terminal out towards the stand.
+    k.box(u, vT1 + 9, 1.6, 9, B + 4.2, B + 7, mat(METAL, [0.82, 0.83, 0.85], WIN, 2, 2.8, 2.8), { solid: false, detail: true });
+    k.cyl(u, vT1 + 16, 0.5, 0.5, B, B + 4.2, mat(METAL, [0.5, 0.5, 0.5]), { detail: true, solid: false, seg: 6 });
+    planesU.push(u);
+  }
+  // Control tower beside the terminal, hangars at the far end of the apron.
+  const ctU = tw / 2 + 60, ctV = vT0 + 20, ctH = 42 + r.range(0, 30);
+  k.box(ctU, ctV, 9, 7, B, B + 8, mat(CONC, WHITE, WIN, 2.5, 4, 4), { top: mat(GRAVEL, WHITE, ROOF) });
+  k.cyl(ctU, ctV, 3.6, 3.2, B, B + ctH, mat(CONC, [0.95, 0.95, 0.95], WIN, 4, 6, 8), { seg: 16 });
+  k.cyl(ctU, ctV, 5.5, 8.5, B + ctH, B + ctH + 1.2, mat(CONC, WHITE), { seg: 16 });
+  k.cyl(ctU, ctV, 8.2, 8.6, B + ctH + 1.2, B + ctH + 5.2, mat(GLASS, [0.6, 0.75, 0.85], WIN | CURTAIN, 1.5, 4, 4), { seg: 16 });
+  k.cyl(ctU, ctV, 9, 9, B + ctH + 5.2, B + ctH + 6, mat(CONC, WHITE), { seg: 16, top: mat(GRAVEL, WHITE, ROOF) });
+  k.cyl(ctU, ctV, 0.2, 0.1, B + ctH + 6, B + ctH + 13, mat(METAL, [0.8, 0.2, 0.15]), { detail: true, solid: false, seg: 6 });
+  for (let h = 0; h < P.hangars; h++) {
+    const hu = -(tw / 2 + 70 + h * 72), hvv = vA0 + 38;
+    const hm = mat(METAL, r.pick<RGB>([[0.85, 0.87, 0.9], [0.6, 0.65, 0.7], [0.75, 0.78, 0.72]]));
+    k.box(hu, hvv, 30, 26, B, B + 14, hm, { top: mat(METAL_ROOF, WHITE, ROOF) });
+    k.vault(hu, hvv, 26, 30, B + 14, B + 21, mat(METAL_ROOF, [0.9, 0.9, 0.9], ROOF), { rot: Math.PI / 2, solid: false });
+    k.box(hu, hvv + 26.05, 26, 0.1, B, B + 12.5, mat(METAL, [0.45, 0.47, 0.5]), { solid: false, detail: true });
+  }
+  // Aircraft at the gates (nose towards the terminal) and one holding at the runway end.
+  const liveries = [r.int(0, 7), r.int(0, 7), r.int(0, 7)];
+  for (let i = 0; i < Math.min(P.planes, planesU.length); i++) {
+    const big = r.chance(0.35);
+    k.sub(planesU[i], vT1 + 26 + (big ? 32 : 22), -Math.PI / 2, () => plane(k, B, big ? 62 : 38, PAINT[liveries[i % 3]]));
+  }
+  k.sub(-len / 2 + 120, vTx, 0, () => plane(k, B, 44, PAINT[liveries[0]]));
+}
+
+/** An airliner, nose towards local +u: fuselage, wings, tail, engines, landing gear. */
+function plane(k: Kit, B: number, L: number, livery: RGB): void {
+  const R = L * 0.055, y = B + R + 1.6 + L * 0.01;
+  const body = mat(PANEL, [1.05, 1.05, 1.05], WIN, 1.0, R * 1.2, R * 0.9);
+  const tail = mat(PANEL, livery);
+  k.tube(0, 0, y, L * 0.4, R, R, body, { solid: true, map: 1 });
+  k.tube(L * 0.45, 0, y - R * 0.1, L * 0.05, R, R * 0.3, body);
+  k.tube(-L * 0.46, 0, y + R * 0.25, L * 0.06, R * 0.35, R, body);
+  // Wings (swept), tailplane, fin.
+  const span = L * 0.55;
+  for (const s of [-1, 1]) {
+    k.box(-L * 0.04, s * span * 0.27, L * 0.09, span * 0.25, y - R * 0.55, y - R * 0.4, body, { rot: s * 0.45, solid: false });
+    k.box(-L * 0.45, s * L * 0.1, L * 0.04, L * 0.09, y + R * 0.2, y + R * 0.3, body, { rot: s * 0.5, solid: false });
+    k.tube(L * 0.04, s * span * 0.2, y - R * 1.05, L * 0.05, R * 0.45, R * 0.42, mat(METAL, [0.85, 0.86, 0.9]), { detail: false });
+    k.box(-L * 0.02, s * R * 0.8, 0.2, 0.2, B, y - R * 0.6, mat(METAL, [0.3, 0.3, 0.3]), { detail: true, solid: false });
+  }
+  k.box(-L * 0.44, 0, L * 0.06, 0.25, y + R * 0.6, y + R + L * 0.15, tail, { solid: false });
+  k.box(L * 0.4, 0, 0.15, 0.15, B, y - R * 0.7, mat(METAL, [0.3, 0.3, 0.3]), { detail: true, solid: false });
+  // A livery stripe along the body (near only).
+  for (const s of [-1, 1]) k.box(0, s * R * 1.0, L * 0.36, 0.04, y - R * 0.15, y + R * 0.05, tail, { detail: true, solid: false });
+}
+
+/** Access road: draped quads along the polyline. */
+function road(k: Kit, pts: number[]): void {
+  const m = mat(TAR, [0.5, 0.5, 0.52]), hw = 5.5;
+  for (let i = 0; i + 3 < pts.length; i += 2) {
+    const ax = pts[i], az = pts[i + 1], bx = pts[i + 2], bz = pts[i + 3];
+    const L = Math.hypot(bx - ax, bz - az);
+    if (L < 1) continue;
+    const nx = -(bz - az) / L * hw, nz = (bx - ax) / L * hw;
+    const n = Math.ceil(L / 12);
+    for (let s = 0; s < n; s++) {
+      const t0 = s / n, t1 = (s + 1) / n;
+      const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
+      const h = (x: number, z: number) => k.T.height(x, z) + 0.12;
+      k.quad([x0 - nx, h(x0 - nx, z0 - nz), z0 - nz, x1 - nx, h(x1 - nx, z1 - nz), z1 - nz, x1 + nx, h(x1 + nx, z1 + nz), z1 + nz, x0 + nx, h(x0 + nx, z0 + nz), z0 + nz], m);
+    }
+  }
+}
+
+// ------------------------------------------------------------------------ API
+
+const cache = new WeakMap<Landmark, LmPart[]>();
+
+/** The parts of a landmark (cached per landmark object). */
+export function landmarkParts(lm: Landmark, terrain: Terrain): LmPart[] {
+  let parts = cache.get(lm);
+  if (parts) return parts;
+  const k = new Kit(lm, terrain);
+  const r = new Rng(lm.seed);
+  switch (lm.kind) {
+    case 'townhall': townhall(k, lm, r); break;
+    case 'stadium': stadium(k, lm, r); break;
+    case 'tower': tower(k, lm, r); break;
+    case 'cathedral': cathedral(k, lm, r); break;
+    case 'wheel': wheel(k, lm, r); break;
+    case 'monument': monument(k, lm, r); break;
+    case 'museum': museum(k, lm, r); break;
+    case 'lighthouse': lighthouse(k, lm, r); break;
+    case 'fortress': fortress(k, lm, r); break;
+    case 'glasshouse': glasshouse(k, lm, r); break;
+    case 'airport': airport(k, lm, r); if (lm.road) road(k, lm.road); break;
+  }
+  parts = k.parts;
+  cache.set(lm, parts);
+  return parts;
+}
+
+/** Collision solids of the parts (boxes and cylinders, with their bottom and top). */
+export function partObstacles(parts: LmPart[]): PartObstacle[] {
+  const out: PartObstacle[] = [];
+  for (const p of parts) {
+    if (!p.solid) continue;
+    const y0 = Math.min(p.y0, p.foot ?? p.y0);
+    const ux = Math.cos(p.a), uz = Math.sin(p.a);
+    switch (p.k) {
+      case PK.Cyl: case PK.Dome: {
+        const r = p.k === PK.Cyl ? Math.max(p.r ?? 0, p.r2 ?? 0) : Math.max(p.hx, p.hz) * 0.9;
+        out.push({ cyl: true, x: p.x, z: p.z, r, hx: r, hz: r, ux, uz, y0, y1: Math.max(p.y0, p.y1) });
+        break;
+      }
+      case PK.Beam: {
+        const dx = p.bx! - p.x, dz = p.bz! - p.z, L = Math.hypot(dx, dz) || 1;
+        out.push({ cyl: false, x: (p.x + p.bx!) / 2, z: (p.z + p.bz!) / 2, r: 0, hx: L / 2, hz: p.w!, ux: dx / L, uz: dz / L, y0: Math.min(p.y0, p.by!) - p.w!, y1: Math.max(p.y0, p.by!) + p.w! });
+        break;
+      }
+      case PK.Quad: case PK.Flat: break;
+      default:
+        out.push({ cyl: false, x: p.x, z: p.z, r: 0, hx: Math.max(p.hx, p.hx2 ?? 0), hz: p.hz, ux, uz, y0, y1: p.y1 });
+    }
+  }
+  return out;
+}
+
+/** Outline of a part on the ground (CCW), grown by m; null for parts without one. */
+export function partOutline(p: LmPart, m = 0): Poly | null {
+  const c = Math.cos(p.a), s = Math.sin(p.a);
+  const P = (u: number, v: number) => [p.x + u * c - v * s, p.z + u * s + v * c];
+  switch (p.k) {
+    case PK.Cyl: case PK.Dome: {
+      // (A dome may be elliptical: radii hx along u, hz along v.)
+      const rx = (p.k === PK.Cyl ? Math.max(p.r ?? 0, p.r2 ?? 0) : p.hx) + m, rz = (p.k === PK.Cyl ? rx - m : p.hz) + m;
+      const out: number[] = [];
+      for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; out.push(...P(Math.cos(a) * rx, Math.sin(a) * rz)); }
+      return out;
+    }
+    case PK.Ramp: {
+      if (p.q && p.q.length === 8) {
+        if (m === 0) return p.q.slice();
+        const cx = (p.q[0] + p.q[2] + p.q[4] + p.q[6]) / 4, cz = (p.q[1] + p.q[3] + p.q[5] + p.q[7]) / 4;
+        return p.q.map((v, i) => { const c0 = i % 2 ? cz : cx, d = Math.hypot(p.q![i - (i % 2)] - cx, p.q![i - (i % 2) + 1] - cz) || 1; return v + ((v - c0) / d) * m; });
+      }
+      const a = p.hx + m, b = (p.hx2 ?? p.hx) + m, h = p.hz + m;
+      return [...P(-a, -h), ...P(a, -h), ...P(b, h), ...P(-b, h)];
+    }
+    case PK.Quad: return [p.q![0], p.q![2], p.q![3], p.q![5], p.q![6], p.q![8], p.q![9], p.q![11]];
+    case PK.Beam: return null;
+    default: return [...P(-p.hx - m, -p.hz - m), ...P(p.hx + m, -p.hz - m), ...P(p.hx + m, p.hz + m), ...P(-p.hx - m, p.hz + m)];
+  }
+}
+
+/** Ground footprints of the solid parts standing on the site (for the cell planner), grown by m. */
+export function solidFootprints(lm: Landmark, parts: LmPart[], m = 0.8): Poly[] {
+  const out: Poly[] = [];
+  for (const p of parts) {
+    if (!p.solid || p.k === PK.Beam) continue;
+    if (Math.min(p.y0, p.foot ?? p.y0) > lm.base + 2.5) continue; // up in the air
+    const o = partOutline(p, m);
+    if (o) out.push(o);
+  }
+  return out;
+}
+
+/** Map footprints: [category, outline] for every part with a map category (largest first). */
+export function partFootprints(parts: LmPart[]): { cat: number; poly: Poly }[] {
+  const out: { cat: number; poly: Poly; area: number }[] = [];
+  for (const p of parts) {
+    if (!p.map || (p.detail && !p.hidden)) continue;
+    const o = partOutline(p);
+    if (!o) continue;
+    let a = 0;
+    for (let i = 0, n = o.length >> 1, j = n - 1; i < n; j = i++) a += o[j * 2] * o[i * 2 + 1] - o[i * 2] * o[j * 2 + 1];
+    out.push({ cat: p.map, poly: o, area: Math.abs(a) });
+  }
+  // Paving under buildings: draw the big flat areas first.
+  out.sort((a, b) => (a.cat === 1 ? 1 : 0) - (b.cat === 1 ? 1 : 0) || b.area - a.area);
+  return out;
+}

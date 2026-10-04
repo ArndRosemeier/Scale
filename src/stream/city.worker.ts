@@ -18,6 +18,7 @@ import { BINFO_STRIDE, SKY_STRIDE, MapItem, type FromWorker, type ToWorker } fro
 import { minAreaRect } from '../core/geom2';
 import { buildingBase, buildingHeight } from '../build/buildingLayout';
 import { buildBridges } from '../build/bridges';
+import { buildLandmarkMesh } from '../build/landmarks';
 import { LandUse } from '../world/landuse';
 import { ForestGen } from '../build/forest';
 
@@ -124,6 +125,11 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       const mapData = Float32Array.from(map);
       void SKY_STRIDE;
       post({ type: 'skyline', job: m.job, cells: m.cells, records, counts, map: mapData, mapOff: Int32Array.from(mapOff) }, [records.buffer, mapData.buffer]);
+      return;
+    }
+    if (m.type === 'landmarks') {
+      const meshes = macro.landmarks.map((lm) => [buildLandmarkMesh(lm, terrain!, 0).build(), buildLandmarkMesh(lm, terrain!, 1).build()] as [MeshData, MeshData]);
+      post({ type: 'landmarks', job: m.job, meshes }, meshes.flatMap(([a, b]) => [...meshTransferables(a), ...meshTransferables(b)]));
       return;
     }
     if (m.type === 'bridges') {

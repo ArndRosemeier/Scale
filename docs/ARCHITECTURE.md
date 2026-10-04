@@ -240,6 +240,43 @@ and car ownership.
   * farther: none
   * cars: instanced procedural models with wheel animation and lights
 
+### Landmarks (`src/plan/landmarks`, `src/plan/landmarkParts`, `src/build/landmarks`, `src/world/airfield`)
+Special buildings, planned with the macro plan (`MacroPlan.landmarks`, ~10 ms) and different in every city.
+* **Which**: a town hall (at the old core: classical with portico and dome, gothic with belfry and spire,
+  baroque with clock tower and cupola, or modern slab with campanile and council drum; wings, a square
+  with a fountain in front), a stadium (around the edge of the centre: oval or rectangular bowl, 1–3 tiers by
+  city size, open / canopied sides / ring canopy / closed roof, running track, floodlights, car parks), 1–4
+  attractions by size from a weighted pool that depends on the place (TV / lattice / glass observation tower,
+  gothic or domed cathedral, big wheel, obelisk / column / triumphal arch / statue, classical or modern museum,
+  lighthouse only on a coast, castle or castle ruin only where there is a hill, botanical glasshouse), and for
+  cities from 3.5 km radius an airport.
+* **Sites**: every in-city landmark reserves an oriented rectangle inside one cell (`SiteFitter`: inside the cell
+  inset by its arterials' half width and sidewalk, so off the sewer manholes too; dry, flat enough, apart from the
+  other sites; near its target — the core, a hilltop, the shore, a park; the front (-v) towards the cell edge for
+  squares). `planCell` keeps it free: local street cuts that would cross it move along its edge (or the piece
+  stays whole), blocks lose the site (holes are split away so lots never land in it, thin leftovers are paved),
+  the site gets its ground (`siteZones`: square, lawn or car park, with holes under the structure) and its own
+  props (lamps, benches, trees, a fountain, parked cars) — after the cafés, so no terrace spills onto it.
+* **Structure** (`landmarkParts`): a list of primitive parts — boxes, cylinders / cones, (elliptic) domes, gable
+  and pyramid roofs, stands (quad prisms with stepped seat rows), beams, tubes, barrel vaults, flats, quads —
+  each with a facade-atlas material (layer, tint, window grammar). One description serves the mesh, collision
+  (`partObstacles`: the solid parts; open structures like the wheel use hidden collision volumes), the map
+  (`partFootprints`) and the planner (`solidFootprints`). Walls that follow the terrain (fortress) sample it.
+* **Mesh** (`build/landmarks`, worker job `landmarks`): one `THREE.LOD` per landmark in the facade material
+  (shared, not destructible), near mesh with all details, far mesh without `detail` parts and with fewer
+  segments; 0.1–11 k triangles each.
+* **Collision** (`world/LandmarkSolids`): a 32 m grid of the solid parts; an obstacle provider for the walker
+  (walls stop, tops can be stood on), `WorldIndex.groundHeight` (physics ground) and `WorldIndex.raycast`
+  (camera, aiming, sight).
+* **Airport**: `world/airfield` picks a flat, dry rectangle just beyond the protected zone around the city (the
+  city's terrain stays unchanged), the terrain levels it (`Terrain.height`, a 90 m embankment band) and the land
+  use keeps forest, fields and hedges off it. Runway(s) with markings, taxiway, apron, a terminal (flat, waved or
+  saw-tooth roof) with jet bridges, a control tower, hangars, parked airliners and a road to the nearest arterial
+  node.
+* **Map**: footprints on the map tiles (buildings, paving, pitch, track), a star badge per landmark (named on the
+  full map, tooltip, compass within ~1.3 km); the map square reaches out to the airport.
+* Debug: `npx tsx tools/celldump.ts <seed> <size> out.png 600 landmark:<kind>`.
+
 ### Countryside (`src/world/landuse`, `src/build/forest`, `src/stream/Countryside`)
 The land beyond the city is a global, seed-driven layer, built to sit between several cities later.
 * **Rivers** (`Terrain.extendRivers`): the city's rivers continue as meandering countryside rivers to
@@ -1030,7 +1067,7 @@ A session can be saved and continued: `game.saves` (`SaveSystem`), stored by `Sa
 ```
 src/core       rng, noise, math, geometry (polygons, splitting, offsetting), spatial hash
 src/world      terrain, water, settings, city outline, countryside land use, weather schedule
-src/plan       macro, cell, building descriptors (pure data)
+src/plan       macro, cell, building descriptors, landmarks and their parts (pure data)
 src/build      geometry builders (buildings, roads, terrain, props, interiors, underground)
 src/render     renderer, sky, weather (rain, wet streets, lightning), materials, textures, post
 src/stream     cell streaming, worker pool

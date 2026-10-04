@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.025 — 2026-10-04
+
+- **Landmarks**: every city now has a town hall with a square in front (classical with columns and dome, gothic with bell tower, baroque with clock tower, or modern with a campanile), a stadium (oval or rectangular, open, partly or fully roofed, floodlights, scoreboard, car parks) and 1–4 tourist attractions picked and shaped differently in every city: TV or lattice or glass observation towers, cathedrals, a Ferris wheel, monuments (obelisk, column, triumphal arch, statue), museums (colonnade or glass pyramid), a lighthouse on the coast, a castle or ruin on the highest hill, botanical glasshouses.
+- **Airports** for bigger cities: runways, terminal with jet bridges, control tower, hangars, parked airliners in different liveries, and a road out to it.
+- All of them have names, are shown on the map, minimap and compass, and are solid — you can stand on roofs and stands.
+
 ## 0.024 — 2026-10-04
 
 - Sewers: the grey see-through slabs standing in the tunnels are gone — they were meant as daylight falling through the manhole lids. Now the lid glows overhead and a soft pool of daylight lies on the walkways and water below it.

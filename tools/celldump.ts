@@ -1,13 +1,15 @@
 /**
  * Zoomed debug map of cell plans:
  * `npx tsx tools/celldump.ts <seed> <size> <out.png> <width_m> [cx cz]`
- * (cx,cz default: the main centre)
+ * (cx,cz default: the main centre; `core` the old core, a district name its nearest cell,
+ * `landmark:<kind>` that landmark)
  */
 import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
 import { planCell, PropType } from '../src/plan/cell';
 import { Raster } from './raster';
+import { landmarkParts, partFootprints } from '../src/plan/landmarkParts';
 
 const STYLE_COLOR: Record<string, number> = {
   rowhouse: 0x9c5b45, tenement: 0xa0503c, haussmann: 0xd8cdb4, timber: 0xc9b38a, oldstone: 0xc8a982, artdeco: 0xb59a6a,
@@ -24,7 +26,8 @@ const terrain = new Terrain(profile);
 const macro = buildMacroPlan(terrain);
 const pickD = (d: string) => macro.cells.filter((c) => c.district === d).sort((a, b) => Math.hypot(...a.centroid) - Math.hypot(...b.centroid))[0]?.centroid;
 const arg6 = process.argv[6];
-const at: [number, number] = arg6 === 'core' ? macro.core : arg6 && isNaN(Number(arg6)) ? (pickD(arg6) ?? [0, 0]) : arg6 !== undefined ? [Number(arg6), Number(process.argv[7])] : [macro.centres[0].x, macro.centres[0].z];
+const lmAt = arg6?.startsWith('landmark:') ? macro.landmarks.find((l) => l.kind === arg6.slice(9)) : undefined;
+const at: [number, number] = lmAt ? [lmAt.x, lmAt.z] : arg6 === 'core' ? macro.core : arg6 && isNaN(Number(arg6)) ? (pickD(arg6) ?? [0, 0]) : arg6 !== undefined ? [Number(arg6), Number(process.argv[7])] : [macro.centres[0].x, macro.centres[0].z];
 const cx = at[0], cz = at[1];
 const ras = new Raster(1400, 1400, 0x3a4a30);
 ras.view(cx, cz, span);
@@ -57,6 +60,12 @@ for (const c of macro.cells) {
     np++;
   }
   ras.polygon(c.poly, 0xff4040);
+}
+// Landmarks: their parts' footprints (buildings, paving, pitch, track) and the site outline.
+const LM_COLOR = [0, 0xe0c040, 0x9a968c, 0x5aa040, 0xc06040, 0x505055];
+for (const l of macro.landmarks) {
+  for (const f of partFootprints(landmarkParts(l, terrain))) ras.fill([f.poly], LM_COLOR[f.cat] ?? 0xff00ff, f.cat === 1 ? 1 : 0.8);
+  ras.polygon(l.site, 0x40e0ff);
 }
 ras.save(out);
 console.log(`${nc} cells in ${t.toFixed(0)} ms (${(t / Math.max(1, nc)).toFixed(1)} ms/cell), ${nl} lots, ${nb} buildings, ${np} props → ${out}`);

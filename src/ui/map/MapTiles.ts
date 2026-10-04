@@ -9,7 +9,7 @@
  * water, arterials and metro always; local streets, parks and building
  * footprints once they are legible.
  *
- * Data: the macro plan (cells, arterials, bridges, metro, sewers), the terrain
+ * Data: the macro plan (cells, arterials, bridges, metro, sewers, landmarks), the terrain
  * (hillshade, rivers, sea) and per-cell items that arrive with the skyline
  * batches (building boxes, local streets, parks, plazas, metro entrances) —
  * the whole city without loading it in detail.
@@ -19,6 +19,7 @@ import type { Terrain } from '../../world/terrain';
 import { seaPolygon } from '../../plan/water';
 import { pointInPoly } from '../../core/geom2';
 import { SKY_STRIDE, MapItem } from '../../stream/protocol';
+import { landmarkParts, partFootprints, solidFootprints } from '../../plan/landmarkParts';
 
 export const TILE_PX = 512;
 
@@ -46,6 +47,9 @@ export const MAP_COLORS = {
   boulevardCase: '#d4a548',
   bridgeCase: '#5f574e',
   sewer: '#8d6b3f',
+  /** Landmarks: buildings, paving (aprons, runways), pitches, running tracks, roads. */
+  landmark: ['', '#b9a58c', '#cfcac0', '#9dcd85', '#d98a70', '#fbf8f0'],
+  landmarkEdge: '#8f7b63',
 };
 
 const DISTRICT_TINT: Partial<Record<District, string>> = {
@@ -121,10 +125,22 @@ export class MapWorld {
   cellsKnown = 0;
   /** Street-crime index per cell (0..1, game/crime/CrimeIndex), set by the crime layer. */
   crimeIndex: Float32Array | null = null;
+  /** Landmark footprints (map category, outline, bounds), drawn at every zoom. */
+  readonly landmarkShapes: { cat: number; poly: number[]; box: [number, number, number, number] }[] = [];
+  /** Ground outlines of the landmarks' solid parts (safe spots stay off them). */
+  private landmarkSolids: { poly: number[]; box: [number, number, number, number] }[] = [];
 
   constructor(readonly macro: MacroPlan, readonly terrain: Terrain) {
     const R = terrain.profile.radius;
-    this.half = Math.ceil((R * 1.3 + 400) / 100) * 100;
+    // The square reaches out to the landmarks (the airport lies beyond the city).
+    let half = R * 1.3 + 400;
+    for (const l of macro.landmarks ?? []) half = Math.max(half, Math.max(Math.abs(l.x), Math.abs(l.z)) + Math.hypot(l.hu, l.hv) + 300);
+    this.half = Math.ceil(half / 100) * 100;
+    for (const l of macro.landmarks ?? []) {
+      const parts = landmarkParts(l, terrain);
+      for (const f of partFootprints(parts)) this.landmarkShapes.push({ ...f, box: boxOf(f.poly) });
+      for (const p of solidFootprints(l, parts, 0)) this.landmarkSolids.push({ poly: p, box: boxOf(p) });
+    }
     const n = macro.cells.length;
     this.cellBox = new Float64Array(n * 4);
     macro.cells.forEach((c, i) => this.cellBox.set(boxOf(c.poly), i * 4));
@@ -188,6 +204,11 @@ export class MapWorld {
 
   /** Is the point inside a building footprint (with margin)? null when the cell's buildings are not known yet. */
   inBuilding(x: number, z: number, margin: number): boolean | null {
+    for (const s of this.landmarkSolids) {
+      const b = s.box;
+      if (x < b[0] - margin || x > b[2] + margin || z < b[1] - margin || z > b[3] + margin) continue;
+      if (pointInPoly(s.poly, x, z)) return true;
+    }
     const c = this.cellAt(x, z);
     if (c < 0) return false;
     const R = this.cellBld[c];
@@ -498,6 +519,24 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
       g.strokeStyle = MAP_COLORS.bldEdge;
       g.lineWidth = px(0.8);
       for (const p of tone) g.stroke(p);
+    }
+  }
+
+  // Landmarks: their aprons, pitches and tracks, then their buildings (outlined).
+  {
+    const paths = new Map<number, Path2D>();
+    for (const s of w.landmarkShapes) {
+      if (!vis(s.box)) continue;
+      let p = paths.get(s.cat);
+      if (!p) paths.set(s.cat, (p = new Path2D()));
+      addPoly(p, s.poly, true);
+    }
+    for (const cat of [5, 2, 3, 4, 1]) {
+      const p = paths.get(cat);
+      if (!p) continue;
+      g.fillStyle = MAP_COLORS.landmark[cat];
+      g.fill(p);
+      if (cat === 1) { g.strokeStyle = MAP_COLORS.landmarkEdge; g.lineWidth = px(0.9); g.stroke(p); }
     }
   }
 

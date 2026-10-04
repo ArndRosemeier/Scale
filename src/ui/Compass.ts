@@ -73,7 +73,8 @@ export class Compass {
     for (const m of g.map.allMarkers()) {
       if (m.kind === 'pin') continue;
       if (m.always) { goals.push(m); continue; }
-      if (Math.hypot(m.x - p.x, m.z - p.z) > range) continue;
+      // Landmarks are seen from further away.
+      if (Math.hypot(m.x - p.x, m.z - p.z) > range * (m.kind === 'landmark' ? 4 : 1)) continue;
       list.push(poiOf(m));
     }
     // Metro: the nearest street entrance of each station in range.
@@ -161,5 +162,6 @@ function poiOf(m: MapMarker): Poi {
   if (m.kind === 'alert') return { x: m.x, z: m.z, cls: 'poi alert', color: m.color, text: '!' };
   if (m.kind === 'core') return { x: m.x, z: m.z, cls: 'poi core', color: m.color, text: '' };
   if (m.kind === 'zone') return { x: m.x, z: m.z, cls: 'poi zone', color: m.color, text: '!' };
+  if (m.kind === 'landmark') return { x: m.x, z: m.z, cls: 'poi landmark', color: m.color, text: '★' };
   return { x: m.x, z: m.z, cls: 'poi', color: m.color, text: '' };
 }
