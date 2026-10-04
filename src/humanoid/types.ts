@@ -37,6 +37,12 @@ export interface HumanoidAppearance {
     jaw: number; chin: number; cheekbones: number; noseSize: number; noseWidth: number; noseBridge: number;
     browRidge: number; eyeSize: number; eyeSpacing: number; mouthWidth: number; lipFullness: number;
     earSize: number; earPoint: number; headRound: number; foreheadSlope: number;
+    /** Cheek fullness: lean, hollow cheeks (−1) … round, full cheeks (+1). Absent in older looks: 0. */
+    cheekFullness?: number;
+    /** Face width: narrow (−1) … broad (+1). */
+    faceWidth?: number;
+    /** Resting expression: stern (−1) … smiling (+1) — mouth corners and the face's expression at rest. */
+    smile?: number;
   };
   body: {
     shoulders: number; chest: number; waist: number; hips: number; armLength: number; legLength: number;

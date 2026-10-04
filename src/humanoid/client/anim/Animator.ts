@@ -1405,6 +1405,11 @@ export class Animator {
     const set = (n: string, w: number) => { const i = this.exprIdx.get(n); if (i !== undefined) tgt[i] = Math.max(tgt[i], w); };
     const mood = this.pain > 0.3 ? 'pain' : actionMood ?? inp.anim.mood ?? 'neutral';
     for (const [n, w] of MOODS[mood] ?? []) set(n, w);
+    // The character's resting expression (appearance.face.smile): a friendly face carries a
+    // little of the happy mood all the time, a stern one a slight frown.
+    const rest = this.ch.app.face.smile ?? 0;
+    if (rest > 0 && mood !== 'pain') for (const [n, w] of MOODS.happy) set(n, w * rest * 0.9);
+    else if (rest < 0 && mood === 'neutral') { set('mouth-depression', -rest * 0.35); set('eyebrows-left-down', -rest * 0.25); set('eyebrows-right-down', -rest * 0.25); }
     if (this.pain > 0) for (const [n, w] of MOODS.pain) set(n, w * this.pain);
     const dead = fam === 'dead', asleep = fam === 'sleep';
     // Blinking.

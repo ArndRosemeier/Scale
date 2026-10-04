@@ -23,6 +23,7 @@ const FACE: [FaceKey, string][] = [
   ['headRound', 'Head shape'], ['foreheadSlope', 'Forehead'], ['browRidge', 'Brow ridge'], ['eyeSize', 'Eye size'], ['eyeSpacing', 'Eye spacing'],
   ['noseSize', 'Nose size'], ['noseWidth', 'Nose width'], ['noseBridge', 'Nose bridge'], ['cheekbones', 'Cheekbones'], ['jaw', 'Jaw'],
   ['chin', 'Chin'], ['mouthWidth', 'Mouth width'], ['lipFullness', 'Lips'], ['earSize', 'Ears'],
+  ['cheekFullness', 'Cheeks (lean – full)'], ['faceWidth', 'Face width'], ['smile', 'Expression (stern – smiling)'],
 ];
 const BODY: [BodyKey, string][] = [
   ['shoulders', 'Shoulders'], ['chest', 'Chest'], ['waist', 'Waist'], ['hips', 'Hips'], ['belly', 'Belly'], ['neck', 'Neck'],
@@ -436,7 +437,7 @@ export class CharacterCreator {
       }
       case 'face':
         kids = [
-          section('Features', ...FACE.map(([k, label]) => slider(label, a.face[k], -1, 1, signed, (v) => { this.look.appearance.face[k] = v; this.changed(); }).el)),
+          section('Features', ...FACE.map(([k, label]) => slider(label, a.face[k] ?? 0, -1, 1, signed, (v) => { this.look.appearance.face[k] = v; this.changed(); }).el)),
           h('p', 'cc-note', 'Double-click a slider to reset it to average.'),
         ];
         break;

@@ -95,6 +95,15 @@ export function computeShape(a: HumanoidAppearance): ShapeParams {
   t.signed('chin-prominent', f.chin);
   t.signed('chin-height', f.chin, 0, 0.35);
   t.signed('%-cheek-bones', f.cheekbones);
+  // Cheek fullness and face width (the "puffy" broad face is the head's fat and cheek volume).
+  const cheeks = f.cheekFullness ?? 0, width = f.faceWidth ?? 0, smile = f.smile ?? 0;
+  t.signed('%-cheek-volume', cheeks);
+  t.signed('%-cheek-inner', cheeks, 0, 0.8);
+  t.signed('head-fat', cheeks, 0, 1.2);
+  t.signed('head-scale-horiz', width + cheeks * 0.25, 0, 0.8);
+  // Resting smile: mouth corners up (stern: down), laugh lines with a real smile.
+  t.signed('mouth-angles', smile, 1, 1);
+  if (smile > 0) t.signed('mouth-laugh-lines', smile, 2, 0.6);
   t.signed('nose-scale-vert', f.noseSize);
   t.signed('nose-scale-depth', f.noseSize, 0, 0.6);
   t.signed('nose-volume', f.noseSize, 0, 0.3);
