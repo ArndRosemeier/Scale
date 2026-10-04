@@ -61,15 +61,25 @@ export class CameraRig {
     // Shoulder offset to the right for a cinematic view.
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const shoulder = this.zoom < 6 && !this.underground ? h * 0.18 : 0;
-    const origin = this.smoothPivot.clone().addScaledVector(right, shoulder);
+    let origin = this.smoothPivot.clone().addScaledVector(right, shoulder);
     // Collision: shorten the boom when something is in between (skip for giants vs small buildings).
     let maxD = want;
+    // Next to a wall the shoulder point can already be on its far side (outside the building):
+    // then the boom starts at the body instead.
+    if (this.solidAt && shoulder > 0) {
+      const sx = this.smoothPivot.x, sy = this.smoothPivot.y, sz = this.smoothPivot.z;
+      for (let k = 1; k <= 4; k++) {
+        const f = k / 4;
+        if (this.solidAt(sx + right.x * shoulder * f, sy, sz + right.z * shoulder * f)) { origin = this.smoothPivot.clone(); break; }
+      }
+    }
     if (this.solidAt) {
       // Dense enough that thin interior walls (tested within 0.12 m) can't be stepped over.
       const steps = Math.min(400, Math.max(40, Math.ceil(want / 0.08)));
       for (let i = 1; i <= steps; i++) {
         const t = (i / steps) * want;
-        if (this.solidAt(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t)) { maxD = Math.max(h * 0.15, t - Math.max(0.15, h * 0.08)); break; }
+        // (Indoors the camera may come right up to the body rather than end up beyond the wall.)
+        if (this.solidAt(origin.x + dir.x * t, origin.y + dir.y * t, origin.z + dir.z * t)) { maxD = Math.max(Math.min(h * 0.15, t * 0.5), t - Math.max(0.15, h * 0.08)); break; }
       }
     } else {
       const hit = this.world.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, want, Math.max(0.2, want / 48));

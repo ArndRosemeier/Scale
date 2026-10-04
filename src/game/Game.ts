@@ -490,7 +490,8 @@ export class Game {
     this.T('react', () => this.reactions.update(dt, this.player));
     this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs));
-    this.traffic.player = this.freeCam ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
+    // Cars only brake for a player on the street (not one under it in the sewer or metro).
+    this.traffic.player = this.freeCam || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z) ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     if (!this.freeCam) this.bodyContacts(dt);
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
@@ -664,7 +665,8 @@ export class Game {
       if (dx * dx + dz * dz > (v.length + pr + 2) ** 2) continue;
       const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
       const along = dx * fx + dz * fz, lat = dx * -fz + dz * fx;
-      if (Math.abs(along) > v.length / 2 + pr || Math.abs(lat) > v.width / 2 + pr || p.pos.y > v.y + 1.6) continue;
+      // Above the car (on its roof, flying) or below it (sewer, metro, a cellar): no contact.
+      if (Math.abs(along) > v.length / 2 + pr || Math.abs(lat) > v.width / 2 + pr || p.pos.y > v.y + 1.6 || p.pos.y + p.height < v.y - 0.3) continue;
       if (p.mass < 300 && v.speed > 1.5) {
         // Hit by the car.
         p.vel.x = fx * v.speed * 1.2; p.vel.z = fz * v.speed * 1.2; p.vel.y = 2 + v.speed * 0.3;

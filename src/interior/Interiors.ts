@@ -13,7 +13,7 @@ import { planFloor, planLift, liftRect, type FloorPlan, type LiftShaft } from '.
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
 import { buildFloorMeshes, wallCollisionSegments } from './InteriorBuilder';
-import { pointInPoly, distSqPointSeg } from '../core/geom2';
+import { pointInPoly, distSqPointSeg, distPointPolyEdge } from '../core/geom2';
 import { offset } from '../core/clip';
 import { gridCell, type BuildingLayout } from '../build/buildingLayout';
 import type { Population } from '../sim/Population';
@@ -398,7 +398,8 @@ export class Interiors {
 
   /** Camera solidity while inside an active building: outside the shell, near interior walls, below the floor or above the ceiling. */
   solidIndoors(a: ActiveBuilding, x: number, y: number, z: number): boolean {
-    if (!pointInPoly(a.ref.poly, x, z)) return true;
+    // The outer wall has a thickness: a camera inside it would look out through its back faces.
+    if (!pointInPoly(a.ref.poly, x, z) || distPointPolyEdge(a.ref.poly, x, z) < OUTER_WALL) return true;
     for (const f of a.floors.values()) {
       if (y < f.plan.y || y > f.plan.y + f.plan.height) continue;
       if (y < f.plan.y + 0.1 || y > f.plan.y + f.plan.height - 0.08) return true;
@@ -414,6 +415,9 @@ export class Interiors {
     for (const a of [...this.active.values()]) this.drop(a);
   }
 }
+
+/** Thickness of a building's outer wall for the indoor camera (m). */
+const OUTER_WALL = 0.25;
 
 function bboxOf(p: number[]): [number, number, number, number] {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;

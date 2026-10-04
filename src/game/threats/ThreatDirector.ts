@@ -22,9 +22,9 @@ import { ThreatClock, type CityEvents, type ClockSignal } from './ThreatClock';
 import { RogueMachines } from './RogueMachines';
 import { RobotMalfunction, robotOmen, type RobotEventOpts } from './RobotMalfunction';
 import type { DamageResult, DamageSource, ThreatActor, ThreatEvent } from './ThreatEvent';
-import { Strider, STRIDER, type StriderOpts } from './Strider';
+import { Strider, STRIDER, STRIDER_RIG, type StriderOpts } from './Strider';
 import { planStriderRoute, type StriderRoute } from './StriderRoute';
-import { CreatureMesh, SHAPES, type Shape } from './rig/CreatureMesh';
+import { CreatureMesh } from './rig/CreatureMesh';
 import { FacadeFires } from './FacadeFires';
 import type { Obstacle } from '../../world/Collision';
 
@@ -100,8 +100,9 @@ export class ThreatDirector {
     this.clock.setting = loadSetting();
     this.rogue = new RogueMachines(g);
     g.future.malfunction = this.rogue;
-    // Two creatures' worth of parts (the climax budget, THREATS_PLAN §4): the program compiles at start.
-    this.mesh = new CreatureMesh([80, 36, 4, 4, 10]);
+    // Two Striders' skinned bodies (the climax budget, THREATS_PLAN §4: a live one and a body lying
+    // in the city); the skin is built now and the program compiles during the warm-up.
+    this.mesh = new CreatureMesh([{ def: STRIDER_RIG, count: 2, name: 'strider' }]);
     g.renderer.scene.add(this.mesh.group);
     this.fires = new FacadeFires(g.elements.fx, g.destruction, g.renderer.camera);
     // Their bodies stand in the player's way.
@@ -296,12 +297,11 @@ export class ThreatDirector {
     M.begin();
     for (const ev of this.events) if (ev instanceof Strider) ev.draw(M);
     for (const r of this.remains) r.draw(M);
-    // During the start-up warm-up one speck of every shape is drawn (under the player, too small to
-    // see), so the creature program and its shadow variant compile behind the loading screen.
+    // During the start-up warm-up a speck of a body is drawn (under the player, too small to see),
+    // so the creature program and its shadow variant compile behind the loading screen.
     if (!this.g.gate.enabled) {
       const p = this.g.player.pos;
-      _m.makeScale(1e-3, 1e-3, 1e-3).setPosition(p.x, p.y - 2, p.z);
-      for (let k = 0; k < SHAPES; k++) M.push(k as Shape, _m);
+      M.warm(p.x, p.y - 2, p.z);
     }
     M.end();
   }
@@ -452,7 +452,6 @@ export class ThreatDirector {
 }
 
 const WAKE_A = new THREE.Color(0.86, 0.9, 0.92), WAKE_B = new THREE.Color(0.6, 0.68, 0.72);
-const _m = new THREE.Matrix4();
 
 function loadSetting(): CityEvents {
   try { const s = localStorage.getItem(SETTING_KEY); if (s === 'off' || s === 'rare' || s === 'normal' || s === 'frequent') return s; } catch { /* storage unavailable */ }

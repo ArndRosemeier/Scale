@@ -7,12 +7,15 @@
  * spine and a head without legs, tentacles are tails, tripod legs are legs).
  *
  * Per frame: `update` moves the skeleton (the owner sets the root position, heading and the pose
- * controls first), `draw` pushes the parts into a CreatureMesh, `capsules` lists the body's
- * capsules for hits (ray, sphere) with the zone each belongs to. Footfalls come out through `onStep`.
+ * controls first), `draw` poses the creature's skinned body in a CreatureMesh (`boneFrames`: a frame
+ * per bone — segments, head, hinged jaw, legs, feet — with breathing and the feet rolling as they
+ * step), `capsules` lists the body's capsules for hits (ray, sphere) with the zone each belongs to.
+ * Footfalls come out through `onStep`.
  */
 import * as THREE from 'three';
 import { follow, reach, twoBone, swingOf, smooth01, type Vec3 } from './chain';
-import { Shape, type CreatureMesh } from './CreatureMesh';
+import type { CreatureMesh } from './CreatureMesh';
+import { JAW_HINGE, type BoneLayout } from './skin';
 
 export interface LegDef {
   /** Fixed to the front (chest) or the back (pelvis) of the spine. */
@@ -63,7 +66,6 @@ interface LegState {
   pin: Vec3 | null;
 }
 
-const _m = new THREE.Matrix4();
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _v: Vec3 = { x: 0, y: 0, z: 0 }, _w: Vec3 = { x: 0, y: 0, z: 0 }, _p: Vec3 = { x: 0, y: 0, z: 0 };
@@ -92,8 +94,12 @@ export class CreatureRig {
   ridge = 0;
   throat = 0;
   eyes = 0.6;
+  /** Wet skin after wading (0..1: glossier). */
+  wet = 0;
   /** Breathing / idle sway time. */
   t = 0;
+  /** No breathing or idle sway (the bind pose the skin is built around). */
+  still = false;
   /** Ground height at a point (terrain / street, ignoring buildings). */
   ground: (x: number, z: number) => number = () => 0;
   /** A foot came down (leg index, where). */
@@ -194,7 +200,8 @@ export class CreatureRig {
     const slump = smooth01(this.slump), rear = smooth01(this.rear);
     // ---- spine: the leader (neck base) on the path, the rest follow it.
     const nS = D.spine.length;
-    const breath = Math.sin(this.t * 1.1) * 0.25 * s;
+    const live = this.still ? 0 : 1;
+    const breath = Math.sin(this.t * 1.1) * 0.25 * s * live;
     const lead = 0.6 * s;
     const lx = this.x + fx * lead * (1 - rear) - fx * rear * 6 * s, lz = this.z + fz * lead * (1 - rear) - fz * rear * 6 * s;
     const groundLead = this.ground(lx, lz);
@@ -289,7 +296,7 @@ export class CreatureRig {
     }
     if (slump > 0) { ty = ty * (1 - slump) - 0.5 * slump; }
     // Idle sway of the head.
-    tx += Math.sin(this.t * 0.37) * 0.05; ty += Math.sin(this.t * 0.53) * 0.04;
+    tx += Math.sin(this.t * 0.37) * 0.05 * live; ty += Math.sin(this.t * 0.53) * 0.04 * live;
     const reachD = nL * 0.93;
     let hx = n0x + tx * reachD, hy = n0y + ty * reachD, hz = n0z + tz * reachD;
     if (slump > 0) hy = hy * (1 - slump) + (this.ground(hx, hz) + D.neckR[D.neckR.length - 1] * s * 0.8) * slump;
@@ -316,12 +323,12 @@ export class CreatureRig {
     // Each joint is drawn towards where it would be on a tail bent by the sweep angle (stronger
     // towards the tip) plus a slow idle sway, drooping behind the pelvis; the chain constraint keeps
     // the lengths (and when walking, the drag along the path dominates).
-    const ang0 = this.sweep * 1.9 + Math.sin(this.t * 0.9) * 0.12;
+    const ang0 = this.sweep * 1.9 + Math.sin(this.t * 0.9) * 0.12 * live;
     const rate = Math.min(1, dt * (Math.abs(this.sweep) > 0.05 ? 7 : 2.5));
     let o = 0;
     for (let i = 1; i <= nT; i++) {
       o += D.tail[i - 1] * s;
-      const k = i / nT, a = ang0 * Math.pow(k, 0.7) + Math.sin(this.t * 1.3 - k * 3) * 0.08 * k;
+      const k = i / nT, a = ang0 * Math.pow(k, 0.7) + Math.sin(this.t * 1.3 - k * 3) * 0.08 * k * live;
       const ca = Math.cos(a), sa = Math.sin(a);
       const dx = bx * ca - bz * sa, dz = bz * ca + bx * sa;
       const tx = this.tail[0] + dx * o, tz = this.tail[2] + dz * o, ty = this.tail[1] - o * 0.16;
@@ -352,106 +359,72 @@ export class CreatureRig {
     }
   }
 
-  /** Push the parts into the batch. */
+  /** Pose this creature's skinned body in the batch (1 when drawn). */
   draw(mesh: CreatureMesh): number {
-    const D = this.def, s = this.scale;
-    let n = 0;
-    const fx = this.fx, fz = this.fz;
-    // Up hint per chain: the body's up (rolling over while dying).
+    return mesh.draw(this);
+  }
+
+  /**
+   * Every bone's world frame now (16 floats each, column-major, axes X = Y × Z, scaled with the
+   * rig) in the layout's order; bone 0 is left alone. Chain segments: origin at the joint, Y along
+   * the segment, Z up its back (the body's up rolled while dying; necks use up-and-back so a raised
+   * neck keeps its twist). Head: Z forward, Y up. Jaw: the head's frame at the hinge, opened about
+   * X. Legs: Y down the bone, Z forward. Feet: on the ground under the heel, Y up, Z to the toes,
+   * rolling toes-down while they swing. The chest swells with each breath.
+   */
+  boneFrames(out: Float32Array, L: BoneLayout): void {
+    const D = this.def, s = this.scale, nS = D.spine.length, nN = D.neck.length;
     const roll = smooth01(this.slump) * 0.9 * this.slumpSide;
     const upx = this.rx * Math.sin(roll), upy = Math.cos(roll), upz = this.rz * Math.sin(roll);
-    // Spine (with the belly glow off), neck (the throat segment glows when charging), tail.
-    for (let i = 0; i < D.spine.length; i++) n += this.seg(mesh, this.spine, i, D.spineR[i] * s * 1.0, D.spineR[i] * s * 0.92, upx, upy, upz, 0, 0, 0) ? 1 : 0;
-    const th = this.throat;
-    for (let i = 0; i < D.neck.length; i++) {
-      const g = i === D.neck.length - 1 ? th : i === D.neck.length - 2 ? th * 0.5 : 0;
-      n += this.seg(mesh, this.neck, i, D.neckR[i] * s, D.neckR[i] * s * 0.95, upx, upy, upz, 2.6 * g, 1.1 * g, 0.25 * g) ? 1 : 0;
+    const fx = this.fx, fz = this.fz;
+    const live = this.still ? 0 : 1;
+    const breathe = 1 + 0.03 * Math.sin(this.t * 1.1) * live * (1 - smooth01(this.slump));
+    for (let i = 0; i < nS; i++) {
+      const k = i < 2 ? breathe : 1;
+      chainFrame(out, L.spine + i, this.spine, i, upx, upy, upz, s * k, s, s * k);
     }
-    for (let i = 0; i < D.tail.length; i++) n += this.seg(mesh, this.tail, i, D.tailR[i] * s, D.tailR[i] * s * 0.85, upx, upy, upz, 0, 0, 0) ? 1 : 0;
-    // Legs: upper and lower bones, the foot flat on the ground pointing ahead.
-    for (const L of this.legs) {
-      const r = L.def.r;
-      n += this.bone(mesh, L.hip, L.knee, r[0] * s, upx, upy, upz) ? 1 : 0;
-      n += this.bone(mesh, L.knee, L.ankle, r[1] * s, upx, upy, upz) ? 1 : 0;
-      const j = L.def.at === 'front' ? 1 : D.spine.length;
-      const a = L.def.at === 'front' ? 0 : j - 1;
-      let ax = this.spine[a * 3] - this.spine[j * 3], az = this.spine[a * 3 + 2] - this.spine[j * 3 + 2];
+    for (let i = 0; i < nN; i++) chainFrame(out, L.neck + i, this.neck, i, upx - fx * 0.7, upy, upz - fz * 0.7, s, s, s);
+    for (let i = 0; i < D.tail.length; i++) chainFrame(out, L.tail + i, this.tail, i, upx, upy, upz, s, s, s);
+    // Head and jaw (a breath of the jaw at rest).
+    const hp = this.headPos, hf = this.headFwd, hu = this.headUp;
+    _x.crossVectors(hu, hf).normalize();
+    writeFrame(out, L.head, hp.x, hp.y, hp.z, _x.x, _x.y, _x.z, hu.x, hu.y, hu.z, hf.x, hf.y, hf.z, s);
+    const H = D.head;
+    const a = (this.jaw + 0.035 * (0.5 + 0.5 * Math.sin(this.t * 1.1)) * live) * JAW_OPEN;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const jx = hp.x - hu.x * H.h * s * JAW_HINGE.down + hf.x * H.len * s * JAW_HINGE.fwd;
+    const jy = hp.y - hu.y * H.h * s * JAW_HINGE.down + hf.y * H.len * s * JAW_HINGE.fwd;
+    const jz = hp.z - hu.z * H.h * s * JAW_HINGE.down + hf.z * H.len * s * JAW_HINGE.fwd;
+    writeFrame(out, L.jaw, jx, jy, jz, _x.x, _x.y, _x.z,
+      hu.x * ca + hf.x * sa, hu.y * ca + hf.y * sa, hu.z * ca + hf.z * sa,
+      hf.x * ca - hu.x * sa, hf.y * ca - hu.y * sa, hf.z * ca - hu.z * sa, s);
+    // Legs.
+    for (let li = 0; li < this.legs.length; li++) {
+      const Lg = this.legs[li], d = Lg.def, b = L.legs + li * 3;
+      const j = d.at === 'front' ? 1 : nS;
+      const a0 = d.at === 'front' ? 0 : j - 1;
+      let ax = this.spine[a0 * 3] - this.spine[j * 3], az = this.spine[a0 * 3 + 2] - this.spine[j * 3 + 2];
       const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
-      // Toes splay out a little to their side.
-      const sx = -az * L.def.side, sz = ax * L.def.side;
+      boneFrame(out, b, Lg.hip, Lg.knee, ax, 0, az, s);
+      boneFrame(out, b + 1, Lg.knee, Lg.ankle, ax, 0, az, s);
+      // Foot: toes a little out to its side, flat on the ground; rolled toes-down mid-swing.
+      const sx = -az * d.side, sz = ax * d.side;
       _z.set(ax + sx * 0.25, 0, az + sz * 0.25).normalize();
       _y.set(0, 1, 0);
       _x.crossVectors(_y, _z).normalize();
-      const fl = L.def.foot * s, fw = r[2] * s * 2.2;
-      _m.makeBasis(_x.multiplyScalar(fw), _y.multiplyScalar(r[2] * s * 1.6), _z.multiplyScalar(fl));
-      _m.setPosition(L.ankle.x - ax * fl * 0.25, L.foot.y, L.ankle.z - az * fl * 0.25);
-      n += mesh.push(Shape.Foot, _m) ? 1 : 0;
+      const fl = d.foot * s;
+      let ox = Lg.ankle.x - ax * fl * 0.25, oy = Lg.foot.y, oz = Lg.ankle.z - az * fl * 0.25;
+      if (Lg.sw >= 0 && !Lg.pin) {
+        // Roll about the ankle (the heel lifts first, the toes reach for the ground at the end).
+        const p = -0.5 * Math.sin(Math.PI * Lg.sw) + 0.12 * Math.sin(Math.PI * Math.min(1, Lg.sw * 2));
+        _q.setFromAxisAngle(_x, -p);
+        _y.applyQuaternion(_q); _z.applyQuaternion(_q);
+        // Keep the ankle where it is: origin = ankle − R(ankle − origin).
+        _v3.set(ox - Lg.ankle.x, oy - Lg.ankle.y, oz - Lg.ankle.z).applyQuaternion(_q);
+        ox = Lg.ankle.x + _v3.x; oy = Lg.ankle.y + _v3.y; oz = Lg.ankle.z + _v3.z;
+      }
+      writeFrame(out, b + 2, ox, oy, oz, _x.x, _x.y, _x.z, _y.x, _y.y, _y.z, _z.x, _z.y, _z.z, s);
     }
-    // Head and jaw.
-    const hp = this.headPos, hf = this.headFwd, hu = this.headUp;
-    _z.copy(hf); _y.copy(hu); _x.crossVectors(_y, _z).normalize();
-    const H = D.head;
-    _m.makeBasis(_x.clone().multiplyScalar(H.w * s), _y.clone().multiplyScalar(H.h * s), _z.clone().multiplyScalar(H.len * s));
-    _m.setPosition(hp.x, hp.y, hp.z);
-    const eg = this.eyes;
-    n += mesh.push(Shape.Head, _m, 3.2 * eg, 1.6 * eg, 0.3 * eg) ? 1 : 0;
-    // Jaw hinged below the skull, opened by `jaw`.
-    _q.setFromAxisAngle(_x, this.jaw * 0.55);
-    const jz = _z.clone().applyQuaternion(_q), jy = _y.clone().applyQuaternion(_q);
-    const J = D.jaw;
-    _m.makeBasis(_x.clone().multiplyScalar(J.w * s), jy.multiplyScalar(J.h * s), jz.multiplyScalar(J.len * s));
-    _m.setPosition(hp.x - hu.x * H.h * s * 0.1 + hf.x * H.len * s * 0.06, hp.y - hu.y * H.h * s * 0.1 + hf.y * H.len * s * 0.06, hp.z - hu.z * H.h * s * 0.1 + hf.z * H.len * s * 0.06);
-    n += mesh.push(Shape.Jaw, _m, 2.6 * th, 1.1 * th, 0.25 * th) ? 1 : 0;
-    // Dorsal plates: on top of their segment, edge along the spine; the ridge glow runs from the tail to the head.
-    const P = D.plates;
-    for (let k = 0; k < P.length; k++) {
-      const p = P[k];
-      const c = p.chain === 'spine' ? this.spine : p.chain === 'neck' ? this.neck : this.tail;
-      const R = p.chain === 'spine' ? D.spineR : p.chain === 'neck' ? D.neckR : D.tailR;
-      const i = p.seg;
-      const ax = c[i * 3], ay = c[i * 3 + 1], az = c[i * 3 + 2], bx = c[i * 3 + 3], by = c[i * 3 + 4], bz = c[i * 3 + 5];
-      const px = ax + (bx - ax) * p.t, py = ay + (by - ay) * p.t, pz = az + (bz - az) * p.t;
-      _z.set(bx - ax, by - ay, bz - az).normalize();
-      if (p.chain !== 'neck') _z.negate();
-      _y.set(upx, upy, upz);
-      _y.addScaledVector(_z, -_y.dot(_z)).normalize();
-      _x.crossVectors(_y, _z).normalize();
-      const rr = R[Math.min(i, R.length - 1)] * s * 0.85;
-      _m.makeBasis(_x.multiplyScalar(s * 1.1), _y.clone().multiplyScalar(p.h * s), _z.multiplyScalar(p.len * s));
-      _m.setPosition(px + _y.x * rr, py + _y.y * rr, pz + _y.z * rr);
-      // The wave: plates nearest the tail light first.
-      const order = 1 - k / Math.max(1, P.length - 1);
-      const gl = Math.max(0, Math.min(1, this.ridge * 1.6 - order * 0.6));
-      n += mesh.push(Shape.Plate, _m, 0.6 * gl * gl * 4, 1.4 * gl * gl * 4, 3.2 * gl * gl * 4) ? 1 : 0;
-    }
-    void fx; void fz;
-    return n;
-  }
-
-  /** One chain segment as a spindle (radii across: rx sideways, rz up/down). */
-  private seg(mesh: CreatureMesh, c: Float64Array, i: number, rx: number, rz: number, upx: number, upy: number, upz: number, gr: number, gg: number, gb: number): boolean {
-    _v.x = c[i * 3]; _v.y = c[i * 3 + 1]; _v.z = c[i * 3 + 2];
-    _w.x = c[i * 3 + 3]; _w.y = c[i * 3 + 4]; _w.z = c[i * 3 + 5];
-    return this.spindle(mesh, _v, _w, rx, rz, upx, upy, upz, gr, gg, gb);
-  }
-
-  private bone(mesh: CreatureMesh, a: Vec3, b: Vec3, r: number, upx: number, upy: number, upz: number): boolean {
-    return this.spindle(mesh, a, b, r, r, upx, upy, upz, 0, 0, 0);
-  }
-
-  private spindle(mesh: CreatureMesh, a: Vec3, b: Vec3, rx: number, rz: number, upx: number, upy: number, upz: number, gr: number, gg: number, gb: number): boolean {
-    _y.set(b.x - a.x, b.y - a.y, b.z - a.z);
-    const len = _y.length();
-    if (len < 1e-4) return false;
-    _y.divideScalar(len);
-    // Z: the body's up, made perpendicular to the segment (back up, belly down).
-    _z.set(upx, upy, upz).addScaledVector(_y, -(upx * _y.x + upy * _y.y + upz * _y.z));
-    if (_z.lengthSq() < 1e-6) _z.set(1, 0, 0).addScaledVector(_y, -_y.x);
-    _z.normalize();
-    _x.crossVectors(_y, _z).normalize();
-    _m.makeBasis(_x.multiplyScalar(rx), _y.multiplyScalar(len), _z.multiplyScalar(rz));
-    _m.setPosition(a.x, a.y, a.z);
-    return mesh.push(Shape.Spindle, _m, gr, gg, gb);
   }
 
   // ------------------------------------------------------------------ hit queries
@@ -475,6 +448,45 @@ export class CreatureRig {
     }
     return bc ? { d: best, cap: bc } : null;
   }
+}
+
+/** How far the jaw opens at `jaw` = 1 (rad). */
+export const JAW_OPEN = 0.62;
+const _v3 = new THREE.Vector3();
+
+/** Write a frame (axes scaled by s) as a column-major matrix at bone b. */
+function writeFrame(o: Float32Array, b: number, px: number, py: number, pz: number, xx: number, xy: number, xz: number, yx: number, yy: number, yz: number, zx: number, zy: number, zz: number, s: number): void {
+  const k = b * 16;
+  o[k] = xx * s; o[k + 1] = xy * s; o[k + 2] = xz * s; o[k + 3] = 0;
+  o[k + 4] = yx * s; o[k + 5] = yy * s; o[k + 6] = yz * s; o[k + 7] = 0;
+  o[k + 8] = zx * s; o[k + 9] = zy * s; o[k + 10] = zz * s; o[k + 11] = 0;
+  o[k + 12] = px; o[k + 13] = py; o[k + 14] = pz; o[k + 15] = 1;
+}
+
+/** A bone from a to b (Y along it), Z towards the hint made perpendicular, X = Y × Z; axes scaled (sx, sy, sz). */
+function boneFrame(o: Float32Array, bone: number, a: Vec3, b: Vec3, hx: number, hy: number, hz: number, sx: number, sy = sx, sz = sx): void {
+  let yx = b.x - a.x, yy = b.y - a.y, yz = b.z - a.z;
+  const l = Math.hypot(yx, yy, yz) || 1;
+  yx /= l; yy /= l; yz /= l;
+  const d = hx * yx + hy * yy + hz * yz;
+  let zx = hx - yx * d, zy = hy - yy * d, zz = hz - yz * d;
+  let zl = Math.hypot(zx, zy, zz);
+  if (zl < 1e-5) { zx = 1 - yx * yx; zy = -yx * yy; zz = -yx * yz; zl = Math.hypot(zx, zy, zz) || 1; }
+  zx /= zl; zy /= zl; zz /= zl;
+  const xx = yy * zz - yz * zy, xy = yz * zx - yx * zz, xz = yx * zy - yy * zx;
+  const k = bone * 16;
+  o[k] = xx * sx; o[k + 1] = xy * sx; o[k + 2] = xz * sx; o[k + 3] = 0;
+  o[k + 4] = yx * sy; o[k + 5] = yy * sy; o[k + 6] = yz * sy; o[k + 7] = 0;
+  o[k + 8] = zx * sz; o[k + 9] = zy * sz; o[k + 10] = zz * sz; o[k + 11] = 0;
+  o[k + 12] = a.x; o[k + 13] = a.y; o[k + 14] = a.z; o[k + 15] = 1;
+}
+
+const _ja: Vec3 = { x: 0, y: 0, z: 0 }, _jb: Vec3 = { x: 0, y: 0, z: 0 };
+/** Segment i of a chain as a bone (axes scaled: sx across, sy along, sz up its back). */
+function chainFrame(o: Float32Array, bone: number, c: Float64Array, i: number, hx: number, hy: number, hz: number, sx: number, sy: number, sz: number): void {
+  _ja.x = c[i * 3]; _ja.y = c[i * 3 + 1]; _ja.z = c[i * 3 + 2];
+  _jb.x = c[i * 3 + 3]; _jb.y = c[i * 3 + 4]; _jb.z = c[i * 3 + 5];
+  boneFrame(o, bone, _ja, _jb, hx, hy, hz, sx, sy, sz);
 }
 
 function scaled(a: number[], s: number): number[] {

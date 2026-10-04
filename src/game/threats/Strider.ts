@@ -956,7 +956,10 @@ export class Strider implements ThreatEvent, ThreatActor {
   private water(dt: number): void {
     const g = this.g, rig = this.rig, fx = g.elements.fx;
     const wl = g.terrain.waterLevel(this.x, this.z);
+    // Wet skin dries off over a minute once out of the river.
+    rig.wet = Math.max(0, rig.wet - dt / 60);
     if (!isFinite(wl)) return;
+    rig.wet = 1;
     this.waterT -= dt;
     const rising = this.mode === 'emerge' || this.mode === 'sink';
     if (this.waterT > 0) return;
