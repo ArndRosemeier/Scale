@@ -137,11 +137,12 @@ export class CrimeSystem {
       pursue: (lvl) => this.police.pursuePlayer(lvl),
       toast: (html, kind) => g.powerHud.toast(html, kind),
       sound: (id, gain) => g.audio.play2d(id, gain),
+      hostileThing: (ref) => g.threats?.isHostile(ref) ?? false,
     });
     g.consequences.onRecord = (e) => {
       this.justice.record(e);
       const a = e.ref as PedAgent | undefined;
-      if (e.target === 'person' && a && a.actor?.role !== 'criminal') for (const c of this.crimes) if (c.committed) c.collateral++;
+      if (e.cause === 'player' && e.target === 'person' && a && a.actor?.role !== 'criminal') for (const c of this.crimes) if (c.committed) c.collateral++;
     };
     this.director = new CrimeDirector(seed, {
       hoursAbs: () => g.sky.hoursAbs,
@@ -550,7 +551,7 @@ export class CrimeSystem {
   }
 
   /** People nearby cheer (wave) when the player stopped a crime; a cheer goes up. */
-  private cheer(): void {
+  cheer(): void {
     const g = this.g, p = g.player.pos;
     if (this.rep.value < -20) return;
     let n = 0;
@@ -583,6 +584,7 @@ export class CrimeSystem {
     this.wake = { x: p.x, y: p.y, z: p.z };
     this.hud.fade(true);
     if (kind === 'police' || this.justice.wanted > 0) return; // the officers cuff them (arrest) or not
+    if (kind === 'robot') return; // a threat knocked them out: no karma penalty (THREATS_PLAN §5.6)
     this.g.progress.addKarma(-5, 'knocked out');
     this.rep.add(-1, 'knocked out');
   }

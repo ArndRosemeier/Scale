@@ -25,14 +25,20 @@ export class Reactions {
    * ragdoll system can take the body over). `power` is the fling speed (m/s).
    */
   onKnockDown: ((a: PedAgent, fx: number, fz: number, power: number, cause: DownCause) => void) | null = null;
+  /**
+   * A civil-defence siren (a 'siren' stimulus with `evac`) reached someone not yet evacuating:
+   * the city response gives them a way to a metro entrance (PedAgent.evac).
+   */
+  onEvacuate: ((a: PedAgent, s: Stimulus) => void) | null = null;
 
   constructor(private peds: Pedestrians, private stimuli: Stimuli) {}
 
   update(dt: number, player: Player): void {
     this.screamCooldown -= dt;
     const fresh: Stimulus[] = [];
-    for (const s of this.stimuli.recent) if (s.time > this.lastSeen) fresh.push(s);
-    this.lastSeen = this.stimuli.time;
+    // (By emission order: what was emitted later in the last frame, after this ran, counts too.)
+    for (const s of this.stimuli.recent) if (s.seq > this.lastSeen) fresh.push(s);
+    this.lastSeen = this.stimuli.seq;
     const H = player.height;
     const px = player.pos.x, py = player.pos.y, pz = player.pos.z;
     const flyingFast = player.flying && player.vel.length() > 15 * Math.sqrt(player.k);
@@ -50,6 +56,11 @@ export class Reactions {
       if (st && st.frozen > 0) continue;
       const nerve = 0.4 + a.cit.nerve * 0.9;
       const before = a.fear;
+      if (a.evac && a.state !== PState.Flee) {
+        // Evacuating: on the way to the metro; only danger right next to them makes them run.
+        for (const s of fresh) if ((s.kind === 'threat' || s.kind === 'blast' || s.kind === 'collapse') && Math.hypot(a.x - s.x, a.z - s.z) < Math.min(14, s.radius * 0.3)) { a.fear = Math.min(2, a.fear + 0.9); this.flee(a, s.x, s.z); }
+        continue;
+      }
       // ---- events
       for (let k = 0; k < fresh.length; k++) {
         const s = fresh[k];
@@ -88,7 +99,13 @@ export class Reactions {
             }
             break;
           case 'siren':
+            if (s.evac) { if (!a.evac) this.onEvacuate?.(a, s); break; }
             if (prox > 0.4 && a.state === PState.Walk && a.cit.curiosity > 0.5 && !a.glance) { a.glance = 2.5; a.lookX = s.x; a.lookY = s.y; a.lookZ = s.z; }
+            break;
+          case 'threat':
+            // Rogue machines ramming and diving at people: run (the bolder keep their distance and film).
+            a.fear = Math.min(2, a.fear + prox * nerve * 1.1);
+            if (a.fear > 0.45) this.flee(a, s.x, s.z); else this.gawk(a, s.x, s.y, s.z);
             break;
           case 'impact':
           case 'glass':

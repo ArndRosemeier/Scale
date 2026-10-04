@@ -26,11 +26,12 @@ import { glanceAt, gawkAt } from './attention';
 import type { LocalGround } from './ground';
 import { GROUPS } from '../physics/Physics';
 import { statusOf } from '../shared/status';
+import { malLed, MAL_KEEP_R, ROGUE_RED, type Malfunction, type MalfunctionCtl } from './malfunction';
 
 export const enum DKind { Delivery = 0, News = 1, Police = 2 }
-const enum DState { Fly = 0, Fall = 1, Down = 2 }
+export const enum DState { Fly = 0, Fall = 1, Down = 2 }
 
-interface Wp { x: number; y: number; z: number; r: number; hold: number; drop?: boolean }
+export interface Wp { x: number; y: number; z: number; r: number; hold: number; drop?: boolean }
 
 export interface Drone {
   id: number;
@@ -60,6 +61,8 @@ export interface Drone {
   alive: boolean;
   /** Seconds to the next look round for people below (glances). */
   lookT: number;
+  /** Glitching or gone rogue (a threat): its plan is set by the malfunction controller. */
+  mal?: Malfunction;
 }
 
 const MAX_DRONES = 60;
@@ -71,6 +74,8 @@ const AMAX = 3.5;
 /** Climb / sink rate limits (m/s). */
 const VUP = 5;
 const VDOWN = 4;
+/** A hostile drone flies harder: speed, acceleration and sink rate × this. */
+const RAGE = 1.6;
 
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
@@ -104,6 +109,8 @@ export class Drones {
   stats = { drones: 0, target: 0, drawn: 0, swatted: 0, news: 0, police: 0, legs: 0, raised: 0, overTop: 0 };
   /** Exact ground and walls for falling drones (set by NearFuture). */
   ground: LocalGround | null = null;
+  /** Plans malfunctioning drones' flights (the threat layer; set by NearFuture). */
+  mal: MalfunctionCtl | null = null;
 
   constructor(private ctx: FutureCtx, mat: THREE.Material) {
     this.bodyB = [new FurnBatch(droneGeometry(0), mat, MAX_DRONES + 8), new FurnBatch(droneGeometry(1), mat, 16)];
@@ -142,7 +149,7 @@ export class Drones {
       const d = this.list[i];
       this.step(d, dt, player);
       const far = Math.hypot(d.x - px, d.z - pz);
-      if (!d.alive || far > DESPAWN_R || (d.state === DState.Down && d.stateT > 120 && far > 60)) this.remove(i);
+      if (!d.alive || far > (d.mal ? MAL_KEEP_R : DESPAWN_R) || (d.state === DState.Down && d.stateT > 120 && far > 60)) this.remove(i);
     }
     // Parcels are taken in right after they land (left lying about they read as loot for the player).
     for (let k = this.dropped.length - 5; k >= 0; k -= 5) if (this.t - this.dropped[k + 4] > PARCEL_STAY) this.dropped.splice(k, 5);
@@ -257,6 +264,27 @@ export class Drones {
     });
   }
 
+  /** A delivery drone hovering at (x, y, z) with nowhere to go (a malfunction plans its flight). */
+  spawnAt(x: number, y: number, z: number, yaw: number): Drone | null {
+    if (this.list.length >= MAX_DRONES + 8) return null;
+    const d: Drone = {
+      id: this.nextId++, kind: DKind.Delivery, fleet: this.rng.int(0, FLEETS.length - 1), x, y, z,
+      vx: 0, vy: 0, vz: 0, yaw, up: new THREE.Vector3(0, 1, 0), q: new THREE.Quaternion(),
+      plan: [{ x, y, z, r: 2, hold: 1e9 }], pi: 0, drop: -9, holdT: 0, parcel: 0, winch: 0, orbit: null, rotor: this.rng.range(0, 6), phase: this.rng.float(),
+      state: DState.Fly, stateT: 0, body: null, lastSpeed: 0, broken: false, alive: true, lookT: this.rng.float(),
+    };
+    this.list.push(d);
+    return d;
+  }
+
+  /** Send a drone away (out of the area, then it is dropped): a shut-down rogue going home. */
+  leave(d: Drone): void {
+    const a = Math.atan2(d.z, d.x) + this.rng.range(-1, 1);
+    d.orbit = null;
+    d.plan = [{ x: d.x + Math.cos(a) * 800, y: d.y + 15, z: d.z + Math.sin(a) * 800, r: 10, hold: 0 }];
+    d.pi = 0;
+  }
+
   /** News drones gather over a collapse, police drones circle a crash. */
   incident(kind: DKind.News | DKind.Police, x: number, z: number, px: number, pz: number): void {
     if (Math.hypot(x - px, z - pz) > 650) return;
@@ -283,6 +311,8 @@ export class Drones {
   private step(d: Drone, dt: number, player: PlayerProbe): void {
     d.stateT += dt;
     if (d.state !== DState.Fly) { this.stepFall(d); return; }
+    if (d.mal && this.mal?.drone(d, dt, player)) return;
+    const rage = d.mal?.mode === 'hostile' ? RAGE : 1;
     // ---- target: orbit, or the plan's current waypoint
     let tx: number, ty: number, tz: number, arriveR: number, hold = 0;
     let faceX = NaN, faceZ = NaN;
@@ -323,12 +353,12 @@ export class Drones {
       if (d.holdT >= hold && (!w.drop || (!d.parcel && d.winch <= 0))) { d.pi++; d.holdT = 0; }
     }
     // ---- steering
-    const want = Math.min(d.orbit ? 7 : VMAX, Math.sqrt(2 * AMAX * 0.6 * Math.max(0, dist - (d.orbit ? 0 : arriveR * 0.3))));
+    const want = Math.min(d.orbit ? 7 : VMAX * rage, Math.sqrt(2 * AMAX * rage * 0.6 * Math.max(0, dist - (d.orbit ? 0 : arriveR * 0.3))));
     const k = dist > 1e-3 ? want / dist : 0;
     // Climbs and descents at a limited rate: the horizontal speed waits for them (no lunges).
-    const climbT = Math.max(0, Math.abs(ey) - arriveR * 0.5) / (ey > 0 ? VUP : VDOWN);
+    const climbT = Math.max(0, Math.abs(ey) - arriveR * 0.5) / (ey > 0 ? VUP : VDOWN * rage);
     const kh = climbT > 0.1 ? Math.min(k, 1 / climbT) : k;
-    const wantY = Math.max(-VDOWN, Math.min(VUP, ey * k));
+    const wantY = Math.max(-VDOWN * rage, Math.min(VUP, ey * k));
     let ax = (ex * kh - d.vx) * 1.6, ay = (wantY - d.vy) * 1.6, az = (ez * kh - d.vz) * 1.6;
     // Separation from other drones.
     for (const o of this.list) {
@@ -354,10 +384,10 @@ export class Drones {
       }
     }
     const ah = Math.hypot(ax, az);
-    if (ah > AMAX) { ax *= AMAX / ah; az *= AMAX / ah; }
-    ay = Math.max(-2.5, Math.min(4, ay));
+    if (ah > AMAX * rage) { ax *= AMAX * rage / ah; az *= AMAX * rage / ah; }
+    ay = Math.max(-2.5 * rage, Math.min(4, ay));
     d.vx += ax * dt; d.vy += ay * dt; d.vz += az * dt;
-    d.vy = Math.max(-VDOWN - 1, Math.min(VUP + 1, d.vy));
+    d.vy = Math.max(-VDOWN * rage - 1, Math.min(VUP + 1, d.vy));
     d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt;
     // ---- attitude: tilt into the horizontal acceleration (plus drag), yaw into the flight direction
     const tX = (ax + d.vx * 0.12) / 9.81, tZ = (az + d.vz * 0.12) / 9.81;
@@ -445,6 +475,7 @@ export class Drones {
   /** Knock a flying drone out of the sky (or push a falling one). */
   knock(d: Drone, jx: number, jy: number, jz: number): void {
     if (d.state === DState.Down) return;
+    if (d.mal) this.mal?.hit('drone', d, Math.hypot(jx, jy, jz));
     const P = this.ctx.physics, R = P.R;
     if (!d.body) {
       d.state = DState.Fall; d.stateT = 0;
@@ -501,17 +532,21 @@ export class Drones {
       if (Math.abs(d.x - cp.x) > DRAW_R || Math.abs(d.z - cp.z) > DRAW_R) continue;
       const sc = statusOf(d)?.scale ?? 1; // shrink ray
       _m.compose(_p.set(d.x, d.y, d.z), d.q, _s.set(sc, sc, sc));
-      const c = d.kind === DKind.Police ? [0.08, 0.1, 0.16] : d.kind === DKind.News ? [0.85, 0.12, 0.1] : FLEETS[d.fleet];
-      const mode = d.broken ? 2 : d.state !== DState.Fly ? 1 : 0;
+      const c = d.mal?.mode === 'hostile' && !d.broken ? ROGUE_RED : d.kind === DKind.Police ? [0.08, 0.1, 0.16] : d.kind === DKind.News ? [0.85, 0.12, 0.1] : FLEETS[d.fleet];
+      const mode = d.broken ? 2 : d.mal && d.state === DState.Fly ? malLed(d.mal) : d.state !== DState.Fly ? 1 : 0;
       const police = d.kind === DKind.Police ? 3 : 0;
       this.bodyB[d.kind === DKind.Delivery ? 0 : 1].push(_m, c[0], c[1], c[2], 1, police, d.phase, mode);
       drawn++;
-      // Light glows (visible as dots far beyond the model): port red, starboard green, strobe.
-      if (!d.broken) {
+      // Light glows (visible as dots far beyond the model): port red, starboard green, strobe
+      // (all red when it has gone rogue; dark when shut down).
+      if (!d.broken && mode < 2) {
         const m0 = DRONE_MOTORS[0], m1 = DRONE_MOTORS[1];
         this.glows.push(_p.set(m0[0], m0[1] - 0.04, m0[2] - 0.05).applyMatrix4(_m), 1, 0.06, 0.03, 0, d.phase);
         this.glows.push(_p.set(m1[0], m1[1] - 0.04, m1[2] - 0.05).applyMatrix4(_m), 0.1, 1, 0.25, 0, d.phase);
         this.glows.push(_p.set(0, 0.09, 0.05).applyMatrix4(_m), 1, 1, 1, d.kind === DKind.Police ? 2 : 1, d.phase);
+      } else if (!d.broken && mode === 3) {
+        for (const m of DRONE_MOTORS) this.glows.push(_p.set(m[0], m[1] - 0.04, m[2]).applyMatrix4(_m), 1, 0.04, 0.02, 0, d.phase);
+        this.glows.push(_p.set(0, 0.09, 0.05).applyMatrix4(_m), 1, 0.05, 0.03, 1, d.phase * 0.3);
       }
       // Rotors: alternate spin directions; a broken drone's rotors stand still.
       const spin = d.broken ? 0.3 : d.rotor;

@@ -10,7 +10,7 @@
  */
 import type { Player } from '../player/Player';
 
-export type HurtKind = 'punch' | 'knife' | 'bat' | 'car' | 'fall' | 'collapse' | 'police';
+export type HurtKind = 'punch' | 'knife' | 'bat' | 'car' | 'fall' | 'collapse' | 'police' | 'robot';
 
 export const HEALTH = {
   max: 100,

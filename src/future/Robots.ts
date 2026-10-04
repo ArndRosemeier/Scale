@@ -33,6 +33,7 @@ import { gawkAt } from './attention';
 import { statusOf } from '../shared/status';
 const _sm = new THREE.Matrix4();
 import type { LocalGround } from './ground';
+import { malLed, MAL_KEEP_R, ROGUE_RED, type Malfunction, type MalfunctionCtl } from './malfunction';
 
 export const enum RState { Drive = 0, Wait = 1, Deliver = 2, Down = 3, Broken = 4 }
 export const enum RKind { Delivery = 0, Cleaner = 1 }
@@ -78,6 +79,8 @@ export interface Robot {
   carWait: number;
   /** Being dragged off the carriageway to this point. */
   drag?: { x: number; z: number };
+  /** Glitching or gone rogue (a threat): driven by the malfunction controller. */
+  mal?: Malfunction;
 }
 
 const MAX_ROBOTS = 150;
@@ -118,6 +121,8 @@ export class Robots {
   stats = { robots: 0, target: 0, hubs: 0, drawn: 0, knocked: 0, broken: 0, cleaners: 0, carHits: 0 };
   /** Exact ground and walls for knocked robots (set by NearFuture). */
   ground: LocalGround | null = null;
+  /** Steps malfunctioning robots (the threat layer; set by NearFuture). */
+  mal: MalfunctionCtl | null = null;
 
   constructor(private ctx: FutureCtx, mat: THREE.Material) {
     this.batch = new FurnBatch(robotGeometry(), mat, MAX_ROBOTS + 16);
@@ -167,7 +172,7 @@ export class Robots {
       if (d > 120 && r.state < RState.Down && !r.onRoad) { if ((i + Math.floor(this.t * 60)) % 4 === 0) this.step(r, dt * 4, player); }
       else this.step(r, dt, player);
       const stale = (r.state >= RState.Down && r.stateT > 150 && d > 40) || (r.kind === RKind.Cleaner && r.legs <= 0 && d > 60);
-      if (!r.alive || d > DESPAWN_R || stale) this.remove(i);
+      if (!r.alive || d > (r.mal ? MAL_KEEP_R : DESPAWN_R) || stale) this.remove(i);
     }
     this.draw(cam);
     this.stats.robots = this.list.length;
@@ -242,8 +247,25 @@ export class Robots {
     return this.ctx.terrain.height(x, z) + (onRoad ? 0 : CURB_H);
   }
 
+  /**
+   * A robot standing on the sidewalk at (x, z) facing yaw, with nowhere to go (a malfunction
+   * drives it). Null when the batch is full.
+   */
+  spawnAt(x: number, z: number, yaw: number, kind = RKind.Delivery, fleet = 0): Robot | null {
+    if (this.list.length >= MAX_ROBOTS + MAX_CLEANERS) return null;
+    const onRoad = this.ctx.world.surfaceOffset(x, z) < 0.01;
+    const r: Robot = {
+      id: this.nextId++, kind, fleet, x, z, y: this.groundY(x, z, onRoad), yaw, speed: 0, route: Float32Array.from([x, z, 0]), wp: 1, onRoad,
+      state: RState.Drive, stateT: 0, blocked: 0, swerve: 0, home: { x, z }, returning: true,
+      phase: this.rng.float(), body: null, pose: null, crushed: false, alive: true, legs: 0, inLane: false, carWait: 0,
+    };
+    this.list.push(r);
+    return r;
+  }
+
   private step(r: Robot, dt: number, player: PlayerProbe): void {
     r.stateT += dt;
+    if (r.mal && this.mal?.robot(r, dt, player)) return;
     if (r.state >= RState.Down) { this.stepDown(r, dt); return; }
     if (r.state === RState.Deliver) {
       // Customer collects the parcel; then back to the shop (or gone when that is far).
@@ -460,6 +482,7 @@ export class Robots {
     const J = Math.hypot(jx, jy, jz);
     if (r.crushed) return;
     const K = KINDS[r.kind];
+    if (r.mal) this.mal?.hit('robot', r, J);
     if (J > J_BREAK && r.state !== RState.Broken) this.breakIt(r, jx / J, jz / J);
     if (r.state < RState.Down) {
       r.state = RState.Down; r.stateT = 0; this.stats.knocked++; r.speed = 0;
@@ -546,7 +569,7 @@ export class Robots {
       if (sc !== 1) _m.multiply(_sm.makeScale(sc, sc, sc));
       if (r.kind === RKind.Cleaner) {
         // Beacon blinks amber while working; brushes spin while it drives.
-        const mode = r.state === RState.Broken ? 2 : r.state === RState.Down || r.legs > 0 ? 1 : 0;
+        const mode = r.state === RState.Broken ? 2 : r.mal ? malLed(r.mal) : r.state === RState.Down || r.legs > 0 ? 1 : 0;
         cb.push(_m, MUNICIPAL[0], MUNICIPAL[1], MUNICIPAL[2], 1, 0, r.phase, mode);
         if (Math.abs(r.x - cp.x) > 70 || Math.abs(r.z - cp.z) > 70) continue;
         const spin = r.state < RState.Down && r.legs > 0 ? this.t * 11 + r.phase * 9 : r.phase * 9;
@@ -557,8 +580,8 @@ export class Robots {
         }
         continue;
       }
-      const c = FLEETS[r.fleet];
-      const mode = r.state === RState.Broken ? 2 : r.state === RState.Wait || r.state === RState.Down || r.blocked > 1.5 ? 1 : 0;
+      const c = r.mal?.mode === 'hostile' ? ROGUE_RED : FLEETS[r.fleet];
+      const mode = r.state === RState.Broken ? 2 : r.mal ? malLed(r.mal) : r.state === RState.Wait || r.state === RState.Down || r.blocked > 1.5 ? 1 : 0;
       b.push(_m, c[0], c[1], c[2], 1, 0, r.phase, mode);
     }
     b.end(); cb.end(); bb.end();

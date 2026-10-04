@@ -26,10 +26,11 @@ import type { FutureCtx, PlayerProbe } from './ctx';
 import { gawkAt } from './attention';
 import type { LocalGround } from './ground';
 import { statusOf } from '../shared/status';
+import { malLed, MAL_KEEP_R, ROGUE_RED, type Malfunction, type MalfunctionCtl } from './malfunction';
 const _sm = new THREE.Matrix4();
 
 const enum Role { Director = 0, Greeter = 1 }
-const enum BState { Stand = 0, Down = 1, Broken = 2 }
+export const enum BState { Stand = 0, Down = 1, Broken = 2 }
 
 interface Post {
   key: number;
@@ -38,6 +39,8 @@ interface Post {
   /** Director: the junction (position; index refreshed when the road graph is rebuilt). */
   nx: number; nz: number;
 }
+
+export type ServiceBot = Bot;
 
 interface Bot {
   post: Post;
@@ -55,6 +58,8 @@ interface Bot {
   inLane: boolean;
   alive: boolean;
   node: number; nodeVer: number;
+  /** Glitching or gone rogue (a threat): driven by the malfunction controller. */
+  mal?: Malfunction;
 }
 
 const MAX_BOTS = 16;
@@ -94,6 +99,8 @@ export class ServiceBots {
   private t = 0;
   private nb: PedAgent[] = [];
   ground: LocalGround | null = null;
+  /** Steps malfunctioning robots (the threat layer; set by NearFuture). */
+  mal: MalfunctionCtl | null = null;
   stats = { bots: 0, posts: 0, drawn: 0, knocked: 0 };
 
   constructor(private ctx: FutureCtx, mat: THREE.Material) {
@@ -114,14 +121,14 @@ export class ServiceBots {
       const d = Math.hypot(p.x - px, p.z - pz);
       const bot = this.list.find((b) => b.post === p);
       if (!bot && on && d < RANGE && (d > 45 || this.t < 6) && this.list.length < MAX_BOTS && !((this.vacant.get(p.key) ?? -1e9) > this.t)) this.spawn(p);
-      else if (bot && !on && d > 45 && bot.state === BState.Stand) bot.alive = false;
+      else if (bot && !on && d > 45 && bot.state === BState.Stand && !bot.mal) bot.alive = false;
     }
     for (let i = this.list.length - 1; i >= 0; i--) {
       const b = this.list[i];
       const d = Math.hypot(b.x - px, b.z - pz);
       this.step(b, dt, d, player);
       if (b.state !== BState.Stand && b.stateT > 90 && d > 40) { this.vacant.set(b.post.key, this.t + 240); b.alive = false; }
-      if (!b.alive || d > RANGE + 40) this.remove(i);
+      if (!b.alive || d > (b.mal ? MAL_KEEP_R : RANGE + 40)) this.remove(i);
     }
     this.draw(cam);
     this.stats.bots = this.list.length;
@@ -167,6 +174,14 @@ export class ServiceBots {
     this.stats.posts = posts.length;
   }
 
+  /** A service robot standing at (x, z) facing yaw, off any post (a malfunction drives it). */
+  spawnAt(x: number, z: number, yaw: number): ServiceBot | null {
+    if (this.list.length >= MAX_BOTS) return null;
+    const key = (hash32(Math.round(x * 7) ^ Math.round(z * 13) * 7919 ^ this.ctx.seed) | 1) >>> 0;
+    this.spawn({ key, role: Role.Greeter, x, z, yaw, nx: 0, nz: 0 });
+    return this.list[this.list.length - 1];
+  }
+
   private spawn(p: Post): void {
     this.list.push({
       post: p, x: p.x, y: this.ctx.terrain.height(p.x, p.z) + CURB_H, z: p.z, yaw: p.yaw, state: BState.Stand, stateT: 0,
@@ -177,6 +192,7 @@ export class ServiceBots {
 
   private step(b: Bot, dt: number, dist: number, player: PlayerProbe): void {
     b.stateT += dt;
+    if (b.mal && this.mal?.bot(b, dt, player)) return;
     if (b.state !== BState.Stand) { this.stepDown(b); return; }
     // People make room (it stands in the sidewalk flow); the player bumps into it.
     if (dist < 110) {
@@ -265,6 +281,7 @@ export class ServiceBots {
   knock(b: Bot, jx: number, jy: number, jz: number): void {
     if (b.crushed) return;
     const J = Math.hypot(jx, jy, jz);
+    if (b.mal) this.mal?.hit('bot', b, J);
     if (J > J_BREAK) this.breakIt(b);
     if (b.state === BState.Stand) {
       b.state = BState.Down; b.stateT = 0; this.stats.knocked++;
@@ -287,7 +304,7 @@ export class ServiceBots {
     b.body.applyImpulseAtPoint({ x: jx * k, y: Math.max(jy * k, 0), z: jz * k }, { x: t.x, y: t.y + HALF * 0.6, z: t.z }, true);
   }
 
-  private breakIt(b: Bot): void {
+  breakIt(b: Bot): void {
     if (b.state === BState.Broken) return;
     b.state = BState.Broken; b.stateT = 0;
     const D = this.ctx.debris, y = b.y + 1.2;
@@ -349,10 +366,15 @@ export class ServiceBots {
     let n = 0;
     for (const b of this.list) {
       if (Math.abs(b.x - cp.x) > DRAW_R || Math.abs(b.z - cp.z) > DRAW_R) continue;
-      const c = ACCENT[b.post.role];
-      const mode = b.state === BState.Broken ? 2 : b.state === BState.Down ? 1 : 0;
+      const c = b.mal?.mode === 'hostile' && b.state !== BState.Broken ? ROGUE_RED : ACCENT[b.post.role];
+      const mode = b.state === BState.Broken ? 2 : b.mal ? malLed(b.mal) : b.state === BState.Down ? 1 : 0;
       if (b.pose) _m.copy(b.pose);
-      else {
+      else if (b.mal?.mode === 'hostile') {
+        // Stalking: a stiff side-to-side rock with every step, leaning into the walk.
+        const st = Math.sin(this.t * 7 + b.phase * 9);
+        _q.setFromEuler(_e.set(-0.08, b.yaw + st * 0.06, st * 0.05, 'YXZ'));
+        _m.compose(_p.set(b.x, b.y + Math.abs(st) * 0.03, b.z), _q, _one);
+      } else {
         // Idle: a slow weight shift.
         const sway = Math.sin(this.t * 0.9 + b.phase * 7) * 0.012;
         _m.compose(_p.set(b.x, b.y, b.z), _q.setFromAxisAngle(_up, b.yaw + sway), _one);
@@ -396,6 +418,14 @@ export class ServiceBots {
     if (b.state !== BState.Stand) {
       // Limp.
       u.set(side * 0.25, -1, 0.1); f.set(side * 0.2, -1, -0.15);
+    } else if (b.mal?.mode === 'hostile') {
+      // Arms raised forward, the right one swinging down in a blow while it attacks.
+      const sw = side === 1 ? b.mal.swing : 0;
+      u.set(side * 0.3, -0.25 + 0.9 * sw, -1); f.set(side * 0.1, 0.2 - 1.2 * sw, -1);
+    } else if (b.mal?.mode === 'glitch') {
+      // Twitching.
+      const j = Math.sin(t * 23 + side) > 0.6 ? 0.6 : 0;
+      u.set(side * (0.12 + j), -1, -0.1 - j * 0.5); f.set(side * 0.2, -1 + j * 1.4, -0.3);
     } else if (b.post.role === Role.Greeter) {
       if (b.waveT > 0 && side === 1) {
         // Right hand up, waving side to side.

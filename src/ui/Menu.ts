@@ -50,6 +50,9 @@ export class Menu {
         <div class="row"><label>Street crime</label><select id="pCrime" title="How often crimes happen near you (depends on the district and the hour)">
           <option value="off">Off</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="chaos">Chaos</option>
         </select></div>
+        <div class="row"><label>City events</label><select id="pEvents" title="How often the city is hit by events (rogue robots and, later, worse); they are heralded by strange signs first">
+          <option value="off">Off</option><option value="rare">Rare</option><option value="normal">Normal</option><option value="frequent">Frequent</option>
+        </select></div>
         <div class="row" id="pInvRow"><label>Invulnerable</label><input id="pInv" type="checkbox"></div>
         <div class="buttons"><button id="pResume">Resume</button><button id="pHelp">Controls</button><button id="pNew">New city…</button></div>
       </div>`;
@@ -67,6 +70,7 @@ export class Menu {
     $<HTMLSelectElement>('pScale').onchange = (e) => { game.renderer.gl.setPixelRatio(Number((e.target as HTMLSelectElement).value) * (window.devicePixelRatio > 1 ? 1 : 1)); game.renderer.resize(); };
     $<HTMLButtonElement>('pReset').onclick = () => { game.player.height = 1.8; this.sync(); };
     $<HTMLSelectElement>('pCrime').onchange = (e) => { if (game.crime) game.crime.setting = (e.target as HTMLSelectElement).value as typeof game.crime.setting; };
+    $<HTMLSelectElement>('pEvents').onchange = (e) => { if (game.threats) game.threats.setting = (e.target as HTMLSelectElement).value as typeof game.threats.setting; };
     $<HTMLInputElement>('pInv').onchange = (e) => { if (game.crime) { game.crime.health.invulnerable = (e.target as HTMLInputElement).checked; if (game.crime.health.invulnerable) game.crime.health.reset(); } };
     $<HTMLButtonElement>('pResume').onclick = () => this.close();
     $<HTMLButtonElement>('pHelp').onclick = () => this.toggleHelp(true);
@@ -103,6 +107,7 @@ export class Menu {
       // Invulnerability is a sandbox toggle (Normal mode: the player can be hurt).
       document.getElementById('pInvRow')!.style.display = g.mode === 'sandbox' ? '' : 'none';
     }
+    if (g.threats) (document.getElementById('pEvents') as HTMLSelectElement).value = g.threats.setting;
     document.getElementById('pSize')!.textContent = `${g.player.height < 1 ? (g.player.height * 100).toFixed(0) + ' cm' : g.player.height.toFixed(1) + ' m'}`;
   }
 

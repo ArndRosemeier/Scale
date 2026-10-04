@@ -501,5 +501,29 @@
     "loop": false,
     "gain": 0.9,
     "description": "oncoming metro train rushing past in the tunnel (procedural, tools/synthMetro.mjs)"
+  },
+  "civil_siren": {
+    "files": [
+      "civil_siren.wav"
+    ],
+    "loop": true,
+    "gain": 0.8,
+    "description": "civil-defence / evacuation siren, two-tone motor siren winding up and down with city echo, seamless loop (procedural, tools/synthThreats.mjs)"
+  },
+  "robot_glitch": {
+    "files": [
+      "robot_glitch.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "a machine glitching: stuttering bleeps, bit-crushed buzz, a falling boop (procedural, tools/synthThreats.mjs)"
+  },
+  "robot_hostile": {
+    "files": [
+      "robot_hostile.wav"
+    ],
+    "loop": false,
+    "gain": 0.75,
+    "description": "a machine turning hostile: servo whine winding up into a harsh two-tone chirp (procedural, tools/synthThreats.mjs)"
   }
 }

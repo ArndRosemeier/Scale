@@ -25,10 +25,10 @@ import { Rng } from '../core/rng';
 // ---------------------------------------------------------------- public API
 
 export type VehicleKind =
-  | 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle';
+  | 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle' | 'swat';
 
 export const VEHICLE_KINDS: VehicleKind[] = [
-  'sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle',
+  'sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle', 'swat',
 ];
 
 export interface VehicleModel {
@@ -1613,9 +1613,10 @@ function buildTruck(variant: number, rng: Rng): Built {
   return finishCar('truck', g, ctx, axles, 'steel', 7500, [-0.6, 1.45, zA + 0.75]);
 }
 
-// ---------------- delivery van (high-roof panel van)
+// ---------------- delivery van (high-roof panel van); the police tactical (SWAT) van is one with a
+// light bar on the cab roof, a push bumper and running boards
 
-function buildDelivery(variant: number, rng: Rng): Built {
+function buildDelivery(variant: number, rng: Rng, swat = false): Built {
   const g = new Geo();
   const L = (variant === 1 ? 5.3 : variant === 2 ? 6.6 : 5.93) * (1 + rng.range(-0.01, 0.01)), W = 2.02;
   const H = variant === 1 ? 2.45 : variant === 3 ? 2.3 : 2.68;
@@ -1679,8 +1680,15 @@ function buildDelivery(variant: number, rng: Rng): Built {
   addMirrors(g, ctx, lerp(zA, zB, 0.22), 1.35, 0.04);
   addHandles(g, ctx, [bZ - 0.2, slide0 + 0.12]);
   tubeZ(g, [0.5, yb + 0.05, zR - 0.25], 0.03, 0.25, 8, VPart.Chrome, VPart.Undercarriage, 1);
+  if (swat) {
+    // Light bar over the windscreen, a push bumper, running boards along both sides.
+    const zz = zB + 0.25, y0 = H - 0.01;
+    rbox(g, 0, 0.7, y0, y0 + 0.11, zz - 0.14, zz + 0.14, 0.03, (n, c) => (n[1] < -0.5 ? VPart.Plastic : Math.abs(c[0]) < 0.1 && n[2] !== 0 ? VPart.Plastic : VPart.Lightbar));
+    rbox(g, 0, 0.55, yb + 0.25, yb + 0.62, zF - 0.1, zF + 0.02, 0.03, () => VPart.Plastic);
+    for (const sx of [-1, 1]) rbox(g, sx * (W / 2 - 0.02), 0.08, yb + 0.12, yb + 0.17, zA + 0.2, zR - 0.9, 0.02, () => VPart.Plastic);
+  }
   void za;
-  return finishCar('delivery', g, ctx, axles, variant === 0 || variant === 2 ? 'steel' : 'cap', 2800, [-0.5, 0.9, zA + 0.72]);
+  return finishCar(swat ? 'swat' : 'delivery', g, ctx, axles, variant === 0 || variant === 2 ? 'steel' : 'cap', swat ? 3600 : 2800, [-0.5, 0.9, zA + 0.72]);
 }
 
 // ---------------------------------------------------------------- model cache / API
@@ -1709,6 +1717,7 @@ export function vehicleModel(kind: VehicleKind, variant = 0): VehicleModel {
     case 'bus': b = buildBus(v, rng); break;
     case 'truck': b = buildTruck(v, rng); break;
     case 'delivery': b = buildDelivery(v, rng); break;
+    case 'swat': b = buildDelivery(v === 1 ? 0 : v, rng, true); break;
     case 'shuttle': b = buildShuttle(v, rng); break;
     default: b = buildPassenger({ kind, variant: v, rng }); break;
   }
@@ -2028,6 +2037,7 @@ export function paintColor(kind: VehicleKind, seed: number): [number, number, nu
   if (kind === 'bus') {
     return r.pick([hsl(0.13, 0.85, 0.5), [0.92, 0.92, 0.9] as [number, number, number], hsl(0.0, 0.72, 0.42), hsl(0.6, 0.6, 0.35), hsl(0.36, 0.55, 0.32), hsl(0.55, 0.5, 0.55)]);
   }
+  if (kind === 'swat') return r.pick([[0.05, 0.055, 0.065], hsl(0.62, 0.45, 0.12)] as [number, number, number][]);
   if (kind === 'shuttle') {
     // Operator liveries: white, warm grey, a few city-transit colours.
     return r.pick([[0.93, 0.93, 0.92], [0.93, 0.93, 0.92], [0.78, 0.77, 0.74], hsl(0.5, 0.45, 0.42), hsl(0.6, 0.45, 0.35)] as [number, number, number][]);

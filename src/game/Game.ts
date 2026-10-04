@@ -76,6 +76,8 @@ import { Consequences } from './Consequences';
 import { PowerSynth } from '../audio/PowerSynth';
 import { TargetHud } from '../ui/TargetHud';
 import { CrimeSystem } from './crime/CrimeSystem';
+import { ThreatDirector } from './threats/ThreatDirector';
+import { ResponseDirector } from './response/ResponseDirector';
 
 export class Game {
   readonly renderer: Renderer;
@@ -135,6 +137,9 @@ export class Game {
   synth!: PowerSynth;
   /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
   crime!: CrimeSystem;
+  /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
+  threats!: ThreatDirector;
+  response!: ResponseDirector;
   /** Parked cars of the loaded cells. */
   get parkedCars(): Vehicle[] { return this.parkedList; }
   /** Power cores (Normal mode only). */
@@ -468,6 +473,7 @@ export class Game {
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
+    this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
       this.rideFx(dt);
@@ -745,6 +751,8 @@ export class Game {
     }
     // Street crime, police, justice, health and reputation (needs the map, HUD and targeting).
     this.crime = new CrimeSystem(this);
+    this.response = new ResponseDirector(this);
+    this.threats = new ThreatDirector(this);
     setTimeout(() => toast(normal
       ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
       : 'Sandbox: every power is yours. <b>1–9, 0</b> use the hotbar (hold for beams and super speed), click or <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);

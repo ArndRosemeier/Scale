@@ -31,6 +31,8 @@ export interface JusticeHost {
   /** A short hint / feedback line. */
   toast(html: string, kind: 'warn' | 'info' | 'karma'): void;
   sound(id: string, gain: number): void;
+  /** A machine gone rogue (a threat): fair game, not property. */
+  hostileThing?(ref: object): boolean;
 }
 
 export const JUSTICE = {
@@ -66,6 +68,9 @@ export class Justice {
   /** A ledger entry (Consequences.onRecord). */
   record(e: HarmEntry): void {
     const H = this.h;
+    // Only the player's own doing (a rogue robot's or the police's damage is never booked to them).
+    if (e.cause !== 'player') return;
+    if (e.ref && H.hostileThing?.(e.ref)) return;
     const now = H.time;
     const ref = e.ref as (PedAgent | Vehicle | undefined);
     // Repeated hits on the same thing within 3 s (beams, area ticks) count once.

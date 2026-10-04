@@ -139,7 +139,7 @@ const GROUND_DRAW_R = 220;
 const GRAV = 9.81;
 
 /** Scare radii (m) of stimuli for birds on the ground (capped by the stimulus' own radius). */
-const SCARE: Partial<Record<Stimulus['kind'], number>> = { impact: 35, glass: 25, collapse: 260, blast: 200, stomp: 140, giant: 150, crash: 60, scream: 18, horn: 16, sonic: 500, flyby: 40 };
+const SCARE: Partial<Record<Stimulus['kind'], number>> = { impact: 35, glass: 25, collapse: 260, blast: 200, stomp: 140, giant: 150, crash: 60, scream: 18, horn: 16, sonic: 500, flyby: 40, threat: 25 };
 
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();

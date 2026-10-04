@@ -15,6 +15,7 @@ import { Signs } from './Signs';
 import { ServiceBots } from './ServiceBots';
 import { LocalGround } from './ground';
 import type { FutureCtx, PlayerProbe } from './ctx';
+import type { MalfunctionCtl } from './malfunction';
 
 export type { FutureCtx, PlayerProbe } from './ctx';
 
@@ -125,6 +126,11 @@ export class NearFuture {
     this.drones.hit(x, y, z, r, jx, jy, jz);
     const J = Math.hypot(jx, jy, jz);
     if (J > 1200) this.signs.impact(x, y, z, r + 0.8, J > 3500);
+  }
+
+  /** The controller for glitching and rogue machines (the threat layer). */
+  set malfunction(ctl: MalfunctionCtl | null) {
+    this.robots.mal = this.service.mal = this.drones.mal = ctl;
   }
 
   /** Short debug summary (window.game.future.report()). */

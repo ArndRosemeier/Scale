@@ -75,6 +75,11 @@ export interface PedAgent {
   stall?: number;
   /** Seconds spent gawking / filming lately (see gawkOver); it wears off while walking on. */
   gawkT?: number;
+  /**
+   * Evacuating (a civil-defence siren): walking its route to a metro entrance at this multiple
+   * of the usual pace, vanishing down the stairs at the end (set by the city response).
+   */
+  evac?: number;
 }
 
 /** Gawkers per incident (people already standing and looking within GAWK_R m count). */
@@ -106,7 +111,7 @@ export function gawkersNear(peds: { neighbours(x: number, z: number, r: number, 
   return n;
 }
 
-export type DownCause = 'player' | 'collapse' | 'accident' | 'other';
+export type DownCause = 'player' | 'collapse' | 'accident' | 'threat' | 'police' | 'other';
 
 
 const MAX_AGENTS = 2600;
@@ -542,7 +547,7 @@ export class Pedestrians {
         a.onRoad = a.wp < a.route.length / 3 ? a.route[a.wp * 3 + 2] > 0.5 : false;
         return;
       }
-      desired = a.pref;
+      desired = a.pref * (a.evac ?? 1);
     }
     // Shrunk: little legs, slower steps.
     if (st && st.scale < 1) desired *= Math.sqrt(st.scale);

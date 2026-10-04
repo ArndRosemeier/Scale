@@ -5,10 +5,14 @@
  * go for the criminals: they cuff the knocked-out and the ones with their hands up, run after the
  * rest and tackle them, walk the arrested to the car and drive off. A wanted player is chased the
  * same way; an officer who gets them on the ground cuffs them (the justice layer settles it).
+ *
+ * Incidents (THREATS_PLAN §2, the city response): the response director sends units with an
+ * `IncidentJob` — a patrol car to the scene, a car to a roadblock, a SWAT van; the job says how
+ * many get out and what they do there (`work`), and when to go (`done`).
  */
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
-import type { Traffic, Vehicle } from '../../sim/Traffic';
+import type { Traffic, Vehicle, VKind } from '../../sim/Traffic';
 import { VState } from '../../sim/Traffic';
 import type { Combat } from '../Combat';
 import type { HurtKind } from '../PlayerHealth';
@@ -37,9 +41,29 @@ export interface PoliceHost {
   wanted(): number;
 }
 
-type Job = { kind: 'crime'; crime: Crime } | { kind: 'player' };
+/** A unit's work at an incident (the response director's): where, how many, what to do there. */
+export interface IncidentJob {
+  /** Where to drive to (may move; the car is re-routed). */
+  x: number; z: number;
+  vehicle: VKind;
+  officers: number;
+  /** Set by the owner: the unit packs up and drives off. */
+  done: boolean;
+  /** The unit sent (unset: no car could be found / the budget is full). */
+  unit?: Unit;
+  /** The car has arrived and the officers are out. */
+  arrived?(u: Unit): void;
+  /** Every frame on the scene. */
+  work(u: Unit, dt: number): void;
+  /** Dress / equip an officer who got out. */
+  equip?(o: PedAgent): void;
+  /** Cars that come from out of view start this far out (m; default POLICE.spawnMin). */
+  spawnR?: number;
+}
 
-interface Unit {
+type Job = { kind: 'crime'; crime: Crime } | { kind: 'player' } | { kind: 'incident'; job: IncidentJob };
+
+export interface Unit {
   id: number;
   car: Vehicle;
   officers: PedAgent[];
@@ -55,7 +79,7 @@ interface Unit {
   boarded: number;
 }
 
-export const POLICE = { maxUnits: 4, officerHp: 90, officerStrength: 1.45, run: 5.45, tackleR: 1.3, cuffTime: 1.8, respondR: 650, spawnMin: 300, spawnMax: 420 };
+export const POLICE = { maxUnits: 4, maxIncident: 12, officerHp: 90, officerStrength: 1.45, run: 5.45, tackleR: 1.3, cuffTime: 1.8, respondR: 650, spawnMin: 300, spawnMax: 420 };
 
 /** The uniform: navy shirt, trousers and cap, a dark jacket. */
 export function policeOutfit(seed: number): EquipmentVisuals {
@@ -141,16 +165,24 @@ export class Police {
   }
 
   private target(u: Unit): { x: number; z: number } {
-    return u.job.kind === 'crime' ? u.job.crime.hot : { x: this.h.player.x, z: this.h.player.z };
+    return u.job.kind === 'crime' ? u.job.crime.hot : u.job.kind === 'incident' ? u.job.job : { x: this.h.player.x, z: this.h.player.z };
   }
 
-  private dispatch(job: Job): void {
+  /** Send a unit to an incident now (false: no car to be had, or the incident budget is full). */
+  respond(job: IncidentJob): boolean {
+    if (this.units.filter((u) => u.job.kind === 'incident').length >= POLICE.maxIncident) return false;
+    return this.dispatch({ kind: 'incident', job });
+  }
+
+  private dispatch(job: Job): boolean {
     const H = this.h;
-    if (this.units.length >= POLICE.maxUnits) return;
-    const t = job.kind === 'crime' ? job.crime.hot : { x: H.player.x, z: H.player.z };
+    const incident = job.kind === 'incident';
+    if (!incident && this.units.filter((u) => u.job.kind !== 'incident').length >= POLICE.maxUnits) return false;
+    const t = job.kind === 'crime' ? job.crime.hot : job.kind === 'incident' ? { x: job.job.x, z: job.job.z } : { x: H.player.x, z: H.player.z };
+    const kind: VKind = job.kind === 'incident' ? job.job.vehicle : 'police';
     // The nearest free patrol car in traffic, else one coming in from out of view.
     let car: Vehicle | null = null, bd = POLICE.respondR;
-    for (const v of H.traffic.vehicles) {
+    if (kind === 'police') for (const v of H.traffic.vehicles) {
       if (v.kind !== 'police' || v.state !== VState.Drive || v.task || this.units.some((u) => u.car === v)) continue;
       const d = Math.hypot(v.x - t.x, v.z - t.z);
       if (d < bd) { bd = d; car = v; }
@@ -158,22 +190,25 @@ export class Police {
     if (!car) {
       for (let k = 0; k < 10 && !car; k++) {
         const a = (this.seed = (this.seed * 1103515245 + 12345) >>> 0) / 4294967296 * Math.PI * 2;
-        const r = POLICE.spawnMin + k * 15;
+        const r = (job.kind === 'incident' ? job.job.spawnR ?? POLICE.spawnMin : POLICE.spawnMin) + k * 15;
         const x = t.x + Math.cos(a) * r, z = t.z + Math.sin(a) * r;
         if (H.visible(x, 1, z) && Math.hypot(x - H.player.x, z - H.player.z) < 200) continue;
-        car = H.traffic.spawnVehicle('police', x, z, 80, t);
+        car = H.traffic.spawnVehicle(kind, x, z, 80, t);
       }
       if (car) this.stats.spawnedCars++;
     }
-    if (!car) return;
+    if (!car) return false;
     car.task = { x: t.x, z: t.z, arrived: false };
     car.siren = true;
     car.fear = 0;
     car.state = VState.Drive;
     car.vmax = 20;
     H.traffic.sendTo(car, t.x, t.z);
-    this.units.push({ id: UNIT_ID++, car, officers: [], job, state: 'driving', t: 0, retargetT: 4, siren: H.sirenLoop(), sirenT: 0, idleT: 0, boarded: 0 });
+    const unit: Unit = { id: UNIT_ID++, car, officers: [], job, state: 'driving', t: 0, retargetT: 4, siren: H.sirenLoop(), sirenT: 0, idleT: 0, boarded: 0 };
+    this.units.push(unit);
+    if (job.kind === 'incident') job.job.unit = unit;
     this.stats.dispatched++;
+    return true;
   }
 
   /** One unit: drive, deploy, work the scene, leave. False when it is done. */
@@ -192,6 +227,7 @@ export class Police {
       // The job may have ended on the way.
       if (u.job.kind === 'crime' && !u.job.crime.active && u.job.crime.outcome !== 'escaped') { this.leave(u); return true; }
       if (u.job.kind === 'player' && H.wanted() <= 0) { this.leave(u); return true; }
+      if (u.job.kind === 'incident' && u.job.job.done) { this.leave(u); return true; }
       u.retargetT -= dt;
       const t = this.target(u);
       if (u.retargetT <= 0) {
@@ -199,12 +235,19 @@ export class Police {
         if (car.task && Math.hypot(car.task.x - t.x, car.task.z - t.z) > 35 && !car.task.arrived) { car.task.x = t.x; car.task.z = t.z; H.traffic.sendTo(car, t.x, t.z); }
       }
       const close = Math.hypot(car.x - t.x, car.z - t.z);
-      if (car.task?.arrived || close < 22 || (close < 45 && car.speed < 0.5 && u.t > 6) || u.t > 120) this.deploy(u);
+      // (Stuck in a jam near an incident: they get out and go the rest of the way on foot.)
+      u.idleT = car.speed < 0.5 ? u.idleT + dt : 0;
+      const stuck = u.job.kind === 'incident' && close < 90 && u.idleT > 8;
+      if (car.task?.arrived || close < 22 || (close < 45 && car.speed < 0.5 && u.t > 6) || stuck || u.t > 120) this.deploy(u);
       return true;
     }
     if (u.state === 'scene') {
       // Nobody got out (the street was full): try again for a while.
       if (!u.officers.length) { if (u.t < 20 && (u.idleT += dt) > 1) { u.idleT = 0; this.spawnOfficers(u); } if (u.t >= 20) { this.leave(u); } return true; }
+      if (u.job.kind === 'incident') {
+        if (u.job.job.done) this.leave(u); else u.job.job.work(u, dt);
+        return true;
+      }
       const busy = u.job.kind === 'crime' ? this.workCrime(u, u.job.crime, dt) : this.workPlayer(u, dt);
       if (!busy) { u.idleT += dt; if (u.idleT > 6) this.leave(u); }
       else u.idleT = 0;
@@ -243,17 +286,20 @@ export class Police {
     u.idleT = 0;
     // Keep the flashers going while parked.
     car.fear = 0.35;
+    if (u.job.kind === 'incident') u.job.job.arrived?.(u);
   }
 
   private spawnOfficers(u: Unit): void {
     const H = this.h, car = u.car;
-    const n = 2;
+    const n = u.job.kind === 'incident' ? u.job.job.officers : 2;
     const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw);
     for (let i = 0; i < n; i++) {
-      const side = i ? 1 : -1;
-      const x = car.x + fz * side * 1.6 + fx * 0.3, z = car.z - fx * side * 1.6 + fz * 0.3;
+      const side = i & 1 ? 1 : -1;
+      const back = (i >> 1) * 1.4;
+      const x = car.x + fz * side * 1.6 + fx * (0.3 - back), z = car.z - fx * side * 1.6 + fz * (0.3 - back);
       const o = H.spawnOfficer((this.seed = (this.seed * 1103515245 + 12345) >>> 0), x, z, car.yaw);
       if (!o) continue;
+      if (u.job.kind === 'incident') u.job.job.equip?.(o);
       u.officers.push(o);
       H.sound('door_open', x, 1, z, 0.6);
     }
@@ -345,7 +391,8 @@ export class Police {
     return busy || crime.active;
   }
 
-  private chase(o: PedAgent, tgt: { x: number; z: number }, speed: number): void {
+  /** Run after a point along the sidewalks (straight in the last 28 m). */
+  chase(o: PedAgent, tgt: { x: number; z: number }, speed: number): void {
     const act = o.actor!;
     const d = Math.hypot(tgt.x - o.x, tgt.z - o.z);
     setState(act, 'run');
@@ -402,6 +449,6 @@ export class Police {
 
   /** Units for the dev console. */
   summary(): string {
-    return this.units.map((u) => `#${u.id} ${u.job.kind}${u.job.kind === 'crime' ? ':' + u.job.crime.kind : ''} ${u.state} car ${Math.round(Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z))} m, ${u.officers.filter((o) => o.alive).length} officers`).join(' · ') || 'none';
+    return this.units.map((u) => `#${u.id} ${u.job.kind}${u.job.kind === 'crime' ? ':' + u.job.crime.kind : u.job.kind === 'incident' ? ':' + u.car.kind : ''} ${u.state} car ${Math.round(Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z))} m, ${u.officers.filter((o) => o.alive).length} officers`).join(' · ') || 'none';
   }
 }

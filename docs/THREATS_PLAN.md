@@ -2,6 +2,8 @@
 
 Research and design brief (2026-10-03). Status: accepted with changes — see PLAYGROUND_PLAN.md §0 decision 19 (no player levels; army vs player uncapped; small-nuke countdown as last resort; carcasses removed by city crews after a while). Builds on docs/PLAYGROUND_PLAN.md §0 (binding decisions).
 
+Status (2026-10-04): Phase A "Robot malfunction" is implemented — ThreatClock with omens, rogue robots / service robots / drones, response levels 0–2 (patrol, perimeter & evacuation with civil-defence siren and roadblocks, SWAT), cause-aware consequences, incident marker; see ARCHITECTURE.md, "Threats and city response".
+
 ## 0. Research takeaways
 
 - **Cloverfield / Godzilla (2014) / Minus One** — the monster is seen in fragments (a tail between towers, a silhouette in smoke, a news-drone feed on a billboard) long before it is seen whole; restraint sells the scale. Fits "show, don't tell".

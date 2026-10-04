@@ -4,8 +4,13 @@
  */
 /** 'power': a frightening elemental power in use (beams, flames, bolts, quakes, vortices) — people flee, nothing breaks by itself.
  *  'cry': someone calls for help (a crime victim) — people stop, turn, film or back off. 'alarm': a shop alarm bell.
- *  'siren': a police car responding — traffic yields, people look. */
-export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power' | 'cry' | 'alarm' | 'siren';
+ *  'siren': a police car responding — traffic yields, people look; with `evac` a civil-defence siren: people
+ *  near it leave for the nearest metro entrance (evacuate, not panic).
+ *  'threat': hostile machines at work (rogue robots ramming, drones diving) — people near it flee. */
+export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power' | 'cry' | 'alarm' | 'siren' | 'threat';
+
+/** Who caused something (THREATS_PLAN §4: stimuli and the collateral ledger carry it). */
+export type Cause = 'player' | 'threat' | 'police';
 
 export interface Stimulus {
   kind: StimulusKind;
@@ -15,15 +20,22 @@ export interface Stimulus {
   /** Radius in m within which it is noticed. */
   radius: number;
   time: number;
+  /** Emission order (consumers that poll take what came after the last one they saw). */
+  seq: number;
+  /** Civil-defence siren: evacuate (kind 'siren'). */
+  evac?: boolean;
+  cause?: Cause;
 }
 
 export class Stimuli {
   private list: Stimulus[] = [];
   time = 0;
+  /** Sequence number of the last emitted stimulus. */
+  seq = 0;
   private listeners: ((s: Stimulus) => void)[] = [];
 
-  emit(kind: StimulusKind, x: number, y: number, z: number, intensity: number, radius: number): void {
-    const s = { kind, x, y, z, intensity, radius, time: this.time };
+  emit(kind: StimulusKind, x: number, y: number, z: number, intensity: number, radius: number, extra?: { evac?: boolean; cause?: Cause }): void {
+    const s: Stimulus = { kind, x, y, z, intensity, radius, time: this.time, seq: ++this.seq, ...extra };
     this.list.push(s);
     for (const l of this.listeners) l(s);
   }

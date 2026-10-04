@@ -72,7 +72,13 @@ export class Signs {
   private t = 0;
   private checkT = 0;
   private queue: CellState[] = [];
-  readonly uniforms = { uTime: { value: 0 }, uAtlas: { value: null as THREE.Texture | null }, uNight: G.uNight };
+  /**
+   * Red alert (a threat nearby, THREATS_PLAN §2 level 1): screens within uAlert.z m of (x, z)
+   * show a flashing warning pictogram instead of their ads, strength uAlert.w (0 off).
+   */
+  readonly uniforms = { uTime: { value: 0 }, uAtlas: { value: null as THREE.Texture | null }, uNight: G.uNight, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) } };
+  /** Signs flickering for a while (an omen), back to normal after `until`. */
+  private glitched: { s: Sign; until: number }[] = [];
   stats = { cells: 0, signs: 0, kiosks: 0, drawn: 0, broken: 0 };
 
   constructor(private ctx: FutureCtx, furnMat: THREE.Material) {
@@ -256,6 +262,12 @@ export class Signs {
   update(dt: number, cam: THREE.Camera): void {
     this.t += dt;
     this.uniforms.uTime.value = this.t;
+    for (let i = this.glitched.length - 1; i >= 0; i--) {
+      const g = this.glitched[i];
+      if (this.t < g.until) continue;
+      this.glitched.splice(i, 1);
+      if (g.s.state === 0.5 && g.s.elems.every((e) => this.ctx.streamer.isAlive(g.s.ref.cell, e))) { g.s.state = 1; this.dirty = true; }
+    }
     this.syncCells();
     // A couple of cells per frame (layouts are cached by Destruction, cheap after the first).
     this.placeSome(0.8);
@@ -287,6 +299,25 @@ export class Signs {
 
   private sparks(x: number, y: number, z: number, n: number): void {
     this.ctx.debris.chipBurst(x, y, z, n, 4, 0, -0.3, 0, new THREE.Color(4, 2.4, 0.7), 0.02, 0.8);
+  }
+
+  /** Screens near (x, z) flicker and tear for `dur` seconds, then recover (a malfunction omen). Returns how many. */
+  glitch(x: number, z: number, r: number, dur: number, max = 4): number {
+    let n = 0;
+    for (const { signs } of this.byCell.values()) for (const s of signs) {
+      if (n >= max) return n;
+      if (s.state !== 1 || Math.hypot(s.x - x, s.z - z) > r) continue;
+      s.state = 0.5;
+      this.glitched.push({ s, until: this.t + dur });
+      this.dirty = true;
+      n++;
+    }
+    return n;
+  }
+
+  /** Red alert pictograms on the screens within r of (x, z) (strength 0 = off). */
+  alert(x: number, z: number, r: number, strength: number): void {
+    this.uniforms.uAlert.value.set(x, z, r, strength);
   }
 
   /** A blast / impact nearby: signs flicker, a direct hit kills them; kiosks smash. */
@@ -351,18 +382,34 @@ export class Signs {
     const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const u = this.uniforms;
     m.onBeforeCompile = (sh) => {
-      sh.uniforms.uTime = u.uTime; sh.uniforms.uAtlas = u.uAtlas; sh.uniforms.uNight = u.uNight;
+      sh.uniforms.uTime = u.uTime; sh.uniforms.uAtlas = u.uAtlas; sh.uniforms.uNight = u.uNight; sh.uniforms.uAlert = u.uAlert;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
 attribute vec2 sUv; attribute vec4 iRect; attribute vec4 iSign;
-varying vec2 vL; varying vec4 vRect; varying vec4 vSign;`)
+uniform vec4 uAlert;
+varying vec2 vL; varying vec4 vRect; varying vec4 vSign; varying float vAlert;`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
-vL = sUv; vRect = iRect; vSign = iSign;`);
+vL = sUv; vRect = iRect; vSign = iSign;
+vec3 wc = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+vAlert = uAlert.w * step(distance(wc.xz, uAlert.xy), uAlert.z);`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform float uTime; uniform float uNight; uniform sampler2D uAtlas;
-varying vec2 vL; varying vec4 vRect; varying vec4 vSign;
+varying vec2 vL; varying vec4 vRect; varying vec4 vSign; varying float vAlert;
 float sh1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+// Red alert: a white warning triangle with a black "!" on a flashing red field (no text).
+vec3 alertPict(vec2 l, float aspect) {
+  vec2 p = (l - 0.5) * vec2(aspect, 1.0) / min(1.0, aspect);
+  float on = step(0.5, fract(uTime * 1.2));
+  vec3 c = mix(vec3(0.35, 0.0, 0.0), vec3(1.0, 0.04, 0.02), on);
+  float tri = step(-0.32, p.y) * step(p.y, 0.36) * step(abs(p.x), (0.36 - p.y) * 0.62);
+  float inner = step(-0.25, p.y) * step(p.y, 0.25) * step(abs(p.x), (0.25 - p.y) * 0.6);
+  float bang = step(abs(p.x), 0.033) * step(-0.06, p.y) * step(p.y, 0.17) + step(length(p - vec2(0.0, -0.15)), 0.042);
+  c = mix(c, vec3(1.0, 0.04, 0.02), tri);
+  c = mix(c, vec3(1.0, 0.95, 0.85), inner);
+  c = mix(c, vec3(0.02), inner * min(1.0, bang));
+  return c;
+}
 vec3 slide(float i, vec2 l) {
   float col = mod(i, 4.0), row = floor(i / 4.0);
   vec2 a = vec2(col * 0.25, 1.0 - (1536.0 + (row + 1.0) * 256.0) / 2048.0);
@@ -399,10 +446,11 @@ vec3 slide(float i, vec2 l) {
     c *= n < 0.35 ? 0.05 : n < 0.5 ? 0.5 : 1.0;
     if (abs(vL.y - fract(uTime * 0.5 + seed)) < 0.06) c = c.gbr * 1.4;
   }
+  if (vAlert > 0.0 && state > 0.25) c = mix(c, alertPict(vL, (vRect.z - vRect.x) / max(1e-4, vRect.w - vRect.y)), vAlert);
   diffuseColor.rgb = c * mix(1.15, 2.7, uNight);
 }`);
     };
-    m.customProgramCacheKey = () => 'future-sign-v1';
+    m.customProgramCacheKey = () => 'future-sign-v2';
     return m;
   }
 

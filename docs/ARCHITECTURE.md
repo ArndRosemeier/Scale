@@ -249,6 +249,8 @@ constructs it, updates it, forwards strikes, and it listens to stimuli (stomp, c
   hit and die when their wall breaks), plus holographic kiosks. One instanced quad mesh, own shader.
 * Robots and drones exist only near the player (≤ 150 delivery + 24 cleaning robots, ≤ 16 service
   robots, ≤ 60 drones), in the furniture material (instanced).
+* **Malfunctions** (`malfunction.ts`): a machine with `mal` set (glitching, hostile, shut down) is stepped by the
+  threat layer's controller (see "Threats and city response"); `spawnAt` places a robot / drone / service robot for it.
   EV charging posts are street furniture (`evCharger`, beside some parking bays); driverless
   `shuttle`s are a vehicle kind in traffic with turquoise automated-driving marker lamps.
 * Vehicles sit on the road surface: `Traffic.settle` samples the surface (terrain, or a bridge deck the
@@ -324,6 +326,57 @@ every frame) owns the parts and draws what belongs to them.
 * **Helping people up** (`game/Deeds`): fallen people within 160 m are marked; ones nobody can get to (indoors, in the
   water, at a height that does not match the ground) get no marker and leave after a few seconds.
 
+### Threats and city response (`src/game/threats`, `src/game/response`)
+THREATS_PLAN Phase A ("Robot malfunction"), PLAYGROUND_PLAN §0 decisions 15 and 19. `ThreatDirector` (`game.threats`) and
+`ResponseDirector` (`game.response`) are built after the crime layer and updated every frame (`prof.threats`).
+* **Threat clock** (`ThreatClock`, pure, tested in `selftest.ts`): pressure = played time + karma earned × 6 s + the
+  player's own ledger entries (chaos) × 1.5 s. Event n has a seeded gap (`deriveSeed(seed, 'threat', n)`: the first minor
+  event no earlier than 45 min of play, then 20–30 min apart, × the "City events" setting: off / rare ×2 / normal /
+  frequent ×½) and fires when played ≥ last + gap and pressure ≥ last + 1.4 × gap. A seeded 4–8 min before, the clock
+  arms and schedules 2–3 omens of the coming archetype over that lead; the event never comes before them, and waits
+  while the player is underground, indoors or a giant. Saved per city and mode (`scale.threat.v1.…`); the setting is a
+  pause-menu preference. Archetypes plug into the clock's table and the director's `ARCHETYPE_IMPL` (omens, start);
+  every event implements `ThreatEvent` (centre, strength, people hurt, targets for the police, shutdown).
+* **Rogue machines** (`RogueMachines`, the near-future layer's `MalfunctionCtl`, `src/future/malfunction.ts`): a robot,
+  service robot or drone with `mal` set is stepped by the controller (one early return in each class's step; knocks are
+  reported to it; status LEDs in shader modes 3 hostile red / 4 glitch flicker / 2 dark, the livery parts red; kept
+  loaded to 720 m). Glitch (omen): stops dead and spins, a drone sags out of its lane and lurches, a service robot
+  twitches, then they carry on. Hostile: delivery and cleaning robots hunt people and the player (knock-downs with
+  cause `threat`, at most 3 machines on the player, one blow per 1.2 s), rammers dent and stall cars, blockers line
+  up across the street (Traffic.obstacles); knocked over they right themselves after 2.6 s until they have taken
+  their impulse hit points (delivery 600 N·s: three ordinary punches; service robot 950), then break. Service robots
+  leave their posts and swing at people; drones hover over a target, dive to head height, hit and climb. They keep to
+  their district (85 m leash round the event's centre). The last knock's cause (player / police / threat) is kept.
+* **Robot malfunction** (`RobotMalfunction`): near the site 9–12 delivery robots (those about, the rest rolling out
+  of shop doors), 2–3 service robots and 4–6 drones (overhead ones drop their parcels, more fly in) glitch for a
+  moment and turn. A `threat` stimulus at the swarm's centre keeps people away; it ends when every machine is out of
+  action (stopped) or after 5 min (the fleet is shut down remotely: what is left powers off; drones fly home).
+  Omens (`robotOmen`): glitching robots, a drone dropping out of its lane, screens tearing (`Signs.glitch`).
+  Rewards: a machine the player disabled 5 karma (service robot 8) +0.5 rep, +3 when it was going for someone,
+  20 karma +4 rep and cheers when it is stopped with the player's help (≥ 2 machines).
+* **City response** (`ResponseDirector`, levels 0–2 of the ladder, per incident): 0 — three patrol cars with sirens
+  (`Police.respond(IncidentJob)`: the job says where, how many get out, what they do there, when to go), a police
+  drone; officers hold a line facing it and wave people back. 1 (after 30 s with > 45 % of it still in action, or 8
+  people hurt) — police cars swing across the streets where they cross a 115 m cordon (`Traffic.blocks`), a civil-defence
+  siren loops over the district and every 2 s a `siren` stimulus with `evac` (210 m) sends people to the nearest metro
+  entrance not in the thick of it (`Reactions.onEvacuate` → a sidewalk route, `PedAgent.evac` = 2.3 × pace, vanishing
+  down the stairs; budget 0.45 ms/frame of routing), cars inside the cordon turn round or are left, screens within
+  330 m show a flashing red warning pictogram (`Signs.alert`). 2 (40 s later with > 25 % still in action) — a SWAT van
+  (vehicle kind `swat`: the delivery van with a light bar, push bumper, running boards) with four officers and two more
+  patrol cars; officers go in on foot and strike the machines (baton 430 / stun baton 720 N·s, credited to the police;
+  never guns, never at people), SWAT bring drones down with a hand-held jammer. Units stuck in a jam within 90 m get
+  out and walk. When it is over: down a level after 8 s and 16 s, everyone packs up at 30 s.
+* **Cause-aware ledger**: `Consequences.record(…, cause)` (player / threat / police) with totals per cause; Justice only
+  books the player's own entries and never a rogue machine (fair game); `Reactions.knockDown` causes `threat` and
+  `police`; people knocked down by a threat are helped up for karma like accident victims; a robot knocking the player
+  out costs nothing. `Stimuli` carry `seq` (Reactions takes everything emitted since it last ran, also what was
+  emitted later in the frame), `cause` and `evac`.
+* **Map / compass**: layer `threat` — the incident as a red alert marker with `always` (compass at any distance), its
+  machines within 250 m as red dots; police units as blue dots (crime layer).
+* Dev console: `dev.threat.spawn('robots', { dist, at, robots, bots, drones, duration })`, `dev.threat.clock(seconds |
+  { setting, played, pressure })`, `dev.threat.omen(kind)`, `dev.threat.events()`, `dev.threat.stop()`,
+  `dev.response.level(n)`, `dev.response.status()`. Sounds: `tools/synthThreats.mjs` (civil siren, glitch, hostile).
+
 ### Birds (`src/fauna`)
 `Birds` (constructed, updated and sent strikes by the game; it listens to stimuli itself) keeps at most 300 birds,
 only around the camera, in one instanced mesh (`birdMesh.ts`: 26 triangles, wing flap and fold in the vertex
@@ -375,6 +428,7 @@ as distance LOD).
 * Compass strip at the top: heading ticks, nearby points of interest within ~320 m (metro
   entrances, people needing help, crimes, small deeds, power cores — the map's marker layers)
   and the player's marker with its distance, pinned to the edge when behind.
+* A threat incident is a red alert marker shown on the compass at any distance (`always`).
 
 ## Threads
 

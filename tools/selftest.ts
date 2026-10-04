@@ -467,5 +467,53 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   console.log(`traffic: six-way junction ${n} cars, longest overlap ${worst} s, ${maxBox} in the box at most; gawkers ≤ ${maxG} (${gawkingAtEnd} after 2 min of cries) in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
+// ---- city threats: the threat clock's schedule is deterministic per seed, the first minor event
+// comes no earlier than its minimum, omens always come first, "off" schedules nothing.
+{
+  const { ThreatClock, CLOCK, EVENT_SCALE } = await import('../src/game/threats/ThreatClock');
+  type Sig = { t: number; type: string; kind?: string };
+  const run = (seed: number, setting: 'off' | 'rare' | 'normal' | 'frequent', hours: number, karmaEvery = 0, from?: InstanceType<typeof ThreatClock>) => {
+    const c = from ?? new ThreatClock(seed);
+    c.setting = setting;
+    const out: Sig[] = [];
+    for (let t = 0; t < hours * 3600; t++) {
+      for (const s of c.tick(1, karmaEvery && t % karmaEvery === 0 ? 1 : 0, 0)) out.push({ t: Math.round(c.state.played), type: s.type, kind: s.type === 'omen' ? s.kind : undefined });
+    }
+    return { out, c };
+  };
+  const a = run(42, 'normal', 5).out, b = run(42, 'normal', 5).out, c2 = run(43, 'normal', 5).out;
+  const evA = a.filter((s) => s.type === 'event');
+  check(JSON.stringify(a) === JSON.stringify(b), 'threat clock: schedule deterministic for a seed');
+  check(JSON.stringify(a) !== JSON.stringify(c2), 'threat clock: schedule varies with the seed');
+  check(evA.length >= 3, `threat clock: minor events come over 5 h of play (${evA.length})`);
+  check(evA.length > 0 && evA[0].t >= CLOCK.firstMinor, `threat clock: first event not before ${CLOCK.firstMinor / 60} min (${(evA[0]?.t / 60).toFixed(1)} min)`);
+  let gapsOk = true, omensOk = true, prev = 0;
+  for (const e of evA) {
+    if (prev && e.t - prev < CLOCK.gapMin) gapsOk = false;
+    const om = a.filter((s) => s.type === 'omen' && s.t > prev && s.t < e.t);
+    if (om.length < CLOCK.omensMin) omensOk = false;
+    prev = e.t;
+  }
+  check(gapsOk, 'threat clock: at most one minor event per 20 min of play');
+  check(omensOk, `threat clock: every event preceded by ≥ ${CLOCK.omensMin} omens since the last one`);
+  check(run(42, 'off', 6).out.length === 0, 'threat clock: "off" schedules nothing');
+  // A busy hero (karma) brings events sooner — never before the minimum.
+  const busy = run(42, 'normal', 5, 20).out.filter((s) => s.type === 'event');
+  check(busy.length > evA.length && busy[0].t >= CLOCK.firstMinor && busy[0].t <= evA[0].t, `threat clock: karma brings events sooner, not before the minimum (first ${(busy[0]?.t / 60).toFixed(1)} vs ${(evA[0]?.t / 60).toFixed(1)} min, ${busy.length} vs ${evA.length} events)`);
+  const freq = run(42, 'frequent', 5).out.filter((s) => s.type === 'event'), rare = run(42, 'rare', 5).out.filter((s) => s.type === 'event');
+  check(freq.length > evA.length && freq[0].t >= CLOCK.firstMinor * EVENT_SCALE.frequent && rare.length < evA.length, `threat clock: frequent / rare scale it (${freq.length} / ${evA.length} / ${rare.length} events in 5 h)`);
+  // Saved and restored half way: the same continuation.
+  const half = run(42, 'normal', 2.5).c;
+  const restored = new ThreatClock(42, JSON.parse(JSON.stringify(half.state)));
+  const rest = run(42, 'normal', 2.5, 0, restored).out.filter((s) => s.type === 'event').map((s) => s.t);
+  check(JSON.stringify(rest) === JSON.stringify(evA.filter((s) => s.t > 2.5 * 3600).map((s) => s.t)), 'threat clock: a saved clock continues the same schedule');
+  // Never armed while not ready (underground): the due event waits, then comes.
+  const w = new ThreatClock(42);
+  let fired = -1;
+  for (let t = 0; t < 4 * 3600 && fired < 0; t++) if (w.tick(1, 0, 0, t > 2 * 3600).some((s) => s.type === 'event')) fired = t;
+  check(fired > 2 * 3600, `threat clock: a due event waits until it can be seen (fired at ${(fired / 60).toFixed(0)} min)`);
+  console.log(`threat clock: seed 42 normal → events at ${evA.map((e) => (e.t / 60).toFixed(0)).join(', ')} min; omens ${a.filter((s) => s.type === 'omen').map((s) => `${(s.t / 60).toFixed(0)}:${s.kind}`).join(' ')}`);
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

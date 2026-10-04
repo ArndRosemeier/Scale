@@ -10,7 +10,8 @@
  *  - aSub   float sub-material code (internal): 0 plain, 1 red / 2 amber / 3 green signal lens,
  *           4 pedestrian "don't walk" / 5 "walk" lens, 7 back-lit sign, 8 foliage, 9 fixed paint
  *           (ignores iColor), 10 status LED / 11 strobe / 12 navigation light (near-future robots
- *           and drones: always powered, iState.z = blink phase, iState.w = 0 ok / 1 alert / 2 off)
+ *           and drones: always powered, iState.z = blink phase, iState.w = 0 ok / 1 alert / 2 off /
+ *           3 hostile (red) / 4 glitching (flicker))
  *  - aColor vec3 default paint / plastic colour (linear). Per-instance iColor (sRGB) replaces it for
  *           PaintedMetal / Plastic vertices when non-zero.
  *
@@ -1454,24 +1455,30 @@ export function createFurnitureMaterial(): THREE.MeshStandardMaterial {
               base = vec3(0.02) + vPaint * mask * 0.05;
               rough = 0.2;
               fEmis = vPaint * mask * lit * (3.0 + 4.0 * uNight);
-            } else if (sub >= 10 && sub <= 12) { // near-future LEDs (always powered; iState.z phase, .w mode: 0 ok, 1 alert, 2 off)
+            } else if (sub >= 10 && sub <= 12) { // near-future LEDs (always powered; iState.z phase, .w mode: 0 ok, 1 alert, 2 off, 3 hostile, 4 glitching)
               base = vPaint * 0.25;
               rough = 0.2;
-              float off = vState.w > 1.5 ? 0.0 : 1.0;
-              if (sub == 10) { // status light: steady teal pulse, amber blink when waiting
+              float off = abs(vState.w - 2.0) < 0.5 ? 0.0 : 1.0;
+              bool hostile = vState.w > 2.5 && vState.w < 3.5;
+              // Glitching: irregular drop-outs, flicking between its colour and red.
+              float gl = vState.w > 3.5 ? fract(sin(floor(uTime * 11.0) * 91.7 + vState.z * 311.0) * 43758.5) : 0.0;
+              if (sub == 10) { // status light: steady teal pulse, amber blink when waiting, angry red when hostile
                 bool alert = vState.w > 0.5 && vState.w < 1.5;
                 vec3 c = alert ? vec3(1.0, 0.5, 0.06) : vec3(0.12, 0.8, 1.0);
                 float k = alert ? step(0.45, fract(uTime * 1.6 + vState.z)) : 0.75 + 0.25 * sin(uTime * 2.5 + vState.z * 6.283);
+                if (hostile) { c = vec3(1.0, 0.03, 0.02); k = 0.8 + 0.4 * step(0.5, fract(uTime * 3.0 + vState.z)); }
+                if (vState.w > 3.5) { c = gl > 0.55 ? vec3(1.0, 0.04, 0.02) : c; k *= step(0.25, gl); }
                 base = c * 0.3;
                 fEmis = c * k * off * (1.4 + 2.6 * uNight);
-              } else if (sub == 11) { // anti-collision strobe (double flash); police: red / blue
+              } else if (sub == 11) { // anti-collision strobe (double flash); police: red / blue; hostile: fast red
                 float ph = fract(uTime * 0.9 + vState.z);
                 float k = step(ph, 0.04) + step(abs(ph - 0.13), 0.02);
                 vec3 c = vState.y > 2.5 ? (fract(uTime * 2.0 + vState.z) < 0.5 ? vec3(1.0, 0.05, 0.03) : vec3(0.05, 0.2, 1.0)) : vec3(1.0);
                 if (vState.y > 2.5) k = step(0.5, fract(uTime * 8.0)) * 0.8;
+                if (hostile) { c = vec3(1.0, 0.03, 0.02); k = step(0.5, fract(uTime * 5.0 + vState.z)); }
                 fEmis = c * k * off * (5.0 + 9.0 * uNight);
-              } else { // steady navigation light (colour from the model)
-                fEmis = vPaint * off * (0.6 + 3.4 * uNight);
+              } else { // steady navigation light (colour from the model); hostile: red
+                fEmis = (hostile ? vec3(1.0, 0.03, 0.02) : vPaint) * off * (0.6 + 3.4 * uNight) * (vState.w > 3.5 ? step(0.3, gl) : 1.0);
               }
             } else if (sub == 9) { // retro-reflective band
               base = vPaint; rough = 0.25; metal = 0.0;
