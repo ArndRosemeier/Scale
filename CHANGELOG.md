@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.021 — 2026-10-04
+
+- **Characters in the streets**: a doomsayer with a sandwich board warning that the end is nigh, buskers, living statues (silver or gold) that come alive when you get too close, a mime trapped in an invisible box, jugglers, street dancers (sometimes a crew round a boombox), a chicken mascot handing out flyers for a café round the corner, a tinfoil-hat conspiracy theorist, the pigeon lady, a lost tourist asking the way, neon joggers — and at night a sleepwalker in pyjamas.
+- Passers-by stop to watch the performers and drop coins; you hear the busker's guitar and the dance crew's beat.
+- They talk to you: about you flying past, being a giant or tiny, your reputation, being wanted.
+- When danger comes they drop everything and run — and the doomsayer finally gets to say "I told you so".
+- Fix: a flock of pigeons scared up once never settled back to normal.
+
 ## 0.020 — 2026-10-04
 
 - **Stairs everywhere**: almost every building with more than one storey now has a real stairwell — a stair hall at one end of each floor with a switchback staircase (two flights and a landing per storey, handrails). Walk up as far as the building goes; no more being stuck on the ground floor without a lift.
