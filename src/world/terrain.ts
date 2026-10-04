@@ -12,6 +12,7 @@ import { chaikin, resample } from '../core/geom2';
 import { smoothstep, clamp, lerp } from '../core/math';
 import type { WorldProfile } from './settings';
 import { makeBoundary, terrainExtent } from './boundary';
+import { pickAirfield, AIRFIELD_BLEND, type Airfield } from './airfield';
 
 export interface River {
   /** Centerline, resampled ~12 m. */
@@ -84,6 +85,12 @@ export class Terrain {
   private outerCell = 0;
   /** Hash cells holding countryside river segments (there the nearest bank wins, see waterMixed). */
   private mixed = new Set<number>();
+  /**
+   * The airfield of a big city (world/airfield): levelled by `height`, outside the protected
+   * zone. Null for smaller cities (and while it is being picked from the natural terrain).
+   */
+  airfield: Airfield | null = null;
+  private afReach = 0;
 
   constructor(profile: WorldProfile, countryRivers = true) {
     this.profile = profile;
@@ -98,6 +105,8 @@ export class Terrain {
     this.baseRivers = this.rivers.length;
     if (countryRivers) this.extendRivers();
     this.buildIndex();
+    const af = pickAirfield(this);
+    if (af) { this.afReach = Math.hypot(af.hu, af.hv) + AIRFIELD_BLEND; this.airfield = af; }
   }
 
   // ---------------------------------------------------------------- rivers
@@ -613,6 +622,13 @@ export class Terrain {
       const land = smoothstep(-10, 900, c);
       h = lerp(shore + Math.max(0, c) * 0.004, h, land);
       if (c < 0) h = Math.min(h, shore - Math.min(28, -c * 0.06 + 1.5));
+    }
+    // The airfield: level, with an embankment band blending into the natural ground.
+    const af = this.airfield;
+    if (af && Math.abs(x - af.x) < this.afReach && Math.abs(z - af.z) < this.afReach) {
+      const dx = x - af.x, dz = z - af.z, c = Math.cos(af.angle), s = Math.sin(af.angle);
+      const e = Math.max(Math.abs(dx * c + dz * s) - af.hu, Math.abs(-dx * s + dz * c) - af.hv);
+      if (e < AIRFIELD_BLEND) h = lerp(af.level, h, smoothstep(0, AIRFIELD_BLEND, e));
     }
 
     return h;

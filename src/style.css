@@ -387,6 +387,7 @@ body.looking #crosshair { display: block; }
 #compass .poi i { display: block; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9); }
 #compass .poi.alert i { width: 11px; height: 11px; font: 800 8px/11px system-ui, sans-serif; color: #1a1408; text-align: center; font-style: normal; }
 #compass .poi.core i { border-radius: 1px; transform: rotate(45deg); width: 8px; height: 8px; }
+#compass .poi.landmark i { width: 11px; height: 11px; font: 700 8px/11px system-ui, sans-serif; color: #fff; text-align: center; font-style: normal; }
 #compass .poi.metro i { width: 11px; height: 11px; border-radius: 2px; font: 800 8px/11px system-ui, sans-serif; color: #fff; text-align: center; font-style: normal; }
 #compass .poi.pin { top: 12px; }
 #compass .poi.pin i { width: 12px; height: 12px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #e8483b; }

@@ -2,6 +2,7 @@
  * Plan data types. Pure data: structured-clone / transfer friendly, no three.js.
  */
 import type { Poly } from '../core/geom2';
+import type { Landmark } from './landmarks';
 
 export const enum RoadClass {
   Boulevard = 0,
@@ -164,4 +165,6 @@ export interface MacroPlan {
   sewers: SewerTrunk[];
   /** City boundary radius function samples (64 angles). */
   boundary: number[];
+  /** Town hall, stadium, attractions and (big cities) the airport: plan/landmarks. */
+  landmarks: Landmark[];
 }

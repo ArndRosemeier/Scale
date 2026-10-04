@@ -18,6 +18,7 @@ import { cityName, streetName } from '../../plan/names';
 import { cityClass } from '../../world/settings';
 import { STATION_HALF, ENTRANCE_L } from '../../plan/cell';
 import { MapItem } from '../../stream/protocol';
+import { LANDMARK_KIND_NAME } from '../../plan/landmarks';
 import { clamp } from '../../core/math';
 
 const LAYERS_KEY = 'scale.map.layers';
@@ -34,8 +35,8 @@ export interface MapMarker {
   z: number;
   /** CSS colour. */
   color: string;
-  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; pin: the player's own marker; zone: a ring of radius `r`. */
-  kind: 'core' | 'alert' | 'dot' | 'pin' | 'zone';
+  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; pin: the player's own marker; zone: a ring of radius `r`; landmark: a star badge (named on the full map). */
+  kind: 'core' | 'alert' | 'dot' | 'pin' | 'zone' | 'landmark';
   title?: string;
   /** The compass shows it at any distance (pinned to its edge when behind), with the distance (a zone: to its edge — the way out from inside). */
   always?: boolean;
@@ -125,6 +126,8 @@ export class GameMap {
     this.world = new MapWorld(game.macro, game.terrain);
     this.layers = loadJSON<MapLayers>(LAYERS_KEY, { metro: true, buildings: true, labels: true, sewers: false, crime: true });
     this.tiles = new MapTiles(this.world, this.layers);
+    // Landmarks: a star badge each, named on the full map, in the tooltip and on the compass.
+    this.setMarkers('landmarks', (game.macro.landmarks ?? []).map((l) => ({ x: l.x, z: l.z, color: '#b5562a', kind: 'landmark' as const, title: `${l.name} — ${LANDMARK_KIND_NAME[l.kind]}` })));
     this.miniOn = loadJSON(MINI_KEY, { on: true }).on;
     game.skyline.onBatch = (cells, rec, counts, map, off) => { this.tiles.invalidate(this.world.addBatch(cells, rec, counts, map, off)); this.miniKey = ''; };
     const ts = performance.now();
@@ -734,6 +737,18 @@ export class GameMap {
           g.lineWidth = 1.5; g.strokeStyle = '#ffffff'; g.stroke();
           g.fillStyle = '#1a1408'; g.font = `800 ${full ? 10 : 8}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
           g.fillText('!', 0, 0.5);
+        } else if (m.kind === 'landmark') {
+          g.beginPath(); g.arc(0, 0, r * 0.95, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();
+          g.lineWidth = 1.5; g.strokeStyle = '#ffffff'; g.stroke();
+          g.fillStyle = '#ffffff'; g.font = `700 ${full ? 11 : 8}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillText('★', 0, 0.5);
+          // Its name beside it on the full map (with the names layer on).
+          if (full && this.layers.labels && m.title) {
+            const name = m.title.split(' — ')[0];
+            g.font = '700 12px system-ui, sans-serif'; g.textAlign = 'left';
+            g.lineWidth = 3.5; g.strokeStyle = 'rgba(255,255,255,0.92)'; g.strokeText(name, r + 4, 0);
+            g.fillStyle = '#5b2a10'; g.fillText(name, r + 4, 0);
+          }
         } else {
           g.beginPath(); g.arc(0, 0, r * 0.6, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();
         }

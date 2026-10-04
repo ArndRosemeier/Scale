@@ -1,6 +1,6 @@
 /**
  * Streams the city around the camera: cell meshes (ground + buildings),
- * terrain quadtree tiles, water tiles and bridges. Cells keep their damage
+ * terrain quadtree tiles, water tiles, bridges and landmarks. Cells keep their damage
  * state (element texture) when evicted and reapply it when reloaded.
  */
 import { hitch } from '../debug/HitchLog';
@@ -105,6 +105,33 @@ export class CityStreamer {
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.name = 'bridges';
     this.root.add(mesh);
+  }
+
+  /**
+   * Landmarks (town hall, stadium, attractions, airport): always present, one LOD object each
+   * (near mesh with all details, far mesh without), sharing one facade material.
+   */
+  async loadLandmarks(): Promise<void> {
+    if (!this.macro.landmarks?.length) return;
+    const r = await this.pool.run<Extract<FromWorker, { type: 'landmarks' }>>({ type: 'landmarks', job: 0 }, -1);
+    const mat = createFacadeMaterial(this.tex.facade, null);
+    r.meshes.forEach(([near, far], i) => {
+      const lm = this.macro.landmarks[i];
+      const lod = new THREE.LOD();
+      lod.name = `landmark:${lm.kind}`;
+      // LOD distances are measured to the object's own position: put it at the landmark.
+      lod.position.set(...near.origin);
+      // Switch to the far mesh a little beyond the site (the airport is kilometres long).
+      const switchAt = 450 + Math.hypot(lm.hu, lm.hv) * 0.6;
+      for (const [m, d] of [[near, 0], [far, switchAt]] as const) {
+        const mesh = new THREE.Mesh(toGeometry(m), mat);
+        mesh.position.set(m.origin[0] - near.origin[0], m.origin[1] - near.origin[1], m.origin[2] - near.origin[2]);
+        mesh.castShadow = mesh.receiveShadow = true;
+        releaseAfterUpload(mesh.geometry);
+        lod.addLevel(mesh, d);
+      }
+      this.root.add(lod);
+    });
   }
 
   update(dt: number, cam: THREE.Vector3): void {

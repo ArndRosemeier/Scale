@@ -1,7 +1,7 @@
 /**
  * Main-thread spatial index of the loaded city for physics-ish queries:
  * building prisms (2D footprint + base/top), ground surfaces (road vs raised
- * sidewalk/lot), bridge decks, and ray casts against all of them.
+ * sidewalk/lot), bridge decks, landmark solids, and ray casts against all of them.
  */
 import type { Terrain } from './terrain';
 import type { CellState } from '../stream/CityStreamer';
@@ -11,6 +11,7 @@ import { pointInPoly, polyBounds } from '../core/geom2';
 import { CURB_H } from '../build/ground';
 import type { BridgeProfile } from '../build/bridges';
 import { BINFO_STRIDE } from '../stream/protocol';
+import type { LandmarkSolids } from './LandmarkSolids';
 
 /** A carriageway shape with its bounds and its holes' bounds (min x, min z, max x, max z). */
 interface BoxedShape { outer: number[]; ob: [number, number, number, number]; holes: { poly: number[]; b: [number, number, number, number] }[] }
@@ -38,6 +39,8 @@ export class WorldIndex {
   private cellRefs = new Map<number, BuildingRef[]>();
   private cellShapes = new Map<number, { cell: CellState; bounds: [number, number, number, number]; carr: BoxedShape[]; poly: number[] }>();
   bridges: BridgeProfile[] = [];
+  /** Solid parts of the landmarks (town hall, stadium, attractions, airport): set by the game. */
+  landmarks: LandmarkSolids | null = null;
 
   constructor(readonly terrain: Terrain, private cellPolys: (id: number) => number[]) {}
 
@@ -171,6 +174,7 @@ export class WorldIndex {
     if (deck > -Infinity && deck <= yRef + step) g = Math.max(g, deck);
     const b = this.buildingAt(x, z);
     if (b && b.top <= yRef + step) g = Math.max(g, b.top);
+    if (this.landmarks) g = Math.max(g, this.landmarks.topAt(x, z, yRef, step));
     return g;
   }
 
@@ -185,6 +189,7 @@ export class WorldIndex {
       if (y < g) return { t: refine(this, ox, oy, oz, dx, dy, dz, ((i - 1) / n) * maxDist, t), building: null };
       const b = this.buildingAt(x, z);
       if (b && y < b.top && y > b.low) return { t, building: b };
+      if (this.landmarks && this.landmarks.hit(x, y, z)) return { t, building: null };
       prevAbove = true;
     }
     void prevAbove;

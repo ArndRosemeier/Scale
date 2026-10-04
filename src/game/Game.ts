@@ -17,6 +17,7 @@ import { WorldIndex } from '../world/WorldIndex';
 import { Player } from '../player/Player';
 import { CameraRig } from '../player/CameraRig';
 import { bridgeProfiles } from '../build/bridges';
+import { LandmarkSolids } from '../world/LandmarkSolids';
 import { ENTRANCE_L } from '../plan/metroDims';
 import { BodyService } from '../humanoid/client/BodyService';
 import { clipLibraryReady } from '../humanoid/client/anim/clips';
@@ -225,6 +226,10 @@ export class Game {
     this.streamer.prepare = (o) => this.renderer.compileAsync(o);
     this.world = new WorldIndex(this.terrain, (id) => macro.cells[id].poly);
     this.world.bridges = bridgeProfiles(macro, this.terrain);
+    // Landmarks (town hall, stadium, attractions, airport): solid for the walker, the physics
+    // ground and ray casts.
+    const landmarks = new LandmarkSolids(macro, this.terrain);
+    this.world.landmarks = landmarks;
     this.streamer.onCellReady = (c) => this.world.addCell(c);
     this.streamer.onCellEvicted = (c) => this.world.removeCell(c);
     this.tex = tex;
@@ -237,6 +242,7 @@ export class Game {
     this.destruction = new Destruction(this.streamer, this.world, this.terrain, this.debris, this.dust, tex);
     this.renderer.scene.add(this.destruction.group);
     this.collision = new Collision(this.world, this.destruction, this.streamer);
+    this.collision.obstacleProviders.push(landmarks.provider);
     this.underground = new Underground(macro, this.terrain, tex, (x, z) => this.terrain.height(x, z) + this.world.surfaceOffset(x, z));
     this.collision.under = this.underground;
     this.underground.onTrainSound = (id, x, y, z, gain) => this.audio.play(id, x, y, z, gain, 1, 10, this.renderer.camera.position);
@@ -266,7 +272,7 @@ export class Game {
     this.renderer.scene.add(this.crowd.group);
     this.crowd.prepare = (o) => this.renderer.compileAsync(o);
     this.population = new Population(macro, this.settings.seed);
-    await this.streamer.loadBridges();
+    await Promise.all([this.streamer.loadBridges(), this.streamer.loadLandmarks()]);
     // Start at the main centre (or a loaded save's spot), at street level.
     const c = this.startAt ?? macro.centres[0];
     const cam = this.renderer.camera;
@@ -284,7 +290,7 @@ export class Game {
     this.player = new Player(this.settings.seed, this.world);
     this.player.collision = this.collision;
     let sx = c.x, sz = c.z;
-    for (let k = 0; k < 200 && this.world.buildingAt(sx, sz); k++) { sx += (k % 7) * 3 - 9; sz += Math.floor(k / 7) * 3 - 9; }
+    for (let k = 0; k < 200 && (this.world.buildingAt(sx, sz) || landmarks.onFootprint(sx, sz, 1)); k++) { sx += (k % 7) * 3 - 9; sz += Math.floor(k / 7) * 3 - 9; }
     this.player.pos.set(sx, this.world.groundHeight(sx, sz) + 0.05, sz);
     this.renderer.scene.add(this.player.rig.object);
     this.camRig = new CameraRig(cam, this.world);
