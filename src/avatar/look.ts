@@ -95,7 +95,8 @@ export function randomLook(seed: number, gender?: number): CharacterLook {
 export function normalizeLook(l: CharacterLook): CharacterLook {
   const base = randomLook(l.appearance?.seed ?? 1, l.appearance?.gender);
   const a = { ...base.appearance, ...l.appearance };
-  a.face = { ...base.appearance.face, ...l.appearance?.face };
+  // (Cheeks, face width and expression came later: a character saved before keeps its face — 0, not a random value.)
+  a.face = { ...base.appearance.face, cheekFullness: 0, faceWidth: 0, smile: 0, ...l.appearance?.face };
   a.body = { ...base.appearance.body, ...l.appearance?.body };
   return { appearance: a, outfit: { ...base.outfit, ...l.outfit } };
 }

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.005 — 2026-10-04
+
+- **People's faces**: city people now vary in cheek fullness (fuller with more weight), face width and resting expression — most look neutral to friendly, a few stern.
+
 ## 0.004 — 2026-10-04
 
 - **Character builder, face**: new sliders *Cheeks (lean – full)*, *Face width* and *Expression (stern – smiling)*. A smiling character keeps a friendly face at rest (and still shows fear, pain and surprise); a stern one a slight frown.

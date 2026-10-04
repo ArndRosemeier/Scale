@@ -195,6 +195,12 @@ export function randomAppearance(race: RaceId, seed: number, opts: AppearanceOpt
     if (f === 'jaw' || f === 'browRidge') v += male ? 0.15 : -0.15;
     face[f] = clamp(v, -1, f === 'earPoint' ? 1.3 : 1);
   }
+  // Cheeks, face width and the resting expression (their own stream: everyone keeps the rest of
+  // their face). Fuller cheeks with more weight; most people look neutral to friendly, a few stern.
+  const rf2 = base.fork('face2');
+  face.cheekFullness = clamp((weight - 0.5) * 0.9 + rf2.gaussian(0, 0.25), -1, 1);
+  face.faceWidth = clamp(rf2.gaussian(0, 0.22), -1, 1);
+  face.smile = clamp(rf2.gaussian(0.12, 0.3), -0.7, 0.8);
   const rbd = base.fork('bodymods');
   const fieldsB = ['shoulders', 'chest', 'waist', 'hips', 'armLength', 'legLength', 'neck', 'hands', 'feet', 'belly'] as const;
   const body = {} as HumanoidAppearance['body'];
