@@ -32,6 +32,8 @@ import { LineOfSight, LOS, type LosCar, type LosWorld } from '../src/game/combat
 import { resolveShot, newShot, type ShotTrace } from '../src/game/combat/shot';
 import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
 import { parseStemManifest } from '../src/audio/music/StemPlayer';
+import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
+import { lineFor, allLines } from '../src/game/street/lines';
 import { readFileSync, existsSync } from 'node:fs';
 
 let failures = 0;
@@ -1516,6 +1518,50 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   for (let k = 0; k < 10; k++) lc.clear(0, 1.42, 0, 30, 1.25, 0);
   check(lc.stats.rays === 1 && lc.stats.cached === 9, `los: the same line is cached (${lc.stats.rays} traced, ${lc.stats.cached} cached)`);
   console.log(`line of sight: ${(per * 1000).toFixed(1)} µs a line (headless boxes)`);
+}
+
+// Street characters (game/street/cast.ts): sites clear of the walking corridors, footprints, doors and
+// furniture; the cast deterministic, only in its hours, everyone turning up somewhere.
+{
+  const t0 = performance.now();
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.4 }));
+  const macro = buildMacroPlan(terrain);
+  const c0 = macro.centres[0];
+  const cells = macro.cells.slice().sort((a, b) => Math.hypot(a.centroid[0] - c0.x, a.centroid[1] - c0.z) - Math.hypot(b.centroid[0] - c0.x, b.centroid[1] - c0.z)).slice(0, 40);
+  const byKind = [0, 0, 0, 0];
+  let n = 0, onFoot = 0, inWalk = 0, atDoor = 0, sameA = true, badHour = 0;
+  const seen = new Set<StreetKind>();
+  for (const c of cells) {
+    const p = planCell(macro, c, terrain);
+    const A = streetSites(p), B = streetSites(p);
+    if (hashPlan(A) !== hashPlan(B)) sameA = false;
+    for (const s of A) {
+      n++; byKind[s.kind]++;
+      if (p.buildings.some((b) => pointInPoly(b.poly, s.x, s.z))) onFoot++;
+      if (!clearOfWalk(p.streets, s.x, s.z, 0.75)) inWalk++;
+      if (p.buildings.some((b) => { const d = frontDoor(b); return Math.hypot(d.x - s.x, d.z - s.z) < 2.9; })) atDoor++;
+      for (let h = 0; h < 48; h += SLOT_H) {
+        const k = streetCast(42, s, c.district, h);
+        const k2 = streetCast(42, s, c.district, h);
+        if (JSON.stringify(k) !== JSON.stringify(k2)) sameA = false;
+        if (!k) continue;
+        seen.add(k.kind);
+        if (!kindAt(k.kind, (k.slot + 0.5) * SLOT_H) || !STREET_KINDS[k.kind].sites.includes(s.kind) || h < k.from || h >= k.to) badHour++;
+      }
+    }
+  }
+  check(sameA, 'street: sites and cast deterministic');
+  check(n > 40 && byKind[SiteKind.Plaza] + byKind[SiteKind.Park] > 3 && byKind[SiteKind.Sidewalk] > 10, `street: sites found (${n}: ${byKind.join(' plaza / park / metro / sidewalk ')})`);
+  check(onFoot === 0 && inWalk === 0 && atDoor === 0, `street: sites off footprints (${onFoot}), clear of the walking corridor (${inWalk}) and doors (${atDoor})`);
+  check(badHour === 0, `street: everyone cast within their hours and at their kind of site (${badHour} not)`);
+  const missing = STREET_KIND_LIST.filter((k) => !seen.has(k));
+  check(missing.length === 0, `street: every character turns up somewhere in two days (missing: ${missing.join(', ') || 'none'})`);
+  check(kindAt('sleepwalker', 2) && !kindAt('sleepwalker', 14) && kindAt('busker', 21) && !kindAt('busker', 4) && kindAt('jogger', 7) && !kindAt('jogger', 12), 'street: day people by day, night people at night');
+  const lines = allLines();
+  check(lines.length > 150 && lines.every((l) => l.trim().length > 0 && !/undefined|NaN/.test(l)), `street: lines all there (${lines.length})`);
+  check(STREET_KIND_LIST.every((k) => (['own', 'greet', 'panic', 'hit', 'leave', 'fly', 'giant'] as const).every((t) => !!lineFor(k, t, () => 0.5, 'X'))), 'street: every character has a line for every common moment');
+  check(lineFor('tourist', 'greet', () => 0, 'Linden station')!.includes('Linden station'), 'street: places filled into the lines');
+  console.log(`street: ${n} sites in ${cells.length} cells (${(performance.now() - t0).toFixed(0)} ms), ${seen.size} kinds cast`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

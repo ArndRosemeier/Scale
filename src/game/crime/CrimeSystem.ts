@@ -23,7 +23,7 @@ import { cityOutfit } from '../../humanoid/client/wardrobe';
 import { hash32 } from '../../core/rng';
 import { pointInPoly } from '../../core/geom2';
 import { statusOf } from '../../shared/status';
-import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, type ActorRole } from '../../sim/actors/Actor';
+import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, STREET_OWNER, type ActorRole } from '../../sim/actors/Actor';
 import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
 import { Reputation } from '../Reputation';
@@ -566,9 +566,10 @@ export class CrimeSystem {
     for (const a of this.g.peds.agents) {
       const act = a.actor;
       if (!act) continue;
-      // (Soldiers and the aftermath's people have their own budgets: response/forces, game/aftermath.)
+      // (Soldiers, the aftermath's people and the street characters have their own budgets:
+      // response/forces, game/aftermath, game/street.)
       const uniformed = act.role === 'police' || act.role === 'soldier';
-      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER) n++;
+      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER) n++;
       tickActor(act, dt);
       if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && uniformed))) {
         act.upT -= dt;
@@ -749,7 +750,7 @@ export class CrimeSystem {
       if (act.role === 'criminal' && c) {
         name = CRIMINAL_NAME[c.kind];
         friends = c.criminals.filter((o) => o !== a && o.alive && o.actor && o.actor.hostile && Math.hypot(o.x - a.x, o.z - a.z) < 15).length;
-      } else name = ROLE_NAME[act.role];
+      } else name = act.title ?? ROLE_NAME[act.role];
       if (name) {
         const st = act.state === 'arrested' ? ' (cuffed)' : act.state === 'surrender' ? ' (hands up)' : act.state === 'ko' ? ' (out cold)' : a.state === PState.Down ? ' (down)' : act.armed !== 'none' && act.hostile ? ` (${act.armed})` : '';
         name += st;

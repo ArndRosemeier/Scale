@@ -10,6 +10,7 @@ import { cityOutfit, heldItem } from '../humanoid/client/wardrobe';
 import { HumanoidRig } from '../humanoid/client/HumanoidRig';
 import { randomAppearance } from '../humanoid/appearance';
 import type { EquipmentVisuals } from '../items/types';
+import type { HumanoidAppearance } from '../humanoid/types';
 import { Role } from './Population';
 import { statusOf } from '../shared/status';
 
@@ -134,6 +135,8 @@ export class CrowdRenderer {
   heldFor: ((a: PedAgent) => string | null | undefined) | null = null;
   /** Seated people chatting (sim/Terraces). */
   talking: ((a: PedAgent, time: number) => boolean) | null = null;
+  /** Adjust a person's looks before they are built (game/street: body paint on living statues and mimes). */
+  appearance: ((a: PedAgent, app: HumanoidAppearance) => void) | null = null;
   stats = { crowd: 0, rigs: 0 };
 
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
@@ -189,6 +192,7 @@ export class CrowdRenderer {
     if (ti < 0) ti = this.templates.findIndex((t) => t.female === female && t.outfit === 'casual');
     if (ti < 0) ti = Math.max(0, this.templates.findIndex((t) => t.female === female));
     const app = randomAppearance('human', c.seed, { gender: c.gender, age: c.age });
+    this.appearance?.(a, app);
     const col = (rgb: [number, number, number] | undefined, fb: [number, number, number]) => {
       const cc = new THREE.Color().setRGB(...(rgb ?? fb), THREE.SRGBColorSpace);
       return [cc.r, cc.g, cc.b];
@@ -254,6 +258,7 @@ export class CrowdRenderer {
         fresh++;
         const look = this.lookOf(a);
         const app = randomAppearance('human', a.cit.seed, { gender: a.cit.gender, age: a.cit.age });
+        this.appearance?.(a, app);
         const rig = new HumanoidRig(app, { castShadow: true, ground: this.rigGround ? this.cachedGround : null, priority: 5 });
         rig.setEquipment(look.eq);
         this.scene.add(rig.object);

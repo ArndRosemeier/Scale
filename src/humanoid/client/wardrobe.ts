@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { EquipmentVisuals, ItemVisual } from '../../items/types';
 import type { ShellLayer, ShellMaterial, WearableSpec, BodyFit, RigidPart } from '../../items/wearable';
 import { Rng } from '../../core/rng';
+import { streetWearable, streetHeld } from './streetwear';
 
 type C3 = [number, number, number];
 
@@ -55,7 +56,8 @@ export function resolveWearable(defId: string, v: ItemVisual): WearableSpec | nu
     case 'cap': return { layers: [capPart(c)] };
     case 'helmet': return { layers: [helmetPart(c)] };
     case 'beanie': return { layers: [beaniePart(c)] };
-    default: return null;
+    // Costumes of the street characters (game/street).
+    default: return streetWearable(defId, v);
   }
 }
 
@@ -193,8 +195,11 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(shaft, canopy);
       break;
     }
-    default:
+    default: {
+      const s = streetHeld(defId);
+      if (s) g.add(s);
       break;
+    }
   }
   return g;
 }

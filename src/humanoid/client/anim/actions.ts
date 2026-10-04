@@ -475,6 +475,109 @@ function cower(p: Pose, t: number) {
   p.root.z += 0.08 * u;
 }
 
+// ------------------------------------------------------------------ street characters (game/street)
+
+/** Strumming a guitar slung across the chest: left hand up the neck, right hand over the sound hole. */
+function playGuitar(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed;
+  const strum = Math.sin(e * PI * 4.2);
+  const chord = Math.sin(e * 0.9) * 0.08;
+  p.arm('L', 0.95 + chord, 0.5, 0.35, 1.55, 1.1, 0.25, Math.sin(e * 5.3) * 0.08);
+  p.arm('R', 0.35, -0.35, 0.75, 1.35 + strum * 0.08, 0.7, strum * 0.35, 0);
+  p.spine(0.04, 0.05, Math.sin(e * 2.1) * 0.03);
+  p.neck(-0.28 + Math.abs(Math.sin(e * PI * 2.1)) * 0.07, 0.15);
+}
+
+/** The doomsayer: a finger to the sky, arms flung wide, a finger at the crowd (a 7 s cycle). */
+function preach(p: Pose, _t: number, c: ActionCtx) {
+  const u = (c.elapsed % 7) / 7;
+  const sky = kf(u, [[0, 0], [0.06, 1], [0.32, 1], [0.38, 0], [1, 0]]);
+  const wide = kf(u, [[0.32, 0], [0.4, 1], [0.62, 1], [0.68, 0]]);
+  const at = kf(u, [[0.62, 0], [0.7, 1], [0.94, 1], [1, 0]]);
+  const shake = Math.sin(c.elapsed * 9) * 0.05;
+  p.arm('R', 2.75 * sky + 1.15 * wide + 1.45 * at + shake, 0.25 * sky + 1.25 * wide + 0.2 * at, 0, 0.12 * sky + 0.3 * wide + 0.1 * at, 0.8 * at);
+  p.arm('L', 0.65 * sky + 1.15 * wide + 0.35 * at, 0.35 * sky + 1.25 * wide + 0.15 * at, 0.4 * sky, 1.1 * sky + 0.3 * wide + 1.3 * at, 0.9 * sky);
+  p.spine(0.1 * sky - 0.08 * at, 0, 0);
+  p.neck(0.35 * sky + 0.1 * wide - 0.05 * at, 0, 0);
+}
+
+/** A mime in an invisible box: palms on the front wall, then the side, then the ceiling (a 9 s cycle). */
+function mimeBox(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed, u = (e % 9) / 9;
+  const front = kf(u, [[0, 1], [0.3, 1], [0.38, 0], [0.92, 0], [1, 1]]);
+  const side = kf(u, [[0.3, 0], [0.38, 1], [0.6, 1], [0.68, 0]]);
+  const top = kf(u, [[0.6, 0], [0.68, 1], [0.9, 1], [0.97, 0]]);
+  // Palms flat on the glass, sliding along it.
+  const sl = Math.sin(e * 1.7) * 0.18, sr = Math.sin(e * 1.7 + 1.9) * 0.18;
+  p.arm('L', (1.3 + sl) * front + 1.1 * side + 2.55 * top, 0.12 * front + 0.2 * side + 0.35 * top, -0.2 * front, 0.65 * front + 0.9 * side + 0.55 * top, 1.0 * front + 1.0 * side, -1.05 * (front + side + top), 0);
+  p.arm('R', (1.3 + sr) * front + 0.2 * side + 2.55 * top, 0.12 * front + 1.45 * side + 0.35 * top, -0.2 * front - 0.3 * side, 0.65 * front + 0.4 * side + 0.55 * top, 1.0 * front + 0.6 * side, -1.05 * (front + side + top), 0.6 * side);
+  p.spine(0.02 * front, -0.25 * side, 0);
+  p.neck(0.25 * top - 0.05 * front, -0.55 * side, 0.08 * Math.sin(e * 0.8));
+}
+
+/** Juggling a cascade: forearms forward, hands tossing in turn, eyes up on the balls. */
+function juggle(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed * PI * 2 * 1.25;
+  const l = Math.max(0, Math.sin(e)), r = Math.max(0, Math.sin(e + PI));
+  p.arm('L', 0.55 + l * 0.18, 0.12, 0.35, 1.45 - l * 0.35, 1.3, -0.2 + l * 0.4);
+  p.arm('R', 0.55 + r * 0.18, 0.12, 0.35, 1.45 - r * 0.35, 1.3, -0.2 + r * 0.4);
+  p.neck(0.3, Math.sin(e * 0.5) * 0.06);
+}
+
+/** A living statue, frozen: one arm pointing at the horizon, the other hand on the hip. */
+function statueSalute(p: Pose) {
+  p.arm('R', 2.05, 0.25, 0, 0.08, 0.6);
+  p.arm('L', -0.15, 0.55, -0.7, 1.75, 0.2, 0.3);
+  p.leg('L', 0.25, 0.04, 0, 0.12);
+  p.leg('R', -0.12, 0.04);
+  p.spine(0.05, -0.15);
+  p.neck(0.22, -0.25);
+}
+
+/** A living statue, frozen: the thinker, chin on the hand, standing. */
+function statueThinker(p: Pose) {
+  p.arm('R', 1.25, -0.15, 0.55, 2.3, 0.6, 0.25);
+  p.arm('L', 0.3, 0.05, 1.0, 1.75, 0.5);
+  p.leg('L', 0.15, 0.02, 0, 0.08);
+  p.leg('R', -0.08, 0.02);
+  p.spine(-0.12);
+  p.neck(-0.3, 0.1);
+}
+
+/** Scattering crumbs from a bag held at the belly. */
+function feedBirds(p: Pose, _t: number, c: ActionCtx) {
+  const u = (c.elapsed % 2.6) / 2.6;
+  const reach = kf(u, [[0, 0], [0.3, 0], [0.5, 1], [0.62, 1], [0.85, 0], [1, 0]]);
+  p.arm('L', 0.5, 0.05, 0.4, 1.65, 1.0);
+  p.arm('R', 0.45 + reach * 0.7, 0.05 + reach * 0.5, 0.4, 1.4 - reach * 1.05, 0.9 - reach * 0.5, reach * -0.4);
+  p.spine(-0.18 - reach * 0.08);
+  p.neck(-0.35);
+}
+
+/** Sleepwalking: both arms out in front, wrists limp, the head lolling. */
+function sleepwalk(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed;
+  p.arm('L', 1.45 + Math.sin(e * 1.1) * 0.05, 0.1, 0, 0.12, 0.3, 0.55);
+  p.arm('R', 1.45 + Math.sin(e * 1.1 + 1) * 0.05, 0.1, 0, 0.12, 0.3, 0.55);
+  p.neck(0.12, Math.sin(e * 0.5) * 0.15, 0.22 + Math.sin(e * 0.7) * 0.06);
+}
+
+/** Holding a big map open in front of the chest, looking down at it (now and then up and around). */
+function readMap(p: Pose, _t: number, c: ActionCtx) {
+  const u = (c.elapsed % 8) / 8;
+  const up = kf(u, [[0, 0], [0.7, 0], [0.76, 1], [0.92, 1], [1, 0]]);
+  p.arm('L', 0.95, 0.42, 0.35, 1.25, 0.35, 0.2);
+  p.arm('R', 0.95, 0.42, 0.35, 1.25, 0.35, 0.2);
+  p.neck(-0.45 + up * 0.5, up * Math.sin(c.elapsed * 0.9) * 0.7);
+}
+
+/** Holding something out to a passer-by (a flyer). */
+function offer(p: Pose, t: number) {
+  const u = kf(t, [[0, 0], [0.2, 1], [0.8, 1], [1, 0]]);
+  p.arm('R', 1.25 * u, 0.15 * u, 0.4 * u, 0.3 * u, 0.4 * u);
+  p.spine(-0.05 * u, -0.1 * u);
+}
+
 export const ACTIONS: Record<string, ActionDef> = {
   hands_up: { mask: 'upper', blendIn: 0.15, blendOut: 0.2, pose: handsUp, mood: 'afraid' },
   cower: { mask: 'full', blendIn: 0.2, blendOut: 0.25, pose: cower, mood: 'afraid' },
@@ -518,4 +621,15 @@ export const ACTIONS: Record<string, ActionDef> = {
   stagger: { mask: 'full', blendIn: 0.03, blendOut: 0.3, pose: stagger, mood: 'pain', clip: () => ({ name: 'Hit_Chest' }) },
   roll: { mask: 'full', blendIn: 0.05, blendOut: 0.15, pose: roll, clip: () => ({ name: 'Roll', from: 0.04, to: 0.8 }) },
   die: { mask: 'full', blendIn: 0.02, blendOut: 0, pose: () => {}, mood: 'pain' },
+  // Street characters (game/street).
+  play_guitar: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: playGuitar, mood: 'happy', loop: true },
+  preach: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: preach, mood: 'angry', loop: true },
+  mime_box: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: mimeBox, mood: 'surprised', loop: true },
+  juggle: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: juggle, mood: 'focused', loop: true },
+  statue_salute: { mask: 'full', blendIn: 0.1, blendOut: 0.1, pose: statueSalute, loop: true },
+  statue_thinker: { mask: 'full', blendIn: 0.1, blendOut: 0.1, pose: statueThinker, loop: true },
+  feed_birds: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: feedBirds, mood: 'happy', loop: true },
+  sleepwalk: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: sleepwalk, loop: true },
+  read_map: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: readMap, loop: true },
+  offer: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: offer, mood: 'happy' },
 };

@@ -20,6 +20,8 @@ export type ActorRole = 'criminal' | 'victim' | 'police' | 'shopkeeper' | 'owner
 
 /** Owner id of the aftermath's actors (src/game/aftermath: medics, the injured, the trapped, cleanup crews): their own budget. */
 export const AFTERMATH_OWNER = -2;
+/** Owner id of the street characters (src/game/street: buskers, the doomsayer, living statues …): their own budget. */
+export const STREET_OWNER = -3;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';
@@ -63,6 +65,8 @@ export interface Actor {
   held?: string | null;
   /** Outfit override (police uniform). */
   outfit?: EquipmentVisuals;
+  /** Name on the target frame (street characters: "Busker"); else the role's, if any. */
+  title?: string;
   /** Not despawned by distance while set. */
   pinned: boolean;
   /** Owner id (crime / deed / police) for bookkeeping. */
