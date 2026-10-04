@@ -100,7 +100,13 @@ export class Compass {
       return { edge: Math.abs(off) > lim, x: W / 2 + Math.max(-lim, Math.min(lim, off)) * pxDeg, d: dist(Math.hypot(x - p.x, z - p.z)) };
     };
     for (const m of goals) {
-      const q = pinned(m.x, m.z), poi = poiOf(m);
+      // A zone: its nearest edge — from inside, the way out — with the distance to it.
+      let gx = m.x, gz = m.z;
+      if (m.kind === 'zone' && m.r) {
+        const dx = p.x - m.x, dz = p.z - m.z, d = Math.hypot(dx, dz) || 1;
+        gx = m.x + (dx / d) * m.r; gz = m.z + (dz / d) * m.r;
+      }
+      const q = pinned(gx, gz), poi = poiOf(m);
       this.show(pi++, `${poi.cls} goal${q.edge ? ' edge' : ''}`, poi.color, poi.text, q.d, q.x);
     }
     const w = g.map.waypoint;
@@ -154,5 +160,6 @@ function wrap(a: number): number {
 function poiOf(m: MapMarker): Poi {
   if (m.kind === 'alert') return { x: m.x, z: m.z, cls: 'poi alert', color: m.color, text: '!' };
   if (m.kind === 'core') return { x: m.x, z: m.z, cls: 'poi core', color: m.color, text: '' };
+  if (m.kind === 'zone') return { x: m.x, z: m.z, cls: 'poi zone', color: m.color, text: '!' };
   return { x: m.x, z: m.z, cls: 'poi', color: m.color, text: '' };
 }

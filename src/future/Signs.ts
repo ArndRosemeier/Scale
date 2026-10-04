@@ -83,7 +83,21 @@ export class Signs {
    * Red alert (a threat nearby, THREATS_PLAN §2 level 1): screens within uAlert.z m of (x, z)
    * show a flashing warning pictogram instead of their ads, strength uAlert.w (0 off).
    */
-  readonly uniforms = { uTime: { value: 0 }, uAtlas: { value: null as THREE.Texture | null }, uNight: G.uNight, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) } };
+  readonly uniforms = {
+    uTime: { value: 0 }, uAtlas: { value: null as THREE.Texture | null }, uNight: G.uNight, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) },
+    /**
+     * The last resort (THREATS_PLAN §2 level 5): screens within uCount.z m of (x, z) show the strike
+     * countdown — a warning symbol and the minutes and seconds left (uCount.w), no words; strength uCountOn.
+     */
+    uCount: { value: new THREE.Vector4(0, 0, 0, 0) }, uCountOn: { value: 0 },
+    /**
+     * The live news feed (the Cloverfield trick, src/game/aftermath/NewsFeed): billboards within
+     * uFeedAt.z m of (x, z) show a low-res render of the monster (uFeed), strength uFeedAt.w.
+     */
+    uFeed: { value: blackTexture() as THREE.Texture }, uFeedAt: { value: new THREE.Vector4(0, 0, 0, 0) },
+    /** City news on the billboards (a pictogram: 1 the city lost, 2 all clear, 3 the monster brought down), strength uNews.y. */
+    uNews: { value: new THREE.Vector4(0, 0, 0, 0) },
+  };
   /** Signs flickering for a while (an omen), back to normal after `until`. */
   private glitched: { s: Sign; until: number }[] = [];
   stats = { cells: 0, signs: 0, kiosks: 0, drawn: 0, broken: 0, names: 0 };
@@ -131,7 +145,7 @@ export class Signs {
     this.nSign = new THREE.InstancedBufferAttribute(new Float32Array(NAME_CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
     ng.setAttribute('iRect', this.nRect);
     ng.setAttribute('iSign', this.nSign);
-    this.names = new THREE.InstancedMesh(ng, this.signMaterial({ ...this.uniforms, uAtlas: { value: this.nameAtlas.texture }, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) } }), NAME_CAP);
+    this.names = new THREE.InstancedMesh(ng, this.signMaterial({ ...this.uniforms, uAtlas: { value: this.nameAtlas.texture }, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) }, uCountOn: { value: 0 }, uFeedAt: { value: new THREE.Vector4(0, 0, 0, 0) }, uNews: { value: new THREE.Vector4(0, 0, 0, 0) } }), NAME_CAP);
     this.names.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.names.count = 0;
     this.names.frustumCulled = false;
@@ -390,6 +404,30 @@ export class Signs {
     this.uniforms.uAlert.value.set(x, z, r, strength);
   }
 
+  /** The strike countdown on the screens within r of (x, z): `seconds` left (strength 0 = off). */
+  countdown(x: number, z: number, r: number, seconds: number, strength: number): void {
+    this.uniforms.uCount.value.set(x, z, r, Math.max(0, seconds));
+    this.uniforms.uCountOn.value = strength;
+  }
+
+  /** The live feed on the billboards within r of (x, z) (null / strength 0: off; the texture is kept bound). */
+  feed(tex: THREE.Texture | null, x: number, z: number, r: number, strength: number): void {
+    if (tex) this.uniforms.uFeed.value = tex;
+    this.uniforms.uFeedAt.value.set(x, z, r, tex ? strength : 0);
+  }
+
+  /** Big billboard screens (slide shows: they carry the live feed) still working within r of (x, z). */
+  billboardsNear(x: number, z: number, r: number): number {
+    let n = 0;
+    for (const { signs } of this.byCell.values()) for (const s of signs) if (s.mode === SMode.Slides && s.state > 0.25 && Math.abs(s.x - x) < r && Math.abs(s.z - z) < r) n++;
+    return n;
+  }
+
+  /** City news on the billboards: kind 1 the city lost, 2 all clear, 3 the monster brought down (0 / strength 0: off). */
+  news(kind: number, strength: number): void {
+    this.uniforms.uNews.value.set(kind, kind > 0 ? strength : 0, 0, 0);
+  }
+
   /** A blast / impact nearby: signs flicker, a direct hit kills them; kiosks smash. */
   impact(x: number, y: number, z: number, r: number, strong: boolean): void {
     for (const { signs, kiosks } of this.byCell.values()) {
@@ -473,20 +511,117 @@ export class Signs {
     const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = u.uTime; sh.uniforms.uAtlas = u.uAtlas; sh.uniforms.uNight = u.uNight; sh.uniforms.uAlert = u.uAlert;
+      sh.uniforms.uCount = u.uCount; sh.uniforms.uCountOn = u.uCountOn; sh.uniforms.uFeed = u.uFeed; sh.uniforms.uFeedAt = u.uFeedAt; sh.uniforms.uNews = u.uNews;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
 attribute vec2 sUv; attribute vec4 iRect; attribute vec4 iSign;
-uniform vec4 uAlert;
-varying vec2 vL; varying vec4 vRect; varying vec4 vSign; varying float vAlert;`)
+uniform vec4 uAlert; uniform vec4 uCount; uniform float uCountOn; uniform vec4 uFeedAt; uniform vec4 uNews;
+varying vec2 vL; varying vec4 vRect; varying vec4 vSign; varying float vAlert; varying float vCount; varying float vFeed; varying float vNews;`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
 vL = sUv; vRect = iRect; vSign = iSign;
 vec3 wc = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-vAlert = uAlert.w * step(distance(wc.xz, uAlert.xy), uAlert.z);`);
+vAlert = uAlert.w * step(distance(wc.xz, uAlert.xy), uAlert.z);
+vCount = uCountOn * step(distance(wc.xz, uCount.xy), uCount.z);
+// The big billboards (slide shows) carry the live feed near the player, and the news (most of them).
+float bill = step(2.5, iSign.x) * step(iSign.x, 3.5);
+vFeed = bill * uFeedAt.w * step(distance(wc.xz, uFeedAt.xy), uFeedAt.z);
+vNews = bill * uNews.y * step(iSign.y, 0.7);`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform float uTime; uniform float uNight; uniform sampler2D uAtlas;
-varying vec2 vL; varying vec4 vRect; varying vec4 vSign; varying float vAlert;
+uniform vec4 uCount; uniform sampler2D uFeed; uniform vec4 uNews;
+varying vec2 vL; varying vec4 vRect; varying vec4 vSign; varying float vAlert; varying float vCount; varying float vFeed; varying float vNews;
 float sh1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+// Seven-segment digits (the countdown) and the shapes of the pictograms (no text anywhere).
+float segLine(vec2 p, vec2 a, vec2 b, float w) {
+  vec2 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return 1.0 - smoothstep(w * 0.6, w, length(pa - ba * h));
+}
+float digit7(vec2 p, int d) {
+  int m = d == 0 ? 63 : d == 1 ? 6 : d == 2 ? 91 : d == 3 ? 79 : d == 4 ? 102 : d == 5 ? 109 : d == 6 ? 125 : d == 7 ? 7 : d == 8 ? 127 : 111;
+  vec2 TL = vec2(0.18, 0.88), TR = vec2(0.82, 0.88), ML = vec2(0.18, 0.5), MR = vec2(0.82, 0.5), BL = vec2(0.18, 0.12), BR = vec2(0.82, 0.12);
+  float w = 0.1, c = 0.0;
+  if ((m & 1) != 0) c = max(c, segLine(p, TL, TR, w));
+  if ((m & 2) != 0) c = max(c, segLine(p, TR, MR, w));
+  if ((m & 4) != 0) c = max(c, segLine(p, MR, BR, w));
+  if ((m & 8) != 0) c = max(c, segLine(p, BL, BR, w));
+  if ((m & 16) != 0) c = max(c, segLine(p, ML, BL, w));
+  if ((m & 32) != 0) c = max(c, segLine(p, TL, ML, w));
+  if ((m & 64) != 0) c = max(c, segLine(p, ML, MR, w));
+  return c;
+}
+// A stylised hazard symbol: a black trefoil on a yellow disc (p centred, unit ≈ the disc's radius).
+float trefoil(vec2 p) {
+  float r = length(p), a = atan(p.y, p.x);
+  float blade = step(0.24, r) * step(r, 0.86) * step(fract(a * 0.4774648 + 0.5), 0.5);
+  return max(blade, step(r, 0.17));
+}
+// The countdown: the symbol and MM:SS in red LED digits, hazard stripes round the edge.
+vec3 countPict(vec2 l, float aspect, float secs) {
+  vec2 P = vec2(l.x * aspect, l.y);
+  float edge = min(min(P.x, aspect - P.x), min(P.y, 1.0 - P.y));
+  vec3 c = vec3(0.015, 0.01, 0.01);
+  if (edge < 0.07) c = mix(vec3(0.02), vec3(1.0, 0.75, 0.0), step(0.5, fract((P.x + P.y) * 5.0)));
+  bool wide = aspect > 1.6;
+  vec2 sc = wide ? vec2(0.55, 0.5) : vec2(aspect * 0.5, 0.67);
+  float sr = wide ? 0.34 : min(0.22, aspect * 0.36);
+  vec2 sp = (P - sc) / sr;
+  float blink = secs < 30.0 ? step(0.35, fract(uTime * 2.0)) : 1.0;
+  if (length(sp) < 1.0) c = mix(vec3(1.0, 0.78, 0.0), vec3(0.02), trefoil(sp)) * mix(0.25, 1.0, blink);
+  // MM:SS.
+  float m = floor(secs / 60.0), s = floor(mod(secs, 60.0));
+  vec2 d0 = wide ? vec2(1.05, 0.22) : vec2(aspect * 0.08, 0.1);
+  float dw = wide ? (aspect - 1.15) / 4.6 : aspect * 0.84 / 4.6, dh = wide ? 0.56 : 0.3;
+  dh = min(dh, dw * 1.8); dw = min(dw, dh / 1.3);
+  vec2 q = (P - d0) / vec2(dw, dh);
+  float lit = 0.0;
+  if (q.y > 0.0 && q.y < 1.0 && q.x > 0.0 && q.x < 4.6) {
+    float cell = q.x < 2.0 ? floor(q.x) : q.x < 2.6 ? -1.0 : floor(q.x - 0.6);
+    vec2 f = vec2(q.x < 2.0 ? fract(q.x) : fract(q.x - 0.6), q.y);
+    int dd = cell == 0.0 ? int(mod(floor(m / 10.0), 10.0)) : cell == 1.0 ? int(mod(m, 10.0)) : cell == 2.0 ? int(floor(s / 10.0)) : int(mod(s, 10.0));
+    if (cell >= 0.0) lit = digit7(f, dd);
+    else lit = step(length(vec2((q.x - 2.3) * 0.6, q.y - 0.3)), 0.07) + step(length(vec2((q.x - 2.3) * 0.6, q.y - 0.7)), 0.07);
+  }
+  c = mix(c, vec3(1.0, 0.18, 0.04) * 1.6, clamp(lit, 0.0, 1.0));
+  return c;
+}
+// The live feed: the news drone's picture, scan lines, a blinking red dot, viewfinder corners.
+vec3 feedPict(vec2 l, float aspect) {
+  vec2 k = vec2(min(1.0, aspect / 1.7778), min(1.0, 1.7778 / aspect));
+  vec3 f = texture2D(uFeed, (l - 0.5) * k + 0.5).rgb;
+  f = f / (1.0 + f);
+  f = f * f * 1.5 * (0.92 + 0.08 * sin(l.y * 420.0 - uTime * 30.0));
+  vec2 P = vec2(l.x * aspect, l.y);
+  float dotR = length(P - vec2(0.12, 0.86));
+  f = mix(f, vec3(1.0, 0.05, 0.03), step(dotR, 0.045) * step(0.4, fract(uTime * 0.9)));
+  vec2 e = min(P, vec2(aspect, 1.0) - P);
+  float corner = step(min(e.x, e.y), 0.03) * step(max(e.x, e.y), 0.14) * step(0.012, min(e.x, e.y));
+  return mix(f, vec3(0.9), corner);
+}
+// City news (pictograms): 1 the city lost — a mushroom cloud over a broken skyline; 2 all clear — a
+// check over the skyline; 3 the monster brought down — its body lying before the skyline.
+vec3 newsPict(vec2 l, float aspect, float kind) {
+  vec2 P = vec2((l.x - 0.5) * aspect, l.y);
+  vec3 bg = kind < 1.5 ? mix(vec3(0.25, 0.02, 0.0), vec3(0.06, 0.0, 0.0), l.y) : kind < 2.5 ? mix(vec3(0.05, 0.35, 0.12), vec3(0.02, 0.15, 0.05), l.y) : mix(vec3(0.05, 0.12, 0.3), vec3(0.02, 0.04, 0.12), l.y);
+  vec3 fg = kind < 1.5 ? vec3(0.02) : vec3(0.9, 0.95, 0.9);
+  float bx = floor(P.x * 9.0), hgt = 0.12 + 0.22 * sh1(bx * 3.7 + 1.0);
+  if (kind < 1.5 && abs(P.x) < 0.3) hgt *= 0.25 + 0.2 * sh1(bx * 5.1);
+  vec3 c = mix(bg, fg, step(l.y, hgt) * step(abs(P.x), aspect * 0.48));
+  if (kind < 1.5) {
+    float cap = step(length((P - vec2(0.0, 0.7)) * vec2(1.0, 1.5)), 0.2), stem = step(abs(P.x), 0.05 + 0.03 * (0.62 - l.y)) * step(0.2, l.y) * step(l.y, 0.62);
+    c = mix(c, mix(vec3(1.0, 0.45, 0.1), vec3(0.45, 0.4, 0.36), l.y), max(cap, stem) * (0.85 + 0.15 * sin(uTime * 3.0)));
+  } else if (kind < 2.5) {
+    float ck = max(segLine(P, vec2(-0.16, 0.66), vec2(-0.05, 0.54), 0.05), segLine(P, vec2(-0.05, 0.54), vec2(0.2, 0.84), 0.05));
+    c = mix(c, vec3(1.0), ck);
+  } else {
+    float body = step(length((P - vec2(-0.05, 0.12)) * vec2(1.0, 3.2)), 0.32) + step(length(P - vec2(0.3, 0.13)), 0.07) + step(length((P - vec2(-0.45, 0.08)) * vec2(1.0, 5.0)), 0.18);
+    c = mix(c, vec3(0.15, 0.17, 0.2), clamp(body, 0.0, 1.0));
+    float ck = max(segLine(P, vec2(0.18, 0.7), vec2(0.26, 0.62), 0.035), segLine(P, vec2(0.26, 0.62), vec2(0.42, 0.84), 0.035));
+    c = mix(c, vec3(0.3, 1.0, 0.4), ck);
+  }
+  return c;
+}
 // Red alert: a white warning triangle with a black "!" on a flashing red field (no text).
 vec3 alertPict(vec2 l, float aspect) {
   vec2 p = (l - 0.5) * vec2(aspect, 1.0) / min(1.0, aspect);
@@ -536,11 +671,15 @@ vec3 slide(float i, vec2 l) {
     c *= n < 0.35 ? 0.05 : n < 0.5 ? 0.5 : 1.0;
     if (abs(vL.y - fract(uTime * 0.5 + seed)) < 0.06) c = c.gbr * 1.4;
   }
-  if (vAlert > 0.0 && state > 0.25) c = mix(c, alertPict(vL, (vRect.z - vRect.x) / max(1e-4, vRect.w - vRect.y)), vAlert);
+  float asp = (vRect.z - vRect.x) / max(1e-4, vRect.w - vRect.y);
+  if (vNews > 0.0 && state > 0.25) c = mix(c, newsPict(vL, asp, uNews.x), vNews);
+  if (vAlert > 0.0 && state > 0.25) c = mix(c, alertPict(vL, asp), vAlert);
+  if (vFeed > 0.0 && state > 0.25) c = mix(c, feedPict(vL, asp), vFeed);
+  if (vCount > 0.0 && state > 0.25) c = mix(c, countPict(vL, asp, uCount.w), vCount);
   diffuseColor.rgb = c * mix(1.15, 2.7, uNight);
 }`);
     };
-    m.customProgramCacheKey = () => 'future-sign-v2';
+    m.customProgramCacheKey = () => 'future-sign-v3';
     return m;
   }
 
@@ -597,4 +736,11 @@ function nearPolyline(pts: number[], x: number, z: number, r: number): boolean {
     if (Math.hypot(ax + dx * t - x, az + dz * t - z) < r) return true;
   }
   return false;
+}
+
+/** A 1×1 black texture: the live-feed sampler is always bound (one program), the feed swaps it in. */
+let black: THREE.DataTexture | null = null;
+function blackTexture(): THREE.DataTexture {
+  if (!black) { black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat); black.needsUpdate = true; }
+  return black;
 }

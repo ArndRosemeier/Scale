@@ -167,7 +167,9 @@ export class Weather {
       if (t > 1.2) { this.pulses.splice(i, 1); continue; }
       if (t >= 0) f += q.amp * Math.exp(-t / 0.07);
     }
-    this.flash = Math.min(1.6, f);
+    // A glare from elsewhere (the last resort's flash) fades over a few seconds.
+    this.glareK = Math.max(0, this.glareK - this.glareK * Math.min(1, dt * 0.6) - dt * 0.02);
+    this.flash = Math.min(1.6, f + this.glareK);
     for (let i = this.thunder.length - 1; i >= 0; i--) {
       const th = this.thunder[i];
       if (this.now < th.t) continue;
@@ -181,6 +183,10 @@ export class Weather {
       if (th.d < 2500 && !this.ug) { const P = g.player.pos; g.stimuli.emit('thunder', P.x, P.y, P.z, 3 * (1 - th.d / 2500), 350); }
     }
   }
+
+  /** A glare lighting up the sky and everything (the last resort's flash): it fades over seconds. */
+  glare(amp: number): void { this.glareK = Math.max(this.glareK, amp); }
+  private glareK = 0;
 
   /** A lightning strike somewhere round the city (admin: dev.weather.strike()). */
   strike(dist?: number): number {

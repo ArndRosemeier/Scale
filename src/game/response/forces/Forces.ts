@@ -173,6 +173,15 @@ export class Forces {
     this.battery = { x: e.x + (dx / l) * 3200, z: e.z + (dz / l) * 3200 };
   }
 
+  /** The last resort (level 5): everyone pulls out of the strike zone — convoys leaving; no more fire. */
+  withdraw(): void {
+    for (const q of this.squads) for (const u of q.units) if (u.task !== 'dead') { u.task = 'leave'; u.taskT = 0; u.mounted = false; }
+    this.withdrawn = true;
+    this.note('pulling out (the last resort)');
+  }
+  /** Pulled out for the last resort (until the battle is over). */
+  private withdrawn = false;
+
   /** A level stands down: its squads leave. */
   private standDown(level: number): void {
     for (const q of this.squads) if (q.level >= level) for (const u of q.units) if (u.task !== 'dead') u.task = 'leave';
@@ -187,7 +196,7 @@ export class Forces {
     const t0 = performance.now();
     this.time += dt;
     const S = this.mon, ev = this.inc?.ev;
-    const fighting = !!(S && ev && ev.active && S.targetable && !S.defeated);
+    const fighting = !!(S && ev && ev.active && S.targetable && !S.defeated) && !this.withdrawn;
     this.materialise(dt);
     const ops = this.ops(fighting);
     if (S && this.view && (fighting || S.mode === 'retreat' || S.mode === 'sink')) {
@@ -271,6 +280,7 @@ export class Forces {
       this.note(`over: ${S.outcome}${byArmy ? ' (the army)' : ''}`);
     }
     this.inc = null; this.mon = null; this.view = null;
+    this.withdrawn = false;
     this.fx.clearEmplacements();
     this.placed.clear();
     this.air.clear();
@@ -885,18 +895,24 @@ export class Forces {
     };
   }
 
-  /** Stage E hook (reputation unlock): squads near the player gather on them. Not wired to the player yet. */
-  rally(x: number, z: number): number {
+  /** The player's rally (src/game/aftermath/Command, reputation unlock): squads within r of (x, z) gather on them. */
+  rally(x: number, z: number, r = 350): number {
+    if (this.withdrawn) return 0;
     let n = 0;
-    for (const q of this.squads) for (const u of q.units) if (u.task !== 'dead' && u.task !== 'leave' && u.kind !== 'heli' && u.kind !== 'jet' && u.kind !== 'artillery' && Math.hypot(u.x - x, u.z - z) < 350) { u.tx = x + this.rng.range(-20, 20); u.tz = z + this.rng.range(-20, 20); u.task = 'move'; n++; }
+    for (const q of this.squads) for (const u of q.units) if (u.task !== 'dead' && u.task !== 'leave' && u.kind !== 'heli' && u.kind !== 'jet' && u.kind !== 'artillery' && Math.hypot(u.x - x, u.z - z) < r) { u.tx = x + this.rng.range(-20, 20); u.tz = z + this.rng.range(-20, 20); u.task = 'move'; n++; }
     return n;
   }
 
-  /** Stage E hook (reputation unlock: an airstrike on a Tab target); here: a jet run over a point now. */
+  /** An airstrike on a point now (the player's call on a Tab target, src/game/aftermath/Command; dev): a jet run. */
   airstrike(x: number, z: number): boolean {
-    let q = this.squads.find((s) => s.kind === 'jet');
+    // A monster about that the army has not engaged yet: the bombs are aimed at it all the same.
+    if (!this.mon) { const sx = this.g.threats.strider(); const inc = sx?.active ? this.g.response.incidents.find((i) => i.ev === sx) : undefined; if (sx && inc) this.attach(inc, sx); }
+    // Its own squad (not the army's jets): one run per call, never on the battle's timer.
+    let q = this.squads.find((s) => s.key === 'air-strike');
     if (!q) { q = makeSquad('air-strike', 'jet', 4, [makeUnit('jet', 'air-strike', x, z, 1, 0)]); this.squads.push(q); }
     const u = q.units[0];
+    u.cool = 1e9;
+    this.idle = false;
     if (!this.mon) {
       this.air.jetRun(x, z, this.rng.range(0, Math.PI * 2), (bx, by, bz) => {
         for (let k = 0; k < 4; k++) this.fx.projectile('bomb', bx, by, bz, x + (k - 1.5) * 14, this.g.world.groundHeight(x, z) + 0.3, z, 1.9 + k * 0.12, () => this.groundHit(x + (k - 1.5) * 14, this.g.world.groundHeight(x, z) + 0.3, z, 2.8, 0, -1, 0), 12);

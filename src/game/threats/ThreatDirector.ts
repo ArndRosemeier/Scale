@@ -55,6 +55,9 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
   },
 };
 
+/** A defeated monster's body as saves keep it (SaveBody). */
+interface SavedBody { kind: string; x: number; z: number; yaw: number; side: number; s: number; downAt: number; cleared: number }
+
 /** A wake on the river (an omen): foam drifting downstream for a while. */
 interface Wake { x: number; z: number; dx: number; dz: number; t: number }
 
@@ -273,7 +276,7 @@ export class ThreatDirector {
     this.markT = 0.5;
     const list: MapMarker[] = [];
     const p = this.g.player.pos;
-    for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
+    for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
       if (!ev.active) continue;
@@ -283,7 +286,8 @@ export class ThreatDirector {
         list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: 'A rogue machine' });
       }
     }
-    const key = list.map((m) => `${Math.round(m.x / 3)},${Math.round(m.z / 3)}`).join(';');
+    // (Kind and title in the key: a monster brought down turns from an alert into a dot on the same spot.)
+    const key = list.map((m) => `${Math.round(m.x / 3)},${Math.round(m.z / 3)},${m.kind},${m.title?.length ?? 0}`).join(';');
     if (key !== this.markKey) { this.markKey = key; this.g.map.setMarkers('threat', list); }
   }
 
@@ -375,16 +379,19 @@ export class ThreatDirector {
    * one just brought down) and a Strider on the move (resumed at its route position). Robot
    * malfunctions and omens are not kept: they end with the session.
    */
-  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string; level: number } | null } {
-    const remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[] = [];
+  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level: number } | null } {
+    const remains: SavedBody[] = [];
     let strider: { s: number; hp: number; mode: string; level: number } | null = null;
-    for (const b of [...this.remains, ...this.events.filter((e): e is Strider => e instanceof Strider && e.defeated)]) remains.push({ kind: 'strider', ...b.saveState() });
+    for (const b of [...this.remains, ...this.events.filter((e): e is Strider => e instanceof Strider && e.defeated)]) {
+      const st = b.saveState();
+      remains.push({ kind: 'strider', x: st.x, z: st.z, yaw: st.yaw, side: st.side, s: st.s, downAt: Math.round(b.downAt * 1000) / 1000, cleared: Math.round(b.cleared * 1000) / 1000 });
+    }
     for (const e of this.events) if (e instanceof Strider && e.active && (e.mode === 'emerge' || e.mode === 'advance' || e.mode === 'rampage')) { const st = e.saveState(); strider = { s: st.s, hp: st.hp, mode: st.mode, level: this.g.response.incidents.find((i) => i.ev === e)?.level ?? 0 }; }
     return { clock: { ...this.clock.state }, setting: this.setting, remains, strider };
   }
 
   /** Saves: restore what `saveState` kept (on a fresh city: no events running yet). */
-  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: { kind: string; x: number; z: number; yaw: number; side: number; s: number }[]; strider: { s: number; hp: number; mode: string; level?: number } | null }): void {
+  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level?: number } | null }): void {
     const S = this.clock.state as unknown as Record<string, unknown>;
     if (o.clock && o.clock.v === 1) for (const k of Object.keys(S)) if (k in o.clock && (typeof o.clock[k] === typeof S[k] || o.clock[k] === null || S[k] === null)) S[k] = o.clock[k];
     if (o.setting === 'off' || o.setting === 'rare' || o.setting === 'normal' || o.setting === 'frequent') this.setting = o.setting;
@@ -395,6 +402,9 @@ export class ThreatDirector {
       try {
         const s = new Strider(this.g, deriveSeed(this.g.settings.seed, 'remains', i));
         s.restoreDead(b);
+        // When it came down (unknown in an old save: from now) and how much the crews took away.
+        s.downAt = b.downAt >= 0 ? b.downAt : this.g.sky.hoursAbs;
+        s.cleared = Math.max(0, Math.min(1, b.cleared ?? 0));
         this.remains.push(s);
       } catch (err) { console.warn('[threats] could not lay the body back', err); }
     });

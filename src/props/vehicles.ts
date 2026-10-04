@@ -27,11 +27,13 @@ import { buildArmyTruck, buildApc, buildTank } from './military';
 
 export type VehicleKind =
   | 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle' | 'swat'
-  | 'army_truck' | 'apc' | 'tank';
+  | 'army_truck' | 'apc' | 'tank'
+  | 'ambulance' | 'firetruck' | 'crane' | 'flatbed';
 
 export const VEHICLE_KINDS: VehicleKind[] = [
   'sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle', 'swat',
   'army_truck', 'apc', 'tank',
+  'ambulance', 'firetruck', 'crane', 'flatbed',
 ];
 
 export interface VehicleModel {
@@ -1541,7 +1543,15 @@ function buildShuttle(variant: number, rng: Rng): Built {
 
 // ---------------- box truck
 
-function buildTruck(variant: number, rng: Rng): Built {
+/**
+ * Box truck; the city's service trucks share its cab and chassis (the aftermath, src/game/aftermath):
+ * 'fire' — an equipment body with lockers, a ladder on the roof and light bars; 'crane' — a mobile
+ * crane (a flat deck, outriggers; its cab and boom turn and lift as the model's turret and gun);
+ * 'flat' — a flatbed with low sides (the cleanup crews cart the carcass away on them).
+ */
+type TruckStyle = 'box' | 'fire' | 'crane' | 'flat';
+
+function buildTruck(variant: number, rng: Rng, style: TruckStyle = 'box'): Built {
   const g = new Geo();
   const L = (variant === 1 ? 7.2 : 8.2) * (1 + rng.range(-0.01, 0.01)), W = 2.5, H = 3.5;
   const cabW = 2.3;
@@ -1586,10 +1596,11 @@ function buildTruck(variant: number, rng: Rng): Built {
   );
   // bumper
   rbox(g, 0, cabW / 2 - 0.02, yb - 0.02, yb + 0.3, zF - 0.04, zF + 0.2, 0.05, () => VPart.Plastic);
-  // cargo box
+  // cargo box (or the service body)
   const bz0 = zCabR + 0.08, bz1 = zR;
   const by0 = 1.18;
-  rbox(g, 0, W / 2, by0, H, bz0, bz1, 0.05, (n) => (n[1] < -0.5 ? VPart.Undercarriage : VPart.Cargo), 2);
+  if (style === 'box') rbox(g, 0, W / 2, by0, H, bz0, bz1, 0.05, (n) => (n[1] < -0.5 ? VPart.Undercarriage : VPart.Cargo), 2);
+  else serviceBody(g, style, W, cabH, by0, bz0, bz1, zA, zB);
   // box bottom rail
   rbox(g, 0, W / 2 + 0.01, by0 - 0.12, by0 + 0.02, bz0 + 0.02, bz1 + 0.01, 0.01, () => VPart.Plastic, 1);
   // chassis rails
@@ -1613,7 +1624,7 @@ function buildTruck(variant: number, rng: Rng): Built {
     g.quadN([-0.26, y0, zq], [0.26, y0, zq], [0.26, y0 + 0.11, zq], [-0.26, y0 + 0.11, zq], [0, 0], [1, 0], [1, 1], [0, 1], VPart.Plate, [0, 0, 1]);
   }
   // marker lights on box top front corners
-  for (const s of [1, -1]) rbox(g, s * (W / 2 - 0.12), 0.05, H - 0.02, H + 0.02, bz0 - 0.01, bz0 + 0.06, 0.01, () => VPart.Indicator, 1);
+  if (style === 'box') for (const s of [1, -1]) rbox(g, s * (W / 2 - 0.12), 0.05, H - 0.02, H + 0.02, bz0 - 0.01, bz0 + 0.06, 0.01, () => VPart.Indicator, 1);
   // mirrors on arms
   for (const s of [1, -1]) {
     const z = zA + 0.25;
@@ -1623,13 +1634,80 @@ function buildTruck(variant: number, rng: Rng): Built {
   // steps
   for (const s of [1, -1]) rbox(g, s * (cabW / 2 - 0.12), 0.12, 0.62, 0.66, zCabR - 0.75, zCabR - 0.35, 0.01, () => VPart.Plastic, 1);
   addHandles(g, ctx, [zC - 0.6], 0.0);
-  return finishCar('truck', g, ctx, axles, 'steel', 7500, [-0.6, 1.45, zA + 0.75]);
+  const built = finishCar('truck', g, ctx, axles, 'steel', style === 'crane' ? 16000 : style === 'fire' ? 14000 : 7500, [-0.6, 1.45, zA + 0.75]);
+  if (style === 'crane') built.turret = { geo: craneCab(), pivot: [0, by0 + 0.12, (bz0 + bz1) / 2 + 0.6], gun: craneBoom(), gunPivot: CRANE_BOOM_PIVOT };
+  return built;
+}
+
+/** The crane's boom pivot (in the cab's frame) and length; the hook hangs from its tip. */
+export const CRANE_BOOM_PIVOT: [number, number, number] = [0, 1.55, 0.9];
+export const CRANE_BOOM_LEN = 15.5;
+
+/** A service truck's body behind the cab: fire engine, crane deck, flatbed. */
+function serviceBody(g: Geo, style: TruckStyle, W: number, cabH: number, by0: number, bz0: number, bz1: number, zA: number, zB: number): void {
+  if (style === 'fire') {
+    // Equipment body with roller-shutter lockers, a hose reel at the back, the ladder on top.
+    const top = cabH + 0.15;
+    rbox(g, 0, W / 2, by0, top, bz0, bz1, 0.06, (n) => (n[1] < -0.5 ? VPart.Undercarriage : VPart.Paint), 2);
+    const seg = (bz1 - bz0 - 0.5) / 3;
+    for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) {
+      const z0 = bz0 + 0.25 + k * seg, z1 = z0 + seg - 0.12;
+      rbox(g, sx * (W / 2 + 0.005), 0.012, by0 + 0.25, top - 0.25, z0, z1, 0.005, () => VPart.Chrome, 1);
+      rbox(g, sx * (W / 2 + 0.02), 0.012, by0 + 0.8, by0 + 0.86, z0 + 0.1, z0 + 0.35, 0.005, () => VPart.Plastic, 1);
+    }
+    for (const sx of [-1, 1]) rbox(g, sx * (W / 2 - 0.02), 0.03, by0 + 0.05, by0 + 0.18, bz0, bz1, 0.01, () => VPart.Indicator, 1);
+    tubeZ(g, [0, by0 + 0.75, bz1 + 0.12], 0.42, 0.22, 14, VPart.Plastic, VPart.Chrome, 1);
+    // Ladder: two rails with rungs, resting on the roof from the cab back.
+    for (const sx of [-1, 1]) rbox(g, sx * 0.48, 0.035, top + 0.1, top + 0.24, zA + 0.2, bz1 + 0.6, 0.01, () => VPart.Chrome, 1);
+    for (let z = zA + 0.35; z < bz1 + 0.5; z += 0.38) rbox(g, 0, 0.47, top + 0.15, top + 0.19, z, z + 0.04, 0.01, () => VPart.Chrome, 1);
+    // Light bars: over the cab and at the back.
+    for (const [zz, y0] of [[zB + 0.35, cabH - 0.02], [bz1 - 0.2, top]] as [number, number][]) {
+      rbox(g, 0, 0.8, y0, y0 + 0.12, zz - 0.15, zz + 0.15, 0.03, (n, c) => (n[1] < -0.5 ? VPart.Plastic : Math.abs(c[0]) < 0.1 && n[2] !== 0 ? VPart.Plastic : VPart.Lightbar));
+    }
+  } else if (style === 'crane') {
+    // A flat steel deck with the slewing ring; outriggers down at the corners; a counterweight.
+    rbox(g, 0, W / 2, by0, by0 + 0.12, bz0, bz1, 0.03, () => VPart.Undercarriage, 1);
+    for (const sx of [-1, 1]) for (const zz of [bz0 + 0.3, bz1 - 0.3]) {
+      rbox(g, sx * (W / 2 + 0.25), 0.3, by0 - 0.25, by0 + 0.05, zz - 0.18, zz + 0.18, 0.03, () => VPart.Paint, 1);
+      rbox(g, sx * (W / 2 + 0.5), 0.2, 0.0, by0 - 0.25, zz - 0.2, zz + 0.2, 0.03, () => VPart.Undercarriage, 1);
+      rbox(g, sx * (W / 2 + 0.5), 0.05, by0 - 0.24, by0 - 0.18, zz - 0.21, zz + 0.21, 0.01, () => VPart.Indicator, 1);
+    }
+    rbox(g, 0, W / 2 - 0.15, by0 + 0.12, by0 + 0.95, bz1 - 0.9, bz1 - 0.05, 0.08, () => VPart.Paint, 2);
+  } else {
+    // Flatbed: a deck, low drop sides, a headboard; amber beacons on the cab.
+    rbox(g, 0, W / 2, by0, by0 + 0.14, bz0, bz1, 0.03, () => VPart.Undercarriage, 1);
+    for (const sx of [-1, 1]) rbox(g, sx * (W / 2 - 0.04), 0.04, by0 + 0.14, by0 + 0.62, bz0 + 0.05, bz1 - 0.05, 0.02, () => VPart.Paint, 1);
+    rbox(g, 0, W / 2 - 0.04, by0 + 0.14, by0 + 1.1, bz0 + 0.02, bz0 + 0.1, 0.02, () => VPart.Paint, 1);
+    rbox(g, 0, W / 2 - 0.04, by0 + 0.14, by0 + 0.62, bz1 - 0.1, bz1 - 0.02, 0.02, () => VPart.Paint, 1);
+    for (const sx of [-1, 1]) rbox(g, sx * (W / 2 - 0.15), 0.08, cabH - 0.02, cabH + 0.08, zB + 0.25, zB + 0.45, 0.02, () => VPart.Indicator, 1);
+  }
+}
+
+/** The crane's slewing cab (an operator's window) on the deck; it turns about its centre. */
+function craneCab(): THREE.BufferGeometry {
+  const g = new Geo();
+  rbox(g, 0, 1.05, 0.0, 0.55, -1.3, 1.7, 0.06, () => VPart.Paint, 2);
+  rbox(g, 0.55, 0.42, 0.55, 2.1, -1.2, 0.2, 0.06, (n) => (n[2] < -0.5 || Math.abs(n[0]) > 0.5 ? VPart.Glass : VPart.Paint), 2);
+  rbox(g, -0.45, 0.5, 0.55, 1.75, 0.0, 1.6, 0.06, () => VPart.Paint, 2);
+  rbox(g, 0, 0.9, 0.55, 1.2, 1.1, 1.75, 0.06, () => VPart.Undercarriage, 1);
+  return finalize(g, 38);
+}
+
+/** The boom: a tapering box along −Z from the pivot, the sheave at the tip (it pitches up). */
+function craneBoom(): THREE.BufferGeometry {
+  const g = new Geo();
+  const L = CRANE_BOOM_LEN;
+  rbox(g, 0, 0.42, -0.4, 0.4, -L * 0.55, 0.6, 0.05, () => VPart.Paint, 2);
+  rbox(g, 0, 0.32, -0.3, 0.3, -L, -L * 0.5, 0.05, () => VPart.Paint, 2);
+  rbox(g, 0, 0.2, -0.42, 0.22, -L - 0.25, -L + 0.15, 0.04, () => VPart.Plastic, 1);
+  tubeZ(g, [0, -0.62, -2.2], 0.14, 4.2, 8, VPart.Chrome, VPart.Plastic, 1);
+  return finalize(g, 38);
 }
 
 // ---------------- delivery van (high-roof panel van); the police tactical (SWAT) van is one with a
 // light bar on the cab roof, a push bumper and running boards
 
-function buildDelivery(variant: number, rng: Rng, swat = false): Built {
+function buildDelivery(variant: number, rng: Rng, swat = false, ambulance = false): Built {
   const g = new Geo();
   const L = (variant === 1 ? 5.3 : variant === 2 ? 6.6 : 5.93) * (1 + rng.range(-0.01, 0.01)), W = 2.02;
   const H = variant === 1 ? 2.45 : variant === 3 ? 2.3 : 2.68;
@@ -1693,6 +1771,16 @@ function buildDelivery(variant: number, rng: Rng, swat = false): Built {
   addMirrors(g, ctx, lerp(zA, zB, 0.22), 1.35, 0.04);
   addHandles(g, ctx, [bZ - 0.2, slide0 + 0.12]);
   tubeZ(g, [0.5, yb + 0.05, zR - 0.25], 0.03, 0.25, 8, VPart.Chrome, VPart.Undercarriage, 1);
+  if (ambulance) {
+    // Light bars over the cab and at the back corners, a livery band along the sides, a rear step.
+    const zz = zB + 0.25, y0 = H - 0.01;
+    rbox(g, 0, 0.85, y0, y0 + 0.12, zz - 0.15, zz + 0.15, 0.03, (n, c) => (n[1] < -0.5 ? VPart.Plastic : Math.abs(c[0]) < 0.1 && n[2] !== 0 ? VPart.Plastic : VPart.Lightbar));
+    for (const sx of [-1, 1]) {
+      rbox(g, sx * (W / 2 - 0.12), 0.1, y0, y0 + 0.1, zR - 0.3, zR - 0.1, 0.02, (n) => (n[1] < -0.5 ? VPart.Plastic : VPart.Lightbar), 1);
+      rbox(g, sx * (W / 2 + 0.004), 0.008, 0.98, 1.22, zA + 0.35, zR - 0.08, 0.004, () => VPart.Livery, 1);
+    }
+    rbox(g, 0, 0.6, yb + 0.05, yb + 0.12, zR - 0.05, zR + 0.32, 0.02, () => VPart.Plastic, 1);
+  }
   if (swat) {
     // Light bar over the windscreen, a push bumper, running boards along both sides.
     const zz = zB + 0.25, y0 = H - 0.01;
@@ -1701,7 +1789,7 @@ function buildDelivery(variant: number, rng: Rng, swat = false): Built {
     for (const sx of [-1, 1]) rbox(g, sx * (W / 2 - 0.02), 0.08, yb + 0.12, yb + 0.17, zA + 0.2, zR - 0.9, 0.02, () => VPart.Plastic);
   }
   void za;
-  return finishCar(swat ? 'swat' : 'delivery', g, ctx, axles, variant === 0 || variant === 2 ? 'steel' : 'cap', swat ? 3600 : 2800, [-0.5, 0.9, zA + 0.72]);
+  return finishCar(swat ? 'swat' : ambulance ? 'ambulance' : 'delivery', g, ctx, axles, variant === 0 || variant === 2 ? 'steel' : 'cap', swat ? 3600 : ambulance ? 3400 : 2800, [-0.5, 0.9, zA + 0.72]);
 }
 
 // ---------------------------------------------------------------- model cache / API
@@ -1735,6 +1823,10 @@ export function vehicleModel(kind: VehicleKind, variant = 0): VehicleModel {
     case 'army_truck': b = buildArmyTruck(); break;
     case 'apc': b = buildApc(); break;
     case 'tank': b = buildTank(); break;
+    case 'ambulance': b = buildDelivery(v === 1 ? 0 : v, rng, false, true); break;
+    case 'firetruck': b = buildTruck(v === 1 ? 0 : v, rng, 'fire'); break;
+    case 'crane': b = buildTruck(0, rng, 'crane'); break;
+    case 'flatbed': b = buildTruck(v === 1 ? 1 : 0, rng, 'flat'); break;
     default: b = buildPassenger({ kind, variant: v, rng }); break;
   }
   const bb = b.body.boundingBox!;
@@ -2068,6 +2160,12 @@ export function paintColor(kind: VehicleKind, seed: number): [number, number, nu
   // Military: olive drab in a few shades (a desert-sand tank now and then).
   if (kind === 'army_truck' || kind === 'apc' || kind === 'tank') return kind === 'tank' && r.chance(0.25) ? hsl(0.1, 0.28, 0.42 + v(0.03)) : hsl(0.2 + v(0.02), 0.26 + v(0.04), 0.2 + v(0.025));
   if (kind === 'swat') return r.pick([[0.05, 0.055, 0.065], hsl(0.62, 0.45, 0.12)] as [number, number, number][]);
+  // City services: ambulances white (a navy livery band), fire engines red, cranes yellow, the
+  // cleanup flatbeds municipal orange.
+  if (kind === 'ambulance') return [0.94, 0.94, 0.92];
+  if (kind === 'firetruck') return hsl(0.0, 0.8, 0.38 + v(0.02));
+  if (kind === 'crane') return hsl(0.12, 0.9, 0.48 + v(0.02));
+  if (kind === 'flatbed') return hsl(0.07, 0.85, 0.48 + v(0.02));
   if (kind === 'shuttle') {
     // Operator liveries: white, warm grey, a few city-transit colours.
     return r.pick([[0.93, 0.93, 0.92], [0.93, 0.93, 0.92], [0.78, 0.77, 0.74], hsl(0.5, 0.45, 0.42), hsl(0.6, 0.45, 0.35)] as [number, number, number][]);

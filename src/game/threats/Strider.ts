@@ -42,6 +42,7 @@ import { DAMAGE_PER_IMPULSE } from './ThreatEvent';
 import type { Cause } from '../Stimuli';
 import type { BuildingRef } from '../../world/WorldIndex';
 import { angriestInReach } from '../response/forces/BattleModel';
+import { boneLayout } from './rig/skin';
 
 /** Its blows as the army's units feel them (response/forces): breath ticks, tail sweeps, footfalls, slams, roars, its fall. */
 export type StriderBlow = 'breath' | 'swipe' | 'step' | 'slam' | 'roar' | 'fall';
@@ -107,6 +108,9 @@ export const STRIDER_RIG: RigDef = {
   stride: 15, swing: 0.3, lift: 3.6,
 };
 
+/** The skin's bone layout of the Strider (the carcass cleanup cuts it up bone by bone). */
+export const CUT_LAYOUT = boneLayout(STRIDER_RIG);
+
 type Mode = 'emerge' | 'advance' | 'rampage' | 'retreat' | 'sink' | 'dying' | 'dead' | 'gone';
 type Act = null | 'roar' | 'charge' | 'breath' | 'swipe' | 'lean' | 'stagger' | 'swat';
 
@@ -168,6 +172,11 @@ export class Strider implements ThreatEvent, ThreatActor {
   readonly aggro = new Map<string, number>();
   /** Stage 3: called once when it is brought down (the body stays). */
   onDefeated: ((s: Strider) => void) | null = null;
+  /** The last resort's countdown is on (response level 5): it stays in downtown — no rampage or visit limit sends it home. */
+  stay = false;
+  /** A body lying in the city: when it came down (absolute game hours; −1 not yet) and the share carted away (the aftermath). */
+  downAt = -1;
+  cleared = 0;
   /** Things in the air it can swat besides drones (the army's helicopters). */
   airTargets: AirProvider[] = [];
   /** The army (response/forces): where a squad (an aggro key) stands now — its breath and roars go for them. */
@@ -397,7 +406,10 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.mode === 'advance' && this.s >= this.route.length - 12) { this.mode = 'rampage'; this.rampage = { ref: null, t: 0, done: new Set(), x: this.x, z: this.z }; }
     if (this.mode === 'rampage' && this.rampage) {
       const R = this.rampage;
-      if (R.t > STRIDER.rampageT || R.done.size >= 5) { this.startRetreat(); return; }
+      if (R.t > STRIDER.rampageT || R.done.size >= 5) {
+        if (!this.stay) { this.startRetreat(); return; }
+        R.t = 0; R.done.clear();
+      }
       if (!R.ref || !R.ref.alive) { R.ref = this.pickTower(R.done); if (R.ref) { const c = nearestOnPoly(R.ref.poly, this.x, this.z); R.x = c.x; R.z = c.z; } }
     }
     // Swat what flies near its head.
@@ -777,10 +789,10 @@ export class Strider implements ThreatEvent, ThreatActor {
    * STRIDER.visitMax.
    */
   private watch(dt: number): void {
-    if ((this.mode === 'advance' || this.mode === 'rampage') && this.t > STRIDER.visitMax) { this.startRetreat(); return; }
+    if ((this.mode === 'advance' || this.mode === 'rampage') && this.t > STRIDER.visitMax && !this.stay) { this.startRetreat(); return; }
     if (this.mode === 'rampage' && this.rampage) {
       this.rampage.t += dt;
-      if (this.rampage.t > STRIDER.rampageT + 30) { this.startRetreat(); return; }
+      if (this.rampage.t > STRIDER.rampageT + 30 && !this.stay) { this.startRetreat(); return; }
     }
     if (this.mode !== 'advance' && this.mode !== 'retreat') { this.watchT = 0; this.watchX = this.x; this.watchZ = this.z; return; }
     this.watchT += dt;
@@ -1184,6 +1196,14 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.dieT < 6) { this.dieT += dt; this.rig.update(dt, 0); }
   }
 
+  /** The last resort's strike: nothing is left of it (no body, no rewards). */
+  obliterate(): void {
+    if (this.mode === 'gone') return;
+    this.act = null;
+    this.stay = false;
+    this.finish('destroyed');
+  }
+
   private finish(o: ThreatOutcome): void {
     if (this.mode === 'gone') return;
     this.active = false;
@@ -1276,10 +1296,23 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.mode === 'gone') return;
     for (const c of this.rig.caps) {
       if (c.zone === 'tail' || c.zone === 'head') continue;
-      const mx = (c.ax + c.bx) / 2, mz = (c.az + c.bz) / 2, r = c.r * 0.9;
+      // A carcass being taken away: what has been cut off and carted away is no longer in the way.
+      const k = this.rig.cut ? this.cutOf(c.zone) : 1;
+      if (k < 0.3) continue;
+      const mx = (c.ax + c.bx) / 2, mz = (c.az + c.bz) / 2, r = c.r * 0.9 * k;
       if (mx + r < x0 || mx - r > x1 || mz + r < z0 || mz - r > z1) continue;
       out({ cyl: true, x: mx, z: mz, r, hx: 0, hz: 0, ux: 1, uz: 0, y0: Math.min(c.ay, c.by) - c.r, y1: Math.max(c.ay, c.by) + c.r });
     }
+  }
+
+  /** How much of a body zone is left while the carcass is cut up (1 whole; the smallest of its bones). */
+  private cutOf(zone: string): number {
+    const C = this.rig.cut!, L = CUT_LAYOUT;
+    if (zone === 'body') return Math.min(C[L.spine], C[L.spine + 1], C[L.spine + 2]);
+    if (zone === 'neck' || zone === 'throat') return Math.min(C[L.neck], C[L.neck + 1], C[L.neck + 2]);
+    const leg = STRIDER_RIG.legs.findIndex((d) => d.zone === zone);
+    if (leg >= 0) return Math.min(C[L.legs + leg * 3], C[L.legs + leg * 3 + 1]);
+    return 1;
   }
 
   private updateZones(): void {

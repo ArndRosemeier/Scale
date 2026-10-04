@@ -34,11 +34,13 @@ export interface MapMarker {
   z: number;
   /** CSS colour. */
   color: string;
-  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; pin: the player's own marker. */
-  kind: 'core' | 'alert' | 'dot' | 'pin';
+  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; pin: the player's own marker; zone: a ring of radius `r`. */
+  kind: 'core' | 'alert' | 'dot' | 'pin' | 'zone';
   title?: string;
-  /** The compass shows it at any distance (pinned to its edge when behind), with the distance. */
+  /** The compass shows it at any distance (pinned to its edge when behind), with the distance (a zone: to its edge — the way out from inside). */
   always?: boolean;
+  /** A zone's radius (m, world). */
+  r?: number;
 }
 
 const DISTRICT_LABEL: Record<string, string> = {
@@ -693,6 +695,17 @@ export class GameMap {
       for (const m of list) {
         let x = ox + m.x * s, y = oy + m.z * s;
         let edge = false;
+        if (m.kind === 'zone') {
+          // A zone: a dashed ring of its world radius (drawn even when its centre is off the view).
+          const R = (m.r ?? 0) * s;
+          g.save();
+          g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2);
+          g.fillStyle = m.color; g.globalAlpha = 0.12 + 0.06 * pulse; g.fill();
+          g.globalAlpha = 0.9; g.setLineDash([6, 5]); g.lineWidth = full ? 2.5 : 2; g.strokeStyle = m.color; g.stroke();
+          g.restore();
+          if (m.title && (!full || (x > -12 && y > -12 && x < W + 12 && y < H + 12))) hits.push({ x, y, t: m.title });
+          continue;
+        }
         if (!full) {
           const c = MINI_PX / 2, r = MINI_PX / 2 - 9;
           const dx = x - c, dy = y - c, d = Math.hypot(dx, dy);

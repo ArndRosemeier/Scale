@@ -23,7 +23,7 @@ import { cityOutfit } from '../../humanoid/client/wardrobe';
 import { hash32 } from '../../core/rng';
 import { pointInPoly } from '../../core/geom2';
 import { statusOf } from '../../shared/status';
-import { makeActor, attach, setState, tickActor, type ActorRole } from '../../sim/actors/Actor';
+import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, type ActorRole } from '../../sim/actors/Actor';
 import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
 import { Reputation } from '../Reputation';
@@ -485,9 +485,9 @@ export class CrimeSystem {
     for (const a of this.g.peds.agents) {
       const act = a.actor;
       if (!act) continue;
-      // (Soldiers have their own budget: response/forces.)
+      // (Soldiers and the aftermath's people have their own budgets: response/forces, game/aftermath.)
       const uniformed = act.role === 'police' || act.role === 'soldier';
-      if (act.role !== 'soldier') n++;
+      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER) n++;
       tickActor(act, dt);
       if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && uniformed))) {
         act.upT -= dt;

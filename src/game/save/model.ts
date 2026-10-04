@@ -11,7 +11,7 @@
  */
 import type { GameMode } from '../mode';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export type SaveKind = 'auto' | 'manual';
 
@@ -58,8 +58,11 @@ export interface SaveCamera { yaw: number; pitch: number; zoom: number }
 export interface SaveSky { day: number; hour: number; timeScale: number }
 export interface SaveWeather { setting: string; wet: number; skipH: number }
 
-/** A defeated monster's body lying in the city. */
-export interface SaveBody { kind: string; x: number; z: number; yaw: number; side: number; s: number }
+/**
+ * A defeated monster's body lying in the city: where, and since when (absolute game hours; −1:
+ * unknown, counted from the load) and how much of it the cleanup crews have carted away (0..1).
+ */
+export interface SaveBody { kind: string; x: number; z: number; yaw: number; side: number; s: number; downAt: number; cleared: number }
 /** A Strider on the move (resumed at its route position; the response back at its level — the army's units come in anew). */
 export interface SaveStrider { s: number; hp: number; mode: string; level?: number }
 
@@ -69,6 +72,26 @@ export interface SaveThreats {
   setting: string;
   remains: SaveBody[];
   strider: SaveStrider | null;
+}
+
+/**
+ * The aftermath of the city's incidents (src/game/aftermath): the casualty ledger, districts a
+ * last-resort strike levelled, smoke still rising, cordoned damage, memorials, the news on the
+ * screens. Times are absolute game hours (Sky.hoursAbs). A running countdown is not kept: the
+ * resumed monster brings the response back to level 4 at most, and level 5 comes again if due.
+ */
+export interface SaveAftermath {
+  ledger: { evacuated: number; injured: number; trapped: number; rescued: number; byPlayer: number };
+  /** Levelled districts: [x, z, r, when]. */
+  zones: [number, number, number, number][];
+  /** Smoke columns: [x, z, strength, until]. */
+  smoke: [number, number, number, number][];
+  /** Cordon tape round the worst damage: [x, z, r, until]. */
+  cordons: [number, number, number, number][];
+  /** Memorials (flowers, candles): [x, z, yaw, since]. */
+  memorials: [number, number, number, number][];
+  /** City news on the screens (a pictogram: 'lost' — the strike; 'saved' — called off; 'down' — the monster brought down) until when. */
+  news: { kind: string; until: number } | null;
 }
 
 /** One cell's damage: index sets (codec.encodeIndexSet) over its elements. */
@@ -115,6 +138,7 @@ export interface SaveData {
   waypoint: { x: number; z: number } | null;
   settings: { crime: string; events: string };
   damage: SaveDamage | null;
+  aftermath: SaveAftermath | null;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -132,6 +156,9 @@ const numRecord = (v: unknown): Record<string, number> => {
   return out;
 };
 const oneOf = <T extends string>(v: unknown, list: readonly T[], d: T): T => (list.includes(v as T) ? (v as T) : d);
+/** Rows of four finite numbers (zones, smoke, cordons, memorials), at most `max`. */
+const rows4 = (v: unknown, max: number): [number, number, number, number][] =>
+  (Array.isArray(v) ? v : []).filter((r): r is [number, number, number, number] => Array.isArray(r) && r.length >= 4 && r.slice(0, 4).every(Number.isFinite)).slice(0, max).map((r) => [r[0], r[1], r[2], r[3]]);
 
 export const CRIME_SETTINGS = ['off', 'calm', 'normal', 'chaos'] as const;
 export const EVENT_SETTINGS = ['off', 'rare', 'normal', 'frequent'] as const;
@@ -154,6 +181,9 @@ export const MIGRATIONS: Record<number, (o: Record<string, unknown>) => Record<s
       progress: o.progress ?? null,
     };
   },
+  // 1 → 2: the aftermath (casualty ledger, levelled districts, smoke, cordons, memorials, news) and
+  // the carcass cleanup per body; old saves start with none (a body lying there counts from the load).
+  1: (o) => ({ ...o, v: 2, aftermath: null }),
 };
 
 /** Upgrade a raw save object to the current version (throws on a save from a newer game). */
@@ -183,6 +213,7 @@ export function parseSave(input: string | unknown): SaveData {
   const w = o.weather ? obj(o.weather) : null;
   const wp = o.waypoint ? obj(o.waypoint) : null;
   const dmg = o.damage ? obj(o.damage) : null;
+  const aft = o.aftermath ? obj(o.aftermath) : null;
   return {
     v: SAVE_VERSION,
     id: str(o.id, ''),
@@ -210,6 +241,7 @@ export function parseSave(input: string | unknown): SaveData {
       setting: oneOf(thr.setting ?? set.events, EVENT_SETTINGS, 'normal'),
       remains: (Array.isArray(thr.remains) ? thr.remains : []).map(obj).filter((b) => Number.isFinite(b.x) && Number.isFinite(b.z)).slice(0, 8).map((b) => ({
         kind: str(b.kind, 'strider', 20), x: num(b.x, 0), z: num(b.z, 0), yaw: num(b.yaw, 0), side: num(b.side, 1) < 0 ? -1 : 1, s: num(b.s, 0, 0),
+        downAt: num(b.downAt, -1, -1), cleared: num(b.cleared, 0, 0, 1),
       })),
       strider: thr.strider ? (() => { const s = obj(thr.strider); return { s: num(s.s, 0, 0), hp: num(s.hp, 1, 0), mode: str(s.mode, 'advance', 20), ...(s.level !== undefined ? { level: Math.min(4, Math.round(num(s.level, 0, 0))) } : {}) }; })() : null,
     },
@@ -222,6 +254,15 @@ export function parseSave(input: string | unknown): SaveData {
       buildings: (Array.isArray(dmg.buildings) ? dmg.buildings : []).filter((b): b is [number, number, number] => Array.isArray(b) && b.length >= 3 && b.every(Number.isFinite)).map((b) => [b[0], b[1], b[2]]),
       mounds: (Array.isArray(dmg.mounds) ? dmg.mounds : []).filter((m): m is [number, number, number, number] => Array.isArray(m) && m.length >= 4 && m.every(Number.isFinite)).map((m) => [m[0], m[1], m[2], m[3]]),
     } : null,
+    aftermath: aft ? (() => {
+      const L = obj(aft.ledger), n = (v: unknown) => Math.floor(num(v, 0, 0));
+      const nw = aft.news ? obj(aft.news) : null;
+      return {
+        ledger: { evacuated: n(L.evacuated), injured: n(L.injured), trapped: n(L.trapped), rescued: n(L.rescued), byPlayer: n(L.byPlayer) },
+        zones: rows4(aft.zones, 8), smoke: rows4(aft.smoke, 48), cordons: rows4(aft.cordons, 16), memorials: rows4(aft.memorials, 8),
+        news: nw && typeof nw.kind === 'string' ? { kind: str(nw.kind, 'lost', 12), until: num(nw.until, 0) } : null,
+      };
+    })() : null,
   };
 }
 

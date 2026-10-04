@@ -122,7 +122,8 @@ export class Barks {
     }
   }
 
-  private say(a: PedAgent, text: string): void {
+  /** A short line over someone (where it can be seen; sparse — see the limits above). Also for the aftermath's people. */
+  say(a: PedAgent, text: string): void {
     if (this.gapT > 0 || this.shown.some((s) => s.a === a)) return;
     if (this.time < (this.quiet.get(a) ?? -Infinity)) return;
     // Only where it can be seen.

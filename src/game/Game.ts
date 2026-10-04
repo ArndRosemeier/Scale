@@ -83,6 +83,7 @@ import { CrimeSystem } from './crime/CrimeSystem';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { ResponseDirector } from './response/ResponseDirector';
 import { Forces } from './response/forces/Forces';
+import { Aftermath } from './aftermath/Aftermath';
 import { SaveSystem } from './save/SaveSystem';
 import type { SaveData } from './save/model';
 import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
@@ -156,6 +157,8 @@ export class Game {
   response!: ResponseDirector;
   /** The army: response levels 3 (National Guard) and 4 (army & air) against a major threat (response/forces). */
   forces!: Forces;
+  /** Consequences and the last resort (src/game/aftermath): casualty ledger, rescues and triage, the nuke countdown, smoke, the news feed, the carcass cleanup. */
+  aftermath!: Aftermath;
   /** Saves: autosave, named saves, loading (src/game/save). */
   saves!: SaveSystem;
   /** A save to put into the city once it has started (set before `start`, by main.ts). */
@@ -524,6 +527,7 @@ export class Game {
     this.T('crime', () => this.crime.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     this.T('army', () => this.forces.update(dt));
+    this.T('aftermath', () => this.aftermath.update(dt));
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
       this.rideFx(dt);
@@ -808,6 +812,7 @@ export class Game {
     this.response = new ResponseDirector(this);
     this.threats = new ThreatDirector(this);
     this.forces = new Forces(this);
+    this.aftermath = new Aftermath(this);
     // (Not when a save is loaded: the player has been here before.)
     if (!this.pendingSave) setTimeout(() => toast(normal
       ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
@@ -886,6 +891,8 @@ export class Game {
     if (this.freeCam) return null;
     const metro = this.underground.metroHint();
     if (metro) return metro;
+    const rescue = this.aftermath?.hint();
+    if (rescue) return rescue;
     const crime = this.crime?.hint();
     if (crime) return crime;
     const deed = this.deeds?.hint();
@@ -923,7 +930,7 @@ export class Game {
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
-    if (this.crime.use() || this.deeds.help()) { this.input.pressed.delete('KeyE'); return; }
+    if (this.aftermath.use() || this.crime.use() || this.deeds.help()) { this.input.pressed.delete('KeyE'); return; }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Sit down on a bench or café chair in reach, or get up again.
     if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }

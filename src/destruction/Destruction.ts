@@ -728,7 +728,7 @@ export class Destruction {
     c.done = true;
   }
 
-  private addMound(x: number, z: number, r: number, h: number): void {
+  private addMound(x: number, z: number, r: number, h: number, scatter?: number): void {
     const y = this.terrain.height(x, z);
     this.mounds.push({ x, z, r, h, y });
     const i = this.moundMesh.count;
@@ -738,7 +738,7 @@ export class Destruction {
     this.moundMesh.count = i + 1;
     this.moundMesh.instanceMatrix.needsUpdate = true;
     // Scatter static debris on the mound for texture.
-    for (let k = 0; k < Math.min(60, r * 4); k++) {
+    for (let k = 0; k < (scatter ?? Math.min(60, r * 4)); k++) {
       const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r * 0.95;
       const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
       const py = y + h * Math.sqrt(Math.max(0, 1 - (d / r) ** 2));
@@ -776,7 +776,8 @@ export class Destruction {
 
   /** Saves: a damaged building as it was (its storey slabs show through the holes; collapsed: gone / lower). */
   restoreBuilding(ref: BuildingRef, top: number | null): void {
-    this.ensureSlabs(ref);
+    // (Gone entirely: no slabs to show through holes.)
+    if (top === null || top >= 0) this.ensureSlabs(ref);
     if (top === null) return;
     if (top < 0) ref.alive = false;
     else ref.top = Math.min(ref.top, top);
@@ -785,10 +786,10 @@ export class Destruction {
     this.debris.groundChanged(x0 - 1, z0 - 1, x1 + 1, z1 + 1, ref.low - 1, ref.base + 400);
   }
 
-  /** Saves: a rubble mound back in place. */
-  restoreMound(x: number, z: number, r: number, h: number): void {
+  /** Saves (and a levelled district): a rubble mound back in place; `scatter`: loose rubble on it (default: by size). */
+  restoreMound(x: number, z: number, r: number, h: number, scatter?: number): void {
     if (this.mounds.some((m) => Math.abs(m.x - x) < 0.5 && Math.abs(m.z - z) < 0.5)) return;
-    this.addMound(x, z, r, h);
+    this.addMound(x, z, r, h, scatter);
   }
 
   /** Is a building (index) visible as damaged? */

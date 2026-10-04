@@ -992,6 +992,83 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   }
 }
 
+// ------------------------------------------------------------------ the aftermath (src/game/aftermath): casualty ledger, the last
+// resort's trigger and shock wave, the carcass cleanup schedule — pure rules
+{
+  console.log('aftermath: casualty ledger, last resort, shock wave, carcass removal');
+  const { CasualtyLedger, strikeCasualties } = await import('../src/game/aftermath/Casualties');
+  const { LAST_RESORT, lastResortDue, lastResortRoll, ShockWave, CARCASS, carcassStage, removalOrder, boneScales } = await import('../src/game/aftermath/rules');
+  const { STRIDER_RIG, CUT_LAYOUT } = await import('../src/game/threats/Strider');
+  // Ledger: a random run of events keeps the rules (never negative, the waiting only fall by a rescue, nobody counted dead).
+  const L = new CasualtyLedger();
+  let lr = 4242, bad = 0, digs = 0, treats = 0, mine = 0;
+  const lrnd = () => { lr = (lr * 1103515245 + 12345) & 0x7fffffff; return lr / 0x7fffffff; };
+  for (let i = 0; i < 4000; i++) {
+    const r = lrnd(), before = { ...L.c };
+    if (r < 0.2) L.injure(1 + Math.floor(lrnd() * 3));
+    else if (r < 0.35) L.trap(1);
+    else if (r < 0.4) L.evacuate(Math.floor(lrnd() * 40));
+    else if (r < 0.7) { const p = lrnd() < 0.5; if (L.dig(p)) { digs++; if (p) mine++; } }
+    else { const p = lrnd() < 0.3; if (L.treat(p)) { treats++; if (p) mine++; } }
+    const c = L.c;
+    if (c.injured < 0 || c.trapped < 0 || c.rescued < 0 || c.evacuated < before.evacuated || c.rescued < before.rescued) bad++;
+    if (c.trapped < before.trapped && c.rescued !== before.rescued + 1) bad++;
+    if (c.injured < before.injured && c.rescued !== before.rescued + 1) bad++;
+  }
+  check(bad === 0 && L.c.rescued === digs + treats && L.c.byPlayer === mine && !('dead' in L.c) && !('killed' in L.c), `casualty ledger: the rules hold over 4000 events (${JSON.stringify(L.c)}, ${bad} broken)`);
+  const waiting = L.c.injured + L.c.trapped, rescued0 = L.c.rescued;
+  check(L.settle() === waiting && L.c.injured === 0 && L.c.trapped === 0 && L.c.rescued === rescued0 + waiting && !L.dig(true) && !L.treat(true), 'casualty ledger: the crews settle everyone still waiting; nothing to dig or treat after');
+  const L2 = new CasualtyLedger();
+  L2.restore(JSON.parse(JSON.stringify(L.serialize())));
+  const L3 = new CasualtyLedger();
+  L3.restore({ evacuated: -3, injured: 2.9, trapped: 'x', rescued: Infinity, byPlayer: 4 });
+  check(JSON.stringify(L2.c) === JSON.stringify(L.c) && L3.c.evacuated === 0 && L3.c.injured === 2 && L3.c.trapped === 0 && L3.c.rescued === 0 && L3.c.byPlayer === 4, `casualty ledger: saved and restored (sanitised: ${JSON.stringify(L3.c)})`);
+  const sc = strikeCasualties(37);
+  check(sc.trapped + sc.injured === 37 && sc.trapped > 0 && sc.injured > 0 && Object.keys(sc).length === 2, `casualty ledger: people left in a struck district are trapped or injured, never dead (${JSON.stringify(sc)})`);
+  // The last resort: deterministic, only deep in the city with the army failing, rare and tunable.
+  const base = { major: true, level: 4, levelT: 90, strength: 0.7, downtown: true, progress: 1, broken: 2, lost: 3, roll: 0.1, setting: 'normal' as 'off' | 'rare' | 'normal' | 'frequent' };
+  const due = (o: Partial<typeof base> & { forced?: boolean }) => lastResortDue({ ...base, ...o });
+  check(due({}) && due({}) === due({}), 'last resort: due deep in the city with the army failing (deterministic)');
+  check(!due({ level: 3 }) && !due({ major: false }) && !due({ roll: 0.9 }) && !due({ strength: 0.3 }) && !due({ downtown: false, progress: 0.5 }) && !due({ broken: 0, lost: 0 }) && !due({ levelT: 20 }) && !due({ setting: 'off' }),
+    'last resort: not below level 4, not for a minor threat, not past the roll, not with the monster nearly beaten, not before it is deep in the city, not while the army holds, not before level 4 has fought a while, never with city events off');
+  check(due({ broken: 0, lost: 0, levelT: LAST_RESORT.timeout }) && due({ downtown: false, progress: LAST_RESORT.deep }) && due({ broken: 0, lost: LAST_RESORT.lost }), 'last resort: the army failing — lines broken, units lost or no result for too long');
+  check(due({ forced: true, roll: 0.99, strength: 0.1, downtown: false, progress: 0, broken: 0, lost: 0, levelT: 0 }) && !due({ forced: true, level: 3 }), 'last resort: dev can force it at level 4 (not below)');
+  let under = 0, same = 0;
+  for (let id = 1; id <= 2000; id++) { const r = lastResortRoll(42, id); if (r < LAST_RESORT.chance) under++; if (r === lastResortRoll(42, id)) same++; }
+  check(same === 2000 && Math.abs(under / 2000 - LAST_RESORT.chance) < 0.04 && !due({ roll: LAST_RESORT.chance * 0.6, setting: 'rare' }) && due({ roll: LAST_RESORT.chance * 1.2, setting: 'frequent' }),
+    `last resort: the roll is seeded per incident and comes up ~${Math.round(LAST_RESORT.chance * 100)} % (× the setting) (${(under / 20).toFixed(1)} %)`);
+  // The shock wave levels everything in range, nearest first, never more than its budget a frame, never before the front.
+  const dists: number[] = [];
+  for (let i = 0; i < 260; i++) dists.push(lrnd() * LAST_RESORT.radius);
+  const W = new ShockWave(dists);
+  let early = 0, over = 0, out = 0, last = -1, order = 0, t = 0;
+  while (!W.done && t < 60) { const got = W.step(1 / 60); t += 1 / 60; if (got.length > LAST_RESORT.perFrame) over++; for (const k of got) { out++; if (dists[k] > W.front + 1e-9) early++; if (dists[k] < last) order++; last = dists[k]; } }
+  const tMax = LAST_RESORT.radius / LAST_RESORT.shockSpeed + dists.length / LAST_RESORT.perFrame / 60 + 0.1;
+  check(out === dists.length && early === 0 && over === 0 && order === 0 && t <= tMax, `last resort: the shock wave levels all ${dists.length} buildings nearest first within the budget (${t.toFixed(2)} s ≤ ${tMax.toFixed(2)} s)`);
+  // The carcass: a landmark first, then carted away piece by piece, tail tip first, trunk last.
+  check(carcassStage(0).stage === 'landmark' && carcassStage(CARCASS.landmarkH - 0.01).removed === 0 && carcassStage(CARCASS.landmarkH + CARCASS.cleanupH / 2).stage === 'cleanup'
+    && Math.abs(carcassStage(CARCASS.landmarkH + CARCASS.cleanupH / 2).removed - 0.5) < 1e-9 && carcassStage(CARCASS.landmarkH + CARCASS.cleanupH).stage === 'gone', 'carcass: landmark, cleanup, gone on schedule');
+  let mono = true, prev = 0;
+  for (let h = 0; h < 20; h += 0.05) { const r = carcassStage(h).removed; if (r < prev) mono = false; prev = r; }
+  const ord = removalOrder(CUT_LAYOUT, { tail: STRIDER_RIG.tail.length, neck: STRIDER_RIG.neck.length, spine: STRIDER_RIG.spine.length, legs: STRIDER_RIG.legs.length });
+  const want = STRIDER_RIG.tail.length + 2 + STRIDER_RIG.neck.length + STRIDER_RIG.legs.length * 3 + STRIDER_RIG.spine.length;
+  check(mono && ord.length === want && new Set(ord).size === want && ord[0] === CUT_LAYOUT.tail + STRIDER_RIG.tail.length - 1 && ord[want - 1] === CUT_LAYOUT.spine && ord.every((b) => b > 0 && b < CUT_LAYOUT.count),
+    `carcass: ${want} pieces, every bone once, the tail tip first and the trunk last`);
+  const sA = new Float32Array(CUT_LAYOUT.count), sB = new Float32Array(CUT_LAYOUT.count);
+  let scaleBad = 0;
+  boneScales(0, ord, sA);
+  if (sA.some((v) => v !== 1)) scaleBad++;
+  for (let r = 0.01; r <= 1.0001; r += 0.01) {
+    boneScales(r, ord, sB);
+    let partial = 0;
+    for (let b = 0; b < sB.length; b++) { if (sB[b] > sA[b] + 1e-6) scaleBad++; if (sB[b] > 0 && sB[b] < 1) partial++; }
+    if (partial > 1) scaleBad++;
+    sA.set(sB);
+  }
+  boneScales(1, ord, sB);
+  check(scaleBad === 0 && ord.every((b) => sB[b] === 0) && sB[0] === 1, `carcass: pieces only ever shrink, one at a time, all gone at the end (${scaleBad} faults)`);
+}
+
 // ------------------------------------------------------------------ saves (src/game/save)
 {
   console.log('saves: model round trip, migrations, damage codec');
@@ -1008,17 +1085,33 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     justice: { heat: 3.2, wanted: 1, stats: { offences: 3, arrests: 0, turnIns: 1, escapes: 2 } },
     threats: {
       clock: { v: 1, played: 5400, pressure: 7300, n: 2, lastAt: 4100, lastP: 5000, last: 'robots', armedAt: null, omensDone: 0, karma: 320, majors: 0, lastMajorAt: 0, armedMajor: false },
-      setting: 'frequent', remains: [{ kind: 'strider', x: 410.5, z: -220.25, yaw: 0.75, side: -1, s: 812 }], strider: { s: 455.5, hp: 3800, mode: 'advance', level: 4 },
+      setting: 'frequent', remains: [{ kind: 'strider', x: 410.5, z: -220.25, yaw: 0.75, side: -1, s: 812, downAt: 98.25, cleared: 0.375 }], strider: { s: 455.5, hp: 3800, mode: 'advance', level: 4 },
     },
     waypoint: { x: -500, z: 260.5 },
     settings: { crime: 'chaos', events: 'frequent' },
     damage: { cells: [{ id: 17, n: 50000, dead: encodeIndexSet([5, 6, 7, 900]), glass: encodeIndexSet([12, 13]), slabs: encodeIndexSet([7]) }], buildings: [[17, 4, -1], [17, 9, 31.5]], mounds: [[401.25, -230.5, 14.5, 6.25]] },
+    aftermath: {
+      ledger: { evacuated: 1240, injured: 3, trapped: 2, rescued: 17, byPlayer: 6 },
+      zones: [[120.5, -64.25, 380, 96.5]], smoke: [[118, -60, 2.5, 120.25], [410, -221, 1, 104]], cordons: [[405.5, -218, 42, 106.5]],
+      memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
+    },
   };
   const back = parseSave(serializeSave(full));
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
-  check(keys(back) === keys(full) && keys(back.player) === keys(full.player) && keys(back.threats) === keys(full.threats), 'saves: all fields survive parsing');
+  check(keys(back) === keys(full) && keys(back.player) === keys(full.player) && keys(back.threats) === keys(full.threats) && keys(back.aftermath!) === keys(full.aftermath!) && keys(back.threats.remains[0]) === keys(full.threats.remains[0]), 'saves: all fields survive parsing');
+  // A version-1 save (before the aftermath): migrates with no aftermath; its bodies count from the load, nothing cleared.
+  const v1 = JSON.parse(serializeSave(full)) as Record<string, unknown>;
+  v1.v = 1; delete v1.aftermath;
+  for (const b of (v1.threats as { remains: Record<string, unknown>[] }).remains) { delete b.downAt; delete b.cleared; }
+  const up1 = parseSave(v1);
+  check(up1.v === SAVE_VERSION && up1.aftermath === null && up1.threats.remains[0].downAt === -1 && up1.threats.remains[0].cleared === 0,
+    `saves: a version-1 save migrates (aftermath ${JSON.stringify(up1.aftermath)}, body ${JSON.stringify(up1.threats.remains[0])})`);
+  // The aftermath is sanitised: garbage rows dropped, counts whole and ≥ 0, the level-5 countdown never comes back (level ≤ 4).
+  const junk = parseSave({ ...JSON.parse(serializeSave(full)), aftermath: { ledger: { evacuated: -5, injured: 'x', trapped: 2.7 }, zones: [[1, 2, 3], 'z', [1, 2, 3, NaN], [5, 6, 7, 8]], news: { kind: 7 } }, threats: { ...full.threats, strider: { s: 10, hp: 50, mode: 'rampage', level: 5 } } });
+  check(junk.aftermath!.ledger.evacuated === 0 && junk.aftermath!.ledger.injured === 0 && junk.aftermath!.ledger.trapped === 2 && junk.aftermath!.zones.length === 1 && junk.aftermath!.news === null && junk.aftermath!.smoke.length === 0 && junk.threats.strider!.level === 4,
+    `saves: the aftermath is sanitised (${JSON.stringify(junk.aftermath)}, level ${junk.threats.strider?.level})`);
   // Garbage and partial saves load with defaults (no throw), a city is required, newer versions are refused.
   const partial = parseSave({ v: 1, city: { seed: 7, size: 0.4 }, player: { x: 'nope', hp: 1e9 }, sky: { hour: 99 }, damage: { cells: [{ id: 'x' }, { id: 3, dead: 5 }], buildings: [[1, 2], [1, 2, 3]] } });
   check(partial.player.x === 0 && partial.sky.hour < 24 && partial.player.height === 1.8 && partial.mode === 'normal' && partial.damage!.cells.length === 1 && partial.damage!.cells[0].dead === '' && partial.damage!.buildings.length === 1,

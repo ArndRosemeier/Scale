@@ -2,6 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.013 — 2026-10-04
+
+- **Consequences of the giant creature's attacks**:
+  - **Rescues**: people can be trapped under fresh rubble — hold **E** to dig them out. Injured people stay down; **E** carries one over your shoulders to the medics' triage tent (ambulances, medics, cots). Karma for both.
+  - **Casualty count** under the compass during an incident: evacuated, injured, trapped, rescued. Nobody dies — people are injured or trapped.
+  - **Fire engines** put out burning facades.
+  - **Signs of it**: smoke columns you see from across the city, a live news-drone picture on billboards, people filming; afterwards cordons, a memorial with flowers and candles, news on the screens.
+  - **The carcass** of a defeated creature stays as a landmark for a few hours, then a crane crew cuts it up and trucks carry it away.
+- **The last resort**: if the army fails deep in the city, a countdown starts (sirens, the strike zone on the map, a timer on every screen). Drive the creature off in time — or the district is levelled for good. The city pays in karma and reputation.
+- **Lead the army** (with enough reputation): **R** — nearby squads follow you; **T** — call in a jet strike on your target.
+- Saves keep all of this (levelled districts, smoke, memorials, the carcass).
+
 ## 0.012 — 2026-10-04
 
 - **Fix**: delivery drones could hang over a door for good — two drones delivering to the same door pushed each other off the drop point. Only one drone delivers to a door at a time now, and a drone nudged off its spot still finishes.

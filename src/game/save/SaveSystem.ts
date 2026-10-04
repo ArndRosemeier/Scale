@@ -119,6 +119,7 @@ export class SaveSystem {
       waypoint: g.map.waypoint ? { x: r3(g.map.waypoint.x), z: r3(g.map.waypoint.z) } : null,
       settings: { crime: g.crime.setting, events: g.threats.setting },
       damage,
+      aftermath: g.aftermath ? g.aftermath.saveState() : null,
     };
   }
 
@@ -250,6 +251,7 @@ export class SaveSystem {
     step('settings', () => { g.crime.setting = d.settings.crime as typeof g.crime.setting; });
     step('the threats', () => g.threats.restoreState({ ...d.threats, setting: d.settings.events || d.threats.setting }));
     step('the city damage', () => { const n = this.damage.restore(d.damage); if (n) console.log(`[saves] damage restored in ${n} cells`); });
+    step('the aftermath', () => g.aftermath.restore(d.aftermath));
     step('the player', () => this.placePlayer(d.player));
     step('the camera', () => { g.camRig.yaw = d.camera.yaw; g.camRig.pitch = d.camera.pitch; g.camRig.zoom = d.camera.zoom; });
     step('health', () => {

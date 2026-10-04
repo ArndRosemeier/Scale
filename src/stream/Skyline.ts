@@ -23,6 +23,11 @@ export class Skyline {
   private maskData: Uint8Array;
   private maskW = 256;
   private mat: THREE.MeshStandardMaterial;
+  /**
+   * Levelled districts (the last resort's strike, src/game/aftermath): far buildings within z m of
+   * (x, y) are not drawn (w > 0: on). Up to four.
+   */
+  readonly ruins = [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()];
   private requested = false;
   private pendingJobs = 0;
   loaded = 0;
@@ -34,7 +39,7 @@ export class Skyline {
     this.maskData = new Uint8Array(this.maskW * h).fill(255);
     this.mask = new THREE.DataTexture(this.maskData, this.maskW, h, THREE.RedFormat, THREE.UnsignedByteType);
     this.mask.needsUpdate = true;
-    this.mat = skylineMaterial(arrays, this.mask, this.maskW);
+    this.mat = skylineMaterial(arrays, this.mask, this.maskW, this.ruins);
   }
 
   /** Request skyline records for all cells (nearest first) in the background. */
@@ -114,7 +119,7 @@ export class Skyline {
 
 const _up = new THREE.Vector3(0, 1, 0);
 
-function skylineMaterial(arrays: MaterialArrays, mask: THREE.Texture, maskW: number): THREE.MeshStandardMaterial {
+function skylineMaterial(arrays: MaterialArrays, mask: THREE.Texture, maskW: number, ruins: THREE.Vector4[]): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
   const uniforms = {
     uAlb: { value: arrays.albedo },
@@ -124,13 +129,14 @@ function skylineMaterial(arrays: MaterialArrays, mask: THREE.Texture, maskW: num
     uNight: G.uNight,
     uLitFrac: G.uLitFrac,
     uDayLight: G.uDayLight,
+    uRuin: { value: ruins },
   };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec4 iA; attribute vec4 iB;
-uniform sampler2D uMask; uniform int uMaskW;
+uniform sampler2D uMask; uniform int uMaskW; uniform vec4 uRuin[4];
 varying vec2 vFUv; varying vec4 vA; varying vec4 vB; varying vec3 vObjN; varying float vTop;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vec3 sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
@@ -140,7 +146,8 @@ vTop = step(0.5, normal.y);
 vFUv = abs(normal.x) > 0.5 ? vec2((position.z + 0.5) * sc.z, position.y * sc.y) : vec2((position.x + 0.5) * sc.x, position.y * sc.y);
 vA = iA; vB = iB;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
-{ int c = int(iA.w + 0.5); if (texelFetch(uMask, ivec2(c % uMaskW, c / uMaskW), 0).r < 0.5) gl_Position = vec4(0.0); }`);
+{ int c = int(iA.w + 0.5); if (texelFetch(uMask, ivec2(c % uMaskW, c / uMaskW), 0).r < 0.5) gl_Position = vec4(0.0); }
+{ vec2 ic = instanceMatrix[3].xz; for (int i = 0; i < 4; i++) if (uRuin[i].w > 0.5 && distance(ic, uRuin[i].xy) < uRuin[i].z) gl_Position = vec4(0.0); }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2DArray uAlb; uniform float uTile[24]; uniform float uNight; uniform float uLitFrac; uniform float uDayLight;
@@ -177,6 +184,6 @@ diffuseColor.rgb = col;`)
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = gMetal;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += gEmis;');
   };
-  mat.customProgramCacheKey = () => 'skyline-v1';
+  mat.customProgramCacheKey = () => 'skyline-v2';
   return mat;
 }

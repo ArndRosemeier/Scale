@@ -562,6 +562,17 @@ export class PropRenderer {
     }
   }
 
+  /**
+   * Gone without a fall (a district levelled by the last resort, src/game/aftermath): everything
+   * within r is broken at once — no falling bodies, no sounds. Returns how many.
+   */
+  flatten(x: number, z: number, r: number): number {
+    let n = 0;
+    this.near(x, z, r + 6, (p) => { if (!p.broken && Math.hypot(p.x - x, p.z - z) < r + p.radius) { p.broken = true; n++; } });
+    if (n) { this.dirty = true; this.farDirty = true; }
+    return n;
+  }
+
   onBreak?: (p: { x: number; y: number; z: number; tree: boolean }) => void;
 
   private topple(p: Prop, jx: number, jy: number, jz: number): void {

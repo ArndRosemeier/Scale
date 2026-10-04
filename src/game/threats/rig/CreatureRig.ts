@@ -100,6 +100,11 @@ export class CreatureRig {
   t = 0;
   /** No breathing or idle sway (the bind pose the skin is built around). */
   still = false;
+  /**
+   * A carcass being taken away (src/game/aftermath): per bone (the skin's layout) a scale, 1 whole …
+   * 0 cut off and carted away; the skin shrinks round the bone's joint. Null: whole.
+   */
+  cut: Float32Array | null = null;
   /** Ground height at a point (terrain / street, ignoring buildings). */
   ground: (x: number, z: number) => number = () => 0;
   /** A foot came down (leg index, where). */

@@ -293,7 +293,9 @@ constructs it, updates it, forwards strikes, and it listens to stimuli (stomp, c
   a giant's body knocks them down (Rapier, break on impact). One positional rotor-buzz loop.
 * **Signage** (`Signs`, art in `signArt`): LED fascias, blade signs and billboard screens placed per
   building from (seed, cell, building), attached to the wall elements behind them (they flicker when
-  hit and die when their wall breaks), plus holographic kiosks. One instanced quad mesh, own shader.
+  hit and die when their wall breaks), plus holographic kiosks. One instanced quad mesh, own shader; in an incident it
+  draws the red alert, the last resort's countdown, the live news feed (a sampler bound to a 1×1 texture until the feed
+  renders) and the news pictograms (src/game/aftermath) — no text, one program.
 * Robots and drones exist only near the player (≤ 150 delivery + 24 cleaning robots, ≤ 16 service
   robots, ≤ 60 drones), in the furniture material (instanced).
 * **Malfunctions** (`malfunction.ts`): a machine with `mal` set (glitching, hostile, shut down) is stepped by the
@@ -374,7 +376,8 @@ every frame) owns the parts and draws what belongs to them.
   water, at a height that does not match the ground) get no marker and leave after a few seconds.
 
 ### Threats and city response (`src/game/threats`, `src/game/response`)
-THREATS_PLAN Phase A ("Robot malfunction"), Phase B stage 1 (the Strider) and stage 2 (the army), PLAYGROUND_PLAN §0 decisions 15 and 19.
+THREATS_PLAN Phase A ("Robot malfunction"), Phase B stage 1 (the Strider), stage 2 (the army) and stage 3 (consequences and the
+last resort), PLAYGROUND_PLAN §0 decisions 2, 15 and 19.
 `ThreatDirector` (`game.threats`) and `ResponseDirector` (`game.response`) are built after the crime layer and updated
 every frame (`prof.threats`).
 * **Threat clock** (`ThreatClock`, pure, tested in `selftest.ts`): pressure = played time + karma earned × 6 s + the
@@ -561,10 +564,111 @@ every frame (`prof.threats`).
     drives it off / brings it down in 25–55 % (now ~46 %), units within the budgets.
   * **Saves**: the army is not kept; a resumed Strider brings the response back to its saved level (`SaveStrider.level`)
     and the units come in anew.
-  * Stage 3 / E hooks: `Forces.onOutcome` (the battle's end: outcome, whether the army did it, losses — for the aftermath,
-    triage, the nuke countdown at level 5), `rally(x, z)` and `airstrike(x, z)` (reputation unlocks, not wired to the
-    player), `hostilePlayer` (the army against a rampaging giant player with a very low reputation after a warning
-    sequence — not implemented: needs a ThreatEvent for the player and a target adapter instead of the Strider).
+  * Hooks: `Forces.onOutcome` (the battle's end: outcome, whether the army did it, losses), `withdraw()` (level 5: every unit
+    pulls out — convoys leaving, no more fire), `rally(x, z, r)` and `airstrike(x, z)` (wired to the player: the aftermath's
+    `Command`, below; a player's airstrike is its own squad `air-strike`, one run per call, attached to a monster the army
+    has not engaged yet), `hostilePlayer` (the army against a rampaging giant player with a very low reputation after a
+    warning sequence — not implemented: needs a ThreatEvent for the player and a target adapter instead of the Strider).
+* **Consequences and the last resort** (`src/game/aftermath`, `game.aftermath`, prof `aftermath`; Phase B stage 3, THREATS_PLAN
+  §2 "Casualties without gore", "Show, don't tell", "How the player helps", level 5; §3 aftermath). Built after the army.
+  * **Casualty ledger** (`Casualties.ts`, pure, tested): evacuated (the response's count) / injured / trapped / rescued (and
+    how many by the player) — never dead: `injure`, `trap`, `dig`, `treat`, `settle` (the crews look after everyone still
+    waiting); counts never go negative, the waiting only fall by a rescue. A small chip under the compass shows the four as
+    pictograms with numbers (hover: what they are) while a major incident and its aftermath last.
+  * **Rules** (`rules.ts`, pure, tested): `lastResortDue` (below), `ShockWave` (the strike's buildings by distance, ≤ 6 a
+    frame, never before the front), the carcass schedule (`carcassStage`, `removalOrder`, `boneScales`), how long smoke,
+    cordons, the memorial, the news and the EMS stay (`AFTERMATH`, in game hours).
+  * **Level 5 — the last resort** (`LastResort.ts`, `registerLevel(5)`): only for a major threat with the army failing deep
+    in the city — level 4 for ≥ 45 s, the monster at ≥ 45 % in downtown (its rampage) or ≥ 85 % along its route, the army's
+    lines broken (≥ 2 squads) or ≥ 6 units lost or level 4 for 150 s without a result — and a seeded roll per incident
+    (`lastResortRoll`: 45 % × the City events setting; off: never); `LAST_RESORT` holds every number. Countdown (180 s):
+    the district's evacuation siren falls silent and the attack warning (`nuke_siren`) wails over ground zero, the
+    evacuation widens to 1.6 × the strike radius (`Incident.tone`, `evacR`), cars in the zone are sent out of it (a few a
+    second), the army pulls out (`Forces.withdraw`), the monster stays in downtown (`Strider.stay`), every screen in the
+    city shows a hazard symbol and MM:SS (`Signs.countdown`), the map and minimap draw the strike zone's ring and the
+    compass points at its nearest edge with the distance (marker kind `zone`). Driven off or brought down in time: called
+    off — the attack siren winds down, an all-clear pictogram on the billboards, 150 karma and 15 reputation when the
+    player did most of it. At zero: a white flash (an overlay; `Weather.glare` on the sky and the light), the boom after
+    distance / 343 m/s (`blast_rumble`), a fireball (glow particles), a mushroom cloud (the smoke columns' mushroom mode,
+    growing over ~25 s), the monster gone (`Strider.obliterate`, outcome `destroyed`; a carcass in the zone goes too), the
+    shock wave levelling every building within 380 m by its distance (`Aftermath.level`: all its elements dead, the
+    building gone, a rubble mound for the bigger ones, street furniture flattened without falling bodies — ≤ 0.9 ms in any
+    frame), cars crushed as it passes, dust rolling out, a `tremor` stimulus far off. People still in the district are
+    counted trapped (40 %) or injured — never dead (`strikeCasualties`, plus a few per hectare who sheltered indoors); the
+    player inside 1.1 × the radius (not underground) is thrown down (a ragdoll), the view fades and they come round at the
+    ring's edge with a third of their health, at no karma cost. The city lost: −40 karma, −20 reputation, the news
+    pictogram for hours. The district stays levelled: `Aftermath.zones` (in saves), levelled again without effects as its
+    cells stream in (`streamer.onCellReady`), hidden in the far skyline (`Skyline.ruins`, a uniform), and the city damage
+    keeps its buildings and mounds. A running countdown is not kept in saves (the resumed monster brings the response back
+    to level 4 at most; level 5 comes again if due).
+  * **Rescues and triage** (`Rescues.ts`): new rubble mounds in a rescue area (a major incident's 650 m, a recent scene, a
+    struck district — whose trapped are planned by the strike instead) may hold one or two people (65 %): drawn within
+    220 m of the player (≤ 10; dust-covered, crouched at the foot of the mound with slabs over their legs, waving, a
+    muffled call `trapped_call` every few seconds, a "Help!" bark up close), abstract farther off. Hold E beside them
+    (3.5 s, faster with super strength): the dig action, dust, stones, `dig_rubble` — out they climb, thank the player and
+    walk off (12 karma, 1.5 reputation). Crews reach the rest 0.3–1.5 game hours after it is over. People the monster or a
+    collapse knocks down in a rescue area are injured: once they lie still they stay down (`RagdollSystem.keepDown`, an
+    actor that does not get up); E carries one across the shoulders (as the cat in SmallDeeds), E (or just arriving) at
+    the triage tent lays them on a cot (10 karma, 1 reputation), E elsewhere puts them down. The **triage tent** goes up at
+    level 2 of a major incident (and after a strike) in an open spot outside the cordon (no building within 7 m, dry,
+    flat, near a street, parks preferred): a white tent with the first-aid sign (a white cross on green), eight cots, two
+    ambulances with sirens (`ambulance_siren`) that park at the kerb with their light bars going, three paramedics in
+    high-vis who kneel by the cots and, one at a time, fetch someone lying out there (never near the monster or in a strike
+    zone counting down): they kneel beside them for 7 s, then walk them to a cot. The treated get a triage tag (their
+    clothes' trim red / yellow / green) and walk off after 40–90 s; the tent packs up 1.2 game hours after it is over.
+    Markers (layer `rescue`): the nearest six trapped (amber "!"), the injured (orange dots), the tent (a green diamond, on
+    the compass at any distance while carrying someone), tooltips saying what to do. ≤ 14 injured looked after near the
+    player (the rest are counted and cared for out of sight). Actors of the aftermath (owner `AFTERMATH_OWNER`, roles
+    `medic`, `worker`) have their own budget (not the crime layer's).
+  * **Fire engines** (`FireCrew.ts`): a facade burning within 420 m of the player and not by the monster: an engine comes
+    with its siren, parks in the street, two firefighters get out and hose it down (a water jet, `FacadeFires.douse`); with
+    nothing left burning they stand by 90 s and leave. ≤ 2.
+  * **Show, don't tell**: long-range **smoke columns** (`SmokeColumns.ts`): every collapse smokes for 3–8 game hours
+    (merged within 35 m), every burning facade sends up a dark column lit from below, a struck district smokes for a day;
+    ONE instanced billboard mesh (≤ 24 columns × 14 puffs + a 72-puff mushroom cloud), its own small shader (rise, drift
+    with the wind, growth and fade in the vertex shader; fog; puffs at the camera fade out), compiled in the warm-up — the
+    CPU only rewrites instances when a column changes. The **live news feed** (`NewsFeed.ts`, the Cloverfield trick): one
+    256 × 144 render target in the scene pass's HDR format (no new programs), ≤ 5 Hz, only while there is something to
+    film and a billboard within 420 m of the player: a news drone circling the monster above the roofs (after the strike
+    the cloud from 2.6 km; a carcass for its first hour); the picture leaves out people, cars, street furniture, signs,
+    birds, interiors, the underground and cells far from its subject, draws facades at the simple LOD, brings new cells
+    and terrain tiles in a few a picture, reuses the frame's shadow map and does not recompute matrices (~1.2 ms a
+    render). The billboards (slide-show screens) show it with scan lines, a blinking red dot and viewfinder corners;
+    afterwards most of them show the **news** as a pictogram — a mushroom cloud over a broken skyline (the city lost), a
+    check over the skyline (all clear), the monster lying before the skyline (brought down). During an incident people
+    near the player stop to point and film it (a few a second); at night their phones glow (a tiny glow at the hand).
+  * **The aftermath** (`Aftermath.ts`): per major incident a scene (where it raged, its worst damage = clusters of
+    collapses). When it is over: cordon tape on posts round the two worst clusters (barriers with blinking lamps where
+    streets cross the ring; a struck district: barriers on its streets only) for 10 game hours, a memorial on the
+    pavement nearby (at a struck district's edge) — flowers, candles lit at night, a few mourners now and then who pray or
+    bow — for two game days; the EMS packs up after 1.2 game hours, smoke lingers, the news shows for 8 game hours, people
+    come back (the alert lifts). `onReconstruct` (the damage clusters) is the hook for scaffolding and slow repair — not
+    built.
+  * **The carcass** (`Cleanup.ts`; THREATS_PLAN §5.4): a monster brought down lies where it fell (`ThreatDirector.remains`,
+    `Strider.downAt`) — a landmark for 5 game hours: barriers round it (42 m), people at the tape staring and filming, on
+    the news feed for its first hour. Then the city removes it over 6 game hours: a mobile crane (vehicle kind `crane`: its
+    cab and boom turn and lift as the model's turret and gun) parks in a street beside it clear of the body, a crew of
+    three in orange high-vis and white helmets cuts it up (saw / hammer actions) tail tip first, then the head and jaw, the
+    neck, the legs foot first, the trunk last (`removalOrder`); the piece being worked on shrinks out of the skin round its
+    joint (`CreatureRig.cut`, a per-bone scale applied in `CreatureMesh`), the crane lifts a chunk on its hook and swings it
+    over a flatbed (kind `flatbed`), which drives off with it while the next one arrives; parts cut away are no longer
+    obstacles. Gone: `ThreatDirector.removeRemains`. Far from the player only the schedule runs; the share carted away is
+    saved (`SaveBody.cleared`).
+  * **The player leading the army** (`Command.ts`): **R** with reputation ≥ 40 — the squads within 350 m gather on the
+    player and follow for 60 s (`Forces.rally` every 4 s; a soldier calls "On you!"); **T** with reputation ≥ 70 and a
+    giant creature as the Tab target — two jets roar in and bomb it (`Forces.airstrike`; held up to 20 s while the army's
+    jets are on a run), 150 s between calls. A refusal says why in one short line; the P screen and the help list the keys.
+  * Service vehicles: kinds `ambulance` (the delivery van with light bars and a livery band), `firetruck` (the truck's cab
+    with an equipment body, lockers, a roof ladder and light bars), `crane`, `flatbed` (props/vehicles.ts; light bars flash
+    on the scene); the aftermath's props (`props/aftermath.ts`: tent, sign, cot, barrier, tape and posts, bouquet, candle,
+    carcass chunk, hook and cable) are instanced in the shared vehicle material (`Props.ts`): no new programs, warmed at
+    start. Service vehicles park close to their spot when the street network does not run right past it (`park.ts`).
+  * Costs (desktop, seed 42, size 0.6; sum of `window.prof`, noisy ±1 ms): the aftermath section ~0.04 ms idle, ~0.15 ms
+    with the triage scene and the feed running (a feed render ~1.2 ms at 5 Hz), ~0.07 ms with a carcass being cut up
+    (crane, flatbeds, crew, 9 smoke columns, cordon, memorial); the triage scene ran at ~15.5 ms CPU / 59.5 fps, the
+    cleanup scene at ~15 ms / 59 fps; the 10 s after a strike averaged 16.8 ms a frame (p95 21 ms) against 60 fps before,
+    levelling ≤ 0.9 ms in any frame. Known: the feed's first picture of a place the main camera has not drawn yet costs one
+    frame of 50–90 ms (its meshes are uploaded in one go), once per incident.
 * Dev console: `dev.threat.spawn('robots', { dist, at, robots, bots, drones, duration })`, `dev.threat.spawn('strider',
   { from: 'river' })`, `dev.threat.strider.status() | roar(rear) | breathe() | swipe(side) | damage(zone, amount) |
   expose(zone) | die() | retreat() | skip(m) | route() | player(dist)`, `dev.threat.clock(seconds | { setting, played,
@@ -574,7 +678,11 @@ every frame (`prof.threats`).
   APC, airstrike, the no-player battle). Sounds: `tools/synthThreats.mjs` (civil siren, glitch, hostile),
   `tools/synthStrider.mjs` (footsteps, two-tone roar, breath charge, breath, tremor rumble, car alarm),
   `tools/synthArmy.mjs` (rifle bursts, autocannon, tank gun, rotor loop, jet flyby, rockets, explosions, bomb, a hit on
-  the hide, distant artillery, incoming whistle).
+  the hide, distant artillery, incoming whistle), `tools/synthAftermath.mjs` (the attack warning siren, a distant blast,
+  a trapped person's muffled call, digging, the ambulance's two-tone, a crane at work). The aftermath:
+  `dev.aftermath.status() | rescues() | fire() | trap() | injure(n) | triage() | smoke(strength, hours) | zone(r, x, z) |
+  carcass(hours) | cleanup() | news(kind) | settle() | log()`, `dev.lastResort.status() | force() | left(s) | enabled(on)`
+  (`dev.response.level(5)` climbs to the countdown too).
 
 ### Cafés, restaurants and terraces (`src/plan/eatery.ts`, `src/plan/terrace.ts`, `src/sim/Terraces.ts`)
 Part of the cell plan (pure, in the workers, checked in `selftest.ts`), lived in near the player.
@@ -739,6 +847,8 @@ as distance LOD).
   entrances, people needing help, crimes, small deeds, power cores — the map's marker layers)
   and the player's marker with its distance, pinned to the edge when behind.
 * A threat incident is a red alert marker shown on the compass at any distance (`always`).
+* Marker kind `zone` (a radius `r`): a dashed ring of that size on the map and minimap (the last resort's strike zone, a
+  levelled district); on the compass its nearest edge — from inside, the way out — with the distance.
 
 ### Saves (`src/game/save`, `src/ui/SaveUi.ts`)
 A session can be saved and continued: `game.saves` (`SaveSystem`), stored by `SaveStore`.
@@ -749,8 +859,11 @@ A session can be saved and continued: `game.saves` (`SaveSystem`), stored by `Sa
   underground / indoors), camera (yaw, pitch, zoom), sky (day, hour, time speed), weather (setting, wet streets, the
   schedule skip; read from `render/Weather` — a `serialize` / `restore` pair there would take over), Progress (karma,
   ranks, hotbar, cores, bonuses), reputation, justice (heat, wanted), the threat clock and its setting, the bodies of
-  defeated monsters (`ThreatDirector.remains`, laid back down settled) and a Strider on the move (resumed at its route
-  position and hit points), the map marker, the crime / city-event settings, and the city damage.
+  defeated monsters (`ThreatDirector.remains`, laid back down settled, with when they came down and the share carted
+  away) and a Strider on the move (resumed at its route position and hit points; the response at most at level 4), the map
+  marker, the crime / city-event settings, the city damage, and the aftermath (`SaveAftermath`, version 2: the casualty
+  ledger, levelled districts, smoke still rising, cordons, memorials, the news on the screens; migrated from version 1
+  with none).
 * **City damage** (`CityDamage.ts`, `codec.ts`): per damaged cell the dead elements (walls, roofs, slabs — not slabs
   only hidden by an open interior), shattered windows (not windows an interior opened) and broken slab tiles as
   index runs (gap + length varints, base64); collapsed buildings (gone, or the lower top of a partial collapse) and the
@@ -760,7 +873,9 @@ A session can be saved and continued: `game.saves` (`SaveSystem`), stored by `Sa
   ~6 KB of JSON; a save is ~1.4 KB without damage, gzip-compressed in IndexedDB, plus a ~6 KB JPEG thumbnail.
   Not kept: loose / settled debris, broken props and trees, wrecked cars, road craters.
 * **Not restored on purpose**: people, traffic, robots and drones (seed + clock), running crimes, small deeds, robot
-  malfunctions, omens and facade fires (they end with the session). Indoors the player is put on the street outside
+  malfunctions, omens and facade fires (they end with the session); a last-resort countdown; the trapped and injured
+  still waiting (the ledger settles them: looked after meanwhile), the triage tent and the cleanup crews (they come back
+  as needed). Indoors the player is put on the street outside
   (interiors open on approach); an underground spot is restored exactly when the tunnel / room is there; a street or
   roof spot when the ground under it matches, else `GameMap.placeSafely` (the map's safe-spot logic).
 * **Storage** (`SaveStore.ts`): IndexedDB `scale-saves` (`meta`: the list entries with name, city, mode, game day /

@@ -94,6 +94,10 @@ export interface Incident {
   waveT: number;
   closed: boolean;
   stats: { tasked: number; taskedAt: number[]; levelAt: number[]; evacuated: number; fled: number; sirens: number; strikes: number; roadblocks: number };
+  /** Level 5 (the last resort): another siren has taken over (the district's evacuation siren falls silent). */
+  tone?: string;
+  /** Level 5: the evacuation reaches this far (m) round the incident (the strike zone and beyond). */
+  evacR?: number;
 }
 
 let INC = 1;
@@ -117,7 +121,7 @@ export class ResponseDirector {
   private sheltered(ax: number, az: number, bx: number, bz: number): boolean {
     for (const inc of this.incidents) {
       if (inc.closed || inc.level < 1) continue;
-      const ev = inc.ev, R = this.radii(inc).sirenR;
+      const ev = inc.ev, R = Math.max(this.radii(inc).sirenR, inc.evacR ?? 0);
       if (Math.hypot(ax - ev.x, az - ev.z) < R || Math.hypot(bx - ev.x, bz - ev.z) < R) return true;
     }
     return false;
@@ -137,7 +141,7 @@ export class ResponseDirector {
     this.g.audio.loop('civil_siren')?.stop();
   }
 
-  /** Plug in a level above 2 (THREATS_PLAN §2: 3 National Guard, 4 army & air, 5 the last resort). */
+  /** Plug in a level above 2 (THREATS_PLAN §2: 3 National Guard, 4 army & air, 5 the last resort: src/game/aftermath). */
   registerLevel(level: number, h: LevelHandler): void { this.levels.set(level, h); }
 
   /** The highest level there is (2 built in, more when registered in a row). */
@@ -392,8 +396,9 @@ export class ResponseDirector {
   private perimeter(inc: Incident, dt: number): void {
     const g = this.g, ev = inc.ev;
     const on = inc.level >= 1 && !inc.closed;
-    // Civil-defence siren over the district (a slow rising and falling wail).
-    inc.sirenGain += ((on ? 1 : 0) - inc.sirenGain) * Math.min(1, dt * (on ? 0.6 : 0.35));
+    // Civil-defence siren over the district (a slow rising and falling wail; silent while level 5's attack warning sounds).
+    const voice = on && !inc.tone ? 1 : 0;
+    inc.sirenGain += (voice - inc.sirenGain) * Math.min(1, dt * (voice ? 0.6 : 0.35));
     const R = this.radii(inc);
     if (on && !inc.siren) inc.siren = g.audio.loop('civil_siren', inc.ev.tier === 'major' ? 60 : 32);
     if (inc.siren) {
@@ -407,7 +412,7 @@ export class ResponseDirector {
     inc.sirenT -= dt;
     if (inc.sirenT <= 0) {
       inc.sirenT = 2;
-      g.stimuli.emit('siren', ev.x, g.terrain.height(ev.x, ev.z) + 10, ev.z, 4, R.sirenR, { evac: true, cause: 'police' });
+      g.stimuli.emit('siren', ev.x, g.terrain.height(ev.x, ev.z) + 10, ev.z, 4, Math.max(R.sirenR, inc.evacR ?? 0), { evac: true, cause: 'police' });
       inc.stats.sirens++;
     }
     // Traffic inside the cordon turns round or is left standing.
@@ -415,7 +420,7 @@ export class ResponseDirector {
     if (this.carT <= 0) {
       this.carT = 1;
       for (const v of g.traffic.vehicles) {
-        if (v.state !== VState.Drive || v.task || v.siren || v.kind === 'police' || v.kind === 'swat' || v.kind === 'bus') continue;
+        if (v.state !== VState.Drive || v.task || v.siren || v.kind === 'police' || v.kind === 'swat' || v.kind === 'bus' || v.kind === 'ambulance' || v.kind === 'firetruck') continue;
         if (Math.hypot(v.x - ev.x, v.z - ev.z) < R.cordonR * 0.9) v.fear = Math.max(v.fear, 0.95);
       }
     }

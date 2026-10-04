@@ -22,7 +22,8 @@ import type { Obstacle, ObstacleProvider } from '../world/Collision';
 import { statusOf } from '../shared/status';
 
 export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle' | 'swat'
-  | 'army_truck' | 'apc' | 'tank';
+  | 'army_truck' | 'apc' | 'tank'
+  | 'ambulance' | 'firetruck' | 'crane' | 'flatbed';
 
 /** Military vehicles (the army's, response/forces): one model each, never in ordinary traffic. */
 export function isMilitary(kind: VKind): boolean { return kind === 'army_truck' || kind === 'apc' || kind === 'tank'; }
@@ -103,6 +104,7 @@ const DIMS: Record<VKind, [number, number]> = {
   sedan: [4.7, 1.85], hatch: [4.1, 1.78], wagon: [4.8, 1.85], suv: [4.8, 1.95], van: [5.2, 2.0], pickup: [5.4, 2.0],
   taxi: [4.8, 1.85], police: [4.9, 1.9], sports: [4.4, 1.9], bus: [12, 2.55], truck: [8, 2.5], delivery: [6, 2.2], shuttle: [5.0, 2.06], swat: [6, 2.2],
   army_truck: [9.1, 2.5], apc: [7.8, 2.9], tank: [7.6, 3.8],
+  ambulance: [6, 2.2], firetruck: [8.2, 2.5], crane: [8.2, 2.5], flatbed: [8.2, 2.5],
 };
 
 export class Traffic {
@@ -289,7 +291,7 @@ export class Traffic {
       const s = this.rng.range(jb + 6, e.len - jb - 6);
       // Near future: a few driverless shuttles among the cars (main roads mostly).
       const kind = this.rng.weighted<VKind>(['sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle'],
-        (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: 1.2, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4, shuttle: e.cls <= 1 ? 7 : 3, swat: 0, army_truck: 0, apc: 0, tank: 0 }[k2]));
+        (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: 1.2, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4, shuttle: e.cls <= 1 ? 7 : 3, swat: 0, army_truck: 0, apc: 0, tank: 0, ambulance: 0, firetruck: 0, crane: 0, flatbed: 0 }[k2]));
       const v = this.makeVehicle(kind, ei, fwd, s, null);
       // Not on top of another car (on the lane it really got).
       if (!this.clearAt(v, 8)) continue;

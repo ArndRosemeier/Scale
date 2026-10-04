@@ -10,8 +10,11 @@
  */
 import type { Cause } from '../Stimuli';
 
-/** stopped: beaten by force · defeated: a monster brought down (its body stays) · retreated: driven off. */
-export type ThreatOutcome = 'stopped' | 'shutdown' | 'abandoned' | 'defeated' | 'retreated';
+/**
+ * stopped: beaten by force · defeated: a monster brought down (its body stays) · retreated: driven off ·
+ * destroyed: the last resort's strike (nothing is left of it).
+ */
+export type ThreatOutcome = 'stopped' | 'shutdown' | 'abandoned' | 'defeated' | 'retreated' | 'destroyed';
 
 /** A body zone of a threat actor: armour, weak spot, where it is now. */
 export interface ThreatZone {

@@ -175,7 +175,7 @@ export class VehicleRenderer {
       this.m4.compose(this.p, this.q, this.s);
       b.body.setMatrixAt(k, this.m4);
       b.paint.setXYZ(k, v.paint[0], v.paint[1], v.paint[2]);
-      const blue = v.kind === 'police' || v.kind === 'swat';
+      const blue = v.kind === 'police' || v.kind === 'swat' || v.kind === 'ambulance' || v.kind === 'firetruck';
       if (b.turret && b.gun && k < TURRET_CAP) this.turret(b, k, v);
       // Parked cars stand dark at night (nobody in them); traffic and police drive with lights.
       const head = v.state === VState.Abandoned || crushed || parkedCar ? 0 : Math.max(lamps, blue ? 0.3 : 0);

@@ -104,6 +104,7 @@ interface Slot { mesh: THREE.SkinnedMesh; skeleton: THREE.Skeleton }
 interface Kind { def: RigDef; L: BoneLayout; geo: THREE.BufferGeometry; bindInv: THREE.Matrix4[]; slots: Slot[]; used: number }
 
 const _f = new THREE.Matrix4();
+const _s = new THREE.Matrix4();
 
 export class CreatureMesh {
   readonly group = new THREE.Group();
@@ -180,7 +181,7 @@ export class CreatureMesh {
     const slot = K.slots[K.used++];
     const F = this.frames;
     rig.boneFrames(F, K.L);
-    this.pose(K, slot, F, rig.ridge, rig.throat, rig.eyes, rig.wet);
+    this.pose(K, slot, F, rig.ridge, rig.throat, rig.eyes, rig.wet, rig.cut);
     // Cull against the body's capsules (the posed skin stays within them plus the plates and horns).
     const C = rig.caps;
     let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
@@ -214,10 +215,14 @@ export class CreatureMesh {
     slot.mesh.boundingSphere!.radius = 1;
   }
 
-  private pose(K: Kind, slot: Slot, F: Float32Array, ridge: number, throat: number, eyes: number, wet: number): void {
+  private pose(K: Kind, slot: Slot, F: Float32Array, ridge: number, throat: number, eyes: number, wet: number, cut: Float32Array | null): void {
     const M = slot.skeleton.boneMatrices!;
     for (let b = 1; b < K.L.count; b++) {
-      _f.fromArray(F, b * 16).multiply(K.bindInv[b]);
+      _f.fromArray(F, b * 16);
+      // A carcass being cut up: the bone's part of the skin shrinks round its joint (never quite to 0).
+      const c = cut ? cut[b] : 1;
+      if (c < 1) { const k = Math.max(1e-3, c); _f.multiply(_s.makeScale(k, k, k)); }
+      _f.multiply(K.bindInv[b]);
       _f.toArray(M, b * 16);
     }
     M.fill(0, 0, 16);

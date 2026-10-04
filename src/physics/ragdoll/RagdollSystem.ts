@@ -235,6 +235,14 @@ export class RagdollSystem {
     if (e.phase === Phase.Lying) this.startGetUp(e);
   }
 
+  /** Keep a lying target down for good (someone injured, waiting for care): no getting up after the lie. */
+  keepDown(target: RagTarget): void {
+    const e = this.byTarget.get(target);
+    if (!e) return;
+    e.stayDown = true;
+    if (e.phase === Phase.Lying && e.ped) e.ped.ragdoll = false;
+  }
+
   /** Drop the ragdoll at once (the target is removed or teleported). */
   release(target: RagTarget): void {
     const e = this.byTarget.get(target);
