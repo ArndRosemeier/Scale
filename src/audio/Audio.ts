@@ -27,7 +27,7 @@ export const SOUND_CATEGORIES: { id: SoundCategory; name: string }[] = [
 ];
 const CATEGORY_RULES: [RegExp, SoundCategory][] = [
   [/^(siren_|civil_siren|alarm_bell|car_alarm)/, 'alarms'],
-  [/^(scream_|cry_|shout_|crowd_|terrace_murmur|amb_crowd)/, 'voices'],
+  [/^(scream_|cry_|shout_|crowd_|terrace_murmur|amb_crowd|street_)/, 'voices'],
   [/^(amb_|thunder_|under_|deep_|heart_pulse)/, 'ambience'],
   [/^(strider_|robot_|tremor_|step_giant|murk_|maw_)/, 'monsters'],
   [/^(car_|bus_|tire_|metro_|drone_)/, 'traffic'],

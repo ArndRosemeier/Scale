@@ -724,6 +724,45 @@ Part of the cell plan (pure, in the workers, checked in `selftest.ts`), lived in
   Awnings fall when the wall behind them breaks. Ambience: one positional loop `terrace_murmur` at the
   nearest busy terrace (`tools/synthTerrace.mjs`). ≈ 0.02 ms/frame.
 
+### Street characters (`src/game/street`)
+Eccentric people who make the streets feel lived in, near the player only. Twelve kinds: a doomsayer in a
+sandwich board ("THE END IS NIGH", finger to the sky, hints at the falling star, giants from the river and
+things glowing under the drains), a busker (guitar slung across the chest, open guitar case collecting
+coins, a positional guitar loop), a living statue (silver or gold: body paint on skin, hair and clothes; frozen
+in a pose until someone comes close — BOO!), a mime in an invisible box (white face, stripes), a juggler
+(three balls in a cascade over the rig's hands, now and then one gets away and is fetched), street dancers
+(headphones; on plazas and in parks sometimes a crew of three round a boombox with a beat loop), a chicken
+mascot handing out flyers for a real café nearby, a conspiracy theorist (tinfoil hat, "BIRDS AREN'T REAL"
+board, pacing), the pigeon lady (feeds pigeons that fly in: `Birds.feed`), a sleepwalker in pyjamas at
+night, a lost tourist with a huge map asking the way to a real station or café, a neon jogger doing laps.
+* **Cast** (`cast.ts`, pure, checked in `selftest.ts`): `streetSites(plan)` finds spots per cell — on plazas,
+  on small park lawns / beside park paths, next to metro entrances, on wide sidewalks between the walking
+  corridor and the facades — clear of the walking lines, carriageways, doors, footprints and furniture (the
+  rules of `plan/terrace.ts`). `streetCast(seed, site, district, hoursAbs)` rolls per site and 1.5 h slot
+  whether someone is there and who (by site kind, district liveliness, the kind's hours: busker 10–23,
+  sleepwalker 0:30–4:30, jogger morning and evening …). Same seed + site + slot → same character.
+* **Life** (`StreetLife.ts`, `game.street`): within 120 m the nearest cast site comes alive (one a second,
+  at most 8 characters, no two of a kind within 100 m, none underground): a synthetic citizen fitting the
+  part (`costume.ts`: wardrobe garments plus `humanoid/client/streetwear.ts` pieces — tinfoil hat, chicken
+  head, headphones, nightcap, sweatband, sandwich board with a canvas text, guitar, city map, flyer) walks in
+  from a door down the street when the spot is in view, else is simply there; sets up (`gear.ts`: guitar
+  case, hat with coins, boombox, balls), performs with looping actions (`anim/actions.ts`: play_guitar,
+  preach, mime_box, juggle, statue_salute / statue_thinker, feed_birds, sleepwalk, read_map, offer; dance),
+  and packs up and walks off at the end of the slot (after at least 75 s) or in the rain (not the rainproof).
+  Body paint goes through `CrowdRenderer.appearance`; the target frame shows their title (`Actor.title`).
+* **Crowd and talk**: performers draw a few curious passers-by (they stop and watch: `PState.Gawk`) who drop a
+  coin as they leave now and then (`street_coin`); the juggler bows to applause. Lines (`lines.ts`) go through
+  `Barks.say` with a per-character pause: their own patter, and for the player — flying past, a giant, tiny,
+  wanted, a hero or a menace by reputation, a first hello up close; `{place}` is a real name nearby.
+* **Danger**: performers are actors (`STREET_OWNER`, own budget; the crime layer and Reactions leave them be).
+  A blast, collapse, roar, threat, gunfire, a close power or crash, a giant's stomp, a giant player, or any
+  hit ends the act at once: they say a line and become ordinary pedestrians fleeing (Reactions takes over,
+  knock-downs included); their things stay on the pavement for 45 s; nobody new sets up for 60 s. A
+  civil-defence siren sends them off with everyone else.
+* Cost: sites planned once per loaded cell (one cell a second), a few characters stepped per frame, no lights.
+  Sounds: `tools/synthStreet.mjs` (guitar loop, boombox beat, coin). Dev: `dev.street.spawn(kind, dist)`,
+  `.list()`, `.sites()`, `.clear()`, `.stats()`; admin console section "Street life".
+
 ### Birds (`src/fauna`)
 `Birds` (constructed, updated and sent strikes by the game; it listens to stimuli itself) keeps at most 300 birds,
 only around the camera, in one instanced mesh (`birdMesh.ts`: 26 triangles, wing flap and fold in the vertex
@@ -973,4 +1012,5 @@ src/underground metro, sewers, trains, side rooms, hidden colonies, their slimes
 src/humanoid   Norgo human pipeline (bodies, animator) plus modern clothing
 src/audio      audio engine
 src/ui         HUD, menu, map
+src/game/street street characters: sites and cast (pure), performers, costumes, their lines
 ```

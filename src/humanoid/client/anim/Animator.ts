@@ -1335,6 +1335,8 @@ export class Animator {
     if (def && inp.main === 'none' && (def === ACTIONS.punch || def === ACTIONS.block)) { cR = 1.5; cL = 1.5; }
     if (def === ACTIONS.gesture_wave || def === ACTIONS.cast_forward || def === ACTIONS.channel) cR = 0.1;
     if (def === ACTIONS.gesture_point) cR = 1.3;
+    // A mime's palms flat on the glass.
+    if (def === ACTIONS.mime_box) { cR = 0.05; cL = 0.05; }
     // Flight: fists ahead, relaxed hands otherwise (empty hands only).
     const fw = inp.anim.move === 'fly' ? this.famW.get('glide')! : 0;
     if (fw > 0.01 && inp.main === 'none') cR += (this.flyCurl.R - cR) * fw;

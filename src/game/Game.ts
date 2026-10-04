@@ -84,6 +84,7 @@ import { PowerSynth } from '../audio/PowerSynth';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { CrimeSystem } from './crime/CrimeSystem';
+import { StreetLife } from './street/StreetLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
 import { ResponseDirector } from './response/ResponseDirector';
@@ -161,6 +162,8 @@ export class Game {
   synth!: PowerSynth;
   /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
   crime!: CrimeSystem;
+  /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
+  street: StreetLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
   threats!: ThreatDirector;
   /** The slime civilisation under the city: the Lumen and the Murk, their war, the Lumen's trust. */
@@ -536,6 +539,7 @@ export class Game {
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
+    this.T('street', () => this.street?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
     this.T('army', () => this.forces.update(dt));
@@ -837,6 +841,7 @@ export class Game {
     this.threats = new ThreatDirector(this);
     this.forces = new Forces(this);
     this.aftermath = new Aftermath(this);
+    this.street = new StreetLife(this);
     this.slimeRealm = new SlimeRealm(this);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)

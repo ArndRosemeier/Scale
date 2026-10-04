@@ -935,5 +935,29 @@
     "loop": false,
     "gain": 0.5,
     "description": "a wobbling, stretching membrane parting (procedural, tools/synthDeep.mjs)"
+  },
+  "street_guitar": {
+    "files": [
+      "street_guitar.wav"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "a busker's acoustic guitar, strummed chords (procedural loop, tools/synthStreet.mjs)"
+  },
+  "street_beat": {
+    "files": [
+      "street_beat.wav"
+    ],
+    "loop": true,
+    "gain": 0.5,
+    "description": "a boombox playing a boom-bap beat, small-speaker lo-fi (procedural loop, tools/synthStreet.mjs)"
+  },
+  "street_coin": {
+    "files": [
+      "street_coin.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a coin dropped into a hat or guitar case (procedural, tools/synthStreet.mjs)"
   }
 }

@@ -1,6 +1,6 @@
 /**
  * Hidden admin console (Ctrl+Shift+F12): buttons for the things worth trying out — spawn the
- * Strider or a robot malfunction, set the city response level, start crimes and small deeds,
+ * Strider or a robot malfunction, set the city response level, start crimes and small deeds, call up street characters,
  * karma, health, size, time of day, the slime colonies — and a command line that runs any
  * JavaScript with `game` and `dev` in scope (Up / Down for history).
  *
@@ -169,6 +169,12 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Lost wallet', run: (_g, d) => call(d, 'deed', 'wallet') },
     { label: 'Wanted 3', run: (_g, d) => call(d, 'wanted', 3) },
     { label: 'Wanted 0', run: (_g, d) => call(d, 'wanted', 0) },
+  ]],
+  ['Street life', [
+    ...(['preacher', 'busker', 'statue', 'mime', 'juggler', 'dancer', 'mascot', 'conspiracy', 'pigeons', 'sleepwalker', 'tourist', 'jogger'] as const).map((k) => ({ label: k[0].toUpperCase() + k.slice(1), run: (_g: Game, d: Dev) => call(d, 'street.spawn', k, 7) })),
+    { label: 'Who is about', run: (_g, d) => call(d, 'street.list') },
+    { label: 'Sites near', run: (_g, d) => call(d, 'street.sites') },
+    { label: 'Clear', run: (_g, d) => call(d, 'street.clear') },
   ]],
   ['Player', [
     { label: '+100 karma', run: (g) => { g.progress.addKarma(100, 'admin'); return g.progress.sandbox ? 'sandbox has no karma' : g.progress.karma; } },

@@ -252,6 +252,45 @@ export class Birds {
     S.ms = S.ms * 0.95 + (performance.now() - t0) * 0.05;
   }
 
+  /**
+   * Pigeons flying in to be fed at (x, z) (game/street: the pigeon lady): a new street group whose
+   * birds come down from the roofs around and land in a patch of radius r. Returns how many came.
+   */
+  feed(x: number, z: number, r = 1.6, n = 10): number {
+    if (this.free.length < n + 20 || this.night > 0.6) return 0;
+    const y = this.groundSpot(x, z);
+    const gi = this.freeGroup();
+    if (!Number.isFinite(y) || gi < 0) return 0;
+    const g = this.groups[gi];
+    // Already flushed and calm: the members circle in and land as soon as their air time is up.
+    g.on = true; g.sp = Sp.Pigeon; g.x = x; g.y = y; g.z = z; g.r = r;
+    g.roof = false; g.flushed = true; g.calm = 3; g.checkT = 0.5; g.cooT = 4;
+    g.cx = x; g.cy = y + 6; g.cz = z;
+    g.members.length = 0;
+    const S = SPECIES[Sp.Pigeon];
+    for (let j = 0; j < n; j++) {
+      const b = this.alloc(Sp.Pigeon, Mode.Air);
+      if (!b) break;
+      b.g = gi;
+      const a = Math.random() * Math.PI * 2, d = 18 + Math.random() * 22;
+      b.x = x + Math.cos(a) * d; b.z = z + Math.sin(a) * d; b.y = y + 9 + Math.random() * 8;
+      b.vx = -Math.cos(a) * 4; b.vz = -Math.sin(a) * 4; b.vy = 0;
+      b.yaw = Math.atan2(b.vx, b.vz);
+      b.t = 0.8 + Math.random() * 2.5;
+      b.fold = 0; b.amp = 0.9; b.hz = S.hz;
+      b.ox = Math.random();
+      g.members.push(b.id);
+    }
+    return g.members.length;
+  }
+
+  /** Birds on the ground (or landing) within r of a point. */
+  groundNear(x: number, z: number, r: number): number {
+    let n = 0;
+    for (const b of this.birds) if (b.on && (b.mode === Mode.Ground || b.mode === Mode.Land) && Math.abs(b.x - x) < r && Math.abs(b.z - z) < r) n++;
+    return n;
+  }
+
   /** Short debug summary (window.game.birds.report()). */
   report(): string {
     const s = this.stats;
@@ -552,7 +591,11 @@ export class Birds {
     if (threat) {
       g.calm = 0;
       if (!g.flushed) this.flush(gi, this.thx, this.thz, 1);
-    } else if (g.flushed) g.calm += step;
+    } else if (g.flushed) {
+      g.calm += step;
+      // All back down and settled: a group like any other again (it can be flushed anew).
+      if (g.calm > 8 && g.members.every((i) => this.birds[i].mode === Mode.Ground)) g.flushed = false;
+    }
     if (!threat && !g.flushed && !g.roof) this.nudge(g);
   }
 

@@ -128,21 +128,26 @@ export class Barks {
     }
   }
 
-  /** A short line over someone (where it can be seen; sparse — see the limits above). Also for the aftermath's people. */
-  say(a: PedAgent, text: string): void {
-    if (this.gapT > 0 || this.shown.some((s) => s.a === a)) return;
-    if (this.time < (this.quiet.get(a) ?? -Infinity)) return;
+  /**
+   * A short line over someone (where it can be seen; sparse — see the limits above). Also for the
+   * aftermath's people and the street characters (`pause`: their own, shorter wait before the next
+   * line). False when it was not shown.
+   */
+  say(a: PedAgent, text: string, pause = PERSON_PAUSE): boolean {
+    if (this.gapT > 0 || this.shown.some((s) => s.a === a)) return false;
+    if (this.time < (this.quiet.get(a) ?? -Infinity)) return false;
     // Only where it can be seen.
     const cam = this.game.renderer.camera;
     this.p.set(a.x, a.y + 2.05, a.z).project(cam);
-    if (this.p.z > 1 || Math.abs(this.p.x) > 0.95 || Math.abs(this.p.y) > 0.95) return;
-    if (this.shown.length >= MAX_SHOWN) return;
+    if (this.p.z > 1 || Math.abs(this.p.x) > 0.95 || Math.abs(this.p.y) > 0.95) return false;
+    if (this.shown.length >= MAX_SHOWN) return false;
     const el = this.els.find((e) => !this.shown.some((s) => s.el === e))!;
     el.textContent = text;
     el.classList.remove('out');
     this.shown.push({ a, el, t: 0 });
-    this.quiet.set(a, this.time + PERSON_PAUSE);
+    this.quiet.set(a, this.time + pause);
     this.gapT = GAP;
+    return true;
   }
 
   private draw(dt: number, hidden: boolean): void {
