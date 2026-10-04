@@ -377,7 +377,8 @@ export class Player {
       else this.grounded = false;
     }
     // Water: the body floats/wades (simple buoyancy) — or, fast enough, runs across it.
-    const wl = this.world.terrain.waterLevel(px, pz);
+    // (Not in a tunnel under the river: a culvert, the metro.)
+    const wl = this.collision.underground(px, ny, pz) ? -Infinity : this.world.terrain.waterLevel(px, pz);
     if (!this.flying && this.speedTop > 0 && wl > ny - 0.05 * this.height && this.vel.y <= 0.5
       && Math.hypot(this.vel.x, this.vel.z) > SPEED_WATER * Math.sqrt(this.k)) {
       ny = wl;
@@ -426,7 +427,7 @@ export class Player {
     if (this.downT > 0) return 'knockdown';
     if (this.flying) return 'fly';
     if (!this.grounded) return this.vel.y > 0 ? 'jump' : 'fall';
-    const wl = this.world.terrain.waterLevel(this.pos.x, this.pos.z);
+    const wl = this.collision?.underground(this.pos.x, this.pos.y, this.pos.z) ? -Infinity : this.world.terrain.waterLevel(this.pos.x, this.pos.z);
     if (wl > this.pos.y + this.height * 0.5) return 'swim';
     const hs = Math.hypot(this.vel.x, this.vel.z) / Math.sqrt(this.k);
     return hs < 0.15 ? 'idle' : hs < 2.5 ? 'walk' : hs < 5.6 ? 'run' : 'sprint';

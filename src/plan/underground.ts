@@ -24,13 +24,16 @@ export function planUnderground(plan: MacroPlan, field: CityField, terrain: Terr
   if (field.profile.metro) planMetro(plan, field, terrain);
 }
 
+/**
+ * One trunk under every arterial. Under a bridge the trunk becomes a culvert: it dips under the
+ * river bed and comes up on the far bank, so the sewers of the whole city form one network.
+ */
 function planSewers(plan: MacroPlan, terrain: Terrain): void {
   for (const e of plan.edges) {
-    if (e.bridge) continue;
     const pts = e.pts.slice();
     const depth: number[] = [];
     for (let i = 0; i < pts.length; i += 2) depth.push(4.5);
-    plan.sewers.push({ pts, depth, width: e.cls === 0 ? 3.2 : 2.4 });
+    plan.sewers.push({ pts, depth, width: e.cls === 0 ? 3.2 : 2.4, a: e.a, b: e.b, culvert: e.bridge || undefined });
   }
   void terrain;
 }
@@ -162,12 +165,36 @@ const MAX_GRADE = 0.035;
 export const HALL_SPAN = STATION_HALF + 6;
 
 /** Sewer invert (floor of the walkways) along a trunk: ~4.6 m under the street, smoothed. */
-export function sewerInvert(pts: number[], terrain: Terrain): number[] {
+export function sewerInvert(pts: number[], terrain: Terrain, culvert = false): number[] {
   const y: number[] = [];
   for (let i = 0; i < pts.length; i += 2) y.push(terrain.height(pts[i], pts[i + 1]) - 4.6);
+  if (culvert) {
+    // Under the river: 4.6 m under the bed at least, sloping no steeper than CULVERT_GRADE from the
+    // banks (a lower envelope), so it can be walked down into and up out of.
+    const cum = [0];
+    for (let i = 2; i < pts.length; i += 2) cum.push(cum[cum.length - 1] + Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]));
+    // Densely sampled bed (the deck's polyline points can be far apart over the water).
+    const bed = y.slice();
+    for (let i = 0; i + 1 < y.length; i++) {
+      const L = cum[i + 1] - cum[i];
+      for (let s = 2; s < L; s += 2) {
+        const f = s / L, x = pts[i * 2] + (pts[i * 2 + 2] - pts[i * 2]) * f, z = pts[i * 2 + 1] + (pts[i * 2 + 3] - pts[i * 2 + 1]) * f;
+        const v = terrain.height(x, z) - 4.6;
+        bed[i] = Math.min(bed[i], v + CULVERT_GRADE * s);
+        bed[i + 1] = Math.min(bed[i + 1], v + CULVERT_GRADE * (L - s));
+      }
+    }
+    const e = bed.slice();
+    for (let i = 1; i < e.length; i++) e[i] = Math.min(e[i], e[i - 1] + CULVERT_GRADE * (cum[i] - cum[i - 1]));
+    for (let i = e.length - 2; i >= 0; i--) e[i] = Math.min(e[i], e[i + 1] + CULVERT_GRADE * (cum[i + 1] - cum[i]));
+    return e;
+  }
   for (let it = 0; it < 4; it++) for (let i = 1; i + 1 < y.length; i++) y[i] = (y[i - 1] + y[i] * 2 + y[i + 1]) / 4;
   return y;
 }
+
+/** Steepest slope of a culvert's floor (walkable). */
+export const CULVERT_GRADE = 0.3;
 
 /** Laplacian smoothing (ends fixed) towards metro curve radii, then even 10 m spacing. */
 function smoothTrack(pts: number[]): number[] {
@@ -317,7 +344,7 @@ function profileLine(L: MetroLine, lines: MetroLine[], stations: MetroStation[],
   for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(P[i * 2] - P[i * 2 - 2], P[i * 2 + 1] - P[i * 2 - 1]));
   const hallOf = new Int32Array(n).fill(-1);
   L.stationS.forEach((s, k) => { for (let i = 0; i < n; i++) if (Math.abs(cum[i] - s) <= HALL_SPAN + 0.5) hallOf[i] = k; });
-  const inv = plan.sewers.map((sw) => sewerInvert(sw.pts, terrain));
+  const inv = plan.sewers.map((sw) => sewerInvert(sw.pts, terrain, sw.culvert));
   const ymax = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const x = P[i * 2], z = P[i * 2 + 1];

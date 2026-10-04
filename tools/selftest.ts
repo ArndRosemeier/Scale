@@ -578,7 +578,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
     const terrain = new Terrain(makeProfile({ seed, size }));
     const macro = buildMacroPlan(terrain);
-    const tubes = [...macro.metroLines.map(metroTube), ...macro.sewers.map((s) => sewerTube(s.pts, terrain))];
+    const tubes = [...macro.metroLines.map(metroTube), ...macro.sewers.map((s) => sewerTube(s.pts, terrain, s.culvert))];
     const halls = stationHalls(macro);
     const t0 = performance.now();
     const plan = planRooms(macro, terrain, tubes, halls);
@@ -634,6 +634,49 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   }
 }
 
+// ---- the sewers: one network (culverts under the rivers join the banks), junctions level, culverts
+// walkable and under the river bed; the Lumen's signs on every junction lead to a colony.
+{
+  const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
+  const { planRooms } = await import('../src/underground/rooms');
+  const { planSewerHints } = await import('../src/underground/sewerHints');
+  for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const macro = buildMacroPlan(terrain);
+    const S = macro.sewers, sew = S.map((s) => sewerTube(s.pts, terrain, s.culvert));
+    const parent = macro.nodes.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const ends = new Map<number, number[]>();
+    S.forEach((s, i) => {
+      parent[find(s.a)] = find(s.b);
+      const P = sew[i].pts;
+      ends.set(s.a, [...(ends.get(s.a) ?? []), P[1]]);
+      ends.set(s.b, [...(ends.get(s.b) ?? []), P[P.length - 2]]);
+    });
+    const comps = new Set(S.map((s) => find(s.a))).size;
+    let step = 0;
+    for (const ys of ends.values()) step = Math.max(step, Math.max(...ys) - Math.min(...ys));
+    let grade = 0, cover = Infinity;
+    S.forEach((s, i) => {
+      if (!s.culvert) return;
+      const P = sew[i].pts;
+      for (let k = 3; k < P.length; k += 3) { const L = Math.hypot(P[k] - P[k - 3], P[k + 2] - P[k - 1]); if (L > 0.5) grade = Math.max(grade, Math.abs(P[k + 1] - P[k - 2]) / L); }
+      for (let k = 0; k < P.length; k += 3) cover = Math.min(cover, terrain.height(P[k], P[k + 2]) - (P[k + 1] + sew[i].height));
+    });
+    const culverts = S.filter((s) => s.culvert).length;
+    check(comps === 1, `sewers seed ${seed}: one network (${comps} parts, ${culverts} culverts under the rivers)`);
+    check(step < 0.01, `sewers seed ${seed}: trunks meet level at the junctions (largest step ${step.toFixed(3)} m)`);
+    check(!culverts || (grade <= 0.31 && cover >= 1.5), `sewers seed ${seed}: culverts walkable and covered (grade ${grade.toFixed(2)}, cover ${cover.toFixed(1)} m)`);
+    const tubes = [...macro.metroLines.map(metroTube), ...sew];
+    const rooms = planRooms(macro, terrain, tubes, stationHalls(macro));
+    const hints = planSewerHints(macro, tubes, rooms);
+    const junctions = [...new Set(S.flatMap((s) => [s.a, s.b]))].filter((n) => S.filter((s) => s.a === n || s.b === n).length >= 2).length;
+    const marks = hints.filter((h) => h.kind === 'mark').length, dots = hints.filter((h) => h.kind === 'dot').length;
+    const sewerColonies = rooms.colonies.filter((c) => rooms.rooms[c.room].net === 'sewer').length;
+    check(!sewerColonies || (marks >= junctions * 0.98 && dots > 50), `sewers seed ${seed}: the Lumen's signs mark the way at the junctions (${marks} of ${junctions}, ${dots} trail dots, ${sewerColonies} colonies off the sewers)`);
+  }
+}
+
 // ---- the deep realm (src/underground/deep): deterministic per seed; its caves clear of every tunnel,
 // station, room, crawl and entrance passage, deep under the ground; every waypoint edge walkable on
 // the field's floors (steps a walker can take, headroom); the war and the trust behave.
@@ -646,7 +689,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
     const terrain = new Terrain(makeProfile({ seed, size }));
     const macro = buildMacroPlan(terrain);
-    const tubes = [...macro.metroLines.map(metroTube), ...macro.sewers.map((s) => sewerTube(s.pts, terrain))];
+    const tubes = [...macro.metroLines.map(metroTube), ...macro.sewers.map((s) => sewerTube(s.pts, terrain, s.culvert))];
     const halls = stationHalls(macro);
     const rooms = planRooms(macro, terrain, tubes, halls);
     const passages = (metroInput(macro, terrain).input.passages ?? []).map((p) => p.tube);

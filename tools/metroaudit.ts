@@ -20,7 +20,7 @@ export function metroInput(macro: MacroPlan, terrain: Terrain): { input: AuditIn
     tube: metroTube(line),
     stops: line.stations.map((sid, k) => ({ s: line.stationS[k], hall: halls.find((b) => b.station === sid && b.line === line.id) ?? null })),
   }));
-  const sewers = macro.sewers.map((sw) => sewerTube(sw.pts, terrain));
+  const sewers = macro.sewers.map((sw) => sewerTube(sw.pts, terrain, sw.culvert));
   // Entrances from the cell plans around the halls.
   const ground = (x: number, z: number) => terrain.height(x, z) + CURB_H;
   const holes: number[] = [];

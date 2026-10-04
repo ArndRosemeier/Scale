@@ -31,6 +31,7 @@ import { planRooms, type RoomPlan } from './rooms';
 import { buildRoom, buildCrawl, buildChamber, colonyLayout, type BuiltRoom, type RoomMats, type EmitterId } from './RoomMeshes';
 import { roomAtlas, decal, CELL } from './roomArt';
 import { Slimes } from './Slimes';
+import { planSewerHints } from './sewerHints';
 import { planDeep, type DeepPlan } from './deep/plan';
 import { DeepField } from './deep/field';
 import { DeepMeshes } from './deep/DeepMeshes';
@@ -99,7 +100,7 @@ export class Underground {
     for (const st of macro.metroStations) this.stationNames.set(st.id, st.name);
     // Sewers under the arterials (not bridges).
     for (const sw of macro.sewers) {
-      const t = sewerTube(sw.pts, terrain);
+      const t = sewerTube(sw.pts, terrain, sw.culvert);
       this.tubes.push(t);
       this.sewerTubes.push(t);
     }
@@ -140,6 +141,26 @@ export class Underground {
       veil: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
     };
     this.group.add(this.slimes.group);
+    // The Lumen's signs in the sewers: the way to the colonies (one mesh for the whole network).
+    try {
+      const hints = planSewerHints(macro, this.tubes, this.rooms);
+      if (hints.length) {
+        const mb = new MeshBuilder([{ name: 'uv', size: 2 }, { name: 'color', size: 3, type: 'u8n' }]);
+        for (const h of hints) {
+          if (h.kind === 'mark') {
+            mb.set('color', 0.16 * h.s, 0.62 * h.s, 0.5 * h.s);
+            decal(mb, h.x + h.nx * 0.012, h.y, h.z + h.nz * 0.012, h.nz, 0, -h.nx, 0, 1, 0, 0.28, 0.28, CELL.mark + h.sign);
+          } else {
+            mb.set('color', 0.12 * h.s, 0.36 * h.s, 0.3 * h.s);
+            decal(mb, h.x, h.y + 0.016, h.z, h.nx, 0, h.nz, h.nz, 0, -h.nx, 0.05, 0.04, CELL.dot);
+          }
+        }
+        const m = new THREE.Mesh(toGeometry(mb.build()), this.mats.glow);
+        m.name = 'sewer-hints';
+        this.group.add(m);
+        this.hintCount = hints.length;
+      }
+    } catch (err) { console.warn('[sewer hints]', err); }
     // Stand-ins so the start-up warm-up compiles the room materials (a degenerate triangle each).
     for (const m of [this.mats.glow, this.mats.decal, this.mats.veil]) {
       const g = new THREE.BufferGeometry();
@@ -185,6 +206,8 @@ export class Underground {
   private mats: RoomMats;
   private builtRooms = new Map<string, BuiltRoom>();
   readonly slimes = new Slimes();
+  /** Lumen signs and trails laid in the sewers (sewerHints.ts). */
+  hintCount = 0;
   /** The deep realm (deep/plan.ts): its plan, its rock as a field, its meshes; null when the city has none. */
   deep: { plan: DeepPlan; field: DeepField; meshes: DeepMeshes } | null = null;
   /** What the deep realm's look follows (set by the game's slime civilisation): the lift running, the kin mosaic. */
@@ -409,6 +432,8 @@ export class Underground {
         const f = (s - C[i]) / Math.max(1e-6, C[i + 1] - C[i]);
         const x = P[i * 3] + (P[i * 3 + 3] - P[i * 3]) * f, z = P[i * 3 + 2] + (P[i * 3 + 5] - P[i * 3 + 2]) * f;
         if (!pointInPoly(poly, x, z)) continue;
+        // No lids in the river over a culvert.
+        if (this.terrain.isWater(x, z, 3)) continue;
         const key = Math.floor(x / 32) * 65536 + Math.floor(z / 32);
         let l = this.manholes.get(key);
         if (!l) this.manholes.set(key, (l = []));

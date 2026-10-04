@@ -40,8 +40,8 @@ export function metroTube(line: MetroLine): Tube {
 }
 
 /** Sewer trunk tube: invert ~4.6 m under the street, smoothed so it never climbs steeply. */
-export function sewerTube(pts2: number[], terrain: Terrain): Tube {
-  const inv = sewerInvert(pts2, terrain), pts: number[] = [];
+export function sewerTube(pts2: number[], terrain: Terrain, culvert = false): Tube {
+  const inv = sewerInvert(pts2, terrain, culvert), pts: number[] = [];
   for (let i = 0; i < pts2.length; i += 2) pts.push(pts2[i], inv[i >> 1], pts2[i + 1]);
   return makeTube('sewer', pts, SEWER_HW, SEWER_H, 0.6, 0.45);
 }

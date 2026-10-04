@@ -801,7 +801,13 @@ as distance LOD).
     `Underground.riding`); doors, arrival, departure and oncoming trains rushing past are heard
     near the listener (`Underground.onTrainSound`). Sounds: `tools/synthMetro.mjs`.
 * Sewers: arched brick tunnels with channels and walkways under arterials, manholes with
-  ladders, and outfalls.
+  ladders, and outfalls. One trunk per arterial edge (`SewerTrunk.a / b`: its junction nodes, where trunks meet
+  level); under a bridge the trunk is a culvert (`culvert`, `sewerInvert(…, culvert)`: ≥ 4.6 m under the bed, a
+  lower envelope with grade ≤ 0.3), so the whole city's sewers are one network (self test). No manhole lids over
+  water; the player does not float in a tunnel under the river (`Collision.underground`).
+* The Lumen's signs (`underground/sewerHints.ts`, pure): Dijkstra over the sewer junctions from every colony room
+  off a sewer; at each junction the colony's sign (`CELL.mark + id % 4`) on the wall of the branch towards it, 7 m
+  in, fading with distance (1400 m); a dotted trail on the walkway within 450 m. One glow mesh for the city.
 * Tunnel dressing (in the tube chunks): cable trays and a pipe along metro walls, a green
   running-figure exit sign every 60 m with a maintenance ladder at every third, an old pipe along
   one sewer wall.

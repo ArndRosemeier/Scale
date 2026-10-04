@@ -19,28 +19,59 @@ export function saveLine(m: SaveMeta): string {
   return `<span title="${esc(cityClass(m.size))}, seed ${m.seed}">${esc(m.city)}</span> · ${MODE_INFO[m.mode]?.name ?? m.mode} · ${gameTimeLabel(m.day, m.hour)}`;
 }
 
-/** A list of saves into `el`; `onLoad` / `onDelete` per row. */
+/**
+ * A list of saves into `el`: the player's own (named) saves first, then the autosaves in a section
+ * of their own, folded unless there is nothing else (the rotating autosaves are always the newest
+ * and used to bury the named ones). `onLoad` / delete per row.
+ */
 export async function fillSaveList(el: HTMLElement, onLoad: (m: SaveMeta) => void, after?: (list: SaveMeta[]) => void): Promise<SaveMeta[]> {
   const list = await saveStore.list();
   el.innerHTML = '';
-  for (const m of list) {
-    const row = document.createElement('div');
-    row.className = 'sv-row';
-    row.innerHTML = `${thumbHtml(m)}<div class="sv-info"><div class="sv-name">${esc(m.name)}${m.kind === 'auto' ? '<span class="sv-tag">auto</span>' : ''}</div>
+  const named = list.filter((m) => m.kind !== 'auto'), autos = list.filter((m) => m.kind === 'auto');
+  const row = (m: SaveMeta, parent: HTMLElement) => {
+    const r = document.createElement('div');
+    r.className = 'sv-row';
+    r.innerHTML = `${thumbHtml(m)}<div class="sv-info"><div class="sv-name">${esc(m.name)}</div>
       <div class="sv-sub">${saveLine(m)}</div><div class="sv-sub">${agoLabel(m.created)} · played <b>${playTimeLabel(m.playTime)}</b>${m.mode === 'normal' ? ` · ${m.karma} karma` : ''}</div></div>
       <div class="sv-acts"><button type="button" class="sv-load">Load</button><button type="button" class="sv-del" title="Delete this save">✕</button></div>`;
-    const acts = row.querySelector('.sv-acts') as HTMLElement;
+    const acts = r.querySelector('.sv-acts') as HTMLElement;
     const normal = acts.innerHTML;
     const wire = () => {
       (acts.querySelector('.sv-load') as HTMLButtonElement).onclick = () => onLoad(m);
       (acts.querySelector('.sv-del') as HTMLButtonElement).onclick = () => {
         acts.innerHTML = `<span class="sv-ask">Delete?</span><button type="button" class="sv-yes">Delete</button><button type="button" class="sv-no">Keep</button>`;
-        (acts.querySelector('.sv-yes') as HTMLButtonElement).onclick = async () => { await saveStore.remove(m.id); row.remove(); after?.(await saveStore.list()); };
+        (acts.querySelector('.sv-yes') as HTMLButtonElement).onclick = async () => { await saveStore.remove(m.id); r.remove(); after?.(await saveStore.list()); };
         (acts.querySelector('.sv-no') as HTMLButtonElement).onclick = () => { acts.innerHTML = normal; wire(); };
       };
     };
     wire();
-    el.appendChild(row);
+    parent.appendChild(r);
+  };
+  const head = document.createElement('div');
+  head.className = 'sv-sec';
+  head.textContent = 'Your saves';
+  el.appendChild(head);
+  if (named.length) for (const m of named) row(m, el);
+  else {
+    const empty = document.createElement('div');
+    empty.className = 'sv-empty';
+    empty.textContent = 'No saved games yet — give one a name in the pause menu (Esc).';
+    el.appendChild(empty);
+  }
+  if (autos.length) {
+    const open = !named.length;
+    const tog = document.createElement('button');
+    tog.type = 'button';
+    tog.className = 'sv-sec sv-toggle';
+    const box = document.createElement('div');
+    box.className = 'sv-autos';
+    box.hidden = !open;
+    const label = () => { tog.innerHTML = `<span>${box.hidden ? '▸' : '▾'}</span> Autosaves <span class="sv-count">${autos.length}</span>`; };
+    tog.onclick = () => { box.hidden = !box.hidden; label(); };
+    label();
+    el.appendChild(tog);
+    el.appendChild(box);
+    for (const m of autos) row(m, box);
   }
   after?.(list);
   return list;

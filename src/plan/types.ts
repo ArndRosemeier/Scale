@@ -143,6 +143,11 @@ export interface SewerTrunk {
   depth: number[];
   /** Tunnel width. */
   width: number;
+  /** The arterial nodes it joins (junctions with the other trunks there). */
+  a: number;
+  b: number;
+  /** Under a bridge: dips under the river (a culvert) to join the sewers on both banks. */
+  culvert?: boolean;
 }
 
 export interface MacroPlan {

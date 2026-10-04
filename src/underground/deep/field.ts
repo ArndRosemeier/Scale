@@ -86,23 +86,33 @@ export class DeepField {
     this.evals++;
     const l = this.grid.get((Math.floor(x / CELL) + 32768) * 65536 + (Math.floor(z / CELL) + 32768));
     if (!l) { this.lastPrim = -1; return FAR; }
-    let d = 1e5, best = -1, bd = Infinity;
+    let d = 1e5, best = -1, bd = Infinity, wsum = 0, nsum = 0;
     const P = this.prims;
     for (let i = 0; i < l.length; i++) {
       const p = P[l[i]];
       const e = primDist(p, x, y, z);
-      // Rock is carved out of the air (smooth subtraction); the nearest surface sets the roughness.
+      // Rock is carved out of the air (smooth subtraction).
       d = p.rock ? smaxk(d, -e, p.k) : smink(d, e, p.k);
       const ae = Math.abs(e);
       if (ae < bd) { bd = ae; best = l[i]; }
+      // Roughness: a smooth blend over the shapes near the point (a hard switch between shapes
+      // would make the noise jump and raise phantom rock). Rock shapes count more (ramps,
+      // terraces, bridges are walked on); floors stay gentle, walls and vaults rough.
+      if (ae < 6) {
+        let n = p.n;
+        if (n > 0) {
+          const fy = primFloor(p, x, y, z);
+          if (fy > -1e8) { const t = Math.max(0, Math.min(1, (y - fy - 0.3) / 2.8)); n *= 0.12 + 0.88 * t * t * (3 - 2 * t); }
+        }
+        const w = (p.rock ? 4 : 1) / (ae * ae + 0.3);
+        wsum += w; nsum += w * n;
+      }
     }
     this.lastPrim = best;
-    if (best >= 0) {
-      const n = P[best].n;
-      if (n > 0 && d < 4 && d > -4) {
-        const N = this.noise;
-        d += n * (N.n3(x * 0.065, y * 0.08, z * 0.065) * 1.25 + N.n3(x * 0.21 + 17, y * 0.24, z * 0.21 - 9) * 0.35);
-      }
+    const n = wsum > 0 ? nsum / wsum : 0;
+    if (n > 0 && d < 4 && d > -4) {
+      const N = this.noise;
+      d += n * (N.n3(x * 0.065, y * 0.08, z * 0.065) * 1.25 + N.n3(x * 0.21 + 17, y * 0.24, z * 0.21 - 9) * 0.35);
     }
     return d;
   }

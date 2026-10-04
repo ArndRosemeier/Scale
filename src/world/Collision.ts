@@ -108,6 +108,11 @@ export class Collision {
 
   constructor(private world: WorldIndex, private destruction: Destruction, private streamer: CityStreamer) {}
 
+  /** Feet at (x, y, z) inside an underground volume, below the ground (water above does not reach them). */
+  underground(x: number, y: number, z: number): boolean {
+    return !!this.under && y < this.world.terrain.height(x, z) - 1.0 && this.under.contains(x, y + 0.3, z, 0);
+  }
+
   /** Ceiling over (x, z) for a body at y (underground halls and tunnels; Infinity in the open). */
   ceilingAt(x: number, z: number, y: number): number {
     if (!this.under || y > this.world.terrain.height(x, z) - 1.0) return Infinity;

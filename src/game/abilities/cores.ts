@@ -80,7 +80,7 @@ export function planCoreSites(macro: MacroPlan, terrain: Terrain): CoreSite[] {
       const m = tr.pts.length >> 1;
       if (m < 3) continue;
       const k = rng.int(1, m - 2);
-      const inv = sewerInvert(tr.pts, terrain);
+      const inv = sewerInvert(tr.pts, terrain, tr.culvert);
       const dx = tr.pts[k * 2 + 2] - tr.pts[k * 2 - 2], dz = tr.pts[k * 2 + 3] - tr.pts[k * 2 - 1];
       const l = Math.hypot(dx, dz) || 1;
       const side = rng.sign() * 1.15; // on the walkway beside the channel

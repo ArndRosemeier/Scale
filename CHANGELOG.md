@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.019 — 2026-10-04
+
+- **Saves: your own saves first.** The load list now shows the games you saved by name on top, and the autosaves in a section of their own below (folded away unless they are all there is).
+- **One sewer network**: under every bridge a culvert now dips beneath the river, so the sewers of the whole city connect — you can walk from any manhole to any other. (Side rooms and the hidden colonies are laid out anew in every city because of it.)
+- **The Lumen's signs**: at every junction in the sewers, a faint glowing sign is painted on the wall of the branch that leads towards the nearest slime colony — each colony has its own sign — brighter the nearer you get, and close by a trail of glowing drops on the walkway. Nothing says what they mean.
+- Fix: the deep caves could grow phantom bumps of rock where two cave shapes met (most noticeable on the lower part of the Throat's ramp).
+
 ## 0.018 — 2026-10-04
 
 - **The slime civilisation**: behind the hidden slime colonies there is now a whole world, deep under the city — two peoples of slimes in a war that never ends.
