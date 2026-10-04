@@ -293,9 +293,6 @@ export class SaveSystem {
     }
   }
 
-  /** Leaving the session on purpose (new city): skip the last-moment save. */
-  leave(): void { this.leaving = true; }
-
   // ------------------------------------------------------------------ console
 
   private installDev(): void {

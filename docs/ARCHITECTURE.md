@@ -645,6 +645,47 @@ as distance LOD).
   and the player's marker with its distance, pinned to the edge when behind.
 * A threat incident is a red alert marker shown on the compass at any distance (`always`).
 
+### Saves (`src/game/save`, `src/ui/SaveUi.ts`)
+A session can be saved and continued: `game.saves` (`SaveSystem`), stored by `SaveStore`.
+* **Model** (`model.ts`, pure, tested in `selftest.ts`): one versioned JSON object (`SAVE_VERSION`; `MIGRATIONS[v]`
+  upgrades v → v + 1, `parseSave` sanitises every field so a partial save loads with defaults, a newer version is
+  refused): city (seed, size), mode, the character (AvatarStore id, plus a created look as a fallback), the player
+  (position, yaw, size incl. the admin size override, flying, health, energy, hotbar slot; whether the spot was
+  underground / indoors), camera (yaw, pitch, zoom), sky (day, hour, time speed), weather (setting, wet streets, the
+  schedule skip; read from `render/Weather` — a `serialize` / `restore` pair there would take over), Progress (karma,
+  ranks, hotbar, cores, bonuses), reputation, justice (heat, wanted), the threat clock and its setting, the bodies of
+  defeated monsters (`ThreatDirector.remains`, laid back down settled) and a Strider on the move (resumed at its route
+  position and hit points), the map marker, the crime / city-event settings, and the city damage.
+* **City damage** (`CityDamage.ts`, `codec.ts`): per damaged cell the dead elements (walls, roofs, slabs — not slabs
+  only hidden by an open interior), shattered windows (not windows an interior opened) and broken slab tiles as
+  index runs (gap + length varints, base64); collapsed buildings (gone, or the lower top of a partial collapse) and the
+  rubble mounds. Restored into loaded cells at once and into the others as they stream in (`CityStreamer.restoreElements`,
+  `Destruction.restoreBuilding` shows the storey slabs through the holes). The same bookkeeping keeps collapsed
+  buildings collapsed across cell eviction. A heavily damaged district (34 collapsed buildings, 27 k dead elements) is
+  ~6 KB of JSON; a save is ~1.4 KB without damage, gzip-compressed in IndexedDB, plus a ~6 KB JPEG thumbnail.
+  Not kept: loose / settled debris, broken props and trees, wrecked cars, road craters.
+* **Not restored on purpose**: people, traffic, robots and drones (seed + clock), running crimes, small deeds, robot
+  malfunctions, omens and facade fires (they end with the session). Indoors the player is put on the street outside
+  (interiors open on approach); an underground spot is restored exactly when the tunnel / room is there; a street or
+  roof spot when the ground under it matches, else `GameMap.placeSafely` (the map's safe-spot logic).
+* **Storage** (`SaveStore.ts`): IndexedDB `scale-saves` (`meta`: the list entries with name, city, mode, game day /
+  time, real date, play time, karma, thumbnail; `data`: the save), one transaction per save; localStorage as the
+  fallback. Every call is wrapped — a failed save never breaks the game.
+* **Autosave**: every 2 min of play, on `visibilitychange` → hidden, after notable moments (a city event or a crime
+  ends, karma spent; at most every 25 s), rotating over three slots (`auto-0..2`: the oldest is overwritten, so the
+  previous autosave always survives). On `pagehide` / `beforeunload` a synchronous copy goes to localStorage
+  (`scale.save.emergency`, ~7 ms) and is folded into IndexedDB on the next start (`recover`).
+* **Loading** always starts the city fresh: Continue / Load on the start screen start it in place; loading from the
+  pause menu (same or another city) reloads with `?seed&size&mode&load=<id>`. `Game.startAt` streams the city in
+  around the saved spot, `Game.pendingSave` is applied before the warm-up. Loading a save writes its progress /
+  reputation back to the per-city stores (`scale.progress.v1.…`, `scale.rep.v1.…`, `scale.threat.v1.…`), which still
+  carry a city's progress into a new game there.
+* **UI**: start screen — Continue (newest save: thumbnail, city, mode, day / time, play time) and Load game (the list:
+  thumbnail, name, city, mode, day / time, real date, play time, karma; load, delete with an inline confirm). Pause
+  menu — Save game (a name; the same name asks to overwrite inline), Load game, "Autosaved 12 s ago". A small
+  "Saving… / Saved" chip bottom left. Admin console section "Saves"; `dev.save.now(name) | auto() | list() |
+  load(id | 'latest') | get(id) | remove(id) | capture() | sizes() | status()`.
+
 ## Threads
 
 | Thread | Work |
