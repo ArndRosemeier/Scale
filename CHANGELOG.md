@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.024 — 2026-10-04
+
+- Sewers: the grey see-through slabs standing in the tunnels are gone — they were meant as daylight falling through the manhole lids. Now the lid glows overhead and a soft pool of daylight lies on the walkways and water below it.
+- Outlet pipes dribble a thinner stream.
+
 ## 0.023 — 2026-10-04
 
 - **Wrecking buildings has consequences**: smashing facades in front of people costs reputation and karma and draws the police; bringing a building down is seen by everyone — a big hit to reputation and karma (the taller, the worse) and the police come for you.

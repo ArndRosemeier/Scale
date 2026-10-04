@@ -501,7 +501,7 @@ export class Underground {
     const snd = this.sound;
     if (snd && !this.slimes.sound) this.slimes.sound = { play: (id, x, y, z, g) => snd.play(id, x, y, z, g, 1, 3), loop: (id) => snd.loop(id, 3) };
     this.slimes.update(dt, player, under);
-    this.shaftMat.color.setScalar(0.035 * G.uDayLight.value);
+    this.shaftMat.color.setScalar(0.5 * G.uDayLight.value);
     if (this.deep) {
       const c = cam.position, D = this.deep.plan;
       const camUnder = under || this.isUnder(c.x, c.y, c.z);
@@ -859,24 +859,36 @@ export class Underground {
       }
       g.add(new THREE.Mesh(toGeometry(wg.build()), this.waterMat));
       if (!wet.empty) g.add(new THREE.Mesh(toGeometry(wet.build()), this.waterMat));
-      // Daylight falling through the manhole lids (fades with the day).
+      // Daylight through the manhole lids (fades with the day): the lid glowing overhead and a soft
+      // pool of light on the walkways and the water under it — no beam standing in the way.
       const sh = new MeshBuilder([{ name: 'color', size: 3, type: 'u8n' }]);
       const total = t.cum[t.cum.length - 1];
       for (let s = 22.5; s < total; s += 45) {
         if (s < t.cum[i0] || s >= t.cum[i1]) continue;
         const q = pointOnTube(t, s);
         if (!q || this.terrain.isWater(q.x, q.z, 3)) continue;
-        const top = q.y + t.height, r0 = 0.32, r1 = 0.75;
-        for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
-          const cx = Math.cos(a), cz = Math.sin(a);
-          // Bright under the lid, gone by the floor.
-          sh.set('color', 1, 0.95, 0.85);
-          const i = sh.v(q.x - cx * r0, top, q.z - cz * r0, 0, 0, 1);
-          sh.v(q.x + cx * r0, top, q.z + cz * r0, 0, 0, 1);
-          sh.set('color', 0, 0, 0);
-          sh.v(q.x + cx * r1, q.y + 0.1, q.z + cz * r1, 0, 0, 1);
-          sh.v(q.x - cx * r1, q.y + 0.1, q.z - cz * r1, 0, 0, 1);
-          sh.quad(i, i + 1, i + 2, i + 3);
+        const top = q.y + t.height - 0.03, SEG = 16, RINGS = 5, R = 1.5;
+        sh.set('color', 1, 0.96, 0.88);
+        const c0 = sh.v(q.x, top, q.z, 0, -1, 0);
+        for (let k = 0; k < SEG; k++) { const a = (k / SEG) * Math.PI * 2; sh.v(q.x + Math.cos(a) * 0.34, top, q.z + Math.sin(a) * 0.34, 0, -1, 0); }
+        for (let k = 0; k < SEG; k++) sh.tri(c0, c0 + 1 + k, c0 + 1 + ((k + 1) % SEG));
+        // The pool: rings of vertices, on the water inside the channel and on the walkways outside.
+        sh.set('color', 0.6, 0.58, 0.53);
+        const base = sh.v(q.x, q.y - 0.14, q.z, 0, 1, 0);
+        const ring0 = base + 1;
+        for (let r = 1; r <= RINGS; r++) {
+          const rr = (r / RINGS) * R, f = Math.pow(1 - r / RINGS, 2) * 0.6;
+          sh.set('color', f, f * 0.96, f * 0.88);
+          for (let k = 0; k < SEG; k++) {
+            const a = (k / SEG) * Math.PI * 2, ox = Math.cos(a) * rr, oz = Math.sin(a) * rr;
+            const lat = Math.abs(-q.dz * ox + q.dx * oz);
+            sh.v(q.x + ox, lat < 0.6 ? q.y - 0.14 : q.y + 0.015, q.z + oz, 0, 1, 0);
+          }
+        }
+        for (let k = 0; k < SEG; k++) sh.tri(base, ring0 + ((k + 1) % SEG), ring0 + k);
+        for (let r = 0; r + 1 < RINGS; r++) for (let k = 0; k < SEG; k++) {
+          const a0 = ring0 + r * SEG, a1 = a0 + SEG, k1 = (k + 1) % SEG;
+          sh.quad(a0 + k, a0 + k1, a1 + k1, a1 + k);
         }
       }
       if (!sh.empty) { const m = new THREE.Mesh(toGeometry(sh.build()), this.shaftMat); m.renderOrder = 3; g.add(m); }
@@ -884,7 +896,7 @@ export class Underground {
     return g;
   }
 
-  /** Daylight shafts under the manholes: additive, scaled by the daylight each frame. */
+  /** Daylight under the manholes (lid glow, light pool): additive, scaled by the daylight each frame. */
   private shaftMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, color: 0x000000, fog: false });
 
   /**
@@ -986,10 +998,10 @@ export class Underground {
       // The stream: falling from the lip, then a wet streak to the channel.
       const lx = -o.dz * side, lz = o.dx * side;
       const ex = o.x - lx * 0.02, ez = o.z - lz * 0.02;
-      const i = wet.v(ex - o.dx * 0.04, o.y - 0.08, ez - o.dz * 0.04, -lx, 0, -lz, 0, 0);
-      wet.v(ex + o.dx * 0.04, o.y - 0.08, ez + o.dz * 0.04, -lx, 0, -lz, 1, 0);
-      wet.v(ex + o.dx * 0.07, o.fy + 0.01, ez + o.dz * 0.07, -lx, 0, -lz, 1, 1);
-      wet.v(ex - o.dx * 0.07, o.fy + 0.01, ez - o.dz * 0.07, -lx, 0, -lz, 0, 1);
+      const i = wet.v(ex - o.dx * 0.025, o.y - 0.08, ez - o.dz * 0.025, -lx, 0, -lz, 0, 0);
+      wet.v(ex + o.dx * 0.025, o.y - 0.08, ez + o.dz * 0.025, -lx, 0, -lz, 1, 0);
+      wet.v(ex + o.dx * 0.04, o.fy + 0.01, ez + o.dz * 0.04, -lx, 0, -lz, 1, 1);
+      wet.v(ex - o.dx * 0.04, o.fy + 0.01, ez - o.dz * 0.04, -lx, 0, -lz, 0, 1);
       wet.quad(i, i + 1, i + 2, i + 3); wet.quad(i, i + 3, i + 2, i + 1);
       const c0 = at(s, side * 0.62, 0.012);
       if (c0) {

@@ -877,7 +877,8 @@ as distance LOD).
   (`pipe()`) on brackets, one straight run per tube segment, stopping at junction openings and doorways with an
   elbow into the wall; stone ribs across the vault at 7–11 m (or none), a deeper stone portal at every junction
   mouth; outlet pipes dribbling into the channel; lamp spacing 10–16 m with some dead lamps; additive daylight
-  shafts under the manhole lids (`shaftMat`, scaled by `G.uDayLight`).
+  through the manhole lids (`shaftMat`, scaled by `G.uDayLight`): the lid glowing and a pool of light on walkways
+  and water — no beam geometry standing in the tunnel.
 * Tunnel dressing (in the tube chunks): cable trays and a pipe along metro walls, a green
   running-figure exit sign every 60 m with a maintenance ladder at every third.
 * Side rooms (`underground/rooms.ts`, pure data, deterministic per seed): every ~240–520 m of sewer
