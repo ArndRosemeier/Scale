@@ -1049,9 +1049,13 @@ export class Animator {
     }
     if (fast > 0.001) {
       const q = tmp.clear();
-      // Right fist ahead; the left arm along the body, or also ahead when boosting.
-      q.arm('R', 2.86, 0.1, 0, 0.08, 0.15, 0);
-      q.arm('L', -0.22 + 3.1 * boost, 0.1 - 0.02 * boost, 0, 0.14 - 0.08 * boost, 0.3 - 0.15 * boost, 0.06 * (1 - boost));
+      // Right fist ahead; the left arm along the body, or also ahead when boosting. Raised arms
+      // angle outward and the collarbones stay back (straight up front, the arm drifted across the
+      // body and the fists crossed in front of the head).
+      q.arm('R', 2.7, 0.42, 0, 0.08, 0.15, 0);
+      q.arm('L', -0.22 + 2.92 * boost, 0.1 + 0.32 * boost, 0, 0.14 - 0.08 * boost, 0.3 - 0.15 * boost, 0.06 * (1 - boost));
+      q.add('clavicle.R', -0.3, 0, 0);
+      q.add('clavicle.L', -0.3 * boost, 0, 0);
       q.leg('L', -0.04, 0, 0, 0.05, 0.65, 0.2);
       q.leg('R', -0.06, 0, 0, 0.22 * (1 - boost) + 0.05, 0.65, 0.2);
       q.spine(0.1 + 0.04 * boost);

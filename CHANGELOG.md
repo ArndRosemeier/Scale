@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.007 — 2026-10-04
+
+- **Fix**: in fast flight the forward arm drifted across the body and the fists crossed in front of the head; the arms now reach ahead and slightly outward (one fist ahead, both in a V when boosting).
+
 ## 0.006 — 2026-10-04
 
 - **The army fights the giant creature** (city response levels 3 and 4):
