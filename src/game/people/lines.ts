@@ -1,0 +1,208 @@
+/**
+ * What people say (NPC_PERSONALITY_PLAN §3.2), as rules in the style of Valve's dynamic dialog
+ * (Ruskin, GDC 2012): every entry has criteria over the talk facts and a few ways to say it. The
+ * most specific entry that matches wins (talk.ts `pickLine`), so a grumpy dock worker who was
+ * knocked down by the hero last week says something only he would say, and everybody else still
+ * has a line.
+ *
+ * Tokens: {first} {last} {full} {title} {aTitle} {interest} {street} {metStreet} {group} {boss}
+ * {city} {place} {dir} {dist} {days}; a capital first letter ({ATitle}, {Group}, {Dir}) capitalises
+ * the value. An entry that uses {street}, {metStreet}, {group} or {boss} must require it in `when`.
+ *
+ * Pure data.
+ */
+import type { JobKind, Temperament } from './identity';
+
+export type Topic = 'hello' | 'mood' | 'job' | 'hobby' | 'news' | 'way' | 'me' | 'bye';
+
+export interface When {
+  temper?: readonly Temperament[];
+  /** Mood range (−1..1), inclusive. */
+  mood?: readonly [number, number];
+  /** Opinion of the hero range (−100..100), inclusive. */
+  op?: readonly [number, number];
+  /** Met before (true) or a stranger (false). */
+  met?: boolean;
+  /** What happened between them last time it mattered. */
+  deed?: 'helped' | 'saved' | 'hurt';
+  /** Days since you last met at least this many. */
+  away?: number;
+  night?: boolean;
+  morning?: boolean;
+  wet?: boolean;
+  storm?: boolean;
+  /** Destruction or danger nearby lately. */
+  trouble?: boolean;
+  /** A monster or another big threat in the city lately. */
+  threat?: boolean;
+  child?: boolean;
+  senior?: boolean;
+  job?: readonly JobKind[];
+  interest?: readonly string[];
+  /** A villain group holds this street. */
+  group?: boolean;
+  boss?: boolean;
+  street?: boolean;
+  metStreet?: boolean;
+  /** The hero is giant-sized. */
+  giant?: boolean;
+  /** The place asked for is far (way topic). */
+  far?: boolean;
+}
+
+export interface LineEntry { id: string; when: When; say: readonly string[] }
+
+const S = (...say: string[]) => say;
+
+export const LINES: Record<Topic, readonly LineEntry[]> = {
+  hello: [
+    { id: 'h0', when: { met: false }, say: S('Hi. I\'m {first}.', 'Hello! {full}. Nice to meet you.', 'Hey. {first}, {first} {last}.') },
+    { id: 'h1', when: { met: false, temper: ['shy'] }, say: S('Oh! Um, hi. I\'m {first}.', 'H-hello. {first}. Sorry, I don\'t usually talk to… you know. Heroes.') },
+    { id: 'h2', when: { met: false, temper: ['grumpy'] }, say: S('What? …Fine. {first}. What do you want?', '{last}. And no, I don\'t want an autograph.') },
+    { id: 'h3', when: { met: false, temper: ['chatty'] }, say: S('Hello hello! I\'m {first}, {first} {last}, but everybody just says {first}. And you\'re — wait, you\'re the hero, aren\'t you?') },
+    { id: 'h4', when: { met: false, temper: ['cheerful'] }, say: S('Hi there! I\'m {first}. Lovely day to meet a hero!', 'Oh, hello! {first}. What a nice surprise.') },
+    { id: 'h5', when: { met: false, temper: ['anxious'] }, say: S('Oh — hello. Sorry. I\'m {first}. Is something going to happen?', '{first}. Hi. Is everything alright? You\'re not here because of a… a situation?') },
+    { id: 'h6', when: { met: false, temper: ['proud'] }, say: S('{full}. Pleased to meet you, I suppose.', '{full}. You may have heard of me. No? Well.') },
+    { id: 'h7', when: { met: false, temper: ['kind'] }, say: S('Hello, dear. I\'m {first}. Are you alright? You look like you\'ve had a long day.', 'Hi, I\'m {first}. Can I help you with something?') },
+    { id: 'h8', when: { met: false, temper: ['nosy'], street: true }, say: S('Hello! {first}. So what brings a hero to {street}? Something going on?') },
+    { id: 'h9', when: { met: false, temper: ['dreamy'] }, say: S('Oh, hi. {first}. Sorry, I was miles away.') },
+    { id: 'h10', when: { met: false, child: true }, say: S('Hi! I\'m {first}! Are you a real superhero? Can you fly?', 'I\'m {first} and I\'m nearly {years}! Are you strong? Show me!') },
+    { id: 'h11', when: { met: false, senior: true, temper: ['kind', 'cheerful', 'chatty'] }, say: S('Well, hello there, young one. {full}. In my day heroes wore capes, you know.') },
+    { id: 'h12', when: { met: false, giant: true }, say: S('Whoa. Hello up there! I\'m {first}! Please don\'t step on me.') },
+    { id: 'h13', when: { met: false, op: [-100, -40] }, say: S('You\'re the one from the news. {first}. Keep your distance, alright?') },
+    { id: 'h14', when: { met: false, op: [40, 100] }, say: S('Oh wow, it\'s you! I\'m {first}! My friends won\'t believe this.') },
+    { id: 'h20', when: { met: true }, say: S('Oh, hello again!', '{first}, remember? Good to see you again.', 'Hey, it\'s you again.') },
+    { id: 'h21', when: { met: true, deed: 'helped', metStreet: true }, say: S('It\'s you! You helped me up on {metStreet}. I never thanked you properly.', 'You\'re the one who picked me up off the pavement on {metStreet}! Thank you, really.') },
+    { id: 'h22', when: { met: true, deed: 'helped' }, say: S('It\'s you! You helped me up when I fell. I never thanked you properly.') },
+    { id: 'h23', when: { met: true, deed: 'saved' }, say: S('My hero! I tell everybody about the day you came to help me.') },
+    { id: 'h24', when: { met: true, deed: 'hurt' }, say: S('You again. Last time you knocked me flat. Mind your step.', 'Oh. You. My hip still hurts, thanks for asking.') },
+    { id: 'h25', when: { met: true, temper: ['grumpy'] }, say: S('Hm. You again.', 'What now?') },
+    { id: 'h26', when: { met: true, temper: ['chatty'] }, say: S('Hey! Back again! I was just telling my neighbour about you.') },
+    { id: 'h27', when: { met: true, away: 2 }, say: S('Long time no see! It\'s been {days} days.', 'Well, look who it is! Where have you been?') },
+    { id: 'h28', when: { met: true, child: true }, say: S('Hi again! Did you fight any monsters today?', 'It\'s you! I told my whole class about you!') },
+    { id: 'h29', when: { met: true, op: [-100, -30] }, say: S('You. What do you want this time?') },
+    { id: 'h30', when: { met: true, temper: ['shy'] }, say: S('Oh — hi again. You remembered me?') },
+  ],
+  mood: [
+    { id: 'm0', when: { mood: [0.55, 1] }, say: S('Couldn\'t be better, honestly!', 'Wonderful, thanks for asking!') },
+    { id: 'm1', when: { mood: [0.2, 0.55] }, say: S('Good, good. Can\'t complain.', 'Pretty good, actually.') },
+    { id: 'm2', when: { mood: [-0.15, 0.2] }, say: S('Oh, you know. Fine.', 'Same as always.', 'Alright. Busy.') },
+    { id: 'm3', when: { mood: [-0.5, -0.15] }, say: S('Bit of a slow day.', 'Could be better.', 'Meh. One of those days.') },
+    { id: 'm4', when: { mood: [-1, -0.5] }, say: S('Honestly? Rotten.', 'Don\'t ask.') },
+    { id: 'm5', when: { trouble: true, mood: [-1, 0] }, say: S('Shaken. Did you see what happened over there? I\'m still shaking.', 'Not good. All that noise, the dust… I thought the building was coming down.') },
+    { id: 'm6', when: { wet: true, mood: [-1, 0.2] }, say: S('Wet. This rain gets into my bones.', 'Soaked through. Again.') },
+    { id: 'm7', when: { wet: true, mood: [0, 1], temper: ['dreamy', 'cheerful'] }, say: S('I like the rain, actually. The city smells different.') },
+    { id: 'm8', when: { storm: true }, say: S('With this storm? I just want to get home.', 'Did you hear that thunder? I nearly dropped my shopping.') },
+    { id: 'm9', when: { night: true, mood: [-1, 0.3] }, say: S('Tired. It\'s late, I should be in bed.') },
+    { id: 'm10', when: { morning: true, mood: [-1, 0.3] }, say: S('Not awake yet. Ask me after my coffee.') },
+    { id: 'm11', when: { trouble: true, temper: ['anxious'] }, say: S('I heard the crashes. Is it over? Is it safe now?') },
+    { id: 'm12', when: { trouble: true, temper: ['grumpy'] }, say: S('How do you think? Half the street is rubble. Was that you?') },
+    { id: 'm13', when: { child: true, mood: [0.2, 1] }, say: S('Good! We had pancakes!', 'Super good! No homework today!') },
+    { id: 'm14', when: { senior: true, mood: [-0.5, 0.2] }, say: S('My knees hurt, but that\'s old news.') },
+    { id: 'm15', when: { temper: ['chatty'], mood: [0.2, 1] }, say: S('Great! I\'ve been thinking about {interest} all day.') },
+    { id: 'm16', when: { met: true, deed: 'helped', mood: [0, 1] }, say: S('Better than the last time we met, thanks to you!') },
+    { id: 'm17', when: { op: [50, 100], mood: [0, 1] }, say: S('Better now that you\'re here!') },
+    { id: 'm18', when: { threat: true, temper: ['anxious', 'shy'] }, say: S('I can\'t sleep since that… thing was in the city.') },
+  ],
+  job: [
+    { id: 'j0', when: {}, say: S('I\'m {aTitle}. It pays the bills.', '{ATitle}. Have been for years.') },
+    { id: 'j1', when: { job: ['pupil'] }, say: S('I go to school. Maths is boring, but break is good.', 'School. We\'re doing volcanoes!') },
+    { id: 'j2', when: { job: ['student'] }, say: S('I study. Mostly I study how to pay the rent.', 'Student. Exams next week, so… panicking, mostly.') },
+    { id: 'j3', when: { job: ['retired'] }, say: S('Retired! Forty years of work, and now I finally have time for {interest}.', 'Retired. I keep busier than when I worked, though.') },
+    { id: 'j4', when: { job: ['home'] }, say: S('I\'m between jobs right now. Something will come up.', 'I work from home. Which means I mostly talk to the cat.') },
+    { id: 'j5', when: { temper: ['proud'] }, say: S('I\'m {aTitle}, and a good one, if I may say so.') },
+    { id: 'j6', when: { temper: ['grumpy'] }, say: S('{ATitle}. Don\'t get me started.') },
+    { id: 'j7', when: { temper: ['cheerful'] }, say: S('I\'m {aTitle}! Love it, most days.') },
+    { id: 'j8', when: { temper: ['dreamy'] }, say: S('I\'m {aTitle}, but really I\'d like to do something with {interest}.') },
+    { id: 'j9', when: { job: ['office'] }, say: S('{ATitle}. Spreadsheets. Meetings about spreadsheets.') },
+    { id: 'j10', when: { job: ['factory'] }, say: S('{ATitle} out in the industrial area. The robots do half the work now.') },
+    { id: 'j11', when: { job: ['dock'] }, say: S('{ATitle} down at the port. Early starts, good people.') },
+    { id: 'j12', when: { job: ['food'] }, say: S('{ATitle}. If you\'re ever hungry, you know where to find me.') },
+    { id: 'j13', when: { job: ['civic'] }, say: S('{ATitle}. Busy days, with everything that goes on in {city}.') },
+    { id: 'j14', when: { job: ['tech'] }, say: S('{ATitle}. Somebody has to keep the machines happy.') },
+    { id: 'j15', when: { job: ['craft'] }, say: S('{ATitle}. If it\'s broken, I fix it. Which keeps me busy around you, ha.') },
+    { id: 'j16', when: { job: ['craft'], giant: true }, say: S('{ATitle}. And people like you keep me in work, ha!') },
+    { id: 'j17', when: { job: ['factory', 'office'], temper: ['grumpy', 'anxious'] }, say: S('{ATitle}. For now. They keep talking about robots taking over.') },
+  ],
+  hobby: [
+    { id: 'i0', when: {}, say: S('In my free time? {Interest}, mostly.', 'And I\'m mad about {interest}.') },
+    { id: 'i1', when: { temper: ['chatty', 'nosy'] }, say: S('But {interest} — that\'s my real passion. Don\'t get me started, I could talk for hours.') },
+    { id: 'i2', when: { temper: ['shy'] }, say: S('I like {interest}. Quietly.') },
+    { id: 'i3', when: { interest: ['conspiracy theories'] }, say: S('Have you noticed the drones fly in patterns? Think about it.', 'Ask yourself who really runs the robots. Go on. Ask.') },
+    { id: 'i4', when: { interest: ['superheroes'] }, say: S('Superheroes, obviously. I collect the cards. Would you sign one?') },
+    { id: 'i5', when: { interest: ['their dog'] }, say: S('Mostly I walk my dog. Best friend I have.') },
+    { id: 'i6', when: { interest: ['their cat'] }, say: S('My cat runs my life, honestly. I just live there.') },
+    { id: 'i7', when: { interest: ['their grandchildren'] }, say: S('My grandchildren! Do you want to see pictures? I have a few hundred.') },
+    { id: 'i8', when: { interest: ['robots'] }, say: S('I build little robots at home. Nothing that could take over a street, promise.') },
+    { id: 'i9', when: { interest: ['birdwatching'] }, say: S('Birds. You\'d be amazed what nests on the rooftops here. Mind them when you fly.') },
+    { id: 'i10', when: { interest: ['astronomy'] }, say: S('Stargazing, when the city lights let me. Have you ever been up high enough to see properly?') },
+    { id: 'i11', when: { interest: ['local history'] }, say: S('Local history. Every street in {city} has a story, you know.') },
+    { id: 'i12', when: { child: true }, say: S('I like {interest}! And ice cream!') },
+  ],
+  news: [
+    { id: 'n0', when: {}, say: S('Quiet around here, mostly. That\'s how I like it.', 'Nothing much. The usual.', 'The {city} news says it\'ll be a quiet week. They always say that.') },
+    { id: 'n1', when: { group: true }, say: S('{Group} run these streets. Keep your head down around their people.', 'You see the tags on the walls? {Group}. They think they own the place.') },
+    { id: 'n2', when: { group: true, temper: ['grumpy'] }, say: S('{Group}, that\'s what. And the police do nothing.') },
+    { id: 'n3', when: { group: true, temper: ['anxious', 'shy'] }, say: S('Don\'t say it too loud, but {group} are everywhere around here.') },
+    { id: 'n4', when: { group: true, boss: true, temper: ['nosy', 'chatty'] }, say: S('They say {boss} calls the shots for {group}. Nobody\'s ever seen them twice in the same place.') },
+    { id: 'n5', when: { group: true, boss: true, op: [30, 100] }, say: S('If you want to do something about {group}, it\'s {boss} you need. Everyone knows that name.') },
+    { id: 'n6', when: { trouble: true }, say: S('Did you see the damage? Something tore up the street a while ago.', 'The noise earlier! I thought it was an earthquake.') },
+    { id: 'n7', when: { threat: true }, say: S('There was something huge in the city. A monster! The sirens went on for ages.') },
+    { id: 'n8', when: { storm: true }, say: S('They say the storm will go on all night.') },
+    { id: 'n9', when: { temper: ['nosy'] }, say: S('Well, since you ask… the couple upstairs have been arguing again. Oh, you meant crime? Ha.') },
+    { id: 'n10', when: { temper: ['chatty'] }, say: S('You know the café round the corner? They put in a robot barista. The coffee\'s terrible now.') },
+    { id: 'n11', when: { temper: ['dreamy'] }, say: S('Have you ever looked at the city from the top of a tower? I\'d love to, just once.') },
+    { id: 'n12', when: { interest: ['conspiracy theories'] }, say: S('The drones. Watch them. They\'re counting us.') },
+    { id: 'n13', when: { senior: true }, say: S('In my day this was all little shops. Now it\'s robots carrying parcels.') },
+    { id: 'n14', when: { child: true }, say: S('There\'s a cat that lives in the park! I named it Captain.', 'My friend says there are slime monsters in the sewers. That\'s not true, right?') },
+    { id: 'n15', when: { group: true, child: true }, say: S('Mum says I\'m not allowed near the ones with the tags. {Group}.') },
+  ],
+  way: [
+    { id: 'w0', when: {}, say: S('{Place}? That\'s {dir} of here, about {dist}. There, I\'ve put it on your map.', '{Place}… go {dir}, it\'s about {dist}. I\'ll mark it for you.') },
+    { id: 'w1', when: { temper: ['grumpy'] }, say: S('{Place}? {Dir}. About {dist}. Can\'t miss it.') },
+    { id: 'w2', when: { temper: ['chatty', 'cheerful'] }, say: S('Oh, {place}! Go {dir}, about {dist} — lovely spot. There, it\'s on your map now.') },
+    { id: 'w3', when: { far: true }, say: S('{Place}? That\'s a long way, {dist} {dir}. I\'ve marked it, but take the metro!') },
+    { id: 'w4', when: { child: true }, say: S('That way! {Dir}! I\'ll show you on your map!') },
+    { id: 'w5', when: { temper: ['shy', 'anxious'] }, say: S('I think… {dir}? About {dist}. I put it on your map, I hope that\'s right.') },
+  ],
+  me: [
+    { id: 'o0', when: { op: [-10, 25] }, say: S('Don\'t know you well enough yet. Ask me again in a while.', 'You seem alright. Time will tell.') },
+    { id: 'o1', when: { op: [25, 60] }, say: S('I think you\'re alright. You help people. That counts.') },
+    { id: 'o2', when: { op: [60, 100] }, say: S('Honestly? You\'re the best thing that\'s happened to this city.', 'People like you give me hope.') },
+    { id: 'o3', when: { op: [-40, -10] }, say: S('You break a lot of things. Somebody has to pay for all that, you know.') },
+    { id: 'o4', when: { op: [-100, -40] }, say: S('I think you\'re dangerous. People get hurt around you.', 'Honestly? I wish you\'d go and be a hero somewhere else.') },
+    { id: 'o5', when: { deed: 'helped', op: [0, 100] }, say: S('You helped me when I was on the ground. I won\'t forget that.') },
+    { id: 'o6', when: { deed: 'saved', op: [0, 100] }, say: S('You came for me when nobody else did. That\'s what I think of you.') },
+    { id: 'o7', when: { deed: 'hurt' }, say: S('You knocked me over and didn\'t even look back.', 'Ask my bruises.') },
+    { id: 'o8', when: { giant: true }, say: S('Hard to have an opinion of someone whose ankle I\'m talking to.') },
+    { id: 'o9', when: { child: true, op: [0, 100] }, say: S('You\'re so cool! When I grow up I want to fly too!') },
+    { id: 'o10', when: { temper: ['grumpy'], op: [25, 100] }, say: S('You\'re alright. Don\'t let it go to your head.') },
+    { id: 'o11', when: { temper: ['shy'], op: [-10, 60] }, say: S('Oh! Um. You seem… nice?') },
+    { id: 'o12', when: { trouble: true, op: [-100, 10] }, say: S('Look around you. That\'s what I think.') },
+  ],
+  bye: [
+    { id: 'b0', when: {}, say: S('See you around.', 'Take care!', 'Bye!') },
+    { id: 'b1', when: { temper: ['grumpy'] }, say: S('Finally.', 'Yeah, yeah.') },
+    { id: 'b2', when: { temper: ['cheerful'] }, say: S('Bye! Go save the world!') },
+    { id: 'b3', when: { temper: ['kind'] }, say: S('Look after yourself, dear.') },
+    { id: 'b4', when: { op: [-100, -30] }, say: S('Good. Off you go.') },
+    { id: 'b5', when: { child: true }, say: S('Bye! Fly safe!') },
+    { id: 'b6', when: { temper: ['anxious'] }, say: S('Be careful out there.') },
+    { id: 'b7', when: { night: true }, say: S('Good night!') },
+    { id: 'b8', when: { temper: ['chatty'] }, say: S('Oh, already? Well — come by again, I\'m usually around here!') },
+  ],
+};
+
+/** Small talk of passers-by (ui/Barks), by temperament; shy people say nothing. */
+export const CHAT: Record<Temperament, readonly string[]> = {
+  cheerful: ['Lovely day!', 'Morning!', 'Ha, look at that!', 'What a day.'],
+  chatty: ['…and then I said to her…', 'Yeah, I\'ll call you back!', 'You won\'t believe what happened.', 'Did you see the news?'],
+  shy: [],
+  grumpy: ['Tsk.', 'Watch where you\'re going.', 'Typical.', 'Unbelievable.'],
+  anxious: ['Did you hear that?', 'I should get home.', 'Is it going to rain?', 'Running late, running late…'],
+  nosy: ['What\'s going on over there?', 'Who\'s that?', 'Ooh, look.'],
+  proud: ['Excuse me.', 'Pardon.', 'If you don\'t mind.'],
+  kind: ['After you!', 'Have a nice day!', 'Sorry, go ahead.'],
+  dreamy: ['Hmm…', 'Look at those clouds.', 'Where was I going again?'],
+  steady: ['Running late again…', 'Morning.', 'Right on time.', 'Excuse me.'],
+};

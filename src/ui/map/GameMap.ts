@@ -36,8 +36,8 @@ export interface MapMarker {
   z: number;
   /** CSS colour. */
   color: string;
-  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; pin: the player's own marker; zone: a ring of radius `r`; landmark: a star badge (named on the full map). */
-  kind: 'core' | 'alert' | 'dot' | 'pin' | 'zone' | 'landmark';
+  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; faint: a small see-through dot (people you met; not on the compass); pin: the player's own marker; zone: a ring of radius `r`; landmark: a star badge (named on the full map). */
+  kind: 'core' | 'alert' | 'dot' | 'faint' | 'pin' | 'zone' | 'landmark';
   title?: string;
   /** The compass shows it at any distance (pinned to its edge when behind), with the distance (a zone: to its edge — the way out from inside). */
   always?: boolean;
@@ -774,6 +774,10 @@ export class GameMap {
             g.lineWidth = 3.5; g.strokeStyle = 'rgba(255,255,255,0.92)'; g.strokeText(name, r + 4, 0);
             g.fillStyle = '#5b2a10'; g.fillText(name, r + 4, 0);
           }
+        } else if (m.kind === 'faint') {
+          g.globalAlpha = 0.6;
+          g.beginPath(); g.arc(0, 0, full ? 3.6 : 2.6, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();
+          g.lineWidth = 1; g.strokeStyle = 'rgba(20, 28, 36, 0.55)'; g.stroke();
         } else {
           g.beginPath(); g.arc(0, 0, r * 0.6, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();
         }

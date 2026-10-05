@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.050 — 2026-10-05
+
+- **Everybody has a name and a personality now.** Click someone and the target frame shows who they are ("Mara Okonkwo", "Shop assistant"). Every person has a temperament (cheerful, chatty, shy, grumpy, anxious, nosy, proud, kind, dreamy or steady), a job, a hobby and a mood that changes with the day, the weather and what just happened on their street. Passers-by make small talk in their own manner; shy people keep quiet.
+- **Talk to people with E**: stand by someone (or target them) and press E. They stop, turn to you and you can say hello, ask how they are, what they do, what's going on around here (the gang that runs the street, its boss, a recent monster), ask the way (they put the nearest metro station or a landmark on your map) or what they think of you. Keys 1–7 or click; Esc or E ends it. Their answers depend on who they are and on what you did.
+- **People remember you.** Everyone you talk to or help up remembers it, and people who know you also remember being knocked down by you. Meet them again and they greet you for it ("You're the one who helped me up on Linden Street!"), or grumble at you. Their opinion of you mixes your reputation with what you did to them.
+- **Faint dots on the map** show where the people you have met are right now (at home, at work, out for lunch), even far away. Hover one for their name and how they feel about you. Up to 24 people; after that the one you care least about is forgotten. They are kept in your saves.
+- The plan for all of this, and for optional language-model conversations via OpenRouter later, is in docs/NPC_PERSONALITY_PLAN.md.
+
 ## 0.049 — 2026-10-05
 
 - **Being defeated is a real moment now.** When your health runs out you no longer just get up where you fell (where a swarm could knock you down again and again). You lie there untouchable, the edge of the screen red, and:

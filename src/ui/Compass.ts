@@ -71,7 +71,7 @@ export class Compass {
     const list: Poi[] = [];
     const goals: MapMarker[] = [];
     for (const m of g.map.allMarkers()) {
-      if (m.kind === 'pin') continue;
+      if (m.kind === 'pin' || m.kind === 'faint') continue;
       if (m.always) { goals.push(m); continue; }
       // Landmarks are seen from further away.
       if (Math.hypot(m.x - p.x, m.z - p.z) > range * (m.kind === 'landmark' ? 4 : 1)) continue;

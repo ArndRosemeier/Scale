@@ -125,6 +125,7 @@ export class SaveSystem {
       aftermath: g.aftermath ? g.aftermath.saveState() : null,
       slimes: g.slimeRealm ? g.slimeRealm.saveState() : null,
       factions: g.crime.saveFactions(),
+      people: g.people ? g.people.save() : null,
     };
   }
 
@@ -261,6 +262,7 @@ export class SaveSystem {
     step('the aftermath', () => g.aftermath.restore(d.aftermath));
     step('the slimes', () => g.slimeRealm?.restore(d.slimes as Parameters<typeof g.slimeRealm.restore>[0]));
     step('the villain groups', () => g.crime.restoreFactions(d.factions));
+    step('the people you met', () => g.people?.restore(d.people));
     step('the player', () => this.placePlayer(d.player));
     step('the camera', () => { g.camRig.yaw = d.camera.yaw; g.camRig.pitch = d.camera.pitch; g.camRig.zoom = d.camera.zoom; });
     step('health', () => {
