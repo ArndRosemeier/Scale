@@ -180,6 +180,14 @@ function roofFaults(b: BuildingDesc, terrain: Terrain): number {
   return faults;
 }
 
+// Regression: these cities crashed in the bridge picking (the shared terrain.water() result was
+// overwritten by a later water query before its river was read). Seed 1234 at size 1 had the same cause.
+for (const [seed, size] of [[17, 0.75]] as const) {
+  let ok = true;
+  try { buildMacroPlan(new Terrain(makeProfile({ seed, size }))); } catch (e) { ok = false; console.error(e); }
+  check(ok, `seed ${seed} size ${size}: macro plan builds without crashing`);
+}
+
 for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) {
   const t0 = performance.now();
   const profile = makeProfile({ seed, size });

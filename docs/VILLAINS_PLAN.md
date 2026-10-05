@@ -8,7 +8,7 @@ group and growing when it gets away with it, turf and tags in saves. Phase 2 is 
 between the groups, hideouts (found by walking past or from a cuffed member, guarded, stash busted with E), turf that
 drifts by itself every game hour, rewards the moment a crime is stopped. Phase 3 part 1 is built (v0.035): the caster core,
 the villain power set with tells, the gang's Brute and the Syndicate's Enforcer leading operations. Part 2 is built
-(v0.037): the techno-cult (robot hijacks, its Technomancer with an EMP) and the elemental cult (rituals before
+(v0.038): the techno-cult (robot hijacks, its Technomancer with an EMP) and the elemental cult (rituals before
 landmarks, its Invoker). Moving the hero's own powers onto the caster core is left open. Builds on the street-crime layer (`src/game/crime`),
 the threat/response layer (`src/game/threats`, `src/game/response`) and the powers
 (`src/game/powers`). Design rules from PLAYGROUND_PLAN §0 still hold: show, don't tell (no quests,
