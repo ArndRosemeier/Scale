@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.042 — 2026-10-05
+
+- **The busker really plays the guitar**: the strumming hand now strums across the strings in front of the sound hole (the forearm lies over the guitar instead of reaching through it, no more waving), and the other hand holds the neck, moving between chord positions. Works for every body shape: the hands are placed on the guitar itself.
+
 ## 0.041 — 2026-10-05
 
 - **Named bosses**: every villain group now has a boss with a name and a title: the gang's **Kingpin**, the Syndicate's **Chairman**, the techno-cult's **Architect** and the elemental cult's **High Invoker**. A boss is far tougher than a lieutenant, glows brightly in the group's colour, has the lieutenants' powers plus one of its own, and fights to the end.
