@@ -2,11 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.026 — 2026-10-05
+## 0.027 — 2026-10-05
 
 - **The army comes for you**: a giant on a rampage with a bad reputation is now treated like a monster. First a warning (a siren, the screens around you turn to the red alert, a police drone overhead, an officer shouting up at you), then a final warning, then the whole response: police and SWAT firing from a distance, cordons and evacuation sirens, the National Guard, tanks, attack helicopters, jets and artillery — and, rarely, the tactical nuke countdown, aimed at you.
 - **Ending it**: stop wrecking things for a while, or shrink back to human size, and the army stands down — but once it has been called it keeps after you for three minutes at least, so the Guard and the tanks do get there. Get knocked out and you are taken into custody. Start again soon after and the army comes back without new warnings.
 - **Fighting back** works: stomp tanks and trucks, knock soldiers down, punch helicopters out of the sky. The news drone films you on the city's screens.
+
+## 0.026 — 2026-10-05
+
+- **Villain groups, first step**: every city now has a street gang and a Syndicate with their own names, colours and emblem — different in every city (for example "the Harbour Saints" and "Marlow Holdings").
+- Each group holds **turf**: the gang in the rough housing estates, docks and industrial streets, the Syndicate in the centre. A new **Turf** layer on the map shows who runs which streets, with the groups listed in the legend.
+- Crime in a group's turf is its work: the gang mugs, the Syndicate robs shops. Its members wear its colours (gang caps and jackets, dark Syndicate suits), the target frame names the group, and the map marks their crimes in its colour.
 
 ## 0.025 — 2026-10-04
 

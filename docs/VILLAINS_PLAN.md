@@ -1,6 +1,9 @@
 # Villain groups — plan (for approval)
 
-Status: **proposal**, nothing built yet. Builds on the street-crime layer (`src/game/crime`),
+Status: **proposal**, accepted with the defaults of §6 questions 1 and 2.
+Status (2026-10-05): Phase 1 part 1 is built — seeded street gang and Syndicate with turf, the turf map layer, today's
+crimes as their operations (uniforms, names on the target frame and map); see ARCHITECTURE.md, "Street crime". Part 2
+(racket, tagging, saves, turf shrinking when you stop them) is open. Builds on the street-crime layer (`src/game/crime`),
 the threat/response layer (`src/game/threats`, `src/game/response`) and the powers
 (`src/game/powers`). Design rules from PLAYGROUND_PLAN §0 still hold: show, don't tell (no quests,
 no dialogue trees, sparse barks); nobody dies (KO / injured); progression is karma.
