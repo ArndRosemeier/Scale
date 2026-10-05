@@ -975,7 +975,7 @@ export class Game {
     for (const a of hit) this.crime.combat.hitActor(a, jx, jy, jz, 'strike', 'player');
   }
 
-  /** Nearest street holes -> terrain shader. */
+  /** Nearest street holes and whether the camera is underground -> terrain shader. */
   private updateHoles(): void {
     const H = this.underground.holes;
     const c = this.renderer.camera.position;
@@ -989,6 +989,7 @@ export class Game {
       n++;
     }
     terrainHoles.uHoleN.value = n;
+    terrainHoles.uUnder.value = c.y < this.terrain.height(c.x, c.z) - 0.5 ? 1 : 0;
   }
 
   /** Inside a building (an active interior) or a landmark's rooms (the town hall)? */
