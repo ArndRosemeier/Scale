@@ -2,16 +2,26 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.042 — 2026-10-05
+## 0.044 — 2026-10-05
 
 - **Walk into the cathedral**: the west doors stand open and lead into a full interior.
-  - Inside: a nave with pillars and arcades, side aisles, a transept and an apse, under stone vaults. The domed cathedral has a dome over the crossing.
+  - Inside: a nave with pillars and arcades, side aisles, a transept and an apse, under stone vaults. The domed cathedral's crossing rises on four arches and pendentives to a gilded ring, a drum and a dome.
   - Furnishings: rows of pews, a red runner up the middle, a raised chancel with choir stalls and an altar, a pulpit, a font, and crown lamps hanging on chains.
   - It is dim inside like other interiors, lit by the lamps and the stained glass.
 - **Stained glass**: the cathedral's lancet and rose windows are coloured glass that glows in daylight.
   - The glass shatters into coloured shards from a light hit while the stone around it holds, and a broken window lets you through.
   - The cathedral can now be wrecked piece by piece like the marvels. Broken windows and walls are kept in saves.
-- **Fix**: the town hall's front door was blocked for walking (the stone above it reached down to the ground). It is open now, and so are other landmark doors and windows built the same way.
+- **Fix**: the town hall's front door was blocked for walking (the stone above it reached down to the ground). It is open now, and so are other landmark doors and windows built the same way. The doorway has a threshold, so you don't drop into a pit under it.
+- **Fix**: entrance steps (cathedral and town hall) now reach the square even when it lies far below the floor. They get steeper (up to 30 cm) and more numerous instead of stopping short with a high first step.
+
+## 0.043 — 2026-10-05
+
+- **A real sun and moon in the sky**: the sun is now a clear disc, yellow-white by day and orange-red as it rises and sets, with a soft glow around it instead of one white blot of glare. Clouds pass in front of it and it vanishes under an overcast sky.
+- **The moon** crosses the sky like the sun, about 50 minutes later each day, and goes through its phases over a month (crescent, half, gibbous, full), with darker seas and faint craters. By night it shines over the city and hides the stars behind it; by day you can sometimes see it as a pale disc. Moonlight now comes from the moon: brighter at full moon, darkest on moonless nights.
+
+## 0.042 — 2026-10-05
+
+- **The busker really plays the guitar**: the strumming hand now strums across the strings in front of the sound hole (the forearm lies over the guitar instead of reaching through it, no more waving), and the other hand holds the neck, moving between chord positions. Works for every body shape: the hands are placed on the guitar itself.
 
 ## 0.041 — 2026-10-05
 
