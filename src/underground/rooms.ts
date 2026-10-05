@@ -126,8 +126,11 @@ export function denLayout(r: Room): DenLayout {
   const crew: DenLayout['crew'] = [];
   for (const a of [0.4, 2.3, 4.2]) crew.push({ u: table.u + Math.cos(a) * 1.05, v: table.v + Math.sin(a) * 1.05, fu: table.u, fv: table.v });
   crew.push({ u: barrel.u - 0.2, v: barrel.v - 0.75, fu: barrel.u, fv: barrel.v });
-  // The lookout, just inside the door, eyes on it.
-  crew.push({ u: m.u0 + 0.9, v: Math.max(m.v0 + 0.6, Math.min(m.v1 - 0.6, r.doors[0].v1 + 0.9)), fu: m.u0 - 1, fv: (r.doors[0].v0 + r.doors[0].v1) / 2 });
+  // The lookout, just inside the door on whichever side leaves the most room to the others, eyes on it.
+  const d = r.doors[0], lu = m.u0 + 0.9, clampV = (v: number) => Math.max(m.v0 + 0.6, Math.min(m.v1 - 0.6, v));
+  const room = (v: number) => Math.min(...crew.map((c) => Math.hypot(c.u - lu, c.v - v)));
+  const sides = [clampV(d.v1 + 0.9), clampV(d.v0 - 0.9)];
+  crew.push({ u: lu, v: room(sides[0]) >= room(sides[1]) ? sides[0] : sides[1], fu: m.u0 - 1, fv: (d.v0 + d.v1) / 2 });
   return {
     table, barrel, crew,
     sofa: { u: m.u1 - 0.45, v0: mv - 0.4, v1: mv + 1.8 },
