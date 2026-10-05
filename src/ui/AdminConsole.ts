@@ -175,6 +175,7 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Groups & hideouts', run: (_g, d) => call(d, 'factions') },
     { label: 'Go to gang hideout', run: (_g, d) => call(d, 'hideout', 0, 'go') },
     { label: 'Turf drift 24 h', run: (_g, d) => call(d, 'drift', 24) },
+    { label: 'Mad bomber', run: (_g, d) => call(d, 'crime', 'bomber', 40) },
     { label: 'Cat in tree', run: (_g, d) => call(d, 'deed', 'cat') },
     { label: 'Runaway dog', run: (_g, d) => call(d, 'deed', 'dog') },
     { label: 'Lost wallet', run: (_g, d) => call(d, 'deed', 'wallet') },

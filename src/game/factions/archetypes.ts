@@ -51,7 +51,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: 1,
     dense: 0,
     reach: 0.42,
-    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5, brawl: 1.5, hideout: 0 },
+    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5, bomber: 1.5, brawl: 1.5, hideout: 0 },
     rivals: ['syndicate'],
     palettes: [
       { name: 'red', map: '#e5484d', primary: [0.62, 0.08, 0.08], accent: [0.85, 0.12, 0.1] },
@@ -72,7 +72,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: -0.6,
     dense: 1.5,
     reach: 0.34,
-    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0, brawl: 0.6, hideout: 0 },
+    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0, bomber: 0, brawl: 0.6, hideout: 0 },
     rivals: ['gang'],
     palettes: [
       { name: 'gold', map: '#d4a72c', primary: [0.07, 0.07, 0.08], accent: [0.85, 0.66, 0.18] },

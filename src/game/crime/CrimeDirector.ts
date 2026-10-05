@@ -40,6 +40,8 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     brawl: (night ? 0.55 : evening ? 0.5 : 0.2) * (rough ? 1.2 : 0.8),
     // Never rolled: hideout guards are there when the player comes by.
     hideout: 0,
+    // Rare: a madman with a bag of bombs where the crowds are.
+    bomber: busy ? 0.09 : 0.05,
   };
 }
 

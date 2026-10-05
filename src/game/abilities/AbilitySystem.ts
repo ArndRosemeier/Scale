@@ -19,7 +19,7 @@ import type { Progress } from './Progress';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
   ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE,
-  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, NOVA, NOVA_COOLDOWN,
+  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, FIREBALL, FIREBALL_COOLDOWN, NOVA, NOVA_COOLDOWN,
   BOLT, BOLT_COOLDOWN, QUAKE, QUAKE_COOLDOWN, GUST, GUST_COOLDOWN, SHRINK, SHRINK_COOLDOWN,
 } from './tuning';
 
@@ -46,6 +46,7 @@ const NUMPAD = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6'
 /** Tap powers of the elemental layer: energy and cooldown by rank. */
 const TAP: Partial<Record<AbilityId, { cost: number; cd: number[] }>> = {
   fireWave: { cost: FIRE.cost, cd: FIRE_COOLDOWN },
+  fireball: { cost: FIREBALL.cost, cd: FIREBALL_COOLDOWN },
   frostNova: { cost: NOVA.cost, cd: NOVA_COOLDOWN },
   lightning: { cost: BOLT.cost, cd: BOLT_COOLDOWN },
   stomp: { cost: QUAKE.cost, cd: QUAKE_COOLDOWN },

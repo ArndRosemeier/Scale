@@ -5,7 +5,8 @@
 import {
   MAX_RANK, PUNCH_IMPULSE, JUMP_HEIGHT, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE, SHOCK_COOLDOWN, SHOCK_COST,
   FLIGHT_SPEED, FLIGHT_CRUISE, flightBoost, SIZE_RANGE, JUMP, DASH, SPEED_TOP,
-  LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, FIRE_COOLDOWN, NOVA, NOVA_RADIUS, NOVA_FREEZE, NOVA_COOLDOWN,
+  LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, FIRE_COOLDOWN,
+  FIREBALL, FIREBALL_RANGE, FIREBALL_RADIUS, FIREBALL_BLAST, FIREBALL_BURN, FIREBALL_COOLDOWN, NOVA, NOVA_RADIUS, NOVA_FREEZE, NOVA_COOLDOWN,
   ICE, ICE_WIDTH, ICE_LIFE, BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, BOLT_COOLDOWN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE,
   QUAKE_COOLDOWN, GUST, GUST_RADIUS, GUST_TIME, GUST_COOLDOWN, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
   SHRINK_COOLDOWN, SLIME, SLIME_COOLDOWN, SLIME_COUNT, SLIME_TIME, SLIME_REACH, SLIME_HOLD,
@@ -13,7 +14,7 @@ import {
 import { wallBreakShare, windowShatterShare, WALL_CLASSES, type WallClass } from '../../destruction/wallStrength';
 
 export type AbilityId = 'punch' | 'strength' | 'superJump' | 'speed' | 'shockwave' | 'flight' | 'size'
-  | 'laser' | 'fireWave' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink' | 'slimeCall';
+  | 'laser' | 'fireWave' | 'fireball' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink' | 'slimeCall';
 
 /** Ids of earlier versions (saved progress, hotbars) -> their current power. */
 export const LEGACY_IDS: Record<string, AbilityId> = { dash: 'speed' };
@@ -103,6 +104,12 @@ function fireWalls(r: number): string {
   return windowShatterShare(FIRE_HEAT[r]) >= 0.75 ? 'bursts windows, scorches walls' : 'scorches walls';
 }
 
+function fireballWalls(r: number): string {
+  const b = breaksClasses(FIREBALL_BLAST[r]);
+  if (b.length) return `blows in ${list(b)} walls`;
+  return windowShatterShare(FIREBALL_BLAST[r]) >= 0.75 ? 'blows out windows' : 'cracks windows';
+}
+
 function quakeWalls(r: number): string {
   const b = breaksClasses(QUAKE_IMPULSE[r]);
   return b.length ? `breaks ${list(b)} walls along it` : 'shatters windows along it';
@@ -171,6 +178,13 @@ export const ABILITIES: AbilityDef[] = [
     icon: svg('<path d="M12 21c-3.9 0-6.4-2.6-6.4-6 0-3.4 2.9-5.4 3.4-9 2 1.5 3 3.2 3 5 1-1 1.5-2.2 1.5-3.5 2.4 2 3.9 4.5 3.9 7.5 0 3.4-2.4 6-5.4 6z"/><path d="M12 21c-1.5 0-2.6-1.1-2.6-2.6 0-1.5 1.3-2.3 1.6-3.9 1.6 1 3.6 2.4 3.6 3.9 0 1.5-1.1 2.6-2.6 2.6z"/>'),
     rankText: (r) => `Cone ${FIRE_RANGE[r]} m · burns ${FIRE_BURN[r]} s · ${fireWalls(r)}`,
     costText: (r) => `${FIRE.cost} energy · ${cd(FIRE_COOLDOWN[Math.max(1, r)])}`,
+  },
+  {
+    id: 'fireball', name: 'Fireball', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'Hurl a ball of fire that bursts where it lands: people are thrown and set alight, cars burn and blow up, windows and walls are blown in.',
+    icon: svg('<circle cx="15" cy="9" r="4.2"/><path d="M15 6.6c1 .9 1.6 1.7 1.6 2.6a1.6 1.6 0 0 1-3.2 0c0-.6.3-1 .7-1.5"/><path d="M11.4 12.6L4 20M9.6 10.4L3.5 14.5M13.6 14.4L9.5 20.5" opacity="0.7"/>'),
+    rankText: (r) => `Bursts ${FIREBALL_RADIUS[r]} m wide · reach ${FIREBALL_RANGE[r]} m · burns ${FIREBALL_BURN[r]} s · ${r >= 3 ? 'wrecks cars · ' : ''}${fireballWalls(r)}`,
+    costText: (r) => `${FIREBALL.cost} energy · ${cd(FIREBALL_COOLDOWN[Math.max(1, r)])}`,
   },
   {
     id: 'frostNova', name: 'Frost nova', kind: 'active', group: 'elemental', trigger: 'tap', maxRank: MAX_RANK,
