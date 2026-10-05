@@ -292,6 +292,9 @@ export class Animator {
   /** World facing of the character (the yaw lives on the rig root, not on ch.object). */
   private facingYaw = 0;
 
+  /** Take the next pose at once, without blending from this one (after a cut). */
+  snapPose(): void { this.fresh = true; }
+
   update(inp: AnimInput, dt: number, lod: number, ground: GroundFn | null) {
     this.facingYaw = inp.yaw;
     dt = Math.min(dt, 0.1);

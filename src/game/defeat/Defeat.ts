@@ -187,7 +187,7 @@ export class Defeat {
     });
     const ps = padSpot(top, items, c.x, c.z);
     const pad = new THREE.Vector3(ps.x, b.top + 0.08, ps.z);
-    this.padScale = clamp(ps.clear / 4.9, 0.55, 1);
+    this.padScale = clamp((ps.clear - 0.5) / 4.9, 0.5, 1);
     let ex = c.x, ez = c.z, yaw = 0;
     const st = buildingEntrance(b.desc, g.terrain);
     if (st && st.boxes.length >= 5) {
@@ -236,6 +236,8 @@ export class Defeat {
         if (!g.ragdolls.isActive(P) && P.height > BASE_HEIGHT * 1.3) { P.height = Math.max(BASE_HEIGHT, P.height * Math.exp(-dt * 1.4)); P.targetHeight = P.height; }
         if (once('cap', 0.6)) this.ui.titleCard('DEFEATED<small>Rescue drones on the way</small>', true);
         if (once('capOff', 3.4)) this.ui.titleCard('');
+        // Down again in the ward: no ragdoll there (its physics has no floor down here).
+        if (this.phase === 'down' && this.ward.open) { this.takeBody(); P.pos.copy(this.body); }
         if (this.phase === 'down' && this.t >= DEFEAT.downTime && this.skipping === 0) this.startInbound();
         if (this.phase === 'inbound' && this.skipping === 0) { this.inbound(dt); this.inboundCam(dt); }
         // (Not in the first moment: a jump pressed as the blow landed should not skip it all.)
@@ -561,6 +563,7 @@ export class Defeat {
       P.yaw = Math.PI; // facing the doors (+z)
       P.vel.set(0, 0, 0);
       P.height = P.targetHeight = BASE_HEIGHT;
+      P.rig.animator?.snapPose(); // standing at once (no slanted blend out of lying in the bed)
       H.reset();
       H.koT = 1e9;
       this.ui.caption('');

@@ -166,7 +166,7 @@ export class HospitalWard {
       c.font = `400 ${Math.round(H * 0.17)}px system-ui, sans-serif`;
       c.fillText('REGENERATION WARD  ·  LEVEL R', H * 1.0, H * 0.74);
     });
-    this.sign.mesh.position.set(0, 3.0, -hz + 0.02);
+    this.sign.mesh.position.set(0, 3.5, -hz + 0.02); // (high: over the vitals hologram as seen from the ward)
     g.add(this.sign.mesh);
     const exit = canvasPanel(1.4, 0.45, 256, (c, W, H) => {
       c.fillStyle = '#0a2a14'; c.fillRect(0, 0, W, H);
@@ -178,7 +178,7 @@ export class HospitalWard {
     g.add(exit.mesh);
     // The vitals hologram over the main machine's head end.
     this.vitals = canvasPanel(1.9, 1.0, 512, (c, W, H) => this.drawVitals(c, W, H), true);
-    this.vitals.mesh.position.set(WARD.pod.x, 2.55, WARD.pod.z - WARD.pod.len / 2 - 0.25);
+    this.vitals.mesh.position.set(WARD.pod.x, 2.3, WARD.pod.z - WARD.pod.len / 2 - 0.25);
     this.vitals.mesh.rotation.order = 'YXZ';
     this.vitals.mesh.rotation.x = -0.18;
     g.add(this.vitals.mesh);
