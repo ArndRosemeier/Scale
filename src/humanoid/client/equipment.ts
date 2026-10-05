@@ -58,6 +58,117 @@ interface ShellBuild {
 
 const _v = new THREE.Vector3();
 
+const smoothstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/**
+ * Turns the foot part of a shell into a shoe: per foot, the forefoot cross-sections are projected
+ * onto rounded boxes (superellipses: flat sole, flat top, filled toe gaps) and the toes onto a
+ * rounded toe cap, blended in from mid-foot so the ankle and heel keep following the body.
+ * Works in the bind pose (sole frame from the foot's own vertices), so it fits any body.
+ */
+function shapeShoe(st: HumanStatic, topo: ShellTopo, P: Float32Array, N: Float32Array) {
+  const { src, idx, nbStart, nbList, edge } = topo;
+  const n = src.length;
+  for (const side of ['L', 'R'] as const) {
+    const reg = BODY_REGIONS.indexOf(`foot.${side}` as BodyRegion);
+    const ids: number[] = [];
+    for (let i = 0; i < n; i++) if (st.region[src[i]] === reg) ids.push(i);
+    if (ids.length < 16) continue;
+    const tOf = (i: number) => st.regionT[src[i]];
+    // Foot axis (horizontal): heel/ankle centroid → toe-tip centroid.
+    const cen = (lo: number, hi: number) => {
+      let x = 0, z = 0, c = 0;
+      for (const i of ids) { const t = tOf(i); if (t >= lo && t <= hi) { x += P[i * 3]; z += P[i * 3 + 2]; c++; } }
+      return c ? [x / c, z / c] : null;
+    };
+    const back = cen(0, 0.2), tip = cen(0.85, 1);
+    if (!back || !tip) continue;
+    let dx = tip[0] - back[0], dz = tip[1] - back[1];
+    const dl = Math.hypot(dx, dz);
+    if (dl < 1e-4) continue;
+    dx /= dl; dz /= dl;
+    // Local frame: s along the foot, x across (side), y up.
+    const S = (i: number) => (P[i * 3] - back[0]) * dx + (P[i * 3 + 2] - back[1]) * dz;
+    const X = (i: number) => (P[i * 3] - back[0]) * dz - (P[i * 3 + 2] - back[1]) * dx;
+    // Cross-section of the forefoot (ball of the foot): bounds of the layer around t 0.5..0.68.
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, s0 = 0, c0 = 0, sMax = -Infinity;
+    for (const i of ids) {
+      const t = tOf(i), s = S(i);
+      sMax = Math.max(sMax, s);
+      if (t < 0.5 || t > 0.68) continue;
+      const x = X(i), y = P[i * 3 + 1];
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      s0 += s; c0++;
+    }
+    if (!c0 || x1 <= x0 || y1 <= y0) continue;
+    s0 /= c0;
+    const cx = (x0 + x1) / 2, a = (x1 - x0) / 2 * 1.04;
+    // Sole stays where the foot's sole is; the toe box gets a little extra room on top.
+    const b = (y1 - y0) / 2 * 1.08, cy = y0 + b;
+    const capLen = Math.max(0.02, (sMax - s0) * 1.06);
+    const pw = 3.2; // superellipse exponent: boxy but rounded
+    const se = (u: number, v: number) => Math.pow(Math.pow(Math.abs(u), pw) + Math.pow(Math.abs(v), pw), 1 / pw);
+    const project = (i: number) => {
+      const s = S(i), x = X(i), y = P[i * 3 + 1];
+      const v = (x - cx) / a, h = (y - cy) / b;
+      let ns: number, nx: number, ny: number;
+      if (s <= s0) {
+        // Rounded-box cross-section (filled instep/arch hollows, flat sole).
+        const r = se(v, h);
+        // Behind the ball the foot is taller (instep): never pull the surface inward there.
+        if (r < 1e-4 || r > 1) return;
+        ns = s; nx = cx + (v / r) * a; ny = cy + (h / r) * b;
+      } else {
+        // Toe cap: radial projection onto a half-ellipsoid with a rounded-box section.
+        const u = (s - s0) / capLen;
+        const r = Math.hypot(u, se(v, h));
+        if (r < 1e-4) return;
+        ns = s0 + (u / r) * capLen; nx = cx + (v / r) * a; ny = cy + (h / r) * b;
+      }
+      P[i * 3] = back[0] + ns * dx + nx * dz;
+      P[i * 3 + 1] = ny;
+      P[i * 3 + 2] = back[1] + ns * dz - nx * dx;
+    };
+    // Fully shaped copy first (projection, then a few rounds of smoothing + re-projection, which
+    // spreads the vertices of toe gaps and toe tips evenly over the cap instead of folding them),
+    // blended in from mid-foot at the end.
+    const orig = P.slice();
+    const w = new Float32Array(n);
+    for (const i of ids) { w[i] = smoothstep(0.3, 0.5, tOf(i)); if (w[i] > 0) project(i); }
+    const tmp = new Float32Array(P.length);
+    for (let it = 0; it < 16; it++) {
+      tmp.set(P);
+      for (const i of ids) {
+        const q0 = nbStart[i], q1 = nbStart[i + 1];
+        if (!w[i] || edge[i] || q1 === q0) continue;
+        let x = 0, y = 0, z = 0;
+        for (let q = q0; q < q1; q++) { const j = nbList[q]; x += P[j * 3]; y += P[j * 3 + 1]; z += P[j * 3 + 2]; }
+        const c = 1 / (q1 - q0);
+        tmp[i * 3] = (P[i * 3] + x * c) / 2; tmp[i * 3 + 1] = (P[i * 3 + 1] + y * c) / 2; tmp[i * 3 + 2] = (P[i * 3 + 2] + z * c) / 2;
+      }
+      P.set(tmp);
+      for (const i of ids) if (w[i] > 0) project(i);
+    }
+    for (const i of ids) for (let k = 0; k < 3; k++) P[i * 3 + k] = orig[i * 3 + k] + (P[i * 3 + k] - orig[i * 3 + k]) * w[i];
+  }
+  // Body normals still carry the toes: shade the shoe by its own surface.
+  const acc = new Float32Array(n * 3);
+  for (let k = 0; k < idx.length; k += 3) {
+    const a = idx[k] * 3, b = idx[k + 1] * 3, c = idx[k + 2] * 3;
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+    const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+    for (const o of [a, b, c]) { acc[o] += fx; acc[o + 1] += fy; acc[o + 2] += fz; }
+  }
+  const feet = new Set(['foot.L', 'foot.R'].map((r) => BODY_REGIONS.indexOf(r as BodyRegion)));
+  for (let i = 0; i < n; i++) {
+    if (!feet.has(st.region[src[i]])) continue;
+    const x = acc[i * 3], y = acc[i * 3 + 1], z = acc[i * 3 + 2], l = Math.hypot(x, y, z);
+    if (l < 1e-12) continue;
+    N[i * 3] = x / l; N[i * 3 + 1] = y / l; N[i * 3 + 2] = z / l;
+  }
+}
+
 /** New geometry sharing all vertex attributes of `g` (no copies) with its own index. */
 function shareGeometry(g: THREE.BufferGeometry, index: number[]): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
@@ -324,6 +435,8 @@ export class EquipmentRig {
         }
       }
     }
+    // Shoes are solid: the forefoot is reshaped into a closed toe box so toes don't show through.
+    if (footShell && topo) shapeShoe(st, topo, P, N);
     // Weld seam twins (same displaced position and normal).
     if (twins) for (const gl of twins) {
       let x = 0, y = 0, z = 0, nx = 0, ny = 0, nz = 0;
