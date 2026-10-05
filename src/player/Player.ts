@@ -44,6 +44,8 @@ export class Player {
   height = BASE_HEIGHT;
   targetHeight = BASE_HEIGHT;
   flying = false;
+  /** R: keep moving forward (autorun on foot, autoflight in the air) until R, W or S. */
+  autoMove = false;
   grounded = false;
   readonly rig: HumanoidRig;
   readonly app: HumanoidAppearance;
@@ -151,12 +153,14 @@ export class Player {
     this.sinceToggle += dt;
     if (input.hit('KeyF') && this.flightAllowed) this.toggleFlight();
     else if (this.flying && !this.flightAllowed) this.toggleFlight();
+    if (input.hit('KeyR')) this.autoMove = !this.autoMove;
+    else if (input.hit('KeyW') || input.hit('KeyS')) this.autoMove = false;
 
     // ---- desired movement in camera space
     const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
     const right = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));
     const wish = new THREE.Vector3();
-    if (input.down('KeyW')) wish.add(fwd);
+    if (input.down('KeyW') || this.autoMove) wish.add(fwd);
     if (input.down('KeyS')) wish.sub(fwd);
     if (input.down('KeyD')) wish.add(right);
     if (input.down('KeyA')) wish.sub(right);
@@ -168,6 +172,7 @@ export class Player {
       wish.set(0, 0, 0);
       if (this.flying) this.toggleFlight();
       this.seat = null;
+      this.autoMove = false;
     }
     // Seated: any move, a jump or growing / shrinking gets up; otherwise stay on the seat.
     if (this.seat) {
@@ -313,7 +318,7 @@ export class Player {
     const dir = new THREE.Vector3(-Math.sin(camYaw) * Math.cos(camPitch), Math.sin(camPitch), -Math.cos(camYaw) * Math.cos(camPitch));
     const right = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));
     const w = new THREE.Vector3();
-    if (input.down('KeyW')) w.add(dir);
+    if (input.down('KeyW') || this.autoMove) w.add(dir);
     if (input.down('KeyS')) w.sub(dir);
     if (input.down('KeyD')) w.add(right);
     if (input.down('KeyA')) w.sub(right);
@@ -406,6 +411,7 @@ export class Player {
   sitOn(x: number, z: number, yaw: number): void {
     if (this.flying || this.downT > 0 || this.ragdoll) return;
     this.seat = { x, z, yaw };
+    this.autoMove = false;
   }
 
   /** Get up from the seat, a step forward off it. */

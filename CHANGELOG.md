@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.040 — 2026-10-05
+
+- **Autorun and autoflight on R**: press R and you keep going forward on your own, walking or running on foot and flying when in the air (Shift still runs or boosts, the mouse still steers). Press R again, W or S to stop; it also stops when you sit down or are knocked down.
+- **Rallying the army moved to G** (it was R): with reputation 40+, G makes the soldiers near you follow you. T still calls the airstrike.
+
 ## 0.038 — 2026-10-05
 
 - **Two new villain groups**: every city now also has a **techno-cult** (grey work clothes with glowing seams, in industrial districts and the port) and an **elemental cult** (long dark robes with glowing trim, in the old town and the parks). They hold turf, fight the other groups and show on the map like the street gang and the Syndicate.
