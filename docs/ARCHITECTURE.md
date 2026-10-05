@@ -421,6 +421,17 @@ every frame) owns the parts and draws what belongs to them.
   +0.04 per tag, half as much next door via `FactionMap.near`); holder changes redraw the map and toast. Finished tags
   (`Graffiti`, one canvas texture per group, newest `TAGS.max`) and turf as deltas from the seeded influence
   (`saveFactions`, hundredths) go in saves (`SaveData.factions`, save v4). Crime kinds are one table (`crime/kinds.ts`).
+  Phase 2: archetypes name their `rivals` (`relation`: hostile / wary). `TurfBrawl` (kind `brawl`, rolled only where
+  `rivalsAt` finds a hostile group on the cell or next door): two sides of 2–3 (`memo.side`, each in its own group's
+  colours, `Actor.faction`) meet on a pavement and pick the nearest standing rival; one side beaten → `won` (winner
+  +0.08, loser −0.1); the player close → broken up (both lose). Hideouts (`factions/Hideouts`): one per group, a door
+  of an ordinary building in its home (or strongest) cell, picked from the loaded cell's doors by seed and move count;
+  found when passed in view or told by a cuffed member (map diamond); `HideoutGuard` posts 2–3 guards while the player
+  is within `HIDEOUTS.guardR`; E at the door with them beaten busts the stash (−0.32 there, lie low 36 game hours, then
+  a new door). Off-screen `drift` once per game hour (catch-up ≤ 24 h): influence moves towards the seeded hold ×
+  strength (a beaten group regrows to less; its home never below `DRIFT.home`), raised next to its own turf, lowered
+  where a rival presses, seeded noise; hysteresis on changes of hand (saves store each group's held cells, so a cell kept below HOLD stays held). Crimes emit `subdued` once when everyone is down
+  or giving up: the stop is rewarded then (`Crime.paid`), not at the arrest. Hideouts go in `SaveData.factions.hideouts`.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a

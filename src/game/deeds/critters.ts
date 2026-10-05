@@ -118,9 +118,12 @@ export function makeDog(seed: number): Critter {
 }
 
 /** Small things: a wallet, a handbag, a cash bag. */
-export function makeItem(kind: 'wallet' | 'bag' | 'cash'): THREE.Group {
+export function makeItem(kind: 'wallet' | 'bag' | 'cash' | 'envelope'): THREE.Group {
   const g = new THREE.Group();
-  if (kind === 'wallet') g.add(part(geo.box, mat(0x4a2e1a, 0.55), 0.11, 0.025, 0.09, 0, 0.0125, 0));
+  if (kind === 'envelope') {
+    // A fat manila envelope, a band of notes showing at the flap.
+    g.add(part(geo.box, mat(0xc8a46a, 0.8), 0.23, 0.03, 0.12, 0, 0.015, 0), part(geo.box, mat(0x3b8f4a, 0.6), 0.05, 0.032, 0.1, 0.07, 0.016, 0));
+  } else if (kind === 'wallet') g.add(part(geo.box, mat(0x4a2e1a, 0.55), 0.11, 0.025, 0.09, 0, 0.0125, 0));
   else if (kind === 'bag') {
     g.add(part(geo.box, mat(0x8c2f39, 0.55), 0.3, 0.22, 0.1, 0, 0.11, 0));
     const strap = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.01, 5, 12, Math.PI), mat(0x8c2f39, 0.6));

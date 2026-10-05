@@ -9,6 +9,8 @@ import { Mugging } from './Mugging';
 import { Robbery } from './Robbery';
 import { Racket } from './Racket';
 import { Tagging } from './Tagging';
+import { TurfBrawl } from './TurfBrawl';
+import { HideoutGuard } from './HideoutGuard';
 import { Bomber } from './Bomber';
 
 export interface KindSpec {
@@ -32,5 +34,8 @@ export const KINDS: Record<CrimeKind, KindSpec> = {
   robbery: { make: (w, s, n) => new Robbery(w, s, n), ko: 14, resolved: 25, rep: 6, title: 'A robbery', criminal: 'Robber', stopped: 'a robbery' },
   racket: { make: (w, s, n) => new Racket(w, s, n), ko: 10, resolved: 16, rep: 4, title: 'Protection money — a shopkeeper is being leaned on', criminal: 'Enforcer', stopped: 'a protection racket' },
   tagging: { make: (w, s, n) => new Tagging(w, s, n), ko: 5, resolved: 8, rep: 2, title: 'Vandals tagging a wall', criminal: 'Tagger', stopped: 'a tagging' },
+  brawl: { make: (w, s, n) => new TurfBrawl(w, s, n), ko: 8, resolved: 18, rep: 5, title: 'Turf war — two gangs fighting in the street', criminal: 'Brawler', stopped: 'a turf brawl' },
+  // (Hideout guards are placed at a hideout's door by CrimeSystem; `make` without a door puts them at the point.)
+  hideout: { make: (w, s, n) => new HideoutGuard(w, s, { x: n?.x ?? w.player.x, z: n?.z ?? w.player.z, nx: 0, nz: 1 }), ko: 9, resolved: 10, rep: 3, title: 'A hideout, guarded', criminal: 'Guard', stopped: 'the guards of a hideout' },
   bomber: { make: (w, s, n) => new Bomber(w, s, n), ko: 18, resolved: 32, rep: 8, title: 'A mad bomber — explosions in the street', criminal: 'Mad bomber', stopped: 'a mad bomber' },
 };

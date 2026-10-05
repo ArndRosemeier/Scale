@@ -15,11 +15,18 @@
  * Results move the turf (Phase 1 part 2, `shift`): stopping a group's operation costs it influence
  * in that cell and a little in the cells next to it, an operation that comes off (and a finished
  * tag) gains it some. The difference from the seeded influence is saved per city
- * (`saveFactions` / `restoreFactions`). Drift over time and rivals moving into the gap are Phase 2.
+ * (`saveFactions` / `restoreFactions`).
+ *
+ * Phase 2: rivals (`relation`) fight over shared borders, and the turf drifts by itself once per
+ * game hour (`drift`, deterministic per seed and hour): every group grows back towards its seeded
+ * hold scaled by how much of its turf it still has (a group the player has hurt regrows to less),
+ * pushes into the cells next to its own where it could hold them, eats into a rival's hold there,
+ * and a little seeded noise keeps the borders alive.
  */
 import type { MacroPlan } from '../../plan/types';
 import { Rng, deriveSeed } from '../../core/rng';
 import { valueNoise2 } from '../crime/CrimeIndex';
+import { hashToFloat } from '../../core/rng';
 import { ARCHETYPES, PHASE1, type Archetype, type ArchetypeId, type Palette } from './archetypes';
 
 /** Influence a group needs to hold a cell. */
@@ -46,6 +53,10 @@ export interface FactionMap {
   base: Float32Array[];
   /** Neighbouring macro cells (sharing an arterial edge). */
   near: number[][];
+  /** Per faction per cell: could it hold that cell at all (its archetype's affinity for the district > 0). */
+  can: Uint8Array[];
+  /** Cells each faction held at the start (how strong it still is: `strength`). */
+  baseHeld: number[];
 }
 
 /** The city's groups and turf for a seed (crime index: CrimeIndex.crimeIndex of the same plan). */
@@ -57,6 +68,7 @@ export function planFactions(macro: MacroPlan, seed: number, index: Float32Array
   R = Math.max(500, R);
   const factions: Faction[] = [];
   const influence: Float32Array[] = [];
+  const can: Uint8Array[] = [];
   for (const id of archetypes) {
     const A = ARCHETYPES[id];
     const rng = new Rng(deriveSeed(seed, 'faction', id));
@@ -80,6 +92,7 @@ export function planFactions(macro: MacroPlan, seed: number, index: Float32Array
     inf[home] = Math.max(inf[home], 0.9);
     factions.push(f);
     influence.push(inf);
+    can.push(Uint8Array.from(cells, (c) => (A.affinity[c.district] > 0 ? 1 : 0)));
   }
   const holder = new Int8Array(cells.length).fill(-1);
   for (let i = 0; i < cells.length; i++) {
@@ -92,7 +105,8 @@ export function planFactions(macro: MacroPlan, seed: number, index: Float32Array
   cells.forEach((c, i) => { for (const e of c.edges) { const l = byEdge.get(e); if (l) l.push(i); else byEdge.set(e, [i]); } });
   const near: number[][] = cells.map(() => []);
   for (const l of byEdge.values()) for (const a of l) for (const b of l) if (a !== b && !near[a].includes(b)) near[a].push(b);
-  return { factions, influence, holder, base: influence.map((f) => f.slice()), near };
+  const baseHeld = factions.map((f) => holder.reduce((n, h) => n + (h === f.id ? 1 : 0), 0));
+  return { factions, influence, holder, base: influence.map((f) => f.slice()), near, can, baseHeld };
 }
 
 /** The group with the most influence in a cell if it reaches HOLD, else -1. */
@@ -110,6 +124,13 @@ export const SHIFT = {
   succeeded: 0.05,
   /** A tag on the wall. */
   tag: 0.04,
+  /** A turf brawl: the winners gain the street, the losers lose it. */
+  brawlWon: 0.08,
+  brawlLost: -0.1,
+  /** The player busted a hideout's stash: a big loss where it was. */
+  bust: -0.32,
+  /** …and its stash block drops at least this far below HOLD: lost outright. */
+  bustBelow: 0.08,
   spread: 0.5,
   /** Never above this (a group can be driven out, but its grip never gets absolute). */
   max: 1,
@@ -132,8 +153,12 @@ export function shift(F: FactionMap, cell: number, f: number, amount: number, sp
   return out;
 }
 
-/** Saved turf: per group (by archetype), the cells whose influence differs from the seeded one, in hundredths. */
-export interface SavedFactions { v: 1; groups: { archetype: string; cells: [number, number][] }[]; stats: Record<string, number> }
+/**
+ * Saved turf: per group (by archetype), the cells whose influence differs from the seeded one, in
+ * hundredths, and the cells it holds (drift's hysteresis lets a holder keep a cell a little below
+ * HOLD, which the influence alone would not give back; older saves have no `held`).
+ */
+export interface SavedFactions { v: 1; groups: { archetype: string; cells: [number, number][]; held?: number[] }[]; stats: Record<string, number> }
 
 export function saveFactions(F: FactionMap, stats: Record<string, number> = {}): SavedFactions {
   return {
@@ -142,7 +167,9 @@ export function saveFactions(F: FactionMap, stats: Record<string, number> = {}):
       const cells: [number, number][] = [];
       const I = F.influence[f.id], B = F.base[f.id];
       for (let i = 0; i < I.length; i++) { const d = Math.round((I[i] - B[i]) * 100); if (d !== 0) cells.push([i, d]); }
-      return { archetype: f.archetype, cells };
+      const held: number[] = [];
+      for (let i = 0; i < F.holder.length; i++) if (F.holder[i] === f.id) held.push(i);
+      return { archetype: f.archetype, cells, held };
     }),
     stats: { ...stats },
   };
@@ -153,6 +180,7 @@ export function restoreFactions(F: FactionMap, raw: unknown): Record<string, num
   const o = raw && typeof raw === 'object' ? (raw as Partial<SavedFactions>) : null;
   for (let f = 0; f < F.factions.length; f++) F.influence[f].set(F.base[f]);
   const stats: Record<string, number> = {};
+  const held = new Int16Array(F.holder.length).fill(-1);
   if (o && Array.isArray(o.groups)) {
     for (const g of o.groups) {
       const f = F.factions.find((x) => x.archetype === g?.archetype);
@@ -162,10 +190,15 @@ export function restoreFactions(F: FactionMap, raw: unknown): Record<string, num
         if (!Array.isArray(c) || !Number.isInteger(c[0]) || !Number.isFinite(c[1]) || c[0] < 0 || c[0] >= I.length) continue;
         I[c[0]] = Math.max(0, Math.min(SHIFT.max, B[c[0]] + c[1] / 100));
       }
+      if (Array.isArray(g.held)) for (const i of g.held) if (Number.isInteger(i) && i >= 0 && i < held.length) held[i] = f.id;
     }
     for (const [k, v] of Object.entries(o.stats ?? {})) if (Number.isFinite(v)) stats[k] = v as number;
   }
-  for (let i = 0; i < F.holder.length; i++) F.holder[i] = holderOf(F, i);
+  // The saved holder keeps a cell as long as drift would let it (within the hysteresis below HOLD).
+  for (let i = 0; i < F.holder.length; i++) {
+    const h = held[i];
+    F.holder[i] = h >= 0 && F.influence[h][i] >= HOLD - DRIFT.hysteresis - 0.005 ? h : holderOf(F, i);
+  }
   return stats;
 }
 
@@ -196,4 +229,100 @@ function nameFor(A: Archetype, rng: Rng, district: import('../../plan/types').Di
 /** Display name with "the" kept lower case inside a sentence ("stopped the Harbour Kings"). */
 export function inSentence(f: Faction): string {
   return f.name.startsWith('The ') ? `the ${f.name.slice(4)}` : f.name;
+}
+
+/** How two groups get on: rivals fight (turf brawls, pressure on shared borders); others are wary. */
+export function relation(F: FactionMap, a: number, b: number): 'self' | 'hostile' | 'wary' {
+  if (a === b) return 'self';
+  const A = F.factions[a], B = F.factions[b];
+  if (!A || !B) return 'wary';
+  return ARCHETYPES[A.archetype].rivals.includes(B.archetype) || ARCHETYPES[B.archetype].rivals.includes(A.archetype) ? 'hostile' : 'wary';
+}
+
+/** How much of its starting turf a group still holds (1: all of it; more after gains). */
+export function strength(F: FactionMap, f: number): number {
+  const held = F.holder.reduce((n, h) => n + (h === f ? 1 : 0), 0);
+  return held / Math.max(1, F.baseHeld[f] ?? 1);
+}
+
+/** Off-screen drift per game hour. */
+export const DRIFT = {
+  /** Share of the gap to the target closed per hour. */
+  rate: 0.03,
+  /** A group's target is its seeded hold × (floor + (1 − floor) × strength): a weakened group holds less. */
+  floor: 0.3,
+  /** Next to its own turf, where it could hold a cell, the target is this much higher (× strength). */
+  push: 0.12,
+  /** In its own cell on a border with a rival, the target is this much lower (× the rival's strength). */
+  clash: 0.08,
+  /** Seeded noise per cell and hour (±). */
+  noise: 0.012,
+  /** Its home cell's target never drops below this (a beaten group comes back there). */
+  home: 0.42,
+  /** A cell changes hands only this far past HOLD (and past the holder): no flickering borders. */
+  hysteresis: 0.03,
+  /** Hours caught up at most after a jump in time. */
+  maxCatchUp: 24,
+};
+
+/**
+ * One game hour of drift (pure, deterministic for seed and hour): every group's influence moves a
+ * step towards a target — its seeded hold scaled by its strength, raised next to its own turf where
+ * it could hold the cell, lowered where a rival presses on its border — plus seeded noise. Cells
+ * change hands with hysteresis. Returns the cells whose holder changed.
+ */
+export function drift(F: FactionMap, seed: number, hour: number): { cell: number; from: number; to: number }[] {
+  const n = F.holder.length, D = DRIFT, nf = F.factions.length;
+  const str = F.factions.map((f) => Math.min(1, Math.max(0, strength(F, f.id))));
+  const next = F.influence.map((I) => I.slice());
+  for (let f = 0; f < nf; f++) {
+    const I = F.influence[f], B = F.base[f], s = str[f];
+    for (let i = 0; i < n; i++) {
+      let target = B[i] * (D.floor + (1 - D.floor) * s);
+      // A group never quite dies: it keeps coming back to its home ground.
+      if (i === F.factions[f].home) target = Math.max(target, D.home);
+      let border = false, press = 0;
+      for (const j of F.near[i]) {
+        const h = F.holder[j];
+        if (h === f) border = true;
+        else if (h >= 0 && F.holder[i] === f && relation(F, f, h) === 'hostile') press = Math.max(press, str[h]);
+      }
+      if (border && F.holder[i] !== f && F.can[f][i]) target += D.push * s;
+      if (press > 0) target -= D.clash * press;
+      if (target <= 0 && I[i] <= 0) continue;
+      let v = I[i] + (Math.max(0, target) - I[i]) * D.rate;
+      if (I[i] > 0 || B[i] > 0) v += (hashToFloat(deriveSeed(seed, 'drift', hour, i, f)) - 0.5) * 2 * D.noise;
+      next[f][i] = Math.max(0, Math.min(SHIFT.max, v));
+    }
+  }
+  for (let f = 0; f < nf; f++) F.influence[f].set(next[f]);
+  const out: { cell: number; from: number; to: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const from = F.holder[i];
+    let to = holderOf(F, i);
+    if (to !== from) {
+      // Hysteresis: the holder keeps a cell until clearly below HOLD; a newcomer needs a clear lead.
+      const cur = from >= 0 ? F.influence[from][i] : 0;
+      const holds = from >= 0 && cur >= HOLD - D.hysteresis;
+      const lead = to >= 0 ? F.influence[to][i] : 0;
+      if (to < 0) { if (holds) to = from; }
+      else if (lead < HOLD + D.hysteresis || (holds && lead < cur + D.hysteresis)) to = holds ? from : -1;
+    }
+    if (from !== to) { F.holder[i] = to; out.push({ cell: i, from, to }); }
+  }
+  return out;
+}
+
+/** The hostile groups with a hold on a cell or its neighbours (who could pick a fight there), strongest first. */
+export function rivalsAt(F: FactionMap, cell: number, f: number): number[] {
+  if (cell < 0) return [];
+  const score = new Map<number, number>();
+  for (const i of [cell, ...F.near[cell]]) {
+    for (let g = 0; g < F.factions.length; g++) {
+      if (relation(F, f, g) !== 'hostile') continue;
+      const v = F.influence[g][i] * (i === cell ? 1.5 : 1);
+      if (F.holder[i] === g || (i === cell && v >= 0.12 * 1.5)) score.set(g, Math.max(score.get(g) ?? 0, v));
+    }
+  }
+  return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([g]) => g);
 }

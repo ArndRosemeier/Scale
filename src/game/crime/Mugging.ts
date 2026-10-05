@@ -17,6 +17,11 @@ export class Mugging extends Crime {
   readonly kind: 'mugging' | 'racket' = 'mugging';
   readonly tier = 1;
   victim: PedAgent | null = null;
+  /**
+   * How the handover is staged: how close they loom, whether they jab and shove, what changes hands,
+   * whether the victim cowers and cries for help (a racket is quiet business at a shop door).
+   */
+  protected stage = { loom: 1.05, jab: true, shove: true, handover: 'wallet', cower: true };
   private shoutT = 0;
   private confronted = false;
 
@@ -86,25 +91,31 @@ export class Mugging extends Crime {
         if (this.reactToPlayer(crooks, dt)) break;
         crooks.forEach((c, i) => {
           const act = c.actor!;
+          const S = this.stage;
           const ang = Math.atan2(c.x - v.x, c.z - v.z) + (i ? 0.7 : -0.3);
-          const tx = v.x + Math.sin(ang) * 1.05, tz = v.z + Math.cos(ang) * 1.05;
+          const tx = v.x + Math.sin(ang) * S.loom, tz = v.z + Math.cos(ang) * S.loom;
           if (Math.hypot(tx - c.x, tz - c.z) > 0.25) goTo(act, tx, tz, 1.2); else stand(act);
           lookAt(act, v.x, v.y + 1.4, v.z);
-          setState(act, 'fight');
+          setState(act, S.jab ? 'fight' : 'idle');
           act.mood = 'angry';
           act.memo.jab = (act.memo.jab ?? 1 + i) - dt;
           if (act.armed === 'gun') hold(act, 'aim_pistol');
-          else if (act.memo.jab < 0) { act.memo.jab = 1.8 + this.rng.float() * 1.6; play(act, act.armed === 'knife' && this.rng.chance(0.5) ? 'stab' : 'gesture_point', 0.7); }
+          else if (act.memo.jab < 0) {
+            act.memo.jab = 1.8 + this.rng.float() * 1.6;
+            // A jab of the knife or a finger; leaning on someone is a pointed word now and then.
+            if (S.jab) play(act, act.armed === 'knife' && this.rng.chance(0.5) ? 'stab' : 'gesture_point', 0.7);
+            else if (i === 0 || this.rng.chance(0.4)) play(act, 'gesture_point', 1.1);
+          }
         });
         if (this.phaseT > MUGGING.threatenFor && this.loot && this.loot.carrier === null && !this.loot.returned && crooks[0]) {
-          // The wallet goes over.
+          // The wallet (an envelope of cash) goes over.
           this.loot.carrier = crooks[0];
-          crooks[0].actor!.held = crooks[0].actor!.armed === 'knife' ? 'knife' : crooks[0].actor!.armed === 'gun' ? 'pistol' : 'wallet';
+          crooks[0].actor!.held = crooks[0].actor!.armed === 'knife' ? 'knife' : crooks[0].actor!.armed === 'gun' ? 'pistol' : this.stage.handover;
           if (v.actor) play(v.actor, 'pickup', 0.9);
         }
         if (this.phaseT > MUGGING.robFor) {
           // A shove, and off they go (walking: nobody chases).
-          if (v.actor && this.rng.chance(0.6)) this.w.combat.hitActor(v, (v.x - crooks[0].x) * 260, 80, (v.z - crooks[0].z) * 260, 'shove', 'npc', crooks[0].x, crooks[0].z);
+          if (this.stage.shove && v.actor && this.rng.chance(0.6)) this.w.combat.hitActor(v, (v.x - crooks[0].x) * 260, 80, (v.z - crooks[0].z) * 260, 'shove', 'npc', crooks[0].x, crooks[0].z);
           for (const c of crooks) { setState(c.actor!, 'run'); c.actor!.face = null; c.actor!.memo.calm = 1; if (c.actor!.action?.id === 'aim_pistol') c.actor!.action = null; }
           this.go('escape');
         }
@@ -132,8 +143,10 @@ export class Mugging extends Crime {
     this.adopt(v, 'victim', { hp: 32, maxHp: 32, strength: 0.4, mood: 'afraid', held: null });
     for (const c of this.criminals) if (c.actor) c.actor.hostile = true;
     this.shoutT = 1.2;
-    this.w.sound('scream_single', v.x, v.y + 1.6, v.z, 0.6, 1.1);
-    this.w.emit('cry', v.x, v.y + 1.6, v.z, 1.5, 30);
+    if (this.stage.cower) {
+      this.w.sound('scream_single', v.x, v.y + 1.6, v.z, 0.6, 1.1);
+      this.w.emit('cry', v.x, v.y + 1.6, v.z, 1.5, 30);
+    }
     if (!this.policeCalled) { this.policeCalled = true; this.w.callPolice(this, 26); }
     this.go('commit');
     this.emit('commit');
@@ -185,6 +198,13 @@ export class Mugging extends Crime {
       va.mood = 'happy';
       lookAt(va, this.w.player.x, this.w.player.y + 1.5, this.w.player.z);
       if (va.state !== 'cheer') { setState(va, 'cheer'); play(va, 'cheer', 2.6); }
+      return;
+    }
+    if (this.phase === 'commit' && !this.stage.cower) {
+      // Paying up: standing in the doorway, eyes down, hands on the envelope.
+      setState(va, 'idle');
+      va.mood = 'sad';
+      if (crook) lookAt(va, crook.x, crook.y + 1.2, crook.z);
       return;
     }
     if (this.phase === 'commit' || (crook && Math.hypot(crook.x - v.x, crook.z - v.z) < 4)) {
