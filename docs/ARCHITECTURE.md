@@ -288,7 +288,7 @@ Special buildings, planned with the macro plan (`MacroPlan.landmarks`, ~10 ms) a
   broken piece is cut into one per grid level, which stops blocking once fewer than half its pieces stand; helix
   floors check the piece at the point.
 * **Breaking** (`destruction/LandmarkWreck`, reached through `Destruction.impact` / `update`): an impact breaks
-  the pieces it reaches whose strength (wall material × area, at most a panel's 12 m²) it beats, spreading at
+  the pieces it reaches whose strength (wall material × area, at most 6 m², so a test blast breaks concrete) it beats, spreading at
   60 m/s with debris, chips, dust. When the breaks settle the structure is checked: pieces connected
   (26-neighbourhood) to grounded ones stand, except above a level that kept < 35 % of its pieces. Loose parts
   under 10 pieces shatter; larger ones are cut out (`destruction/extract`) and fall: slender ones (taller than

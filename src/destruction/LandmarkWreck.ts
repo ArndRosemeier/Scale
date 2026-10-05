@@ -32,8 +32,8 @@ import type { LandmarkSolids } from '../world/LandmarkSolids';
 const WAVE_SPEED = 60;
 const BUDGET_MS = 2.5;
 const MAX_JOBS_PER_FRAME = 40;
-/** A piece resists like a wall panel of at most this area (m²): big cells are not tougher. */
-const PANEL_AREA = 12;
+/** A piece resists like a wall panel of at most this area (m²): big cells are not tougher, and a test blast (B) breaks concrete. */
+const PANEL_AREA = 6;
 /** A level that keeps less than this share of its pieces fails, with everything above it. */
 const LEVEL_FAIL = 0.35;
 /** Loose parts smaller than this (pieces) just shatter. */
