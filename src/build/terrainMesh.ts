@@ -75,7 +75,7 @@ export function buildTerrainTile(terrain: Terrain, x0: number, z0: number, size:
 }
 
 /** Water surfaces (river + sea) clipped to a square tile. */
-export function buildWaterTile(terrain: Terrain, x0: number, z0: number, size: number, chunks: ReturnType<typeof riverChunks>, sea: number[] | null): MeshBuilder | null {
+export function buildWaterTile(terrain: Terrain, x0: number, z0: number, size: number, chunks: ReturnType<typeof riverChunks>, sea: number[] | null, lakes: { poly: number[]; bounds: number[] }[] = []): MeshBuilder | null {
   const mb = new MeshBuilder([{ name: 'uv', size: 2 }, { name: 'aLayer', size: 1 }]);
   mb.setOrigin(x0 + size / 2, 0, z0 + size / 2);
   const tile = [x0, z0, x0 + size, z0, x0 + size, z0 + size, x0, z0 + size];
@@ -85,11 +85,14 @@ export function buildWaterTile(terrain: Terrain, x0: number, z0: number, size: n
     for (const s of ch.shapes) polys.push(s.outer);
   }
   if (sea) polys.push(sea);
+  for (const L of lakes) if (!(L.bounds[0] > x0 + size || L.bounds[2] < x0 || L.bounds[1] > z0 + size || L.bounds[3] < z0)) polys.push(L.poly);
   if (!polys.length) return null;
   const clipped = intersection(polys, [tile]);
   if (!clipped.length) return null;
   // Water level: sea → 0; river → the level at each vertex (rivers slope gently).
   const level = (x: number, z: number) => {
+    const lq = terrain.lakeAt(x, z);
+    if (lq.lake >= 0 && lq.e < 30) return lq.level;
     const w = terrain.water(x, z);
     if (terrain.profile.coastal && terrain.coastDistance(x, z) < 0 && (w.river < 0 || w.d > w.halfWidth + 5)) return 0;
     return w.river >= 0 ? w.level : 0;

@@ -22,6 +22,8 @@ import { metroInput } from './metroaudit';
 import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
+import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
+import { buildRuralTile } from '../src/build/rural';
 import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
@@ -368,6 +370,63 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   const edge = terrainExtent(macro.boundary) * 0.95;
   check(tA.rivers.slice(tA.baseRivers).some((R) => { for (let i = 0; i < R.pts.length; i += 2) if (Math.max(Math.abs(R.pts[i]), Math.abs(R.pts[i + 1])) > edge) return true; return false; }), `seed ${seed}: rivers reach the edge of the world`);
   console.log(`seed ${seed} countryside: ${tA.rivers.length - tA.baseRivers} countryside rivers, ${trees} trees checked in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Countryside settlements (world/rural): deterministic; villages joined to the city's arterial ring by
+// country roads that keep off the water and the city; houses, barns and churches dry, apart, off the
+// roads; garden and forest trees never on a road or a building; lakes carved below their level.
+for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
+  const t0 = performance.now();
+  const p = makeProfile({ seed, size });
+  const T = new Terrain(p), macro = buildMacroPlan(T);
+  const land = new LandUse(T), plan = new RuralPlan(T, land, macro);
+  land.settle = plan;
+  const T2 = new Terrain(makeProfile({ seed, size }));
+  const plan2 = new RuralPlan(T2, new LandUse(T2), buildMacroPlan(T2));
+  check(hashPlan(plan.settlements) === hashPlan(plan2.settlements) && hashPlan(plan.roads) === hashPlan(plan2.roads), `rural seed ${seed}: plan deterministic`);
+  const villages = plan.settlements.filter((s) => s.kind !== SettleKind.Farm);
+  check(villages.length >= 10 && plan.settlements.length - villages.length >= 20, `rural seed ${seed}: villages (${villages.length}) and farms (${plan.settlements.length - villages.length})`);
+  check(villages.every((v) => v.roads.length > 0), `rural seed ${seed}: every village has a road`);
+  check(plan.roads.some((R) => R.trim > 0), `rural seed ${seed}: country roads leave the city`);
+  let wet = 0, inCity = 0;
+  for (const R of plan.roads) for (let i = 0; i < R.pts.length; i += 2) {
+    if (T.isWater(R.pts[i], R.pts[i + 1], R.hw)) wet++;
+    if (Math.hypot(R.pts[i] - R.pts[0], R.pts[i + 1] - R.pts[1]) > 450 && land.edge(R.pts[i], R.pts[i + 1]) < 30) inCity++;
+  }
+  check(wet === 0 && inCity === 0, `rural seed ${seed}: roads dry (${wet}) and out of the city (${inCity})`);
+  let nb = 0, bad = 0, overlap = 0;
+  for (const s of plan.settlements) {
+    const L = plan.layout(s.id);
+    check(hashPlan(L) === hashPlan(plan2.layout(s.id)), `rural seed ${seed} settlement ${s.id}: layout deterministic`);
+    const B = L.boxes;
+    for (let o = 0; o < B.length; o += BOX_STRIDE) {
+      nb++;
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const x = B[o] + B[o + 4] * B[o + 2] * a - B[o + 5] * B[o + 3] * b, z = B[o + 1] + B[o + 5] * B[o + 2] * a + B[o + 4] * B[o + 3] * b;
+        if (T.isWater(x, z, 0) || plan.roadEdge(x, z) < 0.5) bad++;
+      }
+      for (let q = o + BOX_STRIDE; q < B.length; q += BOX_STRIDE) if (Math.hypot(B[q] - B[o], B[q + 1] - B[o + 1]) < Math.min(B[o + 2], B[o + 3], B[q + 2], B[q + 3])) overlap++;
+    }
+    check(L.buildings.length === B.length / BOX_STRIDE && L.buildings.every((b) => b.poly.length === 8 && b.floors >= 1), `rural seed ${seed} settlement ${s.id}: buildings valid`);
+  }
+  check(nb > 300 && bad === 0 && overlap === 0, `rural seed ${seed}: ${nb} buildings dry and off the roads (${bad}), apart (${overlap})`);
+  // Trees around a town: never on its roads or buildings.
+  const town = villages.find((v) => v.kind === SettleKind.Town) ?? villages[0];
+  const fg = new ForestGen(land, macro);
+  let onRoad = 0, trees = 0;
+  for (const [dx, dz] of [[-256, -256], [0, -256], [-256, 0], [0, 0]]) {
+    const R = fg.tile(Math.floor((town.x + dx) / 256) * 256, Math.floor((town.z + dz) / 256) * 256, 256);
+    for (let o = 0; o < R.length; o += FOREST_STRIDE) { trees++; if (plan.roadEdge(R[o], R[o + 2]) < 1 || plan.onBuilding(R[o], R[o + 2], 1)) onRoad++; }
+  }
+  check(trees > 20 && onRoad === 0, `rural seed ${seed}: ${trees} trees round ${town.name}, none on a road or building (${onRoad})`);
+  // Lakes: water below the level in the middle, dry land at the shore band's edge.
+  for (const [k, L] of T.lakes.entries()) {
+    const ok = T.waterLevel(L.x, L.z) === L.level && T.height(L.x, L.z) < L.level - 1 && T.lakeAt(L.x, L.z).lake === k;
+    check(ok, `rural seed ${seed}: lake ${k} holds water`);
+  }
+  const tile = buildRuralTile(plan, T, Math.floor(town.x / 1024) * 1024, Math.floor(town.z / 1024) * 1024, 1024);
+  check(!!tile.ground && !!tile.facade && tile.obstacles.length > 0, `rural seed ${seed}: the town's tile has roads, buildings and collision boxes`);
+  console.log(`seed ${seed} rural: ${villages.length} villages, ${plan.settlements.length - villages.length} farms, ${plan.roads.length} roads, ${nb} buildings, ${T.lakes.length} lakes in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // ---- powers: every rank has truthful text, super speed outruns flight, old saves migrate
