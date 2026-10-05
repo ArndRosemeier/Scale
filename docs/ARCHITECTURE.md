@@ -621,19 +621,20 @@ every frame (`prof.threats`).
   `rampage`, major, never on foot) that the response escalates against like a monster's: patrol cars and a cordon,
   evacuation sirens, SWAT and patrol officers firing from a distance (GIANT), the National Guard and the army and air
   (levels 3 and 4), and, rarely, level 5. Below fury 3 while warned (or no longer a giant), the warnings lapse. Standing down — no destruction
-  for 45 s, or human-sized for 20 s — ends it (`abandoned`; the fury is spent); a relapse within 5 min brings the army
+  for 45 s, or human-sized for 20 s, but never within 180 s of the army being called (once mobilised the Guard and
+  the tanks get there) — ends it (`abandoned`; the fury is spent); a relapse within 5 min brings the army
   back without new warnings. Brought down (knocked out by the response): `stopped`, taken into custody (Justice.arrested).
   * **The player's body** (`PlayerBody`, a ThreatActor with `self`: the police's and the army's target, never in
     `ThreatDirector.actors()`, so never the player's own Tab target or blow): zones head / torso / legs round the player
     (armour 0.2–0.35, no weak spots); army damage points after armour become health — 500 points a full bar (small hits
     add up), past the health's size scaling; `HurtKind` 'military' (no karma for the knock-out itself).
   * **As the army's foe**: its route runs from the city centre's side (≥ 1 km) to where the player stands, rewritten as
-    they move, mode `rampage` — the battle model rings them (rifles ~230 m, APCs ~270, tanks ~330); units come in 720 m
-    from the player on the city's side (`spawnPoint`), the artillery beyond them (`batteryAt`); units holding out of
-    their weapon's reach of a player who has moved on go again after 5 s (`regroup`: a rifle squad waits for its truck).
+    they move, mode `rampage` — the battle model rings them (rifles ~230 m, APCs ~270, tanks ~330); units come in 420 m
+    from the player on the city's side (`spawnPoint`), the artillery beyond them (`batteryAt`); units holding beyond
+    their weapon's range of a player who has moved on go again after 5 s (`regroup`: a rifle squad waits for its truck).
     The player's blows on the units are their own: vehicles crushed or wrecked, soldiers knocked down (the usual losses
     and morale), helicopters punched out of the sky (`Forces.struck`). Headless check (`simulatePlayerBattle`,
-    selftest): a 20 m giant standing still goes down at level 4 in ~2 min (level 3 alone takes far longer); one walking
+    selftest): a 20 m giant standing still goes down ~40 s after level 4 arrives, the ground forces doing about half (level 3 alone takes far longer); one walking
     off is followed.
   * **The last resort against the player**: the same rule (level 4 a while, the army failing, the seeded roll), the player
     counting as "deep in the city"; the strike zone follows the player through the countdown; standing down or being

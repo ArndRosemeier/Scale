@@ -30,8 +30,13 @@ export const RAMPAGE = {
   warn: 6, act: 9, gap: 20,
   /** Below this share of `warn` while being warned: they stopped, the warnings lapse. */
   lapse: 0.5,
-  /** Standing down: no destruction for `quietT` s, or human-sized (under minHeight) for `smallT` s (the fury is spent then). */
-  quietT: 45, smallT: 20,
+  /**
+   * Standing down: no destruction for `quietT` s, or human-sized (under minHeight) for `smallT` s (the fury is spent
+   * then) — never before `minHostile` s: once mobilised, the Guard and the army get there and keep the giant covered.
+   */
+  quietT: 45, smallT: 20, minHostile: 180,
+  /** The army's units come in this far from the player (m; nearer than a monster's 720: they are sent where the player is). */
+  spawnR: 420,
   /** A relapse within this long (s) of the last warning brings the army back without new warnings. */
   memory: 300,
   /** Army damage points (before armour) a full health bar is worth. */
@@ -109,7 +114,7 @@ export class RampageWatch {
         if (this.state === 'final' && this.fury >= R.act && eligible) return this.go('hostile');
         return null;
       case 'hostile':
-        if (this.quiet >= R.quietT || this.small >= R.smallT) { this.stats.stoodDown++; this.reset(); return 'standDown'; }
+        if (this.t >= R.minHostile && (this.quiet >= R.quietT || this.small >= R.smallT)) { this.stats.stoodDown++; this.reset(); return 'standDown'; }
         return null;
     }
   }
@@ -171,7 +176,7 @@ export function playerPath(out: PathView & { start: { x: number; z: number }; en
 }
 
 /** Where the army's units come from for the player: `dist` m from them on the city's side, spread round it. */
-export function playerSpawn(cx: number, cz: number, px: number, pz: number, k: number, dist = ARMY.spawnR): { x: number; z: number } {
+export function playerSpawn(cx: number, cz: number, px: number, pz: number, k: number, dist = RAMPAGE.spawnR): { x: number; z: number } {
   const base = Math.hypot(cx - px, cz - pz) < 1 ? 0 : Math.atan2(cz - pz, cx - px);
   const a = base + ((k * 2.399) % 1.8) - 0.9;
   return { x: px + Math.cos(a) * dist, z: pz + Math.sin(a) * dist };
@@ -189,6 +194,8 @@ export interface PlayerBattleResult {
   nearest: number; farthest: number;
   /** Ground units that were holding near the player after it walked away (its last position). */
   followed: number;
+  /** Damage the ground units (rifles, APCs, tanks) did in the second half of the run (the walk, with `walk`). */
+  late: number;
   peak: Record<string, number>;
   hash: number;
 }
@@ -208,7 +215,7 @@ export function simulatePlayerBattle(seed: number, opts: { maxT?: number; dt?: n
   const zones = PLAYER_ZONES.map((z) => ({ id: z.id, armour: z.armour, weak: false, exposed: false }));
   const dealtBy: Record<string, number> = {};
   const peak: Record<string, number> = {};
-  let fired = 0, hash = 2166136261, koT = -1;
+  let fired = 0, hash = 2166136261, koT = -1, late = 0;
   const path = { pts: [] as number[], s: [] as number[], length: 0, start: { x: 0, z: 0 }, end: { x: 0, z: 0 } };
   playerPath(path, cx, cz, P.x, P.z);
   const view: MonsterView = {
@@ -225,7 +232,7 @@ export function simulatePlayerBattle(seed: number, opts: { maxT?: number; dt?: n
     if (!l4 && t >= l4At) { l4 = true; squads.push(...levelSquads(4, spawn)); }
     if (opts.walk && t > maxT / 2) { P.x += opts.walk * dt; playerPath(path, cx, cz, P.x, P.z); }
     regroup(squads, view, RAMPAGE.regroupT);
-    stepForces(squads, view, path, dt, fire, (u, d) => { dealtBy[u.kind] = (dealtBy[u.kind] ?? 0) + d; });
+    stepForces(squads, view, path, dt, fire, (u, d) => { dealtBy[u.kind] = (dealtBy[u.kind] ?? 0) + d; if (t > maxT / 2 && (u.kind === 'rifles' || u.kind === 'apc' || u.kind === 'tank')) late += d; });
     if (hp <= 0 && koT < 0) { koT = t; if (!opts.walk) break; hp = opts.hp ?? RAMPAGE.hp; }
     const now: Record<string, number> = {};
     for (const q of squads) for (const u of q.units) if (u.task !== 'dead' && u.task !== 'leave') now[u.kind] = (now[u.kind] ?? 0) + (u.kind === 'rifles' ? u.crew : 1);
@@ -244,6 +251,6 @@ export function simulatePlayerBattle(seed: number, opts: { maxT?: number; dt?: n
   }
   return {
     koT, dealtBy: Object.fromEntries(Object.entries(dealtBy).map(([k, v]) => [k, Math.round(v)])), fired,
-    nearest: Number.isFinite(nearest) ? Math.round(nearest) : -1, farthest: Math.round(farthest), followed, peak, hash,
+    nearest: Number.isFinite(nearest) ? Math.round(nearest) : -1, farthest: Math.round(farthest), followed, late: Math.round(late), peak, hash,
   };
 }

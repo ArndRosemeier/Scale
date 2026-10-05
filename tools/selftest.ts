@@ -984,8 +984,10 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     const s3 = run(W3, 200, 0);
     const W4 = new RampageWatch();
     run(W4, 120, 0.5);
-    const s4 = run(W4, 40, 0.5, 1.8);
+    const early = run(W4, RAMPAGE.minHostile - 90, 0, 1.8);
+    const s4 = run(W4, 160, 0.5, 1.8);
     check(s3.includes('standDown') && W3.state === 'calm' && s4.includes('standDown'), 'rampage: standing down ends it (no destruction for a while, or human-sized again)');
+    check(early.length === 0, `rampage: once mobilised the army keeps at it for ${RAMPAGE.minHostile} s at least (the Guard and the tanks get there)`);
     // A relapse soon after: the army comes back without new warnings; much later, warnings again.
     const r1 = run(W3, 30, 0.6);
     check(r1[0] === 'hostile' && !r1.includes('warn'), `rampage: a relapse soon after brings the army back at once (${r1.join(' → ')})`);
@@ -997,15 +999,17 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     playerPath(path, 0, 0, 300, 400);
     playerPath(path, 0, 0, 0.2, 0);
     const sp = playerSpawn(-1000, 0, 0, 0, 3);
-    check(path.pts.length === 4 && path.end.x === 0.2 && path.length >= 1000 && Math.abs(Math.hypot(sp.x, sp.z) - ARMY.spawnR) < 1e-6 && sp.x < 0, 'rampage: the army plans to the player (route ends at them, ≥ 1 km) and comes in from the city side');
+    check(path.pts.length === 4 && path.end.x === 0.2 && path.length >= 1000 && Math.abs(Math.hypot(sp.x, sp.z) - RAMPAGE.spawnR) < 1e-6 && sp.x < 0, 'rampage: the army plans to the player (route ends at them, ≥ 1 km) and comes in from the city side');
     // The battle model against a giant standing still: ringed, worn down in a bounded time (level 3 alone: much longer).
     const t0 = performance.now();
     const ko: number[] = [];
-    let nondet = 0, ringed = 0, over = 0;
+    let nondet = 0, ringed = 0, over = 0, ground = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const a = simulatePlayerBattle(seed);
       ko.push(a.koT);
       if (a.nearest >= 150 && a.farthest <= 450) ringed++;
+      const tot = Object.values(a.dealtBy).reduce((x, y) => x + y, 0);
+      if (((a.dealtBy.rifles ?? 0) + (a.dealtBy.apc ?? 0) + (a.dealtBy.tank ?? 0)) >= 0.35 * tot) ground++;
       const P = a.peak;
       if ((P.truck ?? 0) + (P.apc ?? 0) + (P.tank ?? 0) > ARMY.maxVehicles || (P.rifles ?? 0) > ARMY.maxSoldiers || (P.heli ?? 0) > ARMY.maxHelis) over++;
       if (seed <= 3 && simulatePlayerBattle(seed).hash !== a.hash) nondet++;
@@ -1014,8 +1018,10 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     check(nondet === 0 && over === 0, `rampage battle: deterministic per seed, within the budgets (${nondet} differ, ${over} over)`);
     check(ko.every((t) => t >= 60 && t <= 240) && (l3.koT < 0 || l3.koT > 2 * Math.max(...ko)), `rampage battle: a giant standing still goes down at level 4 in 60–240 s (${ko.join(', ')} s), at level 3 alone far later (${l3.koT} s)`);
     check(ringed >= 8, `rampage battle: units hold a ring round the giant out of its reach (${ringed}/10)`);
-    const w = simulatePlayerBattle(9, { walk: 6, maxT: 500, hp: 1e9 });
-    check(w.followed >= 2 && (w.dealtBy.tank ?? 0) > 0, `rampage battle: the army follows a giant walking off (${w.followed} units in reach at its end, ${JSON.stringify(w.dealtBy)})`);
+    check(ground >= 8, `rampage battle: the Guard and the tanks get there and do a good share of the fighting, not just the air (${ground}/10)`);
+    const w = simulatePlayerBattle(9, { walk: 5, maxT: 500, hp: 1e9 });
+    const still = simulatePlayerBattle(9, { maxT: 500, hp: 1e9 });
+    check(w.late >= 0.25 * still.late, `rampage battle: the army follows a giant walking off at 5 m/s — its ground forces keep firing, if less (${w.late} vs ${still.late} on one standing still)`);
     console.log(`rampage battle (10 seeds): KO at ${ko.join(' ')} s, level 3 alone ${l3.koT} s, ${Math.round(performance.now() - t0)} ms`);
   }
 

@@ -570,13 +570,14 @@ export function stepForces(squads: Squad[], mon: MonsterView, path: PathView, dt
 
 /**
  * A target that moves where it likes (a rampaging giant player, not a monster on its route): units
- * holding out of their weapon's reach of it for `minT` s go again — to a new slot round it.
+ * holding out of their weapon's reach of it (beyond its range) for `minT` s go again — to a new slot round it.
  */
 export function regroup(squads: Squad[], mon: MonsterView, minT: number): void {
   for (const q of squads) for (const u of q.units) {
     if (u.task !== 'hold' || u.mounted || u.taskT < minT || u.kind === 'heli' || u.kind === 'jet' || u.kind === 'artillery' || u.kind === 'truck') continue;
     const W = FORCE[u.kind].weapon;
-    if (!W || Math.hypot(u.x - mon.x, u.z - mon.z) <= W.range * 0.8) continue;
+    // (Out of reach: past the weapon's range — the ring round the target lies inside it.)
+    if (!W || Math.hypot(u.x - mon.x, u.z - mon.z) <= W.range) continue;
     // (A rifle squad waits for its truck to fetch it, when it has one.)
     u.task = u.kind === 'rifles' && q.units.some((t) => t.kind === 'truck' && t.task !== 'dead' && t.task !== 'leave') ? 'mount' : 'inbound';
     u.taskT = 0;
