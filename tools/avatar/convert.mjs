@@ -43,11 +43,13 @@ out = resolve(out ?? join(root, 'public', 'avatars', basename(inputs[0], extname
 
 const blender = findBlender();
 console.log(`[avatar] blender: ${blender}`);
-const r = spawnSync(blender, ['-b', '--factory-startup', '-P', join(here, 'convert_avatar.py'), '--', out, ...inputs], { encoding: 'utf8' });
+// Rigs can print thousands of harmless driver messages: allow a big log.
+const r = spawnSync(blender, ['-b', '--factory-startup', '-P', join(here, 'convert_avatar.py'), '--', out, ...inputs], { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 });
 const log = (r.stdout ?? '') + (r.stderr ?? '');
-for (const line of log.split(/\r?\n/)) if (line.includes('[avatar]') || /error|Traceback/i.test(line)) console.log(line);
+for (const line of log.split(/\r?\n/)) if (line.includes('[avatar]') || /^Error:|Traceback/.test(line)) console.log(line);
 if (r.status !== 0 || !existsSync(out)) {
-  console.error(`[avatar] conversion failed (exit ${r.status})`);
+  // Exit code 2: the converter refused the model (reason printed above), no file written.
+  console.error(r.status === 2 ? '[avatar] not converted: the model would not work in the game' : `[avatar] conversion failed (exit ${r.status})`);
   if (!log.includes('[avatar]')) console.error(log.slice(-2000));
   process.exit(1);
 }

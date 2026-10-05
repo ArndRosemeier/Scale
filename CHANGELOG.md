@@ -2,9 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.046 — 2026-10-05
+## 0.047 — 2026-10-05
 
 - **No more falling out of the caves**: a hard fall or a knock-down underground (slime colonies, the deep caves, sewers, metro) used to throw your body onto the street above, often into a house, before you were snapped back. Underground you now just go down on the spot and get up again where you fell.
+
+## 0.046 — 2026-10-05
+
+- **Avatar converter rebuilt**: the converter (download on the start screen) now handles far more Blender characters.
+  - It measures what the character's rig actually does to the mesh and builds a clean game skeleton from that, so muscle and helper bones, breast and jiggle bones, cage-deformed clothes, BlenRig and Rigify rigs and non-English bone names all come out right.
+  - Arms, legs and spine are found by shape when the bone names don't help.
+  - Before writing the file it bends the result into test poses. If the mesh would tear, or no humanoid body is found and there is no animation of its own, it writes no .glb and says why, instead of producing a broken model.
+  - The character's own animations are baked onto the new skeleton. Very dense models get their subdivision lowered to stay playable.
 
 ## 0.045 — 2026-10-05
 
