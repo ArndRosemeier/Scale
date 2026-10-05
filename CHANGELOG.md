@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.041 — 2026-10-05
+
+- **A real sun and moon in the sky**: the sun is now a clear disc, yellow-white by day and orange-red as it rises and sets, with a soft glow around it instead of one white blot of glare. Clouds pass in front of it and it vanishes under an overcast sky.
+- **The moon** crosses the sky like the sun, about 50 minutes later each day, and goes through its phases over a month (crescent, half, gibbous, full), with darker seas and faint craters. By night it shines over the city and hides the stars behind it; by day you can sometimes see it as a pale disc. Moonlight now comes from the moon: brighter at full moon, darkest on moonless nights.
+
 ## 0.040 — 2026-10-05
 
 - **Autorun and autoflight on R**: press R and you keep going forward on your own, walking or running on foot and flying when in the air (Shift still runs or boosts, the mouse still steers). Press R again, W or S to stop; it also stops when you sit down or are knocked down.
