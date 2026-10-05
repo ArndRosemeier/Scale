@@ -25,8 +25,14 @@
  * people; the player is only ever hurt by a stray splash (ArmyFx.explosion).
  *
  * Stage 3 / E hooks: `onOutcome` (the battle's end for the aftermath / triage and the nuke
- * countdown), `rally` and `airstrike` (the player's reputation unlocks), `hostilePlayer` (the army
- * against a rampaging giant player with a very low reputation — not wired yet, see ARCHITECTURE.md).
+ * countdown), `rally` and `airstrike` (the player's reputation unlocks).
+ *
+ * The army against the player: a rampaging giant player (threats/PlayerRampage, after its warnings)
+ * is an `ArmyFoe` like the Strider — the same levels, squads and fire, its zones the player's body
+ * (army damage becomes the player's health). Its route ends where the player stands, so the battle
+ * model rings them; units come in from the city's side, and holding units the player has walked away
+ * from go again (`regroup`). Its blows on the units are the player's own: crushed and wrecked
+ * vehicles, knocked-down soldiers, helicopters swatted by a punch (`struck`).
  */
 import * as THREE from 'three';
 import type { Game } from '../../Game';
@@ -38,12 +44,15 @@ import { attach, goTo, lookAt, makeActor, play, setState, stand } from '../../..
 import { G } from '../../../render/materials/globals';
 import type { MapMarker } from '../../../ui/map/GameMap';
 import type { EquipmentVisuals } from '../../../items/types';
-import { Strider, STRIDER, STRIDER_ZONES, type StriderBlow } from '../../threats/Strider';
-import type { ThreatZone } from '../../threats/ThreatEvent';
+import { Strider, STRIDER, STRIDER_ZONES, type AirProvider, type StriderBlow } from '../../threats/Strider';
+import { PlayerRampage } from '../../threats/PlayerRampage';
+import { RAMPAGE } from '../../threats/rampageRules';
+import type { DamageResult, DamageSource, ThreatEvent, ThreatOutcome, ThreatZone } from '../../threats/ThreatEvent';
 import type { Incident } from '../ResponseDirector';
 import {
-  ARMY, FORCE, aimedVolley, hurtUnit, land, levelSquads, makeSquad, makeUnit, pathAt, pickZone, simulateBattle, stepForces, volley,
-  type ForceKind, type ForceOps, type ForceUnit, type MonsterSpec, type MonsterView, type Squad,
+  ARMY, FORCE, aimedVolley, hurtUnit, land, levelSquads, makeSquad, makeUnit, pathAt, pickZone, regroup, simulateBattle, stepForces, volley,
+  type ForceKind, type ForceOps, type ForceUnit, type MonsterSpec, type MonsterView, type PathView, type Squad,
+  type ZoneView,
 } from './BattleModel';
 import { ArmyFx } from './ArmyFx';
 import { Aircraft } from './Aircraft';
@@ -59,6 +68,37 @@ interface Body {
   stuckT: number;
 }
 
+/** What the army fights: the Strider, or a rampaging giant player (threats/PlayerRampage). */
+export interface ArmyFoe {
+  readonly x: number; readonly y: number; readonly z: number;
+  /** Progress along its route (m) and what it is doing ('advance', 'rampage' at the route's end …). */
+  readonly s: number; readonly mode: string;
+  readonly zones: ThreatZone[];
+  readonly route: PathView & { start: { x: number; z: number }; end: { x: number; z: number } };
+  readonly targetable: boolean;
+  readonly defeated: boolean;
+  readonly outcome: ThreatOutcome | null;
+  readonly aggro: ReadonlyMap<string, number>;
+  readonly hp: number;
+  readonly maxHp: number;
+  readonly headPos: { x: number; y: number; z: number };
+  damage(zone: ThreatZone | string | null, amount: number, src: DamageSource): DamageResult;
+  /** Its hooks for the army: where a squad stands, its blows, helicopters in reach. */
+  unitAt: ((key: string) => { x: number; y: number; z: number } | null) | null;
+  onBlow: ((kind: StriderBlow, x: number, y: number, z: number, r: number) => void) | null;
+  airTargets: AirProvider[];
+  /** Where units come from (default: ahead of it along its route) and the artillery's spot (default: past the route's end). */
+  spawnPoint?(k: number, level: number): { x: number; z: number };
+  batteryAt?(): { x: number; z: number };
+  /** It goes where it likes (the player): units holding out of reach go again. */
+  readonly chased?: boolean;
+}
+
+/** The army's foe in an incident (a major threat with a body), or null. */
+export function armyFoe(ev: ThreatEvent): ArmyFoe | null {
+  return ev.tier === 'major' && (ev instanceof Strider || ev instanceof PlayerRampage) ? ev : null;
+}
+
 const VEHICLE_KIND: Partial<Record<ForceKind, VKind>> = { truck: 'army_truck', apc: 'apc', tank: 'tank' };
 const ON_GROUND: ForceKind[] = ['truck', 'apc', 'tank', 'rifles'];
 const _o = { x: 0, z: 0, dx: 0, dz: 0 };
@@ -69,9 +109,9 @@ export class Forces {
   readonly fx: ArmyFx;
   readonly air: Aircraft;
   private inc: Incident | null = null;
-  private mon: Strider | null = null;
+  private mon: ArmyFoe | null = null;
   private view: MonsterView | null = null;
-  private hooked = new WeakSet<Strider>();
+  private hooked = new WeakSet<ArmyFoe>();
   private bodies = new Map<number, Body>();
   private rng: Rng;
   /** Soldiers getting back into their truck, and the hurt walking out of it. */
@@ -81,6 +121,10 @@ export class Forces {
   private blowT = new Map<string, number>();
   /** Volleys in a row with no line of sight, per unit. */
   private blockedN = new Map<number, number>();
+  /** The zone each unit last had a line to (a target that goes where it likes). */
+  private lastZone = new Map<number, string>();
+  /** Units whose spot gave no line from where they actually stand: the next slot is somewhere else. */
+  private reslot = new Set<number>();
   private battery: { x: number; z: number } | null = null;
   private time = 0;
   private markT = 0;
@@ -88,10 +132,10 @@ export class Forces {
   private devDone = false;
   private idle = true;
   readonly log: { t: number; what: string }[] = [];
-  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
+  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, heldBy: {} as Record<string, number>, reslots: 0, breaches: 0, suppress: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
   /** Stage 3: the battle is over (the monster defeated or driven off by the army, or it got away). */
   onOutcome: ((o: { outcome: string; byArmy: boolean; lost: Record<string, number> }) => void) | null = null;
-  /** Stage E: a rampaging giant player with a very low reputation is the army's target (not wired yet). */
+  /** The army's target is a rampaging giant player (threats/PlayerRampage: HostilePlayer sets it). */
   hostilePlayer = false;
 
   constructor(private g: Game) {
@@ -120,8 +164,8 @@ export class Forces {
     });
   }
 
-  /** The army comes for a major threat with a body (the Strider). */
-  private armyFor(inc: Incident): boolean { return this.enabled && inc.ev.tier === 'major' && inc.ev instanceof Strider; }
+  /** The army comes for a major threat with a body (the Strider, a rampaging giant player). */
+  private armyFor(inc: Incident): boolean { return this.enabled && !!armyFoe(inc.ev); }
 
   /** Off: the ladder stops at 2 (dev.army.enabled(false): measurements without the army). */
   enabled = true;
@@ -129,10 +173,12 @@ export class Forces {
   // ================================================================== levels
 
   private engage(inc: Incident, level: 3 | 4): void {
-    if (!this.enabled || !(inc.ev instanceof Strider)) return;
-    this.attach(inc, inc.ev);
+    const foe = armyFoe(inc.ev);
+    if (!this.enabled || !foe) return;
+    this.attach(inc, foe);
     const S = this.mon!, R = S.route;
     const spawn = (k: number) => {
+      if (S.spawnPoint) { const p = S.spawnPoint(k, level); return this.street(p.x, p.z, 200); }
       // From beyond it, ahead towards downtown (past the end: further on in the same direction), on a street.
       const want = S.s + ARMY.spawnR;
       const p = pathAt(R, Math.min(R.length, want), _o);
@@ -145,7 +191,7 @@ export class Forces {
     this.note(`level ${level}: ${add.map((q) => `${q.key} (${q.units.map((u) => u.kind).join('+')})`).join(', ')}`);
   }
 
-  private attach(inc: Incident, s: Strider): void {
+  private attach(inc: Incident, s: ArmyFoe): void {
     this.inc = inc;
     if (this.mon === s) return;
     this.mon = s;
@@ -153,7 +199,7 @@ export class Forces {
     this.view = {
       get x() { return s.x; }, get z() { return s.z; }, get s() { return s.s; }, get mode() { return s.mode; },
       zones: s.zones,
-      get head() { const h = s.rig.headPos; return { x: h.x, y: h.y, z: h.z }; },
+      get head() { const h = s.headPos; return { x: h.x, y: h.y, z: h.z }; },
       damage(z, amount, key) {
         const c = self.centroid(key);
         const r = s.damage(z as ThreatZone, amount, { cause: 'military', key, x: c?.x, y: c?.y, z: c?.z });
@@ -168,6 +214,7 @@ export class Forces {
       s.airTargets.push((x, y, z, r) => this.air.airTargets(x, y, z, r));
     }
     // The battery beyond the city edge, further on past downtown.
+    if (s.batteryAt) { this.battery = s.batteryAt(); return; }
     const R = s.route, e = pathAt(R, R.length, _o);
     const dx = R.end.x - R.start.x, dz = R.end.z - R.start.z, l = Math.hypot(dx, dz) || 1;
     this.battery = { x: e.x + (dx / l) * 3200, z: e.z + (dz / l) * 3200 };
@@ -200,6 +247,8 @@ export class Forces {
     this.materialise(dt);
     const ops = this.ops(fighting);
     if (S && this.view && (fighting || S.mode === 'retreat' || S.mode === 'sink')) {
+      // (A target that goes where it likes: units it has left out of reach go again.)
+      if (S.chased && fighting) regroup(this.squads, this.view, RAMPAGE.regroupT, RAMPAGE.reach);
       stepForces(this.squads, this.view, S.route, dt, this.rng, () => {}, ops);
     } else this.leaveStep(dt, ops);
     this.soldierStep(dt);
@@ -221,7 +270,7 @@ export class Forces {
   /** The game's hooks for the battle model. */
   private ops(fighting: boolean): ForceOps {
     return {
-      slot: (u, x, z) => (u.kind === 'rifles' ? this.street(x, z, 90, 4) : this.street(x, z, 140)),
+      slot: (u, x, z) => (this.mon?.chased ? this.sightSlot(u, x, z) : u.kind === 'rifles' ? this.street(x, z, 90, 4) : this.street(x, z, 140)),
       move: (u, x, z, dt) => this.move(u, x, z, dt),
       fire: (u, q, d) => (fighting ? this.fire(u, q, d) : true),
       event: (q, what, u) => this.event(q, what, u),
@@ -255,7 +304,7 @@ export class Forces {
       const q = this.squads[i];
       for (let k = q.units.length - 1; k >= 0; k--) {
         const u = q.units[k];
-        const gone = u.task === 'leave' && (u.taskT > ARMY.leaveT || Math.hypot(u.x - p.x, u.z - p.z) > ARMY.dematR + 300) && !this.visibleBody(u);
+        const gone = u.task === 'leave' && (u.taskT > ARMY.leaveT * 2 || ((u.taskT > ARMY.leaveT || Math.hypot(u.x - p.x, u.z - p.z) > ARMY.dematR + 300) && !this.visibleBody(u)));
         if (!gone) continue;
         this.dematerialise(u, true);
         q.units.splice(k, 1);
@@ -283,6 +332,7 @@ export class Forces {
     this.withdrawn = false;
     this.fx.clearEmplacements();
     this.placed.clear();
+    this.lastZone.clear(); this.reslot.clear();
     this.air.clear();
     for (const b of this.boarding) b.a.alive = false;
     this.boarding.length = 0;
@@ -412,13 +462,16 @@ export class Forces {
     }
     if (b.soldiers?.length) {
       const S = this.mon, fx = S ? S.x - x : 0, fz = S ? S.z - z : 1, l = Math.hypot(fx, fz) || 1;
-      let done = true;
+      let away = 0;
       b.soldiers.forEach((o, i) => {
         const p = this.coverSpot(x, z, fx / l, fz / l, i, b.soldiers!.length);
         const d = Math.hypot(p.x - o.x, p.z - o.z);
-        if (d > 1.5) { done = false; this.g.crime.police.chase(o, p, 3.6); }
+        if (d > 1.5) { away++; this.g.crime.police.chase(o, p, 3.6); }
       });
-      return done;
+      // (A target that goes where it likes turns the line about as it goes: most of them there will do;
+      // and a squad that cannot get there in the end fights from where it got to.)
+      if (S?.chased && u.task === 'move') return away <= b.soldiers.length / 2 || u.taskT > 45;
+      return away === 0;
     }
     return undefined;
   }
@@ -427,6 +480,45 @@ export class Forces {
   private coverSpot(x: number, z: number, fx: number, fz: number, i: number, n: number): { x: number; z: number } {
     const side = (i - (n - 1) / 2) * 0.75;
     return { x: x - fz * side - fx * 0.2, z: z + fx * side - fz * 0.2 };
+  }
+
+  /**
+   * A slot round a target that goes where it likes (a giant player): the street point nearest the
+   * ring slot (x, z) from which a unit sees the target — tried round its side of the ring and nearer
+   * in (streets running towards the target give a line down them), else the ring slot itself. Without
+   * this, units on the ring stood behind buildings, never got a shot and moved on for ever.
+   */
+  private sightSlot(u: ForceUnit, x: number, z: number): { x: number; z: number } {
+    const S = this.mon!, g = this.g;
+    const snap = (px: number, pz: number) => (u.kind === 'rifles' ? this.street(px, pz, 60, 4) : this.street(px, pz, 80));
+    const ax = x - S.x, az = z - S.z, R = Math.hypot(ax, az) || 1, a0 = Math.atan2(az, ax);
+    const W = FORCE[u.kind].weapon, danger = FORCE[u.kind].danger;
+    const reach = Math.min(W?.range ?? 1e9, RAMPAGE.reach[u.kind] ?? 1e9) * 0.95;
+    const head = S.zones.find((zz) => zz.id === 'head') ?? S.zones[0], torso = S.zones.find((zz) => zz.id === 'torso') ?? head;
+    const eye = u.kind === 'tank' ? 2.4 : u.kind === 'rifles' ? 1.5 : 2.6;
+    // Not where it stood without a line, and not on top of another unit (a convoy parked nose to tail
+    // down one street: the one in front blocks the line of the ones behind).
+    const moved = this.reslot.delete(u.id), ux = u.x, uz = u.z;
+    const taken: { x: number; z: number }[] = [];
+    for (const q of this.squads) for (const o of q.units) {
+      if (o === u || o.task === 'dead' || o.task === 'leave' || o.mounted || !ON_GROUND.includes(o.kind) || o.kind === 'truck') continue;
+      taken.push({ x: o.x, z: o.z });
+      if (o.task === 'move' || o.task === 'hold') taken.push({ x: o.tx, z: o.tz });
+    }
+    const free = (p: { x: number; z: number }) => (!moved || Math.hypot(p.x - ux, p.z - uz) > 20) && !taken.some((t) => Math.hypot(t.x - p.x, t.z - p.z) < 16);
+    for (const k of SLOT_R) {
+      const r = Math.max(danger + 25, Math.min(R, reach) * k);
+      if (r > reach) continue;
+      for (const da of SLOT_A) {
+        const p = snap(S.x + Math.cos(a0 + da) * r, S.z + Math.sin(a0 + da) * r);
+        const d = Math.hypot(p.x - S.x, p.z - S.z);
+        if (d < danger + 10 || d > reach || !free(p)) continue;
+        const y = g.world.groundHeight(p.x, p.z) + eye;
+        this.stats.rays++;
+        if (g.sight.clear(p.x, y, p.z, torso.x, torso.y, torso.z, torso.r) || g.sight.clear(p.x, y, p.z, head.x, head.y, head.z, head.r)) return p;
+      }
+    }
+    return snap(x, z);
   }
 
   /** A street point near (x, z) (lane offset `off` m), or the point itself. */
@@ -563,26 +655,57 @@ export class Forces {
     // aside): the zone it aims at, else the high back over the roofs in front. Targeted fire
     // (combat/shot.ts): no clear line, no volley; a clear one, every round hits.
     const sight = this.g.sight, own = b.car ?? null;
-    let aimZ = pickZone(this.rng, S.zones, true, W.aimWeak) as ThreatZone;
+    // (A target that goes where it likes: the zone it hit last first — a tank's gun stays laid.)
+    const last = S.chased ? S.zones.find((z) => z.id === this.lastZone.get(u.id)) : undefined;
+    let aimZ = last ?? (pickZone(this.rng, S.zones, true, W.aimWeak) as ThreatZone);
     let ax = aimZ.x, ay = aimZ.y, az = aimZ.z;
     let blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
     this.stats.rays++;
-    if (blocked && aimZ.id !== 'back') {
-      aimZ = S.zones.find((z) => z.id === 'back') ?? aimZ;
+    // (A giant player: whatever part of it shows over the cars and round the corner — a shoulder past
+    // a corner, the top of the head over the roofs; not only the middle of each part.)
+    if (blocked && S.chased) {
+      const fx = aimZ.x - o.x, fz = aimZ.z - o.z, fl = Math.hypot(fx, fz) || 1, px = -fz / fl, pz = fx / fl;
+      search: for (const z of [aimZ, ...S.zones.filter((zz) => zz !== aimZ)]) {
+        for (let k = z === aimZ ? 1 : 0; k < SEE.length; k++) {
+          const [side, up] = SEE[k], tx = z.x + px * side * z.r, ty = z.y + up * z.r, tz = z.z + pz * side * z.r;
+          this.stats.rays++;
+          if (sight.clear(o.x, o.y, o.z, tx, ty, tz, k ? 0.5 : z.r, own)) { aimZ = z; ax = tx; ay = ty; az = tz; blocked = false; break search; }
+        }
+      }
+    }
+    if (S.chased) { if (blocked) this.lastZone.delete(u.id); else this.lastZone.set(u.id, aimZ.id); }
+    // (The high back over the roofs in front; a giant player's head.)
+    const high = S.zones.find((z) => z.id === 'back') ?? S.zones.find((z) => z.id === 'head');
+    if (blocked && high && aimZ !== high) {
+      aimZ = high;
       ax = aimZ.x; ay = aimZ.y + aimZ.r * 0.5; az = aimZ.z;
       blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
       this.stats.rays++;
     }
-    const dx = ax - o.x, dy = ay - o.y, dz = az - o.z, L = Math.hypot(dx, dy, dz) || 1;
     // No line of sight from here, volley after volley: shift along the line to another spot.
     const nb = blocked ? (this.blockedN.get(u.id) ?? 0) + 1 : 0;
     this.blockedN.set(u.id, nb);
-    if (nb >= 3) { this.blockedN.set(u.id, 0); u.slot = (u.slot + 1) % 6; if (u.task === 'hold') u.task = 'inbound'; return true; }
-    if (blocked) { this.stats.held++; u.cool = Math.min(u.cool, 1.5); return true; }
-    if (u.kind === 'tank') return this.tankShot(u, q, b.car!, mz, aimZ, dist);
+    if (nb >= 3) { this.blockedN.set(u.id, 0); u.slot = (u.slot + 1) % 6; if (S.chased) { this.reslot.add(u.id); this.stats.reslots++; } if (u.task === 'hold') u.task = 'inbound'; return true; }
+    // (A tank with a building between it and a giant player: it shoots its way through — the shell
+    // blasts the facade in front, and the hole it leaves may give it its line next time.)
+    if (blocked && S.chased && u.kind === 'tank' && b.car) return this.breachShot(u, b.car, mz, ax, ay, az);
+    // (Rifles and APCs against a giant player with no clear line: fire over the roofs at the head
+    // anyway — the battle model's rule for units out of sight, a hit by chance, never a weak spot.)
+    if (blocked && S.chased && (u.kind === 'rifles' || u.kind === 'apc') && high) {
+      this.stats.suppress++;
+      aimZ = high; ax = high.x; ay = high.y + high.r * 0.5; az = high.z;
+      return this.volleyFx(u, q, b, o, ax, ay, az, volley(this.rng, W, dist, q.morale, [high], false).map((h) => ({ zone: h.zone, dmg: h.dmg * 0.6 })));
+    }
+    if (blocked) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.cool = Math.min(u.cool, 1.5); return true; }
+    if (u.kind === 'tank') return this.tankShot(u, q, b.car!, mz, aimZ, dist, { x: ax, y: ay, z: az });
+    return this.volleyFx(u, q, b, o, ax, ay, az, aimedVolley(this.rng, W, dist, q.morale, S.zones));
+  }
+
+  /** A rifle / APC volley: the hits land; bursts with tracers, flashes, sparks on the hide. */
+  private volleyFx(u: ForceUnit, q: Squad, b: Body, o: { x: number; y: number; z: number }, ax: number, ay: number, az: number, hits: { zone: ZoneView; dmg: number }[]): boolean {
+    const dx = ax - o.x, dy = ay - o.y, dz = az - o.z, L = Math.hypot(dx, dy, dz) || 1;
     q.fired++;
     this.stats.volleys++;
-    const hits = aimedVolley(this.rng, W, dist, q.morale, S.zones);
     const crewK = u.kind === 'rifles' ? u.crew / FORCE.rifles.crew : 1;
     for (const h of hits) if (crewK >= 1 || this.rng.chance(crewK)) land(u, q, this.view!, h.zone, h.dmg, () => {});
     // What it looks like: bursts with tracers (every third round lights up), flashes, sparks on the hide.
@@ -606,7 +729,7 @@ export class Forces {
       this.g.audio.play('army_rifle', o.x, o.y, o.z, 0.85, 0.95 + this.rng.float() * 0.1, 14, cam);
     } else {
       // APC autocannon: heavy tracers in a quick string.
-      for (let k = 0; k < W.shots; k++) {
+      for (let k = 0; k < FORCE[u.kind].weapon!.shots; k++) {
         const e = endFor(k);
         this.fx.tracer(o.x, o.y, o.z, e.x, e.y, e.z, 900, 10, 0.2, 3.5, 1.6, 0.4, k * 0.15);
       }
@@ -630,9 +753,9 @@ export class Forces {
   }
 
   /** A tank: turn the turret first; then the shot (recoil, flash, the shell flies; it lands on the body, a facade or the street). */
-  private tankShot(u: ForceUnit, q: Squad, car: Vehicle, o: { x: number; y: number; z: number }, zone: ThreatZone, dist: number): boolean {
-    this.aimAt.set(u.id, { x: zone.x, y: zone.y, z: zone.z });
-    const a = this.tankAim(car, zone), G2 = car.gun!;
+  private tankShot(u: ForceUnit, q: Squad, car: Vehicle, o: { x: number; y: number; z: number }, zone: ThreatZone, dist: number, at: { x: number; y: number; z: number } = zone): boolean {
+    this.aimAt.set(u.id, { x: at.x, y: at.y, z: at.z });
+    const a = this.tankAim(car, at), G2 = car.gun!;
     if (Math.abs(angle(a.yaw - G2.yaw)) > 0.06 || Math.abs(a.pitch - G2.pitch) > 0.05) { u.cool = 0.4; return true; }
     q.fired++;
     this.stats.volleys++;
@@ -655,6 +778,28 @@ export class Forces {
       if (h && this.view) { land(u, q, this.view, h.zone, h.dmg, () => {}); this.fx.explosion(end.x, end.y, end.z, 1.4, true); this.g.audio.play('army_hit', end.x, end.y, end.z, 1, 1, 40, cam); }
       else this.groundHit(end.x, end.y, end.z, 1.5, dx / L, dy / L, dz / L);
     });
+    return true;
+  }
+
+  /** A tank shooting into the building between it and the target (turret first; the shell bursts on the facade). */
+  private breachShot(u: ForceUnit, car: Vehicle, o: { x: number; y: number; z: number }, tx: number, ty: number, tz: number): boolean {
+    const dx = tx - o.x, dy = ty - o.y, dz = tz - o.z, L = Math.hypot(dx, dy, dz) || 1;
+    const h = this.g.targeting.probe(o.x, o.y, o.z, dx / L, dy / L, dz / L, L, null, NO_KINDS);
+    this.stats.rays++;
+    // (Nothing to blast — terrain, a car: it holds its fire.)
+    if ((h.what !== 'building' && h.what !== 'roof') || h.t < 8) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.cool = Math.min(u.cool, 1.5); return true; }
+    this.aimAt.set(u.id, { x: h.x, y: h.y, z: h.z });
+    const a = this.tankAim(car, h), G2 = car.gun!;
+    if (Math.abs(angle(a.yaw - G2.yaw)) > 0.06 || Math.abs(a.pitch - G2.pitch) > 0.05) { u.cool = 0.4; return true; }
+    this.stats.breaches++;
+    G2.recoil = 0.55;
+    const cam = this.g.renderer.camera.position;
+    this.fx.flash(o.x, o.y, o.z, dx / L, dy / L, dz / L, 2.6);
+    this.g.dust.burst(car.x, car.y + 0.3, car.z, 14, 4, 3, 2.5, 2.5, DUST, 0.2, 0.45);
+    this.g.audio.play('army_tank', o.x, o.y, o.z, 1, 0.95 + this.rng.float() * 0.1, 45, cam);
+    this.g.stimuli.emit('gunfire', o.x, o.y, o.z, 6, 220, { cause: 'military' });
+    const ex = h.x, ey = h.y, ez = h.z;
+    this.fx.projectile('shell', o.x, o.y, o.z, ex, ey, ez, h.t / 900, () => this.groundHit(ex, ey, ez, 1.5, dx / L, dy / L, dz / L));
     return true;
   }
 
@@ -691,7 +836,7 @@ export class Forces {
     // Targeted: a clear line from the helicopter to the part it goes for, or the run is held (the rockets kept).
     const z0 = (hits[0]?.zone ?? S.zones[0]) as ThreatZone;
     this.stats.rays++;
-    if (!this.g.sight.clear(from.x, from.y - 0.4, from.z, z0.x, z0.y, z0.z, z0.r)) { this.stats.held++; u.ammo++; return true; }
+    if (!this.g.sight.clear(from.x, from.y - 0.4, from.z, z0.x, z0.y, z0.z, z0.r)) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.ammo++; return true; }
     q.fired++;
     this.stats.volleys++;
     const cam = this.g.renderer.camera.position;
@@ -758,7 +903,7 @@ export class Forces {
       this.fx.projectile('arty', tx - 60, S.y + 500, tz - 60, tx, this.g.world.groundHeight(tx, tz) + 0.4, tz, 1.4, () => {
         const M = this.mon;
         if (h && M && M.targetable && this.view) {
-          const z = M.zones.find((zz) => zz.id === h.zone.id) ?? M.zones[3];
+          const z = M.zones.find((zz) => zz.id === h.zone.id) ?? M.zones[Math.min(3, M.zones.length - 1)];
           land(u, q, this.view, z, h.dmg, () => {});
           this.fx.explosion(z.x, z.y + z.r * 0.5, z.z, 1.8, true);
         } else this.groundHit(tx, this.g.world.groundHeight(tx, tz) + 0.4, tz, 1.8, 0, -1, 0);
@@ -922,6 +1067,17 @@ export class Forces {
     return this.jetRun(u, q);
   }
 
+  /**
+   * A blow of the player's at a point (Game.strike: a punch, a thrown car): an army helicopter in
+   * reach is knocked out of the sky — only while the army is after the player.
+   */
+  struck(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): number {
+    if (!this.hostilePlayer || !(this.mon instanceof PlayerRampage)) return 0;
+    const hit = this.air.airTargets(x, y, z, Math.max(r, this.g.player.height * 0.15));
+    for (const h of hit) h.swat(jx, jy, jz);
+    return hit.length;
+  }
+
   /** Dev / admin: a unit of a kind `dist` m ahead of the player (it joins the fight when there is one). */
   spawn(kind: 'tank' | 'heli' | 'rifles' | 'apc' | 'truck', dist = 40): string {
     const g = this.g, fy = g.camRig.forwardYaw;
@@ -977,6 +1133,11 @@ export class Forces {
   }
 }
 
+/** Where a slot round a giant player is looked for: shares of the ring's radius, angles off the unit's side (rad). */
+const SLOT_R = [1, 0.8, 0.62, 0.48, 0.36];
+/** Points tried on a zone of a giant player (side, up — in zone radii): the middle, its edges, its top. */
+const SEE: [number, number][] = [[0, 0], [0, 0.8], [-0.8, 0], [0.8, 0], [0, -0.6]];
+const SLOT_A = [0, 0.18, -0.18, 0.4, -0.4];
 const VEHICLE_KIND_SET = new Set<string>(['army_truck', 'apc', 'tank']);
 const NO_KINDS = {};
 const DUST = new THREE.Color(0.55, 0.52, 0.47);

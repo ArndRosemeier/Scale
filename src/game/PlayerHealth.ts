@@ -38,6 +38,8 @@ export class PlayerHealth {
   sinceHurt = 999;
   /** Knocked out: seconds left until waking up (0 = awake). */
   koT = 0;
+  /** Regeneration multiplier (the army after a rampaging giant: slower — threats/PlayerRampage). */
+  regenK = 1;
   /** Strength rank (super strength), set by the game every frame. */
   strengthRank = 0;
   /** Recent hurt flash 0..1 (HUD vignette). */
@@ -105,7 +107,7 @@ export class PlayerHealth {
       }
       return;
     }
-    if (this.sinceHurt > HEALTH.regenDelay && this.hp < this.max) this.hp = Math.min(this.max, this.hp + HEALTH.regen * dt * (1 + this.strengthRank * 0.2));
+    if (this.sinceHurt > HEALTH.regenDelay && this.hp < this.max) this.hp = Math.min(this.max, this.hp + HEALTH.regen * this.regenK * dt * (1 + this.strengthRank * 0.2));
   }
 
   get lastHurt(): HurtKind { return this.lastKind; }

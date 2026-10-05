@@ -71,6 +71,8 @@ export interface ThreatActor {
   readonly aggro: ReadonlyMap<string, number>;
   /** Fighting strength for the con (1 = an average adult). */
   conStrength(): number;
+  /** The player's own body (a rampaging giant: the police's and the army's target, never the player's). */
+  readonly self?: boolean;
 }
 
 /** Points of damage per N·s of impulse (punches, shoves, blows on a threat actor). */

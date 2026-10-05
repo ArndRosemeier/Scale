@@ -26,6 +26,7 @@ import { Strider, STRIDER, STRIDER_RIG, type StriderOpts } from './Strider';
 import { planStriderRoute, type StriderRoute } from './StriderRoute';
 import { CreatureMesh } from './rig/CreatureMesh';
 import { FacadeFires } from './FacadeFires';
+import { PlayerRampage } from './PlayerRampage';
 import { Brood, BroodGlimpse, broodOmen, type BroodOpts } from './Brood';
 import { BroodMesh } from './brood/broodMesh';
 import type { HitEffect } from './brood/BroodSim';
@@ -55,6 +56,12 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
       } catch (err) { console.warn('[threats]', err); return null; }
     },
     fallback: ['tremor'],
+  },
+  // A rampaging giant player (started by HostilePlayer after its warnings, never by the clock).
+  rampage: {
+    omen: () => false,
+    start: (d) => new PlayerRampage(d.g),
+    fallback: [],
   },
   brood: {
     omen: (d, site, kind, rng) => broodOmen(d.g, site, kind, rng, d.glimpses),
@@ -148,7 +155,8 @@ export class ThreatDirector {
   /** The big threat bodies one can target and hurt now. */
   actors(): ThreatActor[] {
     const out: ThreatActor[] = [];
-    for (const ev of this.events) if (ev.actors) for (const a of ev.actors) if (a.targetable) out.push(a);
+    // (Not the player's own body: a rampaging giant is the army's target, never their own.)
+    for (const ev of this.events) if (ev.actors) for (const a of ev.actors) if (a.targetable && !a.self) out.push(a);
     return out;
   }
 
@@ -314,7 +322,8 @@ export class ThreatDirector {
     for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
-      if (!ev.active) continue;
+      // (A rampaging player is the incident: no alert marker on themselves.)
+      if (!ev.active || ev.archetype === 'rampage') continue;
       list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : ev.archetype === 'brood' ? 'A swarm from the sewers — creatures attacking people' : 'Threat', always: true });
       if (ev instanceof RobotMalfunction) for (const m of ev.units) {
         if (m.out || m.mode !== 'hostile' || Math.hypot(m.obj.x - p.x, m.obj.z - p.z) > 250) continue;
