@@ -704,7 +704,8 @@ every frame (`prof.threats`).
     their reach of a player who has moved on (`RAMPAGE.reach`: rifles 230 m, APCs 340, tanks 480 — in a city a gun
     outranges its line of sight), or still on the way to a slot the player has long left, go again after 5 s (`regroup`:
     a rifle squad waits for its truck); a unit blocked three volleys running re-slots away from where it stood and from
-    other units' spots (no convoy nose to tail down one street), and fires at whichever zone it sees, keeping the last.
+    other units' spots (no convoy nose to tail down one street), and fires at whichever zone it sees (each zone's middle, sides and top tried, `SEE`), keeping the last; a tank with
+    a building in the way shoots into the facade (`breachShot`: the hole may give it its line next time).
     While hostile the player's health regenerates at 20 % (`PlayerHealth.regenK`).
     The player's blows on the units are their own: vehicles crushed or wrecked, soldiers knocked down (the usual losses
     and morale), helicopters punched out of the sky (`Forces.struck`). Headless check (`simulatePlayerBattle`,

@@ -131,7 +131,7 @@ export class Forces {
   private devDone = false;
   private idle = true;
   readonly log: { t: number; what: string }[] = [];
-  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, heldBy: {} as Record<string, number>, reslots: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
+  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, heldBy: {} as Record<string, number>, reslots: 0, breaches: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
   /** Stage 3: the battle is over (the monster defeated or driven off by the army, or it got away). */
   onOutcome: ((o: { outcome: string; byArmy: boolean; lost: Record<string, number> }) => void) | null = null;
   /** The army's target is a rampaging giant player (threats/PlayerRampage: HostilePlayer sets it). */
@@ -660,12 +660,16 @@ export class Forces {
     let ax = aimZ.x, ay = aimZ.y, az = aimZ.z;
     let blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
     this.stats.rays++;
-    // (A giant player: whatever part of it shows over the cars and round the corner.)
+    // (A giant player: whatever part of it shows over the cars and round the corner — a shoulder past
+    // a corner, the top of the head over the roofs; not only the middle of each part.)
     if (blocked && S.chased) {
-      for (const z of S.zones) {
-        if (z === aimZ) continue;
-        this.stats.rays++;
-        if (sight.clear(o.x, o.y, o.z, z.x, z.y, z.z, z.r, own)) { aimZ = z; ax = z.x; ay = z.y; az = z.z; blocked = false; break; }
+      const fx = aimZ.x - o.x, fz = aimZ.z - o.z, fl = Math.hypot(fx, fz) || 1, px = -fz / fl, pz = fx / fl;
+      search: for (const z of [aimZ, ...S.zones.filter((zz) => zz !== aimZ)]) {
+        for (let k = z === aimZ ? 1 : 0; k < SEE.length; k++) {
+          const [side, up] = SEE[k], tx = z.x + px * side * z.r, ty = z.y + up * z.r, tz = z.z + pz * side * z.r;
+          this.stats.rays++;
+          if (sight.clear(o.x, o.y, o.z, tx, ty, tz, k ? 0.5 : z.r, own)) { aimZ = z; ax = tx; ay = ty; az = tz; blocked = false; break search; }
+        }
       }
     }
     if (S.chased) { if (blocked) this.lastZone.delete(u.id); else this.lastZone.set(u.id, aimZ.id); }
@@ -682,8 +686,11 @@ export class Forces {
     const nb = blocked ? (this.blockedN.get(u.id) ?? 0) + 1 : 0;
     this.blockedN.set(u.id, nb);
     if (nb >= 3) { this.blockedN.set(u.id, 0); u.slot = (u.slot + 1) % 6; if (S.chased) { this.reslot.add(u.id); this.stats.reslots++; } if (u.task === 'hold') u.task = 'inbound'; return true; }
+    // (A tank with a building between it and a giant player: it shoots its way through — the shell
+    // blasts the facade in front, and the hole it leaves may give it its line next time.)
+    if (blocked && S.chased && u.kind === 'tank' && b.car) return this.breachShot(u, b.car, mz, ax, ay, az);
     if (blocked) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.cool = Math.min(u.cool, 1.5); return true; }
-    if (u.kind === 'tank') return this.tankShot(u, q, b.car!, mz, aimZ, dist);
+    if (u.kind === 'tank') return this.tankShot(u, q, b.car!, mz, aimZ, dist, { x: ax, y: ay, z: az });
     q.fired++;
     this.stats.volleys++;
     const hits = aimedVolley(this.rng, W, dist, q.morale, S.zones);
@@ -734,9 +741,9 @@ export class Forces {
   }
 
   /** A tank: turn the turret first; then the shot (recoil, flash, the shell flies; it lands on the body, a facade or the street). */
-  private tankShot(u: ForceUnit, q: Squad, car: Vehicle, o: { x: number; y: number; z: number }, zone: ThreatZone, dist: number): boolean {
-    this.aimAt.set(u.id, { x: zone.x, y: zone.y, z: zone.z });
-    const a = this.tankAim(car, zone), G2 = car.gun!;
+  private tankShot(u: ForceUnit, q: Squad, car: Vehicle, o: { x: number; y: number; z: number }, zone: ThreatZone, dist: number, at: { x: number; y: number; z: number } = zone): boolean {
+    this.aimAt.set(u.id, { x: at.x, y: at.y, z: at.z });
+    const a = this.tankAim(car, at), G2 = car.gun!;
     if (Math.abs(angle(a.yaw - G2.yaw)) > 0.06 || Math.abs(a.pitch - G2.pitch) > 0.05) { u.cool = 0.4; return true; }
     q.fired++;
     this.stats.volleys++;
@@ -759,6 +766,28 @@ export class Forces {
       if (h && this.view) { land(u, q, this.view, h.zone, h.dmg, () => {}); this.fx.explosion(end.x, end.y, end.z, 1.4, true); this.g.audio.play('army_hit', end.x, end.y, end.z, 1, 1, 40, cam); }
       else this.groundHit(end.x, end.y, end.z, 1.5, dx / L, dy / L, dz / L);
     });
+    return true;
+  }
+
+  /** A tank shooting into the building between it and the target (turret first; the shell bursts on the facade). */
+  private breachShot(u: ForceUnit, car: Vehicle, o: { x: number; y: number; z: number }, tx: number, ty: number, tz: number): boolean {
+    const dx = tx - o.x, dy = ty - o.y, dz = tz - o.z, L = Math.hypot(dx, dy, dz) || 1;
+    const h = this.g.targeting.probe(o.x, o.y, o.z, dx / L, dy / L, dz / L, L, null, NO_KINDS);
+    this.stats.rays++;
+    // (Nothing to blast — terrain, a car: it holds its fire.)
+    if ((h.what !== 'building' && h.what !== 'roof') || h.t < 8) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.cool = Math.min(u.cool, 1.5); return true; }
+    this.aimAt.set(u.id, { x: h.x, y: h.y, z: h.z });
+    const a = this.tankAim(car, h), G2 = car.gun!;
+    if (Math.abs(angle(a.yaw - G2.yaw)) > 0.06 || Math.abs(a.pitch - G2.pitch) > 0.05) { u.cool = 0.4; return true; }
+    this.stats.breaches++;
+    G2.recoil = 0.55;
+    const cam = this.g.renderer.camera.position;
+    this.fx.flash(o.x, o.y, o.z, dx / L, dy / L, dz / L, 2.6);
+    this.g.dust.burst(car.x, car.y + 0.3, car.z, 14, 4, 3, 2.5, 2.5, DUST, 0.2, 0.45);
+    this.g.audio.play('army_tank', o.x, o.y, o.z, 1, 0.95 + this.rng.float() * 0.1, 45, cam);
+    this.g.stimuli.emit('gunfire', o.x, o.y, o.z, 6, 220, { cause: 'military' });
+    const ex = h.x, ey = h.y, ez = h.z;
+    this.fx.projectile('shell', o.x, o.y, o.z, ex, ey, ez, h.t / 900, () => this.groundHit(ex, ey, ez, 1.5, dx / L, dy / L, dz / L));
     return true;
   }
 
@@ -1094,6 +1123,8 @@ export class Forces {
 
 /** Where a slot round a giant player is looked for: shares of the ring's radius, angles off the unit's side (rad). */
 const SLOT_R = [1, 0.8, 0.62, 0.48, 0.36];
+/** Points tried on a zone of a giant player (side, up — in zone radii): the middle, its edges, its top. */
+const SEE: [number, number][] = [[0, 0], [0, 0.8], [-0.8, 0], [0.8, 0], [0, -0.6]];
 const SLOT_A = [0, 0.18, -0.18, 0.4, -0.4];
 const VEHICLE_KIND_SET = new Set<string>(['army_truck', 'apc', 'tank']);
 const NO_KINDS = {};
