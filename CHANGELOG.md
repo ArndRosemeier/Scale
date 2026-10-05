@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.044 — 2026-10-05
+
+- **Real shoes**: sneakers, shoes and boots no longer show the toes through them. The front of the foot is now a closed, rounded toe box with a flat sole, so footwear reads as shoes instead of paint on bare feet.
+
 ## 0.043 — 2026-10-05
 
 - **A real sun and moon in the sky**: the sun is now a clear disc, yellow-white by day and orange-red as it rises and sets, with a soft glow around it instead of one white blot of glare. Clouds pass in front of it and it vanishes under an overcast sky.

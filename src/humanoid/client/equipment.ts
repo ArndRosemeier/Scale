@@ -58,6 +58,205 @@ interface ShellBuild {
 
 const _v = new THREE.Vector3();
 
+const smoothstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+type ShellParts = { P: number[]; N: number[]; UV: number[]; SI: number[]; SW: number[]; E: number[]; I: number[] };
+
+/** A shoe's generated toe box, in the bind pose (sole frame of one foot). */
+interface ToeCap {
+  /** Heel point (x, z) and the horizontal foot direction. */
+  back: [number, number]; dx: number; dz: number;
+  /** Ball of the foot along the foot (m), toe box length beyond it. */
+  s0: number; len: number;
+  /** Rounded-box section: centre across / up and half extents. */
+  cx: number; cy: number; a: number; b: number;
+  /** Shell vertices of the forefoot and toes (skin weights for the cap). */
+  ids: number[];
+}
+
+const SHOE_PW = 3.2; // superellipse exponent of the shoe section: boxy but rounded
+const seNorm = (u: number, v: number) => Math.pow(Math.pow(Math.abs(u), SHOE_PW) + Math.pow(Math.abs(v), SHOE_PW), 1 / SHOE_PW);
+
+/**
+ * Turns the foot part of a shell into a shoe. The toes are too fine to reshape (their gaps fold
+ * over when pressed onto a smooth surface), so the shell stops at the ball of the foot and a
+ * generated toe box (`buildToeCap`) closes the front. Behind the ball, the cross-sections are
+ * pressed out onto a rounded box (filled arch and instep hollows, flat sole), blended in from
+ * mid-foot so ankle and heel keep following the body. Bind pose, so it fits any body.
+ * Returns the shell vertices to drop (toes) and the toe boxes to add.
+ */
+function shapeShoe(st: HumanStatic, topo: ShellTopo, P: Float32Array, N: Float32Array): { drop: Uint8Array; caps: ToeCap[] } {
+  const { src, idx, nbStart, nbList, edge, twins } = topo;
+  const n = src.length;
+  const drop = new Uint8Array(n);
+  const caps: ToeCap[] = [];
+  for (const side of ['L', 'R'] as const) {
+    const reg = BODY_REGIONS.indexOf(`foot.${side}` as BodyRegion);
+    const ids: number[] = [];
+    for (let i = 0; i < n; i++) if (st.region[src[i]] === reg) ids.push(i);
+    if (ids.length < 16) continue;
+    const tOf = (i: number) => st.regionT[src[i]];
+    // Foot axis (horizontal): heel/ankle centroid → toe-tip centroid.
+    const cen = (lo: number, hi: number) => {
+      let x = 0, z = 0, c = 0;
+      for (const i of ids) { const t = tOf(i); if (t >= lo && t <= hi) { x += P[i * 3]; z += P[i * 3 + 2]; c++; } }
+      return c ? [x / c, z / c] as [number, number] : null;
+    };
+    const back = cen(0, 0.2), tip = cen(0.85, 1);
+    if (!back || !tip) continue;
+    let dx = tip[0] - back[0], dz = tip[1] - back[1];
+    const dl = Math.hypot(dx, dz);
+    if (dl < 1e-4) continue;
+    dx /= dl; dz /= dl;
+    // Local frame: s along the foot, x across (side), y up.
+    const S = (i: number) => (P[i * 3] - back[0]) * dx + (P[i * 3 + 2] - back[1]) * dz;
+    const X = (i: number) => (P[i * 3] - back[0]) * dz - (P[i * 3 + 2] - back[1]) * dx;
+    // Cross-section of the forefoot (ball of the foot): bounds of the layer around t 0.5..0.68.
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, s0 = 0, c0 = 0, sMax = -Infinity;
+    for (const i of ids) {
+      const t = tOf(i), s = S(i);
+      sMax = Math.max(sMax, s);
+      if (t < 0.5 || t > 0.68) continue;
+      const x = X(i), y = P[i * 3 + 1];
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      s0 += s; c0++;
+    }
+    if (!c0 || x1 <= x0 || y1 <= y0) continue;
+    s0 /= c0;
+    const cx = (x0 + x1) / 2, a = (x1 - x0) / 2 * 1.04;
+    // Sole stays where the foot's sole is; the toe box gets a little extra room on top.
+    const b = (y1 - y0) / 2 * 1.08, cy = y0 + b;
+    const w = new Float32Array(n);
+    const capIds: number[] = [];
+    for (const i of ids) {
+      if (tOf(i) > 0.45) capIds.push(i);
+      if (S(i) > s0) drop[i] = 1;
+      else w[i] = smoothstep(0.3, 0.5, tOf(i));
+    }
+    caps.push({ back, dx, dz, s0, len: Math.max(0.02, (sMax - s0) * 1.06), cx, cy, a, b, ids: capIds });
+    // Rounded-box section; behind the ball the foot is taller (instep): never pull inward there.
+    const project = (i: number) => {
+      const x = X(i), y = P[i * 3 + 1];
+      const v = (x - cx) / a, h = (y - cy) / b;
+      const r = seNorm(v, h);
+      if (r < 1e-4 || r > 1) return;
+      const nx = cx + (v / r) * a, s = S(i);
+      P[i * 3] = back[0] + s * dx + nx * dz;
+      P[i * 3 + 1] = cy + (h / r) * b;
+      P[i * 3 + 2] = back[1] + s * dz - nx * dx;
+    };
+    // Fully shaped copy first (projection, then a few rounds of smoothing + re-projection to even
+    // out the vertices), blended in from mid-foot at the end.
+    const orig = P.slice();
+    for (const i of ids) if (w[i] > 0) project(i);
+    const tmp = new Float32Array(P.length);
+    for (let it = 0; it < 4; it++) {
+      tmp.set(P);
+      for (const i of ids) {
+        const q0 = nbStart[i], q1 = nbStart[i + 1];
+        if (!w[i] || edge[i] || q1 === q0) continue;
+        let x = 0, y = 0, z = 0;
+        for (let q = q0; q < q1; q++) { const j = nbList[q]; x += P[j * 3]; y += P[j * 3 + 1]; z += P[j * 3 + 2]; }
+        const c = 1 / (q1 - q0);
+        tmp[i * 3] = (P[i * 3] + x * c) / 2; tmp[i * 3 + 1] = (P[i * 3 + 1] + y * c) / 2; tmp[i * 3 + 2] = (P[i * 3 + 2] + z * c) / 2;
+      }
+      P.set(tmp);
+      // UV-seam twins only see the neighbours on their own side: keep them together.
+      if (twins) for (const gl of twins) {
+        if (!w[gl[0]]) continue;
+        let x = 0, y = 0, z = 0;
+        for (const i of gl) { x += P[i * 3]; y += P[i * 3 + 1]; z += P[i * 3 + 2]; }
+        const c = 1 / gl.length;
+        for (const i of gl) { P[i * 3] = x * c; P[i * 3 + 1] = y * c; P[i * 3 + 2] = z * c; }
+      }
+      for (const i of ids) if (w[i] > 0) project(i);
+    }
+    for (const i of ids) if (!drop[i]) for (let k = 0; k < 3; k++) P[i * 3 + k] = orig[i * 3 + k] + (P[i * 3 + k] - orig[i * 3 + k]) * w[i];
+  }
+  // Body normals still carry the foot's detail: shade the shoe by its own surface.
+  const acc = new Float32Array(n * 3);
+  for (let k = 0; k < idx.length; k += 3) {
+    if (drop[idx[k]] || drop[idx[k + 1]] || drop[idx[k + 2]]) continue;
+    const a = idx[k] * 3, b = idx[k + 1] * 3, c = idx[k + 2] * 3;
+    const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+    const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+    for (const o of [a, b, c]) { acc[o] += fx; acc[o + 1] += fy; acc[o + 2] += fz; }
+  }
+  const feet = new Set(['foot.L', 'foot.R'].map((r) => BODY_REGIONS.indexOf(r as BodyRegion)));
+  for (let i = 0; i < n; i++) {
+    if (!feet.has(st.region[src[i]])) continue;
+    const x = acc[i * 3], y = acc[i * 3 + 1], z = acc[i * 3 + 2], l = Math.hypot(x, y, z);
+    if (l < 1e-12) continue;
+    N[i * 3] = x / l; N[i * 3 + 1] = y / l; N[i * 3 + 2] = z / l;
+  }
+  return { drop, caps };
+}
+
+/**
+ * The closed toe box of a shoe: a short band over the end of the shell at the ball of the foot,
+ * then a half-ellipsoid with the shoe's rounded-box section out to the toe tip. Slightly larger
+ * than the shell so the overlap reads as the toe cap's seam. Skinned like the nearest shell vertex.
+ */
+function buildToeCap(cap: ToeCap, st: HumanStatic, src: number[], P: Float32Array, out: ShellParts, base: number) {
+  const rows = 10, cols = 28, k = 1.025, band = 0.03;
+  const v0 = base + out.P.length / 3, first = out.P.length;
+  const ssi = st.skinIndex.array as Uint16Array, ssw = st.skinWeight.array as Uint8Array;
+  const put = (s: number, lx: number, y: number, u: number, v: number) => {
+    const px = cap.back[0] + s * cap.dx + lx * cap.dz, pz = cap.back[1] + s * cap.dz - lx * cap.dx;
+    out.P.push(px, y, pz);
+    out.N.push(0, 0, 0);
+    out.UV.push(u, v);
+    out.E.push(0);
+    let best = cap.ids[0], bd = Infinity;
+    for (const i of cap.ids) {
+      const d = (P[i * 3] - px) ** 2 + (P[i * 3 + 1] - y) ** 2 + (P[i * 3 + 2] - pz) ** 2;
+      if (d < bd) { bd = d; best = i; }
+    }
+    const sv = src[best];
+    for (let q = 0; q < 4; q++) { out.SI.push(ssi[sv * 4 + q]); out.SW.push(ssw[sv * 4 + q]); }
+  };
+  // Rings: r = 0 at the back of the band, r = 1 at the ball, then up the cap toward the tip.
+  for (let r = 0; r <= rows; r++) {
+    const f = r === 0 ? 0 : ((r - 1) / rows) * Math.PI * 0.5;
+    const s = r === 0 ? cap.s0 - band : cap.s0 + cap.len * Math.sin(f);
+    const sc = Math.cos(f) * k;
+    for (let c = 0; c < cols; c++) {
+      const th = (c / cols) * Math.PI * 2, ct = Math.cos(th), sn = Math.sin(th);
+      const ux = Math.sign(ct) * Math.pow(Math.abs(ct), 2 / SHOE_PW), uy = Math.sign(sn) * Math.pow(Math.abs(sn), 2 / SHOE_PW);
+      put(s, cap.cx + ux * cap.a * sc, cap.cy + uy * cap.b * sc, c / cols, r / (rows + 1));
+    }
+  }
+  const tip = v0 + (rows + 1) * cols;
+  put(cap.s0 + cap.len, cap.cx, cap.cy, 0.5, 1);
+  const tri: number[] = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const a = v0 + r * cols + c, b = v0 + r * cols + ((c + 1) % cols), a2 = a + cols, b2 = b + cols;
+    tri.push(a, a2, b, b, a2, b2);
+  }
+  for (let c = 0; c < cols; c++) tri.push(v0 + rows * cols + c, tip, v0 + rows * cols + ((c + 1) % cols));
+  // Winding: outward faces front (the frame's handedness depends on the foot's side).
+  const Pt = (i: number) => out.P.slice((i - base) * 3, (i - base) * 3 + 3);
+  const [p0, p1, p2] = [Pt(tri[0]), Pt(tri[1]), Pt(tri[2])];
+  const fn = [(p1[1] - p0[1]) * (p2[2] - p0[2]) - (p1[2] - p0[2]) * (p2[1] - p0[1]), (p1[2] - p0[2]) * (p2[0] - p0[0]) - (p1[0] - p0[0]) * (p2[2] - p0[2]), (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])];
+  const ax = cap.back[0] + cap.s0 * cap.dx + cap.cx * cap.dz, az = cap.back[1] + cap.s0 * cap.dz - cap.cx * cap.dx;
+  if (fn[0] * (p0[0] - ax) + fn[1] * (p0[1] - cap.cy) + fn[2] * (p0[2] - az) < 0) for (let q = 0; q < tri.length; q += 3) [tri[q + 1], tri[q + 2]] = [tri[q + 2], tri[q + 1]];
+  // Smooth normals from the cap's own faces.
+  for (let q = 0; q < tri.length; q += 3) {
+    const [i0, i1, i2] = [tri[q] - base, tri[q + 1] - base, tri[q + 2] - base];
+    const A = out.P, o0 = i0 * 3, o1 = i1 * 3, o2 = i2 * 3;
+    const ux = A[o1] - A[o0], uy = A[o1 + 1] - A[o0 + 1], uz = A[o1 + 2] - A[o0 + 2];
+    const vx = A[o2] - A[o0], vy = A[o2 + 1] - A[o0 + 1], vz = A[o2 + 2] - A[o0 + 2];
+    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+    for (const o of [o0, o1, o2]) { out.N[o] += fx; out.N[o + 1] += fy; out.N[o + 2] += fz; }
+  }
+  for (let o = first; o < out.N.length; o += 3) {
+    const l = Math.hypot(out.N[o], out.N[o + 1], out.N[o + 2]) || 1;
+    out.N[o] /= l; out.N[o + 1] /= l; out.N[o + 2] /= l;
+  }
+  out.I.push(...tri);
+}
+
 /** New geometry sharing all vertex attributes of `g` (no copies) with its own index. */
 function shareGeometry(g: THREE.BufferGeometry, index: number[]): THREE.BufferGeometry {
   const out = new THREE.BufferGeometry();
@@ -324,6 +523,14 @@ export class EquipmentRig {
         }
       }
     }
+    // Shoes are solid: the shell stops at the ball of the foot and a closed toe box covers the toes.
+    const shoe = footShell && topo ? shapeShoe(st, topo, P, N) : null;
+    const keepTri = (t: number[]) => {
+      if (!shoe) return t;
+      const d = shoe.drop, o: number[] = [];
+      for (let k = 0; k < t.length; k += 3) if (!d[t[k]] && !d[t[k + 1]] && !d[t[k + 2]]) o.push(t[k], t[k + 1], t[k + 2]);
+      return o;
+    };
     // Weld seam twins (same displaced position and normal).
     if (twins) for (const gl of twins) {
       let x = 0, y = 0, z = 0, nx = 0, ny = 0, nz = 0;
@@ -343,8 +550,9 @@ export class EquipmentRig {
       for (let k = 0; k < 4; k++) { si[i * 4 + k] = ssi[v * 4 + k]; sw[i * 4 + k] = ssw[v * 4 + k]; }
       if (sel[v]) covered[v] |= 1 << (order & 31);
     }
-    let idx = (topo?.idx ?? []).slice();
-    const parts: { P: number[]; N: number[]; UV: number[]; SI: number[]; SW: number[]; E: number[]; I: number[] } = { P: [], N: [], UV: [], SI: [], SW: [], E: [], I: [] };
+    let idx = keepTri(topo?.idx ?? []);
+    const parts: ShellParts = { P: [], N: [], UV: [], SI: [], SW: [], E: [], I: [] };
+    if (shoe) for (const cap of shoe.caps) buildToeCap(cap, st, src, P, parts, n);
     if (l.skirt) this.buildSkirt(l, parts, n);
     if (l.hood) this.buildHood(parts, n);
     const total = n + parts.P.length / 3;
@@ -360,7 +568,7 @@ export class EquipmentRig {
     g.setAttribute('aEdge', new THREE.BufferAttribute(fE, 1));
     g.setIndex(idx);
     g.boundingSphere = ch.geo.body[0].boundingSphere!.clone();
-    if (parts.P.length) g.computeVertexNormals();
+    if (l.skirt || l.hood) g.computeVertexNormals();
     const tm = performance.now();
     const mat = createGarmentMaterial(l.material, seed, l.trim?.color);
     EQ_STATS.garmentMaterial += performance.now() - tm;
@@ -383,7 +591,7 @@ export class EquipmentRig {
     for (const l of [1, 2]) {
       const gl = new THREE.BufferGeometry();
       for (const [name, attr] of Object.entries(g.attributes)) gl.setAttribute(name, attr);
-      gl.setIndex((topo?.lodIdx[l - 1] ?? []).concat(parts.I));
+      gl.setIndex(keepTri(topo?.lodIdx[l - 1] ?? []).concat(parts.I));
       gl.boundingSphere = g.boundingSphere;
       const far = new THREE.SkinnedMesh(gl, mat.material);
       far.userData.slot = slot;
