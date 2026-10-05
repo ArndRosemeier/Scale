@@ -14,6 +14,7 @@ import { HideoutGuard } from './HideoutGuard';
 import { Bomber } from './Bomber';
 import { Hijack } from './Hijack';
 import { Ritual } from './Ritual';
+import { SewerDen } from './SewerDen';
 
 export interface KindSpec {
   make(w: CrimeWorld, seed: number, near: { x: number; z: number } | null): Crime;
@@ -41,5 +42,7 @@ export const KINDS: Record<CrimeKind, KindSpec> = {
   hideout: { make: (w, s, n) => new HideoutGuard(w, s, { x: n?.x ?? w.player.x, z: n?.z ?? w.player.z, nx: 0, nz: 1 }), ko: 9, resolved: 10, rep: 3, title: 'A hideout, guarded', criminal: 'Guard', stopped: 'the guards of a hideout' },
   hijack: { make: (w, s, n) => new Hijack(w, s, n), ko: 12, resolved: 22, rep: 6, title: 'Techno-cultists hacking the robots', criminal: 'Hacker', stopped: 'a robot hijack' },
   ritual: { make: (w, s, n) => new Ritual(w, s, n), ko: 10, resolved: 20, rep: 5, title: 'A ritual — robed figures chanting in a circle', criminal: 'Cultist', stopped: 'a ritual' },
+  // (A den's crew is posted in a sewer hideout by CrimeSystem; `make` without a site puts them at the point.)
+  den: { make: (w, s, n) => { const x = n?.x ?? w.player.x, z = n?.z ?? w.player.z, y = w.player.y; return new SewerDen(w, s, { room: -1, spots: [0, 1, 2].map((i) => ({ x: x + i, y, z, fx: x, fz: z + 3, sit: false })), stash: { x, y, z }, cx: x, cy: y, cz: z }); }, ko: 9, resolved: 14, rep: 4, title: 'A den in the sewers', criminal: 'Crook', stopped: 'a sewer den' },
   bomber: { make: (w, s, n) => new Bomber(w, s, n), ko: 18, resolved: 32, rep: 8, title: 'A mad bomber — explosions in the street', criminal: 'Mad bomber', stopped: 'a mad bomber' },
 };
