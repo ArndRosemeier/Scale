@@ -72,6 +72,9 @@ const MOODS: Record<string, [string, number][]> = {
 
 const _e = new THREE.Euler();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
+const _rt = new THREE.Vector3(), _rw = new THREE.Vector3(), _rg = new THREE.Vector3(), _rp = new THREE.Vector3();
+const _ra = new THREE.Vector3(), _rb = new THREE.Vector3(), _rc = new THREE.Vector3(), _rd = new THREE.Vector3(), _re = new THREE.Vector3(), _rf = new THREE.Vector3();
+const _rq = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3();
 
 interface FingerRig {
@@ -151,6 +154,7 @@ export class Animator {
   private lastActionKey = '';
   private actionVariant = 0;
   private actionW = 0;
+  private anchors = new Map<string, THREE.Object3D>();
   private lastAction: { def: ActionDef; id: string; t0: number; dur: number; aim?: Vec3 } | null = null;
   private time = 0;
   /** Per-foot ground offsets from the last IK pass. */
@@ -349,9 +353,10 @@ export class Animator {
     const out = this.out.copy(base);
     let actionMood: string | undefined;
     const action = this.currentAction(a.action, inp.time);
+    let actionCtx: ActionCtx | null = null;
     if (action) {
       const { def, elapsed, t } = action;
-      const ctx: ActionCtx = { main: inp.main, off: inp.off, variant: this.actionVariant, elapsed, dur: this.lastAction!.dur, aimPitch: this.aimPitch(this.lastAction!.aim) };
+      const ctx: ActionCtx = actionCtx = { main: inp.main, off: inp.off, variant: this.actionVariant, elapsed, dur: this.lastAction!.dur, aimPitch: this.aimPitch(this.lastAction!.aim) };
       this.act.copy(base);
       // Actions author absolute arm/spine angles over the neutral; start from base for unmasked parts.
       const mask = this.masks[def.mask];
@@ -408,6 +413,7 @@ export class Animator {
     // ---- apply
     this.apply(out);
     this.fingerPose(inp, action?.def, dt);
+    if (action?.def.reach && actionCtx && this.actionW > 0.02) this.reachIK(action.def, actionCtx, this.actionW);
     // ---- IK & face (near only)
     if (lod === 0 && ground && ovW < 0.5 && (fam === 'ground' || fam === 'sit' || fam === 'stunned') && this.famW.get('ground')! > 0.5) this.footIK(ground, dt);
     else { this.footOff[0] = this.footOff[1] = 0; this.pelvisOff = approach(this.pelvisOff, 0, 8, dt); }
@@ -1337,6 +1343,11 @@ export class Animator {
     if (def === ACTIONS.gesture_point) cR = 1.3;
     // A mime's palms flat on the glass.
     if (def === ACTIONS.mime_box) { cR = 0.05; cL = 0.05; }
+    if (def?.curl) {
+      const w = clamp(this.actionW, 0, 1);
+      if (def.curl.L !== undefined) cL += (def.curl.L - cL) * w;
+      if (def.curl.R !== undefined) cR += (def.curl.R - cR) * w;
+    }
     // Flight: fists ahead, relaxed hands otherwise (empty hands only).
     const fw = inp.anim.move === 'fly' ? this.famW.get('glide')! : 0;
     if (fw > 0.01 && inp.main === 'none') cR += (this.flyCurl.R - cR) * fw;
@@ -1394,6 +1405,76 @@ export class Animator {
       if (Math.abs(this.footOff[k] - this.pelvisOff) < 0.004) continue;
       this.twoBone(hip, knee, foot, target);
     }
+  }
+
+  /**
+   * Hands onto a worn prop's anchors (ActionDef.reach): two-bone IK on each arm so the grip point
+   * lands on the target, blended in with the action's weight. Two passes, since the hand's
+   * offset from the wrist turns with the forearm.
+   */
+  private reachIK(def: ActionDef, ctx: ActionCtx, w: number) {
+    const want = def.reach!(ctx);
+    const ch = this.ch;
+    ch.bone('spine01').getWorldQuaternion(_rq);
+    for (const s of ['L', 'R'] as const) {
+      const r = want[s];
+      if (!r) continue;
+      const a = this.anchor(r.anchor);
+      const grip = ch.sockets.get(`grip.${s}`);
+      if (!a || !grip) continue;
+      const sh = ch.bone(`upperarm01.${s}`), el = ch.bone(`lowerarm01.${s}`), wr = ch.bone(`wrist.${s}`);
+      // Elbow direction in the chest's frame (outward for this arm, up, forward; model faces −Z).
+      const pole = r.pole ?? [0.4, -1, 0.2];
+      _rp.set((s === 'L' ? -1 : 1) * pole[0], pole[1], -pole[2]).applyQuaternion(_rq);
+      for (let k = 0; k < 2; k++) {
+        a.localToWorld(_rt.set(r.x, r.y, r.z));
+        wr.getWorldPosition(_rw);
+        grip.getWorldPosition(_rg);
+        // Wrist target: move the wrist by the grip's miss (scaled by the blend weight).
+        _rt.sub(_rg).multiplyScalar(w).add(_rw);
+        this.poleIK(sh, el, wr, _rt, _rp);
+      }
+    }
+  }
+
+  /** Two-bone IK with the bend toward `pole` (a world direction from the root joint). */
+  private poleIK(root: THREE.Bone, mid: THREE.Bone, end: THREE.Bone, target: THREE.Vector3, pole: THREE.Vector3) {
+    const S = root.getWorldPosition(_ra), E = mid.getWorldPosition(_rb), W = end.getWorldPosition(_rc);
+    const la = S.distanceTo(E), lb = E.distanceTo(W);
+    const n = _rd.subVectors(target, S);
+    const d = clamp(n.length(), Math.abs(la - lb) + 1e-3, la + lb - 1e-3);
+    n.normalize();
+    const along = (la * la - lb * lb + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, la * la - along * along));
+    const u = _re.copy(pole).addScaledVector(n, -pole.dot(n));
+    if (u.lengthSq() < 1e-8) return;
+    u.normalize();
+    // Upper bone: swing its current direction onto the wanted elbow position.
+    const want = _rf.copy(S).addScaledVector(n, along).addScaledVector(u, h).sub(S).normalize();
+    this.rotateWorldQ(root, _q.setFromUnitVectors(E.sub(S).normalize(), want));
+    root.updateMatrixWorld(true);
+    // Lower bone: swing onto the target.
+    mid.getWorldPosition(E);
+    end.getWorldPosition(W);
+    this.rotateWorldQ(mid, _q.setFromUnitVectors(W.sub(E).normalize(), _rf.subVectors(target, E).normalize()));
+    mid.updateMatrixWorld(true);
+  }
+
+  /** A named anchor object on the character (worn props), cached while it stays attached. */
+  private anchor(name: string): THREE.Object3D | null {
+    const root = this.ch.object;
+    let a = this.anchors.get(name) ?? null;
+    if (a) {
+      let o: THREE.Object3D | null = a;
+      while (o && o !== root) o = o.parent;
+      if (!o) a = null;
+    }
+    if (!a) {
+      a = root.getObjectByName(name) ?? null;
+      if (a) this.anchors.set(name, a);
+      else this.anchors.delete(name);
+    }
+    return a;
   }
 
   /** Two-bone IK: bend the knee to the needed angle, then aim the hip at the target. */

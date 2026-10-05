@@ -188,6 +188,14 @@ function guitar(fit: BodyFit, c: C3): THREE.Object3D {
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.16, 0.022), neckM);
   head.position.set(0, 0.92, 0.015);
   body.add(neck, head);
+  // Hand anchors for the play_guitar action (anim/actions.ts): the left hand's place on the neck
+  // and the strings over the sound hole (+Y up the neck, +Z out of the top).
+  const fret = new THREE.Object3D(), strum = new THREE.Object3D();
+  fret.name = 'reach:fret';
+  fret.position.set(0, 0.6, 0.02);
+  strum.name = 'reach:strum';
+  strum.position.set(0, 0.12, 0.045);
+  body.add(fret, strum);
   // Across the body: tilted ~60° (neck up to the player's left, +X), in front of the belly.
   body.rotation.z = -1.05;
   body.position.set(-0.1, -0.24, fit.chestDepth * 0.75 + 0.08);
