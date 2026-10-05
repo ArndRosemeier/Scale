@@ -65,6 +65,9 @@ export class Player {
   action: { id: string; t0: number; dur: number } | undefined;
   /** Knocked down (combat, a car, knocked out): seconds left on the ground; movement input is ignored. */
   downT = 0;
+  /** Chilled (a villain's frost): seconds of slow left; `chillSpeed` is the share of speed left meanwhile. */
+  chillT = 0;
+  chillSpeed = 0.55;
   /** Ragdoll (physics/ragdoll): 'limp' while the body tumbles or lies, 'getup' while it stands up; no control. */
   ragdoll: '' | 'limp' | 'getup' = '';
   get animClock(): number { return this.animTime; }
@@ -159,6 +162,7 @@ export class Player {
     if (input.down('KeyA')) wish.sub(right);
     const run = input.down('ShiftLeft') || input.down('ShiftRight');
     const walkSlow = input.down('AltLeft');
+    if (this.chillT > 0) this.chillT = Math.max(0, this.chillT - dt);
     if (this.downT > 0 || this.ragdoll) {
       this.downT = Math.max(0, this.downT - dt);
       wish.set(0, 0, 0);
@@ -262,7 +266,7 @@ export class Player {
     const k = this.k, sk = Math.sqrt(k);
     const g = 9.81;
     const fast = this.speedTop > 0;
-    const speed = fast ? this.speedTop * sk : (slow ? 0.8 : run ? 5.2 : 1.45) * sk;
+    const speed = (fast ? this.speedTop * sk : (slow ? 0.8 : run ? 5.2 : 1.45) * sk) * (this.chillT > 0 ? this.chillSpeed : 1);
     const moving = wish.lengthSq() > 0;
     if (moving) wish.normalize().multiplyScalar(speed);
     // Acceleration limited by friction (∝ g) — giants accelerate as fast in m/s² but feel heavy relative to size.

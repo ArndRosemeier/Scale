@@ -2,6 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.035 — 2026-10-05
+
+- **Villains with powers**: the street gang and the Syndicate now send lieutenants now and then. They are tougher, dressed in their group's colours with glowing trim, and stand and fight with powers instead of running.
+  - The gang's **Brute** braces and charges you shoulder first, or stamps a crack along the pavement that knocks down whoever stands on it.
+  - The Syndicate's **Enforcer** lobs stun grenades, fires a frost gun that slows you down, raises a shimmering shield that soaks up your punches, and drops a smoke bomb to slip away when it goes badly.
+- Every power has a clear wind-up: light gathering in the hands, a cast pose and a sound. The aim is fixed when the wind-up starts, so a step to the side gets you out of the way. No single power can knock you out, and at most three villains cast at once.
+- Knocking out a lieutenant earns double karma.
+- Clothing can glow now: a lieutenant's jacket or suit has lit seams in the group's colour.
+- Admin console, Crime & deeds: a gang Brute, a Syndicate Enforcer, a brawl with lieutenants on both sides, and a test villain with bolt, fireball and gust.
+
 ## 0.034 — 2026-10-05
 
 - **No more orange blobs in your face**: embers, flames and smoke puffs right in front of the camera now fade out instead of filling the view as big flat discs.

@@ -1,12 +1,13 @@
 /**
  * Villain group archetypes (VILLAINS_PLAN §2). The archetypes are fixed; a city's groups get their
- * name, colours and emblem from the seed (factions/Factions.ts). Phase 1 has the two groups that
- * need no powers: the street gang and the Syndicate.
+ * name, colours and emblem from the seed (factions/Factions.ts). Phase 1 brought the street gang and
+ * the Syndicate; Phase 3 gives each its lieutenants with powers.
  *
  * Pure data: no three.js, usable in headless tests.
  */
 import type { District } from '../../plan/types';
 import type { CrimeKind } from '../crime/Crime';
+import type { VillainPower } from '../powers/Caster';
 
 export type ArchetypeId = 'gang' | 'syndicate';
 
@@ -31,6 +32,11 @@ export interface Archetype {
   kinds: Record<CrimeKind, number>;
   /** Archetypes it is at war with (turf brawls, pressure on shared borders); any other group: wary. */
   rivals: ArchetypeId[];
+  /**
+   * Its lieutenants (Phase 3): what they are called, their powers (powers/Caster), and the chance
+   * that one leads an operation of a kind (one per operation; in a brawl, one per side at most).
+   */
+  lieutenant: { title: string; powers: VillainPower[]; chance: Partial<Record<CrimeKind, number>> };
   palettes: Palette[];
   emblems: string[];
   /** Name patterns: `{a}` and `{b}` are picked from `a` and `b`. */
@@ -53,6 +59,8 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     reach: 0.42,
     kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5, bomber: 1.5, brawl: 1.5, hideout: 0 },
     rivals: ['syndicate'],
+    // The Brute: a shoulder charge and a stomp that splits the pavement.
+    lieutenant: { title: 'Brute', powers: ['dash', 'quake'], chance: { brawl: 0.4, hideout: 0.6, racket: 0.25, mugging: 0.12, robbery: 0.2 } },
     palettes: [
       { name: 'red', map: '#e5484d', primary: [0.62, 0.08, 0.08], accent: [0.85, 0.12, 0.1] },
       { name: 'purple', map: '#9b5de5', primary: [0.32, 0.12, 0.5], accent: [0.55, 0.25, 0.85] },
@@ -74,6 +82,8 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     reach: 0.34,
     kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0, bomber: 0, brawl: 0.6, hideout: 0 },
     rivals: ['gang'],
+    // The Enforcer: gadgets — a stun grenade, a frost gun, a shield projector, smoke to get away in.
+    lieutenant: { title: 'Enforcer', powers: ['stun', 'frost', 'shield', 'smoke'], chance: { robbery: 0.35, hideout: 0.6, brawl: 0.4, snatch: 0.05 } },
     palettes: [
       { name: 'gold', map: '#d4a72c', primary: [0.07, 0.07, 0.08], accent: [0.85, 0.66, 0.18] },
       { name: 'emerald', map: '#0f9d63', primary: [0.06, 0.08, 0.07], accent: [0.08, 0.55, 0.32] },

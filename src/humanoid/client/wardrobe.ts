@@ -37,7 +37,9 @@ const LEGS = (to: number) => [
 export function resolveWearable(defId: string, v: ItemVisual): WearableSpec | null {
   const c = v.primary, c2 = v.secondary;
   const pat = (v.material as ShellMaterial['pattern']) || 'plain';
-  const L = (layer: ShellLayer): WearableSpec => ({ layers: [layer] });
+  // An emissive accent (a villain lieutenant's lit trim): the item's glow in its glow colour (or accent).
+  const lit = (layer: ShellLayer): ShellLayer => (v.glow > 0 && 'material' in layer && layer.material ? { ...layer, material: { ...layer.material, glow: v.glow, glowColor: v.glowColor ?? v.accent } } as ShellLayer : layer);
+  const L = (layer: ShellLayer): WearableSpec => ({ layers: [lit(layer)] });
   switch (defId) {
     case 'tshirt': return L({ kind: 'shell', regions: [...TORSO, ...ARMS(0.22)], offset: 0.004, layer: 1, material: mat(c, pat, { color2: c2, roughness: 0.9 }), trim: { width: 0.006, color: c2 } });
     case 'shirt': return L({ kind: 'shell', regions: [...TORSO, ...ARMS(0.97)], offset: 0.004, layer: 1, material: mat(c, pat, { color2: c2, roughness: 0.75, sheen: 0.2 }), trim: { width: 0.01, color: [c[0] * 0.9, c[1] * 0.9, c[2] * 0.9] } });
