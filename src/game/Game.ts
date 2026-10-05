@@ -416,6 +416,7 @@ export class Game {
       physics: this.physics, ground: this.future.ground, peds: this.peds, crowd: this.crowd, player: this.player,
       groundAt: (x, y, z) => this.collision.groundAt(x, z, y, 0.3),
       cars: () => this.carBoxes(),
+      underground: (x, y, z) => this.collision.underground(x, y, z),
     });
     const onLand = this.player.events.onLand;
     this.player.events.onLand = (x, y, z, e, h) => {
