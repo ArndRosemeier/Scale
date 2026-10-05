@@ -96,11 +96,14 @@ export interface FlightPlan {
  */
 export function planFlight(a: [number, number, number], b: [number, number, number], clear: number): FlightPlan {
   const dx = b[0] - a[0], dz = b[2] - a[2], d = Math.hypot(dx, dz);
-  const cruise = Math.max(a[1], b[1], clear) + clamp(20 + d * 0.04, 20, 70);
+  const cruise = Math.max(a[1], b[1], clear) + clamp(25 + d * 0.04, 25, 70);
+  // Straight up first, over the roofs, straight down onto the pad (the controls stand over the
+  // ends; a little above cruise so the middle of the curve reaches it).
+  const top = cruise + (cruise - Math.min(a[1], b[1])) * 0.33;
   const p: [number, number, number][] = [
     [a[0], a[1], a[2]],
-    [a[0] + dx * 0.22, cruise, a[2] + dz * 0.22],
-    [b[0] - dx * 0.22, cruise, b[2] - dz * 0.22],
+    [a[0] + dx * 0.04, top, a[2] + dz * 0.04],
+    [b[0] - dx * 0.04, top, b[2] - dz * 0.04],
     [b[0], b[1], b[2]],
   ];
   const len = d + (cruise - a[1]) + (cruise - b[1]);
@@ -126,9 +129,9 @@ export const WARD = {
   /** The revival machine (centre of the bed). */
   pod: { x: 0, z: -5.2, len: 2.5, w: 1.2, top: 0.95 },
   /** Where the hero stands up (beside the machine), facing the doors (+z). */
-  stand: { x: 1.65, z: -4.6 },
+  stand: { x: 1.05, z: -4.6 },
   /** The exit: doors in the front wall (z = +hz), this wide; walking through leaves the ward. */
-  door: { half: 1.3, open: 3.2 },
+  door: { half: 1.6, open: 3.2 },
 };
 
 /** Inside the ward's walls (local x, z), kept r from them. */

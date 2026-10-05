@@ -34,7 +34,7 @@ export type DefeatPhase = 'idle' | 'down' | 'inbound' | 'lift' | 'flight' | 'arr
 
 /** Drone slots round the body (x across, z along the heading, y over the body). */
 const SLOTS: [number, number][] = [[0, -1.25], [-1.15, 0.85], [1.15, 0.85]];
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion();
 const _f: [number, number, number] = [0, 0, 0];
 
 interface Hospital {
@@ -61,12 +61,14 @@ export class Defeat {
   private skipping = 0;
   private camPos = new THREE.Vector3();
   private camLook = new THREE.Vector3();
+  private chase = new THREE.Vector3();
   private camInit = false;
   private handoff: { pos: THREE.Vector3; q: THREE.Quaternion } | null = null;
   private loop: ReturnType<Game['audio']['loop']> = null;
   private beat = 0;
   private fired = new Set<string>();
   private rep = 0;
+  private lights: THREE.PointLight[] = [];
   stats = { defeats: 0, rescues: 0, gameOvers: 0, skips: 0, last: '' };
 
   constructor(private g: Game) {
@@ -74,6 +76,13 @@ export class Defeat {
     this.ward = new HospitalWard(this.name);
     this.ui = new DefeatUi(g);
     g.renderer.scene.add(this.fleet.group, this.ward.group);
+    // The ward's lights live in the scene from the start, off (a light appearing later would
+    // recompile every material).
+    for (let i = 0; i < 3; i++) {
+      const l = new THREE.PointLight(0xeef6ff, 0, 18, 1.2);
+      this.lights.push(l);
+      g.renderer.scene.add(l);
+    }
     g.collision.room = this.ward.room;
     g.collision.obstacleProviders.push(this.ward.provider);
   }
@@ -176,6 +185,11 @@ export class Defeat {
     const g = this.g;
     this.fleet.update(dt);
     this.ward.update(dt, this.inWard ? g.player.pos : null);
+    const o = this.ward.origin, lit = this.ward.open;
+    this.lights.forEach((l, i) => {
+      l.intensity = lit ? 7 : 0;
+      if (lit) l.position.set(o.x, o.y + (i === 2 ? 2.6 : 3.9), o.z + [WARD.pod.z + 1, 4, WARD.hz + 1.6][i]);
+    });
     if (this.ward.doorsMoved) g.audio.play('door_open', this.ward.origin.x, this.ward.origin.y + 1.5, this.ward.origin.z + WARD.hz, 0.6, 1.3, 5, g.renderer.camera.position);
     if (this.phase === 'idle') return;
     this.t += dt;
@@ -311,8 +325,10 @@ export class Defeat {
     this.carry(_w, this.heading, k, dt);
     // The camera swings round to the side, looking at the rising body.
     const side = this.heading + Math.PI / 2;
-    _v.set(_w.x + Math.sin(side) * 6.5, _w.y + 2.4, _w.z + Math.cos(side) * 6.5);
+    _v.set(_w.x + Math.sin(side) * 8, _w.y + 1.2, _w.z + Math.cos(side) * 8);
+    _w.y += 1.6; // between the body and the drones
     this.camTo(_v, _w, dt, 1.6);
+    _w.y -= 1.6;
     if (this.t >= DEFEAT.liftTime) {
       this.body.copy(_w);
       const h = this.hosp!;
@@ -328,7 +344,7 @@ export class Defeat {
     const n = Math.max(2, Math.ceil(a.distanceTo(b) / 40));
     for (let i = 0; i <= n; i++) {
       const x = lerp(a.x, b.x, i / n), z = lerp(a.z, b.z, i / n);
-      for (const r of this.g.world.buildingsIn(x - 30, z - 30, x + 30, z + 30)) if (r !== this.hosp?.ref) top = Math.max(top, r.top);
+      for (const r of this.g.world.buildingsIn(x - 60, z - 60, x + 60, z + 60)) if (r !== this.hosp?.ref) top = Math.max(top, r.top);
       top = Math.max(top, this.g.terrain.height(x, z));
     }
     return top;
@@ -345,7 +361,7 @@ export class Defeat {
       f.position.set(b.x, b.y + 0.28, b.z);
       f.rotation.set(Math.PI / 2, heading, 0, 'YXZ');
     }
-    _w.set(b.x, b.y + 0.3, b.z);
+    _b.set(b.x, b.y + 0.3, b.z);
     this.fleet.drones.forEach((d, i) => {
       const prev = _q.copy(d.object.quaternion);
       this.slot(i, b, heading, DEFEAT.hang, _v);
@@ -354,7 +370,7 @@ export class Defeat {
       const sp = Math.hypot(vx, vz);
       if (sp > 2) this.face(d.object, vx, vz, clamp(sp / 140, 0, 0.35));
       else d.object.quaternion.copy(prev);
-      d.aim(P.puppet || beam > 0 ? _w : null, beam);
+      d.aim(P.puppet || beam > 0 ? _b : null, beam);
     });
     P.update(dt, this.g.input, 0, 0);
   }
@@ -377,10 +393,17 @@ export class Defeat {
     this.carry(this.body, this.heading, 1, dt);
     // Chase camera: behind (the feet trail) and above, a little to the side, swinging slowly.
     // ((sin, cos) of the heading is the way the body travels: the camera trails it.)
+    // (The offset is smoothed, not the camera: at 50 m/s a lagging camera loses the body.)
     const back = this.heading, sw = Math.sin(this.t * 0.35) * 0.6;
-    _v.set(nx - Math.sin(back + sw) * 11, ny + 4.5, nz - Math.cos(back + sw) * 11);
-    _w.set(nx, ny + 0.4, nz);
-    this.camTo(_v, _w, dt, 2.2, 62);
+    _v.set(-Math.sin(back + sw) * 8.5, 3.6, -Math.cos(back + sw) * 8.5);
+    if (this.t <= dt) this.chase.copy(this.camPos).sub(this.body);
+    this.chase.lerp(_v, Math.min(1, dt * 1.5));
+    const cam = this.g.renderer.camera;
+    this.camPos.copy(this.body).add(this.chase);
+    this.camLook.set(nx, ny + 0.5, nz);
+    cam.position.copy(this.camPos);
+    cam.lookAt(this.camLook);
+    this.fov(62);
     if (this.t >= f.dur) {
       this.set('arrive');
       this.g.audio.play('drone_buzz', nx, ny + 2, nz, 0.4, 0.9, 10, this.g.renderer.camera.position);
@@ -604,6 +627,7 @@ export class Defeat {
       pad: h ? { x: Math.round(h.pad.x), y: Math.round(h.pad.y), z: Math.round(h.pad.z), building: !!h.ref } : null,
       exit: h ? { x: Math.round(h.exit.x), z: Math.round(h.exit.z) } : null,
       flight: this.plan ? +this.plan.dur.toFixed(1) : null, ward: this.ward.open, ...this.stats,
+      local: this.ward.open ? (() => { const P = this.g.player.pos, l = this.ward.local(P.x, P.z); return { x: +l.x.toFixed(2), y: +(P.y - this.ward.origin.y).toFixed(2), z: +l.z.toFixed(2) }; })() : null,
     };
   }
 }

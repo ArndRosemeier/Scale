@@ -32,7 +32,7 @@ const CSS = `
 #dcine .dc-skip kbd { border: 1px solid rgba(255,255,255,.4); border-radius: 4px; padding: 1px 6px; margin-right: 6px; font: inherit; }
 body.dcine-on > :not(#view):not(#dcine):not(#dover) { opacity: 0 !important; pointer-events: none !important; transition: opacity .8s ease; }
 #dover { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; pointer-events: auto;
-  background: radial-gradient(ellipse at center, rgba(40,4,6,.82), rgba(4,2,3,.96)); opacity: 0; transition: opacity 1.6s ease; }
+  background: radial-gradient(ellipse at center, rgba(40,4,6,.93), rgba(4,2,3,.98)); opacity: 0; transition: opacity 1.6s ease; }
 #dover.show { opacity: 1; }
 #dover .do-box { width: min(560px, 92vw); max-height: 88vh; overflow: auto; text-align: center; color: #f1e6e6; font: 400 15px/1.5 system-ui, sans-serif; }
 #dover h1 { margin: 0 0 .2em; font: 700 clamp(38px, 7vh, 72px)/1.05 system-ui, sans-serif; letter-spacing: .14em; color: #ff5d5d; text-shadow: 0 0 30px rgba(255,40,40,.35); }
