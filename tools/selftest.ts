@@ -757,6 +757,18 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       check(ok && !vc.cast(cs[CASTERS.maxCasting], 'bolt', 'begin', 0, 0, 0), `caster budget: ${CASTERS.maxCasting} at once`);
       vc.cast(cs[0], 'bolt', 'end', 0, 0, 0);
       check(vc.cast(cs[CASTERS.maxCasting], 'bolt', 'begin', 0, 0, 0), 'caster budget: a slot frees when a cast ends');
+      // A boss: tougher than a lieutenant, fights on longer; a hunting group's members stand and fight.
+      const bg = new HideoutGuard(w5, 4040, { x: 800, z: 60, nx: 0, nz: 1 });
+      check(bg.setup() && bg.criminals.length >= 2, 'boss: guards at a door');
+      const [bossA, other] = bg.criminals;
+      const hp1 = bossA.actor!.maxHp;
+      bg.promote(bossA, ['dash', 'quake', 'gust'], { hp: 1.7, strength: 1.2 });
+      check(bossA.actor!.memo.boss === 1 && bossA.actor!.maxHp >= Math.round(hp1 * 1.8 * 1.7) - 1, `boss: promoted, tougher than a lieutenant (${hp1} → ${bossA.actor!.maxHp})`);
+      bossA.actor!.hp = bossA.actor!.maxHp * 0.25;
+      check((bg as unknown as { decide(c: unknown): string }).decide(bossA) === 'fight', 'boss: still fights at a quarter of its health');
+      other.actor!.memo.grudge = 1; other.actor!.memo.lt = 0; other.actor!.armed = 'none';
+      check((bg as unknown as { decide(c: unknown): string }).decide(other) === 'fight', 'notoriety: a member of a hunting group stands and fights');
+      for (const a of bg.criminals) a.alive = false;
       for (const a of cs) a.alive = false;
     }
 
@@ -867,6 +879,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const { planHour } = await import('../src/game/crime/CrimeDirector');
   const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions, drift, relation, rivalsAt, strength, DRIFT } = await import('../src/game/factions/Factions');
   const { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts } = await import('../src/game/factions/Hideouts');
+  const { planBosses, bossLabel, raise, heatOf, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, NOTORIETY, BOSS } = await import('../src/game/factions/Bosses');
   const { ARCHETYPES, CITY_GROUPS } = await import('../src/game/factions/archetypes');
   const { factionOutfit } = await import('../src/game/factions/outfits');
   const t0 = performance.now();
@@ -968,6 +981,27 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const back = restoreHideouts(F, JSON.parse(JSON.stringify(saveHideouts(F, HO))));
     check(JSON.stringify(back) === JSON.stringify(HO), 'hideouts survive a save');
     check(JSON.stringify(restoreHideouts(F, [{ archetype: 'nobody' }, null, 5])) === JSON.stringify(planHideouts(F)), 'hideouts: junk in a save is ignored');
+    // Phase 4: a named boss per group (the same city, the same bosses), notoriety that turns a group
+    // wary then hunting and fades, jail time that grows, records in saves.
+    const BS = planBosses(F, seed), BS2 = planBosses(F, seed);
+    check(BS.length === F.factions.length && JSON.stringify(BS) === JSON.stringify(BS2) && BS.every((b) => /^\S+ \S+$/.test(b.name) && b.jailedUntil < 0), `bosses: one per group, seeded (${BS.map((b) => bossLabel(F, b)).join('; ')})`);
+    const NT = F.factions.map(() => 0);
+    const steps: (string | null)[] = [];
+    for (let k = 0; k < 6; k++) steps.push(raise(NT, gang.id, NOTORIETY.stopped));
+    check(steps.filter(Boolean).join() === 'wary' && heatOf(NT[gang.id]) === 'wary', `notoriety: stopping the gang makes it wary (${NT[gang.id]}, ${steps.join(',')})`);
+    check(raise(NT, gang.id, NOTORIETY.bust + NOTORIETY.boss) === 'hunted' && NT[syn.id] === 0, 'notoriety: a bust and its boss beaten: hunted (the others do not care)');
+    check(ltChance(0.4, NT[gang.id]) > ltChance(0.4, 0) && bossChance(BS[gang.id], NT[gang.id], 0) > bossChance(BS[gang.id], 30, 0) && bossChance(BS[gang.id], 0, 0) === 0, 'notoriety: more lieutenants, and the boss comes out, the hotter it gets');
+    fade(NT, 48);
+    check(heatOf(NT[gang.id]) !== 'hunted' && NT[gang.id] >= 0, `notoriety fades over two days (${NT[gang.id].toFixed(0)})`);
+    const t1 = jail(BS[gang.id], 100), t2 = jail(BS[gang.id], 500);
+    check(t1 === 100 + BOSS.jail && t2 - 500 > t1 - 100 && bossChance(BS[gang.id], 90, 200) === 0, 'jail: a boss behind bars leads nothing; longer the second time');
+    BS[gang.id].beaten = 3; BS[gang.id].escapes = 1; NT[gang.id] = 42;
+    const BR = planBosses(F, seed), NR = F.factions.map(() => 0);
+    restoreBosses(F, BR, NR, JSON.parse(JSON.stringify(saveBosses(F, BS, NT))));
+    check(JSON.stringify(BR) === JSON.stringify(BS) && NR[gang.id] === 42, 'bosses and notoriety survive a save');
+    const BJ = planBosses(F, seed), NJ = F.factions.map(() => 0);
+    restoreBosses(F, BJ, NJ, [{ archetype: 'nobody' }, null, { archetype: 'gang', notoriety: 'x', beaten: -4 }]);
+    check(JSON.stringify(BJ) === JSON.stringify(planBosses(F, seed)) && NJ.every((n) => n === 0), 'bosses: junk in a save is ignored');
   }
   check(names.size >= 5, `group names vary with the seed (${[...names].join(', ')})`);
   console.log(`factions: ${[...names].join(' · ')} in ${(performance.now() - t0).toFixed(0)} ms`);
@@ -1892,7 +1926,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
     },
     slimes: { trust: { v: 42.5, gifts: [0, 2], marks: ['heart'] }, war: { v: 1, murk: 0.5, lumen: 0.625, front: 0.25, at: 130.5, nextRaid: 133, mawBack: 0, raid: null, captives: [2, 4, 0], nextBreach: 150, stats: { won: 3, lost: 1, kills: 12, freed: 4, maw: 0, breaches: 0 } } },
-    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }] },
+    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }] },
   };
   const back = parseSave(serializeSave(full));
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);

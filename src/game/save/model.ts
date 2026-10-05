@@ -151,7 +151,7 @@ export interface SaveData {
    * SavedFactions, sanitised by `restoreFactions`), the tags on the walls and the hideouts (Hideouts
    * SavedHideout, sanitised by `restoreHideouts`; older saves have none: not found yet).
    */
-  factions: { turf: unknown; tags: unknown[]; hideouts?: unknown[] } | null;
+  factions: { turf: unknown; tags: unknown[]; hideouts?: unknown[]; bosses?: unknown[] } | null;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -286,6 +286,7 @@ export function parseSave(input: string | unknown): SaveData {
       turf: obj(o.factions).turf ?? null,
       tags: (Array.isArray(obj(o.factions).tags) ? (obj(o.factions).tags as unknown[]) : []).slice(-64),
       hideouts: (Array.isArray(obj(o.factions).hideouts) ? (obj(o.factions).hideouts as unknown[]) : []).slice(0, 16),
+      bosses: (Array.isArray(obj(o.factions).bosses) ? (obj(o.factions).bosses as unknown[]) : []).slice(0, 16),
     } : null,
   };
 }

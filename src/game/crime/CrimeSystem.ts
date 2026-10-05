@@ -577,7 +577,7 @@ export class CrimeSystem {
         a.actor!.outfit = bossOutfit(by, a.cit.seed);
         a.actor!.title = `${by.emblem} ${by.name} · ${bossLabel(this.factions, B)}`;
         this.bossOf.set(c, a);
-        if (Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.g.powerHud.toast(`<b style="color:${by.palette.map}">${by.emblem} ${B.name}</b>, the ${bossLabel(this.factions, B).split(', the ')[1]} of ${inSentence(by)}, is out on the street`, 'warn');
+        if (Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.g.powerHud.toast(`<b style="color:${by.palette.map}">${by.emblem} ${bossLabel(this.factions, B)}</b> of ${inSentence(by)} is out on the street`, 'warn');
         return;
       }
       if (!this.devLieutenant && !roll.chance(ltChance(L.chance[c.kind] ?? 0, heat))) return;
@@ -1514,6 +1514,23 @@ export class CrimeSystem {
         const fid = typeof faction === 'string' ? this.factions.factions.find((f) => f.archetype === faction)?.id ?? -1 : faction;
         const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, fid, lt);
         return c ? c.snapshot() : 'no site';
+      },
+      /** Each group's boss and notoriety; with a group ('gang' or an id) and a value, set its notoriety. */
+      bosses: (faction?: number | string, notoriety?: number) => {
+        const F = this.factions.factions;
+        const fid = typeof faction === 'string' ? F.find((f) => f.archetype === faction)?.id ?? -1 : faction ?? -1;
+        if (fid >= 0 && notoriety !== undefined && Number.isFinite(notoriety)) this.notoriety[fid] = Math.max(0, Math.min(NOTORIETY.max, notoriety));
+        const now = g.sky.hoursAbs;
+        return this.bosses.map((B) => ({ group: F[B.faction].name, boss: bossLabel(this.factions, B), notoriety: Math.round(this.notoriety[B.faction]), heat: heatOf(this.notoriety[B.faction]), jailedFor: B.jailedUntil > now ? Math.round(B.jailedUntil - now) : 0, beaten: B.beaten, escapes: B.escapes, jailed: B.jailed, collapsed: this.collapsed(B.faction), out: [...this.bossOf.values()].some((a) => a.alive && a.actor?.faction === B.faction) }));
+      },
+      /** Dev: the boss of a group goes to jail now (hours; 0: out again). */
+      jailBoss: (faction: number | string, hours = 72) => {
+        const F = this.factions.factions, fid = typeof faction === 'string' ? F.find((f) => f.archetype === faction)?.id ?? -1 : faction;
+        const B = this.bosses[fid];
+        if (!B) return 'no such group';
+        B.jailedUntil = hours > 0 ? g.sky.hoursAbs + hours : g.sky.hoursAbs - 0.01;
+        if (hours > 0) this.checkCollapse(fid);
+        return bossLabel(this.factions, B);
       },
       /** Hacks and rituals under way: nearly done (the next second finishes them). */
       rushOps: () => {
