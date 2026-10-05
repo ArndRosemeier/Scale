@@ -39,7 +39,9 @@ export class TurfBrawl extends Crime {
 
   setup(): boolean {
     const rMin = this.near ? 0 : BRAWL.ringMin, rMax = this.near ? 80 : BRAWL.ringMax;
-    const spots = this.w.walls?.(rMin, rMax) ?? this.w.shops?.(rMin, rMax) ?? [];
+    // Plain doors first (a side street); in a shopping street the shop fronts do.
+    let spots = this.w.walls?.(rMin, rMax) ?? [];
+    if (!spots.length) spots = this.w.shops?.(rMin, rMax) ?? [];
     if (!spots.length) return false;
     const s = spots[this.rng.int(0, Math.min(spots.length, 8) - 1)];
     // On the pavement in front of a door; the two sides come along the street from either end.
@@ -200,7 +202,11 @@ export class TurfBrawl extends Crime {
     if (!this.confronted) {
       this.confronted = true;
       this.playerInvolved = true;
-      if (this.phase === 'commit') this.go('escape');
+      if (this.phase === 'commit') {
+        this.go('escape');
+        // Broken up before either side won: that is the stop (paid now, not when the police cuff the last of them).
+        if (this.winner < 0 && !this.wasSubdued) { this.wasSubdued = true; this.emit('subdued'); }
+      }
     }
     for (const c of crooks) {
       const act = c.actor!;

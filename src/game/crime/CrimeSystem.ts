@@ -46,7 +46,7 @@ import type { Target } from '../Targeting';
 import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
-import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, relation, SHIFT, DRIFT, type Faction, type FactionMap } from '../factions/Factions';
+import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, relation, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES } from '../factions/archetypes';
@@ -676,6 +676,12 @@ export class CrimeSystem {
     this.rep.count('stopped');
     this.cheer();
     const changed = shift(this.factions, h.cell, f.id, SHIFT.bust, 0.6);
+    // Its stash block is lost outright (no longer held: the turf map shows it); its home ground comes back with drift.
+    const left = this.factions.influence[f.id][h.cell] - (HOLD - SHIFT.bustBelow);
+    if (left > 0) for (const x of shift(this.factions, h.cell, f.id, -left, 0)) {
+      const was = changed.find((y) => y.cell === x.cell);
+      if (was) was.to = x.to; else changed.push(x);
+    }
     this.factionStats.lost += changed.filter((x) => x.from === f.id).length;
     g.map.setTurf(this.factions);
     g.powerHud.toast(`You busted the stash of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>${changed.length ? ` — they lost ${changed.filter((x) => x.from === f.id).length || 'some'} ${changed.length === 1 ? 'block' : 'blocks'}` : ''}. They will lie low for a while.`, 'info');
@@ -1276,7 +1282,7 @@ export class CrimeSystem {
       /**
        * Hideouts: dev.hideout(id) places the group's hideout now (wherever the player is: its cell's
        * doors must be loaded), marks it found and returns where it is; dev.hideout(id, 'go') also
-       * puts the player 40 m in front of it.
+       * puts the player 75 m in front of it (far enough for the guards to be posted out of view).
        */
       hideout: (id = 0, go?: 'go') => {
         const h = this.hideouts[id];
@@ -1295,7 +1301,7 @@ export class CrimeSystem {
         }
         h.found = true;
         this.hideKey = '';
-        if (go) { const D = h.door; g.player.pos.set(D.x + D.nx * 40, g.world.groundHeight(D.x + D.nx * 40, D.z + D.nz * 40) + 1, D.z + D.nz * 40); }
+        if (go) { const D = h.door, r = 75; g.player.pos.set(D.x + D.nx * r, g.world.groundHeight(D.x + D.nx * r, D.z + D.nz * r) + 1, D.z + D.nz * r); }
         return { cell: h.cell, door: h.door };
       },
       /** Off-screen drift: run n game hours of it now (the map updates); returns the cells that changed hands. */

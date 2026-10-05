@@ -129,6 +129,8 @@ export const SHIFT = {
   brawlLost: -0.1,
   /** The player busted a hideout's stash: a big loss where it was. */
   bust: -0.32,
+  /** …and its stash block drops at least this far below HOLD: lost outright. */
+  bustBelow: 0.08,
   spread: 0.5,
   /** Never above this (a group can be driven out, but its grip never gets absolute). */
   max: 1,
@@ -151,8 +153,12 @@ export function shift(F: FactionMap, cell: number, f: number, amount: number, sp
   return out;
 }
 
-/** Saved turf: per group (by archetype), the cells whose influence differs from the seeded one, in hundredths. */
-export interface SavedFactions { v: 1; groups: { archetype: string; cells: [number, number][] }[]; stats: Record<string, number> }
+/**
+ * Saved turf: per group (by archetype), the cells whose influence differs from the seeded one, in
+ * hundredths, and the cells it holds (drift's hysteresis lets a holder keep a cell a little below
+ * HOLD, which the influence alone would not give back; older saves have no `held`).
+ */
+export interface SavedFactions { v: 1; groups: { archetype: string; cells: [number, number][]; held?: number[] }[]; stats: Record<string, number> }
 
 export function saveFactions(F: FactionMap, stats: Record<string, number> = {}): SavedFactions {
   return {
@@ -161,7 +167,9 @@ export function saveFactions(F: FactionMap, stats: Record<string, number> = {}):
       const cells: [number, number][] = [];
       const I = F.influence[f.id], B = F.base[f.id];
       for (let i = 0; i < I.length; i++) { const d = Math.round((I[i] - B[i]) * 100); if (d !== 0) cells.push([i, d]); }
-      return { archetype: f.archetype, cells };
+      const held: number[] = [];
+      for (let i = 0; i < F.holder.length; i++) if (F.holder[i] === f.id) held.push(i);
+      return { archetype: f.archetype, cells, held };
     }),
     stats: { ...stats },
   };
@@ -172,6 +180,7 @@ export function restoreFactions(F: FactionMap, raw: unknown): Record<string, num
   const o = raw && typeof raw === 'object' ? (raw as Partial<SavedFactions>) : null;
   for (let f = 0; f < F.factions.length; f++) F.influence[f].set(F.base[f]);
   const stats: Record<string, number> = {};
+  const held = new Int16Array(F.holder.length).fill(-1);
   if (o && Array.isArray(o.groups)) {
     for (const g of o.groups) {
       const f = F.factions.find((x) => x.archetype === g?.archetype);
@@ -181,10 +190,15 @@ export function restoreFactions(F: FactionMap, raw: unknown): Record<string, num
         if (!Array.isArray(c) || !Number.isInteger(c[0]) || !Number.isFinite(c[1]) || c[0] < 0 || c[0] >= I.length) continue;
         I[c[0]] = Math.max(0, Math.min(SHIFT.max, B[c[0]] + c[1] / 100));
       }
+      if (Array.isArray(g.held)) for (const i of g.held) if (Number.isInteger(i) && i >= 0 && i < held.length) held[i] = f.id;
     }
     for (const [k, v] of Object.entries(o.stats ?? {})) if (Number.isFinite(v)) stats[k] = v as number;
   }
-  for (let i = 0; i < F.holder.length; i++) F.holder[i] = holderOf(F, i);
+  // The saved holder keeps a cell as long as drift would let it (within the hysteresis below HOLD).
+  for (let i = 0; i < F.holder.length; i++) {
+    const h = held[i];
+    F.holder[i] = h >= 0 && F.influence[h][i] >= HOLD - DRIFT.hysteresis - 0.005 ? h : holderOf(F, i);
+  }
   return stats;
 }
 

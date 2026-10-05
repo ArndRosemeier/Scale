@@ -644,7 +644,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const m = brawl2.meet!;
     player.x = m.x + 4; player.z = m.z + 4;
     drive(brawl2, () => false, 60, b2Ev);
-    check(brawl2.playerInvolved && brawl2.winner < 0 && brawl2.phase !== 'commit', `brawl: the hero comes close and breaks it up (${brawl2.phase}, ${b2Ev.join(',')})`);
+    check(brawl2.playerInvolved && brawl2.winner < 0 && brawl2.phase !== 'commit' && b2Ev.includes('subdued'), `brawl: the hero comes close and breaks it up, stopped at once (${brawl2.phase}, ${b2Ev.join(',')})`);
     player.x = 0; player.z = 0;
 
     const guards = new HideoutGuard(w3, 2024, { x: 300, z: 60, nx: 0, nz: 1 });
@@ -720,6 +720,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(st.stopped === 12 && H.holder.every((h, i) => h === F.holder[i]) && H.influence.every((I, f) => I.every((v, i) => Math.abs(v - F.influence[f][i]) < 0.006)), 'turf and stats survive a save');
     restoreFactions(H, null);
     check(H.holder.every((h, i) => h === G.holder[i]), 'no saved turf: the seeded one');
+    // Drift's hysteresis lets a holder keep a cell a little below HOLD: a save keeps it held.
+    const K = planFactions(macro, seed, idx);
+    K.influence[gang.id][gang.home] = HOLD - DRIFT.hysteresis * 0.6;
+    const kept = planFactions(macro, seed, idx);
+    restoreFactions(kept, JSON.parse(JSON.stringify(saveFactions(K))));
+    check(K.holder[gang.home] === gang.id && kept.holder[gang.home] === gang.id, `a block held just below HOLD stays held through a save (${kept.holder[gang.home]})`);
+
     const grow = shift(G, gang.home, gang.id, SHIFT.tag);
     check(grow.length === 0 && G.influence[gang.id][gang.home] <= SHIFT.max, 'a tag at home strengthens the hold without flipping it');
     // Phase 2: the gang and the Syndicate are at war; turf brawls only where they meet.

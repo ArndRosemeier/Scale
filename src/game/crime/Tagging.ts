@@ -9,7 +9,7 @@ import { Crime, type CrimeWorld, setState, stand, lookAt, goTo, subdued } from '
 import type { PedAgent } from '../../sim/Pedestrians';
 import { hold } from '../../sim/actors/Actor';
 
-export const TAGGING = { paintY: 0.85, ringMin: 90, ringMax: 360, hp: 45, strength: 0.9, paintFor: 9, approachTimeout: 60, lookoutChance: 0.4, noticeR: 16, hissEvery: 3.3 };
+export const TAGGING = { paintY: 1.0, ringMin: 90, ringMax: 360, hp: 45, strength: 0.9, paintFor: 9, approachTimeout: 60, lookoutChance: 0.4, noticeR: 16, hissEvery: 3.3 };
 
 /** Where a tag goes: a point on the wall at chest height, its outward normal. */
 export interface TagSpot { x: number; y: number; z: number; nx: number; nz: number }
