@@ -2,9 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.028 — 2026-10-05
+## 0.029 — 2026-10-05
 
 - **Laser eyes look stronger**: thicker beams with a white-hot core inside a pulsing red halo, a flare at each eye, a bigger glow where they hit, twice the sparks, molten drips and more smoke. Damage, reach and energy cost are unchanged.
+
+## 0.028 — 2026-10-05
+
+- **The countryside is lived in**: hamlets, villages and small towns now dot the land around the city — houses along their streets in the local building style, a church with a spire on the village square, shops round the square in the towns, gardens with trees.
+- **Farmsteads** out in the fields: farmhouse, barns and sheds round an earth or gravel yard, a dirt track to the road, some with an orchard.
+- **Country roads** lead out of the city and link the villages, with a dashed centre line; village lanes and side streets; roads cut through the forests.
+- **Lakes** in the open country, with shores and groups of trees round them — you can swim in them.
 
 ## 0.027 — 2026-10-05
 

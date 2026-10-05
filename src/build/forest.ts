@@ -15,6 +15,7 @@ import { distPointPolyEdge, pointInPoly, polyBounds } from '../core/geom2';
 import { hedgeOnCol, hedgeOnRow, newLandSample, parcelToWorld, type LandUse } from '../world/landuse';
 import type { MacroPlan } from '../plan/types';
 import { TERRAIN_DROP } from './terrainMesh';
+import { SettleKind } from '../world/rural';
 
 export const FOREST_STRIDE = 7;
 /** Tiles of this size and smaller hold real trees. */
@@ -54,6 +55,7 @@ const WARM = [9, 10, 11, 0, 9];
 const BANK = [6, 7, 2, 3, 0, 4];
 const HEDGE = [0, 1, 4, 2, 12, 13, 12, 13, 12];
 const SOLO = [0, 1, 2, 8, 4, 14, 0];
+const ORCHARD = [0, 1, 4, 8];
 
 /**
  * Where the city's streets and blocks reach: trees and hedges keep off cells near the outline
@@ -130,7 +132,9 @@ export class ForestGen {
       if (ls.rural <= 0.05 || ls.water < 1.5) continue;
       if (T.profile.coastal && T.coastDistance(x, z) < 6) continue;
       // Acceptance: forest, the green bank strip along rivers, solitary trees in the meadows.
-      const bankRow = ls.water < 22 ? 0.42 * (1 - smoothstep(14, 22, ls.water)) : 0;
+      let bankRow = ls.water < 22 ? 0.42 * (1 - smoothstep(14, 22, ls.water)) : 0;
+      // Round a lake the bank trees come in groups, with open shore between.
+      if (bankRow > 0 && T.lakeAt(x, z).e < 25) bankRow *= smoothstep(0.42, 0.62, nz.fbm2(x / 90 - 13.1, z / 90 + 4.2, 2) * 0.5 + 0.5);
       let p = ls.rural * ls.forest * 0.95 + ls.rural * bankRow * (1 - ls.forest);
       let pal = DECIDUOUS;
       if (detail) {
@@ -138,8 +142,14 @@ export class ForestGen {
         const near = 1 - smoothstep(0, 500, ls.edge);
         p += ls.rural * ls.meadow * (0.006 + 0.05 * clump + 0.02 * near) * (1 - bankRow);
       }
+      // Gardens: fruit and shade trees between the village houses.
+      const S = this.land.settle;
+      const clear = S ? S.clearing(x, z) : 0;
+      if (detail && clear > 0.3 && S!.near(x, z).some((id) => S!.settlements[id].kind !== SettleKind.Farm)) p += 0.05 * clear;
       if (r0 >= p) continue;
       if (ls.edge < 260 && this.mask.has(x, z, 6)) continue;
+      // Never on a road, a square, a yard or a building.
+      if (S && (S.roadEdge(x, z) < 1.8 || (clear > 0 && (S.onPaved(x, z, 1.5) || S.onBuilding(x, z, 2.5))))) continue;
       // Species: conifer stands by region (and up the hills), warm-climate mix, river-bank trees.
       if (ls.forest > 0.5) {
         const con = nz.fbm2(x / 1700 - 31, z / 1700 + 12, 3) * 0.5 + 0.5 + (this.warm < 0.3 ? 0.15 : 0);
@@ -147,15 +157,39 @@ export class ForestGen {
       } else if (bankRow > 0) pal = BANK;
       else pal = this.warm > 0.75 ? WARM : SOLO;
       const solo = ls.forest < 0.5;
+      const garden = clear > 0.3;
       // Undergrowth: some forest spots get a shrub instead of a tree.
       const under = detail && !solo && hashToFloat(hash32(h + 4111)) < 0.14;
       const kind = under ? 12 + (h & 1) : pal[Math.floor(r3 * pal.length) % pal.length];
-      const scale = under ? 0.9 + r3 * 0.6 : (solo ? 0.95 : 0.66) + hashToFloat(hash32(h + 1703)) * (solo ? 0.35 : 0.5);
+      const scale = under ? 0.9 + r3 * 0.6 : garden ? 0.55 + hashToFloat(hash32(h + 1703)) * 0.35 : (solo ? 0.95 : 0.66) + hashToFloat(hash32(h + 1703)) * (solo ? 0.35 : 0.5);
       const y = T.height(x, z) - TERRAIN_DROP - 0.15;
       out.push(x, y, z, scale, hashToFloat(hash32(h + 2307)) * Math.PI * 2, kind, spread);
     }
     if (detail) this.hedges(x0, z0, size, out);
+    this.orchards(x0, z0, size, out, detail ? 1 : sp / 7);
     return Float32Array.from(out);
+  }
+
+  /** Orchards beside some farmyards: rows of small fruit trees (far tiles: a few clumps for them). */
+  private orchards(x0: number, z0: number, size: number, out: number[], spread: number): void {
+    const S = this.land.settle, T = this.land.terrain;
+    if (!S) return;
+    const step = 6.5;
+    for (const s of S.settlements) {
+      const o = s.orchard;
+      if (!o || s.x < x0 - 120 || s.x > x0 + size + 120 || s.z < z0 - 120 || s.z > z0 + size + 120) continue;
+      const every = Math.max(1, Math.round(spread * 1.4));
+      let k = 0;
+      for (let u = o[0] + step / 2; u < o[2]; u += step) for (let v = o[1] + step / 2; v < o[3]; v += step) {
+        if (k++ % every) continue;
+        const h = hash2i(this.seed ^ 0x0c4a, Math.round(u * 2) + s.id * 977, Math.round(v * 2));
+        const [x, z] = S.fromFrame(s, u + (hashToFloat(h) - 0.5) * 0.6, v + (hashToFloat(hash32(h + 3)) - 0.5) * 0.6);
+        if (x < x0 || x >= x0 + size || z < z0 || z >= z0 + size) continue;
+        if (hashToFloat(hash32(h + 7)) < 0.06) continue; // a gap now and then
+        const kind = ORCHARD[Math.floor(hashToFloat(hash32(h + 11)) * ORCHARD.length) % ORCHARD.length];
+        out.push(x, T.height(x, z) - TERRAIN_DROP - 0.1, z, 0.36 + hashToFloat(hash32(h + 13)) * 0.12, hashToFloat(hash32(h + 17)) * Math.PI * 2, kind, every > 1 ? Math.sqrt(every) : 1);
+      }
+    }
   }
 
   /** Hedgerows (trees and shrubs) along some parcel borders between fields. */
@@ -182,6 +216,8 @@ export class ForestGen {
       this.land.sample(x, z, ls);
       if (ls.rural < 0.9 || ls.field < 0.5 || ls.water < 4) return;
       if (ls.edge < 260 && this.mask.has(x, z, 6)) return;
+      const S = this.land.settle;
+      if (S && (S.roadEdge(x, z) < 2.5 || S.clearing(x, z) > 0.2)) return;
       const kind = HEDGE[Math.floor(hashToFloat(hash32(h + 501)) * HEDGE.length) % HEDGE.length];
       const shrub = FOREST_KINDS[kind].species === 'shrub';
       const jx = (hashToFloat(hash32(h + 1102)) - 0.5) * 1.6, jz = (hashToFloat(hash32(h + 1304)) - 0.5) * 1.6;

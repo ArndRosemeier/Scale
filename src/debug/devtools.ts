@@ -5,8 +5,12 @@ import type { Game } from '../game/Game';
 import type { BuildingRef } from '../world/WorldIndex';
 import { statusOf } from '../shared/status';
 import type { WeatherSetting } from '../render/Weather';
+import { LandUse } from '../world/landuse';
+import { RuralPlan } from '../world/rural';
 
 export function installDevtools(game: Game): void {
+  let rural: RuralPlan | null = null;
+  const ruralPlan = () => { if (!rural) { const land = new LandUse(game.terrain); rural = new RuralPlan(game.terrain, land, game.macro); land.settle = rural; } return rural; };
   const dev = {
     game,
     wait: (ms: number) => new Promise((r) => setTimeout(r, ms)),
@@ -26,6 +30,29 @@ export function installDevtools(game: Game): void {
       g.pitch = Math.atan2(dy, Math.hypot(dx, dz));
     },
     playerCam(): void { (game as unknown as { freeCam: boolean }).freeCam = false; },
+    /** Countryside: settlements nearest the camera (kind 0 hamlet, 1 village, 2 town, 3 farm), lakes, a view of one. */
+    rural: {
+      list(kind = -1, n = 8) {
+        const c = game.renderer.camera.position;
+        return ruralPlan().settlements.filter((s) => kind < 0 || s.kind === kind).map((s) => ({ id: s.id, kind: s.kind, name: s.name, x: Math.round(s.x), z: Math.round(s.z), d: Math.round(Math.hypot(s.x - c.x, s.z - c.z)) })).sort((a, b) => a.d - b.d).slice(0, n);
+      },
+      lakes: () => game.terrain.lakes.map((l, i) => ({ i, x: Math.round(l.x), z: Math.round(l.z), r: Math.round(l.r) })),
+      /** Free camera looking at settlement `id` from `dist` m away and `h` m up. */
+      look(id: number, dist = 260, h = 90, yaw = 0.6) {
+        const s = ruralPlan().settlements[id];
+        const y = game.terrain.height(s.x, s.z);
+        dev.look(s.x + Math.cos(yaw) * dist, y + h, s.z + Math.sin(yaw) * dist, s.x, y + 5, s.z);
+        return { name: s.name, kind: ['hamlet', 'village', 'town', 'farm'][s.kind] };
+      },
+      /** Free camera looking at lake `i` from `dist` m beyond its shore and `h` m above the water. */
+      lookLake(i: number, dist = 150, h = 25, yaw = 0.6) {
+        const L = game.terrain.lakes[i];
+        const d = L.r + dist;
+        dev.look(L.x + Math.cos(yaw) * d, L.level + h, L.z + Math.sin(yaw) * d, L.x, L.level, L.z);
+        return { r: Math.round(L.r), level: L.level };
+      },
+      stats: () => game.rural.stats,
+    },
     /** Blast the ground floor of a building on one side; camera at a distance. */
     blastBuilding(b: BuildingRef, impulse = 3e6, dist = 110): void {
       const L = game.destruction.layoutOf(b);
