@@ -462,15 +462,16 @@ export abstract class Crime {
 
   // ------------------------------------------------------------------ powers (lieutenants)
 
-  /** Make a criminal a lieutenant: tougher, stronger, brave, with these powers. */
-  promote(c: PedAgent, powers: readonly VillainPower[]): void {
+  /** Make a criminal a lieutenant: tougher, stronger, brave, with these powers (with `boss`: the group's boss, tougher still). */
+  promote(c: PedAgent, powers: readonly VillainPower[], boss?: { hp: number; strength: number }): void {
     const act = c.actor;
     if (!act || this.casters.has(c)) return;
-    act.maxHp = Math.round(act.maxHp * LIEUTENANT.hp);
+    act.maxHp = Math.round(act.maxHp * LIEUTENANT.hp * (boss?.hp ?? 1));
     act.hp = act.maxHp;
-    act.strength *= LIEUTENANT.strength;
+    act.strength *= LIEUTENANT.strength * (boss?.strength ?? 1);
     act.memo.brave = 1;
     act.memo.lt = 1;
+    if (boss) act.memo.boss = 1;
     this.casters.set(c, new Caster(powers, this.rng.fork('caster', c.id)));
   }
 
@@ -662,7 +663,9 @@ export abstract class Crime {
     const ratio = this.strengthOf(c) / Math.max(0.1, this.w.player.strength);
     const hurt = act.hp < act.maxHp * 0.45;
     // A lieutenant stands and fights with its powers until badly hurt.
-    if (act.memo.lt && act.hp > act.maxHp * 0.3) return 'fight';
+    if (act.memo.lt && act.hp > act.maxHp * (act.memo.boss ? 0.2 : 0.3)) return 'fight';
+    // A group hunting the hero: its members stand and fight while they are fit.
+    if (act.memo.grudge && act.hp > act.maxHp * 0.5) return 'fight';
     if (ratio < 0.3 && this.distToPlayer(c) < 5) return 'surrender';
     if (hurt && act.armed === 'none' && this.distToPlayer(c) < 3) return act.memo.brave ? 'fight' : 'surrender';
     if (ratio > 1.25 && act.armed !== 'none') return 'fight';

@@ -17,6 +17,8 @@ export class HideoutGuard extends Crime {
   readonly kind = 'hideout' as const;
   readonly tier = 1;
   private confronted = false;
+  /** Guards over the usual two or three (a group wary of the hero posts more). */
+  extra = 0;
 
   constructor(w: CrimeWorld, seed: number, readonly door: Door) {
     super(w, seed);
@@ -24,7 +26,7 @@ export class HideoutGuard extends Crime {
 
   setup(): boolean {
     const D = this.door, ax = -D.nz, az = D.nx;
-    const n = this.rng.chance(0.5) ? 3 : 2;
+    const n = (this.rng.chance(0.5) ? 3 : 2) + this.extra;
     for (let i = 0; i < n; i++) {
       // Either side of the door, a step out on the pavement.
       const along = (i % 2 ? 1 : -1) * (1.6 + Math.floor(i / 2) * 1.4 + this.rng.float() * 0.6), out = 1.4 + this.rng.float() * 1.2;
