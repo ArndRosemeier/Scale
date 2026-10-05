@@ -27,8 +27,9 @@ export const BOMB = {
   blast: 22000,
   /** Fling speed (m/s) for a person at the centre. */
   person: 9,
-  /** Damage to the player at the centre (before size). */
+  /** Damage to the player at the centre (before size), out to `playerR` m (a dash sideways on the fuse gets clear). */
   player: 26,
+  playerR: 3.6,
   /** Throwing speed along the ground (m/s) and the limits of the flight time (s). */
   speed: 13,
   flight: [0.45, 1.6],
@@ -122,7 +123,7 @@ export class Bombs {
     const g = this.g, R = BOMB.radius, cam = g.renderer.camera.position;
     this.stats.exploded++;
     const ground = g.world.groundHeight(x, z);
-    if (Math.hypot(cam.x - x, cam.z - z) < 700) fireBurst(g.elements.fx, g.debris, g.dust, x, y + 0.5, z, 1.25, ground);
+    if (Math.hypot(cam.x - x, cam.z - z) < 700) fireBurst(g.elements.fx, g.debris, g.dust, x, y + 0.5, z, 1.25, ground, 0.6);
     g.audio.play('army_explosion', x, y, z, 0.95, 1.05 + Math.random() * 0.1, 30, cam);
     g.destruction.as('fire', () => g.destruction.impact(x, y + 0.6, z, 2.4, BOMB.blast, 0, 0.2, 0, 'blast'));
     g.props.hit(x, y + 0.5, z, R * 0.8, 0, 900, 0);
@@ -150,9 +151,10 @@ export class Bombs {
     }
     // The player.
     const P = g.player, pd = Math.hypot(P.pos.x - x, P.pos.z - z);
-    if (pd < R + P.height * 0.1 && P.pos.y < y + R && P.pos.y + P.height > y - 1) {
+    const PR = BOMB.playerR + P.height * 0.1;
+    if (pd < PR && P.pos.y < y + R && P.pos.y + P.height > y - 1) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(BOMB.player * (1 - Math.min(1, pd / (R + 0.5))) + 4, 'bomb', x, z);
+      this.hurtPlayer?.(BOMB.player * (1 - pd / PR) + 4, 'bomb', x, z);
     }
     g.stimuli.emit('gunfire', x, y, z, 6, 150);
     const dp = Math.hypot(P.pos.x - x, P.pos.z - z);

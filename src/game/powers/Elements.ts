@@ -481,7 +481,11 @@ export class Elements {
 
   /** Set something alight from outside the player's powers (a villain's bomb): burns as from fire wave. */
   ignite(t: Target, dur: number): void {
-    if (t.kind !== 'threat') this.burn(t, dur);
+    if (t.kind === 'threat') return;
+    this.burn(t, dur);
+    // Not the player's doing: a car that burns out from it is not booked to them.
+    const s = statusOf(t.obj);
+    if (s && s.burning > 0) (s.saved ??= {}).notPlayer = true;
   }
 
   private burn(t: Target, dur: number): void {
@@ -489,6 +493,7 @@ export class Elements {
     const s = this.track(t);
     if (s.frozen > 0) { s.frozen = Math.max(0, s.frozen - dur); return; } // thaws instead
     s.burning = Math.max(s.burning, dur * (s.wet > 0 ? 0.4 : 1));
+    if (s.saved?.notPlayer) delete s.saved.notPlayer;
     if (t.kind === 'car') this.savePaint(t.obj, s);
   }
 
@@ -1599,7 +1604,7 @@ export class Elements {
           if (s.burning > 0 && s.burning < 0.5 && !sv?.charred) {
             const sv2 = (s.saved ??= {});
             sv2.charred = true;
-            if (v.state !== VState.Wreck && v.state !== VState.Crushed) { this.w.traffic.wreckIt(v); this.stats.wrecked++; this.record('fireWave', t, 'wreck', v.x, v.z); }
+            if (v.state !== VState.Wreck && v.state !== VState.Crushed) { this.w.traffic.wreckIt(v); this.stats.wrecked++; if (!sv?.notPlayer) this.record('fireWave', t, 'wreck', v.x, v.z); }
             v.damage = 1;
             this.w.sound('car_crash', v.x, v.y, v.z, 0.5, 0.8, 10);
             this.w.dust.burst(v.x, v.y + 1, v.z, 10, 1.2, 2, 1.5, 4, SMOKE, 0.8, 0.6);

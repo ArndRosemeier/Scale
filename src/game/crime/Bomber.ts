@@ -17,13 +17,15 @@ export const BOMBER = {
   approachTimeout: 60,
   hp: 70, strength: 1.1,
   /** Bombs in the bag. */
-  bombs: [12, 18] as const,
+  bombs: [10, 15] as const,
   /** Seconds between throws, and the wind-up before the bomb leaves the hand. */
-  gap: [1.9, 3.2] as const,
+  gap: [2.8, 4.4] as const,
   windup: 0.38,
   /** How far he throws (m), and from how far the hero becomes the target. */
   throwMin: 6, throwMax: 22, atPlayer: 26,
   fuse: [1.2, 1.7] as const,
+  /** At the hero: a longer fuse and a miss of up to this many metres (a mad throw, and room to dodge). */
+  heroFuse: 0.5, scatter: [0.8, 2.4] as const,
   /** Backs off from a hero closer than this. */
   keepMin: 7,
   /** Wanders this far about his spot while throwing. */
@@ -168,7 +170,7 @@ export class Bomber extends Crime {
       act.memo.windup -= dt;
       lookAt(act, act.memo.tx, c.y + 1, act.memo.tz);
       if (act.memo.windup <= 0 && act.staggerT <= 0 && c.state !== PState.Down) {
-        const fuse = BOMBER.fuse[0] + this.rng.float() * (BOMBER.fuse[1] - BOMBER.fuse[0]);
+        const fuse = BOMBER.fuse[0] + this.rng.float() * (BOMBER.fuse[1] - BOMBER.fuse[0]) + (act.memo.atHero ? BOMBER.heroFuse : 0);
         if (!this.w.bomb || this.w.bomb(c, act.memo.tx, act.memo.tz, fuse)) { this.bombsLeft--; this.thrown++; }
       }
       return;
@@ -178,6 +180,7 @@ export class Bomber extends Crime {
     act.memo.throwT = (BOMBER.gap[0] + this.rng.float() * (BOMBER.gap[1] - BOMBER.gap[0])) * slow;
     const t = this.pickTarget(c);
     if (!t) return;
+    act.memo.atHero = t.hero ? 1 : 0;
     act.memo.tx = t.x; act.memo.tz = t.z;
     act.memo.windup = BOMBER.windup;
     stand(act);
@@ -187,14 +190,15 @@ export class Bomber extends Crime {
   }
 
   /** Where the next bomb goes: the hero when they are close, else an officer, a car, the crowd, or anywhere. */
-  private pickTarget(c: PedAgent): { x: number; z: number } | null {
+  private pickTarget(c: PedAgent): { x: number; z: number; hero?: boolean } | null {
     const p = this.w.player, B = BOMBER;
     const d = this.distToPlayer(c);
     const ok = (x: number, z: number) => { const e = Math.hypot(x - c.x, z - c.z); return e >= B.throwMin * 0.7 && e <= B.throwMax; };
     if (d >= 4 && d <= B.atPlayer && (!p.flying || p.y - c.y < 8) && !p.down) {
       // Where they will be in a moment (running straight on gets you caught; a turn dodges it).
-      const x = p.x + p.vx * 0.6, z = p.z + p.vz * 0.6;
-      return clampReach(c, x, z, B.throwMax);
+      const a = this.rng.float() * Math.PI * 2, e = B.scatter[0] + this.rng.float() * (B.scatter[1] - B.scatter[0]);
+      const x = p.x + p.vx * 0.6 + Math.sin(a) * e, z = p.z + p.vz * 0.6 + Math.cos(a) * e;
+      return { ...clampReach(c, x, z, B.throwMax), hero: true };
     }
     const cops = this.w.officers?.(c.x, c.z, B.throwMax).filter((o) => ok(o.x, o.z));
     if (cops?.length) return cops[this.rng.int(0, cops.length - 1)];

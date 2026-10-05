@@ -634,7 +634,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const n0 = thrownAt.length;
     drive(bomber, () => thrownAt.length > n0, 800, bEv);
     const last = thrownAt[thrownAt.length - 1];
-    check(thrownAt.length > n0 && Math.hypot(last.x - player.x, last.z - player.z) < 2, `bomber: once the hero is close the next bomb goes at them (${last ? Math.hypot(last.x - player.x, last.z - player.z).toFixed(1) : '-'} m off)`);
+    check(thrownAt.length > n0 && Math.hypot(last.x - player.x, last.z - player.z) <= BOMBER.scatter[1] + 0.1, `bomber: once the hero is close the next bomb goes at them (${last ? Math.hypot(last.x - player.x, last.z - player.z).toFixed(1) : '-'} m off)`);
     let punches = 0;
     for (let i = 0; i < 400 && bb.actor!.state !== 'ko' && bb.actor!.state !== 'surrender'; i++) {
       player.x = bb.x + 0.9; player.z = bb.z;
