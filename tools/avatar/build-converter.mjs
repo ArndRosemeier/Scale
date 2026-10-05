@@ -20,6 +20,8 @@ for (const f of ['Convert.bat', 'convert.ps1', 'README.txt']) cpSync(join(here, 
 cpSync(join(here, 'convert_avatar.py'), join(stage, 'convert_avatar.py'));
 mkdirSync(dirname(out), { recursive: true });
 rmSync(out, { force: true });
-const r = spawnSync('powershell', ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}\*' -DestinationPath '${out}' -Force`], { stdio: 'inherit' });
+const r = process.platform === 'win32'
+  ? spawnSync('powershell', ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}\*' -DestinationPath '${out}' -Force`], { stdio: 'inherit' })
+  : spawnSync('python3', ['-c', 'import shutil, sys; shutil.make_archive(sys.argv[1][:-4], "zip", sys.argv[2], "ScaleAvatarConverter")', out, dirname(stage)], { stdio: 'inherit' });
 if (r.status !== 0 || !existsSync(out)) { console.error('packaging failed'); process.exit(1); }
 console.log(`wrote ${out}`);
