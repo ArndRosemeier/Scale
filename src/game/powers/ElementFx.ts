@@ -185,6 +185,10 @@ class Particles {
           mv.xy += position.xy * iP.w;
           gl_Position = projectionMatrix * mv;
           vUv = position.xy * 2.0; vC = iC;
+          // Fade out right at the camera (an ember or a puff of smoke next to the lens would fill the view
+          // as a big flat disc): gone within 0.3 m, full from about two sprite sizes away.
+          float near = clamp((-mv.z - 0.3) / (1.2 + iP.w * 1.5), 0.0, 1.0);
+          vC.a *= near * near;
         }`,
       fragmentShader: /* glsl */ `
         varying vec2 vUv; varying vec4 vC;

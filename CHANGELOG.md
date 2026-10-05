@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.034 — 2026-10-05
+## 0.035 — 2026-10-05
 
 - **Villains with powers**: the street gang and the Syndicate now send lieutenants now and then. They are tougher, dressed in their group's colours with glowing trim, and stand and fight with powers instead of running.
   - The gang's **Brute** braces and charges you shoulder first, or stamps a crack along the pavement that knocks down whoever stands on it.
@@ -11,6 +11,11 @@ Every push raises the version by 0.001. Newest first.
 - Knocking out a lieutenant earns double karma.
 - Clothing can glow now: a lieutenant's jacket or suit has lit seams in the group's colour.
 - Admin console, Crime & deeds: a gang Brute, a Syndicate Enforcer, a brawl with lieutenants on both sides, and a test villain with bolt, fireball and gust.
+
+## 0.034 — 2026-10-05
+
+- **No more orange blobs in your face**: embers, flames and smoke puffs right in front of the camera now fade out instead of filling the view as big flat discs.
+- **Sandbox shows no karma**: the police and witness messages ("people saw it", turning yourself in, being arrested) no longer mention karma or fines in sandbox, where there is no karma.
 
 ## 0.033 — 2026-10-05
 
