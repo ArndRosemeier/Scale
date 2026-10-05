@@ -125,6 +125,9 @@ export class TouchControls {
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
     el.addEventListener('contextmenu', (e) => e.preventDefault());
+    // No click after the touch: it would land on what the button just opened (the controls
+    // overlay closes on a click).
+    el.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
   }
 
   // ------------------------------------------------------------------ view touches
