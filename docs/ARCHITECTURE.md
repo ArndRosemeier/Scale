@@ -711,7 +711,7 @@ every frame (`prof.threats`).
   (levels 3 and 4), and, rarely, level 5. Below fury 3 while warned (or no longer a giant), the warnings lapse. Standing down — no destruction
   for 45 s, or human-sized for 20 s, but never within 240 s of the army being called (once mobilised the Guard and
   the tanks get there) — ends it (`abandoned`; the fury is spent); a relapse within 5 min brings the army
-  back without new warnings. Brought down (knocked out by the response): `stopped`, taken into custody (Justice.arrested).
+  back without new warnings. Brought down (knocked out by the response): `stopped`, taken into custody (Justice.arrested) — a clean slate (`served`): the next rampage is warned first.
   * **The player's body** (`PlayerBody`, a ThreatActor with `self`: the police's and the army's target, never in
     `ThreatDirector.actors()`, so never the player's own Tab target or blow): zones head / torso / legs round the player
     (armour 0.2–0.35, no weak spots); army damage points after armour become health — 500 points a full bar (small hits

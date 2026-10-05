@@ -262,7 +262,8 @@ export class HostilePlayer {
         g.crime.justice.arrested();
         this.note('brought down — taken into custody');
       } else this.note(`over: ${ev.outcome}`);
-      if (this.watch.state === 'hostile') this.watch.reset();
+      if (ev.outcome === 'stopped') this.watch.served();
+      else if (this.watch.state === 'hostile') this.watch.reset();
       g.forces.hostilePlayer = false;
       this.ev = null;
     }

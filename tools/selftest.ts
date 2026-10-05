@@ -1375,6 +1375,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const W5 = new RampageWatch();
     run(W5, 120, 0.5); run(W5, 200, 0); run(W5, RAMPAGE.memory + 10, 0);
     check(run(W5, 30, 0.6)[0] === 'warn', 'rampage: long after, the warnings come again first');
+    // Taken into custody: a clean slate — rampaging again straight away is warned first.
+    const W6 = new RampageWatch();
+    run(W6, 120, 0.5); W6.served();
+    check(run(W6, 30, 0.6)[0] === 'warn', 'rampage: after custody, the warnings come again first');
     // The army's route for the player ends where they stand; units come from the city's side.
     const path = { pts: [] as number[], s: [] as number[], length: 0, start: { x: 0, z: 0 }, end: { x: 0, z: 0 } };
     playerPath(path, 0, 0, 300, 400);

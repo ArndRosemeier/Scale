@@ -146,6 +146,12 @@ export class RampageWatch {
     this.t = 0;
     this.quiet = 0;
   }
+
+  /** Taken into custody: it is over, and the slate is clean — another rampage gets its warnings again. */
+  served(): void {
+    this.reset();
+    this.warnedAt = -1e9;
+  }
 }
 
 /** The player's body zones as the army sees them (no weak spots: a hero has none to show). */
