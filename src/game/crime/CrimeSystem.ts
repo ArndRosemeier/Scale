@@ -35,6 +35,9 @@ import { Robbery } from './Robbery';
 import { Tagging, TAGGING } from './Tagging';
 import { TurfBrawl } from './TurfBrawl';
 import { HideoutGuard } from './HideoutGuard';
+import { Ritual, type RitualElement } from './Ritual';
+import { Channeling } from './Channeling';
+import { HijackedFleet } from './HijackedFleet';
 import { KINDS } from './kinds';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
@@ -52,7 +55,9 @@ import { ABILITIES } from '../abilities/defs';
 import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, relation, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
-import { ARCHETYPES } from '../factions/archetypes';
+import { ARCHETYPES, CITY_GROUPS } from '../factions/archetypes';
+import { siteToWorld } from '../../plan/landmarks';
+import { RState } from '../../future/Robots';
 import { factionOutfit, lieutenantOutfit } from '../factions/outfits';
 
 /** Rewards common to every kind (the per-kind ones are in crime/kinds). */
@@ -67,6 +72,8 @@ export const ACTOR_BUDGET = 40;
 const SETTING_KEY = 'scale.crime.setting';
 
 /** Names shown on the target frame for actors (the frame is the one place a role is named). */
+/** A cult's element by its colours. */
+const RITUAL_ELEMENT: Record<string, RitualElement> = { ember: 'fire', frost: 'frost', violet: 'storm' };
 const ROLE_NAME: Record<string, string> = { police: 'Police officer', shopkeeper: 'Shopkeeper', soldier: 'Soldier' };
 
 const _v = new THREE.Vector3();
@@ -79,6 +86,9 @@ export class CrimeSystem {
   readonly bombs: Bombs;
   /** Lieutenants' powers in the world: tells, beams, orbs, cracks, flashes (crime/VillainCasts). */
   readonly casts: VillainCasts;
+  /** Machines turned by a techno-cult hack (crime/Hijack), until they reboot. */
+  readonly fleets: HijackedFleet[] = [];
+  private fleetKey = '';
   /** Dev: the next crime's group sends its lieutenant (dev.crime(kind, dist, group, 'lt')). */
   private devLieutenant = false;
   readonly health: PlayerHealth;
@@ -128,7 +138,7 @@ export class CrimeSystem {
     const seed = g.settings.seed;
     this.index = crimeIndex(g.macro, seed);
     g.map.world.crimeIndex = this.index;
-    this.factions = planFactions(g.macro, seed, this.index);
+    this.factions = planFactions(g.macro, seed, this.index, CITY_GROUPS);
     this.hideouts = planHideouts(this.factions);
     g.map.setTurf(this.factions);
     this.graffiti = new Graffiti((a) => this.factions.factions.find((f) => f.archetype === a) ?? null);
@@ -293,6 +303,11 @@ export class CrimeSystem {
       bomb: (c, x, z, fuse) => this.bombs.throw(c, x, z, fuse),
       cast: (c, power, stage, x, y, z) => this.casts.cast(c, power, stage, x, y, z),
       clearLine: (ax, ay, az, bx, by, bz, skip) => g.sight.clear(ax, ay, az, bx, by, bz, 0.25, skip),
+      machines: (rMin, rMax) => this.machines(rMin, rMax),
+      landmarks: (rMin, rMax) => this.landmarkSpots(rMin, rMax),
+      opFx: (look, x, z, share, workers) => this.casts.opFx(look, x, z, share, workers),
+      hijack: (c, x, z, n) => { if (g.threats) this.fleets.push(new HijackedFleet(g, g.threats.rogue, c, x, z, n)); },
+      ritual: (c, x, z, element) => this.casts.ritualBurst(c.criminals, x, z, element),
       cars: (x, z, r) => {
         const out: { x: number; z: number }[] = [];
         for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) if (v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < r) out.push(v);
@@ -552,6 +567,41 @@ export class CrimeSystem {
   /** The group behind a crime, or null. */
   factionOf(c: Crime): Faction | null { return c.faction < 0 ? null : this.factions.factions[c.faction] ?? null; }
 
+  /** Delivery robots standing free on the pavement near the player: a point beside one (hack it there). */
+  private machines(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
+    const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
+    for (const r of this.g.future.robots.list) {
+      if (!r.alive || r.mal || r.state >= RState.Down || r.onRoad) continue;
+      const d = Math.hypot(r.x - p.x, r.z - p.z);
+      if (d < rMin || d > rMax) continue;
+      // The guards stand out on the side away from the buildings (square to its heading).
+      let nx = Math.cos(r.yaw), nz = -Math.sin(r.yaw);
+      if (W.buildingAt(r.x + nx * 4.5, r.z + nz * 4.5)) { nx = -nx; nz = -nz; }
+      if (W.buildingAt(r.x + nx * 4.5, r.z + nz * 4.5)) continue;
+      out.push({ x: r.x, z: r.z, nx, nz, d });
+    }
+    return out.sort((a, b) => a.d - b.d);
+  }
+
+  /** Open ground in front of the city's landmarks near the player: the circle's centre, the way out. */
+  private landmarkSpots(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
+    const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
+    for (const lm of this.g.macro.landmarks ?? []) {
+      if (lm.kind === 'airport' || lm.cell < 0) continue;
+      const nx = Math.sin(lm.angle), nz = -Math.cos(lm.angle);
+      // From the edge of the front square inwards: the first point clear of the structure.
+      for (let v = -lm.hv + 4; v < -lm.hv + 16 && v < 0; v += 2) {
+        const [x, z] = siteToWorld(lm, 0, v);
+        const d = Math.hypot(x - p.x, z - p.z);
+        if (d < rMin || d > rMax) break;
+        if (W.landmarks?.onFootprint(x, z, 3.5) || W.buildingAt(x, z)) continue;
+        out.push({ x, z, nx, nz, d });
+        break;
+      }
+    }
+    return out.sort((a, b) => a.d - b.d);
+  }
+
   /** A tagging crime's tag on the wall. */
   private tagOf(c: Tagging, f: Faction): Tag {
     const S = c.spot!;
@@ -758,6 +808,7 @@ export class CrimeSystem {
       if (c.rival < 0) { c.abort(); c.dispose(); return false; }
     }
     if (f) this.enlist(c, f);
+    if (c instanceof Ritual && f) c.element = RITUAL_ELEMENT[f.palette.name] ?? c.element;
     this.crimes.push(c);
     this.stats.started++;
     return true;
@@ -834,6 +885,7 @@ export class CrimeSystem {
     this.updateHideouts(dt);
     this.bombs.update(dt);
     this.casts.update(dt);
+    this.updateFleets(dt);
     this.police.update(dt);
     this.guns.update(dt);
     this.justice.update(dt);
@@ -852,6 +904,20 @@ export class CrimeSystem {
   }
 
   private lingering: { c: Crime; t: number }[] = [];
+
+  /** Hijacked machines: run their course; the link cut when the hackers are stopped; red dots on the map. */
+  private updateFleets(dt: number): void {
+    const g = this.g, p = g.player.pos, list: MapMarker[] = [];
+    for (let i = this.fleets.length - 1; i >= 0; i--) {
+      const F = this.fleets[i], was = F.active;
+      F.update(dt);
+      if (was && !F.active && F.end === 'cut' && Math.hypot(F.x - p.x, F.z - p.z) < 200) g.powerHud.toast('With the hackers stopped, the hijacked robots go dark', 'info');
+      if (F.done) { this.fleets.splice(i, 1); continue; }
+      for (const m of F.live()) if (Math.hypot(m.obj.x - p.x, m.obj.z - p.z) < 250) list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: 'A hijacked machine' });
+    }
+    const key = list.map((m) => `${Math.round(m.x / 3)},${Math.round(m.z / 3)}`).join(';');
+    if (key !== this.fleetKey) { this.fleetKey = key; g.map.setMarkers('hijack', list); }
+  }
 
   /** After a crime: the victim (or shopkeeper) waits, upset, for their things; cheers when they come back. */
   private linger(dt: number): void {
@@ -945,10 +1011,23 @@ export class CrimeSystem {
         }
         break;
       }
-      case 'failed': {
-        // An operation came off: the group's hold on the street grows (a brawl's result is 'won').
+      case 'done': {
+        // A hack went through, a ritual was completed: the group's hold on the street grows.
         const f = this.factionOf(c);
-        if (f && c.outcome === 'escaped' && !(c instanceof TurfBrawl) && !(c instanceof HideoutGuard)) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
+        if (!f) break;
+        this.factionStats.succeeded++;
+        this.turf(c, f, SHIFT.ritual);
+        if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 220) {
+          const what = c instanceof Ritual ? 'completed a ritual' : 'hijacked the robots';
+          g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> ${what} here`, 'warn');
+        }
+        break;
+      }
+      case 'failed': {
+        // An operation came off: the group's hold on the street grows (a brawl's result is 'won', a
+        // hack's or a ritual's is 'done').
+        const f = this.factionOf(c);
+        if (f && c.outcome === 'escaped' && !(c instanceof TurfBrawl) && !(c instanceof HideoutGuard) && !(c instanceof Channeling)) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
         break;
       }
       case 'won': {
@@ -1315,11 +1394,21 @@ export class CrimeSystem {
     Object.assign(dev, {
       crimeSystem: this,
       /** Start a crime near the player (dist: metres to the site, along the view). */
-      crime: (kind: CrimeKind = 'snatch', dist = 25, faction?: number, lt?: string) => {
+      crime: (kind: CrimeKind = 'snatch', dist = 25, faction?: number | string, lt?: string) => {
         const p = g.player.pos, fy = g.camRig.forwardYaw;
-        const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, faction, lt);
+        // A group by id, or by kind ('techno': the city's techno-cult).
+        const fid = typeof faction === 'string' ? this.factions.factions.find((f) => f.archetype === faction)?.id ?? -1 : faction;
+        const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, fid, lt);
         return c ? c.snapshot() : 'no site';
       },
+      /** Hacks and rituals under way: nearly done (the next second finishes them). */
+      rushOps: () => {
+        let n = 0;
+        for (const c of this.crimes) if (c instanceof Channeling && c.phase === 'commit') { c.progress = Math.max(c.progress, c.spec.workFor - 1); n++; }
+        return n;
+      },
+      /** Hijacked machines: per hack, how many are still at it and how it ended. */
+      fleets: () => this.fleets.map((F) => ({ crime: F.crime.id, t: Math.round(F.t), active: F.active, end: F.end, units: F.units.length, live: F.live().length, byPlayer: F.byPlayer })),
       /** The city's villain groups: name, kind, home cell, cells held; the one whose turf the player stands in. */
       factions: () => {
         const F = this.factions, p = g.player.pos, here = this.factionAt(p.x, p.z);

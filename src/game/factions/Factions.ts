@@ -74,7 +74,10 @@ export function planFactions(macro: MacroPlan, seed: number, index: Float32Array
     const rng = new Rng(deriveSeed(seed, 'faction', id));
     const home = pickHome(macro, index, A, rng, factions);
     if (home < 0) continue;
-    const f: Faction = { id: factions.length, archetype: id, name: nameFor(A, rng, cells[home].district), palette: rng.pick(A.palettes), emblem: rng.pick(A.emblems), home };
+    // (A group named for its colours picks them first; the others keep their seeded order.)
+    const pal = A.byPalette ? rng.pick(A.palettes) : null;
+    const name = nameFor(A, rng, cells[home].district, pal?.name);
+    const f: Faction = { id: factions.length, archetype: id, name, palette: pal ?? rng.pick(A.palettes), emblem: rng.pick(A.emblems), home };
     const inf = new Float32Array(cells.length);
     const [hx, hz] = cells[home].centroid;
     const reach = Math.max(450, A.reach * R);
@@ -124,6 +127,8 @@ export const SHIFT = {
   succeeded: 0.05,
   /** A tag on the wall. */
   tag: 0.04,
+  /** A ritual completed, a robot hijack gone through. */
+  ritual: 0.07,
   /** A turf brawl: the winners gain the street, the losers lose it. */
   brawlWon: 0.08,
   brawlLost: -0.1,
@@ -218,9 +223,10 @@ function pickHome(macro: MacroPlan, index: Float32Array, A: Archetype, rng: Rng,
   return best;
 }
 
-function nameFor(A: Archetype, rng: Rng, district: import('../../plan/types').District): string {
+function nameFor(A: Archetype, rng: Rng, district: import('../../plan/types').District, palette?: string): string {
   const places = A.places?.[district];
-  const a = places && rng.chance(0.6) ? rng.pick(places) : rng.pick(A.a);
+  const own = palette ? A.byPalette?.[palette] : undefined;
+  const a = own ? rng.pick(own) : places && rng.chance(0.6) ? rng.pick(places) : rng.pick(A.a);
   const b = A.b.length ? rng.pick(A.b) : '';
   const s = rng.pick(A.names).replace('{a}', a).replace('{b}', b);
   return s.charAt(0).toUpperCase() + s.slice(1);

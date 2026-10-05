@@ -475,6 +475,18 @@ every frame) owns the parts and draws what belongs to them.
   quake; Syndicate Enforcer: stun, frost, shield, smoke) and its chance per operation kind, rolled in `enlist`
   (`lieutenantOutfit`: glowing accents); a lieutenant KO pays double. The player's own powers (`Elements`) do not run
   on the core yet.
+  Phase 3 part 2: `CITY_GROUPS` seeds four groups (gang, Syndicate, techno-cult, elemental cult; saves match groups by
+  archetype, so older saves keep their turf). Channelled operations share `crime/Channeling` (members walk to posts,
+  workers channel with `memo.work`, guards watch; the hero within `noticeR` or a blow breaks it off for good; the work
+  finishing emits `done` once): `Hijack` (techno-cult, at a free delivery robot from `CrimeWorld.machines`, else a shop
+  door) calls `CrimeWorld.hijack`, which makes a `crime/HijackedFleet` — a `RogueOwner` turning nearby robots, a
+  service robot and drones hostile under `threats/RogueMachines` (they spare the hackers via `RogueOwner.spares`); it
+  ends after `HIJACKED.duration`, when the hackers are subdued (link cut) or when all are disabled, then the machines
+  reboot. `Ritual` (elemental cult, a circle before a landmark from `CrimeWorld.landmarks`, else a pavement) calls
+  `CrimeWorld.ritual` (`VillainCasts.ritualBurst`: fire, frost or storm by the cult's palette). `VillainCasts.opFx`
+  draws the work (sparks to the port, rune ring and rising column). `done` gains `SHIFT.ritual` turf; escaped channelled
+  crimes gain nothing more. New power `emp` (Technomancer): cars stall, drones drop, the hero is jolted and slowed.
+  Dev: `dev.crime(kind, dist, 'techno' | 'cult', 'lt')`, `dev.rushOps()`, `dev.fleets()`.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a

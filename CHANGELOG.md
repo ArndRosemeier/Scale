@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.038 — 2026-10-05
+
+- **Two new villain groups**: every city now also has a **techno-cult** (grey work clothes with glowing seams, in industrial districts and the port) and an **elemental cult** (long dark robes with glowing trim, in the old town and the parks). They hold turf, fight the other groups and show on the map like the street gang and the Syndicate.
+- **Robot hijacks**: techno-cultists walk up to a delivery robot and hack into it, with sparks and a blue glow, while a guard watches the street. Leave them be and the hack goes through: the robots, a service robot and drones nearby turn on people for a while, and the hackers slip away. Stop the hackers and the hijacked robots go dark. Get close in time and the hack is broken off.
+- **Rituals**: three or four cultists stand in a circle before a landmark and chant, arms raised. A ring of runes lights up and a column of fire, frost or lightning rises, stronger the longer it runs. Left alone for half a minute it ends in a burst that knocks back everyone near; break the circle and it never happens.
+- **New lieutenants**: the techno-cult's **Technomancer** fires lightning, raises a shield and sets off an **EMP** that stalls cars, drops drones and jolts and slows you; the cult's **Invoker** throws fireballs, frost rays and gusts of wind.
+- Admin console, Crime & deeds: a robot hijack, a ritual, each with its lieutenant, and a button that brings hacks and rituals under way to their end.
+
 ## 0.037 — 2026-10-05
 
 - **Fixed a crash while generating some cities** (for example seed 17 at size 0.75 and seed 1234 at the largest size): planning the bridges over the river read a water lookup after another lookup had already overwritten it. These cities now generate normally.

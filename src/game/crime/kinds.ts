@@ -12,6 +12,8 @@ import { Tagging } from './Tagging';
 import { TurfBrawl } from './TurfBrawl';
 import { HideoutGuard } from './HideoutGuard';
 import { Bomber } from './Bomber';
+import { Hijack } from './Hijack';
+import { Ritual } from './Ritual';
 
 export interface KindSpec {
   make(w: CrimeWorld, seed: number, near: { x: number; z: number } | null): Crime;
@@ -37,5 +39,7 @@ export const KINDS: Record<CrimeKind, KindSpec> = {
   brawl: { make: (w, s, n) => new TurfBrawl(w, s, n), ko: 8, resolved: 18, rep: 5, title: 'Turf war — two gangs fighting in the street', criminal: 'Brawler', stopped: 'a turf brawl' },
   // (Hideout guards are placed at a hideout's door by CrimeSystem; `make` without a door puts them at the point.)
   hideout: { make: (w, s, n) => new HideoutGuard(w, s, { x: n?.x ?? w.player.x, z: n?.z ?? w.player.z, nx: 0, nz: 1 }), ko: 9, resolved: 10, rep: 3, title: 'A hideout, guarded', criminal: 'Guard', stopped: 'the guards of a hideout' },
+  hijack: { make: (w, s, n) => new Hijack(w, s, n), ko: 12, resolved: 22, rep: 6, title: 'Techno-cultists hacking the robots', criminal: 'Hacker', stopped: 'a robot hijack' },
+  ritual: { make: (w, s, n) => new Ritual(w, s, n), ko: 10, resolved: 20, rep: 5, title: 'A ritual — robed figures chanting in a circle', criminal: 'Cultist', stopped: 'a ritual' },
   bomber: { make: (w, s, n) => new Bomber(w, s, n), ko: 18, resolved: 32, rep: 8, title: 'A mad bomber — explosions in the street', criminal: 'Mad bomber', stopped: 'a mad bomber' },
 };

@@ -760,6 +760,70 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       for (const a of cs) a.alive = false;
     }
 
+    // Phase 3 part 2: channelled operations. A techno-cult hack at a robot and an elemental cult's
+    // ritual before a landmark: left alone the work finishes and the world's effect fires once; with
+    // the hero close it is broken off and never finished.
+    {
+      const { Hijack, HIJACK } = await import('../src/game/crime/Hijack');
+      const { Ritual, RITUAL } = await import('../src/game/crime/Ritual');
+      const fired: string[] = [], looks = new Set<string>();
+      const w6 = Object.assign(Object.create(w3) as typeof w3, {
+        machines: () => [{ x: 700, z: 40, nx: 0, nz: 1 }],
+        landmarks: () => [{ x: 760, z: 90, nx: 0, nz: -1 }],
+        opFx: (look: string) => { looks.add(look); },
+        hijack: (_c: unknown, _x: number, _z: number, n: number) => { fired.push(`hijack:${n}`); },
+        ritual: (_c: unknown, _x: number, _z: number, el: string) => { fired.push(`ritual:${el}`); },
+      });
+      const hk = new Hijack(w6, 5150);
+      check(hk.setup() && hk.kind === 'hijack' && hk.criminals.some((c) => c.actor!.memo.work) && hk.criminals.some((c) => !c.actor!.memo.work), `hijack: hackers at the robot and a guard (${hk.criminals.length})`);
+      const hEv: string[] = [];
+      drive(hk, () => hk.phase !== 'approach', 2400, hEv);
+      check(hk.phase === 'commit', `hijack: they reach the robot and start the hack (${hk.phase})`);
+      drive(hk, () => hk.done, Math.ceil((HIJACK.hackFor + 2) / 0.05), hEv);
+      const nM = Number(fired.find((f) => f.startsWith('hijack'))?.split(':')[1] ?? 0);
+      check(hk.done && hEv.filter((e) => e === 'done').length === 1 && nM >= HIJACK.machines[0] && looks.has('hack') && hk.phase === 'escape', `hijack: left alone the hack goes through, the machines turn once (${fired.join(',')}, ${hEv.join(',')})`);
+      const hk2 = new Hijack(w6, 6160);
+      check(hk2.setup(), 'hijack: a second one');
+      drive(hk2, () => hk2.phase !== 'approach', 2400, []);
+      drive(hk2, () => hk2.progress > 3, 200, []);
+      const h2Ev: string[] = [];
+      player.x = hk2.site!.x + 4; player.z = hk2.site!.z + 4;
+      drive(hk2, () => false, Math.ceil(HIJACK.hackFor / 0.05), h2Ev);
+      check(!hk2.done && !h2Ev.includes('done') && hk2.playerInvolved && hk2.phase !== 'commit', `hijack: the hero comes close, the hack is broken off (${hk2.phase}, ${h2Ev.join(',')})`);
+      player.x = 0; player.z = 0;
+      for (const c of [...hk.criminals, ...hk2.criminals]) c.alive = false;
+
+      fired.length = 0;
+      const rt = new Ritual(w6, 7170);
+      rt.element = 'frost';
+      check(rt.setup() && rt.kind === 'ritual' && rt.criminals.filter((c) => c.actor!.memo.work).length >= 3, `ritual: a circle of ${rt.criminals.filter((c) => c.actor!.memo.work).length} before the landmark`);
+      const rc = rt.criminals.filter((c) => c.actor!.memo.work).map((c) => Math.hypot(c.actor!.memo.postX - rt.site!.x, c.actor!.memo.postZ - rt.site!.z));
+      check(rc.every((d) => Math.abs(d - RITUAL.radius) < 0.01), 'ritual: they stand on the circle');
+      const rEv2: string[] = [];
+      drive(rt, () => rt.phase !== 'approach', 2400, rEv2);
+      check(rt.phase === 'commit', `ritual: the circle forms and the chant begins (${rt.phase})`);
+      drive(rt, () => rt.progress > RITUAL.chantFor * 0.5, Math.ceil(RITUAL.chantFor / 0.05), rEv2);
+      check(!rt.done && fired.length === 0 && rt.share > 0.45, `ritual: half way, nothing yet (${rt.share.toFixed(2)})`);
+      drive(rt, () => rt.done, Math.ceil(RITUAL.chantFor / 0.05), rEv2);
+      check(rt.done && fired.join() === 'ritual:frost' && looks.has('frost') && rEv2.filter((e) => e === 'done').length === 1, `ritual: left alone it is completed, its element bursts once (${fired.join(',')}, ${rEv2.join(',')})`);
+      const rt2 = new Ritual(w6, 8180);
+      check(rt2.setup(), 'ritual: a second one');
+      drive(rt2, () => rt2.phase !== 'approach', 2400, []);
+      drive(rt2, () => rt2.progress > 5, 400, []);
+      const r2Ev: string[] = [];
+      player.x = rt2.site!.x + 5; player.z = rt2.site!.z + 5;
+      drive(rt2, () => false, Math.ceil(RITUAL.chantFor / 0.05), r2Ev);
+      check(!rt2.done && fired.length === 1 && rt2.playerInvolved && rt2.phase !== 'commit', `ritual: the hero breaks the circle, it is never completed (${rt2.phase}, ${r2Ev.join(',')})`);
+      player.x = 0; player.z = 0;
+      for (const c of [...rt.criminals, ...rt2.criminals]) c.alive = false;
+      const nohk = new Hijack(Object.assign(Object.create(w6) as typeof w6, { machines: () => [], shops: () => [] }), 1);
+      check(!nohk.setup(), 'hijack: no robot and no shop near, no hack');
+      // The EMP: a Technomancer's pulse at a hero in range.
+      const KE = new Caster(['emp'], new Rng(9));
+      KE.tick(5);
+      check(KE.choose({ dist: 10, hp: 1, fleeing: false, targetDown: false, clear: false }) === 'emp' && KE.choose({ dist: 2, hp: 1, fleeing: false, targetDown: false, clear: true }) === null, 'caster: an EMP in range (no clear line needed), not point-blank');
+    }
+
     // The mad bomber: walks to the busy spot and starts lobbing bombs; once the hero is close the
     // bombs go at them; a few punches knock him out and the police take him.
     const { Bomber, BOMBER } = await import('../src/game/crime/Bomber');
@@ -803,7 +867,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const { planHour } = await import('../src/game/crime/CrimeDirector');
   const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions, drift, relation, rivalsAt, strength, DRIFT } = await import('../src/game/factions/Factions');
   const { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts } = await import('../src/game/factions/Hideouts');
-  const { ARCHETYPES } = await import('../src/game/factions/archetypes');
+  const { ARCHETYPES, CITY_GROUPS } = await import('../src/game/factions/archetypes');
   const { factionOutfit } = await import('../src/game/factions/outfits');
   const t0 = performance.now();
   const names = new Set<string>();
@@ -813,6 +877,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const F = planFactions(macro, seed, idx), G = planFactions(macro, seed, idx);
     check(JSON.stringify(F.factions) === JSON.stringify(G.factions) && F.holder.every((h, i) => h === G.holder[i]), `factions deterministic (seed ${seed})`);
     check(F.factions.map((f) => f.archetype).join() === 'gang,syndicate', `seed ${seed}: a street gang and a Syndicate (${F.factions.map((f) => f.name).join(', ')})`);
+    const all4 = planFactions(macro, seed, idx, CITY_GROUPS);
+    check(all4.factions.length >= 3 && all4.factions.slice(0, 2).map((f) => f.archetype).join() === 'gang,syndicate' && all4.factions.some((f) => f.archetype === 'techno' || f.archetype === 'cult'), `seed ${seed}: the city's groups include the cults (${all4.factions.map((f) => `${f.archetype}:${all4.holder.filter((h) => h === f.id).length}`).join(', ')})`);
+    for (const f of all4.factions.filter((x) => x.archetype === 'techno' || x.archetype === 'cult')) {
+      const o = factionOutfit(f, 5);
+      check(f.archetype === 'techno' ? o.feet?.defId === 'boots' : o.back?.defId === 'coat', `${f.name}: dressed as ${f.archetype === 'techno' ? 'techno-cultists (work clothes, boots)' : 'cultists (long coats)'}`);
+      check(all4.holder.every((h, i) => h !== f.id || ARCHETYPES[f.archetype].affinity[macro.cells[i].district] > 0), `${f.name}: turf only in its kind of district`);
+    }
     const land = macro.cells.filter((c) => c.district !== 'water').length;
     for (const f of F.factions) {
       names.add(f.name);
