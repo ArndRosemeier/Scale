@@ -78,6 +78,11 @@ export interface PowerWorld {
   sight?: Pick<Sight, 'clear'>;
   /** Short feedback (a toast) for a power that could not go off. */
   deny?: (msg: string) => void;
+  /**
+   * The brood's creatures round a point take a power (ThreatDirector.broodHit): dmg in their hit
+   * points (frost: seconds frozen), flung at `fling` m/s. Returns where the ones hit are.
+   */
+  swarm?: (effect: 'blow' | 'fire' | 'shock' | 'frost' | 'wind' | 'water' | 'heat', x: number, y: number, z: number, r: number, dmg: number, fling: number) => { x: number; y: number; z: number }[];
 }
 
 /** The power being held this frame (from the AbilitySystem). */
@@ -92,7 +97,7 @@ interface Aim {
 }
 
 interface Bolt { pts: number[]; t: number; life: number; jit: number; seed: number }
-interface FireBurst { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number; range: number; rank: number; t: number; cand: { t: Target; d: number }[]; walls: { x: number; y: number; z: number; nx: number; ny: number; nz: number; d: number; building: boolean }[]; k: number }
+interface FireBurst { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number; range: number; rank: number; t: number; cand: { t: Target; d: number }[]; walls: { x: number; y: number; z: number; nx: number; ny: number; nz: number; d: number; building: boolean }[]; k: number; swarmD: number }
 interface Quake { x0: number; z0: number; dx: number; dz: number; len: number; t: number; done: number; rank: number; k: number; hit: Set<object> }
 interface Vortex { air: boolean; x: number; y: number; z: number; dx: number; dz: number; r: number; t: number; life: number; rank: number; k: number; tick: number; hitT: Map<object, number>; loop: SynthHandle | null }
 interface Nova { x: number; y: number; z: number; r: number; t: number }
@@ -563,6 +568,7 @@ export class Elements {
     }
     if (Math.random() < 0.4) this.w.synth.play('sizzle', ex, ey, ez, 0.5, 5);
     if (Math.random() < 0.2) this.w.stimuli.emit('power', ex, ey, ez, 4, 40);
+    this.w.swarm?.('heat', ex, ey, ez, 0.8 * this.reachK, 1.2, 1.5);
     if (H.what === 'building' || H.what === 'roof') {
       // Cumulative heat on the spot (60 cm cells): the panel gives way once the dose beats it.
       const key = (Math.round(ex / 0.6) * 73856093) ^ (Math.round(ey / 0.6) * 19349663) ^ (Math.round(ez / 0.6) * 83492791);
@@ -622,7 +628,7 @@ export class Elements {
     const range = FIRE_RANGE[r] * this.reachK;
     const A = this.aim('hands', range, 25, this.aimA);
     if (!A) return false;
-    const b: FireBurst = { ox: A.ox, oy: A.oy, oz: A.oz, dx: A.dx, dy: A.dy, dz: A.dz, range, rank: r, t: 0, cand: [], walls: [], k };
+    const b: FireBurst = { ox: A.ox, oy: A.oy, oz: A.oz, dx: A.dx, dy: A.dy, dz: A.dz, range, rank: r, t: 0, cand: [], walls: [], k, swarmD: 0 };
     // Who and what is in the cone (with a line of sight from the hands).
     const cosA = Math.cos(FIRE.halfAngle);
     this.w.targeting.inSphere(A.ox + A.dx * range * 0.5, A.oy + A.dy * range * 0.5, A.oz + A.dz * range * 0.5, range * 0.62, (t) => {
@@ -683,6 +689,12 @@ export class Elements {
       }
       // The front reaches things at its speed.
       const front = Math.min(1, b.t / (sw * 0.8)) * b.range;
+      // The brood in the cone: burnt where the front passes (a slab every 1.5 m).
+      while (this.w.swarm && b.swarmD + 1.5 <= front) {
+        b.swarmD += 1.5;
+        const d = b.swarmD;
+        this.w.swarm('fire', b.ox + b.dx * d, b.oy + b.dy * d - 0.8, b.oz + b.dz * d, Math.tan(FIRE.halfAngle) * d + 0.8, 1.4, 2);
+      }
       for (let j = b.cand.length - 1; j >= 0; j--) {
         const c = b.cand[j];
         if (c.d > front) continue;
@@ -751,6 +763,8 @@ export class Elements {
       const c = this.w.targeting.centre(t, _w);
       this.record('frostNova', t, 'freeze', c.x, c.z);
     });
+    // The brood round about freezes solid (the next blow shatters them).
+    this.w.swarm?.('frost', cx, p.pos.y + 0.3, cz, R, dur, 0);
     // Windows shatter in the cold snap (walls hold).
     this.w.destruction.impact(cx, cy, cz, R, NOVA.glass * p.k * p.k, 0, 0.1, 0, 'blast');
     // Icy ground.
@@ -976,6 +990,23 @@ export class Elements {
       this.boltHit(bt, r, x, y, z);
       pts.push(x, y, z);
     }
+    // The brood: every bolt point arcs into the creatures round it, and the chain runs on through
+    // the swarm (jumps from creature to creature, clearing clumps).
+    if (this.w.swarm) {
+      const sr = 3 * this.reachK;
+      let left = BOLT_JUMPS[r] + 2;
+      const n0 = pts.length / 3;
+      for (let i = 1; i < n0; i++) this.swarmArcs(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2], sr);
+      while (left-- > 0) {
+        const lx = pts[pts.length - 3], ly = pts[pts.length - 2], lz = pts[pts.length - 1];
+        const near = this.w.swarm('shock', lx, ly, lz, jr, 0, 0);
+        let best: { x: number; y: number; z: number } | null = null, bd = -1;
+        for (const c of near) { const d = Math.hypot(c.x - lx, c.z - lz); if (d > sr * 0.6 && d < jr && d > bd) { bd = d; best = c; } }
+        if (!best) break;
+        pts.push(best.x, best.y, best.z);
+        this.swarmArcs(best.x, best.y, best.z, sr);
+      }
+    }
     this.bolts.push({ pts, t: 0, life: BOLT.flash + 0.05 * pts.length / 3, jit: 0, seed: Math.random() * 1000 });
     const p = this.w.player;
     p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.5 };
@@ -983,6 +1014,16 @@ export class Elements {
     this.w.stimuli.emit('power', pts[3], pts[4], pts[5], 6, 120);
     this.w.camRig.addShake(0.12);
     return true;
+  }
+
+  /** A bolt point among the brood: side arcs into the creatures round it, which die of it. */
+  private swarmArcs(x: number, y: number, z: number, r: number): void {
+    const hit = this.w.swarm?.('shock', x, y, z, r, 3, 3) ?? [];
+    for (let k = 0; k < Math.min(5, hit.length); k++) {
+      const c = hit[k];
+      this.bolts.push({ pts: [x, y, z, c.x, c.y, c.z], t: 0, life: BOLT.flash, jit: 0, seed: Math.random() * 1000 });
+      this.sparks(c.x, c.y, c.z, 4);
+    }
   }
 
   private boltHit(t: Target, r: number, x: number, y: number, z: number): void {
@@ -1108,6 +1149,7 @@ export class Elements {
         // Everything near the line is thrown.
         const J = QUAKE_IMPULSE[q.rank] * q.k * q.k;
         const R = 3.5 * sk;
+        this.w.swarm?.('blow', mx, g + 0.3, mz, R, 4, 6);
         T.inSphere(mx, g + 0.5, mz, R, (t) => {
           if (q.hit.has(t.obj)) return;
           q.hit.add(t.obj);
@@ -1222,6 +1264,7 @@ export class Elements {
       if (v.tick > 0) continue;
       v.tick = 0.125;
       this.w.debris.vortex(v.x, v.y, v.z, v.r * 1.2, lift * 1.6, lift);
+      this.w.swarm?.('wind', v.x, v.y + 0.5, v.z, v.r, 0.6, 3 + lift);
       this.w.dust.clearNear(v.x, v.y + v.r, v.z, v.r * 1.6);
       const r = v.rank;
       T.each(v.x, v.z, v.r + 3, (t) => {
@@ -1293,6 +1336,8 @@ export class Elements {
         this.fx.soft(ex, ey, ez, (H.nx + (Math.random() - 0.5) * 1.6) * sp, (H.ny * 0.5 + 0.5 + Math.random()) * sp, (H.nz + (Math.random() - 0.5) * 1.6) * sp, 0.6, 0.12 * sk, 0.35 * sk, WATER, WATER_END, 0.7, 0.8, 9.8);
       }
       if (Math.random() < dt * 10) this.w.dust.burst(ex, ey, ez, 2, 0.4 * sk, 1.2, 0.7 * sk, 1.2, STEAM, 0.1, 0.25);
+      // The jet washes the brood away (and drowns the small ones).
+      if (Math.random() < dt * 8) this.w.swarm?.('water', ex, ey, ez, 1.4 * sk, 0.5, 6);
     }
     if (!this.waterLoop) this.waterLoop = this.w.synth.loop('water', 5 * sk);
     this.waterLoop?.set(A.ox, A.oy, A.oz, 0.7);
