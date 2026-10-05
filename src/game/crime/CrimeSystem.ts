@@ -5,10 +5,10 @@
  * marks, the crime-index map layer, health / reputation / wanted in the HUD).
  *
  * Rewards (Normal mode; karma, reputation):
- *   knocking out a criminal yourself   snatch 8 · mugging 10 · robbery 14 karma, +2 rep
+ *   knocking out a criminal yourself   per kind (crime/kinds: snatch 8 · mugging 10 · robbery 14 …), +2 rep
  *   a criminal giving up to you        6 karma, +1 rep
- *   the crime stopped with your help   snatch 10 · mugging 15 · robbery 25 karma (+25 % with no
- *                                      bystander hurt), +3 / +4 / +6 rep, the crowd cheers
+ *   the crime stopped with your help   per kind (snatch 10 · mugging 15 · robbery 25 …; +25 % with no
+ *                                      bystander hurt), its reputation, the crowd cheers
  *   returning the stolen bag / wallet  8 karma, +2 rep
  */
 import * as THREE from 'three';
@@ -30,10 +30,10 @@ import { Reputation } from '../Reputation';
 import { CON_COLOR, conLevel, personStrength, playerStrength } from '../Consider';
 import { crimeIndex, SETTING_MAX, type CrimeSetting } from './CrimeIndex';
 import { CrimeDirector, type CrimeRoll } from './CrimeDirector';
-import { Crime, CRIME_DEV, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
-import { Snatch } from './Snatch';
-import { Mugging } from './Mugging';
+import { Crime, CRIME_DEV, GROUP_KINDS, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
 import { Robbery } from './Robbery';
+import { Tagging, TAGGING } from './Tagging';
+import { KINDS } from './kinds';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
 import { Firearms, GUNS, MUZZLE_Y, gunJ, type GunSpec } from './Firearms';
@@ -44,28 +44,24 @@ import type { Target } from '../Targeting';
 import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
-import { planFactions, inSentence, type Faction, type FactionMap } from '../factions/Factions';
+import { planFactions, inSentence, shift, saveFactions, restoreFactions, SHIFT, type Faction, type FactionMap } from '../factions/Factions';
+import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES } from '../factions/archetypes';
 import { factionOutfit } from '../factions/outfits';
 
+/** Rewards common to every kind (the per-kind ones are in crime/kinds). */
 export const CRIME_KARMA = {
-  ko: { snatch: 8, mugging: 10, robbery: 14 } as Record<CrimeKind, number>,
   surrender: 6,
-  resolved: { snatch: 10, mugging: 15, robbery: 25 } as Record<CrimeKind, number>,
-  resolvedRep: { snatch: 3, mugging: 4, robbery: 6 } as Record<CrimeKind, number>,
   cleanBonus: 0.25,
   returned: 8,
 };
 
-/** Map / compass descriptions of a crime in progress. */
-const CRIME_TITLE: Record<CrimeKind, string> = { snatch: 'Purse snatching — a thief on the run', mugging: 'A mugging — someone is being threatened', robbery: 'A robbery' };
 
 export const ACTOR_BUDGET = 40;
 const SETTING_KEY = 'scale.crime.setting';
 
 /** Names shown on the target frame for actors (the frame is the one place a role is named). */
 const ROLE_NAME: Record<string, string> = { police: 'Police officer', shopkeeper: 'Shopkeeper', soldier: 'Soldier' };
-const CRIMINAL_NAME: Record<CrimeKind, string> = { snatch: 'Thief', mugging: 'Mugger', robbery: 'Robber' };
 
 const _v = new THREE.Vector3();
 
@@ -83,6 +79,10 @@ export class CrimeSystem {
   readonly index: Float32Array;
   /** The city's villain groups and their turf (VILLAINS_PLAN, Phase 1). */
   readonly factions: FactionMap;
+  /** Gang tags on the walls (factions/Graffiti). */
+  readonly graffiti: Graffiti;
+  /** Villain group results (saved with the turf): operations stopped, come off, tags finished, cells lost. */
+  factionStats: Record<string, number> = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0 };
   readonly hud: CrimeHud;
   /** Loot lying about or carried (outlives its crime for a while). */
   private loots: { loot: Loot; crime: Crime; obj: THREE.Group; glint: THREE.Sprite; endT: number }[] = [];
@@ -108,6 +108,8 @@ export class CrimeSystem {
     g.map.world.crimeIndex = this.index;
     this.factions = planFactions(g.macro, seed, this.index);
     g.map.setTurf(this.factions);
+    this.graffiti = new Graffiti((a) => this.factions.factions.find((f) => f.archetype === a) ?? null);
+    g.renderer.scene.add(this.graffiti.group);
     g.map.tiles.invalidate();
     this.combat = new Combat({
       knockDown: (a, fx, fz, power, cause) => g.reactions.knockDown(a, fx, fz, power, cause),
@@ -223,6 +225,7 @@ export class CrimeSystem {
     const info = g.powers.info;
     g.powers.info = () => `${info()} <span class="pw-rep">Reputation: <b>${this.rep.label()}</b> (${this.rep.value > 0 ? '+' : ''}${Math.round(this.rep.value)}) · crimes stopped ${this.rep.stats.stopped} · deeds ${this.rep.stats.deeds}</span>`;
     g.gate?.precompile?.(SmallDeeds.warmup());
+    if (this.factions.factions[0]) g.gate?.precompile?.(this.graffiti.warmup(this.factions.factions[0]));
   }
 
   // ================================================================== settings
@@ -255,6 +258,7 @@ export class CrimeSystem {
       callPolice: (c, delay) => this.police.call(c, delay),
       random: Math.random,
       shops: (rMin, rMax) => this.shops(rMin, rMax),
+      walls: (rMin, rMax) => this.shops(rMin, rMax, true),
       getaway: (x, z) => this.getaway(x, z),
       officers: (x, z, r) => this.officersAround(x, z, r),
       gunfire: (c, at) => this.crookShot(c, at),
@@ -373,12 +377,13 @@ export class CrimeSystem {
     return a;
   }
 
-  private shops(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
+  /** Shop entrances in a ring around the player (any building's door with `any`: walls to tag). */
+  private shops(rMin: number, rMax: number, any = false): { x: number; z: number; nx: number; nz: number }[] {
     const p = this.g.player.pos, W = this.g.world;
     const out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
     for (const r of W.buildingsIn(p.x - rMax, p.z - rMax, p.x + rMax, p.z + rMax)) {
       const d = r.desc;
-      if (!r.alive || !(d.shopfront || d.use === 'retail')) continue;
+      if (!r.alive || (!any && !(d.shopfront || d.use === 'retail'))) continue;
       const door = doorOf(d);
       const dist = Math.hypot(door.x - p.x, door.z - p.z);
       if (dist < rMin || dist > rMax) continue;
@@ -481,15 +486,51 @@ export class CrimeSystem {
       const act = a.actor;
       if (!act) continue;
       act.outfit = factionOutfit(f, a.cit.seed);
-      act.title = `${f.emblem} ${f.name} · ${CRIMINAL_NAME[c.kind]}`;
+      act.title = `${f.emblem} ${f.name} · ${KINDS[c.kind].criminal}`;
     }
   }
 
   /** The group behind a crime, or null. */
   factionOf(c: Crime): Faction | null { return c.faction < 0 ? null : this.factions.factions[c.faction] ?? null; }
 
+  /** A tagging crime's tag on the wall. */
+  private tagOf(c: Tagging, f: Faction): Tag {
+    const S = c.spot!;
+    return { x: S.x, y: S.y, z: S.z, nx: S.nx, nz: S.nz, archetype: f.archetype, seed: c.seed };
+  }
+
+  /** Move a group's turf at a crime's site; streets changing hands are redrawn and told. */
+  private turf(c: Crime, f: Faction, amount: number): void {
+    const changed = shift(this.factions, this.cellAt(c.x, c.z), f.id, amount);
+    if (!changed.length) return;
+    this.g.map.setTurf(this.factions);
+    const lost = changed.filter((x) => x.from === f.id).length, won = changed.filter((x) => x.to === f.id).length;
+    this.factionStats.lost += lost;
+    this.factionStats.gained += won;
+    const who = `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>`;
+    if (lost) this.g.powerHud.toast(`${who} lost their grip on ${lost > 1 ? `${lost} blocks` : 'a block'}`, 'info');
+    else if (won) this.g.powerHud.toast(`${who} took over ${won > 1 ? `${won} more blocks` : 'another block'}`, 'warn');
+  }
+
+  /** Turf and tags for a save (SaveData.factions). */
+  saveFactions(): { turf: unknown; tags: Tag[] } {
+    return { turf: saveFactions(this.factions, this.factionStats), tags: this.graffiti.tags.map((t) => ({ ...t })) };
+  }
+
+  /** Put saved turf and tags back (null: the seeded turf, no tags). */
+  restoreFactions(d: { turf: unknown; tags: unknown } | null): void {
+    const stats = restoreFactions(this.factions, d?.turf ?? null);
+    this.factionStats = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0, ...stats };
+    const tags = Array.isArray(d?.tags) ? (d!.tags as unknown[]).filter((t): t is Tag => {
+      const o = t as Tag;
+      return !!o && [o.x, o.y, o.z, o.nx, o.nz, o.seed].every(Number.isFinite) && typeof o.archetype === 'string';
+    }) : [];
+    this.graffiti.restore(tags);
+    this.g.map.setTurf(this.factions);
+  }
+
   private make(kind: CrimeKind, seed: number, near: { x: number; z: number } | null): Crime {
-    return kind === 'snatch' ? new Snatch(this.world, seed, near) : kind === 'mugging' ? new Mugging(this.world, seed, near) : new Robbery(this.world, seed, near);
+    return KINDS[kind].make(this.world, seed, near);
   }
 
   private startRoll(r: CrimeRoll): boolean {
@@ -500,7 +541,10 @@ export class CrimeSystem {
 
   private begin(c: Crime, faction?: Faction | null): boolean {
     if (!c.setup()) { c.abort(); c.dispose(); return false; }
-    const f = faction === undefined ? this.factionAt(c.x, c.z) : faction;
+    // The group whose turf it is (a group-only kind just outside it: the player's cell's group).
+    const p = this.g.player.pos, own = GROUP_KINDS.includes(c.kind);
+    const f = faction === undefined ? this.factionAt(c.x, c.z) ?? (own ? this.factionAt(p.x, p.z) : null) : faction;
+    if (!f && own) { c.abort(); c.dispose(); return false; }
     if (f) this.enlist(c, f);
     this.crimes.push(c);
     this.stats.started++;
@@ -541,6 +585,12 @@ export class CrimeSystem {
       c.update(dt);
       for (const e of c.events) this.onEvent(e.type, c, e.who);
       c.events.length = 0;
+      // A tag in progress fades in on the wall; an interrupted one goes.
+      if (c instanceof Tagging && c.spot && !c.done) {
+        const f = this.factionOf(c);
+        if (f && c.phase === 'commit') this.graffiti.paint(c.id, this.tagOf(c, f), c.progress / TAGGING.paintFor);
+        else if (c.phase !== 'approach') this.graffiti.drop(c.id);
+      }
       if (!c.active) {
         // The victim waits a while for the stolen things (lying in the street or with the player).
         const l = c.loot;
@@ -638,32 +688,49 @@ export class CrimeSystem {
           c.playerInvolved = true;
           this.stats.kos++;
           this.rep.count('kos');
-          g.progress.addKarma(CRIME_KARMA.ko[c.kind], `knocked out a ${CRIMINAL_NAME[c.kind].toLowerCase()}`);
+          g.progress.addKarma(KINDS[c.kind].ko, `knocked out a ${KINDS[c.kind].criminal.toLowerCase()}`);
           this.rep.add(2, 'ko');
         }
         break;
       case 'surrender':
         if (who && near(who) < 8) {
           c.playerInvolved = true;
-          g.progress.addKarma(CRIME_KARMA.surrender, `a ${CRIMINAL_NAME[c.kind].toLowerCase()} gave up`);
+          g.progress.addKarma(CRIME_KARMA.surrender, `a ${KINDS[c.kind].criminal.toLowerCase()} gave up`);
           this.rep.add(1, 'surrender');
         }
         break;
       case 'arrest':
         this.rep.count('arrests');
         break;
+      case 'tagged': {
+        const f = this.factionOf(c);
+        if (f && c instanceof Tagging) {
+          this.graffiti.finish(c.id, this.tagOf(c, f));
+          this.factionStats.tags++;
+          this.turf(c, f, SHIFT.tag);
+        }
+        break;
+      }
+      case 'failed': {
+        // An operation came off: the group's hold on the street grows.
+        const f = this.factionOf(c);
+        if (f && c.outcome === 'escaped') { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
+        break;
+      }
       case 'resolved':
         // Involved: a KO, a surrender in front of the player, or any blow the player landed on one
         // of them (a thief knocked down by the player and cuffed by the police counts).
         if (c.playerInvolved || c.criminals.some((a) => a.actor?.hitByPlayer)) {
           const clean = c.collateral === 0;
-          const k = Math.round(CRIME_KARMA.resolved[c.kind] * (clean ? 1 + CRIME_KARMA.cleanBonus : 1));
+          const k = Math.round(KINDS[c.kind].resolved * (clean ? 1 + CRIME_KARMA.cleanBonus : 1));
           const by = this.factionOf(c);
-          g.progress.addKarma(k, `stopped a ${c.kind === 'snatch' ? 'purse snatching' : c.kind === 'mugging' ? 'mugging' : 'robbery'}${by ? ` by ${inSentence(by)}` : ''}${clean ? ' — nobody else hurt' : ''}`);
-          this.rep.add(CRIME_KARMA.resolvedRep[c.kind], 'crime stopped');
+          g.progress.addKarma(k, `stopped ${KINDS[c.kind].stopped}${by ? ` by ${inSentence(by)}` : ''}${clean ? ' — nobody else hurt' : ''}`);
+          this.rep.add(KINDS[c.kind].rep, 'crime stopped');
           this.rep.count('stopped');
           this.justice.atone(1.5);
           this.cheer();
+          // Stopping a group's operation costs it ground.
+          if (by) { this.factionStats.stopped++; this.turf(c, by, SHIFT.stopped); }
         }
         break;
       default:
@@ -788,7 +855,7 @@ export class CrimeSystem {
     if (act) {
       const c = this.crimeOf(a);
       if (act.role === 'criminal' && c) {
-        name = act.title ?? CRIMINAL_NAME[c.kind];
+        name = act.title ?? KINDS[c.kind].criminal;
         friends = c.criminals.filter((o) => o !== a && o.alive && o.actor && o.actor.hostile && Math.hypot(o.x - a.x, o.z - a.z) < 15).length;
       } else name = act.title ?? ROLE_NAME[act.role];
       if (name) {
@@ -949,7 +1016,7 @@ export class CrimeSystem {
         const act = a.actor;
         if (!a.alive || !act || act.state === 'gone' || act.state === 'arrested') continue;
         const down = act.state === 'ko' || act.state === 'surrender';
-        list.push({ x: a.x, z: a.z, color, kind: down ? 'dot' : 'alert', title: down ? 'A criminal, stopped — the police will take over' : by + CRIME_TITLE[c.kind] });
+        list.push({ x: a.x, z: a.z, color, kind: down ? 'dot' : 'alert', title: down ? 'A criminal, stopped — the police will take over' : by + KINDS[c.kind].title });
       }
       if (c instanceof Robbery && c.phase === 'getaway' && c.car) list.push({ x: c.car.x, z: c.car.z, color, kind: 'alert', title: `${by}Getaway car — block it or stop it` });
     }
@@ -994,7 +1061,7 @@ export class CrimeSystem {
       /** The city's villain groups: name, kind, home cell, cells held; the one whose turf the player stands in. */
       factions: () => {
         const F = this.factions, p = g.player.pos, here = this.factionAt(p.x, p.z);
-        return { here: here?.name ?? null, groups: F.factions.map((f) => ({ id: f.id, name: f.name, archetype: f.archetype, colour: f.palette.name, emblem: f.emblem, home: f.home, cells: F.holder.filter((h) => h === f.id).length })) };
+        return { here: here?.name ?? null, stats: { ...this.factionStats }, tags: this.graffiti.tags.length, groups: F.factions.map((f) => ({ id: f.id, name: f.name, archetype: f.archetype, colour: f.palette.name, emblem: f.emblem, home: f.home, cells: F.holder.filter((h) => h === f.id).length })) };
       },
       crimes: () => this.crimes.map((c) => c.snapshot()),
       crimeStats: () => ({ ...this.stats, actors: this.actorCount, director: this.director.stats, police: this.police.summary(), wanted: this.justice.wanted, heat: +this.justice.heat.toFixed(2), rep: this.rep.value, hp: Math.round(this.health.hp), combat: this.combat.stats }),

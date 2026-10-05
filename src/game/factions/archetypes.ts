@@ -49,7 +49,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: 1,
     dense: 0,
     reach: 0.42,
-    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8 },
+    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5 },
     palettes: [
       { name: 'red', map: '#e5484d', primary: [0.62, 0.08, 0.08], accent: [0.85, 0.12, 0.1] },
       { name: 'purple', map: '#9b5de5', primary: [0.32, 0.12, 0.5], accent: [0.55, 0.25, 0.85] },
@@ -69,7 +69,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: -0.6,
     dense: 1.5,
     reach: 0.34,
-    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6 },
+    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0 },
     palettes: [
       { name: 'gold', map: '#d4a72c', primary: [0.07, 0.07, 0.08], accent: [0.85, 0.66, 0.18] },
       { name: 'emerald', map: '#0f9d63', primary: [0.06, 0.08, 0.07], accent: [0.08, 0.55, 0.32] },

@@ -383,8 +383,13 @@ every frame) owns the parts and draws what belongs to them.
   the group's operations (`groupWeights`: the gang mugs, the Syndicate robs); a crime whose site lies in a group's turf
   is its operation (`Crime.faction`): members wear its uniform (`factionOutfit`), the target frame names the group, the
   map marks it in the group's colour, the karma line says who was stopped. Turf is a map layer ("Turf": tint per cell,
-  dashed borders from shared arterial edges) with the groups in the legend. Static for now: drift, saves and the
-  player's effect on turf come next. `dev.factions()`, `dev.crime(kind, dist, factionId)`.
+  dashed borders from shared arterial edges) with the groups in the legend. `dev.factions()`, `dev.crime(kind, dist, factionId)`.
+  Part 2: group-only kinds (`GROUP_KINDS`: `Racket`, a Mugging with the shopkeeper as the victim; `Tagging`, paint at a
+  wall beside a door for `TAGGING.paintFor` s, emits `tagged`) roll only in held cells, falling back to the player
+  cell's group or aborting. Results move turf (`shift`: −0.14 when the player stops one, +0.05 when one gets away,
+  +0.04 per tag, half as much next door via `FactionMap.near`); holder changes redraw the map and toast. Finished tags
+  (`Graffiti`, one canvas texture per group, newest `TAGS.max`) and turf as deltas from the seeded influence
+  (`saveFactions`, hundredths) go in saves (`SaveData.factions`, save v4). Crime kinds are one table (`crime/kinds.ts`).
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a
