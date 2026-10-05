@@ -487,6 +487,34 @@ every frame (`prof.threats`).
   Omens (`robotOmen`): glitching robots, a drone dropping out of its lane, screens tearing (`Signs.glitch`).
   Rewards: a machine the player disabled 5 karma (service robot 8) +0.5 rep, +3 when it was going for someone,
   20 karma +4 rep and cheers when it is stopped with the player's help (≥ 2 machines).
+* **The brood** (`Brood.ts`, archetype `brood`, minor; Phase C): a swarm of small creatures out of the sewers.
+  `brood/BroodSim.ts` is the pure simulation (no three.js, no Game; deterministic, tested in `selftest.ts`), stepped at
+  a fixed 15 Hz and interpolated for drawing: the creatures (≤ 150; skitters 1.1 m, 1 hp, and one brute 2.4 m, 6 hp
+  per 25) wait in the sewer and leap out of up to three manholes near the site (`findHoles`; a drain at the kerb when
+  there is none) in a stream; boids on a 2.5 m grid (separation by body size, a little alignment and cohesion, a
+  burst-and-pause gait); each goes for the nearest prey within 18 m that is not covered yet (≤ 5 on a person, 8 on the
+  player, 10 on a car, 4 on a robot; brutes prefer cars), else for the swarm's goal (the busiest spot round about,
+  or the player once they have killed a few) at its own offset in the carpet, never beyond a 120 m leash. A skitter
+  running into a facade may climb it (`BroodWorld.wall`: a building taller than it is): up to a seeded height, cling,
+  drop off — or over the edge onto a roof ≤ 14 m up; the others slide along. Bites (`Brood.bite`): people knocked
+  down (cause `threat`), the player 4 hp (brute 10, one per 0.6 s), cars gnawed to a standstill and rolled over after
+  9 gnaws (a brute's bite counts 4), robots chewed apart. Hits (`BroodSim.hit` / `damage`, effect and hit points):
+  `Game.strike` (punches and blasts, J / 150 hp, flung), and through `PowerWorld.swarm` → `ThreatDirector.broodHit`
+  every power: fire wave (slabs as the front passes), laser heat, frost nova (frozen; the next blow shatters),
+  chain lightning (side arcs at every bolt point, then the chain jumps on from creature to creature), seismic stomp,
+  whirlwind, hydrokinesis, a giant's footsteps; police rounds (dmg / 20) and batons through `targetsNear` / `strike`
+  / `shoot` (`engageOnFoot`). Killed ones are flung, lie curled on their backs and fade after 5 s (no gore). It ends
+  when all are dead or ≤ 12 % are left (stopped), after 5 min (retreated) or with the player 700 m away for 30 s;
+  leaving, the rest run for the nearest hole (or slip into a drain after 20 s). One instanced mesh for every swarm
+  (`brood/broodMesh.ts`, `threats.broodMesh`: a three-part body, spines, mandibles, glowing eyes, six legs in a
+  tripod gait in the vertex shader; up a wall it faces up; frozen ones turn icy; warmed at start). Sounds
+  (`tools/synthBrood.mjs`): `brood_chitter` (a loop at the creature nearest the camera, louder with more out),
+  `brood_screech`, `brood_bite`. Omens (`broodOmen`): `chitter` — a manhole near the player rattles, dust and a
+  chittering from below, a small `tremor`; `glimpse` — three creatures (`BroodGlimpse`, a tiny BroodSim) dart out of
+  one manhole and down another across the street. Rewards: 1 karma a small one, 5 + 0.5 rep a brute, +2 for one that
+  was on someone (every 4 s at most), 20 karma +4 rep and cheers when it is stopped with ≥ 8 kills by the player.
+  Dev: `dev.threat.spawn('brood', { count: 150, brutes, dist })`, `dev.threat.brood.status() / .hit(effect, r, dmg) /
+  .leave() / .player(dist)`, `dev.threat.omen('chitter' | 'glimpse')`; admin console "City events".
 * **City response** (`ResponseDirector`, levels 0–2 of the ladder, per incident): 0 — three patrol cars with sirens
   (`Police.respond(IncidentJob)`: the job says where, how many get out, what they do there, when to go), a police
   drone; officers hold a line facing it and wave people back. 1 (after 30 s with > 45 % of it still in action, or 8
