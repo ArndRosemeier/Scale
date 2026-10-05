@@ -55,6 +55,7 @@ import * as THREE from 'three';
 import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
 import { intersection } from '../src/core/clip';
 import { readFileSync, existsSync } from 'node:fs';
+import { rescueAllowed, pickHospital, hospitalFit, planFlight, flightAt, wardInside, wardExit, hospitalName, WARD, type HospitalCandidate } from '../src/game/defeat/rules';
 
 let failures = 0;
 const check = (ok: boolean, msg: string) => {
@@ -2503,6 +2504,32 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   }
   check(badElem === 0 && unnamed === 0, `wrecks: every triangle of the near meshes is a piece, the far ones agree (${badElem} out of range, ${unnamed} unnamed)`);
   console.log(`wrecks: ${results.join(', ')} pieces in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Defeat: the rescue needs reputation 0+, the hospital is a fitting block (the same ones every
+// time, never the one beside the hero when another is near), the flight climbs over the roofs.
+{
+  check(rescueAllowed(0) && rescueAllowed(35) && !rescueAllowed(-0.1) && !rescueAllowed(-60), 'defeat: drones come at reputation 0 or better, not below');
+  const blocks: HospitalCandidate[] = [];
+  for (let i = 0; i < 400; i++) {
+    const a = i * 2.4, r = 30 + i * 3;
+    blocks.push({ id: i, x: Math.cos(a) * r, z: Math.sin(a) * r, base: 2, top: 2 + 10 + (i % 9) * 8, area: 300 + (i % 7) * 150, use: ['office', 'residential', 'civic', 'mixed', 'retail'][i % 5], roof: i % 4 === 3 ? 'gable' : 'flat', alive: i % 13 !== 0 });
+  }
+  const h1 = pickHospital(blocks, 0, 0, 77), h2 = pickHospital(blocks, 0, 0, 77), h3 = pickHospital(blocks, 0, 0, 78);
+  const fit = h1 >= 0 && hospitalFit(blocks[h1]);
+  const d1 = h1 >= 0 ? Math.hypot(blocks[h1].x, blocks[h1].z) : -1;
+  check(fit && h1 === h2 && d1 >= 50, `defeat: the hospital is a fitting block, the same every time, not next door (block ${h1} at ${d1.toFixed(0)} m; another seed: ${h3})`);
+  const lonely = pickHospital([{ id: 1, x: 10, z: 0, base: 0, top: 8, area: 90, use: 'residential', roof: 'gable', alive: true }], 0, 0, 1);
+  check(lonely === 0 && pickHospital([], 0, 0, 1) === -1, 'defeat: without a fitting block any standing building will do; none: no hospital');
+  const f = planFlight([0, 5, 0], [600, 42, 300], 120);
+  let maxY = -Infinity, okEnds = true;
+  const p: [number, number, number] = [0, 0, 0];
+  for (let t = 0; t <= f.dur; t += 0.05) { flightAt(f, t, p); maxY = Math.max(maxY, p[1]); }
+  flightAt(f, 0, p); okEnds &&= Math.hypot(p[0], p[1] - 5, p[2]) < 1e-6;
+  flightAt(f, f.dur, p); okEnds &&= Math.hypot(p[0] - 600, p[1] - 42, p[2] - 300) < 1e-6;
+  check(okEnds && maxY > 120 && f.dur >= 6 && f.dur <= 14, `defeat: the flight starts at the body, ends over the pad, clears the roofs (top ${maxY.toFixed(0)} m over 120, ${f.dur.toFixed(1)} s)`);
+  check(wardInside(0, 0) && !wardInside(WARD.hx + 0.5, 0) && wardExit(0, WARD.hz) && !wardExit(WARD.hx - 1, WARD.hz) && !wardExit(0, WARD.pod.z), 'defeat: the ward has an inside and a way out through the doors only');
+  check(hospitalName(5) === hospitalName(5) && hospitalName(5).length > 4, `defeat: the city's hospital has a name (${hospitalName(5)})`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

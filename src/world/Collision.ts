@@ -53,6 +53,13 @@ export class Collision {
   /** Extra walkable surfaces (ice-path sheets): top height at (x, z) not above yRef + step, or -Infinity. */
   extraGround: ((x: number, z: number, yRef: number, step: number) => number) | null = null;
 
+  /**
+   * A sealed room off the map (the hospital's revival ward, game/defeat/HospitalWard): inside it
+   * its own floor and ceiling count, nothing of the city above; it counts as underground (no water,
+   * no sky). Its walls and furniture come through an obstacle provider. Null: none open.
+   */
+  room: { inside(x: number, y: number, z: number): boolean; floorAt(x: number, y: number, z: number): number | null; ceiling: number } | null = null;
+
   /** Underground volumes (metro, sewers) - supplied by the game. */
   under: {
     floorAt(x: number, y: number, z: number): number | null;
@@ -110,17 +117,20 @@ export class Collision {
 
   /** Feet at (x, y, z) inside an underground volume, below the ground (water above does not reach them). */
   underground(x: number, y: number, z: number): boolean {
+    if (this.room?.inside(x, y, z)) return true;
     return !!this.under && y < this.world.terrain.height(x, z) - 1.0 && this.under.contains(x, y + 0.3, z, 0);
   }
 
   /** Ceiling over (x, z) for a body at y (underground halls and tunnels; Infinity in the open). */
   ceilingAt(x: number, z: number, y: number): number {
+    if (this.room?.inside(x, y, z)) return this.room.ceiling;
     if (!this.under || y > this.world.terrain.height(x, z) - 1.0) return Infinity;
     return this.under.ceilingAt(x, y + 0.3, z);
   }
 
   /** Highest walkable surface under (x,z) not above yRef + step. */
   groundAt(x: number, z: number, yRef: number, step: number): number {
+    if (this.room) { const f = this.room.floorAt(x, yRef, z); if (f !== null) return f; }
     let g = this.world.terrain.height(x, z) + this.world.surfaceOffset(x, z);
     if (this.under) {
       const uf = this.under.floorAt(x, yRef + 0.3, z);

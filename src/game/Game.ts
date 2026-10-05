@@ -98,6 +98,8 @@ import { HostilePlayer } from './threats/PlayerRampage';
 import { SaveSystem } from './save/SaveSystem';
 import type { SaveData } from './save/model';
 import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
+import { Defeat } from './defeat/Defeat';
+import { MedFleet } from './defeat/MedDrones';
 
 export class Game {
   readonly renderer: Renderer;
@@ -187,6 +189,8 @@ export class Game {
   intro: OriginIntro | null = null;
   /** Saves: autosave, named saves, loading (src/game/save). */
   saves!: SaveSystem;
+  /** Defeated: the rescue drones, the hospital's revival ward, or game over (src/game/defeat). */
+  defeat!: Defeat;
   /** A save to put into the city once it has started (set before `start`, by main.ts). */
   pendingSave: SaveData | null = null;
   /** Where to stream in and put the player (a loaded save's spot; default: the main centre). */
@@ -342,6 +346,7 @@ export class Game {
     // Indoors the camera collides with the shell, interior walls and floors instead of building prisms.
     this.camRig.solidAt = (x, y, z) => {
       const p = this.player;
+      if (this.defeat?.inWard) return !this.defeat.ward.cameraFree(x, y, z);
       if (this.camRig.underground) return !this.underground.cameraFree(x, y, z, 0.12);
       const inside = this.interiors.insideAt(p.pos.x, p.pos.y + p.height * 0.5, p.pos.z);
       if (inside) return this.interiors.solidIndoors(inside, x, y, z);
@@ -462,6 +467,11 @@ export class Game {
     this.menu = new Menu(this);
     this.setupPowers();
     installDevtools(this);
+    this.defeat = new Defeat(this);
+    {
+      const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
+      if (dev) dev.defeat = { status: () => this.defeat.status(), down: (kind?: Parameters<Defeat['down']>[0]) => this.defeat.down(kind), rep: (v: number) => { this.crime.rep.add(v - this.crime.rep.value, 'dev'); return this.crime.rep.value; } };
+    }
     this.saves = new SaveSystem(this);
     new PauseSaves(this);
     new SaveIndicator(this);
@@ -480,7 +490,7 @@ export class Game {
     progress('Preparing shaders', 0.97);
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
-      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
@@ -493,6 +503,8 @@ export class Game {
     this.gate.precompile(this.props.warmupObject());
     this.gate.precompile(this.countryside.warmupObject());
     this.gate.precompile(this.rural.warmupObject());
+    this.gate.precompile(MedFleet.warmupObject());
+    this.gate.precompile(this.defeat.ward.warmupObject());
     void this.intro?.play();
   }
 
@@ -571,11 +583,14 @@ export class Game {
     this.T('player', () => {
       if (this.intro?.active) this.intro.update(dt);
       else if (this.freeCam) this.updateFreeCam(dt);
+      else if (this.defeat.drives) { /* the defeat's scene moves the body and the camera (below) */ }
       else {
         this.abilities.enabled = !this.powers.open && !this.map.open;
         this.abilities.preUpdate(dt, this.input);
+        this.defeat.gate();
         this.player.update(dt, this.input, this.camRig.yaw, this.camRig.pitch);
-        this.camRig.underground = this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z);
+        this.defeat.afterPlayer();
+        this.camRig.underground = this.defeat.inWard || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z);
         this.camRig.update(dt, this.player, this.input);
         // In-world panels (elevator buttons) get the click first when the crosshair is on one in reach.
         const hand = _hand.copy(this.player.pos); hand.y += this.player.height * 0.6;
@@ -586,6 +601,9 @@ export class Game {
         this.interactions.update(dt, this.input, this.clock.getElapsed());
       }
     });
+    if (!this.intro?.active && !this.freeCam) this.T('defeat', () => this.defeat.update(dt));
+    // (The ward lies deep under the hospital: lit, heard and seen like the underground.)
+    if (this.defeat.inWard) this.camRig.underground = true;
     this.stimuli.update(dt);
     this.simT += dt;
     const readyCells = [...this.streamer.cells.values()].filter((c) => c.status === 'ready');
@@ -1125,20 +1143,22 @@ export class Game {
     const altFade = 1 - smoothstep(30, 400, alt);
     const speed = p.flying ? p.vel.length() / Math.sqrt(p.k) : 0;
     const wind = p.flying ? clamp(speed / 60, 0.08, 1) : clamp(alt / 300, 0, 0.4);
-    const ug = this.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z);
+    const ward = !!this.defeat?.inWard;
+    const ug = !ward && this.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z);
     const inStation = ug && this.underground.boxes.some((b) => b.kind === 'station' && Math.hypot(b.cx - p.pos.x, b.cz - p.pos.z) < b.hu + 5);
-    const surf = ug ? 0.08 : 1;
+    const surf = ug ? 0.08 : ward ? 0 : 1;
     // Weather: rain (light / heavy) and gusts, muffled indoors and underground; a wet city is quieter.
     const W = this.weather.p, rain = W.rain;
-    const shut = (1 - 0.75 * this.sky.indoor) * (ug ? 0.05 : 1);
+    const shut = (1 - 0.75 * this.sky.indoor) * (ug ? 0.05 : ward ? 0 : 1);
     const quiet = 1 - 0.3 * smoothstep(0.1, 0.7, rain);
     this.audio.setAmbience({
       amb_sewer: ug && !inStation ? 0.9 : 0,
       amb_metro: inStation ? 0.9 : 0,
       amb_city_day: (1 - night) * 0.9 * altFade * surf * quiet,
       amb_city_night: night * 0.9 * altFade * surf * quiet,
-      amb_river: nearWater * 0.8,
-      amb_sea: nearSea * 0.8,
+      amb_river: ward ? 0 : nearWater * 0.8,
+      amb_sea: ward ? 0 : nearSea * 0.8,
+      amb_interior: ward ? 0.55 : 0,
       amb_wind_flight: wind,
       amb_rain_light: clamp(rain * 4, 0, 1) * (1 - smoothstep(0.35, 0.8, rain) * 0.6) * shut,
       amb_rain_heavy: smoothstep(0.25, 0.85, rain) * shut,
