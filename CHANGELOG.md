@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.046 — 2026-10-05
+
+- **No more falling out of the caves**: a hard fall or a knock-down underground (slime colonies, the deep caves, sewers, metro) used to throw your body onto the street above, often into a house, before you were snapped back. Underground you now just go down on the spot and get up again where you fell.
+
 ## 0.045 — 2026-10-05
 
 - **Walk into the cathedral**: the west doors stand open and lead into a full interior.

@@ -144,6 +144,11 @@ export interface RagdollDeps {
   groundAt: (x: number, y: number, z: number) => number;
   /** Cars on the road and parked (physical wrecks excluded): tumbling bodies hit them. */
   cars?: () => Iterable<CarBox>;
+  /**
+   * Feet at (x, y, z) underground (metro, sewers, colonies, the deep caves)? The physics only has
+   * the street there: a body would be lifted onto the street above (into a house) or fall through.
+   */
+  underground?: (x: number, y: number, z: number) => boolean;
 }
 
 /** A car as a box: the car itself (identity), base centre on the road, yaw (forward = −sin, −cos), size. */
@@ -204,6 +209,8 @@ export class RagdollSystem {
     if (e && e.phase !== Phase.Tumble) e = this.wake(e);
     if (!e) e = this.create(target, 0, 0, 0);
     if (!e) {
+      // The player without a ragdoll (underground): the knock-down animation on the spot.
+      if (!ped) { const P = this.d.player; if (!P.flying) P.downT = Math.max(P.downT, o.lie ?? 1.6); }
       // Fallback: the old ballistic knock-down.
       if (ped && (o.velocity || o.impulse)) {
         const m = 72;
@@ -434,6 +441,8 @@ export class RagdollSystem {
   private create(target: RagTarget, vx: number, vy: number, vz: number): Entry | null {
     const ped = this.isPed(target) ? target : null;
     if (ped?.inside) return null;
+    const u = this.d.underground, pl = this.d.player.pos;
+    if (u && (ped ? u(ped.x, ped.y, ped.z) : u(pl.x, pl.y, pl.z))) return null;
     if (!this.makeRoom(!ped)) return null;
     const P = this.d.physics;
     if (!P.world) return null;
