@@ -660,6 +660,8 @@ function stepUnit(u: ForceUnit, q: Squad, mon: MonsterView, path: PathView, dt: 
     // Waiting for the truck to fetch them.
     if (!truck) { u.task = 'hold'; return; }
     if (Math.hypot(truck.x - u.x, truck.z - u.z) < 30) { u.mounted = true; u.task = 'inbound'; ops.event?.(q, 'mount', u); return; }
+    // (A target that goes where it likes: a truck that does not come for them in time — they go on foot.)
+    if (mon.mode === 'rampage' && u.taskT > 30) { u.task = 'inbound'; u.taskT = 0; }
   }
   // Holding (or waiting): fire when it is in reach.
   u.cool -= dt;

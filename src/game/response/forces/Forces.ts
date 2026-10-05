@@ -52,6 +52,7 @@ import type { Incident } from '../ResponseDirector';
 import {
   ARMY, FORCE, aimedVolley, hurtUnit, land, levelSquads, makeSquad, makeUnit, pathAt, pickZone, regroup, simulateBattle, stepForces, volley,
   type ForceKind, type ForceOps, type ForceUnit, type MonsterSpec, type MonsterView, type PathView, type Squad,
+  type ZoneView,
 } from './BattleModel';
 import { ArmyFx } from './ArmyFx';
 import { Aircraft } from './Aircraft';
@@ -131,7 +132,7 @@ export class Forces {
   private devDone = false;
   private idle = true;
   readonly log: { t: number; what: string }[] = [];
-  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, heldBy: {} as Record<string, number>, reslots: 0, breaches: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
+  stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, heldBy: {} as Record<string, number>, reslots: 0, breaches: 0, suppress: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
   /** Stage 3: the battle is over (the monster defeated or driven off by the army, or it got away). */
   onOutcome: ((o: { outcome: string; byArmy: boolean; lost: Record<string, number> }) => void) | null = null;
   /** The army's target is a rampaging giant player (threats/PlayerRampage: HostilePlayer sets it). */
@@ -681,7 +682,6 @@ export class Forces {
       blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
       this.stats.rays++;
     }
-    const dx = ax - o.x, dy = ay - o.y, dz = az - o.z, L = Math.hypot(dx, dy, dz) || 1;
     // No line of sight from here, volley after volley: shift along the line to another spot.
     const nb = blocked ? (this.blockedN.get(u.id) ?? 0) + 1 : 0;
     this.blockedN.set(u.id, nb);
@@ -689,11 +689,23 @@ export class Forces {
     // (A tank with a building between it and a giant player: it shoots its way through — the shell
     // blasts the facade in front, and the hole it leaves may give it its line next time.)
     if (blocked && S.chased && u.kind === 'tank' && b.car) return this.breachShot(u, b.car, mz, ax, ay, az);
+    // (Rifles and APCs against a giant player with no clear line: fire over the roofs at the head
+    // anyway — the battle model's rule for units out of sight, a hit by chance, never a weak spot.)
+    if (blocked && S.chased && (u.kind === 'rifles' || u.kind === 'apc') && high) {
+      this.stats.suppress++;
+      aimZ = high; ax = high.x; ay = high.y + high.r * 0.5; az = high.z;
+      return this.volleyFx(u, q, b, o, ax, ay, az, volley(this.rng, W, dist, q.morale, [high], false).map((h) => ({ zone: h.zone, dmg: h.dmg * 0.6 })));
+    }
     if (blocked) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.cool = Math.min(u.cool, 1.5); return true; }
     if (u.kind === 'tank') return this.tankShot(u, q, b.car!, mz, aimZ, dist, { x: ax, y: ay, z: az });
+    return this.volleyFx(u, q, b, o, ax, ay, az, aimedVolley(this.rng, W, dist, q.morale, S.zones));
+  }
+
+  /** A rifle / APC volley: the hits land; bursts with tracers, flashes, sparks on the hide. */
+  private volleyFx(u: ForceUnit, q: Squad, b: Body, o: { x: number; y: number; z: number }, ax: number, ay: number, az: number, hits: { zone: ZoneView; dmg: number }[]): boolean {
+    const dx = ax - o.x, dy = ay - o.y, dz = az - o.z, L = Math.hypot(dx, dy, dz) || 1;
     q.fired++;
     this.stats.volleys++;
-    const hits = aimedVolley(this.rng, W, dist, q.morale, S.zones);
     const crewK = u.kind === 'rifles' ? u.crew / FORCE.rifles.crew : 1;
     for (const h of hits) if (crewK >= 1 || this.rng.chance(crewK)) land(u, q, this.view!, h.zone, h.dmg, () => {});
     // What it looks like: bursts with tracers (every third round lights up), flashes, sparks on the hide.
@@ -717,7 +729,7 @@ export class Forces {
       this.g.audio.play('army_rifle', o.x, o.y, o.z, 0.85, 0.95 + this.rng.float() * 0.1, 14, cam);
     } else {
       // APC autocannon: heavy tracers in a quick string.
-      for (let k = 0; k < W.shots; k++) {
+      for (let k = 0; k < FORCE[u.kind].weapon!.shots; k++) {
         const e = endFor(k);
         this.fx.tracer(o.x, o.y, o.z, e.x, e.y, e.z, 900, 10, 0.2, 3.5, 1.6, 0.4, k * 0.15);
       }
