@@ -12,7 +12,42 @@ import { chaikin, resample } from '../core/geom2';
 import { smoothstep, clamp, lerp } from '../core/math';
 import type { WorldProfile } from './settings';
 import { makeBoundary, terrainExtent } from './boundary';
-import { pickAirfield, AIRFIELD_BLEND, type Airfield } from './airfield';
+import { pickAirfield, airfieldEdge, AIRFIELD_BLEND, type Airfield } from './airfield';
+
+/**
+ * A countryside lake: a lobed, stretched blob with a level surface, carved into the terrain
+ * (a gently shelving bowl inside, a shore band blending out into the land around it).
+ */
+export interface Lake {
+  x: number;
+  z: number;
+  /** Mean radius (m) along the long axis. */
+  r: number;
+  /** Long axis angle and aspect (long / short, ≥ 1). */
+  angle: number;
+  aspect: number;
+  /** Shore lobes: amplitude, phase per harmonic 2, 3, 5, 8. */
+  lobes: number[];
+  /** Water level (absolute y). */
+  level: number;
+  /** Depth at the middle below the level (m). */
+  depth: number;
+  /** Width of the shore band where the land blends down to the water (m). */
+  shore: number;
+  /** Bounding radius of the lake and its shore band. */
+  reach: number;
+}
+
+export interface LakeQuery {
+  /** Lake index (-1 none). */
+  lake: number;
+  /** Signed distance to the shoreline (m, negative on the water). */
+  e: number;
+  level: number;
+}
+
+const LAKE_CELL = 1024;
+const LAKE_HARM = [2, 3, 5, 8];
 
 export interface River {
   /** Centerline, resampled ~12 m. */
@@ -91,6 +126,9 @@ export class Terrain {
    */
   airfield: Airfield | null = null;
   private afReach = 0;
+  /** Countryside lakes (beyond the protected zone and its blend band). */
+  readonly lakes: Lake[] = [];
+  private lakeHash = new Map<number, number[]>();
 
   constructor(profile: WorldProfile, countryRivers = true) {
     this.profile = profile;
@@ -107,6 +145,110 @@ export class Terrain {
     this.buildIndex();
     const af = pickAirfield(this);
     if (af) { this.afReach = Math.hypot(af.hu, af.hv) + AIRFIELD_BLEND; this.airfield = af; }
+    if (countryRivers) this.pickLakes();
+  }
+
+  // ------------------------------------------------------------------ lakes
+
+  /**
+   * Lakes out in the country: on a jittered grid, where the land is open and fairly level, away
+   * from the city (beyond the blend band, so its terrain stays bit for bit the same), the rivers,
+   * the coast, the airfield and each other. The level sits just below the lowest point of the rim.
+   */
+  private pickLakes(): void {
+    const p = this.profile;
+    const rng = new Rng(deriveSeed(p.seed, 'lakes'));
+    const G = 3400, W = this.worldExtent;
+    const n = Math.floor(W / G);
+    const rim: number[] = [];
+    for (let j = -n; j < n; j++) for (let i = -n; i < n; i++) {
+      const r = rng.fork(i, j);
+      if (!r.chance(0.5)) continue;
+      const x = (i + r.range(0.15, 0.85)) * G, z = (j + r.range(0.15, 0.85)) * G;
+      const big = r.chance(0.15);
+      const rad = big ? r.range(420, 780) : 90 + 330 * r.float() * r.float();
+      // Never round: stretched, with bays and points (no lobe set left near zero).
+      const aspect = r.range(1.25, big ? 2.3 : 1.9), angle = r.range(0, Math.PI);
+      const lobes = LAKE_HARM.flatMap((_, k) => [r.range(0.07, 0.17) / (k + 1), r.range(0, Math.PI * 2)]);
+      const reach = rad * 1.45 + 60 + rad * 0.3;
+      if (Math.hypot(x, z) < this.protectR + BLEND_BAND + reach + 300) continue;
+      if (Math.max(Math.abs(x), Math.abs(z)) > W - reach - 1500) continue;
+      if (p.coastal && this.coastDistance(x, z) < reach + 500) continue;
+      this.sampleRaster(x, z, this.rtmp);
+      if (this.rtmp[0] - this.rtmp[2] < reach + 220) continue;
+      const af = this.airfield;
+      if (af && airfieldEdge(af, x, z) < reach + 300) continue;
+      if (this.lakes.some((L) => Math.hypot(L.x - x, L.z - z) < L.reach + reach + 300)) continue;
+      // Rim: fairly level all round, no hill in the middle.
+      rim.length = 0;
+      const c = Math.cos(angle), s = Math.sin(angle);
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        const rr = this.lakeRadius({ r: rad, lobes } as Lake, a) * 1.12;
+        const u = Math.cos(a) * rr, v = (Math.sin(a) * rr) / aspect;
+        rim.push(this.height(x + u * c - v * s, z + u * s + v * c));
+      }
+      const lo = Math.min(...rim), hi = Math.max(...rim);
+      if (hi - lo > 5 + rad * 0.025) continue;
+      const level = lo - 0.9;
+      if (this.height(x, z) > level + 14) continue;
+      const lake: Lake = { x, z, r: rad, angle, aspect, lobes, level, depth: 2.5 + rad * 0.014, shore: 45 + rad * 0.3, reach };
+      const k = this.lakes.length;
+      this.lakes.push(lake);
+      for (let cx = Math.floor((x - reach) / LAKE_CELL); cx <= Math.floor((x + reach) / LAKE_CELL); cx++) {
+        for (let cz = Math.floor((z - reach) / LAKE_CELL); cz <= Math.floor((z + reach) / LAKE_CELL); cz++) {
+          const key = (cx + 32768) * 65536 + (cz + 32768);
+          let b = this.lakeHash.get(key);
+          if (!b) this.lakeHash.set(key, (b = []));
+          b.push(k);
+        }
+      }
+    }
+  }
+
+  /** Shoreline radius of a lake in its stretched frame at angle a. */
+  private lakeRadius(L: Lake, a: number): number {
+    let f = 1;
+    for (let k = 0; k < LAKE_HARM.length; k++) f += L.lobes[k * 2] * Math.cos(LAKE_HARM[k] * a + L.lobes[k * 2 + 1]);
+    return L.r * f;
+  }
+
+  private lq: LakeQuery = { lake: -1, e: Infinity, level: 0 };
+
+  /** Nearest lake shore at (x, z) (within a lake's reach; lake -1 and e Infinity elsewhere). */
+  lakeAt(x: number, z: number, out: LakeQuery = this.lq): LakeQuery {
+    out.lake = -1;
+    out.e = Infinity;
+    if (!this.lakes.length) return out;
+    const b = this.lakeHash.get((Math.floor(x / LAKE_CELL) + 32768) * 65536 + (Math.floor(z / LAKE_CELL) + 32768));
+    if (!b) return out;
+    for (const k of b) {
+      const L = this.lakes[k];
+      const dx = x - L.x, dz = z - L.z;
+      if (dx * dx + dz * dz > L.reach * L.reach) continue;
+      const c = Math.cos(L.angle), s = Math.sin(L.angle);
+      const u = dx * c + dz * s, v = (-dx * s + dz * c) * L.aspect;
+      const d = Math.hypot(u, v);
+      const rr = this.lakeRadius(L, Math.atan2(v, u));
+      // Distances in the stretched frame shrink by up to the aspect across the long axis.
+      const e = (d - rr) / (1 + (L.aspect - 1) * (Math.abs(v) / (d || 1)));
+      if (e < out.e) { out.e = e; out.lake = k; out.level = L.level; }
+    }
+    return out;
+  }
+
+  /** A lake's water outline (closed polygon, `margin` m beyond the shoreline). */
+  lakePolygon(k: number, margin = 3, n = 128): number[] {
+    const L = this.lakes[k];
+    const c = Math.cos(L.angle), s = Math.sin(L.angle);
+    const out: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const rr = this.lakeRadius(L, a);
+      const u = Math.cos(a) * (rr + margin), v = (Math.sin(a) * (rr + margin * L.aspect)) / L.aspect;
+      out.push(L.x + u * c - v * s, L.z + u * s + v * c);
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------- rivers
@@ -623,6 +765,21 @@ export class Terrain {
       h = lerp(shore + Math.max(0, c) * 0.004, h, land);
       if (c < 0) h = Math.min(h, shore - Math.min(28, -c * 0.06 + 1.5));
     }
+    // Lakes: a shelving bowl below the level, the shore band easing the land down to it.
+    if (this.lakes.length) {
+      const q = this.lakeAt(x, z);
+      if (q.lake >= 0) {
+        const L = this.lakes[q.lake];
+        if (q.e < L.shore) {
+          // (The terrain mesh is drawn TERRAIN_DROP lower: the drawn shore meets the water a few metres in.)
+          const top = L.level + 0.5;
+          // Inside, the bed drops off from the shoreline at once (no flat lip the water would
+          // cross in jagged steps on the coarse far terrain), then levels out.
+          const t = Math.min(1, -q.e / clamp(L.r * 0.3, 12, 90));
+          h = q.e >= 0 ? lerp(top, h, smoothstep(0, L.shore, q.e)) : top - (0.5 + L.depth) * t * (2 - t);
+        }
+      }
+    }
     // The airfield: level, with an embankment band blending into the natural ground.
     const af = this.airfield;
     if (af && Math.abs(x - af.x) < this.afReach && Math.abs(z - af.z) < this.afReach) {
@@ -640,6 +797,8 @@ export class Terrain {
     if (p.coastal && this.coastDistance(x, z) < 0) return 0;
     const w = this.water(x, z);
     if (w.river >= 0 && w.d < w.halfWidth + 0.5) return w.level;
+    const q = this.lakeAt(x, z);
+    if (q.lake >= 0 && q.e < 3 && this.height(x, z) < q.level) return q.level;
     return -Infinity;
   }
 
@@ -648,7 +807,8 @@ export class Terrain {
     const p = this.profile;
     if (p.coastal && this.coastDistance(x, z) < margin) return true;
     const w = this.water(x, z);
-    return w.river >= 0 && w.d < w.halfWidth + margin;
+    if (w.river >= 0 && w.d < w.halfWidth + margin) return true;
+    return this.lakeAt(x, z).e < margin;
   }
 
   /** Gradient magnitude (slope) by central differences. */

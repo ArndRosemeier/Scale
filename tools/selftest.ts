@@ -22,6 +22,8 @@ import { metroInput } from './metroaudit';
 import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
+import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
+import { buildRuralTile } from '../src/build/rural';
 import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
@@ -370,6 +372,63 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   console.log(`seed ${seed} countryside: ${tA.rivers.length - tA.baseRivers} countryside rivers, ${trees} trees checked in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
+// Countryside settlements (world/rural): deterministic; villages joined to the city's arterial ring by
+// country roads that keep off the water and the city; houses, barns and churches dry, apart, off the
+// roads; garden and forest trees never on a road or a building; lakes carved below their level.
+for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
+  const t0 = performance.now();
+  const p = makeProfile({ seed, size });
+  const T = new Terrain(p), macro = buildMacroPlan(T);
+  const land = new LandUse(T), plan = new RuralPlan(T, land, macro);
+  land.settle = plan;
+  const T2 = new Terrain(makeProfile({ seed, size }));
+  const plan2 = new RuralPlan(T2, new LandUse(T2), buildMacroPlan(T2));
+  check(hashPlan(plan.settlements) === hashPlan(plan2.settlements) && hashPlan(plan.roads) === hashPlan(plan2.roads), `rural seed ${seed}: plan deterministic`);
+  const villages = plan.settlements.filter((s) => s.kind !== SettleKind.Farm);
+  check(villages.length >= 10 && plan.settlements.length - villages.length >= 20, `rural seed ${seed}: villages (${villages.length}) and farms (${plan.settlements.length - villages.length})`);
+  check(villages.every((v) => v.roads.length > 0), `rural seed ${seed}: every village has a road`);
+  check(plan.roads.some((R) => R.trim > 0), `rural seed ${seed}: country roads leave the city`);
+  let wet = 0, inCity = 0;
+  for (const R of plan.roads) for (let i = 0; i < R.pts.length; i += 2) {
+    if (T.isWater(R.pts[i], R.pts[i + 1], R.hw)) wet++;
+    if (Math.hypot(R.pts[i] - R.pts[0], R.pts[i + 1] - R.pts[1]) > 450 && land.edge(R.pts[i], R.pts[i + 1]) < 30) inCity++;
+  }
+  check(wet === 0 && inCity === 0, `rural seed ${seed}: roads dry (${wet}) and out of the city (${inCity})`);
+  let nb = 0, bad = 0, overlap = 0;
+  for (const s of plan.settlements) {
+    const L = plan.layout(s.id);
+    check(hashPlan(L) === hashPlan(plan2.layout(s.id)), `rural seed ${seed} settlement ${s.id}: layout deterministic`);
+    const B = L.boxes;
+    for (let o = 0; o < B.length; o += BOX_STRIDE) {
+      nb++;
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const x = B[o] + B[o + 4] * B[o + 2] * a - B[o + 5] * B[o + 3] * b, z = B[o + 1] + B[o + 5] * B[o + 2] * a + B[o + 4] * B[o + 3] * b;
+        if (T.isWater(x, z, 0) || plan.roadEdge(x, z) < 0.5) bad++;
+      }
+      for (let q = o + BOX_STRIDE; q < B.length; q += BOX_STRIDE) if (Math.hypot(B[q] - B[o], B[q + 1] - B[o + 1]) < Math.min(B[o + 2], B[o + 3], B[q + 2], B[q + 3])) overlap++;
+    }
+    check(L.buildings.length === B.length / BOX_STRIDE && L.buildings.every((b) => b.poly.length === 8 && b.floors >= 1), `rural seed ${seed} settlement ${s.id}: buildings valid`);
+  }
+  check(nb > 300 && bad === 0 && overlap === 0, `rural seed ${seed}: ${nb} buildings dry and off the roads (${bad}), apart (${overlap})`);
+  // Trees around a town: never on its roads or buildings.
+  const town = villages.find((v) => v.kind === SettleKind.Town) ?? villages[0];
+  const fg = new ForestGen(land, macro);
+  let onRoad = 0, trees = 0;
+  for (const [dx, dz] of [[-256, -256], [0, -256], [-256, 0], [0, 0]]) {
+    const R = fg.tile(Math.floor((town.x + dx) / 256) * 256, Math.floor((town.z + dz) / 256) * 256, 256);
+    for (let o = 0; o < R.length; o += FOREST_STRIDE) { trees++; if (plan.roadEdge(R[o], R[o + 2]) < 1 || plan.onBuilding(R[o], R[o + 2], 1)) onRoad++; }
+  }
+  check(trees > 20 && onRoad === 0, `rural seed ${seed}: ${trees} trees round ${town.name}, none on a road or building (${onRoad})`);
+  // Lakes: water below the level in the middle, dry land at the shore band's edge.
+  for (const [k, L] of T.lakes.entries()) {
+    const ok = T.waterLevel(L.x, L.z) === L.level && T.height(L.x, L.z) < L.level - 1 && T.lakeAt(L.x, L.z).lake === k;
+    check(ok, `rural seed ${seed}: lake ${k} holds water`);
+  }
+  const tile = buildRuralTile(plan, T, Math.floor(town.x / 1024) * 1024, Math.floor(town.z / 1024) * 1024, 1024);
+  check(!!tile.ground && !!tile.facade && tile.obstacles.length > 0, `rural seed ${seed}: the town's tile has roads, buildings and collision boxes`);
+  console.log(`seed ${seed} rural: ${villages.length} villages, ${plan.settlements.length - villages.length} farms, ${plan.roads.length} roads, ${nb} buildings, ${T.lakes.length} lakes in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
 // ---- powers: every rank has truthful text, super speed outruns flight, old saves migrate
 {
   const { ABILITIES, LEGACY_IDS } = await import('../src/game/abilities/defs');
@@ -504,6 +563,59 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   check(crime.phase === 'resolved' && crime.outcome === 'arrested' && thief.actor!.state === 'arrested', `snatch: arrested, resolved (${crime.phase}, ${crime.outcome})`);
   check(events.join(',') === 'commit,ko,arrest,resolved' && policeCalls === 1, `snatch events ${events.join(',')}, police called ${policeCalls} times`);
   check(phases.join('>') === 'approach>escape>subdued>resolved', `snatch phases ${phases.join(' > ')}`);
+  // Group operations (VILLAINS_PLAN P1 part 2) with the same mocked world plus shop doors: a racket
+  // leans on the shopkeeper and walks off with the cash; a tagger paints the tag and it stays, or
+  // runs when the hero comes close and the tag is never finished.
+  {
+    const { Racket } = await import('../src/game/crime/Racket');
+    const { Tagging, TAGGING } = await import('../src/game/crime/Tagging');
+    const { attach } = await import('../src/sim/actors/Actor');
+    const doors = [{ x: 180, z: 40, nx: 0, nz: 1 }, { x: 200, z: 40, nx: 0, nz: 1 }];
+    const w2 = Object.assign(Object.create(world) as typeof world, {
+      spawn: (seed: number, x: number, z: number, h: number, role: Parameters<typeof makeActor>[0]) => { const a = mk(seed, x, z, h, 2); attach(a, makeActor(role, -1)); return a; },
+      shops: () => doors,
+    });
+    const drive = (c: import('../src/game/crime/Crime').Crime, until: () => boolean, max: number, ev: string[]) => {
+      for (let i = 0; i < max && !until(); i++) {
+        time += 0.05;
+        for (const a of agents) {
+          const act = a.actor;
+          if (!a.alive || !act) continue;
+          act.stateT += 0.05; act.attackT -= 0.05; act.replanT -= 0.05;
+          const g = act.goal;
+          if (g) { const dx = g.x - a.x, dz = g.z - a.z, d = Math.hypot(dx, dz); const s = Math.min(d, act.speed * 0.05); if (d > 1e-6) { a.x += (dx / d) * s; a.z += (dz / d) * s; } }
+        }
+        c.update(0.05);
+        for (const e of c.events) ev.push(e.type);
+        c.events.length = 0;
+      }
+    };
+    player.x = 0; player.z = 0;
+    const racket = new Racket(w2, 777);
+    check(racket.setup() && racket.kind === 'racket' && racket.victim?.actor?.role === 'shopkeeper' && racket.loot?.kind === 'cash', `racket: a shopkeeper at the door is the victim, the loot is cash (${racket.victim?.actor?.role}, ${racket.loot?.kind})`);
+    check(racket.criminals.length >= 1 && racket.criminals.length <= 2, `racket: one or two collectors (${racket.criminals.length})`);
+    const rEv: string[] = [];
+    drive(racket, () => racket.phase === 'escape' || racket.phase === 'aborted', 2400, rEv);
+    check(racket.phase === 'escape' && racket.loot?.carrier === racket.criminals[0], `racket: they take the envelope and walk off (${racket.phase}, events ${rEv.join(',')})`);
+
+    const tag = new Tagging(w2, 4242);
+    check(tag.setup() && !!tag.spot && tag.kind === 'tagging', 'tagging: setup finds a wall beside a door and a tagger');
+    const tEv: string[] = [];
+    drive(tag, () => tag.phase !== 'approach', 2400, tEv);
+    check(tag.phase === 'commit', `tagging: the tagger reaches the wall and starts painting (${tag.phase})`);
+    drive(tag, () => tag.done, Math.ceil((TAGGING.paintFor + 1) / 0.05), tEv);
+    check(tag.done && tag.phase === 'escape' && tEv.includes('tagged') && tag.progress >= TAGGING.paintFor, `tagging: left alone the tag is finished (${tEv.join(',')})`);
+
+    const tag2 = new Tagging(w2, 99);
+    check(tag2.setup(), 'tagging: a second tagger');
+    const t2Ev: string[] = [];
+    drive(tag2, () => tag2.phase !== 'approach', 2400, t2Ev);
+    drive(tag2, () => tag2.progress > 3, 200, t2Ev);
+    player.x = tag2.tagger!.x + 3; player.z = tag2.tagger!.z + 3;
+    drive(tag2, () => false, Math.ceil(TAGGING.paintFor / 0.05), t2Ev);
+    check(!tag2.done && !t2Ev.includes('tagged') && tag2.playerInvolved && tag2.phase !== 'commit', `tagging: the hero comes close, the tag is abandoned (${tag2.phase}, ${t2Ev.join(',')})`);
+    player.x = 0; player.z = 0;
+  }
   console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
@@ -513,7 +625,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
 {
   const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
   const { planHour } = await import('../src/game/crime/CrimeDirector');
-  const { planFactions, HOLD } = await import('../src/game/factions/Factions');
+  const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions } = await import('../src/game/factions/Factions');
   const { ARCHETYPES } = await import('../src/game/factions/archetypes');
   const { factionOutfit } = await import('../src/game/factions/outfits');
   const t0 = performance.now();
@@ -536,11 +648,33 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     check(F.holder.every((h, i) => h < 0 || F.influence[h][i] >= HOLD), `seed ${seed}: every holder reaches the hold threshold`);
     const syn = F.factions.find((f) => f.archetype === 'syndicate')!, gang = F.factions.find((f) => f.archetype === 'gang')!;
     check(['downtown', 'commercial', 'oldtown'].includes(macro.cells[syn.home].district), `the Syndicate sits in the centre (${macro.cells[syn.home].district})`);
-    const robs = (ops: Record<'snatch' | 'mugging' | 'robbery', number> | null) => Array.from({ length: 24 }, (_, h) => planHour(seed, 2, h, syn.home, 0.6, 'commercial', 'chaos', 45, ops)).flat().filter((r) => r.kind === 'robbery').length;
+    const robs = (ops: Record<import('../src/game/crime/Crime').CrimeKind, number> | null) => Array.from({ length: 24 }, (_, h) => planHour(seed, 2, h, syn.home, 0.6, 'commercial', 'chaos', 45, ops)).flat().filter((r) => r.kind === 'robbery').length;
     check(robs(ARCHETYPES.syndicate.kinds) > robs(null) && robs(null) >= robs(ARCHETYPES.gang.kinds), `operations: the Syndicate robs more (${robs(ARCHETYPES.syndicate.kinds)} vs ${robs(null)} vs gang ${robs(ARCHETYPES.gang.kinds)} a day)`);
     const suit = factionOutfit(syn, 99), hood = factionOutfit(gang, 99);
     check(suit.back?.defId === 'suitjacket' && JSON.stringify(suit) === JSON.stringify(factionOutfit(syn, 99)), 'Syndicate members wear suits (deterministic)');
     check(!!hood.head && JSON.stringify(hood.head.visual.primary) === JSON.stringify(gang.palette.accent), 'gang members wear a cap in their colour');
+    // Part 2: group operations only in a group's turf; the gang rackets and tags, the Syndicate doesn't.
+    const day = (ops: Record<import('../src/game/crime/Crime').CrimeKind, number> | null, cell: number) => Array.from({ length: 24 }, (_, h) => planHour(seed, 3, h, cell, 0.7, 'apartments', 'chaos', 45, ops)).flat();
+    const anon = day(null, 1).concat(day(null, 2));
+    check(!anon.some((r) => r.kind === 'racket' || r.kind === 'tagging'), `nobody's turf: no rackets or tags (${anon.length} rolls)`);
+    const gangDay = day(ARCHETYPES.gang.kinds, gang.home), synDay = day(ARCHETYPES.syndicate.kinds, syn.home);
+    check(gangDay.some((r) => r.kind === 'racket') && gangDay.some((r) => r.kind === 'tagging'), `gang turf: rackets and tags (${gangDay.map((r) => r.kind).join(',')})`);
+    check(!synDay.some((r) => r.kind === 'racket' || r.kind === 'tagging'), 'Syndicate turf: no rackets or tags');
+    // Turf shifts: stopping the gang at home again and again loosens its grip (the cell and next door), then a save brings it back.
+    const before = saveFactions(F);
+    check(before.groups.every((g) => g.cells.length === 0), 'untouched turf saves nothing');
+    const flips: { cell: number; from: number; to: number }[] = [];
+    for (let k = 0; k < 12 && F.holder[gang.home] === gang.id; k++) flips.push(...shift(F, gang.home, gang.id, SHIFT.stopped));
+    check(F.holder[gang.home] !== gang.id && flips.some((x) => x.cell === gang.home && x.from === gang.id), `stopping the gang loses it its home block (${flips.length} flips)`);
+    check(F.near[gang.home].some((n) => F.influence[gang.id][n] < F.base[gang.id][n]), 'and loosens its grip next door');
+    const saved = JSON.parse(JSON.stringify(saveFactions(F, { stopped: 12 })));
+    const H = planFactions(macro, seed, idx);
+    const st = restoreFactions(H, saved);
+    check(st.stopped === 12 && H.holder.every((h, i) => h === F.holder[i]) && H.influence.every((I, f) => I.every((v, i) => Math.abs(v - F.influence[f][i]) < 0.006)), 'turf and stats survive a save');
+    restoreFactions(H, null);
+    check(H.holder.every((h, i) => h === G.holder[i]), 'no saved turf: the seeded one');
+    const grow = shift(G, gang.home, gang.id, SHIFT.tag);
+    check(grow.length === 0 && G.influence[gang.id][gang.home] <= SHIFT.max, 'a tag at home strengthens the hold without flipping it');
   }
   check(names.size >= 5, `group names vary with the seed (${[...names].join(', ')})`);
   console.log(`factions: ${[...names].join(' · ')} in ${(performance.now() - t0).toFixed(0)} ms`);
@@ -1461,6 +1595,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
       memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
     },
     slimes: { trust: { v: 42.5, gifts: [0, 2], marks: ['heart'] }, war: { v: 1, murk: 0.5, lumen: 0.625, front: 0.25, at: 130.5, nextRaid: 133, mawBack: 0, raid: null, captives: [2, 4, 0], nextBreach: 150, stats: { won: 3, lost: 1, kills: 12, freed: 4, maw: 0, breaches: 0 } } },
+    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }] },
   };
   const back = parseSave(serializeSave(full));
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
@@ -1479,6 +1614,11 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   v2.v = 2; delete v2.slimes;
   const up2 = parseSave(v2);
   check(up2.v === SAVE_VERSION && up2.slimes === null && up2.aftermath !== null, `saves: a version-2 save migrates (slimes ${JSON.stringify(up2.slimes)})`);
+  // A version-3 save (before the villain groups): migrates with the seeded turf and no tags.
+  const v3 = JSON.parse(serializeSave(full)) as Record<string, unknown>;
+  v3.v = 3; delete v3.factions;
+  const up3 = parseSave(v3);
+  check(up3.v === SAVE_VERSION && up3.factions === null && up3.slimes !== null, `saves: a version-3 save migrates (factions ${JSON.stringify(up3.factions)})`);
   // The aftermath is sanitised: garbage rows dropped, counts whole and ≥ 0, the level-5 countdown never comes back (level ≤ 4).
   const junk = parseSave({ ...JSON.parse(serializeSave(full)), aftermath: { ledger: { evacuated: -5, injured: 'x', trapped: 2.7 }, zones: [[1, 2, 3], 'z', [1, 2, 3, NaN], [5, 6, 7, 8]], news: { kind: 7 } }, threats: { ...full.threats, strider: { s: 10, hp: 50, mode: 'rampage', level: 5 } } });
   check(junk.aftermath!.ledger.evacuated === 0 && junk.aftermath!.ledger.injured === 0 && junk.aftermath!.ledger.trapped === 2 && junk.aftermath!.zones.length === 1 && junk.aftermath!.news === null && junk.aftermath!.smoke.length === 0 && junk.threats.strider!.level === 4,

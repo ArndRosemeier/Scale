@@ -2,12 +2,26 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.028 — 2026-10-05
+## 0.030 — 2026-10-05
 
 - **The army comes for you**: a giant on a rampage with a bad reputation is now treated like a monster. First a warning (a siren, the screens around you turn to the red alert, a police drone overhead, an officer shouting up at you), then a final warning, then the whole response: police and SWAT firing from a distance, cordons and evacuation sirens, the National Guard, tanks, attack helicopters, jets and artillery — and, rarely, the tactical nuke countdown, aimed at you.
 - **Ending it**: stop wrecking things for a while, or shrink back to human size, and the army stands down — but once it has been called it keeps after you for four minutes at least, so the Guard and the tanks get there and fight. Get knocked out and you are taken into custody. Start again soon after and the army comes back without new warnings.
 - **Tanks, APCs and infantry fight too**: ground units close in on you (tanks to about 500 m, APCs to 350 m, infantry to 250 m) and follow you when you walk off, pick spots with a clear view of you, don't park behind each other, aim at whatever part of you they can see and move to a better spot when they lose sight of you. While the army is after you, your health comes back much more slowly. Soldiers no longer get knocked over by their own side's shells.
 - **Fighting back** works: stomp tanks and trucks, knock soldiers down, punch helicopters out of the sky. The news drone films you on the city's screens.
+
+## 0.029 — 2026-10-05
+
+- **Villain groups, second step**: the street gang now runs its own rackets. Its collectors lean on shopkeepers in their doorways for protection money, and **taggers** spray the gang's emblem and name on walls (with a hiss of the can and a lookout now and then). Both happen only in the gang's turf.
+- **Tags stay on the walls** when nobody stops them; caught in the act, the tagger runs and the half-done tag is never finished.
+- **Your work changes the map**: stopping a group's crimes loosens its grip on that block and the ones next to it, until it loses them ("… lost their grip on a block"). Crimes that come off and fresh tags let it grow back and take over new streets.
+- Turf, the tags on the walls and the groups' tallies are kept in **saves**. Older saves load with the city's starting turf.
+
+## 0.028 — 2026-10-05
+
+- **The countryside is lived in**: hamlets, villages and small towns now dot the land around the city — houses along their streets in the local building style, a church with a spire on the village square, shops round the square in the towns, gardens with trees.
+- **Farmsteads** out in the fields: farmhouse, barns and sheds round an earth or gravel yard, a dirt track to the road, some with an orchard.
+- **Country roads** lead out of the city and link the villages, with a dashed centre line; village lanes and side streets; roads cut through the forests.
+- **Lakes** in the open country, with shores and groups of trees round them — you can swim in them.
 
 ## 0.027 — 2026-10-05
 

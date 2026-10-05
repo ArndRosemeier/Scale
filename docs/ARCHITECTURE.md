@@ -277,7 +277,7 @@ Special buildings, planned with the macro plan (`MacroPlan.landmarks`, ~10 ms) a
   full map, tooltip, compass within ~1.3 km); the map square reaches out to the airport.
 * Debug: `npx tsx tools/celldump.ts <seed> <size> out.png 600 landmark:<kind>`.
 
-### Countryside (`src/world/landuse`, `src/build/forest`, `src/stream/Countryside`)
+### Countryside (`src/world/landuse`, `src/world/rural`, `src/build/forest`, `src/build/rural`, `src/stream/Countryside`, `src/stream/Rural`)
 The land beyond the city is a global, seed-driven layer, built to sit between several cities later.
 * **Rivers** (`Terrain.extendRivers`): the city's rivers continue as meandering countryside rivers to
   the edge of the streamed world (same gradient and width at the junction), plus a few streams joining
@@ -299,6 +299,33 @@ The land beyond the city is a global, seed-driven layer, built to sit between se
   tree models (full ≤ 75 m, shadows ≤ 45 m, far hulls ≤ ~330 m), every other tile is one or two instanced
   meshes of low-poly canopy clumps (a constant count per tile; in big tiles each clump is a patch of forest)
   out to 11 km. Trunks near the player are obstacles. Budget: ~10–25 MB, ≤ 0.1 ms/frame on average.
+* **Lakes** (`Terrain.pickLakes`, `lakeAt`, `lakePolygon`): on a jittered 3.4 km grid, where the land is open and
+  fairly level, beyond the protected zone and its blend band (the city's terrain stays bit for bit the same), away
+  from rivers, coast, airfield and each other; a lobed, stretched blob whose level sits just under the lowest point
+  of its rim. `height` carves a shelving bowl inside and eases the land down to the water in a shore band;
+  `waterLevel` / `isWater` know them (swimming), the water tiles draw them, the land use treats the shore as a bank
+  (bank trees in groups round them).
+* **Settlements and roads** (`world/rural` `RuralPlan`, built in every worker at init from the terrain, the land use
+  and the macro plan, ~0.1 s; then attached as `LandUse.settle`): hamlets, villages and small towns on a jittered
+  2.3 km grid (open, fairly level, dry, ≥ 900 m beyond the city edge); country roads from the city's outer ring
+  (gate nodes: nothing of the city just beyond them; the road leaves radially, then wanders to its village) and
+  between villages (nearest neighbours, shortest first, planar — no crossing without a junction —, distinct
+  angles at each end, never through the water, the city, the airfield or another village); village lanes as
+  spokes from the square plus side lanes in a fishbone; farmsteads on an 820 m grid in the fields (a gravel yard
+  aligned with the parcels, its gate facing a dirt track to the nearest road; an orchard beside some).
+  `layout(id)` lays out a settlement lazily as ordinary `BuildingDesc`s: houses along every street (denser and
+  taller in the core; style from the city's architectural flavour: timber / oldstone / mediterranean / house,
+  shop fronts in town cores, barns at the edge), a church with a spired tower on the square, farmhouse, barn and
+  sheds round the yard; all boxes dry, fairly level, off the roads and apart. The land use reads it back: fields
+  and forest give way to the built-up strip along the streets, yards and orchards, forest to road corridors.
+* **Rural tiles** (`build/rural`, worker job `rural`, `stream/Rural`): fixed 1 km tiles out to 7 km; road ribbons
+  draped on the terrain (asphalt with a dashed centre line outside villages, lighter lanes, dirt tracks; three
+  vertices across), squares and yards, and the buildings of the settlements centred in the tile drawn by the
+  city's building shells (near: the shell within ~420 m, else LOD1; ~160 / 80 triangles a house) in one shared
+  facade material without destruction state; their boxes block the player. Roads show within 5 km.
+  `ForestGen` keeps trees off roads, squares, yards and buildings, adds garden trees in villages and orchard rows.
+* Debug: `npx tsx tools/ruraldump.ts <seed> <size> out.png [width] [cx] [cz]`; in game `dev.rural.list(kind)`,
+  `dev.rural.look(id)`, `dev.rural.lakes()`, `dev.rural.stats()`.
 
 ### Near future (`src/future`)
 The city is a believable near future (PLAYGROUND_PLAN §0, decision 16). `NearFuture` owns it; the game
@@ -383,8 +410,13 @@ every frame) owns the parts and draws what belongs to them.
   the group's operations (`groupWeights`: the gang mugs, the Syndicate robs); a crime whose site lies in a group's turf
   is its operation (`Crime.faction`): members wear its uniform (`factionOutfit`), the target frame names the group, the
   map marks it in the group's colour, the karma line says who was stopped. Turf is a map layer ("Turf": tint per cell,
-  dashed borders from shared arterial edges) with the groups in the legend. Static for now: drift, saves and the
-  player's effect on turf come next. `dev.factions()`, `dev.crime(kind, dist, factionId)`.
+  dashed borders from shared arterial edges) with the groups in the legend. `dev.factions()`, `dev.crime(kind, dist, factionId)`.
+  Part 2: group-only kinds (`GROUP_KINDS`: `Racket`, a Mugging with the shopkeeper as the victim; `Tagging`, paint at a
+  wall beside a door for `TAGGING.paintFor` s, emits `tagged`) roll only in held cells, falling back to the player
+  cell's group or aborting. Results move turf (`shift`: −0.14 when the player stops one, +0.05 when one gets away,
+  +0.04 per tag, half as much next door via `FactionMap.near`); holder changes redraw the map and toast. Finished tags
+  (`Graffiti`, one canvas texture per group, newest `TAGS.max`) and turf as deltas from the seeded influence
+  (`saveFactions`, hundredths) go in saves (`SaveData.factions`, save v4). Crime kinds are one table (`crime/kinds.ts`).
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a

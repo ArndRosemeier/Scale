@@ -15,7 +15,7 @@
 import { deriveSeed, hashToFloat, hash32 } from '../../core/rng';
 import type { District } from '../../plan/types';
 import { crimesPerMinute, SETTING_MAX, type CrimeSetting } from './CrimeIndex';
-import type { CrimeKind } from './Crime';
+import { GROUP_KINDS, type CrimeKind } from './Crime';
 
 export const DIRECTOR = { tick: 4, cooldown: { off: 0, calm: 60, normal: 25, chaos: 6 } as Record<CrimeSetting, number>, minGap: 20 };
 
@@ -33,13 +33,19 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     snatch: (busy ? 1.4 : 0.8) * (night ? 0.35 : 1),
     mugging: (rough ? 1.2 : 0.5) * (night ? 2.5 : evening ? 1.4 : 0.6),
     robbery: shopsOpen ? (busy ? 0.55 : d === 'apartments' || d === 'rowhouses' ? 0.35 : 0.2) : 0.08,
+    // Group operations (only where a group holds the cell, see groupWeights).
+    racket: shopsOpen ? (busy || d === 'apartments' || d === 'rowhouses' ? 0.5 : 0.3) : 0.04,
+    tagging: (night ? 0.7 : evening ? 0.5 : 0.25) * (rough ? 1.2 : 0.8),
   };
 }
 
-/** The district's mix weighted by a group's operations (null: nobody's turf, the mix as is). */
+/**
+ * The district's mix weighted by a group's operations; in nobody's turf (null) the group-only kinds
+ * (racket, tagging) drop out and the rest stays as it is.
+ */
 export function groupWeights(w: Record<CrimeKind, number>, ops: Record<CrimeKind, number> | null): Record<CrimeKind, number> {
-  if (!ops) return w;
   const out = { ...w };
+  if (!ops) { for (const k of GROUP_KINDS) out[k] = 0; return out; }
   for (const k of Object.keys(out) as CrimeKind[]) out[k] *= ops[k] ?? 1;
   return out;
 }

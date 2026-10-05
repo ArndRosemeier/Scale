@@ -17,6 +17,7 @@ import { smoothstep } from '../core/math';
 import { makeBoundary, boundaryAt } from './boundary';
 import type { Terrain, WaterQuery } from './terrain';
 import { airfieldEdge } from './airfield';
+import type { RuralPlan } from './rural';
 
 export interface LandSample {
   /** Countryside weight: 0 in the city … 1 out in the country. */
@@ -146,6 +147,11 @@ export class LandUse {
   private noise: Noise;
   private boundary: number[];
   private wq: WaterQuery = { d: Infinity, s: 0, river: -1, halfWidth: 0, level: 0 };
+  /**
+   * Villages, farms and roads (world/rural), attached once planned (the plan reads this land use
+   * without them): fields and forest give way to them.
+   */
+  settle: RuralPlan | null = null;
 
   constructor(readonly terrain: Terrain) {
     const p = terrain.profile;
@@ -172,9 +178,13 @@ export class LandUse {
     const n = this.noise;
     // River banks: green strip, no fields, a ragged forest edge.
     const w = this.terrain.water(x, z, this.wq);
-    const dw = w.river >= 0 ? w.d - w.halfWidth : Infinity;
+    const dr = w.river >= 0 ? w.d - w.halfWidth : Infinity;
+    // Lake shores count as banks too, with a narrower green strip (a wide one reads as a dark ring).
+    const lq = this.terrain.lakeAt(x, z);
+    const dl = lq.lake >= 0 ? Math.max(0, lq.e) : Infinity;
+    const dw = Math.min(dr, dl);
     out.water = dw;
-    out.bank = 1 - smoothstep(4, 35, dw);
+    out.bank = Math.max(1 - smoothstep(4, 35, dr), 1 - smoothstep(2, 12, dl));
     // Forest: large warped patches, preferring slopes, thinning towards the city.
     const wx = x + 650 * n.n2(x / 4100, z / 4100), wz = z + 650 * n.n2(x / 4100 + 19.3, z / 4100 - 7.1);
     let f = n.fbm2(wx / 2300, wz / 2300, 4) * 0.5 + 0.5;
@@ -188,7 +198,14 @@ export class LandUse {
     const coast = this.terrain.profile.coastal ? smoothstep(60, 170, this.terrain.coastDistance(x, z)) : 1;
     const ring = smoothstep(80, 450, e);
     const farm = smoothstep(0.26, 0.4, n.fbm2(x / 3100 + 50.7, z / 3100 - 3.3, 3) * 0.5 + 0.5);
-    const field = (1 - forest) * flat * dry * coast * ring * farm;
+    let field = (1 - forest) * flat * dry * coast * ring * farm;
+    // Villages, yards and orchards clear the land; roads cut through forests and run between fields.
+    const S = this.settle;
+    if (S) {
+      const c = S.clearing(x, z), re = S.roadEdge(x, z);
+      forest *= (1 - c) * smoothstep(2.5, 9, re);
+      field *= (1 - c) * smoothstep(0.5, 3, re);
+    }
     forest = Math.max(0, Math.min(1, forest));
     out.forest = forest;
     out.field = field;

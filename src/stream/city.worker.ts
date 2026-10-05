@@ -13,7 +13,7 @@ import { MeshBuilder, meshTransferables, type MeshData } from '../build/meshBuil
 import { buildBuildingShell, facadeSpecs } from '../build/buildingShell';
 import { buildTerrainTile, buildWaterTile } from '../build/terrainMesh';
 import { riverChunks, seaPolygon } from '../plan/water';
-import { polyCentroid } from '../core/geom2';
+import { polyCentroid, polyBounds } from '../core/geom2';
 import { BINFO_STRIDE, SKY_STRIDE, MapItem, type FromWorker, type ToWorker } from './protocol';
 import { minAreaRect } from '../core/geom2';
 import { buildingBase, buildingHeight } from '../build/buildingLayout';
@@ -21,6 +21,8 @@ import { buildBridges } from '../build/bridges';
 import { buildLandmarkMesh } from '../build/landmarks';
 import { LandUse } from '../world/landuse';
 import { ForestGen } from '../build/forest';
+import { RuralPlan } from '../world/rural';
+import { buildRuralTile } from '../build/rural';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -28,6 +30,7 @@ let terrain: Terrain | null = null;
 let macro: MacroPlan | null = null;
 let water: ReturnType<typeof riverChunks> | null = null;
 let sea: number[] | null = null;
+let lakes: { poly: number[]; bounds: number[] }[] = [];
 let land: LandUse | null = null;
 let forest: ForestGen | null = null;
 
@@ -43,9 +46,12 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       terrain = new Terrain(makeProfile(m.settings));
       macro = buildMacroPlan(terrain);
       land = new LandUse(terrain);
+      // Villages, farms and roads: planned from the land use, then clearing it.
+      land.settle = new RuralPlan(terrain, land, macro);
       water = riverChunks(terrain, 0.0);
       // The sea surface reaches along the whole coast of the streamed world.
       sea = seaPolygon(terrain, 0, 40, terrain.worldExtent * 1.1);
+      lakes = terrain.lakes.map((_, k) => { const poly = terrain!.lakePolygon(k); return { poly, bounds: polyBounds(poly) }; });
       post({ type: 'ready', macro: m.sendMacro ? macro : undefined, ms: performance.now() - t0 });
       return;
     }
@@ -85,7 +91,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       return;
     }
     if (m.type === 'water') {
-      const mb = buildWaterTile(terrain, m.x0, m.z0, m.size, water!, sea);
+      const mb = buildWaterTile(terrain, m.x0, m.z0, m.size, water!, sea, lakes);
       const mesh: MeshData | null = mb ? mb.build() : null;
       post({ type: 'water', job: m.job, mesh }, mesh ? meshTransferables(mesh) : []);
       return;
@@ -94,6 +100,13 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       forest ??= new ForestGen(land!, macro);
       const trees = forest.tile(m.x0, m.z0, m.size);
       post({ type: 'forest', job: m.job, trees }, [trees.buffer]);
+      return;
+    }
+    if (m.type === 'rural') {
+      const t = buildRuralTile(land!.settle!, terrain, m.x0, m.z0, m.size);
+      const ground = t.ground?.build() ?? null, facade = t.facade?.build() ?? null, facadeLod = t.facadeLod?.build() ?? null;
+      const transfer = [...(ground ? meshTransferables(ground) : []), ...(facade ? meshTransferables(facade) : []), ...(facadeLod ? meshTransferables(facadeLod) : []), t.obstacles.buffer];
+      post({ type: 'rural', job: m.job, ground, facade, facadeLod, obstacles: t.obstacles }, transfer as Transferable[]);
       return;
     }
     if (m.type === 'skyline') {

@@ -960,6 +960,14 @@
     "gain": 0.6,
     "description": "a coin dropped into a hat or guitar case (procedural, tools/synthStreet.mjs)"
   },
+  "spray_hiss": {
+    "files": [
+      "spray_hiss.wav"
+    ],
+    "loop": false,
+    "gain": 0.55,
+    "description": "spray can: a rattle and three bursts of hiss (procedural, tools/synthFactions.mjs)"
+  },
   "brood_chitter": {
     "files": [
       "brood_chitter.wav"
