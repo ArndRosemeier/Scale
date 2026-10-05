@@ -2,6 +2,20 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.049 — 2026-10-05
+
+- **Being defeated is a real moment now.** When your health runs out you no longer just get up where you fell (where a swarm could knock you down again and again). You lie there untouchable, the edge of the screen red, and:
+  - **with a reputation of 0 or better, the hospital sends its rescue drones**: three white drones with red crosses fly in, lock blue tractor beams onto you, lift you in a glowing stasis field and fly you over the city to the landing pad that lights up on the hospital's roof. Space skips ahead.
+  - **in the hospital's revival ward** you lie in a high-tech revival machine under a glass canopy: scanning rings sweep along your body, the vitals hologram climbs, your heart starts again, a surge and a white flash, the canopy opens and you stand up beside it with full health. Walk out through the sliding doors at the end of the ward and you are on the street in front of the hospital.
+  - **with a negative reputation nobody comes: game over.** Load the latest save, pick another save, or start a new game. Nothing is saved after a game over, so your saves stay as they were.
+- Every city has its own hospital (Helix Medical Center, Vitalis Medical Center, …) in some of its flat-roofed office and civic blocks; the drones take you to the nearest one. A giant hero shrinks back to normal size while lying there.
+- Knocked out again in the ward before leaving: straight back into the machine.
+- Being arrested by the police is unchanged. A save made on the way to the hospital or in the ward puts you outside the hospital, healed.
+
+## 0.048 — 2026-10-05
+
+- **No more ghost walls in the sewers**: the walls you could walk through down there were not houses but the edges of the ground itself. The landscape is drawn in square tiles, and each tile hangs a curtain a few metres deep along its edges to hide seams between near and far detail; wherever a tile edge crossed a tunnel, that curtain stood across it (smeared ground texture, which looked like wood). From underground these curtains are no longer drawn, in the sewers and the metro alike.
+
 ## 0.047 — 2026-10-05
 
 - **No more falling out of the caves**: a hard fall or a knock-down underground (slime colonies, the deep caves, sewers, metro) used to throw your body onto the street above, often into a house, before you were snapped back. Underground you now just go down on the spot and get up again where you fell.

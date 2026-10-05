@@ -74,11 +74,20 @@ if (uWet > 0.001) {
 }
 
 /** Natural terrain outside the urban surfaces. */
-/** Up to 16 street holes (metro entrances, open manholes) that the terrain must not cover. */
+/**
+ * Up to 16 street holes (metro entrances, open manholes) that the terrain must not cover, and
+ * whether the camera is below the ground (the tiles' skirts are hidden then: see uUnder).
+ */
 export const terrainHoles = {
   uHoleA: { value: Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, 1, 0)) },
   uHoleB: { value: Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, 0, 0)) },
   uHoleN: { value: 0 },
+  /**
+   * 1 while the camera is underground. The skirts that hide cracks between terrain tiles hang
+   * metres below the surface along every tile edge; seen from a sewer or the metro they stood
+   * across the tunnels as walls one walked through.
+   */
+  uUnder: { value: 0 },
 };
 
 /**
@@ -107,7 +116,7 @@ export function createTerrainMaterial(arrays: MaterialArrays, seed?: number): TH
         '#include <common>',
         `#include <common>
 uniform sampler2DArray uAlb; uniform sampler2DArray uNrm; uniform float uTile[16];
-uniform vec4 uHoleA[16]; uniform vec4 uHoleB[16]; uniform int uHoleN; uniform float uWet;
+uniform vec4 uHoleA[16]; uniform vec4 uHoleB[16]; uniform int uHoleN; uniform float uUnder; uniform float uWet;
 varying vec2 vMUv; varying vec3 vWPos; varying vec3 vWNrm;
 ${GLSL_COMMON}
 float gRough; vec2 gTn; vec2 gTuv;
@@ -115,7 +124,9 @@ ${land ? 'varying vec4 vLand;\n' + landGlsl(parcelParams(seed!)) + LAND_FRAG : '
       )
       .replace(
         '#include <map_fragment>',
-        `for (int i = 0; i < 16; i++) {
+        `// Skirts (vertical, the only faces with a level normal) are not drawn from below the ground.
+if (uUnder > 0.5 && vWNrm.y < 0.02) discard;
+for (int i = 0; i < 16; i++) {
   if (i >= uHoleN) break;
   vec2 d = vWPos.xz - uHoleA[i].xy;
   float u = dot(d, uHoleA[i].zw), v = -d.x * uHoleA[i].w + d.y * uHoleA[i].z;
@@ -140,7 +151,7 @@ diffuseColor.rgb = a.rgb * mix(0.85, 1.1, n) * mix(1.0, nn.a, 0.8);`,
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;')
       .replace('#include <normal_fragment_maps>', 'normal = perturbNormalUV(-vViewPosition, normal, gTuv, gTn, 1.0);');
   };
-  mat.customProgramCacheKey = () => 'terrain-v4' + (land ? '-' + seed : '');
+  mat.customProgramCacheKey = () => 'terrain-v5' + (land ? '-' + seed : '');
   return mat;
 }
 
