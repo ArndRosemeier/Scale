@@ -96,6 +96,22 @@ export function installDevtools(game: Game): void {
       game.camRig.yaw = Math.atan2(-r.nx, -r.nz);
       return { room: r.id, kind: r.kind, x: Math.round(x), z: Math.round(z) };
     },
+    /** Put the player just inside the nearest sewer room of a kind ('hall' | 'gears' | 'hideout' | …; skip: the next ones). */
+    room(kind = 'hideout', skip = 0): { room: number; kind: string; x: number; z: number } | null {
+      const U = game.underground, p = game.player.pos;
+      const list = U.rooms.rooms.filter((r) => r.kind === kind).sort((a, b) => Math.hypot(a.ox - p.x, a.oz - p.z) - Math.hypot(b.ox - p.x, b.oz - p.z));
+      const r = list[skip];
+      if (!r) return null;
+      const v = (r.doors[0].v0 + r.doors[0].v1) / 2, u = r.main.u0 + 0.6;
+      const x = r.ox + r.nx * u - r.nz * v, z = r.oz + r.nz * u + r.nx * v;
+      (game as unknown as { freeCam: boolean }).freeCam = false;
+      game.player.pos.set(x, r.y + 0.1, z);
+      game.player.vel.set(0, 0, 0);
+      game.camRig.yaw = Math.atan2(-r.nx, -r.nz);
+      return { room: r.id, kind: r.kind, x: Math.round(x), z: Math.round(z) };
+    },
+    /** Rats and the wandering slime around the player (calm: they stay put). */
+    sewerLife: (calm?: boolean) => { if (calm !== undefined) game.underground.life.calm = calm; return game.underground.life.stats; },
     /** The deep realm: go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …), places, status. */
     deep: {
       places: () => Object.keys(game.underground.deep?.plan.places ?? {}),

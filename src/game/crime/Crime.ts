@@ -23,7 +23,7 @@ import { type Actor, type ActorRole, makeActor, attach, release, setState, play,
 import { personStrength } from '../Consider';
 import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual';
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den';
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
 export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual'];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
@@ -707,7 +707,7 @@ export abstract class Crime {
       const act = c.actor;
       if (!act || act.state === 'gone' || act.state === 'arrested' || !c.alive) continue;
       for (const o of this.w.neighbours(c.x, c.z, act.state === 'fight' ? 18 : 12)) {
-        if (o === c || o.actor || o.inside || o.state === PState.Down || this.staged.has(o)) continue;
+        if (o === c || o.actor || o.inside || o.state === PState.Down || this.staged.has(o) || !!o.under !== !!c.under) continue;
         this.staged.add(o);
         o.lookX = c.x; o.lookY = c.y + 1.2; o.lookZ = c.z;
         if (act.state === 'fight' || act.state === 'ko') {

@@ -38,8 +38,9 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     tagging: (night ? 0.7 : evening ? 0.5 : 0.25) * (rough ? 1.2 : 0.8),
     // Two groups fighting over a street (only on a border with a rival, see CrimeSystem.playerCell).
     brawl: (night ? 0.55 : evening ? 0.5 : 0.2) * (rough ? 1.2 : 0.8),
-    // Never rolled: hideout guards are there when the player comes by.
+    // Never rolled: hideout guards (and a sewer den's crew) are there when the player comes by.
     hideout: 0,
+    den: 0,
     // The techno-cult turning the robots (where there are robots: busy streets by day).
     hijack: (busy || d === 'industrial' ? 0.55 : 0.3) * (night ? 0.4 : 1),
     // The elemental cult's rituals: mostly after dark.
