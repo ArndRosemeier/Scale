@@ -23,7 +23,15 @@ import { landmarkParts, partFootprints, solidFootprints } from '../../plan/landm
 
 export const TILE_PX = 512;
 
-export interface MapLayers { metro: boolean; buildings: boolean; labels: boolean; sewers: boolean; crime: boolean }
+export interface MapLayers { metro: boolean; buildings: boolean; labels: boolean; sewers: boolean; crime: boolean; turf: boolean }
+
+/** Villain group turf for the map (game/factions): the holder per macro cell, a colour per group, the borders. */
+export interface MapTurf {
+  holder: Int8Array;
+  colors: string[];
+  /** Cell edges where a group's turf ends (its colour, on its side). */
+  borders: { pts: number[]; box: [number, number, number, number]; group: number }[];
+}
 
 /** A metro entrance as the cell planner placed it (opening centre, long axis u). */
 export interface MapEntrance { x: number; z: number; ux: number; uz: number; station: number; end: number }
@@ -82,7 +90,7 @@ interface Tile {
   used: number;
 }
 
-function boxOf(pts: ArrayLike<number>, i0 = 0, i1 = pts.length): [number, number, number, number] {
+export function boxOf(pts: ArrayLike<number>, i0 = 0, i1 = pts.length): [number, number, number, number] {
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
   for (let i = i0; i < i1; i += 2) {
     const x = pts[i], z = pts[i + 1];
@@ -125,6 +133,8 @@ export class MapWorld {
   cellsKnown = 0;
   /** Street-crime index per cell (0..1, game/crime/CrimeIndex), set by the crime layer. */
   crimeIndex: Float32Array | null = null;
+  /** Villain group turf, set by the crime layer. */
+  turf: MapTurf | null = null;
   /** Landmark footprints (map category, outline, bounds), drawn at every zoom. */
   readonly landmarkShapes: { cat: number; poly: number[]; box: [number, number, number, number] }[] = [];
   /** Ground outlines of the landmarks' solid parts (safe spots stay off them). */
@@ -457,6 +467,21 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
     }
   }
 
+  // Turf layer: each villain group's cells in its colour (its borders go over the arterials, below).
+  if (layers.turf && w.turf) {
+    const T = w.turf, fills = new Map<number, Path2D>();
+    for (const i of cellVis) {
+      const f = T.holder[i];
+      if (f < 0) continue;
+      let p = fills.get(f);
+      if (!p) fills.set(f, (p = new Path2D()));
+      addPoly(p, macro.cells[i].poly, true);
+    }
+    g.globalAlpha = 0.26;
+    for (const [f, p] of fills) { g.fillStyle = T.colors[f]; g.fill(p); }
+    g.globalAlpha = 1;
+  }
+
   const detail = mpp <= DETAIL_MPP;
   // Parks and plazas inside the cells.
   if (detail) {
@@ -608,6 +633,21 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
     g.lineWidth = px(wp);
     g.stroke();
     g.lineCap = 'round';
+  }
+
+  // Turf borders: dashed lines in the group's colour along the arterials where its turf ends
+  // (drawn after the roads, which would cover them).
+  if (layers.turf && w.turf) {
+    g.globalAlpha = 0.9;
+    g.lineWidth = px(2.4);
+    g.setLineDash([px(6), px(4)]);
+    for (const b of w.turf.borders) {
+      if (!vis(b.box)) continue;
+      g.strokeStyle = w.turf.colors[b.group];
+      g.beginPath(); addLine(g, b.pts); g.stroke();
+    }
+    g.setLineDash([]);
+    g.globalAlpha = 1;
   }
 
   // Sewer trunks (optional layer).

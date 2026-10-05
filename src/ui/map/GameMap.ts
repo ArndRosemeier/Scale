@@ -13,7 +13,8 @@
  */
 import * as THREE from 'three';
 import type { Game } from '../../game/Game';
-import { MapWorld, MapTiles, MAP_COLORS, hexColor, type MapLayers, type MapEntrance } from './MapTiles';
+import { MapWorld, MapTiles, MAP_COLORS, hexColor, boxOf, type MapLayers, type MapEntrance } from './MapTiles';
+import type { FactionMap } from '../../game/factions/Factions';
 import { cityName, streetName } from '../../plan/names';
 import { cityClass } from '../../world/settings';
 import { STATION_HALF, ENTRANCE_L } from '../../plan/cell';
@@ -112,6 +113,28 @@ export class GameMap {
     return [...this.markerSets.values()].flat();
   }
 
+  /** The villain groups' turf (game/factions): the map layer and the legend's list of groups. */
+  setTurf(F: FactionMap): void {
+    const cells = this.game.macro.cells, edges = this.game.macro.edges;
+    // Which cells share each arterial edge: a border is an edge whose other side is not the same group's.
+    const sides = new Map<number, number[]>();
+    cells.forEach((c, i) => { for (const e of c.edges) { const l = sides.get(e); if (l) l.push(i); else sides.set(e, [i]); } });
+    const borders: { pts: number[]; box: [number, number, number, number]; group: number }[] = [];
+    for (const [e, cs] of sides) {
+      const groups = new Set(cs.map((i) => F.holder[i]));
+      if (cs.length < 2) groups.add(-1);
+      if (groups.size < 2) continue;
+      const pts = edges[e]?.pts;
+      if (!pts) continue;
+      for (const f of groups) if (f >= 0) borders.push({ pts, box: boxOf(pts), group: f });
+    }
+    this.world.turf = { holder: F.holder, colors: F.factions.map((f) => f.palette.map), borders };
+    const el = this.root.querySelector<HTMLDivElement>('.map-turf');
+    if (el) el.innerHTML = F.factions.map((f) => `<div class="map-key" title="Turf of ${esc(f.name)}"><span class="turf" style="border-color:${f.palette.map};background:${f.palette.map}33"></span><b style="color:${f.palette.map}">${esc(f.emblem)}</b> ${esc(f.name)}</div>`).join('');
+    this.tiles.invalidate();
+    this.miniKey = '';
+  }
+
   /** Replace one marker layer (call on change, not per frame: it redraws the minimap). */
   setMarkers(layer: string, list: MapMarker[]): void {
     this.markerSets.set(layer, list);
@@ -124,7 +147,7 @@ export class GameMap {
   constructor(private game: Game) {
     const t0 = performance.now();
     this.world = new MapWorld(game.macro, game.terrain);
-    this.layers = loadJSON<MapLayers>(LAYERS_KEY, { metro: true, buildings: true, labels: true, sewers: false, crime: true });
+    this.layers = loadJSON<MapLayers>(LAYERS_KEY, { metro: true, buildings: true, labels: true, sewers: false, crime: true, turf: true });
     this.tiles = new MapTiles(this.world, this.layers);
     // Landmarks: a star badge each, named on the full map, in the tooltip and on the compass.
     this.setMarkers('landmarks', (game.macro.landmarks ?? []).map((l) => ({ x: l.x, z: l.z, color: '#b5562a', kind: 'landmark' as const, title: `${l.name} — ${LANDMARK_KIND_NAME[l.kind]}` })));
@@ -152,6 +175,8 @@ export class GameMap {
         <label><input type="checkbox" data-layer="labels"> Names</label>
         <label><input type="checkbox" data-layer="sewers"> Sewers &amp; manholes</label>
         <label title="Street crime by district: the redder, the rougher the area"><input type="checkbox" data-layer="crime"> Crime</label>
+        <label title="Who runs which streets: each villain group's turf in its colour"><input type="checkbox" data-layer="turf"> Turf</label>
+        <div class="map-turf"></div>
         <h3>Metro</h3>
         ${lines || '<div class="map-none">This town has no metro. Larger cities do.</div>'}
         ${lines ? '<div class="map-key"><span class="ent">M</span> street entrance (zoom in)</div>' : ''}
