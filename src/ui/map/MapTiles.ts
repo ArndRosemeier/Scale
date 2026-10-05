@@ -467,7 +467,7 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
     }
   }
 
-  // Turf layer: each villain group's cells in its colour, a line where its turf ends.
+  // Turf layer: each villain group's cells in its colour (its borders go over the arterials, below).
   if (layers.turf && w.turf) {
     const T = w.turf, fills = new Map<number, Path2D>();
     for (const i of cellVis) {
@@ -477,17 +477,8 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
       if (!p) fills.set(f, (p = new Path2D()));
       addPoly(p, macro.cells[i].poly, true);
     }
-    g.globalAlpha = 0.2;
+    g.globalAlpha = 0.26;
     for (const [f, p] of fills) { g.fillStyle = T.colors[f]; g.fill(p); }
-    g.globalAlpha = 0.85;
-    g.lineWidth = px(2);
-    g.setLineDash([px(6), px(4)]);
-    for (const b of T.borders) {
-      if (!vis(b.box)) continue;
-      g.strokeStyle = T.colors[b.group];
-      g.beginPath(); addLine(g, b.pts); g.stroke();
-    }
-    g.setLineDash([]);
     g.globalAlpha = 1;
   }
 
@@ -642,6 +633,21 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
     g.lineWidth = px(wp);
     g.stroke();
     g.lineCap = 'round';
+  }
+
+  // Turf borders: dashed lines in the group's colour along the arterials where its turf ends
+  // (drawn after the roads, which would cover them).
+  if (layers.turf && w.turf) {
+    g.globalAlpha = 0.9;
+    g.lineWidth = px(2.4);
+    g.setLineDash([px(6), px(4)]);
+    for (const b of w.turf.borders) {
+      if (!vis(b.box)) continue;
+      g.strokeStyle = w.turf.colors[b.group];
+      g.beginPath(); addLine(g, b.pts); g.stroke();
+    }
+    g.setLineDash([]);
+    g.globalAlpha = 1;
   }
 
   // Sewer trunks (optional layer).

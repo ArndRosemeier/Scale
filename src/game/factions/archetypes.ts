@@ -72,8 +72,8 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6 },
     palettes: [
       { name: 'gold', map: '#d4a72c', primary: [0.07, 0.07, 0.08], accent: [0.85, 0.66, 0.18] },
-      { name: 'silver', map: '#a8b3c2', primary: [0.1, 0.11, 0.13], accent: [0.78, 0.8, 0.84] },
-      { name: 'pearl', map: '#e9e1cf', primary: [0.06, 0.07, 0.1], accent: [0.92, 0.88, 0.8] },
+      { name: 'emerald', map: '#0f9d63', primary: [0.06, 0.08, 0.07], accent: [0.08, 0.55, 0.32] },
+      { name: 'steel', map: '#3f6db3', primary: [0.08, 0.09, 0.12], accent: [0.32, 0.45, 0.68] },
     ],
     emblems: ['◆', '♦', '✦'],
     names: ['{a} & Co.', 'the {a} Syndicate', '{a} Holdings', 'the {a} Group'],
