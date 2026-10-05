@@ -169,6 +169,7 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Snatch', run: (_g, d) => call(d, 'crime', 'snatch', 25) },
     { label: 'Mugging', run: (_g, d) => call(d, 'crime', 'mugging', 25) },
     { label: 'Robbery', run: (_g, d) => call(d, 'crime', 'robbery', 40) },
+    { label: 'Mad bomber', run: (_g, d) => call(d, 'crime', 'bomber', 40) },
     { label: 'Cat in tree', run: (_g, d) => call(d, 'deed', 'cat') },
     { label: 'Runaway dog', run: (_g, d) => call(d, 'deed', 'dog') },
     { label: 'Lost wallet', run: (_g, d) => call(d, 'deed', 'wallet') },

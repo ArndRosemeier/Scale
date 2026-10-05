@@ -1,6 +1,6 @@
 /**
  * The elemental powers in the world (PLAYGROUND_PLAN §0 decisions 17, 18): laser eyes, fire
- * wave, frost nova, ice path, chain lightning, seismic stomp, whirlwind, hydrokinesis and the
+ * wave, fireball, frost nova, ice path, chain lightning, seismic stomp, whirlwind, hydrokinesis and the
  * shrink ray.
  *
  * Every power works on every kind of target — people, cars, robots, drones, props and
@@ -25,6 +25,7 @@ import type { CameraRig } from '../../player/CameraRig';
 import type { Targeting, Target, ProbeHit } from '../Targeting';
 import { vehicleHeight } from '../Targeting';
 import { ElementFx, BeamStyle, DecalKind } from './ElementFx';
+import { fireBurst } from './blastFx';
 import type { PowerSynth, SynthHandle } from '../../audio/PowerSynth';
 import type { Destruction } from '../../destruction/Destruction';
 import type { Debris } from '../../destruction/Debris';
@@ -45,7 +46,8 @@ import { statusFor, statusOf, statusList, statusCount, tickStatus, type TargetSt
 import { WallMat } from '../../plan/building';
 import { DAMAGE_PER_IMPULSE } from '../threats/ThreatEvent';
 import {
-  LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE, ICE, ICE_WIDTH, ICE_LIFE,
+  LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, FIREBALL, FIREBALL_RANGE, FIREBALL_RADIUS, FIREBALL_BLAST,
+  FIREBALL_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE, ICE, ICE_WIDTH, ICE_LIFE,
   BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE, GUST, GUST_RADIUS, GUST_TIME, GUST_LIFT,
   HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
 } from '../abilities/tuning';
@@ -98,6 +100,8 @@ interface Aim {
 
 interface Bolt { pts: number[]; t: number; life: number; jit: number; seed: number }
 interface FireBurst { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number; range: number; rank: number; t: number; cand: { t: Target; d: number }[]; walls: { x: number; y: number; z: number; nx: number; ny: number; nz: number; d: number; building: boolean }[]; k: number; swarmD: number }
+/** A fireball in flight: from (ox, oy, oz) along (dx, dy, dz), bursting at distance `L`. */
+interface Orb { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number; L: number; s: number; v: number; rank: number; k: number; trailT: number }
 interface Quake { x0: number; z0: number; dx: number; dz: number; len: number; t: number; done: number; rank: number; k: number; hit: Set<object> }
 interface Vortex { air: boolean; x: number; y: number; z: number; dx: number; dz: number; r: number; t: number; life: number; rank: number; k: number; tick: number; hitT: Map<object, number>; loop: SynthHandle | null }
 interface Nova { x: number; y: number; z: number; r: number; t: number }
@@ -146,6 +150,7 @@ export class Elements {
   // ---- effects in flight
   private bolts: Bolt[] = [];
   private fires: FireBurst[] = [];
+  private orbs: Orb[] = [];
   private quakes: Quake[] = [];
   private vortices: Vortex[] = [];
   private novas: Nova[] = [];
@@ -173,7 +178,7 @@ export class Elements {
     this.time += dt;
     this.idle = false;
     this.w.consequences.update(dt);
-    const busy = channel || this.lastChannel || this.bolts.length || this.fires.length || this.quakes.length || this.vortices.length
+    const busy = channel || this.lastChannel || this.bolts.length || this.fires.length || this.orbs.length || this.quakes.length || this.vortices.length
       || this.novas.length || this.beams.length || this.patches.length || this.tiles.length || statusCount() || this.fx.active;
     if (!busy) { this.w.player.onIce = false; this.fx.update(dt); return; }
     // ---- held power
@@ -190,6 +195,7 @@ export class Elements {
     // ---- effects in flight
     if (this.bolts.length) this.updateBolts(dt);
     if (this.fires.length) this.updateFires(dt);
+    if (this.orbs.length) this.updateOrbs(dt);
     if (this.quakes.length) this.updateQuakes(dt);
     if (this.vortices.length) this.updateVortices(dt);
     if (this.novas.length) this.updateNovas(dt);
@@ -233,6 +239,7 @@ export class Elements {
     switch (id) {
       case 'frostNova': return this.frostNova(rank);
       case 'fireWave': return this.fireWave(rank);
+      case 'fireball': return this.fireball(rank);
       case 'lightning': return this.lightning(rank);
       case 'stomp': return this.stomp(rank);
       case 'gust': return this.gust(rank);
@@ -470,6 +477,11 @@ export class Elements {
       case 'prop': if (fresh) { s.hx = t.obj.x; s.hz = t.obj.z; } break;
     }
     if (fresh) this.stats.frozen++;
+  }
+
+  /** Set something alight from outside the player's powers (a villain's bomb): burns as from fire wave. */
+  ignite(t: Target, dur: number): void {
+    if (t.kind !== 'threat') this.burn(t, dur);
   }
 
   private burn(t: Target, dur: number): void {
@@ -759,6 +771,100 @@ export class Elements {
         break;
       }
     }
+  }
+
+  // ================================================================== fireball
+
+  /** Hurl a fireball at the target or along the cursor; it bursts on what it meets (or at full reach). */
+  private fireball(r: number): boolean {
+    const k = this.w.player.k;
+    const range = FIREBALL_RANGE[r] * this.reachK;
+    const v = FIREBALL.speed * this.reachK;
+    const A = this.aim('hands', range, v, this.aimA);
+    if (!A) return false;
+    this.orbs.push({ ox: A.ox, oy: A.oy, oz: A.oz, dx: A.dx, dy: A.dy, dz: A.dz, L: Math.max(0.5, A.t), s: 0, v, rank: r, k, trailT: 0 });
+    const p = this.w.player;
+    p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.5 };
+    this.w.synth.play('fire', A.ox, A.oy, A.oz, 0.7, 5 * this.reachK, 1.3 / Math.pow(Math.max(0.3, k), 0.1));
+    this.w.stimuli.emit('power', A.ox, A.oy, A.oz, 4, 40 + range);
+    return true;
+  }
+
+  private updateOrbs(dt: number): void {
+    for (let i = this.orbs.length - 1; i >= 0; i--) {
+      const o = this.orbs[i];
+      const s0 = o.s;
+      o.s = Math.min(o.L, o.s + o.v * dt);
+      const sk = Math.max(0.5, Math.sqrt(o.k)), size = (0.35 + o.rank * 0.08) * sk;
+      const x = o.ox + o.dx * o.s, y = o.oy + o.dy * o.s, z = o.oz + o.dz * o.s;
+      // The ball: a hot core and licking flames, a trail of embers and smoke behind it.
+      this.fx.glow(x, y, z, 0, 0, 0, 0.06, size * 1.6, size * 1.2, SPARK, FIRE_MID, 1, 1, 0);
+      for (let j = 0; j < 3; j++) this.fx.glow(x, y, z, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2 + 0.5, (Math.random() - 0.5) * 2, 0.12 + Math.random() * 0.1, size * 1.4, size * 0.6, FIRE_HOT, FIRE_END, 0.8, 1, 0);
+      const n = Math.ceil((o.s - s0) / (0.35 * sk));
+      for (let j = 0; j < n; j++) {
+        const t = s0 + (o.s - s0) * (j / Math.max(1, n));
+        this.fx.glow(o.ox + o.dx * t, o.oy + o.dy * t, o.oz + o.dz * t, (Math.random() - 0.5) * 1.5, 0.8 + Math.random(), (Math.random() - 0.5) * 1.5, 0.25 + Math.random() * 0.25, size * 0.9, size * 0.2, FIRE_MID, FIRE_END, 0.6, 1.5, -1);
+      }
+      o.trailT -= dt;
+      if (o.trailT <= 0) { o.trailT = 0.05; this.fx.soft(x, y, z, 0, 0.6, 0, 0.9, size * 0.6, size * 2.2, SMOKE, SMOKE_LIGHT, 0.3, 1, -0.3); }
+      if (o.s < o.L) continue;
+      this.orbs.splice(i, 1);
+      this.fireballBurst(x - o.dx * 0.2, y - o.dy * 0.2, z - o.dz * 0.2, o);
+    }
+  }
+
+  /** The fireball bursts: a blast on the facades (the old test blast's impact), everything in the radius thrown and set alight. */
+  private fireballBurst(x: number, y: number, z: number, o: Orb): void {
+    const r = o.rank, k = o.k, sk = Math.max(0.5, Math.sqrt(k));
+    const R = FIREBALL_RADIUS[r] * sk;
+    const burnT = FIREBALL_BURN[r];
+    const n = this.w.destruction.impact(x, y, z, R * 0.6, FIREBALL_BLAST[r] * k * k, 0, 0.2, 0, 'blast');
+    this.stats.impacts++;
+    if (n) this.stats.broken += n;
+    this.w.swarm?.('fire', x, y, z, R, 3, 4);
+    this.w.targeting.inSphere(x, y, z, R, (t, d) => {
+      const f = 1 - d / R;
+      const c = this.w.targeting.centre(t, _w);
+      let hx = c.x - x, hz = c.z - z;
+      const hl = Math.hypot(hx, hz) || 1;
+      hx /= hl; hz /= hl;
+      switch (t.kind) {
+        case 'person': {
+          const a = t.obj;
+          if (a.state !== PState.Down) { this.knock(a, x, z, 3 + 6 * f, 2 + 4 * f); this.record('fireball', t, 'knockdown', a.x, a.z); }
+          this.burn(t, burnT);
+          this.record('fireball', t, 'burn', a.x, a.z);
+          break;
+        }
+        case 'car': {
+          const v = t.obj;
+          v.fear = 2;
+          this.burn(t, burnT * 2);
+          this.record('fireball', t, 'burn', v.x, v.z);
+          // Rank 3 on: the car is thrown and burns out; below, scorched and stalled.
+          if (r >= 3 && f > 0.25) { this.wreck(v, x, y, z, hx * 9000 * f * k, 7000 * f * k, hz * 9000 * f * k); this.record('fireball', t, 'wreck', v.x, v.z); }
+          else { v.speed *= 0.2; v.damage = Math.min(1, v.damage + 0.25 * f); }
+          break;
+        }
+        case 'robot': case 'bot': this.shove(t, hx * 900 * f * k, 400 * f * k, hz * 900 * f * k, 'fireball'); this.burn(t, burnT * 0.5); break;
+        case 'drone': this.shove(t, hx * 120 * f, 60 * f, hz * 120 * f, 'fireball'); break;
+        case 'threat': this.hurtThreat(t, FIREBALL_BLAST[r] * k * k * DAMAGE_PER_IMPULSE * 1.5, x, y, z); break;
+        case 'prop': {
+          const p = t.obj;
+          this.shove(t, hx * 600 * f * k, 400 * f * k, hz * 600 * f * k, 'fireball');
+          if (p.tree || p.kind.includes('bench') || p.kind.includes('bin')) { this.burn(t, burnT * 1.5); this.record('fireball', t, 'burn', c.x, c.z); }
+          else if (p.kind.includes('lamp') && !p.dark) { this.w.props.darken(p); this.record('fireball', t, 'break', c.x, c.z); }
+          break;
+        }
+      }
+    });
+    const g = this.w.collision.groundAt(x, z, y + 1, 2);
+    fireBurst(this.fx, this.w.debris, this.w.dust, x, y, z, (0.8 + r * 0.3) * sk, g);
+    this.w.sound('explosion', x, y, z, Math.min(1, 0.55 + r * 0.1), 1.25 - r * 0.06, 6 + r * 3);
+    // Bystanders farther off run (the burst itself already threw the ones in it).
+    this.w.stimuli.emit('power', x, y, z, 6, 60 + R * 10);
+    const p = this.w.player;
+    this.w.camRig.addShake(Math.min(0.8, (0.2 + r * 0.1) * 30 / Math.max(10, Math.hypot(x - p.pos.x, z - p.pos.z))));
   }
 
   // ================================================================== frost nova

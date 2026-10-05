@@ -36,6 +36,8 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     // Group operations (only where a group holds the cell, see groupWeights).
     racket: shopsOpen ? (busy || d === 'apartments' || d === 'rowhouses' ? 0.5 : 0.3) : 0.04,
     tagging: (night ? 0.7 : evening ? 0.5 : 0.25) * (rough ? 1.2 : 0.8),
+    // Rare: a madman with a bag of bombs where the crowds are.
+    bomber: busy ? 0.09 : 0.05,
   };
 }
 

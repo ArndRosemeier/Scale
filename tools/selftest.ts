@@ -615,6 +615,38 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     drive(tag2, () => false, Math.ceil(TAGGING.paintFor / 0.05), t2Ev);
     check(!tag2.done && !t2Ev.includes('tagged') && tag2.playerInvolved && tag2.phase !== 'commit', `tagging: the hero comes close, the tag is abandoned (${tag2.phase}, ${t2Ev.join(',')})`);
     player.x = 0; player.z = 0;
+
+    // The mad bomber: walks to the busy spot and starts lobbing bombs; once the hero is close the
+    // bombs go at them; a few punches knock him out and the police take him.
+    const { Bomber, BOMBER } = await import('../src/game/crime/Bomber');
+    for (let k = 0; k < 6; k++) mk(500 + k, 300 + k * 2.5, 60 + (k % 2) * 3, Math.PI / 2, 0);
+    const thrownAt: { x: number; z: number }[] = [];
+    const w3 = Object.assign(Object.create(w2) as typeof w2, { bomb: (_c: unknown, x: number, z: number) => { thrownAt.push({ x, z }); return true; } });
+    const bomber = new Bomber(w3, 31337, { x: 305, z: 62 });
+    check(bomber.setup() && bomber.bomber?.actor?.held === 'bomb' && bomber.bombsLeft >= BOMBER.bombs[0] && bomber.kind === 'bomber', `bomber: setup finds a busy spot and a bomber with a bag of bombs (${bomber.bombsLeft})`);
+    const bEv: string[] = [];
+    drive(bomber, () => bomber.phase !== 'approach', 2400, bEv);
+    check(bomber.phase === 'commit' && bEv.includes('commit'), `bomber: he reaches the spot and starts (${bomber.phase}, ${bEv.join(',')})`);
+    drive(bomber, () => thrownAt.length >= 3, 800, bEv);
+    const bb = bomber.bomber!;
+    check(thrownAt.length >= 3 && bomber.thrown === thrownAt.length, `bomber: bombs fly (${thrownAt.length} thrown)`);
+    player.x = bb.x + 15; player.z = bb.z;
+    const n0 = thrownAt.length;
+    drive(bomber, () => thrownAt.length > n0, 800, bEv);
+    const last = thrownAt[thrownAt.length - 1];
+    check(thrownAt.length > n0 && Math.hypot(last.x - player.x, last.z - player.z) < 2, `bomber: once the hero is close the next bomb goes at them (${last ? Math.hypot(last.x - player.x, last.z - player.z).toFixed(1) : '-'} m off)`);
+    let punches = 0;
+    for (let i = 0; i < 400 && bb.actor!.state !== 'ko' && bb.actor!.state !== 'surrender'; i++) {
+      player.x = bb.x + 0.9; player.z = bb.z;
+      if (i % 12 === 0) { combat.hitActor(bb, -420, 80, 0, 'punch', 'player'); punches++; }
+      drive(bomber, () => false, 1, bEv);
+    }
+    check(bb.actor!.state === 'ko' || bb.actor!.state === 'surrender', `bomber: a few punches stop him (${punches} punches, ${bb.actor!.state})`);
+    drive(bomber, () => false, 2, bEv);
+    bomber.arrest(bb);
+    drive(bomber, () => false, 2, bEv);
+    check(bomber.phase === 'resolved' && bomber.outcome === 'arrested', `bomber: arrested, resolved (${bomber.phase}, ${bEv.join(',')})`);
+    player.x = 0; player.z = 0;
   }
   console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
