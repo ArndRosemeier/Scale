@@ -1226,12 +1226,16 @@ export class CrimeSystem {
     if (d > 0) this.g.audio.play2d('punch_impact', 0.5, 0.8);
   }
 
-  /** Knocked out: fade, wake up where one fell (or, cuffed, released at the scene). */
+  /**
+   * Knocked out: by the police (or while wanted) a fade and the officers cuff them; otherwise
+   * defeated — the hospital's rescue drones, or game over with the city against them (game/defeat).
+   */
   private knockedOut(kind: HurtKind): void {
     const p = this.g.player.pos;
     this.wake = { x: p.x, y: p.y, z: p.z };
-    this.hud.fade(true);
-    if (kind === 'police' || this.justice.wanted > 0) return; // the officers cuff them (arrest) or not
+    if (kind === 'police' || this.justice.wanted > 0) { this.hud.fade(true); return; } // the officers cuff them (arrest) or not
+    // (The rescue is decided on the reputation before the knockout's own cost.)
+    if (!this.g.defeat?.begin(kind)) this.hud.fade(true);
     if (kind === 'robot' || kind === 'monster' || kind === 'military') return; // a threat (or the army's stray fire) knocked them out: no karma penalty (THREATS_PLAN §5.6)
     this.g.progress.addKarma(-5, 'knocked out');
     this.rep.add(-1, 'knocked out');
