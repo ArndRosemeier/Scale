@@ -5,7 +5,7 @@
  * marks it on the map and compass. Owns the rogue-machine controller of the near-future layer.
  *
  * Archetypes plug in through ARCHETYPE_IMPL (omens and the event itself): the robot malfunction
- * (minor) and the Strider (major). The clock is saved per city (seed, size) and mode, like
+ * and the brood swarm (minor) and the Strider (major). The clock is saved per city (seed, size) and mode, like
  * Progress; the "City events" setting (off / rare / normal / frequent) is a player preference.
  *
  * Big threats are actors (ThreatActor): the director lists them for targeting, routes blows to
@@ -27,6 +27,9 @@ import { planStriderRoute, type StriderRoute } from './StriderRoute';
 import { CreatureMesh } from './rig/CreatureMesh';
 import { FacadeFires } from './FacadeFires';
 import { PlayerRampage } from './PlayerRampage';
+import { Brood, BroodGlimpse, broodOmen, type BroodOpts } from './Brood';
+import { BroodMesh } from './brood/broodMesh';
+import type { HitEffect } from './brood/BroodSim';
 import type { Obstacle } from '../../world/Collision';
 
 /** How an archetype shows itself before it comes (omens) and how it starts. */
@@ -60,6 +63,11 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
     start: (d) => new PlayerRampage(d.g),
     fallback: [],
   },
+  brood: {
+    omen: (d, site, kind, rng) => broodOmen(d.g, site, kind, rng, d.glimpses),
+    start: (d, site, seed, opts) => new Brood(d.g, site, seed, opts as BroodOpts),
+    fallback: ['chitter', 'glimpse'],
+  },
   // The Murk breaking out of the sewers (started by the slime realm's war, never by the clock).
   murk: {
     omen: () => false,
@@ -90,6 +98,10 @@ export class ThreatDirector {
   readonly mesh: CreatureMesh;
   /** Facades set burning (breath, later crashes and shells). */
   readonly fires: FacadeFires;
+  /** Every brood swarm's creatures (one instanced mesh). */
+  readonly broodMesh: BroodMesh;
+  /** The few creatures of a brood omen darting between manholes. */
+  readonly glimpses: BroodGlimpse[] = [];
   private wakes: Wake[] = [];
   private striderRoute: StriderRoute | null | undefined;
   private readonly key: string;
@@ -120,6 +132,8 @@ export class ThreatDirector {
     // in the city); the skin is built now and the program compiles during the warm-up.
     this.mesh = new CreatureMesh([{ def: STRIDER_RIG, count: 2, name: 'strider' }]);
     g.renderer.scene.add(this.mesh.group);
+    this.broodMesh = new BroodMesh();
+    g.renderer.scene.add(this.broodMesh.mesh);
     this.fires = new FacadeFires(g.elements.fx, g.destruction, g.renderer.camera);
     // Their bodies stand in the player's way.
     g.collision.obstacleProviders.push((x0, z0, x1, z1, out) => this.obstacles(x0, z0, x1, z1, out));
@@ -155,6 +169,20 @@ export class ThreatDirector {
       if (res && (!best || res.dealt > best.dealt)) best = res;
     }
     return best;
+  }
+
+  /**
+   * A hit on the brood's creatures round a point (punches and blasts via Game.strike, the powers via
+   * Elements): every swarm there takes it. Returns the creatures hit (positions for effects).
+   */
+  broodHit(x: number, y: number, z: number, r: number, effect: HitEffect, dmg: number, fling: number): { x: number; y: number; z: number }[] {
+    let out: { x: number; y: number; z: number }[] = [];
+    for (const ev of this.events) {
+      if (!(ev instanceof Brood) || Math.hypot(ev.x - x, ev.z - z) > BROOD_REACH + r) continue;
+      const hit = ev.hit(x, y, z, r, effect, dmg, fling);
+      if (hit.length) out = out.concat(hit.map((c) => ({ x: c.x, y: c.y + c.size * 0.2, z: c.z })));
+    }
+    return out;
   }
 
   /** Stage 3: the aftermath has carted a body away. */
@@ -193,6 +221,7 @@ export class ThreatDirector {
       }
     }
     this.fires.update(dt);
+    for (let i = this.glimpses.length - 1; i >= 0; i--) { const gl = this.glimpses[i]; gl.update(dt); if (gl.done) this.glimpses.splice(i, 1); }
     this.updateWakes(dt);
     this.draw();
     this.markers(dt);
@@ -295,7 +324,7 @@ export class ThreatDirector {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
       // (A rampaging player is the incident: no alert marker on themselves.)
       if (!ev.active || ev.archetype === 'rampage') continue;
-      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : 'Threat', always: true });
+      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : ev.archetype === 'brood' ? 'A swarm from the sewers — creatures attacking people' : 'Threat', always: true });
       if (ev instanceof RobotMalfunction) for (const m of ev.units) {
         if (m.out || m.mode !== 'hostile' || Math.hypot(m.obj.x - p.x, m.obj.z - p.z) > 250) continue;
         list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: 'A rogue machine' });
@@ -323,6 +352,13 @@ export class ThreatDirector {
       M.warm(p.x, p.y - 2, p.z);
     }
     M.end();
+    // The brood's creatures (and those of an omen).
+    const B = this.broodMesh;
+    B.begin();
+    for (const ev of this.events) if (ev instanceof Brood) B.add(ev.sim);
+    for (const gl of this.glimpses) B.add(gl.sim);
+    if (!this.g.gate.enabled) { const p = this.g.player.pos; B.warm(p.x, p.y - 2, p.z); }
+    B.end();
   }
 
   // ================================================================== the Strider's omens
@@ -461,6 +497,30 @@ export class ThreatDirector {
     };
   }
 
+  /** The running (or latest) brood. */
+  brood(): Brood | null {
+    for (let i = this.events.length - 1; i >= 0; i--) { const e = this.events[i]; if (e instanceof Brood) return e; }
+    return null;
+  }
+
+  private broodDev(): Record<string, unknown> {
+    const B = () => this.brood();
+    return {
+      status: () => B()?.snapshot() ?? 'no brood',
+      hit: (effect: HitEffect = 'blow', r = 6, dmg = 10) => { const p = this.g.player.pos; return this.broodHit(p.x, p.y + 0.5, p.z, r, effect, dmg, 6).length; },
+      leave: () => { const b = B(); if (!b) return 'no brood'; b.shutdown(); return b.outcome; },
+      player: (dist = 25) => {
+        const b = B(); if (!b) return 'no brood';
+        const p = this.g.player;
+        const a = Math.atan2(p.pos.x - b.x, p.pos.z - b.z);
+        const x = b.x + Math.sin(a) * dist, z = b.z + Math.cos(a) * dist;
+        p.pos.set(x, this.g.world.groundHeight(x, z) + 0.05, z);
+        p.vel.set(0, 0, 0);
+        return { x: Math.round(x), z: Math.round(z) };
+      },
+    };
+  }
+
   private installDev(): void {
     const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
     if (!dev) return;
@@ -497,8 +557,10 @@ export class ThreatDirector {
         if (a?.pressure !== undefined) this.clock.state.pressure = a.pressure;
         return this.clock.status();
       },
-      /** Show an omen now ('glitch' | 'drone' | 'billboard'). */
-      omen: (kind = 'glitch') => robotOmen(g, this.rogue, this.siteFor(this.clock.state.n), kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
+      /** Show an omen now ('glitch' | 'drone' | 'billboard'; the brood's: 'chitter' | 'glimpse'). */
+      omen: (kind = 'glitch') => kind === 'chitter' || kind === 'glimpse'
+        ? broodOmen(g, this.siteFor(this.clock.state.n), kind, new Rng((Math.random() * 2 ** 32) >>> 0), this.glimpses)
+        : robotOmen(g, this.rogue, this.siteFor(this.clock.state.n), kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
       events: () => this.events.map((e) => e.snapshot()),
       /** Shut every running event down. */
       stop: () => { for (const e of this.events) if (e.active) e.shutdown(); return this.events.map((e) => e.outcome); },
@@ -508,12 +570,20 @@ export class ThreatDirector {
        * (put the player near it, facing it).
        */
       strider: this.striderDev(),
+      /**
+       * The brood: dev.threat.brood.status() · .hit(effect, r, dmg) (round the player) · .leave() ·
+       * .player(dist) (put the player near the swarm).
+       */
+      brood: this.broodDev(),
       setting: (s?: CityEvents) => { if (s) this.setting = s; return this.setting; },
       log: () => this.log,
       stats: () => ({ ...this.stats, rogue: this.rogue.stats, machines: this.rogue.list.length }),
     };
   }
 }
+
+/** A brood's creatures range this far from its centre (m): hits further off skip it. */
+const BROOD_REACH = 160;
 
 const WAKE_A = new THREE.Color(0.86, 0.9, 0.92), WAKE_B = new THREE.Color(0.6, 0.68, 0.72);
 

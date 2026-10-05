@@ -423,6 +423,8 @@ export class Game {
           if (threat) this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, 'threat');
         }
         if (h > 4) this.props.crush(s.x, s.z, r);
+        // A giant hero's foot comes down on the brood.
+        if (!threat && h > 3) this.threats?.broodHit(s.x, s.y + 0.3, s.z, r + 0.4, 'blow', 20, 3);
         // A giant hero stamping on a monster's foot or tail.
         if (!threat && h > 8) this.threats?.blow(s.x, s.y + h * 0.05, s.z, r, 0, -Math.pow(10, s.intensity / 2) * 80, 0, { cause: 'player', x: s.x, y: s.y, z: s.z });
       } else if (s.kind === 'collapse') {
@@ -814,6 +816,7 @@ export class Game {
       stimuli: this.stimuli, consequences: this.consequences, sight: this.sight, deny: (msg) => this.abilities.hooks.deny?.(msg),
       sound: (id, x, y, z, g, pitch = 1, ref = 6) => this.audio.play(id, x, y, z, g, pitch, ref, cam.position),
       douse: (x, y, z, r, amount) => { this.threats?.fires.douse(x, y, z, r, amount); },
+      swarm: (effect, x, y, z, r, dmg, fling) => this.threats?.broodHit(x, y, z, r, effect, dmg, fling) ?? [],
     });
     this.renderer.scene.add(this.elements.fx.group);
     this.abilities.effects = this.elements;
@@ -930,6 +933,8 @@ export class Game {
     // A monster in reach takes the blow (armour, weak spots).
     this.threats?.blow(x, y, z, r, jx, jy, jz, { cause: 'player', x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z });
     this.slimeRealm?.blow(x, y, z, r, jx, jy, jz);
+    // The brood's creatures (a punch kills a small one; a blast a clump).
+    if (J > 0) this.threats?.broodHit(x, y, z, r + 0.3, 'blow', J / 150, Math.min(10, J / 60));
     // The army's helicopters, when they are after the player.
     this.forces?.struck(x, y, z, r, jx, jy, jz);
     this.props.hit(x, y, z, r, jx, jy, jz);

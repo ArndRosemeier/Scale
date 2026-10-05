@@ -2,12 +2,19 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.027 — 2026-10-05
+## 0.028 — 2026-10-05
 
 - **The army comes for you**: a giant on a rampage with a bad reputation is now treated like a monster. First a warning (a siren, the screens around you turn to the red alert, a police drone overhead, an officer shouting up at you), then a final warning, then the whole response: police and SWAT firing from a distance, cordons and evacuation sirens, the National Guard, tanks, attack helicopters, jets and artillery — and, rarely, the tactical nuke countdown, aimed at you.
 - **Ending it**: stop wrecking things for a while, or shrink back to human size, and the army stands down — but once it has been called it keeps after you for four minutes at least, so the Guard and the tanks get there and fight. Get knocked out and you are taken into custody. Start again soon after and the army comes back without new warnings.
 - **Tanks, APCs and infantry fight too**: ground units pick spots with a clear view of you, don't park behind each other, aim at whatever part of you they can see and move to a better spot when they lose sight of you. Soldiers no longer get knocked over by their own side's shells.
 - **Fighting back** works: stomp tanks and trucks, knock soldiers down, punch helicopters out of the sky. The news drone films you on the city's screens.
+
+## 0.027 — 2026-10-05
+
+- **The swarm**: a new city event. Manhole lids rattle and chitter, a few creatures dart from one manhole to another — then the brood pours out of the sewers: up to 150 chittering creatures spreading through the street like a dark carpet. They knock people down, gnaw cars to a standstill (the big ones roll them over), chew robots apart, go for you, and run up facades and over low roofs.
+- A good first monster for a weak hero: a punch kills a small one. Fire wave and chain lightning clear whole clumps (the lightning jumps from creature to creature), frost nova freezes them so the next blow shatters them, and the stomp, whirlwind and water jet scatter them. The police come and shoot and baton them.
+- Killing them earns karma (more for the big ones and for saving someone); beating the swarm back earns a bonus and cheers. Once most are dead, the rest flee back underground.
+- Admin console, City events: spawn a scout pack or a full swarm, show its omens.
 
 ## 0.026 — 2026-10-05
 
