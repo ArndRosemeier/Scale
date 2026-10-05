@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.027 — 2026-10-05
+
+- **The countryside is lived in**: hamlets, villages and small towns now dot the land around the city — houses along their streets in the local building style, a church with a spire on the village square, shops round the square in the towns, gardens with trees.
+- **Farmsteads** out in the fields: farmhouse, barns and sheds round a gravel yard, a dirt track to the road, some with an orchard.
+- **Country roads** lead out of the city and link the villages, with a dashed centre line; village lanes and side streets; roads cut through the forests.
+- **Lakes** in the open country, with shores and groups of trees round them — you can swim in them.
+
 ## 0.026 — 2026-10-05
 
 - **Villain groups, first step**: every city now has a street gang and a Syndicate with their own names, colours and emblem — different in every city (for example "the Harbour Saints" and "Marlow Holdings").
