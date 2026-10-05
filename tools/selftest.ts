@@ -38,9 +38,20 @@ import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
-import { ATTRACTION_KINDS, inSite, siteToWorld } from '../src/plan/landmarks';
-import { landmarkParts, partOutline, solidFootprints } from '../src/plan/landmarkParts';
-import { buildLandmarkMesh } from '../src/build/landmarks';
+import { ATTRACTION_KINDS, inSite, siteToWorld, siteRect, marvelDesign, marvelCount, type Landmark } from '../src/plan/landmarks';
+import { landmarkParts, partOutline, solidFootprints, partObstacles, helixFloorAt, PK } from '../src/plan/landmarkParts';
+import { MARVEL_STYLES, MS } from '../src/plan/marvelParts';
+import { PIECE_STRIDE } from '../src/build/landmarkDice';
+import { LandmarkWrecks } from '../src/destruction/LandmarkWreck';
+import type { LandmarkWreckData } from '../src/stream/CityStreamer';
+import type { Destruction } from '../src/destruction/Destruction';
+import type { MeshData } from '../src/build/meshBuilder';
+import type { MaterialArrays } from '../src/render/TextureLibrary';
+import { LandmarkSolids } from '../src/world/LandmarkSolids';
+import { Rng as MRng } from '../src/core/rng';
+import type { MacroPlan } from '../src/plan/types';
+import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
+import * as THREE from 'three';
 import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
 import { intersection } from '../src/core/clip';
 import { readFileSync, existsSync } from 'node:fs';
@@ -2247,6 +2258,172 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(thLooks.size >= 5, `landmarks: town halls differ (${thLooks.size} looks in ${sigs.length} cities)`);
   check([...ATTRACTION_KINDS].filter((k) => kinds.has(k)).length >= 5, `landmarks: varied attractions (${[...kinds].join(', ')})`);
   console.log(`landmarks: ${sigs.length} cities, kinds ${[...kinds].join(', ')} in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Marvels (plan/marvelParts): every family builds for many seeds and city sizes (finite parts inside
+// the site, near and far meshes within budget); the helix walkway can be walked from the street to
+// the roof between its walls; a pierced slab's holes are open; more of them the bigger the city.
+{
+  const t0 = performance.now();
+  const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
+  const make = (style: MS, seed: number, R: number): Landmark | null => {
+    const r = new MRng(seed * 977 + style);
+    const d = marvelDesign(style, R)(r.fork('design'), 1);
+    if (!d) return null;
+    const lm: Landmark = { id: 0, kind: 'marvel', name: 'test', cell: 0, x: 100, z: -50, angle: 0.3 + seed, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: 0, seed: r.nextU32(), style, p: d.p };
+    lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
+    return lm;
+  };
+  let missing = 0, nan = 0, out = 0, empty = 0, maxTris = 0, farBig = 0;
+  const looks = new Map<number, Set<string>>();
+  for (let style = 0; style < MARVEL_STYLES; style++) for (let seed = 1; seed <= 6; seed++) for (const R of [1300, 3500, 9000]) {
+    const lm = make(style as MS, seed, R);
+    if (!lm) { missing++; continue; }
+    const parts = landmarkParts(lm, flat);
+    for (const p of parts) {
+      const nums = [p.x, p.z, p.a, p.y0, p.y1, p.hx, p.hz, ...(p.pts ?? [])];
+      if (nums.some((v) => !Number.isFinite(v))) nan++;
+      const o = partOutline(p);
+      if (o) for (let i = 0; i < o.length; i += 2) if (!inSite(lm, o[i], o[i + 1], 1)) out++;
+    }
+    const m0 = buildLandmarkMesh(lm, flat, 0).build(), m1 = buildLandmarkMesh(lm, flat, 1).build();
+    if (!m0.index.length || !m1.index.length) empty++;
+    if (m1.index.length > m0.index.length) farBig++;
+    maxTris = Math.max(maxTris, m0.index.length / 3);
+    if (!looks.has(style)) looks.set(style, new Set());
+    looks.get(style)!.add(Object.values(lm.p).map((v) => v.toFixed(1)).join('/'));
+  }
+  check(missing === 0 && nan === 0, `marvels: every family designs and builds (${missing} missing, ${nan} non-finite parts)`);
+  check(out === 0, `marvels: structures inside their sites (${out} points out)`);
+  check(empty === 0 && farBig === 0 && maxTris < 60000, `marvels: near and far meshes (${empty} empty, ${farBig} far bigger), at most ${(maxTris / 1000).toFixed(1)}k triangles`);
+  check([...looks.values()].every((v) => v.size >= 6), `marvels: each family differs from seed to seed (${[...looks.values()].map((v) => v.size).join(', ')} looks from 6 seeds × 3 sizes)`);
+  // The helix: up the walkway from its foot to the roof, on its floor all the way, never inside a wall.
+  {
+    const lm = make(MS.Helix, 3, 5000)!;
+    const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    const hp = landmarkParts(lm, flat).find((p) => p.k === PK.Helix && !p.clear)!;
+    const full = Math.abs(hp.turns!) * Math.PI * 2, sg = hp.turns! < 0 ? -1 : 1, rm = (hp.r! + hp.r2!) / 2;
+    let y = hp.y0, off = 0, blocked = 0, steps = 0;
+    for (let phi = 0; phi <= full; phi += 0.4 / rm) {
+      const th = hp.a + sg * phi, x = hp.x + Math.cos(th) * rm, z = hp.z + Math.sin(th) * rm;
+      const g = solids.topAt(x, z, y, 0.5);
+      if (Math.abs(g - helixFloorAt(hp, phi)) > 0.35) off++;
+      if (g > -Infinity) y = g;
+      solids.provider(x - 0.3, z - 0.3, x + 0.3, z + 0.3, (o) => {
+        if (o.y1 - o.y0 < 0.72 || y >= o.y1 - 0.5 || y + 1.8 <= o.y0) return;
+        const dx = x - o.x, dz = z - o.z;
+        if (o.cyl ? Math.hypot(dx, dz) < o.r + 0.3 : Math.abs(dx * o.ux + dz * o.uz) < o.hx + 0.3 && Math.abs(-dx * o.uz + dz * o.ux) < o.hz + 0.3) blocked++;
+      });
+      steps++;
+    }
+    const roof = solids.topAt(hp.x, hp.z, y, 0.5);
+    check(off === 0 && blocked === 0 && Math.abs(y - hp.y1) < 0.4 && Math.abs(roof - hp.y1) < 0.1,
+      `marvels: the helix walks from ${hp.y0.toFixed(1)} up to the roof at ${hp.y1.toFixed(1)} m (ended at ${y.toFixed(1)}, ${off} of ${steps} steps off the floor, ${blocked} blocked, roof ${roof.toFixed(1)})`);
+    // Its glass wall: one cannot step off the walkway.
+    const th = hp.a + sg * full * 0.5, fy = helixFloorAt(hp, full * 0.5), ex = hp.x + Math.cos(th) * (hp.r2! + 0.2), ez = hp.z + Math.sin(th) * (hp.r2! + 0.2);
+    check(solids.hit(hp.x + Math.cos(th) * (hp.r2! - 0.05), fy + 1, hp.z + Math.sin(th) * (hp.r2! - 0.05)) && !solids.hit(ex, fy + 1, ez), 'marvels: the helix walkway has a wall outside');
+  }
+  // A pierced slab: the holes are open, the slab around them solid.
+  {
+    const lm = make(MS.Porous, 2, 5000)!;
+    const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    const slab = landmarkParts(lm, flat).find((p) => p.k === PK.Perf)!;
+    const H = slab.pts!, c = Math.cos(slab.a), s2 = Math.sin(slab.a);
+    let open = 0, solid = 0;
+    for (let i = 0; i < H.length; i += 3) {
+      const x = slab.x + H[i] * c, z = slab.z + H[i] * s2;
+      if (!solids.hit(x, H[i + 1], z)) open++;
+      if (solids.hit(x, H[i + 1] + H[i + 2] + 1, z) || H[i + 1] + H[i + 2] + 1 > slab.y1) solid++;
+    }
+    check(H.length >= 9 && open === H.length / 3 && solid === H.length / 3, `marvels: a slab's ${H.length / 3} holes open (${open}) in solid walls (${solid})`);
+    check(partObstacles([slab]).length > H.length / 3, 'marvels: the pierced slab collides as pieces round its holes');
+  }
+  // How many: often none in a town, more the bigger the city.
+  const mean = (R: number) => { let n = 0, mx = 0; for (let i = 0; i < 400; i++) { const c = marvelCount(R, new MRng(i * 31 + 7)); n += c; mx = Math.max(mx, c); } return [n / 400, mx]; };
+  const [town, townMax] = mean(1200), [city] = mean(3000), [metro] = mean(6000), [mega, megaMax] = mean(12000);
+  check(town < city && city < metro && metro < mega && townMax <= 1 && megaMax <= 3 && town > 0.15 && town < 0.45,
+    `marvels: more in bigger cities (town ${town.toFixed(2)}, city ${city.toFixed(2)}, metropolis ${metro.toFixed(2)}, megacity ${mega.toFixed(2)})`);
+  console.log(`marvels: ${MARVEL_STYLES} families checked in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Breakable marvels (build/landmarkDice, destruction/LandmarkWreck): meshes diced into pieces that
+// all three meshes agree on; a hit breaks what it reaches, a few broken pieces don't bring it down,
+// a cut-through level drops everything above (it falls, lands and leaves rubble), collision follows
+// and a save brings the same state back.
+{
+  const t0 = performance.now();
+  const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
+  const noop = new Proxy({}, { get: () => () => undefined }) as never;
+  const facade = { albedo: null, normal: null, tileMeters: [] } as unknown as MaterialArrays;
+  const geo = (m: MeshData) => {
+    const g = new THREE.BufferGeometry();
+    for (const k in m.attrs) g.setAttribute(k, new THREE.BufferAttribute(m.attrs[k].array, m.attrs[k].size, m.attrs[k].normalized));
+    g.setIndex(new THREE.BufferAttribute(m.index, 1));
+    return g;
+  };
+  let badElem = 0, unnamed = 0;
+  const results: string[] = [];
+  for (const [style, name] of [[MS.Starship, 'starship'], [MS.Helix, 'helix'], [MS.Orbs, 'orbs']] as const) {
+    const r = new MRng(3 * 977 + style);
+    const d = marvelDesign(style, 6000)(r.fork('design'), 1)!;
+    const lm: Landmark = { id: 0, kind: 'marvel', name: 'test', cell: 0, x: 100, z: -50, angle: 0.3, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: 0, seed: r.nextU32(), style, p: d.p };
+    lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
+    const data = (): LandmarkWreckData => {
+      const b = buildLandmarkMeshes(lm, flat);
+      const n = b.pieces!.length / PIECE_STRIDE;
+      const meshes = [b.near.build(), b.far.build(), ...(b.glass ? [b.glass[0].build(), b.glass[1].build()] : [])];
+      meshes.forEach((m, i) => {
+        const e = m.attrs.aElem.array;
+        for (let v = 0; v < e.length; v++) { if (e[v] > n || e[v] < 0) badElem++; if (i !== 1 && i !== 3 && e[v] === 0) unnamed++; }
+      });
+      const W = 1024, H = Math.ceil((n + 1) / W), ed = new Uint8Array(W * H * 2).fill(255);
+      const near = new THREE.Mesh(geo(meshes[0])), glass = b.glass ? new THREE.Mesh(geo(meshes[2])) : null;
+      near.position.set(...meshes[0].origin);
+      if (glass) glass.position.set(...meshes[2].origin);
+      return { index: 0, lm, grid: b.grid!, pieces: b.pieces!, elemData: ed, elemTex: new THREE.DataTexture(ed, W, H), elemW: W, near, nearGlass: glass, facadeMat: null as never, glassMat: null };
+    };
+    const mounds: number[][] = [];
+    const D = {
+      onImpact: undefined, impact: (...a: number[]) => wr.impact(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
+      restoreMound: (x: number, z: number, rr: number, h: number) => { mounds.push([x, z, rr, h]); },
+    } as unknown as Destruction;
+    const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    const wr = new LandmarkWrecks([data()], D, noop, noop, flat, solids, facade);
+    const w = wr.wrecks[0], T = w.T, top = w.box[4];
+    const run = (s: number) => { for (let t = 0; t < s; t += 1 / 30) wr.update(1 / 30); };
+    // A punch-sized hit on one piece of the lower part: that piece (and little else) breaks.
+    const k = Math.floor(((top - w.g.y0) * 0.25) / w.g.ch);
+    const lvl: number[] = [];
+    for (let p = 0; p < w.n; p++) if (w.ijk[p * 3 + 2] === k) lvl.push(p);
+    const p0 = lvl[0];
+    const one = wr.impact(T[p0 * PIECE_STRIDE + 2], T[p0 * PIECE_STRIDE + 3], T[p0 * PIECE_STRIDE + 4], 0.5, 1e6, 1, 0, 0);
+    const weak = wr.impact(T[p0 * PIECE_STRIDE + 2], T[p0 * PIECE_STRIDE + 3], T[p0 * PIECE_STRIDE + 4], 0.5, 100, 1, 0, 0);
+    run(2);
+    const afterOne = wr.standing(0);
+    // A quarter of that level more: it still stands.
+    for (let i = 1; i < lvl.length; i += 4) wr.impact(T[lvl[i] * PIECE_STRIDE + 2], T[lvl[i] * PIECE_STRIDE + 3], T[lvl[i] * PIECE_STRIDE + 4], 0.01, 1e7, 0, 0, 0);
+    run(3);
+    const afterQuarter = wr.standing(0), topBefore = solids.topAt(lm.x, lm.z, 1e9);
+    // The whole level: everything above comes down.
+    for (const p of lvl) wr.impact(T[p * PIECE_STRIDE + 2], T[p * PIECE_STRIDE + 3], T[p * PIECE_STRIDE + 4], 0.01, 1e7, 0, 0, 0);
+    let fell = 0;
+    for (let t = 0; t < 40; t += 1 / 30) { wr.update(1 / 30); fell = Math.max(fell, wr.group.children.length); }
+    const left = wr.standing(0), yCut = w.g.y0 + (k + 1) * w.g.ch;
+    let above = 0;
+    for (let p = 0; p < w.n; p++) if (w.alive[p] && w.ijk[p * 3 + 2] > k) above++;
+    const topAfter = solids.topAt(lm.x, lm.z, 1e9), hitHigh = solids.hit(lm.x, (yCut + top) / 2, lm.z);
+    const save = wr.capture();
+    const wr2 = new LandmarkWrecks([data()], D, noop, noop, flat, new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat), facade);
+    const restored = save.length === 1 && wr2.restore(save[0][0], save[0][1], save[0][2]) && wr2.standing(0) === left;
+    check(one === 1 && weak === 0 && afterOne === w.n - 1, `wrecks ${name}: a hit breaks the piece it reaches (${one}), a weak one nothing (${weak})`);
+    check(afterQuarter > w.n * 0.9, `wrecks ${name}: a quarter of a level broken, it stands (${afterQuarter} of ${w.n} pieces)`);
+    check(above === 0 && fell >= 1 && mounds.length > 0 && !wr.busy, `wrecks ${name}: a level cut through, the ${w.n - left} pieces above fall (${fell} falling, ${mounds.length} mounds, ${above} left above)`);
+    check(topAfter < yCut + 0.5 && topBefore > yCut && !hitHigh, `wrecks ${name}: collision follows (top ${topBefore.toFixed(0)} → ${topAfter.toFixed(0)} m, cut at ${yCut.toFixed(0)})`);
+    check(restored, `wrecks ${name}: a save restores the same ${left} standing pieces`);
+    results.push(`${name} ${w.n}`);
+  }
+  check(badElem === 0 && unnamed === 0, `wrecks: every triangle of the near meshes is a piece, the far ones agree (${badElem} out of range, ${unnamed} unnamed)`);
+  console.log(`wrecks: ${results.join(', ')} pieces in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

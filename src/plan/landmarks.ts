@@ -7,6 +7,9 @@
  *  * Attractions: 1–4 by city size, picked from a weighted pool that depends on the place
  *    (lighthouse only on a coast, fortress only where there is a hill, cathedral more likely in
  *    old-world cities, …) and parameterised so no two cities share the same one.
+ *  * Marvels: by chance (likelier the bigger the city), up to three breathtaking near-future
+ *    buildings — a kilometre-high starship spire, a tower wound by a glazed walkway, a slab pierced
+ *    by giant holes, … (plan/marvelParts).
  *  * Airport: big cities only, out on the levelled airfield (world/airfield) with a road into town.
  *
  * Every in-city landmark reserves an oriented rectangle (its site) inside one cell, clear of the
@@ -24,9 +27,11 @@ import type { CellInfo, MacroPlan } from './types';
 import type { CityField } from './macro';
 import { ROOTS, cityName } from './names';
 import { CURB_H } from '../build/ground';
+import { MARVEL_STYLES, MS } from './marvelParts';
 
 export type AttractionKind = 'tower' | 'cathedral' | 'wheel' | 'monument' | 'museum' | 'lighthouse' | 'fortress' | 'glasshouse';
-export type LandmarkKind = 'townhall' | 'stadium' | 'airport' | AttractionKind;
+/** A marvel: a rare near-future showpiece building (plan/marvelParts: its families). */
+export type LandmarkKind = 'townhall' | 'stadium' | 'airport' | 'marvel' | AttractionKind;
 
 export const ATTRACTION_KINDS: AttractionKind[] = ['tower', 'cathedral', 'wheel', 'monument', 'museum', 'lighthouse', 'fortress', 'glasshouse'];
 
@@ -34,6 +39,7 @@ export const ATTRACTION_KINDS: AttractionKind[] = ['tower', 'cathedral', 'wheel'
 export const LANDMARK_KIND_NAME: Record<LandmarkKind, string> = {
   townhall: 'town hall', stadium: 'stadium', airport: 'airport', tower: 'observation tower', cathedral: 'cathedral', wheel: 'big wheel',
   monument: 'monument', museum: 'museum', lighthouse: 'lighthouse', fortress: 'fortress', glasshouse: 'botanical garden',
+  marvel: 'landmark tower',
 };
 
 export interface Landmark {
@@ -224,10 +230,10 @@ class SiteFitter {
 // ---------------------------------------------------------------------- designs
 
 /** A landmark's variant, parameters and site half sizes (before it is placed). */
-interface Design { style: number; p: Record<string, number>; hu: number; hv: number; maxRange: number }
+export interface Design { style: number; p: Record<string, number>; hu: number; hv: number; maxRange: number }
 
 /** Shrink a design for a tight spot (k < 1); null when it cannot shrink further. */
-type Designer = (r: Rng, k: number) => Design | null;
+export type Designer = (r: Rng, k: number) => Design | null;
 
 function townhallDesign(terrain: Terrain): Designer {
   const pr = terrain.profile, a = pr.arch;
@@ -324,6 +330,91 @@ function attractionDesign(kind: AttractionKind, terrain: Terrain): Designer {
   }
 }
 
+/** How many marvels a city of this radius gets: often none in a town, up to three in a megacity. */
+export function marvelCount(radius: number, r: Rng): number {
+  const p = radius < 1800 ? [0.3, 0, 0] : radius < 4500 ? [0.6, 0.2, 0] : radius < 9000 ? [0.85, 0.45, 0.1] : [1, 0.6, 0.25];
+  let n = 0;
+  while (n < 3 && r.chance(p[n])) n++;
+  return n;
+}
+
+/** Families of marvels a city of this radius can get (the starship spire only in big ones). */
+export function marvelWeights(radius: number, modern: number): number[] {
+  const m = 0.6 + modern;
+  const w: number[] = [];
+  w[MS.Starship] = radius >= 2600 ? 1.3 : 0;
+  w[MS.Helix] = 1.1;
+  w[MS.Porous] = 1;
+  w[MS.Twist] = 1;
+  w[MS.Skyship] = radius >= 1500 ? 0.8 : 0.25;
+  w[MS.Halo] = radius >= 1500 ? 0.8 : 0.2;
+  w[MS.Orbs] = 0.8;
+  w[MS.Stack] = 0.9;
+  return w.map((v) => v * m);
+}
+
+/** A marvel of the family for a city of radius R (previews and tests use it directly). */
+export function marvelDesign(style: MS, R: number): Designer {
+  const sz = clamp(Math.sqrt(R / 4000), 0.6, 1.25);
+  const col = (r: Rng) => r.int(0, 5);
+  switch (style) {
+    case MS.Starship: return (r, k) => {
+      const big = clamp(R / 6000, 0.42, 1.25);
+      const h = Math.round(Math.min(1000, Math.max(340, r.range(0.75, 1) * 900 * big)) * Math.sqrt(k));
+      const Rh = h * r.range(0.042, 0.055) * k, finR = Rh * r.range(2.3, 3.1);
+      const half = Math.ceil(finR + Rh * 0.3 + 8);
+      return { style, hu: half, hv: half, maxRange: 10, p: { h, R: Rh, fins: r.int(3, 5), finR, finTop: r.range(0.2, 0.36), boosters: r.chance(0.45) ? 1 : 0, prof: r.int(0, 2), ell: r.chance(0.35) ? r.range(0.75, 0.9) : 1, col: col(r), engines: r.chance(0.7) ? 1 : 0, decks: r.int(1, 3) } };
+    };
+    case MS.Helix: return (r, k) => {
+      if (k < 0.7) return null;
+      const h = Math.round(r.range(110, 260) * sz), coreR = r.range(11, 19) * k, w = r.range(3.6, 5);
+      const half = Math.ceil(coreR + w + 12);
+      return { style, hu: half, hv: half, maxRange: 2.5, p: { h, coreR, w, turns: clamp(Math.round(h / r.range(32, 55)), 2, 7), double: r.chance(0.35) ? 1 : 0, hh: 3.4, crown: r.int(0, 2), col: col(r) } };
+    };
+    case MS.Porous: return (r, k) => {
+      if (k < 0.55) return null;
+      const twin = r.chance(0.3) ? 1 : 0;
+      const w = Math.round(r.range(36, 64) * k), d = Math.round(r.range(14, 22) * (twin ? 1.7 : 1));
+      return { style, hu: w / 2 + 10, hv: d / 2 + 12, maxRange: 6, p: { h: Math.round(r.range(90, 220) * sz), w, d, holes: r.int(3, 8), twin, col: col(r) } };
+    };
+    case MS.Twist: return (r, k) => {
+      if (k < 0.55) return null;
+      const side = r.range(11, 18) * k, aspect = r.chance(0.5) ? 1 : r.range(0.55, 0.8);
+      const half = Math.ceil(side * Math.hypot(1, aspect) + 10);
+      return { style, hu: half, hv: half, maxRange: 6, p: { h: Math.round(r.range(150, 380) * sz), side, aspect, twist: r.range(2.2, 5.5) * (r.chance(0.5) ? 1 : -1), taper: r.range(0.6, 1), segH: r.pick([3.9, 4.2, 7.8]), col: col(r) } };
+    };
+    case MS.Skyship: return (r, k) => {
+      if (k < 0.7) return null;
+      const towers = r.int(2, 4), towerT = r.range(14, 22), towerD = r.range(28, 44) * k, gap = towerT + r.range(16, 30) * k;
+      const deckL = (towers - 1) * gap + towerT + 2 * r.range(20, 45) * k, deckW = r.range(28, 44) * k, lean = r.chance(0.5) ? 1 : 0;
+      return { style, hu: Math.ceil(deckL / 2 + 8), hv: Math.ceil(Math.max(lean ? towerD * 1.05 : towerD / 2, deckW / 2) + 14), maxRange: 5, p: { towers, towerH: Math.round(r.range(110, 220) * sz), towerT, towerD, gap, deckL, deckW, lean, col: col(r) } };
+    };
+    case MS.Halo: return (r, k) => {
+      if (k < 0.55) return null;
+      const ringR = r.range(26, 60) * k, tubeR = r.range(4, 8);
+      const half = Math.ceil(ringR + tubeR + 8);
+      return { style, hu: half, hv: half, maxRange: 6, p: { h: Math.round(r.range(180, 460) * sz), stalkR: r.range(5, 9), rings: r.int(1, 3), ringR, tubeR, spokes: r.pick([3, 4, 6, 8]), ringAt: r.range(0.6, 0.85), col: col(r) } };
+    };
+    case MS.Orbs: return (r, k): Design | null => {
+      if (k < 0.55) return null;
+      if (r.chance(0.45)) {
+        const edge = r.range(34, 60) * sz * k, Rs = edge * r.range(0.14, 0.2);
+        const half = Math.ceil(edge * 0.82 + Rs + 8);
+        return { style, hu: half, hv: half, maxRange: 5, p: { atom: 1, edge, R: Rs, lift: r.range(6, 14), col: col(r) } };
+      }
+      const Rs = r.range(10, 20) * k;
+      const half = Math.ceil(Rs * 2.6 + 8);
+      return { style, hu: half, hv: half, maxRange: 5, p: { atom: 0, h: Math.round(r.range(90, 200) * sz), R: Rs, n: r.int(3, 6), col: col(r) } };
+    };
+    case MS.Stack: return (r, k) => {
+      if (k < 0.55) return null;
+      const L = r.range(34, 56) * k, W = r.range(12, 18), off = r.range(4, 10) * k;
+      const half = Math.ceil(Math.hypot(L / 2 + off, W / 2 + off / 2) + 6);
+      return { style, hu: half, hv: half, maxRange: 5, p: { blocks: r.int(5, 11), L, W, H: r.range(8, 14), off, mode: r.int(0, 1), gaps: r.range(0.15, 0.5), col: col(r) } };
+    };
+  }
+}
+
 // ------------------------------------------------------------------------- names
 
 const SAINTS = ['Mary', 'Peter', 'Paul', 'Stephen', 'James', 'John', 'Mark', 'Nicholas', 'Michael', 'Catherine', 'Andrew', 'Lawrence', 'Bartholomew', 'Clement'];
@@ -342,6 +433,16 @@ function landmarkName(kind: LandmarkKind, style: number, r: Rng, city: string, a
     case 'fortress': return style === 1 ? r.pick([`${root} Castle ruin`, 'Old Fort', `${root} Citadel ruin`]) : r.pick([`${root} Castle`, `${city} Citadel`, `${root} Fortress`]);
     case 'glasshouse': return r.pick(['Botanical Garden', `${root} Palm House`, `${city} Conservatory`, `${root} Glasshouse`]);
     case 'airport': return r.chance(0.6) ? `${city} International Airport` : `${root} Field Airport`;
+    case 'marvel': return r.pick([
+      [`${root} Spire`, 'The Ark', `${city} Starship`, 'Vanguard Tower', `${root} Rocket`],
+      ['The Helix', `${root} Spiral`, `${city} Spiral Tower`, 'Corkscrew Tower'],
+      ['Moon Gate Tower', `${root} Sieve`, 'Lumen Tower', `${root} Portals`],
+      ['The Twist', `${root} Torsion Tower`, `${city} Twister`, 'Turning Tower'],
+      ['Skyship', `${root} Sky Park`, `${city} Sky Bridge`, `${root} Towers`],
+      ['Halo Tower', `${root} Ring`, `${city} Orbit`, 'Saturn Tower'],
+      ['Pearl Tower', `${root} Orbs`, 'The Molecule', `${city} Spheres`],
+      ['The Stack', `${root} Blocks`, `${city} Cantilever`, 'Jenga Tower'],
+    ][style] ?? ['Landmark Tower']);
   }
 }
 
@@ -360,8 +461,8 @@ export function planLandmarks(plan: MacroPlan, field: CityField, terrain: Terrai
   const land = plan.cells.filter((c) => c.district !== 'water');
 
   const fronted = new Set<LandmarkKind>(['townhall', 'museum', 'cathedral', 'monument']);
-  const add = (kind: LandmarkKind, des: Designer, cells: CellInfo[], target?: FitOpts['target'], accept?: FitOpts['accept']): Landmark | null => {
-    const r = rng.fork(kind);
+  const add = (kind: LandmarkKind, des: Designer, cells: CellInfo[], target?: FitOpts['target'], accept?: FitOpts['accept'], key: string = kind): Landmark | null => {
+    const r = rng.fork(key);
     for (const k of [1, 0.85, 0.7, 0.55]) {
       const d = des(r.fork(k * 100), k);
       if (!d) break;
@@ -485,6 +586,33 @@ export function planLandmarks(plan: MacroPlan, field: CityField, terrain: Terrai
     }
     void field;
   }
+  // --- Marvels: by chance, near-future showpieces where they suit (the tallest towards the centre).
+  {
+    const r = rng.fork('marvels');
+    const n = marvelCount(pr.radius, r);
+    const w = marvelWeights(pr.radius, pr.arch.modern);
+    const styles = Array.from({ length: MARVEL_STYLES }, (_, i) => i as MS);
+    const water = (c: CellInfo) => {
+      const q = terrain.water(c.centroid[0], c.centroid[1]);
+      return Math.min(q.river >= 0 ? q.d - q.halfWidth : 1e4, pr.coastal ? terrain.coastDistance(c.centroid[0], c.centroid[1]) : 1e4);
+    };
+    const central = pr.radius * 0.45;
+    const pen: Record<string, number> = { industrial: 1.5, port: 1.5, suburban: 0.8, oldtown: 0.6, rowhouses: 0.4, park: 0, apartments: 0.1, commercial: -0.2, downtown: -0.3 };
+    let placed = 0;
+    for (let tries = 0; placed < n && tries < MARVEL_STYLES && w.some((v) => v > 0); tries++) {
+      const style = r.weighted(styles, (s) => w[s]);
+      w[style] = 0;
+      const score = (c: CellInfo) => {
+        let s = dist(c, c0.x, c0.z) / central + (pen[c.district] ?? 0) + r.float() * 0.3;
+        if (style === MS.Helix || style === MS.Orbs) s += (c.district === 'park' ? -0.6 : 0) + Math.min(water(c), 600) / 600 - 0.5;
+        if (style === MS.Skyship) s += Math.min(water(c), 600) / 400 - 0.7;
+        if (style === MS.Starship || style === MS.Twist || style === MS.Halo) s += dist(c, c0.x, c0.z) / central;
+        return s;
+      };
+      const cells = land.map((c) => ({ c, s: score(c) })).sort((a, b) => a.s - b.s).slice(0, 60).map((q) => q.c);
+      if (add('marvel', marvelDesign(style, pr.radius), cells, undefined, undefined, `marvel${placed}`)) placed++;
+    }
+  }
   // --- Airport: on the airfield the terrain levelled, with a road from the nearest arterial node.
   const af = terrain.airfield;
   if (af) {
@@ -546,5 +674,6 @@ export function siteZones(lm: Landmark): { base: ZoneKind; zones: SiteZone[] } {
     case 'lighthouse': return { base: 'park', zones: [] };
     case 'wheel': case 'fortress': case 'glasshouse': return { base: 'park', zones: [] };
     case 'airport': return { base: 'paved', zones: [] };
+    case 'marvel': return { base: 'plaza', zones: [] };
   }
 }

@@ -11,6 +11,9 @@ import type { CellPlan } from '../plan/cell';
 import { WorkerPool } from './WorkerPool';
 import { BINFO_STRIDE, type CellResult, type FromWorker } from './protocol';
 import { createFacadeMaterial, createElemDepthMaterial } from '../render/materials/facade';
+import { clearGlassMaterial, clearGlassElemMaterial } from '../render/materials/clearGlass';
+import type { WreckGrid } from '../build/landmarkDice';
+import type { Landmark } from '../plan/landmarks';
 import { createGroundMaterial, createTerrainMaterial, createWaterMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
 
@@ -62,6 +65,25 @@ export class CellState {
 
 interface Tile { key: string; x0: number; z0: number; size: number; mesh: THREE.Mesh | null; status: 'loading' | 'ready'; used: number }
 
+/**
+ * A breakable landmark as loaded (destruction/LandmarkWreck breaks it): its pieces (landmarkDice
+ * table), their element state (shared by the near, far and glass meshes) and the meshes. The near
+ * meshes keep their CPU geometry (falling parts are cut out of it).
+ */
+export interface LandmarkWreckData {
+  index: number;
+  lm: Landmark;
+  grid: WreckGrid;
+  pieces: Float32Array;
+  elemData: Uint8Array;
+  elemTex: THREE.DataTexture;
+  elemW: number;
+  near: THREE.Mesh;
+  nearGlass: THREE.Mesh | null;
+  facadeMat: THREE.MeshStandardMaterial;
+  glassMat: THREE.Material | null;
+}
+
 export class CityStreamer {
   readonly root = new THREE.Group();
   readonly cells = new Map<number, CellState>();
@@ -90,6 +112,8 @@ export class CityStreamer {
   /** Async shader compile for new meshes (set by the game). */
   prepare: ((o: THREE.Object3D) => Promise<unknown>) | null = null;
   onCellEvicted?: (c: CellState) => void;
+  /** Breakable landmarks (filled by loadLandmarks). */
+  readonly wrecks: LandmarkWreckData[] = [];
 
   constructor(readonly macro: MacroPlan, readonly pool: WorkerPool, readonly tex: TextureLibrary) {
     this.groundMat = createGroundMaterial(tex.ground);
@@ -111,28 +135,62 @@ export class CityStreamer {
 
   /**
    * Landmarks (town hall, stadium, attractions, airport): always present, one LOD object each
-   * (near mesh with all details, far mesh without), sharing one facade material.
+   * (near mesh with all details, far mesh without), sharing one facade material. Breakable ones
+   * (the marvels) get their own element state and materials and keep the near geometry.
    */
   async loadLandmarks(): Promise<void> {
     if (!this.macro.landmarks?.length) return;
     const r = await this.pool.run<Extract<FromWorker, { type: 'landmarks' }>>({ type: 'landmarks', job: 0 }, -1);
-    const mat = createFacadeMaterial(this.tex.facade, null);
+    const shared = createFacadeMaterial(this.tex.facade, null);
     r.meshes.forEach(([near, far], i) => {
       const lm = this.macro.landmarks[i];
-      const lod = new THREE.LOD();
-      lod.name = `landmark:${lm.kind}`;
-      // LOD distances are measured to the object's own position: put it at the landmark.
-      lod.position.set(...near.origin);
-      // Switch to the far mesh a little beyond the site (the airport is kilometres long).
-      const switchAt = 450 + Math.hypot(lm.hu, lm.hv) * 0.6;
-      for (const [m, d] of [[near, 0], [far, switchAt]] as const) {
-        const mesh = new THREE.Mesh(toGeometry(m), mat);
-        mesh.position.set(m.origin[0] - near.origin[0], m.origin[1] - near.origin[1], m.origin[2] - near.origin[2]);
-        mesh.castShadow = mesh.receiveShadow = true;
-        releaseAfterUpload(mesh.geometry);
-        lod.addLevel(mesh, d);
+      const wr = r.wreck?.[i] ?? null;
+      let mat: THREE.MeshStandardMaterial = shared, glassMat: THREE.Material = clearGlassMaterial(), depth: THREE.Material | undefined;
+      let elem: { data: Uint8Array; tex: THREE.DataTexture; w: number } | null = null;
+      if (wr) {
+        const w = 1024, h = Math.max(1, Math.ceil((wr.pieces.length / 12 + 1) / w));
+        const data = new Uint8Array(w * h * 2).fill(255);
+        const tex = new THREE.DataTexture(data, w, h, THREE.RGFormat, THREE.UnsignedByteType);
+        tex.needsUpdate = true;
+        elem = { data, tex, w };
+        mat = createFacadeMaterial(this.tex.facade, tex, w);
+        depth = createElemDepthMaterial(tex, w);
+        glassMat = clearGlassElemMaterial(tex, w);
       }
-      this.root.add(lod);
+      // Switch to the far mesh a little beyond the site (the airport is kilometres long), and
+      // not while one is up a tall one (LOD distances are measured to its foot).
+      const switchAt = 450 + Math.max(Math.hypot(lm.hu, lm.hv) * 0.6, near.bounds[4] * 1.1);
+      const add = (meshes: [MeshData, MeshData], m: THREE.Material, glass: boolean): THREE.Mesh => {
+        const lod = new THREE.LOD();
+        lod.name = `landmark:${lm.kind}${glass ? ':glass' : ''}`;
+        // LOD distances are measured to the object's own position: put it at the landmark.
+        lod.position.set(...meshes[0].origin);
+        let first: THREE.Mesh | null = null;
+        for (const [md, d] of [[meshes[0], 0], [meshes[1], switchAt]] as const) {
+          const mesh = new THREE.Mesh(toGeometry(md), m);
+          mesh.position.set(md.origin[0] - meshes[0].origin[0], md.origin[1] - meshes[0].origin[1], md.origin[2] - meshes[0].origin[2]);
+          // (Clear glass casts no shadow and draws after the opaque world.)
+          mesh.castShadow = !glass;
+          mesh.receiveShadow = true;
+          if (glass) mesh.renderOrder = 2;
+          if (depth && !glass) mesh.customDepthMaterial = depth;
+          // (The near mesh of a breakable one stays on the CPU too: falling parts are cut from it.)
+          if (!(elem && d === 0)) releaseAfterUpload(mesh.geometry);
+          lod.addLevel(mesh, d);
+          first ??= mesh;
+        }
+        this.root.add(lod);
+        return first!;
+      };
+      const nearMesh = add([near, far], mat, false);
+      const g = r.glass[i];
+      const nearGlass = g ? add(g, glassMat, true) : null;
+      if (wr && elem) {
+        this.wrecks.push({
+          index: i, lm, grid: wr.grid, pieces: wr.pieces, elemData: elem.data, elemTex: elem.tex, elemW: elem.w,
+          near: nearMesh, nearGlass, facadeMat: mat, glassMat: g ? glassMat : null,
+        });
+      }
     });
   }
 

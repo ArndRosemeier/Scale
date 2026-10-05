@@ -113,6 +113,8 @@ export interface SaveDamage {
   buildings: [number, number, number][];
   /** Rubble mounds: [x, z, r, h]. */
   mounds: [number, number, number, number][];
+  /** Broken pieces of breakable landmarks: [landmark index, piece count, index set]. */
+  landmarks?: [number, number, string][];
 }
 
 export interface SaveData {
@@ -268,6 +270,7 @@ export function parseSave(input: string | unknown): SaveData {
       })),
       buildings: (Array.isArray(dmg.buildings) ? dmg.buildings : []).filter((b): b is [number, number, number] => Array.isArray(b) && b.length >= 3 && b.every(Number.isFinite)).map((b) => [b[0], b[1], b[2]]),
       mounds: (Array.isArray(dmg.mounds) ? dmg.mounds : []).filter((m): m is [number, number, number, number] => Array.isArray(m) && m.length >= 4 && m.every(Number.isFinite)).map((m) => [m[0], m[1], m[2], m[3]]),
+      ...(Array.isArray(dmg.landmarks) ? { landmarks: dmg.landmarks.filter((l): l is [number, number, string] => Array.isArray(l) && l.length >= 3 && Number.isInteger(l[0]) && Number.isInteger(l[1]) && typeof l[2] === 'string').map((l) => [l[0], l[1], str(l[2], '', 1 << 20)] as [number, number, string]) } : {}),
     } : null,
     aftermath: aft ? (() => {
       const L = obj(aft.ledger), n = (v: unknown) => Math.floor(num(v, 0, 0));

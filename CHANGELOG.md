@@ -2,6 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.036 — 2026-10-05
+
+- **Marvels**: some cities now have breathtaking near-future landmark buildings, different in every city. Towns get one now and then, big cities often, megacities up to three. There are eight kinds, each shaped differently every time:
+  - a **starship spire**, 340 m to a kilometre tall (big cities only): a rocket hull standing on swept fins, with engine pods, sometimes strap-on boosters, and observation rings
+  - a **helix tower** wound by one or two glass walkways that you can walk up from the street to the roof
+  - a **slab pierced by giant round holes** that you can fly through
+  - a **twisted tower**, a **skyship** (towers carrying a long sky park), a **halo tower** with rings on spokes, **orbs** (spheres on a stalk, or a giant molecule standing on one corner) and a **stack** of cantilevered blocks
+- They are on the map, the compass and the minimap like the other landmarks, with a plaza around them. Their windows light up at night, and the glass of walkways, domes and orbs is see-through.
+- **They can be smashed**, piece by piece, like the city's buildings: punches, blasts, fireballs, monsters and the army all break off what they hit. Cut through a level and everything above it loses its hold: a tall top topples toward the damaged side (from high up it tumbles as it falls) and crashes down across the streets, flattening what it lands on and leaving a line of rubble; a wide, low part comes straight down and crushes what is under it. Collision follows the damage (you can walk through the holes, and broken walkway is gone), and saves keep it.
+
 ## 0.035 — 2026-10-05
 
 - **Villains with powers**: the street gang and the Syndicate now send lieutenants now and then. They are tougher, dressed in their group's colours with glowing trim, and stand and fight with powers instead of running.

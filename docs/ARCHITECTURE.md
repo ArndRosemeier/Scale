@@ -250,6 +250,15 @@ Special buildings, planned with the macro plan (`MacroPlan.landmarks`, ~10 ms) a
   gothic or domed cathedral, big wheel, obelisk / column / triumphal arch / statue, classical or modern museum,
   lighthouse only on a coast, castle or castle ruin only where there is a hill, botanical glasshouse), and for
   cities from 3.5 km radius an airport.
+* **Marvels** (`src/plan/marvelParts`): by chance (≈30 % of towns, up to three in a megacity) rare near-future
+  showpieces, each a recipe the seed varies: a 340–1000 m starship spire (lathe hull in bands, swept fins, engine
+  pods, boosters, observation rings; big cities only), a helix tower wound by one or two glazed walkways one can
+  walk from the street to the roof, a slab pierced by giant round holes (one can fly through them), a twisted tower,
+  a skyship (leaning towers carrying a long sky park), a halo tower (inhabited rings on spokes), orbs (pearls on a
+  stalk, or a cube of spheres on its corner), a stack of cantilevered blocks. The tallest go towards the centre,
+  the helix and orbs to parks and water. The only breakable landmarks (see **Breaking** below).
+  `npx tsx tools/marvels.ts <size>` lists which seeds have which; `preview-marvels.html?seed=&radius=` shows one of
+  each family (`&still=1&blast=<s>`: cut through a third of the way up, <s> seconds later; key B in the live page).
 * **Sites**: every in-city landmark reserves an oriented rectangle inside one cell (`SiteFitter`: inside the cell
   inset by its arterials' half width and sidewalk, so off the sewer manholes too; dry, flat enough, apart from the
   other sites; near its target — the core, a hilltop, the shore, a park; the front (-v) towards the cell edge for
@@ -258,16 +267,37 @@ Special buildings, planned with the macro plan (`MacroPlan.landmarks`, ~10 ms) a
   the site gets its ground (`siteZones`: square, lawn or car park, with holes under the structure) and its own
   props (lamps, benches, trees, a fountain, parked cars) — after the cafés, so no terrace spills onto it.
 * **Structure** (`landmarkParts`): a list of primitive parts — boxes, cylinders / cones, (elliptic) domes, gable
-  and pyramid roofs, stands (quad prisms with stepped seat rows), beams, tubes, barrel vaults, flats, quads —
+  and pyramid roofs, stands (quad prisms with stepped seat rows), beams, tubes, barrel vaults, flats, quads,
+  lathes (surfaces of revolution, elliptic, open or closed into rings), prisms (outlines in a vertical plane),
+  pierced slabs (round holes through), helix walkways, struts (round, any slope) —
   each with a facade-atlas material (layer, tint, window grammar). One description serves the mesh, collision
   (`partObstacles`: the solid parts; open structures like the wheel use hidden collision volumes), the map
   (`partFootprints`) and the planner (`solidFootprints`). Walls that follow the terrain (fortress) sample it.
 * **Mesh** (`build/landmarks`, worker job `landmarks`): one `THREE.LOD` per landmark in the facade material
-  (shared, not destructible), near mesh with all details, far mesh without `detail` parts and with fewer
-  segments; 0.1–11 k triangles each.
+  (shared), near mesh with all details, far mesh without `detail` parts and with fewer segments; 0.1–11 k
+  triangles each. Marvels are diced (`build/landmarkDice`): every polygon is clipped along a grid in the
+  landmark's frame (3.5–8 m across, 3.5–9 m up), each grid cell with geometry is a piece = one element (`aElem`);
+  the near meshes (opaque and glass) name the pieces (a table: key, area, centroid, bounds, layer), the far
+  meshes reuse them. 0.6–8.5 k pieces, 5–81 k triangles near; they get their own element texture and materials,
+  and their near geometry stays on the CPU (falling parts are cut out of it).
 * **Collision** (`world/LandmarkSolids`): a 32 m grid of the solid parts; an obstacle provider for the walker
   (walls stop, tops can be stood on), `WorldIndex.groundHeight` (physics ground) and `WorldIndex.raycast`
-  (camera, aiming, sight).
+  (camera, aiming, sight). Lathes collide as stacks of cylinders (rings as boxes round them), prisms as boxes
+  per height band, pierced slabs as boxes round the holes; helix walkways analytically (floor heights per turn
+  at a point; floor and outer-wall pieces generated only around a query). On a marvel, an obstacle around a
+  broken piece is cut into one per grid level, which stops blocking once fewer than half its pieces stand; helix
+  floors check the piece at the point.
+* **Breaking** (`destruction/LandmarkWreck`, reached through `Destruction.impact` / `update`): an impact breaks
+  the pieces it reaches whose strength (wall material × area, at most 6 m², so a test blast breaks concrete) it beats, spreading at
+  60 m/s with debris, chips, dust. When the breaks settle the structure is checked: pieces connected
+  (26-neighbourhood) to grounded ones stand, except above a level that kept < 35 % of its pieces. Loose parts
+  under 10 pieces shatter; larger ones are cut out (`destruction/extract`) and fall: slender ones (taller than
+  their width) topple toward the broken side about a hinge, high up they drop as they turn, and smash along the
+  line they land on (impacts on the buildings there, debris, rubble mounds); squat ones come straight down,
+  crushing standing pieces under them level by level, and end in a mound. Saves keep the broken pieces
+  (`SaveDamage.landmarks`); restoring drops what they held up quietly.
+* **Clear glass**: parts flagged `clear` (helix walkways, glass orbs, domes, balustrades) are meshed apart and
+  drawn with a transparent physical glass material (`render/materials/clearGlass`), no shadow.
 * **Airport**: `world/airfield` picks a flat, dry rectangle just beyond the protected zone around the city (the
   city's terrain stays unchanged), the terrain levels it (`Terrain.height`, a 90 m embankment band) and the land
   use keeps forest, fields and hedges off it. Runway(s) with markings, taxiway, apron, a terminal (flat, waved or

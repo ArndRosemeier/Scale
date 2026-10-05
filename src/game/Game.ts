@@ -19,6 +19,7 @@ import { Player } from '../player/Player';
 import { CameraRig } from '../player/CameraRig';
 import { bridgeProfiles } from '../build/bridges';
 import { LandmarkSolids } from '../world/LandmarkSolids';
+import { LandmarkWrecks } from '../destruction/LandmarkWreck';
 import { ENTRANCE_L } from '../plan/metroDims';
 import { BodyService } from '../humanoid/client/BodyService';
 import { clipLibraryReady } from '../humanoid/client/anim/clips';
@@ -288,6 +289,11 @@ export class Game {
     this.crowd.prepare = (o) => this.renderer.compileAsync(o);
     this.population = new Population(macro, this.settings.seed);
     await Promise.all([this.streamer.loadBridges(), this.streamer.loadLandmarks()]);
+    // The marvels break piece by piece (their meshes came diced).
+    if (this.streamer.wrecks.length) {
+      this.destruction.landmarks = new LandmarkWrecks(this.streamer.wrecks, this.destruction, this.debris, this.dust, this.terrain, landmarks, tex.facade);
+      this.renderer.scene.add(this.destruction.landmarks.group);
+    }
     // Start at the main centre (or a loaded save's spot), at street level.
     const c = this.startAt ?? macro.centres[0];
     const cam = this.renderer.camera;

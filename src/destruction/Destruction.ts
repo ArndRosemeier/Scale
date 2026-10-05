@@ -28,6 +28,8 @@ import { createFacadeMaterial, createElemDepthMaterial } from '../render/materia
 import type { TextureLibrary } from '../render/TextureLibrary';
 import { polyCentroid, polyArea, minAreaRect } from '../core/geom2';
 import { MinHeap } from '../core/heap';
+import type { LandmarkWrecks } from './LandmarkWreck';
+import { extractElements } from './extract';
 
 /** Who broke a building: the player, a threat (monster, rogue machines), the army, a fire. */
 export type DamageCause = 'player' | 'threat' | 'military' | 'fire';
@@ -100,6 +102,8 @@ export class Destruction {
   readonly mounds: RubbleMound[] = [];
   private moundMesh: THREE.InstancedMesh;
   onImpact?: (e: ImpactEvent) => void;
+  /** Breakable landmarks (the marvels), once loaded: impacts reach them too. */
+  landmarks: LandmarkWrecks | null = null;
   /**
    * Who the impacts are for right now: the player unless a threat, the army or a fire is acting
    * (they wrap their calls in `as`). Each building remembers who broke it last; a collapse within
@@ -294,6 +298,7 @@ export class Destruction {
       }
       if (broken > before) { this.pendingChecks.add(ref); this.damaged(ref, broken - before, x, y, z); }
     }
+    if (this.landmarks) broken += this.landmarks.impact(x, y, z, radius, impulse, dx, dy, dz);
     if (broken || glassBroken) this.onImpact?.({ x, y, z, energy: impulse, kind: broken ? kind : 'glass' });
     return broken;
   }
@@ -351,6 +356,7 @@ export class Destruction {
       const q = this.collapseQ.shift()!;
       if (q.ref.alive) { this.lastCollapse = this.clock; this.startCollapse(q.ref, q.L, q.from, q.asym); }
     }
+    this.landmarks?.update(dt);
     for (const c of this.collapses) if (!c.done) this.stepCollapse(c, dt);
     for (let i = this.collapses.length - 1; i >= 0; i--) {
       const c = this.collapses[i];
@@ -826,7 +832,7 @@ export class Destruction {
 
   /** Is a building (index) visible as damaged? */
   isCollapsing(): boolean {
-    return this.collapses.length > 0;
+    return this.collapses.length > 0 || !!this.landmarks?.busy;
   }
 
   /** Remove everything bound to a cell (when evicted). */
@@ -843,49 +849,6 @@ function distToPanel(p: Panel, x: number, y: number, z: number): number {
   const qx = p.ax + dx * t, qz = p.az + dz * t;
   const qy = Math.max(p.y0, Math.min(p.y1, y));
   return Math.hypot(x - qx, y - qy, z - qz);
-}
-
-/** Copy the triangles whose vertices belong to the given element ids into a new geometry. */
-function extractElements(src: THREE.BufferGeometry, elems: Set<number>): THREE.BufferGeometry | null {
-  // Runs on the whole cell's facade mesh: typed arrays and flat lookup tables only.
-  const idx = src.getIndex()!.array as ArrayLike<number>;
-  const aElem = (src.getAttribute('aElem') as THREE.BufferAttribute).array as ArrayLike<number>;
-  let maxE = 0;
-  for (const e of elems) if (e > maxE) maxE = e;
-  const want = new Uint8Array(maxE + 1);
-  for (const e of elems) want[e] = 1;
-  const vCount = (src.getAttribute('position') as THREE.BufferAttribute).count;
-  const map = new Int32Array(vCount).fill(-1);
-  const order: number[] = [];
-  const outIdx: number[] = [];
-  for (let i = 0; i < idx.length; i += 3) {
-    const a = idx[i];
-    const e = Math.round(aElem[a]);
-    if (e > maxE || !want[e]) continue;
-    for (let k = 0; k < 3; k++) {
-      const v = idx[i + k];
-      let m = map[v];
-      if (m < 0) { m = order.length; map[v] = m; order.push(v); }
-      outIdx.push(m);
-    }
-  }
-  if (!outIdx.length) return null;
-  const g = new THREE.BufferGeometry();
-  for (const name of Object.keys(src.attributes)) {
-    const a = src.getAttribute(name) as THREE.BufferAttribute;
-    const size = a.itemSize;
-    const arr = a.array as unknown as Float32Array;
-    const Arr = (arr as unknown as { constructor: new (n: number) => Float32Array }).constructor;
-    const out = new Arr(order.length * size);
-    for (let i = 0; i < order.length; i++) {
-      const o = order[i] * size, d = i * size;
-      for (let k = 0; k < size; k++) out[d + k] = arr[o + k];
-    }
-    g.setAttribute(name, new THREE.BufferAttribute(out, size, a.normalized));
-  }
-  g.setIndex(order.length < 65536 ? new THREE.BufferAttribute(Uint16Array.from(outIdx), 1) : new THREE.BufferAttribute(Uint32Array.from(outIdx), 1));
-  g.computeBoundingSphere();
-  return g;
 }
 
 export { polyCentroid };
