@@ -2,6 +2,23 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.041 — 2026-10-05
+
+- **Named bosses**: every villain group now has a boss with a name and a title: the gang's **Kingpin**, the Syndicate's **Chairman**, the techno-cult's **Architect** and the elemental cult's **High Invoker**. A boss is far tougher than a lieutenant, glows brightly in the group's colour, has the lieutenants' powers plus one of its own, and fights to the end.
+- **Groups remember you**: stopping a group's operations, knocking out its members and busting its stash makes it notice you.
+  - Once it has **noticed you**, more of its operations come with a lieutenant, an extra guard stands at its hideout, and now and then the boss leads an operation in person.
+  - Once it is **out for you**, its members stand and fight instead of running, and the boss guards the hideout.
+  - It calms down again over a few game days. A message tells you when a group starts paying attention.
+- **Jail and breakout**: a boss the police cuff goes to jail for three game days (longer each time) and then breaks out. A boss who gets away after you went for them comes back with a grudge.
+- **Breaking a group**: with its boss behind bars and its stash busted, a group collapses. It runs no operations until one of the two is over.
+- Bosses, their records and every group's notoriety are kept in saves.
+- Admin console, Crime & deeds: a gang, Syndicate and cult boss, a button that makes the gang hunt you, and a list of bosses and notoriety.
+
+## 0.040 — 2026-10-05
+
+- **Autorun and autoflight on R**: press R and you keep going forward on your own, walking or running on foot and flying when in the air (Shift still runs or boosts, the mouse still steers). Press R again, W or S to stop; it also stops when you sit down or are knocked down.
+- **Rallying the army moved to G** (it was R): with reputation 40+, G makes the soldiers near you follow you. T still calls the airstrike.
+
 ## 0.038 — 2026-10-05
 
 - **Two new villain groups**: every city now also has a **techno-cult** (grey work clothes with glowing seams, in industrial districts and the port) and an **elemental cult** (long dark robes with glowing trim, in the old town and the parks). They hold turf, fight the other groups and show on the map like the street gang and the Syndicate.

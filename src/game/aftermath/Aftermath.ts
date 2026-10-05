@@ -17,7 +17,7 @@
  *  - the aftermath: smoke lingering for hours, cordon tape and barriers round the worst damage, a
  *    memorial (flowers, candles, mourners) near it, the EMS staying a while, the carcass of a monster
  *    brought down — a landmark, then carted away by a crane and flatbeds (Cleanup);
- *  - the player leading the army (Command: R rally, T airstrike — reputation unlocks).
+ *  - the player leading the army (Command: G rally, T airstrike — reputation unlocks).
  *
  * Reconstruction (scaffolding and cranes on damaged buildings, slow repair) is not built: the hook
  * is `onReconstruct` (a scene's damage clusters when its aftermath ends).
@@ -150,7 +150,7 @@ export class Aftermath {
     document.body.appendChild(this.hud);
     // The P screen tells how to lead the army (controls only).
     const info = g.powers.info;
-    g.powers.info = () => `${info()} <span class="pw-rep">Army: <b>R</b> rally (reputation 40+) · <b>T</b> airstrike on a targeted creature (70+)</span>`;
+    g.powers.info = () => `${info()} <span class="pw-rep">Army: <b>G</b> rally (reputation 40+) · <b>T</b> airstrike on a targeted creature (70+)</span>`;
   }
 
   /** Absolute game hours. */

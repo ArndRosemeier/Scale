@@ -78,3 +78,11 @@ export function lieutenantOutfit(f: Faction, seed: number): EquipmentVisuals {
   o.chest.visual = { ...o.chest.visual, glow: 0.4, glowColor: A };
   return o as unknown as EquipmentVisuals;
 }
+
+/** A group's boss (Phase 4): the lieutenant's look, fully lit — the one everyone else makes way for. */
+export function bossOutfit(f: Faction, seed: number): EquipmentVisuals {
+  const o = lieutenantOutfit(f, seed) as unknown as Record<string, { defId: string; visual: { glow: number; glowColor?: C3 } }>;
+  const A = f.palette.accent;
+  for (const k of ['back', 'chest', 'head']) if (o[k]) o[k].visual = { ...o[k].visual, glow: k === 'back' ? 1 : 0.6, glowColor: A };
+  return o as unknown as EquipmentVisuals;
+}

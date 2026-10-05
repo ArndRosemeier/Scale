@@ -487,6 +487,17 @@ every frame) owns the parts and draws what belongs to them.
   draws the work (sparks to the port, rune ring and rising column). `done` gains `SHIFT.ritual` turf; escaped channelled
   crimes gain nothing more. New power `emp` (Technomancer): cars stall, drones drop, the hero is jolted and slowed.
   Dev: `dev.crime(kind, dist, 'techno' | 'cult', 'lt')`, `dev.rushOps()`, `dev.fleets()`.
+  Phase 4 part 1, bosses: `factions/Bosses` (pure) seeds a named boss per group (`BOSS_KINDS`: title and an own power
+  on top of the lieutenant set) and keeps notoriety per group (0..100; up on KOs, stops, busts, a boss beaten or
+  escaped; fades `NOTORIETY.fade` per game hour). Heat `wary` raises lieutenant chances (`ltChance`), posts an extra
+  hideout guard (`HideoutGuard.extra`) and lets the boss lead an operation now and then (`bossChance`); `hunted` sets
+  `memo.grudge` on members (`Crime.decide`: they fight while fit) and puts the boss at the hideout door. The boss is a
+  `Crime.promote(c, powers, BOSS)` (memo.boss, fights to 20 %; `bossOutfit`); CrimeSystem tracks `bossOf` per crime:
+  cuffed means `jail` (72 game hours, +24 each time, then a breakout that leaves the group wary), gone after the hero
+  was on to them means an escape (+notoriety). Boss jailed and stash busted at once: the group has collapsed (no
+  operations, its cells count as nobody's in `playerCell` / `begin`) until one of the two is over. Saved in
+  `SaveData.factions.bosses` (by archetype). Dev: `dev.bosses(group?, notoriety?)`, `dev.jailBoss(group, hours)`,
+  `dev.crime(kind, dist, group, 'boss')`.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a
@@ -877,7 +888,7 @@ every frame (`prof.threats`).
     over a flatbed (kind `flatbed`), which drives off with it while the next one arrives; parts cut away are no longer
     obstacles. Gone: `ThreatDirector.removeRemains`. Far from the player only the schedule runs; the share carted away is
     saved (`SaveBody.cleared`).
-  * **The player leading the army** (`Command.ts`): **R** with reputation ≥ 40 — the squads within 350 m gather on the
+  * **The player leading the army** (`Command.ts`): **G** with reputation ≥ 40 — the squads within 350 m gather on the
     player and follow for 60 s (`Forces.rally` every 4 s; a soldier calls "On you!"); **T** with reputation ≥ 70 and a
     giant creature as the Tab target — two jets roar in and bomb it (`Forces.airstrike`; held up to 20 s while the army's
     jets are on a run), 150 s between calls. A refusal says why in one short line; the P screen and the help list the keys.
