@@ -9,7 +9,10 @@ between the groups, hideouts (found by walking past or from a cuffed member, gua
 drifts by itself every game hour, rewards the moment a crime is stopped. Phase 3 part 1 is built (v0.035): the caster core,
 the villain power set with tells, the gang's Brute and the Syndicate's Enforcer leading operations. Part 2 is built
 (v0.038): the techno-cult (robot hijacks, its Technomancer with an EMP) and the elemental cult (rituals before
-landmarks, its Invoker). Moving the hero's own powers onto the caster core is left open. Builds on the street-crime layer (`src/game/crime`),
+landmarks, its Invoker). Moving the hero's own powers onto the caster core is left open. Phase 4 part 1 is built
+(v0.041): named bosses with a saved record, jail and breakout, notoriety per group (wary, hunted), a group that collapses
+when its boss is jailed and its stash busted. Next: boss operations as threat events, then the eco-radicals and the
+necromancers. Builds on the street-crime layer (`src/game/crime`),
 the threat/response layer (`src/game/threats`, `src/game/response`) and the powers
 (`src/game/powers`). Design rules from PLAYGROUND_PLAN §0 still hold: show, don't tell (no quests,
 no dialogue trees, sparse barks); nobody dies (KO / injured); progression is karma.
