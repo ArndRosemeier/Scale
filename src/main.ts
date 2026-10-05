@@ -19,8 +19,11 @@ import { MainMenuSaves } from './ui/SaveUi';
 import { versionLink } from './ui/Changelog';
 import { MenuMusic } from './audio/music/MenuMusic';
 import { probeGpu, maybeShowGpuHint } from './ui/GpuHint';
+import { installTouchMode } from './ui/touch';
+import './ui/touch.css';
 
 const params = new URLSearchParams(location.search);
+installTouchMode();
 const menu = document.getElementById('menu') as HTMLDivElement;
 menu.querySelector('.sub')?.after(versionLink());
 const seedIn = document.getElementById('seed') as HTMLInputElement;

@@ -20,6 +20,7 @@ import { cityClass } from '../../world/settings';
 import { STATION_HALF, ENTRANCE_L } from '../../plan/cell';
 import { MapItem } from '../../stream/protocol';
 import { LANDMARK_KIND_NAME } from '../../plan/landmarks';
+import { isTouch } from '../touch';
 import { clamp } from '../../core/math';
 
 const LAYERS_KEY = 'scale.map.layers';
@@ -83,6 +84,9 @@ export class GameMap {
   private cz = 0;
   private s = 0.1;
   private drag: { x: number; y: number; cx: number; cz: number; moved: boolean } | null = null;
+  /** Fingers on the map (touch): two pinch-zoom. */
+  private fingers = new Map<number, { x: number; y: number }>();
+  private pinchD = 0;
   private picked: Pick | null = null;
   private hoverStation = -1;
   private labelW = new Map<number, number>();
@@ -197,7 +201,7 @@ export class GameMap {
         <button data-act="all" title="Whole city (0)">⤢</button>
       </div>
       <div class="map-scale"><div class="map-north" title="North">▲<span>N</span></div><div><div class="bar"></div><span class="lbl"></span></div></div>
-      <div class="map-help">Drag to pan · Wheel to zoom · Click to set a marker${game.mode === 'sandbox' ? ' or travel' : ''} · <b>M</b> / <b>Esc</b> close</div>
+      <div class="map-help">${isTouch() ? `Drag to pan · Pinch to zoom · Tap to set a marker${game.mode === 'sandbox' ? ' or travel' : ''} · × closes` : `Drag to pan · Wheel to zoom · Click to set a marker${game.mode === 'sandbox' ? ' or travel' : ''} · <b>M</b> / <b>Esc</b> close`}</div>
       <button class="map-close" title="Close (M)">×</button>
       <div class="map-pop"></div>`;
     document.body.appendChild(this.root);
@@ -237,10 +241,24 @@ export class GameMap {
     // ---- mouse
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      if (e.pointerType === 'touch') {
+        this.fingers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+        if (this.fingers.size >= 2) { this.drag = null; this.pinchD = this.fingerDist(); this.hidePop(); return; }
+      }
       this.drag = { x: e.clientX, y: e.clientY, cx: this.cx, cz: this.cz, moved: false };
       this.canvas.setPointerCapture(e.pointerId);
     });
     this.canvas.addEventListener('pointermove', (e) => {
+      const f = this.fingers.get(e.pointerId);
+      if (f) { f.x = e.offsetX; f.y = e.offsetY; }
+      if (this.fingers.size >= 2) {
+        // Pinch: zoom about the point between the fingers.
+        const d = this.fingerDist();
+        const [a, b] = [...this.fingers.values()];
+        if (this.pinchD > 0 && d > 0) this.zoomAt(d / this.pinchD, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        this.pinchD = d;
+        return;
+      }
       if (this.drag) {
         const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
         if (!this.drag.moved && Math.hypot(dx, dy) > 4) { this.drag.moved = true; this.hidePop(); this.canvas.classList.add('grab'); }
@@ -251,7 +269,19 @@ export class GameMap {
       this.hover(this.hitsFull, e.offsetX, e.offsetY, e.clientX, e.clientY, this.hoverStation);
       this.canvas.style.cursor = this.hoverStation >= 0 ? 'pointer' : '';
     });
+    const lift = (e: PointerEvent) => {
+      if (!this.fingers.delete(e.pointerId) || this.fingers.size !== 1) return;
+      // Down to one finger after a pinch: it pans on from where it is, it does not click.
+      const [id, f] = [...this.fingers.entries()][0];
+      const r = this.canvas.getBoundingClientRect();
+      this.drag = { x: f.x + r.left, y: f.y + r.top, cx: this.cx, cz: this.cz, moved: true };
+      try { this.canvas.setPointerCapture(id); } catch { /* lifted meanwhile */ }
+    };
+    this.canvas.addEventListener('pointercancel', (e) => { lift(e); if (!this.fingers.size) { this.drag = null; this.canvas.classList.remove('grab'); } });
     this.canvas.addEventListener('pointerup', (e) => {
+      const pinched = this.fingers.size >= 2;
+      lift(e);
+      if (pinched || this.fingers.size) return;
       const d = this.drag;
       this.drag = null;
       this.canvas.classList.remove('grab');
@@ -314,6 +344,7 @@ export class GameMap {
       this.status.textContent = '';
     } else {
       this.drag = null;
+      this.fingers.clear();
       this.closedAt = performance.now();
     }
   }
@@ -337,6 +368,11 @@ export class GameMap {
     const h = this.world.half;
     this.cx = clamp(this.cx, -h, h);
     this.cz = clamp(this.cz, -h, h);
+  }
+
+  private fingerDist(): number {
+    const [a, b] = [...this.fingers.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
   }
 
   private zoomAt(f: number, sx: number, sy: number): void {

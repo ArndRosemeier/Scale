@@ -80,6 +80,8 @@ import { planCoreSites, LOOT_INFO } from './abilities/cores';
 import { Deeds } from './Deeds';
 import { PowerHud } from '../ui/PowerHud';
 import { PowersScreen } from '../ui/PowersScreen';
+import { TouchControls } from '../ui/TouchControls';
+import { isTouch } from '../ui/touch';
 import { Targeting } from './Targeting';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
@@ -154,6 +156,8 @@ export class Game {
   rural!: RuralStreamer;
   flightFx!: FlightFX;
   menu!: Menu;
+  /** On-screen controls for touch screens (shown in touch mode). */
+  touch!: TouchControls;
   map!: GameMap;
   compass!: Compass;
   barks!: Barks;
@@ -472,6 +476,7 @@ export class Game {
     this.hud = new Hud(this);
     this.menu = new Menu(this);
     this.setupPowers();
+    this.touch = new TouchControls(this);
     installDevtools(this);
     this.defeat = new Defeat(this);
     {
@@ -685,6 +690,7 @@ export class Game {
       this.hud.update(dt);
       this.powerHud.update();
       this.targetHud.update();
+      this.touch.update();
       this.T('map', () => { this.map.update(dt); this.compass.update(); this.barks.update(dt); });
       this.input.endFrame();
     }
@@ -948,8 +954,12 @@ export class Game {
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)
     if (!this.pendingSave && !OriginIntro.wanted(this)) setTimeout(() => toast(normal
-      ? 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
-      : 'Sandbox: every power is yours. <b>1–9, 0</b> use the hotbar (hold for beams and super speed), click or <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);
+      ? isTouch()
+        ? 'You are an ordinary person — for now. Help people (<b>Use</b>) to earn karma, then tap <b>Powers</b> to buy powers.'
+        : 'You are an ordinary person — for now. Help people (<b>E</b>) to earn karma, then press <b>P</b> to buy powers.'
+      : isTouch()
+        ? 'Sandbox: every power is yours. Tap the hotbar (hold for beams and super speed), tap someone or <b>Target</b> to pick a target, <b>Powers</b> manages powers.'
+        : 'Sandbox: every power is yours. <b>1–9, 0</b> use the hotbar (hold for beams and super speed), click or <b>Tab</b> picks a target, <b>P</b> manages powers.', 'info', 10000), 9500);
   }
 
   /** Parked cars from a cell's street plan. */

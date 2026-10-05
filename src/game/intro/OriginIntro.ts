@@ -40,6 +40,10 @@ import { IntroSound } from './IntroSound';
 import { cityName } from '../../plan/names';
 import { clamp, lerp, smoothstep } from '../../core/math';
 import { hash32, hashToFloat } from '../../core/rng';
+import { isTouch } from '../../ui/touch';
+
+/** The skip prompt (a touch screen has no Space key). */
+const skipText = (seen: boolean) => isTouch() ? (seen ? 'Tap to skip' : 'Hold to skip') : seen ? 'Skip — Space' : 'Hold Space to skip';
 
 const SEEN_KEY = 'scale.originSeen';
 /** The page's query as it was at load (the start menu rewrites the URL before the game starts). */
@@ -417,7 +421,7 @@ export class OriginIntro {
 
   private showPrompt(): void {
     this.promptShown = true;
-    this.ui?.skipPrompt(this.seen ? 'Skip — Space' : 'Hold Space to skip', 0);
+    this.ui?.skipPrompt(skipText(this.seen), 0);
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -456,7 +460,7 @@ export class OriginIntro {
     // Hold to skip.
     if (this.holding) { this.hold += dt; if (this.hold >= 0.9) { this.skip(); return; } }
     else this.hold = Math.max(0, this.hold - dt * 2);
-    if (this.promptShown) ui.skipPrompt(this.seen ? 'Skip — Space' : 'Hold Space to skip', this.hold / 0.9);
+    if (this.promptShown) ui.skipPrompt(skipText(this.seen), this.hold / 0.9);
     this.t += dt;
     const t = this.t;
     const once = (k: string, at: number) => { if (t < at || this.fired.has(k)) return false; this.fired.add(k); return true; };

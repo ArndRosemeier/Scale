@@ -1,0 +1,82 @@
+/* Touch mode (ui/touch.ts, ui/TouchControls.ts): on-screen controls and touch-sized HUD. */
+html, body { touch-action: manipulation; overscroll-behavior: none; }
+body.touch { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+body.touch input[type=text], body.touch textarea { -webkit-user-select: text; user-select: text; }
+#view, #touch button, .pslot, #minimap { touch-action: none; }
+
+#touch { display: none; }
+body.touch #touch.on { display: block; }
+#touch button { position: fixed; z-index: 7; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(15, 20, 26, 0.55); color: #e8ecf0; font: 600 12px/1.1 system-ui, -apple-system, sans-serif;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); cursor: pointer; }
+#touch button[hidden] { display: none; }
+#touch button i { font: 700 9px/1 ui-monospace, Menlo, monospace; font-style: normal; color: #8fa3b5; }
+#touch button.down { background: rgba(216, 181, 106, 0.45); border-color: #d8b56a; transform: scale(0.94); }
+#touch button.lit { border-color: #d8b56a; box-shadow: 0 0 0 1px #d8b56a inset, 0 0 16px rgba(216, 181, 106, 0.45); }
+#touch button.lit i { color: #ffd36b; }
+
+/* Action buttons, bottom right, round the jump button. */
+.tc-acts { --r: max(16px, env(safe-area-inset-right)); --b: max(16px, env(safe-area-inset-bottom)); }
+.tc-acts button { width: 62px; height: 62px; border-radius: 31px; }
+.tc-acts button.big { width: 86px; height: 86px; border-radius: 43px; font-size: 14px; }
+.tc-acts button.small { width: 44px; height: 44px; border-radius: 22px; font-size: 22px; font-weight: 500; }
+.tc-acts [data-id=jump] { right: var(--r); bottom: var(--b); }
+.tc-acts [data-id=fly] { right: calc(var(--r) + 98px); bottom: var(--b); }
+.tc-acts [data-id=down] { right: calc(var(--r) + 170px); bottom: var(--b); }
+.tc-acts [data-id=use] { right: calc(var(--r) + 12px); bottom: calc(var(--b) + 98px); }
+.tc-acts [data-id=target] { right: calc(var(--r) + 12px); bottom: calc(var(--b) + 170px); }
+.tc-acts [data-id=untarget] { right: calc(var(--r) + 84px); bottom: calc(var(--b) + 179px); width: 44px; height: 44px; border-radius: 22px; font-size: 16px; }
+.tc-acts [data-id=auto] { right: calc(var(--r) + 86px); bottom: calc(var(--b) + 82px); }
+.tc-acts [data-id=grow] { right: calc(var(--r) + 160px); bottom: calc(var(--b) + 120px); }
+.tc-acts [data-id=shrink] { right: calc(var(--r) + 160px); bottom: calc(var(--b) + 70px); }
+
+/* System buttons, top right; the overflow menu under them. */
+.tc-sys button { top: max(10px, env(safe-area-inset-top)); height: 40px; min-width: 40px; padding: 0 12px; border-radius: 20px; font-size: 13px; }
+.tc-sys [data-id=pause] { right: max(12px, env(safe-area-inset-right)); font-size: 18px; padding: 0; width: 44px; }
+.tc-sys [data-id=more] { right: calc(max(12px, env(safe-area-inset-right)) + 50px); font-size: 18px; padding: 0; width: 44px; }
+.tc-sys [data-id=map] { right: calc(max(12px, env(safe-area-inset-right)) + 100px); width: 58px; }
+.tc-sys [data-id=powers] { right: calc(max(12px, env(safe-area-inset-right)) + 164px); width: 72px; }
+.tc-more { display: none; position: fixed; z-index: 8; top: calc(max(10px, env(safe-area-inset-top)) + 48px); right: max(12px, env(safe-area-inset-right)); flex-direction: column; gap: 4px; padding: 6px;
+  background: rgba(20, 26, 34, 0.94); border: 1px solid #2c3846; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+.tc-more.open { display: flex; }
+#touch .tc-more button { position: static; flex-direction: row; justify-content: space-between; gap: 18px; min-width: 170px; height: 44px; padding: 0 14px; border-radius: 8px; font-size: 14px; font-weight: 500; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; background: #1c2430; }
+#touch .tc-more button i { font-size: 11px; }
+
+/* The stick: a faint ring at rest, under the thumb while held. */
+.tc-stick { position: fixed; z-index: 7; left: max(36px, calc(env(safe-area-inset-left) + 20px)); bottom: max(36px, calc(env(safe-area-inset-bottom) + 20px)); width: 112px; height: 112px; border-radius: 56px;
+  border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(15, 20, 26, 0.3); pointer-events: none; opacity: 0.7; }
+.tc-stick.active { left: 0; top: 0; bottom: auto; opacity: 1; border-color: rgba(255, 255, 255, 0.3); }
+.tc-stick.run { border-color: rgba(216, 181, 106, 0.8); }
+.tc-knob { position: absolute; left: 32px; top: 32px; width: 48px; height: 48px; border-radius: 24px; background: rgba(232, 236, 240, 0.55); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
+.tc-stick.run .tc-knob { background: rgba(255, 211, 107, 0.8); }
+
+/* Touch-sized HUD: aim dot always (powers go where the camera looks), bigger hotbar, the
+   target frame and the minimap out of the thumbs' way. */
+body.touch #crosshair { display: block; }
+body.touch .pslot { width: 56px; height: 56px; }
+body.touch #powerbar { bottom: max(14px, env(safe-area-inset-bottom)); }
+body.touch #tframe { top: calc(max(10px, env(safe-area-inset-top)) + 46px); bottom: auto; left: max(12px, env(safe-area-inset-left)); }
+body.touch #minimap { top: calc(max(10px, env(safe-area-inset-top)) + 50px); bottom: auto; right: max(12px, env(safe-area-inset-right)); width: 150px; height: 150px; }
+body.touch #compass { width: min(560px, 46vw); }
+body.touch #help .panel, body.touch #pause .panel { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+body.touch #pause select, body.touch #pause button { min-height: 36px; }
+body.touch #hint { bottom: 170px; }
+/* Upright tablets and narrow screens: the hotbar above the thumbs. */
+@media (max-width: 900px) {
+  /* The compass below the top-right buttons and the status text; the target frame below it. */
+  body.touch #compass { top: calc(max(10px, env(safe-area-inset-top)) + 50px); width: min(560px, calc(100vw - 2 * (max(12px, env(safe-area-inset-right)) + 162px))); }
+  body.touch #tframe { top: calc(max(10px, env(safe-area-inset-top)) + 106px); }
+  body.touch #casualties { top: calc(max(10px, env(safe-area-inset-top)) + 102px); }
+  body.touch #toasts { top: calc(max(10px, env(safe-area-inset-top)) + 136px); }
+  body.touch #powerbar { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 250px); }
+  body.touch #panel-prompt { bottom: 360px; }
+  body.touch #hint { bottom: 400px; }
+}
+#help .touch-only { display: none; }
+body.touch #help .touch-only { display: block; }
+#help h3 { margin: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8fa3b5; }
+/* Smaller landscape tablets (iPad 10.2", mini): the hotbar beside the stick, clear of the buttons. */
+@media (min-width: 901px) and (max-width: 1150px) {
+  body.touch #powerbar { left: max(170px, calc(env(safe-area-inset-left) + 150px)); transform: none; }
+  body.touch .pslot { width: 50px; height: 50px; }
+}

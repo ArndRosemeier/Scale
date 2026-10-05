@@ -179,8 +179,8 @@ export class Player {
     if (input.down('KeyS')) wish.sub(fwd);
     if (input.down('KeyD')) wish.add(right);
     if (input.down('KeyA')) wish.sub(right);
-    const run = input.down('ShiftLeft') || input.down('ShiftRight');
-    const walkSlow = input.down('AltLeft');
+    const run = input.down('ShiftLeft') || input.down('ShiftRight') || input.touchRun;
+    const walkSlow = input.down('AltLeft') || input.touchSlow;
     if (this.chillT > 0) this.chillT = Math.max(0, this.chillT - dt);
     if (this.downT > 0 || this.ragdoll) {
       this.downT = Math.max(0, this.downT - dt);

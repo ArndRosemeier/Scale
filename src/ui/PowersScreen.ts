@@ -8,6 +8,7 @@ import type { Game } from '../game/Game';
 import type { AbilitySystem } from '../game/abilities/AbilitySystem';
 import { ABILITIES, ABILITY, HOTBAR_SLOTS, GROUP_NAMES, type AbilityId } from '../game/abilities/defs';
 import { KARMA } from '../game/abilities/tuning';
+import { isTouch } from './touch';
 
 export class PowersScreen {
   open = false;
@@ -44,7 +45,7 @@ export class PowersScreen {
         </div>
         <div class="pw-list"></div>
         <div class="pw-hot">
-          <div class="pw-hot-label">Hotbar <span>drag a power onto a slot · or click a power, then a slot · or hover a power and press 1–9, 0 · right-click a slot to clear · Tab picks a target</span></div>
+          <div class="pw-hot-label">Hotbar <span>${isTouch() ? 'tap a power, then a slot · hold a slot to clear it' : 'drag a power onto a slot · or click a power, then a slot · or hover a power and press 1–9, 0 · right-click a slot to clear · Tab picks a target'}</span></div>
           <div class="pw-slots"></div>
         </div>
         <div class="pw-foot"></div>
@@ -114,7 +115,7 @@ export class PowersScreen {
       const cost = pr.nextCost(def.id);
       const card = document.createElement('div');
       card.className = `pw-card${r > 0 ? '' : ' locked'}${this.picked === def.id ? ' picked' : ''}`;
-      card.draggable = def.kind === 'active' && r > 0;
+      card.draggable = def.kind === 'active' && r > 0 && !isTouch();
       const pips = Array.from({ length: def.maxRank }, (_, i) => `<span class="pip${i < r ? ' on' : ''}"></span>`).join('');
       const tag = def.kind === 'passive' ? 'Passive' : def.trigger === 'toggle' ? 'Toggle' : def.trigger === 'hold' ? 'Hold' : 'Active';
       const now = r > 0 ? `<div class="pw-eff"><span>Now</span>${def.rankText(r)}</div>` : '';
@@ -159,7 +160,7 @@ export class PowersScreen {
       const s = document.createElement('div');
       s.className = `pw-slot${def ? '' : ' empty'}${this.picked ? ' target' : ''}`;
       s.innerHTML = `<span class="k">${(i + 1) % 10}</span>${def ? `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span>` : '<span class="nm">empty</span>'}`;
-      s.draggable = !!def;
+      s.draggable = !!def && !isTouch();
       s.ondragstart = (e) => { if (def) e.dataTransfer?.setData('text/plain', def.id); };
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('over'); };
       s.ondragleave = () => s.classList.remove('over');
@@ -170,6 +171,10 @@ export class PowersScreen {
       };
       s.onclick = () => { if (this.picked) { pr.assign(i, this.picked); this.picked = null; this.render(); } };
       s.oncontextmenu = (e) => { e.preventDefault(); pr.assign(i, null); };
+      // A finger has no right button: holding a slot clears it.
+      let hold = 0;
+      s.onpointerdown = (e) => { if (e.pointerType === 'touch' && def) hold = window.setTimeout(() => { hold = 0; this.picked = null; pr.assign(i, null); }, 550); };
+      s.onpointerup = s.onpointercancel = s.onpointerleave = () => { if (hold) { clearTimeout(hold); hold = 0; } };
       this.bar.appendChild(s);
     }
     // Footer: how to earn karma, cores, reset.

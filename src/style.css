@@ -1,6 +1,6 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #e8ecf0; }
-#view { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 /* Start screen: the city behind, the title and Continue on the left, a new city on the right. */
 #menu { position: fixed; inset: 0; z-index: 10; overflow: hidden auto; background: #0b0e12; }
 #menu .menu-bg { position: fixed; inset: -3%; background: #141a22 url('/menu-bg.webp') center / cover no-repeat; animation: menu-drift 60s ease-in-out infinite alternate; }
