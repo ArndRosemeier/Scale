@@ -22,14 +22,14 @@ import type { HurtKind } from '../PlayerHealth';
 import { type Actor, type ActorRole, makeActor, attach, release, setState, play, followRoute, goTo, stand, lookAt, subdued, hold } from '../../sim/actors/Actor';
 import { personStrength } from '../Consider';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging';
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'brawl' | 'hideout';
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
-export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging'];
+export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout'];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
 export type CrimeOutcome = 'arrested' | 'stopped' | 'escaped' | 'aborted';
 
 export interface Loot {
-  kind: 'bag' | 'wallet' | 'cash';
+  kind: 'bag' | 'wallet' | 'cash' | 'envelope';
   x: number; y: number; z: number;
   /** Who it belongs to (returned to them). */
   owner: PedAgent | null;
@@ -40,7 +40,7 @@ export interface Loot {
 }
 
 export interface CrimeEvent {
-  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged';
+  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won';
   crime: Crime;
   who?: PedAgent;
 }
@@ -82,8 +82,11 @@ export interface CrimeWorld {
   random(): number;
   /** Shop entrances (door point outside the wall and its outward normal) in a ring around the player. */
   shops?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
-  /** Building walls by a sidewalk (a door point outside the wall, its outward normal) in a ring around the player. */
-  walls?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /**
+   * Walls to paint by a sidewalk, no shop fronts (a door point outside the wall, its outward normal,
+   * the facade's bay width) in a ring around the player.
+   */
+  walls?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; bay?: number }[];
   /** A getaway car waiting at the kerb near a point (null: no road). */
   getaway?(x: number, z: number): GetawayCar | null;
   /** Officers on foot near a point (armed criminals turn on them). */
@@ -149,6 +152,10 @@ export abstract class Crime {
   readonly events: CrimeEvent[] = [];
   /** Police have been called (the dispatcher may still be on the way). */
   policeCalled = false;
+  /** All of them were down or giving up at some point ('subdued' was emitted once). */
+  wasSubdued = false;
+  /** The player's stopping it has been rewarded (on 'subdued', or at 'resolved'). */
+  paid = false;
   /** Where the police should go (moves with the criminals). */
   readonly hot = { x: 0, z: 0 };
   /** Witnesses already staged (once each). */
@@ -201,7 +208,8 @@ export abstract class Crime {
         else if (escaped) this.finish('escaped');
         else this.finish('aborted');
       } else if (crooks.every((c) => subdued(c.actor!))) {
-        if (this.phase !== 'subdued') this.go('subdued');
+        // Everyone down or giving up: stopped (rewards now; the police come to cuff them).
+        if (this.phase !== 'subdued') { this.go('subdued'); if (!this.wasSubdued) { this.wasSubdued = true; this.emit('subdued'); } }
         // Nobody came for them: they come round and slink away (no arrest).
         if (this.phaseT > 150) this.finish('stopped');
       }

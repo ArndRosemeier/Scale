@@ -1,7 +1,7 @@
 /**
  * Protection racket (tier 1, a street gang's operation — VILLAINS_PLAN §3.2). One or two gang
- * members stroll up to a shop; the owner steps out of the door, they loom over them, an envelope of
- * cash changes hands and they saunter off. It plays out like a mugging with the shopkeeper as the
+ * members stroll up to a shop; the owner steps out of the door, they stand over them (a pointed
+ * word, no blows), an envelope of cash changes hands and they saunter off. It plays out like a mugging with the shopkeeper as the
  * victim (Mugging's staging, confrontation and escape), so the same tactics work: scare them off,
  * knock them out, bring the envelope back.
  */
@@ -13,6 +13,7 @@ export const RACKET = { ringMin: 110, ringMax: 380, hp: 60, strength: 1.1, batCh
 export class Racket extends Mugging {
   readonly kind = 'racket' as const;
   door: { x: number; z: number; nx: number; nz: number } | null = null;
+  protected stage = { loom: 1.55, jab: false, shove: false, handover: 'envelope', cower: false };
 
   setup(): boolean {
     const shops = this.w.shops?.(this.near ? 0 : RACKET.ringMin, this.near ? 90 : RACKET.ringMax) ?? [];
@@ -45,7 +46,7 @@ export class Racket extends Mugging {
     this.victim = owner;
     this.x = door.x; this.z = door.z;
     this.hot.x = door.x; this.hot.z = door.z;
-    this.loot = { kind: 'cash', x: owner.x, y: owner.y, z: owner.z, owner, carrier: null, returned: false, crime: this.id };
+    this.loot = { kind: 'envelope', x: owner.x, y: owner.y, z: owner.z, owner, carrier: null, returned: false, crime: this.id };
     return true;
   }
 }

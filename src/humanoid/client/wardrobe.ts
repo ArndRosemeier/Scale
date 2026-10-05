@@ -186,6 +186,13 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.02), new THREE.MeshStandardMaterial({ color: 0x4a2e1a, roughness: 0.55 })));
       break;
     }
+    case 'envelope': {
+      // Protection money: a fat manila envelope held up in the hand.
+      const env = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.12), new THREE.MeshStandardMaterial({ color: 0xc8a46a, roughness: 0.8 }));
+      env.position.y = 0.06;
+      g.add(env);
+      break;
+    }
     case 'umbrella': {
       // Held up beside the head (raised grip): a short shaft to the canopy just above it.
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.75, 6), new THREE.MeshStandardMaterial({ color: 0x222222 }));

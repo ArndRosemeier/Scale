@@ -146,9 +146,10 @@ export interface SaveData {
   slimes: { trust: unknown; war: unknown } | null;
   /**
    * The villain groups (game/factions): how their turf moved from the seeded one (Factions
-   * SavedFactions, sanitised by `restoreFactions`) and the tags on the walls.
+   * SavedFactions, sanitised by `restoreFactions`), the tags on the walls and the hideouts (Hideouts
+   * SavedHideout, sanitised by `restoreHideouts`; older saves have none: not found yet).
    */
-  factions: { turf: unknown; tags: unknown[] } | null;
+  factions: { turf: unknown; tags: unknown[]; hideouts?: unknown[] } | null;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -278,7 +279,11 @@ export function parseSave(input: string | unknown): SaveData {
       };
     })() : null,
     slimes: o.slimes && typeof o.slimes === 'object' ? { trust: obj(o.slimes).trust ?? null, war: obj(o.slimes).war ?? null } : null,
-    factions: o.factions && typeof o.factions === 'object' ? { turf: obj(o.factions).turf ?? null, tags: (Array.isArray(obj(o.factions).tags) ? (obj(o.factions).tags as unknown[]) : []).slice(-64) } : null,
+    factions: o.factions && typeof o.factions === 'object' ? {
+      turf: obj(o.factions).turf ?? null,
+      tags: (Array.isArray(obj(o.factions).tags) ? (obj(o.factions).tags as unknown[]) : []).slice(-64),
+      hideouts: (Array.isArray(obj(o.factions).hideouts) ? (obj(o.factions).hideouts as unknown[]) : []).slice(0, 16),
+    } : null,
   };
 }
 

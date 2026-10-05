@@ -2,6 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.031 — 2026-10-05
+
+- **Turf wars**: where the gang's streets meet the Syndicate's, the two groups now fight it out — two or three of each, fists, bats and the odd knife, each in their own colours. Left alone, one side is beaten and the winners take the street (a message says who won). Step in and the fight breaks up: both groups lose ground.
+- **Hideouts**: every group keeps a stash behind an ordinary door in its turf, with two or three guards loitering outside. Walk past it (or have a cuffed member give it away) and it is marked on the map. Deal with the guards and press **E** at the door to bust the stash — the group loses a big piece of its turf and lies low for a day and a half before it sets up somewhere else.
+- **The map moves by itself**: every game hour the borders creep a little — groups push into the streets next to theirs, rivals press on each other, and a group you have beaten back holds less for a long while (it always comes back to its home ground eventually). You hear about it when it is the block you are standing in.
+- **Stopping a crime pays at once**: karma, reputation, the cheer and the group losing ground now come the moment the last of them is down or gives up, not when the police finally cuff them.
+- Rackets look like extortion, not a fight: the collector stands over the shopkeeper with a pointed word, the shopkeeper hands over a fat envelope (no screaming, no shove), and the envelope is what drops when you knock the collector down.
+- Tags go on the wall between the windows of ordinary houses, lower down and a little smaller — no more tags on shop windows.
+- Admin console, Crime & deeds: racket, tagging, turf brawl, groups and hideouts, go to the gang's hideout, 24 h of turf drift.
+
 ## 0.030 — 2026-10-05
 
 - **Laser eyes look stronger**: thicker beams with a white-hot core inside a pulsing red halo, a flare at each eye, a bigger glow where they hit, twice the sparks, molten drips and more smoke. Damage, reach and energy cost are unchanged.

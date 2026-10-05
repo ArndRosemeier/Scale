@@ -65,6 +65,8 @@ export interface Actor {
   held?: string | null;
   /** Outfit override (police uniform). */
   outfit?: EquipmentVisuals;
+  /** The villain group it belongs to (factions/Factions id); undefined: none. */
+  faction?: number;
   /** Name on the target frame (street characters: "Busker"); else the role's, if any. */
   title?: string;
   /** Not despawned by distance while set. */

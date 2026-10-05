@@ -9,7 +9,7 @@ import { Crime, type CrimeWorld, setState, stand, lookAt, goTo, subdued } from '
 import type { PedAgent } from '../../sim/Pedestrians';
 import { hold } from '../../sim/actors/Actor';
 
-export const TAGGING = { ringMin: 90, ringMax: 360, hp: 45, strength: 0.9, paintFor: 9, approachTimeout: 60, lookoutChance: 0.4, noticeR: 16, hissEvery: 3.3 };
+export const TAGGING = { paintY: 0.85, ringMin: 90, ringMax: 360, hp: 45, strength: 0.9, paintFor: 9, approachTimeout: 60, lookoutChance: 0.4, noticeR: 16, hissEvery: 3.3 };
 
 /** Where a tag goes: a point on the wall at chest height, its outward normal. */
 export interface TagSpot { x: number; y: number; z: number; nx: number; nz: number }
@@ -32,12 +32,13 @@ export class Tagging extends Crime {
 
   setup(): boolean {
     const rMin = this.near ? 0 : TAGGING.ringMin, rMax = this.near ? 90 : TAGGING.ringMax;
-    const walls = this.w.walls?.(rMin, rMax) ?? this.w.shops?.(rMin, rMax) ?? [];
+    const walls: { x: number; z: number; nx: number; nz: number; bay?: number }[] = this.w.walls?.(rMin, rMax) ?? this.w.shops?.(rMin, rMax) ?? [];
     if (!walls.length) return false;
     const w = walls[this.rng.int(0, Math.min(walls.length, 8) - 1)];
-    // Beside the door, not on it.
+    // Beside the door, on the pier between the door's bay and the next (between the windows).
     const ax = -w.nz, az = w.nx, side = this.rng.chance(0.5) ? 1 : -1;
-    const sx = w.x + ax * side * 2.1, sz = w.z + az * side * 2.1;
+    const off = w.bay ? Math.max(1.1, w.bay * 0.5) : 2.1;
+    const sx = w.x + ax * side * off, sz = w.z + az * side * off;
     const n = this.rng.chance(TAGGING.lookoutChance) ? 2 : 1;
     for (let i = 0; i < n; i++) {
       let c: PedAgent | null = null;
@@ -54,7 +55,7 @@ export class Tagging extends Crime {
     }
     if (!this.criminals.length) return false;
     this.tagger = this.criminals[0];
-    this.spot = { x: sx, y: 1.45, z: sz, nx: w.nx, nz: w.nz };
+    this.spot = { x: sx, y: TAGGING.paintY, z: sz, nx: w.nx, nz: w.nz };
     this.x = sx; this.z = sz;
     this.hot.x = sx; this.hot.z = sz;
     return true;
@@ -122,7 +123,7 @@ export class Tagging extends Crime {
 
   private commit(): void {
     const T = this.tagger!;
-    this.spot!.y = T.y + 1.45;
+    this.spot!.y = T.y + TAGGING.paintY;
     for (const c of this.criminals) if (c.actor) c.actor.hostile = true;
     if (!this.policeCalled) { this.policeCalled = true; this.w.callPolice(this, 45); }
     this.hissT = 0.2;
