@@ -510,7 +510,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
 
   // Snatch FSM with a mocked world.
   const { Snatch } = await import('../src/game/crime/Snatch');
-  const { Combat } = await import('../src/game/Combat');
+  const { Combat, COMBAT } = await import('../src/game/Combat');
   const pop = new Population(macro, 42);
   type A = import('../src/sim/Pedestrians').PedAgent;
   const agents: A[] = [];
@@ -672,6 +672,85 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     }
     check(guards.phase === 'subdued' && gEv.filter((e) => e === 'subdued').length === 1 && guards.guarding === 0, `hideout: guards beaten, 'subdued' once (${guards.phase}, ${gEv.join(',')})`);
     player.x = 0; player.z = 0;
+
+    // Phase 3: the caster core (powers/Caster) on its own, then a lieutenant among hideout guards:
+    // it picks a power that fits, winds up (the tell) with the aim fixed, then releases it; a
+    // shoulder charge lands on a hero who stands still; a step aside in the tell leaves the aim behind.
+    const { Caster, VILLAIN_POWERS, CASTERS, segDist } = await import('../src/game/powers/Caster');
+    const { Rng } = await import('../src/core/rng');
+    {
+      const K = new Caster(['bolt', 'shield', 'smoke'], new Rng(5));
+      const ctx = { dist: 10, hp: 1, fleeing: false, targetDown: false, clear: true };
+      check(K.choose(ctx) === null, 'caster: nothing before its first delay (they square up first)');
+      K.tick(5);
+      check(K.choose(ctx) === 'bolt', 'caster: a bolt in range with a clear line');
+      check(K.choose({ ...ctx, clear: false }) === null && K.choose({ ...ctx, dist: 40 }) === null && K.choose({ ...ctx, targetDown: true }) === null, 'caster: no bolt without a clear line, out of range or at a hero who is down');
+      check(K.choose({ ...ctx, hp: 0.5, clear: false }) === 'shield', 'caster: hurt, it shields');
+      check(K.choose({ ...ctx, fleeing: true }) === 'smoke', 'caster: on the run only smoke');
+      K.begin('bolt', 1, 1, 1);
+      let t = 0, ev: string | null = null;
+      while (!(ev = K.step(0.05)) && t < 5) t += 0.05;
+      check(ev === 'release' && Math.abs(t + 0.05 - VILLAIN_POWERS.bolt.windup) < 0.06 && !K.busy && K.choose(ctx) !== 'bolt', `caster: the bolt goes off after its wind-up (${(t + 0.05).toFixed(2)} s), then cools down`);
+      K.begin('shield', 0, 0, 0);
+      const evs: string[] = [];
+      for (let i = 0; i < 200 && K.busy; i++) { const e = K.step(0.05); if (e) evs.push(e); }
+      check(evs.join(',') === 'release,end', `caster: a shield holds after its release, then ends (${evs.join(',')})`);
+      check(Math.abs(segDist(5, 1, 0, 0, 10, 0) - 1) < 1e-9 && Math.abs(segDist(-3, 4, 0, 0, 10, 0) - 5) < 1e-9, 'caster: distance to a beam');
+      check(Object.values(VILLAIN_POWERS).every((P) => P.windup >= 0.3 && P.cooldown >= 5 && P.dmg < 22), 'caster: every power has a tell, a cooldown and no one-hit knock-down');
+    }
+    {
+      const stages: string[] = [], hurt: { kind: string; dmg: number }[] = [], aims: { stage: string; x: number; z: number }[] = [];
+      const w5 = Object.assign(Object.create(w3) as typeof w3, {
+        cast: (_c: unknown, p: string, st: string, x: number, _y: number, z: number) => {
+          const key = `${p}:${st}`;
+          if (stages[stages.length - 1] !== key) stages.push(key);
+          if (st === 'begin' || st === 'release') aims.push({ stage: st, x, z });
+          return true;
+        },
+        hurtPlayer: (dmg: number, kind: string) => { hurt.push({ kind, dmg }); },
+      });
+      const lg = new HideoutGuard(w5, 777, { x: 400, z: 60, nx: 0, nz: 1 });
+      check(lg.setup(), 'lieutenant: guards at a door');
+      const brute = lg.criminals[0];
+      const hp0 = brute.actor!.maxHp;
+      lg.promote(brute, ['dash']);
+      check(brute.actor!.maxHp > hp0 && brute.actor!.memo.lt === 1 && lg.casters.has(brute), 'lieutenant: promoted (tougher, with powers)');
+      player.x = 400; player.z = 71;
+      const lEv: string[] = [];
+      drive(lg, () => stages.includes('dash:end'), 400, lEv);
+      const iB = stages.indexOf('dash:begin'), iT = stages.indexOf('dash:tell'), iR = stages.indexOf('dash:release');
+      check(lEv.includes('cast') && iB >= 0 && iT > iB && iR > iT, `lieutenant: begin, the tell, then the release (${stages.slice(0, 6).join(' ')})`);
+      check(hurt.some((h) => h.kind === 'punch' && h.dmg >= 15), `lieutenant: the shoulder charge lands on a hero who stands still (${hurt.map((h) => Math.round(h.dmg)).join(',')})`);
+      // A frost caster: the hero steps aside during the tell; the ray goes where they stood.
+      const fg = new HideoutGuard(w5, 991, { x: 600, z: 60, nx: 0, nz: 1 });
+      check(fg.setup(), 'lieutenant: a second door');
+      fg.promote(fg.criminals[0], ['frost']);
+      for (const c of fg.criminals.slice(1)) c.alive = false;
+      player.x = 600; player.z = 72;
+      aims.length = 0; stages.length = 0;
+      drive(fg, () => aims.some((a) => a.stage === 'begin'), 400, []);
+      const b = aims.find((a) => a.stage === 'begin');
+      player.x += 3;
+      drive(fg, () => aims.some((a) => a.stage === 'release'), 60, []);
+      const r = aims.find((a) => a.stage === 'release');
+      check(!!b && !!r && b.x === r.x && b.z === r.z && Math.abs(r.x - player.x) > 2.5, `lieutenant: the aim is fixed in the wind-up, a step aside dodges (${b ? b.x.toFixed(1) : '-'} → ${r ? r.x.toFixed(1) : '-'}, hero at ${player.x.toFixed(1)})`);
+      // A shield: blows barely get through and do not floor them.
+      const sa = fg.criminals[0];
+      sa.actor!.memo.shieldT = 2;
+      const hpS = sa.actor!.hp;
+      const res = combat.hitActor(sa, 0, 60, -900, 'punch', 'player', sa.x, sa.z + 1);
+      check(res.effect !== 'knockdown' && res.effect !== 'ko' && hpS - sa.actor!.hp < 900 * COMBAT.dmgPerNs * CASTERS.shieldTakes * 1.2, `lieutenant: a shield takes most of a blow (${(hpS - sa.actor!.hp).toFixed(1)} hp, ${res.effect})`);
+      player.x = 0; player.z = 0;
+      // City-wide: at most CASTERS.maxCasting casts at once.
+      const { VillainCasts } = await import('../src/game/crime/VillainCasts');
+      const vc = new VillainCasts({} as never);
+      const cs = [0, 1, 2, 3, 4].map((k) => mk(900 + k, 5000 + k * 3, 5000, 0, 2));
+      const ok = cs.slice(0, CASTERS.maxCasting).every((a) => vc.cast(a, 'bolt', 'begin', 0, 0, 0));
+      check(ok && !vc.cast(cs[CASTERS.maxCasting], 'bolt', 'begin', 0, 0, 0), `caster budget: ${CASTERS.maxCasting} at once`);
+      vc.cast(cs[0], 'bolt', 'end', 0, 0, 0);
+      check(vc.cast(cs[CASTERS.maxCasting], 'bolt', 'begin', 0, 0, 0), 'caster budget: a slot frees when a cast ends');
+      for (const a of cs) a.alive = false;
+    }
 
     // The mad bomber: walks to the busy spot and starts lobbing bombs; once the hero is close the
     // bombs go at them; a few punches knock him out and the police take him.

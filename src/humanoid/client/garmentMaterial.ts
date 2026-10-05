@@ -121,6 +121,8 @@ void garmentEval() {
   g_r = a.z;
   g_m = a.w;
   g_e = a.w < -0.5 ? gGlow * a.x * 3.0 : vec3(0.0);
+  // A glowing garment lights its trim most (a villain lieutenant's lit seams).
+  g_e += gGlow * trim * 2.5;
 }
 `;
 

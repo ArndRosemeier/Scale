@@ -21,6 +21,7 @@ import type { Combat } from '../Combat';
 import type { HurtKind } from '../PlayerHealth';
 import { type Actor, type ActorRole, makeActor, attach, release, setState, play, followRoute, goTo, stand, lookAt, subdued, hold } from '../../sim/actors/Actor';
 import { personStrength } from '../Consider';
+import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
 
 export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout';
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
@@ -40,7 +41,7 @@ export interface Loot {
 }
 
 export interface CrimeEvent {
-  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won';
+  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast';
   crime: Crime;
   who?: PedAgent;
 }
@@ -100,7 +101,21 @@ export interface CrimeWorld {
   bomb?(thrower: PedAgent, x: number, z: number, fuse: number): boolean;
   /** Cars (driving or parked, not wrecked) near a point. */
   cars?(x: number, z: number, r: number): { x: number; z: number }[];
+  /**
+   * A villain power (powers/Caster) at a stage: 'begin' asks for a cast slot (false: too many
+   * casting city-wide right now), 'tell' every frame of the wind-up, 'release' once at the fixed
+   * aim, 'hold' every frame a lasting power runs on the caster, 'end' when it is over or fizzled.
+   * What it does — the look and the damage — is the world's (crime/VillainCasts).
+   */
+  cast?(by: PedAgent, power: VillainPower, stage: CastStage, tx: number, ty: number, tz: number): boolean;
+  /** A clear line between two points (a beam or a thrown ball would get through); `skip` is not in the way. */
+  clearLine?(ax: number, ay: number, az: number, bx: number, by: number, bz: number, skip: PedAgent): boolean;
 }
+
+export type CastStage = 'begin' | 'tell' | 'release' | 'hold' | 'end';
+
+/** A lieutenant (VILLAINS_PLAN §3.3/§3.4): tougher, stronger, brave, with a few powers. */
+export const LIEUTENANT = { hp: 1.8, strength: 1.35 };
 
 /** Dev switches (dev.guns): every robbery and mugging has a gun. */
 export const CRIME_DEV = { guns: false };
@@ -162,6 +177,8 @@ export abstract class Crime {
   paid = false;
   /** Where the police should go (moves with the criminals). */
   readonly hot = { x: 0, z: 0 };
+  /** Lieutenants' powers (powers/Caster), by criminal. */
+  readonly casters = new Map<PedAgent, Caster>();
   /** Witnesses already staged (once each). */
   private staged = new WeakSet<PedAgent>();
   private stageT = 0;
@@ -193,6 +210,7 @@ export abstract class Crime {
     }
     this.step(dt);
     if (!this.active) return;
+    for (const c of this.casters.keys()) { const m = c.actor?.memo; if (m && m.shieldT > 0) m.shieldT = Math.max(0, m.shieldT - dt); }
     // KO / surrender bookkeeping, loot dropping, the end states.
     for (const c of this.criminals) {
       const act = c.actor;
@@ -336,6 +354,7 @@ export abstract class Crime {
   protected flee(c: PedAgent, dt: number): boolean {
     const act = c.actor!;
     const p = this.w.player;
+    if (this.usePowers(c, dt, true)) return true;
     if (this.turnOnPolice(c, dt)) return true;
     if (act.action?.id === 'aim_pistol') act.action = null;
     const d = this.distToPlayer(c);
@@ -392,6 +411,8 @@ export abstract class Crime {
     const p = this.w.player;
     // The player is down: done here, run (until hit again).
     if (p.down) { act.memo.choice = 0; act.memo.decHp = act.hp; act.memo.panic = 3; setState(act, 'run'); if (act.action?.id === 'aim_pistol') act.action = null; return; }
+    // A lieutenant's power (its wind-up and a dash take the frame).
+    if (this.usePowers(c, dt)) { setState(act, 'fight'); act.mood = 'angry'; act.hostile = true; return; }
     // A gun: keep off and aim (a pistol-whip only when the player is right there).
     if (act.armed === 'gun' && this.distToPlayer(c) > 1.8) { this.gunFight(c, dt); return; }
     if (act.action?.id === 'aim_pistol') act.action = null;
@@ -427,6 +448,112 @@ export abstract class Crime {
       act.memo.windup = 0.32;
       play(act, act.armed === 'knife' ? 'stab' : act.armed === 'bat' ? 'swing_1h' : this.w.random() < 0.7 ? 'punch' : 'kick', 0.7);
     }
+  }
+
+  // ------------------------------------------------------------------ powers (lieutenants)
+
+  /** Make a criminal a lieutenant: tougher, stronger, brave, with these powers. */
+  promote(c: PedAgent, powers: readonly VillainPower[]): void {
+    const act = c.actor;
+    if (!act || this.casters.has(c)) return;
+    act.maxHp = Math.round(act.maxHp * LIEUTENANT.hp);
+    act.hp = act.maxHp;
+    act.strength *= LIEUTENANT.strength;
+    act.memo.brave = 1;
+    act.memo.lt = 1;
+    this.casters.set(c, new Caster(powers, this.rng.fork('caster', c.id)));
+  }
+
+  /**
+   * A lieutenant uses its powers: picks one that fits (distance, a clear line, cooldowns), winds
+   * up (standing, facing the fixed aim — the tell), releases it, runs a dash. On the run only an
+   * escape gadget (smoke). True while the cast takes the frame.
+   */
+  protected usePowers(c: PedAgent, dt: number, fleeing = false): boolean {
+    const K = this.casters.get(c);
+    if (!K) return false;
+    const act = c.actor!, p = this.w.player;
+    // Not called for a while (the crime did something else): a stale cast fizzles.
+    if (K.cast && this.t - (act.memo.castAt ?? this.t) > 0.3) this.fizzle(c, K);
+    act.memo.castAt = this.t;
+    K.tick(dt);
+    const out = subdued(act) || act.state === 'down' || c.state === PState.Down;
+    if (out || (K.cast?.stage === 'tell' && act.staggerT > 0)) { if (K.cast) this.fizzle(c, K); return false; }
+    const C = K.cast;
+    if (C) {
+      const ev = K.step(dt);
+      if (ev === 'release') this.release(c, C);
+      else if (ev === 'end') this.w.cast?.(c, C.power, 'end', C.tx, C.ty, C.tz);
+      else this.w.cast?.(c, C.power, C.stage, C.tx, C.ty, C.tz);
+      if (ev !== 'release' && C.stage === 'tell') { stand(act); lookAt(act, C.tx, C.ty, C.tz); c.heading = Math.atan2(c.x - C.tx, c.z - C.tz); return true; }
+      if (K.holding('dash')) { this.dashing(c, C); return true; }
+      return false;
+    }
+    // Pick a power (the line of sight is looked at twice a second).
+    act.memo.lineT = (act.memo.lineT ?? 0) - dt;
+    if (act.memo.lineT <= 0) {
+      act.memo.lineT = 0.5;
+      act.memo.clear = !this.w.clearLine || this.w.clearLine(c.x, c.y + 1.4, c.z, p.x, p.y + p.height * 0.55, p.z, c) ? 1 : 0;
+    }
+    const dist = this.distToPlayer(c);
+    const pw = K.choose({ dist, hp: act.hp / Math.max(1, act.maxHp), fleeing, targetDown: !!p.down, clear: act.memo.clear === 1 });
+    if (!pw) {
+      // Too close for a power that is nearly ready (a frost gun, a charge): step back to its range first.
+      if (fleeing || p.down || act.memo.clear !== 1) return false;
+      let want = 0;
+      for (const q of K.powers) { const Q = VILLAIN_POWERS[q]; if (Q.min > dist && (K.cd.get(q) ?? 0) < 1.2 && q !== 'shield' && q !== 'smoke') want = Math.max(want, Q.min + 2); }
+      if (!want) return false;
+      const ax = c.x - p.x, az = c.z - p.z, al = Math.hypot(ax, az) || 1;
+      goTo(act, p.x + (ax / al) * want, p.z + (az / al) * want, 3.4);
+      lookAt(act, p.x, p.y + p.height * 0.7, p.z);
+      return true;
+    }
+    const self = pw === 'shield' || pw === 'smoke';
+    const tx = self ? c.x : p.x, ty = self ? c.y + 1 : p.y + Math.min(p.height * 0.55, 1.2), tz = self ? c.z : p.z;
+    if (this.w.cast && !this.w.cast(c, pw, 'begin', tx, ty, tz)) return false;
+    const P = VILLAIN_POWERS[pw];
+    K.begin(pw, tx, ty, tz);
+    stand(act);
+    lookAt(act, tx, ty, tz);
+    play(act, P.pose, P.windup + 0.25);
+    this.w.sound(P.tellSound, c.x, c.y + 1.4, c.z, 0.75, 1);
+    this.emit('cast', c);
+    return true;
+  }
+
+  /** The power goes off (the world does what it does); lasting ones start on the caster. */
+  private release(c: PedAgent, C: Cast): void {
+    const act = c.actor!, P = VILLAIN_POWERS[C.power];
+    this.w.cast?.(c, C.power, 'release', C.tx, C.ty, C.tz);
+    this.w.sound(P.sound, C.power === 'shield' || C.power === 'dash' || C.power === 'smoke' ? c.x : C.tx, c.y + 1.2, C.power === 'shield' || C.power === 'dash' || C.power === 'smoke' ? c.z : C.tz, 0.85, P.pitch ?? 1);
+    if (C.power === 'shield') act.memo.shieldT = P.hold;
+    if (C.power === 'smoke') { act.memo.panic = 5; act.memo.stamina = 14; }
+    if (C.power === 'dash') {
+      // On past where the target stood (a shoulder charge does not stop at the spot).
+      const dx = C.tx - c.x, dz = C.tz - c.z, l = Math.hypot(dx, dz) || 1, L = Math.min(P.max, l + 2.5);
+      act.memo.dashX = c.x + (dx / l) * L; act.memo.dashZ = c.z + (dz / l) * L; act.memo.dashHit = 0;
+      play(act, 'block', P.hold);
+    }
+  }
+
+  /** The shoulder charge: a rush to the end point; the first time the hero is in the way it lands. */
+  private dashing(c: PedAgent, C: Cast): void {
+    const act = c.actor!, p = this.w.player, P = VILLAIN_POWERS.dash;
+    setState(act, 'run');
+    goTo(act, act.memo.dashX, act.memo.dashZ, CASTERS.dashSpeed);
+    if (!act.memo.dashHit && this.distToPlayer(c) < P.radius && Math.abs(p.y - c.y) < 1.6 && !p.down) {
+      act.memo.dashHit = 1;
+      this.w.hurtPlayer(P.dmg * (0.85 + 0.3 * this.w.random()) * Math.sqrt(act.strength), 'punch', c.x, c.z);
+      this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 1, 0.75);
+    }
+    if (Math.hypot(act.memo.dashX - c.x, act.memo.dashZ - c.z) < 0.6) { this.casters.get(c)?.interrupt(); this.w.cast?.(c, 'dash', 'end', C.tx, C.ty, C.tz); stand(act); }
+  }
+
+  private fizzle(c: PedAgent, K: Caster): void {
+    const C = K.cast!;
+    K.interrupt();
+    if (c.actor) c.actor.action = null;
+    this.w.cast?.(c, C.power, 'end', C.tx, C.ty, C.tz);
   }
 
   /** An armed criminal gives up under police fire (Police.workCrime). */
@@ -524,6 +651,8 @@ export abstract class Crime {
     const act = c.actor!;
     const ratio = this.strengthOf(c) / Math.max(0.1, this.w.player.strength);
     const hurt = act.hp < act.maxHp * 0.45;
+    // A lieutenant stands and fights with its powers until badly hurt.
+    if (act.memo.lt && act.hp > act.maxHp * 0.3) return 'fight';
     if (ratio < 0.3 && this.distToPlayer(c) < 5) return 'surrender';
     if (hurt && act.armed === 'none' && this.distToPlayer(c) < 3) return act.memo.brave ? 'fight' : 'surrender';
     if (ratio > 1.25 && act.armed !== 'none') return 'fight';

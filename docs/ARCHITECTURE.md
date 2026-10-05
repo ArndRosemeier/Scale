@@ -462,6 +462,19 @@ every frame) owns the parts and draws what belongs to them.
   strength (a beaten group regrows to less; its home never below `DRIFT.home`), raised next to its own turf, lowered
   where a rival presses, seeded noise; hysteresis on changes of hand (saves store each group's held cells, so a cell kept below HOLD stays held). Crimes emit `subdued` once when everyone is down
   or giving up: the stop is rewarded then (`Crime.paid`), not at the arrest. Hideouts go in `SaveData.factions.hideouts`.
+  Phase 3 part 1, powers: `powers/Caster` is the actor-agnostic caster core (pure): `VILLAIN_POWERS` (bolt, fireball,
+  frost, gust, quake, dash, shield, stun grenade, smoke; each a wind-up tell, cooldown, range, damage under the
+  player's knock-down threshold), `Caster.choose` (range, clear line, cooldowns; shield when hurt, smoke only on the
+  run) and the stages begin → tell → release (→ hold for shield / dash) → end. `Crime.promote` makes a criminal a
+  lieutenant (×1.8 hp, ×1.35 strength, brave, `memo.lt`); `Crime.usePowers` runs it from `fight` / `flee` with the aim
+  fixed at `begin`, so a step aside in the tell dodges. The world side is `crime/VillainCasts` (through
+  `CrimeWorld.cast`): ≤ `CASTERS.maxCasting` casts at once city-wide, effects from the powers' pools (ElementFx,
+  blastFx), the player hurt through PlayerHealth (kind `power`), frost sets `Player.chillT` (slow), stun and quake
+  `Player.downT`; people are knocked down, nothing is booked to the player. Combat lets `CASTERS.shieldTakes` through a
+  shield (`memo.shieldT`) and never floors a shielded actor. Archetypes name their `lieutenant` (gang Brute: dash,
+  quake; Syndicate Enforcer: stun, frost, shield, smoke) and its chance per operation kind, rolled in `enlist`
+  (`lieutenantOutfit`: glowing accents); a lieutenant KO pays double. The player's own powers (`Elements`) do not run
+  on the core yet.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a
