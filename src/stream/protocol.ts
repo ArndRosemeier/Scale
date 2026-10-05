@@ -1,6 +1,7 @@
 /**
  * Messages between the main thread and city workers.
  */
+import type { WreckGrid } from '../build/landmarkDice';
 import type { MeshData } from '../build/meshBuilder';
 import type { CitySettings } from '../world/settings';
 import type { MacroPlan } from '../plan/types';
@@ -46,7 +47,7 @@ export type FromWorker =
   | { type: 'rural'; job: number; ground: MeshData | null; facade: MeshData | null; facadeLod: MeshData | null; obstacles: Float32Array }
   | { type: 'bridges'; job: number; mesh: MeshData | null }
   /** Per landmark (macro.landmarks order): the near mesh and the far one, and its clear glass (near, far) if it has any. */
-  | { type: 'landmarks'; job: number; meshes: [MeshData, MeshData][]; glass: ([MeshData, MeshData] | null)[] }
+  | { type: 'landmarks'; job: number; meshes: [MeshData, MeshData][]; glass: ([MeshData, MeshData] | null)[]; wreck: ({ pieces: Float32Array; grid: WreckGrid } | null)[] }
   | { type: 'skyline'; job: number; cells: number[]; records: Float32Array; counts: number[]; map: Float32Array; mapOff: Int32Array }
   | { type: 'error'; job: number; message: string };
 

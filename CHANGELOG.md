@@ -10,7 +10,7 @@ Every push raises the version by 0.001. Newest first.
   - a **slab pierced by giant round holes** that you can fly through
   - a **twisted tower**, a **skyship** (towers carrying a long sky park), a **halo tower** with rings on spokes, **orbs** (spheres on a stalk, or a giant molecule standing on one corner) and a **stack** of cantilevered blocks
 - They are on the map, the compass and the minimap like the other landmarks, with a plaza around them. Their windows light up at night, and the glass of walkways, domes and orbs is see-through.
-- Like the other landmarks they can't be destroyed yet.
+- **They can be smashed**, piece by piece, like the city's buildings: punches, blasts, fireballs, monsters and the army all break off what they hit. Cut through a level and everything above it loses its hold: a tall top topples toward the damaged side (from high up it tumbles as it falls) and crashes down across the streets, flattening what it lands on and leaving a line of rubble; a wide, low part comes straight down and crushes what is under it. Collision follows the damage (you can walk through the holes, and broken walkway is gone), and saves keep it.
 ## 0.032 — 2026-10-05
 
 - **Turf wars**: where the gang's streets meet the Syndicate's, the two groups now fight it out — two or three of each, fists, bats and the odd knife, each in their own colours. Left alone, one side is beaten and the winners take the street (a message says who won). Step in and the fight breaks up: both groups lose ground, and the karma for stopping it comes right then.

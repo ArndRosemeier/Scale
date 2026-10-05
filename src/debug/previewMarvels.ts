@@ -1,17 +1,23 @@
 /**
  * Standalone preview of the marvels (preview-marvels.html): one of each family in a row, made
  * for a seed. URL: ?seed=<n>&radius=<city radius m>&view=<family 0–7, or -1 for the row>&night=1.
- * &still=1 draws one frame (screenshots). Keys: 1–8 frame a family, 0 the row, Space the next seed, N day / night.
+ * &still=1 draws one frame (screenshots); &blast=<s> with it: cut through each one a third of the
+ * way up and show it <s> seconds later. Keys: 1–8 frame a family, 0 the row, Space the next seed,
+ * N day / night, B blast (the framed one, or all).
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { TextureLibrary } from '../render/TextureLibrary';
-import { createFacadeMaterial } from '../render/materials/facade';
-import { clearGlassMaterial } from '../render/materials/clearGlass';
+import { createFacadeMaterial, createElemDepthMaterial } from '../render/materials/facade';
+import { clearGlassElemMaterial } from '../render/materials/clearGlass';
+import { LandmarkWrecks } from '../destruction/LandmarkWreck';
+import type { Destruction } from '../destruction/Destruction';
+import { PIECE_STRIDE } from '../build/landmarkDice';
+import type { LandmarkWreckData } from '../stream/CityStreamer';
 import { G } from '../render/materials/globals';
 import { toGeometry } from '../stream/CityStreamer';
-import { buildLandmarkMesh } from '../build/landmarks';
+import { buildLandmarkMeshes } from '../build/landmarks';
 import { marvelDesign, siteRect, type Landmark } from '../plan/landmarks';
 import { MARVEL_STYLES, type MS } from '../plan/marvelParts';
 import { Rng } from '../core/rng';
@@ -50,37 +56,64 @@ scene.add(ground);
 const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
 const tex = new TextureLibrary();
 await tex.load();
-const facade = createFacadeMaterial(tex.facade, null);
-const glass = clearGlassMaterial();
 const root = new THREE.Group();
 scene.add(root);
 const frames: { x: number; h: number; r: number }[] = [];
+let wrecks: LandmarkWrecks | null = null;
+// Rubble mounds where the falling parts land (the game's destruction keeps them instanced).
+const moundGeo = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), moundMat = new THREE.MeshStandardMaterial({ color: 0x8a8279, roughness: 1 });
+const D = {
+  onImpact: undefined,
+  impact: (x: number, y: number, z: number, r: number, j: number, dx: number, dy: number, dz: number) => wrecks?.impact(x, y, z, r, j, dx, dy, dz) ?? 0,
+  restoreMound: (x: number, z: number, r: number, h: number) => { const m = new THREE.Mesh(moundGeo, moundMat); m.position.set(x, 0, z); m.scale.set(r, h, r); m.receiveShadow = m.castShadow = true; root.add(m); },
+} as unknown as Destruction;
+const noop = new Proxy({}, { get: () => () => undefined }) as never;
 
 function build(): void {
   root.clear();
   frames.length = 0;
+  const data: LandmarkWreckData[] = [];
   let x = 0;
   for (let s = 0; s < MARVEL_STYLES; s++) {
     const r = new Rng(seed * 101 + s);
     const d = marvelDesign(s as MS, radius)(r.fork('design'), 1)!;
     const lm: Landmark = { id: s, kind: 'marvel', name: FAMILY[s], cell: 0, x: x + d.hu, z: 0, angle: 0.4, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: 0, seed: r.nextU32(), style: s, p: d.p };
     lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
-    const near = buildLandmarkMesh(lm, flat, 0).build(), clear = buildLandmarkMesh(lm, flat, 0, true).build();
+    const b = buildLandmarkMeshes(lm, flat);
+    const near = b.near.build(), clear = b.glass ? b.glass[0].build() : null;
+    const W = 1024, n = b.pieces!.length / PIECE_STRIDE, ed = new Uint8Array(W * Math.ceil((n + 1) / W) * 2).fill(255);
+    const et = new THREE.DataTexture(ed, W, ed.length / 2 / W, THREE.RGFormat, THREE.UnsignedByteType);
+    et.needsUpdate = true;
+    const facade = createFacadeMaterial(tex.facade, et, W), glass = clearGlassElemMaterial(et, W);
     const mesh = new THREE.Mesh(toGeometry(near), facade);
     mesh.position.set(...near.origin);
+    mesh.customDepthMaterial = createElemDepthMaterial(et, W);
     mesh.castShadow = mesh.receiveShadow = true;
     root.add(mesh);
-    if (clear.index.length) {
-      const g = new THREE.Mesh(toGeometry(clear), glass);
+    let g: THREE.Mesh | null = null;
+    if (clear) {
+      g = new THREE.Mesh(toGeometry(clear), glass);
       g.position.set(...clear.origin);
       g.renderOrder = 1;
       root.add(g);
     }
+    data.push({ index: s, lm, grid: b.grid!, pieces: b.pieces!, elemData: ed, elemTex: et, elemW: W, near: mesh, nearGlass: g, facadeMat: facade, glassMat: g ? glass : null });
     const h = near.bounds[4];
     frames.push({ x: lm.x, h, r: Math.max(d.hu, d.hv) });
     x += d.hu * 2 + 40;
   }
+  wrecks = new LandmarkWrecks(data, D, noop, noop, flat, null, tex.facade);
+  root.add(wrecks.group);
   frame();
+}
+
+/** Break every piece of the level a third of the way up (the framed marvel, or all). */
+function blast(): void {
+  for (const w of wrecks?.wrecks ?? []) {
+    if (view >= 0 && w.d.index !== view) continue;
+    const k = Math.floor(((w.box[4] - w.g.y0) / 3) / w.g.ch), T = w.T;
+    for (let p = 0; p < w.n; p++) if (w.ijk[p * 3 + 2] === k) wrecks!.impact(T[p * PIECE_STRIDE + 2], T[p * PIECE_STRIDE + 3], T[p * PIECE_STRIDE + 4], 0.01, 1e8, 0, 0, 0);
+  }
 }
 
 function frame(): void {
@@ -92,7 +125,7 @@ function frame(): void {
   controls.update();
   sun.position.set(cx + 800, 1400, 900);
   sun.target.position.set(cx, 0, 0);
-  hud.textContent = `seed ${seed}, radius ${radius} m — ${f ? FAMILY[view] + `, ${f.h.toFixed(0)} m` : 'all families'}\n1–8 family, 0 row, Space next seed, N night`;
+  hud.textContent = `seed ${seed}, radius ${radius} m — ${f ? FAMILY[view] + `, ${f.h.toFixed(0)} m` : 'all families'}\n1–8 family, 0 row, Space next seed, N night, B blast`;
 }
 
 function light(): void {
@@ -112,11 +145,18 @@ addEventListener('keydown', (e: KeyboardEvent) => {
   else if (e.key === '0') { view = -1; frame(); }
   else if (e.key === ' ') { seed++; build(); }
   else if (e.key === 'n' || e.key === 'N') { night = !night; light(); }
+  else if (e.key === 'b' || e.key === 'B') blast();
 });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 light();
 build();
 // still=1: one frame only (screenshots in a software renderer).
-if (q.get('still') === '1') renderer.render(scene, camera);
-else renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+if (q.get('still') === '1') {
+  const t = Number(q.get('blast') ?? -1);
+  if (t >= 0) { blast(); for (let s = 0; s < t; s += 1 / 30) wrecks!.update(1 / 30); }
+  renderer.render(scene, camera);
+} else {
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => { wrecks?.update(Math.min(0.05, clock.getDelta())); controls.update(); renderer.render(scene, camera); });
+}
 (window as unknown as { marvelsReady: boolean }).marvelsReady = true;

@@ -7,6 +7,8 @@
  * It also keeps collapsed buildings collapsed across cell eviction (the world index rebuilds a
  * cell's buildings standing when it streams back in; the element state already survived).
  *
+ * Breakable landmarks keep their broken pieces (what they held up is gone on restore).
+ *
  * Not kept: loose and settled debris, broken street props and trees, wrecked cars, road craters.
  */
 import type { Game } from '../Game';
@@ -75,8 +77,9 @@ export class CityDamage {
     const buildings: SaveDamage['buildings'] = [];
     for (const [cell, m] of this.collapsed) for (const [i, top] of m) buildings.push([cell, i, Math.round(top * 100) / 100]);
     const mounds: SaveDamage['mounds'] = D.mounds.map((m) => [r2(m.x), r2(m.z), r2(m.r), r2(m.h)]);
-    if (!cells.length && !buildings.length && !mounds.length) return null;
-    return { cells, buildings, mounds };
+    const landmarks: NonNullable<SaveDamage['landmarks']> = (D.landmarks?.capture() ?? []).map(([i, n, dead]) => [i, n, encodeIndexSet(dead)]);
+    if (!cells.length && !buildings.length && !mounds.length && !landmarks.length) return null;
+    return { cells, buildings, mounds, ...(landmarks.length ? { landmarks } : {}) };
   }
 
   /** Put saved damage back (a fresh city: nothing broken yet). Returns cells restored. */
@@ -101,6 +104,9 @@ export class CityDamage {
       n++;
     }
     for (const [x, z, r, h] of d.mounds) D.restoreMound(x, z, r, h);
+    for (const [i, cnt, dead] of d.landmarks ?? []) {
+      if (D.landmarks && !D.landmarks.restore(i, cnt, decodeIndexSet(dead))) console.warn(`[saves] landmark ${i}: its pieces changed, its damage is skipped`);
+    }
     // Cells that are loaded already.
     for (const cs of g.streamer.cells.values()) if (cs.status === 'ready') this.cellReady(cs);
     return n;

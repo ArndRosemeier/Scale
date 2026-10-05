@@ -12,6 +12,7 @@ import type { Landmark } from '../plan/landmarks';
 import { landmarkParts, latheClosed, helixFloorAt, HELIX_SLAB, PK, type LmPart, type PartMat } from '../plan/landmarkParts';
 import { MeshBuilder } from './meshBuilder';
 import earcut from 'earcut';
+import { Dicer, isWreckable, wreckGrid, type WreckGrid } from './landmarkDice';
 import { facadeSpecs } from './buildingShell';
 
 type V3 = [number, number, number];
@@ -19,12 +20,12 @@ type V3 = [number, number, number];
 /** Roof flag (no openings): build/buildingShell FF.Roof. */
 const ROOF_FLAG = 128;
 
-/** The landmark's mesh for a LOD: its facade parts, or (clear) only its clear glass. */
-export function buildLandmarkMesh(lm: Landmark, terrain: Terrain, lod: number, clear = false): MeshBuilder {
+/** The landmark's mesh for a LOD: its facade parts, or (clear) only its clear glass; diced into pieces with a dicer. */
+export function buildLandmarkMesh(lm: Landmark, terrain: Terrain, lod: number, clear = false, dicer?: Dicer): MeshBuilder {
   const mb = new MeshBuilder(facadeSpecs());
   mb.setOrigin(Math.round(lm.x), Math.round(lm.base), Math.round(lm.z));
   mb.set('aSeed', (lm.seed % 10007) / 10007).set('aElem', 0);
-  const E = new Emitter(mb, lod);
+  const E = new Emitter(mb, lod, dicer);
   for (const p of landmarkParts(lm, terrain)) {
     if (p.hidden || (lod > 0 && p.detail) || !!p.clear !== clear) continue;
     E.part(p);
@@ -32,8 +33,33 @@ export function buildLandmarkMesh(lm: Landmark, terrain: Terrain, lod: number, c
   return mb;
 }
 
+/** A landmark's meshes: near and far facade, clear glass (near, far) if any, and for a breakable one its pieces. */
+export interface LandmarkMeshes {
+  near: MeshBuilder;
+  far: MeshBuilder;
+  glass: [MeshBuilder, MeshBuilder] | null;
+  /** Breakable (isWreckable): the piece table (landmarkDice PIECE_STRIDE) and its grid. */
+  pieces: Float32Array | null;
+  grid: WreckGrid | null;
+}
+
+export function buildLandmarkMeshes(lm: Landmark, terrain: Terrain): LandmarkMeshes {
+  if (!isWreckable(lm)) {
+    const gn = buildLandmarkMesh(lm, terrain, 0, true);
+    return { near: buildLandmarkMesh(lm, terrain, 0), far: buildLandmarkMesh(lm, terrain, 1), glass: gn.empty ? null : [gn, buildLandmarkMesh(lm, terrain, 1, true)], pieces: null, grid: null };
+  }
+  const grid = wreckGrid(lm, landmarkParts(lm, terrain));
+  const d0 = new Dicer(grid);
+  const near = buildLandmarkMesh(lm, terrain, 0, false, d0);
+  // (The near glass names pieces too: a glass dome or orb breaks like the rest.)
+  const gn = buildLandmarkMesh(lm, terrain, 0, true, d0);
+  const pieces = d0.table();
+  const D = () => new Dicer(grid, pieces);
+  return { near, far: buildLandmarkMesh(lm, terrain, 1, false, D()), glass: gn.empty ? null : [gn, buildLandmarkMesh(lm, terrain, 1, true, D())], pieces, grid };
+}
+
 class Emitter {
-  constructor(readonly mb: MeshBuilder, readonly lod: number) {}
+  constructor(readonly mb: MeshBuilder, readonly lod: number, readonly dicer?: Dicer) {}
 
   private use(m: PartMat): void {
     this.mb.set('aLayer', m.layer).set('aTint', ...m.tint).set('aFacade', m.bay, m.fh, m.gh, m.flags);
@@ -56,6 +82,24 @@ class Emitter {
    * is made counter-clockwise around the normal, so the front face is the outside.
    */
   poly(P: V3[], uv: [number, number][], n: V3 | V3[]): void {
+    if (this.dicer) {
+      const one = typeof n[0] === 'number';
+      const verts = P.map((p, i) => ({ p, uv: uv[i], n: one ? (n as V3) : (n as V3[])[i] }));
+      // (The polygon's own facing, for the bits: one normal for the whole polygon keeps the winding.)
+      let ax = 0, ay = 0, az = 0;
+      for (const v of verts) { ax += v.n[0]; ay += v.n[1]; az += v.n[2]; }
+      const face: V3 = [ax, ay, az];
+      this.dicer.split(verts, this.mb.cur.aLayer[0], (bit, elem) => {
+        this.mb.set('aElem', elem);
+        this.rawPoly(bit.map((v) => v.p), bit.map((v) => v.uv), bit.map((v) => v.n), face);
+      });
+      this.mb.set('aElem', 0);
+      return;
+    }
+    this.rawPoly(P, uv, n);
+  }
+
+  private rawPoly(P: V3[], uv: [number, number][], n: V3 | V3[], face?: V3): void {
     const mb = this.mb, k = P.length;
     let gx = 0, gy = 0, gz = 0;
     for (let i = 0; i < k; i++) {
@@ -66,7 +110,8 @@ class Emitter {
     }
     const one = typeof n[0] === 'number';
     let ax = 0, ay = 0, az = 0;
-    if (one) { const q = n as V3; ax = q[0]; ay = q[1]; az = q[2]; }
+    if (face) { ax = face[0]; ay = face[1]; az = face[2]; }
+    else if (one) { const q = n as V3; ax = q[0]; ay = q[1]; az = q[2]; }
     else for (const q of n as V3[]) { ax += q[0]; ay += q[1]; az += q[2]; }
     if (gx * gx + gy * gy + gz * gz < 1e-10) return;
     const flip = gx * ax + gy * ay + gz * az < 0;
@@ -135,6 +180,13 @@ class Emitter {
   /** Triangles (index triples into P) with their winding turned to face the normal(s). */
   tris(P: V3[], uv: [number, number][], n: V3 | V3[], idx: ArrayLike<number>): void {
     const mb = this.mb, one = typeof n[0] === 'number';
+    if (this.dicer) {
+      for (let t = 0; t + 2 < idx.length; t += 3) {
+        const I = [idx[t], idx[t + 1], idx[t + 2]];
+        this.poly(I.map((i) => P[i]), I.map((i) => uv[i]), one ? (n as V3) : I.map((i) => (n as V3[])[i]));
+      }
+      return;
+    }
     const i0 = mb.vcount;
     for (let i = 0; i < P.length; i++) {
       const q = one ? (n as V3) : (n as V3[])[i];
@@ -315,8 +367,10 @@ class Emitter {
       const step = Math.max(1, Math.round(N / Math.max(1, (full * r1) / 3.2)));
       for (let i = 0; i <= N; i += step) {
         const f = (i / N) * full, y = helixFloorAt(p, f), q = at(f, r1 + 0.05, y);
+        if (this.dicer) this.mb.set('aElem', this.dicer.idAt(q[0], y + hh / 2, q[2]));
         this.mb.beam(q[0], y, q[2], q[0], y + hh, q[2], 0.06, 0.06);
       }
+      this.mb.set('aElem', 0);
     }
   }
 

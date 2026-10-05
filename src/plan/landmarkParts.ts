@@ -107,6 +107,8 @@ export interface PartObstacle {
   hx: number; hz: number;
   ux: number; uz: number;
   y0: number; y1: number;
+  /** Broken away (breakable landmarks: world/LandmarkSolids). */
+  dead?: boolean;
 }
 
 // Facade flags (build/buildingShell FF): windows, curtain wall, arched, roof, front.

@@ -18,7 +18,7 @@ import { BINFO_STRIDE, SKY_STRIDE, MapItem, type FromWorker, type ToWorker } fro
 import { minAreaRect } from '../core/geom2';
 import { buildingBase, buildingHeight } from '../build/buildingLayout';
 import { buildBridges } from '../build/bridges';
-import { buildLandmarkMesh } from '../build/landmarks';
+import { buildLandmarkMeshes } from '../build/landmarks';
 import { LandUse } from '../world/landuse';
 import { ForestGen } from '../build/forest';
 import { RuralPlan } from '../world/rural';
@@ -141,13 +141,15 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       return;
     }
     if (m.type === 'landmarks') {
-      const meshes = macro.landmarks.map((lm) => [buildLandmarkMesh(lm, terrain!, 0).build(), buildLandmarkMesh(lm, terrain!, 1).build()] as [MeshData, MeshData]);
-      const glass = macro.landmarks.map((lm) => {
-        const near = buildLandmarkMesh(lm, terrain!, 0, true);
-        return near.empty ? null : [near.build(), buildLandmarkMesh(lm, terrain!, 1, true).build()] as [MeshData, MeshData];
-      });
+      const built = macro.landmarks.map((lm) => buildLandmarkMeshes(lm, terrain!));
+      const meshes = built.map((b) => [b.near.build(), b.far.build()] as [MeshData, MeshData]);
+      const glass = built.map((b) => (b.glass ? [b.glass[0].build(), b.glass[1].build()] as [MeshData, MeshData] : null));
+      const wreck = built.map((b) => (b.pieces && b.grid ? { pieces: b.pieces, grid: b.grid } : null));
       const all = [...meshes, ...glass.filter((g): g is [MeshData, MeshData] => !!g)];
-      post({ type: 'landmarks', job: m.job, meshes, glass }, all.flatMap(([a, b]) => [...meshTransferables(a), ...meshTransferables(b)]));
+      post({ type: 'landmarks', job: m.job, meshes, glass, wreck }, [
+        ...all.flatMap(([a, b]) => [...meshTransferables(a), ...meshTransferables(b)]),
+        ...wreck.flatMap((w) => (w ? [w.pieces.buffer as ArrayBuffer] : [])),
+      ]);
       return;
     }
     if (m.type === 'bridges') {
