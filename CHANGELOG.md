@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.041 — 2026-10-05
+
+- **The busker really plays the guitar**: the strumming hand now strums across the strings in front of the sound hole (the forearm lies over the guitar instead of reaching through it, no more waving), and the other hand holds the neck, moving between chord positions. Works for every body shape: the hands are placed on the guitar itself.
+
 ## 0.040 — 2026-10-05
 
 - **Autorun and autoflight on R**: press R and you keep going forward on your own, walking or running on foot and flying when in the air (Shift still runs or boosts, the mouse still steers). Press R again, W or S to stop; it also stops when you sit down or are knocked down.
