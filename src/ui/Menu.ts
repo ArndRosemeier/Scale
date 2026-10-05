@@ -8,6 +8,7 @@ import { saveTimeScale } from '../render/SkySystem';
 import type { WeatherSetting } from '../render/Weather';
 import type { QualitySetting } from '../render/Graphics';
 import { probeGpu, maybeShowGpuHint } from './GpuHint';
+import { isTouch } from './touch';
 
 const CONTROLS: [string, string][] = [
   ['W A S D', 'Walk (in flight: fly)'],
@@ -33,6 +34,21 @@ const CONTROLS: [string, string][] = [
   ['F8', 'Free camera'],
   ['H', 'This help'],
   ['Esc', 'Pause & settings'],
+];
+
+/** On a touch screen (iPad): the on-screen controls (TouchControls). */
+const TOUCH_CONTROLS: [string, string][] = [
+  ['Left thumb', 'Walk where the thumb lands · push to the rim to run (in flight: boost), barely push to walk slowly'],
+  ['Drag on the right', 'Look around · pinch: camera distance'],
+  ['Tap', 'On someone or something: target it · on an elevator button: press it'],
+  ['Jump', 'Jump · hold to charge a super jump (in flight: Up, hold)'],
+  ['Fly / Land · Down', 'Toggle flight (when unlocked) · sink while flying'],
+  ['Use', 'Lights up when there is something to do: help someone up, pick up, open a manhole … (hold to dig)'],
+  ['Target · ✕', 'Pick a target near the centre / cycle · clear it'],
+  ['Auto', 'Autorun / autoflight on / off · moving the stick forward or back stops it'],
+  ['+  −', 'Grow / shrink (with size shift)'],
+  ['Hotbar', 'Tap a power; hold for beams, jets, ice path, super speed'],
+  ['Powers · Map · ⋯ · ☰', 'Buy powers · city map (pinch to zoom) · more (rally, airstrike, time of day …) · pause & settings'],
 ];
 
 export class Menu {
@@ -78,7 +94,8 @@ export class Menu {
     document.body.appendChild(this.el);
     this.help = document.createElement('div');
     this.help.id = 'help';
-    this.help.innerHTML = `<div class="panel"><h2>Controls</h2><table>${CONTROLS.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('')}</table><p class="sub">Normal mode: help people to earn karma and buy powers with P. Everything can be destroyed. People live their own days — and they notice what you do.</p></div>`;
+    const rows = (list: [string, string][]) => `<table>${list.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('')}</table>`;
+    this.help.innerHTML = `<div class="panel"><h2>Controls</h2><div class="touch-only">${rows(TOUCH_CONTROLS)}<h3>With a keyboard</h3></div>${rows(CONTROLS)}<p class="sub">Normal mode: help people to earn karma and buy powers with P. Everything can be destroyed. People live their own days — and they notice what you do.</p></div>`;
     document.body.appendChild(this.help);
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
     $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); saveTimeScale(game.sky.timeScale); };
@@ -127,7 +144,9 @@ export class Menu {
     // First-time hint.
     const hint = document.createElement('div');
     hint.id = 'hint';
-    hint.textContent = 'Hold right mouse to look around · click someone to target them · M for the map · H for controls · Esc for settings';
+    hint.textContent = isTouch()
+      ? 'Left thumb walks · drag on the right to look · tap someone to target them · ☰ for settings and controls'
+      : 'Hold right mouse to look around · click someone to target them · M for the map · H for controls · Esc for settings';
     document.body.appendChild(hint);
     setTimeout(() => hint.classList.add('fade'), 9000);
   }

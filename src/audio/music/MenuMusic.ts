@@ -10,6 +10,8 @@ import { StemPlayer } from './StemPlayer';
 const BASE = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
 /** The menu theme sits lower than in-game music. */
 const MENU_LEVEL = 0.55;
+/** Events that may start audio (iPad Safari: only a touch's end, not its start). */
+const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'keydown'];
 
 export class MenuMusic {
   private ctx: AudioContext | null = null;
@@ -21,17 +23,22 @@ export class MenuMusic {
 
   constructor() {
     if (storedMusicLevel() <= 0) return;
-    window.addEventListener('pointerdown', this.onGesture);
-    window.addEventListener('keydown', this.onGesture);
+    for (const ev of GESTURES) window.addEventListener(ev, this.onGesture, { passive: true });
   }
 
   private begin(): void {
-    window.removeEventListener('pointerdown', this.onGesture);
-    window.removeEventListener('keydown', this.onGesture);
-    if (this.ctx || this.stopped) return;
+    // A context made on a touch's start stays suspended on iPad Safari: resume it on the next
+    // gesture (the touch's end counts there) and stop listening once it plays.
+    if (this.ctx) {
+      if (this.ctx.state === 'running') this.unlisten();
+      else void this.ctx.resume().then(() => { if (this.ctx?.state === 'running') this.unlisten(); }).catch(() => {});
+      return;
+    }
+    if (this.stopped) { this.unlisten(); return; }
     const level = storedMusicLevel();
     if (level <= 0) return;
-    try { this.ctx = new AudioContext(); } catch { return; }
+    try { this.ctx = new AudioContext(); } catch { this.unlisten(); return; }
+    if (this.ctx.state === 'running') this.unlisten();
     const out = this.ctx.createGain();
     out.gain.value = level * MENU_LEVEL;
     out.connect(this.ctx.destination);
@@ -44,12 +51,15 @@ export class MenuMusic {
     }, 200);
   }
 
+  private unlisten(): void {
+    for (const ev of GESTURES) window.removeEventListener(ev, this.onGesture);
+  }
+
   /** Fade out over `secs` and release the audio context. */
   stop(secs = 4): void {
     if (this.stopped) return;
     this.stopped = true;
-    window.removeEventListener('pointerdown', this.onGesture);
-    window.removeEventListener('keydown', this.onGesture);
+    this.unlisten();
     if (!this.ctx) return;
     this.player.stopAll(secs);
     const ctx = this.ctx;

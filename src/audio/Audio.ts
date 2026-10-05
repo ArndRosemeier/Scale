@@ -91,8 +91,8 @@ export class Audio {
       }
       for (const id of Object.keys(this.manifest)) if (id.startsWith('amb_')) void this.load(id);
     };
-    window.addEventListener('pointerdown', start, { once: false });
-    window.addEventListener('keydown', start, { once: false });
+    // (iPad Safari only lets a touch's end start audio: pointerdown is not a gesture there.)
+    for (const ev of ['pointerdown', 'pointerup', 'touchend', 'keydown']) window.addEventListener(ev, start, { passive: true });
     this.wake = start;
     // After a gesture on the page (the start menu's click) the context may start right away.
     if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) start();

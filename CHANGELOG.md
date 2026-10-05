@@ -2,6 +2,15 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.049 — 2026-10-05
+
+- **Playable on an iPad (and other touch screens)**: touch the screen and on-screen controls appear; a mouse moving switches back.
+  - Left thumb: a stick appears where you put it down. Push it to the rim to run (in flight: boost), barely push it to walk slowly.
+  - Right side: drag to look around, pinch to move the camera closer or further, tap someone to target them.
+  - Buttons for Jump (hold for a super jump; in flight Up), Fly / Land, Down, Use (lights up when there is something to do; hold to dig), Target and clear target, Autorun, and grow / shrink. Top right: Powers, Map, a ⋯ menu (rally the army, airstrike, minimap, time of day, controls) and ☰ for pause and settings.
+  - Hotbar slots work with a finger, held powers run while you hold the slot. The map pans with a finger and zooms with a pinch. The controls screen lists the touch controls.
+  - Sound and music now start on an iPad (Safari only lets a touch's end start audio). The page no longer zooms or scrolls under your fingers.
+
 ## 0.048 — 2026-10-05
 
 - **No more ghost walls in the sewers**: the walls you could walk through down there were not houses but the edges of the ground itself. The landscape is drawn in square tiles, and each tile hangs a curtain a few metres deep along its edges to hide seams between near and far detail; wherever a tile edge crossed a tunnel, that curtain stood across it (smeared ground texture, which looked like wood). From underground these curtains are no longer drawn, in the sewers and the metro alike.

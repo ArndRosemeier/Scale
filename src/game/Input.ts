@@ -14,6 +14,12 @@ export class Input {
   /** Cursor position in the canvas (CSS px) and the canvas size, for picking under the mouse. */
   mouseX = -1;
   mouseY = -1;
+  /** Touch controls (TouchControls): a look drag in progress, and the stick's run / slow walk. */
+  touchLook = false;
+  touchRun = false;
+  touchSlow = false;
+  /** A tap set the cursor for one frame (picking): it is dropped again at the end of the frame. */
+  private tapped = false;
   private el: HTMLElement;
 
   constructor(el: HTMLElement) {
@@ -57,7 +63,22 @@ export class Input {
   }
 
   /** Mouse look in progress (right button held)? */
-  get looking(): boolean { return this.locked || (this.buttons & 4) !== 0; }
+  get looking(): boolean { return this.locked || (this.buttons & 4) !== 0 || this.touchLook; }
+
+  /** Hold or release a key from the touch controls (polled keys only: no keydown event). */
+  setKey(code: string, on: boolean): void {
+    if (on) { if (!this.keys.has(code)) this.pressed.add(code); this.keys.add(code); }
+    else this.keys.delete(code);
+  }
+
+  /** A tap on the view (touch): a left click at that point, for this frame only. */
+  tap(clientX: number, clientY: number): void {
+    const r = this.el.getBoundingClientRect();
+    this.mouseX = clientX - r.left;
+    this.mouseY = clientY - r.top;
+    this.clicked |= 1;
+    this.tapped = true;
+  }
 
   /** Cursor in normalised device coordinates (null: not over the view, or looking). */
   cursorNdc(): { x: number; y: number } | null {
@@ -86,6 +107,7 @@ export class Input {
   }
   endFrame(): void {
     this.syncLookClass();
+    if (this.tapped) { this.tapped = false; this.mouseX = this.mouseY = -1; }
     this.pressed.clear();
     this.mouseDX = this.mouseDY = 0;
     this.wheel = 0;

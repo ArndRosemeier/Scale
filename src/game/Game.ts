@@ -80,6 +80,7 @@ import { planCoreSites, LOOT_INFO } from './abilities/cores';
 import { Deeds } from './Deeds';
 import { PowerHud } from '../ui/PowerHud';
 import { PowersScreen } from '../ui/PowersScreen';
+import { TouchControls } from '../ui/TouchControls';
 import { Targeting } from './Targeting';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
@@ -151,6 +152,8 @@ export class Game {
   rural!: RuralStreamer;
   flightFx!: FlightFX;
   menu!: Menu;
+  /** On-screen controls for touch screens (shown in touch mode). */
+  touch!: TouchControls;
   map!: GameMap;
   compass!: Compass;
   barks!: Barks;
@@ -462,6 +465,7 @@ export class Game {
     this.hud = new Hud(this);
     this.menu = new Menu(this);
     this.setupPowers();
+    this.touch = new TouchControls(this);
     installDevtools(this);
     this.saves = new SaveSystem(this);
     new PauseSaves(this);
@@ -660,6 +664,7 @@ export class Game {
       this.hud.update(dt);
       this.powerHud.update();
       this.targetHud.update();
+      this.touch.update();
       this.T('map', () => { this.map.update(dt); this.compass.update(); this.barks.update(dt); });
       this.input.endFrame();
     }

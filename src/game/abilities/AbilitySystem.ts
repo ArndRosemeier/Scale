@@ -128,12 +128,14 @@ export class AbilitySystem {
     }
   }
 
-  /** A hotbar slot clicked with the mouse (held powers run until the button is released). */
+  /** A hotbar slot clicked or touched (held powers run until the button or finger is released). */
   click(slot: number): void {
     if (!this.enabled) return;
     this.selected = slot;
     this.slotHeld = true;
-    window.addEventListener('mouseup', () => { this.slotHeld = false; }, { once: true });
+    const up = () => { this.slotHeld = false; window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     this.press(slot, 'Mouse0');
   }
   private slotHeld = false;
