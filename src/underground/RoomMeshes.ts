@@ -12,7 +12,7 @@ import { facadeSpecs } from '../build/buildingShell';
 import { toGeometry } from '../stream/CityStreamer';
 import { Rng } from '../core/rng';
 import type { Obstacle } from '../world/Collision';
-import { type Room, type Colony, GHOST_PLATFORM, CRAWL_HW, CRAWL_H } from './rooms';
+import { type Room, type Colony, denLayout, GHOST_PLATFORM, CRAWL_HW, CRAWL_H, HALL_GALLERY, HALL_STAIR_W, HALL_STEPS, HALL_RUN } from './rooms';
 import { CELL, fw, fbox, cyl, dome, wallDecal, floorDecal, cellQuad, wall, flat, type Frame } from './roomArt';
 import { pointOnTube } from './layout';
 
@@ -25,7 +25,7 @@ export interface RoomMats {
   veil: THREE.Material;
 }
 
-export type EmitterId = 'under_drip' | 'under_falls' | 'under_hum' | 'under_fan';
+export type EmitterId = 'under_drip' | 'under_falls' | 'under_hum' | 'under_fan' | 'under_engine' | 'under_gears' | 'under_fire';
 export interface Emitter { id: EmitterId; x: number; y: number; z: number }
 
 export interface BuiltRoom {
@@ -36,7 +36,12 @@ export interface BuiltRoom {
   tick: ((t: number, day: number) => void) | null;
   /** Trace rooms: where a lone one may sit (x, y, z) and the crack it slips into. */
   scout: { x: number; y: number; z: number; hx: number; hz: number } | null;
+  /** Hideouts: spots on the walls for the group's tags (centre, normal into the room). */
+  tags: { x: number; y: number; z: number; nx: number; nz: number }[];
 }
+
+/** Things a room's look may follow (from the game): the colours of the group holding the street above a hideout. */
+export interface RoomLook { accent?: [number, number, number] }
 
 const SEWER_WALL: [number, number, number] = [0.75, 0.68, 0.6];
 const METRO_WALL: [number, number, number] = [0.74, 0.74, 0.71];
@@ -215,7 +220,7 @@ function shell(k: Kit, r: Room, ceilHole: [number, number, number, number] | nul
 }
 
 /** Build one side room. */
-export function buildRoom(r: Room, mats: RoomMats, veilOut: (o: THREE.Object3D) => void = () => {}): BuiltRoom {
+export function buildRoom(r: Room, mats: RoomMats, look: RoomLook = {}): BuiltRoom {
   const f: Frame = { ox: r.ox, oz: r.oz, nx: r.nx, nz: r.nz };
   const k = new Kit(f, new Rng(r.seed));
   const m = r.main, y = r.y, top = m.y0 + m.h, mu = (m.u0 + m.u1) / 2, mv = (m.v0 + m.v1) / 2;
@@ -224,6 +229,7 @@ export function buildRoom(r: Room, mats: RoomMats, veilOut: (o: THREE.Object3D) 
   let tick: BuiltRoom['tick'] = null;
   const extra: THREE.Object3D[] = [];
   const wallT = sewer ? SEWER_WALL : METRO_WALL;
+  const tags: BuiltRoom['tags'] = [];
   // Metro rooms behind a door get the green running figure over it (on the tunnel side).
   if (!sewer && r.kind !== 'ghost' && r.kind !== 'niche') exitSign(k, -0.21, 0, -1, 0, y + r.doors[0].top + 0.3);
   switch (r.kind) {
@@ -563,6 +569,9 @@ export function buildRoom(r: Room, mats: RoomMats, veilOut: (o: THREE.Object3D) 
       k.emit('under_hum', m.u1 - 0.5, mv, y + 1.2);
       break;
     }
+    case 'hall': tick = machineHall(k, r, mats, extra); break;
+    case 'gears': tick = windingRoom(k, r, mats, extra); break;
+    case 'hideout': tick = hideout(k, r, mats, extra, look, tags); break;
     case 'storage': {
       // Shelves of crates, old signs leaning on the wall, a dead departure board.
       k.m(11, 0.4, 0.42, 0.44);
@@ -586,7 +595,7 @@ export function buildRoom(r: Room, mats: RoomMats, veilOut: (o: THREE.Object3D) 
     }
   }
   // Graffiti here and there (metro rooms more often), stains, a drip in most.
-  if (r.kind !== 'ghost' && r.main.u1 - r.main.u0 > 2 && k.rng.chance(sewer ? 0.25 : 0.4)) graffiti(k, m, 1 + k.rng.int(0, 1), m.y0);
+  if (r.kind !== 'ghost' && r.kind !== 'hideout' && r.main.u1 - r.main.u0 > 2 && k.rng.chance(sewer ? 0.25 : 0.4)) graffiti(k, m, 1 + k.rng.int(0, 1), m.y0);
   if (sewer && r.kind !== 'cistern' && r.kind !== 'alcove') k.emit('under_drip', mu, mv, top - 0.2);
   shell(k, r, ceilHole);
   // A faint trail: something small and glowing passed through, towards a crack (or the gap).
@@ -594,7 +603,7 @@ export function buildRoom(r: Room, mats: RoomMats, veilOut: (o: THREE.Object3D) 
   if (r.trace) scout = trail(k, r);
   const obj = k.build(mats);
   for (const e of extra) obj.add(e);
-  return { obj, obstacles: k.obstacles, emitters: k.emitters, tick, scout };
+  return { obj, obstacles: k.obstacles, emitters: k.emitters, tick, scout, tags };
 }
 
 /** Glow dots along the floor from the door to the gap (or a crack in a back corner). */
@@ -874,5 +883,362 @@ export function buildChamber(c: Colony, L: ColonyLayout, mats: RoomMats, hole: C
     fbox(k.lit, f, L.circle.u + Math.cos(a) * 1.05, L.circle.v + Math.sin(a) * 1.05, y + 0.02, 0.09, 0.02, 0.07, a);
   }
   k.emit('under_drip', hu - 2, 0, top - 0.2);
-  return { obj: k.build(mats), obstacles: k.obstacles, emitters: k.emitters, tick: null, scout: null };
+  return { obj: k.build(mats), obstacles: k.obstacles, emitters: k.emitters, tick: null, scout: null, tags: [] };
+}
+
+// ------------------------------------------------------------ the bigger sewer rooms
+
+/**
+ * A part that turns (a flywheel, a gear): built about its local y axis, turned about the frame's
+ * u or v axis (or the vertical) through (u, v, y). Returns its setter (angle in radians).
+ */
+function spinner(k: Kit, mats: RoomMats, extra: THREE.Object3D[], build: (mb: MeshBuilder) => void, u: number, v: number, y: number, axis: 'u' | 'v' | 'y'): (a: number) => void {
+  const mb = new MeshBuilder(facadeSpecs());
+  mb.set('aFacade', 1, 1, 1, 0).set('aSeed', 0.4).set('aElem', 0);
+  build(mb);
+  const mesh = new THREE.Mesh(toGeometry(mb.build()), mats.lit);
+  const [x, z] = fw(k.f, u, v);
+  mesh.position.set(x, y, z);
+  const ax = axis === 'u' ? new THREE.Vector3(k.f.nx, 0, k.f.nz) : axis === 'v' ? new THREE.Vector3(-k.f.nz, 0, k.f.nx) : new THREE.Vector3(0, 1, 0);
+  const base = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), ax);
+  mesh.quaternion.copy(base);
+  extra.push(mesh);
+  const q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0);
+  return (a) => { mesh.quaternion.copy(base).multiply(q.setFromAxisAngle(Y, a)); };
+}
+
+/** A spoked wheel about the local y axis: rim (radius R, thickness t), spokes, a hub; half width w. */
+function wheelGeo(mb: MeshBuilder, R: number, t: number, w: number, spokes: number): void {
+  const n = Math.max(16, Math.round(R * 26));
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2, a1 = ((i + 1) / n) * Math.PI * 2;
+    mb.box(Math.cos((a0 + a1) / 2) * R, 0, Math.sin((a0 + a1) / 2) * R, t, w, (Math.PI * R) / n + 0.01, -(a0 + a1) / 2);
+  }
+  for (let i = 0; i < spokes; i++) {
+    const a = (i / spokes) * Math.PI * 2;
+    mb.box(Math.cos(a) * R * 0.5, 0, Math.sin(a) * R * 0.5, R * 0.5, w * 0.45, Math.max(0.025, R * 0.05), -a);
+  }
+  cyl(mb, 0, -w * 1.5, 0, 0, w * 1.5, 0, Math.max(0.05, R * 0.16), 10);
+}
+
+/** A gear about the local y axis: a spoked wheel with teeth around it. */
+function gearGeo(mb: MeshBuilder, R: number, w: number, teeth: number): void {
+  wheelGeo(mb, R * 0.86, R * 0.09, w, R > 0.5 ? 6 : 4);
+  const h = R * 0.1 + 0.015;
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2;
+    mb.box(Math.cos(a) * (R - h), 0, Math.sin(a) * (R - h), h, w, ((Math.PI * R) / teeth) * 0.5, -a);
+  }
+}
+
+/** A ring of short beams in the (u, v) plane at height y: a valve hand wheel lying flat. */
+function flatWheel(k: Kit, u: number, v: number, y: number, R: number): void {
+  for (let i = 0; i < 12; i++) {
+    const a0 = (i / 12) * Math.PI * 2, a1 = ((i + 1) / 12) * Math.PI * 2;
+    k.cylF(u + Math.cos(a0) * R, v + Math.sin(a0) * R, y, u + Math.cos(a1) * R, v + Math.sin(a1) * R, y, 0.022, 5);
+  }
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; k.cylF(u, v, y, u + Math.cos(a) * R, v + Math.sin(a) * R, y, 0.014, 4); }
+}
+
+/**
+ * Machine hall: a gallery inside the door over a floor 2.2 m lower, stairs down along one wall,
+ * a row of pump sets (motor, flywheel turning, pump casing, a riser through the ceiling, an inlet
+ * from the back wall with its valve), a travelling crane on rails, a control desk on the gallery.
+ */
+function machineHall(k: Kit, r: Room, mats: RoomMats, extra: THREE.Object3D[]): BuiltRoom['tick'] {
+  const f = k.f, m = r.main, y = r.y, drop = y - m.y0, top = m.y0 + m.h, mv = (m.v0 + m.v1) / 2;
+  const g1 = m.u0 + HALL_GALLERY, sv0 = m.v1 - HALL_STAIR_W, rise = drop / HALL_STEPS, gEnd = g1 + (HALL_STEPS - 1) * HALL_RUN;
+  // The gallery (a slab on the low floor) and the stairs.
+  k.m(8, 0.48, 0.47, 0.45);
+  fbox(k.lit, f, (m.u0 + g1) / 2, mv, m.y0 + drop / 2, (g1 - m.u0) / 2, drop / 2, (m.v1 - m.v0) / 2);
+  for (let s = 1; s < HALL_STEPS; s++) {
+    const h = drop - rise * s;
+    fbox(k.lit, f, g1 + (s - 0.5) * HALL_RUN, (sv0 + m.v1) / 2, m.y0 + h / 2, HALL_RUN / 2, h / 2, HALL_STAIR_W / 2);
+  }
+  wallDecal(k.dec, f, g1, (m.v0 + sv0) / 2, 1, 0, y - 0.09, (sv0 - m.v0) / 2 - 0.05, 0.08, CELL.hazard);
+  // Railing along the gallery edge and down the stairs.
+  k.m(11, 0.78, 0.6, 0.14);
+  for (let vv = m.v0 + 0.15; vv < sv0; vv += 1.25) k.cylF(g1 - 0.06, vv, y, g1 - 0.06, vv, y + 1.0, 0.025, 5);
+  k.cylF(g1 - 0.06, sv0 - 0.02, y, g1 - 0.06, sv0 - 0.02, y + 1.0, 0.025, 5);
+  for (const h of [0.5, 1.0]) k.cylF(g1 - 0.06, m.v0 + 0.02, y + h, g1 - 0.06, sv0 - 0.02, y + h, 0.03, 6);
+  for (const h of [0.5, 1.0]) k.cylF(g1 - 0.06, sv0 - 0.02, y + h, gEnd, sv0 - 0.02, m.y0 + h, 0.03, 6);
+  k.cylF(gEnd, sv0 - 0.02, m.y0, gEnd, sv0 - 0.02, m.y0 + 1.0, 0.025, 5);
+  k.solid(g1 - 0.06, (m.v0 + sv0) / 2, y, y + 1.05, 0.06, (sv0 - m.v0) / 2);
+  k.solid((g1 + gEnd) / 2, sv0 - 0.02, m.y0, y + 1.05, (gEnd - g1) / 2, 0.06);
+  // The pump sets in a row along the hall.
+  const fu0 = g1 + 0.5, fu1 = m.u1 - 0.8, vv0 = m.v0 + 0.5, vv1 = sv0 - 0.5;
+  const n = Math.max(1, Math.min(3, Math.floor((vv1 - vv0) / 3.6)));
+  const cu = (fu0 + fu1) / 2 + 0.2, hA = m.y0 + 1.05;
+  const paints: [number, number, number][] = [[0.25, 0.42, 0.38], [0.28, 0.36, 0.5], [0.45, 0.4, 0.25]];
+  const paint = paints[k.rng.int(0, paints.length - 1)];
+  const wheels: { set: (a: number) => void; w: number; ph: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const cv = vv0 + ((i + 0.5) / n) * (vv1 - vv0);
+    k.m(8, 0.52, 0.5, 0.47); fbox(k.lit, f, cu - 0.2, cv, m.y0 + 0.12, 1.9, 0.12, 0.9);
+    // Motor on its pedestal, cooling ribs, feet.
+    k.m(8, 0.46, 0.45, 0.43); fbox(k.lit, f, cu - 0.85, cv, m.y0 + 0.45, 0.6, 0.25, 0.35);
+    k.m(11, ...paint); k.cylF(cu - 1.45, cv, hA, cu - 0.25, cv, hA, 0.42, 16);
+    k.m(11, paint[0] * 0.75, paint[1] * 0.75, paint[2] * 0.75);
+    for (let j = 0; j < 5; j++) { const uu = cu - 1.3 + j * 0.24; k.cylF(uu - 0.025, cv, hA, uu + 0.025, cv, hA, 0.46, 16); }
+    whiteBox(k, cu - 0.85, cv - 0.43, hA + 0.1, 0.1, 0.06, 0.005, [0.85, 0.85, 0.8]);
+    // Shaft, coupling, the pump casing and its pedestal.
+    k.m(11, 0.6, 0.6, 0.58); k.cylF(cu - 1.9, cv, hA, cu + 0.2, cv, hA, 0.07, 8);
+    k.m(11, 0.3, 0.3, 0.3); k.cylF(cu - 0.2, cv, hA, cu - 0.05, cv, hA, 0.16, 10);
+    k.m(8, 0.46, 0.45, 0.43); fbox(k.lit, f, cu + 0.5, cv, m.y0 + 0.33, 0.45, 0.1, 0.45);
+    k.m(11, 0.55, 0.16, 0.12); k.cylF(cu + 0.2, cv, hA, cu + 0.8, cv, hA, 0.6, 18);
+    k.m(11, 0.35, 0.35, 0.36); for (const uu of [cu + 0.2, cu + 0.8]) k.cylF(uu - 0.02, cv, hA, uu + 0.02, cv, hA, 0.64, 18);
+    whiteBox(k, cu + 0.5, cv, hA + 0.62, 0.07, 0.01, 0.07, [0.9, 0.9, 0.85]);
+    // The riser up through the ceiling (a flange or two) and the inlet from the back wall with a valve.
+    k.m(11, 0.36, 0.33, 0.3);
+    k.cylF(cu + 0.5, cv, hA + 0.5, cu + 0.5, cv, top + 0.3, 0.25, 12);
+    for (const yy of [hA + 0.9, top - 0.6]) k.cylF(cu + 0.5, cv, yy - 0.03, cu + 0.5, cv, yy + 0.03, 0.31, 12);
+    k.cylF(cu + 0.8, cv, hA - 0.25, m.u1 + 0.1, cv, hA - 0.25, 0.26, 12);
+    const wu = (cu + 0.8 + m.u1) / 2 + 0.1;
+    k.cylF(wu - 0.04, cv, hA - 0.25, wu + 0.04, cv, hA - 0.25, 0.33, 12);
+    k.cylF(wu, cv, hA - 0.25, wu, cv, hA + 0.35, 0.035, 6);
+    k.m(11, 0.6, 0.12, 0.1); flatWheel(k, wu, cv, hA + 0.35, 0.26);
+    k.solid(cu - 0.3, cv, m.y0, m.y0 + 1.75, 1.95, 0.9);
+    k.solid(wu, cv, m.y0, hA + 0.1, (m.u1 - cu - 0.8) / 2 + 0.1, 0.3);
+    // The flywheel behind the motor (turning; now and then one stands still).
+    const R = 0.82;
+    const set = spinner(k, mats, extra, (mb) => { mb.set('aLayer', 11).set('aTint', 0.3, 0.3, 0.32); wheelGeo(mb, R, 0.09, 0.07, 6); }, cu - 1.68, cv, hA, 'u');
+    wheels.push({ set, w: k.rng.chance(0.2) ? 0 : k.rng.range(2.2, 3.4), ph: k.rng.range(0, 6) });
+    k.solid(cu - 1.68, cv, m.y0, hA + R, 0.12, R);
+    puddles(k, { ...m, u0: cu - 1.5, u1: cu + 1, v0: cv - 1.2, v1: cv + 1.2 }, 1);
+  }
+  // A travelling crane on rails under the ceiling, its hook hanging over one of the pumps.
+  k.m(11, 0.78, 0.6, 0.14);
+  for (const ru of [g1 + 0.25, m.u1 - 0.25]) fbox(k.lit, f, ru, mv, top - 0.25, 0.09, 0.1, (m.v1 - m.v0) / 2);
+  const bv = vv0 + (vv1 - vv0) * k.rng.range(0.2, 0.8), hu = cu + 0.5;
+  fbox(k.lit, f, (g1 + m.u1) / 2, bv, top - 0.44, (m.u1 - g1 - 0.4) / 2, 0.09, 0.16);
+  k.m(11, 0.3, 0.3, 0.3); fbox(k.lit, f, hu, bv, top - 0.68, 0.2, 0.15, 0.2);
+  const hookY = m.y0 + 2.4;
+  k.cylF(hu, bv, top - 0.82, hu, bv, hookY + 0.1, 0.014, 4);
+  k.m(11, 0.6, 0.45, 0.1); fbox(k.lit, f, hu, bv, hookY, 0.07, 0.1, 0.05);
+  // Control desk on the gallery: lamps, a panel of dials on the wall.
+  const dv = m.v0 + 1.1;
+  k.m(11, 0.38, 0.42, 0.4); fbox(k.lit, f, m.u0 + 0.38, dv, y + 0.45, 0.28, 0.45, 0.7);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) {
+    const c: [number, number, number] = k.rng.chance(0.6) ? [0.2, 0.95, 0.3] : k.rng.chance(0.5) ? [0.95, 0.6, 0.15] : [0.95, 0.2, 0.15];
+    whiteBox(k, m.u0 + 0.3 + j * 0.12, dv - 0.5 + i * 0.32, y + 0.91, 0.025, 0.012, 0.025, c);
+  }
+  k.solid(m.u0 + 0.38, dv, y, y + 0.9, 0.3, 0.72);
+  k.m(11, 0.32, 0.35, 0.34); fbox(k.lit, f, m.u0 + 0.04, dv, y + 1.65, 0.03, 0.4, 0.8);
+  for (let i = 0; i < 4; i++) whiteBox(k, m.u0 + 0.075, dv - 0.6 + i * 0.4, y + 1.75, 0.005, 0.12, 0.12, [0.85, 0.85, 0.78]);
+  wallDecal(k.dec, f, m.u0, dv + 1.2, 1, 0, y + 1.5, 0.25, 0.25, CELL.volt);
+  // A main along the back wall under the ceiling, cable trays on the gallery wall.
+  k.m(11, 0.36, 0.33, 0.3); k.cylF(m.u1 - 0.3, m.v0, top - 0.75, m.u1 - 0.3, m.v1, top - 0.75, 0.2, 10);
+  k.m(11, 0.3, 0.3, 0.32); fbox(k.lit, f, m.u0 + 0.1, mv, y + 2.3, 0.08, 0.03, (m.v1 - m.v0) / 2);
+  // Lights: long lamps over the floor, wall lamps over the gallery.
+  for (let vv = m.v0 + 1.8; vv < m.v1 - 1; vv += 3.6) { lamp(k, (g1 + m.u1) / 2, vv, top, true, true); lamp(k, m.u0 + 0.07, vv, y + 2.05, false); }
+  streaks(k, m, 6);
+  graffiti(k, { ...m, u0: g1 + 0.3 }, k.rng.chance(0.5) ? 1 : 0, m.y0);
+  k.emit('under_engine', cu, mv, hA);
+  k.emit('under_hum', m.u0 + 0.4, dv, y + 1);
+  for (let i = 0; i < 2; i++) k.emit('under_drip', k.rng.range(fu0, fu1), k.rng.range(vv0, vv1), top - 0.2);
+  return (t) => { for (const w of wheels) w.set(t * w.w + w.ph); };
+}
+
+/**
+ * Winding room over a sluice: the gate in the back wall raised a hand's breadth (water seeping
+ * under it down a runnel to the sewer), the winding gear over it (a big gear and its pinion on
+ * shafts, chain drums, a motor), a gear train on a side wall, a governor spinning on its pedestal,
+ * a counterweight on a chain.
+ */
+function windingRoom(k: Kit, r: Room, mats: RoomMats, extra: THREE.Object3D[]): BuiltRoom['tick'] {
+  const f = k.f, m = r.main, y = r.y, top = m.y0 + m.h, mu = (m.u0 + m.u1) / 2, gv = (m.v0 + m.v1) / 2;
+  // The runnel from the gate to the door, kerbs, the water in it.
+  k.m(8, 0.44, 0.43, 0.4);
+  for (const s of [-1, 1]) fbox(k.lit, f, (r.dl + m.u1) / 2, s * 0.55, y + 0.05, (m.u1 - r.dl) / 2, 0.05, 0.06);
+  floorDecal(k.water, f, (r.dl + m.u1) / 2, 0, y + 0.012, (m.u1 - r.dl) / 2, 0.48, 0, CELL.white);
+  // (The runnel runs from the door (v = 0) to the gate in the back wall: rooms.ts keeps a winding room's door near its middle.)
+  const sv = 0;
+  // The gate: guides, the plate raised a little, its top beam.
+  k.m(11, 0.35, 0.36, 0.38);
+  for (const s of [-1, 1]) fbox(k.lit, f, m.u1 - 0.12, sv + s * 1.25, (y + top) / 2, 0.12, (top - y) / 2, 0.08);
+  fbox(k.lit, f, m.u1 - 0.12, sv, top - 0.2, 0.14, 0.12, 1.4);
+  k.m(11, 0.42, 0.3, 0.22); fbox(k.lit, f, m.u1 - 0.1, sv, y + 0.25 + 1.0, 0.06, 1.0, 1.15);
+  k.m(11, 0.3, 0.22, 0.17); for (let i = 0; i < 4; i++) fbox(k.lit, f, m.u1 - 0.17, sv, y + 0.45 + i * 0.5, 0.02, 0.04, 1.12);
+  k.glow.set('color', 0.02, 0.02, 0.025);
+  { const n0 = k.glow.vcount; wall(k.glow, f, m.u1 - 0.01, sv - 1.15, m.u1 - 0.01, sv + 1.15, y, y + 0.25); pinUV(k.glow, n0); }
+  // Water seeping under it (thin bright streaks over the lip).
+  const veil = new MeshBuilder([{ name: 'color', size: 3, type: 'u8n' }]);
+  for (let i = 0; i < 10; i++) {
+    const vv = sv + k.rng.range(-1, 1), w = k.rng.range(0.03, 0.08), c = k.rng.range(0.03, 0.07);
+    veil.set('color', c, c * 1.05, c * 1.1);
+    const A = k.P(m.u1 - 0.18, vv - w, y + 0.25), B = k.P(m.u1 - 0.18, vv + w, y + 0.25), C = k.P(m.u1 - 0.45, vv + w, y + 0.02), D = k.P(m.u1 - 0.45, vv - w, y + 0.02);
+    const j = veil.v(A[0], A[1], A[2], 1, 0, 0); veil.v(B[0], B[1], B[2], 1, 0, 0); veil.v(C[0], C[1], C[2], 1, 0, 0); veil.v(D[0], D[1], D[2], 1, 0, 0);
+    veil.quad(j, j + 1, j + 2, j + 3);
+  }
+  const vm = new THREE.Mesh(toGeometry(veil.build()), mats.veil);
+  vm.renderOrder = 3;
+  extra.push(vm);
+  // The winding gear: the big gear on the drum shaft, the pinion below it on the motor shaft.
+  const su = m.u1 - 1.1, sy = top - 0.8, R1 = 0.95, R2 = 0.38;
+  const gvB = sv + 1.75, a = Math.atan2(-0.95, -0.9), pu = su + Math.cos(a) * (R1 + R2 - 0.04), py = sy + Math.sin(a) * (R1 + R2 - 0.04);
+  k.m(11, 0.5, 0.5, 0.5); k.cylF(su, sv - 1.9, sy, su, gvB + 0.25, sy, 0.07, 8);
+  k.m(11, 0.3, 0.3, 0.32);
+  for (const vv of [sv - 1.9, sv + 0.1 + 1.1]) { fbox(k.lit, f, su, vv, sy, 0.16, 0.14, 0.1); fbox(k.lit, f, (su + m.u1) / 2, vv, sy + 0.05, (m.u1 - su) / 2, 0.06, 0.06); }
+  // Chain drums and the chains down to the gate's top.
+  for (const vv of [sv - 0.9, sv + 0.9]) {
+    k.m(11, 0.33, 0.3, 0.27); k.cylF(su, vv - 0.18, sy, su, vv + 0.18, sy, 0.24, 12);
+    k.m(11, 0.2, 0.2, 0.2); k.cylF(su + 0.24, vv, sy, m.u1 - 0.1, vv, y + 2.3, 0.02, 4);
+  }
+  const big = spinner(k, mats, extra, (mb) => { mb.set('aLayer', 11).set('aTint', 0.45, 0.32, 0.2); gearGeo(mb, R1, 0.06, 36); }, su, gvB, sy, 'v');
+  const pin = spinner(k, mats, extra, (mb) => { mb.set('aLayer', 11).set('aTint', 0.5, 0.48, 0.42); gearGeo(mb, R2, 0.065, 14); }, pu, gvB, py, 'v');
+  // The pinion's shaft to the motor on a bracket by the side wall.
+  k.m(11, 0.5, 0.5, 0.5); k.cylF(pu, gvB, py, pu, m.v1 - 0.55, py, 0.05, 8);
+  k.m(11, 0.25, 0.42, 0.38); k.cylF(pu, m.v1 - 1.05, py, pu, m.v1 - 0.25, py, 0.28, 14);
+  k.m(11, 0.3, 0.3, 0.32); fbox(k.lit, f, pu, m.v1 - 0.65, py - 0.36, 0.25, 0.06, 0.45);
+  k.cylF(pu, m.v1 - 0.65, py - 0.42, pu, m.v1, py - 0.42, 0.04, 6);
+  // A gear train on the v0 side wall, a governor on its pedestal.
+  const trainV = m.v0 + 0.2, gy = y + 2.1;
+  const gs: { R: number; u: number; y: number; set: (a: number) => void }[] = [];
+  let gu = mu - 1.4, gyy = gy, prevR = 0;
+  for (const [R, ang] of [[0.6, 0], [0.32, -0.5], [0.48, 0.35]] as [number, number][]) {
+    if (prevR) { gu += Math.cos(ang) * (prevR + R - 0.03); gyy += Math.sin(ang) * (prevR + R - 0.03); }
+    const set = spinner(k, mats, extra, (mb) => { mb.set('aLayer', 11).set('aTint', 0.42, 0.4, 0.36); gearGeo(mb, R, 0.05, Math.round(R * 40)); }, gu, trainV, gyy, 'v');
+    k.m(11, 0.3, 0.3, 0.3); k.cylF(gu, m.v0, gyy, gu, trainV + 0.08, gyy, 0.04, 6);
+    gs.push({ R, u: gu, y: gyy, set });
+    prevR = R;
+  }
+  k.m(11, 0.28, 0.28, 0.3); fbox(k.lit, f, mu - 0.6, m.v0 + 0.03, gy, 1.5, 0.85, 0.03);
+  const gov = { u: mu - 0.7, v: m.v0 + 1.2 };
+  k.m(8, 0.46, 0.45, 0.43); fbox(k.lit, f, gov.u, gov.v, y + 0.45, 0.25, 0.45, 0.25);
+  k.solid(gov.u, gov.v, y, y + 1.6, 0.3, 0.3);
+  const govSet = spinner(k, mats, extra, (mb) => {
+    mb.set('aLayer', 11).set('aTint', 0.62, 0.55, 0.3);
+    cyl(mb, 0, 0, 0, 0, 0.65, 0, 0.025, 6);
+    for (const s of [-1, 1]) { cyl(mb, 0, 0.6, 0, s * 0.22, 0.32, 0, 0.012, 4); mb.box(s * 0.24, 0.3, 0, 0.06, 0.06, 0.06); }
+  }, gov.u, gov.v, y + 0.9, 'y');
+  // A counterweight on a chain from a pulley in the corner.
+  const cwu = m.u1 - 0.55, cwv = m.v1 - 0.55;
+  k.m(11, 0.3, 0.3, 0.3); k.cylF(cwu, cwv, top - 0.1, cwu, cwv, y + 1.2, 0.015, 4);
+  k.m(8, 0.5, 0.5, 0.48); fbox(k.lit, f, cwu, cwv, y + 0.9, 0.22, 0.3, 0.22);
+  k.solid(cwu, cwv, y + 0.6, y + 1.2, 0.25, 0.25);
+  // Lamps, warning stripes, stains.
+  lamp(k, mu, gv - 2.2, top, true, true);
+  lamp(k, mu, gv + 2.2, top, true);
+  wallDecal(k.dec, f, m.u1, sv, -1, 0, top - 0.5, 1.2, 0.08, CELL.hazard);
+  puddles(k, m, 3);
+  streaks(k, m, 4);
+  k.emit('under_gears', su, sv, sy);
+  k.emit('under_drip', m.u1 - 0.5, sv, y + 0.3);
+  const w = k.rng.range(0.25, 0.4);
+  return (t) => {
+    const A = t * w;
+    big(A); pin(-A * (R1 / R2));
+    let ang = A * 1.6, prev = 0;
+    for (let i = 0; i < gs.length; i++) { if (i) ang = -ang * (prev / gs[i].R); gs[i].set(ang); prev = gs[i].R; }
+    govSet(t * 4.5);
+    vm.position.set(0, Math.sin(t * 19) * 0.006, 0);
+  };
+}
+
+/**
+ * A hideout: mattresses and blankets, a sofa facing an old TV, a cable drum for a table with
+ * crates round it (cards, bottles), a fire barrel, string lights, the stash in a corner, tags on
+ * the walls (the group's, when one holds the street above: `look.accent`, `tags`). The crew who
+ * hang about here are the crime system's (crime/SewerDen), at denLayout's spots.
+ */
+function hideout(k: Kit, r: Room, mats: RoomMats, extra: THREE.Object3D[], look: RoomLook, tags: BuiltRoom['tags']): BuiltRoom['tick'] {
+  const f = k.f, m = r.main, y = r.y, top = m.y0 + m.h, mu = (m.u0 + m.u1) / 2, mv = (m.v0 + m.v1) / 2;
+  const L = denLayout(r);
+  const acc: [number, number, number] = look.accent ?? [0.55, 0.22, 0.18];
+  const cloth = (s: number): [number, number, number] => [acc[0] * s + 0.1, acc[1] * s + 0.1, acc[2] * s + 0.1];
+  // A tarp hung half across the doorway.
+  const d = r.doors[0];
+  k.m(7, ...cloth(0.6)); fbox(k.lit, f, r.dl * 0.6, d.v0 + 0.32, y + d.top / 2, 0.015, d.top / 2 - 0.05, 0.3, 0.15);
+  // Mattresses with blankets and a pillow.
+  for (const q of L.mattresses) {
+    k.m(7, 0.62, 0.58, 0.5); fbox(k.lit, f, q.u, q.v, y + 0.08, 0.95, 0.08, 0.45, k.rng.range(-0.1, 0.1));
+    k.m(7, ...cloth(k.rng.range(0.5, 0.9))); fbox(k.lit, f, q.u + 0.25, q.v + k.rng.range(-0.05, 0.05), y + 0.18, 0.6, 0.03, 0.47, k.rng.range(-0.2, 0.2));
+    k.m(7, 0.75, 0.73, 0.68); fbox(k.lit, f, q.u - 0.72, q.v, y + 0.2, 0.15, 0.06, 0.28);
+    k.solid(q.u, q.v, y, y + 0.22, 0.95, 0.45);
+  }
+  // The sofa against the back wall, facing the room.
+  { const s = L.sofa, sv = (s.v0 + s.v1) / 2, hv = (s.v1 - s.v0) / 2;
+    k.m(7, 0.35, 0.28, 0.22); fbox(k.lit, f, s.u, sv, y + 0.22, 0.42, 0.22, hv);
+    k.m(7, 0.42, 0.33, 0.25); fbox(k.lit, f, s.u - 0.05, sv, y + 0.5, 0.36, 0.08, hv - 0.15);
+    fbox(k.lit, f, s.u + 0.32, sv, y + 0.68, 0.1, 0.36, hv);
+    for (const e of [-1, 1]) fbox(k.lit, f, s.u, sv + e * (hv - 0.08), y + 0.6, 0.42, 0.18, 0.08);
+    k.m(7, ...cloth(0.8)); fbox(k.lit, f, s.u - 0.1, sv + 0.4, y + 0.6, 0.28, 0.02, 0.4, 0.3);
+    k.solid(s.u, sv, y, y + 0.85, 0.44, hv); }
+  // The TV on a crate, its screen glowing; a boombox.
+  crate(k, L.tv.u, L.tv.v, y, 0.28, 0);
+  k.m(11, 0.12, 0.12, 0.13); fbox(k.lit, f, L.tv.u, L.tv.v, y + 0.82, 0.22, 0.26, 0.32);
+  whiteBox(k, L.tv.u - 0.225, L.tv.v, y + 0.84, 0.005, 0.19, 0.25, [0.3, 0.45, 0.62]);
+  k.m(11, 0.15, 0.15, 0.16); fbox(k.lit, f, L.tv.u - 0.1, L.tv.v + 0.7, y + 0.12, 0.12, 0.12, 0.28);
+  for (const e of [-1, 1]) whiteBox(k, L.tv.u - 0.225, L.tv.v + 0.7 + e * 0.15, y + 0.12, 0.004, 0.07, 0.07, [0.08, 0.08, 0.09]);
+  // The table: a cable drum, crates for stools; cards, bottles, a can.
+  drum(k, L.table.u, L.table.v, y, 0.42, 0.5);
+  const tt = y + 0.84;
+  for (let i = 0; i < 5; i++) { k.m(12, 0.9, 0.9, 0.86); fbox(k.lit, f, L.table.u + k.rng.range(-0.25, 0.25), L.table.v + k.rng.range(-0.3, 0.3), tt + 0.004, 0.06, 0.003, 0.045, k.rng.range(0, 3)); }
+  for (let i = 0; i < 4; i++) {
+    const g = k.rng.chance(0.5);
+    k.m(11, g ? 0.15 : 0.35, g ? 0.4 : 0.22, g ? 0.15 : 0.08);
+    const bu = L.table.u + k.rng.range(-0.3, 0.3), bv = L.table.v + k.rng.range(-0.35, 0.35);
+    k.cylF(bu, bv, tt, bu, bv, tt + 0.24, 0.035, 6);
+  }
+  for (const c of L.crew.slice(0, 3)) crate(k, c.u + (c.u - L.table.u) * 0.15, c.v + (c.v - L.table.v) * 0.15, y, 0.2, k.rng.range(-0.4, 0.4), false);
+  // The fire barrel: rusty drum, embers, flames (flickering).
+  k.m(11, 0.45, 0.26, 0.15); k.cylF(L.barrel.u, L.barrel.v, y, L.barrel.u, L.barrel.v, y + 0.85, 0.3, 12);
+  k.m(11, 0.32, 0.18, 0.1); for (const yy of [0.25, 0.6]) k.cylF(L.barrel.u, L.barrel.v, y + yy - 0.02, L.barrel.u, L.barrel.v, y + yy + 0.02, 0.315, 12);
+  k.solid(L.barrel.u, L.barrel.v, y, y + 0.9, 0.32, 0.32);
+  k.glow.set('color', 1, 0.45, 0.12);
+  { const n0 = k.glow.vcount; flat(k.glow, f, L.barrel.u - 0.24, L.barrel.u + 0.24, L.barrel.v - 0.24, L.barrel.v + 0.24, y + 0.8); pinUV(k.glow, n0); }
+  const fl = new MeshBuilder([{ name: 'color', size: 3, type: 'u8n' }]);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI;
+    const ca = Math.cos(a) * 0.22, sa = Math.sin(a) * 0.22;
+    fl.set('color', 0.55, 0.25, 0.05);
+    const j = fl.v(-ca, 0, -sa, 0, 1, 0); fl.v(ca, 0, sa, 0, 1, 0);
+    fl.set('color', 0, 0, 0);
+    fl.v(ca * 0.3, 0.55, sa * 0.3, 0, 1, 0); fl.v(-ca * 0.3, 0.55, -sa * 0.3, 0, 1, 0);
+    fl.quad(j, j + 1, j + 2, j + 3);
+  }
+  const flame = new THREE.Mesh(toGeometry(fl.build()), mats.veil);
+  { const [x, z] = fw(f, L.barrel.u, L.barrel.v); flame.position.set(x, y + 0.82, z); }
+  flame.renderOrder = 3;
+  extra.push(flame);
+  // String lights zigzagging under the ceiling.
+  const warm: [number, number, number][] = [[1, 0.8, 0.35], [1, 0.45, 0.2], [0.95, 0.3, 0.3], [0.4, 0.9, 0.45], [0.45, 0.6, 1]];
+  let pu = m.u0 + 0.3, pv = m.v0 + 0.3, side = 1;
+  for (let vv = m.v0 + 1.5; vv <= m.v1 - 0.2; vv += 1.2) {
+    const nu = side > 0 ? m.u1 - 0.3 : m.u0 + 0.3, sag = 0.25;
+    k.m(11, 0.1, 0.1, 0.1);
+    const N = 6;
+    for (let i = 0; i < N; i++) {
+      const t0 = i / N, t1 = (i + 1) / N, s0 = Math.sin(t0 * Math.PI) * sag, s1 = Math.sin(t1 * Math.PI) * sag;
+      k.cylF(pu + (nu - pu) * t0, pv + (vv - pv) * t0, top - 0.08 - s0, pu + (nu - pu) * t1, pv + (vv - pv) * t1, top - 0.08 - s1, 0.006, 3);
+      const tm = (t0 + t1) / 2;
+      whiteBox(k, pu + (nu - pu) * tm, pv + (vv - pv) * tm, top - 0.13 - Math.sin(tm * Math.PI) * sag, 0.025, 0.035, 0.025, warm[k.rng.int(0, warm.length - 1)]);
+    }
+    pu = nu; pv = vv; side = -side;
+  }
+  // The stash: crates, holdalls, a strongbox.
+  const S = L.stash;
+  crate(k, S.u, S.v, y, 0.3, 0.1);
+  crate(k, S.u - 0.15, S.v - 0.6, y, 0.25, -0.2);
+  crate(k, S.u + 0.05, S.v - 0.05, y + 0.6, 0.22, 0.4, false);
+  k.m(7, ...cloth(0.35)); fbox(k.lit, f, S.u - 0.75, S.v + 0.1, y + 0.17, 0.35, 0.17, 0.2, 0.5);
+  k.m(7, 0.15, 0.15, 0.16); fbox(k.lit, f, S.u - 0.7, S.v - 0.55, y + 0.14, 0.3, 0.14, 0.18, -0.3);
+  k.m(11, 0.25, 0.3, 0.28); fbox(k.lit, f, S.u - 0.1, S.v - 1.25, y + 0.2, 0.25, 0.2, 0.2);
+  k.solid(S.u - 0.35, S.v - 0.45, y, y + 0.9, 0.55, 0.95);
+  // Litter, a work lamp, tags and graffiti.
+  for (let i = 0; i < 14; i++) {
+    k.m(12, k.rng.range(0.4, 0.85), k.rng.range(0.35, 0.7), k.rng.range(0.3, 0.6));
+    fbox(k.lit, f, k.rng.range(m.u0 + 0.4, m.u1 - 0.4), k.rng.range(m.v0 + 0.4, m.v1 - 0.4), y + 0.012, k.rng.range(0.04, 0.12), 0.01, k.rng.range(0.04, 0.1), k.rng.range(0, 3));
+  }
+  lamp(k, m.u1 - 0.07, mv - 3.2, y + 1.9, false);
+  graffiti(k, m, 4, y);
+  puddles(k, m, 1);
+  // Spots for the group's tags (Underground puts them up when a group holds the street above).
+  { const [x, z] = fw(f, m.u1 - 0.01, mv - 0.3); tags.push({ x, y: y + 1.75, z, nx: -f.nx, nz: -f.nz }); }
+  { const [x, z] = fw(f, mu + 0.6, m.v1 - 0.01); tags.push({ x, y: y + 1.6, z, nx: f.nz, nz: -f.nx }); }
+  k.emit('under_fire', L.barrel.u, L.barrel.v, y + 0.9);
+  return (t) => {
+    flame.scale.set(1 + Math.sin(t * 13) * 0.08, 0.85 + 0.25 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 3.1 + 1)), 1 + Math.cos(t * 11) * 0.08);
+    flame.rotation.y = t * 0.7;
+  };
 }

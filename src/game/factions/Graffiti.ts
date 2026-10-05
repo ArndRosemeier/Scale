@@ -140,6 +140,11 @@ export class Graffiti {
     for (const t of list.slice(-TAGS.max)) this.add(t);
   }
 
+  /** The material of a group's tag (shared; sewer hideouts put their own quads up with it). */
+  tagMaterial(f: Faction, seed: number): THREE.Material {
+    return this.material(f, seed % 3);
+  }
+
   /** Warm-up object (shader precompile): one finished tag's material. */
   warmup(f: Faction): THREE.Object3D {
     return new THREE.Mesh(this.geo, this.material(f, 0));

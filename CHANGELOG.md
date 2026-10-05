@@ -2,6 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.050 — 2026-10-05
+
+- **Livelier sewers.**
+  - **Rats** scurry along the walkways and nose about the side rooms. They sit and sniff, rear up now and then, and squeak and bolt along the wall when you come close, run, or something violent happens nearby.
+  - **Now and then a slime**: every few minutes in the sewers one may be oozing along a walkway ahead of you, carrying something small and glowing. It freezes when it notices you, then slides off and squeezes into the wall. A blow splatters it.
+  - **Machine halls**: big rooms off the trunks with a gallery inside the door over a floor 2 m lower, stairs down, a row of pump sets with turning flywheels, risers through the ceiling, valves, a travelling crane with its hook and a control desk with blinking lamps. They thump and hiss.
+  - **Winding rooms** over a sluice: the gate in the back wall with water seeping under it, a big gear and its pinion turning slowly over it, chain drums, a gear train on the wall and a spinning governor. They clank.
+  - **Hideouts**: dens with mattresses, a sofa in front of an old TV, a cable-drum table with cards and bottles, a fire barrel, string lights and a stash in the corner. Where a villain group holds the street above, the den is in its colours with its tags on the walls.
+  - **The hideouts are manned**: three to five crooks hang about there (sitting at the table, by the fire, a lookout at the door). Come in or hit one and they go for you; outmatched, they back into a corner and give up. Nobody calls the police down here. With them down, **press E at the stash** to bust it: karma, and the group above loses some ground. A cleared den stays empty for a day.
+  - The new rooms come on top of the old ones: every existing side room, slime colony and the deep realm stay where they were.
+
 ## 0.049 — 2026-10-05
 
 - **Being defeated is a real moment now.** When your health runs out you no longer just get up where you fell (where a swarm could knock you down again and again). You lie there untouchable, the edge of the screen red, and:

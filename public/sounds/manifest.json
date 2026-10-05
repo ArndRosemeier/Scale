@@ -991,5 +991,39 @@
     "loop": false,
     "gain": 0.6,
     "description": "a quick snap of mandibles with a crunch (procedural, tools/synthBrood.mjs)"
+  },
+  "rat_squeak": {
+    "files": [
+      "rat_squeak_1.wav",
+      "rat_squeak_2.wav",
+      "rat_squeak_3.wav"
+    ],
+    "loop": false,
+    "gain": 0.4,
+    "description": "a rat squeaking in a tunnel, one to three short high chirps (procedural, tools/synthSewer.mjs)"
+  },
+  "under_engine": {
+    "files": [
+      "under_engine.wav"
+    ],
+    "loop": true,
+    "gain": 0.45,
+    "description": "a pump engine running in an underground machine hall: heavy rhythmic thump, hiss (procedural, tools/synthSewer.mjs)"
+  },
+  "under_gears": {
+    "files": [
+      "under_gears.wav"
+    ],
+    "loop": true,
+    "gain": 0.4,
+    "description": "a big winding gear turning slowly: clanking teeth, a ratchet, a low hum (procedural, tools/synthSewer.mjs)"
+  },
+  "under_fire": {
+    "files": [
+      "under_fire.wav"
+    ],
+    "loop": true,
+    "gain": 0.4,
+    "description": "a fire in an oil drum: crackles and pops over a soft roar (procedural, tools/synthSewer.mjs)"
   }
 }

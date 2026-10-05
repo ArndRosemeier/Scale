@@ -1174,6 +1174,32 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       const step = walk(pts, r.y);
       check(!!r.gap && step <= 0.36, `rooms seed ${seed}: colony ${c.id} reachable from room ${r.id} (${r.kind}) through its gap (largest step ${step.toFixed(2)} m)`);
     }
+    // The bigger rooms: machine halls (stairs back up to the gallery in steps a walker can take),
+    // winding rooms and hideouts (the crew's spots on its floor, clear of each other).
+    const { HALL_GALLERY, HALL_STAIR_W, HALL_STEPS, HALL_RUN, denLayout } = await import('../src/underground/rooms');
+    const big = { hall: 0, gears: 0, hideout: 0 };
+    let hallSteep = 0, denBad = 0;
+    for (const r of plan.rooms) {
+      if (r.kind === 'hall' || r.kind === 'gears' || r.kind === 'hideout') big[r.kind]++;
+      const m = r.main;
+      if (r.kind === 'hall') {
+        const g1 = m.u0 + HALL_GALLERY, sv = m.v1 - HALL_STAIR_W / 2, end = g1 + HALL_STEPS * HALL_RUN + 0.6;
+        const pts = [...roomW(r, end + 0.5, (m.v0 + m.v1) / 2), ...roomW(r, end, sv), ...roomW(r, g1 - 0.3, sv), ...roomW(r, m.u0 + 0.4, 0), ...roomW(r, -0.5, 0)];
+        if (walk(pts, m.y0) > 0.36) hallSteep++;
+      }
+      if (r.kind === 'hideout') {
+        const L = denLayout(r);
+        for (const c of L.crew) {
+          const [x, z] = roomW(r, c.u, c.v);
+          const f = floorAt(x, r.y + 0.5, z);
+          if (f === null || Math.abs(f - r.y) > 0.05 || c.u < m.u0 + 0.3 || c.u > m.u1 - 0.3 || c.v < m.v0 + 0.3 || c.v > m.v1 - 0.3) denBad++;
+        }
+        for (let i = 0; i < L.crew.length; i++) for (let j = i + 1; j < L.crew.length; j++) if (Math.hypot(L.crew[i].u - L.crew[j].u, L.crew[i].v - L.crew[j].v) < 0.7) denBad++;
+      }
+    }
+    check(big.hall > 0 && big.gears > 0 && big.hideout > 0, `rooms seed ${seed}: machine halls, winding rooms and hideouts off the sewers (${big.hall} / ${big.gears} / ${big.hideout})`);
+    check(hallSteep === 0, `rooms seed ${seed}: every machine hall's stairs lead back up to its gallery (${hallSteep} not)`);
+    check(denBad === 0, `rooms seed ${seed}: every hideout's crew spots on its floor, apart (${denBad} bad)`);
     const kinds = new Set(plan.rooms.map((r) => r.kind));
     check(kinds.size >= 12, `rooms seed ${seed}: most kinds of rooms present (${[...kinds].join(' ')})`);
     console.log(`rooms seed ${seed}: ${plan.rooms.length} side rooms (${plan.rooms.filter((r) => r.trace).length} with traces), ${plan.colonies.length} colonies in ${ms.toFixed(0)} ms`);

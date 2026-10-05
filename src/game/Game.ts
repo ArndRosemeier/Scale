@@ -339,6 +339,8 @@ export class Game {
     this.player.events.onFlightToggle = (f) => { if (f) this.audio.play2d('whoosh_takeoff', 0.7); };
     this.net.build([...this.streamer.cells.values()].filter((c) => c.status === 'ready'));
     this.peds = new Pedestrians(this.population, this.net, this.world, this.terrain, macro, this.streamer);
+    // A sewer den's crew walks the underground's floors.
+    this.peds.underFloor = (x, y, z) => this.underground.floorAt(x, y, z);
     this.reactions = new Reactions(this.peds, this.stimuli);
     this.interiors = new Interiors(this.world, this.destruction, this.streamer, this.collision, this.population, this.peds);
     // The town hall's rooms light up like the buildings' interiors.
@@ -923,6 +925,11 @@ export class Game {
     }
     // Street crime, police, justice, health and reputation (needs the map, HUD and targeting).
     this.crime = new CrimeSystem(this);
+    // Sewer hideouts wear the colours and tags of the group holding the street above.
+    this.underground.hideoutLook = (x, z, seed) => {
+      const f = this.crime.factionAt(x, z);
+      return f ? { accent: f.palette.accent, tag: this.crime.graffiti.tagMaterial(f, seed) } : null;
+    };
     this.response = new ResponseDirector(this);
     this.threats = new ThreatDirector(this);
     this.forces = new Forces(this);
