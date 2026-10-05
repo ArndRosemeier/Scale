@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.045 — 2026-10-05
+
+- **No more ghost walls in the sewers**: the walls you could walk through down there were not houses but the edges of the ground itself. The landscape is drawn in square tiles, and each tile hangs a curtain a few metres deep along its edges to hide seams between near and far detail; wherever a tile edge crossed a tunnel, that curtain stood across it (smeared ground texture, which looked like wood). From underground these curtains are no longer drawn, in the sewers and the metro alike.
+
 ## 0.044 — 2026-10-05
 
 - **Real shoes**: sneakers, shoes and boots no longer show the toes through them. The front of the foot is now a closed, rounded toe box with a flat sole, so footwear reads as shoes instead of paint on bare feet.
