@@ -36,7 +36,7 @@ export const BROOD = {
   /** Prey within this (m) is hunted; neighbours within flockR flock. */
   huntR: 18, flockR: 5,
   /** The most creatures on one prey at a time. */
-  maxOn: { person: 5, player: 8, car: 10, robot: 4 } as Record<PreyKind, number>,
+  maxOn: { person: 5, player: 6, car: 10, robot: 4 } as Record<PreyKind, number>,
   /** No further than this from the hole they came out of (m). */
   leash: 120,
   /** Climbing speed (m/s), the highest a climb goes (m), gravity (m/s²). */
@@ -361,8 +361,13 @@ export class BroodSim {
     }
     c.phase += h * (2 + sp * (c.kind ? 3.2 : 6));
     this.move(c, c.x + c.vx * h, c.z + c.vz * h);
-    // Bite.
     const p = c.prey;
+    // Against its prey, not into it (round the legs of a person, the player, along a car's side).
+    if (p && !c.air) {
+      const ox = c.x - p.x, oz = c.z - p.z, d = Math.hypot(ox, oz), min = p.r + c.size * 0.3;
+      if (d < min && d > 1e-3 && isNaN(this.world.wall(p.x + (ox / d) * min, p.z + (oz / d) * min, c.y))) { c.x = p.x + (ox / d) * min; c.z = p.z + (oz / d) * min; }
+    }
+    // Bite.
     if (p && c.mode === CMode.Run && c.biteT <= 0 && Math.hypot(p.x - c.x, p.z - c.z) < K.reach + p.r && Math.abs(p.y - c.y) < 2.5) {
       c.biteT = K.biteGap * rng.range(0.8, 1.25);
       this.stats.bites++;

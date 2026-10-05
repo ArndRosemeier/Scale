@@ -116,7 +116,8 @@ if (aPart > 0.5 && aPart < 1.5) {
   float c = cos(sw), s = sin(sw);
   rel.xz = vec2(c * rel.x - s * rel.z, s * rel.x + c * rel.z);
   rel.y += max(0.0, cos(ph)) * iAnim.y * 0.14 * aSeg;
-  vec3 curled = vec3(rel.x * 0.3, 0.1 + aSeg * 0.18, rel.z * 0.4 + aSeg * 0.04);
+  // Curled (dead, on its back): folded in and bent towards the belly, so they stick up once it is rolled over.
+  vec3 curled = vec3(rel.x * (0.55 - aSeg * 0.25), -0.04 - aSeg * 0.2, rel.z * 0.5 + aSeg * 0.05);
   transformed = hip + mix(rel, curled, iAnim.z);
 }
 vBroodCol = mix(iCol.rgb, vec3(0.62, 0.78, 0.9), iCol.w * 0.8);
@@ -199,7 +200,8 @@ export class BroodMesh {
       _x.set(_x.x * cs - ux * sn, _x.y * cs - uy * sn, _x.z * cs - uz * sn);
     }
     const s = c.size * (c.mode === CMode.Dead && c.t > 3.5 ? Math.max(0.01, 1 - (c.t - 3.5) / 1.5) : 1);
-    const lift = c.curl > 0.5 ? 0.22 * c.size : 0;
+    // On its back: the spines down, resting on them.
+    const lift = 0.38 * c.size * Math.min(1, c.curl * 1.5);
     _m.set(
       _x.x * s, _u.x * s, _z.x * s, x,
       _x.y * s, _u.y * s, _z.y * s, y + lift,
