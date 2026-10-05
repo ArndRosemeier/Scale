@@ -11,7 +11,7 @@ import { clamp, lerp, smoothstep } from '../core/math';
 import { polyArea, polyCentroid, polyBounds, ensureCCW, cleanPoly, type Poly } from '../core/geom2';
 import { difference } from '../core/clip';
 import { riverChunks, seaPolygon } from './water';
-import type { Terrain } from '../world/terrain';
+import type { Terrain, WaterQuery } from '../world/terrain';
 import type { WorldProfile } from '../world/settings';
 import { RoadClass, type ArterialEdge, type ArterialNode, type Bridge, type CellInfo, type Centre, type District, type MacroPlan } from './types';
 import { planUnderground } from './underground';
@@ -306,6 +306,7 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
   const bridgeCands: { k: number; a: number; b: number; wet: number; s: number; river: number; len: number }[] = [];
   /** Every river crossing (also oblique ones): fallback links when the network falls apart. */
   const crossings: typeof bridgeCands = [];
+  const wq: WaterQuery = { d: Infinity, s: 0, river: -1, halfWidth: 0, level: 0 };
   for (const [k, [a, b]] of [...edgeSet]) {
     const wet = crossesWater(a, b);
     if (wet <= 0) continue;
@@ -314,7 +315,8 @@ export function buildMacroPlan(terrain: Terrain): MacroPlan {
     const ax = pts[a * 2], az = pts[a * 2 + 1], bx = pts[b * 2], bz = pts[b * 2 + 1];
     const mx = (ax + bx) / 2, mz = (az + bz) / 2;
     if (p.coastal && terrain.coastDistance(mx, mz) < 0) continue; // never bridge the sea
-    const w = terrain.water(mx, mz);
+    // Own result object: crossesWater below queries the terrain again and would overwrite the shared one.
+    const w = terrain.water(mx, mz, wq);
     if (w.river < 0) continue;
     // Only real crossings: an edge that merely clips a bend has far less water than the river is wide.
     if (crossesWater(a, b, 0) < w.halfWidth * 2 * 0.6) continue;

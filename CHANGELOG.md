@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.037 — 2026-10-05
+
+- **Fixed a crash while generating some cities** (for example seed 17 at size 0.75 and seed 1234 at the largest size): planning the bridges over the river read a water lookup after another lookup had already overwritten it. These cities now generate normally.
+
 ## 0.036 — 2026-10-05
 
 - **Marvels**: some cities now have breathtaking near-future landmark buildings, different in every city. Towns get one now and then, big cities often, megacities up to three. There are eight kinds, each shaped differently every time:
