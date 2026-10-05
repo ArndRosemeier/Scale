@@ -6,6 +6,9 @@
  * happens and how it ends is live (real passers-by, the player). Sites lie in a ring 120–450 m
  * around the player, never on top of them.
  *
+ * Villain groups (VILLAINS_PLAN §3.2): where a group holds the player's cell, its archetype weights
+ * the kinds (the gang mugs, the Syndicate robs); cells nobody holds keep the district's own mix.
+ *
  * Pacing: at most `SETTING_MAX` crimes at once (budget 3), a cooldown after each one ends, and a
  * minimum gap between starts. The roll's seed seeds the crime's own Rng.
  */
@@ -33,6 +36,14 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
   };
 }
 
+/** The district's mix weighted by a group's operations (null: nobody's turf, the mix as is). */
+export function groupWeights(w: Record<CrimeKind, number>, ops: Record<CrimeKind, number> | null): Record<CrimeKind, number> {
+  if (!ops) return w;
+  const out = { ...w };
+  for (const k of Object.keys(out) as CrimeKind[]) out[k] *= ops[k] ?? 1;
+  return out;
+}
+
 /** Pick a kind from a [0, 1) number by weight. */
 export function pickKind(w: Record<CrimeKind, number>, u: number): CrimeKind {
   const ks = Object.keys(w) as CrimeKind[];
@@ -46,25 +57,25 @@ export function pickKind(w: Record<CrimeKind, number>, u: number): CrimeKind {
  * One slot's roll (pure): a crime of a kind with a seed, or null. `slot` counts director ticks
  * within the game hour.
  */
-export function rollSlot(seed: number, day: number, hour: number, slot: number, cell: number, index: number, district: District, setting: CrimeSetting): CrimeRoll | null {
+export function rollSlot(seed: number, day: number, hour: number, slot: number, cell: number, index: number, district: District, setting: CrimeSetting, ops: Record<CrimeKind, number> | null = null): CrimeRoll | null {
   const h = deriveSeed(seed, 'crime', day, Math.floor(hour), slot, cell);
   const p = crimesPerMinute(index, district, hour, setting) * (DIRECTOR.tick / 60);
   if (hashToFloat(h) >= p) return null;
-  return { slot, kind: pickKind(kindWeights(district, hour), hashToFloat(hash32(h ^ 0x51f15e))), seed: hash32(h + 0x2545f491) };
+  return { slot, kind: pickKind(groupWeights(kindWeights(district, hour), ops), hashToFloat(hash32(h ^ 0x51f15e))), seed: hash32(h + 0x2545f491) };
 }
 
 /** Every roll of an hour for a district (headless test: same input → same list). */
-export function planHour(seed: number, day: number, hour: number, cell: number, index: number, district: District, setting: CrimeSetting, slots = 45): CrimeRoll[] {
+export function planHour(seed: number, day: number, hour: number, cell: number, index: number, district: District, setting: CrimeSetting, slots = 45, ops: Record<CrimeKind, number> | null = null): CrimeRoll[] {
   const out: CrimeRoll[] = [];
-  for (let s = 0; s < slots; s++) { const r = rollSlot(seed, day, hour + 0.5, s, cell, index, district, setting); if (r) out.push(r); }
+  for (let s = 0; s < slots; s++) { const r = rollSlot(seed, day, hour + 0.5, s, cell, index, district, setting, ops); if (r) out.push(r); }
   return out;
 }
 
 export interface DirectorHost {
   /** Absolute game time in hours (day × 24 + hour). */
   hoursAbs(): number;
-  /** Macro cell under the player, its district and crime index (null: outside the city). */
-  playerCell(): { cell: number; district: District; index: number } | null;
+  /** Macro cell under the player, its district, crime index and the holding group's operations (null: outside the city). */
+  playerCell(): { cell: number; district: District; index: number; ops?: Record<CrimeKind, number> | null } | null;
   activeCount(): number;
   /** Try to start a crime; false when no site fits right now. */
   start(roll: CrimeRoll): boolean;
@@ -117,7 +128,7 @@ export class CrimeDirector {
       return;
     }
     const day = Math.floor(abs / 24), hour = abs - day * 24;
-    const roll = rollSlot(this.seed, day, hour, slot, cell.cell, cell.index, cell.district, this.setting);
+    const roll = rollSlot(this.seed, day, hour, slot, cell.cell, cell.index, cell.district, this.setting, cell.ops ?? null);
     if (!roll) return;
     this.stats.rolls++;
     if (!room) return;

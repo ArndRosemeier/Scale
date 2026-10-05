@@ -507,6 +507,45 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
+// ---- villain groups (VILLAINS_PLAN Phase 1): every city gets its street gang and Syndicate with a
+// seeded name and turf in their districts; the same seed gives the same groups; in a group's turf
+// the director rolls its operations (the Syndicate robs, the gang mugs); members wear its colours.
+{
+  const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
+  const { planHour } = await import('../src/game/crime/CrimeDirector');
+  const { planFactions, HOLD } = await import('../src/game/factions/Factions');
+  const { ARCHETYPES } = await import('../src/game/factions/archetypes');
+  const { factionOutfit } = await import('../src/game/factions/outfits');
+  const t0 = performance.now();
+  const names = new Set<string>();
+  for (const [seed, size] of [[42, 0.3], [7, 0.3], [3, 0.6]] as const) {
+    const macro = buildMacroPlan(new Terrain(makeProfile({ seed, size })));
+    const idx = crimeIndex(macro, seed);
+    const F = planFactions(macro, seed, idx), G = planFactions(macro, seed, idx);
+    check(JSON.stringify(F.factions) === JSON.stringify(G.factions) && F.holder.every((h, i) => h === G.holder[i]), `factions deterministic (seed ${seed})`);
+    check(F.factions.map((f) => f.archetype).join() === 'gang,syndicate', `seed ${seed}: a street gang and a Syndicate (${F.factions.map((f) => f.name).join(', ')})`);
+    const land = macro.cells.filter((c) => c.district !== 'water').length;
+    for (const f of F.factions) {
+      names.add(f.name);
+      const held = macro.cells.filter((_, i) => F.holder[i] === f.id);
+      check(F.holder[f.home] === f.id, `${f.name} holds its home cell`);
+      check(held.every((c) => ARCHETYPES[f.archetype].affinity[c.district] > 0), `${f.name}: turf only in its kind of district`);
+      check(held.length >= 2 && held.length <= land * 0.4, `${f.name}: turf ${held.length} of ${land} cells`);
+      check(F.influence[f.id].every((v) => v >= 0 && v <= 1), `${f.name}: influence in 0..1`);
+    }
+    check(F.holder.every((h, i) => h < 0 || F.influence[h][i] >= HOLD), `seed ${seed}: every holder reaches the hold threshold`);
+    const syn = F.factions.find((f) => f.archetype === 'syndicate')!, gang = F.factions.find((f) => f.archetype === 'gang')!;
+    check(['downtown', 'commercial', 'oldtown'].includes(macro.cells[syn.home].district), `the Syndicate sits in the centre (${macro.cells[syn.home].district})`);
+    const robs = (ops: Record<'snatch' | 'mugging' | 'robbery', number> | null) => Array.from({ length: 24 }, (_, h) => planHour(seed, 2, h, syn.home, 0.6, 'commercial', 'chaos', 45, ops)).flat().filter((r) => r.kind === 'robbery').length;
+    check(robs(ARCHETYPES.syndicate.kinds) > robs(null) && robs(null) >= robs(ARCHETYPES.gang.kinds), `operations: the Syndicate robs more (${robs(ARCHETYPES.syndicate.kinds)} vs ${robs(null)} vs gang ${robs(ARCHETYPES.gang.kinds)} a day)`);
+    const suit = factionOutfit(syn, 99), hood = factionOutfit(gang, 99);
+    check(suit.back?.defId === 'suitjacket' && JSON.stringify(suit) === JSON.stringify(factionOutfit(syn, 99)), 'Syndicate members wear suits (deterministic)');
+    check(!!hood.head && JSON.stringify(hood.head.visual.primary) === JSON.stringify(gang.palette.accent), 'gang members wear a cap in their colour');
+  }
+  check(names.size >= 5, `group names vary with the seed (${[...names].join(', ')})`);
+  console.log(`factions: ${[...names].join(' · ')} in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
 // ---- traffic at a six-way junction with one exit blocked (its queue backs up into the box):
 // cars never stay inside each other and the junction does not lock up; gawking crowds are capped.
 {

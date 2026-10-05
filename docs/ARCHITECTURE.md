@@ -376,6 +376,15 @@ every frame) owns the parts and draws what belongs to them.
   `crimesPerMinute` (index × hour × setting: average district ≈ one street crime per 2 min, bad ≈ 1/min, safe ≈ 1/10 min;
   off / calm ×0.4 / normal / chaos ×3.5) picks whether and which crime starts (same seed + day + hour + district →
   same rolls); site and outcome are live. At most 1 / 2 / 3 crimes at once (calm / normal / chaos), cooldowns between.
+* **Villain groups** (`src/game/factions`, VILLAINS_PLAN Phase 1 part 1): `planFactions` seeds a street gang and a
+  Syndicate per city (archetypes fixed in `archetypes.ts`; name, palette and emblem from the seed), each with a home cell
+  (affinity × crime index × density × noise) and an influence per macro cell (affinity × falloff over the archetype's
+  reach × a seeded field); the strongest group ≥ `HOLD` holds a cell. In a held cell the director weights the kinds by
+  the group's operations (`groupWeights`: the gang mugs, the Syndicate robs); a crime whose site lies in a group's turf
+  is its operation (`Crime.faction`): members wear its uniform (`factionOutfit`), the target frame names the group, the
+  map marks it in the group's colour, the karma line says who was stopped. Turf is a map layer ("Turf": tint per cell,
+  dashed borders from shared arterial edges) with the groups in the legend. Static for now: drift, saves and the
+  player's effect on turf come next. `dev.factions()`, `dev.crime(kind, dist, factionId)`.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a

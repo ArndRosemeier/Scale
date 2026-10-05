@@ -139,6 +139,8 @@ export abstract class Crime {
   playerInvolved = false;
   /** Bystanders the player hurt while this crime ran (no-collateral bonus). */
   collateral = 0;
+  /** The villain group behind it (factions/Factions: an operation in its turf); -1: nobody's. */
+  faction = -1;
   /** Events for the crime system (drained every frame). */
   readonly events: CrimeEvent[] = [];
   /** Police have been called (the dispatcher may still be on the way). */
@@ -545,9 +547,9 @@ export abstract class Crime {
   }
 
   /** Serializable summary (tests, dev console). */
-  snapshot(): { id: number; kind: CrimeKind; phase: CrimePhase; outcome: CrimeOutcome | null; t: number; x: number; z: number; criminals: { state: string; hp: number; x: number; z: number }[]; loot: string | null } {
+  snapshot(): { id: number; kind: CrimeKind; faction: number; phase: CrimePhase; outcome: CrimeOutcome | null; t: number; x: number; z: number; criminals: { state: string; hp: number; x: number; z: number }[]; loot: string | null } {
     return {
-      id: this.id, kind: this.kind, phase: this.phase, outcome: this.outcome, t: Math.round(this.t * 10) / 10, x: Math.round(this.x), z: Math.round(this.z),
+      id: this.id, kind: this.kind, faction: this.faction, phase: this.phase, outcome: this.outcome, t: Math.round(this.t * 10) / 10, x: Math.round(this.x), z: Math.round(this.z),
       criminals: this.criminals.map((c) => ({ state: c.actor?.state ?? '-', hp: Math.round(c.actor?.hp ?? 0), x: Math.round(c.x), z: Math.round(c.z) })),
       loot: this.loot ? (this.loot.returned ? 'returned' : this.loot.carrier === 'player' ? 'player' : this.loot.carrier ? 'criminal' : 'ground') : null,
     };
