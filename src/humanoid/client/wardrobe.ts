@@ -209,7 +209,8 @@ export function setItemSkyVis(_o: THREE.Object3D, _v: number): void {}
 export function disposeItemObject(o: THREE.Object3D): void {
   o.traverse((x) => {
     const m = x as THREE.Mesh;
-    if (m.isMesh) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
+    // (Some items carry a material array: one per part.)
+    if (m.isMesh) { m.geometry.dispose(); for (const mt of Array.isArray(m.material) ? m.material : [m.material]) mt.dispose(); }
   });
 }
 

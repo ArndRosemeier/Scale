@@ -18,6 +18,7 @@ import type { CharacterLook } from './avatar/look';
 import { MainMenuSaves } from './ui/SaveUi';
 import { versionLink } from './ui/Changelog';
 import { MenuMusic } from './audio/music/MenuMusic';
+import { probeGpu, maybeShowGpuHint } from './ui/GpuHint';
 
 const params = new URLSearchParams(location.search);
 const menu = document.getElementById('menu') as HTMLDivElement;
@@ -65,6 +66,10 @@ refresh();
 // The start screen's theme (after the first click or key; not for automatic starts).
 const menuMusic = params.has('auto') || params.get('load') ? null : new MenuMusic();
 (window as unknown as { menuMusic: MenuMusic | null }).menuMusic = menuMusic;
+
+// Running on the integrated GPU or without hardware acceleration: say how to fix it, before a
+// city loads (the fix needs a browser restart).
+void probeGpu().then((p) => { if (p.issue) console.log(`[graphics] ${p.renderer}: ${p.issue}${p.unused ? `, unused ${p.unused} GPU` : ''}`); maybeShowGpuHint(p); });
 
 let starting = false;
 

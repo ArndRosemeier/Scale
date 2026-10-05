@@ -400,10 +400,14 @@ export class Interiors {
     }
   }
 
+  /** Room lights of other insides (the landmarks') when the player is in none of the buildings: nearest first. */
+  extraLights: ((x: number, y: number, z: number) => { x: number; y: number; z: number; d: number }[]) | null = null;
+
   private updateLights(px: number, py: number, pz: number): void {
     // Warm room lights near the player when inside (always on at night, dimmer by day).
     const inside = this.insideAt(px, py + 1, pz);
-    const cand: { x: number; y: number; z: number; d: number }[] = [];
+    let cand: { x: number; y: number; z: number; d: number }[] = [];
+    if (!inside && this.extraLights) cand = this.extraLights(px, py + 1, pz);
     if (inside) {
       for (const f of inside.floors.values()) {
         const L = f.plan.lights;

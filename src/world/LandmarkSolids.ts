@@ -3,11 +3,13 @@
  * the walker's collision (walls stop, tops can be stood on), the highest top under a point (the
  * physics ground, roofs, stands) and a point-inside test for ray casts (camera, aiming, sight).
  * All landmarks are known from the start (they are part of the macro plan), so the index is built
- * once: a 32 m grid of obstacle indices.
+ * once: a 32 m grid of obstacle indices. Also the walkable insides (the town hall): where one is
+ * indoors, and the room lights near a point.
  */
 import type { MacroPlan } from '../plan/types';
 import type { Terrain } from './terrain';
-import { landmarkParts, partObstacles, type PartObstacle } from '../plan/landmarkParts';
+import { landmarkParts, landmarkInterior, partObstacles, type PartObstacle, type LmInterior } from '../plan/landmarkParts';
+import { pointInPoly } from '../core/geom2';
 import type { ObstacleProvider } from './Collision';
 
 const G = 32;
@@ -20,8 +22,15 @@ export class LandmarkSolids {
   private stamp: Uint32Array;
   private q = 0;
 
+  /** Walkable insides of the landmarks that have one. */
+  readonly insides: LmInterior[] = [];
+
   constructor(macro: MacroPlan, terrain: Terrain) {
-    for (const lm of macro.landmarks ?? []) for (const o of partObstacles(landmarkParts(lm, terrain))) this.obs.push(o);
+    for (const lm of macro.landmarks ?? []) {
+      for (const o of partObstacles(landmarkParts(lm, terrain))) this.obs.push(o);
+      const ins = landmarkInterior(lm, terrain);
+      if (ins) this.insides.push(ins);
+    }
     this.obs.forEach((o, n) => {
       const e = o.cyl ? o.r : Math.abs(o.hx * o.ux) + Math.abs(o.hz * o.uz);
       const f = o.cyl ? o.r : Math.abs(o.hx * o.uz) + Math.abs(o.hz * o.ux);
@@ -74,6 +83,22 @@ export class LandmarkSolids {
     let h = false;
     this.each(x, z, x, z, (o) => { if (!h && y > o.y0 && y < o.y1 && this.inside(o, x, z)) h = true; });
     return h;
+  }
+
+  /** The inside (x, y, z) is in, or null. */
+  insideAt(x: number, y: number, z: number): LmInterior | null {
+    for (const ins of this.insides) for (const rm of ins.rooms) if (y > rm.y0 && y < rm.y1 && pointInPoly(rm.poly, x, z)) return ins;
+    return null;
+  }
+
+  /** Room lights of the inside the point is in, nearest first (x, y, z, distance). */
+  lightsNear(x: number, y: number, z: number): { x: number; y: number; z: number; d: number }[] {
+    const ins = this.insideAt(x, y, z);
+    if (!ins) return [];
+    const out: { x: number; y: number; z: number; d: number }[] = [];
+    const L = ins.lights;
+    for (let i = 0; i < L.length; i += 3) out.push({ x: L[i], y: L[i + 1], z: L[i + 2], d: Math.hypot(L[i] - x, L[i + 1] - y, L[i + 2] - z) });
+    return out.sort((a, b) => a.d - b.d);
   }
 
   /** Is (x, z) on a landmark's footprint at ground level (grown by m)? */

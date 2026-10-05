@@ -12,7 +12,7 @@
  * Local frame: u = (cos angle, sin angle), v = (-sin, cos), origin at the site centre, the
  * front (entrance, square) towards -v. Heights are absolute (y up); `lm.base` is the floor level.
  */
-import { Rng } from '../core/rng';
+import { Rng, deriveSeed } from '../core/rng';
 import type { Poly } from '../core/geom2';
 import type { Terrain } from '../world/terrain';
 import type { Landmark } from './landmarks';
@@ -67,6 +67,22 @@ export interface LmPart {
   noSides?: boolean;
   /** Collision only (a simple volume standing in for an open structure): not drawn. */
   hidden?: boolean;
+  /** Counts as solid ground cover for the planner and the map (a hollow building's outline) without being a solid. */
+  footprint?: boolean;
+}
+
+/** A walkable inside (the town hall's): its outline, height range and where its room lights hang. */
+export interface LmRoom {
+  /** Outline (world, CCW). */
+  poly: Poly;
+  y0: number;
+  y1: number;
+}
+
+export interface LmInterior {
+  rooms: LmRoom[];
+  /** Light positions (x, y, z world). */
+  lights: number[];
 }
 
 /** A solid for the walker (same shape as world/Collision's Obstacle). */
@@ -111,6 +127,7 @@ interface Opt {
 /** Builds parts in a local frame (nested frames for sub-assemblies like planes). */
 class Kit {
   readonly parts: LmPart[] = [];
+  readonly inside: LmInterior = { rooms: [], lights: [] };
   private ox: number;
   private oz: number;
   private oa: number;
@@ -249,6 +266,17 @@ class Kit {
     p.hidden = true;
   }
 
+  /** A walkable room over the local rectangle (u0, v0)–(u1, v1), from y0 to y1. */
+  room(u0: number, v0: number, u1: number, v1: number, y0: number, y1: number): void {
+    this.inside.rooms.push({ poly: [...this.W(u0, v0), ...this.W(u1, v0), ...this.W(u1, v1), ...this.W(u0, v1)], y0, y1 });
+  }
+
+  /** A room light at a local point. */
+  light(u: number, v: number, y: number): void {
+    const [x, z] = this.W(u, v);
+    this.inside.lights.push(x, y, z);
+  }
+
   /** Free quad (world corners, x y z × 4, counter-clockwise from above). */
   quad(q: number[], m: PartMat, o: Opt = {}): LmPart {
     const part: LmPart = { k: PK.Quad, x: (q[0] + q[6]) / 2, z: (q[2] + q[8]) / 2, a: 0, hx: 0, hz: 0, y0: Math.min(q[1], q[4], q[7], q[10]), y1: Math.max(q[1], q[4], q[7], q[10]), q, m, map: o.map ?? 5, detail: o.detail };
@@ -271,13 +299,20 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
   const roofM = st === 1 ? mat(r.pick([SLATE, CLAY]), WHITE, ROOF) : st === 2 ? mat(SLATE, WHITE, ROOF) : mat(st === 3 ? GRAVEL : ZINC, WHITE, ROOF);
   const vb = lm.hv - 4 - P.d / 2;
   const hw = P.w / 2, hd = P.d / 2;
-  // Main block.
+  const fv = vb - hd; // front facade line
+  // The main block is a shell one can walk into: walls with the doorway in the middle of the
+  // front, floors and rooms inside (townhallInterior), solid above the public storeys. The map,
+  // the ground and the props still see one solid block (a footprint-only part).
+  const sh = townhallShell(k, lm, st === 3 ? gh - 0.3 : gh + fh);
+  const foot = k.box(0, vb, hw, hd, B, B + H, plain, { solid: false, map: 1 });
+  foot.hidden = true;
+  foot.footprint = true;
   if (st === 3) {
     // Modern: a glazed ground floor under a solid slab, the council chamber a drum beside it.
-    k.box(0, vb, hw, hd, B, B + gh, mat(GLASS, WHITE, WIN | CURTAIN, 1.6, gh, gh), { foot: true, top: plain });
+    sh.walls(B, B + gh, mat(GLASS, WHITE, WIN | CURTAIN, 1.6, gh, gh), plain);
     k.box(0, vb + 1.5, hw + 1, hd + 1.5, B + gh, B + H, mat(wallL, WHITE, WIN, 2.0, fh, fh), { top: mat(GRAVEL, WHITE, ROOF) });
   } else {
-    k.box(0, vb, hw, hd, B, B + H, wall, { foot: true, top: roofM });
+    sh.walls(B, B + H, wall, roofM);
   }
   if (st === 1) k.gable(0, vb, hw, hd, B + H, B + H + P.d * 0.55, plain, roofM);
   if (st === 2) k.pyramid(0, vb, hw + 0.3, hd + 0.3, B + H, B + H + 5, 0.75, roofM);
@@ -295,9 +330,6 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
       if (st === 1) k.gable(s * (hw - ww / 2), wv, P.wingD / 2 + 0.5, ww / 2, B + H - fh, B + H - fh + ww * 0.5, plain, roofM, { rot: Math.PI / 2 });
     }
   }
-  const fv = vb - hd; // front facade line
-  // Entrance steps across the middle.
-  for (let i = 0; i < 3; i++) k.box(0, fv - 1.2 - i * 0.9, P.w * 0.18 + 1 - i * 0.3, 0.45, k.F, B - i * 0.18, mat(GRANITE, [0.85, 0.85, 0.85]), { detail: i > 0, solid: false });
   // Portico (classical): columns, entablature and pediment.
   if (st === 0) {
     const n = r.pick([6, 6, 8]), pw = Math.min(P.w * 0.45, n * 3.6), cv = fv - 3.2;
@@ -306,6 +338,8 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
     k.box(0, cv + 0.6, pw / 2 + 0.8, 2.6, B + H - 2.2, B + H, plain, { solid: false });
     k.gable(0, cv + 0.6, 2.6, pw / 2 + 0.8, B + H, B + H + pw * 0.16, plain, roofM, { rot: Math.PI / 2, detail: false });
   }
+  /** Where the entrance steps start (with a gateway tower: in front of the tower). */
+  let stepV = fv;
   // Tower: clock tower (belfry, spire or cupola) or a dome on a drum.
   if (P.tower === 2) {
     const dr = Math.min(P.w, P.d) * 0.24;
@@ -317,7 +351,18 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
     // (Modern: a campanile on the square beside the slab's end.)
     const ts = st === 3 ? 4.5 : r.range(4, 5.2), tv = st === 3 ? fv - 8 : fv + ts * 0.6, tu = st === 3 ? hw - 5 : 0;
     const th = B + Math.max(P.towerH, H + 14);
-    k.box(tu, tv, ts, ts, B, th, mat(wallL, pastel, WIN | (st === 1 ? ARCH : 0), ts, 6, gh), { foot: true, top: roofM });
+    const towerM = mat(wallL, pastel, WIN | (st === 1 ? ARCH : 0), ts, 6, gh);
+    if (st === 3) k.box(tu, tv, ts, ts, B, th, towerM, { foot: true, top: roofM });
+    else {
+      // In the middle of the front: its base is the gateway to the door (a passage between two
+      // piers); the part inside the block only starts at the roof.
+      const f0 = tv - ts, dp = (fv - f0) / 2, dw = sh.doorW / 2;
+      for (const s of [-1, 1]) k.box(s * (dw + (ts - dw) / 2), f0 + dp, (ts - dw) / 2, dp, B, B + sh.doorH, towerM, { foot: true });
+      k.box(0, f0 + dp, ts, dp, B + sh.doorH, th, towerM, { top: roofM });
+      k.box(0, (fv + tv + ts) / 2, ts, (tv + ts - fv) / 2, B + H - 0.05, th, towerM, { top: roofM });
+      k.box(0, f0 + dp, dw, dp, B - 0.3, B, mat(GRANITE, [0.85, 0.85, 0.85]), { map: 0, foot: true });
+      stepV = f0;
+    }
     // Clock faces near the top.
     const cy = th - 4;
     for (const [du, dv, rot] of [[0, -ts - 0.12, 0], [0, ts + 0.12, 0], [-ts - 0.12, 0, Math.PI / 2], [ts + 0.12, 0, Math.PI / 2]] as const) {
@@ -331,6 +376,14 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
       k.cyl(tu, tv, 0.25, 0.05, th + 4 + ts * 1.3, th + 9 + ts * 1.3, mat(METAL, GOLD), { detail: true, solid: false });
     } else k.box(tu, tv, ts + 0.4, ts + 0.4, th, th + 0.8, plain, { solid: false });
   }
+  // Entrance steps across the middle (in front of the gateway when the tower stands there),
+  // solid and as many as it takes from the square up to the floor (the block may stand on a
+  // terrace well above the ground).
+  {
+    const rise = 0.17, tread = 0.36, sw = P.w * 0.18 + 1;
+    const n = Math.max(3, Math.min(18, Math.ceil((B - k.ground(0, stepV - 3)) / rise)));
+    for (let i = 0; i < n; i++) k.box(0, stepV - tread / 2 - i * tread, sw + i * 0.05, tread / 2, k.F, B - i * rise, mat(GRANITE, [0.85, 0.85, 0.85]), { solid: true, map: 2 });
+  }
   if (st === 3) k.cyl(-hw + 10, fv - 12, 9, 9, B, B + 9, mat(GLASS, WHITE, WIN | CURTAIN, 1.8, 9, 9), { foot: true, top: mat(METAL_ROOF, WHITE, ROOF) });
   // Flagpoles in front.
   const flagC = r.pick(PAINT);
@@ -339,6 +392,365 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
     k.cyl(u, v, 0.12, 0.08, B - 0.1, B + 12, mat(METAL, [0.85, 0.85, 0.85]), { detail: true, solid: false, seg: 6 });
     k.box(u + 1.3, v, 1.2, 0.03, B + 10.2, B + 11.8, mat(PLASTER, s === 0 ? WHITE : flagC), { detail: true, solid: false });
   }
+  townhallInterior(k, lm, sh, flagC, pastel);
+}
+
+// ------------------------------------------------------------ town hall: shell and interior
+
+/** A wall opening: centre along the wall, width, bottom and top. */
+interface Opening { a: number; w: number; y0: number; y1: number }
+
+/**
+ * A straight wall from a0 to a1 along u (axis 'u', at v = c) or along v (axis 'v', at u = c),
+ * thickness th, between y0 and y1, with openings: full-height pieces between them, a sill
+ * below and a lintel above each.
+ */
+function wallRun(k: Kit, axis: 'u' | 'v', c: number, a0: number, a1: number, y0: number, y1: number, th: number, m: PartMat, open: Opening[], o: Opt = {}): void {
+  const put = (s0: number, s1: number, b: number, t: number) => {
+    if (s1 - s0 < 0.02 || t - b < 0.02) return;
+    const mid = (s0 + s1) / 2, h = (s1 - s0) / 2;
+    if (axis === 'u') k.box(mid, c, h, th / 2, b, t, m, o);
+    else k.box(c, mid, th / 2, h, b, t, m, o);
+  };
+  let s = a0;
+  for (const op of [...open].sort((p, q) => p.a - q.a)) {
+    const l = op.a - op.w / 2, r = op.a + op.w / 2;
+    put(s, l, y0, y1);
+    put(l, r, y0, op.y0);
+    put(l, r, op.y1, y1);
+    s = r;
+  }
+  put(s, a1, y0, y1);
+}
+
+interface Shell {
+  /** Inner extents (local): u in ±iu, v from iv0 (front) to iv1 (back). */
+  iu: number; iv0: number; iv1: number;
+  /** Ceiling of the public storeys (above it the block is solid). */
+  ceil: number;
+  doorW: number; doorH: number;
+  /** The outer walls (and the solid block above the ceiling) from y0 to y1. */
+  walls(y0: number, y1: number, m: PartMat, top: PartMat): void;
+}
+
+function townhallShell(k: Kit, lm: Landmark, ceilH: number): Shell {
+  const P = lm.p, B = k.B, t = 0.6;
+  const hw = P.w / 2, hd = P.d / 2, vb = lm.hv - 4 - P.d / 2, fv = vb - hd, bv = vb + hd;
+  const doorW = 4.4, doorH = 4.4;
+  const sh: Shell = {
+    iu: hw - t, iv0: fv + t, iv1: bv - t, ceil: B + ceilH, doorW, doorH,
+    walls(y0, y1, m, top) {
+      const o: Opt = { foot: true, top, map: 0 };
+      wallRun(k, 'u', fv + t / 2, -hw, hw, y0, y1, t, m, [{ a: 0, w: doorW, y0, y1: y0 + doorH }], o);
+      wallRun(k, 'u', bv - t / 2, -hw, hw, y0, y1, t, m, [], o);
+      for (const s of [-1, 1]) wallRun(k, 'v', s * (hw - t / 2), fv + t, bv - t, y0, y1, t, m, [], o);
+      // Above the public storeys: solid up to the roof (its underside is the ceiling).
+      if (y1 > sh.ceil + 0.05) k.box(0, (sh.iv0 + sh.iv1) / 2, sh.iu - 0.01, (sh.iv1 - sh.iv0) / 2 - 0.01, sh.ceil, y1, mat(PLASTER, [1.02, 1, 0.95]), { top, map: 0 });
+    },
+  };
+  return sh;
+}
+
+/** Interior palette per style (0 classical, 1 gothic, 2 baroque, 3 modern). */
+function hallPalette(st: number, pastel: RGB) {
+  const warm: RGB = st === 2 ? [pastel[0] * 1.05, pastel[1] * 1.05, pastel[2] * 1.05] : st === 1 ? [0.96, 0.9, 0.8] : st === 3 ? [1.02, 1.02, 1.02] : [1.06, 1.0, 0.88];
+  return {
+    wall: mat(st === 1 ? LIME : st === 3 ? PLASTER : STUCCO, warm),
+    stone: mat(st === 1 ? SAND : LIME, [1.12, 1.1, 1.04]),
+    floorA: mat(st === 3 ? CONC : st === 1 ? SAND : LIME, st === 3 ? [1.05, 1.05, 1.05] : [1.18, 1.16, 1.1]),
+    floorB: mat(st === 1 ? BRICK_BROWN : GRANITE, st === 1 ? [0.8, 0.6, 0.5] : st === 2 ? [0.78, 0.48, 0.45] : [0.42, 0.42, 0.46]),
+    wood: mat(PLASTER, st === 3 ? [0.72, 0.55, 0.38] : [0.42, 0.26, 0.15]),
+    dark: mat(PLASTER, st === 3 ? [0.2, 0.2, 0.22] : [0.25, 0.14, 0.08]),
+    red: mat(PLASTER, st === 3 ? [0.15, 0.3, 0.5] : [0.52, 0.07, 0.08]),
+    gold: mat(METAL, GOLD),
+    ceil: mat(PLASTER, [1.02, 1, 0.95]),
+    // (Daylight through the panes: glass reads black indoors, where the sky reflection is dimmed.)
+    glass: mat(PLASTER, [1.2, 1.35, 1.55]),
+    leaf: mat(PLASTER, [0.2, 0.42, 0.18]),
+    pot: mat(BRICK, [0.8, 0.55, 0.4]),
+    screen: mat(PLASTER, [0.25, 0.75, 1.6]),
+    cloth: mat(PLASTER, [1.15, 1.13, 1.08]),
+  };
+}
+type Palette = ReturnType<typeof hallPalette>;
+
+const D: Opt = { detail: true };
+const DS: Opt = { detail: true, solid: true };
+
+function townhallInterior(k: Kit, lm: Landmark, sh: Shell, flagC: RGB, pastel: RGB): void {
+  const r = new Rng(deriveSeed(lm.seed, 'interior'));
+  const st = lm.style, B = k.B;
+  const C = hallPalette(st, pastel);
+  const { iu, iv0, iv1, ceil } = sh;
+  const dw = sh.doorW / 2;
+  const grand = st !== 3 && iu >= 12.5 && iv1 - iv0 >= 15;
+
+  // Floor over the whole inside, solid (with a foundation: the ground may fall away under the block).
+  k.box(0, (iv0 + iv1) / 2, iu, (iv1 - iv0) / 2, B - 0.3, B, C.floorA, { map: 0, foot: true });
+  k.room(-iu, iv0, iu, iv1, B - 0.5, ceil);
+
+  // Lining in front of the outer walls (their inner faces carry the facade's windows), with
+  // tall glazed windows on the sides and the back.
+  const lin = 0.05;
+  wallRun(k, 'u', iv0 + lin / 2, -iu, iu, B, ceil, lin, C.wall, [{ a: 0, w: sh.doorW, y0: B, y1: B + sh.doorH }], D);
+  wallRun(k, 'u', iv1 - lin / 2, -iu, iu, B, ceil, lin, C.wall, [], D);
+  for (const s of [-1, 1]) wallRun(k, 'v', s * (iu - lin / 2), iv0, iv1, B, ceil, lin, C.wall, [], D);
+  const storeys = grand ? [B, B + 5.4] : [B];
+  for (const y of storeys) {
+    const top = Math.min(ceil, y + 5.4);
+    for (let a = -iu + 2.2; a < iu - 1.6; a += 3.2) k.box(a, iv1 - lin - 0.03, 0.6, 0.03, y + 1.0, Math.min(top - 0.6, y + 3.4), C.glass, D);
+    for (const s of [-1, 1]) for (let a = iv0 + 2.2; a < iv1 - 1.6; a += 3.2) k.box(s * (iu - lin - 0.03), a, 0.03, 0.6, y + 1.0, Math.min(top - 0.6, y + 3.4), C.glass, D);
+  }
+
+  // The doorway: open double doors swung inward, a stone frame and a gilded plaque outside.
+  const fv = iv0 - 0.6;
+  for (const s of [-1, 1]) {
+    k.box(s * (dw - 0.06), iv0 + dw / 2 + 0.05, 0.05, dw / 2, B, B + sh.doorH - 0.05, C.dark, DS);
+    k.box(s * (dw + 0.35), fv - 0.18, 0.35, 0.18, B, B + sh.doorH + 0.3, C.stone, D);
+    k.cyl(s * (dw + 1.2), fv - 0.3, 0.18, 0.12, B + 2.6, B + 3.2, mat(PLASTER, [1.6, 1.4, 1.0]), { detail: true, seg: 8, solid: false });
+  }
+  k.box(0, fv - 0.2, dw + 0.8, 0.2, B + sh.doorH, B + sh.doorH + 0.6, C.stone, D);
+  k.box(0, fv - 0.42, 1.6, 0.03, B + sh.doorH + 0.75, B + sh.doorH + 1.3, C.gold, D);
+  k.flat(0, iv0 + 1.2, dw, 0.9, B + 0.012, C.dark, D);
+
+  if (grand) grandHall(k, sh, C, r, flagC);
+  else compactHall(k, sh, C, r, flagC);
+}
+
+// --------------------------------------------------------------- furniture (local frame)
+
+/** A chair facing +v of its frame (rot turns it), the back towards -v. */
+function chair(k: Kit, u: number, v: number, rot: number, y: number, m: PartMat, high = false): void {
+  k.sub(u, v, rot, () => {
+    k.box(0, 0, 0.24, 0.24, y + 0.42, y + 0.48, m, D);
+    k.box(0, -0.22, 0.24, 0.03, y + 0.48, y + (high ? 1.55 : 1.0), m, D);
+    for (const [a, b] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) k.box(a, b, 0.025, 0.025, y, y + 0.42, m, D);
+  });
+}
+
+function bench(k: Kit, u: number, v: number, rot: number, y: number, len: number, m: PartMat): void {
+  k.sub(u, v, rot, () => {
+    k.box(0, 0, len / 2, 0.22, y + 0.4, y + 0.46, m, D);
+    k.box(0, -0.2, len / 2, 0.03, y + 0.46, y + 0.95, m, D);
+    for (const s of [-1, 1]) k.box(s * (len / 2 - 0.1), 0, 0.04, 0.2, y, y + 0.4, m, D);
+  });
+}
+
+function plant(k: Kit, u: number, v: number, y: number, C: Palette, s = 1, leaf = C.leaf): void {
+  k.cyl(u, v, 0.3 * s, 0.22 * s, y, y + 0.55 * s, C.pot, { ...D, seg: 10 });
+  k.dome(u, v, 0.55 * s, 0.55 * s, y + 0.5 * s, y + 1.5 * s, leaf, { ...D, seg: 10 });
+}
+
+/** A chandelier hanging from the ceiling at (u, v); registers a room light under it. */
+function chandelier(k: Kit, u: number, v: number, ceil: number, rad: number, C: Palette, floor: number): void {
+  const y = ceil - Math.min(2.2, (ceil - floor) * 0.3);
+  k.cyl(u, v, 0.03, 0.03, y, ceil, C.gold, { ...D, seg: 6 });
+  k.cyl(u, v, rad, rad * 0.8, y - 0.12, y, C.gold, { ...D, seg: 14 });
+  const n = Math.max(6, Math.round(rad * 8));
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    k.dome(u + Math.cos(a) * rad * 0.9, v + Math.sin(a) * rad * 0.9, 0.09, 0.09, y, y + 0.22, mat(PLASTER, [2.2, 1.9, 1.4]), { ...D, seg: 6 });
+  }
+  k.dome(u, v, rad * 0.35, rad * 0.35, y - 0.12, y - 0.7, C.gold, { ...D, seg: 10 });
+  k.light(u, v, Math.min(y - 0.5, floor + 4.5));
+}
+
+/** A framed portrait on a wall, facing +v of its frame. */
+function portrait(k: Kit, u: number, v: number, rot: number, y: number, C: Palette, r: Rng): void {
+  const col = r.pick<RGB>([[0.35, 0.25, 0.18], [0.22, 0.25, 0.32], [0.4, 0.3, 0.22], [0.25, 0.3, 0.22]]);
+  k.sub(u, v, rot, () => {
+    k.box(0, 0, 0.62, 0.04, y, y + 1.5, C.gold, D);
+    k.box(0, 0.03, 0.52, 0.03, y + 0.1, y + 1.4, mat(PLASTER, col), D);
+  });
+}
+
+function flagStand(k: Kit, u: number, v: number, y: number, col: RGB, C: Palette): void {
+  k.cyl(u, v, 0.25, 0.25, y, y + 0.06, C.gold, { ...D, seg: 8 });
+  k.cyl(u, v, 0.03, 0.03, y, y + 2.6, C.gold, { ...D, seg: 6 });
+  k.box(u + 0.5, v, 0.48, 0.02, y + 1.3, y + 2.5, mat(PLASTER, col), D);
+}
+
+/** Council chamber: rows of desks on circles round a dais at the back (v1), facing it. */
+function chamber(k: Kit, u0: number, u1: number, v0: number, v1: number, y: number, ceil: number, C: Palette, r: Rng, flagC: RGB): void {
+  const cu = (u0 + u1) / 2, half = (u1 - u0) / 2;
+  const dh = Math.min(half - 0.8, 4.5);
+  // (Reaching down into the slab: tall enough to be stood on.)
+  k.box(cu, v1 - 1.5, dh, 1.4, y - 0.5, y + 0.4, C.dark, { ...DS, top: C.red });
+  k.box(cu, v1 - 2.1, Math.min(2.4, dh - 0.4), 0.4, y + 0.4, y + 1.2, C.wood, DS);
+  for (const s of [-1, 0, 1]) chair(k, cu + s * 1.1, v1 - 1.2, Math.PI, y + 0.4, C.red, s === 0);
+  // Coat of arms between two flags.
+  k.box(cu, v1 - 0.09, 0.8, 0.04, y + 2.3, y + 3.5, C.gold, D);
+  k.box(cu, v1 - 0.12, 0.6, 0.03, y + 2.45, y + 3.35, mat(PLASTER, flagC), D);
+  for (const s of [-1, 1]) flagStand(k, cu + s * Math.min(3.2, dh), v1 - 0.6, y + 0.4, s < 0 ? flagC : WHITE, C);
+  const vc = v1 - 2.1;
+  k.flat(cu, (v0 + vc) / 2, half - 0.5, Math.max(0.3, (vc - v0) / 2 - 0.3), y + 0.012, C.red, D);
+  for (let R = 3.2; vc - R - 1.2 > v0 + 0.6; R += 1.9) {
+    const m = Math.max(2, Math.floor((R * 2.4) / 1.75));
+    for (let i = 0; i < m; i++) {
+      const th = -1.2 + (2.4 * (i + 0.5)) / m;
+      const u = cu + R * Math.sin(th), v = vc - R * Math.cos(th);
+      if (Math.abs(u - cu) > half - 1) continue;
+      // (In the desk's frame +v points at the dais.)
+      k.sub(u, v, th, () => {
+        k.box(0, 0, 0.72, 0.28, y, y + 0.76, C.wood, { ...DS, top: C.dark });
+        k.beam(0.3, 0.1, y + 0.76, 0.3, 0.2, y + 1.1, 0.012, C.dark, D);
+        chair(k, 0, -0.62, 0, y, C.red);
+      });
+    }
+  }
+  chandelier(k, cu, (v0 + v1) / 2, ceil, Math.min(1.4, half * 0.2), C, y);
+  for (const s of [-1, 1]) portrait(k, cu + s * (half - 0.09), (v0 + v1) / 2, s * Math.PI / 2, y + 1.4, C, r);
+}
+
+/**
+ * The grand layout: a two-storey hall with side galleries and a twin staircase, the service
+ * hall behind it, and upstairs the council chamber between the mayor's office and the wedding room.
+ */
+function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
+  // (Walkable parts are at least ~0.75 m tall: world/Collision only stands on obstacle tops
+  // taller than 1.4 × the step height, and walks into lower ones. Slabs are thick, steps and
+  // the dais reach down into the floor.)
+  const B = k.B, gh = 5.4, L1 = B + gh, slab = 0.8;
+  const { iu, iv0, iv1, ceil } = sh;
+  const pt = 0.3, vP = iv0 + (iv1 - iv0) * 0.6;
+  const gW = Math.min(4.2, Math.max(3, iu * 0.22));
+  const uTop = iu - gW;
+  const n = Math.round(gh / 0.18), rise = gh / n;
+  const tread = Math.min(0.32, (uTop - 2.0) / n);
+  const uBot = uTop - n * tread;
+  const sw = 2.2, vS = vP - pt / 2 - sw / 2;
+  const hallV1 = vP - pt / 2;
+
+  // Hall floor: a chequer of two stones, the emblem in the middle, a runner from the door.
+  const tile = 2;
+  for (let u = -iu, i = 0; u < iu - 0.01; u += tile, i++)
+    for (let v = iv0, j = 0; v < hallV1 - 0.01; v += tile, j++) {
+      if (!((i + j) % 2)) continue;
+      const hu = Math.min(tile, iu - u) / 2, hv = Math.min(tile, hallV1 - v) / 2;
+      k.flat(u + hu, v + hv, hu, hv, B + 0.006, C.floorB, D);
+    }
+  const ev = (iv0 + vS - sw / 2) / 2;
+  k.cyl(0, ev, 2.6, 2.6, B, B + 0.015, C.floorB, { ...D, seg: 24 });
+  k.cyl(0, ev, 2.2, 2.2, B, B + 0.02, C.gold, { ...D, seg: 24 });
+  k.cyl(0, ev, 1.4, 1.4, B, B + 0.025, mat(PLASTER, flagC), { ...D, seg: 24 });
+  if (ev - 2.6 > iv0 + 2.4) k.flat(0, (iv0 + 2.2 + ev - 2.6) / 2, 1.1, (ev - 2.6 - iv0 - 2.2) / 2, B + 0.014, C.red, D);
+
+  for (const s of [-1, 1]) {
+    // Gallery along the side wall, carried by columns that run up to the ceiling.
+    k.box(s * (iu - gW / 2), (iv0 + hallV1) / 2, gW / 2, (hallV1 - iv0) / 2, L1 - slab, L1, C.ceil, { ...DS, top: C.wood });
+    const cu = s * (uTop + 0.35);
+    for (let v = iv0 + 2.5; v < vS - sw / 2 - 0.8; v += 4.2) {
+      k.cyl(cu, v, 0.42, 0.42, B, ceil, C.stone, { ...DS, seg: 14 });
+      k.box(cu, v, 0.55, 0.55, ceil - 0.4, ceil, C.stone, D);
+      k.box(cu, v, 0.52, 0.52, B, B + 0.35, C.stone, D);
+      plant(k, cu - s * 1.2, v, B, C, 0.9);
+    }
+    // Balustrade (open where the stairs arrive) and banners in the city's colours under it.
+    const b0 = iv0 + 0.2, b1 = vS - sw / 2 - 0.1;
+    k.box(s * (uTop + 0.08), (b0 + b1) / 2, 0.07, (b1 - b0) / 2, L1, L1 + 1.0, C.stone, DS);
+    k.box(s * (uTop + 0.08), (b0 + b1) / 2, 0.12, (b1 - b0) / 2 + 0.05, L1 + 1.0, L1 + 1.08, C.stone, D);
+    for (let v = b0 + 3, i = 0; v < b1 - 2; v += 6, i++) k.box(s * (uTop - 0.02), v, 0.02, 0.7, L1 - 2.8, L1 - slab - 0.1, mat(PLASTER, i % 2 ? WHITE : flagC), D);
+    // Benches and portraits under the gallery.
+    for (let v = iv0 + 5.1; v < vS - sw / 2 - 2; v += 4.2) {
+      bench(k, s * (iu - 0.5), v, s * Math.PI / 2, B, 2.2, C.wood);
+      portrait(k, s * (iu - 0.12), v, s * Math.PI / 2, B + 1.8, C, r);
+    }
+    // The staircase: a flight along the back of the hall, rising outwards to the gallery.
+    for (let i = 0; i < n; i++) k.box(s * (uBot + (i + 0.5) * tread), vS, tread / 2, sw / 2, B - 1, B + (i + 1) * rise, C.stone, DS);
+    const vr = vS - sw / 2 + 0.06;
+    k.beam(s * uBot, vr, B + 1.0, s * uTop, vr, L1 + 1.0, 0.05, C.gold, D);
+    for (const [u, y] of [[uBot, B], [uTop, L1]] as const) k.cyl(s * u, vr, 0.09, 0.09, y, y + 1.1, C.gold, { ...D, seg: 8 });
+  }
+  // Information desk and a bust of the founder.
+  const du = -Math.min(uTop - 3, 8);
+  k.box(du, iv0 + 5, 2, 0.5, B, B + 1.1, C.wood, { ...DS, top: C.stone });
+  chair(k, du, iv0 + 6, Math.PI, B, C.red);
+  k.box(du, iv0 + 4.47, 0.5, 0.03, B + 1.1, B + 1.5, C.gold, D);
+  k.box(-du, iv0 + 5, 0.55, 0.55, B, B + 1.3, C.stone, DS);
+  figure(k, -du, iv0 + 5, B + 1.3, 1.1, mat(METAL, BRONZE), false);
+  for (const f of [0.3, 0.75]) chandelier(k, 0, iv0 + (hallV1 - iv0) * f, ceil, 1.6, C, B);
+
+  // The wall between the hall and the rooms behind: a door to the service hall below, doors
+  // from the galleries into the mayor's office and the wedding room above.
+  wallRun(k, 'u', vP, -iu, iu, B, ceil, pt, C.wall, [
+    { a: 0, w: 3, y0: B, y1: B + 3.4 },
+    { a: -(iu - gW / 2), w: 1.6, y0: L1, y1: L1 + 2.5 },
+    { a: iu - gW / 2, w: 1.6, y0: L1, y1: L1 + 2.5 },
+  ], DS);
+  k.box(0, vP - pt / 2 - 0.05, 1.9, 0.05, B + 3.4, B + 3.9, C.gold, D);
+
+  // Service hall (ground floor behind): counters, waiting benches, a number display.
+  const sv0 = vP + pt / 2, sTop = L1 - slab;
+  k.box(0, (sv0 + iv1) / 2, iu - 0.01, (iv1 - sv0) / 2, L1 - slab, L1, C.ceil, { top: C.wood, map: 0 });
+  const cv = iv1 - 2.4;
+  k.box(0, cv, iu - 1.5, 0.35, B, B + 1.1, C.wood, { ...DS, top: C.stone });
+  for (let u = -iu + 2.5; u < iu - 2; u += 2.8) {
+    k.box(u, cv - 0.05, 0.25, 0.03, B + 1.1, B + 1.45, C.dark, D);
+    chair(k, u, cv + 0.9, Math.PI, B, C.dark);
+  }
+  for (let row = 0, v = sv0 + 1.8; v < cv - 2 && row < 3; v += 1.5, row++)
+    for (const s of [-1, 1]) bench(k, s * Math.min(iu * 0.45, 5), v, 0, B, Math.min(iu * 0.6, 5.5), C.wood);
+  k.box(0, sv0 + 0.06, 1.3, 0.04, B + 2.4, B + 3.1, C.screen, D);
+  for (const f of [-0.5, 0.5]) k.light(f * iu, (sv0 + iv1) / 2, sTop - 0.8);
+  plant(k, -iu + 1, sv0 + 1, B, C);
+  plant(k, iu - 1, sv0 + 1, B, C);
+
+  // Upstairs: the mayor's office | the council chamber | the wedding room.
+  const cw = iu - gW - 1.6;
+  for (const s of [-1, 1]) wallRun(k, 'v', s * cw, sv0, iv1, L1, ceil, 0.25, C.wall, [{ a: sv0 + 1.4, w: 1.3, y0: L1, y1: L1 + 2.4 }], DS);
+  chamber(k, -cw + 0.125, cw - 0.125, sv0, iv1, L1, ceil, C, r, flagC);
+  {
+    // The mayor's office (left): desk, chairs, bookcase, flag, rug, plant.
+    const u0 = -iu, u1 = -cw - 0.125, um = (u0 + u1) / 2, vm = (sv0 + iv1) / 2;
+    k.flat(um, vm + 0.6, (u1 - u0) / 2 - 0.5, Math.max(0.4, (iv1 - sv0) / 2 - 1.1), L1 + 0.012, C.red, D);
+    k.box(um, iv1 - 1.8, 1.0, 0.45, L1, L1 + 0.76, C.wood, { ...DS, top: C.dark });
+    chair(k, um, iv1 - 1.1, Math.PI, L1, C.red, true);
+    for (const s of [-1, 1]) chair(k, um + s * 0.6, iv1 - 2.8, 0, L1, C.dark);
+    const bu = u0 + 0.3, bh = Math.min(1.6, (iv1 - sv0) / 2 - 0.8);
+    k.box(bu, vm, 0.25, bh, L1, L1 + 2.3, C.wood, D);
+    for (let y = L1 + 0.4; y < L1 + 2.2; y += 0.45)
+      for (let v = vm - bh + 0.25; v < vm + bh - 0.2; v += 0.35) k.box(bu + 0.06, v, 0.18, 0.13, y, y + r.range(0.25, 0.36), mat(PLASTER, r.pick<RGB>([[0.5, 0.1, 0.1], [0.15, 0.2, 0.4], [0.2, 0.35, 0.2], [0.55, 0.45, 0.3], [0.2, 0.15, 0.1]])), D);
+    flagStand(k, u1 - 0.8, iv1 - 0.6, L1, flagC, C);
+    portrait(k, um, iv1 - 0.12, Math.PI, L1 + 1.5, C, r);
+    plant(k, u0 + 0.7, iv1 - 0.7, L1, C);
+    k.light(um, vm, ceil - 0.8);
+  }
+  {
+    // The wedding room (right): a table with flowers, the couple's chairs, rows for the guests.
+    const u0 = cw + 0.125, u1 = iu, um = (u0 + u1) / 2, vm = (sv0 + iv1) / 2;
+    k.box(um, iv1 - 1.6, 1.1, 0.45, L1, L1 + 0.78, C.cloth, DS);
+    for (const s of [-1, 1]) {
+      plant(k, um + s * 0.8, iv1 - 1.6, L1 + 0.78, C, 0.35, mat(PLASTER, s < 0 ? [1.3, 1.1, 1.15] : [1.2, 0.5, 0.6]));
+      chair(k, um + s * 0.5, iv1 - 2.6, 0, L1, C.cloth, true);
+    }
+    for (let v = iv1 - 3.8; v > sv0 + 2.2; v -= 1.0)
+      for (const s of [-1, 1]) for (const d of [0.55, 1.15]) chair(k, um + s * d, v, 0, L1, C.wood);
+    k.flat(um, vm, 0.35, (iv1 - sv0) / 2 - 0.4, L1 + 0.012, C.red, D);
+    k.light(um, vm, ceil - 0.8);
+  }
+}
+
+/** The compact layout (smaller and modern town halls): the hall in front, the council chamber behind it, one storey. */
+function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
+  const B = k.B;
+  const { iu, iv0, iv1, ceil } = sh;
+  const pt = 0.25, vP = iv0 + (iv1 - iv0) * 0.5;
+  wallRun(k, 'u', vP, -iu, iu, B, ceil, pt, C.wall, [{ a: 0, w: 2.4, y0: B, y1: B + 3 }], DS);
+  k.box(0, vP - pt / 2 - 0.05, 1.5, 0.05, B + 3, B + 3.4, C.gold, D);
+  // Hall: the emblem, an information desk, benches, plants, a chandelier.
+  const ev = (iv0 + vP) / 2, er = Math.min(2.2, (vP - iv0) * 0.3);
+  k.cyl(0, ev, er, er, B, B + 0.02, C.gold, { ...D, seg: 24 });
+  k.cyl(0, ev, er * 0.65, er * 0.65, B, B + 0.025, mat(PLASTER, flagC), { ...D, seg: 24 });
+  const du = -Math.min(iu - 2, 5);
+  k.box(du, ev, 1.4, 0.45, B, B + 1.1, C.wood, { ...DS, top: C.stone });
+  chair(k, du, ev + 0.9, Math.PI, B, C.red);
+  for (const s of [-1, 1]) {
+    bench(k, s * (iu - 0.5), ev, s * Math.PI / 2, B, Math.max(1.2, Math.min(2.4, vP - iv0 - 2)), C.wood);
+    plant(k, s * (iu - 0.8), iv0 + 0.9, B, C);
+    portrait(k, s * (iu - 0.12), ev, s * Math.PI / 2, B + 1.8, C, r);
+  }
+  chandelier(k, 0, ev, ceil, 1.2, C, B);
+  chamber(k, -iu, iu, vP + pt / 2, iv1, B, ceil, C, r, flagC);
 }
 
 /** Point on a superellipse |x/a|^n + |z/b|^n = 1 at angle t. */
@@ -972,7 +1384,16 @@ export function landmarkParts(lm: Landmark, terrain: Terrain): LmPart[] {
   }
   parts = k.parts;
   cache.set(lm, parts);
+  if (k.inside.rooms.length) insideCache.set(lm, k.inside);
   return parts;
+}
+
+const insideCache = new WeakMap<Landmark, LmInterior>();
+
+/** The landmark's walkable inside (the town hall), or null. */
+export function landmarkInterior(lm: Landmark, terrain: Terrain): LmInterior | null {
+  landmarkParts(lm, terrain);
+  return insideCache.get(lm) ?? null;
 }
 
 /** Collision solids of the parts (boxes and cylinders, with their bottom and top). */
@@ -1032,7 +1453,7 @@ export function partOutline(p: LmPart, m = 0): Poly | null {
 export function solidFootprints(lm: Landmark, parts: LmPart[], m = 0.8): Poly[] {
   const out: Poly[] = [];
   for (const p of parts) {
-    if (!p.solid || p.k === PK.Beam) continue;
+    if ((!p.solid && !p.footprint) || p.k === PK.Beam) continue;
     if (Math.min(p.y0, p.foot ?? p.y0) > lm.base + 2.5) continue; // up in the air
     const o = partOutline(p, m);
     if (o) out.push(o);

@@ -22,7 +22,7 @@ import type { EquipmentVisuals, EquipSlot } from '../../items/types';
 import type { BodyRegion, ShellLayer, ShellMaterial, RigidPart, WearableSpec, BodyFit } from '../../items/wearable';
 import type { ItemVisual } from '../../items/types';
 import { resolveWearable, buildItemObject, animateItem, setItemSkyVis, disposeItemObject, itemDef } from './wardrobe';
-import type { Character } from './Character';
+import { disposeOwn, type Character } from './Character';
 import { BODY_REGIONS, type HumanStatic } from './staticData';
 import { createGarmentMaterial } from './garmentMaterial';
 import type { GripClass } from './anim/actions';
@@ -658,7 +658,8 @@ export class EquipmentRig {
     // Restore the shared body geometry (custom index clones are dropped).
     for (let l = 0; l < 3; l++) {
       const g = ch.bodyMeshes[l].geometry;
-      if (g !== ch.geo.body[l]) { g.dispose(); ch.bodyMeshes[l].geometry = ch.geo.body[l]; }
+      // (The clone shares every vertex attribute with the body: only its index is its own.)
+      if (g !== ch.geo.body[l]) { disposeOwn(g, (a) => a !== g.index); ch.bodyMeshes[l].geometry = ch.geo.body[l]; }
     }
     this.bodyIndex = null;
     void _v;

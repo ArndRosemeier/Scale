@@ -81,6 +81,8 @@ export class CityStreamer {
    * load radius: the nearest cells win, the skyline covers the rest.
    */
   memoryBudget = 700e6;
+  /** Facade LOD switch distance multiplier (graphics settings). */
+  lodScale = 1;
   /** Bytes held by loaded cells. */
   bytesLoaded = 0;
   frame = 0;
@@ -187,7 +189,7 @@ export class CityStreamer {
       if (cs.status !== 'ready' || !cs.lod0 || !cs.lod1) continue;
       const c = this.macro.cells[cs.id];
       const d = Math.max(0, Math.hypot(c.centroid[0] - cam.x, c.centroid[1] - cam.z) - c.radius);
-      const far = d > (cs.lod1.visible ? 380 : 420) + Math.max(0, cam.y) * 0.5;
+      const far = d > ((cs.lod1.visible ? 380 : 420) + Math.max(0, cam.y) * 0.5) * this.lodScale;
       cs.lod0.visible = !far;
       cs.lod1.visible = far;
     }

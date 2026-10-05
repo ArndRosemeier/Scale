@@ -30,7 +30,7 @@ export class HumanoidPreview {
   private time = 0;
   private raf = 0;
   private running = false;
-  private clock = new THREE.Clock();
+  private clock = new THREE.Timer();
   private camPos = new THREE.Vector3(0, 1.2, -4);
   private camTarget = new THREE.Vector3(0, 1, 0);
   private lookTarget = new THREE.Vector3(0, 1, 0);
@@ -111,7 +111,7 @@ export class HumanoidPreview {
   start(): void {
     if (this.running) return;
     this.running = true;
-    this.clock.getDelta();
+    this.clock.update();
     this.loop();
   }
 
@@ -159,7 +159,7 @@ export class HumanoidPreview {
   private loop = (): void => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.loop);
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const dt = Math.min(0.05, this.clock.update().getDelta());
     this.time += dt;
     const rig = this.rig;
     if (rig) {

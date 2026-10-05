@@ -16,7 +16,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 document.body.appendChild(renderer.domElement);
@@ -203,11 +203,11 @@ Object.assign(window as unknown as Record<string, unknown>, {
   },
 });
 
-const clock = new THREE.Clock();
+const clock = new THREE.Timer();
 let frames = 0, fpsT = 0, fps = 0;
 function step() {
-  const dt = clock.getDelta();
-  const t = clock.elapsedTime;
+  const dt = clock.update().getDelta();
+  const t = clock.getElapsed();
   vegetationUniforms.uTime.value = t;
   vegetationUniforms.uWind.value = winds[windIdx];
   vegetationUniforms.uSeason.value = seasons[seasonIdx];

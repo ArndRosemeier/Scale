@@ -3,6 +3,7 @@
  */
 import * as THREE from 'three';
 import { Renderer } from '../render/Renderer';
+import { Graphics } from '../render/Graphics';
 import { SkySystem } from '../render/SkySystem';
 import { Weather } from '../render/Weather';
 import { TextureLibrary } from '../render/TextureLibrary';
@@ -97,6 +98,8 @@ import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
 
 export class Game {
   readonly renderer: Renderer;
+  /** Graphics quality: presets, render scale, automatic adaptation to the GPU (render/Graphics). */
+  readonly graphics: Graphics;
   readonly input: Input;
   sky!: SkySystem;
   /** Weather: the seeded schedule, sky / light / rain / wet streets, sounds, the city's reaction (render/Weather). */
@@ -191,7 +194,7 @@ export class Game {
   powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
   private parkedList: Vehicle[] = [];
-  private clock = new THREE.Clock();
+  private clock = new THREE.Timer();
   private yaw = 0;
   private pitch = -0.1;
   private speed = 15;
@@ -199,6 +202,9 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, readonly settings: CitySettings, readonly mode: GameMode = 'normal') {
     this.renderer = new Renderer(canvas);
+    this.graphics = new Graphics(this.renderer.gl);
+    // A start without shadows compiles the shaders without them (the cheapest for weak GPUs).
+    this.renderer.gl.shadowMap.enabled = this.graphics.startShadows;
     hitch.attach(this.renderer.gl, this.renderer.scene);
     this.gate = new ShaderGate(this.renderer.gl, this.renderer.scene, this.renderer.camera, (fn) => this.renderer.asScenePass(fn));
     this.gate.enabled = false; // the start-up warm-up compiles everything present
@@ -224,6 +230,7 @@ export class Game {
     this.streamer = new CityStreamer(macro, this.pool, tex);
     this.renderer.scene.add(this.streamer.root);
     this.streamer.prepare = (o) => this.renderer.compileAsync(o);
+    this.attachGraphics();
     this.world = new WorldIndex(this.terrain, (id) => macro.cells[id].poly);
     this.world.bridges = bridgeProfiles(macro, this.terrain);
     // Landmarks (town hall, stadium, attractions, airport): solid for the walker, the physics
@@ -316,6 +323,8 @@ export class Game {
     this.peds = new Pedestrians(this.population, this.net, this.world, this.terrain, macro, this.streamer);
     this.reactions = new Reactions(this.peds, this.stimuli);
     this.interiors = new Interiors(this.world, this.destruction, this.streamer, this.collision, this.population, this.peds);
+    // The town hall's rooms light up like the buildings' interiors.
+    this.interiors.extraLights = (x, y, z) => landmarks.lightsNear(x, y, z);
     // Indoors the camera collides with the shell, interior walls and floors instead of building prisms.
     this.camRig.solidAt = (x, y, z) => {
       const p = this.player;
@@ -323,6 +332,8 @@ export class Game {
       const inside = this.interiors.insideAt(p.pos.x, p.pos.y + p.height * 0.5, p.pos.z);
       if (inside) return this.interiors.solidIndoors(inside, x, y, z);
       if (y < this.terrain.height(x, z) + 0.05) return true;
+      // Landmark walls and floors (the town hall can be walked into: the camera stays inside).
+      if (landmarks.hit(x, y, z)) return true;
       const b = this.world.buildingAt(x, z);
       // (Outside, a building is solid even when its interior is loaded — the camera stayed free
       // in there and swung through the wall into the rooms.)
@@ -443,7 +454,7 @@ export class Game {
     }
     (window as unknown as { prof: Record<string, number> }).prof = this.prof;
     this.running = true;
-    this.clock.start();
+    this.clock.reset();
     document.addEventListener('visibilitychange', this.schedule);
     // Warm-up behind the loading screen (render/WarmUp): textures uploaded, every material compiled
     // in parallel before the first frame (then the frame loop starts), the start looked at from all
@@ -487,14 +498,16 @@ export class Game {
     if (!this.running) return;
     // Keep simulating in hidden tabs (timer fallback) so background testing works.
     this.schedule();
-    const raw = this.clock.getDelta();
+    const raw = this.clock.update().getDelta();
     hitch.beginFrame();
+    const t0 = performance.now();
     // Hidden tabs are throttled to ~1 Hz: catch up in substeps so the world keeps real time.
     if (document.hidden && raw > 0.12) {
       let left = Math.min(0.4, raw);
       while (left > 0.1) { this.tick(0.05, false); left -= 0.05; }
       this.tick(left, true);
     } else this.tick(Math.min(0.1, raw), true);
+    this.graphics.frame(raw * 1000, performance.now() - t0 - this.renderMs, this.menu?.paused ?? false);
     hitch.endFrame();
     if (this.frameWaiters.length) { const w = this.frameWaiters; this.frameWaiters = []; for (const r of w) r(); }
   };
@@ -502,6 +515,28 @@ export class Game {
   /** Per-subsystem frame cost (ms, smoothed) — window.prof. */
   readonly prof: Record<string, number> = {};
   private failed = new Set<string>();
+  /** CPU time of the last scene render (the graphics auto mode tells simulation from rendering). */
+  private renderMs = 0;
+
+  /** The graphics settings drive the renderer, the sun's shadows and the facade LOD. */
+  private attachGraphics(): void {
+    const r = this.renderer;
+    r.onResize = () => this.graphics.apply();
+    this.graphics.attach({
+      setPixelRatio: (pr) => r.setPixelRatio(pr),
+      setPost: (bloom, smaa) => r.setPost(bloom, smaa),
+      setShadows: (on, size) => {
+        // Started without shadows: turning them on needs the shaders recompiled (a short stall).
+        if (on && !r.gl.shadowMap.enabled) {
+          r.gl.shadowMap.enabled = true;
+          r.scene.traverse((o) => { const m = (o as { material?: THREE.Material | THREE.Material[] }).material; if (m) for (const x of Array.isArray(m) ? m : [m]) x.needsUpdate = true; });
+        }
+        this.sky.setShadows(on, size);
+      },
+      setLod: (k) => { this.streamer.lodScale = k; },
+    });
+  }
+
   private T(name: string, fn: () => void): void {
     const t0 = performance.now();
     // A failing subsystem must not stop the frame (or rendering); report it once.
@@ -530,7 +565,7 @@ export class Game {
         this.interiors.panels.update(this.renderer.camera, hand, this.player.height * 0.9 + 0.5, this.input);
         this.abilities.postUpdate(this.input);
         this.targeting.update(dt, this.abilities.enabled ? this.input : null);
-        this.interactions.update(dt, this.input, this.clock.elapsedTime);
+        this.interactions.update(dt, this.input, this.clock.getElapsed());
       }
     });
     this.stimuli.update(dt);
@@ -586,7 +621,7 @@ export class Game {
       this.sky.deepTint.setRGB(lerp(0.004, 0.022, m), lerp(0.013, 0.003, m), lerp(0.014, 0.006, m));
     }
     const cp = this.renderer.camera.position;
-    this.sky.indoor = clamp(this.sky.indoor + (this.interiors.insideAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
+    this.sky.indoor = clamp(this.sky.indoor + (this.indoorsAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
     this.T('weather', () => this.weather.update(dt));
     this.T('sky', () => this.sky.update(dt, focus, cam));
     this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
@@ -601,7 +636,7 @@ export class Game {
       this.T('props', () => this.props.update(dt, this.renderer.camera));
       this.T('elementFx', () => this.elements.render(dt));
       this.T('gate', () => this.gate.update());
-      this.T('render', () => this.renderer.render());
+      this.T('render', () => { const t = performance.now(); this.graphics.render(() => this.renderer.render()); this.renderMs = performance.now() - t; });
       this.hud.update(dt);
       this.powerHud.update();
       this.targetHud.update();
@@ -930,17 +965,23 @@ export class Game {
     terrainHoles.uHoleN.value = n;
   }
 
+  /** Inside a building (an active interior) or a landmark's rooms (the town hall)? */
+  indoorsAt(x: number, y: number, z: number): boolean {
+    return !!this.interiors.insideAt(x, y, z) || !!this.world.landmarks?.insideAt(x, y, z);
+  }
+
   /** On-screen hint for something usable where the player stands (null: nothing). */
   private usableHint(): string | null {
     if (this.freeCam) return null;
     const metro = this.underground.metroHint();
     if (metro) return metro;
-    const rescue = this.aftermath?.hint();
-    if (rescue) return rescue;
-    const crime = this.crime?.hint();
-    if (crime) return crime;
-    const deed = this.deeds?.hint();
-    if (deed) return deed;
+    // A hint offering E beats a passive one ("Bring the bag back …"): someone to help up right
+    // here must show even while the player carries loot home.
+    const hints = [this.aftermath?.hint(), this.crime?.hint(), this.deeds?.hint()];
+    const act = hints.find((h) => h && h.includes('<b>E</b>'));
+    if (act) return act;
+    const passive = hints.find((h) => h);
+    if (passive) return passive;
     const slime = this.slimeRealm?.hint();
     if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';

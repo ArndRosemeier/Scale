@@ -26,7 +26,7 @@ renderer.toneMapping = THREE.AgXToneMapping;
 renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 const pmrem = new THREE.PMREMGenerator(renderer);
@@ -245,9 +245,9 @@ tableHtml += '</table>';
 let fps = 0, frames = 0, lastT = performance.now();
 let lastInfo = { t: 0, c: 0 };
 
-const clock = new THREE.Clock();
+const clock = new THREE.Timer();
 function frame() {
-  const dt = clock.getDelta();
+  const dt = clock.update().getDelta();
   vehicleUniforms.uTime.value += dt;
   if (state.spin) { state.spinAngle += dt * 6; updateInstances(); }
   controls.update();

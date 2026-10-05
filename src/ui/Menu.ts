@@ -6,6 +6,8 @@ import { versionLink } from './Changelog';
 import { SOUND_CATEGORIES, defaultMix, type SoundCategory } from '../audio/Audio';
 import { saveTimeScale } from '../render/SkySystem';
 import type { WeatherSetting } from '../render/Weather';
+import type { QualitySetting } from '../render/Graphics';
+import { probeGpu, maybeShowGpuHint } from './GpuHint';
 
 const CONTROLS: [string, string][] = [
   ['W A S D', 'Walk (in flight: fly)'],
@@ -55,8 +57,12 @@ export class Menu {
         <div class="row"><label>Music</label><input id="pMusic" type="checkbox" title="Background music (its level is in the sound mix)"></div>
         <div class="row"><label>Sound mix</label><button type="button" id="pMixBtn" class="mix-btn">Adjust…</button></div>
         <div id="pMix" class="mix-panel"></div>
-        <div class="row"><label>Shadows</label><input id="pShadow" type="checkbox"></div>
-        <div class="row"><label>Render scale</label><select id="pScale"><option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select></div>
+        <div class="row"><label>Graphics</label><select id="pGfx" title="Auto: adapts to your graphics card while you play (remembered per card)">
+          <option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option>
+        </select><span id="pGfxV" class="sub"></span></div>
+        <div class="row"><label>Render scale</label><select id="pScale" title="Auto: as the graphics level sets it">
+          <option value="auto">Auto</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option>
+        </select></div>
         <div class="row"><label>Body size</label><span id="pSize"></span><button id="pReset">Normal size</button></div>
         <div class="row"><label>Street crime</label><select id="pCrime" title="How often crimes happen near you (depends on the district and the hour)">
           <option value="off">Off</option><option value="calm">Calm</option><option value="normal">Normal</option><option value="chaos">Chaos</option>
@@ -94,8 +100,13 @@ export class Menu {
     for (const inp of mix.querySelectorAll<HTMLInputElement>('input[data-cat]')) inp.oninput = () => { game.audio.setMix(inp.dataset.cat as SoundCategory, Number(inp.value)); syncMix(); };
     mix.querySelector<HTMLButtonElement>('.mix-reset')!.onclick = () => { for (const c of SOUND_CATEGORIES) game.audio.setMix(c.id, defaultMix(c.id)); syncMix(); };
     $<HTMLButtonElement>('pMixBtn').onclick = () => { syncMix(); mix.classList.toggle('open'); };
-    $<HTMLInputElement>('pShadow').onchange = (e) => { game.renderer.gl.shadowMap.enabled = (e.target as HTMLInputElement).checked; game.renderer.scene.traverse((o) => { const m = (o as { material?: { needsUpdate: boolean } }).material; if (m) m.needsUpdate = true; }); };
-    $<HTMLSelectElement>('pScale').onchange = (e) => { game.renderer.gl.setPixelRatio(Number((e.target as HTMLSelectElement).value) * (window.devicePixelRatio > 1 ? 1 : 1)); game.renderer.resize(); };
+    $<HTMLSelectElement>('pGfx').onchange = (e) => { game.graphics.set((e.target as HTMLSelectElement).value as QualitySetting); this.sync(); };
+    $<HTMLSelectElement>('pScale').onchange = (e) => { const v = (e.target as HTMLSelectElement).value; game.graphics.setScale(v === 'auto' ? null : Number(v)); };
+    game.graphics.onChange = (level) => {
+      if (this.open) this.sync();
+      // Auto had to go down to Low: the browser may be on the wrong GPU.
+      if (level.shadows === false) void probeGpu(game.graphics.gpu).then((p) => maybeShowGpuHint(p, true));
+    };
     $<HTMLButtonElement>('pReset').onclick = () => { game.player.height = 1.8; this.sync(); };
     $<HTMLSelectElement>('pCrime').onchange = (e) => { if (game.crime) game.crime.setting = (e.target as HTMLSelectElement).value as typeof game.crime.setting; };
     $<HTMLSelectElement>('pEvents').onchange = (e) => { if (game.threats) game.threats.setting = (e.target as HTMLSelectElement).value as typeof game.threats.setting; };
@@ -131,7 +142,11 @@ export class Menu {
     (document.getElementById('pVol') as HTMLInputElement).value = String(g.audio.volume);
     (document.getElementById('pMute') as HTMLInputElement).checked = g.audio.muted;
     (document.getElementById('pMusic') as HTMLInputElement).checked = g.audio.musicOn;
-    (document.getElementById('pShadow') as HTMLInputElement).checked = g.renderer.gl.shadowMap.enabled;
+    const gfx = g.graphics;
+    (document.getElementById('pGfx') as HTMLSelectElement).value = gfx.setting;
+    document.getElementById('pGfxV')!.textContent = gfx.auto ? gfx.level.name : '';
+    document.getElementById('pGfxV')!.title = gfx.gpu;
+    (document.getElementById('pScale') as HTMLSelectElement).value = gfx.scaleOverride === null ? 'auto' : String(gfx.scaleOverride);
     if (g.crime) {
       (document.getElementById('pCrime') as HTMLSelectElement).value = g.crime.setting;
       (document.getElementById('pInv') as HTMLInputElement).checked = g.crime.health.invulnerable;

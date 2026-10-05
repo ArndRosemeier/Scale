@@ -15,6 +15,7 @@ export class Renderer {
   readonly camera: THREE.PerspectiveCamera;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  private smaa: SMAAPass;
   readonly reversed: boolean;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -26,7 +27,7 @@ export class Renderer {
     this.gl.toneMappingExposure = 1.0;
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
     this.gl.shadowMap.enabled = true;
-    this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.gl.shadowMap.type = THREE.PCFShadowMap;
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 60000);
     const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: true });
     if (this.reversed) {
@@ -37,17 +38,34 @@ export class Renderer {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.16, 0.5, 2.0);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
-    this.composer.addPass(new SMAAPass());
+    this.smaa = new SMAAPass();
+    this.composer.addPass(this.smaa);
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('resize', () => { this.onResize?.(); this.resize(); });
   }
+
+  /** Before the resize is applied (the graphics settings re-derive the pixel ratio). */
+  onResize: (() => void) | null = null;
 
   resize(): void {
     const w = window.innerWidth, h = window.innerHeight;
     this.gl.setSize(w, h, false);
+    this.composer.setPixelRatio(this.gl.getPixelRatio());
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+  }
+
+  setPixelRatio(pr: number): void {
+    if (Math.abs(pr - this.gl.getPixelRatio()) < 1e-3) return;
+    this.gl.setPixelRatio(pr);
+    this.resize();
+  }
+
+  /** Bloom and SMAA on or off (the composer renders the last enabled pass to the screen). */
+  setPost(bloom: boolean, smaa: boolean): void {
+    this.bloom.enabled = bloom;
+    this.smaa.enabled = smaa;
   }
 
   setBloom(strength: number): void {

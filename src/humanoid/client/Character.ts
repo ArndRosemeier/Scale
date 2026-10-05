@@ -52,6 +52,18 @@ function partGeometry(p: PartGeo): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * Free a geometry's own GL buffers but not those of attributes it shares (three's dispose()
+ * deletes the buffer of every attribute in the geometry: a shared one would be gone for every
+ * other geometry using it too — draws from a stale vertex array, "no buffer is bound to enabled
+ * attribute").
+ */
+export function disposeOwn(g: THREE.BufferGeometry, shared: (a: THREE.BufferAttribute) => boolean): void {
+  for (const name of Object.keys(g.attributes)) if (shared(g.attributes[name] as THREE.BufferAttribute)) g.deleteAttribute(name);
+  if (g.index && shared(g.index)) g.setIndex(null);
+  g.dispose();
+}
+
 /** Geometry for one built appearance, shared by all characters using it. */
 export class CharacterGeometry {
   /** Body geometries for LOD 0..2 (same vertex attributes, different index). */
@@ -94,8 +106,10 @@ export class CharacterGeometry {
   }
 
   dispose() {
-    // Shared static attributes are owned by HumanStatic; disposing a geometry only frees its own GL buffers.
-    for (const g of [...this.body, this.lashes, this.teeth, this.tongue]) g.dispose();
+    // The static attributes and indices belong to HumanStatic (every character uses them): keep them.
+    const st = this.st;
+    const shared = new Set<THREE.BufferAttribute>([st.uv, st.skinIndex, st.skinWeight, st.maskA, st.maskB, st.face, st.expr, st.lashUv, ...st.bodyIndex, st.tongueIndex, st.teethIndex, st.lashIndex]);
+    for (const g of [...this.body, this.lashes, this.teeth, this.tongue]) disposeOwn(g, (a) => shared.has(a));
     for (const lod of this.parts) for (const p of lod) p.geo.dispose();
   }
 }

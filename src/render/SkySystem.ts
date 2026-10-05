@@ -65,6 +65,27 @@ export class SkySystem {
     scene.fog = new THREE.FogExp2(0xbfd0e0, 0.00012);
   }
 
+  /** False: no shadows (graphics settings) — see `setShadows`. */
+  private shadowsOn = true;
+
+  /**
+   * Shadows on/off and the shadow map size. Off parks the shadow frustum far away from
+   * everything (nothing casts, every fragment is outside it, so all lit), renders that empty
+   * map once and stops updating it: no shadow pass, and no shader recompiles for the switch.
+   */
+  setShadows(on: boolean, size: number): void {
+    const sh = this.sun.shadow;
+    if (sh.mapSize.x !== size) {
+      sh.mapSize.set(size, size);
+      if (sh.map) { sh.map.depthTexture?.dispose(); sh.map.dispose(); sh.map = null; }
+    }
+    this.shadowsOn = on;
+    sh.autoUpdate = true;
+    if (!on) this.parkShadow = 2;
+  }
+  /** Frames left to render the parked (empty) shadow map before updates stop. */
+  private parkShadow = 0;
+
   /** Shadow frustum size around the focus (scales with player size / camera distance). */
   setShadowExtent(m: number): void {
     this.shadowExtent = clamp(m, 15, 3000);
@@ -130,7 +151,10 @@ export class SkySystem {
     const ext = this.shadowExtent;
     // Snap the shadow camera to texels to avoid shimmering.
     const texel = (ext * 2) / this.sun.shadow.mapSize.x;
-    const fx = Math.round(focus.x / texel) * texel, fz = Math.round(focus.z / texel) * texel;
+    // (Shadows off: the frustum is parked 1000 km away; see setShadows.)
+    const park = this.shadowsOn ? 0 : 1e6;
+    const fx = Math.round(focus.x / texel) * texel + park, fz = Math.round(focus.z / texel) * texel;
+    if (!this.shadowsOn && this.parkShadow > 0 && --this.parkShadow === 0) this.sun.shadow.autoUpdate = false;
     this.sun.target.position.set(fx, focus.y, fz);
     this.sun.position.set(fx + lightDir.x * ext * 3, focus.y + lightDir.y * ext * 3, fz + lightDir.z * ext * 3);
     const sc = this.sun.shadow.camera as THREE.OrthographicCamera;
