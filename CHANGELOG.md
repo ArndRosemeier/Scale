@@ -2,14 +2,28 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.042 — 2026-10-05
+## 0.045 — 2026-10-05
 
 - **Being defeated is a real moment now.** When your health runs out you no longer just get up where you fell (where a swarm could knock you down again and again). You lie there untouchable, the edge of the screen red, and:
   - **with a reputation of 0 or better, the hospital sends its rescue drones**: three white drones with red crosses fly in, lock blue tractor beams onto you, lift you in a glowing stasis field and fly you over the city to the landing pad that lights up on the hospital's roof. Space skips ahead.
   - **in the hospital's revival ward** you lie in a high-tech revival machine under a glass canopy: scanning rings sweep along your body, the vitals hologram climbs, your heart starts again, a surge and a white flash, the canopy opens and you stand up beside it with full health. Walk out through the sliding doors at the end of the ward and you are on the street in front of the hospital.
   - **with a negative reputation nobody comes: game over.** Load the latest save, pick another save, or start a new game. Nothing is saved after a game over, so your saves stay as they were.
 - Every city has its own hospital (Helix Medical Center, Vitalis Medical Center, …) in some of its flat-roofed office and civic blocks; the drones take you to the nearest one. A giant hero shrinks back to normal size while lying there.
+- Knocked out again in the ward before leaving: straight back into the machine.
 - Being arrested by the police is unchanged. A save made on the way to the hospital or in the ward puts you outside the hospital, healed.
+
+## 0.044 — 2026-10-05
+
+- **Real shoes**: sneakers, shoes and boots no longer show the toes through them. The front of the foot is now a closed, rounded toe box with a flat sole, so footwear reads as shoes instead of paint on bare feet.
+
+## 0.043 — 2026-10-05
+
+- **A real sun and moon in the sky**: the sun is now a clear disc, yellow-white by day and orange-red as it rises and sets, with a soft glow around it instead of one white blot of glare. Clouds pass in front of it and it vanishes under an overcast sky.
+- **The moon** crosses the sky like the sun, about 50 minutes later each day, and goes through its phases over a month (crescent, half, gibbous, full), with darker seas and faint craters. By night it shines over the city and hides the stars behind it; by day you can sometimes see it as a pale disc. Moonlight now comes from the moon: brighter at full moon, darkest on moonless nights.
+
+## 0.042 — 2026-10-05
+
+- **The busker really plays the guitar**: the strumming hand now strums across the strings in front of the sound hole (the forearm lies over the guitar instead of reaching through it, no more waving), and the other hand holds the neck, moving between chord positions. Works for every body shape: the hands are placed on the guitar itself.
 
 ## 0.041 — 2026-10-05
 
