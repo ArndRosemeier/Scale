@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.027 — 2026-10-05
+
+- **Laser eyes look stronger**: thicker beams with a white-hot core inside a pulsing red halo, a flare at each eye, a bigger glow where they hit, twice the sparks, molten drips and more smoke. Damage, reach and energy cost are unchanged.
+
 ## 0.026 — 2026-10-05
 
 - **Villain groups, first step**: every city now has a street gang and a Syndicate with their own names, colours and emblem — different in every city (for example "the Harbour Saints" and "Marlow Holdings").

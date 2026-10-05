@@ -104,6 +104,7 @@ const C = (r: number, g: number, b: number) => new THREE.Color(r, g, b);
 const FIRE_HOT = C(2.2, 1.05, 0.25), FIRE_MID = C(1.8, 0.5, 0.06), FIRE_END = C(0.55, 0.08, 0.01);
 const SMOKE = C(0.16, 0.15, 0.14), SMOKE_LIGHT = C(0.45, 0.44, 0.43);
 const SPARK = C(4, 2.4, 0.8), SPARK_END = C(1.5, 0.4, 0.05);
+const LASER_RED = C(2.6, 0.3, 0.12);
 const BOLT_C = C(3, 3.6, 5), BOLT_END = C(0.6, 0.8, 1.6);
 const ICE_C = C(1.6, 2.0, 2.4), ICE_END = C(0.5, 0.7, 0.9), SNOW = C(0.92, 0.96, 1.0), SNOW_END = C(0.8, 0.88, 0.95);
 const WATER = C(0.72, 0.84, 0.95), WATER_END = C(0.55, 0.7, 0.85), STEAM = C(0.9, 0.92, 0.94);
@@ -114,6 +115,7 @@ const ICE_PAINT: [number, number, number] = [0.8, 0.9, 0.98];
 
 const _v = new THREE.Vector3();
 const _eyeL = new THREE.Vector3(), _eyeR = new THREE.Vector3();
+const _eyes = [_eyeL, _eyeR];
 const _w = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _nb: PedAgent[] = [];
@@ -529,9 +531,14 @@ export class Elements {
     // Two beams from the eyes, converging on the spot.
     const yaw = this.w.camRig.yaw, rx = Math.cos(yaw) * 0.032 * h, rz = -Math.sin(yaw) * 0.032 * h;
     if (!p.eyePositions(_eyeL, _eyeR)) { _eyeL.set(A.ox - rx, A.oy, A.oz - rz); _eyeR.set(A.ox + rx, A.oy, A.oz + rz); }
-    const wdt = Math.max(0.012, 0.03 * Math.max(0.4, this.sk)) * Math.min(1, held * 6 + 0.3);
-    this.fx.seg(_eyeL.x, _eyeL.y, _eyeL.z, ex, ey, ez, wdt, 2.6, 0.25, 0.12, 1.6, BeamStyle.Laser);
-    this.fx.seg(_eyeR.x, _eyeR.y, _eyeR.z, ex, ey, ez, wdt, 2.6, 0.25, 0.12, 1.6, BeamStyle.Laser);
+    // A white-hot core inside a wide red halo, pulsing slightly, plus a flare at each eye.
+    const grow = Math.min(1, held * 6 + 0.3), pulse = 1 + 0.12 * Math.sin(this.time * 31);
+    const wdt = Math.max(0.022, 0.055 * Math.max(0.4, this.sk)) * grow;
+    for (const e of _eyes) {
+      this.fx.seg(e.x, e.y, e.z, ex, ey, ez, wdt * 3.2 * pulse, 2.4, 0.18, 0.08, 0.7, BeamStyle.Laser);
+      this.fx.seg(e.x, e.y, e.z, ex, ey, ez, wdt, 2.8, 0.35, 0.16, 2.3 * pulse, BeamStyle.Laser);
+      this.fx.glow(e.x, e.y, e.z, 0, 0, 0, 0.05, wdt * 4.5 * pulse, wdt * 3, SPARK, LASER_RED, 0.9, 1, 0);
+    }
     // Sound.
     if (!this.laserLoop) this.laserLoop = this.w.synth.loop('laser', 4 * Math.max(1, this.sk));
     this.laserLoop?.set(A.ox, A.oy, A.oz, 0.55, 1 / Math.pow(Math.max(0.3, k), 0.12));
@@ -539,15 +546,19 @@ export class Elements {
     // Impact glow and sparks (every frame), smoke now and then.
     if (hit) {
       const nx = A.hit.nx, ny = A.hit.ny, nz = A.hit.nz;
-      this.fx.glow(ex + nx * 0.05, ey + ny * 0.05, ez + nz * 0.05, 0, 0.3, 0, 0.08, 0.25 * this.reachK, 0.5 * this.reachK, FIRE_HOT, FIRE_MID, 1, 1, 0);
+      const rk = this.reachK;
+      this.fx.glow(ex + nx * 0.05, ey + ny * 0.05, ez + nz * 0.05, 0, 0.3, 0, 0.08, 0.5 * rk * pulse, 0.9 * rk, FIRE_HOT, FIRE_MID, 1, 1, 0);
+      this.fx.glow(ex + nx * 0.1, ey + ny * 0.1, ez + nz * 0.1, 0, 0, 0, 0.06, 1.3 * rk * pulse, 1.6 * rk, LASER_RED, FIRE_END, 0.45, 1, 0);
       this.laserFxT -= dt;
       if (this.laserFxT <= 0) {
         this.laserFxT = 0.03;
-        for (let i = 0; i < 3; i++) {
-          const sp = 3 + Math.random() * 5;
-          this.fx.glow(ex, ey, ez, (nx + (Math.random() - 0.5) * 1.6) * sp, (ny + Math.random() * 0.8) * sp, (nz + (Math.random() - 0.5) * 1.6) * sp, 0.25 + Math.random() * 0.3, 0.05, 0.02, SPARK, SPARK_END, 1, 0.5, 9.8);
+        for (let i = 0; i < 6; i++) {
+          const sp = 4 + Math.random() * 7;
+          this.fx.glow(ex, ey, ez, (nx + (Math.random() - 0.5) * 1.8) * sp, (ny + Math.random() * 0.9) * sp, (nz + (Math.random() - 0.5) * 1.8) * sp, 0.3 + Math.random() * 0.4, 0.07, 0.02, SPARK, SPARK_END, 1, 0.5, 9.8);
         }
-        if (Math.random() < 0.35) this.fx.soft(ex + nx * 0.2, ey + ny * 0.2, ez + nz * 0.2, nx * 0.3, 0.8, nz * 0.3, 1.6, 0.2, 1.1 * this.reachK, SMOKE, SMOKE_LIGHT, 0.45, 0.6, -0.4);
+        // Molten drips running off the spot.
+        if (Math.random() < 0.5) this.fx.glow(ex + nx * 0.05, ey + ny * 0.05, ez + nz * 0.05, nx * 0.6 + (Math.random() - 0.5), 0.5, nz * 0.6 + (Math.random() - 0.5), 0.7 + Math.random() * 0.4, 0.09 * rk, 0.04 * rk, FIRE_HOT, FIRE_END, 1, 0.3, 9.8);
+        if (Math.random() < 0.5) this.fx.soft(ex + nx * 0.2, ey + ny * 0.2, ez + nz * 0.2, nx * 0.3, 0.8, nz * 0.3, 1.8, 0.25, 1.4 * rk, SMOKE, SMOKE_LIGHT, 0.5, 0.6, -0.4);
       }
     }
     // Damage: at most 10 impacts a second, a heat dose per tick.
