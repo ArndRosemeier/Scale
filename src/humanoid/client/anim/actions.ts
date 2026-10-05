@@ -50,6 +50,23 @@ export interface ActionDef {
   loop?: boolean;
   /** Motion-captured clip for this action (the pose function is the fallback / other variants). */
   clip?: (c: ActionCtx) => ClipUse | null;
+  /**
+   * Hands placed by IK on named anchors of a worn prop (a guitar's neck and strings), over the
+   * authored pose (which sets the elbow direction). Without the anchor the pose stays as authored.
+   */
+  reach?: (c: ActionCtx) => Partial<Record<'L' | 'R', HandReach>>;
+  /** Finger curl per hand while the action plays (0 open … 1.5 fist), over the grip default. */
+  curl?: Partial<Record<'L' | 'R', number>>;
+}
+
+/** Where a hand's grip point goes: an offset (m) in the frame of the named anchor object. */
+export interface HandReach {
+  anchor: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Which way the elbow points: outward (away from the body for this arm), up, forward. */
+  pole?: [number, number, number];
 }
 
 const PI = Math.PI;
@@ -477,15 +494,37 @@ function cower(p: Pose, t: number) {
 
 // ------------------------------------------------------------------ street characters (game/street)
 
-/** Strumming a guitar slung across the chest: left hand up the neck, right hand over the sound hole. */
+/**
+ * Strumming a guitar slung across the chest (humanoid/client/streetwear.ts): the left hand wraps
+ * the neck and moves between chord positions, the right hand strums across the strings over the
+ * sound hole. The arms are posed to set the elbows (left forward under the neck, right resting
+ * on the upper edge of the body); `reach` puts the hands on the guitar's anchors by IK.
+ */
 function playGuitar(p: Pose, _t: number, c: ActionCtx) {
   const e = c.elapsed;
   const strum = Math.sin(e * PI * 4.2);
-  const chord = Math.sin(e * 0.9) * 0.08;
-  p.arm('L', 0.95 + chord, 0.5, 0.35, 1.55, 1.1, 0.25, Math.sin(e * 5.3) * 0.08);
-  p.arm('R', 0.35, -0.35, 0.75, 1.35 + strum * 0.08, 0.7, strum * 0.35, 0);
-  p.spine(0.04, 0.05, Math.sin(e * 2.1) * 0.03);
-  p.neck(-0.28 + Math.abs(Math.sin(e * PI * 2.1)) * 0.07, 0.15);
+  p.arm('L', 1.0, 0.45, 0.2, 1.45, 0.3, -0.35, 0.25);
+  p.arm('R', 0.55, 0.8, 0, 1.5 + strum * 0.06, -0.5, -0.4 + strum * 0.3, 0.1);
+  p.spine(-0.06, 0.08, Math.sin(e * 2.1) * 0.03);
+  p.neck(-0.3 + Math.abs(Math.sin(e * PI * 2.1)) * 0.07, 0.2);
+}
+
+/** Chord positions up the neck (anchor-frame y, m), changed every two bars. */
+const GUITAR_CHORDS = [0, -0.07, 0.05, -0.03];
+
+function guitarReach(c: ActionCtx): Partial<Record<'L' | 'R', HandReach>> {
+  const e = c.elapsed;
+  const bar = e / 1.9;
+  const i = Math.floor(bar), f = bar - i;
+  // Slide quickly to the next chord at the end of each bar, hold it otherwise.
+  const a = GUITAR_CHORDS[i % GUITAR_CHORDS.length], b = GUITAR_CHORDS[(i + 1) % GUITAR_CHORDS.length];
+  const fret = a + (b - a) * kf(f, [[0, 0], [0.88, 0], [1, 1]]);
+  // Down-up strokes across the strings (x), the hand just in front of them (z).
+  const strum = Math.sin(e * PI * 4.2);
+  return {
+    L: { anchor: 'reach:fret', x: 0.03, y: fret, z: -0.012, pole: [0.5, -1, 0.1] },
+    R: { anchor: 'reach:strum', x: strum * 0.065, y: 0, z: 0.045 - Math.abs(strum) * 0.01, pole: [1, 0.5, 1] },
+  };
 }
 
 /** The doomsayer: a finger to the sky, arms flung wide, a finger at the crowd (a 7 s cycle). */
@@ -622,7 +661,7 @@ export const ACTIONS: Record<string, ActionDef> = {
   roll: { mask: 'full', blendIn: 0.05, blendOut: 0.15, pose: roll, clip: () => ({ name: 'Roll', from: 0.04, to: 0.8 }) },
   die: { mask: 'full', blendIn: 0.02, blendOut: 0, pose: () => {}, mood: 'pain' },
   // Street characters (game/street).
-  play_guitar: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: playGuitar, mood: 'happy', loop: true },
+  play_guitar: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: playGuitar, mood: 'happy', loop: true, reach: guitarReach, curl: { L: 1.0, R: 0.75 } },
   preach: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: preach, mood: 'angry', loop: true },
   mime_box: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: mimeBox, mood: 'surprised', loop: true },
   juggle: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: juggle, mood: 'focused', loop: true },

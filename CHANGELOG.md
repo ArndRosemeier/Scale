@@ -2,9 +2,30 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.042 — 2026-10-05
+## 0.044 — 2026-10-05
 
 - **Real shoes**: sneakers, shoes and boots no longer show the toes through them. The front of the foot is now a closed, rounded toe box with a flat sole, so footwear reads as shoes instead of paint on bare feet.
+
+## 0.043 — 2026-10-05
+
+- **A real sun and moon in the sky**: the sun is now a clear disc, yellow-white by day and orange-red as it rises and sets, with a soft glow around it instead of one white blot of glare. Clouds pass in front of it and it vanishes under an overcast sky.
+- **The moon** crosses the sky like the sun, about 50 minutes later each day, and goes through its phases over a month (crescent, half, gibbous, full), with darker seas and faint craters. By night it shines over the city and hides the stars behind it; by day you can sometimes see it as a pale disc. Moonlight now comes from the moon: brighter at full moon, darkest on moonless nights.
+
+## 0.042 — 2026-10-05
+
+- **The busker really plays the guitar**: the strumming hand now strums across the strings in front of the sound hole (the forearm lies over the guitar instead of reaching through it, no more waving), and the other hand holds the neck, moving between chord positions. Works for every body shape: the hands are placed on the guitar itself.
+
+## 0.041 — 2026-10-05
+
+- **Named bosses**: every villain group now has a boss with a name and a title: the gang's **Kingpin**, the Syndicate's **Chairman**, the techno-cult's **Architect** and the elemental cult's **High Invoker**. A boss is far tougher than a lieutenant, glows brightly in the group's colour, has the lieutenants' powers plus one of its own, and fights to the end.
+- **Groups remember you**: stopping a group's operations, knocking out its members and busting its stash makes it notice you.
+  - Once it has **noticed you**, more of its operations come with a lieutenant, an extra guard stands at its hideout, and now and then the boss leads an operation in person.
+  - Once it is **out for you**, its members stand and fight instead of running, and the boss guards the hideout.
+  - It calms down again over a few game days. A message tells you when a group starts paying attention.
+- **Jail and breakout**: a boss the police cuff goes to jail for three game days (longer each time) and then breaks out. A boss who gets away after you went for them comes back with a grudge.
+- **Breaking a group**: with its boss behind bars and its stash busted, a group collapses. It runs no operations until one of the two is over.
+- Bosses, their records and every group's notoriety are kept in saves.
+- Admin console, Crime & deeds: a gang, Syndicate and cult boss, a button that makes the gang hunt you, and a list of bosses and notoriety.
 
 ## 0.040 — 2026-10-05
 
