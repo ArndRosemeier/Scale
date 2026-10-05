@@ -38,7 +38,9 @@
       <h2>Good to know</h2>
       <ul>
         <li>Windows may warn about running a downloaded script. <code>Convert.bat</code> only starts <code>convert.ps1</code> with PowerShell; both are plain text you can read.</li>
-        <li>Humanoid characters (Mixamo, VRM, Unreal-style, Rigify, most named rigs) get the game's full animation. Other rigs play their own animations if they have any.</li>
+        <li>Humanoid characters (Mixamo, VRM, Unreal-style, Rigify, BlenRig, hand-made rigs, bone names in several languages) get the game's full animation. Other rigs play their own animations if they have any.</li>
+        <li>Rigs from Blender files (control bones, constraints, deform cages, extra armatures, props parented to bones) are rebuilt into a clean skeleton with the same skin, then tried in a few test poses.</li>
+        <li>If a model cannot work in the game (no humanoid body and no animations, or the mesh tears when it moves), the converter says why and writes no file, instead of a broken one.</li>
         <li>Materials made from Blender's standard (Principled BSDF) setup and image textures convert; purely procedural shader materials do not.</li>
       </ul>
       <p class="note">macOS and Linux: not packaged yet. With Blender installed you can run <code>blender -b --factory-startup -P convert_avatar.py -- out.glb model.fbx</code> from the ZIP.</p>

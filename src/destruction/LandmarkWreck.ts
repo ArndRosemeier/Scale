@@ -15,13 +15,13 @@
  */
 import * as THREE from 'three';
 import type { LandmarkWreckData } from '../stream/CityStreamer';
-import { PIECE_STRIDE, gridKey, type WreckGrid } from '../build/landmarkDice';
+import { PIECE_STRIDE, gridKey, gridCells, type WreckGrid } from '../build/landmarkDice';
 import type { Destruction } from './Destruction';
 import { extractElements } from './extract';
 import { createFacadeMaterial, createElemDepthMaterial } from '../render/materials/facade';
 import { clearGlassElemMaterial } from '../render/materials/clearGlass';
 import type { MaterialArrays } from '../render/TextureLibrary';
-import { WALL_STRENGTH } from './wallStrength';
+import { WALL_STRENGTH, GLASS_IMPULSE } from './wallStrength';
 import { MinHeap } from '../core/heap';
 import type { Debris } from './Debris';
 import type { Dust } from './Dust';
@@ -40,6 +40,8 @@ const LEVEL_FAIL = 0.35;
 const MIN_FALL = 10;
 const DUST = new THREE.Color(0.68, 0.65, 0.6);
 const CHIPS = new THREE.Color(0.6, 0.58, 0.55);
+/** Colours of stained glass shards (a cathedral's windows). */
+const STAINED = [[0.25, 0.4, 1.0], [1.0, 0.22, 0.2], [1.0, 0.78, 0.25], [0.3, 0.85, 0.4], [0.7, 0.3, 1.0]].map(([r, g, b]) => new THREE.Color(r, g, b));
 
 interface Wreck {
   d: LandmarkWreckData;
@@ -53,6 +55,8 @@ interface Wreck {
   alive: Uint8Array;
   doomed: Uint8Array;
   grounded: Uint8Array;
+  /** Window glass: breaks easily, holds nothing up, does not count toward its level. */
+  pane: Uint8Array;
   levelTotal: Int32Array;
   levelAlive: Int32Array;
   /** Queued breaks not run yet. */
@@ -101,6 +105,8 @@ export class LandmarkWrecks {
   private clock = 0;
   private startQ: { w: Wreck; pieces: number[] }[] = [];
   private lastStart = -10;
+  /** Of the pieces the last impact broke, how many were window glass. */
+  lastPanes = 0;
 
   constructor(
     data: LandmarkWreckData[],
@@ -116,14 +122,16 @@ export class LandmarkWrecks {
   }
 
   private prepare(d: LandmarkWreckData): Wreck {
-    const g = d.grid, T = d.pieces, n = T.length / PIECE_STRIDE;
+    const g = d.grid, T = d.pieces, n = T.length / PIECE_STRIDE, cells = gridCells(g);
     const ijk = new Int32Array(n * 3);
     const byKey = new Map<number, number>();
+    const pane = new Uint8Array(n);
     const box: Wreck['box'] = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     for (let p = 0; p < n; p++) {
-      const key = T[p * PIECE_STRIDE];
+      const key = T[p * PIECE_STRIDE], cell = key % cells;
       byKey.set(key, p);
-      const i = key % g.nu, r = Math.floor(key / g.nu), j = r % g.nv, k = Math.floor(r / g.nv);
+      if (key >= cells) pane[p] = 1;
+      const i = cell % g.nu, r = Math.floor(cell / g.nu), j = r % g.nv, k = Math.floor(r / g.nv);
       ijk[p * 3] = i; ijk[p * 3 + 1] = j; ijk[p * 3 + 2] = k;
       for (let a = 0; a < 3; a++) { box[a] = Math.min(box[a], T[p * PIECE_STRIDE + 5 + a]); box[a + 3] = Math.max(box[a + 3], T[p * PIECE_STRIDE + 8 + a]); }
     }
@@ -131,12 +139,14 @@ export class LandmarkWrecks {
     for (let p = 0; p < n; p++) {
       nbrAt[p] = list.length;
       const i = ijk[p * 3], j = ijk[p * 3 + 1], k = ijk[p * 3 + 2];
+      // (A cell's wall and glass pieces are neighbours of each other and of the cells around.)
       for (let dk = -1; dk <= 1; dk++) for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
-        if (!di && !dj && !dk) continue;
         const a = i + di, b = j + dj, c = k + dk;
         if (a < 0 || b < 0 || c < 0 || a >= g.nu || b >= g.nv || c >= g.ny) continue;
-        const q = byKey.get(gridKey(g, a, b, c));
-        if (q !== undefined) list.push(q);
+        for (const off of [0, cells]) {
+          const q = byKey.get(gridKey(g, a, b, c) + off);
+          if (q !== undefined && q !== p) list.push(q);
+        }
       }
     }
     nbrAt[n] = list.length;
@@ -145,13 +155,14 @@ export class LandmarkWrecks {
     const levelTotal = new Int32Array(g.ny);
     for (let p = 0; p < n; p++) {
       const o = p * PIECE_STRIDE, bottom = g.y0 + ijk[p * 3 + 2] * g.ch;
+      if (pane[p]) continue;
       if (bottom <= Math.max(this.terrain.height(T[o + 2], T[o + 4]), d.lm.base) + 0.5) grounded[p] = 1;
       levelTotal[ijk[p * 3 + 2]]++;
     }
     const origin = new THREE.Vector3();
     d.near.getWorldPosition(origin);
     const w: Wreck = {
-      d, g, n, T, ijk, nbrAt, nbr: Int32Array.from(list), alive: new Uint8Array(n).fill(1), doomed: new Uint8Array(n), grounded,
+      d, g, n, T, ijk, nbrAt, nbr: Int32Array.from(list), alive: new Uint8Array(n).fill(1), doomed: new Uint8Array(n), grounded, pane,
       levelTotal, levelAlive: levelTotal.slice(), pending: 0, dirty: false, checkAt: 0, fresh: [], box, origin,
     };
     this.solids?.attachWreck(d.index, g, T, w.alive);
@@ -174,6 +185,7 @@ export class LandmarkWrecks {
   /** An impact (as Destruction.impact): queues the pieces it breaks, returns how many. */
   impact(x: number, y: number, z: number, radius: number, impulse: number, dx: number, dy: number, dz: number): number {
     let broken = 0;
+    this.lastPanes = 0;
     for (const w of this.wrecks) {
       const b = w.box;
       if (x + radius < b[0] || x - radius > b[3] || y + radius < b[1] || y - radius > b[4] || z + radius < b[2] || z - radius > b[5]) continue;
@@ -192,6 +204,7 @@ export class LandmarkWrecks {
         w.pending++;
         this.push({ w, p, dx, dy, dz, power: Math.min(30, (j / strength) * 3), fn: null }, dc / WAVE_SPEED);
         broken++;
+        this.lastPanes += w.pane[p];
       }
     }
     return broken;
@@ -199,6 +212,8 @@ export class LandmarkWrecks {
 
   private strength(w: Wreck, p: number): number {
     const o = p * PIECE_STRIDE, layer = w.T[o + 11];
+    // (Window glass: like the buildings' panes, which shatter even when the wall holds.)
+    if (w.pane[p]) return GLASS_IMPULSE * Math.max(1, w.T[o + 1]) * 0.3;
     return (WALL_STRENGTH[layer] ?? 14000) * Math.min(PANEL_AREA, Math.max(1, w.T[o + 1]));
   }
 
@@ -219,13 +234,18 @@ export class LandmarkWrecks {
     w.doomed[p] = 0;
     w.d.elemData[(p + 1) * 2] = 0;
     w.d.elemTex.needsUpdate = true;
-    w.levelAlive[w.ijk[p * 3 + 2]]--;
+    if (!w.pane[p]) w.levelAlive[w.ijk[p * 3 + 2]]--;
     w.fresh.push(p);
     w.dirty = true;
     w.checkAt = this.clock + 0.25;
     if (!fx) return;
     const T = w.T, o = p * PIECE_STRIDE;
     const x = T[o + 2], y = T[o + 3], z = T[o + 4], area = T[o + 1], layer = T[o + 11];
+    if (w.pane[p]) {
+      // Stained glass: a burst of coloured shards, no rubble.
+      for (let c = 0; c < 3; c++) this.debris.chipBurst(x, y, z, 8, 2.5 + power * 0.3, dx, dy, dz, STAINED[Math.floor(Math.random() * STAINED.length)], 0.05, 3);
+      return;
+    }
     const glass = layer === 10;
     const tint = glass ? new THREE.Color(0.75, 0.85, 0.9) : new THREE.Color(0.85, 0.82, 0.78);
     const nFrag = glass ? 0 : Math.max(1, Math.min(5, Math.round(area / 3)));
@@ -314,6 +334,7 @@ export class LandmarkWrecks {
     for (let p = 0; p < n; p++) if (w.alive[p] && !w.doomed[p] && w.grounded[p] && ijk[p * 3 + 2] <= failK) { held[p] = 1; queue[qt++] = p; }
     while (qh < qt) {
       const p = queue[qh++];
+      if (w.pane[p]) continue; // (glass holds nothing up)
       for (let e = w.nbrAt[p]; e < w.nbrAt[p + 1]; e++) {
         const q = w.nbr[e];
         if (held[q] || !w.alive[q] || w.doomed[q] || ijk[q * 3 + 2] > failK) continue;

@@ -39,9 +39,17 @@ npm run avatar -- model.fbx [Idle.fbx Walking.fbx ...] [--out file.glb]
 ```
 
 Converts FBX / glTF / OBJ / DAE / .blend into one GLB (metric, Y-up, PBR, embedded
-textures). Extra files are animations for the same rig and become named clips. A JSON
-report (rig kind: mixamo / vrm / unreal / makehuman / generic, bones, clips) is written
-next to it. Blender comes from `BLENDER_BIN` or AssetGenerator's pinned install.
+textures). Extra files are animations for the same rig and become named clips. Rigs are
+not copied but rebuilt: the converter measures how every bone moves the mesh (through
+control bones, constraints, deform cages, lattices, bone-parented props, extra
+armatures), bakes that into plain skin weights on a clean skeleton with standard body
+bone names (found by name in several languages, else by the skeleton's shape) and bakes
+the rig's animations onto it. It then poses the result and refuses (exit code 2, no GLB)
+when the body is not a humanoid the game can drive and has no clips, or when the mesh
+tears. A JSON report (rig, bones, height, clips, warnings or the error) is written next
+to it. Blender comes from `BLENDER_BIN` or AssetGenerator's pinned install.
+`npx tsx tools/avatar/check-glb.ts file.glb` shows how the game reads a GLB (mode,
+mapped bones, clips).
 `npm run build-converter` packages the downloadable Windows version
 (`public/converter/ScaleAvatarConverter.zip`, from `tools/avatar/converter-package`).
 

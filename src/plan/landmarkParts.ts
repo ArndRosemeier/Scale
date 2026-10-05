@@ -17,6 +17,7 @@ import type { Poly } from '../core/geom2';
 import type { Terrain } from '../world/terrain';
 import type { Landmark } from './landmarks';
 import { marvel } from './marvelParts';
+import { cathedral } from './cathedralParts';
 
 export const enum PK { Box = 0, Cyl = 1, Dome = 2, Gable = 3, Pyramid = 4, Ramp = 5, Beam = 6, Tube = 7, Vault = 8, Flat = 9, Quad = 10, Lathe = 11, Prism = 12, Perf = 13, Helix = 14, Strut = 15 }
 
@@ -83,6 +84,21 @@ export interface LmPart {
   hh?: number;
   /** Clear glass: drawn by the transparent glass mesh, not the facade one. */
   clear?: boolean;
+  /** Vault, dome, cylinder: seen from inside (the faces turned inward, no end caps). */
+  inward?: boolean;
+  /** Dome or cylinder: only the half on the part's +v side (an apse's half dome or roof). */
+  half?: boolean;
+  /**
+   * Inward dome as pendentives: the sphere through the corners of the square ±hx × ±hz (from y0
+   * there) cut by the square's sides, up to the ring of radius r it reaches at y1.
+   */
+  pend?: boolean;
+  /**
+   * Window glass of a breakable landmark: diced into pieces of its own (beside the wall's in the
+   * same grid cell) that break as easily as glass and hold nothing up. Its collision box (a
+   * hidden solid) goes with them.
+   */
+  pane?: boolean;
 }
 
 /** A walkable inside (the town hall's): its outline, height range and where its room lights hang. */
@@ -109,10 +125,12 @@ export interface PartObstacle {
   y0: number; y1: number;
   /** Broken away (breakable landmarks: world/LandmarkSolids). */
   dead?: boolean;
+  /** Window glass (LmPart.pane): follows the glass pieces, not the wall's. */
+  pane?: boolean;
 }
 
-// Facade flags (build/buildingShell FF): windows, curtain wall, arched, roof, front.
-export const WIN = 1, CURTAIN = 4, ARCH = 8, ROOF = 128;
+// Facade flags (build/buildingShell FF): windows, curtain wall, arched, roof, front, stained glass.
+export const WIN = 1, CURTAIN = 4, ARCH = 8, ROOF = 128, GLOW = 4096;
 // Wall layers (plan/building WallMat) and roof layers (16 + RoofMat).
 export const BRICK = 0, BRICK_BROWN = 1, LIME = 4, SAND = 5, PLASTER = 6, STUCCO = 7, CONC = 8, PANEL = 9, GLASS = 10, METAL = 11, GRANITE = 13, BRICK_WHITE = 15;
 export const TAR = 16, CLAY = 17, SLATE = 18, ZINC = 19, ASPHALT = 20, METAL_ROOF = 21, GRAVEL = 22, GREEN_ROOF = 23;
@@ -120,8 +138,8 @@ export const TAR = 16, CLAY = 17, SLATE = 18, ZINC = 19, ASPHALT = 20, METAL_ROO
 export type RGB = [number, number, number];
 export const mat = (layer: number, tint: RGB = [1, 1, 1], flags = 0, bay = 3, fh = 4, gh = 4.5): PartMat => ({ layer, tint, flags, bay, fh, gh });
 export const WHITE: RGB = [1, 1, 1];
-const COPPER: RGB = [0.48, 0.72, 0.62];
-const GOLD: RGB = [1.25, 1.0, 0.45];
+export const COPPER: RGB = [0.48, 0.72, 0.62];
+export const GOLD: RGB = [1.25, 1.0, 0.45];
 const BRONZE: RGB = [0.55, 0.42, 0.3];
 /** Paint colours (team colours, wheels, liveries). */
 const PAINT: RGB[] = [[0.85, 0.15, 0.12], [0.15, 0.3, 0.75], [0.95, 0.8, 0.15], [0.15, 0.6, 0.3], [0.95, 0.95, 0.95], [0.55, 0.15, 0.55], [0.95, 0.45, 0.1], [0.12, 0.12, 0.14]];
@@ -437,11 +455,7 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
   // Entrance steps across the middle (in front of the gateway when the tower stands there),
   // solid and as many as it takes from the square up to the floor (the block may stand on a
   // terrace well above the ground).
-  {
-    const rise = 0.17, tread = 0.36, sw = P.w * 0.18 + 1;
-    const n = Math.max(3, Math.min(18, Math.ceil((B - k.ground(0, stepV - 3)) / rise)));
-    for (let i = 0; i < n; i++) k.box(0, stepV - tread / 2 - i * tread, sw + i * 0.05, tread / 2, k.F, B - i * rise, mat(GRANITE, [0.85, 0.85, 0.85]), { solid: true, map: 2 });
-  }
+  entranceSteps(k, stepV, P.w * 0.18 + 1, B, mat(GRANITE, [0.85, 0.85, 0.85]));
   if (st === 3) k.cyl(-hw + 10, fv - 12, 9, 9, B, B + 9, mat(GLASS, WHITE, WIN | CURTAIN, 1.8, 9, 9), { foot: true, top: mat(METAL_ROOF, WHITE, ROOF) });
   // Flagpoles in front.
   const flagC = r.pick(PAINT);
@@ -456,29 +470,49 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
 // ------------------------------------------------------------ town hall: shell and interior
 
 /** A wall opening: centre along the wall, width, bottom and top. */
-interface Opening { a: number; w: number; y0: number; y1: number }
+export interface Opening { a: number; w: number; y0: number; y1: number }
 
 /**
  * A straight wall from a0 to a1 along u (axis 'u', at v = c) or along v (axis 'v', at u = c),
  * thickness th, between y0 and y1, with openings: full-height pieces between them, a sill
  * below and a lintel above each.
  */
-function wallRun(k: Kit, axis: 'u' | 'v', c: number, a0: number, a1: number, y0: number, y1: number, th: number, m: PartMat, open: Opening[], o: Opt = {}): void {
+/**
+ * Solid entrance steps running out from v = stepV (towards -v) down from the floor at B to the
+ * ground: 17 cm each, steeper (up to 30 cm) where the ground lies far below, at most 24.
+ */
+export function entranceSteps(k: Kit, stepV: number, hw: number, B: number, m: PartMat): void {
+  const tread = 0.36, drop = (n: number) => B - k.ground(0, stepV - n * tread);
+  let n = 3;
+  while (n < 24 && drop(n) / n > 0.17) n++;
+  const rise = Math.max(0.17, Math.min(0.3, drop(n) / n));
+  for (let i = 0; i < n; i++) k.box(0, stepV - tread / 2 - i * tread, hw + i * 0.05, tread / 2, k.F, B - i * rise, m, { solid: true, map: 2 });
+}
+
+export function wallRun(k: Kit, axis: 'u' | 'v', c: number, a0: number, a1: number, y0: number, y1: number, th: number, m: PartMat, open: Opening[], o: Opt = {}): void {
+  // (Lintels over openings stand on the wall beside them: no foundation filling the opening.)
+  const lintel: Opt = { ...o, foot: undefined };
   const put = (s0: number, s1: number, b: number, t: number) => {
     if (s1 - s0 < 0.02 || t - b < 0.02) return;
-    const mid = (s0 + s1) / 2, h = (s1 - s0) / 2;
-    if (axis === 'u') k.box(mid, c, h, th / 2, b, t, m, o);
-    else k.box(c, mid, th / 2, h, b, t, m, o);
+    const mid = (s0 + s1) / 2, h = (s1 - s0) / 2, oo = b > y0 + 0.01 ? lintel : o;
+    if (axis === 'u') k.box(mid, c, h, th / 2, b, t, m, oo);
+    else k.box(c, mid, th / 2, h, b, t, m, oo);
   };
-  let s = a0;
-  for (const op of [...open].sort((p, q) => p.a - q.a)) {
-    const l = op.a - op.w / 2, r = op.a + op.w / 2;
-    put(s, l, y0, y1);
-    put(l, r, y0, op.y0);
-    put(l, r, op.y1, y1);
-    s = r;
+  // Openings may stack (a door under a rose): each strip between their edges is filled round
+  // the ones that cover it, bottom to top.
+  const edges = [...new Set([a0, a1, ...open.flatMap((op) => [op.a - op.w / 2, op.a + op.w / 2])])].filter((e) => e >= a0 && e <= a1).sort((p, q) => p - q);
+  for (let i = 0; i + 1 < edges.length; i++) {
+    const l = edges[i], r = edges[i + 1], m = (l + r) / 2;
+    let b = y0;
+    const over = open.filter((q) => Math.abs(m - q.a) < q.w / 2).sort((p, q) => p.y0 - q.y0);
+    // (A doorway's threshold: the wall's foundation, up to the floor, so there is no pit under it.)
+    if (o.foot !== undefined && over.length && over[0].y0 <= y0 + 0.01) put(l, r, y0 - 0.3, y0);
+    for (const op of over) {
+      put(l, r, b, op.y0);
+      b = Math.max(b, op.y1);
+    }
+    put(l, r, b, y1);
   }
-  put(s, a1, y0, y1);
 }
 
 interface Shell {
@@ -532,8 +566,8 @@ function hallPalette(st: number, pastel: RGB) {
 }
 type Palette = ReturnType<typeof hallPalette>;
 
-const D: Opt = { detail: true };
-const DS: Opt = { detail: true, solid: true };
+export const D: Opt = { detail: true };
+export const DS: Opt = { detail: true, solid: true };
 
 function townhallInterior(k: Kit, lm: Landmark, sh: Shell, flagC: RGB, pastel: RGB): void {
   const r = new Rng(deriveSeed(lm.seed, 'interior'));
@@ -586,7 +620,7 @@ function chair(k: Kit, u: number, v: number, rot: number, y: number, m: PartMat,
   });
 }
 
-function bench(k: Kit, u: number, v: number, rot: number, y: number, len: number, m: PartMat): void {
+export function bench(k: Kit, u: number, v: number, rot: number, y: number, len: number, m: PartMat): void {
   k.sub(u, v, rot, () => {
     k.box(0, 0, len / 2, 0.22, y + 0.4, y + 0.46, m, D);
     k.box(0, -0.2, len / 2, 0.03, y + 0.46, y + 0.95, m, D);
@@ -981,70 +1015,6 @@ function tower(k: Kit, lm: Landmark, r: Rng): void {
     k.box(0, 0, w + 5.5, w + 5.5, oy + 12, oy + 13, mat(PANEL, WHITE), { solid: false });
     k.pyramid(0, 0, w * 0.8, w * 0.8, oy + 13, H, 0, mat(METAL, [0.9, 0.9, 0.92]));
   }
-}
-
-function cathedral(k: Kit, lm: Landmark, r: Rng): void {
-  const P = lm.p, B = k.B;
-  const wallL = [SAND, LIME, GRANITE, BRICK][P.wall % 4];
-  const tint: RGB = wallL === GRANITE ? [0.85, 0.83, 0.8] : wallL === BRICK ? [0.92, 0.85, 0.8] : [0.96, 0.93, 0.86];
-  const wall = mat(wallL, tint, WIN | ARCH, 5.2, P.H, P.H);
-  const plain = mat(wallL, tint);
-  const roofM = mat([SLATE, ZINC, CLAY][P.roof % 3], P.roof % 3 === 1 ? COPPER : WHITE, ROOF);
-  const vc = 6, L = P.L, W = P.W, H = B + P.H;
-  const nw = W * 0.28, aw = W * 0.12;
-  const front = vc - L / 2;
-  // Nave (west front at -v), aisles, transept, apse.
-  k.box(0, vc, nw, L / 2, B, H, wall, { foot: true });
-  k.gable(0, vc, L / 2, nw, H, H + nw * 1.5, plain, roofM, { rot: Math.PI / 2 });
-  for (const s of [-1, 1]) {
-    k.box(s * (nw + aw), vc + 2, aw, L / 2 - 4, B, B + P.H * 0.5, mat(wallL, tint, WIN | ARCH, 5.2, P.H * 0.5, P.H * 0.5), { foot: true });
-    k.gable(s * (nw + aw), vc + 2, L / 2 - 4, aw, B + P.H * 0.5, B + P.H * 0.5 + aw * 0.6, plain, roofM, { rot: Math.PI / 2 });
-    // Buttresses along the aisles.
-    for (let v = front + 8; v < vc + L / 2 - 6; v += 7) k.box(s * (nw + 2 * aw + 0.7), v, 0.7, 0.9, B, B + P.H * 0.55, plain, { detail: true, solid: false });
-  }
-  if (lm.style !== 2) {
-    const tl = W * P.transept / 2, tv = vc + L * 0.18;
-    k.box(0, tv, tl, nw * 0.95, B, H, wall, { foot: true });
-    k.gable(0, tv, tl, nw * 0.95, H, H + nw * 1.4, plain, roofM);
-    k.cyl(0, vc + L / 2, nw, nw, B, H - 2, wall, { foot: true, seg: 16 });
-    k.cyl(0, vc + L / 2, nw + 0.3, 0, H - 2, H + nw * 1.2, roofM, { seg: 16, solid: false });
-    if (lm.style === 0) {
-      // Twin west towers with spires.
-      const ts = W * 0.17, th = B + P.towerH * 0.62;
-      for (const s of [-1, 1]) {
-        k.box(s * (W / 2 - ts), front - ts * 0.4, ts, ts, B, th, mat(wallL, tint, WIN | ARCH, ts, 8, P.H), { foot: true });
-        k.pyramid(s * (W / 2 - ts), front - ts * 0.4, ts * 0.9, ts * 0.9, th, B + P.towerH, 0, roofM);
-        for (const c of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.pyramid(s * (W / 2 - ts) + c[0] * ts * 0.85, front - ts * 0.4 + c[1] * ts * 0.85, 0.6, 0.6, th, th + 5, 0, plain, { detail: true });
-      }
-    } else {
-      // A single west tower and spire, a flèche over the crossing.
-      const ts = W * 0.2, th = B + P.towerH * 0.55;
-      k.box(0, front - ts * 0.5, ts, ts, B, th, mat(wallL, tint, WIN | ARCH, ts, 8, P.H), { foot: true });
-      k.pyramid(0, front - ts * 0.5, ts * 0.85, ts * 0.85, th, B + P.towerH, 0, roofM);
-      k.pyramid(0, tv, 1.6, 1.6, H + nw * 1.3, H + nw * 1.3 + 16, 0, roofM, { detail: true });
-    }
-  } else {
-    // Domed: a Greek cross with a great dome on a drum and two bell towers with cupolas.
-    const tl = L * 0.36, tv = vc + L * 0.08;
-    k.box(0, tv, tl, nw * 1.1, B, H, wall, { foot: true });
-    k.gable(0, tv, tl, nw * 1.1, H, H + nw * 0.7, plain, roofM);
-    const dr = nw * 1.15;
-    k.cyl(0, tv, dr, dr, H, H + P.H * 0.45, mat(wallL, tint, WIN | ARCH, 3.2, P.H * 0.45, P.H * 0.45), { solid: false });
-    k.dome(0, tv, dr + 0.5, dr + 0.5, H + P.H * 0.45, H + P.H * 0.45 + dr * 1.25, roofM, { seg: 24 });
-    k.cyl(0, tv, 1.8, 1.8, H + P.H * 0.45 + dr * 1.2, H + P.H * 0.45 + dr * 1.2 + 4, plain, { detail: true, solid: false });
-    k.dome(0, tv, 2.1, 2.1, H + P.H * 0.45 + dr * 1.2 + 4, H + P.H * 0.45 + dr * 1.2 + 6.5, mat(ZINC, GOLD, ROOF), { detail: true });
-    const ts = W * 0.13, th = B + P.towerH * 0.5;
-    for (const s of [-1, 1]) {
-      k.box(s * (W / 2 - ts), front + ts, ts, ts, B, th, mat(wallL, tint, WIN | ARCH, ts, 7, P.H), { foot: true });
-      k.cyl(s * (W / 2 - ts), front + ts, ts * 0.8, ts * 0.8, th, th + 5, mat(wallL, tint, WIN | ARCH, 2.4, 5, 5), { solid: false });
-      k.dome(s * (W / 2 - ts), front + ts, ts * 0.85, ts * 0.85, th + 5, th + 5 + ts * 1.3, roofM);
-    }
-    k.cyl(0, vc + L / 2, nw, nw, B, H - 3, wall, { foot: true, seg: 16 });
-    k.dome(0, vc + L / 2, nw, nw, H - 3, H - 3 + nw * 0.8, roofM, { seg: 16 });
-  }
-  // Steps up to the west door.
-  for (let i = 0; i < 3; i++) k.box(0, front - 1.4 - i * 0.9, nw + 2 - i * 0.4, 0.45, k.F, B - i * 0.18, mat(GRANITE, [0.85, 0.85, 0.85]), { solid: false, detail: i > 0 });
-  void r;
 }
 
 function wheel(k: Kit, lm: Landmark, r: Rng): void {
@@ -1478,7 +1448,7 @@ export function partObstacles(parts: LmPart[]): PartObstacle[] {
       case PK.Prism: prismObstacles(p, out); break;
       case PK.Perf: perfObstacles(p, out); break;
       default:
-        out.push({ cyl: false, x: p.x, z: p.z, r: 0, hx: Math.max(p.hx, p.hx2 ?? 0), hz: p.hz, ux, uz, y0, y1: p.y1 });
+        out.push({ cyl: false, x: p.x, z: p.z, r: 0, hx: Math.max(p.hx, p.hx2 ?? 0), hz: p.hz, ux, uz, y0, y1: p.y1, ...(p.pane ? { pane: true } : {}) });
     }
   }
   return out;

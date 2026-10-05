@@ -27,6 +27,7 @@ export const enum FF {
   Front = 256,     // main street facade (entrance door)
   // 512, 1024: door bay index (0..3) on the front facade
   Eatery = 2048,   // café / restaurant shop front: warm light while open, no generic sign band
+  Glow = 4096,     // stained glass (landmarks): the day shines through it
 }
 
 export function facadeSpecs() {
