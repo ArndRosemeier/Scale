@@ -57,6 +57,7 @@ export interface ArchetypeDef {
 
 export const ARCHETYPES: readonly ArchetypeDef[] = [
   { id: 'robots', tier: 'minor', weight: 1, omens: ['glitch', 'drone', 'billboard'] },
+  { id: 'brood', tier: 'minor', weight: 1, omens: ['chitter', 'glimpse', 'chitter'] },
   { id: 'strider', tier: 'major', weight: 1, omens: ['tremor', 'wake', 'tremor'] },
 ];
 
