@@ -2,10 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.033 — 2026-10-05
+## 0.034 — 2026-10-05
 
 - **No more orange blobs in your face**: embers, flames and smoke puffs right in front of the camera now fade out instead of filling the view as big flat discs.
 - **Sandbox shows no karma**: the police and witness messages ("people saw it", turning yourself in, being arrested) no longer mention karma or fines in sandbox, where there is no karma.
+
+## 0.033 — 2026-10-05
+
+- **The army comes for you**: a giant on a rampage with a bad reputation is now treated like a monster. First a warning (a siren, the screens around you turn to the red alert, a police drone overhead, an officer shouting up at you), then a final warning, then the whole response: police and SWAT firing from a distance, cordons and evacuation sirens, the National Guard, tanks, attack helicopters, jets and artillery — and, rarely, the tactical nuke countdown, aimed at you.
+- **Ending it**: stop wrecking things for a while, or shrink back to human size, and the army stands down — but once it has been called it keeps after you for four minutes at least, so the Guard and the tanks get there and fight. Get knocked out and you are taken into custody. After that the slate is clean: rampage again and you get warned first. Start again soon after and the army comes back without new warnings.
+- **Tanks, APCs and infantry fight too**: ground units close in on you (tanks to about 480 m, APCs to 350 m, infantry to 250 m) and follow you when you walk off, pick spots with a clear view of you, don't park behind each other, aim at whatever part of you they can see (a shoulder past a corner, the top of your head over the roofs) and move to a better spot when they lose sight of you. A tank with a building in the way shoots its way through the facade. Infantry and APCs without a clear view fire over the roofs at your head (they hit less often). A rifle squad whose truck doesn't come goes on foot. While the army is after you, your health comes back much more slowly. Soldiers no longer get knocked over by their own side's shells.
+- **Fix**: a giant knocked down or knocked out no longer turns into a giant ragdoll, which could fall through the ground or break the physics for the rest of the game.
+- **Fighting back** works: stomp tanks and trucks, knock soldiers down, punch helicopters out of the sky. The news drone films you on the city's screens.
 
 ## 0.032 — 2026-10-05
 

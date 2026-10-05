@@ -34,6 +34,7 @@ import type { MapMarker } from '../../ui/map/GameMap';
 import type { SaveAftermath } from '../save/model';
 import type { ThreatEvent } from '../threats/ThreatEvent';
 import { Strider } from '../threats/Strider';
+import { PlayerRampage } from '../threats/PlayerRampage';
 import { RESPONSE } from '../response/ResponseDirector';
 import { CasualtyLedger } from './Casualties';
 import { AFTERMATH, LAST_RESORT } from './rules';
@@ -175,7 +176,7 @@ export class Aftermath {
 
   /** Too dangerous for the medics: near a live monster, inside a strike zone before the strike. */
   danger(x: number, z: number): boolean {
-    for (const ev of this.g.threats.events) if (ev instanceof Strider && ev.targetable && Math.hypot(ev.x - x, ev.z - z) < 170) return true;
+    for (const ev of this.g.threats.events) if ((ev instanceof Strider || ev instanceof PlayerRampage) && ev.targetable && Math.hypot(ev.x - x, ev.z - z) < 170) return true;
     const L = this.lastResort;
     return L.state === 'countdown' && Math.hypot(L.x - x, L.z - z) < L.r * 1.1;
   }
@@ -439,6 +440,8 @@ export class Aftermath {
     if (L.state === 'strike') T = { x: L.x, y: g.terrain.height(L.x, L.z) + 420, z: L.z, dist: 2600, alt: -150 };
     else {
       for (const ev of g.threats.events) if (ev instanceof Strider && ev.targetable) { T = { x: ev.x, y: ev.y + 6, z: ev.z, dist: FEED.dist, alt: Math.max(FEED.alt, this.skyClear(ev.x, ev.z) - ev.y + 20) }; break; }
+      // (A rampaging giant player is on the news too.)
+      if (!T) for (const ev of g.threats.events) if (ev instanceof PlayerRampage && ev.targetable) { T = { x: ev.x, y: ev.y, z: ev.z, dist: FEED.dist, alt: Math.max(FEED.alt, this.skyClear(ev.x, ev.z) - ev.y + 20) }; break; }
       if (!T) for (const b of g.threats.remains) if (this.hours - b.downAt < 1) { T = { x: b.x, y: b.y + 2, z: b.z, dist: 150, alt: 70 }; break; }
     }
     this.feed.target = T;

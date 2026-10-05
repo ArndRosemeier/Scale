@@ -108,7 +108,8 @@ export class ArmyFx {
     if (d < r && g.player.pos.y < y + r) g.crime.health.damage(6 * size * (1 - d / r), 'military', x, z);
     // People in the blast (an area effect hits bystanders): knocked down, injured.
     for (const a of g.peds.neighbours(x, z, r, this.nb)) {
-      if (!a.alive || a.inside || a.state === PState.Down || Math.abs(a.y + 0.9 - y) > r) continue;
+      // (The army's own soldiers aside: their shells fall on the target, not on their own line.)
+      if (!a.alive || a.inside || a.state === PState.Down || a.actor?.role === 'soldier' || Math.abs(a.y + 0.9 - y) > r) continue;
       const da = Math.hypot(a.x - x, a.z - z);
       if (da > r) continue;
       g.reactions.knockDown(a, x, z, 3 + 8 * (1 - da / r), 'military');

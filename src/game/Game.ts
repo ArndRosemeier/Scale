@@ -93,6 +93,7 @@ import { SlimeRealm } from './slimes/SlimeRealm';
 import { ResponseDirector } from './response/ResponseDirector';
 import { Forces } from './response/forces/Forces';
 import { Aftermath } from './aftermath/Aftermath';
+import { HostilePlayer } from './threats/PlayerRampage';
 import { SaveSystem } from './save/SaveSystem';
 import type { SaveData } from './save/model';
 import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
@@ -177,6 +178,8 @@ export class Game {
   response!: ResponseDirector;
   /** The army: response levels 3 (National Guard) and 4 (army & air) against a major threat (response/forces). */
   forces!: Forces;
+  /** The army against a rampaging giant player: the warnings, then the player as a major threat (threats/PlayerRampage). */
+  hostile!: HostilePlayer;
   /** Consequences and the last resort (src/game/aftermath): casualty ledger, rescues and triage, the nuke countdown, smoke, the news feed, the carcass cleanup. */
   aftermath!: Aftermath;
   /** The origin scene of a new Normal game (src/game/intro); drives the player and camera while active. */
@@ -598,7 +601,7 @@ export class Game {
     this.T('street', () => this.street?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
-    this.T('army', () => this.forces.update(dt));
+    this.T('army', () => { this.hostile.update(dt); this.forces.update(dt); });
     this.T('aftermath', () => this.aftermath.update(dt));
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
@@ -898,6 +901,7 @@ export class Game {
     this.response = new ResponseDirector(this);
     this.threats = new ThreatDirector(this);
     this.forces = new Forces(this);
+    this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
     this.slimeRealm = new SlimeRealm(this);
@@ -939,6 +943,8 @@ export class Game {
     this.slimeRealm?.blow(x, y, z, r, jx, jy, jz);
     // The brood's creatures (a punch kills a small one; a blast a clump).
     if (J > 0) this.threats?.broodHit(x, y, z, r + 0.3, 'blow', J / 150, Math.min(10, J / 60));
+    // The army's helicopters, when they are after the player.
+    this.forces?.struck(x, y, z, r, jx, jy, jz);
     this.props.hit(x, y, z, r, jx, jy, jz);
     this.future.hit(x, y, z, r, jx, jy, jz);
     this.birds.hit(x, y, z, r, jx, jy, jz);
