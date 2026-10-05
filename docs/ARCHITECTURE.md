@@ -727,8 +727,46 @@ every frame (`prof.threats`).
   * Hooks: `Forces.onOutcome` (the battle's end: outcome, whether the army did it, losses), `withdraw()` (level 5: every unit
     pulls out — convoys leaving, no more fire), `rally(x, z, r)` and `airstrike(x, z)` (wired to the player: the aftermath's
     `Command`, below; a player's airstrike is its own squad `air-strike`, one run per call, attached to a monster the army
-    has not engaged yet), `hostilePlayer` (the army against a rampaging giant player with a very low reputation after a
-    warning sequence — not implemented: needs a ThreatEvent for the player and a target adapter instead of the Strider).
+    has not engaged yet), `struck` (a punch of the player's knocks a helicopter in reach out of the sky while the army is
+    after them). The army fights an `ArmyFoe`: the Strider, or a rampaging giant player (below).
+* **The army against the player** (`threats/PlayerRampage.ts`, `game.hostile`, rules in `threats/rampageRules.ts`, pure,
+  tested; PLAYGROUND_PLAN §0 decision 19: no cap, after a clear warning sequence). `HostilePlayer` reads the player's own
+  entries in the collateral ledger as a decaying **fury** (a building brought down 3 + 0.35 per storey, a facade 0.25 at
+  most every 1.5 s, a bystander 0.6, an officer or soldier 1.2, a car wrecked 0.4; criminals nothing; halves every 75 s).
+  The **watch** (`RampageWatch`): a giant (≥ 6 m) with a feared reputation (≤ −40) whose fury reaches 6 is warned (a toast,
+  a siren whoop, the nearest officer shouts, a police drone comes over, the screens round about show the red alert);
+  20 s later, still at it, the final warning; 20 s after that, fury ≥ 9: **hostile** — a `PlayerRampage` event (archetype
+  `rampage`, major, never on foot) that the response escalates against like a monster's: patrol cars and a cordon,
+  evacuation sirens, SWAT and patrol officers firing from a distance (GIANT), the National Guard and the army and air
+  (levels 3 and 4), and, rarely, level 5. Below fury 3 while warned (or no longer a giant), the warnings lapse. Standing down — no destruction
+  for 45 s, or human-sized for 20 s, but never within 240 s of the army being called (once mobilised the Guard and
+  the tanks get there) — ends it (`abandoned`; the fury is spent); a relapse within 5 min brings the army
+  back without new warnings. Brought down (knocked out by the response): `stopped`, taken into custody (Justice.arrested) — a clean slate (`served`): the next rampage is warned first.
+  * **The player's body** (`PlayerBody`, a ThreatActor with `self`: the police's and the army's target, never in
+    `ThreatDirector.actors()`, so never the player's own Tab target or blow): zones head / torso / legs round the player
+    (armour 0.2–0.35, no weak spots); army damage points after armour become health — 500 points a full bar (small hits
+    add up), past the health's size scaling; `HurtKind` 'military' (no karma for the knock-out itself).
+  * **As the army's foe**: its route runs from the city centre's side (≥ 1 km) to where the player stands, rewritten as
+    they move, mode `rampage` — the battle model rings them (rifles ~230 m, APCs ~270, tanks ~330); units come in 420 m
+    from the player on the city's side (`spawnPoint`), the artillery beyond them (`batteryAt`); a unit's slot is a street point with a line of sight to the player's body or head (tried round its side of
+    the ring and nearer in, `sightSlot`: at street level the ring is mostly behind buildings); units holding beyond
+    their reach of a player who has moved on (`RAMPAGE.reach`: rifles 230 m, APCs 340, tanks 480 — in a city a gun
+    outranges its line of sight), or still on the way to a slot the player has long left, go again after 5 s (`regroup`:
+    a rifle squad waits for its truck); a unit blocked three volleys running re-slots away from where it stood and from
+    other units' spots (no convoy nose to tail down one street), and fires at whichever zone it sees (each zone's middle, sides and top tried, `SEE`), keeping the last; a tank with
+    a building in the way shoots into the facade (`breachShot`: the hole may give it its line next time)); rifles and APCs without a line fire over the roofs at the head
+    (`volley` with no line of sight, at 60 %: the battle model's rule for unseen units); a rifle squad waits 30 s for its
+    truck, then walks. A giant player (over 6 m) never becomes a ragdoll (RagdollSystem: one many times life size
+    tunnelled through the ground and broke the physics).
+    While hostile the player's health regenerates at 20 % (`PlayerHealth.regenK`).
+    The player's blows on the units are their own: vehicles crushed or wrecked, soldiers knocked down (the usual losses
+    and morale), helicopters punched out of the sky (`Forces.struck`). Headless check (`simulatePlayerBattle`,
+    selftest): a 20 m giant standing still goes down ~40 s after level 4 arrives, the ground forces doing about half (level 3 alone takes far longer); one walking
+    off is followed.
+  * **The last resort against the player**: the same rule (level 4 a while, the army failing, the seeded roll), the player
+    counting as "deep in the city"; the strike zone follows the player through the countdown; standing down or being
+    brought down calls it off; at zero the blast knocks the player out (not underground) and ends the rampage
+    (`destroyed`). The news feed films the rampaging giant; medics keep clear of them. Not kept in saves.
 * **Consequences and the last resort** (`src/game/aftermath`, `game.aftermath`, prof `aftermath`; Phase B stage 3, THREATS_PLAN
   §2 "Casualties without gore", "Show, don't tell", "How the player helps", level 5; §3 aftermath). Built after the army.
   * **Casualty ledger** (`Casualties.ts`, pure, tested): evacuated (the response's count) / injured / trapped / rescued (and

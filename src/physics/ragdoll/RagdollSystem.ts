@@ -152,6 +152,9 @@ export interface CarBox { ref: object; x: number; y: number; z: number; yaw: num
 /** Cars near tumbling bodies get a moving (kinematic) box collider from this pool. */
 const CAR_POOL = 10, CAR_NEAR = 14;
 
+/** The player above this height (m) never becomes a ragdoll. */
+const GIANT_H = 6;
+
 export class RagdollSystem {
   private entries: Entry[] = [];
   private byTarget = new Map<RagTarget, Entry>();
@@ -368,7 +371,9 @@ export class RagdollSystem {
   /** The player: knocked down by combat (downT), a hard landing. */
   private watchPlayer(): void {
     const P = this.d.player;
-    if (P.downT > 0 && this.playerDownT <= 0 && !this.byTarget.has(P)) {
+    // (Not a giant: a ragdoll many times life size tunnels through the ground and breaks the physics —
+    // a knocked-out giant goes down under the fade instead.)
+    if (P.downT > 0 && this.playerDownT <= 0 && !this.byTarget.has(P) && P.height <= GIANT_H) {
       const sk = Math.sqrt(P.k);
       this.knockout(P, { velocity: [P.vel.x, Math.max(P.vel.y, 0), P.vel.z], lie: Math.min(P.downT, 4 * sk), source: 'combat' });
     }
@@ -379,7 +384,7 @@ export class RagdollSystem {
   landed(impactSpeed: number): void {
     const P = this.d.player;
     const sk = Math.sqrt(P.k);
-    if (P.flying || P.landedLeap > 0 || impactSpeed < this.fallSpeed * sk || this.byTarget.has(P)) return;
+    if (P.flying || P.landedLeap > 0 || impactSpeed < this.fallSpeed * sk || this.byTarget.has(P) || P.height > GIANT_H) return;
     const f = Math.min(1, (impactSpeed / sk - this.fallSpeed) / 15);
     this.knockout(P, { velocity: [P.vel.x * 0.6, 1.2 * sk, P.vel.z * 0.6], lie: 1.5 + 2.5 * f, source: 'fall' });
   }

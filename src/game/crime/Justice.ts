@@ -30,6 +30,8 @@ export interface JusticeHost {
   pursue(level: number): void;
   /** A short hint / feedback line. */
   toast(html: string, kind: 'warn' | 'info' | 'karma'): void;
+  /** No karma in this game (sandbox): the lines leave the karma out. */
+  readonly noKarma?: boolean;
   sound(id: string, gain: number): void;
   /** A machine gone rogue (a threat): fair game, not property. */
   hostileThing?(ref: object): boolean;
@@ -135,7 +137,7 @@ export class Justice {
     this.heat += heat;
     if (karma < 0) H.karma(Math.round(karma), msg || 'misdeed');
     if (rep < 0) H.rep(rep, msg || 'misdeed');
-    if (msg && H.time - this.hurtT > 6) { this.hurtT = H.time; H.toast(`${msg} — people saw it (<b>${Math.round(karma)} karma</b>)`, 'warn'); }
+    if (msg && H.time - this.hurtT > 6) { this.hurtT = H.time; H.toast(`${msg} — people saw it${H.noKarma ? '' : ` (<b>${Math.round(karma)} karma</b>)`}`, 'warn'); }
     this.levelUp();
   }
 
@@ -212,7 +214,7 @@ export class Justice {
     const cost = JUSTICE.turnInBase + JUSTICE.turnInPer * this.wanted;
     H.karma(-cost, 'turned yourself in');
     H.rep(1, 'turned yourself in');
-    H.toast(`You turned yourself in — a fine of <b>${cost} karma</b>, and a clean slate`, 'info');
+    H.toast(H.noKarma ? 'You turned yourself in — a clean slate' : `You turned yourself in — a fine of <b>${cost} karma</b>, and a clean slate`, 'info');
     this.heat = 0;
     this.wanted = 0;
     this.unseen = 0;
@@ -226,7 +228,7 @@ export class Justice {
     const fine = JUSTICE.fineBase + JUSTICE.finePer * Math.max(1, this.wanted);
     H.karma(-fine, 'arrested');
     H.rep(-5, 'arrested');
-    H.toast(`Arrested — a night in a cell, a fine of <b>${fine} karma</b>`, 'warn');
+    H.toast(H.noKarma ? 'Arrested — a night in a cell' : `Arrested — a night in a cell, a fine of <b>${fine} karma</b>`, 'warn');
     this.heat = 0;
     this.wanted = 0;
     this.unseen = 0;
