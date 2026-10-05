@@ -669,7 +669,11 @@ every frame (`prof.threats`).
     they move, mode `rampage` — the battle model rings them (rifles ~230 m, APCs ~270, tanks ~330); units come in 420 m
     from the player on the city's side (`spawnPoint`), the artillery beyond them (`batteryAt`); a unit's slot is a street point with a line of sight to the player's body or head (tried round its side of
     the ring and nearer in, `sightSlot`: at street level the ring is mostly behind buildings); units holding beyond
-    their weapon's range of a player who has moved on go again after 5 s (`regroup`: a rifle squad waits for its truck).
+    their reach of a player who has moved on (`RAMPAGE.reach`: rifles 230 m, APCs 340, tanks 480 — in a city a gun
+    outranges its line of sight), or still on the way to a slot the player has long left, go again after 5 s (`regroup`:
+    a rifle squad waits for its truck); a unit blocked three volleys running re-slots away from where it stood and from
+    other units' spots (no convoy nose to tail down one street), and fires at whichever zone it sees, keeping the last.
+    While hostile the player's health regenerates at 20 % (`PlayerHealth.regenK`).
     The player's blows on the units are their own: vehicles crushed or wrecked, soldiers knocked down (the usual losses
     and morale), helicopters punched out of the sky (`Forces.struck`). Headless check (`simulatePlayerBattle`,
     selftest): a 20 m giant standing still goes down ~40 s after level 4 arrives, the ground forces doing about half (level 3 alone takes far longer); one walking

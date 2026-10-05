@@ -247,7 +247,7 @@ export class Forces {
     const ops = this.ops(fighting);
     if (S && this.view && (fighting || S.mode === 'retreat' || S.mode === 'sink')) {
       // (A target that goes where it likes: units it has left out of reach go again.)
-      if (S.chased && fighting) regroup(this.squads, this.view, RAMPAGE.regroupT);
+      if (S.chased && fighting) regroup(this.squads, this.view, RAMPAGE.regroupT, RAMPAGE.reach);
       stepForces(this.squads, this.view, S.route, dt, this.rng, () => {}, ops);
     } else this.leaveStep(dt, ops);
     this.soldierStep(dt);
@@ -492,6 +492,7 @@ export class Forces {
     const snap = (px: number, pz: number) => (u.kind === 'rifles' ? this.street(px, pz, 60, 4) : this.street(px, pz, 80));
     const ax = x - S.x, az = z - S.z, R = Math.hypot(ax, az) || 1, a0 = Math.atan2(az, ax);
     const W = FORCE[u.kind].weapon, danger = FORCE[u.kind].danger;
+    const reach = Math.min(W?.range ?? 1e9, RAMPAGE.reach[u.kind] ?? 1e9) * 0.95;
     const head = S.zones.find((zz) => zz.id === 'head') ?? S.zones[0], torso = S.zones.find((zz) => zz.id === 'torso') ?? head;
     const eye = u.kind === 'tank' ? 2.4 : u.kind === 'rifles' ? 1.5 : 2.6;
     // Not where it stood without a line, and not on top of another unit (a convoy parked nose to tail
@@ -505,12 +506,12 @@ export class Forces {
     }
     const free = (p: { x: number; z: number }) => (!moved || Math.hypot(p.x - ux, p.z - uz) > 20) && !taken.some((t) => Math.hypot(t.x - p.x, t.z - p.z) < 16);
     for (const k of SLOT_R) {
-      const r = Math.max(danger + 25, R * k);
-      if (W && r > W.range * 0.95) continue;
+      const r = Math.max(danger + 25, Math.min(R, reach) * k);
+      if (r > reach) continue;
       for (const da of SLOT_A) {
         const p = snap(S.x + Math.cos(a0 + da) * r, S.z + Math.sin(a0 + da) * r);
         const d = Math.hypot(p.x - S.x, p.z - S.z);
-        if (d < danger + 10 || (W && d > W.range * 0.95) || !free(p)) continue;
+        if (d < danger + 10 || d > reach || !free(p)) continue;
         const y = g.world.groundHeight(p.x, p.z) + eye;
         this.stats.rays++;
         if (g.sight.clear(p.x, y, p.z, torso.x, torso.y, torso.z, torso.r) || g.sight.clear(p.x, y, p.z, head.x, head.y, head.z, head.r)) return p;
@@ -794,7 +795,7 @@ export class Forces {
     // Targeted: a clear line from the helicopter to the part it goes for, or the run is held (the rockets kept).
     const z0 = (hits[0]?.zone ?? S.zones[0]) as ThreatZone;
     this.stats.rays++;
-    if (!this.g.sight.clear(from.x, from.y - 0.4, from.z, z0.x, z0.y, z0.z, z0.r)) { this.stats.held++; u.ammo++; return true; }
+    if (!this.g.sight.clear(from.x, from.y - 0.4, from.z, z0.x, z0.y, z0.z, z0.r)) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.ammo++; return true; }
     q.fired++;
     this.stats.volleys++;
     const cam = this.g.renderer.camera.position;

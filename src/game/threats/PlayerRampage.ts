@@ -200,6 +200,8 @@ export class PlayerRampage implements ThreatEvent, ArmyFoe {
     this.body.update(dt);
     if (!this.active) return;
     this.path();
+    // (Under fire from the army: no catching one's breath — health comes back slowly.)
+    this.g.crime.health.regenK = RAMPAGE.regenK;
     // Brought down: taken into custody.
     if (this.g.crime.health.down) this.end('stopped');
   }
@@ -209,6 +211,7 @@ export class PlayerRampage implements ThreatEvent, ArmyFoe {
     this.active = false;
     this.outcome = outcome;
     this.body.on = false;
+    this.g.crime.health.regenK = 1;
   }
 
   /** The response gives up on it (dev: threat.stop): it is over. */

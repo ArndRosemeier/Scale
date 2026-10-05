@@ -17,7 +17,7 @@
  *    walking away — the army rings it, follows it, and wears a passive one down in a bounded time.
  */
 import { Rng } from '../../core/rng';
-import { ARMY, FORCE, levelSquads, regroup, stepForces, type MonsterView, type PathView, type Squad, type ZoneView } from '../response/forces/BattleModel';
+import { ARMY, FORCE, levelSquads, regroup, stepForces, type ForceKind, type MonsterView, type PathView, type Squad, type ZoneView } from '../response/forces/BattleModel';
 
 export const RAMPAGE = {
   /** A giant: the player at least this tall (m; THREATS_PLAN size tier T2 and up). */
@@ -45,6 +45,10 @@ export const RAMPAGE = {
   radius: 40, radiusK: 2,
   /** Units holding out of reach of a moving player go again after this long (s). */
   regroupT: 5,
+  /** The player's health regeneration while the army is after them (share of the normal rate). */
+  regenK: 0.2,
+  /** How near the ground units close in (m): in a city a gun outranges its line of sight. */
+  reach: { rifles: 230, apc: 340, tank: 480 } as Partial<Record<ForceKind, number>>,
 };
 
 /** What a ledger entry of the player's adds to the fury. */
@@ -231,7 +235,7 @@ export function simulatePlayerBattle(seed: number, opts: { maxT?: number; dt?: n
   for (t = 0; t < maxT; t += dt) {
     if (!l4 && t >= l4At) { l4 = true; squads.push(...levelSquads(4, spawn)); }
     if (opts.walk && t > maxT / 2) { P.x += opts.walk * dt; playerPath(path, cx, cz, P.x, P.z); }
-    regroup(squads, view, RAMPAGE.regroupT);
+    regroup(squads, view, RAMPAGE.regroupT, RAMPAGE.reach);
     stepForces(squads, view, path, dt, fire, (u, d) => { dealtBy[u.kind] = (dealtBy[u.kind] ?? 0) + d; if (t > maxT / 2 && (u.kind === 'rifles' || u.kind === 'apc' || u.kind === 'tank')) late += d; });
     if (hp <= 0 && koT < 0) { koT = t; if (!opts.walk) break; hp = opts.hp ?? RAMPAGE.hp; }
     const now: Record<string, number> = {};
