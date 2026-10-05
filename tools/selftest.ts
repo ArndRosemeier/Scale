@@ -56,6 +56,10 @@ import * as THREE from 'three';
 import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
 import { intersection } from '../src/core/clip';
 import { readFileSync, existsSync } from 'node:fs';
+import { nameOf, traitsOf, temperamentOf, jobOf, interestOf, moodOf, moodWord, TEMPERAMENTS, type Temperament } from '../src/game/people/identity';
+import { pickLine, ruleAnswer, fill, dirWord, type TalkFacts } from '../src/game/people/talk';
+import { LINES, CHAT, type Topic } from '../src/game/people/lines';
+import { PEOPLE, newKnown, applyDeed, remember, opinionOf, savePeople, restorePeople, addSaid } from '../src/game/people/memory';
 import { rescueAllowed, pickHospital, hospitalFit, planFlight, flightAt, wardInside, wardExit, hospitalName, padSpot, WARD, type HospitalCandidate } from '../src/game/defeat/rules';
 
 let failures = 0;
@@ -2713,6 +2717,89 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     check(up <= 0.31 && down < 0.31 && blocked === 0 && Math.abs(y - lm.base) < 0.05 && !!S.insideAt(x, y + 1, z),
       `seed ${seed} size ${size}: walk in to the ${lm.kind} (steps up to ${up.toFixed(2)} m, drops ${down.toFixed(2)} m, ${blocked} blocked, floor ${(y - lm.base).toFixed(2)} m)`);
   }
+}
+
+
+// People (NPC_PERSONALITY_PLAN phase 1): names, personalities, talk lines, memory.
+{
+  const t0 = performance.now();
+  const terrain = new Terrain(makeProfile({ seed: 7, size: 0.4 }));
+  const macro = buildMacroPlan(terrain);
+  const pop = new Population(macro, 7);
+  // (Synthetic citizens are never workers: every other one gets a workplace, as workersOf would.)
+  const cits = Array.from({ length: 3000 }, (_, i) => { const c = pop.synthetic(1000 + i * 7919); return i % 2 && c.role !== 0 ? { ...c, role: 3, work: { ...c.home, kind: 'work' as const } } : c; });
+  const same = cits.slice(0, 50).every((c) => nameOf(c).full === nameOf({ ...c }).full && nameOf(c).full === nameOf(pop.synthetic(1000 + cits.indexOf(c) * 7919)).full && temperamentOf(traitsOf(c)) === temperamentOf(traitsOf(pop.synthetic(c.seed))));
+  check(same, 'people: the same person has the same name and temperament every time');
+  const names = new Set(cits.map((c) => nameOf(c).full));
+  check(names.size > cits.length * 0.7, `people: names vary (${names.size} different of ${cits.length})`);
+  const tally: Record<string, number> = {};
+  for (const c of cits) { const t = temperamentOf(traitsOf(c)); tally[t] = (tally[t] ?? 0) + 1; }
+  const rare = TEMPERAMENTS.filter((t) => (tally[t] ?? 0) < cits.length * 0.02);
+  check(rare.length === 0, `people: every temperament is common enough (${TEMPERAMENTS.map((t) => `${t} ${tally[t] ?? 0}`).join(', ')})`);
+  check(TEMPERAMENTS.every((t) => Array.isArray(CHAT[t])), 'people: small talk for every temperament');
+  // Every topic answers for everybody in every situation, with every token filled in.
+  const topics: Topic[] = ['hello', 'mood', 'job', 'news', 'way', 'me', 'bye'];
+  let none = 0, raw = 0, n = 0;
+  const seen: Record<string, Set<string>> = {};
+  const rng = new MRng(99);
+  for (const c of cits.slice(0, 400)) {
+    const traits = traitsOf(c);
+    const temper = temperamentOf(traits) as Temperament;
+    const job = jobOf(c, rng.pick(['downtown', 'industrial', 'port', 'oldtown', 'commercial'] as const));
+    const trouble = rng.chance(0.2) ? rng.float() : 0;
+    const opinion = rng.range(-100, 100);
+    const weather = rng.pick(['clear', 'fair', 'rain', 'storm', 'fog']);
+    const hour = rng.range(0, 24);
+    const mood = moodOf(c, traits, { day: rng.int(0, 9), hour, weather, trouble, opinion });
+    const nm = nameOf(c);
+    const met = rng.chance(0.5) ? rng.int(1, 5) : 0;
+    const f: TalkFacts = {
+      first: nm.first, last: nm.last, full: nm.full, years: Math.round(c.age * 100), child: c.role === 0, senior: c.age >= 0.66,
+      traits, temper, job, interest: interestOf(c), mood, moodWord: moodWord(mood, trouble), met,
+      deed: met ? rng.pick([null, 'helped', 'saved', 'hurt'] as const) : null, days: met ? rng.range(0, 6) : 0, opinion, hour, weather, trouble,
+      threat: rng.chance(0.2), street: rng.chance(0.8) ? 'Linden Street' : null, metStreet: rng.chance(0.5) ? 'Oak Avenue' : null, city: 'Port Ashford',
+      group: rng.chance(0.4) ? 'The Harbour Kings' : null, boss: rng.chance(0.5) ? 'Rook Malone' : null, giant: rng.chance(0.1),
+      place: 'Linden Square station', dir: dirWord(rng.range(-1, 1), rng.range(-1, 1)), dist: rng.range(100, 4000),
+    };
+    if (!f.group) f.boss = null;
+    for (const tp of topics) {
+      const p = ruleAnswer({ topic: tp, facts: f, seed: c.seed + n, used: new Set() });
+      n++;
+      if (p.text === '…') none++;
+      if (/[{}]/.test(p.text)) raw++;
+      (seen[tp] ??= new Set()).add(p.id);
+    }
+  }
+  check(none === 0 && raw === 0, `people: every topic has a line for everybody (${none} without, ${raw} with unfilled tokens, of ${n})`);
+  const unused = topics.flatMap((tp) => LINES[tp].filter((e) => ![...seen[tp]].some((id) => id.split(' ').some((x) => x.startsWith(`${e.id}#`)))).map((e) => e.id));
+  check(unused.length <= 6, `people: almost every line gets said by someone (${unused.length} never: ${unused.join(' ')})`);
+  // The most specific line wins; a person does not repeat themselves.
+  const base = { first: 'Ann', last: 'Lee', full: 'Ann Lee', years: 40, child: false, senior: false, traits: { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 }, job: { kind: 'office' as const, title: 'office worker' }, interest: 'chess', mood: 0, moodWord: 'fine' as const, days: 0, opinion: 0, hour: 12, weather: 'fair', trouble: 0, threat: false, street: 'Elm Street', metStreet: 'Elm Street', city: 'X', group: null, boss: null, giant: false };
+  const helped = pickLine('hello', { ...base, temper: 'grumpy', met: 2, deed: 'helped' }, 1);
+  check(helped.id.startsWith('h21#'), `people: someone you helped up greets you for it (${helped.id}: ${helped.text})`);
+  const used = new Set<string>();
+  const said: string[] = [];
+  for (let i = 0; i < 3; i++) { const p = pickLine('news', { ...base, temper: 'steady', met: 0, deed: null }, 5 + i, used); said.push(p.text); used.add(p.id); }
+  check(new Set(said).size === said.length, `people: no repeats while there is something new to say (${said.join(' | ')})`);
+  check(fill('{ATitle}, {aTitle}, {Group}.', { ...base, temper: 'kind', met: 0, deed: null, job: { kind: 'office', title: 'office worker' }, group: 'the Kings' }) === 'An office worker, an office worker, The Kings.', 'people: tokens with articles and capitals');
+  check(dirWord(0, -1) === 'north' && dirWord(1, 0) === 'east' && dirWord(-1, 1) === 'south-west', 'people: compass words (north is −z, as on the map)');
+  // Memory: a small cap; the one you care least about is forgotten; saves round-trip.
+  const list = cits.slice(0, PEOPLE.cap).map((c, i) => { const k = newKnown(c, nameOf(c).full, i, 0, 0, null); applyDeed(k, 'talked', i, null); return k; });
+  applyDeed(list[0], 'helped', 30, 'Elm Street');
+  const all: typeof list = [];
+  for (const k of list) remember(all, k, 30);
+  const extra = newKnown(cits[PEOPLE.cap], 'New One', 40, 0, 0, null);
+  const gone = remember(all, extra, 40);
+  check(all.length === PEOPLE.cap && !!gone && gone !== list[0] && gone !== extra && all.includes(list[0]), `people: at most ${PEOPLE.cap} remembered, the least important forgotten (${gone?.name})`);
+  check(opinionOf(list[0], 0, 0.5) > 20 && opinionOf({ talks: 0, helped: 0, saved: 0, hurt: 2 }, 0, 0.5) < -40 && opinionOf(null, 80, 1) > opinionOf(null, 80, 0), 'people: opinion from deeds and reputation (agreeable people go by reputation more)');
+  addSaid(list[0], 'h1#0 i0#1');
+  const back = restorePeople(JSON.parse(JSON.stringify(savePeople(all))));
+  check(back.length === all.length && back[0].name === all[0].name && back[0].cit.seed === all[0].cit.seed && back[0].deed === 'helped' && back[0].said.join() === 'h1#0,i0#1' && back[0].cit.home.cell === all[0].cit.home.cell,
+    'people: the people you met survive a save');
+  check(restorePeople({ people: [{ cit: { id: 1 } }, 'junk', null] }).length === 0 && restorePeople(null).length === 0, 'people: a damaged list loads empty, not broken');
+  const st = pop.stateAt(list[0].cit, 30);
+  check(!!(st.stay || st.trip), 'people: a remembered person is somewhere on their day plan');
+  console.log(`people: ${TEMPERAMENTS.length} temperaments, ${topics.reduce((s, t) => s + LINES[t].length, 0)} line rules, ${n} answers in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

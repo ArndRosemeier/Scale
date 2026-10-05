@@ -100,6 +100,7 @@ import type { SaveData } from './save/model';
 import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
 import { Defeat } from './defeat/Defeat';
 import { MedFleet } from './defeat/MedDrones';
+import { People } from './people/People';
 
 export class Game {
   readonly renderer: Renderer;
@@ -200,6 +201,8 @@ export class Game {
   /** Power cores (Normal mode only). */
   cores: PowerCores | null = null;
   deeds!: Deeds;
+  /** The city's people as individuals: names, personalities, talking (E), who remembers you (game/people). */
+  people!: People;
   powerHud!: PowerHud;
   powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
@@ -473,6 +476,7 @@ export class Game {
     this.defeat = new Defeat(this);
     {
       const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
+      if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
       if (dev) dev.defeat = { status: () => this.defeat.status(), down: (kind?: Parameters<Defeat['down']>[0]) => this.defeat.down(kind), rep: (v: number) => { this.crime.rep.add(v - this.crime.rep.value, 'dev'); return this.crime.rep.value; } };
     }
     this.saves = new SaveSystem(this);
@@ -588,7 +592,7 @@ export class Game {
       else if (this.freeCam) this.updateFreeCam(dt);
       else if (this.defeat.drives) { /* the defeat's scene moves the body and the camera (below) */ }
       else {
-        this.abilities.enabled = !this.powers.open && !this.map.open;
+        this.abilities.enabled = !this.powers.open && !this.map.open && !this.people.talking;
         this.abilities.preUpdate(dt, this.input);
         this.defeat.gate();
         this.player.update(dt, this.input, this.camRig.yaw, this.camRig.pitch);
@@ -626,6 +630,7 @@ export class Game {
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
     this.T('street', () => this.street?.update(dt));
+    this.T('people', () => this.people?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
     this.T('army', () => { this.hostile.update(dt); this.forces.update(dt); });
@@ -780,7 +785,8 @@ export class Game {
       const dx = p.pos.x - a.x, dz = p.pos.z - a.z;
       const d = Math.hypot(dx, dz);
       const rr = pr + 0.25;
-      if (d >= rr || d < 1e-4) continue;
+      // (!(d < rr): a person at a non-finite spot must not drag the hero there too.)
+      if (!(d < rr) || d < 1e-4) continue;
       const nx = dx / d, nz = dz / d, pen = rr - d;
       const am = 70;
       const wp = am / (am + pm), wa = pm / (am + pm);
@@ -937,6 +943,8 @@ export class Game {
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
     this.slimeRealm = new SlimeRealm(this);
+    this.people = new People(this);
+    this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)
     if (!this.pendingSave && !OriginIntro.wanted(this)) setTimeout(() => toast(normal
@@ -1037,6 +1045,8 @@ export class Game {
     const slime = this.slimeRealm?.hint();
     if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';
+    const talk = this.people?.hint();
+    if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
     const p = this.player.pos;
     // Manholes are climbed from the sewers only (not from metro halls, passages or trains).
@@ -1074,6 +1084,8 @@ export class Game {
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Sit down on a bench or café chair in reach, or get up again.
     if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }
+    // Talk to the person in front (or the one targeted).
+    if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();
     if (seat) { this.player.sitOn(seat.x, seat.z, seat.yaw); this.input.pressed.delete('KeyE'); return; }
     const p = this.player.pos;

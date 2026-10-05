@@ -250,6 +250,19 @@ export class Pedestrians {
   private lastPz = 0;
   setPlayer(x: number, z: number): void { this.lastPx = x; this.lastPz = z; }
 
+  /** The agent of a citizen, while they are out and about near the player (or null). */
+  agentOf(citId: number): PedAgent | null {
+    return this.byId.get(citId) ?? null;
+  }
+
+  /** Where a place is: its building's door while the cell is loaded, else the cell's centre (null: unknown cell). */
+  placeSpot(p: PlaceRef): { x: number; z: number; exact: boolean } | null {
+    const ref = this.resolve(p);
+    if (ref) { const d = doorOf(ref.desc); return { x: d.x, z: d.z, exact: true }; }
+    const c = this.macro.cells[p.cell]?.centroid;
+    return c ? { x: c[0], z: c[1], exact: false } : null;
+  }
+
   /** Resolve a place to a concrete building in a loaded cell (or null). */
   private resolve(p: PlaceRef): BuildingRef | null {
     const cs = this.streamer.cells.get(p.cell);

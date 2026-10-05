@@ -1212,6 +1212,20 @@ as distance LOD).
   fallbacks.
 * Weather layers (rain light / heavy, gusts) and thunder: see "Weather".
 
+### People (`src/game/people`, `src/ui/TalkUi.ts`)
+
+Everyone is an individual (docs/NPC_PERSONALITY_PLAN.md). `identity.ts` derives name, Big Five traits (neuroticism =
+`Citizen.nerve`, openness = `Citizen.curiosity`), temperament, job (by the workplace's district), hobby and the day's
+mood from the citizen's seed: nothing is stored for people never met. `lines.ts` holds the talk rules (criteria + ways
+to say it, Valve dynamic-dialog style) and the temperament small talk Barks uses; `talk.ts` picks the most specific
+matching line, avoids repeats, fills tokens, and defines `TalkBackend` (rules now, a language model later).
+`memory.ts` keeps the people met (cap 24, lowest keep score forgotten; the whole `Citizen` is kept so
+`Population.stateAt` finds them anywhere), opinion = own deeds + reputation × agreeableness, save sanitising.
+`People.ts` ties it to the game: E talks (Game.manholeKey, after standing up from a seat; `TALK_OWNER` actor faces
+the hero), Deeds.onHelped and Reactions.onKnockDown feed memory, known people greet you as you pass, the `people` map
+layer draws `faint` dots (live agent, else the day plan's place via `Pedestrians.placeSpot`). Kept per city in
+localStorage (`scale.people.v1.*`) and in saves (`SaveData.people`). `dev.people.list()` / `.forget()`.
+
 ### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
 * Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the
   minimap's edge when out of view; cleared on arrival); travel by clicking is a sandbox feature.
