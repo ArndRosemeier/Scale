@@ -176,7 +176,10 @@ void landUse(inout vec4 a, inout vec4 nn, vec4 g, vec4 d, vec4 gn, vec4 dn, floa
   float big = fbm2(vWPos.xz * 0.0021 + 3.7);
   // Meadow: the grass, lusher or drier in large patches; banks lush.
   vec3 meadow = g.rgb * mix(vec3(1.08, 1.02, 0.72), vec3(0.86, 1.08, 0.82), big);
-  vec3 bank = g.rgb * vec3(0.82, 1.08, 0.74);
+  // From afar the grass texture averages out far darker than the crops round it (clearings round
+  // villages and farms read as smudged shadows): ease towards a pasture green.
+  meadow = mix(meadow, ${srgb(0.4, 0.5, 0.22)} * mix(0.88, 1.08, big), smoothstep(40.0, 320.0, camD) * 0.85);
+  vec3 bank = meadow * vec3(0.9, 1.04, 0.86);
   // Forest: litter and moss up close, canopy colour from afar.
   float moss = smoothstep(0.35, 0.65, fbm2(vWPos.xz * 0.09 + 11.0) + (n - 0.5) * 0.4);
   vec3 floorC = mix(d.rgb * vec3(0.6, 0.5, 0.38), g.rgb * vec3(0.62, 0.78, 0.42), moss);

@@ -178,12 +178,13 @@ export class LandUse {
     const n = this.noise;
     // River banks: green strip, no fields, a ragged forest edge.
     const w = this.terrain.water(x, z, this.wq);
-    let dw = w.river >= 0 ? w.d - w.halfWidth : Infinity;
-    // Lake shores count as banks too.
+    const dr = w.river >= 0 ? w.d - w.halfWidth : Infinity;
+    // Lake shores count as banks too, with a narrower green strip (a wide one reads as a dark ring).
     const lq = this.terrain.lakeAt(x, z);
-    if (lq.lake >= 0) dw = Math.min(dw, Math.max(0, lq.e));
+    const dl = lq.lake >= 0 ? Math.max(0, lq.e) : Infinity;
+    const dw = Math.min(dr, dl);
     out.water = dw;
-    out.bank = 1 - smoothstep(4, 35, dw);
+    out.bank = Math.max(1 - smoothstep(4, 35, dr), 1 - smoothstep(2, 12, dl));
     // Forest: large warped patches, preferring slopes, thinning towards the city.
     const wx = x + 650 * n.n2(x / 4100, z / 4100), wz = z + 650 * n.n2(x / 4100 + 19.3, z / 4100 - 7.1);
     let f = n.fbm2(wx / 2300, wz / 2300, 4) * 0.5 + 0.5;

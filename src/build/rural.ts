@@ -11,6 +11,7 @@ import { MeshBuilder } from './meshBuilder';
 import { drapeShape, groundSpecs, GroundLayer } from './ground';
 import { buildBuildingShell, facadeSpecs } from './buildingShell';
 import { minAreaRect } from '../core/geom2';
+import { TERRAIN_DROP } from './terrainMesh';
 
 /** Per building box for collision: cx, cz, hu, hv, ux, uz, y0, y1. */
 export const RURAL_OBST_STRIDE = 8;
@@ -83,7 +84,11 @@ export function buildRuralTile(plan: RuralPlan, terrain: Terrain, x0: number, z0
   for (const st of plan.settlements) {
     if (!in_(st.x, st.z)) continue;
     const L = plan.layout(st.id);
-    for (const p of L.paved) drapeShape(gb, { outer: p.poly, holes: [] }, terrain, st.kind === SettleKind.Farm ? 0.045 : 0.075, p.layer, undefined, 6);
+    for (const p of L.paved) {
+      const dy = st.kind === SettleKind.Farm ? 0.045 : 0.075;
+      drapeShape(gb, { outer: p.poly, holes: [] }, terrain, dy, p.layer, undefined, 6);
+      skirt(gb, terrain, p.poly, dy, p.layer);
+    }
     for (const b of L.buildings) {
       const info = buildBuildingShell(fb, b, e0, terrain, 0, 'shell');
       e0 += info.elemCount;
@@ -98,6 +103,36 @@ export function buildRuralTile(plan: RuralPlan, terrain: Terrain, x0: number, z0
     facadeLod: fl.empty ? null : fl,
     obstacles: Float32Array.from(obst),
   };
+}
+
+/**
+ * A lip round a draped area (counter-clockwise outline): slopes from its surface down under the
+ * terrain mesh a little way out, so the edge does not show as a raised slab from the side.
+ */
+function skirt(mb: MeshBuilder, T: Terrain, poly: number[], dy: number, layer: number): void {
+  const W = 1.6, DOWN = TERRAIN_DROP + 0.12;
+  const n = poly.length >> 1;
+  mb.set('aLayer', layer);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = poly[i * 2], az = poly[i * 2 + 1], bx = poly[j * 2], bz = poly[j * 2 + 1];
+    // Outward normals at both ends (averaged with the neighbouring edges: no gaps at the corners).
+    const nrm = (k: number): [number, number] => {
+      const p = (k + n - 1) % n, q = (k + 1) % n;
+      let ux = poly[k * 2] - poly[p * 2], uz = poly[k * 2 + 1] - poly[p * 2 + 1], vx = poly[q * 2] - poly[k * 2], vz = poly[q * 2 + 1] - poly[k * 2 + 1];
+      const lu = Math.hypot(ux, uz) || 1, lv = Math.hypot(vx, vz) || 1;
+      ux /= lu; uz /= lu; vx /= lv; vz /= lv;
+      const ox = uz + vz, oz = -ux - vx, l = Math.hypot(ox, oz) || 1;
+      return [ox / l, oz / l];
+    };
+    const [anx, anz] = nrm(i), [bnx, bnz] = nrm(j);
+    const base = mb.vcount;
+    const pts = [[ax, az, dy], [bx, bz, dy], [bx + bnx * W, bz + bnz * W, -DOWN], [ax + anx * W, az + anz * W, -DOWN]];
+    for (const [x, z, d] of pts) mb.v(x, T.height(x, z) + d, z, 0, 1, 0, x, z);
+    // Faces up: clockwise in x/z as in drapeShape (the outline runs counter-clockwise, the lip outside it).
+    mb.tri(base, base + 1, base + 2);
+    mb.tri(base, base + 2, base + 3);
+  }
 }
 
 /** A draped ribbon from a to b: three vertices across (follows the cross slope), uv = world x/z. */

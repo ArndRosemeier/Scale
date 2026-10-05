@@ -26,7 +26,7 @@ export interface Lake {
   /** Long axis angle and aspect (long / short, ≥ 1). */
   angle: number;
   aspect: number;
-  /** Shore lobes: amplitude, phase per harmonic 2, 3, 5. */
+  /** Shore lobes: amplitude, phase per harmonic 2, 3, 5, 8. */
   lobes: number[];
   /** Water level (absolute y). */
   level: number;
@@ -47,7 +47,7 @@ export interface LakeQuery {
 }
 
 const LAKE_CELL = 1024;
-const LAKE_HARM = [2, 3, 5];
+const LAKE_HARM = [2, 3, 5, 8];
 
 export interface River {
   /** Centerline, resampled ~12 m. */
@@ -167,8 +167,9 @@ export class Terrain {
       const x = (i + r.range(0.15, 0.85)) * G, z = (j + r.range(0.15, 0.85)) * G;
       const big = r.chance(0.15);
       const rad = big ? r.range(420, 780) : 90 + 330 * r.float() * r.float();
-      const aspect = r.range(1, big ? 2.2 : 1.7), angle = r.range(0, Math.PI);
-      const lobes = LAKE_HARM.flatMap((_, k) => [r.range(0, 0.16 / (k + 1)), r.range(0, Math.PI * 2)]);
+      // Never round: stretched, with bays and points (no lobe set left near zero).
+      const aspect = r.range(1.25, big ? 2.3 : 1.9), angle = r.range(0, Math.PI);
+      const lobes = LAKE_HARM.flatMap((_, k) => [r.range(0.07, 0.17) / (k + 1), r.range(0, Math.PI * 2)]);
       const reach = rad * 1.45 + 60 + rad * 0.3;
       if (Math.hypot(x, z) < this.protectR + BLEND_BAND + reach + 300) continue;
       if (Math.max(Math.abs(x), Math.abs(z)) > W - reach - 1500) continue;
@@ -183,7 +184,8 @@ export class Terrain {
       const c = Math.cos(angle), s = Math.sin(angle);
       for (let k = 0; k < 16; k++) {
         const a = (k / 16) * Math.PI * 2;
-        const u = Math.cos(a) * rad * 1.15, v = (Math.sin(a) * rad * 1.15) / aspect;
+        const rr = this.lakeRadius({ r: rad, lobes } as Lake, a) * 1.12;
+        const u = Math.cos(a) * rr, v = (Math.sin(a) * rr) / aspect;
         rim.push(this.height(x + u * c - v * s, z + u * s + v * c));
       }
       const lo = Math.min(...rim), hi = Math.max(...rim);
@@ -771,7 +773,10 @@ export class Terrain {
         if (q.e < L.shore) {
           // (The terrain mesh is drawn TERRAIN_DROP lower: the drawn shore meets the water a few metres in.)
           const top = L.level + 0.5;
-          h = q.e >= 0 ? lerp(top, h, smoothstep(0, L.shore, q.e)) : top - (0.5 + L.depth) * smoothstep(0, clamp(L.r * 0.3, 12, 90), -q.e);
+          // Inside, the bed drops off from the shoreline at once (no flat lip the water would
+          // cross in jagged steps on the coarse far terrain), then levels out.
+          const t = Math.min(1, -q.e / clamp(L.r * 0.3, 12, 90));
+          h = q.e >= 0 ? lerp(top, h, smoothstep(0, L.shore, q.e)) : top - (0.5 + L.depth) * t * (2 - t);
         }
       }
     }

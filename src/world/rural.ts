@@ -81,7 +81,7 @@ const SB = 512;
 const key = (i: number, j: number) => (i + 32768) * 65536 + (j + 32768);
 
 /** Ground layers used here (kept in sync with build/ground GroundLayer). */
-const L_ASPHALT = 0, L_PLAZA = 4, L_COBBLE = 5, L_GRAVEL = 6;
+const L_ASPHALT = 0, L_PLAZA = 4, L_COBBLE = 5, L_GRAVEL = 6, L_DIRT = 11;
 
 interface Node { x: number; z: number; settle: number; junction: number; dirs: number[]; gate: boolean; trim: number }
 
@@ -154,7 +154,7 @@ export class RuralPlan {
       const s = this.settlements[id];
       if (s.kind === SettleKind.Farm) {
         const [u, v] = this.toFrame(s, x, z);
-        c = Math.max(c, 1 - smoothstep(4, 14, Math.max(Math.abs(u) - s.hu, Math.abs(v) - s.hv)));
+        c = Math.max(c, 1 - smoothstep(1, 6, Math.max(Math.abs(u) - s.hu, Math.abs(v) - s.hv)));
         const o = s.orchard;
         if (o) c = Math.max(c, 1 - smoothstep(1, 6, Math.max(o[0] - u, u - o[2], o[1] - v, v - o[3])));
       } else {
@@ -168,8 +168,9 @@ export class RuralPlan {
           const t = l2 > 0 ? clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1) : 0;
           ds = Math.min(ds, Math.hypot(ax + dx * t - x, az + dz * t - z));
         }
-        const depth = s.kind === SettleKind.Town ? 48 : 40;
-        c = Math.max(c, (1 - smoothstep(depth, depth + 22, ds)) * (1 - smoothstep(s.r * 1.02, s.r * 1.22, d)));
+        // (Narrow edges: the grass of a wide fade reads as a dark smudge on the fields from afar.)
+        const depth = s.kind === SettleKind.Town ? 34 : 30;
+        c = Math.max(c, (1 - smoothstep(depth, depth + 8, ds)) * (1 - smoothstep(s.r, s.r * 1.1, d)));
       }
       if (c >= 1) break;
     }
@@ -776,16 +777,28 @@ export class RuralPlan {
   private barnDesc(r: Rng, id: number, poly: Poly, front: number): BuildingDesc {
     const a = this.terrain.profile.arch;
     const walls = a.american > a.oldWorld ? [WallMat.WoodSiding, WallMat.WoodSiding, WallMat.BrickRed, WallMat.MetalPanel] : [WallMat.BrickRed, WallMat.Plaster, WallMat.Timber, WallMat.WoodSiding, WallMat.BrickBrown];
-    return this.desc(r, id, poly, front, 'warehouse', { floors: 1, roof: 'gable', pitch: r.range(0.45, 0.8), floorH: r.range(5.5, 7.5), walls, roofMats: [RoofMat.Metal, RoofMat.ClayTile, RoofMat.Slate, RoofMat.Asphalt], use: 'industrial' });
+    const d = this.desc(r, id, poly, front, 'warehouse', { floors: 1, roof: 'gable', pitch: r.range(0.45, 0.8), floorH: r.range(5.5, 7.5), walls, roofMats: [RoofMat.Metal, RoofMat.ClayTile, RoofMat.Slate, RoofMat.Asphalt], use: 'industrial' });
+    // Few, widely spaced openings: a barn, not a hall full of windows.
+    d.bay = r.range(8, 11);
+    return d;
   }
 
   private farmLayout(s: Settlement): SettlementLayout {
     const r = new Rng(deriveSeed(s.seed, 'layout'));
     const out: SettlementLayout = { buildings: [], boxes: [], paved: [] };
     const c = Math.cos(s.angle), n = Math.sin(s.angle);
+    // The yard: trodden earth or gravel between the buildings, rounded and a little uneven at the edge.
     const yard: number[] = [];
-    for (const [u, v] of [[-s.hu, -s.hv], [s.hu, -s.hv], [s.hu, s.hv], [-s.hu, s.hv]]) yard.push(...this.fromFrame(s, u, v));
-    out.paved.push({ poly: ensureCCW(yard), layer: L_GRAVEL });
+    const yu = s.hu - 2.5, yv = s.hv - 2.5, rc = 7;
+    for (let q = 0; q < 4; q++) {
+      const su = q === 0 || q === 3 ? 1 : -1, sv = q < 2 ? 1 : -1;
+      for (let k = 0; k <= 4; k++) {
+        const a = ((q + k / 4) * Math.PI) / 2;
+        const j = r.range(-1, 1);
+        yard.push(...this.fromFrame(s, su * (yu - rc) + Math.cos(a) * (rc + j), sv * (yv - rc) + Math.sin(a) * (rc + j)));
+      }
+    }
+    out.paved.push({ poly: ensureCCW(yard), layer: r.chance(0.6) ? L_DIRT : L_GRAVEL });
     // Frame-aligned boxes: (u, v) centre, half extents along u and v, front direction in the frame.
     const put = (u: number, v: number, hu: number, hv: number, fu: number, fv: number, mk: (poly: Poly, front: number) => BuildingDesc) => {
       const [cx, cz] = this.fromFrame(s, u, v);

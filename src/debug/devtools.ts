@@ -44,6 +44,13 @@ export function installDevtools(game: Game): void {
         dev.look(s.x + Math.cos(yaw) * dist, y + h, s.z + Math.sin(yaw) * dist, s.x, y + 5, s.z);
         return { name: s.name, kind: ['hamlet', 'village', 'town', 'farm'][s.kind] };
       },
+      /** Free camera looking at lake `i` from `dist` m beyond its shore and `h` m above the water. */
+      lookLake(i: number, dist = 150, h = 25, yaw = 0.6) {
+        const L = game.terrain.lakes[i];
+        const d = L.r + dist;
+        dev.look(L.x + Math.cos(yaw) * d, L.level + h, L.z + Math.sin(yaw) * d, L.x, L.level, L.z);
+        return { r: Math.round(L.r), level: L.level };
+      },
       stats: () => game.rural.stats,
     },
     /** Blast the ground floor of a building on one side; camera at a distance. */
