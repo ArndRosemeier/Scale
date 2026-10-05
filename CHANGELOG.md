@@ -2,9 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.029 — 2026-10-05
+## 0.030 — 2026-10-05
 
 - **Laser eyes look stronger**: thicker beams with a white-hot core inside a pulsing red halo, a flare at each eye, a bigger glow where they hit, twice the sparks, molten drips and more smoke. Damage, reach and energy cost are unchanged.
+
+## 0.029 — 2026-10-05
+
+- **Villain groups, second step**: the street gang now runs its own rackets. Its collectors lean on shopkeepers in their doorways for protection money, and **taggers** spray the gang's emblem and name on walls (with a hiss of the can and a lookout now and then). Both happen only in the gang's turf.
+- **Tags stay on the walls** when nobody stops them; caught in the act, the tagger runs and the half-done tag is never finished.
+- **Your work changes the map**: stopping a group's crimes loosens its grip on that block and the ones next to it, until it loses them ("… lost their grip on a block"). Crimes that come off and fresh tags let it grow back and take over new streets.
+- Turf, the tags on the walls and the groups' tallies are kept in **saves**. Older saves load with the city's starting turf.
 
 ## 0.028 — 2026-10-05
 

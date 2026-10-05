@@ -11,7 +11,7 @@
  */
 import type { GameMode } from '../mode';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export type SaveKind = 'auto' | 'manual';
 
@@ -144,6 +144,11 @@ export interface SaveData {
    * (deep/War WarState), sanitised by their own parsers on restore.
    */
   slimes: { trust: unknown; war: unknown } | null;
+  /**
+   * The villain groups (game/factions): how their turf moved from the seeded one (Factions
+   * SavedFactions, sanitised by `restoreFactions`) and the tags on the walls.
+   */
+  factions: { turf: unknown; tags: unknown[] } | null;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -191,6 +196,8 @@ export const MIGRATIONS: Record<number, (o: Record<string, unknown>) => Record<s
   1: (o) => ({ ...o, v: 2, aftermath: null }),
   // 2 → 3: the slime civilisation (trust and war); old saves take the city's stored ones.
   2: (o) => ({ ...o, v: 3, slimes: null }),
+  // 3 → 4: the villain groups' turf and tags; old saves start with the seeded turf and clean walls.
+  3: (o) => ({ ...o, v: 4, factions: null }),
 };
 
 /** Upgrade a raw save object to the current version (throws on a save from a newer game). */
@@ -271,6 +278,7 @@ export function parseSave(input: string | unknown): SaveData {
       };
     })() : null,
     slimes: o.slimes && typeof o.slimes === 'object' ? { trust: obj(o.slimes).trust ?? null, war: obj(o.slimes).war ?? null } : null,
+    factions: o.factions && typeof o.factions === 'object' ? { turf: obj(o.factions).turf ?? null, tags: (Array.isArray(obj(o.factions).tags) ? (obj(o.factions).tags as unknown[]) : []).slice(-64) } : null,
   };
 }
 

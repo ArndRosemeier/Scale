@@ -563,6 +563,59 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(crime.phase === 'resolved' && crime.outcome === 'arrested' && thief.actor!.state === 'arrested', `snatch: arrested, resolved (${crime.phase}, ${crime.outcome})`);
   check(events.join(',') === 'commit,ko,arrest,resolved' && policeCalls === 1, `snatch events ${events.join(',')}, police called ${policeCalls} times`);
   check(phases.join('>') === 'approach>escape>subdued>resolved', `snatch phases ${phases.join(' > ')}`);
+  // Group operations (VILLAINS_PLAN P1 part 2) with the same mocked world plus shop doors: a racket
+  // leans on the shopkeeper and walks off with the cash; a tagger paints the tag and it stays, or
+  // runs when the hero comes close and the tag is never finished.
+  {
+    const { Racket } = await import('../src/game/crime/Racket');
+    const { Tagging, TAGGING } = await import('../src/game/crime/Tagging');
+    const { attach } = await import('../src/sim/actors/Actor');
+    const doors = [{ x: 180, z: 40, nx: 0, nz: 1 }, { x: 200, z: 40, nx: 0, nz: 1 }];
+    const w2 = Object.assign(Object.create(world) as typeof world, {
+      spawn: (seed: number, x: number, z: number, h: number, role: Parameters<typeof makeActor>[0]) => { const a = mk(seed, x, z, h, 2); attach(a, makeActor(role, -1)); return a; },
+      shops: () => doors,
+    });
+    const drive = (c: import('../src/game/crime/Crime').Crime, until: () => boolean, max: number, ev: string[]) => {
+      for (let i = 0; i < max && !until(); i++) {
+        time += 0.05;
+        for (const a of agents) {
+          const act = a.actor;
+          if (!a.alive || !act) continue;
+          act.stateT += 0.05; act.attackT -= 0.05; act.replanT -= 0.05;
+          const g = act.goal;
+          if (g) { const dx = g.x - a.x, dz = g.z - a.z, d = Math.hypot(dx, dz); const s = Math.min(d, act.speed * 0.05); if (d > 1e-6) { a.x += (dx / d) * s; a.z += (dz / d) * s; } }
+        }
+        c.update(0.05);
+        for (const e of c.events) ev.push(e.type);
+        c.events.length = 0;
+      }
+    };
+    player.x = 0; player.z = 0;
+    const racket = new Racket(w2, 777);
+    check(racket.setup() && racket.kind === 'racket' && racket.victim?.actor?.role === 'shopkeeper' && racket.loot?.kind === 'cash', `racket: a shopkeeper at the door is the victim, the loot is cash (${racket.victim?.actor?.role}, ${racket.loot?.kind})`);
+    check(racket.criminals.length >= 1 && racket.criminals.length <= 2, `racket: one or two collectors (${racket.criminals.length})`);
+    const rEv: string[] = [];
+    drive(racket, () => racket.phase === 'escape' || racket.phase === 'aborted', 2400, rEv);
+    check(racket.phase === 'escape' && racket.loot?.carrier === racket.criminals[0], `racket: they take the envelope and walk off (${racket.phase}, events ${rEv.join(',')})`);
+
+    const tag = new Tagging(w2, 4242);
+    check(tag.setup() && !!tag.spot && tag.kind === 'tagging', 'tagging: setup finds a wall beside a door and a tagger');
+    const tEv: string[] = [];
+    drive(tag, () => tag.phase !== 'approach', 2400, tEv);
+    check(tag.phase === 'commit', `tagging: the tagger reaches the wall and starts painting (${tag.phase})`);
+    drive(tag, () => tag.done, Math.ceil((TAGGING.paintFor + 1) / 0.05), tEv);
+    check(tag.done && tag.phase === 'escape' && tEv.includes('tagged') && tag.progress >= TAGGING.paintFor, `tagging: left alone the tag is finished (${tEv.join(',')})`);
+
+    const tag2 = new Tagging(w2, 99);
+    check(tag2.setup(), 'tagging: a second tagger');
+    const t2Ev: string[] = [];
+    drive(tag2, () => tag2.phase !== 'approach', 2400, t2Ev);
+    drive(tag2, () => tag2.progress > 3, 200, t2Ev);
+    player.x = tag2.tagger!.x + 3; player.z = tag2.tagger!.z + 3;
+    drive(tag2, () => false, Math.ceil(TAGGING.paintFor / 0.05), t2Ev);
+    check(!tag2.done && !t2Ev.includes('tagged') && tag2.playerInvolved && tag2.phase !== 'commit', `tagging: the hero comes close, the tag is abandoned (${tag2.phase}, ${t2Ev.join(',')})`);
+    player.x = 0; player.z = 0;
+  }
   console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
@@ -572,7 +625,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
 {
   const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
   const { planHour } = await import('../src/game/crime/CrimeDirector');
-  const { planFactions, HOLD } = await import('../src/game/factions/Factions');
+  const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions } = await import('../src/game/factions/Factions');
   const { ARCHETYPES } = await import('../src/game/factions/archetypes');
   const { factionOutfit } = await import('../src/game/factions/outfits');
   const t0 = performance.now();
@@ -595,11 +648,33 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(F.holder.every((h, i) => h < 0 || F.influence[h][i] >= HOLD), `seed ${seed}: every holder reaches the hold threshold`);
     const syn = F.factions.find((f) => f.archetype === 'syndicate')!, gang = F.factions.find((f) => f.archetype === 'gang')!;
     check(['downtown', 'commercial', 'oldtown'].includes(macro.cells[syn.home].district), `the Syndicate sits in the centre (${macro.cells[syn.home].district})`);
-    const robs = (ops: Record<'snatch' | 'mugging' | 'robbery', number> | null) => Array.from({ length: 24 }, (_, h) => planHour(seed, 2, h, syn.home, 0.6, 'commercial', 'chaos', 45, ops)).flat().filter((r) => r.kind === 'robbery').length;
+    const robs = (ops: Record<import('../src/game/crime/Crime').CrimeKind, number> | null) => Array.from({ length: 24 }, (_, h) => planHour(seed, 2, h, syn.home, 0.6, 'commercial', 'chaos', 45, ops)).flat().filter((r) => r.kind === 'robbery').length;
     check(robs(ARCHETYPES.syndicate.kinds) > robs(null) && robs(null) >= robs(ARCHETYPES.gang.kinds), `operations: the Syndicate robs more (${robs(ARCHETYPES.syndicate.kinds)} vs ${robs(null)} vs gang ${robs(ARCHETYPES.gang.kinds)} a day)`);
     const suit = factionOutfit(syn, 99), hood = factionOutfit(gang, 99);
     check(suit.back?.defId === 'suitjacket' && JSON.stringify(suit) === JSON.stringify(factionOutfit(syn, 99)), 'Syndicate members wear suits (deterministic)');
     check(!!hood.head && JSON.stringify(hood.head.visual.primary) === JSON.stringify(gang.palette.accent), 'gang members wear a cap in their colour');
+    // Part 2: group operations only in a group's turf; the gang rackets and tags, the Syndicate doesn't.
+    const day = (ops: Record<import('../src/game/crime/Crime').CrimeKind, number> | null, cell: number) => Array.from({ length: 24 }, (_, h) => planHour(seed, 3, h, cell, 0.7, 'apartments', 'chaos', 45, ops)).flat();
+    const anon = day(null, 1).concat(day(null, 2));
+    check(!anon.some((r) => r.kind === 'racket' || r.kind === 'tagging'), `nobody's turf: no rackets or tags (${anon.length} rolls)`);
+    const gangDay = day(ARCHETYPES.gang.kinds, gang.home), synDay = day(ARCHETYPES.syndicate.kinds, syn.home);
+    check(gangDay.some((r) => r.kind === 'racket') && gangDay.some((r) => r.kind === 'tagging'), `gang turf: rackets and tags (${gangDay.map((r) => r.kind).join(',')})`);
+    check(!synDay.some((r) => r.kind === 'racket' || r.kind === 'tagging'), 'Syndicate turf: no rackets or tags');
+    // Turf shifts: stopping the gang at home again and again loosens its grip (the cell and next door), then a save brings it back.
+    const before = saveFactions(F);
+    check(before.groups.every((g) => g.cells.length === 0), 'untouched turf saves nothing');
+    const flips: { cell: number; from: number; to: number }[] = [];
+    for (let k = 0; k < 12 && F.holder[gang.home] === gang.id; k++) flips.push(...shift(F, gang.home, gang.id, SHIFT.stopped));
+    check(F.holder[gang.home] !== gang.id && flips.some((x) => x.cell === gang.home && x.from === gang.id), `stopping the gang loses it its home block (${flips.length} flips)`);
+    check(F.near[gang.home].some((n) => F.influence[gang.id][n] < F.base[gang.id][n]), 'and loosens its grip next door');
+    const saved = JSON.parse(JSON.stringify(saveFactions(F, { stopped: 12 })));
+    const H = planFactions(macro, seed, idx);
+    const st = restoreFactions(H, saved);
+    check(st.stopped === 12 && H.holder.every((h, i) => h === F.holder[i]) && H.influence.every((I, f) => I.every((v, i) => Math.abs(v - F.influence[f][i]) < 0.006)), 'turf and stats survive a save');
+    restoreFactions(H, null);
+    check(H.holder.every((h, i) => h === G.holder[i]), 'no saved turf: the seeded one');
+    const grow = shift(G, gang.home, gang.id, SHIFT.tag);
+    check(grow.length === 0 && G.influence[gang.id][gang.home] <= SHIFT.max, 'a tag at home strengthens the hold without flipping it');
   }
   check(names.size >= 5, `group names vary with the seed (${[...names].join(', ')})`);
   console.log(`factions: ${[...names].join(' · ')} in ${(performance.now() - t0).toFixed(0)} ms`);
@@ -1447,6 +1522,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
     },
     slimes: { trust: { v: 42.5, gifts: [0, 2], marks: ['heart'] }, war: { v: 1, murk: 0.5, lumen: 0.625, front: 0.25, at: 130.5, nextRaid: 133, mawBack: 0, raid: null, captives: [2, 4, 0], nextBreach: 150, stats: { won: 3, lost: 1, kills: 12, freed: 4, maw: 0, breaches: 0 } } },
+    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }] },
   };
   const back = parseSave(serializeSave(full));
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
@@ -1465,6 +1541,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   v2.v = 2; delete v2.slimes;
   const up2 = parseSave(v2);
   check(up2.v === SAVE_VERSION && up2.slimes === null && up2.aftermath !== null, `saves: a version-2 save migrates (slimes ${JSON.stringify(up2.slimes)})`);
+  // A version-3 save (before the villain groups): migrates with the seeded turf and no tags.
+  const v3 = JSON.parse(serializeSave(full)) as Record<string, unknown>;
+  v3.v = 3; delete v3.factions;
+  const up3 = parseSave(v3);
+  check(up3.v === SAVE_VERSION && up3.factions === null && up3.slimes !== null, `saves: a version-3 save migrates (factions ${JSON.stringify(up3.factions)})`);
   // The aftermath is sanitised: garbage rows dropped, counts whole and ≥ 0, the level-5 countdown never comes back (level ≤ 4).
   const junk = parseSave({ ...JSON.parse(serializeSave(full)), aftermath: { ledger: { evacuated: -5, injured: 'x', trapped: 2.7 }, zones: [[1, 2, 3], 'z', [1, 2, 3, NaN], [5, 6, 7, 8]], news: { kind: 7 } }, threats: { ...full.threats, strider: { s: 10, hp: 50, mode: 'rampage', level: 5 } } });
   check(junk.aftermath!.ledger.evacuated === 0 && junk.aftermath!.ledger.injured === 0 && junk.aftermath!.ledger.trapped === 2 && junk.aftermath!.zones.length === 1 && junk.aftermath!.news === null && junk.aftermath!.smoke.length === 0 && junk.threats.strider!.level === 4,
