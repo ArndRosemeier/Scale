@@ -253,6 +253,8 @@ export class Strider implements ThreatEvent, ThreatActor {
   // ================================================================== ThreatActor
 
   get defeated(): boolean { return this.mode === 'dying' || this.mode === 'dead'; }
+  /** Its head (the army's helicopters make their runs at it). */
+  get headPos(): { x: number; y: number; z: number } { return this.rig.headPos; }
   get targetable(): boolean { return this.mode !== 'gone' && this.mode !== 'dead' && !(this.mode === 'emerge' && this.emergeK < 0.25) && !(this.mode === 'sink' && this.rig.lift < -25); }
 
   zone(id: string): ThreatZone { return this.zones.find((z) => z.id === id) ?? this.zones[3]; }

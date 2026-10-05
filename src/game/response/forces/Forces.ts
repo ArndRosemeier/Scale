@@ -25,8 +25,14 @@
  * people; the player is only ever hurt by a stray splash (ArmyFx.explosion).
  *
  * Stage 3 / E hooks: `onOutcome` (the battle's end for the aftermath / triage and the nuke
- * countdown), `rally` and `airstrike` (the player's reputation unlocks), `hostilePlayer` (the army
- * against a rampaging giant player with a very low reputation — not wired yet, see ARCHITECTURE.md).
+ * countdown), `rally` and `airstrike` (the player's reputation unlocks).
+ *
+ * The army against the player: a rampaging giant player (threats/PlayerRampage, after its warnings)
+ * is an `ArmyFoe` like the Strider — the same levels, squads and fire, its zones the player's body
+ * (army damage becomes the player's health). Its route ends where the player stands, so the battle
+ * model rings them; units come in from the city's side, and holding units the player has walked away
+ * from go again (`regroup`). Its blows on the units are the player's own: crushed and wrecked
+ * vehicles, knocked-down soldiers, helicopters swatted by a punch (`struck`).
  */
 import * as THREE from 'three';
 import type { Game } from '../../Game';
@@ -38,12 +44,14 @@ import { attach, goTo, lookAt, makeActor, play, setState, stand } from '../../..
 import { G } from '../../../render/materials/globals';
 import type { MapMarker } from '../../../ui/map/GameMap';
 import type { EquipmentVisuals } from '../../../items/types';
-import { Strider, STRIDER, STRIDER_ZONES, type StriderBlow } from '../../threats/Strider';
-import type { ThreatZone } from '../../threats/ThreatEvent';
+import { Strider, STRIDER, STRIDER_ZONES, type AirProvider, type StriderBlow } from '../../threats/Strider';
+import { PlayerRampage } from '../../threats/PlayerRampage';
+import { RAMPAGE } from '../../threats/rampageRules';
+import type { DamageResult, DamageSource, ThreatEvent, ThreatOutcome, ThreatZone } from '../../threats/ThreatEvent';
 import type { Incident } from '../ResponseDirector';
 import {
-  ARMY, FORCE, aimedVolley, hurtUnit, land, levelSquads, makeSquad, makeUnit, pathAt, pickZone, simulateBattle, stepForces, volley,
-  type ForceKind, type ForceOps, type ForceUnit, type MonsterSpec, type MonsterView, type Squad,
+  ARMY, FORCE, aimedVolley, hurtUnit, land, levelSquads, makeSquad, makeUnit, pathAt, pickZone, regroup, simulateBattle, stepForces, volley,
+  type ForceKind, type ForceOps, type ForceUnit, type MonsterSpec, type MonsterView, type PathView, type Squad,
 } from './BattleModel';
 import { ArmyFx } from './ArmyFx';
 import { Aircraft } from './Aircraft';
@@ -59,6 +67,37 @@ interface Body {
   stuckT: number;
 }
 
+/** What the army fights: the Strider, or a rampaging giant player (threats/PlayerRampage). */
+export interface ArmyFoe {
+  readonly x: number; readonly y: number; readonly z: number;
+  /** Progress along its route (m) and what it is doing ('advance', 'rampage' at the route's end …). */
+  readonly s: number; readonly mode: string;
+  readonly zones: ThreatZone[];
+  readonly route: PathView & { start: { x: number; z: number }; end: { x: number; z: number } };
+  readonly targetable: boolean;
+  readonly defeated: boolean;
+  readonly outcome: ThreatOutcome | null;
+  readonly aggro: ReadonlyMap<string, number>;
+  readonly hp: number;
+  readonly maxHp: number;
+  readonly headPos: { x: number; y: number; z: number };
+  damage(zone: ThreatZone | string | null, amount: number, src: DamageSource): DamageResult;
+  /** Its hooks for the army: where a squad stands, its blows, helicopters in reach. */
+  unitAt: ((key: string) => { x: number; y: number; z: number } | null) | null;
+  onBlow: ((kind: StriderBlow, x: number, y: number, z: number, r: number) => void) | null;
+  airTargets: AirProvider[];
+  /** Where units come from (default: ahead of it along its route) and the artillery's spot (default: past the route's end). */
+  spawnPoint?(k: number, level: number): { x: number; z: number };
+  batteryAt?(): { x: number; z: number };
+  /** It goes where it likes (the player): units holding out of reach go again. */
+  readonly chased?: boolean;
+}
+
+/** The army's foe in an incident (a major threat with a body), or null. */
+export function armyFoe(ev: ThreatEvent): ArmyFoe | null {
+  return ev.tier === 'major' && (ev instanceof Strider || ev instanceof PlayerRampage) ? ev : null;
+}
+
 const VEHICLE_KIND: Partial<Record<ForceKind, VKind>> = { truck: 'army_truck', apc: 'apc', tank: 'tank' };
 const ON_GROUND: ForceKind[] = ['truck', 'apc', 'tank', 'rifles'];
 const _o = { x: 0, z: 0, dx: 0, dz: 0 };
@@ -69,9 +108,9 @@ export class Forces {
   readonly fx: ArmyFx;
   readonly air: Aircraft;
   private inc: Incident | null = null;
-  private mon: Strider | null = null;
+  private mon: ArmyFoe | null = null;
   private view: MonsterView | null = null;
-  private hooked = new WeakSet<Strider>();
+  private hooked = new WeakSet<ArmyFoe>();
   private bodies = new Map<number, Body>();
   private rng: Rng;
   /** Soldiers getting back into their truck, and the hurt walking out of it. */
@@ -91,7 +130,7 @@ export class Forces {
   stats = { sent: 0, materialised: 0, soldiers: 0, vehicles: 0, lost: {} as Record<string, number>, broke: 0, routed: 0, volleys: 0, rays: 0, held: 0, hits: 0, weak: 0, dealt: 0, msAvg: 0, peakSoldiers: 0, peakVehicles: 0 };
   /** Stage 3: the battle is over (the monster defeated or driven off by the army, or it got away). */
   onOutcome: ((o: { outcome: string; byArmy: boolean; lost: Record<string, number> }) => void) | null = null;
-  /** Stage E: a rampaging giant player with a very low reputation is the army's target (not wired yet). */
+  /** The army's target is a rampaging giant player (threats/PlayerRampage: HostilePlayer sets it). */
   hostilePlayer = false;
 
   constructor(private g: Game) {
@@ -120,8 +159,8 @@ export class Forces {
     });
   }
 
-  /** The army comes for a major threat with a body (the Strider). */
-  private armyFor(inc: Incident): boolean { return this.enabled && inc.ev.tier === 'major' && inc.ev instanceof Strider; }
+  /** The army comes for a major threat with a body (the Strider, a rampaging giant player). */
+  private armyFor(inc: Incident): boolean { return this.enabled && !!armyFoe(inc.ev); }
 
   /** Off: the ladder stops at 2 (dev.army.enabled(false): measurements without the army). */
   enabled = true;
@@ -129,10 +168,12 @@ export class Forces {
   // ================================================================== levels
 
   private engage(inc: Incident, level: 3 | 4): void {
-    if (!this.enabled || !(inc.ev instanceof Strider)) return;
-    this.attach(inc, inc.ev);
+    const foe = armyFoe(inc.ev);
+    if (!this.enabled || !foe) return;
+    this.attach(inc, foe);
     const S = this.mon!, R = S.route;
     const spawn = (k: number) => {
+      if (S.spawnPoint) { const p = S.spawnPoint(k, level); return this.street(p.x, p.z, 200); }
       // From beyond it, ahead towards downtown (past the end: further on in the same direction), on a street.
       const want = S.s + ARMY.spawnR;
       const p = pathAt(R, Math.min(R.length, want), _o);
@@ -145,7 +186,7 @@ export class Forces {
     this.note(`level ${level}: ${add.map((q) => `${q.key} (${q.units.map((u) => u.kind).join('+')})`).join(', ')}`);
   }
 
-  private attach(inc: Incident, s: Strider): void {
+  private attach(inc: Incident, s: ArmyFoe): void {
     this.inc = inc;
     if (this.mon === s) return;
     this.mon = s;
@@ -153,7 +194,7 @@ export class Forces {
     this.view = {
       get x() { return s.x; }, get z() { return s.z; }, get s() { return s.s; }, get mode() { return s.mode; },
       zones: s.zones,
-      get head() { const h = s.rig.headPos; return { x: h.x, y: h.y, z: h.z }; },
+      get head() { const h = s.headPos; return { x: h.x, y: h.y, z: h.z }; },
       damage(z, amount, key) {
         const c = self.centroid(key);
         const r = s.damage(z as ThreatZone, amount, { cause: 'military', key, x: c?.x, y: c?.y, z: c?.z });
@@ -168,6 +209,7 @@ export class Forces {
       s.airTargets.push((x, y, z, r) => this.air.airTargets(x, y, z, r));
     }
     // The battery beyond the city edge, further on past downtown.
+    if (s.batteryAt) { this.battery = s.batteryAt(); return; }
     const R = s.route, e = pathAt(R, R.length, _o);
     const dx = R.end.x - R.start.x, dz = R.end.z - R.start.z, l = Math.hypot(dx, dz) || 1;
     this.battery = { x: e.x + (dx / l) * 3200, z: e.z + (dz / l) * 3200 };
@@ -200,6 +242,8 @@ export class Forces {
     this.materialise(dt);
     const ops = this.ops(fighting);
     if (S && this.view && (fighting || S.mode === 'retreat' || S.mode === 'sink')) {
+      // (A target that goes where it likes: units it has left out of reach go again.)
+      if (S.chased && fighting) regroup(this.squads, this.view, RAMPAGE.regroupT);
       stepForces(this.squads, this.view, S.route, dt, this.rng, () => {}, ops);
     } else this.leaveStep(dt, ops);
     this.soldierStep(dt);
@@ -758,7 +802,7 @@ export class Forces {
       this.fx.projectile('arty', tx - 60, S.y + 500, tz - 60, tx, this.g.world.groundHeight(tx, tz) + 0.4, tz, 1.4, () => {
         const M = this.mon;
         if (h && M && M.targetable && this.view) {
-          const z = M.zones.find((zz) => zz.id === h.zone.id) ?? M.zones[3];
+          const z = M.zones.find((zz) => zz.id === h.zone.id) ?? M.zones[Math.min(3, M.zones.length - 1)];
           land(u, q, this.view, z, h.dmg, () => {});
           this.fx.explosion(z.x, z.y + z.r * 0.5, z.z, 1.8, true);
         } else this.groundHit(tx, this.g.world.groundHeight(tx, tz) + 0.4, tz, 1.8, 0, -1, 0);
@@ -920,6 +964,17 @@ export class Forces {
       return true;
     }
     return this.jetRun(u, q);
+  }
+
+  /**
+   * A blow of the player's at a point (Game.strike: a punch, a thrown car): an army helicopter in
+   * reach is knocked out of the sky — only while the army is after the player.
+   */
+  struck(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): number {
+    if (!this.hostilePlayer || !(this.mon instanceof PlayerRampage)) return 0;
+    const hit = this.air.airTargets(x, y, z, Math.max(r, this.g.player.height * 0.15));
+    for (const h of hit) h.swat(jx, jy, jz);
+    return hit.length;
   }
 
   /** Dev / admin: a unit of a kind `dist` m ahead of the player (it joins the fight when there is one). */

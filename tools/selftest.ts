@@ -952,6 +952,73 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     check(u.crew < 6 && u.crew > 0 && q.morale < ARMY.breakAt && moraleStep(q, 0.5) !== 'ok', `army: losses drop a squad's morale until the line breaks (${u.crew} left, morale ${q.morale.toFixed(2)})`);
   }
 
+  // The army against a rampaging giant player (PLAYGROUND_PLAN decision 19): the warning sequence,
+  // standing down, a relapse; the army ringing a giant, following one who walks off, wearing a
+  // passive one down in a bounded time.
+  {
+    const { RAMPAGE, RampageWatch, furyOf, simulatePlayerBattle, playerPath, playerSpawn } = await import('../src/game/threats/rampageRules');
+    const { ARMY } = await import('../src/game/response/forces/BattleModel');
+    const run = (W: InstanceType<typeof RampageWatch>, secs: number, perS: number, height = 20, rep = -60) => {
+      const out: string[] = [];
+      for (let t = 0; t < secs; t += 0.5) { const s = W.step(0.5, perS * 0.5, height, rep); if (s) out.push(s); }
+      return out;
+    };
+    const collapse = furyOf({ target: 'building', effect: 'collapse', size: 6 });
+    check(collapse > furyOf({ target: 'building', effect: 'facade' }) && furyOf({ target: 'person', effect: 'knockdown', role: 'criminal' }) === 0 && furyOf({ target: 'person', effect: 'knockdown', role: 'soldier' }) > furyOf({ target: 'person', effect: 'knockdown' }),
+      'rampage: fury counts buildings brought down most, officers and soldiers more than bystanders, criminals not at all');
+    // A feared giant levelling a block a few seconds: warned, warned again, then the army.
+    const W1 = new RampageWatch();
+    const seq = run(W1, 120, 0.5);
+    check(seq[0] === 'warn' && seq[1] === 'final' && seq[2] === 'hostile' && W1.state === 'hostile', `rampage: warning, final warning, then the army (${seq.join(' → ')})`);
+    const tHostile = (() => { const W = new RampageWatch(); for (let t = 0; t < 200; t += 0.5) if (W.step(0.5, 0.25, 20, -60) === 'hostile') return t; return -1; })();
+    check(tHostile >= RAMPAGE.gap * 2, `rampage: never hostile before both warnings had their time (${tHostile} s ≥ ${RAMPAGE.gap * 2} s)`);
+    // Not for a human-sized player, nor for one the city does not fear.
+    check(run(new RampageWatch(), 120, 0.5, 2).length === 0 && run(new RampageWatch(), 120, 0.5, 20, 10).length === 0, 'rampage: no warnings for a human-sized player or a giant with a decent reputation');
+    // Stopping after the first warning: the warnings lapse, no army.
+    const W2 = new RampageWatch();
+    const s2 = [...run(W2, 6, 2), ...run(W2, 200, 0)];
+    check(s2[0] === 'warn' && s2.includes('lapse') && !s2.includes('hostile') && W2.state === 'calm', `rampage: stopping after a warning lets it lapse (${s2.join(' → ')})`);
+    // Hostile, then standing down: quiet for a while, or human-sized again.
+    const W3 = new RampageWatch();
+    run(W3, 120, 0.5);
+    const s3 = run(W3, 200, 0);
+    const W4 = new RampageWatch();
+    run(W4, 120, 0.5);
+    const s4 = run(W4, 40, 0.5, 1.8);
+    check(s3.includes('standDown') && W3.state === 'calm' && s4.includes('standDown'), 'rampage: standing down ends it (no destruction for a while, or human-sized again)');
+    // A relapse soon after: the army comes back without new warnings; much later, warnings again.
+    const r1 = run(W3, 30, 0.6);
+    check(r1[0] === 'hostile' && !r1.includes('warn'), `rampage: a relapse soon after brings the army back at once (${r1.join(' → ')})`);
+    const W5 = new RampageWatch();
+    run(W5, 120, 0.5); run(W5, 200, 0); run(W5, RAMPAGE.memory + 10, 0);
+    check(run(W5, 30, 0.6)[0] === 'warn', 'rampage: long after, the warnings come again first');
+    // The army's route for the player ends where they stand; units come from the city's side.
+    const path = { pts: [] as number[], s: [] as number[], length: 0, start: { x: 0, z: 0 }, end: { x: 0, z: 0 } };
+    playerPath(path, 0, 0, 300, 400);
+    playerPath(path, 0, 0, 0.2, 0);
+    const sp = playerSpawn(-1000, 0, 0, 0, 3);
+    check(path.pts.length === 4 && path.end.x === 0.2 && path.length >= 1000 && Math.abs(Math.hypot(sp.x, sp.z) - ARMY.spawnR) < 1e-6 && sp.x < 0, 'rampage: the army plans to the player (route ends at them, ≥ 1 km) and comes in from the city side');
+    // The battle model against a giant standing still: ringed, worn down in a bounded time (level 3 alone: much longer).
+    const t0 = performance.now();
+    const ko: number[] = [];
+    let nondet = 0, ringed = 0, over = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const a = simulatePlayerBattle(seed);
+      ko.push(a.koT);
+      if (a.nearest >= 150 && a.farthest <= 450) ringed++;
+      const P = a.peak;
+      if ((P.truck ?? 0) + (P.apc ?? 0) + (P.tank ?? 0) > ARMY.maxVehicles || (P.rifles ?? 0) > ARMY.maxSoldiers || (P.heli ?? 0) > ARMY.maxHelis) over++;
+      if (seed <= 3 && simulatePlayerBattle(seed).hash !== a.hash) nondet++;
+    }
+    const l3 = simulatePlayerBattle(7, { l4At: 1e9, maxT: 900 });
+    check(nondet === 0 && over === 0, `rampage battle: deterministic per seed, within the budgets (${nondet} differ, ${over} over)`);
+    check(ko.every((t) => t >= 60 && t <= 240) && (l3.koT < 0 || l3.koT > 2 * Math.max(...ko)), `rampage battle: a giant standing still goes down at level 4 in 60–240 s (${ko.join(', ')} s), at level 3 alone far later (${l3.koT} s)`);
+    check(ringed >= 8, `rampage battle: units hold a ring round the giant out of its reach (${ringed}/10)`);
+    const w = simulatePlayerBattle(9, { walk: 6, maxT: 500, hp: 1e9 });
+    check(w.followed >= 2 && (w.dealtBy.tank ?? 0) > 0, `rampage battle: the army follows a giant walking off (${w.followed} units in reach at its end, ${JSON.stringify(w.dealtBy)})`);
+    console.log(`rampage battle (10 seeds): KO at ${ko.join(' ')} s, level 3 alone ${l3.koT} s, ${Math.round(performance.now() - t0)} ms`);
+  }
+
   // Rig math.
   const { twoBone, follow, reach, lengths, layStraight } = await import('../src/game/threats/rig/chain');
   const { rayCapsule, capsuleDist } = await import('../src/game/threats/rig/CreatureRig');

@@ -16,6 +16,11 @@
  *    left in it are trapped or injured — never dead —, the player inside the ring is knocked out and
  *    comes round at its edge. The city lost: karma and reputation fall; the news shows it for hours.
  *
+ * Against a rampaging giant player (threats/PlayerRampage) the same: the army failing, the roll —
+ * but the strike zone follows the player through the countdown (it is the player the strike is
+ * for), and standing down (no more destruction, or human-sized again) or being brought down calls it
+ * off. A player caught at zero is knocked out by the blast like anyone else — unless underground.
+ *
  * The decision (`lastResortDue`), the shock wave (`ShockWave`) and the tuning (LAST_RESORT) are the
  * pure rules in rules.ts. Rare: a seeded roll per incident (× the City events setting); forced with
  * dev.lastResort.force() / dev.response.level(5).
@@ -25,6 +30,7 @@ import type { Game } from '../Game';
 import type { Aftermath } from './Aftermath';
 import type { Incident } from '../response/ResponseDirector';
 import { Strider } from '../threats/Strider';
+import { PlayerRampage } from '../threats/PlayerRampage';
 import { VState, type Vehicle } from '../../sim/Traffic';
 import type { BuildingRef } from '../../world/WorldIndex';
 import { LAST_RESORT, lastResortDue, lastResortRoll, ShockWave } from './rules';
@@ -46,6 +52,8 @@ export class LastResort {
   forced = false;
   private inc: Incident | null = null;
   private mon: Strider | null = null;
+  /** The target is a rampaging giant player (instead of a monster). */
+  private hostile: PlayerRampage | null = null;
   private t = 0;
   private sirenGain = 0;
   private siren: ReturnType<Game['audio']['loop']> = null;
@@ -77,12 +85,14 @@ export class LastResort {
   /** What the ladder asks: time for level 5? */
   private due(inc: Incident): boolean {
     const ev = inc.ev;
-    if (!(ev instanceof Strider) || !this.g.forces.enabled) return false;
+    if (!(ev instanceof Strider || ev instanceof PlayerRampage) || !this.g.forces.enabled) return false;
     const F = this.g.forces;
     const lost = Object.values(F.stats.lost).reduce((a, b) => a + b, 0);
+    // (A rampaging player is wherever they are: the city itself.)
+    const player = ev instanceof PlayerRampage;
     return lastResortDue({
-      major: ev.tier === 'major', level: inc.level, levelT: inc.levelT, strength: ev.strength(), downtown: ev.mode === 'rampage',
-      progress: ev.s / Math.max(1, ev.route.length), broken: F.squads.filter((q) => q.broke > 0 || q.routed).length, lost,
+      major: ev.tier === 'major', level: inc.level, levelT: inc.levelT, strength: ev.strength(), downtown: player || (ev as Strider).mode === 'rampage',
+      progress: player ? 1 : (ev as Strider).s / Math.max(1, (ev as Strider).route.length), broken: F.squads.filter((q) => q.broke > 0 || q.routed).length, lost,
       roll: lastResortRoll(this.g.settings.seed, ev.id), setting: this.g.threats.setting, forced: this.forced,
     });
   }
@@ -91,16 +101,17 @@ export class LastResort {
 
   private start(inc: Incident): void {
     const ev = inc.ev;
-    if (!(ev instanceof Strider)) return;
+    if (!(ev instanceof Strider || ev instanceof PlayerRampage)) return;
     this.forced = false;
     this.inc = inc;
-    this.mon = ev;
+    this.mon = ev instanceof Strider ? ev : null;
+    this.hostile = ev instanceof PlayerRampage ? ev : null;
     this.state = 'countdown';
     this.left = LAST_RESORT.countdown;
     this.t = 0;
     // Ground zero: where it is now (it stays in downtown from now on).
     this.x = ev.x; this.z = ev.z; this.r = LAST_RESORT.radius;
-    ev.stay = true;
+    if (this.mon) this.mon.stay = true;
     // The sirens change their tone; the evacuation widens past the strike zone.
     inc.tone = 'nuke_siren';
     inc.evacR = this.r * 1.6;
@@ -112,8 +123,18 @@ export class LastResort {
 
   private step(inc: Incident, dt: number): void {
     this.t += dt;
-    const g = this.g, S = this.mon;
-    if (this.state === 'countdown' && S) {
+    const g = this.g, S = this.mon, Hp = this.hostile;
+    if (this.state === 'countdown' && Hp) {
+      // The player: the zone follows them; standing down or brought down calls it off.
+      this.left -= dt;
+      if (!Hp.active) this.callOff(false);
+      else if (this.left <= 0) this.strike();
+      else {
+        this.x = Hp.x; this.z = Hp.z;
+        this.traffic(dt);
+        g.future.signs.countdown(this.x, this.z, 6000, this.left, 1);
+      }
+    } else if (this.state === 'countdown' && S) {
       this.left -= dt;
       // Beaten in time: driven off or brought down.
       if (S.mode === 'retreat' || S.mode === 'sink' || S.mode === 'gone' || S.defeated) this.callOff(true);
@@ -211,8 +232,9 @@ export class LastResort {
     for (let i = 0; i < 26; i++) fx.glow(this.x + (Math.random() - 0.5) * 60, y0 + 40 + Math.random() * 120, this.z + (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 20, 18 + Math.random() * 20, (Math.random() - 0.5) * 20, 3 + Math.random() * 4, 60, 150, FIRE_A, FIRE_B, 1, 0.4, -2);
     this.mushroom = { x: this.x, y: y0, z: this.z, height: 1100, width: 420, density: 0.85, fire: 0.6, mushroom: 1, growth: 0, seed: 777 };
     this.A.addColumn(this.mushroom);
-    // The monster is gone (and any carcass lying in the district with it).
+    // The monster is gone (and any carcass lying in the district with it); a rampage is over.
     S?.obliterate();
+    this.hostile?.obliterate();
     for (const b of [...g.threats.remains]) if (Math.hypot(b.x - this.x, b.z - this.z) < this.r) { g.threats.removeRemains(b); b.rig.cut = null; }
     // The buildings the wave will level (those loaded; the rest are levelled as they stream in).
     const seen = new Set<BuildingRef>();
@@ -358,6 +380,7 @@ export class LastResort {
     if (this.state === 'countdown') this.callOff(false);
     if (this.inc) { this.inc.tone = undefined; this.inc.evacR = undefined; }
     this.inc = null;
+    this.hostile = null;
   }
 
   /** Dev: the clock (seconds left), or skip to the strike. */
@@ -367,6 +390,7 @@ export class LastResort {
     return {
       state: this.state, left: +this.left.toFixed(1), at: { x: Math.round(this.x), z: Math.round(this.z), r: this.r }, forced: this.forced,
       monster: this.mon ? { mode: this.mon.mode, hp: Math.round(this.mon.hp), stay: this.mon.stay } : null,
+      player: this.hostile ? { active: this.hostile.active, outcome: this.hostile.outcome } : null,
       wave: this.wave ? { front: Math.round(this.wave.front), left: this.wave.left } : null, convoy: this.convoy.size, ...this.stats,
     };
   }
