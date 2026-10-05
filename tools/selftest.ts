@@ -43,6 +43,7 @@ import { landmarkParts, partOutline, solidFootprints, partObstacles, helixFloorA
 import { MARVEL_STYLES, MS } from '../src/plan/marvelParts';
 import { PIECE_STRIDE } from '../src/build/landmarkDice';
 import { LandmarkWrecks } from '../src/destruction/LandmarkWreck';
+import { GLASS_IMPULSE } from '../src/destruction/wallStrength';
 import type { LandmarkWreckData } from '../src/stream/CityStreamer';
 import type { Destruction } from '../src/destruction/Destruction';
 import type { MeshData } from '../src/build/meshBuilder';
@@ -2503,6 +2504,77 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   }
   check(badElem === 0 && unnamed === 0, `wrecks: every triangle of the near meshes is a piece, the far ones agree (${badElem} out of range, ${unnamed} unnamed)`);
   console.log(`wrecks: ${results.join(', ')} pieces in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Cathedrals (plan/cathedralParts): walk in through the west door, under the vaults to the nave; the
+// stained glass shatters on a light hit while the walls hold (and lets you through), the meshes
+// agree on the pieces and a save brings the broken windows back.
+{
+  const t0 = performance.now();
+  const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
+  const noop = new Proxy({}, { get: () => () => undefined }) as never;
+  const facade = { albedo: null, normal: null, tileMeters: [] } as unknown as MaterialArrays;
+  const results: string[] = [];
+  for (const style of [0, 1, 2]) {
+    const r = new MRng(7 * 101 + style);
+    const L = Math.round(r.range(62, 96)), W = Math.round(r.range(20, 28));
+    const p = { L, W, H: r.range(20, 30), towerH: r.range(60, 105), transept: r.range(1.6, 2.1), wall: r.int(0, 3), roof: r.int(0, 2) };
+    const lm: Landmark = { id: 0, kind: 'cathedral', name: 'test', cell: 0, x: 100, z: -50, angle: 0.4, hu: W / 2 + 18, hv: L / 2 + 16, site: [], base: 0.15, low: 0, seed: r.nextU32(), style, p } as Landmark;
+    lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
+    const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    // Walk up the centre line from the square: up the steps, through the door, into the nave.
+    let y = 0, blocked = 0, maxStep = 0, inside = false;
+    for (let v = -lm.hv; v <= 0; v += 0.2) {
+      const [x, z] = siteToWorld(lm, 0, v);
+      const ny = Math.max(0, solids.topAt(x, z, y + 0.45, 0));
+      maxStep = Math.max(maxStep, ny - y);
+      y = ny;
+      for (const h of [0.3, 1.0, 1.7]) if (solids.hit(x, y + h, z)) { blocked++; break; }
+      inside = !!solids.insideAt(x, y + 1, z);
+    }
+    const floor = y;
+    check(blocked === 0 && maxStep < 0.45 && inside && floor >= lm.base - 0.01, `cathedral ${style}: walk in from the square to the nave (${blocked} blocked, steps up to ${maxStep.toFixed(2)} m, floor ${floor.toFixed(2)} m, inside ${inside})`);
+    // Destruction: glass, walls, meshes, save.
+    let badElem = 0;
+    const data = (): LandmarkWreckData => {
+      const b = buildLandmarkMeshes(lm, flat);
+      const n = b.pieces!.length / PIECE_STRIDE;
+      const meshes = [b.near.build(), b.far.build()];
+      for (const m of meshes) { const e = m.attrs.aElem.array; for (let i = 0; i < e.length; i++) if (e[i] > n || e[i] < 0) badElem++; }
+      const Wd = 1024, Hd = Math.ceil((n + 1) / Wd), ed = new Uint8Array(Wd * Hd * 2).fill(255);
+      const g = new THREE.BufferGeometry();
+      for (const k in meshes[0].attrs) g.setAttribute(k, new THREE.BufferAttribute(meshes[0].attrs[k].array, meshes[0].attrs[k].size, meshes[0].attrs[k].normalized));
+      g.setIndex(new THREE.BufferAttribute(meshes[0].index, 1));
+      const near = new THREE.Mesh(g);
+      near.position.set(...meshes[0].origin);
+      return { index: 0, lm, grid: b.grid!, pieces: b.pieces!, elemData: ed, elemTex: new THREE.DataTexture(ed, Wd, Hd), elemW: Wd, near, nearGlass: null, facadeMat: null as never, glassMat: null };
+    };
+    const D = { onImpact: undefined, impact: () => 0, restoreMound: () => undefined } as unknown as Destruction;
+    const wr = new LandmarkWrecks([data()], D, noop, noop, flat, solids, facade);
+    const w = wr.wrecks[0], T = w.T;
+    let panes = 0;
+    for (let q = 0; q < w.n; q++) panes += w.pane[q];
+    // The lowest pane on the nave's side: a light hit breaks it (and only glass), its wall stands.
+    let p0 = -1;
+    for (let q = 0; q < w.n; q++) if (w.pane[q] && (p0 < 0 || T[q * PIECE_STRIDE + 3] < T[p0 * PIECE_STRIDE + 3])) p0 = q;
+    const at = (q: number) => [T[q * PIECE_STRIDE + 2], T[q * PIECE_STRIDE + 3], T[q * PIECE_STRIDE + 4]] as const;
+    const [px, py, pz] = at(p0);
+    const before = solids.hit(px, py, pz);
+    // (Glass gives at GLASS_IMPULSE·0.3 per m², walls at thousands.)
+    const light = GLASS_IMPULSE * Math.max(1, T[p0 * PIECE_STRIDE + 1]) * 0.6;
+    const broken = wr.impact(px, py, pz, 0.01, light, 1, 0, 0), glass = wr.lastPanes;
+    for (let t = 0; t < 2; t += 1 / 30) wr.update(1 / 30);
+    let wallBroken = 0;
+    for (let q = 0; q < w.n; q++) if (!w.pane[q] && !w.alive[q]) wallBroken++;
+    check(panes > 20 && broken >= 1 && glass === broken && wallBroken === 0 && !w.alive[p0], `cathedral ${style}: a light hit shatters the stained glass (${broken} pieces, ${glass} glass) of ${panes} panes, no wall (${wallBroken})`);
+    check(before && !solids.hit(px, py, pz), `cathedral ${style}: a shattered window lets you through (solid before ${before})`);
+    const save = wr.capture();
+    const wr2 = new LandmarkWrecks([data()], D, noop, noop, flat, new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat), facade);
+    const restored = save.length === 1 && wr2.restore(save[0][0], save[0][1], save[0][2]) && wr2.standing(0) === wr.standing(0) && !wr2.wrecks[0].alive[p0];
+    check(badElem === 0 && restored, `cathedral ${style}: meshes agree on the ${w.n} pieces (${badElem} out of range), a save restores the broken glass`);
+    results.push(`${style}: ${w.n} pieces, ${panes} panes`);
+  }
+  console.log(`cathedrals: ${results.join('; ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
