@@ -63,6 +63,11 @@ body.touch #pause select, body.touch #pause button { min-height: 36px; }
 body.touch #hint { bottom: 170px; }
 /* Upright tablets and narrow screens: the hotbar above the thumbs. */
 @media (max-width: 900px) {
+  /* The compass below the top-right buttons and the status text; the target frame below it. */
+  body.touch #compass { top: calc(max(10px, env(safe-area-inset-top)) + 50px); width: min(560px, calc(100vw - 2 * (max(12px, env(safe-area-inset-right)) + 162px))); }
+  body.touch #tframe { top: calc(max(10px, env(safe-area-inset-top)) + 106px); }
+  body.touch #casualties { top: calc(max(10px, env(safe-area-inset-top)) + 102px); }
+  body.touch #toasts { top: calc(max(10px, env(safe-area-inset-top)) + 136px); }
   body.touch #powerbar { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 250px); }
   body.touch #panel-prompt { bottom: 360px; }
   body.touch #hint { bottom: 400px; }
