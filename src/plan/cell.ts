@@ -1130,6 +1130,15 @@ function placeLandmarkProps(plan: CellPlan, lm: Landmark, terrain: Terrain): voi
       scatter(Math.round((hu * hv) / 140), 0.35, 4);
       break;
     }
+    case 'marvel': {
+      // A plaza round the foot: benches and planters on a ring, lamps at the edges, a few trees.
+      const R = Math.min(hu, hv) - 4;
+      for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2 + 0.2; put(k % 3 ? PropType.Bench : PropType.Planter, Math.cos(a) * R, Math.sin(a) * R, face(-Math.cos(a), -Math.sin(a)), 1.6); }
+      put(PropType.Fountain, 0, -hv + 6, 0, 4, 1, r.int(0, 3));
+      edgeLamps(16, 2);
+      scatter(6, 0.3, 3);
+      break;
+    }
     case 'airport': break;
   }
 }

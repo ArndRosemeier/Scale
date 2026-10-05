@@ -45,8 +45,8 @@ export type FromWorker =
   /** Countryside settlements and roads of a tile (build/rural): meshes (null when empty) and collision boxes. */
   | { type: 'rural'; job: number; ground: MeshData | null; facade: MeshData | null; facadeLod: MeshData | null; obstacles: Float32Array }
   | { type: 'bridges'; job: number; mesh: MeshData | null }
-  /** Per landmark (macro.landmarks order): the near mesh and the far one. */
-  | { type: 'landmarks'; job: number; meshes: [MeshData, MeshData][] }
+  /** Per landmark (macro.landmarks order): the near mesh and the far one, and its clear glass (near, far) if it has any. */
+  | { type: 'landmarks'; job: number; meshes: [MeshData, MeshData][]; glass: ([MeshData, MeshData] | null)[] }
   | { type: 'skyline'; job: number; cells: number[]; records: Float32Array; counts: number[]; map: Float32Array; mapOff: Int32Array }
   | { type: 'error'; job: number; message: string };
 

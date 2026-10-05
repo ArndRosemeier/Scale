@@ -2,6 +2,15 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.033 — 2026-10-05
+
+- **Marvels**: some cities now have breathtaking near-future landmark buildings, different in every city. Towns get one now and then, big cities often, megacities up to three. There are eight kinds, each shaped differently every time:
+  - a **starship spire**, 340 m to a kilometre tall (big cities only): a rocket hull standing on swept fins, with engine pods, sometimes strap-on boosters, and observation rings
+  - a **helix tower** wound by one or two glass walkways that you can walk up from the street to the roof
+  - a **slab pierced by giant round holes** that you can fly through
+  - a **twisted tower**, a **skyship** (towers carrying a long sky park), a **halo tower** with rings on spokes, **orbs** (spheres on a stalk, or a giant molecule standing on one corner) and a **stack** of cantilevered blocks
+- They are on the map, the compass and the minimap like the other landmarks, with a plaza around them. Their windows light up at night, and the glass of walkways, domes and orbs is see-through.
+- Like the other landmarks they can't be destroyed yet.
 ## 0.032 — 2026-10-05
 
 - **Turf wars**: where the gang's streets meet the Syndicate's, the two groups now fight it out — two or three of each, fists, bats and the odd knife, each in their own colours. Left alone, one side is beaten and the winners take the street (a message says who won). Step in and the fight breaks up: both groups lose ground, and the karma for stopping it comes right then.

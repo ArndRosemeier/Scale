@@ -16,8 +16,9 @@ import { Rng, deriveSeed } from '../core/rng';
 import type { Poly } from '../core/geom2';
 import type { Terrain } from '../world/terrain';
 import type { Landmark } from './landmarks';
+import { marvel } from './marvelParts';
 
-export const enum PK { Box = 0, Cyl = 1, Dome = 2, Gable = 3, Pyramid = 4, Ramp = 5, Beam = 6, Tube = 7, Vault = 8, Flat = 9, Quad = 10 }
+export const enum PK { Box = 0, Cyl = 1, Dome = 2, Gable = 3, Pyramid = 4, Ramp = 5, Beam = 6, Tube = 7, Vault = 8, Flat = 9, Quad = 10, Lathe = 11, Prism = 12, Perf = 13, Helix = 14, Strut = 15 }
 
 /** Surface material: facade atlas layer (walls 0–15, roofs 16–23), tint, facade flags and window grammar. */
 export interface PartMat { layer: number; tint: [number, number, number]; flags: number; bay: number; fh: number; gh: number }
@@ -63,12 +64,25 @@ export interface LmPart {
   foot?: number;
   /** Map category: 0 none, 1 building, 2 paving, 3 lawn / pitch, 4 running track, 5 road. */
   map?: number;
-  /** Ramp: no end faces (segments of a ring). */
+  /** Ramp: no end faces (segments of a ring). Lathe: no caps (a band of a longer body, a balustrade). */
   noSides?: boolean;
   /** Collision only (a simple volume standing in for an open structure): not drawn. */
   hidden?: boolean;
   /** Counts as solid ground cover for the planner and the map (a hollow building's outline) without being a solid. */
   footprint?: boolean;
+  /**
+   * Lathe: profile (r, y) pairs, bottom to top (closed when the last pair repeats the first: a
+   * ring), radii scaled by hx along u and hz along v. Prism: outline (u, y) pairs in the part's
+   * frame (u along its axis), extruded ±hz across. Perf: holes (u, y, radius) through the slab
+   * along v.
+   */
+  pts?: number[];
+  /** Helix: turns (the sign is the sense of rotation, + counter-clockwise from above). */
+  turns?: number;
+  /** Helix: clear height of the walkway. */
+  hh?: number;
+  /** Clear glass: drawn by the transparent glass mesh, not the facade one. */
+  clear?: boolean;
 }
 
 /** A walkable inside (the town hall's): its outline, height range and where its room lights hang. */
@@ -96,14 +110,14 @@ export interface PartObstacle {
 }
 
 // Facade flags (build/buildingShell FF): windows, curtain wall, arched, roof, front.
-const WIN = 1, CURTAIN = 4, ARCH = 8, ROOF = 128;
+export const WIN = 1, CURTAIN = 4, ARCH = 8, ROOF = 128;
 // Wall layers (plan/building WallMat) and roof layers (16 + RoofMat).
-const BRICK = 0, BRICK_BROWN = 1, LIME = 4, SAND = 5, PLASTER = 6, STUCCO = 7, CONC = 8, PANEL = 9, GLASS = 10, METAL = 11, GRANITE = 13, BRICK_WHITE = 15;
-const TAR = 16, CLAY = 17, SLATE = 18, ZINC = 19, ASPHALT = 20, METAL_ROOF = 21, GRAVEL = 22, GREEN_ROOF = 23;
+export const BRICK = 0, BRICK_BROWN = 1, LIME = 4, SAND = 5, PLASTER = 6, STUCCO = 7, CONC = 8, PANEL = 9, GLASS = 10, METAL = 11, GRANITE = 13, BRICK_WHITE = 15;
+export const TAR = 16, CLAY = 17, SLATE = 18, ZINC = 19, ASPHALT = 20, METAL_ROOF = 21, GRAVEL = 22, GREEN_ROOF = 23;
 
-type RGB = [number, number, number];
-const mat = (layer: number, tint: RGB = [1, 1, 1], flags = 0, bay = 3, fh = 4, gh = 4.5): PartMat => ({ layer, tint, flags, bay, fh, gh });
-const WHITE: RGB = [1, 1, 1];
+export type RGB = [number, number, number];
+export const mat = (layer: number, tint: RGB = [1, 1, 1], flags = 0, bay = 3, fh = 4, gh = 4.5): PartMat => ({ layer, tint, flags, bay, fh, gh });
+export const WHITE: RGB = [1, 1, 1];
 const COPPER: RGB = [0.48, 0.72, 0.62];
 const GOLD: RGB = [1.25, 1.0, 0.45];
 const BRONZE: RGB = [0.55, 0.42, 0.3];
@@ -111,7 +125,7 @@ const BRONZE: RGB = [0.55, 0.42, 0.3];
 const PAINT: RGB[] = [[0.85, 0.15, 0.12], [0.15, 0.3, 0.75], [0.95, 0.8, 0.15], [0.15, 0.6, 0.3], [0.95, 0.95, 0.95], [0.55, 0.15, 0.55], [0.95, 0.45, 0.1], [0.12, 0.12, 0.14]];
 const STONES = [LIME, SAND, GRANITE, BRICK_WHITE];
 
-interface Opt {
+export interface Opt {
   /** Turn relative to the current frame. */
   rot?: number;
   top?: PartMat;
@@ -122,10 +136,12 @@ interface Opt {
   foot?: boolean | number;
   map?: number;
   seg?: number;
+  /** Clear glass (see LmPart.clear). */
+  clear?: boolean;
 }
 
 /** Builds parts in a local frame (nested frames for sub-assemblies like planes). */
-class Kit {
+export class Kit {
   readonly parts: LmPart[] = [];
   readonly inside: LmInterior = { rooms: [], lights: [] };
   private ox: number;
@@ -184,9 +200,10 @@ class Kit {
     const [x, z] = this.W(u, v);
     const part: LmPart = {
       k, x, z, a: this.oa + (o.rot ?? 0), ...p,
-      top: o.top, back: o.back, solid: o.solid ?? (solid && !o.detail), detail: o.detail, foot: this.foot(o),
+      top: o.top, back: o.back, solid: o.solid ?? (solid && !o.detail && !o.clear), detail: o.detail, foot: this.foot(o),
       map: o.map ?? (o.detail ? 0 : map), seg: o.seg ?? p.seg,
     };
+    if (o.clear) part.clear = true;
     this.parts.push(part);
     return part;
   }
@@ -266,6 +283,39 @@ class Kit {
     p.hidden = true;
   }
 
+  /**
+   * Surface of revolution about a vertical axis at (u, v): profile (r, y) pairs from bottom to top
+   * (repeat the first pair at the end for a closed ring), radii scaled by sx along u and sz along v.
+   */
+  lathe(u: number, v: number, prof: number[], sx: number, sz: number, m: PartMat, o: Opt = {}): LmPart {
+    let y0 = Infinity, y1 = -Infinity;
+    for (let i = 1; i < prof.length; i += 2) { y0 = Math.min(y0, prof[i]); y1 = Math.max(y1, prof[i]); }
+    return this.add(PK.Lathe, u, v, { hx: sx, hz: sz, y0, y1, pts: prof.slice(), m, seg: 32 }, o, true, 1);
+  }
+
+  /** A slab in the vertical plane along u: outline (du, y) pairs around (u, v) (CCW), 2 hv thick. */
+  prism(u: number, v: number, outline: number[], hv: number, m: PartMat, o: Opt = {}): LmPart {
+    let y0 = Infinity, y1 = -Infinity;
+    for (let i = 1; i < outline.length; i += 2) { y0 = Math.min(y0, outline[i]); y1 = Math.max(y1, outline[i]); }
+    return this.add(PK.Prism, u, v, { hx: 0, hz: hv, y0, y1, pts: outline.slice(), m }, o, true, 1);
+  }
+
+  /** A slab (2 hu × 2 hv, y0–y1) pierced along v by round holes (du, y, radius). */
+  perf(u: number, v: number, hu: number, hv: number, y0: number, y1: number, holes: number[], m: PartMat, o: Opt = {}): LmPart {
+    return this.add(PK.Perf, u, v, { hx: hu, hz: hv, y0, y1, pts: holes.slice(), m, seg: 24 }, o, true, 1);
+  }
+
+  /**
+   * A walkway winding up around a vertical axis at (u, v) between radii r and r2: its floor rises
+   * from yA to yB over `turns` turns (sign: sense), starting at angle a0 (local), hh high inside.
+   * Two parts: the floor slabs and roof edge (m), and the clear glass walls and roof (glass).
+   */
+  helix(u: number, v: number, r: number, r2: number, yA: number, yB: number, turns: number, a0: number, hh: number, m: PartMat, glass: PartMat, o: Opt = {}): void {
+    const p = { hx: r2, hz: r2, r, r2, y0: yA, y1: yB, turns, hh, m, seg: 48 };
+    this.add(PK.Helix, u, v, p, { ...o, rot: a0 }, true, 1);
+    this.add(PK.Helix, u, v, { ...p, m: glass }, { ...o, rot: a0, clear: true, solid: false, map: 0 }, false, 0);
+  }
+
   /** A walkable room over the local rectangle (u0, v0)–(u1, v1), from y0 to y1. */
   room(u0: number, v0: number, u1: number, v1: number, y0: number, y1: number): void {
     this.inside.rooms.push({ poly: [...this.W(u0, v0), ...this.W(u1, v0), ...this.W(u1, v1), ...this.W(u0, v1)], y0, y1 });
@@ -275,6 +325,12 @@ class Kit {
   light(u: number, v: number, y: number): void {
     const [x, z] = this.W(u, v);
     this.inside.lights.push(x, y, z);
+  }
+
+  /** A round strut (cylinder of radius rad) between two local points at any slope. */
+  strut(u0: number, v0: number, y0: number, u1: number, v1: number, y1: number, rad: number, m: PartMat, o: Opt = {}): LmPart {
+    const [bx, bz] = this.W(u1, v1);
+    return this.add(PK.Strut, u0, v0, { hx: 0, hz: 0, y0, y1: y0, bx, by: y1, bz, w: rad, m, seg: 10 }, o, false, 0);
   }
 
   /** Free quad (world corners, x y z × 4, counter-clockwise from above). */
@@ -1381,6 +1437,7 @@ export function landmarkParts(lm: Landmark, terrain: Terrain): LmPart[] {
     case 'fortress': fortress(k, lm, r); break;
     case 'glasshouse': glasshouse(k, lm, r); break;
     case 'airport': airport(k, lm, r); if (lm.road) road(k, lm.road); break;
+    case 'marvel': marvel(k, lm, r); break;
   }
   parts = k.parts;
   cache.set(lm, parts);
@@ -1409,16 +1466,128 @@ export function partObstacles(parts: LmPart[]): PartObstacle[] {
         out.push({ cyl: true, x: p.x, z: p.z, r, hx: r, hz: r, ux, uz, y0, y1: Math.max(p.y0, p.y1) });
         break;
       }
-      case PK.Beam: {
+      case PK.Beam: case PK.Strut: {
         const dx = p.bx! - p.x, dz = p.bz! - p.z, L = Math.hypot(dx, dz) || 1;
         out.push({ cyl: false, x: (p.x + p.bx!) / 2, z: (p.z + p.bz!) / 2, r: 0, hx: L / 2, hz: p.w!, ux: dx / L, uz: dz / L, y0: Math.min(p.y0, p.by!) - p.w!, y1: Math.max(p.y0, p.by!) + p.w! });
         break;
       }
-      case PK.Quad: case PK.Flat: break;
+      case PK.Quad: case PK.Flat: case PK.Helix: break; // (the helix: world/LandmarkSolids, analytically)
+      case PK.Lathe: latheObstacles(p, out); break;
+      case PK.Prism: prismObstacles(p, out); break;
+      case PK.Perf: perfObstacles(p, out); break;
       default:
         out.push({ cyl: false, x: p.x, z: p.z, r: 0, hx: Math.max(p.hx, p.hx2 ?? 0), hz: p.hz, ux, uz, y0, y1: p.y1 });
     }
   }
+  return out;
+}
+
+/** Is a lathe profile closed (a ring)? */
+export function latheClosed(P: number[]): boolean {
+  const n = P.length;
+  return n >= 6 && Math.abs(P[0] - P[n - 2]) < 1e-6 && Math.abs(P[1] - P[n - 1]) < 1e-6;
+}
+
+/**
+ * A lathe as solids: a ring (closed profile) as boxes around it, anything else as a stack of
+ * cylinders (boxes when clearly elliptical), one per profile step, of the step's mean radius.
+ */
+function latheObstacles(p: LmPart, out: PartObstacle[]): void {
+  const P = p.pts!, ux = Math.cos(p.a), uz = Math.sin(p.a), sx = p.hx, sz = p.hz;
+  const ell = Math.max(sx, sz) / Math.max(1e-6, Math.min(sx, sz)) > 1.25;
+  if (latheClosed(P)) {
+    let r0 = Infinity, r1 = 0, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < P.length; i += 2) { r0 = Math.min(r0, P[i]); r1 = Math.max(r1, P[i]); y0 = Math.min(y0, P[i + 1]); y1 = Math.max(y1, P[i + 1]); }
+    const rm = (r0 + r1) / 2, n = 28;
+    for (let k = 0; k < n; k++) {
+      const t = ((k + 0.5) / n) * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
+      // Tangent of the (possibly elliptical) ring at t, in the part frame, then in the world.
+      const lu = c * rm * sx, lv = s * rm * sz, tu = -s * sx, tv = c * sz, tl = Math.hypot(tu, tv);
+      const wx = p.x + lu * ux - lv * uz, wz = p.z + lu * uz + lv * ux;
+      const dx = (tu * ux - tv * uz) / tl, dz = (tu * uz + tv * ux) / tl;
+      const chord = (Math.PI * 2 * rm * Math.max(sx, sz)) / n;
+      out.push({ cyl: false, x: wx, z: wz, r: 0, hx: chord / 2 + 0.3, hz: ((r1 - r0) / 2) * Math.min(sx, sz), ux: dx, uz: dz, y0, y1 });
+    }
+    return;
+  }
+  for (let i = 0; i + 3 < P.length; i += 2) {
+    const ya = Math.min(P[i + 1], P[i + 3]), yb = Math.max(P[i + 1], P[i + 3]);
+    const r = (P[i] + P[i + 2]) / 2;
+    if (yb - ya < 0.05 || r < 0.4) continue;
+    if (ell) out.push({ cyl: false, x: p.x, z: p.z, r: 0, hx: r * sx * 0.85, hz: r * sz * 0.85, ux, uz, y0: ya, y1: yb });
+    else out.push({ cyl: true, x: p.x, z: p.z, r: r * Math.min(sx, sz), hx: 0, hz: 0, ux, uz, y0: ya, y1: yb });
+  }
+}
+
+/** Extent along u of a closed (u, y) outline between heights ya and yb, or null. */
+function bandExtent(P: number[], ya: number, yb: number): [number, number] | null {
+  let lo = Infinity, hi = -Infinity;
+  const n = P.length >> 1;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n, au = P[i * 2], ay = P[i * 2 + 1], bu = P[j * 2], by = P[j * 2 + 1];
+    if (ay >= ya && ay <= yb) { lo = Math.min(lo, au); hi = Math.max(hi, au); }
+    for (const y of [ya, yb]) if ((ay - y) * (by - y) < 0) { const u = au + ((bu - au) * (y - ay)) / (by - ay); lo = Math.min(lo, u); hi = Math.max(hi, u); }
+  }
+  return hi - lo > 0.05 ? [lo, hi] : null;
+}
+
+/** A prism as a stack of boxes, each spanning the outline's width in its height band. */
+function prismObstacles(p: LmPart, out: PartObstacle[]): void {
+  const P = p.pts!, ux = Math.cos(p.a), uz = Math.sin(p.a);
+  const n = Math.max(1, Math.min(24, Math.ceil((p.y1 - p.y0) / 6)));
+  for (let b = 0; b < n; b++) {
+    const ya = p.y0 + ((p.y1 - p.y0) * b) / n, yb = p.y0 + ((p.y1 - p.y0) * (b + 1)) / n;
+    const e = bandExtent(P, ya, yb);
+    if (!e) continue;
+    const um = (e[0] + e[1]) / 2;
+    out.push({ cyl: false, x: p.x + um * ux, z: p.z + um * uz, r: 0, hx: (e[1] - e[0]) / 2, hz: p.hz, ux, uz, y0: ya, y1: yb });
+  }
+}
+
+/** Share of a hole's radius kept open in the collision (the square inside the circle, a little more). */
+const HOLE_OPEN = 0.74;
+
+/** A pierced slab as boxes around its holes (one can fly or walk through them). */
+function perfObstacles(p: LmPart, out: PartObstacle[]): void {
+  const H = p.pts!, ux = Math.cos(p.a), uz = Math.sin(p.a);
+  const y0 = Math.min(p.y0, p.foot ?? p.y0);
+  const ys = [y0, p.y1];
+  for (let i = 0; i < H.length; i += 3) ys.push(H[i + 1] - H[i + 2] * HOLE_OPEN, H[i + 1] + H[i + 2] * HOLE_OPEN);
+  ys.sort((a, b) => a - b);
+  for (let k = 0; k + 1 < ys.length; k++) {
+    const ya = ys[k], yb = ys[k + 1], ym = (ya + yb) / 2;
+    if (yb - ya < 0.05) continue;
+    const cut: [number, number][] = [];
+    for (let i = 0; i < H.length; i += 3) if (Math.abs(ym - H[i + 1]) < H[i + 2] * HOLE_OPEN) cut.push([H[i] - H[i + 2] * HOLE_OPEN, H[i] + H[i + 2] * HOLE_OPEN]);
+    cut.sort((a, b) => a[0] - b[0]);
+    let u = -p.hx;
+    const put = (a: number, b: number) => { if (b - a > 0.05) out.push({ cyl: false, x: p.x + ((a + b) / 2) * ux, z: p.z + ((a + b) / 2) * uz, r: 0, hx: (b - a) / 2, hz: p.hz, ux, uz, y0: ya, y1: yb }); };
+    for (const [a, b] of cut) { put(u, a); u = Math.max(u, b); }
+    put(u, p.hx);
+  }
+}
+
+/** Walkway slab thickness of a helix (the mesh; the solid is a little thicker). */
+export const HELIX_SLAB = 0.5;
+
+/** Floor height of a helix at turn angle φ from its start (0 … 2π·|turns|). */
+export function helixFloorAt(p: LmPart, phi: number): number {
+  const full = Math.abs(p.turns!) * Math.PI * 2;
+  return p.y0 + ((p.y1 - p.y0) * phi) / full;
+}
+
+/**
+ * Floor heights of a helix over the world point (x, z) (one per turn passing over it, lowest
+ * first), or none when the point is off the walkway's annulus (grown by m).
+ */
+export function helixFloorsAt(p: LmPart, x: number, z: number, m = 0, out: number[] = []): number[] {
+  out.length = 0;
+  const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
+  if (d < p.r! - m || d > p.r2! + m) return out;
+  const sg = p.turns! < 0 ? -1 : 1, full = Math.abs(p.turns!) * Math.PI * 2, T = Math.PI * 2;
+  let phi = (sg * (Math.atan2(dz, dx) - p.a)) % T;
+  if (phi < 0) phi += T;
+  for (; phi <= full; phi += T) out.push(helixFloorAt(p, phi));
   return out;
 }
 
@@ -1444,7 +1613,21 @@ export function partOutline(p: LmPart, m = 0): Poly | null {
       return [...P(-a, -h), ...P(a, -h), ...P(b, h), ...P(-b, h)];
     }
     case PK.Quad: return [p.q![0], p.q![2], p.q![3], p.q![5], p.q![6], p.q![8], p.q![9], p.q![11]];
-    case PK.Beam: return null;
+    case PK.Beam: case PK.Strut: return null;
+    case PK.Lathe: case PK.Helix: {
+      let rm = 0;
+      if (p.k === PK.Helix) rm = p.r2!;
+      else for (let i = 0; i < p.pts!.length; i += 2) rm = Math.max(rm, p.pts![i]);
+      const sx = p.k === PK.Lathe ? p.hx : 1, sz = p.k === PK.Lathe ? p.hz : 1;
+      const out: number[] = [];
+      for (let i = 0; i < 20; i++) { const a = (i / 20) * Math.PI * 2; out.push(...P(Math.cos(a) * (rm * sx + m), Math.sin(a) * (rm * sz + m))); }
+      return out;
+    }
+    case PK.Prism: {
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < p.pts!.length; i += 2) { lo = Math.min(lo, p.pts![i]); hi = Math.max(hi, p.pts![i]); }
+      return [...P(lo - m, -p.hz - m), ...P(hi + m, -p.hz - m), ...P(hi + m, p.hz + m), ...P(lo - m, p.hz + m)];
+    }
     default: return [...P(-p.hx - m, -p.hz - m), ...P(p.hx + m, -p.hz - m), ...P(p.hx + m, p.hz + m), ...P(-p.hx - m, p.hz + m)];
   }
 }
@@ -1453,7 +1636,7 @@ export function partOutline(p: LmPart, m = 0): Poly | null {
 export function solidFootprints(lm: Landmark, parts: LmPart[], m = 0.8): Poly[] {
   const out: Poly[] = [];
   for (const p of parts) {
-    if ((!p.solid && !p.footprint) || p.k === PK.Beam) continue;
+    if ((!p.solid && !p.footprint) || p.k === PK.Beam || p.k === PK.Strut) continue;
     if (Math.min(p.y0, p.foot ?? p.y0) > lm.base + 2.5) continue; // up in the air
     const o = partOutline(p, m);
     if (o) out.push(o);

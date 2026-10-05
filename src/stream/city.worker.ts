@@ -142,7 +142,12 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
     }
     if (m.type === 'landmarks') {
       const meshes = macro.landmarks.map((lm) => [buildLandmarkMesh(lm, terrain!, 0).build(), buildLandmarkMesh(lm, terrain!, 1).build()] as [MeshData, MeshData]);
-      post({ type: 'landmarks', job: m.job, meshes }, meshes.flatMap(([a, b]) => [...meshTransferables(a), ...meshTransferables(b)]));
+      const glass = macro.landmarks.map((lm) => {
+        const near = buildLandmarkMesh(lm, terrain!, 0, true);
+        return near.empty ? null : [near.build(), buildLandmarkMesh(lm, terrain!, 1, true).build()] as [MeshData, MeshData];
+      });
+      const all = [...meshes, ...glass.filter((g): g is [MeshData, MeshData] => !!g)];
+      post({ type: 'landmarks', job: m.job, meshes, glass }, all.flatMap(([a, b]) => [...meshTransferables(a), ...meshTransferables(b)]));
       return;
     }
     if (m.type === 'bridges') {

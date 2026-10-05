@@ -11,6 +11,7 @@ import type { CellPlan } from '../plan/cell';
 import { WorkerPool } from './WorkerPool';
 import { BINFO_STRIDE, type CellResult, type FromWorker } from './protocol';
 import { createFacadeMaterial, createElemDepthMaterial } from '../render/materials/facade';
+import { clearGlassMaterial } from '../render/materials/clearGlass';
 import { createGroundMaterial, createTerrainMaterial, createWaterMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
 
@@ -119,20 +120,29 @@ export class CityStreamer {
     const mat = createFacadeMaterial(this.tex.facade, null);
     r.meshes.forEach(([near, far], i) => {
       const lm = this.macro.landmarks[i];
-      const lod = new THREE.LOD();
-      lod.name = `landmark:${lm.kind}`;
-      // LOD distances are measured to the object's own position: put it at the landmark.
-      lod.position.set(...near.origin);
-      // Switch to the far mesh a little beyond the site (the airport is kilometres long).
-      const switchAt = 450 + Math.hypot(lm.hu, lm.hv) * 0.6;
-      for (const [m, d] of [[near, 0], [far, switchAt]] as const) {
-        const mesh = new THREE.Mesh(toGeometry(m), mat);
-        mesh.position.set(m.origin[0] - near.origin[0], m.origin[1] - near.origin[1], m.origin[2] - near.origin[2]);
-        mesh.castShadow = mesh.receiveShadow = true;
-        releaseAfterUpload(mesh.geometry);
-        lod.addLevel(mesh, d);
-      }
-      this.root.add(lod);
+      // Switch to the far mesh a little beyond the site (the airport is kilometres long), and
+      // not while one is up a tall one (LOD distances are measured to its foot).
+      const switchAt = 450 + Math.max(Math.hypot(lm.hu, lm.hv) * 0.6, near.bounds[4] * 1.1);
+      const add = (meshes: [MeshData, MeshData], m: THREE.Material, glass: boolean) => {
+        const lod = new THREE.LOD();
+        lod.name = `landmark:${lm.kind}${glass ? ':glass' : ''}`;
+        // LOD distances are measured to the object's own position: put it at the landmark.
+        lod.position.set(...meshes[0].origin);
+        for (const [md, d] of [[meshes[0], 0], [meshes[1], switchAt]] as const) {
+          const mesh = new THREE.Mesh(toGeometry(md), m);
+          mesh.position.set(md.origin[0] - meshes[0].origin[0], md.origin[1] - meshes[0].origin[1], md.origin[2] - meshes[0].origin[2]);
+          // (Clear glass casts no shadow and draws after the opaque world.)
+          mesh.castShadow = !glass;
+          mesh.receiveShadow = true;
+          if (glass) mesh.renderOrder = 2;
+          releaseAfterUpload(mesh.geometry);
+          lod.addLevel(mesh, d);
+        }
+        this.root.add(lod);
+      };
+      add([near, far], mat, false);
+      const g = r.glass[i];
+      if (g) add(g, clearGlassMaterial(), true);
     });
   }
 
