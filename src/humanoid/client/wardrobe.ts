@@ -186,6 +186,22 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.02), new THREE.MeshStandardMaterial({ color: 0x4a2e1a, roughness: 0.55 })));
       break;
     }
+    case 'envelope': {
+      // Protection money: a fat manila envelope held up in the hand.
+      const env = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.12), new THREE.MeshStandardMaterial({ color: 0xc8a46a, roughness: 0.8 }));
+      env.position.y = 0.06;
+      g.add(env);
+      break;
+    }
+    case 'bomb': {
+      // A round black bomb with a short fuse (the mad bomber's): held in the palm.
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 9), new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.45, metalness: 0.35 }));
+      m.position.set(0, 0.06, 0.03);
+      const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.06, 5), new THREE.MeshStandardMaterial({ color: 0xc8a060, emissive: 0xff7a20, emissiveIntensity: 0.6 }));
+      fuse.position.set(0, 0.155, 0.03);
+      g.add(m, fuse);
+      break;
+    }
     case 'umbrella': {
       // Held up beside the head (raised grip): a short shaft to the canopy just above it.
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.75, 6), new THREE.MeshStandardMaterial({ color: 0x222222 }));

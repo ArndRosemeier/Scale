@@ -561,7 +561,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   crime.arrest(thief);
   step(0.05);
   check(crime.phase === 'resolved' && crime.outcome === 'arrested' && thief.actor!.state === 'arrested', `snatch: arrested, resolved (${crime.phase}, ${crime.outcome})`);
-  check(events.join(',') === 'commit,ko,arrest,resolved' && policeCalls === 1, `snatch events ${events.join(',')}, police called ${policeCalls} times`);
+  check(events.join(',') === 'commit,ko,subdued,arrest,resolved' && policeCalls === 1, `snatch events ${events.join(',')}, police called ${policeCalls} times`);
   check(phases.join('>') === 'approach>escape>subdued>resolved', `snatch phases ${phases.join(' > ')}`);
   // Group operations (VILLAINS_PLAN P1 part 2) with the same mocked world plus shop doors: a racket
   // leans on the shopkeeper and walks off with the cash; a tagger paints the tag and it stays, or
@@ -581,7 +581,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
         for (const a of agents) {
           const act = a.actor;
           if (!a.alive || !act) continue;
-          act.stateT += 0.05; act.attackT -= 0.05; act.replanT -= 0.05;
+          act.stateT += 0.05; act.attackT -= 0.05; act.replanT -= 0.05; act.staggerT = Math.max(0, act.staggerT - 0.05);
+          if (act.memo.stagCd > 0) act.memo.stagCd -= 0.05;
+          // Knocked down (not out): up again after a while (CrimeSystem.upkeep).
+          if (act.state === 'down') { act.upT -= 0.05; if (act.upT <= 0) { a.state = 2; act.state = 'run'; act.stateT = 0; } continue; }
+          if (act.state === 'ko' || act.state === 'surrender' || act.state === 'arrested') continue;
           const g = act.goal;
           if (g) { const dx = g.x - a.x, dz = g.z - a.z, d = Math.hypot(dx, dz); const s = Math.min(d, act.speed * 0.05); if (d > 1e-6) { a.x += (dx / d) * s; a.z += (dz / d) * s; } }
         }
@@ -592,11 +596,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     };
     player.x = 0; player.z = 0;
     const racket = new Racket(w2, 777);
-    check(racket.setup() && racket.kind === 'racket' && racket.victim?.actor?.role === 'shopkeeper' && racket.loot?.kind === 'cash', `racket: a shopkeeper at the door is the victim, the loot is cash (${racket.victim?.actor?.role}, ${racket.loot?.kind})`);
+    check(racket.setup() && racket.kind === 'racket' && racket.victim?.actor?.role === 'shopkeeper' && racket.loot?.kind === 'envelope', `racket: a shopkeeper at the door is the victim, the loot an envelope of cash (${racket.victim?.actor?.role}, ${racket.loot?.kind})`);
     check(racket.criminals.length >= 1 && racket.criminals.length <= 2, `racket: one or two collectors (${racket.criminals.length})`);
     const rEv: string[] = [];
     drive(racket, () => racket.phase === 'escape' || racket.phase === 'aborted', 2400, rEv);
-    check(racket.phase === 'escape' && racket.loot?.carrier === racket.criminals[0], `racket: they take the envelope and walk off (${racket.phase}, events ${rEv.join(',')})`);
+    check(racket.phase === 'escape' && racket.loot?.carrier === racket.criminals[0] && racket.criminals[0].actor?.held === 'envelope', `racket: they take the envelope and walk off (${racket.phase}, events ${rEv.join(',')})`);
+    check(racket.victim!.actor?.state !== 'cower' && racket.victim!.state !== 5, `racket: the shopkeeper pays up, not cowering or shoved down (${racket.victim!.actor?.state})`);
 
     const tag = new Tagging(w2, 4242);
     check(tag.setup() && !!tag.spot && tag.kind === 'tagging', 'tagging: setup finds a wall beside a door and a tagger');
@@ -615,6 +620,79 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     drive(tag2, () => false, Math.ceil(TAGGING.paintFor / 0.05), t2Ev);
     check(!tag2.done && !t2Ev.includes('tagged') && tag2.playerInvolved && tag2.phase !== 'commit', `tagging: the hero comes close, the tag is abandoned (${tag2.phase}, ${t2Ev.join(',')})`);
     player.x = 0; player.z = 0;
+
+    // Phase 2: a turf brawl between two groups fights itself out (one side beaten, a winner) with
+    // nobody about; with the hero close it is broken up (no winner). Hideout guards square up.
+    const { TurfBrawl } = await import('../src/game/crime/TurfBrawl');
+    const { HideoutGuard } = await import('../src/game/crime/HideoutGuard');
+    const w3 = Object.assign(Object.create(w2) as typeof w2, { walls: () => doors.map((d) => ({ ...d, bay: 2.2 })) });
+    const brawl = new TurfBrawl(w3, 31337);
+    brawl.faction = 0; brawl.rival = 1;
+    check(brawl.setup() && brawl.standing(0).length >= 2 && brawl.standing(1).length >= 2, `brawl: two sides of 2–3 (${brawl.standing(0).length} vs ${brawl.standing(1).length})`);
+    const bEv: string[] = [];
+    drive(brawl, () => brawl.phase !== 'approach', 2400, bEv);
+    check(brawl.phase === 'commit', `brawl: the two sides meet and fight (${brawl.phase})`);
+    drive(brawl, () => brawl.winner >= 0 || !brawl.active, 4000, bEv);
+    const beaten = brawl.standing(0).length === 0 ? 0 : 1;
+    check(brawl.winner === (beaten === 0 ? 1 : 0) && bEv.includes('won') && !brawl.playerInvolved, `brawl: left alone, one side is beaten and the other wins (winner ${brawl.winner}, standing ${brawl.standing(0).length}/${brawl.standing(1).length}, ${bEv.join(',')})`);
+    check(brawl.criminals.some((c) => c.actor?.state === 'ko' && !c.actor.koByPlayer), 'brawl: they knock each other out');
+    const brawl2 = new TurfBrawl(w3, 4711);
+    brawl2.faction = 0; brawl2.rival = 1;
+    check(brawl2.setup(), 'brawl: a second one');
+    const b2Ev: string[] = [];
+    drive(brawl2, () => brawl2.phase !== 'approach', 2400, b2Ev);
+    const m = brawl2.meet!;
+    player.x = m.x + 4; player.z = m.z + 4;
+    drive(brawl2, () => false, 60, b2Ev);
+    check(brawl2.playerInvolved && brawl2.winner < 0 && brawl2.phase !== 'commit' && b2Ev.includes('subdued'), `brawl: the hero comes close and breaks it up, stopped at once (${brawl2.phase}, ${b2Ev.join(',')})`);
+    player.x = 0; player.z = 0;
+
+    const guards = new HideoutGuard(w3, 2024, { x: 300, z: 60, nx: 0, nz: 1 });
+    check(guards.setup() && guards.criminals.length >= 2 && guards.guarding === guards.criminals.length, `hideout: ${guards.criminals.length} guards at the door`);
+    const gEv: string[] = [];
+    drive(guards, () => false, 100, gEv);
+    check(guards.phase === 'approach' && !gEv.includes('commit'), 'hideout: the guards keep watch while nobody comes');
+    player.x = 300; player.z = 72;
+    drive(guards, () => guards.phase !== 'approach', 40, gEv);
+    check(guards.phase === 'commit' && guards.criminals.every((c) => c.actor!.hostile), `hideout: the hero walks up and they square up (${guards.phase})`);
+    for (let k = 0; k < 40 && guards.phase !== 'subdued' && guards.active; k++) {
+      for (const c of guards.criminals) if (c.actor && c.actor.state !== 'ko' && c.actor.state !== 'surrender') combat.hitActor(c, 0, 60, -500, 'punch', 'player', player.x, player.z);
+      drive(guards, () => false, 10, gEv);
+    }
+    check(guards.phase === 'subdued' && gEv.filter((e) => e === 'subdued').length === 1 && guards.guarding === 0, `hideout: guards beaten, 'subdued' once (${guards.phase}, ${gEv.join(',')})`);
+    player.x = 0; player.z = 0;
+
+    // The mad bomber: walks to the busy spot and starts lobbing bombs; once the hero is close the
+    // bombs go at them; a few punches knock him out and the police take him.
+    const { Bomber, BOMBER } = await import('../src/game/crime/Bomber');
+    for (let k = 0; k < 6; k++) mk(500 + k, 300 + k * 2.5, 60 + (k % 2) * 3, Math.PI / 2, 0);
+    const thrownAt: { x: number; z: number }[] = [];
+    const w4 = Object.assign(Object.create(w2) as typeof w2, { bomb: (_c: unknown, x: number, z: number) => { thrownAt.push({ x, z }); return true; } });
+    const bomber = new Bomber(w4, 31337, { x: 305, z: 62 });
+    check(bomber.setup() && bomber.bomber?.actor?.held === 'bomb' && bomber.bombsLeft >= BOMBER.bombs[0] && bomber.kind === 'bomber', `bomber: setup finds a busy spot and a bomber with a bag of bombs (${bomber.bombsLeft})`);
+    const bombEv: string[] = [];
+    drive(bomber, () => bomber.phase !== 'approach', 2400, bombEv);
+    check(bomber.phase === 'commit' && bombEv.includes('commit'), `bomber: he reaches the spot and starts (${bomber.phase}, ${bombEv.join(',')})`);
+    drive(bomber, () => thrownAt.length >= 3, 800, bombEv);
+    const bb = bomber.bomber!;
+    check(thrownAt.length >= 3 && bomber.thrown === thrownAt.length, `bomber: bombs fly (${thrownAt.length} thrown)`);
+    player.x = bb.x + 15; player.z = bb.z;
+    const n0 = thrownAt.length;
+    drive(bomber, () => thrownAt.length > n0, 800, bombEv);
+    const last = thrownAt[thrownAt.length - 1];
+    check(thrownAt.length > n0 && Math.hypot(last.x - player.x, last.z - player.z) <= BOMBER.scatter[1] + 0.1, `bomber: once the hero is close the next bomb goes at them (${last ? Math.hypot(last.x - player.x, last.z - player.z).toFixed(1) : '-'} m off)`);
+    let punches = 0;
+    for (let i = 0; i < 400 && bb.actor!.state !== 'ko' && bb.actor!.state !== 'surrender'; i++) {
+      player.x = bb.x + 0.9; player.z = bb.z;
+      if (i % 12 === 0) { combat.hitActor(bb, -420, 80, 0, 'punch', 'player'); punches++; }
+      drive(bomber, () => false, 1, bombEv);
+    }
+    check(bb.actor!.state === 'ko' || bb.actor!.state === 'surrender', `bomber: a few punches stop him (${punches} punches, ${bb.actor!.state})`);
+    drive(bomber, () => false, 2, bombEv);
+    bomber.arrest(bb);
+    drive(bomber, () => false, 2, bombEv);
+    check(bomber.phase === 'resolved' && bomber.outcome === 'arrested', `bomber: arrested, resolved (${bomber.phase}, ${bombEv.join(',')})`);
+    player.x = 0; player.z = 0;
   }
   console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
@@ -625,7 +703,8 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
 {
   const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
   const { planHour } = await import('../src/game/crime/CrimeDirector');
-  const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions } = await import('../src/game/factions/Factions');
+  const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions, drift, relation, rivalsAt, strength, DRIFT } = await import('../src/game/factions/Factions');
+  const { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts } = await import('../src/game/factions/Hideouts');
   const { ARCHETYPES } = await import('../src/game/factions/archetypes');
   const { factionOutfit } = await import('../src/game/factions/outfits');
   const t0 = performance.now();
@@ -673,8 +752,53 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(st.stopped === 12 && H.holder.every((h, i) => h === F.holder[i]) && H.influence.every((I, f) => I.every((v, i) => Math.abs(v - F.influence[f][i]) < 0.006)), 'turf and stats survive a save');
     restoreFactions(H, null);
     check(H.holder.every((h, i) => h === G.holder[i]), 'no saved turf: the seeded one');
+    // Drift's hysteresis lets a holder keep a cell a little below HOLD: a save keeps it held.
+    const K = planFactions(macro, seed, idx);
+    K.influence[gang.id][gang.home] = HOLD - DRIFT.hysteresis * 0.6;
+    const kept = planFactions(macro, seed, idx);
+    restoreFactions(kept, JSON.parse(JSON.stringify(saveFactions(K))));
+    check(K.holder[gang.home] === gang.id && kept.holder[gang.home] === gang.id, `a block held just below HOLD stays held through a save (${kept.holder[gang.home]})`);
+
     const grow = shift(G, gang.home, gang.id, SHIFT.tag);
     check(grow.length === 0 && G.influence[gang.id][gang.home] <= SHIFT.max, 'a tag at home strengthens the hold without flipping it');
+    // Phase 2: the gang and the Syndicate are at war; turf brawls only where they meet.
+    check(relation(F, gang.id, syn.id) === 'hostile' && relation(F, syn.id, gang.id) === 'hostile' && relation(F, gang.id, gang.id) === 'self', 'the gang and the Syndicate are rivals');
+    const border = F.holder.findIndex((h, i) => h === gang.id && F.near[i].some((j) => F.holder[j] === syn.id));
+    const deep = F.holder.findIndex((h, i) => h === gang.id && [i, ...F.near[i]].every((j) => F.holder[j] !== syn.id && F.influence[syn.id][j] < 0.12));
+    if (border >= 0) check(rivalsAt(F, border, gang.id)[0] === syn.id, `a border cell: the Syndicate presses there (cell ${border})`);
+    if (deep >= 0) check(rivalsAt(F, deep, gang.id).length === 0, `deep in gang turf: no rivals about (cell ${deep})`);
+    // Off-screen drift: deterministic, borders don't flicker, the map stays near its seeded shape.
+    const D1 = planFactions(macro, seed, idx), D2 = planFactions(macro, seed, idx);
+    let drifts = 0;
+    for (let h = 0; h < 240; h++) { drifts += drift(D1, seed, 5000 + h).length; drift(D2, seed, 5000 + h); }
+    check(D1.holder.every((h, i) => h === D2.holder[i]) && D1.influence.every((I, f) => I.every((v, i) => v === D2.influence[f][i])), `drift deterministic for seed and hour (seed ${seed})`);
+    check(D1.influence.every((I) => I.every((v) => v >= 0 && v <= SHIFT.max)), 'drift keeps influence in range');
+    check(drifts <= macro.cells.length * 0.5, `drift: no flickering borders (${drifts} changes of hand in 240 h over ${macro.cells.length} cells)`);
+    for (const f of D1.factions) {
+      const n0 = F.baseHeld[f.id], n1 = D1.holder.filter((h) => h === f.id).length;
+      check(n1 >= n0 * 0.6 && n1 <= Math.max(n0 + 3, n0 * 1.6), `drift: ${f.name} keeps about its turf over 10 days (${n0} → ${n1} cells)`);
+    }
+    // A group the player has driven out of its streets: holds less for a while, then comes back home.
+    const W = planFactions(macro, seed, idx);
+    for (let k = 0; k < 600 && W.holder.some((h) => h === gang.id); k++) shift(W, W.holder.indexOf(gang.id), gang.id, SHIFT.stopped);
+    check(strength(W, gang.id) === 0, 'the gang driven out of every block');
+    for (let h = 0; h < 12; h++) drift(W, seed, 6000 + h);
+    const after12 = W.holder.filter((h) => h === gang.id).length;
+    for (let h = 12; h < 120; h++) drift(W, seed, 6000 + h);
+    check(after12 < F.baseHeld[gang.id] && W.holder[gang.home] === gang.id, `a beaten gang lies low (${after12} blocks after 12 h), then is back home (${W.holder.filter((h) => h === gang.id).length} after 5 days)`);
+    check(DRIFT.maxCatchUp >= 1, 'drift catches up a bounded number of hours');
+    // Hideouts: in the home cell while it holds it; the door is picked by seed and move count; saved.
+    const HO = planHideouts(F);
+    check(HO.length === 2 && HO.every((h, i) => h.cell === F.factions[i].home && !h.found && !h.door), 'hideouts: one per group, in its home, not found yet');
+    check(hideoutCell(G, gang.id) === gang.home && hideoutCell(F, gang.id) !== gang.home, 'hideout cell: home while held, else its strongest block');
+    const doorsAt = Array.from({ length: 12 }, (_, k) => ({ x: 100 + k * 9.5, z: -40 + (k % 3) * 7, nx: 0, nz: 1 }));
+    const d0 = pickDoor(doorsAt, seed, gang.id, 0, 150, -30, 300), d0b = pickDoor(doorsAt, seed, gang.id, 0, 150, -30, 300);
+    const moved = [1, 2, 3, 4].map((m) => pickDoor(doorsAt, seed, gang.id, m, 150, -30, 300));
+    check(d0 === d0b && moved.some((d) => d !== d0), 'hideout door: the same for seed and move count, another after a move');
+    HO[gang.id].door = d0; HO[gang.id].found = true; HO[gang.id].bustedUntil = 77.5; HO[gang.id].moves = 1;
+    const back = restoreHideouts(F, JSON.parse(JSON.stringify(saveHideouts(F, HO))));
+    check(JSON.stringify(back) === JSON.stringify(HO), 'hideouts survive a save');
+    check(JSON.stringify(restoreHideouts(F, [{ archetype: 'nobody' }, null, 5])) === JSON.stringify(planHideouts(F)), 'hideouts: junk in a save is ignored');
   }
   check(names.size >= 5, `group names vary with the seed (${[...names].join(', ')})`);
   console.log(`factions: ${[...names].join(' · ')} in ${(performance.now() - t0).toFixed(0)} ms`);
@@ -1595,7 +1719,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
     },
     slimes: { trust: { v: 42.5, gifts: [0, 2], marks: ['heart'] }, war: { v: 1, murk: 0.5, lumen: 0.625, front: 0.25, at: 130.5, nextRaid: 133, mawBack: 0, raid: null, captives: [2, 4, 0], nextBreach: 150, stats: { won: 3, lost: 1, kills: 12, freed: 4, maw: 0, breaches: 0 } } },
-    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }] },
+    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }] },
   };
   const back = parseSave(serializeSave(full));
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);

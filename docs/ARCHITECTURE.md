@@ -386,6 +386,10 @@ migrated — dash was folded into super speed: tap = dash, hold = run).
   They reuse destruction impacts (laser heat accumulates per 60 cm spot, ≤ 10 impacts/s), debris, dust, props.hit,
   traffic wrecks, reactions.knockDown and the near-future knock. Ice-path sheets are walkable through
   `Collision.extraGround`. Everything done to someone is recorded in `Consequences` (collateral ledger stub).
+  **Fireball** (tap): an `Orb` flies from the hands at `FIREBALL.speed` to what the aim probe met (or full reach) and
+  bursts there: the old test blast's destruction impact (`'blast'`, `FIREBALL_BLAST`), `Targeting.inSphere` knock /
+  burn / wreck (cars from rank 3), the shared look `powers/blastFx.fireBurst`. The old blast itself is still the
+  **Shockwave** power (`Interactions.blastAtView`).
 * **States** (`src/shared/status.ts`): frozen, shrunk, burning, stunned, wet — a WeakMap registry the sim and
   renderers read with one lookup (`statusOf`, free while nothing is affected): peds hold still / walk slower,
   cars stall, crowd instances ice-tint and stop animating, cars / robots / drones / props draw scaled.
@@ -417,6 +421,17 @@ every frame) owns the parts and draws what belongs to them.
   +0.04 per tag, half as much next door via `FactionMap.near`); holder changes redraw the map and toast. Finished tags
   (`Graffiti`, one canvas texture per group, newest `TAGS.max`) and turf as deltas from the seeded influence
   (`saveFactions`, hundredths) go in saves (`SaveData.factions`, save v4). Crime kinds are one table (`crime/kinds.ts`).
+  Phase 2: archetypes name their `rivals` (`relation`: hostile / wary). `TurfBrawl` (kind `brawl`, rolled only where
+  `rivalsAt` finds a hostile group on the cell or next door): two sides of 2–3 (`memo.side`, each in its own group's
+  colours, `Actor.faction`) meet on a pavement and pick the nearest standing rival; one side beaten → `won` (winner
+  +0.08, loser −0.1); the player close → broken up (both lose). Hideouts (`factions/Hideouts`): one per group, a door
+  of an ordinary building in its home (or strongest) cell, picked from the loaded cell's doors by seed and move count;
+  found when passed in view or told by a cuffed member (map diamond); `HideoutGuard` posts 2–3 guards while the player
+  is within `HIDEOUTS.guardR`; E at the door with them beaten busts the stash (−0.32 there, lie low 36 game hours, then
+  a new door). Off-screen `drift` once per game hour (catch-up ≤ 24 h): influence moves towards the seeded hold ×
+  strength (a beaten group regrows to less; its home never below `DRIFT.home`), raised next to its own turf, lowered
+  where a rival presses, seeded noise; hysteresis on changes of hand (saves store each group's held cells, so a cell kept below HOLD stays held). Crimes emit `subdued` once when everyone is down
+  or giving up: the stop is rewarded then (`Crime.paid`), not at the arrest. Hideouts go in `SaveData.factions.hideouts`.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a
@@ -424,6 +439,10 @@ every frame) owns the parts and draws what belongs to them.
   an alarm bell, a getaway car with hazards on. Criminals weigh up the player (con): fight, flee, surrender. Loot drops
   where they go down; E picks it up and gives it back (the victim waits for it). All world access goes through
   `CrimeWorld`, so a crime runs headless in `selftest.ts`.
+* **Mad bomber** (`Bomber`, any turf, the gang more often): walks to the busiest pavement in the ring and lobs bombs
+  (`CrimeWorld.bomb` → `crime/Bombs`: an arc, a hissing lit fuse on the ground, then `fireBurst`, knock-downs with cause
+  `'other'`, cars wrecked / set burning, a destruction impact booked as `'fire'`, the player hurt as `'bomb'`, a
+  `gunfire` scare). Targets: the hero within `BOMBER.atPlayer` m (led by their velocity), officers, cars, the crowd.
 * **Actors** (`sim/actors/Actor.ts`): `PedAgent.actor` (role, state, health, goal/speed, facing, held item, outfit,
   one-shot animation). `Pedestrians.step` steers actors to their goal and keeps the physics; they are not despawned
   while pinned, Reactions leaves them alone, `CrowdRenderer` gives up to 8 of them full rigs out to 60 m and plays

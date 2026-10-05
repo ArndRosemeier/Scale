@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { Rng } from '../../core/rng';
 import type { Faction } from './Factions';
 
-export const TAGS = { max: 48, w: 1.8, h: 1.1, lift: 0.035 };
+export const TAGS = { max: 48, w: 1.45, h: 0.9, lift: 0.035 };
 
 /** A tag on a wall: centre point, outward normal, the group (by archetype) and a seed for its look. */
 export interface Tag { x: number; y: number; z: number; nx: number; nz: number; archetype: string; seed: number }

@@ -2,12 +2,29 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.031 — 2026-10-05
+## 0.033 — 2026-10-05
 
 - **The army comes for you**: a giant on a rampage with a bad reputation is now treated like a monster. First a warning (a siren, the screens around you turn to the red alert, a police drone overhead, an officer shouting up at you), then a final warning, then the whole response: police and SWAT firing from a distance, cordons and evacuation sirens, the National Guard, tanks, attack helicopters, jets and artillery — and, rarely, the tactical nuke countdown, aimed at you.
 - **Ending it**: stop wrecking things for a while, or shrink back to human size, and the army stands down — but once it has been called it keeps after you for four minutes at least, so the Guard and the tanks get there and fight. Get knocked out and you are taken into custody. Start again soon after and the army comes back without new warnings.
 - **Tanks, APCs and infantry fight too**: ground units close in on you (tanks to about 480 m, APCs to 350 m, infantry to 250 m) and follow you when you walk off, pick spots with a clear view of you, don't park behind each other, aim at whatever part of you they can see (a shoulder past a corner, the top of your head over the roofs) and move to a better spot when they lose sight of you. A tank with a building in the way shoots its way through the facade. While the army is after you, your health comes back much more slowly. Soldiers no longer get knocked over by their own side's shells.
 - **Fighting back** works: stomp tanks and trucks, knock soldiers down, punch helicopters out of the sky. The news drone films you on the city's screens.
+
+## 0.032 — 2026-10-05
+
+- **Turf wars**: where the gang's streets meet the Syndicate's, the two groups now fight it out — two or three of each, fists, bats and the odd knife, each in their own colours. Left alone, one side is beaten and the winners take the street (a message says who won). Step in and the fight breaks up: both groups lose ground, and the karma for stopping it comes right then.
+- **Hideouts**: every group keeps a stash behind an ordinary door in its turf, with two or three guards loitering outside. Walk past it (or have a cuffed member give it away) and it is marked on the map. Deal with the guards and press **E** at the door to bust the stash — the group loses the block its stash was in, and ground around it, and lies low for a day and a half before it sets up somewhere else.
+- **The map moves by itself**: every game hour the borders creep a little — groups push into the streets next to theirs, rivals press on each other, and a group you have beaten back holds less for a long while (it always comes back to its home ground eventually). You hear about it when it is the block you are standing in.
+- **Stopping a crime pays at once**: karma, reputation, the cheer and the group losing ground now come the moment the last of them is down or gives up, not when the police finally cuff them.
+- Rackets look like extortion, not a fight: the collector stands over the shopkeeper with a pointed word, the shopkeeper hands over a fat envelope (no screaming, no shove), and the envelope is what drops when you knock the collector down.
+- Tags go on the wall between the windows of ordinary houses, a little smaller and just above the ground floor's base — no more tags on shop windows.
+- Saves keep the turf exactly as it was, including blocks a group just about holds on to.
+- Admin console, Crime & deeds: racket, tagging, turf brawl, groups and hideouts, go to the gang's hideout, 24 h of turf drift.
+
+## 0.031 — 2026-10-05
+
+- **Fireball**: a new elemental power. Hurl a ball of fire that flies to your target (or where you aim) and bursts: people are thrown and set alight, cars burn (from rank 3 they are blown up), props topple, windows and, at high rank, walls are blown in. Buy it on the powers screen (P). The old blast power is still there as **Shockwave**.
+- **The mad bomber**: a rare new crime. A madman walks into a busy street with a bag of round black bombs and lobs them about: into the crowd, under cars, at the police and at you once you come close. Each bomb lies hissing and sparking on its fuse before it goes off, so you can get out of the way (his throws at you go a little wide, and a dash sideways on the fuse gets you clear). Fires his bombs start are never booked to you. Knock him out or wait for the police; out of bombs, he runs. The street gang sends one now and then in its turf.
+- Admin console, Crime & deeds: start a mad bomber.
 
 ## 0.030 — 2026-10-05
 

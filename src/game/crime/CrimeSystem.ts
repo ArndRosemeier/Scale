@@ -33,10 +33,13 @@ import { CrimeDirector, type CrimeRoll } from './CrimeDirector';
 import { Crime, CRIME_DEV, GROUP_KINDS, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
 import { Robbery } from './Robbery';
 import { Tagging, TAGGING } from './Tagging';
+import { TurfBrawl } from './TurfBrawl';
+import { HideoutGuard } from './HideoutGuard';
 import { KINDS } from './kinds';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
 import { Firearms, GUNS, MUZZLE_Y, gunJ, type GunSpec } from './Firearms';
+import { Bombs } from './Bombs';
 import { SmallDeeds, type SmallDeedKind } from '../deeds/SmallDeeds';
 import { makeItem, makeGlint } from '../deeds/critters';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -44,7 +47,8 @@ import type { Target } from '../Targeting';
 import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
-import { planFactions, inSentence, shift, saveFactions, restoreFactions, SHIFT, type Faction, type FactionMap } from '../factions/Factions';
+import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, relation, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
+import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES } from '../factions/archetypes';
 import { factionOutfit } from '../factions/outfits';
@@ -69,6 +73,8 @@ export class CrimeSystem {
   readonly combat: Combat;
   /** Small arms (police, SWAT, armed robbers): rules, effects (crime/Firearms). */
   readonly guns: Firearms;
+  /** Villains' bombs (the mad bomber): in flight, on a lit fuse, going off (crime/Bombs). */
+  readonly bombs: Bombs;
   readonly health: PlayerHealth;
   readonly rep: Reputation;
   readonly director: CrimeDirector;
@@ -81,8 +87,18 @@ export class CrimeSystem {
   readonly factions: FactionMap;
   /** Gang tags on the walls (factions/Graffiti). */
   readonly graffiti: Graffiti;
-  /** Villain group results (saved with the turf): operations stopped, come off, tags finished, cells lost. */
-  factionStats: Record<string, number> = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0 };
+  /** Villain group results (saved with the turf): operations stopped, come off, tags finished, cells lost, brawls, busts. */
+  factionStats: Record<string, number> = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0, brawls: 0, busts: 0, drifted: 0 };
+  /** Each group's hideout (factions/Hideouts; saved with the turf). */
+  hideouts: Hideout[];
+  /** Guards posted at a hideout, by faction id. */
+  private guards = new Map<number, HideoutGuard>();
+  /** Groups whose hideout has had its guards posted since the player came near (not again until they leave). */
+  private posted = new Set<number>();
+  /** The last game hour the turf drifted (off-screen drift, once per hour). */
+  private driftHour = -1;
+  private hideT = 0;
+  private hideKey = '';
   readonly hud: CrimeHud;
   /** Loot lying about or carried (outlives its crime for a while). */
   private loots: { loot: Loot; crime: Crime; obj: THREE.Group; glint: THREE.Sprite; endT: number }[] = [];
@@ -107,6 +123,7 @@ export class CrimeSystem {
     this.index = crimeIndex(g.macro, seed);
     g.map.world.crimeIndex = this.index;
     this.factions = planFactions(g.macro, seed, this.index);
+    this.hideouts = planHideouts(this.factions);
     g.map.setTurf(this.factions);
     this.graffiti = new Graffiti((a) => this.factions.factions.find((f) => f.archetype === a) ?? null);
     g.renderer.scene.add(this.graffiti.group);
@@ -122,6 +139,8 @@ export class CrimeSystem {
       if (cause === 'player') this.record('body', 'person', 'knockdown', a.x, a.z, a);
     };
     this.guns = new Firearms(g);
+    this.bombs = new Bombs(g);
+    this.bombs.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
     this.health = new PlayerHealth(g.player, g.mode === 'sandbox');
     this.rep = new Reputation(seed, g.settings.size, g.mode);
     this.world = this.makeWorld();
@@ -262,6 +281,12 @@ export class CrimeSystem {
       getaway: (x, z) => this.getaway(x, z),
       officers: (x, z, r) => this.officersAround(x, z, r),
       gunfire: (c, at) => this.crookShot(c, at),
+      bomb: (c, x, z, fuse) => this.bombs.throw(c, x, z, fuse),
+      cars: (x, z, r) => {
+        const out: { x: number; z: number }[] = [];
+        for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) if (v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < r) out.push(v);
+        return out;
+      },
     };
   }
 
@@ -377,20 +402,24 @@ export class CrimeSystem {
     return a;
   }
 
-  /** Shop entrances in a ring around the player (any building's door with `any`: walls to tag). */
-  private shops(rMin: number, rMax: number, any = false): { x: number; z: number; nx: number; nz: number }[] {
+  /**
+   * Shop entrances in a ring around the player; with `walls`, the doors of buildings without a shop
+   * front instead (walls to tag beside them, with the facade's bay width: no shop windows).
+   */
+  private shops(rMin: number, rMax: number, walls = false): { x: number; z: number; nx: number; nz: number; bay: number }[] {
     const p = this.g.player.pos, W = this.g.world;
-    const out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
+    const out: { x: number; z: number; nx: number; nz: number; bay: number; d: number }[] = [];
     for (const r of W.buildingsIn(p.x - rMax, p.z - rMax, p.x + rMax, p.z + rMax)) {
       const d = r.desc;
-      if (!r.alive || (!any && !(d.shopfront || d.use === 'retail'))) continue;
+      const shop = !!d.shopfront || d.use === 'retail';
+      if (!r.alive || shop === walls) continue;
       const door = doorOf(d);
       const dist = Math.hypot(door.x - p.x, door.z - p.z);
       if (dist < rMin || dist > rMax) continue;
       // The pavement in front must be free (not inside another building).
       const fx = door.x + door.nx * 3, fz = door.z + door.nz * 3;
       if (W.buildingAt(fx, fz)) continue;
-      out.push({ ...door, d: dist });
+      out.push({ ...door, bay: d.bay, d: dist });
     }
     out.sort((a, b) => a.d - b.d);
     return out;
@@ -476,17 +505,24 @@ export class CrimeSystem {
     const best = this.cellAt(p.x, p.z);
     if (best < 0) return null;
     const f = this.factions.holder[best];
-    return { cell: best, district: cells[best].district, index: this.index[best], ops: f < 0 ? null : ARCHETYPES[this.factions.factions[f].archetype].kinds };
+    if (f < 0) return { cell: best, district: cells[best].district, index: this.index[best], ops: null };
+    // Turf brawls only where a rival group holds the street next door (or has a hold here).
+    const ops = { ...ARCHETYPES[this.factions.factions[f].archetype].kinds };
+    if (!rivalsAt(this.factions, best, f).length) ops.brawl = 0;
+    return { cell: best, district: cells[best].district, index: this.index[best], ops };
   }
 
-  /** A crime in a group's turf is its operation: its members wear its colours and name. */
+  /** A crime in a group's turf is its operation: its members wear its colours and name (a brawl's other side: the rival's). */
   private enlist(c: Crime, f: Faction): void {
     c.faction = f.id;
+    const rival = c instanceof TurfBrawl && c.rival >= 0 ? this.factions.factions[c.rival] : null;
     for (const a of c.criminals) {
       const act = a.actor;
       if (!act) continue;
-      act.outfit = factionOutfit(f, a.cit.seed);
-      act.title = `${f.emblem} ${f.name} · ${KINDS[c.kind].criminal}`;
+      const by = rival && act.memo.side === 1 ? rival : f;
+      act.faction = by.id;
+      act.outfit = factionOutfit(by, a.cit.seed);
+      act.title = `${by.emblem} ${by.name} · ${KINDS[c.kind].criminal}`;
     }
   }
 
@@ -512,21 +548,168 @@ export class CrimeSystem {
     else if (won) this.g.powerHud.toast(`${who} took over ${won > 1 ? `${won} more blocks` : 'another block'}`, 'warn');
   }
 
-  /** Turf and tags for a save (SaveData.factions). */
-  saveFactions(): { turf: unknown; tags: Tag[] } {
-    return { turf: saveFactions(this.factions, this.factionStats), tags: this.graffiti.tags.map((t) => ({ ...t })) };
+  /** Turf, tags and hideouts for a save (SaveData.factions). */
+  saveFactions(): { turf: unknown; tags: Tag[]; hideouts: unknown[] } {
+    return { turf: saveFactions(this.factions, this.factionStats), tags: this.graffiti.tags.map((t) => ({ ...t })), hideouts: saveHideouts(this.factions, this.hideouts) };
   }
 
-  /** Put saved turf and tags back (null: the seeded turf, no tags). */
-  restoreFactions(d: { turf: unknown; tags: unknown } | null): void {
+  /** Put saved turf, tags and hideouts back (null: the seeded turf, no tags, hideouts not yet found). */
+  restoreFactions(d: { turf: unknown; tags: unknown; hideouts?: unknown } | null): void {
     const stats = restoreFactions(this.factions, d?.turf ?? null);
-    this.factionStats = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0, ...stats };
+    this.factionStats = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0, brawls: 0, busts: 0, drifted: 0, ...stats };
+    for (const gd of this.guards.values()) gd.standDown();
+    this.guards.clear();
+    this.posted.clear();
+    this.hideouts = restoreHideouts(this.factions, d?.hideouts ?? null);
+    this.driftHour = Math.floor(this.g.sky.hoursAbs);
+    this.hideKey = '';
     const tags = Array.isArray(d?.tags) ? (d!.tags as unknown[]).filter((t): t is Tag => {
       const o = t as Tag;
       return !!o && [o.x, o.y, o.z, o.nx, o.nz, o.seed].every(Number.isFinite) && typeof o.archetype === 'string';
     }) : [];
     this.graffiti.restore(tags);
     this.g.map.setTurf(this.factions);
+  }
+
+  // ================================================================== turf over time, hideouts
+
+  /** Off-screen drift once per game hour (catching up at most DRIFT.maxCatchUp hours after a jump). */
+  private driftTurf(): void {
+    const h = Math.floor(this.g.sky.hoursAbs);
+    if (this.driftHour < 0 || h < this.driftHour) { this.driftHour = h; return; }
+    if (h === this.driftHour) return;
+    const from = Math.max(this.driftHour + 1, h - DRIFT.maxCatchUp + 1);
+    let changed = 0;
+    const p = this.g.player.pos, here = this.cellAt(p.x, p.z);
+    let hereNow: { from: number; to: number } | null = null;
+    for (let k = from; k <= h; k++) {
+      for (const x of drift(this.factions, this.g.settings.seed, k)) { changed++; if (x.cell === here) hereNow = x; }
+    }
+    this.driftHour = h;
+    if (!changed) return;
+    this.factionStats.drifted += changed;
+    this.g.map.setTurf(this.factions);
+    // Told only when it is the street the player stands in.
+    if (hereNow) {
+      const F = this.factions.factions, to = hereNow.to >= 0 ? F[hereNow.to] : null, was = hereNow.from >= 0 ? F[hereNow.from] : null;
+      if (to) this.g.powerHud.toast(`<b style="color:${to.palette.map}">${to.emblem} ${to.name}</b> ${was ? `pushed ${inSentence(was)} out of` : 'moved into'} this block`, 'warn');
+      else if (was) this.g.powerHud.toast(`<b style="color:${was.palette.map}">${was.emblem} ${was.name}</b> lost their hold on this block`, 'info');
+    }
+  }
+
+  /** The player learns where a group's hideout is (spotted, or a cuffed member told). */
+  private reveal(f: number, how: 'seen' | 'told'): void {
+    const h = this.hideouts[f], F = this.factions.factions[f];
+    if (!h || !F || h.found || !h.door || h.bustedUntil > this.g.sky.hoursAbs) return;
+    h.found = true;
+    this.hideKey = '';
+    const who = `<b style="color:${F.palette.map}">${F.emblem} ${F.name}</b>`;
+    this.g.powerHud.toast(how === 'seen' ? `You found the hideout of ${who} — marked on your map` : `A cuffed member of ${who} gave up their hideout — marked on your map`, 'info');
+  }
+
+  /**
+   * Hideouts: placed in the group's stash cell once the player is near it, spotted when passed, guards
+   * posted while the player is close, moved after a bust once the group has lain low.
+   */
+  private updateHideouts(dt: number): void {
+    this.hideT -= dt;
+    if (this.hideT > 0) return;
+    this.hideT = 0.5;
+    const g = this.g, p = g.player.pos, now = g.sky.hoursAbs, F = this.factions, cells = g.macro.cells;
+    for (const h of this.hideouts) {
+      const f = F.factions[h.faction];
+      if (!f) continue;
+      // Lying low after a bust: then set up again in its strongest cell, behind another door.
+      if (h.bustedUntil > 0 && now >= h.bustedUntil) { h.bustedUntil = -1; h.door = null; h.found = false; h.cell = hideoutCell(F, f.id); this.hideKey = ''; }
+      if (h.bustedUntil > now) continue;
+      if (!h.door) {
+        const cell = h.cell >= 0 && F.holder[h.cell] === f.id ? h.cell : hideoutCell(F, f.id);
+        if (cell < 0) continue;
+        h.cell = cell;
+        const c = cells[cell];
+        if (Math.hypot(c.centroid[0] - p.x, c.centroid[1] - p.z) > c.radius + HIDEOUTS.placeR) continue;
+        h.door = pickDoor(this.doorsIn(cell), g.settings.seed, f.id, h.moves, c.centroid[0], c.centroid[1], c.radius);
+        if (!h.door) continue;
+      }
+      const D = h.door, d = Math.hypot(D.x - p.x, D.z - p.z);
+      if (!h.found && d < HIDEOUTS.spotR && this.visible(D.x, g.world.groundHeight(D.x, D.z) + 1.5, D.z)) this.reveal(f.id, 'seen');
+      // Guards at the door while the player is around.
+      const gd = this.guards.get(f.id);
+      if (gd && !gd.active) this.guards.delete(f.id);
+      if (!this.guards.has(f.id) && d < HIDEOUTS.guardR && (d > HIDEOUTS.guardMin || !this.visible(D.x, g.world.groundHeight(D.x, D.z) + 1, D.z)) && this.actorCount < ACTOR_BUDGET - 6 && !this.posted.has(f.id)) {
+        const c = new HideoutGuard(this.world, hash32(g.settings.seed ^ (f.id * 7919) ^ Math.floor(now * 4)), D);
+        if (this.begin(c, f)) { this.guards.set(f.id, c); this.posted.add(f.id); }
+      } else if (gd && d > HIDEOUTS.leaveR && !gd.committed) { gd.standDown(); this.guards.delete(f.id); }
+      // Gone far enough: next time the guards are back at the door.
+      if (d > HIDEOUTS.leaveR) this.posted.delete(f.id);
+    }
+    this.hideoutMarkers();
+  }
+
+  /** Doors of ordinary buildings (no shops) in a macro cell. */
+  private doorsIn(cell: number): { x: number; z: number; nx: number; nz: number }[] {
+    // (Only once the cell is loaded, all of it: the pick is the same whichever way the player came.)
+    const c = this.g.macro.cells[cell], W = this.g.world;
+    const out: { x: number; z: number; nx: number; nz: number }[] = [];
+    for (const r of W.cellBuildings(cell)) {
+      const d = r.desc;
+      if (!r.alive || d.shopfront || d.use === 'retail' || d.floors <= 0) continue;
+      const door = doorOf(d);
+      if (!pointInPoly(c.poly, door.x, door.z) || W.buildingAt(door.x + door.nx * 3, door.z + door.nz * 3)) continue;
+      out.push(door);
+    }
+    return out;
+  }
+
+  /** The hideout at the player's feet that can be busted now (guards out of the way), or null. */
+  private bustable(): Hideout | null {
+    const p = this.g.player.pos, now = this.g.sky.hoursAbs;
+    for (const h of this.hideouts) {
+      if (!h.door || h.bustedUntil > now || Math.hypot(h.door.x - p.x, h.door.z - p.z) > HIDEOUTS.useR) continue;
+      const gd = this.guards.get(h.faction);
+      if (gd && gd.active && gd.guarding > 0) return null;
+      return h;
+    }
+    return null;
+  }
+
+  /** E at a hideout's door: the stash is busted — a big loss of turf for the group; it lies low. */
+  private bust(h: Hideout): void {
+    const g = this.g, f = this.factions.factions[h.faction];
+    h.bustedUntil = g.sky.hoursAbs + HIDEOUTS.lieLow;
+    h.found = true;
+    h.moves++;
+    this.factionStats.busts++;
+    g.player.action = { id: 'kick', t0: g.player.animClock, dur: 0.7 };
+    this.sound('punch_impact', h.door!.x, g.player.pos.y + 1, h.door!.z, 1, 0.6);
+    g.progress.addKarma(20, `busted the stash of ${inSentence(f)}`);
+    this.rep.add(5, 'hideout busted');
+    this.rep.count('stopped');
+    this.cheer();
+    const changed = shift(this.factions, h.cell, f.id, SHIFT.bust, 0.6);
+    // Its stash block is lost outright (no longer held: the turf map shows it); its home ground comes back with drift.
+    const left = this.factions.influence[f.id][h.cell] - (HOLD - SHIFT.bustBelow);
+    if (left > 0) for (const x of shift(this.factions, h.cell, f.id, -left, 0)) {
+      const was = changed.find((y) => y.cell === x.cell);
+      if (was) was.to = x.to; else changed.push(x);
+    }
+    this.factionStats.lost += changed.filter((x) => x.from === f.id).length;
+    g.map.setTurf(this.factions);
+    g.powerHud.toast(`You busted the stash of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>${changed.length ? ` — they lost ${changed.filter((x) => x.from === f.id).length || 'some'} ${changed.length === 1 ? 'block' : 'blocks'}` : ''}. They will lie low for a while.`, 'info');
+    this.hideKey = '';
+  }
+
+  /** Found hideouts on the map (a diamond in the group's colour; grey while it lies low). */
+  private hideoutMarkers(): void {
+    const now = this.g.sky.hoursAbs, list: MapMarker[] = [];
+    for (const h of this.hideouts) {
+      const f = this.factions.factions[h.faction];
+      if (!f || !h.door || !h.found) continue;
+      const busted = h.bustedUntil > now;
+      list.push({ x: h.door.x, z: h.door.z, color: busted ? '#8a8f98' : f.palette.map, kind: busted ? 'dot' : 'core', title: busted ? `${f.emblem} ${f.name}: hideout (busted)` : `${f.emblem} ${f.name}: hideout — bust the stash (E at the door)` });
+    }
+    const key = list.map((m) => `${m.kind}${Math.round(m.x)},${Math.round(m.z)}`).join(';');
+    if (key !== this.hideKey) { this.hideKey = key; this.g.map.setMarkers('hideouts', list); }
   }
 
   private make(kind: CrimeKind, seed: number, near: { x: number; z: number } | null): Crime {
@@ -545,6 +728,12 @@ export class CrimeSystem {
     const p = this.g.player.pos, own = GROUP_KINDS.includes(c.kind);
     const f = faction === undefined ? this.factionAt(c.x, c.z) ?? (own ? this.factionAt(p.x, p.z) : null) : faction;
     if (!f && own) { c.abort(); c.dispose(); return false; }
+    if (c instanceof TurfBrawl && f) {
+      // The rivals who came to take the street: whoever presses here, else any hostile group.
+      const F = this.factions;
+      c.rival = rivalsAt(F, this.cellAt(c.x, c.z), f.id)[0] ?? F.factions.find((o) => relation(F, f.id, o.id) === 'hostile')?.id ?? -1;
+      if (c.rival < 0) { c.abort(); c.dispose(); return false; }
+    }
     if (f) this.enlist(c, f);
     this.crimes.push(c);
     this.stats.started++;
@@ -605,6 +794,9 @@ export class CrimeSystem {
       }
     }
     this.linger(dt);
+    this.driftTurf();
+    this.updateHideouts(dt);
+    this.bombs.update(dt);
     this.police.update(dt);
     this.guns.update(dt);
     this.justice.update(dt);
@@ -701,6 +893,8 @@ export class CrimeSystem {
         break;
       case 'arrest':
         this.rep.count('arrests');
+        // A cuffed group member may give the hideout away.
+        if (who?.actor?.faction !== undefined && Math.random() < HIDEOUTS.tellChance) this.reveal(who.actor.faction, 'told');
         break;
       case 'tagged': {
         const f = this.factionOf(c);
@@ -712,25 +906,31 @@ export class CrimeSystem {
         break;
       }
       case 'failed': {
-        // An operation came off: the group's hold on the street grows.
+        // An operation came off: the group's hold on the street grows (a brawl's result is 'won').
         const f = this.factionOf(c);
-        if (f && c.outcome === 'escaped') { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
+        if (f && c.outcome === 'escaped' && !(c instanceof TurfBrawl) && !(c instanceof HideoutGuard)) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
         break;
       }
+      case 'won': {
+        // A turf brawl was decided: the winners take the street from the losers.
+        if (!(c instanceof TurfBrawl) || c.winner < 0) break;
+        const F = this.factions.factions, win = F[c.winner], lose = F[c.winner === c.faction ? c.rival : c.faction];
+        this.factionStats.brawls++;
+        if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 140) g.powerHud.toast(`<b style="color:${win.palette.map}">${win.emblem} ${win.name}</b> beat ${lose ? inSentence(lose) : 'their rivals'} in a street fight`, 'warn');
+        this.turf(c, win, SHIFT.brawlWon);
+        if (lose) this.turf(c, lose, SHIFT.brawlLost);
+        break;
+      }
+      case 'subdued':
       case 'resolved':
-        // Involved: a KO, a surrender in front of the player, or any blow the player landed on one
-        // of them (a thief knocked down by the player and cuffed by the police counts).
-        if (c.playerInvolved || c.criminals.some((a) => a.actor?.hitByPlayer)) {
-          const clean = c.collateral === 0;
-          const k = Math.round(KINDS[c.kind].resolved * (clean ? 1 + CRIME_KARMA.cleanBonus : 1));
-          const by = this.factionOf(c);
-          g.progress.addKarma(k, `stopped ${KINDS[c.kind].stopped}${by ? ` by ${inSentence(by)}` : ''}${clean ? ' — nobody else hurt' : ''}`);
-          this.rep.add(KINDS[c.kind].rep, 'crime stopped');
-          this.rep.count('stopped');
-          this.justice.atone(1.5);
-          this.cheer();
-          // Stopping a group's operation costs it ground.
-          if (by) { this.factionStats.stopped++; this.turf(c, by, SHIFT.stopped); }
+        // Stopped: rewarded once, as soon as they are all down or giving up (the police cuff them
+        // later). Involved: a KO, a surrender in front of the player, or any blow the player landed
+        // on one of them (a thief knocked down by the player and cuffed by the police counts).
+        if (!c.paid && (c.playerInvolved || c.criminals.some((a) => a.actor?.hitByPlayer))) {
+          c.paid = true;
+          // A brawl that one side had already won: the player only cleaned up (the KOs count).
+          if (c instanceof TurfBrawl && c.winner >= 0) break;
+          this.stopped(c);
         }
         break;
       default:
@@ -744,6 +944,24 @@ export class CrimeSystem {
       this.group.add(obj, glint);
       this.loots.push({ loot: c.loot, crime: c, obj, glint, endT: 0 });
     }
+  }
+
+  /** The player stopped a crime: karma, reputation, cheers; a group's operation costs it ground. */
+  private stopped(c: Crime): void {
+    const g = this.g;
+    const clean = c.collateral === 0;
+    const k = Math.round(KINDS[c.kind].resolved * (clean ? 1 + CRIME_KARMA.cleanBonus : 1));
+    const by = this.factionOf(c);
+    const rival = c instanceof TurfBrawl && c.rival >= 0 ? this.factions.factions[c.rival] : null;
+    const who = by ? ` by ${inSentence(by)}${rival ? ` and ${inSentence(rival)}` : ''}` : '';
+    g.progress.addKarma(k, `stopped ${KINDS[c.kind].stopped}${who}${clean ? ' — nobody else hurt' : ''}`);
+    this.rep.add(KINDS[c.kind].rep, 'crime stopped');
+    this.rep.count('stopped');
+    this.justice.atone(1.5);
+    this.cheer();
+    if (by) { this.factionStats.stopped++; this.turf(c, by, SHIFT.stopped); }
+    // Breaking up a brawl: both groups lose face on that street.
+    if (rival) this.turf(c, rival, SHIFT.stopped * 0.7);
   }
 
   /** People nearby cheer (wave) when the player stopped a crime; a cheer goes up. */
@@ -933,18 +1151,20 @@ export class CrimeSystem {
       const l = L.loot;
       if (l.carrier === null && Number.isFinite(l.x) && Math.hypot(l.x - p.x, l.z - p.z) < 1.6) return `Press <b>E</b> to pick up the ${l.kind === 'cash' ? 'cash bag' : l.kind}`;
       if (l.carrier === 'player') {
-        const what = l.kind === 'cash' ? 'money' : l.kind;
+        const what = l.kind === 'cash' || l.kind === 'envelope' ? 'money' : l.kind;
         const T = this.returnTarget(L);
         const d = Math.hypot(T.x - p.x, T.z - p.z);
         if (T.kind === 'owner' && d < 2.8) return `Press <b>E</b> to give the ${what} back`;
         if (T.kind === 'police' && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4))) return `Press <b>E</b> to hand the ${what} to the police`;
-        if (T.kind === 'site' && d < 4) return `Press <b>E</b> to leave the ${what} ${l.kind === 'cash' ? 'at the shop' : 'here'}`;
+        if (T.kind === 'site' && d < 4) return `Press <b>E</b> to leave the ${what} ${l.kind === 'cash' || l.kind === 'envelope' ? 'at the shop' : 'here'}`;
         // On the way: say where it goes (the green mark on the map and compass).
-        const to = T.kind === 'police' ? 'to the police' : l.kind === 'cash' ? 'back to the shop' : 'back to its owner';
+        const to = T.kind === 'police' ? 'to the police' : l.kind === 'cash' || l.kind === 'envelope' ? 'back to the shop' : 'back to its owner';
         return `Bring the ${what} ${to} — the green mark on your map and compass`;
       }
     }
     if (this.justice.hot && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4))) return 'Press <b>E</b> to turn yourself in';
+    const h = this.bustable();
+    if (h) return `Press <b>E</b> to bust the stash of ${inSentence(this.factions.factions[h.faction])}`;
     return this.deeds.hint();
   }
 
@@ -968,7 +1188,7 @@ export class CrimeSystem {
           L.crime.playerInvolved = true;
           P.action = { id: 'pickup', t0: P.animClock, dur: 0.8 };
           const k = officer ? Math.round(CRIME_KARMA.returned / 2) : CRIME_KARMA.returned;
-          g.progress.addKarma(k, officer ? 'handed in stolen property' : `returned the stolen ${l.kind === 'cash' ? 'money' : l.kind}`);
+          g.progress.addKarma(k, officer ? 'handed in stolen property' : `returned the stolen ${l.kind === 'cash' || l.kind === 'envelope' ? 'money' : l.kind}`);
           this.rep.add(officer ? 1 : 2, 'returned');
           this.rep.count('returned');
           if (who?.actor) { who.actor.held = l.kind === 'bag' ? 'bag' : null; who.actor.mood = 'happy'; }
@@ -984,6 +1204,8 @@ export class CrimeSystem {
       P.action = { id: 'pickup', t0: P.animClock, dur: 0.8 };
       return true;
     }
+    const h = this.bustable();
+    if (h) { this.bust(h); return true; }
     return this.deeds.use();
   }
 
@@ -1061,7 +1283,47 @@ export class CrimeSystem {
       /** The city's villain groups: name, kind, home cell, cells held; the one whose turf the player stands in. */
       factions: () => {
         const F = this.factions, p = g.player.pos, here = this.factionAt(p.x, p.z);
-        return { here: here?.name ?? null, stats: { ...this.factionStats }, tags: this.graffiti.tags.length, groups: F.factions.map((f) => ({ id: f.id, name: f.name, archetype: f.archetype, colour: f.palette.name, emblem: f.emblem, home: f.home, cells: F.holder.filter((h) => h === f.id).length })) };
+        return {
+          here: here?.name ?? null, stats: { ...this.factionStats }, tags: this.graffiti.tags.length,
+          groups: F.factions.map((f) => {
+            const h = this.hideouts[f.id];
+            return { id: f.id, name: f.name, archetype: f.archetype, colour: f.palette.name, emblem: f.emblem, home: f.home, cells: F.holder.filter((x) => x === f.id).length, hideout: h ? { cell: h.cell, door: h.door ? { x: Math.round(h.door.x * 10) / 10, z: Math.round(h.door.z * 10) / 10 } : null, found: h.found, bustedUntil: Math.round(h.bustedUntil * 10) / 10, moves: h.moves, guards: this.guards.get(f.id)?.guarding ?? 0 } : null };
+          }),
+        };
+      },
+      /**
+       * Hideouts: dev.hideout(id) places the group's hideout now (wherever the player is: its cell's
+       * doors must be loaded), marks it found and returns where it is; dev.hideout(id, 'go') also
+       * puts the player 75 m in front of it (far enough for the guards to be posted out of view).
+       */
+      hideout: (id = 0, go?: 'go') => {
+        const h = this.hideouts[id];
+        if (!h) return 'no such group';
+        if (!h.door) {
+          const cell = hideoutCell(this.factions, id);
+          const c = g.macro.cells[cell];
+          if (!c) return 'no turf';
+          h.cell = cell;
+          h.door = pickDoor(this.doorsIn(cell), g.settings.seed, id, h.moves, c.centroid[0], c.centroid[1], c.radius);
+          if (!h.door) {
+            // Its block is not loaded yet: go there first (then ask again).
+            if (go) g.player.pos.set(c.centroid[0], g.world.groundHeight(c.centroid[0], c.centroid[1]) + 3, c.centroid[1]);
+            return `cell ${cell} not loaded yet${go ? ': flown over it — call again in a moment' : ` (it is at ${Math.round(c.centroid[0])}, ${Math.round(c.centroid[1])})`}`;
+          }
+        }
+        h.found = true;
+        this.hideKey = '';
+        if (go) { const D = h.door, r = 75; g.player.pos.set(D.x + D.nx * r, g.world.groundHeight(D.x + D.nx * r, D.z + D.nz * r) + 1, D.z + D.nz * r); }
+        return { cell: h.cell, door: h.door };
+      },
+      /** Off-screen drift: run n game hours of it now (the map updates); returns the cells that changed hands. */
+      drift: (hours = 24) => {
+        let n = 0;
+        const h0 = Math.floor(g.sky.hoursAbs);
+        for (let k = 1; k <= hours; k++) n += drift(this.factions, g.settings.seed, h0 + 1000 + k).length;
+        this.factionStats.drifted += n;
+        g.map.setTurf(this.factions);
+        return n;
       },
       crimes: () => this.crimes.map((c) => c.snapshot()),
       crimeStats: () => ({ ...this.stats, actors: this.actorCount, director: this.director.stats, police: this.police.summary(), wanted: this.justice.wanted, heat: +this.justice.heat.toFixed(2), rep: this.rep.value, hp: Math.round(this.health.hp), combat: this.combat.stats }),
