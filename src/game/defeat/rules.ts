@@ -4,6 +4,7 @@
  */
 import { hash32 } from '../../core/rng';
 import { clamp, smoothstep } from '../../core/math';
+import { pointInPoly, type Poly } from '../../core/geom2';
 
 /** Reputation the city needs to think well enough of the hero to send the drones (else: game over). */
 export const RESCUE_MIN_REP = 0;
@@ -84,6 +85,37 @@ export function pickHospital(c: HospitalCandidate[], x: number, z: number, seed:
   return i;
 }
 
+/** Something standing on a roof (a circle round it: x, z, radius). */
+export interface RoofBlock { x: number; z: number; r: number }
+
+/**
+ * Where the landing pad goes on a roof (polygon `top`, flat [x, z, …]): the spot farthest from the
+ * roof's edges and from what stands on it (water tanks, HVAC units, housings), on a 1 m grid; ties
+ * go to the spot nearest (cx, cz). `clear`: room round it (m).
+ */
+export function padSpot(top: Poly, items: RoofBlock[], cx: number, cz: number): { x: number; z: number; clear: number } {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < top.length; i += 2) { x0 = Math.min(x0, top[i]); x1 = Math.max(x1, top[i]); z0 = Math.min(z0, top[i + 1]); z1 = Math.max(z1, top[i + 1]); }
+  const n = top.length / 2;
+  let best = { x: cx, z: cz, clear: -1 }, bestScore = -Infinity;
+  const step = Math.max(1, Math.max(x1 - x0, z1 - z0) / 60);
+  for (let x = x0 + step / 2; x < x1; x += step) for (let z = z0 + step / 2; z < z1; z += step) {
+    if (!pointInPoly(top, x, z)) continue;
+    let c = Infinity;
+    for (let i = 0; i < n; i++) {
+      const ax = top[i * 2], az = top[i * 2 + 1], bx = top[((i + 1) % n) * 2], bz = top[((i + 1) % n) * 2 + 1];
+      const ex = bx - ax, ez = bz - az, L = ex * ex + ez * ez || 1;
+      const t = clamp(((x - ax) * ex + (z - az) * ez) / L, 0, 1);
+      c = Math.min(c, Math.hypot(x - ax - ex * t, z - az - ez * t));
+    }
+    for (const it of items) c = Math.min(c, Math.hypot(x - it.x, z - it.z) - it.r);
+    // Room counts up to a full pad and some air (6.5 m); beyond that, the middle of the roof is nicer.
+    const score = Math.min(c, 6.5) - Math.hypot(x - cx, z - cz) * 0.02;
+    if (score > bestScore) { bestScore = score; best = { x, z, clear: c }; }
+  }
+  return best;
+}
+
 /** The drones' flight: a cubic Bézier from over the body to over the roof pad, cruising high. */
 export interface FlightPlan {
   p: [number, number, number][];
@@ -128,8 +160,8 @@ export const WARD = {
   hx: 7, hz: 11, h: 4.4,
   /** The revival machine (centre of the bed). */
   pod: { x: 0, z: -5.2, len: 2.5, w: 1.2, top: 0.95 },
-  /** Where the hero stands up (beside the machine), facing the doors (+z). */
-  stand: { x: 1.05, z: -4.6 },
+  /** Where the hero stands up (at the foot of the machine, clear of it), facing the doors (+z). */
+  stand: { x: 1.35, z: -3.3 },
   /** The exit: doors in the front wall (z = +hz), this wide; walking through leaves the ward. */
   door: { half: 1.6, open: 3.2 },
 };

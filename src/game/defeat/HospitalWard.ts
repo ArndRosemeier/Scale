@@ -14,16 +14,18 @@ import { clamp, smoothstep } from '../../core/math';
 
 const self = (color: number, glow: number, rough = 0.3, metal = 0.05) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, emissive: color, emissiveIntensity: glow });
 const M = {
-  floor: self(0xd7e0e7, 0.32, 0.14, 0.1),
-  wall: self(0xeef2f5, 0.5, 0.4),
-  rib: self(0xc5d0da, 0.42, 0.35, 0.2),
-  ceil: self(0xdfe6ec, 0.36, 0.6),
-  panel: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4fbff, emissiveIntensity: 2.2 }),
+  // (Held low: the frame's tone mapping washes a bright white room out to one flat grey.)
+  floor: self(0x6f7d8a, 0.1, 0.62, 0.1),
+  wall: self(0xe2e8ed, 0.22, 0.5),
+  rib: self(0x27313b, 0.12, 0.4, 0.45),
+  base: self(0x3a4652, 0.1, 0.5, 0.2),
+  ceil: self(0xb9c3cc, 0.14, 0.7),
+  panel: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4fbff, emissiveIntensity: 1.5 }),
   cyan: new THREE.MeshStandardMaterial({ color: 0x7ff6ff, emissive: 0x38e8ff, emissiveIntensity: 2.6 }),
-  body: self(0xf4f7fa, 0.42, 0.25, 0.15),
-  pad: self(0x51667a, 0.25, 0.7),
+  body: self(0xf2f5f8, 0.24, 0.32, 0.15),
+  pad: self(0x2a3846, 0.12, 0.6),
   dark: new THREE.MeshStandardMaterial({ color: 0x1e2630, roughness: 0.35, metalness: 0.6, emissive: 0x0b1118, emissiveIntensity: 0.5 }),
-  door: self(0xdde6ee, 0.45, 0.2, 0.3),
+  door: self(0x8d9aa6, 0.16, 0.3, 0.45),
   glass: new THREE.MeshBasicMaterial({ color: 0x9feeff, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
   ring: new THREE.MeshBasicMaterial({ color: 0x5ff0ff, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }),
   floorGlow: new THREE.MeshBasicMaterial({ color: 0x38e8ff, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
@@ -109,7 +111,15 @@ export class HospitalWard {
         box(0.04, 0.06, 3.0, M.cyan, s * (hx - 0.02), 1.15, z + 1.8);
       }
     }
-    for (const s of [-1, 1]) box(0.05, 0.05, hz * 2, M.cyan, s * (hx - 0.03), 0.06, 0);
+    // A dark band low on the walls, the skirting light along it.
+    for (const s of [-1, 1]) box(0.04, 0.9, hz * 2, M.base, s * (hx - 0.02), 0.45, 0);
+    box(hx * 2, 0.9, 0.04, M.base, 0, 0.45, -hz + 0.02);
+    for (const s of [-1, 1]) box(0.05, 0.05, hz * 2, M.cyan, s * (hx - 0.05), 0.06, 0);
+    // Guide lines on the floor, from the machine to the doors; a dark frame round the doorway.
+    const g0 = WARD.pod.z + WARD.pod.len / 2 + 0.6, g1 = hz - 0.3;
+    for (const s of [-1, 1]) box(0.08, 0.012, g1 - g0, M.cyan, s * 1.0, 0.006, (g0 + g1) / 2);
+    for (const s of [-1, 1]) box(0.22, 3.0, 0.36, M.rib, s * (WARD.door.half + 0.11), 1.5, hz + 0.15);
+    box(WARD.door.half * 2 + 0.44, 0.2, 0.36, M.rib, 0, 3.0, hz + 0.15);
     box(hx * 2, 0.05, 0.05, M.cyan, 0, 0.06, -hz + 0.03);
     // Ceiling light panels.
     for (let z = -hz + 2.5; z < hz - 1; z += 4) for (const x of [-3.4, 0, 3.4]) {
@@ -169,6 +179,7 @@ export class HospitalWard {
     // The vitals hologram over the main machine's head end.
     this.vitals = canvasPanel(1.9, 1.0, 512, (c, W, H) => this.drawVitals(c, W, H), true);
     this.vitals.mesh.position.set(WARD.pod.x, 2.55, WARD.pod.z - WARD.pod.len / 2 - 0.25);
+    this.vitals.mesh.rotation.order = 'YXZ';
     this.vitals.mesh.rotation.x = -0.18;
     g.add(this.vitals.mesh);
     g.visible = false;
@@ -367,7 +378,13 @@ export class HospitalWard {
     this.vit.t += dt;
     this.redrawT -= dt;
     if (this.redrawT <= 0) { this.redrawT = 0.08; this.vitals.redraw(); }
-    this.vitals.mesh.rotation.y = Math.sin(this.t * 0.5) * 0.04;
+  }
+
+  /** The hologram turns its face to the camera (seen from behind its text would read mirrored). */
+  faceVitals(cam: THREE.Vector3): void {
+    const m = this.vitals.mesh;
+    const dx = cam.x - (this.origin.x + m.position.x), dz = cam.z - (this.origin.z + m.position.z);
+    m.rotation.y = Math.atan2(dx, dz) + Math.sin(this.t * 0.5) * 0.04;
   }
   /** The doors started opening this frame (a sound). */
   doorsMoved = false;

@@ -589,7 +589,7 @@ export class Game {
         this.abilities.preUpdate(dt, this.input);
         this.defeat.gate();
         this.player.update(dt, this.input, this.camRig.yaw, this.camRig.pitch);
-        this.defeat.afterPlayer();
+        this.defeat.afterPlayer(dt);
         this.camRig.underground = this.defeat.inWard || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z);
         this.camRig.update(dt, this.player, this.input);
         // In-world panels (elevator buttons) get the click first when the crosshair is on one in reach.
@@ -620,7 +620,7 @@ export class Game {
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     if (!this.freeCam) this.bodyContacts(dt);
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
-    if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
+    if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
     this.T('street', () => this.street?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });

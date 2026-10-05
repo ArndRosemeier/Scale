@@ -55,7 +55,7 @@ import * as THREE from 'three';
 import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
 import { intersection } from '../src/core/clip';
 import { readFileSync, existsSync } from 'node:fs';
-import { rescueAllowed, pickHospital, hospitalFit, planFlight, flightAt, wardInside, wardExit, hospitalName, WARD, type HospitalCandidate } from '../src/game/defeat/rules';
+import { rescueAllowed, pickHospital, hospitalFit, planFlight, flightAt, wardInside, wardExit, hospitalName, padSpot, WARD, type HospitalCandidate } from '../src/game/defeat/rules';
 
 let failures = 0;
 const check = (ok: boolean, msg: string) => {
@@ -2583,6 +2583,14 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   flightAt(f, f.dur, p); okEnds &&= Math.hypot(p[0] - 600, p[1] - 42, p[2] - 300) < 1e-6;
   check(okEnds && maxY > 120 && f.dur >= 6 && f.dur <= 14, `defeat: the flight starts at the body, ends over the pad, clears the roofs (top ${maxY.toFixed(0)} m over 120, ${f.dur.toFixed(1)} s)`);
   check(wardInside(0, 0) && !wardInside(WARD.hx + 0.5, 0) && wardExit(0, WARD.hz) && !wardExit(WARD.hx - 1, WARD.hz) && !wardExit(0, WARD.pod.z), 'defeat: the ward has an inside and a way out through the doors only');
+  {
+    // A 30 × 20 roof with a water tank in its middle: the pad goes beside it, clear of the tank and the edges.
+    const roof = [0, 0, 30, 0, 30, 20, 0, 20];
+    const p = padSpot(roof, [{ x: 15, z: 10, r: 3 }], 15, 10);
+    const tank = Math.hypot(p.x - 15, p.z - 10) - 3;
+    const empty = padSpot(roof, [], 15, 10);
+    check(tank >= 4 && p.clear >= 4 && p.x > 1 && p.x < 29 && Math.hypot(empty.x - 15, empty.z - 10) < 1.5, `defeat: the roof pad keeps clear of the water tank and the edges (${tank.toFixed(1)} m from the tank, ${p.clear.toFixed(1)} m clear; empty roof: the middle)`);
+  }
   check(hospitalName(5) === hospitalName(5) && hospitalName(5).length > 4, `defeat: the city's hospital has a name (${hospitalName(5)})`);
 }
 

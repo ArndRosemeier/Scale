@@ -28,6 +28,8 @@ export class Deeds {
   private markerKey = '';
   /** Accidents happen (Normal mode). */
   accidents = true;
+  /** No new accidents for now (the hero is down, being rescued). */
+  quiet = false;
 
   constructor(private peds: Pedestrians, private reactions: Reactions, private player: Player, private progress: Progress) {
     this.accidentT = 25;
@@ -78,7 +80,7 @@ export class Deeds {
   update(dt: number): void {
     const p = this.player;
     // Everyday accidents near the player.
-    if (this.accidents && !this.progress.sandbox) {
+    if (this.accidents && !this.quiet && !this.progress.sandbox) {
       this.accidentT -= dt;
       if (this.accidentT <= 0) {
         this.accidentT = ACCIDENTS.minGap + Math.random() * (ACCIDENTS.maxGap - ACCIDENTS.minGap);

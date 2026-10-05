@@ -49,6 +49,12 @@ export class CameraRig {
     this.kickT = 0;
   }
 
+  /** After a jump cut (a teleport, a scripted camera): follow at once, the boom at full length. */
+  snap(): void {
+    this.init = false;
+    this.dist = 1e3;
+  }
+
   update(dt: number, p: Player, input: Input): void {
     this.yaw -= input.mouseDX * 0.0024;
     this.pitch = clamp(this.pitch - input.mouseDY * 0.0024, -1.45, 1.2);

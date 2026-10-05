@@ -23,7 +23,7 @@ import type { BuildingRef } from '../../world/WorldIndex';
 import { MedFleet } from './MedDrones';
 import { HospitalWard } from './HospitalWard';
 import { DefeatUi } from '../../ui/DefeatUi';
-import { DEFEAT, WARD, flightAt, hospitalName, pickHospital, planFlight, rescueAllowed, wardExit, type FlightPlan, type HospitalCandidate } from './rules';
+import { DEFEAT, WARD, flightAt, hospitalName, padSpot, pickHospital, planFlight, rescueAllowed, wardExit, type FlightPlan, type HospitalCandidate, type RoofBlock } from './rules';
 import { buildingEntrance } from '../../build/buildingLayout';
 import { polyArea } from '../../core/geom2';
 import { clamp, lerp, smoothstep } from '../../core/math';
@@ -68,6 +68,8 @@ export class Defeat {
   private beat = 0;
   private fired = new Set<string>();
   private rep = 0;
+  /** The roof pad's size (smaller on a cramped roof). */
+  private padScale = 1;
   private lights: THREE.PointLight[] = [];
   stats = { defeats: 0, rescues: 0, gameOvers: 0, skips: 0, last: '' };
 
@@ -91,7 +93,7 @@ export class Defeat {
   /** The scene drives the player and the camera itself (the game skips the controls and the rig). */
   get drives(): boolean { return this.phase === 'lift' || this.phase === 'flight' || this.phase === 'arrive' || this.phase === 'revive'; }
   /** The hero is in the ward (sealed room: no city sounds, no weather, its own camera space). */
-  get inWard(): boolean { return this.ward.open && (this.phase === 'revive' || this.phase === 'ward' || this.phase === 'leaving'); }
+  get inWard(): boolean { return this.ward.open && this.phase !== 'idle'; }
   /** No saving (game over: the older saves are what one goes back to). */
   get holdSaves(): boolean { return this.phase === 'over'; }
 
@@ -104,8 +106,9 @@ export class Defeat {
 
   /** Health reached zero (not an arrest). Returns true: the defeat takes it from here. */
   begin(kind: HurtKind): boolean {
-    if (this.phase !== 'idle') return true;
     const g = this.g, P = g.player, H = g.crime.health;
+    if (this.phase === 'ward' || this.phase === 'leaving') { this.again(kind); return true; }
+    if (this.phase !== 'idle') { H.koT = 1e9; return true; }
     H.koT = 1e9; // held down (untouchable) until the revival
     P.downT = Math.max(P.downT, 1e3);
     this.rep = g.crime.rep.value;
@@ -133,6 +136,26 @@ export class Defeat {
     this.t = 0;
   }
 
+  /** Defeated again before leaving the ward: straight back into the machine. */
+  private again(kind: HurtKind): void {
+    const g = this.g, P = g.player, H = g.crime.health;
+    H.koT = 1e9;
+    P.downT = Math.max(P.downT, 1e3);
+    this.stats.defeats++;
+    this.stats.last = kind;
+    this.fired.clear();
+    this.camInit = false;
+    this.handoff = null;
+    this.ui.hurt(true);
+    g.audio.play2d('heart_pulse', 0.7, 0.75);
+    this.body.copy(P.pos);
+    this.takeBody();
+    this.fleet.field.visible = false;
+    this.set('down');
+    this.skipping = 0;
+    this.startSkip();
+  }
+
   // ------------------------------------------------------------------ the hospital
 
   private findHospital(x: number, z: number): Hospital {
@@ -155,9 +178,16 @@ export class Defeat {
       return { ref: null, pad, exit: { x, z, yaw: g.player.yaw } };
     }
     const b = list[i], c = cand[i];
-    const pad = new THREE.Vector3(c.x, b.top + 0.08, c.z);
-    // The roof's centre may be outside an L-shaped footprint: the vertex mean is safer then.
-    // (Good enough for a pad: the drones hover over it.)
+    // The pad: where the roof has the most room (clear of water tanks, HVAC units, the edges).
+    const L = g.destruction.layoutOf(b);
+    const top = L.tiers[L.tiers.length - 1].poly;
+    const items: RoofBlock[] = [];
+    g.collision.roofEquipmentIn(b.bounds[0], b.bounds[1], b.bounds[2], b.bounds[3], (o) => {
+      if (o.y1 > b.top - 0.5) items.push({ x: o.x, z: o.z, r: o.cyl ? o.r + 0.4 : Math.hypot(o.hx, o.hz) + 0.3 });
+    });
+    const ps = padSpot(top, items, c.x, c.z);
+    const pad = new THREE.Vector3(ps.x, b.top + 0.08, ps.z);
+    this.padScale = clamp(ps.clear / 4.9, 0.55, 1);
     let ex = c.x, ez = c.z, yaw = 0;
     const st = buildingEntrance(b.desc, g.terrain);
     if (st && st.boxes.length >= 5) {
@@ -165,7 +195,8 @@ export class Defeat {
       let ox = sx - c.x, oz = sz - c.z;
       const l = Math.hypot(ox, oz) || 1;
       ox /= l; oz /= l;
-      ex = sx + ox * 3; ez = sz + oz * 3;
+      // Out of the doors onto the pavement (not the road), walking away from them.
+      ex = sx + ox * 1.4; ez = sz + oz * 1.4;
       yaw = Math.atan2(-ox, -oz);
     } else {
       let ox = x - c.x, oz = z - c.z;
@@ -187,7 +218,7 @@ export class Defeat {
     this.ward.update(dt, this.inWard ? g.player.pos : null);
     const o = this.ward.origin, lit = this.ward.open;
     this.lights.forEach((l, i) => {
-      l.intensity = lit ? 7 : 0;
+      l.intensity = lit ? 4 : 0;
       if (lit) l.position.set(o.x, o.y + (i === 2 ? 2.6 : 3.9), o.z + [WARD.pod.z + 1, 4, WARD.hz + 1.6][i]);
     });
     if (this.ward.doorsMoved) g.audio.play('door_open', this.ward.origin.x, this.ward.origin.y + 1.5, this.ward.origin.z + WARD.hz, 0.6, 1.3, 5, g.renderer.camera.position);
@@ -205,9 +236,10 @@ export class Defeat {
         if (!g.ragdolls.isActive(P) && P.height > BASE_HEIGHT * 1.3) { P.height = Math.max(BASE_HEIGHT, P.height * Math.exp(-dt * 1.4)); P.targetHeight = P.height; }
         if (once('cap', 0.6)) this.ui.titleCard('DEFEATED<small>Rescue drones on the way</small>', true);
         if (once('capOff', 3.4)) this.ui.titleCard('');
-        if (this.phase === 'down' && this.t >= DEFEAT.downTime) this.startInbound();
-        if (this.phase === 'inbound' && this.skipping === 0) this.inbound(dt);
-        if (skip && this.phase === 'inbound') this.startSkip();
+        if (this.phase === 'down' && this.t >= DEFEAT.downTime && this.skipping === 0) this.startInbound();
+        if (this.phase === 'inbound' && this.skipping === 0) { this.inbound(dt); this.inboundCam(dt); }
+        // (Not in the first moment: a jump pressed as the blow landed should not skip it all.)
+        if (skip && (this.phase === 'inbound' || this.t > 0.6)) this.startSkip();
         break;
       }
       case 'lift': this.lift(dt); if (skip) this.startSkip(); break;
@@ -230,6 +262,7 @@ export class Defeat {
     }
     if (this.skipping > 0) this.skipStep(dt);
     this.sound();
+    this.faceCamera();
   }
 
   /** A short fade to black, then straight into the ward. */
@@ -255,6 +288,7 @@ export class Defeat {
     this.fleet.group.visible = true;
     this.fleet.pad.visible = !!h.ref;
     this.fleet.pad.position.copy(h.pad);
+    this.fleet.pad.scale.setScalar(this.padScale);
     let dx = h.pad.x - P.pos.x, dz = h.pad.z - P.pos.z;
     const l = Math.hypot(dx, dz) || 1;
     dx /= l; dz /= l;
@@ -262,6 +296,38 @@ export class Defeat {
     this.from = this.fleet.drones.map((_, i) => new THREE.Vector3(P.pos.x + dx * DEFEAT.inboundDist + (i - 1) * 4, P.pos.y + DEFEAT.inboundUp + i * 2, P.pos.z + dz * DEFEAT.inboundDist));
     this.fleet.drones.forEach((d, i) => d.object.position.copy(this.from[i]));
     this.ui.skippable(true);
+    this.ui.cinema(true);
+    // The camera from where the rig left it (inboundCam takes it from there).
+    const cam = g.renderer.camera;
+    this.camPos.copy(cam.position);
+    _v.set(0, 0, -1).applyQuaternion(cam.quaternion);
+    this.camLook.copy(cam.position).addScaledVector(_v, 6);
+    this.camInit = true;
+  }
+
+  /** The drones coming in: low beside the body, looking up past it at them (both in the frame). */
+  private inboundCam(dt: number): void {
+    const g = this.g, P = g.player;
+    _w.set(0, 0, 0);
+    for (const d of this.fleet.drones) _w.add(d.object.position);
+    _w.multiplyScalar(1 / this.fleet.drones.length);
+    let dx = _w.x - P.pos.x, dz = _w.z - P.pos.z;
+    const l = Math.hypot(dx, dz) || 1;
+    dx /= l; dz /= l;
+    // Behind the body (seen from the drones) and to the side.
+    let ox = -dx * 6.5 - dz * 2.8, oz = -dz * 6.5 + dx * 2.8;
+    const oy = 1.5;
+    const ol = Math.hypot(ox, oy, oz);
+    const hit = g.world.raycast(P.pos.x, P.pos.y + 0.8, P.pos.z, ox / ol, oy / ol, oz / ol, ol, 0.5);
+    const k = hit.t < ol ? Math.max(0.3, (hit.t - 0.6) / ol) : 1;
+    ox *= k; oz *= k;
+    _v.set(P.pos.x + ox, P.pos.y + 0.8 + oy * k, P.pos.z + oz);
+    _v.y = Math.max(_v.y, g.terrain.height(_v.x, _v.z) + 0.5);
+    // Look halfway (in angle) between the body and the drones.
+    _b.set(P.pos.x, P.pos.y + 0.3, P.pos.z).sub(_v).normalize();
+    _w.sub(_v).normalize().add(_b).normalize();
+    _w.multiplyScalar(10).add(_v);
+    this.camTo(_v, _w, dt, 1.4);
   }
 
   /** The slot of drone i over a body at (b) with the given heading. */
@@ -305,8 +371,8 @@ export class Defeat {
 
   private takeBody(): void {
     const g = this.g, P = g.player;
+    if (g.ragdolls.isActive(P)) g.ragdolls.release(P);
     if (P.puppet) return;
-    g.ragdolls.release(P);
     P.ragdoll = '';
     P.downT = 0;
     P.action = undefined;
@@ -469,7 +535,7 @@ export class Defeat {
     let a = 1 - smoothstep(T.fadeIn, T.fadeIn + 1.6, this.t), white = 0;
     if (this.t > T.surge) {
       const f = this.t < T.flash ? smoothstep(T.surge, T.flash, this.t) : 1 - smoothstep(T.flash, T.flash + 1.1, this.t);
-      a = Math.max(a, f * 0.92); white = 1;
+      a = Math.max(a, f * 0.7); white = 1;
     }
     this.ui.fade(a, white);
     // The scan and the vitals.
@@ -502,7 +568,13 @@ export class Defeat {
     if (this.t >= T.stand && this.t < T.hand) P.update(dt, ZERO_INPUT as unknown as Game['input'], P.yaw, 0);
     // Camera: high over the machine, circling; close at the head as the scan ends; then the rig.
     const cam = g.renderer.camera;
-    if (this.t < T.hand) {
+    if (this.t >= T.stand && this.t < T.hand) {
+      // Cut under the flash: from in front, the hero up beside the machine.
+      _v.set(o.x + WARD.stand.x + 2.6, o.y + 2.1, o.z + WARD.stand.z + 4.6);
+      _w.set(o.x + WARD.stand.x - 0.4, o.y + 1.1, o.z + WARD.stand.z - 0.6);
+      this.camTo(_v, _w, dt, this.fired.has('wide') ? 3 : 100, 55);
+      this.fired.add('wide');
+    } else if (this.t < T.hand) {
       const a0 = 0.6 + this.t * 0.07;
       const pz = o.z + WARD.pod.z;
       if (this.t < 5.2) {
@@ -516,8 +588,9 @@ export class Defeat {
     } else {
       // Into the gameplay camera, behind the hero facing the doors.
       if (!this.handoff) {
-        g.camRig.yaw = P.yaw;
-        g.camRig.pitch = -0.18;
+        g.camRig.yaw = P.yaw - 0.35; // behind, a little to the open side
+        g.camRig.pitch = -0.2;
+        g.camRig.snap();
         this.handoff = { pos: cam.position.clone(), q: cam.quaternion.clone() };
       }
       g.camRig.update(dt, P, ZERO_INPUT as unknown as Game['input']);
@@ -552,8 +625,10 @@ export class Defeat {
       g.map.placeSafely(e.x, e.z);
       P.yaw = e.yaw;
       P.vel.set(0, 0, 0);
-      g.camRig.yaw = e.yaw;
-      g.camRig.pitch = -0.15;
+      // The camera in front, looking back at the hero walking out with the hospital behind them.
+      g.camRig.yaw = e.yaw + Math.PI - 0.55;
+      g.camRig.pitch = -0.12;
+      g.camRig.snap();
       g.audio.play2d('door_close', 0.5, 1);
     }
     if (this.t >= 0.6) this.ui.fade(1 - smoothstep(0.7, 1.6, this.t));
@@ -573,10 +648,21 @@ export class Defeat {
   }
 
   /** After the player moved (the game's tick): keep the body in the ward. */
-  afterPlayer(): void {
+  afterPlayer(dt: number): void {
     if (!this.inWard || this.drives) return;
-    const P = this.g.player;
+    const P = this.g.player, o = this.ward.origin;
+    // Near the front wall, heading out: eased into the doorway (off to one side one would only
+    // walk into the wall beside it).
+    const lx = P.pos.x - o.x, lz = P.pos.z - o.z, D = WARD.door.half - P.radius - 0.15;
+    if (this.phase === 'ward' && lz > WARD.hz - 2.4 && lz < WARD.hz + 0.3 && Math.abs(lx) > D && Math.abs(lx) < WARD.door.half + 1.6 && P.vel.z > 0.3) {
+      P.pos.x -= (lx - Math.sign(lx) * D) * Math.min(1, dt * 5);
+    }
     this.ward.clampBody(P.pos, P.radius, P.height);
+  }
+
+  /** Where the camera is (the vitals hologram turns to it). */
+  faceCamera(): void {
+    if (this.ward.open) this.ward.faceVitals(this.g.renderer.camera.position);
   }
 
   // ------------------------------------------------------------------ camera, sound
