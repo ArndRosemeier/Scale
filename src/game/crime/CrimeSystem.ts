@@ -53,12 +53,13 @@ import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
 import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, relation, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
+import { planBosses, bossLabel, bossPowers, heatOf, raise, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, NOTORIETY, BOSS, type Boss, type Heat } from '../factions/Bosses';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES, CITY_GROUPS } from '../factions/archetypes';
 import { siteToWorld } from '../../plan/landmarks';
 import { RState } from '../../future/Robots';
-import { factionOutfit, lieutenantOutfit } from '../factions/outfits';
+import { factionOutfit, lieutenantOutfit, bossOutfit } from '../factions/outfits';
 
 /** Rewards common to every kind (the per-kind ones are in crime/kinds). */
 export const CRIME_KARMA = {
@@ -113,6 +114,15 @@ export class CrimeSystem {
   private posted = new Set<number>();
   /** The last game hour the turf drifted (off-screen drift, once per hour). */
   private driftHour = -1;
+  /** Each group's named boss (factions/Bosses) and how much it has it in for the hero (0..100). */
+  bosses: Boss[];
+  notoriety: number[];
+  private heatHour = -1;
+  /** Crimes a boss leads, and the boss. */
+  private bossOf = new Map<Crime, PedAgent>();
+  /** Groups told as collapsed (not again until they are back). */
+  private collapsedTold = new Set<number>();
+  private devBoss = false;
   private hideT = 0;
   private hideKey = '';
   readonly hud: CrimeHud;
@@ -140,6 +150,8 @@ export class CrimeSystem {
     g.map.world.crimeIndex = this.index;
     this.factions = planFactions(g.macro, seed, this.index, CITY_GROUPS);
     this.hideouts = planHideouts(this.factions);
+    this.bosses = planBosses(this.factions, seed);
+    this.notoriety = this.factions.factions.map(() => 0);
     g.map.setTurf(this.factions);
     this.graffiti = new Graffiti((a) => this.factions.factions.find((f) => f.archetype === a) ?? null);
     g.renderer.scene.add(this.graffiti.group);
@@ -531,7 +543,7 @@ export class CrimeSystem {
     const best = this.cellAt(p.x, p.z);
     if (best < 0) return null;
     const f = this.factions.holder[best];
-    if (f < 0) return { cell: best, district: cells[best].district, index: this.index[best], ops: null };
+    if (f < 0 || this.collapsed(f)) return { cell: best, district: cells[best].district, index: this.index[best], ops: null };
     // Turf brawls only where a rival group holds the street next door (or has a hold here).
     const ops = { ...ARCHETYPES[this.factions.factions[f].archetype].kinds };
     if (!rivalsAt(this.factions, best, f).length) ops.brawl = 0;
@@ -555,13 +567,26 @@ export class CrimeSystem {
     const roll = c.rng.fork('lieutenant');
     sides.forEach((by, side) => {
       const L = ARCHETYPES[by.archetype].lieutenant;
-      if (!this.devLieutenant && !roll.chance(L.chance[c.kind] ?? 0)) return;
       const a = c.criminals.find((x) => x.actor && (!rival || (x.actor.memo.side ?? 0) === side));
       if (!a) return;
+      // The boss leads it now and then (the hideout's door, when they are hunting the hero).
+      const B = this.bosses[by.id], heat = this.notoriety[by.id] ?? 0;
+      const bossHere = this.devBoss || (c instanceof HideoutGuard ? heatOf(heat) === 'hunted' && bossChance(B, heat, this.g.sky.hoursAbs) > 0 : roll.chance(bossChance(B, heat, this.g.sky.hoursAbs)));
+      if (bossHere && B && B.jailedUntil <= this.g.sky.hoursAbs && ![...this.bossOf.values()].some((x) => x.actor?.faction === by.id && x.alive)) {
+        c.promote(a, bossPowers(L.powers, by.archetype), BOSS);
+        a.actor!.outfit = bossOutfit(by, a.cit.seed);
+        a.actor!.title = `${by.emblem} ${bossLabel(this.factions, B)} · ${by.name}`;
+        this.bossOf.set(c, a);
+        if (Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.g.powerHud.toast(`<b style="color:${by.palette.map}">${by.emblem} ${bossLabel(this.factions, B)}</b> of ${inSentence(by)} is out on the street`, 'warn');
+        return;
+      }
+      if (!this.devLieutenant && !roll.chance(ltChance(L.chance[c.kind] ?? 0, heat))) return;
       c.promote(a, L.powers);
       a.actor!.outfit = lieutenantOutfit(by, a.cit.seed);
       a.actor!.title = `${by.emblem} ${by.name} · ${L.title}`;
     });
+    // A group hunting the hero: its members stand and fight.
+    for (const a of c.criminals) if (a.actor && heatOf(this.notoriety[a.actor.faction ?? f.id] ?? 0) === 'hunted') a.actor.memo.grudge = 1;
   }
 
   /** The group behind a crime, or null. */
@@ -622,18 +647,24 @@ export class CrimeSystem {
   }
 
   /** Turf, tags and hideouts for a save (SaveData.factions). */
-  saveFactions(): { turf: unknown; tags: Tag[]; hideouts: unknown[] } {
-    return { turf: saveFactions(this.factions, this.factionStats), tags: this.graffiti.tags.map((t) => ({ ...t })), hideouts: saveHideouts(this.factions, this.hideouts) };
+  saveFactions(): { turf: unknown; tags: Tag[]; hideouts: unknown[]; bosses: unknown[] } {
+    return { turf: saveFactions(this.factions, this.factionStats), tags: this.graffiti.tags.map((t) => ({ ...t })), hideouts: saveHideouts(this.factions, this.hideouts), bosses: saveBosses(this.factions, this.bosses, this.notoriety) };
   }
 
   /** Put saved turf, tags and hideouts back (null: the seeded turf, no tags, hideouts not yet found). */
-  restoreFactions(d: { turf: unknown; tags: unknown; hideouts?: unknown } | null): void {
+  restoreFactions(d: { turf: unknown; tags: unknown; hideouts?: unknown; bosses?: unknown } | null): void {
     const stats = restoreFactions(this.factions, d?.turf ?? null);
     this.factionStats = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0, brawls: 0, busts: 0, drifted: 0, ...stats };
     for (const gd of this.guards.values()) gd.standDown();
     this.guards.clear();
     this.posted.clear();
     this.hideouts = restoreHideouts(this.factions, d?.hideouts ?? null);
+    this.bosses = planBosses(this.factions, this.g.settings.seed);
+    this.notoriety = this.factions.factions.map(() => 0);
+    restoreBosses(this.factions, this.bosses, this.notoriety, d?.bosses ?? null);
+    this.collapsedTold.clear();
+    for (const f of this.factions.factions) if (this.collapsed(f.id)) this.collapsedTold.add(f.id);
+    this.heatHour = Math.floor(this.g.sky.hoursAbs);
     this.driftHour = Math.floor(this.g.sky.hoursAbs);
     this.hideKey = '';
     const tags = Array.isArray(d?.tags) ? (d!.tags as unknown[]).filter((t): t is Tag => {
@@ -711,6 +742,7 @@ export class CrimeSystem {
       if (gd && !gd.active) this.guards.delete(f.id);
       if (!this.guards.has(f.id) && d < HIDEOUTS.guardR && (d > HIDEOUTS.guardMin || !this.visible(D.x, g.world.groundHeight(D.x, D.z) + 1, D.z)) && this.actorCount < ACTOR_BUDGET - 6 && !this.posted.has(f.id)) {
         const c = new HideoutGuard(this.world, hash32(g.settings.seed ^ (f.id * 7919) ^ Math.floor(now * 4)), D);
+        if (heatOf(this.notoriety[f.id]) !== 'calm') c.extra = 1;
         if (this.begin(c, f)) { this.guards.set(f.id, c); this.posted.add(f.id); }
       } else if (gd && d > HIDEOUTS.leaveR && !gd.committed) { gd.standDown(); this.guards.delete(f.id); }
       // Gone far enough: next time the guards are back at the door.
@@ -770,6 +802,8 @@ export class CrimeSystem {
     g.map.setTurf(this.factions);
     g.powerHud.toast(`You busted the stash of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>${changed.length ? ` — they lost ${changed.filter((x) => x.from === f.id).length || 'some'} ${changed.length === 1 ? 'block' : 'blocks'}` : ''}. They will lie low for a while.`, 'info');
     this.hideKey = '';
+    this.heat(f.id, NOTORIETY.bust);
+    this.checkCollapse(f.id);
   }
 
   /** Found hideouts on the map (a diamond in the group's colour; grey while it lies low). */
@@ -799,7 +833,9 @@ export class CrimeSystem {
     if (!c.setup()) { c.abort(); c.dispose(); return false; }
     // The group whose turf it is (a group-only kind just outside it: the player's cell's group).
     const p = this.g.player.pos, own = GROUP_KINDS.includes(c.kind);
-    const f = faction === undefined ? this.factionAt(c.x, c.z) ?? (own ? this.factionAt(p.x, p.z) : null) : faction;
+    let f = faction === undefined ? this.factionAt(c.x, c.z) ?? (own ? this.factionAt(p.x, p.z) : null) : faction;
+    // A collapsed group runs nothing (its streets are nobody's for now).
+    if (f && faction === undefined && this.collapsed(f.id)) f = null;
     if (!f && own) { c.abort(); c.dispose(); return false; }
     if (c instanceof TurfBrawl && f) {
       // The rivals who came to take the street: whoever presses here, else any hostile group.
@@ -823,8 +859,9 @@ export class CrimeSystem {
     const c = this.make(kind, (Math.random() * 2 ** 32) >>> 0, near ?? null);
     const f = faction === undefined ? undefined : this.factions.factions[faction] ?? null;
     this.devLieutenant = lt === 'lt';
-    try { if (!this.begin(c, f)) return null; } finally { this.devLieutenant = false; }
-    const powers = lt && lt !== 'lt' ? lt.split(',').map((x) => x.trim()).filter((x): x is VillainPower => x in VILLAIN_POWERS) : [];
+    this.devBoss = lt === 'boss';
+    try { if (!this.begin(c, f)) return null; } finally { this.devLieutenant = false; this.devBoss = false; }
+    const powers = lt && lt !== 'lt' && lt !== 'boss' ? lt.split(',').map((x) => x.trim()).filter((x): x is VillainPower => x in VILLAIN_POWERS) : [];
     const a = c.criminals.find((x) => x.actor);
     if (powers.length && a) {
       c.casters.delete(a);
@@ -868,6 +905,7 @@ export class CrimeSystem {
         else if (c.phase !== 'approach') this.graffiti.drop(c.id);
       }
       if (!c.active) {
+        this.bossGone(c);
         // The victim waits a while for the stolen things (lying in the street or with the player).
         const l = c.loot;
         const keep = !!l && !l.returned && Number.isFinite(l.x) && [...c.victims, ...c.extras].some((v) => v.alive && v.actor);
@@ -882,6 +920,7 @@ export class CrimeSystem {
     }
     this.linger(dt);
     this.driftTurf();
+    this.bossHours();
     this.updateHideouts(dt);
     this.bombs.update(dt);
     this.casts.update(dt);
@@ -904,6 +943,74 @@ export class CrimeSystem {
   }
 
   private lingering: { c: Crime; t: number }[] = [];
+
+  // ------------------------------------------------------------------ bosses and notoriety
+
+  /** A group's notoriety rises; the hero is told when it turns wary or hunting. */
+  private heat(f: number, n: number): void {
+    const to: Heat | null = raise(this.notoriety, f, n);
+    const F = this.factions.factions[f];
+    if (!to || !F) return;
+    const who = `<b style="color:${F.palette.map}">${F.emblem} ${F.name}</b>`;
+    this.g.powerHud.toast(to === 'hunted' ? `${who} are out for you — their people will stand and fight` : `${who} have noticed you — expect their lieutenants`, 'warn');
+  }
+
+  /** Busted and the boss behind bars: the group collapses until one of the two is over. */
+  collapsed(f: number): boolean {
+    const now = this.g.sky.hoursAbs, b = this.bosses[f], h = this.hideouts[f];
+    return !!b && !!h && b.jailedUntil > now && h.bustedUntil > now;
+  }
+
+  private checkCollapse(f: number): void {
+    if (!this.collapsed(f) || this.collapsedTold.has(f)) return;
+    this.collapsedTold.add(f);
+    const F = this.factions.factions[f];
+    this.g.progress.addKarma(30, `broke ${inSentence(F)}`);
+    this.g.powerHud.toast(`<b style="color:${F.palette.map}">${F.emblem} ${F.name}</b> have collapsed: their boss is behind bars and their stash is gone. Their streets are quiet for now.`, 'info');
+  }
+
+  /** The boss is cuffed: behind bars for a few days. */
+  private jailBoss(c: Crime, who: PedAgent): void {
+    const f = this.factions.factions[who.actor?.faction ?? c.faction], B = f ? this.bosses[f.id] : null;
+    this.bossOf.delete(c);
+    if (!f || !B) return;
+    const until = jail(B, this.g.sky.hoursAbs);
+    const days = Math.max(1, Math.round((until - this.g.sky.hoursAbs) / 24));
+    this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> is behind bars — for ${days} days, if the walls hold`, 'info');
+    this.checkCollapse(f.id);
+  }
+
+  /** A boss's crime ended without an arrest: if the hero was on to them, they got away (with a grudge). */
+  private bossGone(c: Crime): void {
+    const a = this.bossOf.get(c);
+    if (!a) return;
+    this.bossOf.delete(c);
+    const f = this.factions.factions[a.actor?.faction ?? c.faction], B = f ? this.bosses[f.id] : null;
+    // Not an escape: cuffed, behind bars meanwhile, or left lying (knocked out or given up; the beating already counted).
+    if (!f || !B || a.actor?.state === 'arrested' || B.jailedUntil > this.g.sky.hoursAbs || a.actor?.memo.down || !(c.playerInvolved || a.actor?.hitByPlayer)) return;
+    B.escapes++;
+    this.heat(f.id, NOTORIETY.escaped);
+    this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> got away — and will remember you`, 'warn');
+  }
+
+  /** Once per game hour: notoriety fades; a boss whose time is up breaks out; a collapse ends. */
+  private bossHours(): void {
+    const now = this.g.sky.hoursAbs, h = Math.floor(now);
+    if (this.heatHour < 0 || h < this.heatHour) { this.heatHour = h; return; }
+    if (h === this.heatHour) return;
+    fade(this.notoriety, Math.min(48, h - this.heatHour));
+    this.heatHour = h;
+    for (const B of this.bosses) {
+      const f = this.factions.factions[B.faction];
+      if (B.jailedUntil > 0 && now >= B.jailedUntil) {
+        B.jailedUntil = -1;
+        // Out again, and not in a forgiving mood.
+        this.notoriety[B.faction] = Math.max(this.notoriety[B.faction], NOTORIETY.wary);
+        this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> broke out of jail`, 'warn');
+      }
+      if (this.collapsedTold.has(B.faction) && !this.collapsed(B.faction)) this.collapsedTold.delete(B.faction);
+    }
+  }
 
   /** Hijacked machines: run their course; the link cut when the hackers are stopped; red dots on the map. */
   private updateFleets(dt: number): void {
@@ -984,10 +1091,17 @@ export class CrimeSystem {
           this.stats.kos++;
           this.rep.count('kos');
           // A lieutenant counts double (and says which: the group's Brute or Enforcer).
-          const f = who.actor.memo.lt ? this.factions.factions[who.actor.faction ?? c.faction] ?? null : null;
+          const fid = who.actor.faction ?? c.faction;
+          const f = who.actor.memo.lt ? this.factions.factions[fid] ?? null : null;
           const lt = who.actor.memo.lt ? (f ? ARCHETYPES[f.archetype].lieutenant.title : 'Lieutenant') : null;
-          { const name = (lt ?? KINDS[c.kind].criminal).toLowerCase(); g.progress.addKarma(KINDS[c.kind].ko * (lt ? 2 : 1), `knocked out ${/^[aeiou]/.test(name) ? 'an' : 'a'} ${name}${f ? ` of ${inSentence(f)}` : ''}`); }
-          this.rep.add(lt ? 4 : 2, 'ko');
+          const B = who.actor.memo.boss && f ? this.bosses[f.id] : null;
+          if (B && f) {
+            B.beaten++;
+            g.progress.addKarma(KINDS[c.kind].ko * 4, `knocked out ${bossLabel(this.factions, B)} of ${inSentence(f)}`);
+            g.powerHud.toast(`You knocked out <b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> — the police will take them in`, 'info');
+          } else { const name = (lt ?? KINDS[c.kind].criminal).toLowerCase(); g.progress.addKarma(KINDS[c.kind].ko * (lt ? 2 : 1), `knocked out ${/^[aeiou]/.test(name) ? 'an' : 'a'} ${name}${f ? ` of ${inSentence(f)}` : ''}`); }
+          this.rep.add(B ? 8 : lt ? 4 : 2, 'ko');
+          if (fid >= 0) this.heat(fid, B ? NOTORIETY.boss : lt ? NOTORIETY.lieutenant : NOTORIETY.ko);
         }
         break;
       case 'surrender':
@@ -999,6 +1113,7 @@ export class CrimeSystem {
         break;
       case 'arrest':
         this.rep.count('arrests');
+        if (who && this.bossOf.get(c) === who) this.jailBoss(c, who);
         // A cuffed group member may give the hideout away.
         if (who?.actor?.faction !== undefined && Math.random() < HIDEOUTS.tellChance) this.reveal(who.actor.faction, 'told');
         break;
@@ -1078,7 +1193,7 @@ export class CrimeSystem {
     this.rep.count('stopped');
     this.justice.atone(1.5);
     this.cheer();
-    if (by) { this.factionStats.stopped++; this.turf(c, by, SHIFT.stopped); }
+    if (by) { this.factionStats.stopped++; this.turf(c, by, SHIFT.stopped); this.heat(by.id, NOTORIETY.stopped); }
     // Breaking up a brawl: both groups lose face on that street.
     if (rival) this.turf(c, rival, SHIFT.stopped * 0.7);
   }
@@ -1404,6 +1519,23 @@ export class CrimeSystem {
         const fid = typeof faction === 'string' ? this.factions.factions.find((f) => f.archetype === faction)?.id ?? -1 : faction;
         const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, fid, lt);
         return c ? c.snapshot() : 'no site';
+      },
+      /** Each group's boss and notoriety; with a group ('gang' or an id) and a value, set its notoriety. */
+      bosses: (faction?: number | string, notoriety?: number) => {
+        const F = this.factions.factions;
+        const fid = typeof faction === 'string' ? F.find((f) => f.archetype === faction)?.id ?? -1 : faction ?? -1;
+        if (fid >= 0 && notoriety !== undefined && Number.isFinite(notoriety)) this.notoriety[fid] = Math.max(0, Math.min(NOTORIETY.max, notoriety));
+        const now = g.sky.hoursAbs;
+        return this.bosses.map((B) => ({ group: F[B.faction].name, boss: bossLabel(this.factions, B), notoriety: Math.round(this.notoriety[B.faction]), heat: heatOf(this.notoriety[B.faction]), jailedFor: B.jailedUntil > now ? Math.round(B.jailedUntil - now) : 0, beaten: B.beaten, escapes: B.escapes, jailed: B.jailed, collapsed: this.collapsed(B.faction), out: [...this.bossOf.values()].some((a) => a.alive && a.actor?.faction === B.faction) }));
+      },
+      /** Dev: the boss of a group goes to jail now (hours; 0: out again). */
+      jailBoss: (faction: number | string, hours = 72) => {
+        const F = this.factions.factions, fid = typeof faction === 'string' ? F.find((f) => f.archetype === faction)?.id ?? -1 : faction;
+        const B = this.bosses[fid];
+        if (!B) return 'no such group';
+        B.jailedUntil = hours > 0 ? g.sky.hoursAbs + hours : g.sky.hoursAbs - 0.01;
+        if (hours > 0) this.checkCollapse(fid);
+        return bossLabel(this.factions, B);
       },
       /** Hacks and rituals under way: nearly done (the next second finishes them). */
       rushOps: () => {

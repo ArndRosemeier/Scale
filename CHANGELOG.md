@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.041 — 2026-10-05
+## 0.042 — 2026-10-05
 
 - **Being defeated is a real moment now.** When your health runs out you no longer just get up where you fell (where a swarm could knock you down again and again). You lie there untouchable, the edge of the screen red, and:
   - **with a reputation of 0 or better, the hospital sends its rescue drones**: three white drones with red crosses fly in, lock blue tractor beams onto you, lift you in a glowing stasis field and fly you over the city to the landing pad that lights up on the hospital's roof. Space skips ahead.
@@ -10,6 +10,18 @@ Every push raises the version by 0.001. Newest first.
   - **with a negative reputation nobody comes: game over.** Load the latest save, pick another save, or start a new game. Nothing is saved after a game over, so your saves stay as they were.
 - Every city has its own hospital (Helix Medical Center, Vitalis Medical Center, …) in some of its flat-roofed office and civic blocks; the drones take you to the nearest one. A giant hero shrinks back to normal size while lying there.
 - Being arrested by the police is unchanged. A save made on the way to the hospital or in the ward puts you outside the hospital, healed.
+
+## 0.041 — 2026-10-05
+
+- **Named bosses**: every villain group now has a boss with a name and a title: the gang's **Kingpin**, the Syndicate's **Chairman**, the techno-cult's **Architect** and the elemental cult's **High Invoker**. A boss is far tougher than a lieutenant, glows brightly in the group's colour, has the lieutenants' powers plus one of its own, and fights to the end.
+- **Groups remember you**: stopping a group's operations, knocking out its members and busting its stash makes it notice you.
+  - Once it has **noticed you**, more of its operations come with a lieutenant, an extra guard stands at its hideout, and now and then the boss leads an operation in person.
+  - Once it is **out for you**, its members stand and fight instead of running, and the boss guards the hideout.
+  - It calms down again over a few game days. A message tells you when a group starts paying attention.
+- **Jail and breakout**: a boss the police cuff goes to jail for three game days (longer each time) and then breaks out. A boss who gets away after you went for them comes back with a grudge.
+- **Breaking a group**: with its boss behind bars and its stash busted, a group collapses. It runs no operations until one of the two is over.
+- Bosses, their records and every group's notoriety are kept in saves.
+- Admin console, Crime & deeds: a gang, Syndicate and cult boss, a button that makes the gang hunt you, and a list of bosses and notoriety.
 
 ## 0.040 — 2026-10-05
 
