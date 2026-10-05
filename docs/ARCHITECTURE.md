@@ -888,7 +888,7 @@ every frame (`prof.threats`).
     over a flatbed (kind `flatbed`), which drives off with it while the next one arrives; parts cut away are no longer
     obstacles. Gone: `ThreatDirector.removeRemains`. Far from the player only the schedule runs; the share carted away is
     saved (`SaveBody.cleared`).
-  * **The player leading the army** (`Command.ts`): **R** with reputation ≥ 40 — the squads within 350 m gather on the
+  * **The player leading the army** (`Command.ts`): **G** with reputation ≥ 40 — the squads within 350 m gather on the
     player and follow for 60 s (`Forces.rally` every 4 s; a soldier calls "On you!"); **T** with reputation ≥ 70 and a
     giant creature as the Tab target — two jets roar in and bomb it (`Forces.airstrike`; held up to 20 s while the army's
     jets are on a run), 150 s between calls. A refusal says why in one short line; the P screen and the help list the keys.

@@ -2,7 +2,7 @@
  * The player leading the army (THREATS_PLAN §2 "How the player helps", high power; Phase E hooks of
  * response/forces): with a good reputation the soldiers in the field listen to the player.
  *
- *  R  rally (reputation ≥ COMMAND.rallyRep): the squads near the player gather on them and follow
+ *  G  rally (reputation ≥ COMMAND.rallyRep): the squads near the player gather on them and follow
  *     for a while (Forces.rally every few seconds) — a soldier calls out "On you!".
  *  T  airstrike (reputation ≥ COMMAND.strikeRep): two jets roar in and bomb the Tab target (a giant
  *     creature), a few minutes between calls (Forces.airstrike) — "Copy, jets inbound!".
@@ -38,7 +38,7 @@ export class Command {
     const g = this.g, inp = g.input;
     this.strikeT -= dt;
     if (!g.freeCam && !g.powers.open && !g.map.open && !g.menu.paused) {
-      if (inp.hit('KeyR')) this.rally();
+      if (inp.hit('KeyG')) this.rally();
       if (inp.hit('KeyT')) this.airstrike();
     }
     if (this.rallyLeft > 0) {
@@ -57,7 +57,7 @@ export class Command {
     }
   }
 
-  /** R: the soldiers near the player follow them. True when they do. */
+  /** G: the soldiers near the player follow them. True when they do. */
   rally(): boolean {
     const g = this.g, p = g.player.pos;
     if (!g.forces.squads.length) return false;

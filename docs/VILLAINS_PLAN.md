@@ -10,7 +10,7 @@ drifts by itself every game hour, rewards the moment a crime is stopped. Phase 3
 the villain power set with tells, the gang's Brute and the Syndicate's Enforcer leading operations. Part 2 is built
 (v0.038): the techno-cult (robot hijacks, its Technomancer with an EMP) and the elemental cult (rituals before
 landmarks, its Invoker). Moving the hero's own powers onto the caster core is left open. Phase 4 part 1 is built
-(v0.039): named bosses with a saved record, jail and breakout, notoriety per group (wary, hunted), a group that collapses
+(v0.041): named bosses with a saved record, jail and breakout, notoriety per group (wary, hunted), a group that collapses
 when its boss is jailed and its stash busted. Next: boss operations as threat events, then the eco-radicals and the
 necromancers. Builds on the street-crime layer (`src/game/crime`),
 the threat/response layer (`src/game/threats`, `src/game/response`) and the powers
