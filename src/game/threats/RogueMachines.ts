@@ -41,6 +41,8 @@ export interface RogueOwner {
   blockSpot(m: Rogue): { x: number; z: number; yaw: number } | null;
   /** Something was attacked (people near it take fright; the response hears of it). */
   attacked(m: Rogue, what: 'person' | 'player' | 'car' | 'officer', x: number, z: number): void;
+  /** People the machines leave alone (the cultists who hacked them). */
+  spares?(a: PedAgent): boolean;
 }
 
 /** A malfunctioning machine (the state the future classes see is its Malfunction part). */
@@ -527,7 +529,7 @@ export class RogueMachines implements MalfunctionCtl {
     // Keep the current one while valid (hysteresis).
     const cur = m.tgt;
     if (cur?.kind === 'player' && playerOk) return;
-    if (cur?.kind === 'ped' && this.validPed(cur.a, y, m.kind === 'drone') && Math.hypot(cur.a.x - x, cur.a.z - z) < see * 1.3 && inLeash(cur.a.x, cur.a.z) && !(playerOk && pd < 8)) return;
+    if (cur?.kind === 'ped' && this.validPed(cur.a, y, m.kind === 'drone') && !o?.spares?.(cur.a) && Math.hypot(cur.a.x - x, cur.a.z - z) < see * 1.3 && inLeash(cur.a.x, cur.a.z) && !(playerOk && pd < 8)) return;
     if (cur?.kind === 'car' && cur.v.alive && cur.v.state < VState.Wreck && Math.hypot(cur.v.x - x, cur.v.z - z) < ROGUE.seeCars && inLeash(cur.v.x, cur.v.z)) return;
     m.tgt = null;
     if (playerOk && (m.role !== 'rammer' || pd < 6)) { m.tgt = { kind: 'player' }; return; }
@@ -542,7 +544,7 @@ export class RogueMachines implements MalfunctionCtl {
     }
     let best: PedAgent | null = null, bd = see;
     for (const a of g.peds.neighbours(x, z, see, this.nb)) {
-      if (!this.validPed(a, y, m.kind === 'drone') || !inLeash(a.x, a.z)) continue;
+      if (!this.validPed(a, y, m.kind === 'drone') || !inLeash(a.x, a.z) || o?.spares?.(a)) continue;
       const d = Math.hypot(a.x - x, a.z - z);
       if (d < bd) { bd = d; best = a; }
     }

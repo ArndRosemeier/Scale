@@ -41,6 +41,13 @@ const DUST = C(0.55, 0.5, 0.44), DUST_END = C(0.45, 0.42, 0.38);
 const WHITE = C(5, 5, 5), WHITE_END = C(1.2, 1.2, 1.3);
 const SMOKE = C(0.42, 0.42, 0.44), SMOKE_END = C(0.6, 0.6, 0.62);
 const WIND = C(1.2, 1.25, 1.3), WIND_END = C(0.3, 0.32, 0.35);
+const EMP = C(1.2, 2.2, 4.5), EMP_END = C(0.2, 0.4, 1.2);
+const HACK = C(0.4, 2.4, 3.2), HACK_END = C(0.05, 0.5, 0.8);
+const STORM = C(1.7, 1.5, 3.8), STORM_END = C(0.35, 0.25, 0.9);
+/** A ritual's colours by element. */
+const RITE = { fire: [FIRE, FIRE_END], frost: [ICE, ICE_END], storm: [STORM, STORM_END] } as const;
+/** A completed ritual's burst: reach (m), damage to the player, the knock on people. */
+export const RITE_BURST = { radius: 9, dmg: 12, knock: 6 };
 const _c0 = new THREE.Color(), _c1 = new THREE.Color();
 
 export class VillainCasts {
@@ -172,6 +179,7 @@ export class VillainCasts {
         if (this.near(by.x, by.z)) for (let i = 0; i < 8; i++) { const a = Math.random() * Math.PI * 2; g.elements.fx.soft(by.x, by.y + 0.15, by.z, Math.sin(a) * 3, 0.8, Math.cos(a) * 3, 0.8, 0.4, 1.4, DUST, DUST_END, 0.5, 2, 0); }
         break;
       }
+      case 'emp': this.emp(by, tx, ty, tz); break;
       case 'shield': break;
       case 'smoke': this.clouds.push({ x: by.x, y: by.y, z: by.z, t: 0 }); g.stimuli.emit('gunfire', by.x, by.y, by.z, 2, 25); break;
     }
@@ -193,6 +201,40 @@ export class VillainCasts {
       if (power === 'bolt') { g.reactions.knockDown(a, ax, az, 3.5, 'other'); this.stats.knocked++; }
       else { a.fear = Math.min(2, a.fear + 1); a.fearX = ax; a.fearZ = az; a.state = PState.Flee; a.stateT = 0; }
     }
+  }
+
+  /** An EMP at the aim: a blue ring, cars in it stall, drones drop, the hero gets a jolt and is slowed. */
+  private emp(by: PedAgent, x: number, y: number, z: number): void {
+    const g = this.g, P = VILLAIN_POWERS.emp, R = P.radius, p = g.player;
+    const ground = g.world.groundHeight(x, z);
+    if (this.near(x, z, 500)) {
+      const fx = g.elements.fx;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        fx.glow(x, ground + 0.4, z, Math.cos(a) * R * 2.6, 0.3, Math.sin(a) * R * 2.6, 0.38, 0.35, 0.15, EMP, EMP_END, 1, 1, 0);
+      }
+      fx.glow(x, ground + 1, z, 0, 0, 0, 0.18, 1.2, 4, EMP, EMP_END, 1, 1, 0);
+      this.rays.push({ power: 'bolt', ax: by.x, ay: by.y + 2.2, az: by.z, bx: x, by: ground + 1, bz: z, life: 0.25, t: 0, seed: (Math.random() * 1e6) | 0 });
+    }
+    const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
+    if (pd < R + p.height * 0.1 && Math.abs(p.pos.y - y) < 4) {
+      this.stats.atPlayer++;
+      this.hurtPlayer?.(P.dmg, 'power', x, z);
+      p.chillT = Math.max(p.chillT, 1.5); p.chillSpeed = CASTERS.chillSpeed;
+    }
+    for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) {
+      if (Math.hypot(v.x - x, v.z - z) > R + v.length * 0.4) continue;
+      v.speed = 0; v.fear = 2;
+    }
+    for (const d of g.future.drones.list) {
+      if (!d.alive || Math.hypot(d.x - x, d.z - z) > R * 1.5 || d.y - ground > 30) continue;
+      g.future.drones.knock(d, 0, -20, 0);
+    }
+    for (const a of g.peds.neighbours(x, z, R, this.nb)) {
+      if (a === by || !a.alive || a.inside || a.state === PState.Down) continue;
+      a.fear = 2; a.fearX = x; a.fearZ = z; a.state = PState.Flee; a.stateT = 0;
+    }
+    g.stimuli.emit('gunfire', x, y, z, 3, 60);
   }
 
   /** A cone of wind from the caster: shoves the player and the people in it. */
@@ -221,6 +263,88 @@ export class VillainCasts {
       fx.soft(by.x + vx * s * 0.3, by.y + 0.3 + Math.random() * 1.6, by.z + vz * s * 0.3, vx * 16, 0.6, vz * 16, 0.7, 0.35, 1.4, DUST, DUST_END, 0.7, 2, 0);
       if (i % 3 === 0) fx.glow(by.x + vx, by.y + 0.6 + Math.random() * 1.2, by.z + vz, vx * 20, 0, vz * 20, 0.35, 0.12, 0.05, WIND, WIND_END, 0.5, 1.5, 0);
     }
+  }
+
+  // ------------------------------------------------------------------ channelled operations
+
+  /** A frame of a hack or a ritual (CrimeWorld.opFx): `share` of the work done, the ones at it. */
+  opFx(look: 'hack' | 'fire' | 'frost' | 'storm', x: number, z: number, share: number, workers: readonly PedAgent[]): void {
+    if (!this.near(x, z, 300)) return;
+    const g = this.g, fx = g.elements.fx, y = g.world.groundHeight(x, z), t = this.time;
+    if (look === 'hack') {
+      // Sparks and a crackle from the hackers' hands to the robot's port; a cyan glow on it.
+      for (const w of workers) {
+        const hx = w.x - Math.sin(w.heading) * 0.4, hz = w.z - Math.cos(w.heading) * 0.4;
+        if (Math.random() < 0.12 + share * 0.25) this.arc(hx, w.y + 0.85, hz, x, y + 0.55, z, (Math.random() * 1e6) | 0, 0.25 + share * 0.5);
+        if (Math.random() < 0.5) fx.glow(hx, w.y + 0.85, hz, (Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2, 0.35, 0.05, 0.01, HACK, HACK_END, 1, 1, -6);
+      }
+      fx.glow(x, y + 0.6, z, 0, 0, 0, 0.08, 0.35 + share * 0.5, 0.3, HACK, HACK_END, 0.6, 1, 0);
+      // A holo glyph turning above it, rising as the hack goes on.
+      const a = t * 3, r = 0.5;
+      fx.glow(x + Math.cos(a) * r, y + 1.2 + share * 1.2, z + Math.sin(a) * r, 0, 0.2, 0, 0.4, 0.12, 0.05, HACK, HACK_END, 0.8, 1, 0);
+      return;
+    }
+    const [c0, c1] = RITE[look], R = 2.3 * 0.8;
+    // The rune ring on the ground (a flicker of motes along it), and a glyph turning inside it.
+    for (let i = 0; i < 4; i++) {
+      const a = Math.random() * Math.PI * 2;
+      fx.glow(x + Math.cos(a) * R, y + 0.06, z + Math.sin(a) * R, 0, 0.05, 0, 0.6, 0.2, 0.12, c0, c1, 0.55 + share * 0.4, 1, 0);
+    }
+    for (let k = 0; k < 5; k++) {
+      const a = t * 1.2 + (k / 5) * Math.PI * 2;
+      fx.glow(x + Math.cos(a) * 1.1, y + 0.08, z + Math.sin(a) * 1.1, 0, 0, 0, 0.15, 0.22, 0.2, c0, c1, 0.5 + share * 0.4, 1, 0);
+    }
+    // A column of the element rising from the centre, taller and brighter as it goes on.
+    const n = 1 + Math.round(share * 3);
+    for (let i = 0; i < n; i++) {
+      const j = 0.35 * (1 - share * 0.5);
+      if (look === 'fire') fx.glow(x + (Math.random() - 0.5) * j, y + 0.2, z + (Math.random() - 0.5) * j, 0, 2 + share * 5, 0, 0.5 + share * 0.6, 0.35, 0.1, c0, c1, 0.9, 1.5, 1);
+      else fx.glow(x + (Math.random() - 0.5) * j, y + 0.2, z + (Math.random() - 0.5) * j, 0, 1.5 + share * 4, 0, 0.6 + share * 0.7, 0.25, 0.18, c0, c1, 0.8, 1, 0);
+    }
+    // Glow in the raised hands; a storm crackles from the column to them.
+    for (const w of workers) {
+      if (Math.random() < 0.4) fx.glow(w.x, w.y + 2.05, w.z, (x - w.x) * 0.3, 0.3, (z - w.z) * 0.3, 0.4, 0.15, 0.05, c0, c1, 0.9, 1, 0);
+      if (look === 'storm' && Math.random() < 0.04 + share * 0.08) this.arc(w.x, w.y + 2.05, w.z, x, y + 1.5 + share * 3, z, (Math.random() * 1e6) | 0, 0.5 + share * 0.5);
+    }
+  }
+
+  /** A completed ritual: a burst of the element from the circle that knocks back whoever stands near (not the circle). */
+  ritualBurst(circle: readonly PedAgent[], x: number, z: number, element: 'fire' | 'frost' | 'storm'): void {
+    const g = this.g, p = g.player, B = RITE_BURST, y = g.world.groundHeight(x, z);
+    const cam = g.renderer.camera.position;
+    if (this.near(x, z, 700)) {
+      const fx = g.elements.fx, [c0, c1] = RITE[element];
+      if (element === 'fire') fireBurst(fx, g.debris, g.dust, x, y + 1, z, 1.1, y, 0.6);
+      for (let i = 0; i < 36; i++) {
+        const a = (i / 36) * Math.PI * 2;
+        fx.glow(x, y + 0.4, z, Math.cos(a) * B.radius * 2.4, 0.4, Math.sin(a) * B.radius * 2.4, 0.45, 0.45, 0.2, c0, c1, 1, 1, 0);
+      }
+      for (let i = 0; i < 14; i++) fx.glow(x, y + 0.5, z, (Math.random() - 0.5) * 2, 8 + Math.random() * 10, (Math.random() - 0.5) * 2, 1.2, 0.5, 0.2, c0, c1, 1, 1.5, 2);
+      if (element === 'frost') fx.decal(DecalKind.Frost, x, y + 0.03, z, 0, 1, 0, B.radius * 1.4, B.radius * 1.4, 0, 30);
+      else fx.decal(DecalKind.Scorch, x, y + 0.03, z, 0, 1, 0, B.radius, B.radius, 0, 30);
+      if (element === 'storm') for (let i = 0; i < 3; i++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 4;
+        this.rays.push({ power: 'bolt', ax: x + Math.cos(a) * r, ay: y + 40, az: z + Math.sin(a) * r, bx: x, by: y + 0.5, bz: z, life: 0.35, t: 0, seed: (Math.random() * 1e6) | 0 });
+      }
+    }
+    g.audio.play(element === 'storm' ? 'thunder_near' : element === 'frost' ? 'shrink_whoosh' : 'explosion', x, y + 1, z, 0.9, element === 'fire' ? 0.8 : 0.9, 40, cam);
+    const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
+    if (pd < B.radius && Math.abs(p.pos.y - y) < 5) {
+      this.stats.atPlayer++;
+      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius), 'power', x, z);
+      if (element === 'frost') { p.chillT = Math.max(p.chillT, CASTERS.chill); p.chillSpeed = CASTERS.chillSpeed; }
+      else if (!p.flying) { const push = 8 / Math.max(1, Math.sqrt(p.k)), l = pd || 1; p.vel.x += ((p.pos.x - x) / l) * push; p.vel.z += ((p.pos.z - z) / l) * push; p.vel.y += 3 / Math.max(1, Math.sqrt(p.k)); }
+      g.camRig.addShake(0.3);
+    }
+    for (const a of g.peds.neighbours(x, z, B.radius, this.nb)) {
+      if (circle.includes(a) || !a.alive || a.inside || a.state === PState.Down) continue;
+      const f = 1 - Math.hypot(a.x - x, a.z - z) / B.radius;
+      if (f <= 0) continue;
+      g.reactions.knockDown(a, x, z, 2 + B.knock * f, 'other');
+      this.stats.knocked++;
+    }
+    g.props.hit(x, y + 1, z, B.radius * 0.6, 0, 400, 0);
+    g.stimuli.emit('gunfire', x, y + 1, z, 4, 90);
   }
 
   update(dt: number): void {

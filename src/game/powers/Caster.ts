@@ -14,7 +14,7 @@
  */
 import type { Rng } from '../../core/rng';
 
-export type VillainPower = 'bolt' | 'fireball' | 'frost' | 'gust' | 'quake' | 'dash' | 'shield' | 'stun' | 'smoke';
+export type VillainPower = 'bolt' | 'fireball' | 'frost' | 'gust' | 'quake' | 'dash' | 'shield' | 'stun' | 'smoke' | 'emp';
 
 export interface PowerDef {
   /** Wind-up (s): the tell. */
@@ -54,6 +54,8 @@ export const VILLAIN_POWERS: Record<VillainPower, PowerDef> = {
   shield: { windup: 0.35, cooldown: 14, min: 0, max: 12, dmg: 0, radius: 1.1, hold: 4, pose: 'cast_self', tell: [1.4, 1.8, 2.4], tellSound: 'deep_glow', sound: 'membrane' },
   /** A stun grenade: lobbed, a short fuse, a white flash that knocks the target down for a moment. */
   stun: { windup: 0.55, cooldown: 10, min: 5, max: 18, dmg: 5, radius: 5.5, hold: 0, pose: 'throw', tell: [2, 2, 2], tellSound: 'cuffs', sound: 'explosion', pitch: 1.9 },
+  /** An electromagnetic pulse at the target: cars stall, drones drop, the hero takes a jolt and is slowed for a moment. */
+  emp: { windup: 0.85, cooldown: 11, min: 4, max: 20, dmg: 7, radius: 6, hold: 0, pose: 'cast_up', tell: [0.9, 1.5, 3], tellSound: 'deep_glow', sound: 'thunder_far', pitch: 1.4 },
   /** A smoke bomb at their own feet: a cloud to slip away in. */
   smoke: { windup: 0.3, cooldown: 40, min: 0, max: 60, dmg: 0, radius: 6, hold: 0, pose: 'throw', tell: [1, 1, 1], tellSound: 'cuffs', sound: 'spray_hiss', pitch: 0.55 },
 };

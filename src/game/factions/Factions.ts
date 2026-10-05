@@ -124,6 +124,8 @@ export const SHIFT = {
   succeeded: 0.05,
   /** A tag on the wall. */
   tag: 0.04,
+  /** A ritual completed, a robot hijack gone through. */
+  ritual: 0.07,
   /** A turf brawl: the winners gain the street, the losers lose it. */
   brawlWon: 0.08,
   brawlLost: -0.1,

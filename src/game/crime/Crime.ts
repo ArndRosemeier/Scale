@@ -23,9 +23,9 @@ import { type Actor, type ActorRole, makeActor, attach, release, setState, play,
 import { personStrength } from '../Consider';
 import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout';
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual';
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
-export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout'];
+export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual'];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
 export type CrimeOutcome = 'arrested' | 'stopped' | 'escaped' | 'aborted';
 
@@ -41,7 +41,7 @@ export interface Loot {
 }
 
 export interface CrimeEvent {
-  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast';
+  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast' | 'done';
   crime: Crime;
   who?: PedAgent;
 }
@@ -110,6 +110,16 @@ export interface CrimeWorld {
   cast?(by: PedAgent, power: VillainPower, stage: CastStage, tx: number, ty: number, tz: number): boolean;
   /** A clear line between two points (a beam or a thrown ball would get through); `skip` is not in the way. */
   clearLine?(ax: number, ay: number, az: number, bx: number, by: number, bz: number, skip: PedAgent): boolean;
+  /** Robots standing free at the kerb in a ring around the player (a point beside one, the side to stand on). */
+  machines?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /** Open ground before a landmark in a ring around the player (the centre, the way the front faces). */
+  landmarks?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /** A frame of a channelled operation's look (crime/Channeling): `share` of the work done, the ones at it. */
+  opFx?(look: 'hack' | 'fire' | 'frost' | 'storm', x: number, z: number, share: number, workers: readonly PedAgent[]): void;
+  /** A hack went through: `n` machines round about turn on the street for the crime's group. */
+  hijack?(c: Crime, x: number, z: number, n: number): void;
+  /** A ritual is complete: a burst of the element at the circle. */
+  ritual?(c: Crime, x: number, z: number, element: 'fire' | 'frost' | 'storm'): void;
 }
 
 export type CastStage = 'begin' | 'tell' | 'release' | 'hold' | 'end';

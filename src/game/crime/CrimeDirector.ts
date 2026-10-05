@@ -40,6 +40,10 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     brawl: (night ? 0.55 : evening ? 0.5 : 0.2) * (rough ? 1.2 : 0.8),
     // Never rolled: hideout guards are there when the player comes by.
     hideout: 0,
+    // The techno-cult turning the robots (where there are robots: busy streets by day).
+    hijack: (busy || d === 'industrial' ? 0.55 : 0.3) * (night ? 0.4 : 1),
+    // The elemental cult's rituals: mostly after dark.
+    ritual: night ? 0.75 : evening ? 0.5 : 0.15,
     // Rare: a madman with a bag of bombs where the crowds are.
     bomber: busy ? 0.09 : 0.05,
   };
