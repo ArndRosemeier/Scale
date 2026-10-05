@@ -2631,6 +2631,29 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   console.log(`cathedrals: ${results.join('; ')} in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
+// Front doors in real cities: from the square up the steps (however far below the floor it lies)
+// and through the door of the town hall and the cathedral, with no pit or wall on the way.
+for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
+  const terrain = new Terrain(makeProfile({ seed, size }));
+  const macro = buildMacroPlan(terrain);
+  const S = new LandmarkSolids(macro, terrain);
+  for (const lm of macro.landmarks.filter((l) => l.kind === 'cathedral' || l.kind === 'townhall')) {
+    const end = lm.kind === 'cathedral' ? 0 : lm.hv - 4 - lm.p.d + 2;
+    let [x, z] = siteToWorld(lm, 0, -lm.hv - 2);
+    let y = terrain.height(x, z), up = 0, down = 0, blocked = 0;
+    for (let v = -lm.hv - 2; v <= end; v += 0.1) {
+      [x, z] = siteToWorld(lm, 0, v);
+      const ny = Math.max(terrain.height(x, z), S.topAt(x, z, y, 0.5));
+      up = Math.max(up, ny - y);
+      down = Math.max(down, y - ny);
+      y = ny;
+      if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
+    }
+    check(up <= 0.31 && down < 0.31 && blocked === 0 && Math.abs(y - lm.base) < 0.05 && !!S.insideAt(x, y + 1, z),
+      `seed ${seed} size ${size}: walk in to the ${lm.kind} (steps up to ${up.toFixed(2)} m, drops ${down.toFixed(2)} m, ${blocked} blocked, floor ${(y - lm.base).toFixed(2)} m)`);
+  }
+}
+
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
 cmuBvhChecks(check);
 

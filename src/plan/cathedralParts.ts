@@ -16,6 +16,7 @@ import type { Landmark } from './landmarks';
 import {
   Kit, mat, wallRun, bench, D, DS, WHITE, WIN, ARCH, ROOF, GLOW, LIME, SAND, GRANITE, BRICK, PLASTER, METAL, SLATE, ZINC, CLAY,
   COPPER, GOLD, type Opening, type Opt, type PartMat, type LmPart, type RGB,
+  entranceSteps,
 } from './landmarkParts';
 
 /** Stained glass colours (bright: seen against the dim inside they read as lit by the day). */
@@ -321,10 +322,18 @@ export function cathedral(k: Kit, lm: Landmark, r0: Rng): void {
     vault(0, (front + T + cn) / 2, (cn - front - T) / 2, nw - T, Sn, { rot: Math.PI / 2 });
     vault(0, (cs + back) / 2, (back - cs) / 2, nw - T, Sn, { rot: Math.PI / 2 });
     for (const s of [-1, 1]) vault(s * (nw + tl - T) / 2, tv, (tl - T - nw) / 2, tdep - T, St);
-    const Rd = Math.hypot(nw - T, tdep - T), hD = Rd * 0.95;
-    const dm = k.dome(0, tv, Rd, Rd, crownN, crownN + hD, ceil, { seg: 28, solid: false });
+    // Pendentives carry a ring over the crossing's square; on it a drum and the dome.
+    const a = nw - T, b = tdep - T, r = Math.min(a, b) - 0.2, ys = crownN - 0.85 * Math.min(a, b);
+    const yc = ys + 0.85 * Math.sqrt(a * a + b * b - r * r), dh = r * 0.55, hD = r * 0.9;
+    const pd = k.dome(0, tv, a, b, ys, yc, ceil, { solid: false });
+    pd.pend = true;
+    pd.r = r;
+    k.cyl(0, tv, r - 0.05, r - 0.05, yc - 0.05, yc + 0.35, C.gold, { ...D, seg: 32, solid: false }).inward = true;
+    k.cyl(0, tv, r, r, yc + 0.35, yc + dh, inner, { seg: 32, solid: false }).inward = true;
+    k.cyl(0, tv, r - 0.08, r - 0.08, yc + dh - 0.05, yc + dh + 0.2, C.gold, { ...D, seg: 32, solid: false }).inward = true;
+    const dm = k.dome(0, tv, r, r, yc + dh, yc + dh + hD, ceil, { seg: 32, solid: false });
     dm.inward = true;
-    const yTop = crownN + hD + 0.5;
+    const yTop = yc + 0.4;
     for (const sv of [-1, 1]) {
       const out = [-nw, Sn, ...shift(ellipse(nw - T, crownN - Sn), 0, Sn), nw, Sn, nw, yTop, -nw, yTop];
       k.prism(0, tv + sv * (tdep - T / 2), out, T / 2, inner, { solid: false });
@@ -333,8 +342,8 @@ export function cathedral(k: Kit, lm: Landmark, r0: Rng): void {
       const out = [-tdep, St, ...shift(ellipse(tdep - T, crownN - St), 0, St), tdep, St, tdep, yTop, -tdep, yTop];
       k.prism(s * (nw - T / 2), tv, out, T / 2, inner, { rot: Math.PI / 2, solid: false });
     }
-    // A gilded ring where the dome springs, and a sunburst at its crown.
-    k.cyl(0, tv, 1.6, 1.6, crownN + hD - 0.05, crownN + hD + 0.02, C.gold, { ...D, seg: 20 });
+    // A gilded sunburst at the dome's crown.
+    k.cyl(0, tv, 1.6, 1.6, yc + dh + hD - 0.05, yc + dh + hD + 0.02, C.gold, { ...D, seg: 20 });
   } else {
     // Gothic: the nave's and the transept's vaults cross.
     vault(0, (front + T + back) / 2, (back - front - T) / 2, nw - T, Sn, { rot: Math.PI / 2 });
@@ -348,7 +357,13 @@ export function cathedral(k: Kit, lm: Landmark, r0: Rng): void {
 
   // ------------------------------------------------------------ outside
 
-  k.gable(0, vc, L / 2, nw, H, H + nw * 1.5, plain, roofM, { rot: Math.PI / 2 });
+  // (The domed one's roofs stop inside its drum: none of them crosses the dome seen from inside.)
+  const drumR = Math.max(nw * 1.15, Math.hypot(nw - T, tdep - T) + 0.4), cut = drumR - 0.5;
+  const span = (a0: number, a1: number, f: (m: number, h: number) => void) => {
+    if (st !== 2) return f((a0 + a1) / 2, (a1 - a0) / 2);
+    for (const [p, q] of [[a0, -cut], [cut, a1]]) if (q - p > 0.5) f((p + q) / 2, (q - p) / 2);
+  };
+  span(vc - L / 2 - tv, vc + L / 2 - tv, (m, h) => k.gable(0, tv + m, h, nw, H, H + nw * 1.5, plain, roofM, { rot: Math.PI / 2 }));
   /** Where the entrance steps start (in front of the west door, or of the tower it passes under). */
   let stepV = front, stepW = nw + 1;
   if (st !== 2) {
@@ -380,9 +395,9 @@ export function cathedral(k: Kit, lm: Landmark, r0: Rng): void {
     }
   } else {
     // Domed: a great dome on a drum over the crossing, two bell towers with cupolas.
-    k.gable(0, tv, tl, tdep, H, H + nw * 0.7, plain, roofM);
+    span(-tl, tl, (m, h) => k.gable(m, tv, h, tdep, H, H + nw * 0.7, plain, roofM));
     // (Wider than the dome inside: none of the drum shows below it.)
-    const dr = Math.max(nw * 1.15, Math.hypot(nw - T, tdep - T) + 0.4);
+    const dr = drumR;
     k.cyl(0, tv, dr, dr, H, H + P.H * 0.45, mat(wallL, tint, WIN | ARCH, 3.2, P.H * 0.45, P.H * 0.45), { solid: false, foot: H });
     k.dome(0, tv, dr + 0.5, dr + 0.5, H + P.H * 0.45, H + P.H * 0.45 + dr * 1.25, roofM, { seg: 24 });
     k.cyl(0, tv, 1.8, 1.8, H + P.H * 0.45 + dr * 1.2, H + P.H * 0.45 + dr * 1.2 + 4, plain, { detail: true, solid: false });
@@ -396,12 +411,8 @@ export function cathedral(k: Kit, lm: Landmark, r0: Rng): void {
     }
     k.dome(0, back, nw, nw, apseTop, apseTop + nw * 0.8, roofM, { seg: 16, solid: false }).half = true;
   }
-  // Steps up to the door, solid, as many as it takes from the square up to the floor.
-  {
-    const rise = 0.17, tread = 0.36;
-    const n = Math.max(3, Math.min(18, Math.ceil((B - k.ground(0, stepV - 3)) / rise)));
-    for (let i = 0; i < n; i++) k.box(0, stepV - tread / 2 - i * tread, stepW + i * 0.05, tread / 2, k.F, B - i * rise, C.step, { solid: true, map: 2 });
-  }
+  // Steps up to the door from the square.
+  entranceSteps(k, stepV, stepW, B, C.step);
 
   // ------------------------------------------------------------ inside
 

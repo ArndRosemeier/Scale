@@ -431,17 +431,19 @@ class Emitter {
     for (let i = 0; i < m; i++) {
       const j = half ? i + 1 : (i + 1) % m;
       const a0 = a0f + i * step, a1 = a0f + (i + 1) * step;
-      const n0: V3 = norm([Math.cos(a0) * h, ny, Math.sin(a0) * h]), n1: V3 = norm([Math.cos(a1) * h, ny, Math.sin(a1) * h]);
+      const sg = p.inward ? -1 : 1;
+      const n0: V3 = norm([Math.cos(a0) * h * sg, ny * sg, Math.sin(a0) * h * sg]), n1: V3 = norm([Math.cos(a1) * h * sg, ny * sg, Math.sin(a1) * h * sg]);
       const u0 = a0 * r0, u1 = a1 * r0;
       if (r1 > 1e-3) this.poly([[R0[i][0], p.y0, R0[i][1]], [R0[j][0], p.y0, R0[j][1]], [R1[j][0], p.y1, R1[j][1]], [R1[i][0], p.y1, R1[i][1]]], [[u0, 0], [u1, 0], [u1, h], [u0, h]], [n0, n1, n1, n0]);
       else this.poly([[R0[i][0], p.y0, R0[i][1]], [R0[j][0], p.y0, R0[j][1]], [p.x, p.y1, p.z]], [[u0, 0], [u1, 0], [(u0 + u1) / 2, h]], [n0, n1, norm([n0[0] + n1[0], n0[1] + n1[1], n0[2] + n1[2]])]);
     }
-    if (half) return;
+    if (half || p.inward) return;
     if (r1 > 1e-3) { this.useTop(p); this.cap(R1, p.y1, true); }
     if (p.foot === undefined && p.y0 > 0) { this.use(p.m); this.cap(R0, p.y0, false); }
   }
 
   dome(p: LmPart): void {
+    if (p.pend) return this.pendentives(p);
     const n = this.segs(p, 20), K = this.lod > 0 ? 4 : 7;
     const h = p.y1 - p.y0, c = Math.cos(p.a), s = Math.sin(p.a);
     const pt = (t: number, f: number): V3 => {
@@ -461,6 +463,31 @@ class Emitter {
         const uv = (t: number, f: number): [number, number] => [t * p.hx, f * Math.abs(h)];
         if (k === K - 1) this.poly([pt(t0, f0), pt(t1, f0), pt(t0, f1)], [uv(t0, f0), uv(t1, f0), uv(t0, f1)], [nr(t0, f0), nr(t1, f0), nr(t0, f1)]);
         else this.poly([pt(t0, f0), pt(t1, f0), pt(t1, f1), pt(t0, f1)], [uv(t0, f0), uv(t1, f0), uv(t1, f1), uv(t0, f1)], [nr(t0, f0), nr(t1, f0), nr(t1, f1), nr(t0, f1)]);
+      }
+    }
+  }
+
+  /** Pendentives (see LmPart.pend): rings from the square's sides in to the circle, seen from below. */
+  private pendentives(p: LmPart): void {
+    const a = p.hx, b = p.hz, r = p.r!, Rd = Math.hypot(a, b), c = Math.cos(p.a), s = Math.sin(p.a);
+    const q = (p.y1 - p.y0) / Math.sqrt(Math.max(1e-6, Rd * Rd - r * r));
+    const n = this.lod > 0 ? 16 : 32, K = this.lod > 0 ? 3 : 5;
+    const at = (t: number, f: number): { p: V3; n: V3; uv: [number, number] } => {
+      const ct = Math.cos(t), st = Math.sin(t);
+      const ds = Math.min(a / Math.max(1e-6, Math.abs(ct)), b / Math.max(1e-6, Math.abs(st)));
+      const d = ds + (r - ds) * f, u = ct * d, v = st * d, h = q * Math.sqrt(Math.max(0, Rd * Rd - d * d));
+      return {
+        p: [p.x + u * c - v * s, p.y0 + h, p.z + u * s + v * c],
+        n: norm([-(u * c - v * s), -h / (q * q), -(u * s + v * c)]),
+        uv: [t * r, d],
+      };
+    };
+    this.use(p.m);
+    for (let k = 0; k < K; k++) {
+      for (let i = 0; i < n; i++) {
+        const t0 = (i / n) * Math.PI * 2, t1 = ((i + 1) / n) * Math.PI * 2;
+        const P = [at(t0, k / K), at(t1, k / K), at(t1, (k + 1) / K), at(t0, (k + 1) / K)];
+        this.poly(P.map((e) => e.p), P.map((e) => e.uv), P.map((e) => e.n));
       }
     }
   }

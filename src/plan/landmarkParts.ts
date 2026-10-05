@@ -84,10 +84,15 @@ export interface LmPart {
   hh?: number;
   /** Clear glass: drawn by the transparent glass mesh, not the facade one. */
   clear?: boolean;
-  /** Vault, dome: seen from inside (a ceiling: the faces turned inward, no end caps). */
+  /** Vault, dome, cylinder: seen from inside (the faces turned inward, no end caps). */
   inward?: boolean;
   /** Dome or cylinder: only the half on the part's +v side (an apse's half dome or roof). */
   half?: boolean;
+  /**
+   * Inward dome as pendentives: the sphere through the corners of the square ±hx × ±hz (from y0
+   * there) cut by the square's sides, up to the ring of radius r it reaches at y1.
+   */
+  pend?: boolean;
   /**
    * Window glass of a breakable landmark: diced into pieces of its own (beside the wall's in the
    * same grid cell) that break as easily as glass and hold nothing up. Its collision box (a
@@ -450,11 +455,7 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
   // Entrance steps across the middle (in front of the gateway when the tower stands there),
   // solid and as many as it takes from the square up to the floor (the block may stand on a
   // terrace well above the ground).
-  {
-    const rise = 0.17, tread = 0.36, sw = P.w * 0.18 + 1;
-    const n = Math.max(3, Math.min(18, Math.ceil((B - k.ground(0, stepV - 3)) / rise)));
-    for (let i = 0; i < n; i++) k.box(0, stepV - tread / 2 - i * tread, sw + i * 0.05, tread / 2, k.F, B - i * rise, mat(GRANITE, [0.85, 0.85, 0.85]), { solid: true, map: 2 });
-  }
+  entranceSteps(k, stepV, P.w * 0.18 + 1, B, mat(GRANITE, [0.85, 0.85, 0.85]));
   if (st === 3) k.cyl(-hw + 10, fv - 12, 9, 9, B, B + 9, mat(GLASS, WHITE, WIN | CURTAIN, 1.8, 9, 9), { foot: true, top: mat(METAL_ROOF, WHITE, ROOF) });
   // Flagpoles in front.
   const flagC = r.pick(PAINT);
@@ -476,6 +477,18 @@ export interface Opening { a: number; w: number; y0: number; y1: number }
  * thickness th, between y0 and y1, with openings: full-height pieces between them, a sill
  * below and a lintel above each.
  */
+/**
+ * Solid entrance steps running out from v = stepV (towards -v) down from the floor at B to the
+ * ground: 17 cm each, steeper (up to 30 cm) where the ground lies far below, at most 24.
+ */
+export function entranceSteps(k: Kit, stepV: number, hw: number, B: number, m: PartMat): void {
+  const tread = 0.36, drop = (n: number) => B - k.ground(0, stepV - n * tread);
+  let n = 3;
+  while (n < 24 && drop(n) / n > 0.17) n++;
+  const rise = Math.max(0.17, Math.min(0.3, drop(n) / n));
+  for (let i = 0; i < n; i++) k.box(0, stepV - tread / 2 - i * tread, hw + i * 0.05, tread / 2, k.F, B - i * rise, m, { solid: true, map: 2 });
+}
+
 export function wallRun(k: Kit, axis: 'u' | 'v', c: number, a0: number, a1: number, y0: number, y1: number, th: number, m: PartMat, open: Opening[], o: Opt = {}): void {
   // (Lintels over openings stand on the wall beside them: no foundation filling the opening.)
   const lintel: Opt = { ...o, foot: undefined };
@@ -491,7 +504,10 @@ export function wallRun(k: Kit, axis: 'u' | 'v', c: number, a0: number, a1: numb
   for (let i = 0; i + 1 < edges.length; i++) {
     const l = edges[i], r = edges[i + 1], m = (l + r) / 2;
     let b = y0;
-    for (const op of open.filter((q) => Math.abs(m - q.a) < q.w / 2).sort((p, q) => p.y0 - q.y0)) {
+    const over = open.filter((q) => Math.abs(m - q.a) < q.w / 2).sort((p, q) => p.y0 - q.y0);
+    // (A doorway's threshold: the wall's foundation, up to the floor, so there is no pit under it.)
+    if (o.foot !== undefined && over.length && over[0].y0 <= y0 + 0.01) put(l, r, y0 - 0.3, y0);
+    for (const op of over) {
       put(l, r, b, op.y0);
       b = Math.max(b, op.y1);
     }
