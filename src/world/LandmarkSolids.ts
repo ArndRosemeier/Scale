@@ -17,7 +17,7 @@ import type { Terrain } from './terrain';
 import { landmarkParts, landmarkInterior, partObstacles, helixFloorAt, helixFloorsAt, HELIX_SLAB, PK, type PartObstacle, type LmInterior, type LmPart } from '../plan/landmarkParts';
 import { pointInPoly } from '../core/geom2';
 import type { ObstacleProvider } from './Collision';
-import { PIECE_STRIDE, gridKey, keyAt, type WreckGrid } from '../build/landmarkDice';
+import { PIECE_STRIDE, gridKey, gridCells, keyAt, type WreckGrid } from '../build/landmarkDice';
 
 const G = 32;
 /** Helix walkway solids: slab depth under the floor, outer wall thickness, rise per collision piece. */
@@ -141,10 +141,12 @@ export class LandmarkSolids {
         const x = g.x + u * g.c - v * g.s, z = g.z + u * g.s + v * g.c;
         if (this.inside(o, x, z, grow)) cells.push([i, j]);
       }
+    // (Window glass follows the glass pieces of its cells.)
+    const off = o.pane ? gridCells(g) : 0;
     for (let k = k0; k <= k1; k++) {
       const b: Band = { o: { ...o, dead: false, y0: Math.max(o.y0, g.y0 + k * g.ch), y1: Math.min(o.y1, g.y0 + (k + 1) * g.ch) }, n: 0, live: 0 };
       for (const [i, j] of cells) {
-        const p = w.ids.get(gridKey(g, i, j, k));
+        const p = w.ids.get(gridKey(g, i, j, k) + off);
         if (p === undefined) continue;
         b.n++;
         b.live += w.alive[p];

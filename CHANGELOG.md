@@ -2,9 +2,29 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.045 — 2026-10-05
+## 0.047 — 2026-10-05
 
 - **No more ghost walls in the sewers**: the walls you could walk through down there were not houses but the edges of the ground itself. The landscape is drawn in square tiles, and each tile hangs a curtain a few metres deep along its edges to hide seams between near and far detail; wherever a tile edge crossed a tunnel, that curtain stood across it (smeared ground texture, which looked like wood). From underground these curtains are no longer drawn, in the sewers and the metro alike.
+
+## 0.046 — 2026-10-05
+
+- **Avatar converter rebuilt**: the converter (download on the start screen) now handles far more Blender characters.
+  - It measures what the character's rig actually does to the mesh and builds a clean game skeleton from that, so muscle and helper bones, breast and jiggle bones, cage-deformed clothes, BlenRig and Rigify rigs and non-English bone names all come out right.
+  - Arms, legs and spine are found by shape when the bone names don't help.
+  - Before writing the file it bends the result into test poses. If the mesh would tear, or no humanoid body is found and there is no animation of its own, it writes no .glb and says why, instead of producing a broken model.
+  - The character's own animations are baked onto the new skeleton. Very dense models get their subdivision lowered to stay playable.
+
+## 0.045 — 2026-10-05
+
+- **Walk into the cathedral**: the west doors stand open and lead into a full interior.
+  - Inside: a nave with pillars and arcades, side aisles, a transept and an apse, under stone vaults. The domed cathedral's crossing rises on four arches and pendentives to a gilded ring, a drum and a dome.
+  - Furnishings: rows of pews, a red runner up the middle, a raised chancel with choir stalls and an altar, a pulpit, a font, and crown lamps hanging on chains.
+  - It is dim inside like other interiors, lit by the lamps and the stained glass.
+- **Stained glass**: the cathedral's lancet and rose windows are coloured glass that glows in daylight.
+  - The glass shatters into coloured shards from a light hit while the stone around it holds, and a broken window lets you through.
+  - The cathedral can now be wrecked piece by piece like the marvels. Broken windows and walls are kept in saves.
+- **Fix**: the town hall's front door was blocked for walking (the stone above it reached down to the ground). It is open now, and so are other landmark doors and windows built the same way. The doorway has a threshold, so you don't drop into a pit under it.
+- **Fix**: entrance steps (cathedral and town hall) now reach the square even when it lies far below the floor. They get steeper (up to 30 cm) and more numerous instead of stopping short with a high first step.
 
 ## 0.044 — 2026-10-05
 

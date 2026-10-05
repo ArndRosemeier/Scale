@@ -51,7 +51,13 @@ Write-Host "Converting $([IO.Path]::GetFileName($model)) ..."
 $ErrorActionPreference = 'Continue'
 $log = & $Exe -b --factory-startup -P (Join-Path $here 'convert_avatar.py') -- $out @Files 2>&1 | ForEach-Object { "$_" }
 $log | Where-Object { $_ -match '\[avatar\]|Traceback|^Error:' } | ForEach-Object { Write-Host $_ }
-if (-not (Test-Path $out)) { Write-Host ''; Write-Host 'Conversion failed. Full log:'; $log | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }; Pause-Exit 1 }
+if (-not (Test-Path $out)) {
+  Write-Host ''
+  # A refusal (the model would not work in the game) is explained above; anything else is a crash.
+  if ($log -match '\[avatar\] FAILED') { Write-Host 'Not converted: this model would not work in the game (reason above).' }
+  else { Write-Host 'Conversion failed. Full log:'; $log | Select-Object -Last 40 | ForEach-Object { Write-Host $_ } }
+  Pause-Exit 1
+}
 Write-Host ''
 Write-Host "Done: $out"
 Write-Host 'Import it in the game: start screen -> "Import model..." (or drag the .glb onto the start screen).'

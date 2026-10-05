@@ -86,6 +86,8 @@ Surf facadeSurface(vec2 uv, vec4 fp, int flags, float layerF, vec3 eyeDirW, vec3
   s.glass = 0.0;
   s.door = 0.0;
   if (layer == 10) { s.metal = 0.6; }
+  // Stained glass: daylight shines through it (a faint glow at night, lit from inside).
+  if ((flags & 4096) != 0) { s.emis = s.albedo * (0.06 + 0.5 * uDayLight); s.rough = 0.12; s.ao = 1.0; return s; }
   if ((flags & 1) == 0 || (flags & 64) != 0) return s;
 
   bool roof = (flags & 128) != 0;
