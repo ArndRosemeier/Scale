@@ -186,6 +186,7 @@ export class GameMap {
         <div class="map-key"><span class="alert crime">!</span> a crime happening</div>
         <div class="map-key"><span class="alert back">!</span> where stolen goods go back</div>
         <div class="map-key"><span class="crimeheat"></span> rough area (crime layer)</div>
+        <div class="map-key"><span class="faint"></span> someone you met (green: likes you, red: wary of you)</div>
         ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
         <div class="map-status"></div>
       </div>

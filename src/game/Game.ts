@@ -783,7 +783,8 @@ export class Game {
       const dx = p.pos.x - a.x, dz = p.pos.z - a.z;
       const d = Math.hypot(dx, dz);
       const rr = pr + 0.25;
-      if (d >= rr || d < 1e-4) continue;
+      // (!(d < rr): a person at a non-finite spot must not drag the hero there too.)
+      if (!(d < rr) || d < 1e-4) continue;
       const nx = dx / d, nz = dz / d, pen = rr - d;
       const am = 70;
       const wp = am / (am + pm), wa = pm / (am + pm);

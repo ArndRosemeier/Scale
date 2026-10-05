@@ -69,6 +69,7 @@ export function matches(w: When, f: TalkFacts): boolean {
   if (w.child !== undefined && w.child !== f.child) return false;
   if (w.senior !== undefined && w.senior !== f.senior) return false;
   if (w.job && !w.job.includes(f.job.kind)) return false;
+  if (w.title && !w.title.includes(f.job.title)) return false;
   if (w.interest && !w.interest.includes(f.interest)) return false;
   if (w.group !== undefined && w.group !== !!f.group) return false;
   if (w.boss !== undefined && w.boss !== !!f.boss) return false;

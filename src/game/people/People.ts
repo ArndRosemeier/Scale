@@ -71,6 +71,8 @@ interface Session {
   lastBefore: number;
   /** Times asked this conversation (the seed of the next pick). */
   n: number;
+  /** Consequences.time when the talk began (new harm close by ends it). */
+  since: number;
 }
 
 const STORE = (g: Game) => `scale.people.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
@@ -130,10 +132,10 @@ export class People {
   }
 
   /** The target frame's name and sub line for a person ("Mara Okonkwo", "shop assistant · knows you"). */
-  label(a: PedAgent): { name: string; kind: string } {
+  label(a: PedAgent): { name: string; kind: string; ours: boolean } {
     const p = this.person(a.cit), k = this.find(a.cit.id);
     const job = p.job.title.charAt(0).toUpperCase() + p.job.title.slice(1);
-    return { name: p.full, kind: k ? `${job} · knows you` : job };
+    return { name: p.full, kind: k ? `${job} · knows you` : job, ours: a.actor?.owner === TALK_OWNER };
   }
 
   /** A passer-by's bit of small talk in their temperament (null: they keep quiet). */
@@ -249,6 +251,11 @@ export class People {
 
   private start(a: PedAgent): void {
     const p = this.person(a.cit), P = this.g.player;
+    // Right after a crash or a fight nearby nobody stops for a chat.
+    if (this.troubleAt(a.x, a.z) > 0.6) {
+      this.g.barks?.say(a, pick(p.temper === 'grumpy' ? ['Not now!', 'Are you serious? Now?'] : ['Not now!', 'Sorry, I have to go!', 'Not now, it\'s not safe here!']), 8);
+      return;
+    }
     const before = this.find(a.cit.id);
     const metBefore = before ? before.met : 0, lastBefore = before ? before.last : this.g.sky.hoursAbs;
     const k = this.note(a, 'talked');
@@ -258,7 +265,7 @@ export class People {
       a.actor = act;
     }
     a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
-    this.session = { a, p, k, act, idle: 0, closing: 0, metBefore, lastBefore, n: 0 };
+    this.session = { a, p, k, act, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time };
     // Opinion and mood before the menu: the header shows them.
     const f = this.facts(this.session);
     if (act) act.mood = actorMood(f);
@@ -361,6 +368,16 @@ export class People {
     return Math.min(1, n / 8);
   }
 
+  /** Harm done within 40 m of a point since a time (a crash during the talk ends it). */
+  private harmSince(x: number, z: number, t: number): boolean {
+    const C = this.g.consequences;
+    for (let i = C.log.length - 1; i >= 0 && C.log[i].t >= t; i--) {
+      const e = C.log[i];
+      if (e.cause !== 'police' && Math.hypot(e.x - x, e.z - z) < 40) return true;
+    }
+    return false;
+  }
+
   /** The named street nearest a point (arterials, as the map names them), within 120 m. */
   streetAt(x: number, z: number): string | null {
     const E = this.g.macro.edges;
@@ -402,7 +419,7 @@ export class People {
       else a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
       const lost = !a.alive || (s.act && a.actor !== s.act) || a.state === PState.Down || a.ragdoll;
       if (s.closing > 0) { s.closing -= dt; if (s.closing <= 0) this.end(); }
-      else if (lost || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) > TALK.leave || s.idle > TALK.idle || !this.canTalk() || this.troubleAt(a.x, a.z) > 0.6) this.end();
+      else if (lost || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) > TALK.leave || s.idle > TALK.idle || !this.canTalk() || this.harmSince(a.x, a.z, s.since)) this.end();
     }
     this.greet();
     this.markT -= dt;

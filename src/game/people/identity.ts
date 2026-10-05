@@ -37,10 +37,10 @@ const FIRST = {
 } as const;
 
 const LAST = [
-  'Smith', 'Müller', 'Okonkwo', 'Rossi', 'Nguyen', 'García', 'Kowalski', 'Tanaka', 'Schneider', 'Haddad', 'O\'Brien', 'Petrov',
+  'Smith', 'Müller', 'Okonkwo', 'Rossi', 'Nguyen', 'García', 'Kowalski', 'Tanaka', 'Schneider', 'Haddad', 'O\'Brien', 'Popescu',
   'Fischer', 'Silva', 'Andersson', 'Kim', 'Dubois', 'Weber', 'Mensah', 'Novak', 'Brennan', 'Yilmaz', 'Hoffmann', 'Moreau',
   'Patel', 'Lindqvist', 'Costa', 'Wagner', 'Sato', 'Rahman', 'Becker', 'Lopez', 'Jensen', 'Kaur', 'Fontaine', 'Okafor',
-  'Bianchi', 'Schulz', 'Ivanova', 'Walsh', 'Chen', 'Kruger', 'Romero', 'Lehmann', 'Adeyemi', 'Varga', 'Hughes', 'Takahashi',
+  'Bianchi', 'Schulz', 'Horvat', 'Walsh', 'Chen', 'Kruger', 'Romero', 'Lehmann', 'Adeyemi', 'Varga', 'Hughes', 'Takahashi',
   'Meyer', 'Duarte', 'Nowak', 'Bauer', 'Mbeki', 'Sorensen', 'Fernández', 'Keller', 'Ali', 'Morales', 'Richter', 'Doyle',
 ];
 
@@ -116,7 +116,7 @@ const JOB_TITLES: Record<JobKind, readonly string[]> = {
   pupil: ['pupil'],
   student: ['student'],
   retired: ['retired'],
-  home: ['stays at home', 'between jobs', 'works from home', 'freelancer'],
+  home: ['homemaker', 'job seeker', 'remote worker', 'freelancer'],
   office: ['office worker', 'accountant', 'insurance clerk', 'project manager', 'lawyer', 'architect', 'marketing assistant', 'analyst'],
   shop: ['shop assistant', 'cashier', 'florist', 'bookseller', 'pharmacist', 'baker', 'tailor', 'barber'],
   factory: ['factory worker', 'machinist', 'welder', 'forklift driver', 'warehouse worker', 'robot technician'],

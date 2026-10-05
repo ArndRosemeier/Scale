@@ -38,6 +38,8 @@ export interface When {
   child?: boolean;
   senior?: boolean;
   job?: readonly JobKind[];
+  /** Exact job titles (identity JOB_TITLES). */
+  title?: readonly string[];
   interest?: readonly string[];
   /** A villain group holds this street. */
   group?: boolean;
@@ -109,7 +111,10 @@ export const LINES: Record<Topic, readonly LineEntry[]> = {
     { id: 'j1', when: { job: ['pupil'] }, say: S('I go to school. Maths is boring, but break is good.', 'School. We\'re doing volcanoes!') },
     { id: 'j2', when: { job: ['student'] }, say: S('I study. Mostly I study how to pay the rent.', 'Student. Exams next week, so… panicking, mostly.') },
     { id: 'j3', when: { job: ['retired'] }, say: S('Retired! Forty years of work, and now I finally have time for {interest}.', 'Retired. I keep busier than when I worked, though.') },
-    { id: 'j4', when: { job: ['home'] }, say: S('I\'m between jobs right now. Something will come up.', 'I work from home. Which means I mostly talk to the cat.') },
+    { id: 'j4', when: { job: ['home'], title: ['job seeker'] }, say: S('I\'m between jobs right now. Something will come up.') },
+    { id: 'j4b', when: { job: ['home'], title: ['remote worker'] }, say: S('I work from home. Which means I mostly talk to the cat.') },
+    { id: 'j4c', when: { job: ['home'], title: ['homemaker'] }, say: S('I keep the house running. Harder than any office job, believe me.') },
+    { id: 'j4d', when: { job: ['home'], title: ['freelancer'] }, say: S('Freelancer. Feast or famine, every single month.') },
     { id: 'j5', when: { temper: ['proud'] }, say: S('I\'m {aTitle}, and a good one, if I may say so.') },
     { id: 'j6', when: { temper: ['grumpy'] }, say: S('{ATitle}. Don\'t get me started.') },
     { id: 'j7', when: { temper: ['cheerful'] }, say: S('I\'m {aTitle}! Love it, most days.') },
