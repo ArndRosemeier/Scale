@@ -2,6 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.042 — 2026-10-05
+
+- **Walk into the cathedral**: the west doors stand open and lead into a full interior.
+  - Inside: a nave with pillars and arcades, side aisles, a transept and an apse, under stone vaults. The domed cathedral has a dome over the crossing.
+  - Furnishings: rows of pews, a red runner up the middle, a raised chancel with choir stalls and an altar, a pulpit, a font, and crown lamps hanging on chains.
+  - It is dim inside like other interiors, lit by the lamps and the stained glass.
+- **Stained glass**: the cathedral's lancet and rose windows are coloured glass that glows in daylight.
+  - The glass shatters into coloured shards from a light hit while the stone around it holds, and a broken window lets you through.
+  - The cathedral can now be wrecked piece by piece like the marvels. Broken windows and walls are kept in saves.
+- **Fix**: the town hall's front door was blocked for walking (the stone above it reached down to the ground). It is open now, and so are other landmark doors and windows built the same way.
+
 ## 0.041 — 2026-10-05
 
 - **Named bosses**: every villain group now has a boss with a name and a title: the gang's **Kingpin**, the Syndicate's **Chairman**, the techno-cult's **Architect** and the elemental cult's **High Invoker**. A boss is far tougher than a lieutenant, glows brightly in the group's colour, has the lieutenants' powers plus one of its own, and fights to the end.
