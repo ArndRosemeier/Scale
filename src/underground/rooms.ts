@@ -16,7 +16,7 @@ import type { Terrain } from '../world/terrain';
 import { makeBox, makeTube, tubeAt, type Box, type Tube, type Platform } from './Volumes';
 import { pointOnTube, SEWER_H } from './layout';
 
-export type SewerRoomKind = 'alcove' | 'overflow' | 'cistern' | 'pump' | 'collapsed' | 'bricked';
+export type SewerRoomKind = 'alcove' | 'overflow' | 'cistern' | 'pump' | 'collapsed' | 'bricked' | 'hall' | 'gears' | 'hideout';
 export type MetroRoomKind = 'niche' | 'cross' | 'staff' | 'ghost' | 'vent' | 'electrical' | 'storage';
 export type RoomKind = SewerRoomKind | MetroRoomKind;
 
@@ -33,6 +33,11 @@ const SPECS: Record<RoomKind, Spec> = {
   pump: { depth: 4.5, hv: 3, h: 3.0, dhv: 0.7, dl: 1.0, top: SEWER_DOOR_TOP, w: 2 },
   collapsed: { depth: 7, hv: 0.9, h: 2.3, dhv: 0.9, dl: 0.3, top: SEWER_DOOR_TOP, w: 2 },
   bricked: { depth: 3.5, hv: 2, h: 2.4, dhv: 0.45, dl: 0.6, top: 1.75, w: 1.5 },
+  // The bigger rooms (planned in a second pass, see planBig): a machine hall with a gallery over a
+  // lowered floor, a winding room with big gears over a sluice, a hideout.
+  hall: { depth: 7, hv: 7.5, h: 3.5, dhv: 0.8, dl: 1.0, top: SEWER_DOOR_TOP, drop: 2.2, w: 1.2 },
+  gears: { depth: 5, hv: 4.5, h: 3.5, dhv: 0.8, dl: 1.0, top: SEWER_DOOR_TOP, w: 1 },
+  hideout: { depth: 5.5, hv: 4, h: 3.0, dhv: 0.7, dl: 1.2, top: SEWER_DOOR_TOP, w: 0.8 },
   niche: { depth: 1.6, hv: 1.6, h: 2.8, dhv: 1.6, dl: 0.25, top: 2.8, w: 3 },
   cross: { depth: 6, hv: 0.8, h: 2.5, dhv: 0.8, dl: 0.25, top: 2.5, w: 2 },
   staff: { depth: 4.5, hv: 2.5, h: 2.6, dhv: 0.6, dl: 1.5, top: 2.2, w: 2 },
@@ -42,6 +47,10 @@ const SPECS: Record<RoomKind, Spec> = {
   storage: { depth: 5, hv: 3, h: 3.0, dhv: 0.7, dl: 1.0, top: 2.3, w: 2 },
 };
 const SEWER_KINDS: SewerRoomKind[] = ['alcove', 'overflow', 'cistern', 'pump', 'collapsed', 'bricked'];
+/** The bigger sewer rooms (second pass). */
+const BIG_KINDS: SewerRoomKind[] = ['hall', 'gears', 'hideout'];
+/** Machine hall: the gallery inside the door (u from main.u0) and the stairs down along the v1 wall. */
+export const HALL_GALLERY = 1.6, HALL_STAIR_W = 1.3, HALL_STEPS = 8, HALL_RUN = 0.3;
 const METRO_KINDS: MetroRoomKind[] = ['niche', 'cross', 'staff', 'ghost', 'vent', 'electrical', 'storage'];
 /** Kinds whose back wall can hide the gap to a colony. */
 const GAP_KINDS: RoomKind[] = ['collapsed', 'bricked', 'cistern', 'pump', 'storage', 'cross'];
@@ -94,6 +103,41 @@ export interface RoomPlan { rooms: Room[]; colonies: Colony[] }
 /** Room-local (u, v) → world (x, z). */
 export function roomW(r: Room, u: number, v: number): [number, number] {
   return [r.ox + r.nx * u - r.nz * v, r.oz + r.nz * u + r.nx * v];
+}
+
+/**
+ * Where things stand in a hideout (room-local u, v): the furniture RoomMeshes draws and the spots
+ * its crew (crime/SewerDen) hang about at, so both agree.
+ */
+export interface DenLayout {
+  table: { u: number; v: number };
+  barrel: { u: number; v: number };
+  sofa: { u: number; v0: number; v1: number };
+  tv: { u: number; v: number };
+  stash: { u: number; v: number };
+  mattresses: { u: number; v: number }[];
+  /** Crew spots and the point each faces. */
+  crew: { u: number; v: number; fu: number; fv: number }[];
+}
+
+export function denLayout(r: Room): DenLayout {
+  const m = r.main, mu = (m.u0 + m.u1) / 2, mv = (m.v0 + m.v1) / 2;
+  const table = { u: mu + 0.2, v: mv + 0.3 }, barrel = { u: mu - 1.3, v: mv + 2.3 };
+  const crew: DenLayout['crew'] = [];
+  for (const a of [0.4, 2.3, 4.2]) crew.push({ u: table.u + Math.cos(a) * 1.05, v: table.v + Math.sin(a) * 1.05, fu: table.u, fv: table.v });
+  crew.push({ u: barrel.u - 0.2, v: barrel.v - 0.75, fu: barrel.u, fv: barrel.v });
+  // The lookout, just inside the door on whichever side leaves the most room to the others, eyes on it.
+  const d = r.doors[0], lu = m.u0 + 0.9, clampV = (v: number) => Math.max(m.v0 + 0.6, Math.min(m.v1 - 0.6, v));
+  const room = (v: number) => Math.min(...crew.map((c) => Math.hypot(c.u - lu, c.v - v)));
+  const sides = [clampV(d.v1 + 0.9), clampV(d.v0 - 0.9)];
+  crew.push({ u: lu, v: room(sides[0]) >= room(sides[1]) ? sides[0] : sides[1], fu: m.u0 - 1, fv: (d.v0 + d.v1) / 2 });
+  return {
+    table, barrel, crew,
+    sofa: { u: m.u1 - 0.45, v0: mv - 0.4, v1: mv + 1.8 },
+    tv: { u: m.u1 - 0.4, v: mv - 1.9 },
+    stash: { u: m.u1 - 0.75, v: m.v1 - 0.85 },
+    mattresses: [{ u: mu - 1.1, v: m.v0 + 0.55 }, { u: mu + 1.1, v: m.v0 + 0.55 }],
+  };
 }
 
 /** Spatial grid (cells of GRID m) of tube segments and boxes for the clearance tests. */
@@ -251,7 +295,44 @@ export function planRooms(macro: MacroPlan, terrain: Terrain, tubes: Tube[], hal
     }
   });
   placeColonies(env, macro, rooms, colonies);
+  // The bigger rooms come after the colonies (and on their own random stream), so adding them left
+  // every earlier room, colony and the deep realm under it where it was.
+  planBig(env, seed, tubes, rooms, streets, nMetro);
   return { rooms, colonies };
+}
+
+/** Machine halls, winding rooms and hideouts off the sewers: every ~380–760 m, where the street above is wide enough. */
+function planBig(env: Env, seed: number, tubes: Tube[], rooms: Room[], streets: number[], nMetro: number): void {
+  tubes.forEach((t, ti) => {
+    if (t.kind !== 'sewer') return;
+    const total = t.cum[t.cum.length - 1];
+    const rng = new Rng(deriveSeed(seed, 'rooms-big', ti));
+    const street = streets[ti - nMetro] ?? 8;
+    for (let s = rng.range(120, 420); s < total - 20; s += rng.range(380, 760)) {
+      let sc = s;
+      const m = (((sc - 22.5) % 45) + 45) % 45;
+      if (m < 4 || m > 41) sc += m < 4 ? 4 - m : 49 - m;
+      // Not right next to an earlier room on this tube.
+      if (rooms.some((r) => r.tube === ti && Math.abs(r.s - sc) < 20)) continue;
+      const first = rng.weighted(BIG_KINDS, (k) => SPECS[k].w);
+      // (A hideout only where one was meant to be: it is no stand-in for a machine room that did not fit.)
+      const order = [first, ...BIG_KINDS.filter((k) => k !== first && k !== 'hideout')];
+      const side0 = rng.sign();
+      const rs = rng.nextU32();
+      let done = false;
+      for (const kind of order) {
+        for (const side of [side0, -side0]) {
+          const r = tryRoom(env, t, ti, sc, side, kind, street, rooms.length, rs);
+          if (!r) continue;
+          rooms.push(r);
+          for (const b of r.boxes) env.grid.box(b);
+          done = true;
+          break;
+        }
+        if (done) break;
+      }
+    }
+  });
 }
 
 function tryRoom(env: Env, t: Tube, ti: number, s: number, side: number, kind: RoomKind, street: number, id: number, rs: number): Room | null {
@@ -267,7 +348,7 @@ function tryRoom(env: Env, t: Tube, ti: number, s: number, side: number, kind: R
   const doors = kind === 'ghost' ? GHOST_OPEN.map(([v0, v1]) => ({ v0, v1, top: sp.top })) : [{ v0: -sp.dhv, v1: sp.dhv, top: sp.top }];
   // Main room, shifted sideways a little (the doorway off its middle).
   const slack = Math.max(0, sp.hv - sp.dhv - 0.4);
-  const voff = kind === 'ghost' ? 0 : rng.range(-slack, slack);
+  const voff = kind === 'ghost' ? 0 : rng.range(-slack, slack) * (kind === 'gears' ? 0.2 : 1);
   const main = { u0: sp.dl, u1: sp.dl + sp.depth, v0: voff - sp.hv, v1: voff + sp.hv, y0: y - (sp.drop ?? 0), h: sp.h + (sp.drop ?? 0) };
   const r: Room = { id, kind, net: sewer ? 'sewer' : 'metro', tube: ti, s, side, seed: rng.nextU32(), ox, oz, y, nx, nz, hw, doors, dl: sp.dl, main, cuts: [], boxes: [], gap: null, colony: -1, trace: false };
   // The host runs straight and level along the doorways (the wall line is a plane there).
@@ -295,7 +376,12 @@ function tryRoom(env: Env, t: Tube, ti: number, s: number, side: number, kind: R
   };
   for (const d of doors) r.boxes.push(mk(-0.75, sp.dl + 0.3, d.v0, d.v1, y, y + d.top));
   const plats: Platform[] = [];
-  if (sp.drop) {
+  if (kind === 'hall') {
+    // A gallery along the front wall at the door's level, stairs down along the v1 wall.
+    const drop = sp.drop!, rise = drop / HALL_STEPS, g1 = main.u0 + HALL_GALLERY;
+    plats.push([main.v0, main.v1, drop, main.u0 - 0.1, g1]);
+    for (let k = 1; k < HALL_STEPS; k++) plats.push([main.v1 - HALL_STAIR_W, main.v1, drop - rise * k, g1 + (k - 1) * HALL_RUN, g1 + k * HALL_RUN]);
+  } else if (sp.drop) {
     // A landing inside the door, then steps down to the lowered floor.
     const n = 4, rise = sp.drop / n;
     plats.push([main.v0, main.v1, sp.drop, main.u0 - 0.1, main.u0 + 1.4]);

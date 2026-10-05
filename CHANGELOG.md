@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.049 — 2026-10-05
+## 0.052 — 2026-10-05
 
 - **Playable on an iPad (and other touch screens)**: touch the screen and on-screen controls appear; a mouse moving switches back.
   - Left thumb: a stick appears where you put it down. Push it to the rim to run (in flight: boost), barely push it to walk slowly.
@@ -10,6 +10,36 @@ Every push raises the version by 0.001. Newest first.
   - Buttons for Jump (hold for a super jump; in flight Up), Fly / Land, Down, Use (lights up when there is something to do; hold to dig), Target and clear target, Autorun, and grow / shrink. Top right: Powers, Map, a ⋯ menu (rally the army, airstrike, minimap, time of day, controls) and ☰ for pause and settings.
   - Hotbar slots work with a finger, held powers run while you hold the slot. The map pans with a finger and zooms with a pinch. The controls screen lists the touch controls.
   - Sound and music now start on an iPad (Safari only lets a touch's end start audio). The page no longer zooms or scrolls under your fingers.
+
+## 0.051 — 2026-10-05
+
+- **Everybody has a name and a personality now.** Click someone and the target frame shows who they are ("Mara Okonkwo", "Shop assistant"). Every person has a temperament (cheerful, chatty, shy, grumpy, anxious, nosy, proud, kind, dreamy or steady), a job, a hobby and a mood that changes with the day, the weather and what just happened on their street. Passers-by make small talk in their own manner; shy people keep quiet.
+- **Talk to people with E**: stand by someone (or target them) and press E. They stop, turn to you and you can say hello, ask how they are, what they do, what's going on around here (the gang that runs the street, its boss, a recent monster), ask the way (they put the nearest metro station or a landmark on your map) or what they think of you. Keys 1–7 or click; Esc or E ends it. Their answers depend on who they are and on what you did.
+- **People remember you.** Everyone you talk to or help up remembers it, and people who know you also remember being knocked down by you. Meet them again and they greet you for it ("You're the one who helped me up on Linden Street!"), or grumble at you. Their opinion of you mixes your reputation with what you did to them.
+- **Faint dots on the map** show where the people you have met are right now (at home, at work, out for lunch), even far away. Hover one for their name and how they feel about you. Up to 24 people; after that the one you care least about is forgotten. They are kept in your saves.
+- The plan for all of this, and for optional language-model conversations via OpenRouter later, is in docs/NPC_PERSONALITY_PLAN.md.
+- Fixes from the first look in the real game: right after a crash or a fight nearby people say "Not now!" instead of the talk panel flashing open and shut; people at home have job titles that fit a sentence (homemaker, job seeker, remote worker, freelancer) and always tell the same story about them; the target frame keeps the person's name and job while you talk to them; the map legend explains the faint dots.
+
+## 0.050 — 2026-10-05
+
+- **Livelier sewers.**
+  - **Rats** scurry along the walkways and nose about the side rooms. They sit and sniff, rear up now and then, and squeak and bolt along the wall when you come close, run, or something violent happens nearby.
+  - **Now and then a slime**: every few minutes in the sewers one may be oozing along a walkway ahead of you, carrying something small and glowing. It freezes when it notices you, then slides off and squeezes into the wall. A blow splatters it.
+  - **Machine halls**: big rooms off the trunks with a gallery inside the door over a floor 2 m lower, stairs down, a row of pump sets with turning flywheels, risers through the ceiling, valves, a travelling crane with its hook and a control desk with blinking lamps. They thump and hiss.
+  - **Winding rooms** over a sluice: the gate in the back wall with water seeping under it, a big gear and its pinion turning slowly over it, chain drums, a gear train on the wall and a spinning governor. They clank.
+  - **Hideouts**: dens with mattresses, a sofa in front of an old TV, a cable-drum table with cards and bottles, a fire barrel, string lights and a stash in the corner. Where a villain group holds the street above, the den is in its colours with its tags on the walls.
+  - **The hideouts are manned**: three to five crooks hang about there (sitting at the table, by the fire, a lookout at the door). Come in or hit one and they go for you; outmatched, they back into a corner and give up. Nobody calls the police down here. With them down, **press E at the stash** to bust it: karma, and the group above loses some ground. A cleared den stays empty for a day.
+  - The new rooms come on top of the old ones: every existing side room, slime colony and the deep realm stay where they were.
+
+## 0.049 — 2026-10-05
+
+- **Being defeated is a real moment now.** When your health runs out you no longer just get up where you fell (where a swarm could knock you down again and again). You lie there untouchable, the edge of the screen red, and:
+  - **with a reputation of 0 or better, the hospital sends its rescue drones**: three white drones with red crosses fly in, lock blue tractor beams onto you, lift you in a glowing stasis field and fly you over the city to the landing pad that lights up on the hospital's roof. Space skips ahead.
+  - **in the hospital's revival ward** you lie in a high-tech revival machine under a glass canopy: scanning rings sweep along your body, the vitals hologram climbs, your heart starts again, a surge and a white flash, the canopy opens and you stand up beside it with full health. Walk out through the sliding doors at the end of the ward and you are on the street in front of the hospital.
+  - **with a negative reputation nobody comes: game over.** Load the latest save, pick another save, or start a new game. Nothing is saved after a game over, so your saves stay as they were.
+- Every city has its own hospital (Helix Medical Center, Vitalis Medical Center, …) in some of its flat-roofed office and civic blocks; the drones take you to the nearest one. A giant hero shrinks back to normal size while lying there.
+- Knocked out again in the ward before leaving: straight back into the machine.
+- Being arrested by the police is unchanged. A save made on the way to the hospital or in the ward puts you outside the hospital, healed.
 
 ## 0.048 — 2026-10-05
 

@@ -58,6 +58,8 @@ export interface PedAgent {
   /** Placed inside a building (interior): no street movement. */
   inside?: boolean;
   floorY?: number;
+  /** Underground (a sewer hideout's crew): walks the tunnels' and rooms' floors (Pedestrians.underFloor), never the street. */
+  under?: boolean;
   /** Why the agent is down (Down state): the player's doing, a collapse, an accident, other (cars). */
   downBy?: DownCause;
   /** Helped up by the player (thanks them: a wave while stateT is small). */
@@ -247,6 +249,19 @@ export class Pedestrians {
   private lastPx = 0;
   private lastPz = 0;
   setPlayer(x: number, z: number): void { this.lastPx = x; this.lastPz = z; }
+
+  /** The agent of a citizen, while they are out and about near the player (or null). */
+  agentOf(citId: number): PedAgent | null {
+    return this.byId.get(citId) ?? null;
+  }
+
+  /** Where a place is: its building's door while the cell is loaded, else the cell's centre (null: unknown cell). */
+  placeSpot(p: PlaceRef): { x: number; z: number; exact: boolean } | null {
+    const ref = this.resolve(p);
+    if (ref) { const d = doorOf(ref.desc); return { x: d.x, z: d.z, exact: true }; }
+    const c = this.macro.cells[p.cell]?.centroid;
+    return c ? { x: c[0], z: c[1], exact: false } : null;
+  }
 
   /** Resolve a place to a concrete building in a loaded cell (or null). */
   private resolve(p: PlaceRef): BuildingRef | null {
@@ -527,8 +542,13 @@ export class Pedestrians {
     if (a.state === PState.Down) {
       // Knocked down / flung: simple ballistic slide, then lie.
       a.vy -= 9.81 * dt;
-      a.x += a.vx * dt; a.z += a.vz * dt; a.y += a.vy * dt;
-      const g = this.groundOf(a, NaN, a.y);
+      if (a.under) {
+        // (Not through the walls: only onto floor there is.)
+        const f = this.underFloor?.(a.x + a.vx * dt, a.y + 0.5, a.z + a.vz * dt) ?? null;
+        if (f !== null && f <= a.y + 0.5) { a.x += a.vx * dt; a.z += a.vz * dt; } else { a.vx = a.vz = 0; }
+      } else { a.x += a.vx * dt; a.z += a.vz * dt; }
+      a.y += a.vy * dt;
+      const g = a.under ? this.underFloor?.(a.x, a.y + 0.6, a.z) ?? a.y : this.groundOf(a, NaN, a.y);
       if (a.y < g) { a.y = g; a.vy = 0; a.vx *= 0.8; a.vz *= 0.8; }
       // Actors lie until their owner gets them up (or hands them back).
       if (!a.actor && a.stateT > (a.downBy === 'accident' ? ACCIDENTS.lieFor : 25) && a.fear < 100) a.alive = false;
@@ -639,7 +659,14 @@ export class Pedestrians {
     const maxSp = Math.max(desired, 0.3) * 1.3;
     if (sp > maxSp) { vx *= maxSp / sp; vz *= maxSp / sp; }
     a.speed += (Math.hypot(vx, vz) - a.speed) * Math.min(1, dt * 4);
-    a.x += vx * dt; a.z += vz * dt;
+    if (a.under) {
+      // Underground: only where there is floor within a step (else slide along the wall, or stop).
+      const ok = (x: number, z: number) => { const f = this.underFloor?.(x, a.y + 0.5, z) ?? null; return f !== null && f - a.y < 0.45; };
+      if (ok(a.x + vx * dt, a.z + vz * dt)) { a.x += vx * dt; a.z += vz * dt; }
+      else if (ok(a.x + vx * dt, a.z)) { a.x += vx * dt; vz = 0; }
+      else if (ok(a.x, a.z + vz * dt)) { a.z += vz * dt; vx = 0; }
+      else { vx = vz = 0; }
+    } else { a.x += vx * dt; a.z += vz * dt; }
     if (Math.hypot(vx, vz) > 0.1) {
       const h = Math.atan2(-vx, -vz);
       let d = h - a.heading;
@@ -654,7 +681,8 @@ export class Pedestrians {
       a.heading += d * Math.min(1, dt * 3);
     }
     a.phase += a.speed * dt;
-    a.y += (this.groundOf(a, a.heading, a.y) - a.y) * Math.min(1, dt * 10);
+    const gy = a.under ? this.underFloor?.(a.x, a.y + 0.5, a.z) ?? a.y : this.groundOf(a, a.heading, a.y);
+    a.y += (gy - a.y) * Math.min(1, dt * 10);
   }
 
   /** After fleeing: new route from here to the destination (or vanish). */
@@ -667,6 +695,9 @@ export class Pedestrians {
 
   /** The player as an obstacle (only when not tiny). */
   playerObstacle: { x: number; z: number; r: number; h: number } | null = null;
+
+  /** Underground floor at a point (inside a tunnel, room or cave), else null: for `under` agents (set by the game). */
+  underFloor: ((x: number, y: number, z: number) => number | null) | null = null;
 
   /** Optional callback: may this agent step onto the road now? */
   crossCheck: ((a: PedAgent) => boolean) | null = null;

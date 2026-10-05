@@ -35,6 +35,8 @@ import { Robbery } from './Robbery';
 import { Tagging, TAGGING } from './Tagging';
 import { TurfBrawl } from './TurfBrawl';
 import { HideoutGuard } from './HideoutGuard';
+import { SewerDen, type DenSite } from './SewerDen';
+import { denLayout, roomW } from '../../underground/rooms';
 import { Ritual, type RitualElement } from './Ritual';
 import { Channeling } from './Channeling';
 import { HijackedFleet } from './HijackedFleet';
@@ -78,6 +80,9 @@ const RITUAL_ELEMENT: Record<string, RitualElement> = { ember: 'fire', frost: 'f
 const ROLE_NAME: Record<string, string> = { police: 'Police officer', shopkeeper: 'Shopkeeper', soldier: 'Soldier' };
 
 const _v = new THREE.Vector3();
+
+/** Sewer dens: post the crew within postR (m), stand them down beyond leaveR; cleared / busted for game hours; E reach; share of a hideout bust's turf loss. */
+export const DENS = { postR: 45, leaveR: 80, clearedFor: 24, bustedFor: 48, useR: 1.9, turf: 0.4 };
 
 export class CrimeSystem {
   readonly combat: Combat;
@@ -125,6 +130,10 @@ export class CrimeSystem {
   private devBoss = false;
   private hideT = 0;
   private hideKey = '';
+  /** Sewer dens (underground hideout rooms) with their crew posted now, by room id. */
+  private dens = new Map<number, SewerDen>();
+  /** Dens cleared out (crew beaten) until a game hour, and whether the stash was busted, by room id. */
+  private denCleared = new Map<number, { until: number; busted: boolean; faction: number }>();
   readonly hud: CrimeHud;
   /** Loot lying about or carried (outlives its crime for a while). */
   private loots: { loot: Loot; crime: Crime; obj: THREE.Group; glint: THREE.Sprite; endT: number }[] = [];
@@ -571,7 +580,7 @@ export class CrimeSystem {
       if (!a) return;
       // The boss leads it now and then (the hideout's door, when they are hunting the hero).
       const B = this.bosses[by.id], heat = this.notoriety[by.id] ?? 0;
-      const bossHere = this.devBoss || (c instanceof HideoutGuard ? heatOf(heat) === 'hunted' && bossChance(B, heat, this.g.sky.hoursAbs) > 0 : roll.chance(bossChance(B, heat, this.g.sky.hoursAbs)));
+      const bossHere = !(c instanceof SewerDen) && (this.devBoss || (c instanceof HideoutGuard ? heatOf(heat) === 'hunted' && bossChance(B, heat, this.g.sky.hoursAbs) > 0 : roll.chance(bossChance(B, heat, this.g.sky.hoursAbs))));
       if (bossHere && B && B.jailedUntil <= this.g.sky.hoursAbs && ![...this.bossOf.values()].some((x) => x.actor?.faction === by.id && x.alive)) {
         c.promote(a, bossPowers(L.powers, by.archetype), BOSS);
         a.actor!.outfit = bossOutfit(by, a.cit.seed);
@@ -766,6 +775,88 @@ export class CrimeSystem {
     return out;
   }
 
+  /**
+   * Sewer dens: a crew is posted in a hideout room off the sewers when the player comes within
+   * DENS.postR of it (not while it is cleared out), stood down when they go before a fight. Checked
+   * with the hideouts (twice a second).
+   */
+  private updateDens(dt: number): void {
+    this.denT -= dt;
+    if (this.denT > 0) return;
+    this.denT = 0.5;
+    const g = this.g, U = g.underground, p = g.player.pos, now = g.sky.hoursAbs;
+    if (!U) return;
+    for (const [id, den] of this.dens) {
+      if (den.wasSubdued && !this.denCleared.has(id)) this.denCleared.set(id, { until: now + DENS.clearedFor, busted: false, faction: den.faction });
+      if (!den.active) { this.dens.delete(id); continue; }
+      const S = den.site;
+      if (!den.committed && Math.hypot(S.cx - p.x, S.cz - p.z) > DENS.leaveR) { den.standDown(); this.dens.delete(id); }
+    }
+    for (const [id, c] of this.denCleared) if (c.until <= now) this.denCleared.delete(id);
+    if (this.actorCount > ACTOR_BUDGET - 8) return;
+    this.denRooms ??= U.rooms.rooms.filter((r) => r.kind === 'hideout');
+    for (const r of this.denRooms) {
+      if (this.dens.has(r.id) || this.denCleared.has(r.id)) continue;
+      if (Math.abs(r.ox - p.x) > DENS.postR || Math.abs(r.oz - p.z) > DENS.postR || Math.hypot(r.ox - p.x, r.oz - p.z) > DENS.postR || Math.abs(r.y - p.y) > 12) continue;
+      const site = this.denSite(r);
+      if (!site) continue;
+      const den = new SewerDen(this.world, hash32(g.settings.seed ^ (r.id * 2654435761) ^ Math.floor(now)), site);
+      const [mx, mz] = roomW(r, (r.main.u0 + r.main.u1) / 2, (r.main.v0 + r.main.v1) / 2);
+      if (this.begin(den, this.factionAt(mx, mz))) this.dens.set(r.id, den);
+      break;
+    }
+  }
+  private denRooms: import('../../underground/rooms').Room[] | null = null;
+  private denT = 0;
+
+  /** A hideout room's crew spots, stash and middle in world terms (null: its floor is not there). */
+  private denSite(r: import('../../underground/rooms').Room): DenSite | null {
+    const U = this.g.underground, L = denLayout(r), m = r.main;
+    const at = (u: number, v: number) => { const [x, z] = roomW(r, u, v); return { x, z, y: U.floorAt(x, r.y + 0.5, z) }; };
+    const spots: DenSite['spots'] = [];
+    L.crew.forEach((c, i) => {
+      const q = at(c.u, c.v), [fx, fz] = roomW(r, c.fu, c.fv);
+      if (q.y !== null) spots.push({ x: q.x, y: q.y, z: q.z, fx, fz, sit: i < 3 });
+    });
+    const st = at(L.stash.u - 0.9, L.stash.v - 0.45), mid = at((m.u0 + m.u1) / 2, (m.v0 + m.v1) / 2);
+    if (spots.length < 3 || st.y === null || mid.y === null) return null;
+    return { room: r.id, spots, stash: { x: st.x, y: st.y, z: st.z }, cx: mid.x, cy: mid.y, cz: mid.z };
+  }
+
+  /** A cleared den whose stash is in reach and not busted yet (crew all down), or null. */
+  private denBustable(): { id: number; site: DenSite; c: { until: number; busted: boolean; faction: number } } | null {
+    const p = this.g.player.pos;
+    for (const [id, c] of this.denCleared) {
+      if (c.busted) continue;
+      const den = this.dens.get(id), r = this.g.underground.rooms.rooms[id];
+      if (den && den.active && den.standing > 0) continue;
+      const site = den?.site ?? (r ? this.denSite(r) : null);
+      if (site && Math.hypot(site.stash.x - p.x, site.stash.z - p.z) < DENS.useR && Math.abs(site.stash.y - p.y) < 1.5) return { id, site, c };
+    }
+    return null;
+  }
+
+  /** E at a den's stash: busted — karma, and the group that keeps it loses some ground above. */
+  private bustDen(d: { id: number; site: DenSite; c: { until: number; busted: boolean; faction: number } }): void {
+    const g = this.g, f = this.factions.factions[d.c.faction] ?? null;
+    d.c.busted = true;
+    d.c.until = Math.max(d.c.until, g.sky.hoursAbs + DENS.bustedFor);
+    this.factionStats.busts++;
+    g.player.action = { id: 'kick', t0: g.player.animClock, dur: 0.7 };
+    this.sound('punch_impact', d.site.stash.x, d.site.stash.y + 0.5, d.site.stash.z, 1, 0.6);
+    g.progress.addKarma(12, f ? `busted a sewer den of ${inSentence(f)}` : 'busted a sewer den');
+    this.rep.add(3, 'den busted');
+    this.rep.count('stopped');
+    if (f) {
+      const changed = shift(this.factions, this.cellAt(d.site.cx, d.site.cz), f.id, SHIFT.bust * DENS.turf, 0.6);
+      this.factionStats.lost += changed.filter((x) => x.from === f.id).length;
+      g.map.setTurf(this.factions);
+      this.heat(f.id, NOTORIETY.bust * DENS.turf);
+      this.checkCollapse(f.id);
+    }
+    g.powerHud.toast(f ? `You busted a sewer den of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>` : 'You busted a den in the sewers', 'info');
+  }
+
   /** The hideout at the player's feet that can be busted now (guards out of the way), or null. */
   private bustable(): Hideout | null {
     const p = this.g.player.pos, now = this.g.sky.hoursAbs;
@@ -922,6 +1013,7 @@ export class CrimeSystem {
     this.driftTurf();
     this.bossHours();
     this.updateHideouts(dt);
+    this.updateDens(dt);
     this.bombs.update(dt);
     this.casts.update(dt);
     this.updateFleets(dt);
@@ -1204,7 +1296,7 @@ export class CrimeSystem {
     if (this.rep.value < -20) return;
     let n = 0;
     for (const a of g.peds.neighbours(p.x, p.z, 26, [])) {
-      if (a.actor || a.inside || a.state === PState.Down || a.state === PState.Flee) continue;
+      if (a.actor || a.inside || a.state === PState.Down || a.state === PState.Flee || Math.abs(a.y - p.y) > 6) continue;
       a.state = PState.Idle; a.stateT = 0; a.helped = true; a.speed = 0;
       a.heading = Math.atan2(-(p.x - a.x), -(p.z - a.z));
       n++;
@@ -1226,12 +1318,16 @@ export class CrimeSystem {
     if (d > 0) this.g.audio.play2d('punch_impact', 0.5, 0.8);
   }
 
-  /** Knocked out: fade, wake up where one fell (or, cuffed, released at the scene). */
+  /**
+   * Knocked out: by the police (or while wanted) a fade and the officers cuff them; otherwise
+   * defeated — the hospital's rescue drones, or game over with the city against them (game/defeat).
+   */
   private knockedOut(kind: HurtKind): void {
     const p = this.g.player.pos;
     this.wake = { x: p.x, y: p.y, z: p.z };
-    this.hud.fade(true);
-    if (kind === 'police' || this.justice.wanted > 0) return; // the officers cuff them (arrest) or not
+    if (kind === 'police' || this.justice.wanted > 0) { this.hud.fade(true); return; } // the officers cuff them (arrest) or not
+    // (The rescue is decided on the reputation before the knockout's own cost.)
+    if (!this.g.defeat?.begin(kind)) this.hud.fade(true);
     if (kind === 'robot' || kind === 'monster' || kind === 'military') return; // a threat (or the army's stray fire) knocked them out: no karma penalty (THREATS_PLAN §5.6)
     this.g.progress.addKarma(-5, 'knocked out');
     this.rep.add(-1, 'knocked out');
@@ -1399,6 +1495,7 @@ export class CrimeSystem {
     if (this.justice.hot && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4))) return 'Press <b>E</b> to turn yourself in';
     const h = this.bustable();
     if (h) return `Press <b>E</b> to bust the stash of ${inSentence(this.factions.factions[h.faction])}`;
+    if (this.denBustable()) return 'Press <b>E</b> to bust the stash';
     return this.deeds.hint();
   }
 
@@ -1440,6 +1537,8 @@ export class CrimeSystem {
     }
     const h = this.bustable();
     if (h) { this.bust(h); return true; }
+    const dn = this.denBustable();
+    if (dn) { this.bustDen(dn); return true; }
     return this.deeds.use();
   }
 

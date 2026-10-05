@@ -1124,6 +1124,29 @@ as distance LOD).
   only, with the facade atlas (`aLayer`/`aTint`), one unlit glow and one decal material on a canvas
   atlas (`roomArt.ts`: signs, graffiti, markings, cracks, puddles) and an additive veil. Solid
   props are obstacles (`carObstacles`). Drips, hum, fan and falling water: `tools/synthUnder.mjs`.
+* Bigger sewer rooms (`rooms.ts` `planBig`, a second pass after the colonies on its own random stream, so the
+  earlier rooms, colonies and the deep realm are unchanged): every ~380–760 m of sewer, where the street is wide
+  enough — machine hall (`hall`: a gallery `HALL_GALLERY` inside the door over a floor 2.2 m lower, stairs along
+  the v1 wall; pump sets with turning flywheels, risers, valves, a travelling crane, a control desk), winding room
+  (`gears`: a sluice gate with water seeping under it, a big gear and its pinion, chain drums, a wall gear train,
+  a governor; door kept near the middle), hideout (`hideout`: mattresses, sofa, TV, cable-drum table, fire barrel,
+  string lights, stash; `denLayout` gives the furniture and the crew's spots). Turning parts are separate meshes
+  (`spinner`) turned in the room's tick. A hideout under a villain group's turf takes its accent colour and two of
+  its tags (`Underground.hideoutLook`, set by the game from `CrimeSystem.factionAt` / `Graffiti.tagMaterial`).
+  Sounds: `under_engine`, `under_gears`, `under_fire` (`tools/synthSewer.mjs`). `dev.room(kind, skip)`.
+* Sewer dens (`game/crime/SewerDen.ts`, crime kind `den`, never rolled): CrimeSystem posts a crew of 3–5 in a
+  hideout within `DENS.postR` (45 m) of the player (not while cleared: `DENS.clearedFor` game hours), stands them
+  down beyond `leaveR` before a fight. They are `PedAgent.under`: Pedestrians moves them only onto underground
+  floor within a step (`Pedestrians.underFloor` = `Underground.floorAt`, sliding along walls) and lands knocked-down
+  ones there; no ragdolls underground; no police; never released to the street (dispose removes them); witnesses
+  and cheers only on the same level. Beaten: E at the stash (`denBustable` / `bustDen`) — karma, `SHIFT.bust ×
+  DENS.turf` off the group's cell above, notoriety.
+* Sewer life (`underground/SewerLife.ts`, around the player only, not deterministic): up to 12 rats on the
+  walkways (`tube`, arc, lateral) and in nearby sewer rooms (room-local u, v; more in hideouts and halls): sit,
+  sniff, rear, scurry; bolt (squeak, `rat_squeak`) from a close or fast player or a stimulus and vanish. One
+  instanced mesh (`ratGeometry`) plus their eyes. Every few minutes a lone slime oozing along a walkway (drawn with
+  the colonies' blobs: `Slimes.blob`): freezes, flees and squeezes into the wall; a hit splatters it.
+  `dev.sewerLife(calm)`.
 * Hidden colonies (2–5 per city, far out): a gap in the back wall of a quiet side room opens into a
   rough crawl passage (`Tube` kind `crawl`) sinking to a chamber at depth (under the lowest ground
   within 32 m, so hillside foundations never reach it). Slimes live there (`Slimes.ts`, one
@@ -1188,6 +1211,20 @@ as distance LOD).
 * Clips come from SoundStudio (`public/sounds`, see `docs/SOUNDS.md`), with procedural
   fallbacks.
 * Weather layers (rain light / heavy, gusts) and thunder: see "Weather".
+
+### People (`src/game/people`, `src/ui/TalkUi.ts`)
+
+Everyone is an individual (docs/NPC_PERSONALITY_PLAN.md). `identity.ts` derives name, Big Five traits (neuroticism =
+`Citizen.nerve`, openness = `Citizen.curiosity`), temperament, job (by the workplace's district), hobby and the day's
+mood from the citizen's seed: nothing is stored for people never met. `lines.ts` holds the talk rules (criteria + ways
+to say it, Valve dynamic-dialog style) and the temperament small talk Barks uses; `talk.ts` picks the most specific
+matching line, avoids repeats, fills tokens, and defines `TalkBackend` (rules now, a language model later).
+`memory.ts` keeps the people met (cap 24, lowest keep score forgotten; the whole `Citizen` is kept so
+`Population.stateAt` finds them anywhere), opinion = own deeds + reputation × agreeableness, save sanitising.
+`People.ts` ties it to the game: E talks (Game.manholeKey, after standing up from a seat; `TALK_OWNER` actor faces
+the hero), Deeds.onHelped and Reactions.onKnockDown feed memory, known people greet you as you pass, the `people` map
+layer draws `faint` dots (live agent, else the day plan's place via `Pedestrians.placeSpot`). Kept per city in
+localStorage (`scale.people.v1.*`) and in saves (`SaveData.people`). `dev.people.list()` / `.forget()`.
 
 ### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
 * Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the

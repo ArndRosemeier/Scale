@@ -28,6 +28,10 @@ export class Deeds {
   private markerKey = '';
   /** Accidents happen (Normal mode). */
   accidents = true;
+  /** No new accidents for now (the hero is down, being rescued). */
+  quiet = false;
+  /** Someone was just helped up (game/people: they remember it). */
+  onHelped: ((a: PedAgent) => void) | null = null;
 
   constructor(private peds: Pedestrians, private reactions: Reactions, private player: Player, private progress: Progress) {
     this.accidentT = 25;
@@ -70,6 +74,7 @@ export class Deeds {
       if (cause === 'player') this.hooks.toast?.('You helped them up — no karma for someone <b>you</b> knocked down', 'info');
       else this.progress.addKarma(cause === 'collapse' ? KARMA.helpUpCollapse : KARMA.helpUp, 'helped someone up');
     }
+    this.onHelped?.(a);
     // (Not '': with nobody left to mark the new key is '' too, and the old marker stayed.)
     this.markerKey = '#stale';
     return true;
@@ -78,7 +83,7 @@ export class Deeds {
   update(dt: number): void {
     const p = this.player;
     // Everyday accidents near the player.
-    if (this.accidents && !this.progress.sandbox) {
+    if (this.accidents && !this.quiet && !this.progress.sandbox) {
       this.accidentT -= dt;
       if (this.accidentT <= 0) {
         this.accidentT = ACCIDENTS.minGap + Math.random() * (ACCIDENTS.maxGap - ACCIDENTS.minGap);

@@ -24,7 +24,7 @@ const CONTROLS: [string, string][] = [
   ['Right mouse (hold)', 'Look around'],
   ['Mouse wheel', 'Camera distance'],
   ['Left click', 'On someone or something: target it (punch is a hotbar power, slot 1 by default)'],
-  ['E', 'Help someone up · pick up / give back · turn yourself in (next to an officer) · open a manhole / climb out of the sewer · hold to dig someone out of rubble · carry the injured to the triage tent'],
+  ['E', 'Talk to the person in front of you (or the one you targeted; 1–7 to answer) · help someone up · pick up / give back · turn yourself in (next to an officer) · open a manhole / climb out of the sewer · hold to dig someone out of rubble · carry the injured to the triage tent'],
   ['G', 'Rally the soldiers near you to follow you (when the army knows you: reputation 40+)'],
   ['T', 'Call an airstrike on your target, a giant creature (reputation 70+; a few minutes between)'],
   ['M', 'City map: metro, stations · click to set a marker the compass points to (travel in sandbox)'],
@@ -138,7 +138,7 @@ export class Menu {
     window.addEventListener('keydown', (e) => {
       // (Esc that just closed the map or the powers screen does not open the pause menu.)
       // (With a target, Esc first clears the target — Targeting — and opens the menu next time.)
-      if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer) { if (this.open) this.close(); else if (!this.game.targeting?.current) this.show(); }
+      if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer && !this.game.people?.holdsPointer) { if (this.open) this.close(); else if (!this.game.targeting?.current) this.show(); }
       if (e.code === 'KeyH') this.toggleHelp();
     });
     // First-time hint.

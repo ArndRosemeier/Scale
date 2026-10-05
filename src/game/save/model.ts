@@ -152,6 +152,11 @@ export interface SaveData {
    * SavedHideout, sanitised by `restoreHideouts`; older saves have none: not found yet).
    */
   factions: { turf: unknown; tags: unknown[]; hideouts?: unknown[]; bosses?: unknown[] } | null;
+  /**
+   * The people the hero met and what they remember (game/people memory SavedPeople, sanitised by
+   * `restorePeople`); older saves have none (null: the browser's own record for the city stays).
+   */
+  people?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -288,6 +293,7 @@ export function parseSave(input: string | unknown): SaveData {
       hideouts: (Array.isArray(obj(o.factions).hideouts) ? (obj(o.factions).hideouts as unknown[]) : []).slice(0, 16),
       bosses: (Array.isArray(obj(o.factions).bosses) ? (obj(o.factions).bosses as unknown[]) : []).slice(0, 16),
     } : null,
+    ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
   };
 }
 

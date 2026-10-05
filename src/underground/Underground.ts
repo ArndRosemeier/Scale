@@ -31,6 +31,8 @@ import { planRooms, type RoomPlan } from './rooms';
 import { buildRoom, buildCrawl, buildChamber, colonyLayout, type BuiltRoom, type RoomMats, type EmitterId } from './RoomMeshes';
 import { roomAtlas, decal, CELL } from './roomArt';
 import { Slimes } from './Slimes';
+import { SewerLife } from './SewerLife';
+import type { Room } from './rooms';
 import { planSewerHints } from './sewerHints';
 import { planDeep, type DeepPlan } from './deep/plan';
 import { DeepField } from './deep/field';
@@ -141,6 +143,22 @@ export class Underground {
       veil: new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
     };
     this.group.add(this.slimes.group);
+    const snd = () => this.sound ? { play: (id: string, x: number, y: number, z: number, g: number) => this.sound!.play(id, x, y, z, g, 0.9 + Math.random() * 0.25, 3) } : null;
+    this.life = new SewerLife({
+      sewers: this.sewerTubes,
+      roomsNear: (x, z, r) => {
+        const out: Room[] = [];
+        for (const k of this.builtRooms.keys()) {
+          if (k[0] !== 'r') continue;
+          const room = this.rooms.rooms[+k.slice(1)];
+          if (room && Math.hypot(room.ox - x, room.oz - z) < r) out.push(room);
+        }
+        return out;
+      },
+      floorAt: (x, y, z) => this.floorAt(x, y, z),
+      get sound() { return snd(); },
+    }, this.slimes);
+    this.group.add(this.life.group);
     // The Lumen's signs in the sewers: the way to the colonies (one mesh for the whole network).
     try {
       const hints = planSewerHints(macro, this.tubes, this.rooms);
@@ -226,6 +244,13 @@ export class Underground {
   private mats: RoomMats;
   private builtRooms = new Map<string, BuiltRoom>();
   readonly slimes = new Slimes();
+  /** Rats and the odd wandering slime around the player in the sewers. */
+  readonly life: SewerLife;
+  /**
+   * The look of a hideout from the game: the group holding the street above (its accent colour and
+   * a material for its tag), or null for nobody's.
+   */
+  hideoutLook: ((x: number, z: number, seed: number) => { accent: [number, number, number]; tag: THREE.Material } | null) | null = null;
   /** Lumen signs and trails laid in the sewers (sewerHints.ts). */
   hintCount = 0;
   /** The deep realm (deep/plan.ts): its plan, its rock as a field, its meshes; null when the city has none. */
@@ -500,6 +525,7 @@ export class Underground {
     this.roomSounds(dt, cam.position, under);
     const snd = this.sound;
     if (snd && !this.slimes.sound) this.slimes.sound = { play: (id, x, y, z, g) => snd.play(id, x, y, z, g, 1, 3), loop: (id) => snd.loop(id, 3) };
+    this.life.update(dt, player, under && this.inSewerArea(player.x, player.y + 0.5, player.z));
     this.slimes.update(dt, player, under);
     this.shaftMat.color.setScalar(0.5 * G.uDayLight.value);
     if (this.deep) {
@@ -565,7 +591,16 @@ export class Underground {
       const key = `r${r.id}`;
       want.add(key);
       if (this.built.has(key)) continue;
-      const br = buildRoom(r, this.mats);
+      const [lx, lz] = [r.ox + r.nx * 3, r.oz + r.nz * 3];
+      const look = r.kind === 'hideout' ? this.hideoutLook?.(lx, lz, r.seed) ?? null : null;
+      const br = buildRoom(r, this.mats, look ? { accent: look.accent } : {});
+      if (look) for (const t of br.tags) {
+        const tag = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 0.9), look.tag);
+        tag.position.set(t.x + t.nx * 0.03, t.y, t.z + t.nz * 0.03);
+        tag.rotation.y = Math.atan2(t.nx, t.nz);
+        tag.renderOrder = 2;
+        br.obj.add(tag);
+      }
       this.builtRooms.set(key, br);
       this.built.set(key, br.obj);
       if (br.scout) this.slimes.setScout(key, br.scout, r.seed);
@@ -610,7 +645,7 @@ export class Underground {
       const b = best.get(e.id);
       if (!b || d < b.d) best.set(e.id, { d, x: e.x, y: e.y, z: e.z });
     }
-    for (const id of ['under_falls', 'under_hum', 'under_fan'] as EmitterId[]) {
+    for (const id of ['under_falls', 'under_hum', 'under_fan', 'under_engine', 'under_gears', 'under_fire'] as EmitterId[]) {
       const b = best.get(id);
       let l = this.loops.get(id);
       if (!l && b) { l = snd.loop(id, 3); if (l) this.loops.set(id, l); }
@@ -627,6 +662,14 @@ export class Underground {
   /** Something violent happened (a punch, a power, a blast): the slimes near it react. */
   onStimulus(kind: string, x: number, y: number, z: number, radius: number): void {
     this.slimes.stimulus(kind, x, y, z, radius);
+    this.life.stimulus(kind, x, y, z, radius);
+  }
+
+  /** In a sewer trunk or a sewer side room? (Where the rats are.) */
+  inSewerArea(x: number, y: number, z: number): boolean {
+    if (this.inSewer(x, y, z)) return true;
+    for (const b of this.near(x, z).boxes) if (b.room !== undefined && this.rooms.rooms[b.room]?.net === 'sewer' && boxAt(b, x, y, z)) return true;
+    return false;
   }
 
   /** Extruded cross-section along a tube chunk; faces point inward. */

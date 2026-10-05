@@ -262,7 +262,7 @@ export class TouchControls {
 
   update(): void {
     const g = this.game;
-    const show = isTouch() && !g.menu?.paused && !g.map?.open && !g.powers?.open && !g.intro?.active;
+    const show = isTouch() && !g.menu?.paused && !g.map?.open && !g.powers?.open && !g.intro?.active && !g.people?.talking;
     if (show !== this.shown) {
       this.shown = show;
       this.root.classList.toggle('on', show);

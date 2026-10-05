@@ -92,12 +92,15 @@ export class SaveSystem {
 
   /** The session as a save (synchronous; no storage). */
   capture(kind: SaveKind, name: string, id: string): SaveData {
-    const g = this.g, P = g.player, p = P.pos;
-    const under = g.underground.isUnder(p.x, p.y + 0.5, p.z);
-    const indoors = !!g.interiors.insideAt(p.x, p.y + 0.5, p.z);
+    const g = this.g, P = g.player;
+    // Defeated, on the way to the hospital or in its ward: saved standing outside it, healed.
+    const out = g.defeat?.saveSpot() ?? null;
+    const p = out ?? P.pos;
+    const under = !out && g.underground.isUnder(p.x, p.y + 0.5, p.z);
+    const indoors = !out && !!g.interiors.insideAt(p.x, p.y + 0.5, p.z);
     const player: SavePlayer = {
-      x: r3(p.x), y: r3(p.y), z: r3(p.z), yaw: r3(P.yaw), height: r3(P.height), sizeOverride: P.sizeOverride, flying: P.flying,
-      under, indoors, hp: r3(g.crime.health.hp), invulnerable: g.crime.health.invulnerable, energy: r3(g.abilities.energy), slot: g.abilities.selected,
+      x: r3(p.x), y: r3(p.y), z: r3(p.z), yaw: r3(P.yaw), height: r3(out ? 1.8 : P.height), sizeOverride: P.sizeOverride, flying: !out && P.flying,
+      under, indoors, hp: r3(out ? g.crime.health.max : g.crime.health.hp), invulnerable: g.crime.health.invulnerable, energy: r3(g.abilities.energy), slot: g.abilities.selected,
     };
     const W = g.weather as unknown as { setting?: string; wet?: number; skipH?: number; serialize?: () => SaveData['weather'] } | undefined;
     // (Weather hook: a `serialize()` / `restore()` pair on render/Weather wins over the fields read here.)
@@ -122,6 +125,7 @@ export class SaveSystem {
       aftermath: g.aftermath ? g.aftermath.saveState() : null,
       slimes: g.slimeRealm ? g.slimeRealm.saveState() : null,
       factions: g.crime.saveFactions(),
+      people: g.people ? g.people.save() : null,
     };
   }
 
@@ -155,6 +159,8 @@ export class SaveSystem {
 
   /** Capture and store (one at a time). Resolves to the index entry, or null on failure. */
   private async write(kind: SaveKind, name: string, id: string): Promise<SaveMeta | null> {
+    // Game over: nothing new is saved (the saves are what one goes back to).
+    if (this.g.defeat?.holdSaves) return null;
     while (this.busy) await this.busy.catch(() => undefined);
     const run = (async () => {
       this.setStatus('saving');
@@ -185,7 +191,7 @@ export class SaveSystem {
 
   /** The rolling autosave: the oldest of the three slots. */
   async autosave(reason = 'manual'): Promise<SaveMeta | null> {
-    if (this.leaving || !this.g.player) return null;
+    if (this.leaving || !this.g.player || this.g.defeat?.holdSaves) return null;
     this.autoT = AUTOSAVE_EVERY;
     this.lastAutoAt = this.playTime;
     const id = await this.nextSlot();
@@ -203,7 +209,7 @@ export class SaveSystem {
 
   /** Page hide / unload: a synchronous save into localStorage (folded into IndexedDB next start). */
   private lastMoment(): void {
-    if (this.leaving || !this.g.player) return;
+    if (this.leaving || !this.g.player || this.g.defeat?.holdSaves) return;
     try {
       // The slot after the newest autosave's (rotation), known without waiting on IndexedDB.
       const slot = AUTO_SLOTS[(AUTO_SLOTS.indexOf(this.lastAutoSlot) + 1) % AUTO_SLOTS.length];
@@ -256,6 +262,7 @@ export class SaveSystem {
     step('the aftermath', () => g.aftermath.restore(d.aftermath));
     step('the slimes', () => g.slimeRealm?.restore(d.slimes as Parameters<typeof g.slimeRealm.restore>[0]));
     step('the villain groups', () => g.crime.restoreFactions(d.factions));
+    step('the people you met', () => g.people?.restore(d.people));
     step('the player', () => this.placePlayer(d.player));
     step('the camera', () => { g.camRig.yaw = d.camera.yaw; g.camRig.pitch = d.camera.pitch; g.camRig.zoom = d.camera.zoom; });
     step('health', () => {

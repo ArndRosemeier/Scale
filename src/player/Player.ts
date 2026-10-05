@@ -72,6 +72,11 @@ export class Player {
   chillSpeed = 0.55;
   /** Ragdoll (physics/ragdoll): 'limp' while the body tumbles or lies, 'getup' while it stands up; no control. */
   ragdoll: '' | 'limp' | 'getup' = '';
+  /**
+   * Held by a scripted scene (the rescue drones carrying the body, the revival machine): no
+   * control, no physics; the scene sets the position and facing, the body shows this move state.
+   */
+  puppet: MoveState | null = null;
   get animClock(): number { return this.animTime; }
   /** Walking into walls: the obstacle hit this frame (for destruction). */
   blocked: { x: number; z: number; nx: number; nz: number; speed: number } | null = null;
@@ -140,6 +145,16 @@ export class Player {
   get radius(): number { return 0.3 * this.k; }
 
   update(dt: number, input: Input, camYaw: number, camPitch: number): void {
+    if (this.puppet) {
+      this.vel.set(0, 0, 0);
+      this.grounded = true;
+      this.seat = null;
+      this.autoMove = false;
+      if (this.flying) this.toggleFlight();
+      this.animTime += dt / Math.sqrt(this.k);
+      this.updateRig(dt);
+      return;
+    }
     // ---- size (numpad + / -): exponential growth, clamped.
     const grow = (input.down('NumpadAdd') || input.down('Equal') ? 1 : 0) - (input.down('NumpadSubtract') || input.down('Minus') ? 1 : 0);
     const lo = this.sizeOverride ? MIN_HEIGHT : Math.max(MIN_HEIGHT, this.minHeight), hi = this.sizeOverride ? MAX_HEIGHT : Math.min(MAX_HEIGHT, Math.max(lo, this.maxHeight));
@@ -432,6 +447,7 @@ export class Player {
   }
 
   private moveState(): MoveState {
+    if (this.puppet) return this.puppet;
     if (this.ragdoll) return this.ragdoll === 'limp' ? 'knockdown' : 'idle';
     if (this.seat) return 'sit';
     if (this.downT > 0) return 'knockdown';

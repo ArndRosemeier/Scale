@@ -167,6 +167,8 @@ export class Targeting {
   onChange: ((t: Target | null) => void) | null = null;
   /** The crime layer fills in con colour, health and actor names (decision 13). */
   describe: ((t: Target) => { name?: string; con: string | null; health: number | null }) | null = null;
+  /** A person's name and what they do (game/people). */
+  personLabel: ((a: PedAgent) => { name: string; kind: string; ours: boolean }) | null = null;
   /** Tab order bias (negative = earlier): hostiles first, then people of interest (decision 14). */
   priority: ((t: Target) => number) | null = null;
 
@@ -238,6 +240,12 @@ export class Targeting {
     const dist = this.centre(t, _v).distanceTo(this.w.player.pos);
     const d = this.describe?.(t);
     const info: TargetInfo = { name: d?.name ?? this.name(t), kind: this.kindLabel(t), dist, con: d?.con ?? null, health: d?.health ?? null };
+    // Everyone has a name (game/people): the crime layer's names (a gang member, a busker) come first.
+    const l = t.kind === 'person' && this.personLabel ? this.personLabel(t.obj) : null;
+    if (t.kind === 'person' && l && (!d?.name || l.ours)) {
+      info.name = t.obj.state === 5 ? `${l.name} (down)` : l.name;
+      info.kind = l.kind;
+    }
     if (t.kind === 'threat') {
       info.health = d?.health ?? t.obj.hp / t.obj.maxHp;
       const sel = this.current?.obj === t.obj ? this.zone : null;

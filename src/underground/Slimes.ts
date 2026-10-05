@@ -58,6 +58,8 @@ export class Slimes {
   private shell: THREE.InstancedMesh;
   private core: THREE.InstancedMesh;
   private states = new Map<number, ColonyState>();
+  /** Blobs queued for the next frame (blob()): x, y, z, r, sx, sy, yaw, r, g, b, glow. */
+  private queued: number[] = [];
   private scouts = new Map<string, Scout>();
   private time = 0;
   private lastP = new THREE.Vector3(1e9, 0, 0);
@@ -93,6 +95,11 @@ export class Slimes {
   setColony(c: Colony, L: ColonyLayout | null): void {
     if (!L) return;
     if (!this.states.has(c.id)) this.states.set(c.id, this.spawn(c, L));
+  }
+
+  /** Draw one more blob in the next update (sitting at x, y, z; radius, squash, heading, colour, glow). */
+  blob(x: number, y: number, z: number, r: number, sx: number, sy: number, yaw: number, col: readonly [number, number, number], glow: number): void {
+    this.queued.push(x, y, z, r, sx, sy, yaw, col[0], col[1], col[2], glow);
   }
 
   /** A trace room's lone one (key: room id); null removes it. */
@@ -193,6 +200,13 @@ export class Slimes {
     }
     if (active) k = this.updateColony(active, dt, p, under, k);
     k = this.updateScouts(dt, p, k);
+    // Blobs drawn for others (a lone one wandering the sewers: SewerLife).
+    const Q = this.queued;
+    for (let i = 0; i + 11 <= Q.length && k < MAX - 1; i += 11) {
+      _m.compose(_p.set(Q[i], Q[i + 1], Q[i + 2]), _q.setFromAxisAngle(_up, Q[i + 6]), _s.set(Q[i + 3] * Q[i + 4], Q[i + 3] * Q[i + 5], Q[i + 3] * Q[i + 4]));
+      k = this.putM(k, [Q[i + 7], Q[i + 8], Q[i + 9]], Q[i + 10]);
+    }
+    Q.length = 0;
     this.core.count = this.shell.count = k;
     if (k) {
       this.core.instanceMatrix.needsUpdate = this.shell.instanceMatrix.needsUpdate = true;

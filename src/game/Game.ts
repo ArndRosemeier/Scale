@@ -100,6 +100,9 @@ import { HostilePlayer } from './threats/PlayerRampage';
 import { SaveSystem } from './save/SaveSystem';
 import type { SaveData } from './save/model';
 import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
+import { Defeat } from './defeat/Defeat';
+import { MedFleet } from './defeat/MedDrones';
+import { People } from './people/People';
 
 export class Game {
   readonly renderer: Renderer;
@@ -191,6 +194,8 @@ export class Game {
   intro: OriginIntro | null = null;
   /** Saves: autosave, named saves, loading (src/game/save). */
   saves!: SaveSystem;
+  /** Defeated: the rescue drones, the hospital's revival ward, or game over (src/game/defeat). */
+  defeat!: Defeat;
   /** A save to put into the city once it has started (set before `start`, by main.ts). */
   pendingSave: SaveData | null = null;
   /** Where to stream in and put the player (a loaded save's spot; default: the main centre). */
@@ -200,6 +205,8 @@ export class Game {
   /** Power cores (Normal mode only). */
   cores: PowerCores | null = null;
   deeds!: Deeds;
+  /** The city's people as individuals: names, personalities, talking (E), who remembers you (game/people). */
+  people!: People;
   powerHud!: PowerHud;
   powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
@@ -339,6 +346,8 @@ export class Game {
     this.player.events.onFlightToggle = (f) => { if (f) this.audio.play2d('whoosh_takeoff', 0.7); };
     this.net.build([...this.streamer.cells.values()].filter((c) => c.status === 'ready'));
     this.peds = new Pedestrians(this.population, this.net, this.world, this.terrain, macro, this.streamer);
+    // A sewer den's crew walks the underground's floors.
+    this.peds.underFloor = (x, y, z) => this.underground.floorAt(x, y, z);
     this.reactions = new Reactions(this.peds, this.stimuli);
     this.interiors = new Interiors(this.world, this.destruction, this.streamer, this.collision, this.population, this.peds);
     // The town hall's rooms light up like the buildings' interiors.
@@ -346,6 +355,7 @@ export class Game {
     // Indoors the camera collides with the shell, interior walls and floors instead of building prisms.
     this.camRig.solidAt = (x, y, z) => {
       const p = this.player;
+      if (this.defeat?.inWard) return !this.defeat.ward.cameraFree(x, y, z);
       if (this.camRig.underground) return !this.underground.cameraFree(x, y, z, 0.12);
       const inside = this.interiors.insideAt(p.pos.x, p.pos.y + p.height * 0.5, p.pos.z);
       if (inside) return this.interiors.solidIndoors(inside, x, y, z);
@@ -468,6 +478,12 @@ export class Game {
     this.setupPowers();
     this.touch = new TouchControls(this);
     installDevtools(this);
+    this.defeat = new Defeat(this);
+    {
+      const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
+      if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
+      if (dev) dev.defeat = { status: () => this.defeat.status(), down: (kind?: Parameters<Defeat['down']>[0]) => this.defeat.down(kind), rep: (v: number) => { this.crime.rep.add(v - this.crime.rep.value, 'dev'); return this.crime.rep.value; } };
+    }
     this.saves = new SaveSystem(this);
     new PauseSaves(this);
     new SaveIndicator(this);
@@ -486,7 +502,7 @@ export class Game {
     progress('Preparing shaders', 0.97);
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
-      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
@@ -499,6 +515,8 @@ export class Game {
     this.gate.precompile(this.props.warmupObject());
     this.gate.precompile(this.countryside.warmupObject());
     this.gate.precompile(this.rural.warmupObject());
+    this.gate.precompile(MedFleet.warmupObject());
+    this.gate.precompile(this.defeat.ward.warmupObject());
     void this.intro?.play();
   }
 
@@ -577,11 +595,14 @@ export class Game {
     this.T('player', () => {
       if (this.intro?.active) this.intro.update(dt);
       else if (this.freeCam) this.updateFreeCam(dt);
+      else if (this.defeat.drives) { /* the defeat's scene moves the body and the camera (below) */ }
       else {
-        this.abilities.enabled = !this.powers.open && !this.map.open;
+        this.abilities.enabled = !this.powers.open && !this.map.open && !this.people.talking;
         this.abilities.preUpdate(dt, this.input);
+        this.defeat.gate();
         this.player.update(dt, this.input, this.camRig.yaw, this.camRig.pitch);
-        this.camRig.underground = this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z);
+        this.defeat.afterPlayer(dt);
+        this.camRig.underground = this.defeat.inWard || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z);
         this.camRig.update(dt, this.player, this.input);
         // In-world panels (elevator buttons) get the click first when the crosshair is on one in reach.
         const hand = _hand.copy(this.player.pos); hand.y += this.player.height * 0.6;
@@ -592,6 +613,9 @@ export class Game {
         this.interactions.update(dt, this.input, this.clock.getElapsed());
       }
     });
+    if (!this.intro?.active && !this.freeCam) this.T('defeat', () => this.defeat.update(dt));
+    // (The ward lies deep under the hospital: lit, heard and seen like the underground.)
+    if (this.defeat.inWard) this.camRig.underground = true;
     this.stimuli.update(dt);
     this.simT += dt;
     const readyCells = [...this.streamer.cells.values()].filter((c) => c.status === 'ready');
@@ -608,9 +632,10 @@ export class Game {
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     if (!this.freeCam) this.bodyContacts(dt);
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
-    if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.update(dt); this.cores?.update(dt, this.player); });
+    if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => this.crime.update(dt));
     this.T('street', () => this.street?.update(dt));
+    this.T('people', () => this.people?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
     this.T('army', () => { this.hostile.update(dt); this.forces.update(dt); });
@@ -766,7 +791,8 @@ export class Game {
       const dx = p.pos.x - a.x, dz = p.pos.z - a.z;
       const d = Math.hypot(dx, dz);
       const rr = pr + 0.25;
-      if (d >= rr || d < 1e-4) continue;
+      // (!(d < rr): a person at a non-finite spot must not drag the hero there too.)
+      if (!(d < rr) || d < 1e-4) continue;
       const nx = dx / d, nz = dz / d, pen = rr - d;
       const am = 70;
       const wp = am / (am + pm), wa = pm / (am + pm);
@@ -911,6 +937,11 @@ export class Game {
     }
     // Street crime, police, justice, health and reputation (needs the map, HUD and targeting).
     this.crime = new CrimeSystem(this);
+    // Sewer hideouts wear the colours and tags of the group holding the street above.
+    this.underground.hideoutLook = (x, z, seed) => {
+      const f = this.crime.factionAt(x, z);
+      return f ? { accent: f.palette.accent, tag: this.crime.graffiti.tagMaterial(f, seed) } : null;
+    };
     this.response = new ResponseDirector(this);
     this.threats = new ThreatDirector(this);
     this.forces = new Forces(this);
@@ -918,6 +949,8 @@ export class Game {
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
     this.slimeRealm = new SlimeRealm(this);
+    this.people = new People(this);
+    this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)
     if (!this.pendingSave && !OriginIntro.wanted(this)) setTimeout(() => toast(normal
@@ -1022,6 +1055,8 @@ export class Game {
     const slime = this.slimeRealm?.hint();
     if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';
+    const talk = this.people?.hint();
+    if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
     const p = this.player.pos;
     // Manholes are climbed from the sewers only (not from metro halls, passages or trains).
@@ -1059,6 +1094,8 @@ export class Game {
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Sit down on a bench or café chair in reach, or get up again.
     if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }
+    // Talk to the person in front (or the one targeted).
+    if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();
     if (seat) { this.player.sitOn(seat.x, seat.z, seat.yaw); this.input.pressed.delete('KeyE'); return; }
     const p = this.player.pos;
@@ -1137,20 +1174,22 @@ export class Game {
     const altFade = 1 - smoothstep(30, 400, alt);
     const speed = p.flying ? p.vel.length() / Math.sqrt(p.k) : 0;
     const wind = p.flying ? clamp(speed / 60, 0.08, 1) : clamp(alt / 300, 0, 0.4);
-    const ug = this.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z);
+    const ward = !!this.defeat?.inWard;
+    const ug = !ward && this.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z);
     const inStation = ug && this.underground.boxes.some((b) => b.kind === 'station' && Math.hypot(b.cx - p.pos.x, b.cz - p.pos.z) < b.hu + 5);
-    const surf = ug ? 0.08 : 1;
+    const surf = ug ? 0.08 : ward ? 0 : 1;
     // Weather: rain (light / heavy) and gusts, muffled indoors and underground; a wet city is quieter.
     const W = this.weather.p, rain = W.rain;
-    const shut = (1 - 0.75 * this.sky.indoor) * (ug ? 0.05 : 1);
+    const shut = (1 - 0.75 * this.sky.indoor) * (ug ? 0.05 : ward ? 0 : 1);
     const quiet = 1 - 0.3 * smoothstep(0.1, 0.7, rain);
     this.audio.setAmbience({
       amb_sewer: ug && !inStation ? 0.9 : 0,
       amb_metro: inStation ? 0.9 : 0,
       amb_city_day: (1 - night) * 0.9 * altFade * surf * quiet,
       amb_city_night: night * 0.9 * altFade * surf * quiet,
-      amb_river: nearWater * 0.8,
-      amb_sea: nearSea * 0.8,
+      amb_river: ward ? 0 : nearWater * 0.8,
+      amb_sea: ward ? 0 : nearSea * 0.8,
+      amb_interior: ward ? 0.55 : 0,
       amb_wind_flight: wind,
       amb_rain_light: clamp(rain * 4, 0, 1) * (1 - smoothstep(0.35, 0.8, rain) * 0.6) * shut,
       amb_rain_heavy: smoothstep(0.25, 0.85, rain) * shut,

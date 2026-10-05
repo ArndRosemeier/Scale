@@ -87,7 +87,12 @@ export class Barks {
     if (this.chatT <= 0 && !hidden) {
       this.chatT = CHAT_MIN + Math.random() * (CHAT_MAX - CHAT_MIN);
       const near = g.peds.agents.filter((a) => a.alive && !a.actor && !a.inside && (a.state === PState.Walk || a.state === PState.Idle) && Math.hypot(a.x - cam.x, a.z - cam.z) < 12);
-      if (near.length) this.say(near[Math.floor(Math.random() * near.length)], pick(L.chat));
+      if (near.length) {
+        // In their own temperament (game/people); shy people keep quiet.
+        const a = near[Math.floor(Math.random() * near.length)];
+        const line = g.people ? g.people.chatLine(a) : pick(L.chat);
+        if (line) this.say(a, line);
+      }
     }
     this.draw(dt, hidden);
   }
