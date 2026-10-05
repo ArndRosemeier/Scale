@@ -45,6 +45,8 @@ export const BROOD = {
   accel: 34,
   /** A killed creature lies curled this long (s) before it is gone. */
   deadT: 5,
+  /** Leaving: one that has not reached a hole by then slips away into a drain or a crack (s). */
+  leaveT: 20,
   /** Out of the hole: the stream (s between creatures, per hole). */
   emergeGap: 0.12,
 };
@@ -61,6 +63,8 @@ export interface Prey {
   ref: unknown;
   /** Creatures on it this step (the sim counts). */
   n: number;
+  /** The step it was last offered in (the sim stamps it). */
+  seen?: number;
 }
 
 /** What the sim needs of the world. */
@@ -153,6 +157,7 @@ export class BroodSim {
   private ppool: Prey[][] = [];
   private nb: Critter[] = [];
   private nextId = 0;
+  private stepNo = 0;
 
   constructor(private world: BroodWorld, seed: number, holes: { x: number; z: number }[]) {
     this.rng = new Rng(seed);
@@ -234,6 +239,7 @@ export class BroodSim {
 
   step(h: number): void {
     this.time += h;
+    this.stepNo++;
     this.buildGrid();
     this.buildPrey();
     for (const c of this.list) {
@@ -298,7 +304,8 @@ export class BroodSim {
       const H = this.holes[c.hole];
       tx = H.x; tz = H.z;
       speed *= 1.15;
-      if (Math.hypot(H.x - c.x, H.z - c.z) < 0.9) { c.mode = CMode.Gone; this.stats.gone++; return; }
+      // In the hole — or, cut off from it (on a roof, behind a wall), into a drain or a crack.
+      if (Math.hypot(H.x - c.x, H.z - c.z) < 0.9 || c.t > BROOD.leaveT) { c.mode = CMode.Gone; this.stats.gone++; return; }
     } else if (c.fleeT > 0) {
       c.fleeT -= h;
       const dx = c.x - c.fx, dz = c.z - c.fz, l = Math.hypot(dx, dz) || 1;
@@ -306,7 +313,7 @@ export class BroodSim {
       speed *= 1.2;
     } else {
       c.pickT -= h;
-      if (c.pickT <= 0 || (c.prey && !this.preyList.includes(c.prey))) { c.pickT = 0.4 + rng.float() * 0.3; c.prey = this.pickPrey(c); }
+      if (c.pickT <= 0 || (c.prey && c.prey.seen !== this.stepNo)) { c.pickT = 0.4 + rng.float() * 0.3; c.prey = this.pickPrey(c); }
       if (c.prey) c.prey.n++;
       const fromO = Math.hypot(c.x - this.origin.x, c.z - this.origin.z);
       if (c.prey && fromO < BROOD.leash) { tx = c.prey.x; tz = c.prey.z; }
@@ -371,7 +378,7 @@ export class BroodSim {
     if (!isNaN(top)) {
       const K = BROOD_KINDS[c.kind];
       // A climber: up the facade (not while leaving).
-      if (c.mode === CMode.Run && K.climb > 0 && this.rng.chance(K.climb * 0.25)) {
+      if (c.mode === CMode.Run && K.climb > 0 && this.rng.chance(K.climb * 0.15)) {
         const l = Math.hypot(nx - c.x, nz - c.z) || 1;
         c.nx = -(nx - c.x) / l; c.nz = -(nz - c.z) / l;
         c.top = top;
@@ -445,6 +452,7 @@ export class BroodSim {
     this.world.prey(this.preyList);
     for (const p of this.preyList) {
       p.n = 0;
+      p.seen = this.stepNo;
       const k = ckey(p.x, p.z, PCELL);
       let l = this.pgrid.get(k);
       if (!l) { l = this.ppool.pop() ?? []; this.pgrid.set(k, l); }

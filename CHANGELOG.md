@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.026 — 2026-10-05
+
+- **The swarm**: a new city event. Manhole lids rattle and chitter, a few creatures dart from one manhole to another — then the brood pours out of the sewers: up to 150 chittering creatures spreading through the street like a dark carpet. They knock people down, gnaw cars to a standstill (the big ones roll them over), chew robots apart, go for you, and run up facades and over low roofs.
+- A good first monster for a weak hero: a punch kills a small one. Fire wave and chain lightning clear whole clumps (the lightning jumps from creature to creature), frost nova freezes them so the next blow shatters them, and the stomp, whirlwind and water jet scatter them. The police come and shoot and baton them.
+- Killing them earns karma (more for the big ones and for saving someone); beating the swarm back earns a bonus and cheers. Once most are dead, the rest flee back underground.
+- Admin console, City events: spawn a scout pack or a full swarm, show its omens.
+
 ## 0.025 — 2026-10-04
 
 - **Landmarks**: every city now has a town hall with a square in front (classical with columns and dome, gothic with bell tower, baroque with clock tower, or modern with a campanile), a stadium (oval or rectangular, open, partly or fully roofed, floodlights, scoreboard, car parks) and 1–4 tourist attractions picked and shaped differently in every city: TV or lattice or glass observation towers, cathedrals, a Ferris wheel, monuments (obelisk, column, triumphal arch, statue), museums (colonnade or glass pyramid), a lighthouse on the coast, a castle or ruin on the highest hill, botanical glasshouses.
