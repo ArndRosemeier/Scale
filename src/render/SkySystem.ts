@@ -318,7 +318,7 @@ function makeSky(reversed: boolean, env: boolean): Sky {
     ? 'vec3 sundiscColor = ( 760.0 * sundisc * ( 1.0 - overcast ) ) * min( vSunE * Fex, 80.0 );'
     // On screen: bright but not blown out, so the disc keeps its colour (yellow-white high up,
     // orange to red at sunrise / sunset).
-    : 'vec3 sundiscColor = sundisc * ( 1.0 - overcast ) * mix( 16.0, 30.0, smoothstep( 0.0, 0.35, vSunDirection.y ) ) * Fex / max( max( Fex.r, Fex.g ), max( Fex.b, 1e-4 ) ) * smoothstep( 0.0, 0.05, vSunE / 1000.0 );');
+    : 'vec3 sundiscColor = sundisc * ( 1.0 - overcast ) * mix( 9.0, 30.0, smoothstep( 0.0, 0.35, vSunDirection.y ) ) * Fex / max( max( Fex.r, Fex.g ), max( Fex.b, 1e-4 ) ) * smoothstep( 0.0, 0.05, vSunE / 1000.0 );');
   // A soft glow around the sun (the bloom pass spreads it further), and the moon: a sphere lit
   // from the sun's direction, so its phase follows from where the two stand, with darker maria,
   // a few craters and faint earthshine; reddened low over the horizon, added onto the sky (the
@@ -327,7 +327,7 @@ function makeSky(reversed: boolean, env: boolean): Sky {
   // out of it instead of drowning in one white blot; the environment sky keeps the full glare.
   fs('vec3 texColor = ( Lin + L0 ) * 0.04 + sundiscColor + vec3( 0.0, 0.0003, 0.00075 );', `vec3 skyC = ( Lin + L0 ) * 0.04;
 			float skyL = max( max( skyC.r, skyC.g ), skyC.b );
-			if ( ${env ? 'false' : 'skyL > 1.2'} ) skyC *= ( 1.2 + ( skyL - 1.2 ) / ( 1.0 + ( skyL - 1.2 ) / 2.5 ) ) / skyL;
+			if ( ${env ? 'false' : 'skyL > 1.0'} ) skyC *= ( 1.0 + log( skyL ) ) / skyL;
 			vec3 texColor = skyC + sundiscColor + vec3( 0.0, 0.0003, 0.00075 );
 			texColor += min( vSunE * Fex, 80.0 ) * ( 0.05 * pow( max( cosTheta, 0.0 ), 6000.0 ) + 0.003 * pow( max( cosTheta, 0.0 ), 400.0 ) ) * showSunDisc * ( 1.0 - overcast ) * smoothstep( -0.05, 0.02, direction.y );
 			float cosM = dot( direction, moonDir );
