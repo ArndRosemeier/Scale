@@ -22,7 +22,9 @@ import type { HurtKind } from '../PlayerHealth';
 import { type Actor, type ActorRole, makeActor, attach, release, setState, play, followRoute, goTo, stand, lookAt, subdued, hold } from '../../sim/actors/Actor';
 import { personStrength } from '../Consider';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery';
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging';
+/** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
+export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging'];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
 export type CrimeOutcome = 'arrested' | 'stopped' | 'escaped' | 'aborted';
 
@@ -38,7 +40,7 @@ export interface Loot {
 }
 
 export interface CrimeEvent {
-  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight';
+  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged';
   crime: Crime;
   who?: PedAgent;
 }
@@ -80,6 +82,8 @@ export interface CrimeWorld {
   random(): number;
   /** Shop entrances (door point outside the wall and its outward normal) in a ring around the player. */
   shops?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /** Building walls by a sidewalk (a door point outside the wall, its outward normal) in a ring around the player. */
+  walls?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
   /** A getaway car waiting at the kerb near a point (null: no road). */
   getaway?(x: number, z: number): GetawayCar | null;
   /** Officers on foot near a point (armed criminals turn on them). */

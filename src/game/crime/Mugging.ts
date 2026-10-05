@@ -14,13 +14,13 @@ import { release, hold } from '../../sim/actors/Actor';
 export const MUGGING = { ringMin: 120, ringMax: 320, quietR: 22, quietMax: 3, approachTimeout: 50, hp: 55, strength: 1.05, threatenFor: 7, robFor: 13, gunShare: 0.3 };
 
 export class Mugging extends Crime {
-  readonly kind = 'mugging' as const;
+  readonly kind: 'mugging' | 'racket' = 'mugging';
   readonly tier = 1;
   victim: PedAgent | null = null;
   private shoutT = 0;
   private confronted = false;
 
-  constructor(w: CrimeWorld, seed: number, private near: { x: number; z: number } | null = null) {
+  constructor(w: CrimeWorld, seed: number, protected near: { x: number; z: number } | null = null) {
     super(w, seed);
   }
 

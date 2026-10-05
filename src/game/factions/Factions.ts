@@ -11,7 +11,11 @@
  *               (today's anonymous street crime)
  *
  * Deterministic for (seed, plan, crime index); pure (no DOM, no three.js), tested in selftest.ts.
- * Turf does not move yet: drift and the player's effect on it come with saves (Phase 1, part 2).
+ *
+ * Results move the turf (Phase 1 part 2, `shift`): stopping a group's operation costs it influence
+ * in that cell and a little in the cells next to it, an operation that comes off (and a finished
+ * tag) gains it some. The difference from the seeded influence is saved per city
+ * (`saveFactions` / `restoreFactions`). Drift over time and rivals moving into the gap are Phase 2.
  */
 import type { MacroPlan } from '../../plan/types';
 import { Rng, deriveSeed } from '../../core/rng';
@@ -38,6 +42,10 @@ export interface FactionMap {
   influence: Float32Array[];
   /** Holding faction per macro cell, -1 for none. */
   holder: Int8Array;
+  /** The seeded influence (what `influence` started as; saves keep the difference). */
+  base: Float32Array[];
+  /** Neighbouring macro cells (sharing an arterial edge). */
+  near: number[][];
 }
 
 /** The city's groups and turf for a seed (crime index: CrimeIndex.crimeIndex of the same plan). */
@@ -79,7 +87,86 @@ export function planFactions(macro: MacroPlan, seed: number, index: Float32Array
     for (let f = 0; f < factions.length; f++) if (influence[f][i] >= bv) { bv = influence[f][i]; best = f; }
     holder[i] = best;
   }
-  return { factions, influence, holder };
+  // Neighbours: cells that share an arterial edge.
+  const byEdge = new Map<number, number[]>();
+  cells.forEach((c, i) => { for (const e of c.edges) { const l = byEdge.get(e); if (l) l.push(i); else byEdge.set(e, [i]); } });
+  const near: number[][] = cells.map(() => []);
+  for (const l of byEdge.values()) for (const a of l) for (const b of l) if (a !== b && !near[a].includes(b)) near[a].push(b);
+  return { factions, influence, holder, base: influence.map((f) => f.slice()), near };
+}
+
+/** The group with the most influence in a cell if it reaches HOLD, else -1. */
+function holderOf(F: FactionMap, i: number): number {
+  let best = -1, bv = HOLD;
+  for (let f = 0; f < F.factions.length; f++) if (F.influence[f][i] >= bv) { bv = F.influence[f][i]; best = f; }
+  return best;
+}
+
+/** How much results move the turf. */
+export const SHIFT = {
+  /** The player stopped one of its operations: lost in that cell, half of it next door. */
+  stopped: -0.14,
+  /** An operation came off (got away): gained in that cell. */
+  succeeded: 0.05,
+  /** A tag on the wall. */
+  tag: 0.04,
+  spread: 0.5,
+  /** Never above this (a group can be driven out, but its grip never gets absolute). */
+  max: 1,
+};
+
+/**
+ * Move a group's influence in a cell (and `spread` × as much in the cells next to it, where it has
+ * any); returns the cells whose holder changed, with the old and new holder.
+ */
+export function shift(F: FactionMap, cell: number, f: number, amount: number, spread = SHIFT.spread): { cell: number; from: number; to: number }[] {
+  if (cell < 0 || !F.influence[f]) return [];
+  const touched: [number, number][] = [[cell, amount]];
+  for (const n of F.near[cell] ?? []) if (F.influence[f][n] > 0 || amount < 0) touched.push([n, amount * spread]);
+  const out: { cell: number; from: number; to: number }[] = [];
+  for (const [i, a] of touched) {
+    F.influence[f][i] = Math.max(0, Math.min(SHIFT.max, F.influence[f][i] + a));
+    const from = F.holder[i], to = holderOf(F, i);
+    if (from !== to) { F.holder[i] = to; out.push({ cell: i, from, to }); }
+  }
+  return out;
+}
+
+/** Saved turf: per group (by archetype), the cells whose influence differs from the seeded one, in hundredths. */
+export interface SavedFactions { v: 1; groups: { archetype: string; cells: [number, number][] }[]; stats: Record<string, number> }
+
+export function saveFactions(F: FactionMap, stats: Record<string, number> = {}): SavedFactions {
+  return {
+    v: 1,
+    groups: F.factions.map((f) => {
+      const cells: [number, number][] = [];
+      const I = F.influence[f.id], B = F.base[f.id];
+      for (let i = 0; i < I.length; i++) { const d = Math.round((I[i] - B[i]) * 100); if (d !== 0) cells.push([i, d]); }
+      return { archetype: f.archetype, cells };
+    }),
+    stats: { ...stats },
+  };
+}
+
+/** Put saved turf back (unknown groups or cells are skipped); returns the saved stats. */
+export function restoreFactions(F: FactionMap, raw: unknown): Record<string, number> {
+  const o = raw && typeof raw === 'object' ? (raw as Partial<SavedFactions>) : null;
+  for (let f = 0; f < F.factions.length; f++) F.influence[f].set(F.base[f]);
+  const stats: Record<string, number> = {};
+  if (o && Array.isArray(o.groups)) {
+    for (const g of o.groups) {
+      const f = F.factions.find((x) => x.archetype === g?.archetype);
+      if (!f || !Array.isArray(g.cells)) continue;
+      const I = F.influence[f.id], B = F.base[f.id];
+      for (const c of g.cells) {
+        if (!Array.isArray(c) || !Number.isInteger(c[0]) || !Number.isFinite(c[1]) || c[0] < 0 || c[0] >= I.length) continue;
+        I[c[0]] = Math.max(0, Math.min(SHIFT.max, B[c[0]] + c[1] / 100));
+      }
+    }
+    for (const [k, v] of Object.entries(o.stats ?? {})) if (Number.isFinite(v)) stats[k] = v as number;
+  }
+  for (let i = 0; i < F.holder.length; i++) F.holder[i] = holderOf(F, i);
+  return stats;
 }
 
 /** The cell a group wants most; away from the homes already taken. */
