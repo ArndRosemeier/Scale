@@ -22,6 +22,8 @@ import { metroInput } from './metroaudit';
 import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
+import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
+import { buildRuralTile } from '../src/build/rural';
 import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
@@ -368,6 +370,63 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   const edge = terrainExtent(macro.boundary) * 0.95;
   check(tA.rivers.slice(tA.baseRivers).some((R) => { for (let i = 0; i < R.pts.length; i += 2) if (Math.max(Math.abs(R.pts[i]), Math.abs(R.pts[i + 1])) > edge) return true; return false; }), `seed ${seed}: rivers reach the edge of the world`);
   console.log(`seed ${seed} countryside: ${tA.rivers.length - tA.baseRivers} countryside rivers, ${trees} trees checked in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Countryside settlements (world/rural): deterministic; villages joined to the city's arterial ring by
+// country roads that keep off the water and the city; houses, barns and churches dry, apart, off the
+// roads; garden and forest trees never on a road or a building; lakes carved below their level.
+for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
+  const t0 = performance.now();
+  const p = makeProfile({ seed, size });
+  const T = new Terrain(p), macro = buildMacroPlan(T);
+  const land = new LandUse(T), plan = new RuralPlan(T, land, macro);
+  land.settle = plan;
+  const T2 = new Terrain(makeProfile({ seed, size }));
+  const plan2 = new RuralPlan(T2, new LandUse(T2), buildMacroPlan(T2));
+  check(hashPlan(plan.settlements) === hashPlan(plan2.settlements) && hashPlan(plan.roads) === hashPlan(plan2.roads), `rural seed ${seed}: plan deterministic`);
+  const villages = plan.settlements.filter((s) => s.kind !== SettleKind.Farm);
+  check(villages.length >= 10 && plan.settlements.length - villages.length >= 20, `rural seed ${seed}: villages (${villages.length}) and farms (${plan.settlements.length - villages.length})`);
+  check(villages.every((v) => v.roads.length > 0), `rural seed ${seed}: every village has a road`);
+  check(plan.roads.some((R) => R.trim > 0), `rural seed ${seed}: country roads leave the city`);
+  let wet = 0, inCity = 0;
+  for (const R of plan.roads) for (let i = 0; i < R.pts.length; i += 2) {
+    if (T.isWater(R.pts[i], R.pts[i + 1], R.hw)) wet++;
+    if (Math.hypot(R.pts[i] - R.pts[0], R.pts[i + 1] - R.pts[1]) > 450 && land.edge(R.pts[i], R.pts[i + 1]) < 30) inCity++;
+  }
+  check(wet === 0 && inCity === 0, `rural seed ${seed}: roads dry (${wet}) and out of the city (${inCity})`);
+  let nb = 0, bad = 0, overlap = 0;
+  for (const s of plan.settlements) {
+    const L = plan.layout(s.id);
+    check(hashPlan(L) === hashPlan(plan2.layout(s.id)), `rural seed ${seed} settlement ${s.id}: layout deterministic`);
+    const B = L.boxes;
+    for (let o = 0; o < B.length; o += BOX_STRIDE) {
+      nb++;
+      for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const x = B[o] + B[o + 4] * B[o + 2] * a - B[o + 5] * B[o + 3] * b, z = B[o + 1] + B[o + 5] * B[o + 2] * a + B[o + 4] * B[o + 3] * b;
+        if (T.isWater(x, z, 0) || plan.roadEdge(x, z) < 0.5) bad++;
+      }
+      for (let q = o + BOX_STRIDE; q < B.length; q += BOX_STRIDE) if (Math.hypot(B[q] - B[o], B[q + 1] - B[o + 1]) < Math.min(B[o + 2], B[o + 3], B[q + 2], B[q + 3])) overlap++;
+    }
+    check(L.buildings.length === B.length / BOX_STRIDE && L.buildings.every((b) => b.poly.length === 8 && b.floors >= 1), `rural seed ${seed} settlement ${s.id}: buildings valid`);
+  }
+  check(nb > 300 && bad === 0 && overlap === 0, `rural seed ${seed}: ${nb} buildings dry and off the roads (${bad}), apart (${overlap})`);
+  // Trees around a town: never on its roads or buildings.
+  const town = villages.find((v) => v.kind === SettleKind.Town) ?? villages[0];
+  const fg = new ForestGen(land, macro);
+  let onRoad = 0, trees = 0;
+  for (const [dx, dz] of [[-256, -256], [0, -256], [-256, 0], [0, 0]]) {
+    const R = fg.tile(Math.floor((town.x + dx) / 256) * 256, Math.floor((town.z + dz) / 256) * 256, 256);
+    for (let o = 0; o < R.length; o += FOREST_STRIDE) { trees++; if (plan.roadEdge(R[o], R[o + 2]) < 1 || plan.onBuilding(R[o], R[o + 2], 1)) onRoad++; }
+  }
+  check(trees > 20 && onRoad === 0, `rural seed ${seed}: ${trees} trees round ${town.name}, none on a road or building (${onRoad})`);
+  // Lakes: water below the level in the middle, dry land at the shore band's edge.
+  for (const [k, L] of T.lakes.entries()) {
+    const ok = T.waterLevel(L.x, L.z) === L.level && T.height(L.x, L.z) < L.level - 1 && T.lakeAt(L.x, L.z).lake === k;
+    check(ok, `rural seed ${seed}: lake ${k} holds water`);
+  }
+  const tile = buildRuralTile(plan, T, Math.floor(town.x / 1024) * 1024, Math.floor(town.z / 1024) * 1024, 1024);
+  check(!!tile.ground && !!tile.facade && tile.obstacles.length > 0, `rural seed ${seed}: the town's tile has roads, buildings and collision boxes`);
+  console.log(`seed ${seed} rural: ${villages.length} villages, ${plan.settlements.length - villages.length} farms, ${plan.roads.length} roads, ${nb} buildings, ${T.lakes.length} lakes in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // ---- powers: every rank has truthful text, super speed outruns flight, old saves migrate
@@ -958,6 +1017,90 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   console.log(`threat clock: seed 42 normal → events at ${evA.map((e) => (e.t / 60).toFixed(0)).join(', ')} min; omens ${a.filter((s) => s.type === 'omen').map((s) => `${(s.t / 60).toFixed(0)}:${s.kind}`).join(' ')}`);
 }
 
+// ---- the brood (THREATS_PLAN Phase C): the swarm's simulation is deterministic, stays within its cap,
+// comes out of its holes, spreads into a carpet (not a heap), goes for people a few at a time, climbs
+// walls without ending up inside buildings, dies to blows (a frozen brute shatters), withdraws into
+// its holes, steps 150 creatures cheaply; the clock schedules it among the minor events.
+{
+  const { BroodSim, BROOD, CMode } = await import('../src/game/threats/brood/BroodSim');
+  const { ThreatClock } = await import('../src/game/threats/ThreatClock');
+  type P = { kind: 'person'; x: number; y: number; z: number; r: number; ref: unknown; n: number; down: boolean };
+  // Flat ground, one building (x 20…30, z −10…10, 8 m tall), people in a row north of the holes.
+  const inB = (x: number, z: number) => x > 20 && x < 30 && z > -10 && z < 10;
+  const mk = (seed: number, n: number, brutes: number, people = 20) => {
+    const prey: P[] = [];
+    for (let i = 0; i < people; i++) prey.push({ kind: 'person', x: -10 + i, y: 0, z: 30, r: 0.3, ref: i, n: 0, down: false });
+    const sim = new BroodSim({
+      surface: (x, z, yRef) => (inB(x, z) && yRef >= 7.5 ? 8 : 0),
+      wall: (x, z, y) => (inB(x, z) && y < 7.4 ? 8 : NaN),
+      prey: (out) => { for (const p of prey) if (!p.down) out.push(p); },
+    }, seed, [{ x: 0, z: 0 }, { x: 6, z: 2 }]);
+    sim.onBite = (_c, p) => { (p as P).down = true; };
+    sim.spawn(n, brutes, 0.5);
+    return { sim, prey };
+  };
+  const runFor = (sim: InstanceType<typeof BroodSim>, s: number, each?: () => void) => { for (let t = 0; t < s * BROOD.hz; t++) { sim.step(1 / BROOD.hz); each?.(); } };
+  const a = mk(42, 60, 2), b = mk(42, 60, 2), c = mk(43, 60, 2);
+  runFor(a.sim, 20); runFor(b.sim, 20); runFor(c.sim, 20);
+  check(a.sim.hash() === b.sim.hash(), 'brood: the swarm is deterministic for a seed');
+  check(a.sim.hash() !== c.sim.hash(), 'brood: the swarm varies with the seed');
+  check(mk(1, 400, 4).sim.list.length === BROOD.cap, `brood: at most ${BROOD.cap} creatures`);
+  check(a.sim.stats.out === 60, `brood: all came out of the holes within 20 s (${a.sim.stats.out})`);
+  const bitten = a.prey.filter((p) => p.down).length;
+  check(bitten >= 10, `brood: it goes for people (${bitten} of 20 knocked down in 20 s)`);
+  // Never more than the cap on one person; a carpet (nearest neighbour apart), and no one inside the building.
+  const d = mk(7, 120, 3, 0);
+  d.sim.goal = { x: 40, z: 0 };
+  let crowd = 0, inside = 0, nnSum = 0, nnN = 0;
+  const e = mk(8, 80, 0, 4);
+  runFor(e.sim, 12, () => { for (const p of e.prey) if (p.n > BROOD.maxOn.person) crowd++; });
+  runFor(d.sim, 30, () => {
+    for (const k of d.sim.list) if ((k.mode === CMode.Run || k.mode === CMode.Leave) && !k.air && inB(k.x, k.z) && k.y < 7.5) inside++;
+  });
+  for (const k of d.sim.list) {
+    if (k.mode !== CMode.Run || k.kind !== 0 || k.air) continue;
+    let nn = Infinity;
+    for (const o of d.sim.list) if (o !== k && o.mode === CMode.Run && !o.air && Math.abs(o.y - k.y) < 1) nn = Math.min(nn, Math.hypot(o.x - k.x, o.z - k.z));
+    if (isFinite(nn)) { nnSum += nn; nnN++; }
+  }
+  check(crowd === 0, `brood: at most ${BROOD.maxOn.person} on one person (${crowd} steps over)`);
+  check(nnN > 50 && nnSum / nnN > 0.7, `brood: a carpet, not a heap (mean nearest neighbour ${(nnSum / Math.max(1, nnN)).toFixed(2)} m over ${nnN})`);
+  check(d.sim.stats.climbs > 0, `brood: creatures climb walls (${d.sim.stats.climbs} climbs)`);
+  check(inside === 0, `brood: none runs inside a building (${inside} creature-steps)`);
+  check(d.sim.list.some((k) => k.y > 7.9 && inB(k.x, k.z)), 'brood: some get over the edge onto the roof');
+  // Hits: a blow kills the small ones round it, a brute takes more; frozen, it shatters at the next blow.
+  const h = mk(9, 40, 1, 0);
+  runFor(h.sim, 10);
+  const live = () => h.sim.list.filter((k) => k.mode === CMode.Run || k.mode === CMode.Frozen);
+  const k0 = live().filter((k) => k.kind === 0)[0];
+  const r1 = h.sim.hit(k0.x, k0.y + 0.3, k0.z, 4, 'blow', 1, k0.x + 1, k0.z, 5, 'player');
+  check(r1.killed >= 1 && r1.killed === r1.hit.filter((k) => k.kind === 0).length, `brood: a blow kills the small ones it reaches (${r1.killed} of ${r1.hit.length})`);
+  const br = h.sim.list.find((k) => k.kind === 1)!;
+  h.sim.damage(br, 'blow', 1, br.x + 1, br.z, 2, 'player');
+  check(br.mode !== CMode.Dead && br.hp > 0, 'brood: a brute survives one blow');
+  h.sim.damage(br, 'frost', 4, br.x, br.z, 0, 'player');
+  const froze = br.mode === CMode.Frozen;
+  h.sim.damage(br, 'blow', 0.5, br.x + 1, br.z, 2, 'player');
+  check(froze && br.mode === CMode.Dead, 'brood: frozen, a brute shatters at the next blow');
+  check((h.sim.stats.killedBy.player ?? 0) === h.sim.stats.killed, 'brood: kills are credited to who did it');
+  h.sim.leave();
+  runFor(h.sim, 60);
+  check(h.sim.alive === 0 && h.sim.list.every((k) => k.mode === CMode.Gone), `brood: leaving, they all drop back into the holes (${h.sim.alive} left)`);
+  // Cost: 150 creatures at 15 Hz.
+  const f = mk(11, 150, 6, 60);
+  runFor(f.sim, 5);
+  const t0 = performance.now();
+  runFor(f.sim, 20);
+  const ms = (performance.now() - t0) / (20 * BROOD.hz);
+  check(ms < 1.0, `brood: a step of 150 creatures is cheap (${ms.toFixed(3)} ms)`);
+  // The clock: the brood among the minor events.
+  const clk = new ThreatClock(42);
+  const arch: string[] = [];
+  for (let t = 0; t < 8 * 3600; t++) for (const sg of clk.tick(1, 0, 0)) if (sg.type === 'event') arch.push(sg.archetype);
+  check(arch.includes('brood') && arch.includes('robots'), `brood: the clock schedules it among the minor events (${arch.join(', ')})`);
+  console.log(`brood: ${a.sim.stats.bites} bites, ${d.sim.stats.climbs} climbs, step ${ms.toFixed(3)} ms for 150`);
+}
+
 // ---- the Strider (THREATS_PLAN Phase B): major events come no earlier than their floor and only after a
 // karma milestone, with their own omens; its route from the river to downtown exists for 20 seeds; the
 // rig's pure math (two-bone IK reach, follow-the-leader spacing, FABRIK, ray vs capsule) behaves.
@@ -986,7 +1129,7 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
     check(om.length >= CLOCK.majorOmensMin && om.every((o) => o.kind === 'tremor' || o.kind === 'wake'), `major events: seed ${seed}: ≥ ${CLOCK.majorOmensMin} Strider omens before it (${om.map((o) => o.kind).join(', ')})`);
     // Minor events still come around it.
     const evs = busy.filter((s) => s.type === 'event');
-    check(evs.filter((e) => e.arch === 'robots').length >= 4, `major events: seed ${seed}: minor events go on around them (${evs.map((e) => e.arch[0]).join('')})`);
+    check(evs.filter((e) => e.arch === 'robots' || e.arch === 'brood').length >= 4, `major events: seed ${seed}: minor events go on around them (${evs.map((e) => e.arch[0]).join('')})`);
     if (seed === 42) console.log(`threat clock (busy hero, seed 42): ${evs.map((e) => `${(e.t / 60).toFixed(0)}:${e.arch}`).join(' ')}`);
   }
   // The milestone reached late (karma only from 4 h on): the Strider waits for it.

@@ -688,7 +688,7 @@ export class CrimeSystem {
           c.playerInvolved = true;
           this.stats.kos++;
           this.rep.count('kos');
-          g.progress.addKarma(KINDS[c.kind].ko, `knocked out a ${KINDS[c.kind].criminal.toLowerCase()}`);
+          { const who = KINDS[c.kind].criminal.toLowerCase(); g.progress.addKarma(KINDS[c.kind].ko, `knocked out ${/^[aeiou]/.test(who) ? 'an' : 'a'} ${who}`); }
           this.rep.add(2, 'ko');
         }
         break;

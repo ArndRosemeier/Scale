@@ -967,5 +967,29 @@
     "loop": false,
     "gain": 0.55,
     "description": "spray can: a rattle and three bursts of hiss (procedural, tools/synthFactions.mjs)"
+  },
+  "brood_chitter": {
+    "files": [
+      "brood_chitter.wav"
+    ],
+    "loop": true,
+    "gain": 0.7,
+    "description": "a swarm chittering: dry clicks, rasps and chirps from many small bodies, claws scrabbling, seamless loop (procedural, tools/synthBrood.mjs)"
+  },
+  "brood_screech": {
+    "files": [
+      "brood_screech.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a small creature shrieking: a rasping squeal (procedural, tools/synthBrood.mjs)"
+  },
+  "brood_bite": {
+    "files": [
+      "brood_bite.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a quick snap of mandibles with a crunch (procedural, tools/synthBrood.mjs)"
   }
 }

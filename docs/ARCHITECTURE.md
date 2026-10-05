@@ -277,7 +277,7 @@ Special buildings, planned with the macro plan (`MacroPlan.landmarks`, ~10 ms) a
   full map, tooltip, compass within ~1.3 km); the map square reaches out to the airport.
 * Debug: `npx tsx tools/celldump.ts <seed> <size> out.png 600 landmark:<kind>`.
 
-### Countryside (`src/world/landuse`, `src/build/forest`, `src/stream/Countryside`)
+### Countryside (`src/world/landuse`, `src/world/rural`, `src/build/forest`, `src/build/rural`, `src/stream/Countryside`, `src/stream/Rural`)
 The land beyond the city is a global, seed-driven layer, built to sit between several cities later.
 * **Rivers** (`Terrain.extendRivers`): the city's rivers continue as meandering countryside rivers to
   the edge of the streamed world (same gradient and width at the junction), plus a few streams joining
@@ -299,6 +299,33 @@ The land beyond the city is a global, seed-driven layer, built to sit between se
   tree models (full ≤ 75 m, shadows ≤ 45 m, far hulls ≤ ~330 m), every other tile is one or two instanced
   meshes of low-poly canopy clumps (a constant count per tile; in big tiles each clump is a patch of forest)
   out to 11 km. Trunks near the player are obstacles. Budget: ~10–25 MB, ≤ 0.1 ms/frame on average.
+* **Lakes** (`Terrain.pickLakes`, `lakeAt`, `lakePolygon`): on a jittered 3.4 km grid, where the land is open and
+  fairly level, beyond the protected zone and its blend band (the city's terrain stays bit for bit the same), away
+  from rivers, coast, airfield and each other; a lobed, stretched blob whose level sits just under the lowest point
+  of its rim. `height` carves a shelving bowl inside and eases the land down to the water in a shore band;
+  `waterLevel` / `isWater` know them (swimming), the water tiles draw them, the land use treats the shore as a bank
+  (bank trees in groups round them).
+* **Settlements and roads** (`world/rural` `RuralPlan`, built in every worker at init from the terrain, the land use
+  and the macro plan, ~0.1 s; then attached as `LandUse.settle`): hamlets, villages and small towns on a jittered
+  2.3 km grid (open, fairly level, dry, ≥ 900 m beyond the city edge); country roads from the city's outer ring
+  (gate nodes: nothing of the city just beyond them; the road leaves radially, then wanders to its village) and
+  between villages (nearest neighbours, shortest first, planar — no crossing without a junction —, distinct
+  angles at each end, never through the water, the city, the airfield or another village); village lanes as
+  spokes from the square plus side lanes in a fishbone; farmsteads on an 820 m grid in the fields (a gravel yard
+  aligned with the parcels, its gate facing a dirt track to the nearest road; an orchard beside some).
+  `layout(id)` lays out a settlement lazily as ordinary `BuildingDesc`s: houses along every street (denser and
+  taller in the core; style from the city's architectural flavour: timber / oldstone / mediterranean / house,
+  shop fronts in town cores, barns at the edge), a church with a spired tower on the square, farmhouse, barn and
+  sheds round the yard; all boxes dry, fairly level, off the roads and apart. The land use reads it back: fields
+  and forest give way to the built-up strip along the streets, yards and orchards, forest to road corridors.
+* **Rural tiles** (`build/rural`, worker job `rural`, `stream/Rural`): fixed 1 km tiles out to 7 km; road ribbons
+  draped on the terrain (asphalt with a dashed centre line outside villages, lighter lanes, dirt tracks; three
+  vertices across), squares and yards, and the buildings of the settlements centred in the tile drawn by the
+  city's building shells (near: the shell within ~420 m, else LOD1; ~160 / 80 triangles a house) in one shared
+  facade material without destruction state; their boxes block the player. Roads show within 5 km.
+  `ForestGen` keeps trees off roads, squares, yards and buildings, adds garden trees in villages and orchard rows.
+* Debug: `npx tsx tools/ruraldump.ts <seed> <size> out.png [width] [cx] [cz]`; in game `dev.rural.list(kind)`,
+  `dev.rural.look(id)`, `dev.rural.lakes()`, `dev.rural.stats()`.
 
 ### Near future (`src/future`)
 The city is a believable near future (PLAYGROUND_PLAN §0, decision 16). `NearFuture` owns it; the game
@@ -465,6 +492,34 @@ every frame (`prof.threats`).
   Omens (`robotOmen`): glitching robots, a drone dropping out of its lane, screens tearing (`Signs.glitch`).
   Rewards: a machine the player disabled 5 karma (service robot 8) +0.5 rep, +3 when it was going for someone,
   20 karma +4 rep and cheers when it is stopped with the player's help (≥ 2 machines).
+* **The brood** (`Brood.ts`, archetype `brood`, minor; Phase C): a swarm of small creatures out of the sewers.
+  `brood/BroodSim.ts` is the pure simulation (no three.js, no Game; deterministic, tested in `selftest.ts`), stepped at
+  a fixed 15 Hz and interpolated for drawing: the creatures (≤ 150; skitters 1.1 m, 1 hp, and one brute 2.4 m, 6 hp
+  per 25) wait in the sewer and leap out of up to three manholes near the site (`findHoles`; a drain at the kerb when
+  there is none) in a stream; boids on a 2.5 m grid (separation by body size, a little alignment and cohesion, a
+  burst-and-pause gait); each goes for the nearest prey within 18 m that is not covered yet (≤ 5 on a person, 8 on the
+  player, 10 on a car, 4 on a robot; brutes prefer cars), else for the swarm's goal (the busiest spot round about,
+  or the player once they have killed a few) at its own offset in the carpet, never beyond a 120 m leash. A skitter
+  running into a facade may climb it (`BroodWorld.wall`: a building taller than it is): up to a seeded height, cling,
+  drop off — or over the edge onto a roof ≤ 14 m up; the others slide along. Bites (`Brood.bite`): people knocked
+  down (cause `threat`), the player 4 hp (brute 10, one per 0.6 s), cars gnawed to a standstill and rolled over after
+  9 gnaws (a brute's bite counts 4), robots chewed apart. Hits (`BroodSim.hit` / `damage`, effect and hit points):
+  `Game.strike` (punches and blasts, J / 150 hp, flung), and through `PowerWorld.swarm` → `ThreatDirector.broodHit`
+  every power: fire wave (slabs as the front passes), laser heat, frost nova (frozen; the next blow shatters),
+  chain lightning (side arcs at every bolt point, then the chain jumps on from creature to creature), seismic stomp,
+  whirlwind, hydrokinesis, a giant's footsteps; police rounds (dmg / 20) and batons through `targetsNear` / `strike`
+  / `shoot` (`engageOnFoot`). Killed ones are flung, lie curled on their backs and fade after 5 s (no gore). It ends
+  when all are dead or ≤ 12 % are left (stopped), after 5 min (retreated) or with the player 700 m away for 30 s;
+  leaving, the rest run for the nearest hole (or slip into a drain after 20 s). One instanced mesh for every swarm
+  (`brood/broodMesh.ts`, `threats.broodMesh`: a three-part body, spines, mandibles, glowing eyes, six legs in a
+  tripod gait in the vertex shader; up a wall it faces up; frozen ones turn icy; warmed at start). Sounds
+  (`tools/synthBrood.mjs`): `brood_chitter` (a loop at the creature nearest the camera, louder with more out),
+  `brood_screech`, `brood_bite`. Omens (`broodOmen`): `chitter` — a manhole near the player rattles, dust and a
+  chittering from below, a small `tremor`; `glimpse` — three creatures (`BroodGlimpse`, a tiny BroodSim) dart out of
+  one manhole and down another across the street. Rewards: 1 karma a small one, 5 + 0.5 rep a brute, +2 for one that
+  was on someone (every 4 s at most), 20 karma +4 rep and cheers when it is stopped with ≥ 8 kills by the player.
+  Dev: `dev.threat.spawn('brood', { count: 150, brutes, dist })`, `dev.threat.brood.status() / .hit(effect, r, dmg) /
+  .leave() / .player(dist)`, `dev.threat.omen('chitter' | 'glimpse')`; admin console "City events".
 * **City response** (`ResponseDirector`, levels 0–2 of the ladder, per incident): 0 — three patrol cars with sirens
   (`Police.respond(IncidentJob)`: the job says where, how many get out, what they do there, when to go), a police
   drone; officers hold a line facing it and wave people back. 1 (after 30 s with > 45 % of it still in action, or 8

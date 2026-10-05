@@ -12,6 +12,7 @@ export type ToWorker =
   | { type: 'terrain'; job: number; x0: number; z0: number; size: number; res: number; skirt: number }
   | { type: 'water'; job: number; x0: number; z0: number; size: number }
   | { type: 'forest'; job: number; x0: number; z0: number; size: number }
+  | { type: 'rural'; job: number; x0: number; z0: number; size: number }
   | { type: 'bridges'; job: number }
   | { type: 'landmarks'; job: number }
   | { type: 'skyline'; job: number; cells: number[] };
@@ -41,6 +42,8 @@ export type FromWorker =
   | { type: 'water'; job: number; mesh: MeshData | null }
   /** Countryside trees of a tile (FOREST_STRIDE floats per tree, see build/forest). */
   | { type: 'forest'; job: number; trees: Float32Array }
+  /** Countryside settlements and roads of a tile (build/rural): meshes (null when empty) and collision boxes. */
+  | { type: 'rural'; job: number; ground: MeshData | null; facade: MeshData | null; facadeLod: MeshData | null; obstacles: Float32Array }
   | { type: 'bridges'; job: number; mesh: MeshData | null }
   /** Per landmark (macro.landmarks order): the near mesh and the far one. */
   | { type: 'landmarks'; job: number; meshes: [MeshData, MeshData][] }

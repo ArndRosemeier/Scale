@@ -56,6 +56,7 @@ import { interiorWarmup } from '../interior/InteriorBuilder';
 import { Underground } from '../underground/Underground';
 import { Skyline } from '../stream/Skyline';
 import { Countryside } from '../stream/Countryside';
+import { RuralStreamer } from '../stream/Rural';
 import { terrainExtent } from '../world/boundary';
 import { FlightFX } from '../player/FlightFX';
 import { Menu } from '../ui/Menu';
@@ -145,6 +146,7 @@ export class Game {
   gate!: ShaderGate;
   skyline!: Skyline;
   countryside!: Countryside;
+  rural!: RuralStreamer;
   flightFx!: FlightFX;
   menu!: Menu;
   map!: GameMap;
@@ -263,6 +265,9 @@ export class Game {
     this.renderer.scene.add(this.skyline.group);
     this.countryside = new Countryside(this.pool, terrainExtent(macro.boundary));
     this.renderer.scene.add(this.countryside.group);
+    this.rural = new RuralStreamer(this.pool, terrainExtent(macro.boundary), tex);
+    this.rural.prepare = (o) => this.renderer.compileAsync(o);
+    this.renderer.scene.add(this.rural.group);
     const syncSky = () => this.skyline.setLoaded([...this.streamer.cells.values()].filter((c) => c.status === 'ready').map((c) => c.id));
     this.streamer.onCellReady = (c) => {
       hitch.measure('cell:world', () => this.world.addCell(c));
@@ -349,6 +354,7 @@ export class Game {
     this.collision.obstacleProviders.push(
       (x0, z0, x1, z1, out) => this.props.obstaclesIn(x0, z0, x1, z1, out),
       (x0, z0, x1, z1, out) => this.countryside.obstaclesIn(x0, z0, x1, z1, out),
+      (x0, z0, x1, z1, out) => this.rural.obstaclesIn(x0, z0, x1, z1, out),
       new VehicleObstacles(() => [...this.traffic.vehicles, ...this.parkedList]).provider,
       (x0, z0, x1, z1, out) => this.underground.carObstacles(x0, z0, x1, z1, out),
       this.collision.roofEquipmentIn,
@@ -420,6 +426,8 @@ export class Game {
           if (threat) this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, 'threat');
         }
         if (h > 4) this.props.crush(s.x, s.z, r);
+        // A giant hero's foot comes down on the brood.
+        if (!threat && h > 3) this.threats?.broodHit(s.x, s.y + 0.3, s.z, r + 0.4, 'blow', 20, 3);
         // A giant hero stamping on a monster's foot or tail.
         if (!threat && h > 8) this.threats?.blow(s.x, s.y + h * 0.05, s.z, r, 0, -Math.pow(10, s.intensity / 2) * 80, 0, { cause: 'player', x: s.x, y: s.y, z: s.z });
       } else if (s.kind === 'collapse') {
@@ -463,7 +471,7 @@ export class Game {
     progress('Preparing shaders', 0.97);
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
-      later: [this.props.warmupObject(), this.countryside.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
@@ -475,6 +483,7 @@ export class Game {
     // Background: compile what appears later (all tree species, furniture, …) on driver threads.
     this.gate.precompile(this.props.warmupObject());
     this.gate.precompile(this.countryside.warmupObject());
+    this.gate.precompile(this.rural.warmupObject());
     void this.intro?.play();
   }
 
@@ -533,7 +542,7 @@ export class Game {
         }
         this.sky.setShadows(on, size);
       },
-      setLod: (k) => { this.streamer.lodScale = k; },
+      setLod: (k) => { this.streamer.lodScale = k; if (this.rural) this.rural.lodScale = k; },
     });
   }
 
@@ -609,6 +618,7 @@ export class Game {
     const cam = this.renderer.camera;
     this.T('stream', () => this.streamer.update(dt, cam.position));
     this.T('country', () => this.countryside.update(dt, cam));
+    this.T('rural', () => this.rural.update(dt, cam.position));
     const focus = this.freeCam ? cam.position : this.player.pos;
     this.sky.setShadowExtent(this.freeCam ? 80 + Math.max(0, cam.position.y - this.terrain.height(cam.position.x, cam.position.z)) * 1.5 : 25 + this.player.height * 12 + cam.position.distanceTo(this.player.pos) * 1.2);
     this.sky.underground = clamp(this.sky.underground + (this.camRig.underground ? dt : -dt) * 2.5, 0, 1);
@@ -811,6 +821,7 @@ export class Game {
       stimuli: this.stimuli, consequences: this.consequences, sight: this.sight, deny: (msg) => this.abilities.hooks.deny?.(msg),
       sound: (id, x, y, z, g, pitch = 1, ref = 6) => this.audio.play(id, x, y, z, g, pitch, ref, cam.position),
       douse: (x, y, z, r, amount) => { this.threats?.fires.douse(x, y, z, r, amount); },
+      swarm: (effect, x, y, z, r, dmg, fling) => this.threats?.broodHit(x, y, z, r, effect, dmg, fling) ?? [],
     });
     this.renderer.scene.add(this.elements.fx.group);
     this.abilities.effects = this.elements;
@@ -926,6 +937,8 @@ export class Game {
     // A monster in reach takes the blow (armour, weak spots).
     this.threats?.blow(x, y, z, r, jx, jy, jz, { cause: 'player', x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z });
     this.slimeRealm?.blow(x, y, z, r, jx, jy, jz);
+    // The brood's creatures (a punch kills a small one; a blast a clump).
+    if (J > 0) this.threats?.broodHit(x, y, z, r + 0.3, 'blow', J / 150, Math.min(10, J / 60));
     this.props.hit(x, y, z, r, jx, jy, jz);
     this.future.hit(x, y, z, r, jx, jy, jz);
     this.birds.hit(x, y, z, r, jx, jy, jz);

@@ -2,12 +2,26 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.027 — 2026-10-05
+## 0.029 — 2026-10-05
 
 - **Villain groups, second step**: the street gang now runs its own rackets. Its collectors lean on shopkeepers in their doorways for protection money, and **taggers** spray the gang's emblem and name on walls (with a hiss of the can and a lookout now and then). Both happen only in the gang's turf.
 - **Tags stay on the walls** when nobody stops them; caught in the act, the tagger runs and the half-done tag is never finished.
 - **Your work changes the map**: stopping a group's crimes loosens its grip on that block and the ones next to it, until it loses them ("… lost their grip on a block"). Crimes that come off and fresh tags let it grow back and take over new streets.
 - Turf, the tags on the walls and the groups' tallies are kept in **saves**. Older saves load with the city's starting turf.
+
+## 0.028 — 2026-10-05
+
+- **The countryside is lived in**: hamlets, villages and small towns now dot the land around the city — houses along their streets in the local building style, a church with a spire on the village square, shops round the square in the towns, gardens with trees.
+- **Farmsteads** out in the fields: farmhouse, barns and sheds round an earth or gravel yard, a dirt track to the road, some with an orchard.
+- **Country roads** lead out of the city and link the villages, with a dashed centre line; village lanes and side streets; roads cut through the forests.
+- **Lakes** in the open country, with shores and groups of trees round them — you can swim in them.
+
+## 0.027 — 2026-10-05
+
+- **The swarm**: a new city event. Manhole lids rattle and chitter, a few creatures dart from one manhole to another — then the brood pours out of the sewers: up to 150 chittering creatures spreading through the street like a dark carpet. They knock people down, gnaw cars to a standstill (the big ones roll them over), chew robots apart, go for you, and run up facades and over low roofs.
+- A good first monster for a weak hero: a punch kills a small one. Fire wave and chain lightning clear whole clumps (the lightning jumps from creature to creature), frost nova freezes them so the next blow shatters them, and the stomp, whirlwind and water jet scatter them. The police come and shoot and baton them.
+- Killing them earns karma (more for the big ones and for saving someone); beating the swarm back earns a bonus and cheers. Once most are dead, the rest flee back underground.
+- Admin console, City events: spawn a scout pack or a full swarm, show its omens.
 
 ## 0.026 — 2026-10-05
 

@@ -145,6 +145,11 @@ const SECTIONS: [string, Btn[]][] = [
   ]],
   ['City events', [
     { label: 'Robot malfunction', run: (_g, d) => call(d, 'threat.spawn', 'robots') },
+    { label: 'Swarm (scout pack)', run: (_g, d) => call(d, 'threat.spawn', 'brood', { dist: 50 }) },
+    { label: 'Swarm (150)', run: (_g, d) => call(d, 'threat.spawn', 'brood', { dist: 60, count: 150 }) },
+    { label: 'Swarm status', run: (_g, d) => call(d, 'threat.brood.status') },
+    { label: 'Omen: chitter', run: (_g, d) => call(d, 'threat.omen', 'chitter') },
+    { label: 'Omen: glimpse', run: (_g, d) => call(d, 'threat.omen', 'glimpse') },
     { label: 'Omen: glitch', run: (_g, d) => call(d, 'threat.omen', 'glitch') },
     { label: 'Omen: tremor', run: (_g, d) => call(d, 'threat.strider.omen', 'tremor') },
     { label: 'Stop all events', run: (_g, d) => call(d, 'threat.stop') },
