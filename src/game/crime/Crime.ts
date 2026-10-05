@@ -127,6 +127,9 @@ export type CastStage = 'begin' | 'tell' | 'release' | 'hold' | 'end';
 /** A lieutenant (VILLAINS_PLAN §3.3/§3.4): tougher, stronger, brave, with a few powers. */
 export const LIEUTENANT = { hp: 1.8, strength: 1.35 };
 
+/** No melee blow (a boss's included) takes more than this off the hero. */
+export const MELEE_MAX = 24;
+
 /** Dev switches (dev.guns): every robbery and mugging has a gun. */
 export const CRIME_DEV = { guns: false };
 
@@ -218,6 +221,8 @@ export abstract class Crime {
     for (const list of [this.criminals, this.victims, this.extras]) {
       for (let i = list.length - 1; i >= 0; i--) if (!list[i].alive) { if (list[i].actor && list[i].actor!.state !== 'arrested') setState(list[i].actor!, 'gone'); }
     }
+    // Hit on the way to the site: it is off before it began, and they deal with the hero.
+    if (this.phase === 'approach' && this.playerAttacked) this.ambushed();
     this.step(dt);
     if (!this.active) return;
     for (const c of this.casters.keys()) { const m = c.actor?.memo; if (m && m.shieldT > 0) m.shieldT = Math.max(0, m.shieldT - dt); }
@@ -274,6 +279,15 @@ export abstract class Crime {
     this.outcome = o;
     this.go(o === 'arrested' || o === 'stopped' ? 'resolved' : o === 'aborted' ? 'aborted' : 'failed');
     this.emit(o === 'arrested' || o === 'stopped' ? 'resolved' : 'failed');
+  }
+
+  /** The hero struck before it began: the crew turn on them or run (the escape phase decides), the police come. */
+  protected ambushed(): void {
+    this.playerInvolved = true;
+    for (const c of this.criminals) if (c.actor) c.actor.hostile = true;
+    if (!this.policeCalled) { this.policeCalled = true; this.w.callPolice(this, 30); }
+    this.go('escape');
+    this.emit('commit');
   }
 
   /** Abort before anything happened (site lost, budget). */
@@ -420,6 +434,8 @@ export abstract class Crime {
     const act = c.actor!;
     const p = this.w.player;
     // The player is down: done here, run (until hit again).
+    // A lieutenant, a boss or a member out for the hero stands over them instead (they came to fight).
+    if (p.down && (act.memo.lt || act.memo.grudge)) { setState(act, 'fight'); stand(act); lookAt(act, p.x, p.y + 0.4, p.z); act.memo.windup = 0; return; }
     if (p.down) { act.memo.choice = 0; act.memo.decHp = act.hp; act.memo.panic = 3; setState(act, 'run'); if (act.action?.id === 'aim_pistol') act.action = null; return; }
     // A lieutenant's power (its wind-up and a dash take the frame).
     if (this.usePowers(c, dt)) { setState(act, 'fight'); act.mood = 'angry'; act.hostile = true; return; }
@@ -448,7 +464,7 @@ export abstract class Crime {
         act.memo.windup = 0;
         if (this.distToPlayer(c) < 1.75 && act.staggerT <= 0 && c.state !== PState.Down && Math.abs(p.y - c.y) < 1.6) {
           const kind = act.armed === 'knife' ? 'knife' : act.armed === 'bat' ? 'bat' : 'punch';
-          const dmg = (kind === 'knife' ? 15 : kind === 'bat' ? 13 : 7) * (0.8 + 0.4 * this.w.random()) * Math.sqrt(act.strength);
+          const dmg = Math.min(MELEE_MAX, (kind === 'knife' ? 15 : kind === 'bat' ? 13 : 7) * (0.8 + 0.4 * this.w.random()) * Math.sqrt(act.strength));
           this.w.hurtPlayer(dmg, kind, c.x, c.z);
           this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 0.7, kind === 'knife' ? 1.4 : 1);
         }
@@ -462,15 +478,16 @@ export abstract class Crime {
 
   // ------------------------------------------------------------------ powers (lieutenants)
 
-  /** Make a criminal a lieutenant: tougher, stronger, brave, with these powers. */
-  promote(c: PedAgent, powers: readonly VillainPower[]): void {
+  /** Make a criminal a lieutenant: tougher, stronger, brave, with these powers (with `boss`: the group's boss, tougher still). */
+  promote(c: PedAgent, powers: readonly VillainPower[], boss?: { hp: number; strength: number }): void {
     const act = c.actor;
     if (!act || this.casters.has(c)) return;
-    act.maxHp = Math.round(act.maxHp * LIEUTENANT.hp);
+    act.maxHp = Math.round(act.maxHp * LIEUTENANT.hp * (boss?.hp ?? 1));
     act.hp = act.maxHp;
-    act.strength *= LIEUTENANT.strength;
+    act.strength *= LIEUTENANT.strength * (boss?.strength ?? 1);
     act.memo.brave = 1;
     act.memo.lt = 1;
+    if (boss) act.memo.boss = 1;
     this.casters.set(c, new Caster(powers, this.rng.fork('caster', c.id)));
   }
 
@@ -662,7 +679,9 @@ export abstract class Crime {
     const ratio = this.strengthOf(c) / Math.max(0.1, this.w.player.strength);
     const hurt = act.hp < act.maxHp * 0.45;
     // A lieutenant stands and fights with its powers until badly hurt.
-    if (act.memo.lt && act.hp > act.maxHp * 0.3) return 'fight';
+    if (act.memo.lt && act.hp > act.maxHp * (act.memo.boss ? 0.2 : 0.3)) return 'fight';
+    // A group hunting the hero: its members stand and fight while they are fit.
+    if (act.memo.grudge && act.hp > act.maxHp * 0.5) return 'fight';
     if (ratio < 0.3 && this.distToPlayer(c) < 5) return 'surrender';
     if (hurt && act.armed === 'none' && this.distToPlayer(c) < 3) return act.memo.brave ? 'fight' : 'surrender';
     if (ratio > 1.25 && act.armed !== 'none') return 'fight';
