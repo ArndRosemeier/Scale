@@ -768,6 +768,15 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       check((bg as unknown as { decide(c: unknown): string }).decide(bossA) === 'fight', 'boss: still fights at a quarter of its health');
       other.actor!.memo.grudge = 1; other.actor!.memo.lt = 0; other.actor!.armed = 'none';
       check((bg as unknown as { decide(c: unknown): string }).decide(other) === 'fight', 'notoriety: a member of a hunting group stands and fights');
+      // The hero floored: a boss stands over them (no running off at full health); a plain member runs.
+      const pd = player as typeof player & { down?: boolean };
+      pd.down = true;
+      const bgF = bg as unknown as { fight(c: unknown, dt: number): void };
+      bgF.fight(bossA, 0.05);
+      const plain = bg.criminals[2] ?? other;
+      if (plain !== other) { plain.actor!.memo.lt = 0; plain.actor!.memo.grudge = 0; bgF.fight(plain, 0.05); }
+      check(bossA.actor!.state === 'fight' && (plain === other || plain.actor!.state === 'run'), `boss: stands over a floored hero instead of running (${bossA.actor!.state}${plain !== other ? `, a member: ${plain.actor!.state}` : ''})`);
+      pd.down = false;
       for (const a of bg.criminals) a.alive = false;
       for (const a of cs) a.alive = false;
     }
@@ -828,6 +837,17 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       check(!rt2.done && fired.length === 1 && rt2.playerInvolved && rt2.phase !== 'commit', `ritual: the hero breaks the circle, it is never completed (${rt2.phase}, ${r2Ev.join(',')})`);
       player.x = 0; player.z = 0;
       for (const c of [...rt.criminals, ...rt2.criminals]) c.alive = false;
+      // Struck on the way there: it is off, the blow counts (a knockout is a knockout).
+      const rt3 = new Ritual(w6, 9190);
+      check(rt3.setup(), 'ritual: a third one');
+      drive(rt3, () => false, 3, []);
+      const amb = rt3.criminals[0];
+      amb.actor!.hp = 1;
+      combat.hitActor(amb, 0, 60, -900, 'punch', 'player', amb.x, amb.z + 1);
+      const r3Ev: string[] = [];
+      drive(rt3, () => false, 40, r3Ev);
+      check(rt3.phase !== 'approach' && rt3.playerInvolved && amb.actor!.state === 'ko' && r3Ev.includes('ko'), `crime: a criminal knocked out on the way to the site counts, the crime is off (${rt3.phase}, ${amb.actor!.state}, ${r3Ev.join(',')})`);
+      for (const c of rt3.criminals) c.alive = false;
       const nohk = new Hijack(Object.assign(Object.create(w6) as typeof w6, { machines: () => [], shops: () => [] }), 1);
       check(!nohk.setup(), 'hijack: no robot and no shop near, no hack');
       // The EMP: a Technomancer's pulse at a hero in range.

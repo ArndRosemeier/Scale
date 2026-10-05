@@ -575,7 +575,7 @@ export class CrimeSystem {
       if (bossHere && B && B.jailedUntil <= this.g.sky.hoursAbs && ![...this.bossOf.values()].some((x) => x.actor?.faction === by.id && x.alive)) {
         c.promote(a, bossPowers(L.powers, by.archetype), BOSS);
         a.actor!.outfit = bossOutfit(by, a.cit.seed);
-        a.actor!.title = `${by.emblem} ${by.name} · ${bossLabel(this.factions, B)}`;
+        a.actor!.title = `${by.emblem} ${bossLabel(this.factions, B)} · ${by.name}`;
         this.bossOf.set(c, a);
         if (Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.g.powerHud.toast(`<b style="color:${by.palette.map}">${by.emblem} ${bossLabel(this.factions, B)}</b> of ${inSentence(by)} is out on the street`, 'warn');
         return;
@@ -986,7 +986,8 @@ export class CrimeSystem {
     if (!a) return;
     this.bossOf.delete(c);
     const f = this.factions.factions[a.actor?.faction ?? c.faction], B = f ? this.bosses[f.id] : null;
-    if (!f || !B || a.actor?.state === 'arrested' || !(c.playerInvolved || a.actor?.hitByPlayer)) return;
+    // Not an escape: cuffed, behind bars meanwhile, or left lying (knocked out or given up; the beating already counted).
+    if (!f || !B || a.actor?.state === 'arrested' || B.jailedUntil > this.g.sky.hoursAbs || a.actor?.memo.down || !(c.playerInvolved || a.actor?.hitByPlayer)) return;
     B.escapes++;
     this.heat(f.id, NOTORIETY.escaped);
     this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> got away — and will remember you`, 'warn');

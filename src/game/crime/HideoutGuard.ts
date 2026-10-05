@@ -88,6 +88,9 @@ export class HideoutGuard extends Crime {
     }
   }
 
+  /** Struck before they noticed: they stand to the door all the same (no police). */
+  protected ambushed(): void { this.commit(); }
+
   private commit(): void {
     this.confronted = true;
     this.playerInvolved = true;
