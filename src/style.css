@@ -397,6 +397,8 @@ body.looking #crosshair { display: block; }
 #compass .poi.goal i { width: 13px; height: 13px; font: 800 9px/13px system-ui, sans-serif; }
 #compass .poi.goal b { margin-top: 3px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
 #map .map-key .alert.back { background: #4cd964; }
+#map .map-key .turf { display: inline-block; width: 14px; height: 10px; border-radius: 2px; border: 1.5px dashed; box-sizing: border-box; vertical-align: -1px; }
+#map .map-turf .map-key { margin-top: 4px; margin-left: 22px; }
 
 /* Barks (src/ui/Barks.ts): short speech bubbles over people. */
 .bark { position: fixed; left: 0; top: 0; display: none; max-width: 200px; padding: 5px 10px 6px; margin-top: -6px; background: rgba(252, 251, 247, 0.94); color: #1d242b; border-radius: 12px; font: 600 12px/1.25 system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; z-index: 4; transform-origin: 50% 100%; white-space: nowrap; transition: opacity 0.35s; will-change: transform; }

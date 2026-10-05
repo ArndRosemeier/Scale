@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.026 — 2026-10-05
+
+- **Villain groups, first step**: every city now has a street gang and a Syndicate with their own names, colours and emblem — different in every city (for example "the Harbour Saints" and "Marlow Holdings").
+- Each group holds **turf**: the gang in the rough housing estates, docks and industrial streets, the Syndicate in the centre. A new **Turf** layer on the map shows who runs which streets, with the groups listed in the legend.
+- Crime in a group's turf is its work: the gang mugs, the Syndicate robs shops. Its members wear its colours (gang caps and jackets, dark Syndicate suits), the target frame names the group, and the map marks their crimes in its colour.
+
 ## 0.025 — 2026-10-04
 
 - **Landmarks**: every city now has a town hall with a square in front (classical with columns and dome, gothic with bell tower, baroque with clock tower, or modern with a campanile), a stadium (oval or rectangular, open, partly or fully roofed, floodlights, scoreboard, car parks) and 1–4 tourist attractions picked and shaped differently in every city: TV or lattice or glass observation towers, cathedrals, a Ferris wheel, monuments (obelisk, column, triumphal arch, statue), museums (colonnade or glass pyramid), a lighthouse on the coast, a castle or ruin on the highest hill, botanical glasshouses.

@@ -44,6 +44,9 @@ import type { Target } from '../Targeting';
 import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
+import { planFactions, inSentence, type Faction, type FactionMap } from '../factions/Factions';
+import { ARCHETYPES } from '../factions/archetypes';
+import { factionOutfit } from '../factions/outfits';
 
 export const CRIME_KARMA = {
   ko: { snatch: 8, mugging: 10, robbery: 14 } as Record<CrimeKind, number>,
@@ -78,6 +81,8 @@ export class CrimeSystem {
   readonly deeds: SmallDeeds;
   readonly crimes: Crime[] = [];
   readonly index: Float32Array;
+  /** The city's villain groups and their turf (VILLAINS_PLAN, Phase 1). */
+  readonly factions: FactionMap;
   readonly hud: CrimeHud;
   /** Loot lying about or carried (outlives its crime for a while). */
   private loots: { loot: Loot; crime: Crime; obj: THREE.Group; glint: THREE.Sprite; endT: number }[] = [];
@@ -101,6 +106,8 @@ export class CrimeSystem {
     const seed = g.settings.seed;
     this.index = crimeIndex(g.macro, seed);
     g.map.world.crimeIndex = this.index;
+    this.factions = planFactions(g.macro, seed, this.index);
+    g.map.setTurf(this.factions);
     g.map.tiles.invalidate();
     this.combat = new Combat({
       knockDown: (a, fx, fz, power, cause) => g.reactions.knockDown(a, fx, fz, power, cause),
@@ -438,19 +445,48 @@ export class CrimeSystem {
 
   // ================================================================== starting crimes
 
-  private playerCell(): { cell: number; district: import('../../plan/types').District; index: number } | null {
-    const p = this.g.player.pos, cells = this.g.macro.cells;
+  /** Macro cell at a point (the containing one, else the nearest within reach; -1: outside the city). */
+  cellAt(x: number, z: number): number {
+    const cells = this.g.macro.cells;
     let best = -1, bd = Infinity;
     for (let i = 0; i < cells.length; i++) {
       const c = cells[i];
-      const d = Math.hypot(c.centroid[0] - p.x, c.centroid[1] - p.z);
+      const d = Math.hypot(c.centroid[0] - x, c.centroid[1] - z);
       if (d > c.radius + 50) continue;
-      if (pointInPoly(c.poly, p.x, p.z)) { best = i; break; }
+      if (pointInPoly(c.poly, x, z)) { best = i; break; }
       if (d < bd) { bd = d; best = i; }
     }
-    if (best < 0) return null;
-    return { cell: best, district: cells[best].district, index: this.index[best] };
+    return best;
   }
+
+  /** The group holding a point's cell, or null. */
+  factionAt(x: number, z: number): Faction | null {
+    const i = this.cellAt(x, z);
+    const f = i < 0 ? -1 : this.factions.holder[i];
+    return f < 0 ? null : this.factions.factions[f];
+  }
+
+  private playerCell(): { cell: number; district: import('../../plan/types').District; index: number; ops: Record<CrimeKind, number> | null } | null {
+    const p = this.g.player.pos, cells = this.g.macro.cells;
+    const best = this.cellAt(p.x, p.z);
+    if (best < 0) return null;
+    const f = this.factions.holder[best];
+    return { cell: best, district: cells[best].district, index: this.index[best], ops: f < 0 ? null : ARCHETYPES[this.factions.factions[f].archetype].kinds };
+  }
+
+  /** A crime in a group's turf is its operation: its members wear its colours and name. */
+  private enlist(c: Crime, f: Faction): void {
+    c.faction = f.id;
+    for (const a of c.criminals) {
+      const act = a.actor;
+      if (!act) continue;
+      act.outfit = factionOutfit(f, a.cit.seed);
+      act.title = `${f.emblem} ${f.name} · ${CRIMINAL_NAME[c.kind]}`;
+    }
+  }
+
+  /** The group behind a crime, or null. */
+  factionOf(c: Crime): Faction | null { return c.faction < 0 ? null : this.factions.factions[c.faction] ?? null; }
 
   private make(kind: CrimeKind, seed: number, near: { x: number; z: number } | null): Crime {
     return kind === 'snatch' ? new Snatch(this.world, seed, near) : kind === 'mugging' ? new Mugging(this.world, seed, near) : new Robbery(this.world, seed, near);
@@ -462,17 +498,20 @@ export class CrimeSystem {
     return this.begin(this.make(r.kind, r.seed, null));
   }
 
-  private begin(c: Crime): boolean {
+  private begin(c: Crime, faction?: Faction | null): boolean {
     if (!c.setup()) { c.abort(); c.dispose(); return false; }
+    const f = faction === undefined ? this.factionAt(c.x, c.z) : faction;
+    if (f) this.enlist(c, f);
     this.crimes.push(c);
     this.stats.started++;
     return true;
   }
 
-  /** Dev / test: a crime of a kind near the player (dist m away) or at a point. */
-  spawnCrime(kind: CrimeKind, near?: { x: number; z: number }): Crime | null {
+  /** Dev / test: a crime of a kind near the player (dist m away) or at a point; by a group (its id; -1: nobody) or the turf's. */
+  spawnCrime(kind: CrimeKind, near?: { x: number; z: number }, faction?: number): Crime | null {
     const c = this.make(kind, (Math.random() * 2 ** 32) >>> 0, near ?? null);
-    return this.begin(c) ? c : null;
+    const f = faction === undefined ? undefined : this.factions.factions[faction] ?? null;
+    return this.begin(c, f) ? c : null;
   }
 
   crimeOf(a: PedAgent): Crime | null {
@@ -619,7 +658,8 @@ export class CrimeSystem {
         if (c.playerInvolved || c.criminals.some((a) => a.actor?.hitByPlayer)) {
           const clean = c.collateral === 0;
           const k = Math.round(CRIME_KARMA.resolved[c.kind] * (clean ? 1 + CRIME_KARMA.cleanBonus : 1));
-          g.progress.addKarma(k, `stopped a ${c.kind === 'snatch' ? 'purse snatching' : c.kind === 'mugging' ? 'mugging' : 'robbery'}${clean ? ' — nobody else hurt' : ''}`);
+          const by = this.factionOf(c);
+          g.progress.addKarma(k, `stopped a ${c.kind === 'snatch' ? 'purse snatching' : c.kind === 'mugging' ? 'mugging' : 'robbery'}${by ? ` by ${inSentence(by)}` : ''}${clean ? ' — nobody else hurt' : ''}`);
           this.rep.add(CRIME_KARMA.resolvedRep[c.kind], 'crime stopped');
           this.rep.count('stopped');
           this.justice.atone(1.5);
@@ -748,7 +788,7 @@ export class CrimeSystem {
     if (act) {
       const c = this.crimeOf(a);
       if (act.role === 'criminal' && c) {
-        name = CRIMINAL_NAME[c.kind];
+        name = act.title ?? CRIMINAL_NAME[c.kind];
         friends = c.criminals.filter((o) => o !== a && o.alive && o.actor && o.actor.hostile && Math.hypot(o.x - a.x, o.z - a.z) < 15).length;
       } else name = act.title ?? ROLE_NAME[act.role];
       if (name) {
@@ -903,13 +943,15 @@ export class CrimeSystem {
     const list: MapMarker[] = [];
     for (const c of this.crimes) {
       if (!c.committed || !c.active) continue;
+      // A group's operation: its colour and name.
+      const f = this.factionOf(c), color = f ? f.palette.map : '#ff3b30', by = f ? `${f.emblem} ${f.name}: ` : '';
       for (const a of c.criminals) {
         const act = a.actor;
         if (!a.alive || !act || act.state === 'gone' || act.state === 'arrested') continue;
         const down = act.state === 'ko' || act.state === 'surrender';
-        list.push({ x: a.x, z: a.z, color: '#ff3b30', kind: down ? 'dot' : 'alert', title: down ? 'A criminal, stopped — the police will take over' : CRIME_TITLE[c.kind] });
+        list.push({ x: a.x, z: a.z, color, kind: down ? 'dot' : 'alert', title: down ? 'A criminal, stopped — the police will take over' : by + CRIME_TITLE[c.kind] });
       }
-      if (c instanceof Robbery && c.phase === 'getaway' && c.car) list.push({ x: c.car.x, z: c.car.z, color: '#ff3b30', kind: 'alert', title: 'Getaway car — block it or stop it' });
+      if (c instanceof Robbery && c.phase === 'getaway' && c.car) list.push({ x: c.car.x, z: c.car.z, color, kind: 'alert', title: `${by}Getaway car — block it or stop it` });
     }
     for (const u of this.police.units) list.push({ x: u.car.x, z: u.car.z, color: '#3b82f6', kind: 'dot', title: 'Police' });
     // Carried loot: where it goes back (also on the compass at any distance).
@@ -944,10 +986,15 @@ export class CrimeSystem {
     Object.assign(dev, {
       crimeSystem: this,
       /** Start a crime near the player (dist: metres to the site, along the view). */
-      crime: (kind: CrimeKind = 'snatch', dist = 25) => {
+      crime: (kind: CrimeKind = 'snatch', dist = 25, faction?: number) => {
         const p = g.player.pos, fy = g.camRig.forwardYaw;
-        const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist });
+        const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, faction);
         return c ? c.snapshot() : 'no site';
+      },
+      /** The city's villain groups: name, kind, home cell, cells held; the one whose turf the player stands in. */
+      factions: () => {
+        const F = this.factions, p = g.player.pos, here = this.factionAt(p.x, p.z);
+        return { here: here?.name ?? null, groups: F.factions.map((f) => ({ id: f.id, name: f.name, archetype: f.archetype, colour: f.palette.name, emblem: f.emblem, home: f.home, cells: F.holder.filter((h) => h === f.id).length })) };
       },
       crimes: () => this.crimes.map((c) => c.snapshot()),
       crimeStats: () => ({ ...this.stats, actors: this.actorCount, director: this.director.stats, police: this.police.summary(), wanted: this.justice.wanted, heat: +this.justice.heat.toFixed(2), rep: this.rep.value, hp: Math.round(this.health.hp), combat: this.combat.stats }),
