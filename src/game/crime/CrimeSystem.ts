@@ -174,6 +174,7 @@ export class CrimeSystem {
       repValue: () => this.rep.value,
       pursue: (lvl) => this.police.pursuePlayer(lvl),
       toast: (html, kind) => g.powerHud.toast(html, kind),
+      get noKarma() { return g.progress.sandbox; },
       sound: (id, gain) => g.audio.play2d(id, gain),
       hostileThing: (ref) => g.threats?.isHostile(ref) ?? false,
     });
