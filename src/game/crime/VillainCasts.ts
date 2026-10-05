@@ -40,6 +40,7 @@ const ICE = C(1.5, 2.0, 2.6), ICE_END = C(0.5, 0.75, 1.0);
 const DUST = C(0.55, 0.5, 0.44), DUST_END = C(0.45, 0.42, 0.38);
 const WHITE = C(5, 5, 5), WHITE_END = C(1.2, 1.2, 1.3);
 const SMOKE = C(0.42, 0.42, 0.44), SMOKE_END = C(0.6, 0.6, 0.62);
+const WIND = C(1.2, 1.25, 1.3), WIND_END = C(0.3, 0.32, 0.35);
 const _c0 = new THREE.Color(), _c1 = new THREE.Color();
 
 export class VillainCasts {
@@ -58,7 +59,7 @@ export class VillainCasts {
   constructor(private g: Game) {}
 
   /** Casts in their wind-up right now (dev). */
-  get active(): number { return this.casting.size; }
+  get active(): number { this.prune(); return this.casting.size; }
 
   /** A stage of a cast (CrimeWorld.cast). */
   cast(by: PedAgent, power: VillainPower, stage: CastStage, tx: number, ty: number, tz: number): boolean {
@@ -146,7 +147,7 @@ export class VillainCasts {
     switch (power) {
       case 'bolt':
       case 'frost': {
-        this.rays.push({ power, ax: H.x, ay: H.y, az: H.z, bx: ex, by: ey, bz: ez, life: power === 'bolt' ? 0.22 : P.hold, t: 0, seed: (Math.random() * 1e6) | 0 });
+        this.rays.push({ power, ax: H.x, ay: H.y, az: H.z, bx: ex, by: ey, bz: ez, life: power === 'bolt' ? 0.4 : P.hold, t: 0, seed: (Math.random() * 1e6) | 0 });
         this.lineHits(by, power, H.x, H.z, ex, ez, P.radius, H.y, ey);
         if (power === 'frost' && this.near(ex, ez)) g.elements.fx.decal(DecalKind.Frost, ex, g.world.groundHeight(ex, ez) + 0.03, ez, 0, 1, 0, 2.4, 2.4, Math.random() * 6, 20);
         break;
@@ -213,10 +214,12 @@ export class VillainCasts {
       this.stats.knocked++;
     }
     g.props.hit(by.x + ux * 4, by.y + 0.8, by.z + uz * 4, 3, ux * 300, 120, uz * 300);
-    if (this.near(by.x, by.z)) for (let i = 0; i < 18; i++) {
+    if (this.near(by.x, by.z)) for (let i = 0; i < 40; i++) {
       const s = 0.5 + Math.random() * P.max, j = (Math.random() - 0.5) * 0.7;
       const vx = ux * Math.cos(j) - uz * Math.sin(j), vz = ux * Math.sin(j) + uz * Math.cos(j);
-      fx.soft(by.x + vx * s * 0.3, by.y + 0.4 + Math.random() * 1.4, by.z + vz * s * 0.3, vx * 14, 0.5, vz * 14, 0.6, 0.25, 0.9, DUST, DUST_END, 0.45, 2.2, 0);
+      // A thick, fast stream of dust and grit, with streaks of air.
+      fx.soft(by.x + vx * s * 0.3, by.y + 0.3 + Math.random() * 1.6, by.z + vz * s * 0.3, vx * 16, 0.6, vz * 16, 0.7, 0.35, 1.4, DUST, DUST_END, 0.7, 2, 0);
+      if (i % 3 === 0) fx.glow(by.x + vx, by.y + 0.6 + Math.random() * 1.2, by.z + vz, vx * 20, 0, vz * 20, 0.35, 0.12, 0.05, WIND, WIND_END, 0.5, 1.5, 0);
     }
   }
 

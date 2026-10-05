@@ -137,7 +137,7 @@ export class Combat {
       a.x += (jx / hl) * push; a.z += (jz / hl) * push;
       if (act) {
         // No stun-lock: a fresh stagger at most every 1.4 s; tough, armed people shrug off light blows.
-        const tough = act.strength >= 1.2 && J < 350;
+        const tough = (act.strength >= 1.2 && J < 350) || shielded;
         if (!tough && !(act.memo.stagCd > 0)) { act.staggerT = COMBAT.stagger; act.memo.stagCd = 1.4; }
         play(act, J > 300 && !tough ? 'stagger' : 'flinch', 0.5);
       }
