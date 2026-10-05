@@ -16,6 +16,7 @@ export const KARMA_COST = {
   size: [100, 80, 110, 150, 200],
   laser: [60, 60, 85, 120, 165],
   fireWave: [50, 55, 80, 110, 150],
+  fireball: [60, 60, 85, 120, 165],
   frostNova: [50, 55, 80, 110, 150],
   icePath: [40, 45, 65, 90, 125],
   lightning: [60, 60, 85, 120, 165],
@@ -109,6 +110,16 @@ export const FIRE_RANGE = [0, 8, 11, 14, 18, 24];
 export const FIRE_HEAT = [0, 4000, 10000, 20000, 38000, 60000];
 export const FIRE_BURN = [0, 3, 4, 5, 6, 8];
 export const FIRE_COOLDOWN = [0, 8, 7, 6, 5, 4];
+
+/** Fireball (a ball of fire hurled from the hands that bursts where it lands): flight speed (m/s),
+ *  reach (m), burst radius (m), blast on facades (N·s: the old test blast's impact), how long people
+ *  and cars burn (s), energy, cooldown (s). Rank 3 wrecks cars in the burst; rank 5 blows in brick. */
+export const FIREBALL = { cost: 32, speed: 48 };
+export const FIREBALL_RANGE = [0, 45, 60, 75, 95, 120];
+export const FIREBALL_RADIUS = [0, 3, 3.8, 4.6, 5.6, 7];
+export const FIREBALL_BLAST = [0, 6000, 16000, 40000, 90000, 180000];
+export const FIREBALL_BURN = [0, 3, 4, 5, 6, 8];
+export const FIREBALL_COOLDOWN = [0, 6, 5, 4.5, 4, 3.5];
 
 /** Frost nova (around the player): radius (m), freeze time (s), icy ground lasts × iceLinger. */
 export const NOVA = { cost: 35, iceLinger: 3, glass: 2400 };

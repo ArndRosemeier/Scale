@@ -37,6 +37,7 @@ import { KINDS } from './kinds';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
 import { Firearms, GUNS, MUZZLE_Y, gunJ, type GunSpec } from './Firearms';
+import { Bombs } from './Bombs';
 import { SmallDeeds, type SmallDeedKind } from '../deeds/SmallDeeds';
 import { makeItem, makeGlint } from '../deeds/critters';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -69,6 +70,8 @@ export class CrimeSystem {
   readonly combat: Combat;
   /** Small arms (police, SWAT, armed robbers): rules, effects (crime/Firearms). */
   readonly guns: Firearms;
+  /** Villains' bombs (the mad bomber): in flight, on a lit fuse, going off (crime/Bombs). */
+  readonly bombs: Bombs;
   readonly health: PlayerHealth;
   readonly rep: Reputation;
   readonly director: CrimeDirector;
@@ -122,6 +125,8 @@ export class CrimeSystem {
       if (cause === 'player') this.record('body', 'person', 'knockdown', a.x, a.z, a);
     };
     this.guns = new Firearms(g);
+    this.bombs = new Bombs(g);
+    this.bombs.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
     this.health = new PlayerHealth(g.player, g.mode === 'sandbox');
     this.rep = new Reputation(seed, g.settings.size, g.mode);
     this.world = this.makeWorld();
@@ -262,6 +267,12 @@ export class CrimeSystem {
       getaway: (x, z) => this.getaway(x, z),
       officers: (x, z, r) => this.officersAround(x, z, r),
       gunfire: (c, at) => this.crookShot(c, at),
+      bomb: (c, x, z, fuse) => this.bombs.throw(c, x, z, fuse),
+      cars: (x, z, r) => {
+        const out: { x: number; z: number }[] = [];
+        for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) if (v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < r) out.push(v);
+        return out;
+      },
     };
   }
 
@@ -605,6 +616,7 @@ export class CrimeSystem {
       }
     }
     this.linger(dt);
+    this.bombs.update(dt);
     this.police.update(dt);
     this.guns.update(dt);
     this.justice.update(dt);

@@ -22,7 +22,7 @@ import type { HurtKind } from '../PlayerHealth';
 import { type Actor, type ActorRole, makeActor, attach, release, setState, play, followRoute, goTo, stand, lookAt, subdued, hold } from '../../sim/actors/Actor';
 import { personStrength } from '../Consider';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging';
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber';
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
 export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging'];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
@@ -93,6 +93,10 @@ export interface CrimeWorld {
    * PlayerHealth) and the stimulus are the world's. 'held': no clear shot (a wall, people in the line).
    */
   gunfire?(shooter: PedAgent, at: PedAgent | 'player'): 'hit' | 'miss' | 'held';
+  /** A bomb lobbed from a person's hand to the ground at (x, z), going off after `fuse` s (crime/Bombs); false: none thrown. */
+  bomb?(thrower: PedAgent, x: number, z: number, fuse: number): boolean;
+  /** Cars (driving or parked, not wrecked) near a point. */
+  cars?(x: number, z: number, r: number): { x: number; z: number }[];
 }
 
 /** Dev switches (dev.guns): every robbery and mugging has a gun. */

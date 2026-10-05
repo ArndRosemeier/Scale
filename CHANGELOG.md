@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.031 — 2026-10-05
+
+- **Fireball**: a new elemental power. Hurl a ball of fire that flies to your target (or where you aim) and bursts: people are thrown and set alight, cars burn (from rank 3 they are blown up), props topple, windows and, at high rank, walls are blown in. Buy it on the powers screen (P). The old blast power is still there as **Shockwave**.
+- **The mad bomber**: a rare new crime. A madman walks into a busy street with a bag of round black bombs and lobs them about: into the crowd, under cars, at the police and at you once you come close. Each bomb lies hissing and sparking on its fuse before it goes off, so you can get out of the way (his throws at you go a little wide, and a dash sideways on the fuse gets you clear). Fires his bombs start are never booked to you. Knock him out or wait for the police; out of bombs, he runs. The street gang sends one now and then in its turf.
+- Admin console, Crime & deeds: start a mad bomber.
+
 ## 0.030 — 2026-10-05
 
 - **Laser eyes look stronger**: thicker beams with a white-hot core inside a pulsing red halo, a flare at each eye, a bigger glow where they hit, twice the sparks, molten drips and more smoke. Damage, reach and energy cost are unchanged.

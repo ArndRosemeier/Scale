@@ -386,6 +386,10 @@ migrated — dash was folded into super speed: tap = dash, hold = run).
   They reuse destruction impacts (laser heat accumulates per 60 cm spot, ≤ 10 impacts/s), debris, dust, props.hit,
   traffic wrecks, reactions.knockDown and the near-future knock. Ice-path sheets are walkable through
   `Collision.extraGround`. Everything done to someone is recorded in `Consequences` (collateral ledger stub).
+  **Fireball** (tap): an `Orb` flies from the hands at `FIREBALL.speed` to what the aim probe met (or full reach) and
+  bursts there: the old test blast's destruction impact (`'blast'`, `FIREBALL_BLAST`), `Targeting.inSphere` knock /
+  burn / wreck (cars from rank 3), the shared look `powers/blastFx.fireBurst`. The old blast itself is still the
+  **Shockwave** power (`Interactions.blastAtView`).
 * **States** (`src/shared/status.ts`): frozen, shrunk, burning, stunned, wet — a WeakMap registry the sim and
   renderers read with one lookup (`statusOf`, free while nothing is affected): peds hold still / walk slower,
   cars stall, crowd instances ice-tint and stop animating, cars / robots / drones / props draw scaled.
@@ -424,6 +428,10 @@ every frame) owns the parts and draws what belongs to them.
   an alarm bell, a getaway car with hazards on. Criminals weigh up the player (con): fight, flee, surrender. Loot drops
   where they go down; E picks it up and gives it back (the victim waits for it). All world access goes through
   `CrimeWorld`, so a crime runs headless in `selftest.ts`.
+* **Mad bomber** (`Bomber`, any turf, the gang more often): walks to the busiest pavement in the ring and lobs bombs
+  (`CrimeWorld.bomb` → `crime/Bombs`: an arc, a hissing lit fuse on the ground, then `fireBurst`, knock-downs with cause
+  `'other'`, cars wrecked / set burning, a destruction impact booked as `'fire'`, the player hurt as `'bomb'`, a
+  `gunfire` scare). Targets: the hero within `BOMBER.atPlayer` m (led by their velocity), officers, cars, the crowd.
 * **Actors** (`sim/actors/Actor.ts`): `PedAgent.actor` (role, state, health, goal/speed, facing, held item, outfit,
   one-shot animation). `Pedestrians.step` steers actors to their goal and keeps the physics; they are not despawned
   while pinned, Reactions leaves them alone, `CrowdRenderer` gives up to 8 of them full rigs out to 60 m and plays
