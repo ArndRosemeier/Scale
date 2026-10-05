@@ -265,7 +265,7 @@ export class Forces {
   /** The game's hooks for the battle model. */
   private ops(fighting: boolean): ForceOps {
     return {
-      slot: (u, x, z) => (u.kind === 'rifles' ? this.street(x, z, 90, 4) : this.street(x, z, 140)),
+      slot: (u, x, z) => (this.mon?.chased ? this.sightSlot(u, x, z) : u.kind === 'rifles' ? this.street(x, z, 90, 4) : this.street(x, z, 140)),
       move: (u, x, z, dt) => this.move(u, x, z, dt),
       fire: (u, q, d) => (fighting ? this.fire(u, q, d) : true),
       event: (q, what, u) => this.event(q, what, u),
@@ -473,6 +473,34 @@ export class Forces {
     return { x: x - fz * side - fx * 0.2, z: z + fx * side - fz * 0.2 };
   }
 
+  /**
+   * A slot round a target that goes where it likes (a giant player): the street point nearest the
+   * ring slot (x, z) from which a unit sees the target — tried round its side of the ring and nearer
+   * in (streets running towards the target give a line down them), else the ring slot itself. Without
+   * this, units on the ring stood behind buildings, never got a shot and moved on for ever.
+   */
+  private sightSlot(u: ForceUnit, x: number, z: number): { x: number; z: number } {
+    const S = this.mon!, g = this.g;
+    const snap = (px: number, pz: number) => (u.kind === 'rifles' ? this.street(px, pz, 60, 4) : this.street(px, pz, 80));
+    const ax = x - S.x, az = z - S.z, R = Math.hypot(ax, az) || 1, a0 = Math.atan2(az, ax);
+    const W = FORCE[u.kind].weapon, danger = FORCE[u.kind].danger;
+    const head = S.zones.find((zz) => zz.id === 'head') ?? S.zones[0], torso = S.zones.find((zz) => zz.id === 'torso') ?? head;
+    const eye = u.kind === 'tank' ? 2.4 : u.kind === 'rifles' ? 1.5 : 2.6;
+    for (const k of SLOT_R) {
+      const r = Math.max(danger + 25, R * k);
+      if (W && r > W.range * 0.95) continue;
+      for (const da of SLOT_A) {
+        const p = snap(S.x + Math.cos(a0 + da) * r, S.z + Math.sin(a0 + da) * r);
+        const d = Math.hypot(p.x - S.x, p.z - S.z);
+        if (d < danger + 10 || (W && d > W.range * 0.95)) continue;
+        const y = g.world.groundHeight(p.x, p.z) + eye;
+        this.stats.rays++;
+        if (g.sight.clear(p.x, y, p.z, torso.x, torso.y, torso.z, torso.r) || g.sight.clear(p.x, y, p.z, head.x, head.y, head.z, head.r)) return p;
+      }
+    }
+    return snap(x, z);
+  }
+
   /** A street point near (x, z) (lane offset `off` m), or the point itself. */
   private street(x: number, z: number, r: number, off = 0): { x: number; z: number } {
     const net = this.g.net;
@@ -611,8 +639,10 @@ export class Forces {
     let ax = aimZ.x, ay = aimZ.y, az = aimZ.z;
     let blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
     this.stats.rays++;
-    if (blocked && aimZ.id !== 'back') {
-      aimZ = S.zones.find((z) => z.id === 'back') ?? aimZ;
+    // (The high back over the roofs in front; a giant player's head.)
+    const high = S.zones.find((z) => z.id === 'back') ?? S.zones.find((z) => z.id === 'head');
+    if (blocked && high && aimZ !== high) {
+      aimZ = high;
       ax = aimZ.x; ay = aimZ.y + aimZ.r * 0.5; az = aimZ.z;
       blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
       this.stats.rays++;
@@ -1032,6 +1062,9 @@ export class Forces {
   }
 }
 
+/** Where a slot round a giant player is looked for: shares of the ring's radius, angles off the unit's side (rad). */
+const SLOT_R = [1, 0.8, 0.62, 0.48, 0.36];
+const SLOT_A = [0, 0.18, -0.18, 0.4, -0.4];
 const VEHICLE_KIND_SET = new Set<string>(['army_truck', 'apc', 'tank']);
 const NO_KINDS = {};
 const DUST = new THREE.Color(0.55, 0.52, 0.47);

@@ -630,7 +630,7 @@ every frame (`prof.threats`).
   `rampage`, major, never on foot) that the response escalates against like a monster's: patrol cars and a cordon,
   evacuation sirens, SWAT and patrol officers firing from a distance (GIANT), the National Guard and the army and air
   (levels 3 and 4), and, rarely, level 5. Below fury 3 while warned (or no longer a giant), the warnings lapse. Standing down — no destruction
-  for 45 s, or human-sized for 20 s, but never within 180 s of the army being called (once mobilised the Guard and
+  for 45 s, or human-sized for 20 s, but never within 240 s of the army being called (once mobilised the Guard and
   the tanks get there) — ends it (`abandoned`; the fury is spent); a relapse within 5 min brings the army
   back without new warnings. Brought down (knocked out by the response): `stopped`, taken into custody (Justice.arrested).
   * **The player's body** (`PlayerBody`, a ThreatActor with `self`: the police's and the army's target, never in
@@ -639,7 +639,8 @@ every frame (`prof.threats`).
     add up), past the health's size scaling; `HurtKind` 'military' (no karma for the knock-out itself).
   * **As the army's foe**: its route runs from the city centre's side (≥ 1 km) to where the player stands, rewritten as
     they move, mode `rampage` — the battle model rings them (rifles ~230 m, APCs ~270, tanks ~330); units come in 420 m
-    from the player on the city's side (`spawnPoint`), the artillery beyond them (`batteryAt`); units holding beyond
+    from the player on the city's side (`spawnPoint`), the artillery beyond them (`batteryAt`); a unit's slot is a street point with a line of sight to the player's body or head (tried round its side of
+    the ring and nearer in, `sightSlot`: at street level the ring is mostly behind buildings); units holding beyond
     their weapon's range of a player who has moved on go again after 5 s (`regroup`: a rifle squad waits for its truck).
     The player's blows on the units are their own: vehicles crushed or wrecked, soldiers knocked down (the usual losses
     and morale), helicopters punched out of the sky (`Forces.struck`). Headless check (`simulatePlayerBattle`,

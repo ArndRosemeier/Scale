@@ -34,7 +34,7 @@ export const RAMPAGE = {
    * Standing down: no destruction for `quietT` s, or human-sized (under minHeight) for `smallT` s (the fury is spent
    * then) — never before `minHostile` s: once mobilised, the Guard and the army get there and keep the giant covered.
    */
-  quietT: 45, smallT: 20, minHostile: 180,
+  quietT: 45, smallT: 20, minHostile: 240,
   /** The army's units come in this far from the player (m; nearer than a monster's 720: they are sent where the player is). */
   spawnR: 420,
   /** A relapse within this long (s) of the last warning brings the army back without new warnings. */
