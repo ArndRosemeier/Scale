@@ -12,6 +12,7 @@ import { probeGpu, maybeShowGpuHint } from './GpuHint';
 const CONTROLS: [string, string][] = [
   ['W A S D', 'Walk (in flight: fly)'],
   ['Shift', 'Run / boost'],
+  ['R', 'Autorun (in flight: autoflight) on / off · W or S stops it'],
   ['Space', 'Jump · hold to charge a super jump (in flight: up)'],
   ['Ctrl / C', 'Down (in flight)'],
   ['F', 'Toggle flight (when unlocked)'],
@@ -23,7 +24,7 @@ const CONTROLS: [string, string][] = [
   ['Mouse wheel', 'Camera distance'],
   ['Left click', 'On someone or something: target it (punch is a hotbar power, slot 1 by default)'],
   ['E', 'Help someone up · pick up / give back · turn yourself in (next to an officer) · open a manhole / climb out of the sewer · hold to dig someone out of rubble · carry the injured to the triage tent'],
-  ['R', 'Rally the soldiers near you to follow you (when the army knows you: reputation 40+)'],
+  ['G', 'Rally the soldiers near you to follow you (when the army knows you: reputation 40+)'],
   ['T', 'Call an airstrike on your target, a giant creature (reputation 70+; a few minutes between)'],
   ['M', 'City map: metro, stations · click to set a marker the compass points to (travel in sandbox)'],
   ['N', 'Minimap on / off'],
