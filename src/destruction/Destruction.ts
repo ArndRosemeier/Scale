@@ -298,7 +298,12 @@ export class Destruction {
       }
       if (broken > before) { this.pendingChecks.add(ref); this.damaged(ref, broken - before, x, y, z); }
     }
-    if (this.landmarks) broken += this.landmarks.impact(x, y, z, radius, impulse, dx, dy, dz);
+    if (this.landmarks) {
+      // (Window glass of a landmark sounds like glass.)
+      const n = this.landmarks.impact(x, y, z, radius, impulse, dx, dy, dz);
+      broken += n - this.landmarks.lastPanes;
+      glassBroken += this.landmarks.lastPanes;
+    }
     if (broken || glassBroken) this.onImpact?.({ x, y, z, energy: impulse, kind: broken ? kind : 'glass' });
     return broken;
   }

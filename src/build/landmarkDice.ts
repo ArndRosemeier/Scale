@@ -23,9 +23,19 @@ export interface WreckGrid {
 /** Floats per piece in a piece table: key, area, centroid (x, y, z), bounds (x0, y0, z0, x1, y1, z1), layer. */
 export const PIECE_STRIDE = 12;
 
-/** Which landmarks can be broken (the marvels; the older landmarks stay as they are). */
+/** Which landmarks can be broken (the marvels and the cathedral; the other landmarks stay as they are). */
 export function isWreckable(lm: Landmark): boolean {
-  return lm.kind === 'marvel';
+  return lm.kind === 'marvel' || lm.kind === 'cathedral';
+}
+
+/** Grid cells in all: window glass (LmPart.pane) is a piece of its own, keyed one grid further on. */
+export function gridCells(g: WreckGrid): number {
+  return g.nu * g.nv * g.ny;
+}
+
+/** Is a piece key window glass? */
+export function isPaneKey(g: WreckGrid, key: number): boolean {
+  return key >= gridCells(g);
 }
 
 export function wreckGrid(lm: Landmark, parts: LmPart[]): WreckGrid {
@@ -92,8 +102,8 @@ export class Dicer {
     return this.ids.get(keyAt(this.g, x, y, z)) ?? 0;
   }
 
-  /** Split a convex polygon into grid cells: each bit with its element. */
-  split(poly: Vert[], layer: number, out: (bit: Vert[], elem: number) => void): void {
+  /** Split a convex polygon into grid cells: each bit with its element (window glass: the cell's glass piece). */
+  split(poly: Vert[], layer: number, pane: boolean, out: (bit: Vert[], elem: number) => void): void {
     let list: Vert[][] = [poly];
     for (const axis of [1, 0, 2]) {
       const next: Vert[][] = [];
@@ -114,12 +124,12 @@ export class Dicer {
       let cx = 0, cy = 0, cz = 0;
       for (const v of bit) { cx += v.p[0]; cy += v.p[1]; cz += v.p[2]; }
       cx /= bit.length; cy /= bit.length; cz /= bit.length;
-      out(bit, this.elemOf(cx, cy, cz, area(bit), layer));
+      out(bit, this.elemOf(cx, cy, cz, area(bit), layer, pane));
     }
   }
 
-  private elemOf(x: number, y: number, z: number, a: number, layer: number): number {
-    const key = keyAt(this.g, x, y, z);
+  private elemOf(x: number, y: number, z: number, a: number, layer: number, pane: boolean): number {
+    const key = keyAt(this.g, x, y, z) + (pane ? gridCells(this.g) : 0);
     let id = this.ids.get(key);
     if (id === undefined) {
       if (this.frozen) return 0;
