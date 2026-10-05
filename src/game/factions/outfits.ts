@@ -22,8 +22,8 @@ export function factionOutfit(f: Faction, seed: number): EquipmentVisuals {
   if (f.archetype === 'techno') {
     const grey = shade(P, 0.8 + r.float() * 0.4);
     return {
-      chest: { defId: r.chance(0.6) ? 'sweater' : 'tshirt', visual: v(r.chance(0.5) ? dark : shade(grey, 0.7), A) },
-      back: { defId: 'jacket', visual: v(grey, A, r.chance(0.3) ? 'leather' : 'plain', 0.3) },
+      chest: { defId: r.chance(0.6) ? 'sweater' : 'tshirt', visual: v(r.chance(0.6) ? dark : shade(grey, 0.6), A) },
+      back: { defId: 'jacket', visual: v(grey, A, r.chance(0.3) ? 'leather' : 'plain', 0.55) },
       legs: { defId: 'trousers', visual: v(shade(grey, 0.6), shade(grey, 0.6)) },
       feet: { defId: 'boots', visual: v(dark, dark) },
       head: { defId: r.chance(0.5) ? 'helmet' : 'beanie', visual: v(r.chance(0.5) ? shade(A, 0.8) : dark, A) },
@@ -33,7 +33,7 @@ export function factionOutfit(f: Faction, seed: number): EquipmentVisuals {
     const robe = shade(P, 0.8 + r.float() * 0.4);
     return {
       chest: { defId: 'sweater', visual: v(robe, robe) },
-      back: { defId: 'coat', visual: v(robe, A, 'plain', 0.25) },
+      back: { defId: 'coat', visual: v(robe, A, 'plain', 0.5) },
       legs: { defId: 'trousers', visual: v(robe, robe) },
       feet: { defId: r.chance(0.5) ? 'boots' : 'shoes', visual: v(dark, dark) },
       head: { defId: 'beanie', visual: v(shade(robe, 0.8), A) },

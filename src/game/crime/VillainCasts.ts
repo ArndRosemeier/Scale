@@ -286,9 +286,16 @@ export class VillainCasts {
     }
     const [c0, c1] = RITE[look], R = 2.3 * 0.8;
     // The rune ring on the ground (a flicker of motes along it), and a glyph turning inside it.
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 10; i++) {
       const a = Math.random() * Math.PI * 2;
-      fx.glow(x + Math.cos(a) * R, y + 0.06, z + Math.sin(a) * R, 0, 0.05, 0, 0.6, 0.2, 0.12, c0, c1, 0.55 + share * 0.4, 1, 0);
+      fx.glow(x + Math.cos(a) * R, y + 0.06, z + Math.sin(a) * R, 0, 0.05, 0, 0.7, 0.24, 0.16, c0, c1, 0.65 + share * 0.35, 1, 0);
+    }
+    // Six runes on the ring, pulsing in turn, and a spoke of light from each to the centre now and then.
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2, rx = x + Math.cos(a) * R, rz = z + Math.sin(a) * R;
+      const pulse = 0.5 + 0.5 * Math.sin(t * 3 - k * 1.05);
+      fx.glow(rx, y + 0.1, rz, 0, 0.1, 0, 0.12, 0.45 + 0.35 * pulse, 0.4, c0, c1, 0.6 + 0.4 * pulse, 1, 0);
+      if (Math.random() < 0.05 + share * 0.15) fx.seg(rx, y + 0.08, rz, x, y + 0.08, z, 0.08, c0.r * 0.4, c0.g * 0.4, c0.b * 0.4, 0.8 + share, BeamStyle.Laser);
     }
     for (let k = 0; k < 5; k++) {
       const a = t * 1.2 + (k / 5) * Math.PI * 2;

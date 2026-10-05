@@ -43,6 +43,8 @@ export interface Archetype {
   names: string[];
   a: string[];
   b: string[];
+  /** Words for `{a}` by palette name (a cult named for its colours: the Ember Circle in orange); the palette is picked first. */
+  byPalette?: Record<string, string[]>;
   /** Places by district for `{a}` (a gang from the docks calls itself after them). */
   places?: Partial<Record<District, string[]>>;
 }
@@ -109,12 +111,13 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     palettes: [
       { name: 'cyan', map: '#22d3ee', primary: [0.36, 0.38, 0.4], accent: [0.1, 0.85, 0.95] },
       { name: 'lime', map: '#84cc16', primary: [0.32, 0.34, 0.33], accent: [0.55, 0.95, 0.15] },
-      { name: 'magenta', map: '#e879f9', primary: [0.3, 0.3, 0.34], accent: [0.92, 0.35, 0.95] },
+      { name: 'magenta', map: '#e879f9', primary: [0.33, 0.33, 0.34], accent: [0.92, 0.35, 0.95] },
     ],
     emblems: ['⚙', '⌬', '◎'],
     names: ['the {a} Collective', 'Children of the {a}', 'the {a} Circuit'],
-    a: ['Silicon', 'Voltage', 'Copper', 'Machine', 'Signal', 'Static', 'Kernel', 'Cobalt'],
+    a: ['Silicon', 'Voltage', 'Machine', 'Signal', 'Static', 'Kernel'],
     b: [],
+    byPalette: { cyan: ['Silicon', 'Signal', 'Kernel', 'Coolant'], lime: ['Voltage', 'Static', 'Machine', 'Acid'], magenta: ['Neon', 'Pulse', 'Signal', 'Machine'] },
   },
   cult: {
     id: 'cult',
@@ -134,9 +137,10 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
       { name: 'violet', map: '#a78bfa', primary: [0.1, 0.07, 0.14], accent: [0.62, 0.48, 0.98] },
     ],
     emblems: ['✶', '☽', '△'],
-    names: ['the {a} {b}', 'the {b} of the {a} Flame', 'the {a} {b}'],
-    a: ['Ashen', 'Pale', 'Ember', 'Hoarfrost', 'Cinder', 'Hollow', 'Last', 'Seventh'],
+    names: ['the {a} {b}'],
+    a: ['Ashen', 'Pale', 'Hollow', 'Seventh'],
     b: ['Order', 'Circle', 'Covenant', 'Choir', 'Vigil'],
+    byPalette: { ember: ['Ashen', 'Ember', 'Cinder', 'Burning'], frost: ['Pale', 'Hoarfrost', 'Winter', 'Frozen'], violet: ['Hollow', 'Seventh', 'Storm', 'Thunder'] },
   },
 };
 
