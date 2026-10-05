@@ -40,6 +40,8 @@ import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
 import { Firearms, GUNS, MUZZLE_Y, gunJ, type GunSpec } from './Firearms';
 import { Bombs } from './Bombs';
+import { VillainCasts } from './VillainCasts';
+import { VILLAIN_POWERS, type VillainPower } from '../powers/Caster';
 import { SmallDeeds, type SmallDeedKind } from '../deeds/SmallDeeds';
 import { makeItem, makeGlint } from '../deeds/critters';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -51,7 +53,7 @@ import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, 
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES } from '../factions/archetypes';
-import { factionOutfit } from '../factions/outfits';
+import { factionOutfit, lieutenantOutfit } from '../factions/outfits';
 
 /** Rewards common to every kind (the per-kind ones are in crime/kinds). */
 export const CRIME_KARMA = {
@@ -75,6 +77,10 @@ export class CrimeSystem {
   readonly guns: Firearms;
   /** Villains' bombs (the mad bomber): in flight, on a lit fuse, going off (crime/Bombs). */
   readonly bombs: Bombs;
+  /** Lieutenants' powers in the world: tells, beams, orbs, cracks, flashes (crime/VillainCasts). */
+  readonly casts: VillainCasts;
+  /** Dev: the next crime's group sends its lieutenant (dev.crime(kind, dist, group, 'lt')). */
+  private devLieutenant = false;
   readonly health: PlayerHealth;
   readonly rep: Reputation;
   readonly director: CrimeDirector;
@@ -141,6 +147,8 @@ export class CrimeSystem {
     this.guns = new Firearms(g);
     this.bombs = new Bombs(g);
     this.bombs.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
+    this.casts = new VillainCasts(g);
+    this.casts.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
     this.health = new PlayerHealth(g.player, g.mode === 'sandbox');
     this.rep = new Reputation(seed, g.settings.size, g.mode);
     this.world = this.makeWorld();
@@ -282,6 +290,8 @@ export class CrimeSystem {
       officers: (x, z, r) => this.officersAround(x, z, r),
       gunfire: (c, at) => this.crookShot(c, at),
       bomb: (c, x, z, fuse) => this.bombs.throw(c, x, z, fuse),
+      cast: (c, power, stage, x, y, z) => this.casts.cast(c, power, stage, x, y, z),
+      clearLine: (ax, ay, az, bx, by, bz, skip) => g.sight.clear(ax, ay, az, bx, by, bz, 0.25, skip),
       cars: (x, z, r) => {
         const out: { x: number; z: number }[] = [];
         for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) if (v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < r) out.push(v);
@@ -524,6 +534,18 @@ export class CrimeSystem {
       act.outfit = factionOutfit(by, a.cit.seed);
       act.title = `${by.emblem} ${by.name} · ${KINDS[c.kind].criminal}`;
     }
+    // A lieutenant leads it now and then (one per side): tougher, with the group's powers.
+    const sides = rival ? [f, rival] : [f];
+    const roll = c.rng.fork('lieutenant');
+    sides.forEach((by, side) => {
+      const L = ARCHETYPES[by.archetype].lieutenant;
+      if (!this.devLieutenant && !roll.chance(L.chance[c.kind] ?? 0)) return;
+      const a = c.criminals.find((x) => x.actor && (!rival || (x.actor.memo.side ?? 0) === side));
+      if (!a) return;
+      c.promote(a, L.powers);
+      a.actor!.outfit = lieutenantOutfit(by, a.cit.seed);
+      a.actor!.title = `${by.emblem} ${by.name} · ${L.title}`;
+    });
   }
 
   /** The group behind a crime, or null. */
@@ -740,11 +762,24 @@ export class CrimeSystem {
     return true;
   }
 
-  /** Dev / test: a crime of a kind near the player (dist m away) or at a point; by a group (its id; -1: nobody) or the turf's. */
-  spawnCrime(kind: CrimeKind, near?: { x: number; z: number }, faction?: number): Crime | null {
+  /**
+   * Dev / test: a crime of a kind near the player (dist m away) or at a point; by a group (its id;
+   * -1: nobody) or the turf's. `lt`: 'lt' — the group's lieutenant leads it; a list of powers
+   * ('bolt,fireball') — the first criminal gets those (any crime, any group or none).
+   */
+  spawnCrime(kind: CrimeKind, near?: { x: number; z: number }, faction?: number, lt?: string): Crime | null {
     const c = this.make(kind, (Math.random() * 2 ** 32) >>> 0, near ?? null);
     const f = faction === undefined ? undefined : this.factions.factions[faction] ?? null;
-    return this.begin(c, f) ? c : null;
+    this.devLieutenant = lt === 'lt';
+    try { if (!this.begin(c, f)) return null; } finally { this.devLieutenant = false; }
+    const powers = lt && lt !== 'lt' ? lt.split(',').map((x) => x.trim()).filter((x): x is VillainPower => x in VILLAIN_POWERS) : [];
+    const a = c.criminals.find((x) => x.actor);
+    if (powers.length && a) {
+      c.casters.delete(a);
+      c.promote(a, powers);
+      a.actor!.title = `${a.actor!.title ?? KINDS[c.kind].criminal} · ${powers.join(', ')}`;
+    }
+    return c;
   }
 
   crimeOf(a: PedAgent): Crime | null {
@@ -797,6 +832,7 @@ export class CrimeSystem {
     this.driftTurf();
     this.updateHideouts(dt);
     this.bombs.update(dt);
+    this.casts.update(dt);
     this.police.update(dt);
     this.guns.update(dt);
     this.justice.update(dt);
@@ -880,8 +916,11 @@ export class CrimeSystem {
           c.playerInvolved = true;
           this.stats.kos++;
           this.rep.count('kos');
-          { const who = KINDS[c.kind].criminal.toLowerCase(); g.progress.addKarma(KINDS[c.kind].ko, `knocked out ${/^[aeiou]/.test(who) ? 'an' : 'a'} ${who}`); }
-          this.rep.add(2, 'ko');
+          // A lieutenant counts double (and says which: the group's Brute or Enforcer).
+          const f = who.actor.memo.lt ? this.factions.factions[who.actor.faction ?? c.faction] ?? null : null;
+          const lt = who.actor.memo.lt ? (f ? ARCHETYPES[f.archetype].lieutenant.title : 'Lieutenant') : null;
+          { const name = (lt ?? KINDS[c.kind].criminal).toLowerCase(); g.progress.addKarma(KINDS[c.kind].ko * (lt ? 2 : 1), `knocked out ${/^[aeiou]/.test(name) ? 'an' : 'a'} ${name}${f ? ` of ${inSentence(f)}` : ''}`); }
+          this.rep.add(lt ? 4 : 2, 'ko');
         }
         break;
       case 'surrender':
@@ -1275,9 +1314,9 @@ export class CrimeSystem {
     Object.assign(dev, {
       crimeSystem: this,
       /** Start a crime near the player (dist: metres to the site, along the view). */
-      crime: (kind: CrimeKind = 'snatch', dist = 25, faction?: number) => {
+      crime: (kind: CrimeKind = 'snatch', dist = 25, faction?: number, lt?: string) => {
         const p = g.player.pos, fy = g.camRig.forwardYaw;
-        const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, faction);
+        const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, faction, lt);
         return c ? c.snapshot() : 'no site';
       },
       /** The city's villain groups: name, kind, home cell, cells held; the one whose turf the player stands in. */

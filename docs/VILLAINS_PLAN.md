@@ -6,7 +6,9 @@ crimes as their operations (uniforms, names on the target frame and map); see AR
 is built too (v0.029): the gang's protection racket and tagging (tags stay on walls), turf shrinking when you stop a
 group and growing when it gets away with it, turf and tags in saves. Phase 2 is built (v0.032): rivals, turf brawls
 between the groups, hideouts (found by walking past or from a cuffed member, guarded, stash busted with E), turf that
-drifts by itself every game hour, rewards the moment a crime is stopped. Phase 3 (powers) is next. Builds on the street-crime layer (`src/game/crime`),
+drifts by itself every game hour, rewards the moment a crime is stopped. Phase 3 part 1 is built (v0.033): the caster core,
+the villain power set with tells, the gang's Brute and the Syndicate's Enforcer leading operations. Part 2 (techno-cult
+and elemental cult, robot hijack, ritual; the hero's powers on the core) is next. Builds on the street-crime layer (`src/game/crime`),
 the threat/response layer (`src/game/threats`, `src/game/response`) and the powers
 (`src/game/powers`). Design rules from PLAYGROUND_PLAN §0 still hold: show, don't tell (no quests,
 no dialogue trees, sparse barks); nobody dies (KO / injured); progression is karma.

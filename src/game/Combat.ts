@@ -27,6 +27,7 @@ import type { HarmEffect, HarmTarget } from './Consequences';
 import { play, setState } from '../sim/actors/Actor';
 import { statusOf } from '../shared/status';
 import { Role } from '../sim/Population';
+import { CASTERS } from './powers/Caster';
 
 export type HitKind = 'punch' | 'strike' | 'tackle' | 'power' | 'knife' | 'bat' | 'shove' | 'gun';
 export type HitSource = 'player' | 'npc' | 'police' | 'world';
@@ -108,6 +109,9 @@ export class Combat {
     // Someone already down takes less from a light hit (no "kicking people who are down" loop).
     const down = a.state === PState.Down;
     if (down) dmg *= 0.5;
+    // A lieutenant's shield (powers/Caster): blows barely get through and do not floor them.
+    const shielded = !!act && act.memo.shieldT > 0;
+    if (shielded) dmg *= CASTERS.shieldTakes;
     hp = Math.max(0, hp - dmg);
     this.setHp(a, hp);
     res.damage = dmg; res.hp = hp;
@@ -120,7 +124,7 @@ export class Combat {
       this.stats.kos++;
       if (act) { setState(act, 'ko'); act.koByPlayer = source === 'player'; act.action = null; act.goal = null; }
       if (!down) this.knock(a, fx, fz, Math.max(2.2, Math.min(12, J / 350)), jx, jy, jz, source === 'player' ? 'player' : 'other');
-    } else if (!down && (J >= COMBAT.knockJ || dmg >= maxHp * COMBAT.knockShare || kind === 'tackle')) {
+    } else if (!down && !shielded && (J >= COMBAT.knockJ || dmg >= maxHp * COMBAT.knockShare || kind === 'tackle')) {
       res.effect = 'knockdown';
       this.stats.knockdowns++;
       if (act) { setState(act, 'down'); act.upT = COMBAT.upMin + Math.random() * (COMBAT.upMax - COMBAT.upMin); act.action = null; }

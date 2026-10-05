@@ -37,3 +37,20 @@ export function factionOutfit(f: Faction, seed: number): EquipmentVisuals {
     head: { defId: r.chance(0.8) ? 'cap' : 'beanie', visual: v(A, P) },
   } as unknown as EquipmentVisuals;
 }
+
+/**
+ * A lieutenant (Phase 3): the group's uniform with a glowing accent, so the one with powers stands
+ * out of the crowd before they cast — the gang's Brute in a leather jacket, the Syndicate's
+ * Enforcer with lit seams on the suit.
+ */
+export function lieutenantOutfit(f: Faction, seed: number): EquipmentVisuals {
+  const o = factionOutfit(f, seed) as unknown as Record<string, { defId: string; visual: { primary: C3; secondary: C3; accent: C3; material: string; glow: number; glowColor?: C3 } }>;
+  const A = f.palette.accent;
+  if (f.archetype !== 'syndicate') {
+    o.back = { defId: 'jacket', visual: { ...(o.chest.visual), primary: shade(f.palette.primary, 0.7), secondary: A, accent: A, material: 'leather', glow: 0.45, glowColor: A } };
+  } else if (o.back) {
+    o.back.visual = { ...o.back.visual, accent: A, glow: 0.45, glowColor: A };
+  }
+  o.chest.visual = { ...o.chest.visual, glow: 0.25, glowColor: A };
+  return o as unknown as EquipmentVisuals;
+}
