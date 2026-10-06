@@ -403,13 +403,19 @@ constructs it, updates it, forwards strikes, and it listens to stimuli (stomp, c
 ### Powers (`src/game/abilities`, `src/game/powers`, `src/game/Targeting.ts`)
 Roster and rules: PLAYGROUND_PLAN §0 decisions 17 and 18. Every power is a ranked ability (`defs.ts`: icon,
 text from the real numbers; `tuning.ts`: every number; `Progress`: karma, ranks, hotbar of 10 slots, old saves
-migrated — dash was folded into super speed: tap = dash, hold = run).
+migrated — dash was folded into super speed, now only its flight burst).
+* **Super speed** is a toggle (`AbilitySystem.speedOn`; a press in flight dashes). On foot `player/speedNav.ts`
+  steers the runner: it probes ahead with `Collision.collide` (a cone of widening probes), turns to the nearest clear
+  heading on the side it last turned to, and caps the speed so it can stop before what is ahead; holes in the street
+  (manholes, stairwells) are avoided and, at speed, skimmed over (`Collision.skimHoles`).
+* **Super jump** takes off on the Space press and climbs while Space is held (eased into the rank's height; release
+  cuts the climb to a short coast; energy paid per height gained); the leap is steerable in the air.
 * **Targeting**: Tab / Shift+Tab cycle people, cars, robots, drones and props in view, nearest the crosshair first;
   Esc clears. `probe()` is the "first thing ahead" ray (targets, standing facade panels — holes let it through —,
   roofs, ground); `inSphere()` lists everything an area effect hits. `TargetHud` draws the corner brackets and the
   target frame (slots for the later con colour and health).
 * **AbilitySystem**: energy, cooldowns, input; tap powers fire through `Elements.fire`, held powers (laser, ice
-  path, hydrokinesis, super speed) run as a `channel` while the key / right mouse is held. **Punch** is a hotbar power
+  path, hydrokinesis) run as a `channel` while the key / right mouse is held. **Punch** is a hotbar power
   like the others (always rank 1 and free, slot 1 by default; super strength sets its force): left click only targets.
   Flight boost multiplies the cruise speed by a factor that grows with the rank (`FLIGHT_BOOST_MUL`).
 * **Elements**: the elemental powers in the world. With a target they go for it, without one along the crosshair.

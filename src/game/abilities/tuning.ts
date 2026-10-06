@@ -60,11 +60,12 @@ export const PUNCH_IMPULSE = [200, 900, 25000, 60000, 200000, 400000];
 /** Wall smashing by body momentum (running, dashing, flying into a wall): momentum multiplier. */
 export const SMASH_MUL = [0.5, 1, 2, 5, 12, 30];
 
-/** Super jump: apex height in m at 1.8 m (× k) at full charge. */
+/** Super jump: highest climb in m at 1.8 m (× k) with Space held all the way. */
 export const JUMP_HEIGHT = [0, 6, 10, 16, 25, 40];
-export const JUMP = { chargeTime: 0.9, tapTime: 0.18, cost: 22, cooldown: 0.5 };
+/** Energy for the full height (paid as the height is gained), cooldown s from take-off. */
+export const JUMP = { cost: 22, cooldown: 0.5 };
 
-/** Super speed, tap = dash burst: distance in m (× k) covered in DASH.time seconds. */
+/** Super speed pressed in flight = dash burst: distance in m (× k) covered in DASH.time seconds. */
 export const DASH_DIST = [0, 7, 10, 13, 17, 22];
 export const DASH_COOLDOWN = [0, 3, 2.5, 2, 1.5, 1];
 export const DASH = { time: 0.2, cost: 18 };
@@ -84,13 +85,12 @@ export const FLIGHT_BOOST_MUL = [0, 1.8, 2.6, 3.8, 5.2, 7.3];
 export const flightBoost = (r: number): number => FLIGHT_CRUISE * FLIGHT_SPEED[r] * FLIGHT_BOOST_MUL[r];
 
 /**
- * Super speed, hold = run: top speed in m/s at 1.8 m (× √k, like every gait and like flight).
- * Always clearly above flight's boost at the same rank (flightBoost(r)).
+ * Super speed (a toggle), top running speed in m/s at 1.8 m (× √k, like every gait and like flight).
+ * Kept where the streaming city and the collision substeps keep up; the runner steers itself
+ * around what is ahead and brakes when nothing ahead is clear (player/speedNav.ts).
+ * (Running costs no energy, like flight; on water above SPEED_WATER in Player.ts.)
  */
-export const SPEED_TOP = [0, 75, 110, 145, 185, 240];
-/** Super speed: hold longer than this (s) and it runs; a shorter tap dashes. */
-/** (Running costs no energy, like flight; on water above SPEED_WATER in Player.ts.) */
-export const SPEED = { tapTime: 0.22, cost: 0 };
+export const SPEED_TOP = [0, 40, 50, 62, 78, 100];
 
 /** Size shift: allowed body height range in m. */
 export const SIZE_RANGE: [number, number][] = [[1.8, 1.8], [0.5, 4], [0.3, 10], [0.2, 25], [0.12, 50], [0.1, 100]];
