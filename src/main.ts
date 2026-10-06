@@ -17,6 +17,7 @@ import { avatarStore } from './avatar/AvatarStore';
 import type { CharacterLook } from './avatar/look';
 import { MainMenuSaves } from './ui/SaveUi';
 import { versionLink } from './ui/Changelog';
+import { feedbackLink } from './ui/Feedback';
 import { MenuMusic } from './audio/music/MenuMusic';
 import { probeGpu, maybeShowGpuHint } from './ui/GpuHint';
 import { installTouchMode } from './ui/touch';
@@ -25,7 +26,7 @@ import './ui/touch.css';
 const params = new URLSearchParams(location.search);
 installTouchMode();
 const menu = document.getElementById('menu') as HTMLDivElement;
-menu.querySelector('.sub')?.after(versionLink());
+{ const v = versionLink(); menu.querySelector('.sub')?.after(v); v.after(feedbackLink()); }
 const seedIn = document.getElementById('seed') as HTMLInputElement;
 const sizeIn = document.getElementById('size') as HTMLInputElement;
 const sizeLabel = document.getElementById('sizeLabel') as HTMLSpanElement;
