@@ -552,8 +552,10 @@ export function routeEnv(tubes: Tube[], halls: Box[], own: Box): RouteEnv {
       pick(x, z);
       for (const t of others) {
         // (Clear of the underpasses by a wall's thickness: not just inside them.)
+        // (An underpass not even at the same level: the stairs ending where it starts down left its
+        // side wall standing across their foot, a wall one walked through.)
         const h = tubeAt(t, x, y + 1.1, z, t.underpass ? 0.4 : -0.3);
-        if (h && Math.abs(h.floor - y) > 0.5) return true;
+        if (h && (t.underpass || Math.abs(h.floor - y) > 0.5)) return true;
       }
       for (const hb of halls) if (hb !== own && boxAt(hb, x, y + 1.1, z, 0) && y + 1.1 > hb.y0) return true;
       return false;
