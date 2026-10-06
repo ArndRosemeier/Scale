@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.058 — 2026-10-06
+
+- **Long speech bubbles wrap now.** A longer line over someone's head used to run out of its bubble; now it breaks onto several lines and the bubble grows taller, for every kind of bubble (passers-by, street characters, officers, protesters and fans). Longer lines also stay up a little longer so you can read them.
+
 ## 0.057 — 2026-10-06
 
 - **Metro entrance stairs no longer go down and back up.** Where the street dipped or a sewer crossed the way, the passage from a station entrance sank, climbed again on a bare ramp and only then took the stairs down to the platform. The corridor under the street now only ever goes down (about 1 in 40 entrances was affected), and it no longer dips into its own station hall on the way (where it did, it cut through the hall's roof and lost its walls).
