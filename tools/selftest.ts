@@ -59,6 +59,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { nameOf, traitsOf, temperamentOf, jobOf, interestOf, moodOf, moodWord, TEMPERAMENTS, type Temperament } from '../src/game/people/identity';
 import { pickLine, ruleAnswer, fill, dirWord, type TalkFacts } from '../src/game/people/talk';
 import { LINES, CHAT, type Topic } from '../src/game/people/lines';
+import { planHoods, LiveIndex, LIVE, policePresence, policeCarWeight, beatPairs, responseFactor, safeStart, rollOffScreen, safetyOf, type Safety } from '../src/game/news/pulse';
+import { headline, gossip, whenWord, localRemark } from '../src/game/news/headlines';
 import { PEOPLE, newKnown, applyDeed, remember, opinionOf, savePeople, restorePeople, addSaid } from '../src/game/people/memory';
 import { rescueAllowed, pickHospital, hospitalFit, planFlight, flightAt, wardInside, wardExit, hospitalName, padSpot, WARD, type HospitalCandidate } from '../src/game/defeat/rules';
 
@@ -2760,6 +2762,8 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
       threat: rng.chance(0.2), street: rng.chance(0.8) ? 'Linden Street' : null, metStreet: rng.chance(0.5) ? 'Oak Avenue' : null, city: 'Port Ashford',
       group: rng.chance(0.4) ? 'The Harbour Kings' : null, boss: rng.chance(0.5) ? 'Rook Malone' : null, giant: rng.chance(0.1),
       place: 'Linden Square station', dir: dirWord(rng.range(-1, 1), rng.range(-1, 1)), dist: rng.range(100, 4000),
+      heard: rng.chance(0.4) ? 'Did you hear? There was a mugging in Ashville this morning.' : null, hood: rng.chance(0.8) ? 'Ashville' : null,
+      safety: rng.pick(['safe', 'quiet', 'mixed', 'rough', 'dangerous'] as const),
     };
     if (!f.group) f.boss = null;
     for (const tp of topics) {
@@ -2800,6 +2804,66 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const st = pop.stateAt(list[0].cit, 30);
   check(!!(st.stay || st.trip), 'people: a remembered person is somewhere on their day plan');
   console.log(`people: ${TEMPERAMENTS.length} temperaments, ${topics.reduce((s, t) => s + LINES[t].length, 0)} line rules, ${n} answers in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live
+// crime index, police presence, the fresh start, off-screen crime and the news in words
+{
+  const t0 = performance.now();
+  const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
+  const { planFactions } = await import('../src/game/factions/Factions');
+  const { CITY_GROUPS } = await import('../src/game/factions/archetypes');
+  const seed = 42;
+  const macro = buildMacroPlan(new Terrain(makeProfile({ seed, size: 0.4 })));
+  const base = crimeIndex(macro, seed);
+  const H1 = planHoods(macro, seed), H2 = planHoods(buildMacroPlan(new Terrain(makeProfile({ seed, size: 0.4 }))), seed);
+  check(H1.list.length >= 3 && H1.list.map((h) => h.name).join() === H2.list.map((h) => h.name).join() && H1.of.join() === H2.of.join(), `news: neighbourhoods deterministic (${H1.list.length}: ${H1.list.slice(0, 4).map((h) => h.name).join(', ')} …)`);
+  check(new Set(H1.list.map((h) => h.name)).size === H1.list.length, 'news: every neighbourhood has its own name');
+  check(macro.cells.every((c, i) => (c.district === 'water') === (H1.of[i] < 0)), 'news: every land block is in a neighbourhood');
+  check(policePresence(0.05) > 0.85 && policePresence(0.3) > policePresence(0.5) && policePresence(0.7) < 0.1 && beatPairs(policePresence(0.05)) === 3 && beatPairs(policePresence(0.6)) === 0
+    && policeCarWeight(policePresence(0.05)) > 10 * policeCarWeight(policePresence(0.7)) && responseFactor(policePresence(0.05)) < 0.7 && responseFactor(policePresence(0.7)) > 1.6,
+    'news: low crime index, many police (cars, the beat, quick response); high index, hardly any');
+  const F = planFactions(macro, seed, base, CITY_GROUPS);
+  const start = safeStart(macro, base, (i) => F.holder[i] >= 0);
+  const land = base.filter((v) => v > 0).slice().sort();
+  check(start >= 0 && F.holder[start] < 0 && base[start] <= land[Math.floor(land.length * 0.25)], `news: a fresh game starts in a calm block nobody's gang holds (index ${base[start]?.toFixed(2)})`);
+  const L = new LiveIndex(base, H1.near);
+  const c0 = H1.list[0].cells[0];
+  const before = L.live[c0];
+  for (let k = 0; k < 5; k++) L.bump(c0, LIVE.escaped);
+  check(L.live[c0] > before + 0.1 && H1.near[c0].every((n) => base[n] <= 0 || L.live[n] >= base[n]), 'news: crimes that come off raise the index (and a little next door)');
+  const saved = JSON.parse(JSON.stringify(L.save()));
+  const L2 = new LiveIndex(base, H1.near);
+  L2.restore(saved);
+  check(Math.abs(L2.live[c0] - L.live[c0]) < 0.002 && L2.live.every((v, i) => Math.abs(v - L.live[i]) < 0.002), 'news: the live index survives a save');
+  L2.restore([[c0, 'x'], 'junk', [-4, 3], null]);
+  check(L2.live.every((v, i) => v === base[i]), 'news: a damaged index loads as the seeded one');
+  for (let k = 0; k < 40; k++) L.relax(300, () => false);
+  check(Math.abs(L.live[c0] - base[c0]) < 0.01, 'news: the index relaxes back over time');
+  const holder = () => null;
+  const r1 = rollOffScreen(seed, 7, H1, L, macro, 22, 'normal', 0, 0, holder), r2 = rollOffScreen(seed, 7, H1, L, macro, 22, 'normal', 0, 0, holder);
+  check(JSON.stringify(r1) === JSON.stringify(r2), 'news: off-screen crime is seeded');
+  let off = 0, stopped = 0, nearP = 0, safeN = 0, roughN = 0;
+  const rough = (i: number) => base[i] > 0.5, safe = (i: number) => base[i] > 0 && base[i] < 0.2;
+  for (let k = 0; k < 600; k++) for (const c of rollOffScreen(seed, k, H1, L, macro, 21, 'normal', 0, 0, holder)) {
+    off++; if (c.stopped) stopped++;
+    if (Math.hypot(macro.cells[c.cell].centroid[0], macro.cells[c.cell].centroid[1]) < 450 - macro.cells[c.cell].radius) nearP++;
+    if (rough(c.cell)) roughN++; else if (safe(c.cell)) safeN++;
+  }
+  const nRough = base.filter((v, i) => rough(i)).length, nSafe = base.filter((v, i) => safe(i)).length;
+  check(off > 100 && stopped > 0 && stopped < off && nearP === 0, `news: crime happens all over the city, away from the player, some stopped (${off} in 600 ticks, ${stopped} stopped)`);
+  check(nSafe === 0 || nRough === 0 || roughN / nRough > 2 * (safeN / nSafe), `news: rough blocks see far more crime than safe ones (${(roughN / Math.max(1, nRough)).toFixed(1)} vs ${(safeN / Math.max(1, nSafe)).toFixed(1)} per block)`);
+  check(rollOffScreen(seed, 3, H1, L, macro, 12, 'off', 0, 0, holder).length === 0, 'news: crime setting off: nothing off-screen either');
+  const kinds = ['snatch', 'mugging', 'robbery', 'racket', 'tagging', 'brawl', 'hijack', 'ritual', 'bomber', 'rising', 'falling', 'turf'] as const;
+  let bad = 0;
+  for (const w of kinds) for (const end of ['stopped', 'escaped', 'hero', 'none'] as const) {
+    const it = { what: w, hood: 'Ashville', end, t: 30, group: 'The Harbour Kings' };
+    for (const txt of [headline(it), gossip(it, 33, 0.3), gossip(it, 60, 0.9)]) if (/[{}]|undefined/.test(txt) || !txt.includes('Ashville')) bad++;
+  }
+  check(bad === 0, `news: every story reads right on a billboard and in a passer-by's mouth (${bad} bad)`);
+  check(whenWord(30, 30.2) === 'just now' && whenWord(2, 30) === 'last night' && whenWord(10, 40) === 'yesterday', 'news: when words');
+  check(['safe', 'quiet', 'mixed', 'rough', 'dangerous'].every((s) => localRemark(s as Safety, 0.5).length > 5) && safetyOf(0.05) === 'safe' && safetyOf(0.8) === 'dangerous', 'news: a word about the streets for every level');
+  console.log(`news: ${H1.list.length} neighbourhoods, ${off} off-screen crimes in 600 ticks (${stopped} stopped), start block index ${base[start].toFixed(2)}, in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

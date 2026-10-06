@@ -8,6 +8,7 @@
  */
 import { Rng, hashString } from '../../core/rng';
 import type { Job, MoodWord, Temperament, Traits } from './identity';
+import type { Safety } from '../news/pulse';
 import { LINES, type LineEntry, type Topic, type When } from './lines';
 
 export interface TalkFacts {
@@ -44,6 +45,11 @@ export interface TalkFacts {
   group: string | null;
   boss: string | null;
   giant: boolean;
+  /** City news they heard lately, as a sentence (game/news), or null. */
+  heard?: string | null;
+  /** The neighbourhood here and how safe it is (game/news). */
+  hood?: string | null;
+  safety?: Safety;
   /** Way topic: the place asked for, its direction and distance. */
   place?: string;
   dir?: string;
@@ -77,6 +83,8 @@ export function matches(w: When, f: TalkFacts): boolean {
   if (w.metStreet !== undefined && w.metStreet !== !!f.metStreet) return false;
   if (w.giant !== undefined && w.giant !== f.giant) return false;
   if (w.far !== undefined && w.far !== (f.dist ?? 0) > 2500) return false;
+  if (w.heard !== undefined && w.heard !== !!f.heard) return false;
+  if (w.safety && (!f.safety || !f.hood || !w.safety.includes(f.safety))) return false;
   return true;
 }
 
@@ -134,7 +142,7 @@ export function fill(s: string, f: TalkFacts): string {
     first: f.first, last: f.last, full: f.full, title: f.job.title, atitle: withArticle(f.job.title), interest: f.interest,
     street: f.street ?? 'here', metstreet: f.metStreet ?? f.street ?? 'the street', group: f.group ?? 'some gang', boss: f.boss ?? 'their boss',
     city: f.city, place: f.place ?? 'there', dir: f.dir ?? 'that way', dist: distLabel(f.dist ?? 0), days: String(Math.max(1, Math.round(f.days))),
-    years: String(f.years + 1),
+    years: String(f.years + 1), heard: f.heard ?? '', hood: f.hood ?? 'this part of town',
   };
   return s.replace(/\{(\w+)\}/g, (m, k: string) => {
     const val = v[k.toLowerCase()];

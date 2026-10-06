@@ -28,7 +28,9 @@ import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
 import { Reputation } from '../Reputation';
 import { CON_COLOR, conLevel, personStrength, playerStrength } from '../Consider';
-import { crimeIndex, SETTING_MAX, type CrimeSetting } from './CrimeIndex';
+import { SETTING_MAX, type CrimeSetting } from './CrimeIndex';
+import { Beat } from './Beat';
+import { responseFactor } from '../news/pulse';
 import { CrimeDirector, type CrimeRoll } from './CrimeDirector';
 import { Crime, CRIME_DEV, GROUP_KINDS, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
 import { Robbery } from './Robbery';
@@ -101,6 +103,8 @@ export class CrimeSystem {
   readonly rep: Reputation;
   readonly director: CrimeDirector;
   readonly police: Police;
+  /** Officers walking the beat where the crime index is low (crime/Beat). */
+  readonly beat: Beat;
   readonly justice: Justice;
   readonly deeds: SmallDeeds;
   readonly crimes: Crime[] = [];
@@ -155,9 +159,11 @@ export class CrimeSystem {
 
   constructor(private g: Game) {
     const seed = g.settings.seed;
-    this.index = crimeIndex(g.macro, seed);
+    // The live index (game/news: it moves as crimes come off or are stopped); the groups' turf is
+    // planned on the seeded one.
+    this.index = g.city.live.live;
     g.map.world.crimeIndex = this.index;
-    this.factions = planFactions(g.macro, seed, this.index, CITY_GROUPS);
+    this.factions = planFactions(g.macro, seed, g.city.base, CITY_GROUPS);
     this.hideouts = planHideouts(this.factions);
     this.bosses = planBosses(this.factions, seed);
     this.notoriety = this.factions.factions.map(() => 0);
@@ -202,6 +208,18 @@ export class CrimeSystem {
       guns: this.guns,
       gunAt: (o, c, spec) => this.gunAt(o, c, spec),
       gunAtPlayer: (o, spec, car) => this.gunAtPlayer(o, spec, car),
+    });
+    this.beat = new Beat({
+      player: g.player.pos,
+      presence: (x, z) => g.city.presenceAt(x, z),
+      paused: () => this.director.setting === 'off' || !!g.camRig?.underground || !!g.intro || g.player.height > 6,
+      spawnOfficer: (s, x, z, h) => this.spawn(s, x, z, h, 'police'),
+      route: (ax, az, bx, bz) => g.peds.buildRoute(ax, az, bx, bz),
+      visible: (x, y, z) => this.visible(x, y, z),
+      crimes: () => this.crimes,
+      wanted: () => this.justice?.wanted ?? 0,
+      police: this.police,
+      room: () => this.actorCount < ACTOR_BUDGET - 12,
     });
     this.justice = new Justice({
       get time() { return self.time; },
@@ -314,7 +332,7 @@ export class CrimeSystem {
       loop: (id, x, y, z, gain) => { const h = g.audio.loop(id, 12); if (!h) return null; h.set(x, g.world.groundHeight(x, z) + y, z, gain); return h; },
       combat: this.combat,
       hurtPlayer: (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz),
-      callPolice: (c, delay) => this.police.call(c, delay),
+      callPolice: (c, delay) => this.police.call(c, delay * responseFactor(g.city.presenceAt(c.x, c.z))),
       random: Math.random,
       shops: (rMin, rMax) => this.shops(rMin, rMax),
       walls: (rMin, rMax) => this.shops(rMin, rMax, true),
@@ -344,6 +362,7 @@ export class CrimeSystem {
       if (!o.alive || !o.actor || o.state === PState.Down || Math.hypot(o.x - x, o.z - z) > r) continue;
       out.push(o);
     }
+    for (const o of this.beat.officers()) if (Math.hypot(o.x - x, o.z - z) <= r) out.push(o);
     return out;
   }
 
@@ -513,6 +532,7 @@ export class CrimeSystem {
       // A patrol car on the way counts as eyes too.
       if (u.state !== 'leaving' && u.car.alive && Math.hypot(u.car.x - x, u.car.z - z) < r) n++;
     }
+    for (const o of this.beat.officers()) if (Math.hypot(o.x - x, o.z - z) < r) n++;
     return n;
   }
 
@@ -646,6 +666,7 @@ export class CrimeSystem {
   private turf(c: Crime, f: Faction, amount: number): void {
     const changed = shift(this.factions, this.cellAt(c.x, c.z), f.id, amount);
     if (!changed.length) return;
+    for (const x of changed) if (x.to >= 0) this.g.city.turfTaken(x.cell, x.to);
     this.g.map.setTurf(this.factions);
     const lost = changed.filter((x) => x.from === f.id).length, won = changed.filter((x) => x.to === f.id).length;
     this.factionStats.lost += lost;
@@ -696,7 +717,7 @@ export class CrimeSystem {
     const p = this.g.player.pos, here = this.cellAt(p.x, p.z);
     let hereNow: { from: number; to: number } | null = null;
     for (let k = from; k <= h; k++) {
-      for (const x of drift(this.factions, this.g.settings.seed, k)) { changed++; if (x.cell === here) hereNow = x; }
+      for (const x of drift(this.factions, this.g.settings.seed, k)) { changed++; if (x.cell === here) hereNow = x; if (x.to >= 0) this.g.city.turfTaken(x.cell, x.to); }
     }
     this.driftHour = h;
     if (!changed) return;
@@ -984,6 +1005,7 @@ export class CrimeSystem {
     this.health.update(dt);
     this.upkeep(dt);
     this.director.update(dt);
+    this.beat.update(dt);
     for (let i = this.crimes.length - 1; i >= 0; i--) {
       const c = this.crimes[i];
       c.update(dt);
@@ -1007,6 +1029,7 @@ export class CrimeSystem {
         else if (c.outcome === 'escaped') this.stats.failed++;
         else this.stats.resolved++;
         this.director.ended();
+        this.g.city.crimeEnded(c, c.paid);
       }
     }
     this.linger(dt);
@@ -1066,6 +1089,7 @@ export class CrimeSystem {
     const f = this.factions.factions[who.actor?.faction ?? c.faction], B = f ? this.bosses[f.id] : null;
     this.bossOf.delete(c);
     if (!f || !B) return;
+    this.g.city.bossJailed(f.id);
     const until = jail(B, this.g.sky.hoursAbs);
     const days = Math.max(1, Math.round((until - this.g.sky.hoursAbs) / 24));
     this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> is behind bars — for ${days} days, if the walls hold`, 'info');

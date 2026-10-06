@@ -140,8 +140,12 @@ export class People {
 
   /** A passer-by's bit of small talk in their temperament (null: they keep quiet). */
   chatLine(a: PedAgent): string | null {
-    const l = CHAT[this.person(a.cit).temper];
-    return l.length ? pick(l) : null;
+    const t = this.person(a.cit).temper, l = CHAT[t];
+    if (!l.length) return null;
+    // City news and a word about these streets (game/news); the talkative ones more often.
+    const city = this.g.city?.chatLine(a.x, a.z) ?? null;
+    if (city && Math.random() < (t === 'chatty' || t === 'nosy' ? 0.8 : t === 'grumpy' || t === 'dreamy' ? 0.35 : 0.6)) return city;
+    return pick(l);
   }
 
   // ------------------------------------------------------------------ memory
@@ -353,6 +357,7 @@ export class People {
       threat: C.log.some((e) => e.cause === 'threat' && C.time - e.t < 900),
       street: this.streetAt(a.x, a.z), metStreet: k.deedStreet, city: this.city,
       group: f?.name ?? null, boss: boss?.name ?? null, giant: g.player.height > 2.4,
+      ...(g.city ? g.city.talkFacts(a.x, a.z, hashCombine(p.cit.seed, Math.floor(now))) : {}),
     };
   }
 

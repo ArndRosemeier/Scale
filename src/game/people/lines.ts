@@ -6,12 +6,14 @@
  * has a line.
  *
  * Tokens: {first} {last} {full} {title} {aTitle} {interest} {street} {metStreet} {group} {boss}
- * {city} {place} {dir} {dist} {days}; a capital first letter ({ATitle}, {Group}, {Dir}) capitalises
- * the value. An entry that uses {street}, {metStreet}, {group} or {boss} must require it in `when`.
+ * {city} {place} {dir} {dist} {days} {heard} {hood}; a capital first letter ({ATitle}, {Group}, {Dir}) capitalises
+ * the value. An entry that uses {street}, {metStreet}, {group}, {boss} or {heard} must require it in `when`
+ * ({hood}: require a `safety`).
  *
  * Pure data.
  */
 import type { JobKind, Temperament } from './identity';
+import type { Safety } from '../news/pulse';
 
 export type Topic = 'hello' | 'mood' | 'job' | 'hobby' | 'news' | 'way' | 'me' | 'bye';
 
@@ -50,6 +52,10 @@ export interface When {
   giant?: boolean;
   /** The place asked for is far (way topic). */
   far?: boolean;
+  /** Something they heard lately (game/news: city news as a sentence). */
+  heard?: boolean;
+  /** How safe these streets are (game/news: the neighbourhood's live crime index). */
+  safety?: readonly Safety[];
 }
 
 export interface LineEntry { id: string; when: When; say: readonly string[] }
@@ -161,6 +167,14 @@ export const LINES: Record<Topic, readonly LineEntry[]> = {
     { id: 'n13', when: { senior: true }, say: S('In my day this was all little shops. Now it\'s robots carrying parcels.') },
     { id: 'n14', when: { child: true }, say: S('There\'s a cat that lives in the park! I named it Captain.', 'My friend says there are slime monsters in the sewers. That\'s not true, right?') },
     { id: 'n15', when: { group: true, child: true }, say: S('Mum says I\'m not allowed near the ones with the tags. {Group}.') },
+    // City news (game/news): what people heard about, and how safe their neighbourhood is.
+    { id: 'n20', when: { heard: true }, say: S('{Heard}', '{Heard} That\'s what people are saying, anyway.') },
+    { id: 'n21', when: { heard: true, temper: ['nosy', 'chatty'] }, say: S('Oh, have I got news. {Heard} And that\'s not even the half of it!') },
+    { id: 'n22', when: { heard: true, temper: ['anxious'] }, say: S('{Heard} It\'s getting worse out there, isn\'t it?') },
+    { id: 'n23', when: { safety: ['safe', 'quiet'] }, say: S('{Hood} is a good place to live. There are police on every corner.', 'Here in {hood}? Nothing ever happens. The patrols see to that.') },
+    { id: 'n24', when: { safety: ['mixed'] }, say: S('{Hood}? Not the worst, not the best. Watch your pockets after dark.') },
+    { id: 'n25', when: { safety: ['rough', 'dangerous'] }, say: S('Here in {hood}, somebody gets robbed every other day, and the police hardly ever come.', 'You want news? {Hood} is going to the dogs. Nobody does anything.') },
+    { id: 'n26', when: { safety: ['rough', 'dangerous'], op: [30, 100] }, say: S('{Hood} needs someone like you. The police have given up on us.') },
   ],
   way: [
     { id: 'w0', when: {}, say: S('{Place}? That\'s {dir} of here, about {dist}. There, I\'ve put it on your map.', '{Place}… go {dir}, it\'s about {dist}. I\'ll mark it for you.') },

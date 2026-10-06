@@ -13,7 +13,7 @@
  */
 import * as THREE from 'three';
 import type { Game } from '../../game/Game';
-import { MapWorld, MapTiles, MAP_COLORS, hexColor, boxOf, type MapLayers, type MapEntrance } from './MapTiles';
+import { MapWorld, MapTiles, MAP_COLORS, hexColor, boxOf, crimeColor, type MapLayers, type MapEntrance } from './MapTiles';
 import type { FactionMap } from '../../game/factions/Factions';
 import { cityName, streetName } from '../../plan/names';
 import { cityClass } from '../../world/settings';
@@ -104,6 +104,11 @@ export class GameMap {
   private tip: HTMLDivElement;
   private markerT = 0;
 
+  /** Neighbourhoods (game/news): named on the full map with the crime layer, coloured by their live crime index. */
+  hoods: { x: number; z: number; name: string; index: number }[] = [];
+  /** The hover line for a point of the city (its neighbourhood, crime level, police), with the crime layer. */
+  hoodInfo: ((x: number, z: number) => string | null) | null = null;
+
   /** The player's own marker (set on the map; the compass points to it), null: none. */
   waypoint: { x: number; z: number } | null = null;
 
@@ -178,7 +183,7 @@ export class GameMap {
         <label><input type="checkbox" data-layer="buildings"> Buildings</label>
         <label><input type="checkbox" data-layer="labels"> Names</label>
         <label><input type="checkbox" data-layer="sewers"> Sewers &amp; manholes</label>
-        <label title="Street crime by district: the redder, the rougher the area"><input type="checkbox" data-layer="crime"> Crime</label>
+        <label title="Crime index by neighbourhood: green is safe with plenty of police, red is rough with hardly any"><input type="checkbox" data-layer="crime"> Crime</label>
         <label title="Who runs which streets: each villain group's turf in its colour"><input type="checkbox" data-layer="turf"> Turf</label>
         <div class="map-turf"></div>
         <h3>Metro</h3>
@@ -189,7 +194,7 @@ export class GameMap {
         <div class="map-key"><span class="alert">!</span> someone needs help (E)</div>
         <div class="map-key"><span class="alert crime">!</span> a crime happening</div>
         <div class="map-key"><span class="alert back">!</span> where stolen goods go back</div>
-        <div class="map-key"><span class="crimeheat"></span> rough area (crime layer)</div>
+        <div class="map-key"><span class="crimescale"></span> crime: low (many police) to high (crime layer)</div>
         <div class="map-key"><span class="faint"></span> someone you met (green: likes you, red: wary of you)</div>
         ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
         <div class="map-status"></div>
@@ -654,6 +659,7 @@ export class GameMap {
     g.imageSmoothingQuality = 'high';
     this.tiles.drawView(g, this.tiles.levelFor(s * dpr), s, ox, oy, W, H, this.queue);
     this.tiles.renderQueue(this.queue, 9);
+    if (this.layers.crime && this.layers.labels) this.drawHoods(g, W, H, s, ox, oy);
     this.drawMarkers(g, W, H, s, ox, oy, true);
     this.drawCustom(g, W, H, s, ox, oy, true);
     this.drawPlayer(g, ox + this.focus().x * s, oy + this.focus().z * s, 1);
@@ -666,6 +672,39 @@ export class GameMap {
     const known = this.world.cellsKnown, all = m.cells.length;
     const txt = known < all ? `Surveying the city… ${Math.floor((known / all) * 100)}%` : '';
     if (this.status.textContent !== txt) this.status.textContent = txt;
+  }
+
+  /** Neighbourhood names with a crime-level dot (crime layer; greedy, no overlaps, hidden when zoomed far in). */
+  private drawHoods(g: CanvasRenderingContext2D, W: number, H: number, s: number, ox: number, oy: number): void {
+    if (!this.hoods.length || s > 1.6) return;
+    g.save();
+    g.font = '700 12px system-ui, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const placed: number[] = [];
+    for (const h of this.hoods) {
+      const x = ox + h.x * s, y = oy + h.z * s;
+      if (x < -60 || y < -20 || x > W + 60 || y > H + 20) continue;
+      const name = h.name.toUpperCase(), w = g.measureText(name).width + 16;
+      const x0 = x - w / 2, y0 = y - 9, x1 = x + w / 2, y1 = y + 9;
+      let hit = false;
+      for (let i = 0; i < placed.length && !hit; i += 4) hit = !(x0 > placed[i + 2] || x1 < placed[i] || y0 > placed[i + 3] || y1 < placed[i + 1]);
+      if (hit) continue;
+      placed.push(x0, y0, x1, y1);
+      g.lineWidth = 3.5;
+      g.strokeStyle = 'rgba(255,255,255,0.85)';
+      g.strokeText(name, x + 6, y);
+      g.fillStyle = 'rgba(29,36,43,0.82)';
+      g.fillText(name, x + 6, y);
+      g.beginPath();
+      g.arc(x0 + 6, y, 4.5, 0, Math.PI * 2);
+      g.fillStyle = crimeColor(h.index, 1);
+      g.fill();
+      g.lineWidth = 1.5;
+      g.strokeStyle = 'rgba(255,255,255,0.9)';
+      g.stroke();
+    }
+    g.restore();
   }
 
   /** Stations, entrances, manholes and labels (per frame, screen space). */
@@ -833,6 +872,10 @@ export class GameMap {
     if (!best && station >= 0) {
       const m = this.game.macro, st = m.metroStations[station];
       best = `${st.name} — metro, line${st.lines.length > 1 ? 's' : ''} ${st.lines.map((l) => m.metroLines[l].name).join(', ')}`;
+    }
+    if (!best && hits === this.hitsFull && this.layers.crime && this.hoodInfo) {
+      const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
+      best = this.hoodInfo(this.cx + (x - W / 2) / this.s, this.cz + (y - H / 2) / this.s);
     }
     if (!best) { this.tip.style.display = 'none'; return; }
     if (this.tip.textContent !== best) this.tip.textContent = best;

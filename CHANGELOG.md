@@ -2,6 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.053 — 2026-10-06
+
+- **The city lives its own life now, and you hear about it.** Crime happens all over the city, not just near you. The police stop some of it, and the neighbourhoods get safer or rougher over time.
+  - **Neighbourhoods with a crime index**: the city is split into named neighbourhoods ("Ashford Heights", "Mill Quarter" …). Every block has a live crime index. Crimes that get away push it up, crimes stopped by you or the police bring it down, a gang holding the street keeps it high, and it slowly drifts back to the area's usual level. Jailing a gang boss calms their streets. The index is kept in your saves.
+  - **Low crime, lots of police; high crime, the opposite**: safe areas have many patrol cars in traffic and pairs of officers walking the beat, who step in when a crime breaks out near them and cuff the criminals. Rough areas have more crime, hardly any patrols and slow police response.
+  - **A new game starts in a very safe neighbourhood** near the centre.
+  - **On the map**: the crime layer now shades every block from green (safe, many police) through yellow to red (rough). Neighbourhood names show with a coloured dot, and hovering a spot tells you its crime level and police presence.
+  - **Walking into another neighbourhood** shows its name, crime level and police presence.
+  - **News from passers-by**: people chat about what happened around the city ("Did you hear? There was a robbery in Mill Quarter last night.") and about how safe their streets feel. Asking "what's going on around here" in a conversation gets the same news.
+  - **News on the billboards**: the big screens put city news cards between their ads (crime alerts, police news, the hero's deeds, neighbourhoods getting safer or rougher) plus a report on the crime level where you are. Other systems can post a photo with a caption to them (for the press shots of the hero to come).
+
 ## 0.052 — 2026-10-05
 
 - **Playable on an iPad (and other touch screens)**: touch the screen and on-screen controls appear; a mouse moving switches back.
