@@ -2,5 +2,18 @@
   "title": "Scale",
   "tagline": "A seed-driven, walkable, living and destructible 3D city in the browser — every seed is a different place.",
   "tags": ["games", "open-world", "procedural", "destructible"],
-  "screenshot": "/shots/scale.png"
+  "screenshot": "/shots/scale.png",
+  "description": "Every seed builds a different city — a walkable, living place of people, traffic, weather and landmarks, all generated in your browser.\n\nYou wake into it with powers. Bend the city, fight the Strider, or just roam: the systems around you — crime, police, an army, an underground slime civilisation — keep moving whether you act or not.",
+  "highlights": [
+    "Procedurally generated 3D city — every seed a new world",
+    "Karma powers and elemental abilities",
+    "The Strider: a giant living threat the whole city responds to",
+    "Living systems — crime, justice, army, factions",
+    "Underground slime civilisation beneath the streets",
+    "Music, saves, and NPCs with personalities"
+  ],
+  "links": [
+    { "label": "Source", "url": "https://github.com/ArndRosemeier/Scale" }
+  ],
+  "cta": "Enter the city"
 }
