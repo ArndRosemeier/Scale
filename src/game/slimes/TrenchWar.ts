@@ -20,8 +20,8 @@ export const TRENCH = {
   gap: [6, 13] as [number, number], size: [2, 4] as [number, number], most: 9,
   /** A brute now and then, once the Murk are strong. */
   brute: 0.1, bruteMurk: 0.6,
-  /** Seconds between reliefs, between flares; how long a flare burns. */
-  relief: 7, flare: [3.5, 7] as [number, number], burn: 7,
+  /** Seconds between reliefs (while two spots or more are empty), between flares; how long a flare burns. */
+  relief: 7, reliefFast: 2.5, flare: [3.5, 7] as [number, number], burn: 7,
 };
 
 interface Flare { s: THREE.Sprite; x: number; y: number; z: number; vx: number; vy: number; vz: number; t: number; top: number }
@@ -65,14 +65,15 @@ export class TrenchWar {
     // Relief for the fallen.
     this.reliefT -= dt;
     if (this.reliefT <= 0) {
-      this.reliefT = TRENCH.relief;
       const T = P.trench, spots = [...T.gapPosts, ...T.posts.slice(0, TrenchWar.sentries(P, lumen, front))];
       const held = F.blobs.filter((b) => b.role === 'sentry' && b.mode !== 'dead' && b.den);
-      const free = spots.find((q) => !held.some((b) => Math.hypot(b.den!.x - q.x, b.den!.z - q.z) < 0.3));
-      const from = P.places.bottom;
-      if (free && from) {
+      const free = spots.filter((q) => !held.some((b) => Math.hypot(b.den!.x - q.x, b.den!.z - q.z) < 0.3));
+      // A thinned line is filled faster, from just behind it.
+      this.reliefT = free.length >= 2 ? TRENCH.reliefFast : TRENCH.relief;
+      const from = P.places.trench ?? P.places.bottom;
+      if (free.length && from) {
         const b = F.spawn('lumen', 'sentry', from.x + (Math.random() - 0.5) * 3, from.y, from.z + (Math.random() - 0.5) * 3, 'trench');
-        b.den = { ...free };
+        b.den = { ...free[0] };
         this.stats.relieved++;
       }
     }
