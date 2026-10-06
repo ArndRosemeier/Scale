@@ -182,7 +182,7 @@ export function auditPassages(inp: AuditInput, inHole: (x: number, z: number) =>
       // Other volumes cut by the passage's walking space (feet to 2.2 m).
       for (const v of vols) {
         const h = tubeAt(v, x, y + 1.1, z, -0.3);
-        if (h && (v.underpass || Math.abs(h.floor - y) > 0.5)) { r.hits++; break; }
+        if (h && Math.abs(h.floor - y) > 0.5) { r.hits++; break; }
       }
       for (const b of inp.halls) if (b !== ps.hall && boxAt(b, x, y + 1.1, z, 0) && y + 1.1 > b.y0) { r.hits++; break; }
     }
