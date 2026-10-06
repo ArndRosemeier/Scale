@@ -141,6 +141,8 @@ export class Traffic {
   readonly obstacles: { x: number; z: number; r: number }[] = [];
   /** Road closures (police cars parked across a street as a roadblock), kept by their owner. */
   readonly blocks: { x: number; z: number; r: number }[] = [];
+  /** Spawn weight of patrol cars at a point (ordinary cars weigh ~110 together; default 1.2). */
+  policeWeight: ((x: number, z: number) => number) | null = null;
   onCrash?: (v: Vehicle, x: number, y: number, z: number, speed: number) => void;
   onHorn?: (v: Vehicle) => void;
   onAbandon?: (v: Vehicle) => void;
@@ -290,8 +292,10 @@ export class Traffic {
       if (e.len - 2 * jb < 14) continue;
       const s = this.rng.range(jb + 6, e.len - jb - 6);
       // Near future: a few driverless shuttles among the cars (main roads mostly).
+      // Patrol cars by the area's police presence (game/news: many where crime is low).
+      const pw = this.policeWeight ? this.policeWeight(mx, mz) : 1.2;
       const kind = this.rng.weighted<VKind>(['sedan', 'hatch', 'wagon', 'suv', 'van', 'pickup', 'taxi', 'police', 'sports', 'bus', 'truck', 'delivery', 'shuttle'],
-        (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: 1.2, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4, shuttle: e.cls <= 1 ? 7 : 3, swat: 0, army_truck: 0, apc: 0, tank: 0, ambulance: 0, firetruck: 0, crane: 0, flatbed: 0 }[k2]));
+        (k2) => ({ sedan: 30, hatch: 18, wagon: 6, suv: 20, van: 5, pickup: 5, taxi: e.cls <= 1 ? 9 : 3, police: pw, sports: 2, bus: e.cls <= 1 ? 2.5 : 0, truck: 2, delivery: 4, shuttle: e.cls <= 1 ? 7 : 3, swat: 0, army_truck: 0, apc: 0, tank: 0, ambulance: 0, firetruck: 0, crane: 0, flatbed: 0 }[k2]));
       const v = this.makeVehicle(kind, ei, fwd, s, null);
       // Not on top of another car (on the lane it really got).
       if (!this.clearAt(v, 8)) continue;

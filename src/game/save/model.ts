@@ -157,6 +157,11 @@ export interface SaveData {
    * `restorePeople`); older saves have none (null: the browser's own record for the city stays).
    */
   people?: unknown;
+  /**
+   * The city's live crime index and recent news (game/news CityNews SavedNews, sanitised by
+   * `CityNews.restore`); older saves have none (the seeded index, no news).
+   */
+  cityLife?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -294,6 +299,7 @@ export function parseSave(input: string | unknown): SaveData {
       bosses: (Array.isArray(obj(o.factions).bosses) ? (obj(o.factions).bosses as unknown[]) : []).slice(0, 16),
     } : null,
     ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
+    ...(o.cityLife && typeof o.cityLife === 'object' ? { cityLife: o.cityLife } : {}),
   };
 }
 

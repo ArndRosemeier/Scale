@@ -97,6 +97,11 @@ export class Signs {
     uFeed: { value: blackTexture() as THREE.Texture }, uFeedAt: { value: new THREE.Vector4(0, 0, 0, 0) },
     /** City news on the billboards (a pictogram: 1 the city lost, 2 all clear, 3 the monster brought down), strength uNews.y. */
     uNews: { value: new THREE.Vector4(0, 0, 0, 0) },
+    /**
+     * City news cards (game/news, future/newsArt): the slide shows put one up in two of their eight
+     * slots; uCards.x = cards on the canvas (0: ads only).
+     */
+    uCardTex: { value: blackTexture() as THREE.Texture }, uCards: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
   /** Signs flickering for a while (an omen), back to normal after `until`. */
   private glitched: { s: Sign; until: number }[] = [];
@@ -145,7 +150,7 @@ export class Signs {
     this.nSign = new THREE.InstancedBufferAttribute(new Float32Array(NAME_CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
     ng.setAttribute('iRect', this.nRect);
     ng.setAttribute('iSign', this.nSign);
-    this.names = new THREE.InstancedMesh(ng, this.signMaterial({ ...this.uniforms, uAtlas: { value: this.nameAtlas.texture }, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) }, uCountOn: { value: 0 }, uFeedAt: { value: new THREE.Vector4(0, 0, 0, 0) }, uNews: { value: new THREE.Vector4(0, 0, 0, 0) } }), NAME_CAP);
+    this.names = new THREE.InstancedMesh(ng, this.signMaterial({ ...this.uniforms, uAtlas: { value: this.nameAtlas.texture }, uAlert: { value: new THREE.Vector4(0, 0, 0, 0) }, uCountOn: { value: 0 }, uFeedAt: { value: new THREE.Vector4(0, 0, 0, 0) }, uNews: { value: new THREE.Vector4(0, 0, 0, 0) }, uCards: { value: new THREE.Vector4(0, 0, 0, 0) } }), NAME_CAP);
     this.names.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.names.count = 0;
     this.names.frustumCulled = false;
@@ -428,6 +433,12 @@ export class Signs {
     this.uniforms.uNews.value.set(kind, kind > 0 ? strength : 0, 0, 0);
   }
 
+  /** The city news cards on the billboards' slide shows (count 0: ads only). */
+  cards(tex: THREE.Texture, count: number): void {
+    this.uniforms.uCardTex.value = tex;
+    this.uniforms.uCards.value.x = count;
+  }
+
   /** A blast / impact nearby: signs flicker, a direct hit kills them; kiosks smash. */
   impact(x: number, y: number, z: number, r: number, strong: boolean): void {
     for (const { signs, kiosks } of this.byCell.values()) {
@@ -511,7 +522,7 @@ export class Signs {
     const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = u.uTime; sh.uniforms.uAtlas = u.uAtlas; sh.uniforms.uNight = u.uNight; sh.uniforms.uAlert = u.uAlert;
-      sh.uniforms.uCount = u.uCount; sh.uniforms.uCountOn = u.uCountOn; sh.uniforms.uFeed = u.uFeed; sh.uniforms.uFeedAt = u.uFeedAt; sh.uniforms.uNews = u.uNews;
+      sh.uniforms.uCount = u.uCount; sh.uniforms.uCountOn = u.uCountOn; sh.uniforms.uFeed = u.uFeed; sh.uniforms.uFeedAt = u.uFeedAt; sh.uniforms.uNews = u.uNews; sh.uniforms.uCardTex = u.uCardTex; sh.uniforms.uCards = u.uCards;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
 attribute vec2 sUv; attribute vec4 iRect; attribute vec4 iSign;
@@ -529,7 +540,7 @@ vNews = bill * uNews.y * step(iSign.y, 0.7);`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform float uTime; uniform float uNight; uniform sampler2D uAtlas;
-uniform vec4 uCount; uniform sampler2D uFeed; uniform vec4 uNews;
+uniform vec4 uCount; uniform sampler2D uFeed; uniform vec4 uNews; uniform sampler2D uCardTex; uniform vec4 uCards;
 varying vec2 vL; varying vec4 vRect; varying vec4 vSign; varying float vAlert; varying float vCount; varying float vFeed; varying float vNews;
 float sh1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
 // Seven-segment digits (the countdown) and the shapes of the pictograms (no text anywhere).
@@ -639,6 +650,16 @@ vec3 slide(float i, vec2 l) {
   float col = mod(i, 4.0), row = floor(i / 4.0);
   vec2 a = vec2(col * 0.25, 1.0 - (1536.0 + (row + 1.0) * 256.0) / 2048.0);
   return texture2D(uAtlas, a + l * vec2(0.25, 0.125) * 0.994 + 0.003 * vec2(0.25, 0.125)).rgb;
+}
+// A slide show's slot: slots 2 and 6 show a city news card when there are some (two across, four down).
+vec3 slideOr(float i, vec2 l, float seed) {
+  if (uCards.x > 0.5 && (i == 2.0 || i == 6.0)) {
+    float k = mod(floor(seed * 13.0) + i * 0.5 + floor(uTime / 64.0), uCards.x);
+    float col = mod(k, 2.0), row = floor(k / 2.0);
+    vec2 q = clamp(l, 0.004, 0.996);
+    return texture2D(uCardTex, vec2((col + q.x) * 0.5, 1.0 - (row + 1.0 - q.y) * 0.25)).rgb;
+  }
+  return slide(i, l);
 }`)
         .replace('#include <map_fragment>', `
 {
@@ -654,7 +675,7 @@ vec3 slide(float i, vec2 l) {
     float tt = uTime / 8.0 + seed * 8.0;
     float i0 = mod(floor(tt), 8.0), i1 = mod(i0 + 1.0, 8.0);
     float w = smoothstep(0.92, 1.0, fract(tt));
-    c = mix(slide(i0, l), slide(i1, l), step(l.x, w));
+    c = mix(slideOr(i0, l, seed), slideOr(i1, l, seed), step(l.x, w));
     c *= 0.9 + 0.1 * sin(l.x * 6.0 - uTime * 0.7 + l.y * 3.0);
   } else if (mode == 4) { // letters light up top to bottom, then all blink
     float p = fract(uTime * 0.22 + seed) * 1.4;
@@ -679,7 +700,7 @@ vec3 slide(float i, vec2 l) {
   diffuseColor.rgb = c * mix(1.15, 2.7, uNight);
 }`);
     };
-    m.customProgramCacheKey = () => 'future-sign-v3';
+    m.customProgramCacheKey = () => 'future-sign-v4';
     return m;
   }
 
