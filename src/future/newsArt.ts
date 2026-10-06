@@ -14,11 +14,15 @@ const CW = 512, CH = 256;
 
 export interface NewsCard {
   /** Band colour and its word. */
-  kind: 'crime' | 'police' | 'hero' | 'city' | 'area';
+  kind: 'crime' | 'police' | 'hero' | 'city' | 'area' | 'photo';
   head: string;
   sub: string;
   /** Area report: the crime level 0..1 drawn as a bar. */
   level?: number;
+  /** A photo (a press shot of the hero …): drawn on the left, the words beside it. */
+  image?: CanvasImageSource & { width: number; height: number };
+  /** Tells photo cards apart in the redraw check (the image itself is not compared). */
+  imageKey?: string;
 }
 
 const BAND: Record<NewsCard['kind'], [string, string]> = {
@@ -26,6 +30,7 @@ const BAND: Record<NewsCard['kind'], [string, string]> = {
   police: ['#2f6fd6', 'POLICE NEWS'],
   hero: ['#e8a91c', 'HERO WATCH'],
   city: ['#2c9a6a', 'CITY NEWS'],
+  photo: ['#c2410c', 'PRESS PHOTO'],
   area: ['#6b4bd1', 'YOUR AREA'],
 };
 
@@ -54,7 +59,7 @@ export class NewsArt {
   /** Draw a set of cards (at most NEWS_CARDS); nothing happens when it is the same set. */
   set(cards: readonly NewsCard[]): void {
     const list = cards.slice(0, NEWS_CARDS);
-    const key = list.map((c) => `${c.kind}|${c.head}|${c.sub}|${c.level?.toFixed(2) ?? ''}`).join('\n');
+    const key = list.map((c) => `${c.kind}|${c.head}|${c.sub}|${c.level?.toFixed(2) ?? ''}|${c.imageKey ?? ''}`).join('\n');
     if (key === this.key) return;
     this.key = key;
     list.forEach((c, i) => this.card(i, c));
@@ -85,18 +90,29 @@ export class NewsArt {
     g.textAlign = 'right';
     g.font = '700 22px system-ui, sans-serif';
     g.fillText('● LIVE', x0 + CW - 16, y0 + 24);
-    // Headline: two lines at most, as large as fits.
+    // A photo: the left part, cropped to fill (cover), a thin white frame.
+    let tx = x0 + 18, tw = CW - 36;
+    if (c.image && c.image.width > 0 && c.image.height > 0) {
+      const pw = 236, ph = CH - 46 - 16, px = x0 + 10, py = y0 + 54;
+      const ir = c.image.width / c.image.height, r = pw / ph;
+      const sw = ir > r ? c.image.height * r : c.image.width, sh = ir > r ? c.image.height : c.image.width / r;
+      try { g.drawImage(c.image, (c.image.width - sw) / 2, (c.image.height - sh) / 2, sw, sh, px, py, pw, ph); } catch { /* not drawable */ }
+      g.strokeStyle = '#f4f6f8'; g.lineWidth = 3; g.strokeRect(px, py, pw, ph);
+      tx = px + pw + 14; tw = x0 + CW - 14 - tx;
+    }
+    // Headline: two lines at most (three beside a photo), as large as fits.
     g.textAlign = 'left';
     g.fillStyle = '#f4f6f8';
-    let size = 46, lines: string[] = [];
-    for (; size >= 28; size -= 3) {
+    const maxLines = c.image ? 4 : 2;
+    let size = c.image ? 34 : 46, lines: string[] = [];
+    for (; size >= (c.image ? 20 : 28); size -= 3) {
       g.font = `800 ${size}px system-ui, sans-serif`;
-      lines = wrap(g, c.head, CW - 36);
-      if (lines.length <= 2) break;
+      lines = wrap(g, c.head, tw);
+      if (lines.length <= maxLines) break;
     }
-    lines = lines.slice(0, 2);
+    lines = lines.slice(0, maxLines);
     const lh = size * 1.12, top = y0 + 46 + (c.level !== undefined ? 22 : 30) + size * 0.5;
-    lines.forEach((l, k) => g.fillText(l, x0 + 18, top + k * lh));
+    lines.forEach((l, k) => g.fillText(l, tx, top + k * lh));
     // Area report: a bar from green to red with a marker.
     if (c.level !== undefined) {
       const by = y0 + CH - 74, bw = CW - 36;
@@ -110,7 +126,7 @@ export class NewsArt {
     }
     g.fillStyle = '#9fb0c2';
     g.font = '600 24px system-ui, sans-serif';
-    g.fillText(c.sub, x0 + 18, y0 + CH - 28);
+    g.fillText(c.sub, tx, y0 + CH - 28, tw);
     g.restore();
   }
 }

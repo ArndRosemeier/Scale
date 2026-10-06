@@ -11,7 +11,7 @@ Every push raises the version by 0.001. Newest first.
   - **On the map**: the crime layer now shades every block from green (safe, many police) through yellow to red (rough). Neighbourhood names show with a coloured dot, and hovering a spot tells you its crime level and police presence.
   - **Walking into another neighbourhood** shows its name, crime level and police presence.
   - **News from passers-by**: people chat about what happened around the city ("Did you hear? There was a robbery in Mill Quarter last night.") and about how safe their streets feel. Asking "what's going on around here" in a conversation gets the same news.
-  - **News on the billboards**: the big screens put city news cards between their ads (crime alerts, police news, the hero's deeds, neighbourhoods getting safer or rougher) plus a report on the crime level where you are.
+  - **News on the billboards**: the big screens put city news cards between their ads (crime alerts, police news, the hero's deeds, neighbourhoods getting safer or rougher) plus a report on the crime level where you are. Other systems can post a photo with a caption to them (for the press shots of the hero to come).
 
 ## 0.052 — 2026-10-05
 

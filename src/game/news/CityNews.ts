@@ -44,6 +44,9 @@ export class CityNews {
   /** The neighbourhood the hero is in (-2: not looked yet — the first one is not told). */
   private hereHood = -2;
   private hereT = 0;
+  /** Photos posted to the billboards (press shots of the hero …), newest last, until a game hour. */
+  private photos: { card: NewsCard; until: number }[] = [];
+  private photoN = 0;
   stats = { ticks: 0, offCrimes: 0, offStopped: 0, near: 0 };
 
   constructor(private g: Game) {
@@ -139,6 +142,20 @@ export class CityNews {
   private push(it: NewsItem): void {
     this.news.push(it);
     if (this.news.length > KEEP) this.news.splice(0, this.news.length - KEEP);
+  }
+
+  /**
+   * Put a photo with a caption on the billboards (another system's news: a reporter's shot of the
+   * hero …): it leads the cards for `hours` game hours (at most two photos at once, the newest).
+   * `image`: a canvas or a loaded image; it is drawn once, so it may be reused afterwards.
+   */
+  postPhoto(image: CanvasImageSource & { width: number; height: number }, caption: string, sub = '', hours = 3): void {
+    const now = this.g.sky.hoursAbs;
+    const h = this.hoodAt(this.g.player.pos.x, this.g.player.pos.z);
+    const card: NewsCard = { kind: 'photo', head: caption.slice(0, 120), sub: sub || (h >= 0 ? `${this.hoods.list[h].name} · just now` : 'just now'), image, imageKey: `p${++this.photoN}` };
+    this.photos.push({ card, until: now + Math.max(0.1, hours) });
+    if (this.photos.length > 2) this.photos.shift();
+    this.cardsT = 0;
   }
 
   // ------------------------------------------------------------------ talk
@@ -264,8 +281,10 @@ export class CityNews {
       const v = this.hoodIndex(h), s = safetyOf(v);
       return { kind: 'area', head: `${this.hoods.list[h].name}: crime ${SAFETY_LABEL[s].toLowerCase()}`, sub: `${presenceLabel(policePresence(v))} police presence`.replace(/^./, (c) => c.toUpperCase()), level: Math.min(1, v / 0.8) };
     };
-    const items = this.news.filter((n) => now - n.t < 36).slice(-(NEWS_CARDS - 1)).reverse();
-    const cards: NewsCard[] = items.map((n) => ({ kind: storyKind(n), head: headline(n), sub: `${n.hood} · ${whenWord(n.t, now)}` }));
+    this.photos = this.photos.filter((p) => p.until > now);
+    const photos = this.photos.map((p) => p.card).reverse();
+    const items = this.news.filter((n) => now - n.t < 36).slice(-(NEWS_CARDS - 1 - photos.length)).reverse();
+    const cards: NewsCard[] = [...photos, ...items.map((n) => ({ kind: storyKind(n), head: headline(n), sub: `${n.hood} · ${whenWord(n.t, now)}` }))];
     const a = areaCard();
     if (a) cards.push(a);
     this.art!.set(cards);
