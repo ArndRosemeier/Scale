@@ -24,6 +24,7 @@ import {
   type PatchedMaterial, type EyeUniforms, type HairUniforms, type HornUniforms,
 } from './partMaterials';
 import { shellIndex, createShellMaterial, scalpShellFor, beardShellFor } from './hairShells';
+import { WEBGPU } from '../../render/gpuMode';
 
 /** Shell triangle subsets per (style) spec — identical for every body. */
 const shellIndexCache = new Map<string, Uint16Array>();
@@ -37,6 +38,12 @@ function partGeometry(p: PartGeo): THREE.BufferGeometry {
   g.setAttribute('uv', new THREE.BufferAttribute(p.uv, 2));
   g.setAttribute('hairTangent', new THREE.BufferAttribute(p.tangent, 3));
   g.setAttribute('hairAux', new THREE.BufferAttribute(p.aux, 2));
+  if (WEBGPU && p.material === 'hair') {
+    // The node hair material reads the card tangent as `tangent` so three's skinning rotates it.
+    const n = p.tangent.length / 3, t4 = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) { t4[i * 4] = p.tangent[i * 3]; t4[i * 4 + 1] = p.tangent[i * 3 + 1]; t4[i * 4 + 2] = p.tangent[i * 3 + 2]; t4[i * 4 + 3] = 1; }
+    g.setAttribute('tangent', new THREE.BufferAttribute(t4, 4));
+  }
   g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(p.skinIndex, 4));
   g.setAttribute('skinWeight', new THREE.BufferAttribute(p.skinWeight, 4));
   if (p.material === 'tail') {
@@ -195,7 +202,8 @@ export class Character {
     if (app.race === 'umbral' && app.pupil === 'none') eu.uScleraTint.value.setRGB(0.55, 0.55, 0.62);
     this.reg(this.eyeMat);
     const lash = createLashMaterial();
-    lash.material instanceof THREE.MeshStandardMaterial && lash.material.color.setRGB(app.hairColor[0] * 0.3, app.hairColor[1] * 0.3, app.hairColor[2] * 0.3, THREE.SRGBColorSpace);
+    // (uColor is the material's colour; also on WebGPU, where the material is a node material.)
+    lash.uniforms.uColor.value.setRGB(app.hairColor[0] * 0.3, app.hairColor[1] * 0.3, app.hairColor[2] * 0.3, THREE.SRGBColorSpace);
     this.reg(lash);
     const teeth = simpleMaterial(new THREE.Color().setRGB(0.86, 0.82, 0.72, THREE.SRGBColorSpace), { roughness: 0.28, clearcoat: 0.4 });
     const tongue = simpleMaterial(new THREE.Color().setRGB(0.6, 0.28, 0.28, THREE.SRGBColorSpace), { roughness: 0.38, sheen: 0.3 });

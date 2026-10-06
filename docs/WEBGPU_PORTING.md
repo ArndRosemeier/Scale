@@ -33,7 +33,7 @@ How the GLSL materials are ported for `?gpu=webgpu` (see WEBGPU_PLAN.md). Worked
 | `normal = perturbNormalUV(...)` | `normalNode = perturbNormalUV(positionView, normalView, uv, tn, strength)` (common.ts) |
 | `totalEmissiveRadiance += x` | `emissiveNode = x` |
 | `reflectedLight.indirectDiffuse *= ao` | `aoNode = ao` |
-| vertex `transformed = ...` | `positionNode` (in r186 it is applied after instancing: code that needs the raw geometry position before the instance matrix must rebuild it, see webgpu/vegetation.ts) |
+| vertex `transformed = ...` | `positionNode` (in r186 it is applied after skinning and instancing and replaces the result; displacements the GLSL applied before them go in through a `setupPosition` override writing `positionLocal`/`normalLocal`, see webgpu/people.ts, creatures.ts, vegetation.ts) |
 | `gl_Position = vec4(0)` (hide) | `positionNode = select(hide, vec3(0), positionLocal)` |
 | varyings | attributes read in the fragment become varyings by themselves; `varying(node, 'name')` for computed ones |
 | `vWPos` / `vWNrm` | `positionWorld` / `normalWorldGeometry` (unflipped, like `mat3(modelMatrix)*objectNormal`) |

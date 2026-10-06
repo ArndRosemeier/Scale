@@ -11,6 +11,7 @@
  *  - 'varying':   the vertex shader of the patched material already writes `vSkyVis`
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from './gpuMode';
 
 export type SkyVisMode = 'attribute' | 'uniform' | 'varying';
 
@@ -26,6 +27,8 @@ export interface SkyVisPatch {
  * Chains with existing onBeforeCompile hooks.
  */
 export function patchSkyOcclusion(material: THREE.Material, mode: SkyVisMode, init = 1): SkyVisPatch {
+  // Node materials (WebGPU): the same through their lighting model (webgpu/skyOcclusion.ts).
+  if (WEBGPU && (material as { isNodeMaterial?: boolean }).isNodeMaterial) return gpuKit().patchSkyOcclusionNode(material, mode, init);
   const patch: SkyVisPatch = {};
   if (mode === 'uniform') patch.uniform = { value: init };
   const prev = material.onBeforeCompile?.bind(material);

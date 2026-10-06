@@ -22,6 +22,7 @@
  */
 import * as THREE from 'three';
 import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import type { HumanoidAppearance } from '../types';
 import { GLSL_NOISE } from './glsl';
 import { GLSL_FACE, BEARD_IDS } from './faceRegions';
@@ -371,18 +372,9 @@ function sssChunk(): string {
 
 let sssCache: string | null = null;
 
-/** Create the skin material for one character. */
-export function createSkinMaterial(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUnits: number; lod: number }): SkinMaterialHandle {
-  const material = new THREE.MeshPhysicalMaterial({
-    roughness: 0.5,
-    metalness: 0,
-    ior: 1.4,
-    specularIntensity: 0.45,
-    sheen: 0.18,
-    sheenRoughness: 0.55,
-    sheenColor: new THREE.Color(0.32, 0.26, 0.24),
-  });
-  const uniforms: SkinUniforms = {
+/** The per-character skin uniforms (shared by the GLSL and the node material). */
+function skinUniforms(opts: { exprTex: THREE.Texture | null; exprUnits: number }): SkinUniforms {
+  return {
     uTone: { value: new THREE.Color(0.7, 0.5, 0.4) },
     uAccent: { value: new THREE.Color(0.3, 0.2, 0.15) },
     uHair: { value: new THREE.Color(0.1, 0.07, 0.05) },
@@ -397,6 +389,21 @@ export function createSkinMaterial(opts: { expr: boolean; exprTex: THREE.Texture
     uPores: { value: poreTexture() },
     uHide: { value: 0 },
   };
+}
+
+/** Create the skin material for one character. */
+export function createSkinMaterial(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUnits: number; lod: number }): SkinMaterialHandle {
+  if (WEBGPU) return gpuKit().createSkinNodeMaterial(opts, skinUniforms(opts)) as unknown as SkinMaterialHandle;
+  const material = new THREE.MeshPhysicalMaterial({
+    roughness: 0.5,
+    metalness: 0,
+    ior: 1.4,
+    specularIntensity: 0.45,
+    sheen: 0.18,
+    sheenRoughness: 0.55,
+    sheenColor: new THREE.Color(0.32, 0.26, 0.24),
+  });
+  const uniforms = skinUniforms(opts);
   uniforms.sheenTarget = material.sheenColor;
   material.defines = { EXPR_UNITS: Math.max(1, opts.exprUnits) };
   if (opts.expr) material.defines.SKIN_EXPR = '';

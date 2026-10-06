@@ -26,6 +26,9 @@ import { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMateri
 export { createRainNodeMaterial, createDustNodeMaterial, createBeamNodeMaterial, createPowerParticleNodeMaterial, createDecalNodeMaterial, createSmokeColumnNodeMaterial, createStarFxNodeMaterial, createStarParticlesNode };
 export { createBroodNodeMaterial, createBirdNodeMaterial, createCreatureNodeMaterial, createDebrisNodeMaterial, bronzeNodeMaterial };
 export { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMaterial };
+export { createSkinNodeMaterial, createGarmentNodeMaterial, createShellNodeMaterial, createEyeNodeMaterial, createHairNodeMaterial, createHornNodeMaterial, simpleNodeMaterial, createLashNodeMaterial } from './people';
+export { createCrowdNodeMaterial } from './crowd';
+export { patchSkyOcclusionNode } from './skyOcclusion';
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 
 export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): THREE.WebGPURenderer {

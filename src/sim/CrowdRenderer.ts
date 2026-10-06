@@ -13,6 +13,7 @@ import type { EquipmentVisuals } from '../items/types';
 import type { HumanoidAppearance } from '../humanoid/types';
 import { Role } from './Population';
 import { statusOf } from '../shared/status';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 const CAP = 1400;          // instances per template
 const CROWD_RANGE = 380;
@@ -96,6 +97,8 @@ export class CrowdRenderer {
   private meshes: THREE.InstancedMesh[] = [];
   private anim: THREE.InstancedBufferAttribute[] = [];
   private cols: THREE.InstancedBufferAttribute[][] = [];
+  /** WebGPU: the node materials' own view of each mesh's instance matrices (for the shadow pass). */
+  private gpuMatrices: THREE.InstancedInterleavedBuffer[] = [];
   private looks = new Map<number, Look>();
   private rigs = new Map<number, { rig: HumanoidRig; used: number; agent: PedAgent; ready: 0 | 1 | 2; held?: string | null; shadow?: boolean; shadowT?: number }>();
   /** Compile a new object's shaders off the critical path (set by the game); rigs show once ready. */
@@ -143,19 +146,6 @@ export class CrowdRenderer {
 
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
     templates.forEach((t) => {
-      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
-      const uniforms = { uVatPos: { value: t.pos }, uVatNrm: { value: t.nrm } };
-      mat.onBeforeCompile = (sh) => {
-        Object.assign(sh.uniforms, uniforms);
-        patchVat(sh, true);
-        sh.fragmentShader = sh.fragmentShader
-          .replace('#include <common>', '#include <common>\nvarying vec3 vCrowdCol;')
-          .replace('#include <map_fragment>', 'diffuseColor.rgb = vCrowdCol;');
-      };
-      mat.customProgramCacheKey = () => 'crowd-vat-v1';
-      const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-      depth.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, uniforms); patchVat(sh, false); };
-      depth.customProgramCacheKey = () => 'crowd-vat-depth-v1';
       const g = t.geometry.clone();
       const anim = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
       g.setAttribute('iAnim', anim);
@@ -165,8 +155,29 @@ export class CrowdRenderer {
         g.setAttribute('iC' + c, a);
         cols.push(a);
       }
-      const im = new THREE.InstancedMesh(g, mat, CAP);
-      im.customDepthMaterial = depth;
+      const im = new THREE.InstancedMesh(g, undefined, CAP);
+      if (WEBGPU) {
+        // Node material; its shadow pass needs no depth material (castShadowPositionNode).
+        const mat = gpuKit().createCrowdNodeMaterial(t.pos, t.nrm, im.instanceMatrix);
+        im.material = mat as unknown as THREE.MeshStandardMaterial;
+        this.gpuMatrices.push(mat.userData.instanceBuffer as THREE.InstancedInterleavedBuffer);
+      } else {
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
+        const uniforms = { uVatPos: { value: t.pos }, uVatNrm: { value: t.nrm } };
+        mat.onBeforeCompile = (sh) => {
+          Object.assign(sh.uniforms, uniforms);
+          patchVat(sh, true);
+          sh.fragmentShader = sh.fragmentShader
+            .replace('#include <common>', '#include <common>\nvarying vec3 vCrowdCol;')
+            .replace('#include <map_fragment>', 'diffuseColor.rgb = vCrowdCol;');
+        };
+        mat.customProgramCacheKey = () => 'crowd-vat-v1';
+        const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+        depth.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, uniforms); patchVat(sh, false); };
+        depth.customProgramCacheKey = () => 'crowd-vat-depth-v1';
+        im.material = mat;
+        im.customDepthMaterial = depth;
+      }
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       im.count = 0;
       im.frustumCulled = false;
@@ -370,6 +381,8 @@ export class CrowdRenderer {
       // Upload only the instances in use (the buffers hold CAP).
       if (n) {
         upload(m.instanceMatrix, n);
+        const gm = this.gpuMatrices[i];
+        if (gm) { gm.clearUpdateRanges(); gm.addUpdateRange(0, n * 16); gm.needsUpdate = true; }
         upload(this.anim[i], n);
         for (const c of this.cols[i]) upload(c, n);
       }
