@@ -130,6 +130,8 @@ const GROUND_REUSE = 0.4;
 const ACTOR_RESERVE = 48;
 const SCAN_R = 480;
 const DESPAWN_R = 620;
+/** A remembered person's body appears at most this far from where they plausibly are (m). */
+const PIN_R = 40;
 const HASH = 1 << 14;
 
 interface Pending { cit: Citizen; trip: Trip }
@@ -320,16 +322,16 @@ export class Pedestrians {
     if (this.shelter?.(ax, az, bx, bz)) return;
     const route = this.buildRoute(ax, az, bx, bz);
     if (!route) return;
-    const id = this.nextId++;
-    const r = hashToFloat(hash32(c.seed));
-    const pref = c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35;
-    const a: PedAgent = {
-      id, cit: c, x: route[0], z: route[1], y: 0, heading: 0, speed: pref, pref, state: PState.Walk, route, wp: 1, dest,
-      fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
-    };
+    const a = this.walker(c, route, dest);
     // Place along the route by progress.
     if (this.pendingCarDest) { a.carDest = this.pendingCarDest; this.pendingCarDest = null; }
-    if (progress > 0) this.advanceAlong(a, progress * routeLength(route));
+    // (A remembered person appears only near where they plausibly are, not where the schedule ran ahead to.)
+    const pin = this.placeFor?.(c);
+    if (pin) {
+      const at = routeNearest(route, pin.x, pin.z);
+      if (at.d > PIN_R) return;
+      this.advanceAlong(a, at.along);
+    } else if (progress > 0) this.advanceAlong(a, progress * routeLength(route));
     // (Already under way: not where an alert keeps people indoors either.)
     if (progress > 0 && this.shelter?.(a.x, a.z, a.x, a.z)) return;
     a.y = this.groundY(a.x, a.z, a.onRoad, a.heading);
@@ -338,11 +340,49 @@ export class Pedestrians {
     this.stats.spawned++;
   }
 
+  /** A walker at the start of a route. */
+  private walker(c: Citizen, route: Float32Array, dest: { x: number; z: number } | null): PedAgent {
+    const r = hashToFloat(hash32(c.seed));
+    const pref = c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35;
+    return {
+      id: this.nextId++, cit: c, x: route[0], z: route[1], y: 0, heading: 0, speed: pref, pref, state: PState.Walk, route, wp: 1, dest,
+      fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
+    };
+  }
+
+  /**
+   * Put a remembered citizen back in the street where they plausibly are (x, z), walking on to a
+   * place (their trip's end, or where they are staying). The schedule only offers each walk once a
+   * day, so this is how you find them again after their body went out of range. Null: not now
+   * (no walkway near there, already there, the street is full).
+   */
+  bringBack(c: Citizen, x: number, z: number, to: PlaceRef): PedAgent | null {
+    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS) return null;
+    const ref = this.resolve(to);
+    let bx: number, bz: number, dest: { x: number; z: number } | null = null;
+    if (ref) { const d = doorOf(ref.desc); bx = d.x; bz = d.z; dest = { x: bx, z: bz }; }
+    else { const cc = this.macro.cells[to.cell]?.centroid; if (!cc) return null; bx = cc[0]; bz = cc[1]; }
+    if (Math.hypot(bx - x, bz - z) < 4) return null;
+    const route = this.buildRoute(x, z, bx, bz);
+    if (!route || Math.hypot(route[0] - x, route[1] - z) > PIN_R * 2) return null;
+    const a = this.walker(c, route, dest);
+    a.y = this.groundY(a.x, a.z, a.onRoad, a.heading);
+    this.agents.push(a);
+    this.byId.set(c.id, a);
+    this.stats.spawned++;
+    return a;
+  }
+
   private pendingCarDest: { x: number; z: number } | null = null;
   /** At the end of its route: true when someone else takes the agent over (it is not removed). */
   onArrive?: (a: PedAgent) => boolean;
   /** Called when an agent reaches its parked car (trip continues by car). */
   onCarReady?: (a: PedAgent) => void;
+  /**
+   * Where a citizen plausibly is now (a remembered person: People keeps them moving at walking
+   * pace), or null: wherever the schedule says. Their schedule's body only appears near it.
+   */
+  placeFor?: (c: Citizen) => { x: number; z: number } | null;
   /** A trip from a to b is not started (people stay where they are: an alert over the district). */
   shelter?: (ax: number, az: number, bx: number, bz: number) => boolean;
 
@@ -719,6 +759,8 @@ export class Pedestrians {
   /** A citizen placed inside a building (sitting, sleeping or standing). */
   spawnInside(c: Citizen, x: number, y: number, z: number, yaw: number, pose: 'sit' | 'sleep' | 'stand'): PedAgent | null {
     if (this.byId.has(c.id)) return null;
+    const pin = this.placeFor?.(c);
+    if (pin && Math.hypot(pin.x - x, pin.z - z) > PIN_R * 2) return null;
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y, heading: yaw, speed: 0, pref: 1.3, state: pose === 'sit' ? PState.Sit : pose === 'sleep' ? PState.Sleep : PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: x, lookZ: z, lookY: y,
@@ -770,6 +812,19 @@ function dist2(r: BuildingRef, x: number, z: number): number {
 }
 function hashCell(i: number, j: number): number {
   return (Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) & (HASH - 1);
+}
+/** The route point nearest (x, z): its distance and how far along the route it lies. */
+export function routeNearest(r: Float32Array, x: number, z: number): { d: number; along: number } {
+  let best = Math.hypot(r[0] - x, r[1] - z), along = 0, run = 0;
+  for (let i = 3; i < r.length; i += 3) {
+    const ax = r[i - 3], az = r[i - 2], dx = r[i] - ax, dz = r[i + 1] - az;
+    const l = Math.hypot(dx, dz);
+    const t = l > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (l * l))) : 0;
+    const d = Math.hypot(ax + dx * t - x, az + dz * t - z);
+    if (d < best) { best = d; along = run + l * t; }
+    run += l;
+  }
+  return { d: best, along };
 }
 function routeLength(r: Float32Array): number {
   let s = 0;

@@ -34,7 +34,7 @@ export interface AbilityDef {
   /** passive: always on (no hotbar); active: hotbar-assignable. */
   kind: 'active' | 'passive';
   group: AbilityGroup;
-  /** tap: fires on press; hold: works while held (super jump: charges, fires on release); toggle: on/off. */
+  /** tap: fires on press; hold: works while held (super jump: climbs while held); toggle: on/off. */
   trigger: 'tap' | 'hold' | 'toggle' | 'none';
   maxRank: number;
   /** Native key besides the hotbar (shown in the UI). */
@@ -133,16 +133,16 @@ export const ABILITIES: AbilityDef[] = [
   },
   {
     id: 'superJump', name: 'Super jump', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK, key: 'Hold Space',
-    desc: 'Hold Space to charge, release to leap onto rooftops. Heavy landings shake the ground.',
+    desc: 'Press Space to leap and keep holding it to climb higher; steer all the way. Heavy landings shake the ground.',
     icon: svg('<path d="M6 11l6-6 6 6"/><path d="M6 17l6-6 6 6"/><path d="M4 21h16"/>'),
-    rankText: (r) => `Leap up to ${JUMP_HEIGHT[r]} m high`,
-    costText: () => `${JUMP.cost} energy at full charge`,
+    rankText: (r) => `Climb up to ${JUMP_HEIGHT[r]} m high`,
+    costText: () => `${JUMP.cost} energy for the full height`,
   },
   {
-    id: 'speed', name: 'Super speed', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK,
-    desc: 'Hold to run faster than you can fly: up walls, over cars, across water; people you pass are spun aside. Tap for a dash burst.',
+    id: 'speed', name: 'Super speed', kind: 'active', group: 'movement', trigger: 'toggle', maxRank: MAX_RANK,
+    desc: 'Switch it on to run at super speed: you steer around cars, poles and walls by yourself and brake when the way ahead is blocked. Runs across water; people you pass are spun aside. In flight: a dash burst.',
     icon: svg('<path d="M11 6l6 6-6 6"/><path d="M17 6l6 6-6 6" opacity="0.55"/><path d="M2 9h6M1 12h7M2 15h6"/>'),
-    rankText: (r) => `Run ${SPEED_TOP[r]} m/s (flight boost ${Math.round(flightBoost(r))} m/s) · tap: ${DASH_DIST[r]} m dash, ${cd(DASH_COOLDOWN[r])}`,
+    rankText: (r) => `Run ${SPEED_TOP[r]} m/s · in flight: ${DASH_DIST[r]} m dash, ${cd(DASH_COOLDOWN[r])}`,
     costText: () => `Running is free · dash ${DASH.cost} energy`,
   },
   {

@@ -6,7 +6,7 @@
  *  - Right side: drag to look around, pinch to zoom the camera, tap someone to target them
  *    (a tap is a left click at that point).
  *  - Buttons send the same keys as the keyboard (keydown on press, keyup on release), so held
- *    keys work as on a keyboard: hold Jump to charge a super jump or to rise in flight, hold
+ *    keys work as on a keyboard: hold Jump to climb higher in a super jump or to rise in flight, hold
  *    Use to dig someone out. The hotbar slots take touches themselves.
  */
 import type { Game } from '../game/Game';

@@ -2,10 +2,32 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.069 — 2026-10-06
+## 0.074 — 2026-10-06
 
 - **Manholes are climbed now, not teleported through.** Press E by a lid and the hero squats, lifts its edge and drags the heavy cover aside, turns round, lowers themselves over the edge and climbs down a ladder to the sewer's walkway, hands and feet on the rungs. From below, the hero walks to the ladder, climbs up, pushes the lid up and off if it is still on, and climbs out over the edge onto the street. Every manhole has a real brick shaft now, on one side of the sewer over the walkway, with the ladder on its wall and daylight falling in through the pick holes (more when the lid is off). The camera looks down the shaft from the street while the hero is in it and watches from inside the sewer below. An opened manhole stays open with its lid lying beside it, and the hole now cuts through the road surface too (before, an open manhole on the road was hidden under the asphalt).
-- The hole in the street is round like its lid, with a cast-iron frame and a round brick neck under it before the square shaft opens out; the ladder stands inside the neck. Climbing out, the hands stay pressed on the street until the hero is up on one knee, then they stand. Cars wait while the hero is busy at the hole instead of driving over them, the camera no longer squeezes into the hero's face in the sewer, the lid lifting off is watched from the street, and the "press E" prompt is hidden during the climb.
+- The hole in the street is round like its lid, with a cast-iron frame and a round brick neck under it before the square shaft opens out; the ladder stands inside the neck. Over the edge, the hands lie flat on the street, palms down, until the hero is up on one knee, then they stand. Cars wait while the hero is busy at the hole instead of driving over them, the camera no longer squeezes into the hero's face in the sewer, the lid lifting off is watched from the street, and the "press E" prompt is hidden during the climb.
+
+## 0.073 — 2026-10-06
+
+- **People you know no longer outrun you.** After you leave someone you talked to, they carry on at a walking pace (or ride, when they and where they are going are both far from you) instead of jumping along their day plan, which runs many times faster than real time. Their map dot moves the same way, and their body only shows up again near where they plausibly are, so you can't run away and find them waiting ahead of you. When you come back near them, they are back in the street around their dot, walking on to where their day takes them, so you can talk to them again.
+
+## 0.072 — 2026-10-06
+
+- **Dresses and skirts no longer let skin poke through.** The skirt part is now shaped to each body: it starts close at the waist (no strip of skin between bodice and skirt, and no stiff shelf), clears the widest hips, bottom and thighs, and leaves room for the legs to move, so it is a bit wider, most of all lower down. It follows the legs better when walking, running and sitting, and the upper thighs inside a long skirt are hidden so they can't push through when someone sits down.
+- Fixed tears in every skirt and dress: the front split open from the knees down while walking, and the back hem opened into a V between the legs. Sitting in a skirt no longer shows skin on the lap.
+
+## 0.071 — 2026-10-06
+
+- **Super speed is a toggle now, and it steers itself.** Press its hotbar key (or tap its button) once to switch it on and again to switch it off; no more holding. It is slower than before (40 m/s at the first rank up to 100 m/s at the top, was 75 to 240), so the city keeps up with you. While it is on, you steer roughly and the runner does the rest: it swerves around cars, poles and trees, follows the street around walls, and brakes when the way straight ahead is blocked instead of slamming into it (keep pushing into a wall and it still runs up it, slowly). It no longer drops into manholes or metro stairwells: it runs around them, and at speed skims straight over them. In flight, pressing it still gives the dash burst.
+- **Super jump climbs while you hold Space.** You take off the moment you press it and keep rising for as long as you hold it, up to the jump's maximum height (about a second and a half to the top); let go and the climb stops, so you choose your height. You can steer the whole time you are in the air, at a good pace, so landing on a particular roof is easy. A quick tap is a small hop. Energy is paid for the height you actually gain. On the touch screen, the Jump button works the same way.
+
+## 0.070 — 2026-10-06
+
+- **Credit for the built-in characters.** The Woman and Man are based on "Woman_model" by Bananaboy from Blend Swap (Creative Commons Attribution 3.0). The credit is in `public/assets/bodies/LICENSE.txt` and shows when you point at either card in the character picker.
+
+## 0.069 — 2026-10-06
+
+- **Two new built-in characters: a woman and a man.** The start screen's character picker now offers **Woman** and **Man** next to the default human. Both are fully animated, with painted skin, short hair, eyebrows, lips and real irises. The woman is the new base model from Blend Swap; the man is made from the very same mesh and skeleton, reshaped (broader shoulders and chest, narrower hips, fuller thighs, thicker neck and arms, stronger jaw, 1.80 m tall), so the two move and fit exactly alike.
 
 ## 0.068 — 2026-10-06
 

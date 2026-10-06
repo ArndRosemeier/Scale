@@ -290,6 +290,44 @@ interface ShellTopo {
  * computed once per region set and reused: building it per character (string-keyed seam
  * welding, remap and edge maps over the whole body) cost tens of milliseconds per garment.
  */
+/**
+ * Rest-pose distance of the body surface from the skirt's axis per ring (rows+1, from topY down
+ * over len) and direction (cols, angle 0 = front): the widest body vertex
+ * (not the arms) within the ring's band and its neighbouring directions; 0 where there is none.
+ */
+function skirtClearance(ch: Character, cx: number, cz: number, topY: number, len: number, rows: number, cols: number): Float32Array {
+  const st = ch.geo.st, pos = ch.geo.build.renderPos;
+  const si = st.skinIndex.array as Uint16Array, sw = st.skinWeight.array as Uint8Array;
+  const bodyBones = new Set<number>();
+  for (const [name, i] of ch.boneIndex) if (!/(clavicle|shoulder|arm|wrist|hand|finger|metacarpal|thumb)/.test(name)) bodyBones.add(i);
+  const ext = new Float32Array((rows + 1) * cols);
+  const seen = new Uint8Array(st.renderVerts);
+  const band = len / rows;
+  for (const v of st.index.body) {
+    if (seen[v]) continue;
+    seen[v] = 1;
+    const y = pos[v * 3 + 1];
+    if (y > topY + band * 0.5 || y < topY - len - band) continue;
+    let best = 0, bone = -1;
+    for (let k = 0; k < 4; k++) if (sw[v * 4 + k] > best) { best = sw[v * 4 + k]; bone = si[v * 4 + k]; }
+    if (!bodyBones.has(bone)) continue;
+    const dx = pos[v * 3] - cx, dz = pos[v * 3 + 2] - cz;
+    const d = Math.hypot(dx, dz);
+    const c0 = Math.round(((Math.atan2(dx, -dz) / (Math.PI * 2)) + 1) * cols) % cols;
+    const rf = (topY - y) / band;
+    // The waistband ring only takes the waist itself (a wider band reached the hips and stood
+    // the top out from the body like a shelf); lower rings take their neighbours' bands too.
+    for (let r = Math.max(0, Math.floor(rf - 0.6)); r <= Math.min(rows, Math.ceil(rf + 0.6)); r++) {
+      if (r === 0 && Math.abs(rf) > 0.25) continue;
+      for (let k = -1; k <= 1; k++) {
+        const i = r * cols + ((c0 + k + cols) % cols);
+        if (d > ext[i]) ext[i] = d;
+      }
+    }
+  }
+  return ext;
+}
+
 const SHELL_TOPO = new Map<string, ShellTopo | null>();
 
 /** Cumulative equipment build cost by step (diagnostics, ms; window.norgoEquipStats). */
@@ -553,7 +591,21 @@ export class EquipmentRig {
     let idx = keepTri(topo?.idx ?? []);
     const parts: ShellParts = { P: [], N: [], UV: [], SI: [], SW: [], E: [], I: [] };
     if (shoe) for (const cap of shoe.caps) buildToeCap(cap, st, src, P, parts, n);
-    if (l.skirt) this.buildSkirt(l, parts, n);
+    if (l.skirt) {
+      const { topY, hemY } = this.buildSkirt(l, parts, n);
+      // A closed skirt hides the hips and upper thighs inside it (they can't poke through when
+      // the legs swing or the wearer sits; only what's near the hem can be seen). A skirt over a
+      // shirt leaves the lower pelvis bare under it, which showed on the lap when sitting.
+      if (!l.skirt.slits) {
+        const cut = Math.max(hemY + 0.12, ch.rest[ch.boneIndex.get('lowerleg01.L')!].y + 0.08);
+        const thighs = new Set([BODY_REGIONS.indexOf('thigh.L'), BODY_REGIONS.indexOf('thigh.R')]);
+        const hips = new Set([BODY_REGIONS.indexOf('pelvis'), BODY_REGIONS.indexOf('buttocks')]);
+        for (const v of body) {
+          const y = pos[v * 3 + 1];
+          if ((thighs.has(st.region[v]) && y > cut) || (hips.has(st.region[v]) && y < topY - 0.02)) covered[v] |= 1 << (order & 31);
+        }
+      }
+    }
     if (l.hood) this.buildHood(parts, n);
     const total = n + parts.P.length / 3;
     const fP = new Float32Array(total * 3), fN = new Float32Array(total * 3), fUV = new Float32Array(total * 2), fSI = new Uint16Array(total * 4), fSW = new Uint8Array(total * 4), fE = new Float32Array(total);
@@ -608,47 +660,92 @@ export class EquipmentRig {
     this.shells.push({ mesh, sky: mat.sky });
   }
 
-  /** Skirt/robe cone hanging from the hips, skinned to pelvis + thighs. */
-  private buildSkirt(l: ShellLayer, out: { P: number[]; N: number[]; UV: number[]; SI: number[]; SW: number[]; E: number[]; I: number[] }, base: number) {
+  /**
+   * Skirt/robe hanging from the hips, skinned to the hips, both thighs and the shins. Its shape
+   * follows this body: every ring clears the widest hips, buttocks and thighs measured at or
+   * above it (fabric falls, it doesn't tuck in under the bottom), with room for the legs to
+   * move, then flares. The top ring hugs the waist (no gap to see skin through). Coat and
+   * jacket tails (slits, worn over trousers) keep the plain flared ellipse from the hips.
+   * Returns the heights of the waistband and the hem.
+   */
+  private buildSkirt(l: ShellLayer, out: { P: number[]; N: number[]; UV: number[]; SI: number[]; SW: number[]; E: number[]; I: number[] }, base: number): { topY: number; hemY: number } {
     const ch = this.ch;
     const fit = ch.geo.build.body.fit;
     const pel = ch.geo.build.body.sockets.pelvis.pos;
     const bi = (n: string) => ch.boneIndex.get(n)!;
     const root = bi('root'), thL = bi('upperleg01.L'), thR = bi('upperleg01.R'), shL = bi('lowerleg01.L'), shR = bi('lowerleg01.R');
-    const sk = l.skirt!;
-    const topY = pel[1] + 0.06 * (fit.height / 1.75);
-    const rx = fit.waistRadius * 1.3 + l.offset, rz = fit.chestDepth * 0.55 + l.offset;
-    const len = Math.min(sk.length, topY - 0.03);
+    const sk = l.skirt!, closed = !sk.slits;
+    // The waistband sits above the hips on the waist (skin showed between a dress's bodice and
+    // a skirt that started out at the hips); the hem stays where the length puts it.
+    const hipY = pel[1] + 0.06 * (fit.height / 1.75);
+    const topY = closed ? hipY + 0.05 * (fit.height / 1.75) : hipY;
+    const len = Math.min(sk.length, hipY - 0.03) + (topY - hipY);
     const rows = 12, cols = 40;
     const kneeY = ch.rest[shL].y;
+    const cx = pel[0], cz0 = pel[2] - 0.01;
+    // Widest body (hips, buttocks, legs; not the hanging arms) per ring and direction.
+    const ext = closed ? skirtClearance(ch, cx, cz0, topY, len, rows, cols) : null;
+    const R = new Float32Array((rows + 1) * (cols + 1));
+    // Just outside the garment shell under it (its offset rule in addShell, plus a little).
+    const off = Math.max(0.002, l.offset) * 1.25 + 0.008;
+    for (let c = 0; c < cols; c++) {
+      const a = (c / cols) * Math.PI * 2, sx = Math.sin(a), cz = Math.cos(a);
+      // Tails, and a fallback where the body gives no measure: a fixed ellipse, slightly
+      // flattened at the front, deeper at the back (buttocks).
+      const zr = (fit.chestDepth * 0.55 + l.offset) * (cz > 0 ? 1.08 : 0.95), xr = fit.waistRadius * 1.3 + l.offset;
+      const ell = 1 / Math.hypot(sx / xr, cz / zr);
+      let hang = 0;
+      for (let r = 0; r <= rows; r++) {
+        const t = r / rows;
+        if (!ext) { R[r * (cols + 1) + c] = ell * (1 + sk.flare * t * 1.2 + t * 0.25); continue; }
+        // Room for the legs to swing (more lower down, most at the front where knees come up).
+        const ease = off + (0.012 + 0.035 * (0.6 + 0.4 * Math.max(0, cz))) * smoothstep(0.1, 0.55, t) + (0.025 + 0.03 * Math.max(0, -cz)) * smoothstep(0.5, 1, t);
+        const e = ext[r * cols + c];
+        hang = Math.max(hang, e > 0 ? e + ease : r === 0 ? ell * 0.8 : 0);
+        R[r * (cols + 1) + c] = hang * (1 + sk.flare * t * 0.9 + t * 0.12);
+      }
+    }
+    // Smooth around each ring below the waistband (never below what it had: no lumps, no new
+    // clipping); the seam column repeats the first.
+    R[cols] = R[0];
+    for (let r = 1; r <= rows; r++) {
+      const row = R.subarray(r * (cols + 1), r * (cols + 1) + cols);
+      for (let it = 0; it < 3; it++) {
+        const prev = row.slice();
+        for (let c = 0; c < cols; c++) row[c] = Math.max(prev[c], (prev[(c + cols - 1) % cols] + prev[c] * 2 + prev[(c + 1) % cols]) * 0.25);
+      }
+      R[r * (cols + 1) + cols] = row[0];
+    }
     const v0 = base + out.P.length / 3;
     for (let r = 0; r <= rows; r++) {
       const t = r / rows;
       const y = topY - len * t;
-      const flare = 1 + sk.flare * t * 1.2 + t * 0.25;
       for (let c = 0; c <= cols; c++) {
         const a = (c / cols) * Math.PI * 2;
         const sx = Math.sin(a), cz = Math.cos(a);
-        // Slightly flattened at the front, deeper at the back (buttocks).
-        const zr = rz * (cz > 0 ? 1.08 : 0.95);
         const wob = 1 + 0.03 * Math.sin(a * 7 + t * 3) * t;
-        const x = sx * rx * flare * wob + pel[0];
-        const z = -cz * zr * flare * wob + pel[2] - 0.01;
-        out.P.push(x, y, z);
+        const rr = R[r * (cols + 1) + c] * wob;
+        out.P.push(sx * rr + cx, y, -cz * rr + cz0);
         out.N.push(sx, 0, -cz);
         out.UV.push(c / cols, 1 - t);
-        // Weights: hips at the top, thighs/shins by side (left = −X) lower down.
-        const side = sx < 0 ? 'L' : 'R';
-        const lateral = Math.min(1, Math.abs(sx) * 1.4);
-        const legW = Math.min(0.85, t * 1.5) * (0.35 + 0.65 * lateral);
-        const below = y < kneeY ? Math.min(1, (kneeY - y) / 0.25) * 0.5 : 0;
-        const legBone = side === 'L' ? thL : thR, shinBone = side === 'L' ? shL : shR;
-        const wRoot = 1 - legW;
-        const wLeg = legW * (1 - below), wShin = legW * below;
-        const tot = wRoot + wLeg + wShin;
-        out.SI.push(root, legBone, shinBone, 0);
-        const a8 = Math.round((wRoot / tot) * 255), b8 = Math.min(255 - a8, Math.round((wLeg / tot) * 255));
-        out.SW.push(a8, b8, 255 - a8 - b8, 0);
+        // Weights: hips at the top, the thighs lower down, each side its own leg (shared by
+        // both at the middle). A closed skirt follows the legs early and most at the front and
+        // sides; tails mostly at the sides. Below the knee the shins take part.
+        const legW = closed ? Math.min(0.9, t * (1.6 + 1.6 * Math.max(0, cz) + 1.2 * (1 - Math.abs(cz)))) * (1 - 0.2 * Math.max(0, -cz))
+          : Math.min(0.85, t * 1.5) * (0.35 + 0.65 * Math.min(1, Math.abs(sx) * 1.4));
+        // Character's left is −X. A wide blend at the back: the back hangs between the legs
+        // (a narrow one pulled the hem up into a V when the legs split).
+        const bw = 0.35 + 0.25 * Math.max(0, -cz), pL = smoothstep(-bw, bw, -sx);
+        const below = y < kneeY ? Math.min(1, (kneeY - y) / 0.25) * 0.7 : 0;
+        // One shin slot: the shin of this side, fading out towards the middle front and back
+        // where the side changes (by column, so the seam's columns 0 and cols agree). A hard
+        // switch there tore the fabric open between the legs.
+        const sh = below * Math.abs(2 * pL - 1);
+        const wRoot = 1 - legW, wL = legW * pL * (1 - sh), wR = legW * (1 - pL) * (1 - sh);
+        const shin = c % cols < cols / 2 ? shR : shL;
+        out.SI.push(root, thL, thR, shin);
+        const a8 = Math.round(wRoot * 255), b8 = Math.min(255 - a8, Math.round(wL * 255)), c8 = Math.min(255 - a8 - b8, Math.round(wR * 255));
+        out.SW.push(a8, b8, c8, 255 - a8 - b8 - c8);
         out.E.push(r === rows ? 1 : 0);
       }
     }
@@ -659,6 +756,7 @@ export class EquipmentRig {
       const a = v0 + r * (cols + 1) + c, b = a + cols + 1;
       out.I.push(a, b, a + 1, a + 1, b, b + 1);
     }
+    return { topY, hemY: topY - len };
   }
 
   /** Hood: a skinned cap over the head with a face opening, draping onto the shoulders. */

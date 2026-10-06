@@ -17,6 +17,7 @@ import { pointInPoly, distPointPolyEdge } from '../src/core/geom2';
 import { buildBuildingShell, facadeSpecs } from '../src/build/buildingShell';
 import { MeshBuilder } from '../src/build/meshBuilder';
 import { Population } from '../src/sim/Population';
+import { routeNearest } from '../src/sim/Pedestrians';
 import { planFloor, planLift, planStair, coreFits } from '../src/interior/InteriorGen';
 import { metroInput } from './metroaudit';
 import { auditLines, auditPassages } from './metroAuditCore';
@@ -67,7 +68,7 @@ import { pickLine, ruleAnswer, fill, dirWord, type TalkFacts } from '../src/game
 import { LINES, CHAT, type Topic } from '../src/game/people/lines';
 import { planHoods, LiveIndex, LIVE, policePresence, policeCarWeight, beatPairs, responseFactor, safeStart, rollOffScreen, safetyOf, type Safety } from '../src/game/news/pulse';
 import { headline, gossip, whenWord, localRemark } from '../src/game/news/headlines';
-import { PEOPLE, newKnown, applyDeed, remember, opinionOf, savePeople, restorePeople, addSaid } from '../src/game/people/memory';
+import { PEOPLE, onTheirWay, newKnown, applyDeed, remember, opinionOf, savePeople, restorePeople, addSaid } from '../src/game/people/memory';
 import { rescueAllowed, pickHospital, hospitalFit, planFlight, flightAt, wardInside, wardExit, hospitalName, padSpot, WARD, type HospitalCandidate } from '../src/game/defeat/rules';
 
 let failures = 0;
@@ -471,7 +472,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(!/NaN|undefined|Infinity/.test(txt), `${d.id} rank ${r} text: ${txt}`);
     if (!d.granted) check((T.KARMA_COST as Record<string, readonly number[]>)[d.id]?.length === d.maxRank, `${d.id}: karma cost for every rank`);
   }
-  for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.flightBoost(r) * 1.1, `super speed rank ${r} clearly faster than flight boost`);
+  for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.SPEED_TOP[r - 1] && T.SPEED_TOP[r] <= 100, `super speed rank ${r}: faster than the rank below, at most 100 m/s`);
   check(LEGACY_IDS.dash === 'speed', 'dash folds into super speed');
   // A Normal save from before the fold: dash rank 3 on slot 2 becomes super speed rank 3 there.
   const store = new Map<string, string>();
@@ -2960,6 +2961,20 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const said: string[] = [];
   for (let i = 0; i < 3; i++) { const p = pickLine('news', { ...base, temper: 'steady', met: 0, deed: null }, 5 + i, used); said.push(p.text); used.add(p.id); }
   check(new Set(said).size === said.length, `people: no repeats while there is something new to say (${said.join(' | ')})`);
+  {
+    // Out of sight, a known person moves at a walk near you (the plan runs many times faster), rides only far away.
+    let w = { x: 0, z: 0 };
+    for (let i = 0; i < 30; i++) w = onTheirWay(w.x, w.z, 2000, 0, 50, 0, 1);
+    check(Math.abs(w.x - 30 * PEOPLE.walk) < 1e-6, `people: walk near the hero (${w.x.toFixed(1)} m in 30 s)`);
+    const far = onTheirWay(1000, 0, 3000, 0, 0, 0, 10);
+    check(Math.abs(far.x - 1000 - 10 * PEOPLE.ride) < 1e-6, 'people: ride when far from the hero');
+    const there = onTheirWay(0, 0, 3, 4, 0, 0, 100);
+    check(there.x === 3 && there.z === 4, 'people: stop at the place');
+    const R = Float32Array.from([0, 0, 0, 100, 0, 0, 100, 100, 0]);
+    const at = routeNearest(R, 100, 50 + 0.5);
+    check(Math.abs(at.along - 150.5) < 1e-3 && at.d < 1e-3, 'people: nearest route point');
+    check(routeNearest(R, 50, 30).d === 30, 'people: route distance');
+  }
   check(fill('{ATitle}, {aTitle}, {Group}.', { ...base, temper: 'kind', met: 0, deed: null, job: { kind: 'office', title: 'office worker' }, group: 'the Kings' }) === 'An office worker, an office worker, The Kings.', 'people: tokens with articles and capitals');
   check(dirWord(0, -1) === 'north' && dirWord(1, 0) === 'east' && dirWord(-1, 1) === 'south-west', 'people: compass words (north is −z, as on the map)');
   // Memory: a small cap; the one you care least about is forgotten; saves round-trip.
