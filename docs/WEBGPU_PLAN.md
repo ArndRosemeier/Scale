@@ -87,3 +87,11 @@ Ordered by how much of the screen they cover (port first what is always visible)
 
 - 2026-10-06: inventory, plan. Headless WebGPU works in the container (Chromium +
   `--enable-unsafe-webgpu --enable-features=Vulkan --use-webgpu-adapter=swiftshader`).
+- 2026-10-06: steps 1–4 done in one go: every GLSL material has a node version (see
+  WEBGPU_PORTING.md for how, and the traps). Headless `?gpu=webgpu-gl` screenshots match WebGL
+  (street, aerial, night). All generated WGSL validates on Dawn. Fixed on the way: polygon offset
+  under reversed depth (three's WebGPU backends don't flip it like WebGLRenderer), stars as sized
+  sprites, press photos read back asynchronously. Headless real WebGPU (Dawn on SwiftShader) loses
+  its device on the first frame even for a plain cube, so real WebGPU is checked on Arnd's PC.
+  Open: GPU timer (quality auto-levels) on WebGPU; `info.programs` counts; vertex-buffer limit (8)
+  for very large instanced meshes (furniture > ~1024 instances) to watch on real hardware.
