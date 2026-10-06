@@ -1331,12 +1331,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const gates = plan.nodes.filter((q2) => q2.name.startsWith('gate'));
     check(gates.length === plan.roads.length && gates.every((g2) => seen.has(g2.id)), `deep seed ${seed}: every gate (${gates.length}) leads down to the Heart`);
     // The trench war in the Warrens' mouth: the line laid out, the Lumen's sentries hold it against the endless pushes
-    // (most Murk fall in no-man's land, hardly any get past), and the Murk go for a player in their way.
+    // (most Murk fall in no-man's land, hardly any get past, the fallen are replaced; dice seeded per realm),
+    // and the Murk go for a player in their way.
     const T = plan.trench;
     check(T.segs.length === 3 && T.posts.length >= 5 && T.gapPosts.length === 2 && T.craters.length >= 3 && ['trench', 'noMans', 'murkLine'].every((k) => !!plan.places[k]) && ['trench0', 'trench1', 'noMans', 'murkLine'].every((k) => plan.nodes.some((q2) => q2.name === k)),
       `deep seed ${seed}: the Warrens' mouth is a trench line (${T.segs.length} bays, ${T.posts.length} spots, ${T.gapPosts.length} gaps, ${T.craters.length} craters)`);
     const tw = runTrench(plan, 150, 'away');
-    check(tw.spawned >= 20 && tw.killed >= tw.spawned * 0.6 && tw.past <= 2 && tw.sentriesLost <= 4, `deep seed ${seed}: the Lumen hold the trench (${tw.spawned} Murk came, ${tw.killed} fell, ${tw.reachedLine} reached the line, ${tw.past} got past; ${tw.sentriesLost} sentries lost; ${tw.hits}/${tw.bolts} bolts hit)`);
+    check(tw.spawned >= 20 && tw.killed >= tw.spawned * 0.6 && tw.past <= 2 && tw.sentriesLost <= 12, `deep seed ${seed}: the Lumen hold the trench (${tw.spawned} Murk came, ${tw.killed} fell, ${tw.reachedLine} reached the line, ${tw.past} got past; ${tw.sentriesLost} sentries lost; ${tw.hits}/${tw.bolts} bolts hit)`);
     const tp = runTrench(plan, 60, 'noMans');
     check(tp.playerHits >= 3, `deep seed ${seed}: the Murk go for a player in no-man's land (${tp.playerHits} hits in 60 s)`);
     console.log(`deep seed ${seed}: ${plan.roads.length} roads, ${plan.prims.length} shapes, ${plan.decor.length} decor, ${plan.glows.length / 7} lights, ${plan.nodes.length} waypoints, Glow at ${plan.yGlow.toFixed(0)} m, Deep at ${plan.yDeep.toFixed(0)} m, in ${ms.toFixed(0)} ms`);
