@@ -120,7 +120,8 @@ export function gawkersNear(peds: { neighbours(x: number, z: number, r: number, 
   return n;
 }
 
-export type DownCause = 'player' | 'collapse' | 'accident' | 'threat' | 'police' | 'military' | 'other';
+/** ('brush': a super speed runner brushed past, a stumble that is nobody's misdeed.) */
+export type DownCause = 'player' | 'brush' | 'collapse' | 'accident' | 'threat' | 'police' | 'military' | 'other';
 
 
 const MAX_AGENTS = 2600;
