@@ -1,0 +1,31 @@
+{
+ "version": 1,
+ "file": "conform.bin",
+ "bytes": 284376,
+ "note": "MakeHuman mesh reshaped onto the Woman/Man base bodies (tools/avatar/base-bodies/conform.py)",
+ "morphVerts": 14274,
+ "realVerts": 14136,
+ "offsetScale": 2.6352528504826854e-06,
+ "sections": {
+  "female": {
+   "offset": 0,
+   "length": 42822,
+   "type": "i16"
+  },
+  "male": {
+   "offset": 85644,
+   "length": 42822,
+   "type": "i16"
+  },
+  "skinIdx": {
+   "offset": 171288,
+   "length": 56544,
+   "type": "u8"
+  },
+  "skinW": {
+   "offset": 227832,
+   "length": 56544,
+   "type": "u8"
+  }
+ }
+}

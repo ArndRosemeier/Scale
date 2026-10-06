@@ -1076,7 +1076,8 @@ export class Animator {
    *  - hover: upright, arms relaxed a little out from the sides, legs together with one knee
    *    bent, toes pointed, a slow drift in the limbs;
    *  - slow flight: arms along the body, legs trailing straight, head up to see ahead;
-   *  - cruise: one fist stretched ahead (the right), the other arm along the body;
+   *  - cruise (Superman): the right fist stretched ahead, the left arm straight back along the
+   *    body with the hand flat against the thigh, legs together;
    *  - boost: both fists ahead, the head tucked between the arms;
    *  - banking: head turned and torso curled into the turn, legs trailing out of it.
    * Fists close on the stretched arms, the other hands stay relaxed (see fingerPose).
@@ -1112,17 +1113,16 @@ export class Animator {
     }
     if (fast > 0.001) {
       const q = tmp.clear();
-      // Right fist ahead; the left arm along the body, or also ahead when boosting. Raised arms
-      // angle outward and the collarbones stay back (straight up front, the arm drifted across the
-      // body and the fists crossed in front of the head).
-      q.arm('R', 2.7, 0.42, 0, 0.08, 0.15, 0);
-      q.arm('L', -0.22 + 2.92 * boost, 0.1 + 0.32 * boost, 0, 0.14 - 0.08 * boost, 0.3 - 0.15 * boost, 0.06 * (1 - boost));
-      q.add('clavicle.R', -0.3, 0, 0);
-      q.add('clavicle.L', -0.3 * boost, 0, 0);
-      q.leg('L', -0.04, 0, 0, 0.05, 0.65, 0.2);
-      q.leg('R', -0.06, 0, 0, 0.22 * (1 - boost) + 0.05, 0.65, 0.2);
-      q.spine(0.1 + 0.04 * boost);
-      q.neck(0.85 - 0.15 * boost);
+      // Superman: the right fist stretched straight ahead past the head, the left arm straight
+      // back along the body with the hand flat against the thigh (both fists ahead when
+      // boosting), legs together and straight, toes pointed, back arched, head up.
+      q.arm('R', 3.25, 0.2, 0, 0.02, 0.15, 0);
+      q.arm('L', -0.1 + 3.05 * boost, 0.04 + 0.24 * boost, 0, 0.02, 0.15 * boost, 0);
+      q.add('clavicle.R', -0.25, 0, 0);
+      q.add('clavicle.L', -0.25 * boost, 0, 0);
+      for (const s of ['L', 'R'] as const) q.leg(s, -0.06, -0.07, 0, 0.03, 0.8, 0.25);
+      q.spine(0.12 + 0.04 * boost);
+      q.neck(1.0 - 0.3 * boost);
       p.addScaled(q, fast);
     }
     // Banking into a turn (the player rolls the body by `bank`): look and curl into it.
@@ -1133,7 +1133,7 @@ export class Animator {
     p.leg('R', 0, -b * 0.08, 0);
     // Fists on the stretched arms.
     this.flyCurl.R = 0.35 + 1.15 * fast;
-    this.flyCurl.L = 0.35 + 0.2 * slow + 1.15 * boost + 0.15 * fast * (1 - boost);
+    this.flyCurl.L = 0.35 + 0.2 * slow + 1.15 * boost - 0.33 * fast * (1 - boost);
   }
 
   private glide(p: Pose, fly: boolean) {

@@ -2,9 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.076 — 2026-10-06
+## 0.077 — 2026-10-06
 
 - **You can walk to the starship (and every other landmark) again.** In big cities the houses around a landmark's square could close into an unbroken ring, so the only way in was to fly (seed 873738 at full size had its starship, town hall, cathedral and stadium walled in). Now a paved way leads from the middle of each side of a landmark's square straight out to the street, and no house is built on it.
+
+## 0.076 — 2026-10-06
+
+- **Every human is now built on the new Woman and Man bodies.** NPCs and the character you create get their proportions, body shape and face, while height, weight, age, muscle, the face sliders, the other races, clothes and facial expressions all keep working as before. Crowds perform the same (same mesh size and detail levels).
+- **Better bending.** Humans now use the Woman's skin weights, so shoulders, elbows, hips and knees deform more smoothly. Jumps, flight and other procedural poses bend the legs at the real hip and knee instead of kinking the thigh and shin.
+- **Superman flight.** At speed the hero flies with the right fist stretched out ahead, the left arm straight back along the body with the hand flat against the thigh, legs together and toes pointed; the fist points straight ahead past the head. Boosting still puts both fists forward.
+- The character creator can leave top, trousers or shoes off ("none"). Nude is an option only; new characters still start dressed.
+- The creator's Face view centres on the head, so a character standing with a hip-shot pose no longer has their face cut off at the side.
 
 ## 0.075 — 2026-10-06
 
