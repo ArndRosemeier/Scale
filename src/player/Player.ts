@@ -20,6 +20,7 @@ import type { Collision } from '../world/Collision';
 import { ImportedAvatar, type LoadedModel } from '../avatar/ImportedAvatar';
 import { outfitVisuals, type CharacterLook } from '../avatar/look';
 import { stepEnergy } from '../game/GiantBody';
+import { SpeedNav } from './speedNav';
 
 export const BASE_HEIGHT = 1.8;
 /** Super speed carries the runner over water above this speed (m/s at 1.8 m, × √k). */
@@ -99,10 +100,13 @@ export class Player {
   jumpOnSpace = true;
   /**
    * Super speed: top running speed in m/s at 1.8 m (× √k like every gait), 0 = off. Set every
-   * frame by the AbilitySystem while the power is held. Running into a wall runs up it, low
-   * obstacles are vaulted, water carries the runner above SPEED_WATER × √k.
+   * frame by the AbilitySystem while the power is switched on. The runner steers itself around
+   * what is ahead (SpeedNav); what it still runs into fast is run up or vaulted, water carries it
+   * above SPEED_WATER × √k, holes in the street (manholes, stairwells) are skimmed over.
    */
   speedTop = 0;
+  /** Super speed autopilot (steers around what is ahead, brakes when it is blocked). */
+  private readonly nav = new SpeedNav();
   /** Standing on ice (set every frame by the powers): almost no grip, the body slides. */
   onIce = false;
   /** Seconds of parkour climb grace left (super speed up a wall). */
@@ -287,14 +291,29 @@ export class Player {
     const k = this.k, sk = Math.sqrt(k);
     const g = 9.81;
     const fast = this.speedTop > 0;
-    const speed = (fast ? this.speedTop * sk : (slow ? 0.8 : run ? 5.2 : 1.45) * sk) * (this.chillT > 0 ? this.chillSpeed : 1);
+    let speed = (fast ? this.speedTop * sk : (slow ? 0.8 : run ? 5.2 : 1.45) * sk) * (this.chillT > 0 ? this.chillSpeed : 1);
     const moving = wish.lengthSq() > 0;
-    if (moving) wish.normalize().multiplyScalar(speed);
+    // A super jump is steered all the way through the air, at a good clip.
+    const leaping = !this.grounded && this.leap > 0;
+    if (leaping) speed = Math.max(12 * sk, fast ? Math.min(speed, Math.hypot(this.vel.x, this.vel.z)) : speed);
+    if (moving) {
+      wish.normalize();
+      if (fast && (this.grounded || this.onWater) && this.collision) {
+        // Autopilot: around what is ahead; slower when the way is blocked (braking a little
+        // under the runner's real deceleration, see accel below).
+        const decel = 0.55 * this.speedTop * Math.max(1, sk * 0.6);
+        const st = this.nav.steer(this.collision, this.pos.x, this.pos.y, this.pos.z, this.height, this.radius, k, wish.x, wish.z, Math.hypot(this.vel.x, this.vel.z), decel, dt);
+        wish.set(st.dx, 0, st.dz);
+        speed = Math.min(speed, st.max);
+      }
+      wish.multiplyScalar(speed);
+    }
     // Acceleration limited by friction (∝ g) — giants accelerate as fast in m/s² but feel heavy relative to size.
     // A super-speed runner gets to top speed in about a second and a half (and stops as fast);
     // on ice there is hardly any grip at all.
     let accel = this.grounded ? 9 * (run ? 1.2 : 1) * Math.min(1, sk) + 3 : 2;
     if (fast && (this.grounded || this.onWater)) accel = Math.max(accel, (moving ? 0.65 : 1.2) * this.speedTop);
+    else if (leaping && moving) accel = Math.max(accel, 14 * Math.min(1, sk) + 4);
     if (this.onIce && this.grounded && !this.onWater) accel = fast ? accel * 0.35 : 1.1;
     const dvx = wish.x - this.vel.x, dvz = wish.z - this.vel.z;
     const dv = Math.hypot(dvx, dvz);
@@ -365,7 +384,10 @@ export class Player {
     const h = dt / sub;
     this.blocked = null;
     this.onWater = false;
+    // A super-speed runner skims over manholes and stairwells instead of dropping in.
+    this.collision.skimHoles = this.speeding && Math.hypot(this.vel.x, this.vel.z) > 8 * Math.sqrt(this.k);
     for (let s = 0; s < sub; s++) this.integrateStep(h, r);
+    this.collision.skimHoles = false;
   }
 
   private integrateStep(dt: number, r: number): void {
