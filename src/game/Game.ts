@@ -243,10 +243,10 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, readonly settings: CitySettings, readonly mode: GameMode = 'normal') {
     this.renderer = new Renderer(canvas);
-    this.graphics = new Graphics(this.renderer.gl);
+    this.graphics = new Graphics(this.renderer.gl, this.renderer.webgpu);
     // A start without shadows compiles the shaders without them (the cheapest for weak GPUs).
     this.renderer.gl.shadowMap.enabled = this.graphics.startShadows;
-    hitch.attach(this.renderer.gl, this.renderer.scene);
+    if (!this.renderer.webgpu) hitch.attach(this.renderer.gl, this.renderer.scene);
     this.gate = new ShaderGate(this.renderer.gl, this.renderer.scene, this.renderer.camera, (fn) => this.renderer.asScenePass(fn));
     this.gate.enabled = false; // the start-up warm-up compiles everything present
     (window as unknown as { shaderGate: ShaderGate }).shaderGate = this.gate;
@@ -255,6 +255,7 @@ export class Game {
 
   async start(progress: (msg: string, f: number) => void): Promise<void> {
     const loadT0 = performance.now();
+    await this.renderer.init();
     this.profile = makeProfile(this.settings);
     progress('Generating materials', 0);
     const tex = new TextureLibrary();

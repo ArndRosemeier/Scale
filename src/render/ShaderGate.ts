@@ -14,6 +14,7 @@
  * compiles known variants ahead of time; `stats.late` records what still had to wait.
  */
 import * as THREE from 'three';
+import { WEBGPU } from './gpuMode';
 
 type Policy = 'pass' | 'standin' | 'hide';
 
@@ -64,6 +65,8 @@ export class ShaderGate {
     // The shadow pass renders with the scene's lights but without fog / environment.
     this.shadowScene = new THREE.Scene();
     (this.shadowScene as unknown as { traverseVisible: (cb: (o: THREE.Object3D) => void) => void }).traverseVisible = (cb) => { for (const l of this.lights) cb(l); };
+    // WebGPU builds its pipelines asynchronously by itself: no gate (see docs/WEBGPU_PLAN.md).
+    if (WEBGPU) { this.enabled = false; return; }
     // Every subtree added anywhere is looked at once.
     const gate = this;
     const add = THREE.Object3D.prototype.add;
@@ -82,6 +85,7 @@ export class ShaderGate {
 
   /** Per frame, before rendering. */
   update(): void {
+    if (WEBGPU) return;
     if (this.queue.length && performance.now() - this.lightsAt > 2000) this.refreshLights();
     // New objects.
     if (this.queue.length) {
@@ -129,6 +133,10 @@ export class ShaderGate {
    * Used for stand-in meshes of content that appears later.
    */
   precompile(o: THREE.Object3D): void {
+    if (WEBGPU) {
+      void (this.renderer as unknown as { compileAsync(o: THREE.Object3D, c: THREE.Camera, s: THREE.Scene): Promise<void> }).compileAsync(o, this.camera, this.scene).catch((e) => console.warn('[gate] precompile', e));
+      return;
+    }
     this.refreshLights();
     this.asScenePass(() => this.renderer.compile(o, this.camera, this.lightScene));
     o.traverse((c) => {

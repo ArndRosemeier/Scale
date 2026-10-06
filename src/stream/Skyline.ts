@@ -82,6 +82,7 @@ export class Skyline {
     box.translate(0, 0.5, 0);
     const g = new THREE.InstancedBufferGeometry();
     g.index = box.index;
+    g.instanceCount = n; // (InstancedBufferGeometry defaults to Infinity: WebGPU draws that count)
     for (const k of ['position', 'normal', 'uv']) g.setAttribute(k, box.getAttribute(k));
     const a0 = new Float32Array(n * 4), a1 = new Float32Array(n * 4);
     const mesh = new THREE.InstancedMesh(g, this.mat, n);

@@ -4,6 +4,7 @@
  * (PMREM of the sky), fog, and the shared lighting uniforms.
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from './gpuMode';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { G } from './materials/globals';
 import { clamp, smoothstep, lerp } from '../core/math';
@@ -43,7 +44,7 @@ export class SkySystem {
     this.envSky = makeSky(false, true);
     this.envSky.scale.setScalar(1000);
     this.envScene.add(this.envSky);
-    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.pmrem = WEBGPU ? gpuKit().createPMREM(renderer) as unknown as THREE.PMREMGenerator : new THREE.PMREMGenerator(renderer);
     // An environment map from the start: it is part of every lit material's program key, so
     // shaders compiled before the first frame (the loading warm-up, streamed cells) would
     // otherwise all be compiled again — one after the other — once the first frame sets it.
@@ -300,6 +301,8 @@ export function moonPhase(hoursAbs: number): number {
 }
 
 function makeSky(reversed: boolean, env: boolean): Sky {
+  // WebGPU: the same sky as a node material (render/webgpu/sky.ts), same uniforms.
+  if (WEBGPU) return gpuKit().makeSkyNode(reversed, env, SUN_R, MOON_R) as unknown as Sky;
   const sky = new Sky();
   const u = sky.material.uniforms;
   u.turbidity.value = 4;

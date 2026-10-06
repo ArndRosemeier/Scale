@@ -85,10 +85,11 @@ export class Graphics {
   /** Called after auto changed the level (the pause menu shows it). */
   onChange: ((level: GraphicsLevel, why: string) => void) | null = null;
 
-  constructor(gl: THREE.WebGLRenderer) {
-    const ctx = gl.getContext();
-    this.gpu = gpuName(ctx);
-    this.timer = GpuTimer.create(ctx);
+  constructor(gl: THREE.WebGLRenderer, webgpu = false) {
+    // (WebGPU: no WebGL context; the GPU timer comes later, see docs/WEBGPU_PLAN.md.)
+    const ctx = webgpu ? null : gl.getContext();
+    this.gpu = ctx ? gpuName(ctx) : 'WebGPU';
+    this.timer = ctx ? GpuTimer.create(ctx) : null;
     this.setting = loadSetting();
     this.scaleOverride = loadScale();
     this.step = this.setting === 'auto' ? this.autoStart() : PRESET[this.setting];

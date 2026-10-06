@@ -8,19 +8,33 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { WEBGPU, WEBGPU_FORCE_GL, gpuKit } from './gpuMode';
+
+type Post = InstanceType<ReturnType<typeof gpuKit>['Post']>;
 
 export class Renderer {
+  /**
+   * The three.js renderer. On the WebGPU path (`webgpu`) this is a WebGPURenderer: most of the
+   * API is shared; WebGL-only calls (programs, extensions, `compile`) must check `webgpu` first.
+   */
   readonly gl: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
-  private composer: EffectComposer;
-  private bloom: UnrealBloomPass;
-  private smaa: SMAAPass;
+  readonly webgpu = WEBGPU;
+  private composer!: EffectComposer;
+  private bloom!: UnrealBloomPass;
+  private smaa!: SMAAPass;
+  private post: Post | null = null;
   readonly reversed: boolean;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true, stencil: false });
-    this.reversed = this.gl.capabilities.reversedDepthBuffer;
+    if (WEBGPU) {
+      this.gl = gpuKit().createRenderer(canvas, WEBGPU_FORCE_GL) as unknown as THREE.WebGLRenderer;
+      this.reversed = true;
+    } else {
+      this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true, stencil: false });
+      this.reversed = this.gl.capabilities.reversedDepthBuffer;
+    }
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.gl.setSize(window.innerWidth, window.innerHeight, false);
     this.gl.toneMapping = THREE.AgXToneMapping;
@@ -29,6 +43,12 @@ export class Renderer {
     this.gl.shadowMap.enabled = true;
     this.gl.shadowMap.type = THREE.PCFShadowMap;
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 60000);
+    if (WEBGPU) {
+      this.post = new (gpuKit().Post)(this.gl as unknown as ConstructorParameters<ReturnType<typeof gpuKit>['Post']>[0], this.scene, this.camera);
+      this.resize();
+      window.addEventListener('resize', () => { this.onResize?.(); this.resize(); });
+      return;
+    }
     const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: true });
     if (this.reversed) {
       rt.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType);
@@ -50,10 +70,16 @@ export class Renderer {
   resize(): void {
     const w = window.innerWidth, h = window.innerHeight;
     this.gl.setSize(w, h, false);
-    this.composer.setPixelRatio(this.gl.getPixelRatio());
-    this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.post) return;
+    this.composer.setPixelRatio(this.gl.getPixelRatio());
+    this.composer.setSize(w, h);
+  }
+
+  /** The WebGPU renderer needs an async start (device, adapter) before it can render. */
+  async init(): Promise<void> {
+    if (this.webgpu) await (this.gl as unknown as { init(): Promise<unknown> }).init();
   }
 
   setPixelRatio(pr: number): void {
@@ -64,15 +90,18 @@ export class Renderer {
 
   /** Bloom and SMAA on or off (the composer renders the last enabled pass to the screen). */
   setPost(bloom: boolean, smaa: boolean): void {
+    if (this.post) { this.post.set(bloom, smaa); return; }
     this.bloom.enabled = bloom;
     this.smaa.enabled = smaa;
   }
 
   setBloom(strength: number): void {
+    if (this.post) { this.post.setBloom(strength); return; }
     this.bloom.strength = strength;
   }
 
   render(): void {
+    if (this.post) { this.post.render(); return; }
     this.composer.render();
   }
 
@@ -82,6 +111,7 @@ export class Renderer {
    * get different keys (sRGB, AgX) and never be used.
    */
   asScenePass<T>(fn: () => T): T {
+    if (this.post) return fn();
     const prev = this.gl.getRenderTarget();
     this.gl.setRenderTarget(this.composer.readBuffer);
     try { return fn(); } finally { this.gl.setRenderTarget(prev); }
