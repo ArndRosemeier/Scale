@@ -6,7 +6,7 @@ import * as THREE from 'three/webgpu';
 import { pass, renderOutput } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
-import { makeSkyNode } from './sky';
+import { makeSkyNode, makeStarsNode } from './sky';
 import { createFacadeNodeMaterial } from './facade';
 import { createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial } from './ground';
 import { clearGlassNodeMaterial, clearGlassElemNodeMaterial, skylineNodeMaterial } from './city';
@@ -29,6 +29,7 @@ export { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMateri
 export { createSkinNodeMaterial, createGarmentNodeMaterial, createShellNodeMaterial, createEyeNodeMaterial, createHairNodeMaterial, createHornNodeMaterial, simpleNodeMaterial, createLashNodeMaterial } from './people';
 export { createCrowdNodeMaterial } from './crowd';
 export { patchSkyOcclusionNode } from './skyOcclusion';
+export { makeStarsNode };
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 
 export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): THREE.WebGPURenderer {

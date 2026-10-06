@@ -80,7 +80,9 @@ export class SkySystem {
       sh.vertexShader = 'uniform vec3 moonDir;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
 	if ( dot( normalize( position ), moonDir ) > ${Math.cos(MOON_R * 1.15).toFixed(7)} ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );`);
     };
-    this.stars = new THREE.Points(g, starMat);
+    this.stars = WEBGPU
+      ? gpuKit().makeStarsNode(pos, col, 2, moonU, Math.cos(MOON_R * 1.15)) as unknown as THREE.Points
+      : new THREE.Points(g, starMat);
     this.stars.renderOrder = -999;
     this.stars.frustumCulled = false;
     scene.add(this.stars);

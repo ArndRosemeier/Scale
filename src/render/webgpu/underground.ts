@@ -74,11 +74,12 @@ export function deepMotesNode(
   const position = instancedBufferAttribute(new THREE.InstancedBufferAttribute(P, 3), 'vec3');
   const aSeed = instancedBufferAttribute(new THREE.InstancedBufferAttribute(S, 1), 'float');
 
-  const p = vec3(position).toVar();
-  if (liftHeight === null) p.y.addAssign(mod(uT.mul(add(0.15, aSeed.mul(0.25))).add(aSeed.mul(40.0)), 40.0).sub(20.0));
-  else p.y.assign(mod(p.y.add(uT.mul(add(3.0, aSeed.mul(3.0)))), liftHeight));
-  p.x.addAssign(sin(uT.mul(0.3).add(aSeed.mul(30.0))).mul(0.8));
-  p.z.addAssign(cos(uT.mul(0.27).add(aSeed.mul(17.0))).mul(0.8));
+  // (plain expressions: assignments outside an Fn have no stack to land on)
+  const p0 = vec3(position);
+  const py = liftHeight === null
+    ? p0.y.add(mod(uT.mul(add(0.15, aSeed.mul(0.25))).add(aSeed.mul(40.0)), 40.0).sub(20.0))
+    : mod(p0.y.add(uT.mul(add(3.0, aSeed.mul(3.0)))), liftHeight);
+  const p = vec3(p0.x.add(sin(uT.mul(0.3).add(aSeed.mul(30.0))).mul(0.8)), py, p0.z.add(cos(uT.mul(0.27).add(aSeed.mul(17.0))).mul(0.8)));
   mat.positionNode = p;
   const mvz = modelViewMatrix.mul(vec4(p, 1.0)).z.negate();
   const far = liftHeight === null ? 60.0 : 90.0;

@@ -10,6 +10,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, float, floor, fract, vec2, vec3, vec4, acos, add, mul, clamp, cos, dot, exp, max, min, mix, modelViewProjection,
   normalize, positionWorld, pow, smoothstep, sub, varyingProperty, uniform, cameraPosition, If, Loop, cross, sqrt, log, select,
+  instancedBufferAttribute,
 } from 'three/tsl';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -196,4 +197,22 @@ export function makeSkyNode(reversed: boolean, env: boolean, sunR: number, moonR
   material.vertexNode = vertexNode;
   material.colorNode = colorNode;
   return mesh;
+}
+
+/**
+ * The star field (SkySystem): WebGPU draws points one pixel wide, so the stars are instanced
+ * sprites of `size` pixels; the moon's disc hides the stars behind it. `opacity` is set by the
+ * sky each frame, as on the PointsMaterial.
+ */
+export function makeStarsNode(pos: Float32Array, col: Float32Array, size: number, moonDir: { value: THREE.Vector3 }, moonCos: number): THREE.Sprite {
+  const mat = new THREE.PointsNodeMaterial({ transparent: true, opacity: 0, depthWrite: false, fog: false, sizeAttenuation: false });
+  const P = instancedBufferAttribute(new THREE.InstancedBufferAttribute(pos, 3), 'vec3');
+  const C = instancedBufferAttribute(new THREE.InstancedBufferAttribute(col, 3), 'vec3');
+  const hidden = dot(normalize(P), (moonDir as N).isNode ? moonDir : uniform(moonDir.value)).greaterThan(moonCos);
+  mat.positionNode = P;
+  mat.sizeNode = select(hidden, 0.0, size);
+  mat.colorNode = C;
+  const s = new THREE.Sprite(mat);
+  s.count = pos.length / 3;
+  return s;
 }
