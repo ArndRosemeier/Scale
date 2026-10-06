@@ -241,7 +241,8 @@ def sculpt(body, names, head0, head1):
     pubis = front[np.argmax(front[:, 2])]
     # Smooth away the female anatomy around the crotch, then add a modest bulge.
     print('crotch', crotch.round(3), 'pubis', pubis.round(3))
-    m = falloff(Pw, (pubis + crotch) / 2, 0.07)
+    # (front only: smoothing the junction between the legs would pull it up into an arch)
+    m = falloff(Pw, pubis - np.array([0, 0.015, 0]), 0.05) * smoothstep(crotch[2] + 0.01, crotch[2] + 0.035, Pw[:, 2])
     Pw = smooth_w(Pw, edges, np.clip(m * 2.0, 0, 1), 80)
     b = falloff(Pw, pubis + np.array([0, -0.035, 0]), 0.03, (1.0, 1.4, 1)) * (Pw[:, 2] > pubis[2] - 0.05)
     Pw[:, 2] += 0.03 * b
@@ -252,9 +253,9 @@ def sculpt(body, names, head0, head1):
         h, kn = head1[bi[leg]], head1[bi[knee]]
         axis = h[0] + (Pw[:, 1] - h[1]) / (kn[1] - h[1]) * (kn[0] - h[0])
         side = (np.sign(Pw[:, 0]) == sx) & (sx * (Pw[:, 0] - axis) < 0)
-        k = 0.2 * smoothstep(crotch[1] - 0.24, crotch[1] - 0.04, Pw[:, 1]) * smoothstep(crotch[1] + 0.02, crotch[1] - 0.01, Pw[:, 1])
+        k = 0.18 * smoothstep(crotch[1] - 0.17, crotch[1] - 0.015, Pw[:, 1]) * smoothstep(crotch[1] + 0.04, crotch[1] + 0.005, Pw[:, 1])
         Pw[:, 0] = np.where(side, axis + (Pw[:, 0] - axis) * (1 + k), Pw[:, 0])
-    Pw = smooth_w(Pw, edges, np.clip(falloff(Pw, crotch, 0.05) * 1.5, 0, 1), 15)
+    Pw = smooth_w(Pw, edges, np.clip(falloff(Pw, crotch, 0.04) * 1.2, 0, 1), 6)
     # Chest: each breast (already shrunk by its bone) is replaced by a taut membrane spanned by
     # the skin around it, which takes the fold under the breast with it; a modest pectoral
     # swell is added on top.
