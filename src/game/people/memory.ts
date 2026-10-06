@@ -49,6 +49,8 @@ export interface Known {
   street: string | null;
   /** Line keys they already said to you. */
   said: string[];
+  /** Met last as something other than their own job (a busker, an officer …): what the map calls them. */
+  title?: string;
   notes: { t: number; text: string }[];
 }
 
@@ -152,6 +154,7 @@ export function restorePeople(raw: unknown): Known[] {
       cit, name: str(k.name) ?? 'Someone', first: num(k.first, 0), last: num(k.last, 0), met: Math.floor(num(k.met, 1, 1)),
       talks: Math.floor(num(k.talks, 0, 0)), helped: Math.floor(num(k.helped, 0, 0)), saved: Math.floor(num(k.saved, 0, 0)), hurt: Math.floor(num(k.hurt, 0, 0)),
       deed, deedStreet: str(k.deedStreet), x: num(k.x, 0), z: num(k.z, 0), street: str(k.street),
+      ...(str(k.title, 40) ? { title: str(k.title, 40)! } : {}),
       said: (Array.isArray(k.said) ? k.said : []).filter((s): s is string => typeof s === 'string').slice(-PEOPLE.said).map((s) => s.slice(0, 24)),
       notes: (Array.isArray(k.notes) ? k.notes : []).map(obj).filter((n) => typeof n.text === 'string').slice(-PEOPLE.notes).map((n) => ({ t: num(n.t, 0), text: str(n.text, 160)! })),
     });

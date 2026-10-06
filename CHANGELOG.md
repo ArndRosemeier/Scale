@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.056 — 2026-10-06
+
+- **You can talk to more people now**: people sitting on benches and café terraces (they stay seated), street performers and characters (the busker, the mime, the living statue, the chicken mascot, the doomsayer, the lost tourist, even the sleepwalker), police officers, paramedics, soldiers, shopkeepers and cleanup crews, as long as they are not busy fighting or fleeing. Each of them answers as what they are: the mime only mimes, the statue barely moves its lips, the officer introduces themselves by rank. Performers carry on with their act while you talk, and the map remembers them as what you met them as. Firefighters can be talked to as well. Cleanup workers no longer end the talk when they step back to their spot, the map remembers officers, paramedics and shopkeepers by their role too, and people met in a role are always grown-ups.
+
 ## 0.055 — 2026-10-06
 
 - **Feedback**: a new "Feedback" link next to the version label, in the main menu and the pause menu, opens a small form. Pick Bug, Idea, Praise or Other, write your message, and Send opens your mail program with it ready to go (with the game version, city seed and browser added, if you like). The address it goes to is never written anywhere on the site or in its code; the game only puts it together at the moment you press Send, so spam bots scanning the page find nothing.
