@@ -8,6 +8,8 @@
  *    that is the hero's good deed to do).
  *  - Agreeable people point after a thief running past, so you see where they went.
  *  - People who know and like you stop and wave (People.greet decides when).
+ *  - Friends, family, neighbours and colleagues who pass each other stop for a chat (phase 4,
+ *    social.ts bonds); a hungry or tired passer-by stops for a bite or a coffee on the way.
  *
  * The helpers, pointers and wavers are brief actors of PEOPLE_OWNER (their own small budget,
  * MANNERS.maxBusy at once); they go back to their day when done or when anything gets in the way.
@@ -16,11 +18,11 @@ import type { Game } from '../Game';
 import type { People } from './People';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role } from '../../sim/Population';
-import { makeActor, release, goTo, stand, lookAt, play, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
-import { opinionOf } from './memory';
+import { makeActor, release, goTo, stand, lookAt, play, hold, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
+import { bondOf, stopsToChat, chatFor, meetLines, needsOf, pressing, snackLine, SOCIAL } from './social';
 import { MANNERS, berthOf, helps, points, reactLine, type Moment } from './behaviour';
 
-type JobKind = 'help' | 'point' | 'wave';
+type JobKind = 'help' | 'point' | 'wave' | 'chat' | 'snack';
 
 interface Job {
   kind: JobKind;
@@ -30,8 +32,16 @@ interface Job {
   t: number;
   stepT: number;
   step: 'go' | 'kneel' | 'up' | 'show';
-  /** Who they help up / point at. */
+  /** Who they help up / point at / talk with. */
   who: PedAgent | null;
+  /** A chat: where they stand, how long it lasts, who speaks first, what is said, lines said so far. */
+  spot?: { x: number; z: number };
+  dur?: number;
+  lead?: boolean;
+  lines?: { hi: string; back: string; bye: string };
+  said?: number;
+  /** A snack: what for. */
+  need?: 'hunger' | 'tired';
 }
 
 /** States of people free to step in (walking, standing, looking). */
@@ -52,6 +62,8 @@ export class Manners {
   private pointed = new Map<number, number>();
   private time = 0;
   private nb: PedAgent[] = [];
+  /** Pairs who chatted lately ("lo:hi" citizen ids): game seconds. */
+  private chatted = new Map<string, number>();
 
   constructor(private g: Game, private people: People) {}
 
@@ -71,7 +83,7 @@ export class Manners {
     this.awayT -= dt;
     if (this.awayT <= 0) { this.awayT = 0.2; this.keepAway(); }
     this.scanT -= dt;
-    if (this.scanT <= 0) { this.scanT = 1; this.findHelpers(); this.findPointers(); }
+    if (this.scanT <= 0) { this.scanT = 1; this.findHelpers(); this.findPointers(); this.findChats(); this.findSnack(); }
   }
 
   /** End everything (a save loaded, the city left). */
@@ -86,13 +98,12 @@ export class Manners {
   private keepAway(): void {
     const g = this.g, P = g.player;
     if (P.height > 2.4 || P.flying || g.freeCam) return;
-    const rep = g.crime?.rep.value ?? 0;
     const px = P.pos.x, pz = P.pos.z;
     for (const a of g.peds.neighbours(px, pz, MANNERS.berthMax * 1.2 + P.radius, this.nb)) {
       if (!free(a) || Math.abs(a.y - P.pos.y) > 2) continue;
       if (this.people.partner === a) continue;
       const p = this.people.person(a.cit);
-      const op = opinionOf(this.people.find(a.cit.id), rep, p.traits.a);
+      const op = this.people.opinion(a.cit);
       const berth = berthOf(op, p.traits) + P.radius;
       const dx = a.x - px, dz = a.z - pz, d = Math.hypot(dx, dz);
       if (berth <= P.radius || d > berth || d < 1e-3) continue;
@@ -172,17 +183,70 @@ export class Manners {
     if (this.pointed.size > 64) for (const [k, t] of this.pointed) if (this.time - t > 30) this.pointed.delete(k);
   }
 
+  // ------------------------------------------------------------------ the social web (phase 4)
+
+  /** Two people with a bond pass each other near the hero: they stop for a chat. */
+  private findChats(): void {
+    const g = this.g, P = g.player.pos;
+    if (this.jobs.filter((j) => j.kind === 'chat').length >= MANNERS.maxChats * 2) return;
+    for (const a of g.peds.neighbours(P.x, P.z, 45, [])) {
+      if (!free(a) || a.state !== PState.Walk || this.people.partner === a) continue;
+      for (const b of g.peds.neighbours(a.x, a.z, SOCIAL.meetR, [])) {
+        if (b === a || !free(b) || b.state !== PState.Walk || this.people.partner === b || Math.abs(a.y - b.y) > 0.8) continue;
+        const bond = bondOf(a.cit, b.cit);
+        if (!bond) continue;
+        const key = a.cit.id < b.cit.id ? `${a.cit.id}:${b.cit.id}` : `${b.cit.id}:${a.cit.id}`;
+        if (this.time - (this.chatted.get(key) ?? -1e9) < SOCIAL.meetEvery) continue;
+        this.chatted.set(key, this.time);
+        const ea = this.people.person(a.cit).traits.e, eb = this.people.person(b.cit).traits.e;
+        if (!stopsToChat(bond, ea, eb, Math.random())) {
+          // Just a nod and a word in passing.
+          g.barks?.say(a, `Hi, ${this.people.person(b.cit).first}!`, 20);
+          continue;
+        }
+        const dur = chatFor(ea, eb, Math.random());
+        const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+        const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1;
+        const lines = meetLines(bond, Math.random());
+        const ja = this.begin('chat', a, b), jb = this.begin('chat', b, a);
+        Object.assign(ja, { spot: { x: mx - (dx / d) * 0.6, z: mz - (dz / d) * 0.6 }, dur, lead: true, lines: { ...lines, hi: lines.hi.replace('{first}', this.people.person(b.cit).first) }, said: 0, step: 'go' });
+        Object.assign(jb, { spot: { x: mx + (dx / d) * 0.6, z: mz + (dz / d) * 0.6 }, dur, lead: false, lines, said: 0, step: 'go' });
+        if (this.chatted.size > 200) for (const [k, t] of this.chatted) if (this.time - t > SOCIAL.meetEvery) this.chatted.delete(k);
+        return;
+      }
+    }
+  }
+
+  /** Now and then a hungry or tired passer-by near the hero stops for a bite or a coffee. */
+  private findSnack(): void {
+    const g = this.g, P = g.player.pos;
+    if (this.jobs.some((j) => j.kind === 'snack') || this.jobs.length >= MANNERS.maxBusy + MANNERS.maxChats * 2 || Math.random() > MANNERS.snackChance) return;
+    const hour = g.sky?.hour ?? 12;
+    for (const a of g.peds.neighbours(P.x, P.z, 25, [])) {
+      if (!free(a) || a.state !== PState.Walk || a.cit.role === Role.Child || this.people.partner === a) continue;
+      const need = pressing(needsOf(a.cit, this.people.person(a.cit).traits, hour, 0));
+      if (need !== 'hunger' && need !== 'tired') continue;
+      const j = this.begin('snack', a, null);
+      j.need = need;
+      j.act.held = need === 'tired' ? 'coffee' : null;
+      play(j.act, need === 'tired' ? 'drink' : 'eat', 2.2);
+      if (Math.random() < 0.5) g.barks?.say(a, snackLine(need, Math.random()), 20);
+      return;
+    }
+  }
+
   // ------------------------------------------------------------------ waving
 
   /** A person who knows and likes you stops and waves (People.greet). False: not now. */
   wave(a: PedAgent): boolean {
     if (!free(a) || this.jobs.length >= MANNERS.maxBusy + 1) return false;
-    return this.begin('wave', a, null);
+    this.begin('wave', a, null);
+    return true;
   }
 
   // ------------------------------------------------------------------ the jobs
 
-  private begin(kind: JobKind, a: PedAgent, who: PedAgent | null): boolean {
+  private begin(kind: JobKind, a: PedAgent, who: PedAgent | null): Job {
     const p = this.people.person(a.cit);
     const act = makeActor('bystander', PEOPLE_OWNER, { title: p.full, pinned: false });
     a.actor = act;
@@ -192,8 +256,9 @@ export class Manners {
       const l = this.line(a, 'point');
       if (l) this.g.barks?.say(a, l, 15);
     }
-    this.jobs.push({ kind, a, act, t: 0, stepT: 0, step: kind === 'help' ? 'go' : 'show', who });
-    return true;
+    const j: Job = { kind, a, act, t: 0, stepT: 0, step: kind === 'help' ? 'go' : 'show', who };
+    this.jobs.push(j);
+    return j;
   }
 
   private tick(dt: number): void {
@@ -227,6 +292,35 @@ export class Manners {
         lookAt(act, v.x, v.y + 1.2, v.z);
         act.mood = 'surprised';
         return j.t < 2.6;
+      }
+      case 'snack': {
+        stand(act);
+        act.mood = 'happy';
+        if (j.t > 3.2 && !j.said) { j.said = 1; play(act, j.need === 'tired' ? 'drink' : 'eat', 2.2); }
+        return j.t < 7;
+      }
+      case 'chat': {
+        // The other one went (knocked down, scared off, taken by someone else): over.
+        const other = v ? this.jobs.find((o) => o.a === v && o.who === a) : null;
+        if (!v || !other || !v.alive) return false;
+        const sp = j.spot!;
+        if (j.step === 'go') {
+          if (Math.hypot(a.x - sp.x, a.z - sp.z) > 0.3 && j.t < 4) { goTo(act, sp.x, sp.z, 1.1); return true; }
+          stand(act);
+          j.step = 'show'; j.stepT = 0;
+          if (j.lead) play(act, 'gesture_wave', 1.5);
+        }
+        lookAt(act, v.x, v.y + 1.55, v.z);
+        act.mood = 'happy';
+        // Taking turns: one talks with their hands while the other listens.
+        const turn = Math.floor(j.stepT / 3) % 2 === (j.lead ? 0 : 1);
+        if (turn && j.stepT > 1) hold(act, 'talk', 0.6);
+        const L = j.lines!;
+        const say = (text: string) => { if (this.g.barks?.say(a, text, 2) !== false) j.said = (j.said ?? 0) + 1; };
+        if (j.lead && j.said === 0 && j.stepT > 0.2) say(L.hi);
+        else if (!j.lead && j.said === 0 && other.said && j.stepT > 1.8) say(L.back);
+        else if (j.lead && j.said === 1 && j.stepT > j.dur! - 1.6) say(L.bye);
+        return j.stepT < j.dur!;
       }
       case 'help': {
         if (!v) return false;

@@ -1,7 +1,7 @@
 /**
  * The talk panel (game/people, NPC_PERSONALITY_PLAN §1): who you are talking to (name, job, age,
  * temperament, mood, whether you met before and how they feel about you), what they just said,
- * and what you can say: keys 1–7 or a click. "Show me the way" lists places (the nearest metro
+ * and what you can say: keys 1–8 or a click. "Show me the way" lists places (the nearest metro
  * station and landmarks); Esc or E closes. While open it takes the number keys (no powers go
  * off) and Esc; walking keys still move the hero.
  */
@@ -21,6 +21,7 @@ const TOPICS: { topic: Topic; label: string }[] = [
   { topic: 'job', label: 'What do you do?' },
   { topic: 'news', label: 'What\'s going on around here?' },
   { topic: 'way', label: 'Can you show me the way to …' },
+  { topic: 'favour', label: 'Can I do anything for you?' },
   { topic: 'me', label: 'What do you think of me?' },
   { topic: 'bye', label: 'Goodbye.' },
 ];

@@ -29,6 +29,8 @@ export const MANNERS = {
   pointAgree: 0.6, pointR: 14,
   /** People busy with a good turn at once, at most. */
   maxBusy: 3,
+  /** Street chats at once (pairs, phase 4), and the chance per second of looking for someone to stop for a snack. */
+  maxChats: 2, snackChance: 0.12,
   /** Waving at a hero they like: opinion needed (extraverts wave sooner, by up to waveE). */
   wave: 35, waveE: 25,
 } as const;

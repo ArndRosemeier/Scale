@@ -9,7 +9,7 @@
 import { Rng, hashString } from '../../core/rng';
 import type { Job, MoodWord, Temperament, Traits } from './identity';
 import type { Safety } from '../news/pulse';
-import { LINES, type LineEntry, type Topic, type When } from './lines';
+import { LINES, type FavourState, type LineEntry, type Topic, type When } from './lines';
 
 export interface TalkFacts {
   first: string;
@@ -50,6 +50,17 @@ export interface TalkFacts {
   /** The neighbourhood here and how safe it is (game/news). */
   hood?: string | null;
   safety?: Safety;
+  /** Word that got round (social.ts hearsay): who told them ({teller}, their {bond}) and what you did to them. */
+  teller?: string | null;
+  bond?: string;
+  told?: 'helped' | 'saved' | 'hurt' | null;
+  /** The need pressing on them now. */
+  need?: 'hunger' | 'tired' | 'lonely' | null;
+  /** Where the favour they asked stands, the one to look in on ({who}, their {word}), and who sent you ({asker}). */
+  favour?: FavourState;
+  who?: string;
+  word?: string;
+  asker?: string | null;
   /** Way topic: the place asked for, its direction and distance. */
   place?: string;
   dir?: string;
@@ -85,6 +96,10 @@ export function matches(w: When, f: TalkFacts): boolean {
   if (w.far !== undefined && w.far !== (f.dist ?? 0) > 2500) return false;
   if (w.heard !== undefined && w.heard !== !!f.heard) return false;
   if (w.safety && (!f.safety || !f.hood || !w.safety.includes(f.safety))) return false;
+  if (w.told && (w.told !== f.told || !f.teller)) return false;
+  if (w.need && w.need !== f.need) return false;
+  if (w.favour && !w.favour.includes(f.favour ?? 'none')) return false;
+  if (w.sent !== undefined && w.sent !== !!f.asker) return false;
   return true;
 }
 
@@ -144,6 +159,7 @@ export function fill(s: string, f: TalkFacts): string {
     street: f.street ?? 'here', metstreet: f.metStreet ?? f.street ?? 'the street', group: f.group ?? 'some gang', boss: f.boss ?? 'their boss',
     city: f.city, place: f.place ?? 'there', dir: f.dir ?? 'that way', dist: distLabel(f.dist ?? 0), days: String(Math.max(1, Math.round(f.days))),
     years: String(f.years + 1), heard: f.heard ?? '', hood: f.hood ?? 'this part of town',
+    teller: f.teller ?? 'a friend', bond: f.bond ?? 'friend', who: f.who ?? 'my friend', word: f.word ?? 'friend', asker: f.asker ?? 'a friend',
   };
   return s.replace(/\{(\w+)\}/g, (m, k: string) => {
     const val = v[k.toLowerCase()];
