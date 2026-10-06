@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.078 — 2026-10-06
+
+- **You can walk to the starship (and every other landmark) again.** In big cities the houses around a landmark's square could close into an unbroken ring, so the only way in was to fly (seed 873738 at full size had its starship, town hall, cathedral and stadium walled in). Now a paved way leads from the middle of each side of a landmark's square straight out to the street. No house, café terrace, fountain, statue or bench is put on it.
+
 ## 0.077 — 2026-10-06
 
 - **No more walls to walk through in the metro entrances.** Two things from above could stand across an entrance passage as a wall without substance:
