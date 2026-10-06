@@ -233,6 +233,8 @@ export class People {
   // ------------------------------------------------------------------ talking
 
   get talking(): boolean { return !!this.session; }
+  /** Who you are talking to (null: nobody). */
+  get partner(): PedAgent | null { return this.session?.a ?? null; }
   /** The talk panel has the keyboard (or just let go of it): Esc must not open the pause menu. */
   get holdsPointer(): boolean { return this.ui.holdsPointer; }
 
