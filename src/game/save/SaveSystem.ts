@@ -127,6 +127,7 @@ export class SaveSystem {
       factions: g.crime.saveFactions(),
       people: g.people ? g.people.save() : null,
       fame: g.fame ? g.fame.save() : null,
+      cityLife: g.city ? g.city.save() : null,
     };
   }
 
@@ -265,6 +266,7 @@ export class SaveSystem {
     step('the villain groups', () => g.crime.restoreFactions(d.factions));
     step('the people you met', () => g.people?.restore(d.people));
     step('your statue', () => { if (d.fame) g.fame?.restore(d.fame); });
+    step('the neighbourhoods', () => { g.city?.restore(d.cityLife ?? null); g.crime.beat.clear(); });
     step('the player', () => this.placePlayer(d.player));
     step('the camera', () => { g.camRig.yaw = d.camera.yaw; g.camRig.pitch = d.camera.pitch; g.camRig.zoom = d.camera.zoom; });
     step('health', () => {

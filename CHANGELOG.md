@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.053 — 2026-10-06
+## 0.054 — 2026-10-06
 
 - **Your reputation is felt in the street now.**
   - **The press**: once you are well known (reputation 35 and up), photographers turn up when you are out on foot, gather round you, raise their cameras and flash away ("Over here!", "Front page!"), more of them the more famous you are, and right after you stop a crime. **Their photo of you goes up on the big billboard screens** with a headline in a news bar ("CITY HERO DOES IT AGAIN", "WHO IS THE MYSTERY HERO?", and "MENACE ON THE LOOSE" when the city has turned on you). From 65 a TV crew comes along: a reporter holding out a microphone and a camera operator.
@@ -11,6 +11,17 @@ Every push raises the version by 0.001. Newest first.
   - **Protesters**: below 0, people gather with placards ("GO HOME HERO", "WHO PAYS FOR THIS?"), chant against you in red speech bubbles to a drum, boo when you walk up and follow you about. The lower your reputation, the bigger the crowd. Passers-by grumble at you. If your reputation stays below 0, protesters pull your statue down; it lies on the paving with its plaque sprayed over (raise your reputation to 80 again and it is rebuilt).
 - **The police and the army escalate against you at any size now**, not only as a giant. With a reputation of −40 or lower, wrecking things gets you warned, warned again, and then hunted: the police, SWAT and the National Guard for a human-sized hero, the full army and air support for a giant. The lower your reputation, the less destruction it takes. At −70 and below the police hunt you on sight: the first officer who sees you goes after you.
 - **Helping someone up raises your reputation a little** (+1; not for people you knocked down yourself).
+
+## 0.053 — 2026-10-06
+
+- **The city lives its own life now, and you hear about it.** Crime happens all over the city, not just near you. The police stop some of it, and the neighbourhoods get safer or rougher over time.
+  - **Neighbourhoods with a crime index**: the city is split into named neighbourhoods ("Ashford Heights", "Mill Quarter" …). Every block has a live crime index. Crimes that get away push it up, crimes stopped by you or the police bring it down, a gang holding the street keeps it high, and it slowly drifts back to the area's usual level. Jailing a gang boss calms their streets. The index is kept in your saves.
+  - **Low crime, lots of police; high crime, the opposite**: safe areas have many patrol cars in traffic and pairs of officers walking the beat, who step in when a crime breaks out near them and cuff the criminals. Rough areas have more crime, hardly any patrols and slow police response.
+  - **A new game starts in a very safe neighbourhood** near the centre.
+  - **On the map**: the crime layer now shades every block from green (safe, many police) through yellow to red (rough). Neighbourhood names show with a coloured dot, and hovering a spot tells you its crime level and police presence.
+  - **Walking into another neighbourhood** shows its name, crime level and police presence.
+  - **News from passers-by**: people chat about what happened around the city ("Did you hear? There was a robbery in Mill Quarter last night.") and about how safe their streets feel. Asking "what's going on around here" in a conversation gets the same news.
+  - **News on the billboards**: the big screens put city news cards between their ads (crime alerts, police news, the hero's deeds, neighbourhoods getting safer or rougher) plus a report on the crime level where you are. Other systems can post a photo with a caption to them (for the press shots of the hero to come).
 
 ## 0.052 — 2026-10-05
 

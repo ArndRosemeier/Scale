@@ -90,6 +90,11 @@ import { PowerSynth } from '../audio/PowerSynth';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { CrimeSystem } from './crime/CrimeSystem';
+import { CityNews } from './news/CityNews';
+import { crimeIndex } from './crime/CrimeIndex';
+import { safeStart } from './news/pulse';
+import { planFactions } from './factions/Factions';
+import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
@@ -178,6 +183,10 @@ export class Game {
   synth!: PowerSynth;
   /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
   crime!: CrimeSystem;
+  /** The city's own life and its news: live crime index, neighbourhoods, police presence, off-screen crime (game/news). */
+  city!: CityNews;
+  /** A fresh game's start cell (the calmest neighbourhood near the centre; -1: a loaded save). */
+  private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
@@ -308,7 +317,25 @@ export class Game {
       this.destruction.landmarks = new LandmarkWrecks(this.streamer.wrecks, this.destruction, this.debris, this.dust, this.terrain, landmarks, tex.facade);
       this.renderer.scene.add(this.destruction.landmarks.group);
     }
-    // Start at the main centre (or a loaded save's spot), at street level.
+    // Start in the calmest neighbourhood near the centre (game/news: a very low crime index), or at
+    // a loaded save's spot, at street level.
+    if (!this.startAt && !this.pendingSave) {
+      const idx = crimeIndex(macro, this.settings.seed);
+      const F = planFactions(macro, this.settings.seed, idx, CITY_GROUPS);
+      const cell = safeStart(macro, idx, (i) => F.holder[i] >= 0);
+      if (cell >= 0) {
+        const mc = macro.cells[cell];
+        // A corner of the block (on the arterial), a little in toward its middle.
+        let bx = mc.poly[0], bz = mc.poly[1], bd = Infinity;
+        for (let k = 0; k < mc.poly.length; k += 2) {
+          const d = Math.hypot(mc.poly[k] - macro.centres[0].x, mc.poly[k + 1] - macro.centres[0].z);
+          if (d < bd) { bd = d; bx = mc.poly[k]; bz = mc.poly[k + 1]; }
+        }
+        const dx = mc.centroid[0] - bx, dz = mc.centroid[1] - bz, dl = Math.hypot(dx, dz) || 1;
+        this.startAt = { x: bx + (dx / dl) * Math.min(14, dl * 0.3), z: bz + (dz / dl) * Math.min(14, dl * 0.3) };
+        this.startCell = cell;
+      }
+    }
     const c = this.startAt ?? macro.centres[0];
     const cam = this.renderer.camera;
     cam.position.set(c.x, this.terrain.height(c.x, c.z) + 1.7, c.z);
@@ -636,7 +663,7 @@ export class Game {
     if (!this.freeCam) this.bodyContacts(dt);
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
-    this.T('crime', () => this.crime.update(dt));
+    this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.T('street', () => this.street?.update(dt));
     this.T('people', () => this.people?.update(dt));
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
@@ -941,6 +968,8 @@ export class Game {
       this.powers.info = () => `Power cores found: <b>${this.progress.coresCollected}</b> of ${cores.total} (rare glowing loot — rooftops, parks, metro, sewers).`;
     }
     // Street crime, police, justice, health and reputation (needs the map, HUD and targeting).
+    this.city = new CityNews(this);
+    if (this.startCell >= 0) this.city.freshStart(this.startCell);
     this.crime = new CrimeSystem(this);
     // Sewer hideouts wear the colours and tags of the group holding the street above.
     this.underground.hideoutLook = (x, z, seed) => {

@@ -372,7 +372,7 @@ body.looking #crosshair { display: block; }
 #tmark i { border-color: var(--con, rgba(255, 236, 196, 0.92)); }
 #tmark b { border-top-color: var(--con, rgba(255, 236, 196, 0.92)); }
 #map .map-key .alert.crime { background: #ff3b30; color: #fff; }
-#map .map-key .crimeheat { display: inline-block; width: 14px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, rgba(230,140,40,0.35), rgba(240,40,30,0.5)); vertical-align: -1px; }
+#map .map-key .crimescale { display: inline-block; width: 28px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, rgba(47,175,100,0.55), rgba(230,194,41,0.45), rgba(214,52,40,0.6)); vertical-align: -1px; }
 #map .map-key .faint { display: inline-block; width: 7px; height: 7px; margin: 0 3px; border-radius: 50%; background: #a9d6ff; opacity: 0.7; box-shadow: 0 0 0 1px rgba(20,28,36,0.55); }
 .pw-rep { display: block; margin-top: 4px; color: #a9b4bf; }
 
@@ -405,7 +405,8 @@ body.looking #crosshair { display: block; }
 .bark { position: fixed; left: 0; top: 0; display: none; max-width: 200px; padding: 5px 10px 6px; margin-top: -6px; background: rgba(252, 251, 247, 0.94); color: #1d242b; border-radius: 12px; font: 600 12px/1.25 system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; z-index: 4; transform-origin: 50% 100%; white-space: nowrap; transition: opacity 0.35s; will-change: transform; }
 .bark::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(252, 251, 247, 0.94); }
 .bark.out { opacity: 0; }
-/* Fame (src/game/fame): protesters and booing passers-by; fans. */
+/* Fame (src/game/fame): protesters and booing passers-by; fans. Long chants wrap inside the bubble. */
+.bark.angry, .bark.cheer { white-space: normal; width: max-content; max-width: 220px; }
 .bark.angry { background: rgba(196, 38, 38, 0.94); color: #fff; }
 .bark.angry::after { border-top-color: rgba(196, 38, 38, 0.94); }
 .bark.cheer { background: rgba(255, 214, 92, 0.96); color: #2a1d00; }

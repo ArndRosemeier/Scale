@@ -203,7 +203,7 @@ export class HeroStatue {
 
   status(): Record<string, unknown> {
     const S = this.site, p = this.g.player.pos;
-    return { state: this.clock.state, progress: +this.clock.progress.toFixed(2), high: Math.round(this.clock.high), low: Math.round(this.clock.low), at: S ? { x: Math.round(S.x), z: Math.round(S.z), d: Math.round(Math.hypot(p.x - S.x, p.z - S.z)), name: S.name } : null, dressed: !!this.rig?.dressed, bronzed: this.bronzed, stats: { ...this.clock.stats } };
+    return { state: this.clock.state, progress: +this.clock.progress.toFixed(2), high: Math.round(this.clock.high), low: Math.round(this.clock.low), at: S ? { x: Math.round(S.x), z: Math.round(S.z), y: +S.y.toFixed(1), ground: +this.g.world.terrain.height(S.x, S.z).toFixed(1), d: Math.round(Math.hypot(p.x - S.x, p.z - S.z)), name: S.name } : null, dressed: !!this.rig?.dressed, bronzed: this.bronzed, stats: { ...this.clock.stats } };
   }
 
   dev(what?: 'build' | 'unveil' | 'topple' | 'remove' | 'go'): Record<string, unknown> {
@@ -230,18 +230,43 @@ export class HeroStatue {
 
 // ================================================================== the site
 
-/** The statue's spot: on the town hall's square, off to one side of its fountain, facing out. */
+/** The building site's half size (its fence): kept clear of anything standing. */
+const SITE_R = 2.8;
+
+/**
+ * The statue's spot: on the town hall's square, off to one side of its fountain, facing out — the
+ * first of a few spots on the square with nothing standing on it (a rotunda, a campanile, the
+ * fountain's benches: anything over knee height in the building site's footprint), at the square's
+ * own level (never on a roof).
+ */
 function siteOf(lm: Landmark, g: Game): { x: number; z: number; y: number; yaw: number; name: string } {
   const P = lm.p, hu = lm.hu, hv = lm.hv;
   const front = hv - 4 - (P.d ?? 24) - (P.wingD ?? 0);
-  const sq = (-hv + front) / 2;
-  // Off the fountain's bench ring, towards the side away from the flagpoles' middle.
-  const u = -(hu * 0.52), v = sq;
+  const sq = (-hv + front) / 2, depth = front + hv;
   const ca = Math.cos(lm.angle), sa = Math.sin(lm.angle);
-  const x = lm.x + u * ca - v * sa, z = lm.z + u * sa + v * ca;
+  const at = (u: number, v: number) => ({ x: lm.x + u * ca - v * sa, z: lm.z + u * sa + v * ca });
   // Facing out over the square (−v): the rig faces −Z at yaw 0.
   const yaw = -lm.angle;
-  return { x, z, y: g.world.groundHeight(x, z), yaw, name: lm.name };
+  const W = g.world;
+  /** The square's level here: the ground below roofs (a little above the terrain: paving, a plaza). */
+  const floor = (x: number, z: number) => W.groundHeight(x, z, W.terrain.height(x, z) + 1.2);
+  const clearAt = (x: number, z: number): boolean => {
+    const y = floor(x, z), R = SITE_R;
+    for (const [dx, dz] of [[0, 0], [R, 0], [-R, 0], [0, R], [0, -R], [R, R], [R, -R], [-R, R], [-R, -R]]) {
+      const top = W.groundHeight(x + dx, z + dz);
+      if (top > y + 0.5 || Math.abs(floor(x + dx, z + dz) - y) > 0.6) return false;
+    }
+    return true;
+  };
+  const tries: [number, number][] = [];
+  for (const dv of [0, -0.22, 0.22]) for (const fu of [-0.52, 0.52, -0.36, 0.36, -0.7, 0.7]) tries.push([fu * hu, sq + dv * depth]);
+  for (const [u, v] of tries) {
+    const p = at(u, v);
+    if (clearAt(p.x, p.z)) return { ...p, y: floor(p.x, p.z), yaw, name: lm.name };
+  }
+  // Nowhere clear: the first spot, still on the ground.
+  const p = at(tries[0][0], tries[0][1]);
+  return { ...p, y: floor(p.x, p.z), yaw, name: lm.name };
 }
 
 // ================================================================== the pieces

@@ -162,6 +162,11 @@ export interface SaveData {
    * by StatueClock.restore); older saves have none (the browser's own record for the city stays).
    */
   fame?: unknown;
+  /**
+   * The city's live crime index and recent news (game/news CityNews SavedNews, sanitised by
+   * `CityNews.restore`); older saves have none (the seeded index, no news).
+   */
+  cityLife?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -300,6 +305,7 @@ export function parseSave(input: string | unknown): SaveData {
     } : null,
     ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
     ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
+    ...(o.cityLife && typeof o.cityLife === 'object' ? { cityLife: o.cityLife } : {}),
   };
 }
 

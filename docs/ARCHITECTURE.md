@@ -431,8 +431,20 @@ Phase 1 of PLAYGROUND_PLAN §5 ("Street Hero"), decisions 3–6 and 11–15. `Cr
 every frame) owns the parts and draws what belongs to them.
 * **Crime index** (`CrimeIndex`): a deterministic 0..1 per macro cell from (seed, plan): district base (port .70,
   industrial .64, apartments .58 … downtown .30, suburbs .14), density, the poorer inner ring, a seeded smooth noise.
-  `hourFactor` shifts it (nightlife and docks worse after dark, business districts calmer). Shown as a heat tint layer
-  ("Crime") on the full map.
+  `hourFactor` shifts it (nightlife and docks worse after dark, business districts calmer). This is the *seeded* index:
+  the villain groups' turf is planned on it; the director and the map use the live one (below).
+* **The city's pulse** (`src/game/news`): `pulse.ts` (pure, self-tested) groups the macro cells into named
+  neighbourhoods (Poisson-disc seeds ~720 m apart), keeps a **live index** per cell (crimes that come off +, stopped −,
+  a group's turf +0.08 target, relaxing back with a 25-min half-life of play; saved as differences), turns it into
+  **police presence** (patrol cars' spawn weight in `Traffic.policeWeight`, pairs of officers on the beat in
+  `crime/Beat`, the response delay of a call), picks a **fresh game's start** (the calmest block near the centre that no
+  gang holds, its neighbourhood capped at 0.06) and rolls **off-screen crime** every 20 s by neighbourhood index (not
+  within 450 m of the player: the director's ground), stopped by presence. `headlines.ts` words the news for the
+  billboards and for passers-by. `CityNews` (game glue) feeds the map (crime layer green → red, neighbourhood names,
+  hover line), the billboards (`future/newsArt` cards in the slide shows' slots 2 and 6), Barks small talk (via
+  `People.chatLine`), the talk menu's news topic (`heard`, `hood`, `safety` facts) and a toast on entering a
+  neighbourhood. Officers on the beat step in at crimes near them through `Police.footCrime` / `footPlayer` (a unit's
+  scene work without a car: the arrested wait with them for the car).
 * **Director** (`CrimeDirector`): every 4 s a slot roll `deriveSeed(seed, 'crime', day, hour, slot, cell)` against
   `crimesPerMinute` (index × hour × setting: average district ≈ one street crime per 2 min, bad ≈ 1/min, safe ≈ 1/10 min;
   off / calm ×0.4 / normal / chaos ×3.5) picks whether and which crime starts (same seed + day + hour + district →
@@ -1244,8 +1256,8 @@ one is hurting a bystander. Sounds: `tools/synthFame.mjs`.
 `PressPhoto`: a photographer's first flash of a visit (at most every 75 s) renders the scene once from their camera into
 a small HDR target, reads it back, composes a news page on a canvas (tone mapped, a vignette, a news bar with a headline
 by reputation band) and hands it to the billboard screens as `NewsFeed.still` (half float, in the live feed's encoding;
-the live feed wins while it runs) for 75 s with fades; the bare picture also goes to `game.city.postPhoto` when the
-city news layer exists.
+the live feed wins while it runs) for 75 s with fades; the bare picture with the headline also goes to `game.city.postPhoto`, a
+lasting card among the city's news cards.
 `HeroStatue`: `StatueClock` votes a statue after the reputation held ≥ 80 for 45 s, builds it for 150 s (a fenced site,
 scaffolding, a figure under a tarp on the town hall square, off the fountain), unveils it (fanfare, confetti, a cheering
 crowd with fan signs when the hero is near) and pulls it down after 40 s below 0 (lying in front of the plinth, the

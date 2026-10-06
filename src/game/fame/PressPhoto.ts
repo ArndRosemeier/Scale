@@ -123,7 +123,7 @@ export class PressPhoto {
       }
     }
     x.putImageData(img, 0, 0);
-    // (The bare picture for the city's news cards, when the city has them: CityNews.postPhoto.)
+    // (The bare picture, for the city's news cards.)
     const bare = document.createElement('canvas');
     bare.width = W; bare.height = H;
     bare.getContext('2d')!.drawImage(this.canvas, 0, 0);
@@ -138,8 +138,8 @@ export class PressPhoto {
     const fill = (s: string) => s.replace('{city}', cityN).replace('{n}', String(n)).replace('{street}', (street ?? 'MAIN STREET').toUpperCase());
     const head = fill(pickOf(HEADLINES[tone], this.stats.photos)), sub = fill(pickOf(SUBS[tone], this.stats.photos + 1));
     this.headline = head;
-    const city = this.g as unknown as { city?: { postPhoto?(img: HTMLCanvasElement, caption: string, sub?: string, hours?: number): void } };
-    try { city.city?.postPhoto?.(bare, head); } catch (e) { console.warn('[fame] news card', e); }
+    // (And a lasting card among the city's news cards on the screens: CityNews.)
+    try { this.g.city?.postPhoto(bare, head, sub); } catch (e) { console.warn('[fame] news card', e); }
     const barY = H * 0.68;
     x.fillStyle = tone === 'hated' ? 'rgba(150, 18, 18, 0.92)' : 'rgba(12, 32, 78, 0.9)';
     x.fillRect(0, barY, W, H - barY);

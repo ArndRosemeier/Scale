@@ -299,7 +299,7 @@ export class Police {
         if (u.job.job.done) this.leave(u); else u.job.job.work(u, dt);
         return true;
       }
-      const busy = u.job.kind === 'crime' ? this.workCrime(u, u.job.crime, dt) : this.workPlayer(u, dt);
+      const busy = u.job.kind === 'crime' ? this.workCrime(u.officers, u.car, u.job.crime, dt) : this.workPlayer(u.officers, u.car, u.job.swat === true, dt);
       if (!busy) { u.idleT += dt; if (u.idleT > 6) this.leave(u); }
       else u.idleT = 0;
       return true;
@@ -365,20 +365,52 @@ export class Police {
     for (const o of u.officers) if (o.actor) { o.actor.hostile = false; o.actor.action = null; o.actor.move = null; o.actor.held = null; }
   }
 
+  /** A crime has a unit on it or a call out for it (officers on the beat call one car, not two). */
+  covered(crime: Crime): boolean {
+    return this.calls.some((c) => c.crime === crime) || this.units.some((u) => u.job.kind === 'crime' && u.job.crime === crime && u.state !== 'leaving');
+  }
+
   /**
-   * A crime scene: cuff the subdued, chase the rest, escort the arrested to the car.
+   * Officers on the beat (crime/Beat) stepping in at a crime: like a unit's officers, without a car —
+   * the ones they cuff wait with them for the patrol car (or are walked off out of sight). False
+   * when there is nothing (left) for them to do.
+   */
+  footCrime(officers: PedAgent[], crime: Crime, dt: number): boolean {
+    return this.workCrime(officers, null, crime, dt);
+  }
+
+  /** Officers on the beat going after the wanted player (non-lethal on foot below shootAt, like a unit). */
+  footPlayer(officers: PedAgent[], dt: number): boolean {
+    return this.workPlayer(officers, null, false, dt);
+  }
+
+  /**
+   * A crime scene: cuff the subdued, chase the rest, escort the arrested to the car (officers on
+   * foot, `car` null: guard them until a car's officers take them over).
    * Returns false when there is nothing (left) to do.
    */
-  private workCrime(u: Unit, crime: Crime, dt: number): boolean {
-    const H = this.h, car = u.car;
+  private workCrime(officers: PedAgent[], car: Vehicle | null, crime: Crime, dt: number): boolean {
+    const H = this.h;
     let busy = false;
-    const free = u.officers.filter((o) => o.alive && o.actor && o.state !== PState.Down);
+    const free = officers.filter((o) => o.alive && o.actor && o.state !== PState.Down);
     const claimed = new Set<PedAgent>();
     for (const o of free) {
       const act = o.actor!;
       // Escort first: an arrested criminal this officer cuffed walks to the car with them.
-      const escort = crime.criminals.find((c) => c.alive && c.actor?.state === 'arrested' && c.actor.memo.cuffedBy === o.id);
-      if (escort) {
+      const escort = crime.criminals.find((c) => c.alive && c.actor?.state === 'arrested' && (c.actor.memo.cuffedBy === o.id || (!!car && c.actor.memo.foot === 1)));
+      if (escort && car && escort.actor!.memo.foot === 1) { escort.actor!.memo.foot = 0; escort.actor!.memo.cuffedBy = o.id; }
+      if (escort && !car) {
+        // On foot: stand by them until a car's officers take over (a long wait out of sight: walked off).
+        busy = true;
+        const ea = escort.actor!;
+        ea.memo.guardT = (ea.memo.guardT ?? 0) + dt;
+        if (ea.memo.guardT > 75 && !H.visible(escort.x, escort.y + 1, escort.z) && !H.visible(o.x, o.y + 1, o.z)) { escort.alive = false; ea.memo.inCar = 1; continue; }
+        lower(act);
+        if (Math.hypot(o.x - escort.x, o.z - escort.z) > 1.6) { goTo(act, escort.x + 0.9, escort.z, 1.6); setState(act, 'walk'); } else { stand(act); setState(act, 'idle'); }
+        lookAt(act, escort.x, escort.y + 1, escort.z);
+        continue;
+      }
+      if (escort && car) {
         busy = true;
         const ea = escort.actor!;
         if (ea.stateT < 2.6) { stand(act); lookAt(act, escort.x, escort.y + 1, escort.z); continue; }
@@ -429,6 +461,7 @@ export class Police {
           act.memo.cuff = 0;
           crime.arrest(tgt);
           ta.memo.cuffedBy = o.id;
+          if (!car) ta.memo.foot = 1;
           this.stats.arrests++;
           H.sound('cuffs', tgt.x, tgt.y + 0.9, tgt.z, 0.9);
         }
@@ -525,11 +558,11 @@ export class Police {
   }
 
   /** A wanted player: chase, take down, cuff. */
-  private workPlayer(u: Unit, dt: number): boolean {
+  private workPlayer(officers: PedAgent[], car: Vehicle | null, swat: boolean, dt: number): boolean {
     const H = this.h, p = H.player;
     if (H.wanted() <= 0) return false;
     let any = false;
-    for (const o of u.officers) {
+    for (const o of officers) {
       const act = o.actor;
       if (!o.alive || !act || o.state === PState.Down) continue;
       any = true;
@@ -538,7 +571,7 @@ export class Police {
       const d = Math.hypot(p.x - o.x, p.z - o.z);
       lookAt(act, p.x, p.y + p.height * 0.8, p.z);
       // Wanted enough: shoot from where they are (a clear line, out of tackling reach).
-      if (this.shootPlayer(u, o, d, dt)) continue;
+      if (this.shootPlayer(o, d, dt, swat, car)) continue;
       if (p.flying && p.y - o.y > 4) { stand(act); continue; }
       // Could not get to them (no progress): wait and watch a moment.
       if (act.memo.waitT > 0) { act.memo.waitT -= dt; stand(act); if (d < 3) act.memo.waitT = 0; continue; }
@@ -572,10 +605,9 @@ export class Police {
    * within POLICE.playerFireR) stops, aims and fires — their pistol (SWAT: rifle). No clear line
    * twice running: they close in for a while (the chase). True while handling it.
    */
-  private shootPlayer(u: Unit, o: PedAgent, d: number, dt: number): boolean {
+  private shootPlayer(o: PedAgent, d: number, dt: number, swat: boolean, car: Vehicle | null): boolean {
     const H = this.h, act = o.actor!, p = H.player;
     if (H.wanted() < POLICE.shootAt || !H.gunAtPlayer || H.playerDown()) return lowerAny(act);
-    const swat = u.car.kind === 'swat';
     const spec = swat ? GUNS.rifle : GUNS.pistol;
     act.held = spec.item;
     if (act.memo.closeT > 0) { act.memo.closeT -= dt; return lowerAny(act); }
@@ -588,7 +620,7 @@ export class Police {
     act.memo.pgunT = (act.memo.pgunT ?? 0.5 + Math.random() * 0.8) - dt;
     if (act.memo.pgunT > 0) return true;
     act.memo.pgunT = spec.gap * POLICE.playerGapK * (0.85 + Math.random() * 0.3);
-    const r = H.gunAtPlayer(o, spec, u.car);
+    const r = H.gunAtPlayer(o, spec, car);
     if (r === 'held') {
       this.stats.heldAtPlayer++;
       act.memo.pheld = (act.memo.pheld ?? 0) + 1;

@@ -45,6 +45,9 @@ interface Member {
   /** A fan's moment: seconds into the photo. */
   t: number;
   done: boolean;
+  /** Getting no closer to the hero (s), and the closest yet: stuck somewhere, they give up. */
+  stuckT: number;
+  best: number;
 }
 
 interface Group {
@@ -65,6 +68,8 @@ interface Group {
 
 /** Groups farther than this from the hero (m) are dropped (unseen) or sent home. */
 const DROP_R = 110;
+/** Getting no closer for this long (s), farther than 18 m: stuck, they give up. */
+const STUCK_T = 25;
 const LINE_PAUSE = 7;
 
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
@@ -221,7 +226,7 @@ export class Fame {
     if (!a) return null;
     const act = attach(a, makeActor('bystander', FAME_OWNER, { title, held, hp: 40, maxHp: 40 }));
     if (route) { act.route = Float32Array.from(route); act.wp = 1; }
-    const m: Member = { a, act, kind, slot, dist, flashT: rand(0.5, 2), talkT: rand(1, 4), t: 0, done: false };
+    const m: Member = { a, act, kind, slot, dist, flashT: rand(0.5, 2), talkT: rand(1, 4), t: 0, done: false, stuckT: 0, best: 1e9 };
     q.members.push(m);
     return m;
   }
@@ -304,6 +309,10 @@ export class Fame {
       const a = m.a, act = m.act;
       if (!a.alive || a.actor !== act) { m.done = true; continue; }
       if (act.hitByPlayer || a.state === PState.Down || act.state === 'down' || act.state === 'ko' || act.staggerT > 0) { this.panic(q, p.x, p.z); return; }
+      // Stuck on the way (no way round a wall, a rotunda): they give up and go about their day.
+      const dh = Math.hypot(a.x - p.x, a.z - p.z);
+      if (dh < m.best - 0.5 || dh < 18) { m.best = dh; m.stuckT = 0; }
+      else if (q.phase !== 'leave' && (m.stuckT += dt) > STUCK_T) { m.done = true; release(a); }
     }
     q.members = q.members.filter((m) => !m.done);
     if (!q.members.length) { this.drop(q); return; }
@@ -360,8 +369,9 @@ export class Fame {
     const g = this.g, p = g.player.pos;
     const a = q.base + m.slot;
     let x = p.x + Math.sin(a) * m.dist, z = p.z + Math.cos(a) * m.dist;
-    // (Not inside a wall: closer in.)
-    for (let k = 0; k < 4 && g.world.buildingAt(x, z); k++) { x = (x + p.x) / 2; z = (z + p.z) / 2; }
+    // (Not inside a wall or a landmark: closer in.)
+    const inside = (x: number, z: number) => !!g.world.buildingAt(x, z) || !!g.world.landmarks?.hit(x, p.y + 1, z);
+    for (let k = 0; k < 4 && inside(x, z); k++) { x = (x + p.x) / 2; z = (z + p.z) / 2; }
     return { x, z };
   }
 
