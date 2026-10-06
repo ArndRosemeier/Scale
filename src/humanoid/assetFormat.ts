@@ -95,3 +95,18 @@ export interface HumanManifest {
 
 export const HUMAN_ASSET_VERSION = 1;
 export const HUMAN_ASSET_DIR = 'assets/human/';
+
+/**
+ * `conform.json` + `conform.bin` (tools/avatar/base-bodies/conform.py): the MakeHuman mesh
+ * reshaped onto the Woman / Man base bodies. `female` / `male` are per morph-vertex
+ * offsets (i16 × offsetScale m) added after the macro morph, blended by gender;
+ * `skinIdx` / `skinW` replace MakeHuman's skin weights (taken from the Woman's rig).
+ */
+export interface ConformManifest {
+  version: number;
+  file: string;
+  morphVerts: number;
+  realVerts: number;
+  offsetScale: number;
+  sections: Record<'female' | 'male' | 'skinIdx' | 'skinW', Section>;
+}
