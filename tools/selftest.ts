@@ -57,6 +57,7 @@ import { Rng as MRng } from '../src/core/rng';
 import type { MacroPlan } from '../src/plan/types';
 import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
 import * as THREE from 'three';
+import { planHop } from '../src/player/speedHop';
 import { onScreen, screenPoint, toScreen } from '../src/render/screen';
 import { makeSight } from '../src/game/sightline';
 import type { WorldIndex as SightWorld } from '../src/world/WorldIndex';
@@ -3124,6 +3125,50 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const s = runLife(macro, terrain, 1, 9, 60, 1, true);
   check(s.onTracks === 0 && s.offFloor === 0, `metro life: shoved commuters stop at the platform edge, knocked-off ones climb back (${s.onTracks} on the tracks)`);
   console.log(`metro life: ${r.spawned} commuters, ${r.boarded} boarded, ${r.alighted} got off, ${r.left} walked out, in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Super speed hops (src/player/speedHop.ts): over a person or a car ahead when the arc and the
+// landing are clear; never into a wall, never onto someone, never when too late.
+{
+  type O = import('../src/world/Collision').Obstacle;
+  let obs: O[] = [], walls: { x0: number; x1: number }[] = [];
+  const person = (x: number): O => ({ cyl: true, x, z: 0, r: 0.4, hx: 0, hz: 0, ux: 1, uz: 0, y0: 0, y1: 1.85 });
+  const car = (x: number): O => ({ cyl: false, x, z: 0, r: 0, hx: 2.2, hz: 0.9, ux: 1, uz: 0, y0: -0.2, y1: 1.5 });
+  const fake = {
+    obstacleProviders: [(x0: number, z0: number, x1: number, z1: number, out: (o: O) => void) => { for (const o of obs) if (o.x > x0 - 3 && o.x < x1 + 3) out(o); }],
+    under: null,
+    underground: () => false,
+    ceilingAt: () => Infinity,
+    groundAt: () => 0,
+    collide: (x: number, z: number, y: number) => ({ x, z, hit: walls.some((w) => x > w.x0 - 0.4 && x < w.x1 + 0.4) || obs.some((o) => !o.cyl && y < o.y1 - 0.5 && Math.abs(x - o.x) < o.hx + 0.4) }),
+  } as unknown as import('../src/world/Collision').Collision;
+  const plan = (v: number, d: number) => { for (let x = 0; x < d + 40; x += v / 60) { const p = planHop(fake, null, x, 0, 0, 1.8, 0.35, 1, 1, 0, v); if (p) return { at: x, ...p }; } return null; };
+  // The arc's feet height at distance s from take-off.
+  const feet = (p: { vy: number; g: number }, v: number, s: number) => { const t = s / v; return p.vy * t - 0.5 * p.g * t * t; };
+  obs = [person(40)];
+  const a = plan(50, 40);
+  const overHead = a ? feet(a, 50, 40 - a.at) : -1;
+  check(!!a && overHead > 1.85 && feet(a, 50, 40 - 0.75 - a.at) > 1.85 && feet(a, 50, 40 + 0.75 - a.at) > 1.85, `speed hop: over a person at 50 m/s (take-off ${a ? (40 - a.at).toFixed(1) : '-'} m before, feet ${overHead.toFixed(2)} m over them, range ${a?.range.toFixed(1) ?? '-'} m)`);
+  obs = [car(40)];
+  const b = plan(40, 40);
+  check(!!b && feet(b, 40, 40 - 2.6 - b.at) > 1.5 && feet(b, 40, 40 + 2.6 - b.at) > 1.5, `speed hop: over a parked car at 40 m/s (range ${b?.range.toFixed(1) ?? '-'} m)`);
+  // A second person right where the feet would come down: no hop (brush past instead).
+  obs = [person(40)];
+  const r0 = a ? a.range : 30;
+  obs = [person(40), person((a ? a.at : 30) + r0)];
+  const c = plan(50, 40);
+  check(!c || Math.abs(c.at + c.range - (a!.at + r0)) > 1, `speed hop: never lands on someone (${c ? 'landed ' + (c.at + c.range - a!.at - r0).toFixed(1) + ' m off' : 'no hop'})`);
+  // A wall within the arc: no hop.
+  obs = [person(40)]; walls = [{ x0: 50, x1: 52 }];
+  const d = plan(50, 40);
+  check(!d, `speed hop: not into a wall behind the person (${d ? 'hopped' : 'no hop'})`);
+  walls = [];
+  // Too slow, or nothing there: no hop.
+  check(!plan(5, 40) && (obs = [], !plan(50, 40)), 'speed hop: not when walking or when nothing is ahead');
+  // Two people a few metres apart: one hop over both.
+  obs = [person(40), person(43)];
+  const e = plan(50, 40);
+  check(!!e && feet(e, 50, 43 + 0.75 - e.at) > 1.85, `speed hop: one hop over two people in a row (feet ${e ? feet(e, 50, 43 + 0.75 - e.at).toFixed(2) : '-'} m over the second)`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

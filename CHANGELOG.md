@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.078 — 2026-10-06
+
+- **Super speed hops over people.** Running at super speed, the hero now hops over someone a little ahead, and over cars, vans and benches too, in a short, snappy hurdle that keeps the speed. It only hops when the arc is clear (no wall, bus, tree or overhang in the way) and the landing spot is free and on about the same level; several people in a row are cleared in one hop.
+- **Brushing past someone is no misdeed any more.** When a hop is not possible, the person still stumbles out of the way, but it costs no reputation or karma, draws no police, does them no harm and they get up on their own. Instead they call after you in a red bubble low on the screen ("Mara, behind you: “Slow down, hero!”"). Helping such a person up earns nothing, like anyone you knocked down yourself. Dashes and giants running through crowds count as before.
+
 ## 0.077 — 2026-10-06
 
 - **No more walls to walk through in the metro entrances.** Two things from above could stand across an entrance passage as a wall without substance:
