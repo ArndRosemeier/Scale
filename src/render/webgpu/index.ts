@@ -62,6 +62,17 @@ export function flipPolygonOffsets(renderer: THREE.WebGPURenderer): void {
   }
 }
 
+/** A render target's pixels, bottom row first like WebGL's readRenderTargetPixels. */
+export async function readPixels(renderer: THREE.WebGPURenderer, rt: THREE.RenderTarget, w: number, h: number): Promise<Uint16Array> {
+  const data = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h) as Uint16Array;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!(renderer.backend as any).isWebGPUBackend) return data;
+  // WebGPU textures start at the top row.
+  const row = w * 4, out = new Uint16Array(row * h);
+  for (let y = 0; y < h; y++) out.set(data.subarray(y * row, y * row + row), (h - 1 - y) * row);
+  return out;
+}
+
 export function createPMREM(renderer: unknown): THREE.PMREMGenerator {
   return new THREE.PMREMGenerator(renderer as THREE.WebGPURenderer);
 }
