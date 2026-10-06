@@ -2,12 +2,19 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.075 — 2026-10-06
+## 0.076 — 2026-10-06
 
 - **Every human is now built on the new Woman and Man bodies.** NPCs and the character you create get their proportions, body shape and face, while height, weight, age, muscle, the face sliders, the other races, clothes and facial expressions all keep working as before. Crowds perform the same (same mesh size and detail levels).
 - **Better bending.** Humans now use the Woman's skin weights, so shoulders, elbows, hips and knees deform more smoothly. Jumps, flight and other procedural poses bend the legs at the real hip and knee instead of kinking the thigh and shin.
-- **Superman flight.** At speed the hero flies with the right fist stretched out ahead, the left arm straight back along the body with the hand flat against the thigh, legs together and toes pointed. Boosting still puts both fists forward.
+- **Superman flight.** At speed the hero flies with the right fist stretched out ahead, the left arm straight back along the body with the hand flat against the thigh, legs together and toes pointed; the fist points straight ahead past the head. Boosting still puts both fists forward.
 - The character creator can leave top, trousers or shoes off ("none"). Nude is an option only; new characters still start dressed.
+- The creator's Face view centres on the head, so a character standing with a hip-shot pose no longer has their face cut off at the side.
+
+## 0.075 — 2026-10-06
+
+- **"Preparing shaders" is much shorter.** The shaders were already meant to compile in parallel on the graphics driver's own threads, but that compile ran before the sky had made its environment light. The first frame then added it, and that changed every lit material, so about 40 shaders were compiled a second time, one after the other, while the loading screen waited (and the parallel work had been thrown away). The environment light now exists from the start, so the parallel compile is the only one. The first frame's new content (cars, effects, the first crowd) now also compiles in parallel instead of one by one. About a quarter fewer shaders are built at the start (154 to 106).
+- Objects that appear while you play no longer risk staying invisible when their shader got swapped for another variant before it was ready: the shader is requested again, and nothing waits longer than 8 seconds.
+- The browser console now shows how long loading took in all and how much of it was preparing shaders.
 
 ## 0.074 — 2026-10-06
 
