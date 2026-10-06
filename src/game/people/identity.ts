@@ -110,7 +110,8 @@ export function temperamentOf(t: Traits): Temperament {
 
 // ------------------------------------------------------------------ job and interest
 
-export type JobKind = 'pupil' | 'student' | 'retired' | 'home' | 'office' | 'shop' | 'factory' | 'dock' | 'civic' | 'food' | 'craft' | 'tech';
+/** street: a street performer or character (game/street), only while they are at it. */
+export type JobKind = 'pupil' | 'student' | 'retired' | 'home' | 'office' | 'shop' | 'factory' | 'dock' | 'civic' | 'food' | 'craft' | 'tech' | 'street';
 
 const JOB_TITLES: Record<JobKind, readonly string[]> = {
   pupil: ['pupil'],
@@ -124,6 +125,7 @@ const JOB_TITLES: Record<JobKind, readonly string[]> = {
   civic: ['nurse', 'teacher', 'city clerk', 'librarian', 'paramedic', 'social worker'],
   food: ['cook', 'waiter', 'barista', 'café owner', 'dishwasher'],
   craft: ['plumber', 'electrician', 'carpenter', 'painter', 'bike courier', 'taxi driver'],
+  street: ['street performer'],
   tech: ['drone pilot', 'software developer', 'service-robot mechanic', 'data scientist', 'game designer'],
 };
 
