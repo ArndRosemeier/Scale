@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.062 — 2026-10-06
+## 0.063 — 2026-10-06
 
 - **The town hall and the cathedral are full of people now**, by the time of day.
   - **Cathedral**: the priest is there from morning to evening. At the services at 9:00 and 18:00 the pews fill, the priest stands behind the altar and two altar servers sit in the choir stalls. Through the day visitors come and go. They stand at the aisle windows and the rose windows looking up at the glass, look up into the crossing or the dome, stop at the font and the pulpit, and rest in the pews. In the evening a few people sit and pray. At night it is empty.

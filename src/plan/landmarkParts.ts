@@ -825,9 +825,9 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: numb
   }
   // Information desk and a bust of the founder.
   const du = -Math.min(uTop - 3, 8);
-  k.box(du, iv0 + 5, 2, 0.5, B, B + 1.1, C.wood, { ...DS, top: C.stone });
+  k.box(du, iv0 + 5, 2, 0.5, B, B + 0.95, C.wood, { ...DS, top: C.stone });
   // (A plate on its front, not a sign on top: from the hall the clerk behind it is seen.)
-  k.box(du, iv0 + 4.47, 0.5, 0.03, B + 0.6, B + 1.0, C.gold, D);
+  k.box(du, iv0 + 4.47, 0.5, 0.03, B + 0.45, B + 0.85, C.gold, D);
   k.box(-du, iv0 + 5, 0.55, 0.55, B, B + 1.3, C.stone, DS);
   figure(k, -du, iv0 + 5, B + 1.3, 1.1, mat(METAL, BRONZE), false);
   for (const f of [0.3, 0.75]) chandelier(k, 0, iv0 + (hallV1 - iv0) * f, ceil, 1.6, C, B);
@@ -865,8 +865,8 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: numb
     // The mayor's office (left): desk, chairs, bookcase, flag, rug, plant.
     const u0 = -iu, u1 = -cw - 0.125, um = (u0 + u1) / 2, vm = (sv0 + iv1) / 2;
     k.flat(um, vm + 0.6, (u1 - u0) / 2 - 0.5, Math.max(0.4, (iv1 - sv0) / 2 - 1.1), L1 + 0.012, C.red, D);
-    k.box(um, iv1 - 1.8, 1.0, 0.45, L1, L1 + 0.76, C.wood, { ...DS, top: C.dark });
-    chair(k, um, iv1 - 1.1, Math.PI, L1, C.red, true);
+    k.box(um, iv1 - 1.8, 1.0, 0.35, L1, L1 + 0.76, C.wood, { ...DS, top: C.dark });
+    chair(k, um, iv1 - 0.85, Math.PI, L1, C.red, true);
     for (const s of [-1, 1]) chair(k, um + s * 0.6, iv1 - 3.0, 0, L1, C.dark);
     const bu = u0 + 0.3, bh = Math.min(1.6, (iv1 - sv0) / 2 - 0.8);
     k.box(bu, vm, 0.25, bh, L1, L1 + 2.3, C.wood, D);
@@ -945,7 +945,7 @@ function grandWays(k: Kit, sh: Shell, door: number, cM: number, g: { L1: number;
       // The mayor's office: the mayor at the desk, an aide or a visitor in front of it.
       const um = (-iu - cw - 0.125) / 2, oA = k.node(um, iv1 - 3.8, L1);
       k.path(gi, oA, rd);
-      k.spot(um, iv1 - 1.1, L1, Math.PI, true, 'mayor', oA, [[um + 1.45, iv1 - 3.0], [um + 1.45, iv1 - 1.1]]);
+      k.spot(um, iv1 - 0.85, L1, Math.PI, true, 'mayor', oA, [[um + 1.45, iv1 - 3.0], [um + 1.45, iv1 - 0.85]]);
       for (const d of [-0.6, 0.6]) k.spot(um + d, iv1 - 3.0, L1, 0, true, 'aide', oA, [[um + d, iv1 - 3.5]]);
     } else {
       // The wedding room: the couple at the table, the registrar behind it, guests in rows.
@@ -1012,7 +1012,8 @@ function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: nu
   k.cyl(0, ev, er, er, B, B + 0.02, C.gold, { ...D, seg: 24 });
   k.cyl(0, ev, er * 0.65, er * 0.65, B, B + 0.025, mat(PLASTER, flagC), { ...D, seg: 24 });
   const du = -Math.min(iu - 2, 5);
-  k.box(du, ev, 1.4, 0.45, B, B + 1.1, C.wood, { ...DS, top: C.stone });
+  // (Low enough to see the clerk standing behind it.)
+  k.box(du, ev, 1.4, 0.45, B, B + 0.95, C.wood, { ...DS, top: C.stone });
   for (const s of [-1, 1]) {
     bench(k, s * (iu - 0.5), ev, s * Math.PI / 2, B, Math.max(1.2, Math.min(2.4, vP - iv0 - 2)), C.wood);
     plant(k, s * (iu - 0.8), iv0 + 0.9, B, C);
