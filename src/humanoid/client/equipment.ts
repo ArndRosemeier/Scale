@@ -315,11 +315,15 @@ function skirtClearance(ch: Character, cx: number, cz: number, topY: number, len
     const d = Math.hypot(dx, dz);
     const c0 = Math.round(((Math.atan2(dx, -dz) / (Math.PI * 2)) + 1) * cols) % cols;
     const rf = (topY - y) / band;
-    for (let r = Math.max(0, Math.floor(rf - 0.6)); r <= Math.min(rows, Math.ceil(rf + 0.6)); r++)
+    // The waistband ring only takes the waist itself (a wider band reached the hips and stood
+    // the top out from the body like a shelf); lower rings take their neighbours' bands too.
+    for (let r = Math.max(0, Math.floor(rf - 0.6)); r <= Math.min(rows, Math.ceil(rf + 0.6)); r++) {
+      if (r === 0 && Math.abs(rf) > 0.25) continue;
       for (let k = -1; k <= 1; k++) {
         const i = r * cols + ((c0 + k + cols) % cols);
         if (d > ext[i]) ext[i] = d;
       }
+    }
   }
   return ext;
 }
@@ -677,7 +681,8 @@ export class EquipmentRig {
     // Widest body (hips, buttocks, legs; not the hanging arms) per ring and direction.
     const ext = closed ? skirtClearance(ch, cx, cz0, topY, len, rows, cols) : null;
     const R = new Float32Array((rows + 1) * (cols + 1));
-    const off = l.offset * 1.25 + 0.008;
+    // Just outside the garment shell under it (its offset rule in addShell, plus a little).
+    const off = Math.max(0.002, l.offset) * 1.25 + 0.008;
     for (let c = 0; c < cols; c++) {
       const a = (c / cols) * Math.PI * 2, sx = Math.sin(a), cz = Math.cos(a);
       // Tails, and a fallback where the body gives no measure: a fixed ellipse, slightly
@@ -689,14 +694,16 @@ export class EquipmentRig {
         const t = r / rows;
         if (!ext) { R[r * (cols + 1) + c] = ell * (1 + sk.flare * t * 1.2 + t * 0.25); continue; }
         // Room for the legs to swing (more lower down, most at the front where knees come up).
-        const ease = off + (0.012 + 0.035 * (0.6 + 0.4 * Math.max(0, cz))) * smoothstep(0.1, 0.55, t) + (0.025 + 0.04 * Math.max(0, -cz)) * smoothstep(0.5, 1, t);
+        const ease = off + (0.012 + 0.035 * (0.6 + 0.4 * Math.max(0, cz))) * smoothstep(0.1, 0.55, t) + (0.025 + 0.02 * Math.max(0, -cz)) * smoothstep(0.5, 1, t);
         const e = ext[r * cols + c];
         hang = Math.max(hang, e > 0 ? e + ease : r === 0 ? ell * 0.8 : 0);
         R[r * (cols + 1) + c] = hang * (1 + sk.flare * t * 0.9 + t * 0.12);
       }
     }
-    // Smooth around each ring (never below what it had: no lumps, no new clipping).
-    for (let r = 0; r <= rows; r++) {
+    // Smooth around each ring below the waistband (never below what it had: no lumps, no new
+    // clipping); the seam column repeats the first.
+    R[cols] = R[0];
+    for (let r = 1; r <= rows; r++) {
       const row = R.subarray(r * (cols + 1), r * (cols + 1) + cols);
       for (let it = 0; it < 3; it++) {
         const prev = row.slice();
@@ -720,13 +727,17 @@ export class EquipmentRig {
         // both at the middle). A closed skirt follows the legs early and most at the front and
         // sides (knees come up when walking and sitting); tails mostly at the sides. Below the
         // knee the shins take part.
-        const legW = closed ? Math.min(0.9, t * (1.6 + 1.6 * Math.max(0, cz) + 1.2 * (1 - Math.abs(cz))))
+        const legW = closed ? Math.min(0.9, t * (1.6 + 1.6 * Math.max(0, cz) + 1.2 * (1 - Math.abs(cz)))) * (1 - 0.4 * Math.max(0, -cz))
           : Math.min(0.85, t * 1.5) * (0.35 + 0.65 * Math.min(1, Math.abs(sx) * 1.4));
-        const pL = smoothstep(-0.35, 0.35, -sx); // character's left is −X
+        // Character's left is −X. A wide blend at the back: the back hangs between the legs
+        // (a narrow one pulled the hem up into a V when the legs split).
+        const bw = 0.35 + 0.55 * Math.max(0, -cz), pL = smoothstep(-bw, bw, -sx);
         const below = y < kneeY ? Math.min(1, (kneeY - y) / 0.25) * 0.7 : 0;
-        const wRoot = 1 - legW, wL = legW * pL * (1 - below), wR = legW * (1 - pL) * (1 - below), wShin = legW * below;
-        // By column, not by sign of sx: the seam's two columns (0 and cols) must agree, or the
-        // skirt tears open at the front when the shins move apart.
+        // One shin slot: the shin of this side, fading out towards the middle front and back
+        // where the side changes (by column, so the seam's columns 0 and cols agree). A hard
+        // switch there tore the fabric open between the legs.
+        const sh = below * Math.abs(2 * pL - 1);
+        const wRoot = 1 - legW, wL = legW * pL * (1 - sh), wR = legW * (1 - pL) * (1 - sh);
         out.SI.push(root, thL, thR, c % cols < cols / 2 ? shR : shL);
         const a8 = Math.round(wRoot * 255), b8 = Math.min(255 - a8, Math.round(wL * 255)), c8 = Math.min(255 - a8 - b8, Math.round(wR * 255));
         out.SW.push(a8, b8, c8, 255 - a8 - b8 - c8);
