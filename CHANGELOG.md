@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.065 — 2026-10-06
+
+- **Health tags no longer show up for people behind you.** On graphics cards that use the game's sharper depth mode, everything behind the camera was also projected onto the screen, mirrored: villains you ran away from got a second health bar in front of you, speech bubbles hung in empty air, and Tab or a click near a target could pick someone behind you. Every marker that follows something in the world (criminal health tags, target brackets and weak-spot rings, speech bubbles, target picking, the photo-flash glare) now goes through one shared piece of code that knows which side of the camera a point is on, and the self-test fails if any new marker tries to do it on its own.
+- **No more tags through walls and floors.** Health tags and speech bubbles only show for people you could actually see: not for a sewer crew under your feet while you walk the street (or the street above while you are in the sewers), and not for someone behind a building or a hill.
+- **Sewer hideouts stay off the map.** A crew holed up in the sewers no longer shows on the map or the compass; you have to find them down there.
+
+
 ## 0.064 — 2026-10-06
 
 - **Metro stations are full of people now.**

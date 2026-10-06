@@ -55,9 +55,12 @@ import { Rng as MRng } from '../src/core/rng';
 import type { MacroPlan } from '../src/plan/types';
 import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
 import * as THREE from 'three';
+import { onScreen, screenPoint, toScreen } from '../src/render/screen';
+import { makeSight } from '../src/game/sightline';
+import type { WorldIndex as SightWorld } from '../src/world/WorldIndex';
 import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
 import { intersection } from '../src/core/clip';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { nameOf, traitsOf, temperamentOf, jobOf, interestOf, moodOf, moodWord, TEMPERAMENTS, type Temperament } from '../src/game/people/identity';
 import { pickLine, ruleAnswer, fill, dirWord, type TalkFacts } from '../src/game/people/talk';
 import { LINES, CHAT, type Topic } from '../src/game/people/lines';
@@ -3024,6 +3027,49 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(whenWord(30, 30.2) === 'just now' && whenWord(2, 30) === 'last night' && whenWord(10, 40) === 'yesterday', 'news: when words');
   check(['safe', 'quiet', 'mixed', 'rough', 'dangerous'].every((s) => localRemark(s as Safety, 0.5).length > 5) && safetyOf(0.05) === 'safe' && safetyOf(0.8) === 'dangerous', 'news: a word about the streets for every level');
   console.log(`news: ${H1.list.length} neighbourhoods, ${off} off-screen crimes in 600 ticks (${stopped} stopped), start block index ${base[start].toFixed(2)}, in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Screen overlays (health tags, target brackets, speech bubbles): one projection for all of them,
+// right in front of and behind the camera with either depth convention (src/render/screen.ts).
+{
+  const s = screenPoint();
+  let bad = 0;
+  for (const rev of [false, true]) {
+    const cam = new THREE.PerspectiveCamera(60, 1.6, 0.05, 60000);
+    (cam as unknown as { _reversedDepth: boolean })._reversedDepth = rev;
+    cam.position.set(10, 2, 5); cam.lookAt(10, 2, -5); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+    for (const d of [0.5, 3, 40, 900]) {
+      if (!onScreen(toScreen(10.2, 2.1, 5 - d, cam, s)) || s.depth < d * 0.99) bad++; // ahead
+      if (toScreen(10.2, 2.1, 5 + d, cam, s).front || onScreen(s)) bad++; // behind
+    }
+    if (onScreen(toScreen(10, 2, 5.03, cam, s))) bad++; // just behind the lens
+  }
+  check(bad === 0, `screen: overlays only for what is in front of the camera, with or without reversed depth (${bad} wrong)`);
+  // Nothing else may project world points to the screen on its own: `.project(` with a `z > 1`
+  // test lets things behind the camera through (mirrored) under the reversed depth buffer.
+  const strays: string[] = [];
+  const walk = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walk(full); continue; }
+      if (!/\.ts$/.test(f) || full.endsWith('render/screen.ts')) continue;
+      const txt = readFileSync(full, 'utf8');
+      if (/\.project\(\s*[\w.]*cam/i.test(txt)) strays.push(full);
+    }
+  };
+  walk('src');
+  check(strays.length === 0, `screen: every world-to-screen overlay goes through src/render/screen.ts (${strays.join(', ') || 'none elsewhere'})`);
+  // Markers over people need them in sight: same side of the ground, no wall in between.
+  let wall = Infinity;
+  const fake = { terrain: { height: () => 0 }, buildingAt: () => null, raycast: () => ({ t: wall, building: null }) } as unknown as SightWorld;
+  // The camera's side is the game's own flag, not its depth: in a shallow sewer it is barely under the street.
+  let camUnder = false;
+  const see = makeSight(fake, () => camUnder, (_x, y) => y < -1.5), cam = new THREE.PerspectiveCamera();
+  const look = (under: boolean, cy: number, feet: number): boolean => { camUnder = under; cam.position.set(0, cy, 0); return see(20, feet, 0, cam); };
+  const street = look(false, 2, 0), sewer = look(true, -0.8, -2.4), fromStreet = look(false, 2, -2.4), fromSewer = look(true, -0.8, 0);
+  wall = 5;
+  const walled = look(false, 2, 0);
+  check(street && sewer && !fromStreet && !fromSewer && !walled, `screen: no tags through the ground or walls (street ${street}, sewer ${sewer}, sewer from street ${fromStreet}, street from sewer ${fromSewer}, through a wall ${walled})`);
 }
 
 // Station life: commuters come down the real entrance stairs (Pedestrians' own steps over the
