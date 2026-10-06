@@ -2,6 +2,19 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.056 — 2026-10-06
+
+- **The way to the slime civilisation is open.** The living membrane that closed the tunnel out of a colony's chamber is gone: anyone can walk down to the Lumen now. The tunnel itself is much wider (and a little less steep), so the camera no longer gets squeezed against the rock behind you.
+- **The Front is trench warfare now.** The see-through barricade between the Lumen and the Murk is gone. In its place:
+  - **The Lumen's trench**: three bays dug a metre deep across the gallery, with duckboards on the floor and sandbags on the parapet, lit low from inside, and two gaps between the bays marked with glowing stakes. Lumen sentries stand in the bays and lob glowing bolts over the parapet; at the gaps they fight hand to hand.
+  - **Thorn wire** across the gallery in front of the trench (knife rests wound with thorny strands). Murk caught in it slow to a crawl.
+  - **No-man's land**: craters, dark ooze where Murk burst, the husks of dead Murk, broken stakes, the faded glow of fallen Lumen.
+  - **The Murk's berm** at the lip of the Throat, studded with their red crystals, where they gather to go over.
+  - **The war never stops**: every few seconds a handful of Murk come up the Throat and charge across no-man's land at the gaps. Most are shot down before they get far; a few reach the line and die there. Fallen sentries are replaced from behind, and the Lumen send glowing flares up over no-man's land that hang and slowly sink. These endless pushes don't change how the war stands (only the raids do, as before, and big raids can still break through); Murk you kill there still count.
+- **You can tell the slimes apart.** The Murk are blood red now, their spines glowing hotter towards the tips, and they have two slanted, glaring orange eyes (brighter when they fight). The Lumen stay soft, round and glowing.
+- **The Murk go for you on sight**: from 24 m away (was 17), and a Murk fighting a Lumen drops it for you once you come within 10 m. They also follow you further before giving up.
+- Fix: slimes following a route through the caves could get stuck forever trying to reach a waypoint at an edge (the Murk at the lip of the Throat, for example). Now they move on.
+
 ## 0.055 — 2026-10-06
 
 - **Feedback**: a new "Feedback" link next to the version label, in the main menu and the pause menu, opens a small form. Pick Bug, Idea, Praise or Other, write your message, and Send opens your mail program with it ready to go (with the game version, city seed and browser added, if you like). The address it goes to is never written anywhere on the site or in its code; the game only puts it together at the moment you press Send, so spam bots scanning the page find nothing.

@@ -4,13 +4,14 @@
  *
  *  - Lumen (soft, glowing teal, green, blue, amber): dwellers wandering their Hall and slipping in
  *    and out of their domes, tenders in the Gardens, carriers bringing things to the Archive, the
- *    council sitting in its ring pulsing in turn, children round the nursery, guards at the Front's
- *    barricade and at the gates, caravans on the roads, captives pulsing weakly in the Murk's pens.
+ *    council sitting in its ring pulsing in turn, children round the nursery, sentries in the
+ *    Front's trench lobbing glowing bolts at the Murk coming over no-man's land (and fighting them
+ *    hand to hand in the gaps), caravans on the roads, captives pulsing weakly in the Murk's pens.
  *    Shy of strangers (they hide in their domes), wary of acquaintances, greeting friends.
- *  - Murk (dark, spiked, ember cores): drones crawling the Warrens, jailers by the pens, brutes,
- *    raiders climbing the Throat to the Front, and the Maw by the Heart. They attack Lumen and the
- *    player alike: lunges, and brutes and the Maw spit. Every Murk is a ThreatActor, so every power,
- *    Tab-targeting and the target frame work on them.
+ *  - Murk (dark red, spiked, ember cores, glaring eyes): drones crawling the Warrens, jailers by the
+ *    pens, brutes, raiders climbing the Throat to the Front (held up by the thorn wire), and the Maw
+ *    by the Heart. They go for the player on sight, before any Lumen: lunges, and brutes and the Maw
+ *    spit. Every Murk is a ThreatActor, so every power, Tab-targeting and the target frame work on them.
  *
  * Agents exist only in the areas near the player (spawned from the war's state, dropped when far);
  * they walk on the field's floors, turn aside at rock, follow the waypoint graph between places.
@@ -25,7 +26,7 @@ import type { DamageResult, DamageSource, ThreatActor, ThreatZone } from '../../
 
 export type Fac = 'lumen' | 'murk';
 export type Role =
-  | 'dweller' | 'tender' | 'carrier' | 'council' | 'child' | 'guard' | 'caravan' | 'captive' | 'support'
+  | 'dweller' | 'tender' | 'carrier' | 'council' | 'child' | 'guard' | 'sentry' | 'caravan' | 'captive' | 'support'
   | 'drone' | 'raider' | 'brute' | 'jailer' | 'maw' | 'breacher';
 type Mode = 'idle' | 'move' | 'hide' | 'hidden' | 'fight' | 'flee' | 'dead' | 'greet' | 'follow' | 'free' | 'go';
 
@@ -65,6 +66,10 @@ export interface Blob {
   flash: number;
   /** Something to do on the surface (support): a target id to hold, the spot to return to. */
   task: SupportTask | null;
+  /** Velocity over the last frames (m/s; sentries lead their shots by it). */
+  vx: number; vz: number;
+  /** Following a path: nearest it has come to the waypoint, seconds since it got any nearer. */
+  best: number; bestT: number;
 }
 
 /** A Lumen called to the surface: what it does (the game resolves the target by kind and object). */
@@ -72,6 +77,8 @@ export interface SupportTask { kind: 'hold' | 'douse' | 'fight' | 'return'; x: n
 
 export interface Drop { x: number; y: number; z: number; vx: number; vy: number; vz: number; r: number; col: [number, number, number]; life: number; murk: boolean }
 interface Spit { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; dmg: number; from: Blob }
+/** A Lumen sentry's glowing bolt, lobbed at a Murk. */
+interface Bolt { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; col: [number, number, number] }
 
 /** What the factions need from the game. */
 export interface FactionHost {
@@ -104,6 +111,7 @@ const ROLE: Record<Role, { r: [number, number]; hp: number; speed: number; dmg: 
   council: { r: [0.36, 0.5], hp: 3, speed: 0.4, dmg: 0 },
   child: { r: [0.1, 0.16], hp: 0.8, speed: 0.9, dmg: 0 },
   guard: { r: [0.4, 0.62], hp: 9, speed: 1.6, dmg: 2.2 },
+  sentry: { r: [0.36, 0.5], hp: 9, speed: 1.2, dmg: 3.6 },
   caravan: { r: [0.22, 0.34], hp: 2, speed: 0.9, dmg: 0 },
   captive: { r: [0.18, 0.28], hp: 1, speed: 1.4, dmg: 0 },
   support: { r: [0.28, 0.42], hp: 6, speed: 7, dmg: 0 },
@@ -116,18 +124,24 @@ const ROLE: Record<Role, { r: [number, number]; hp: number; speed: number; dmg: 
 };
 
 const MAX = 420;
-/** Murk notice the player within (m), give up beyond; Lumen strangers hide within. */
-const AGGRO = 17, LEASH = 34, SHY = 9;
+/** Murk notice the player within (m), give up beyond, drop a Lumen for the player within; Lumen strangers hide within. */
+const AGGRO = 24, LEASH = 40, SWITCH = 10, SHY = 9;
+/** Sentries: shoot at Murk within (m), every so many seconds, a bolt's damage (and splash); hand to hand within. */
+export const SENTRY = { range: 22, cd: [2.4, 4.0] as [number, number], dmg: 0.5, splash: 0.3, melee: 2.4, scatter: 0.35, scatterK: 0.045 };
+/** The thorn wire holds the Murk up: their speed in it. */
+const WIRE_SLOW = 0.35;
 
 export class Factions {
   readonly group = new THREE.Group();
   readonly blobs: Blob[] = [];
   readonly drops: Drop[] = [];
   private spits: Spit[] = [];
+  private bolts: Bolt[] = [];
   private lShell: THREE.InstancedMesh;
   private lCore: THREE.InstancedMesh;
   private mShell: THREE.InstancedMesh;
   private mCore: THREE.InstancedMesh;
+  private mEyes: THREE.InstancedMesh;
   private nextId = 1;
   private frame = 0;
   time = 0;
@@ -136,7 +150,7 @@ export class Factions {
   /** Nav graph adjacency. */
   private adj: number[][] = [];
   /** Statistics for tests. */
-  stats = { lumen: 0, murk: 0, fights: 0, kills: 0, spits: 0 };
+  stats = { lumen: 0, murk: 0, fights: 0, kills: 0, spits: 0, bolts: 0, boltHits: 0 };
 
   constructor(readonly host: FactionHost) {
     const g = blobGeometry();
@@ -148,7 +162,8 @@ export class Factions {
     this.lShell = new THREE.InstancedMesh(g, shellMat, MAX);
     this.mShell = new THREE.InstancedMesh(mg, murkShell, MAX);
     this.mCore = new THREE.InstancedMesh(g, coreMat, MAX);
-    for (const m of [this.lCore, this.lShell, this.mShell, this.mCore]) {
+    this.mEyes = new THREE.InstancedMesh(eyesGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX);
+    for (const m of [this.lCore, this.lShell, this.mShell, this.mCore, this.mEyes]) {
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
       m.count = 0;
       m.frustumCulled = false;
@@ -170,6 +185,7 @@ export class Factions {
       id: this.nextId++, fac, role, x, y, z, yaw: Math.random() * 6.28, r, hp: S.hp * (r / S.r[1]) * 1.2, maxHp: S.hp * (r / S.r[1]) * 1.2,
       mode: 'idle', tx: x, tz: z, path: [], wait: Math.random() * 3, t: 0, ph: Math.random() * 6, col: pal[Math.floor(Math.random() * pal.length)],
       glow: 0.8, area, foe: null, cd: Math.random(), stretch: 0, lunge: 0, actor: null, surface, vy: 0, den: null, ttl: Infinity, seat: 0, flash: 0, task: null,
+      vx: 0, vz: 0, best: Infinity, bestT: 0,
     };
     if (role === 'maw') { b.hp = b.maxHp = S.hp; b.col = [1.0, 0.22, 0.18]; }
     if (fac === 'murk') b.actor = new MurkActor(b, this);
@@ -224,6 +240,7 @@ export class Factions {
     const n = b.path.shift();
     if (n === undefined) return false;
     const N = this.host.plan.nodes[n];
+    b.best = Infinity; b.bestT = 0;
     b.tx = N.x + (Math.random() - 0.5) * Math.min(3, N.r);
     b.tz = N.z + (Math.random() - 0.5) * Math.min(3, N.r);
     return true;
@@ -248,18 +265,23 @@ export class Factions {
       b.lunge = Math.max(0, b.lunge - h);
       b.flash = Math.max(0, b.flash - h * 3);
       if (b.ttl !== Infinity) { b.ttl -= h; if (b.ttl <= 0) { b.mode = 'dead'; continue; } }
+      const ox = b.x, oz = b.z;
       if (b.fac === 'lumen') { this.lumen(b, h, P, trust); nl++; } else { this.murk(b, h, P); nm++; }
+      const k = Math.min(1, h * 4);
+      b.vx += ((b.x - ox) / h - b.vx) * k; b.vz += ((b.z - oz) / h - b.vz) * k;
     }
     this.stats.lumen = nl; this.stats.murk = nm;
     for (let i = this.blobs.length - 1; i >= 0; i--) if (this.blobs[i].mode === 'dead') this.blobs.splice(i, 1);
     this.updateDrops(dt);
     this.updateSpits(dt, P);
+    this.updateBolts(dt);
     this.draw(cam);
   }
 
   private lumen(b: Blob, dt: number, P: { x: number; y: number; z: number; h: number; speed: number }, trust: number): void {
     const dp = Math.hypot(b.x - P.x, b.z - P.z), dy = Math.abs(b.y - P.y);
     const pal = 0.8;
+    if (b.role === 'sentry') { this.sentry(b, dt); return; }
     // Danger: a Murk close by — guards go for it, the rest flee home.
     if (b.mode !== 'hidden' && b.mode !== 'fight' && (b.t * 3 + b.id) % 1 < dt * 3) {
       const m = this.nearest(b, 'murk', b.role === 'guard' || b.role === 'support' ? 14 : 6);
@@ -343,6 +365,86 @@ export class Factions {
     this.errand(b);
   }
 
+  /**
+   * A sentry in the trench: holds its spot; a Murk in reach is fought hand to hand, one coming over
+   * no-man's land gets a glowing bolt lobbed at it (led by its pace, never quite sure).
+   */
+  private sentry(b: Blob, dt: number): void {
+    const home = b.den ?? { x: b.x, y: b.y, z: b.z };
+    const m = this.nearest(b, 'murk', SENTRY.range, 8);
+    b.glow += ((m ? 1.15 : 0.85) - b.glow) * Math.min(1, dt * 2);
+    // Hand to hand only on its own level (in the bay or the gap): over the parapet it shoots.
+    if (m && Math.hypot(m.x - b.x, m.z - b.z) < SENTRY.melee + m.r && Math.abs(m.y - b.y) < 0.5 && Math.hypot(m.x - home.x, m.z - home.z) < 4) {
+      b.tx = m.x; b.tz = m.z;
+      if (Math.hypot(m.x - b.x, m.z - b.z) > b.r + m.r + 0.25) this.walk(b, dt, ROLE.sentry.speed * 1.5);
+      else this.clash(b, m);
+      return;
+    }
+    if (m && b.cd <= 0 && b.lunge <= 0) {
+      b.cd = SENTRY.cd[0] + Math.random() * (SENTRY.cd[1] - SENTRY.cd[0]);
+      this.shoot(b, m);
+      return;
+    }
+    // Back to its spot; shuffling a little.
+    if (b.wait > 0) { b.wait -= dt; return; }
+    b.tx = home.x; b.tz = home.z;
+    if (Math.hypot(home.x - b.x, home.z - b.z) > 0.6) { if (!this.walk(b, dt, ROLE.sentry.speed)) return; }
+    b.wait = 1 + Math.random() * 3;
+    const a = Math.random() * 6.28;
+    b.tx = home.x + Math.cos(a) * 0.4; b.tz = home.z + Math.sin(a) * 0.4;
+    b.yaw = Math.atan2((m?.z ?? b.z + Math.sin(b.yaw)) - b.z, (m?.x ?? b.x + Math.cos(b.yaw)) - b.x);
+  }
+
+  /** A sentry's bolt: up over the parapet and down on where the Murk will be. */
+  private shoot(b: Blob, m: Blob): void {
+    const sx = b.x, sy = b.y + b.r * 2 + 0.9, sz = b.z;
+    const d0 = Math.hypot(m.x - sx, m.z - sz);
+    const T = Math.max(0.6, Math.min(2.1, d0 / 13));
+    const err = SENTRY.scatter + d0 * SENTRY.scatterK;
+    const tx = m.x + m.vx * T + (Math.random() - 0.5) * 2 * err, tz = m.z + m.vz * T + (Math.random() - 0.5) * 2 * err;
+    const ty = m.y + m.r * 0.5;
+    this.bolts.push({ x: sx, y: sy, z: sz, vx: (tx - sx) / T, vy: (ty - sy) / T + 4.9 * T, vz: (tz - sz) / T, life: T + 1.5, col: b.col });
+    b.lunge = 0.3;
+    b.stretch = 0.6;
+    b.yaw = Math.atan2(m.z - b.z, m.x - b.x);
+    this.stats.bolts++;
+    this.host.sound('murk_spit', sx, sy, sz, 0.35, 1.7 + Math.random() * 0.3);
+  }
+
+  private updateBolts(dt: number): void {
+    const F = this.host.field;
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const o = this.bolts[i];
+      o.vy -= 9.8 * dt;
+      o.x += o.vx * dt; o.y += o.vy * dt; o.z += o.vz * dt;
+      o.life -= dt;
+      let hit: Blob | null = null;
+      for (const m of this.blobs) {
+        if (m.fac !== 'murk' || m.mode === 'dead' || m.surface) continue;
+        if (Math.abs(m.x - o.x) < m.r + 0.5 && Math.abs(m.z - o.z) < m.r + 0.5 && Math.hypot(m.x - o.x, m.y + m.r * 0.6 - o.y, m.z - o.z) < m.r + 0.45) { hit = m; break; }
+      }
+      const rock = !hit && o.vy < 0 && F.near(o.x, o.y, o.z) && F.sdf(o.x, o.y, o.z) > 0;
+      if (!hit && !rock && o.life > 0) continue;
+      if (hit) { this.stats.boltHits++; this.hurt(hit, SENTRY.dmg, false, o.x - o.vx * 0.05, o.z - o.vz * 0.05); }
+      // A splash of glow: the Murk close by are burnt a little too.
+      for (const m of this.blobs) {
+        if (m === hit || m.fac !== 'murk' || m.mode === 'dead' || m.surface) continue;
+        if (Math.hypot(m.x - o.x, m.y - o.y, m.z - o.z) < m.r + 0.9) this.hurt(m, SENTRY.splash, false, o.x, o.z);
+      }
+      for (let k = 0; k < 6; k++) this.drops.push({ x: o.x, y: o.y, z: o.z, vx: (Math.random() - 0.5) * 3, vy: 0.5 + Math.random() * 2, vz: (Math.random() - 0.5) * 3, r: 0.05, col: o.col, life: 4, murk: false });
+      this.host.sound('slime_squish', o.x, o.y, o.z, 0.4, 1.5);
+      this.bolts.splice(i, 1);
+    }
+  }
+
+  /** In the thorn wire at the Front? */
+  private inWire(x: number, y: number, z: number): boolean {
+    const T = this.host.plan.trench;
+    if (!T || Math.abs(y - T.y) > 3) return false;
+    const s = (x - T.x) * T.ax + (z - T.z) * T.az;
+    return s > T.wire[0] && s < T.wire[1] && Math.abs((x - T.x) * T.cx + (z - T.z) * T.cz) < 9;
+  }
+
   private pause(b: Blob): number {
     switch (b.role) {
       case 'council': return 6 + Math.random() * 10;
@@ -406,11 +508,12 @@ export class Factions {
     const dp = Math.hypot(b.x - P.x, b.z - P.z), dy = Math.abs(b.y + b.r - (P.y + P.h * 0.4));
     const S = ROLE[b.role];
     b.glow += ((b.mode === 'fight' ? 1.3 : 0.75) - b.glow) * Math.min(1, dt * 2);
-    // Pick a fight: the player in reach and in sight, else the nearest Lumen.
-    if (b.mode !== 'fight' && (b.t * 2 + b.id * 0.37) % 1 < dt * 2) {
-      const sees = dp < AGGRO * (b.role === 'maw' ? 1.6 : 1) && dy < 8 && this.host.clear(b.x, b.y + b.r, b.z, P.x, P.y + P.h * 0.6, P.z);
+    // Pick a fight: the player first, whenever in reach and in sight (dropping a Lumen for them when
+    // they come close), else the nearest Lumen.
+    if ((b.mode !== 'fight' || (b.foe && dp < SWITCH)) && (b.t * 4 + b.id * 0.37) % 1 < dt * 4) {
+      const sees = dp < (b.mode === 'fight' ? SWITCH : AGGRO * (b.role === 'maw' ? 1.6 : 1)) && dy < 8 && this.host.clear(b.x, b.y + b.r, b.z, P.x, P.y + P.h * 0.6, P.z);
       if (sees) { b.foe = null; b.mode = 'fight'; if (b.cd < 0.3) this.host.sound(b.role === 'maw' ? 'maw_roar' : 'murk_growl', b.x, b.y, b.z, b.role === 'maw' ? 1 : 0.55, b.role === 'brute' ? 0.7 : 1 + Math.random() * 0.3); b.cd = 0.6; }
-      else {
+      else if (b.mode !== 'fight') {
         const l = this.nearest(b, 'lumen', b.role === 'raider' || b.role === 'breacher' ? 16 : 9);
         if (l && l.role !== 'captive' && l.mode !== 'hidden') { b.foe = l; b.mode = 'fight'; }
       }
@@ -451,7 +554,9 @@ export class Factions {
     }
     if (b.wait > 0) { b.wait -= dt; return; }
     if (b.mode === 'go') {
-      if (this.walk(b, dt, S.speed * 0.8)) { if (!this.nextWaypoint(b)) { b.mode = 'idle'; b.wait = 1 + Math.random() * 2; } }
+      // Going over the top at the Front: a charge.
+      const charge = b.area === 'push' || b.area === 'raid' ? 1.25 : 0.8;
+      if (this.walk(b, dt, S.speed * charge)) { if (!this.nextWaypoint(b)) { b.mode = 'idle'; b.wait = 1 + Math.random() * 2; } }
       return;
     }
     if (b.mode === 'move') { if (this.walk(b, dt, S.speed * 0.5)) { b.mode = 'idle'; b.wait = 1 + Math.random() * 4; } return; }
@@ -559,11 +664,11 @@ export class Factions {
   }
 
   /** Nearest living blob of a faction within r (same level). */
-  nearest(b: { x: number; y: number; z: number }, fac: Fac, r: number): Blob | null {
+  nearest(b: { x: number; y: number; z: number }, fac: Fac, r: number, dy = 4): Blob | null {
     let best: Blob | null = null, bd = r;
     for (const o of this.blobs) {
       if (o.fac !== fac || o.mode === 'dead' || o === b) continue;
-      if (Math.abs(o.y - b.y) > 4) continue;
+      if (Math.abs(o.y - b.y) > dy) continue;
       const d = Math.hypot(o.x - b.x, o.z - b.z);
       if (d < bd) { bd = d; best = o; }
     }
@@ -576,6 +681,11 @@ export class Factions {
   private walk(b: Blob, dt: number, speed: number): boolean {
     const dx = b.tx - b.x, dz = b.tz - b.z, d = Math.hypot(dx, dz);
     if (d < 0.25) return true;
+    // On a path, a waypoint it cannot quite reach (an edge, a corner) counts as reached when it has
+    // come no nearer for a while.
+    if (b.mode === 'go') {
+      if (d < b.best - 0.3) { b.best = d; b.bestT = 0; } else if ((b.bestT += dt) > 2.5 && d < 4) { b.best = Infinity; b.bestT = 0; return true; }
+    }
     // Gliding in soft surges.
     const surge = 0.6 + 0.4 * Math.max(0, Math.sin(b.t * 7 + b.ph));
     const st = Math.min(d, speed * surge * dt);
@@ -588,9 +698,11 @@ export class Factions {
       return d - st < 0.25;
     }
     const F = this.host.field;
+    // Murk caught in the thorn wire: slow, wriggling.
+    const stw = b.fac === 'murk' && this.inWire(b.x, b.y, b.z) ? st * WIRE_SLOW : st;
     for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6]) {
       const a = a0 + off;
-      const nx = b.x + Math.cos(a) * st, nz = b.z + Math.sin(a) * st;
+      const nx = b.x + Math.cos(a) * stw, nz = b.z + Math.sin(a) * stw;
       const f = F.floorAt(nx, b.y + 1.2, nz, 5);
       if (f === null || f - b.y > 0.7 || f - b.y < -3) continue;
       if (!F.air(nx, f + Math.max(0.15, b.r * 0.8), nz, Math.min(0.2, b.r * 0.3))) continue;
@@ -627,29 +739,43 @@ export class Factions {
       const x = b.x + Math.cos(b.yaw) * lx, z = b.z + Math.sin(b.yaw) * lx;
       _m.compose(_p.set(x, b.y, z), _q.setFromAxisAngle(_up, -b.yaw), _s.set(b.r * sx, b.r * sy, b.r * sx));
       if (b.fac === 'lumen') { if (kl < MAX) kl = this.put(this.lShell, this.lCore, kl, b.col, glow, false); }
-      else if (km < MAX) km = this.put(this.mShell, this.mCore, km, b.col, glow, true);
+      else if (km < MAX) {
+        // Glaring eyes: brighter in a fight, a slow blink.
+        const blink = Math.sin(this.time * 0.7 + b.ph * 3) > 0.985 ? 0.15 : 1;
+        const e = (b.mode === 'fight' ? 1.0 : 0.7) * blink;
+        this.mEyes.setMatrixAt(km, _m);
+        _c.setRGB(1.0 * e, 0.42 * e, 0.08 * e);
+        this.mEyes.setColorAt(km, _c);
+        km = this.put(this.mShell, this.mCore, km, b.col, glow, true);
+      }
+    }
+    for (const o of this.bolts) {
+      if (kl >= MAX) break;
+      _m.compose(_p.set(o.x, o.y, o.z), _q.identity(), _s.set(0.11, 0.11, 0.11));
+      kl = this.put(this.lShell, this.lCore, kl, o.col, 1.6, false);
     }
     for (const d of this.drops) {
       if (kl >= MAX - 1 || km >= MAX - 1) break;
       const fade = Math.max(0, 1 - d.life / (d.murk ? 6 : 10));
       const flat = d.vx === 0 && d.vz === 0;
       _m.compose(_p.set(d.x, d.y, d.z), _q.identity(), _s.set(d.r * (flat ? 1.4 : 1), d.r * (flat ? 0.35 : 1), d.r * (flat ? 1.4 : 1)));
-      if (d.murk) km = this.put(this.mShell, this.mCore, km, d.col, 0.6 * fade, true); else kl = this.put(this.lShell, this.lCore, kl, d.col, 0.7 * fade, false);
+      if (d.murk) { this.mEyes.setMatrixAt(km, _zero); km = this.put(this.mShell, this.mCore, km, d.col, 0.6 * fade, true); } else kl = this.put(this.lShell, this.lCore, kl, d.col, 0.7 * fade, false);
     }
     for (const s of this.spits) {
       if (km >= MAX) break;
       _m.compose(_p.set(s.x, s.y, s.z), _q.identity(), _s.set(0.12, 0.12, 0.12));
+      this.mEyes.setMatrixAt(km, _zero);
       km = this.put(this.mShell, this.mCore, km, MURK_COL[2], 1.5, true);
     }
     this.lShell.count = this.lCore.count = kl;
-    this.mShell.count = this.mCore.count = km;
-    for (const m of [this.lShell, this.lCore, this.mShell, this.mCore]) { m.instanceMatrix.needsUpdate = true; m.instanceColor!.needsUpdate = true; }
+    this.mShell.count = this.mCore.count = this.mEyes.count = km;
+    for (const m of [this.lShell, this.lCore, this.mShell, this.mCore, this.mEyes]) { m.instanceMatrix.needsUpdate = true; m.instanceColor!.needsUpdate = true; }
   }
 
   private put(shell: THREE.InstancedMesh, core: THREE.InstancedMesh, k: number, col: [number, number, number], glow: number, murk: boolean): number {
     shell.setMatrixAt(k, _m);
-    // Murk: near black with a faint red sheen (the frame's tone mapping lifts even dark values).
-    if (murk) _c.setRGB(0.018 + col[0] * 0.025 * glow, 0.008, 0.012);
+    // Murk: dark blood red, the spines glowing hotter (vertex colours); nothing like the soft Lumen.
+    if (murk) _c.setRGB(0.07 + col[0] * 0.06 * glow, 0.008 + col[2] * 0.01, 0.014);
     else _c.setRGB(col[0] * glow, col[1] * glow, col[2] * glow);
     shell.setColorAt(k, _c);
     _m2.makeScale(murk ? 0.42 : 0.6, murk ? 0.38 : 0.55, murk ? 0.42 : 0.6).setPosition(0, murk ? 0.25 : 0.12, 0);
@@ -692,7 +818,7 @@ export class Factions {
   }
 
   dispose(): void {
-    for (const m of [this.lShell, this.lCore, this.mShell, this.mCore]) m.dispose();
+    for (const m of [this.lShell, this.lCore, this.mShell, this.mCore, this.mEyes]) m.dispose();
   }
 }
 
@@ -767,6 +893,31 @@ export class MurkActor implements ThreatActor {
 const _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4();
 const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _q = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
 const _c = new THREE.Color();
+const _zero = new THREE.Matrix4().makeScale(0, 0, 0);
+
+/** The Murk's eyes: two slanted, glaring slits at the front (+x) of the shell. */
+function eyesGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  for (const side of [-1, 1]) {
+    const e = new THREE.SphereGeometry(1, 10, 6);
+    e.scale(0.07, 0.075, 0.17);
+    // Slanted down towards the middle: an angry glare.
+    e.rotateX(-side * 0.45);
+    e.translate(0.9, 0.66, side * 0.27);
+    parts.push(e);
+  }
+  const pos: number[] = [], idx: number[] = [];
+  for (const p of parts) {
+    const base = pos.length / 3, a = p.getAttribute('position');
+    for (let i = 0; i < a.count; i++) pos.push(a.getX(i), a.getY(i), a.getZ(i));
+    const ix = p.getIndex()!;
+    for (let i = 0; i < ix.count; i++) idx.push(base + ix.getX(i));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  return g;
+}
 
 /** A blob with spines: the Murk's shell (dark, ridged, pointed). */
 function spikedGeometry(): THREE.BufferGeometry {
@@ -783,8 +934,9 @@ function spikedGeometry(): THREE.BufferGeometry {
     const r = 1 + spike + 0.06 * Math.sin(x * 20 + z * 13);
     const yy = y < 0 ? y * 0.3 : y * 0.9;
     pos.setXYZ(i, x * r, yy * r + 0.28, z * r);
-    const c = 0.5 + 0.5 * Math.max(0, 1 - spike * 1.2);
-    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = c;
+    // The body dark, the spines running hot towards their tips.
+    const hot = Math.max(0, Math.min(1, (spike - 0.12) * 2.5));
+    col[i * 3] = 0.45 + hot * 2.6; col[i * 3 + 1] = 0.45 + hot * 1.1; col[i * 3 + 2] = 0.45 + hot * 0.5;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.computeVertexNormals();

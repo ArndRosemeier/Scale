@@ -1177,10 +1177,11 @@ as distance LOD).
   * Plan (`plan.ts`, pure, deterministic per seed, ~0.1 s): a hub colony (nearest the centre) hosts the Glow
     `GLOW_DEPTH` (64 m) under the lowest ground over the realm, the Deep `DEEP_DROP` (52 m) lower. Shapes in a frame
     (origin at the Great Hall, u along the realm's axis): the Hall (ellipsoid, flat-cut, terraced `bowl` floor, pool,
-    the Spire rock column, hanging masses), Gardens, Lake (falls), Archive (mosaics), the Front gallery with the
-    barricade, the Throat (shaft cylinder + dome, a `helix` rock ramp, a rock bridge to a lookout niche), the Warrens
+    the Spire rock column, hanging masses), Gardens, Lake (falls), Archive (mosaics), the Front gallery (a trench
+    war, `Trench`: three dug bays a metre deep behind rock parapets with sandbags and duckboards, two gaps between
+    them, a belt of thorn wire, craters in no-man's land, the Murk's berm short of the lip), the Throat (shaft cylinder + dome, a `helix` rock ramp, a rock bridge to a lookout niche), the Warrens
     (pillars), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
-    `buildChamber`) a narrow neck with the gate, descending steeply until the wide gallery fits under the ground, then
+    `buildChamber`) a neck (r 2.3 m, roomy for the camera; no gate since 0.056), descending steeply until the wide gallery fits under the ground, then
     a gallery (r 5.2 m, grade ≤ 0.16) to the Hall's rim, a spiral first where the way is too short for the drop.
     Colonies within 950 m get roads. Tried over hub colonies / axes / distances until clear of every tube, box and
     the station surroundings and ≥ 14 m under the ground. Decor (dwellings, mushrooms, fungus, crystals, shelves,
@@ -1188,7 +1189,7 @@ as distance LOD).
     lift column, and a waypoint graph whose edges are walked on the field (detour nodes round obstacles).
   * Rock (`field.ts`): one signed distance field — smooth union of air shapes, smooth subtraction of rock shapes,
     two octaves of 3D noise by the nearest shape's roughness (gentle on floors). Grid of 16 m cells listing shapes.
-    Queries: `floorAt` / `ceilingAt` (sphere traced), `contains` (air with margin, closed membranes solid, no
+    Queries: `floorAt` / `ceilingAt` (sphere traced), `contains` (air with margin, no
     climbing faces steeper than 60°), `lineClear`, `ray`. Underground merges it into `floorAt`, `ceilingAt`,
     `contains`, `cameraFree` and `isUnder`; `caveLine` / `caveRay` serve `Sight.clear` and `Targeting` (probe, LOS
     in `inView`) so shots and powers work in the caves.
@@ -1197,23 +1198,28 @@ as distance LOD).
     red seams in the Deep), occlusion from the field and the light of every source in reach baked per vertex
     (`aGlow`, added as emission × albedo by the cave material); decor in the same chunk (lit parts and an unlit glow
     mesh). Built nearest first within 230 m of the camera, dropped beyond 300 m (~5 ms a chunk in the worker, ~500
-    chunks for the whole realm). Faces inside the chambers the roads open into are skipped. Membranes (gates, the
-    barricade), water, falls, the Heart (the origin scene's shard shader), spores round the camera, the lift column,
+    chunks for the whole realm). Faces inside the chambers the roads open into are skipped. Water, falls, the Heart (the origin scene's shard shader), spores round the camera, the lift column,
     the mosaics (canvas). No lights: `SkySystem.deep` (camera in the caves' air) drops the fill light to almost
     nothing and tints the haze (teal in the Glow, red in the Deep).
   * Slimes (`Factions.ts`): Lumen (dwellers with a dome to hide in, tenders, carriers, the council, children,
-    guards, caravans, captives, support) and Murk (drones, raiders, brutes, jailers, the Maw, breachers) as agents
-    of the areas near the player, walking on the field (turning aside at rock, steps ≤ 0.7 m) along the waypoint
-    graph; fights between them, lunges and spit at the player; every Murk a `MurkActor` (ThreatActor: body, an
-    exposed ember core on brutes and the Maw). Four instanced batches (Lumen blob shell / core, spiked Murk shell /
-    ember core).
+    guards, trench sentries, caravans, captives, support) and Murk (drones, raiders, brutes, jailers, the Maw,
+    breachers) as agents of the areas near the player, walking on the field (turning aside at rock, steps ≤ 0.7 m)
+    along the waypoint graph (a waypoint they come no nearer to for 2.5 s counts as reached); fights between them,
+    lunges and spit at the player. Murk go for the player first: on sight within 24 m, and they drop a Lumen for
+    the player within 10 m. Sentries hold their spot, lob led, scattered glowing bolts (`SENTRY`) at Murk within
+    22 m and fight hand to hand only on their own level; the thorn wire slows Murk to a third. Every Murk a
+    `MurkActor` (ThreatActor: body, an exposed ember core on brutes and the Maw). Five instanced batches (Lumen blob
+    shell / core, spiked dark red Murk shell with hot spines / ember core / glaring eyes).
   * The war (`War.ts`, pure, saved): Murk strength (grows from the Heart, not while the Maw is down), Lumen strength,
     the front line; raids every 2.5–5.5 game hours — fought out live by agents when the player is near the Front,
-    else decided by strength; breakouts at night when the Murk hold the Hall (`MurkBreach`, threat archetype
+    else decided by strength. Between raids the Front is a trench war (`game/slimes/TrenchWar.ts`): pushes of 2–4
+    Murk every 6–13 s over no-man's land at the gaps (they leave the war's state alone unless the player kills
+    them), relief for fallen sentries, flares (sprites) over no-man's land; `tools/trenchsim.ts` runs it headlessly.
+    Breakouts at night when the Murk hold the Hall (`MurkBreach`, threat archetype
     `murk`: police, compass, music).
-  * Trust (`Trust.ts`, per city, saved): tiers Shunned / Stranger / Noticed (gates) / Welcome (greetings, lift,
+  * Trust (`Trust.ts`, per city, saved): tiers Shunned / Stranger / Noticed (they stop hiding) / Welcome (greetings, lift,
     pebbles) / Ally / Kin; grants the Slime call (`Progress.granted`, `AbilitySystem.special`).
-  * The game side (`game/slimes/SlimeRealm.ts`): areas, raids, gates, pens (E), the lift, the Heart's resonance,
+  * The game side (`game/slimes/SlimeRealm.ts`): areas, raids, the trench war, pens (E), the lift, the Heart's resonance,
     pebbles, ambience, the Slime call, breakouts, toasts, saves (`SaveData.slimes`, version 3), a safety net for
     bodies below the realm. Sounds: `tools/synthDeep.mjs`. Admin console section "Slimes"; `dev.deep.go(place)`,
     `dev.deep.status()`, `dev.slimes.status() | trust(v) | raid() | breach() | war(patch)`.
