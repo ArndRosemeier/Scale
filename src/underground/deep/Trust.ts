@@ -3,9 +3,9 @@
  * city's reputation. It is earned slowly — patience, defending them, freeing their own — and lost
  * quickly by hurting them.
  *
- *   < −30  Shunned:   they flee and hide; the gates stay shut
+ *   < −30  Shunned:   they flee and hide
  *   < 10   Stranger:  shy; they hide in their domes when the player comes close
- *   ≥ 10   Noticed:   the gates open; they keep their distance
+ *   ≥ 10   Noticed:   they no longer hide; they keep their distance
  *   ≥ 30   Welcome:   they greet the player, children follow, the lift runs, glow pebbles
  *   ≥ 55   Ally:      Slime call (rank 1): they answer from the sewers
  *   ≥ 80   Kin:       Slime call rank 2 (more of them, longer), a mosaic of the player

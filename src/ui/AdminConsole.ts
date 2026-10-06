@@ -217,7 +217,7 @@ const SECTIONS: [string, Btn[]][] = [
     ...[0, 1, 2].map((i) => ({ label: `Slime colony ${i}`, run: (_g: Game, d: Dev) => call(d, 'colony', i) })),
   ]],
   ['Slimes', [
-    ...['hall', 'gardens', 'lake', 'archive', 'front', 'lookout', 'bottom', 'warrens', 'heart'].map((k) => ({ label: 'Go: ' + k, run: (_g: Game, d: Dev) => call(d, 'deep.go', k) })),
+    ...['hall', 'gardens', 'lake', 'archive', 'front', 'trench', 'noMans', 'lookout', 'bottom', 'warrens', 'heart'].map((k) => ({ label: 'Go: ' + k, run: (_g: Game, d: Dev) => call(d, 'deep.go', k) })),
     { label: 'Trust +25', run: (g) => { g.slimeRealm.trust.add(25, 'admin'); return g.slimeRealm.trust.value; } },
     { label: 'Trust -25', run: (g) => { g.slimeRealm.trust.add(-25, 'admin'); return g.slimeRealm.trust.value; } },
     { label: 'Raid now', run: (g) => { g.slimeRealm.devRaid(); return 'raid due'; } },
