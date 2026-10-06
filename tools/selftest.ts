@@ -2975,11 +2975,13 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   // Markers over people need them in sight: same side of the ground, no wall in between.
   let wall = Infinity;
   const fake = { terrain: { height: () => 0 }, buildingAt: () => null, raycast: () => ({ t: wall, building: null }) } as unknown as SightWorld;
-  const see = makeSight(fake), cam = new THREE.PerspectiveCamera();
-  const look = (cy: number, y: number): boolean => { cam.position.set(0, cy, 0); return see(20, y, 0, cam); };
-  const street = look(2, 1.2), sewer = look(-6, -5), fromStreet = look(2, -5), fromSewer = look(-6, 1.2);
+  // The camera's side is the game's own flag, not its depth: in a shallow sewer it is barely under the street.
+  let camUnder = false;
+  const see = makeSight(fake, () => camUnder, (_x, y) => y < -1.5), cam = new THREE.PerspectiveCamera();
+  const look = (under: boolean, cy: number, feet: number): boolean => { camUnder = under; cam.position.set(0, cy, 0); return see(20, feet, 0, cam); };
+  const street = look(false, 2, 0), sewer = look(true, -0.8, -2.4), fromStreet = look(false, 2, -2.4), fromSewer = look(true, -0.8, 0);
   wall = 5;
-  const walled = look(2, 1.2);
+  const walled = look(false, 2, 0);
   check(street && sewer && !fromStreet && !fromSewer && !walled, `screen: no tags through the ground or walls (street ${street}, sewer ${sewer}, sewer from street ${fromStreet}, street from sewer ${fromSewer}, through a wall ${walled})`);
 }
 

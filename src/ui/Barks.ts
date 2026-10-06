@@ -145,7 +145,7 @@ export class Barks {
     if (this.time < (this.quiet.get(a) ?? -Infinity)) return false;
     // Only where it can be seen.
     const cam = this.game.renderer.camera;
-    if (!markerOnScreen(a.x, a.y + 2.05, a.z, a.y + 1.2, cam, this.p, 0.95)) return false;
+    if (!markerOnScreen(a.x, a.y + 2.05, a.z, a.y, cam, this.p, 0.95)) return false;
     if (this.shown.length >= MAX_SHOWN) return false;
     const el = this.els.find((e) => !this.shown.some((s) => s.el === e))!;
     el.textContent = text;
@@ -165,7 +165,7 @@ export class Barks {
       s.t += dt;
       const show = showFor(s.el.textContent ?? '');
       const gone = !s.a.alive || s.t > show;
-      const off = hidden || !markerOnScreen(s.a.x, s.a.y + 2.05, s.a.z, s.a.y + 1.2, cam, this.p, 1.05);
+      const off = hidden || !markerOnScreen(s.a.x, s.a.y + 2.05, s.a.z, s.a.y, cam, this.p, 1.05);
       if (gone) { s.el.style.display = 'none'; this.shown.splice(i, 1); continue; }
       s.el.style.display = off ? 'none' : 'block';
       if (off) continue;

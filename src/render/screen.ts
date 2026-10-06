@@ -58,7 +58,7 @@ export function onScreen(s: ScreenPoint, margin = 1): boolean {
 export function pxX(s: ScreenPoint, w: number): number { return (s.x * 0.5 + 0.5) * w; }
 export function pxY(s: ScreenPoint, h: number): number { return (-s.y * 0.5 + 0.5) * h; }
 
-/** Whether a point (a body, not its marker) can be seen from the camera; set by the game. */
+/** Whether someone standing at (x, feet y, z) can be seen from the camera; set by the game. */
 export type Sight = (x: number, y: number, z: number, cam: THREE.Camera) => boolean;
 let sight: Sight | null = null;
 
@@ -66,9 +66,9 @@ export function setSight(fn: Sight | null): void { sight = fn; }
 
 /**
  * A marker over someone: the marker point (x, y, z) projected into `out`; true when it is on screen
- * (give or take `margin`) and the body at (x, bodyY, z) is in sight of the camera.
+ * (give or take `margin`) and the one standing at (x, feetY, z) is in sight of the camera.
  */
-export function markerOnScreen(x: number, y: number, z: number, bodyY: number, cam: THREE.Camera, out: ScreenPoint, margin = 1): boolean {
+export function markerOnScreen(x: number, y: number, z: number, feetY: number, cam: THREE.Camera, out: ScreenPoint, margin = 1): boolean {
   if (!onScreen(toScreen(x, y, z, cam, out), margin)) return false;
-  return !sight || sight(x, bodyY, z, cam);
+  return !sight || sight(x, feetY, z, cam);
 }

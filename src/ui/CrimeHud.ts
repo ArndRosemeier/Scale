@@ -87,7 +87,7 @@ export class CrimeHud {
     let n = 0;
     for (const a of s.fleeing()) {
       if (n >= this.tags.length) break;
-      if (!markerOnScreen(a.x, a.y + 2.2, a.z, a.y + 1.2, cam, _p)) continue;
+      if (!markerOnScreen(a.x, a.y + 2.2, a.z, a.y, cam, _p)) continue;
       const t = this.tags[n++];
       const d = cam.position.distanceTo(_q.set(a.x, a.y + 1.6, a.z));
       const k = Math.max(0.55, Math.min(1.15, 14 / Math.max(1, d)));

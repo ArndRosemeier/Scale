@@ -280,7 +280,6 @@ export class Game {
     this.destruction = new Destruction(this.streamer, this.world, this.terrain, this.debris, this.dust, tex);
     this.renderer.scene.add(this.destruction.group);
     this.collision = new Collision(this.world, this.destruction, this.streamer);
-    setSight(makeSight(this.world));
     this.collision.obstacleProviders.push(landmarks.provider);
     this.underground = new Underground(macro, this.terrain, tex, (x, z) => this.terrain.height(x, z) + this.world.surfaceOffset(x, z));
     this.collision.under = this.underground;
@@ -288,6 +287,7 @@ export class Game {
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
     this.underground.sound = this.audio;
+    setSight(makeSight(this.world, () => this.camRig?.underground ?? false, (x, y, z) => this.underground.isUnder(x, y, z)));
     this.stimuli.on((s) => this.underground.onStimulus(s.kind, s.x, s.y, s.z, s.radius));
     this.renderer.scene.add(this.underground.group);
     this.net = new RoadNet(macro);
