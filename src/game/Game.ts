@@ -51,6 +51,7 @@ import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
 import { RagdollSystem, type CarBox } from '../physics/ragdoll/RagdollSystem';
 import { Birds } from '../fauna/Birds';
+import { LandmarkCrowds, roomFor } from '../sim/LandmarkCrowds';
 import { Terraces } from '../sim/Terraces';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
@@ -98,6 +99,7 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { StationLife } from './metro/StationLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
 import { ResponseDirector } from './response/ResponseDirector';
@@ -156,6 +158,8 @@ export class Game {
   birds!: Birds;
   /** People at the café and restaurant terraces (sim/Terraces). */
   terraces!: Terraces;
+  /** People inside the town hall and the cathedral (sim/LandmarkCrowds). */
+  halls!: LandmarkCrowds;
   interiors!: Interiors;
   underground!: Underground;
   gate!: ShaderGate;
@@ -191,6 +195,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** Commuters on the metro's stairs, platforms and trains near the player. */
+  stationLife: StationLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
   threats!: ThreatDirector;
   /** The slime civilisation under the city: the Lumen and the Murk, their war, the Lumen's trust. */
@@ -416,6 +422,7 @@ export class Game {
       this.collision.roofEquipmentIn,
     );
     this.underground.body = this.player;
+    this.underground.seatTaken = (x, y, z) => this.peds.neighbours(x, z, 0.4, []).some((a) => Math.abs(a.y - y) < 1 && (a.state === PState.Sit || a.actor?.move === 'sit'));
     this.renderer.scene.add(this.props.group);
     this.props.onBreak = (p) => this.audio.play(p.tree ? 'tree_crack_fall' : 'metal_bend', p.x, p.y + 1, p.z, 0.8, 1, 8, cam.position);
     for (const c of this.streamer.cells.values()) if (c.status === 'ready') { this.addParked(c); this.props.addCell(c, macro.cells[c.id].district); this.underground.addCell(c); }
@@ -452,9 +459,17 @@ export class Game {
     this.birds = new Birds({ terrain: this.terrain, world: this.world, peds: this.peds, traffic: this.traffic, drones: this.future.drones, dust: this.dust, debris: this.debris, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
     this.renderer.scene.add(this.birds.mesh);
     this.terraces = new Terraces({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, pop: this.population, props: this.props, destruction: this.destruction, loop: (id, r) => this.audio.loop(id, r) });
+    this.halls = new LandmarkCrowds({
+      macro, terrain: this.terrain, world: this.world, peds: this.peds, pop: this.population,
+      floor: (x, y, z) => this.world.landmarks?.topAt(x, z, y, 0) ?? -Infinity,
+      clear: (x, y, z) => !!this.world.landmarks && roomFor(this.world.landmarks, x, y, z),
+      standing: (i) => this.destruction.landmarks?.share(i) ?? 1,
+    });
+    this.crowd.outfit = (a) => this.halls.outfit(a);
     this.weather = new Weather(this);
     // Cups at the terraces first, then umbrellas in the rain.
-    this.crowd.heldFor = (a) => { const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
+    // (Nothing in hand inside a landmark: no coffee in the pews, no umbrella indoors.)
+    this.crowd.heldFor = (a) => { if (a.hall) return null; const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
     this.crowd.talking = (a, t) => this.terraces.talking(a, t);
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
@@ -515,6 +530,17 @@ export class Game {
     {
       const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
       if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
+      if (dev) dev.halls = { stats: () => this.halls.stats, list: () => this.halls.report(), go: (kind: 'cathedral' | 'townhall' = 'cathedral') => {
+        // Just inside the door, looking in.
+        const d = this.halls.door(kind);
+        if (!d) return null;
+        this.freeCam = false;
+        this.player.pos.set(d.x, d.y + 0.1, d.z);
+        this.player.vel.set(0, 0, 0);
+        this.camRig.yaw = d.yaw;
+        return d;
+      } };
+      this.halls.busy = (a) => this.people.partner === a;
       if (dev) dev.defeat = { status: () => this.defeat.status(), down: (kind?: Parameters<Defeat['down']>[0]) => this.defeat.down(kind), rep: (v: number) => { this.crime.rep.add(v - this.crime.rep.value, 'dev'); return this.crime.rep.value; } };
     }
     this.saves = new SaveSystem(this);
@@ -659,6 +685,7 @@ export class Game {
     this.T('peds', () => this.peds.update(dt, this.sky.hoursAbs, pp.x, pp.z, dt * this.sky.timeScale));
     this.T('react', () => this.reactions.update(dt, this.player));
     this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));
+    this.T('halls', () => this.halls.update(dt, this.sky.hoursAbs, pp.x, pp.z, pp.y));
     this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs));
     // Cars only brake for a player on the street (not one under it in the sewer or metro).
     this.traffic.player = this.freeCam || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z) ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
@@ -676,6 +703,7 @@ export class Game {
     this.T('aftermath', () => this.aftermath.update(dt));
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
+      this.stationLife?.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z);
       this.rideFx(dt);
       this.updateHoles();
       this.manholeKey();
@@ -790,7 +818,7 @@ export class Game {
     this.props.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
     this.future.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
     if (k > 0.45) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
-      if (this.dashHit.has(a) || a.state === 5 || a.inside || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
+      if (this.dashHit.has(a) || a.state === 5 || (a.inside && !a.hall) || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
       if (segDist(a.x, a.z) > r + 0.3) continue;
       this.dashHit.add(a);
       // Flung forward and aside: the "from" point lies behind them on the dash line (a runner
@@ -820,7 +848,8 @@ export class Game {
     const pm = p.mass, pr = p.radius;
     const near = this.peds.neighbours(p.pos.x, p.pos.z, pr + 1.5, []);
     for (const a of near) {
-      if (a.state === 5 || a.inside) continue;
+      // (Indoors only those in a landmark's hall are in reach; seated ones stay in their seat.)
+      if (a.state === 5 || (a.inside && (!a.hall || a.state === PState.Sit))) continue;
       if (Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
       const dx = p.pos.x - a.x, dz = p.pos.z - a.z;
       const d = Math.hypot(dx, dz);
@@ -985,6 +1014,7 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
     this.fame = new Fame(this);
@@ -1081,7 +1111,9 @@ export class Game {
   /** On-screen hint for something usable where the player stands (null: nothing). */
   private usableHint(): string | null {
     if (this.freeCam) return null;
-    const metro = this.underground.metroHint();
+    const metro = this.underground.metroHint(!!this.underground.ride && !this.player.seat && !!this.seatNear());
+    // On a platform bench the getting-up hint beats the platform's own.
+    if (metro && this.player.seat && !this.underground.ride) return 'Move or press <b>E</b> to get up';
     if (metro) return metro;
     // A hint offering E beats a passive one ("Bring the bag back …"): someone to help up right
     // here must show even while the player carries loot home.
@@ -1107,9 +1139,11 @@ export class Game {
   }
 
   /** A free seat within reach of an ordinary-sized player on foot (benches, café chairs), or null. */
-  private seatNear(): { x: number; z: number; yaw: number } | null {
+  private seatNear(): { x: number; z: number; yaw: number; car?: { u: number; v: number } } | null {
     const P = this.player;
     if (P.flying || !P.grounded || P.height > 2.4 || P.height < 1.2 || P.downT > 0 || P.ragdoll) return null;
+    // Underground: train seats, platform benches.
+    if (this.underground.isUnder(P.pos.x, P.pos.y + 0.5, P.pos.z) || this.underground.ride) return this.underground.seatNear(P.pos.x, P.pos.y, P.pos.z, 1.3);
     let best: { x: number; z: number; yaw: number } | null = null, bd = 1.3;
     this.props.query(P.pos.x, P.pos.z, 1.6, (pr) => {
       if (pr.broken || !/^furn:(bench|cafeChair):/.test(pr.kind)) return;
@@ -1129,13 +1163,27 @@ export class Game {
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
     if (this.aftermath.use() || this.crime.use() || this.deeds.help() || this.slimeRealm?.use()) { this.input.pressed.delete('KeyE'); return; }
-    if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
-    // Sit down on a bench or café chair in reach, or get up again.
+    // Get up from a seat (before the metro: seated in a train, E gets up rather than off).
     if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }
+    // In a train, a free seat in reach wins over the doors (getting off: walk out an open door).
+    const rideSeat = this.underground.ride ? this.seatNear() : null;
+    if (rideSeat && 'car' in rideSeat && rideSeat.car) {
+      this.player.sitOn(rideSeat.x, rideSeat.z, rideSeat.yaw);
+      if (this.player.seat) this.underground.sitInCar(rideSeat.car);
+      this.input.pressed.delete('KeyE');
+      return;
+    }
+    if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();
-    if (seat) { this.player.sitOn(seat.x, seat.z, seat.yaw); this.input.pressed.delete('KeyE'); return; }
+    // Sit down on a bench or café chair in reach (a train seat: the ride holds you on it).
+    if (seat) {
+      this.player.sitOn(seat.x, seat.z, seat.yaw);
+      if ('car' in seat && seat.car && this.player.seat) this.underground.sitInCar(seat.car);
+      this.input.pressed.delete('KeyE');
+      return;
+    }
     const p = this.player.pos;
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
     const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;

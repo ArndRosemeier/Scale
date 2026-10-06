@@ -24,6 +24,8 @@ export const AFTERMATH_OWNER = -2;
 export const STREET_OWNER = -3;
 /** Owner id of the people fame brings (src/game/fame: photographers, a TV crew, fans, protesters): their own budget. */
 export const FAME_OWNER = -4;
+/** Owner id of the metro's commuters (src/game/metro: on the stairs, the platforms and in the trains): their own budget. */
+export const METRO_OWNER = -5;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';

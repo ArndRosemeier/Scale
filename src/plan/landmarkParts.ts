@@ -113,6 +113,29 @@ export interface LmInterior {
   rooms: LmRoom[];
   /** Light positions (x, y, z world). */
   lights: number[];
+  /** Where people walk: a graph of points (x, y, z world) and their links (sim/LandmarkCrowds). */
+  nav: number[];
+  links: number[][];
+  /** Ways out: a nav point at a door and the points on from it (x, y, z …) down to the square. */
+  exits: { node: number; pts: number[] }[];
+  /** Where people sit or stand, and who. */
+  spots: LmSpot[];
+}
+
+/** Who uses a spot inside a landmark: visitors and the faithful, and the people who work there. */
+export type SpotWho = 'visitor' | 'faithful' | 'priest' | 'server' | 'clerk' | 'client' | 'mayor' | 'aide' | 'councillor' | 'registrar' | 'couple' | 'guest' | 'porter';
+
+/** A place to sit or stand inside a landmark (world), reached from a nav point over `via` (x, z pairs). */
+export interface LmSpot {
+  x: number; y: number; z: number;
+  /** Facing (PedAgent.heading convention). */
+  h: number;
+  sit: boolean;
+  who: SpotWho;
+  node: number;
+  via: number[];
+  /** Where they look (x, y, z) while there: a window, the dome, a portrait. */
+  look?: [number, number, number];
 }
 
 /** A solid for the walker (same shape as world/Collision's Obstacle). */
@@ -163,7 +186,7 @@ export interface Opt {
 /** Builds parts in a local frame (nested frames for sub-assemblies like planes). */
 export class Kit {
   readonly parts: LmPart[] = [];
-  readonly inside: LmInterior = { rooms: [], lights: [] };
+  readonly inside: LmInterior = { rooms: [], lights: [], nav: [], links: [], exits: [], spots: [] };
   private ox: number;
   private oz: number;
   private oa: number;
@@ -341,6 +364,45 @@ export class Kit {
     this.inside.rooms.push({ poly: [...this.W(u0, v0), ...this.W(u1, v0), ...this.W(u1, v1), ...this.W(u0, v1)], y0, y1 });
   }
 
+  /** A nav point (sim/LandmarkCrowds) at a local point, standing height y; returns its index. */
+  node(u: number, v: number, y: number): number {
+    const [x, z] = this.W(u, v);
+    this.inside.nav.push(x, y, z);
+    this.inside.links.push([]);
+    return this.inside.links.length - 1;
+  }
+
+  /** Nav links along a chain of points. */
+  path(...ids: number[]): void {
+    for (let i = 0; i + 1 < ids.length; i++) {
+      const a = ids[i], b = ids[i + 1], L = this.inside.links;
+      if (a === b || L[a].includes(b)) continue;
+      L[a].push(b);
+      L[b].push(a);
+    }
+  }
+
+  /**
+   * A spot to sit or stand at a local point, facing local +v turned by `rot` (as chairs), reached
+   * from nav point `node` over local points `via`; `look` (local u, v, y) is where they look.
+   */
+  spot(u: number, v: number, y: number, rot: number, sit: boolean, who: SpotWho, node: number, via: [number, number][] = [], look?: [number, number, number]): void {
+    const [x, z] = this.W(u, v);
+    const vw: number[] = [];
+    for (const [a, b] of via) vw.push(...this.W(a, b));
+    const l = look ? this.W(look[0], look[1]) : null;
+    this.inside.spots.push({ x, y, z, h: Math.PI - (this.oa + rot), sit, who, node, via: vw, look: l && look ? [l[0], look[2], l[1]] : undefined });
+  }
+
+  /** A way out from nav point `node` (at a door) over local points (u, v, y) to the ground at (u, v). */
+  exit(node: number, way: [number, number, number][], u: number, v: number): void {
+    const pts: number[] = [];
+    for (const [a, b, y] of way) { const [x, z] = this.W(a, b); pts.push(x, y, z); }
+    const [x, z] = this.W(u, v);
+    pts.push(x, this.T.height(x, z), z);
+    this.inside.exits.push({ node, pts });
+  }
+
   /** A room light at a local point. */
   light(u: number, v: number, y: number): void {
     const [x, z] = this.W(u, v);
@@ -455,7 +517,7 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
   // Entrance steps across the middle (in front of the gateway when the tower stands there),
   // solid and as many as it takes from the square up to the floor (the block may stand on a
   // terrace well above the ground).
-  entranceSteps(k, stepV, P.w * 0.18 + 1, B, mat(GRANITE, [0.85, 0.85, 0.85]));
+  const stepsFoot = entranceSteps(k, stepV, P.w * 0.18 + 1, B, mat(GRANITE, [0.85, 0.85, 0.85]));
   if (st === 3) k.cyl(-hw + 10, fv - 12, 9, 9, B, B + 9, mat(GLASS, WHITE, WIN | CURTAIN, 1.8, 9, 9), { foot: true, top: mat(METAL_ROOF, WHITE, ROOF) });
   // Flagpoles in front.
   const flagC = r.pick(PAINT);
@@ -464,7 +526,8 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
     k.cyl(u, v, 0.12, 0.08, B - 0.1, B + 12, mat(METAL, [0.85, 0.85, 0.85]), { detail: true, solid: false, seg: 6 });
     k.box(u + 1.3, v, 1.2, 0.03, B + 10.2, B + 11.8, mat(PLASTER, s === 0 ? WHITE : flagC), { detail: true, solid: false });
   }
-  townhallInterior(k, lm, sh, flagC, pastel);
+  const door = townhallInterior(k, lm, sh, flagC, pastel);
+  k.exit(door, [[0, sh.iv0 - 0.7, B], [0, stepV, B]], 0, stepsFoot);
 }
 
 // ------------------------------------------------------------ town hall: shell and interior
@@ -481,12 +544,14 @@ export interface Opening { a: number; w: number; y0: number; y1: number }
  * Solid entrance steps running out from v = stepV (towards -v) down from the floor at B to the
  * ground: 17 cm each, steeper (up to 30 cm) where the ground lies far below, at most 24.
  */
-export function entranceSteps(k: Kit, stepV: number, hw: number, B: number, m: PartMat): void {
+export function entranceSteps(k: Kit, stepV: number, hw: number, B: number, m: PartMat): number {
   const tread = 0.36, drop = (n: number) => B - k.ground(0, stepV - n * tread);
   let n = 3;
   while (n < 24 && drop(n) / n > 0.17) n++;
   const rise = Math.max(0.17, Math.min(0.3, drop(n) / n));
   for (let i = 0; i < n; i++) k.box(0, stepV - tread / 2 - i * tread, hw + i * 0.05, tread / 2, k.F, B - i * rise, m, { solid: true, map: 2 });
+  // (Where the steps meet the square.)
+  return stepV - n * tread - 0.6;
 }
 
 export function wallRun(k: Kit, axis: 'u' | 'v', c: number, a0: number, a1: number, y0: number, y1: number, th: number, m: PartMat, open: Opening[], o: Opt = {}): void {
@@ -569,7 +634,8 @@ type Palette = ReturnType<typeof hallPalette>;
 export const D: Opt = { detail: true };
 export const DS: Opt = { detail: true, solid: true };
 
-function townhallInterior(k: Kit, lm: Landmark, sh: Shell, flagC: RGB, pastel: RGB): void {
+/** Furnishes the town hall's inside; returns the nav point inside its door (sim/LandmarkCrowds). */
+function townhallInterior(k: Kit, lm: Landmark, sh: Shell, flagC: RGB, pastel: RGB): number {
   const r = new Rng(deriveSeed(lm.seed, 'interior'));
   const st = lm.style, B = k.B;
   const C = hallPalette(st, pastel);
@@ -605,8 +671,10 @@ function townhallInterior(k: Kit, lm: Landmark, sh: Shell, flagC: RGB, pastel: R
   k.box(0, fv - 0.42, 1.6, 0.03, B + sh.doorH + 0.75, B + sh.doorH + 1.3, C.gold, D);
   k.flat(0, iv0 + 1.2, dw, 0.9, B + 0.012, C.dark, D);
 
-  if (grand) grandHall(k, sh, C, r, flagC);
-  else compactHall(k, sh, C, r, flagC);
+  const door = k.node(0, iv0 + 1.4, B);
+  if (grand) grandHall(k, sh, C, r, flagC, door);
+  else compactHall(k, sh, C, r, flagC, door);
+  return door;
 }
 
 // --------------------------------------------------------------- furniture (local frame)
@@ -663,7 +731,7 @@ function flagStand(k: Kit, u: number, v: number, y: number, col: RGB, C: Palette
 }
 
 /** Council chamber: rows of desks on circles round a dais at the back (v1), facing it. */
-function chamber(k: Kit, u0: number, u1: number, v0: number, v1: number, y: number, ceil: number, C: Palette, r: Rng, flagC: RGB): void {
+function chamber(k: Kit, u0: number, u1: number, v0: number, v1: number, y: number, ceil: number, C: Palette, r: Rng, flagC: RGB, entry: number): void {
   const cu = (u0 + u1) / 2, half = (u1 - u0) / 2;
   const dh = Math.min(half - 0.8, 4.5);
   // (Reaching down into the slab: tall enough to be stood on.)
@@ -687,6 +755,8 @@ function chamber(k: Kit, u0: number, u1: number, v0: number, v1: number, y: numb
         k.box(0, 0, 0.72, 0.28, y, y + 0.76, C.wood, { ...DS, top: C.dark });
         k.beam(0.3, 0.1, y + 0.76, 0.3, 0.2, y + 1.1, 0.012, C.dark, D);
         chair(k, 0, -0.62, 0, y, C.red);
+        // (Out between the rows, then to the front: the desks are in the way here and there.)
+        k.spot(0, -0.6, y, 0, true, 'councillor', entry, [[0, -1.2]]);
       });
     }
   }
@@ -698,7 +768,7 @@ function chamber(k: Kit, u0: number, u1: number, v0: number, v1: number, y: numb
  * The grand layout: a two-storey hall with side galleries and a twin staircase, the service
  * hall behind it, and upstairs the council chamber between the mayor's office and the wedding room.
  */
-function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
+function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: number): void {
   // (Walkable parts are at least ~0.75 m tall: world/Collision only stands on obstacle tops
   // taller than 1.4 × the step height, and walks into lower ones. Slabs are thick, steps and
   // the dais reach down into the floor.)
@@ -755,9 +825,9 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
   }
   // Information desk and a bust of the founder.
   const du = -Math.min(uTop - 3, 8);
-  k.box(du, iv0 + 5, 2, 0.5, B, B + 1.1, C.wood, { ...DS, top: C.stone });
-  chair(k, du, iv0 + 6, Math.PI, B, C.red);
-  k.box(du, iv0 + 4.47, 0.5, 0.03, B + 1.1, B + 1.5, C.gold, D);
+  k.box(du, iv0 + 5, 2, 0.5, B, B + 0.95, C.wood, { ...DS, top: C.stone });
+  // (A plate on its front, not a sign on top: from the hall the clerk behind it is seen.)
+  k.box(du, iv0 + 4.47, 0.5, 0.03, B + 0.45, B + 0.85, C.gold, D);
   k.box(-du, iv0 + 5, 0.55, 0.55, B, B + 1.3, C.stone, DS);
   figure(k, -du, iv0 + 5, B + 1.3, 1.1, mat(METAL, BRONZE), false);
   for (const f of [0.3, 0.75]) chandelier(k, 0, iv0 + (hallV1 - iv0) * f, ceil, 1.6, C, B);
@@ -778,7 +848,6 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
   k.box(0, cv, iu - 1.5, 0.35, B, B + 1.1, C.wood, { ...DS, top: C.stone });
   for (let u = -iu + 2.5; u < iu - 2; u += 2.8) {
     k.box(u, cv - 0.05, 0.25, 0.03, B + 1.1, B + 1.45, C.dark, D);
-    chair(k, u, cv + 0.9, Math.PI, B, C.dark);
   }
   for (let row = 0, v = sv0 + 1.8; v < cv - 2 && row < 3; v += 1.5, row++)
     for (const s of [-1, 1]) bench(k, s * Math.min(iu * 0.45, 5), v, 0, B, Math.min(iu * 0.6, 5.5), C.wood);
@@ -790,14 +859,15 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
   // Upstairs: the mayor's office | the council chamber | the wedding room.
   const cw = iu - gW - 1.6;
   for (const s of [-1, 1]) wallRun(k, 'v', s * cw, sv0, iv1, L1, ceil, 0.25, C.wall, [{ a: sv0 + 1.4, w: 1.3, y0: L1, y1: L1 + 2.4 }], DS);
-  chamber(k, -cw + 0.125, cw - 0.125, sv0, iv1, L1, ceil, C, r, flagC);
+  const cM = k.node(0, sv0 + 0.8, L1);
+  chamber(k, -cw + 0.125, cw - 0.125, sv0, iv1, L1, ceil, C, r, flagC, cM);
   {
     // The mayor's office (left): desk, chairs, bookcase, flag, rug, plant.
     const u0 = -iu, u1 = -cw - 0.125, um = (u0 + u1) / 2, vm = (sv0 + iv1) / 2;
     k.flat(um, vm + 0.6, (u1 - u0) / 2 - 0.5, Math.max(0.4, (iv1 - sv0) / 2 - 1.1), L1 + 0.012, C.red, D);
-    k.box(um, iv1 - 1.8, 1.0, 0.45, L1, L1 + 0.76, C.wood, { ...DS, top: C.dark });
-    chair(k, um, iv1 - 1.1, Math.PI, L1, C.red, true);
-    for (const s of [-1, 1]) chair(k, um + s * 0.6, iv1 - 2.8, 0, L1, C.dark);
+    k.box(um, iv1 - 1.8, 1.0, 0.35, L1, L1 + 0.76, C.wood, { ...DS, top: C.dark });
+    chair(k, um, iv1 - 0.85, Math.PI, L1, C.red, true);
+    for (const s of [-1, 1]) chair(k, um + s * 0.6, iv1 - 3.0, 0, L1, C.dark);
     const bu = u0 + 0.3, bh = Math.min(1.6, (iv1 - sv0) / 2 - 0.8);
     k.box(bu, vm, 0.25, bh, L1, L1 + 2.3, C.wood, D);
     for (let y = L1 + 0.4; y < L1 + 2.2; y += 0.45)
@@ -813,17 +883,125 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
     k.box(um, iv1 - 1.6, 1.1, 0.45, L1, L1 + 0.78, C.cloth, DS);
     for (const s of [-1, 1]) {
       plant(k, um + s * 0.8, iv1 - 1.6, L1 + 0.78, C, 0.35, mat(PLASTER, s < 0 ? [1.3, 1.1, 1.15] : [1.2, 0.5, 0.6]));
-      chair(k, um + s * 0.5, iv1 - 2.6, 0, L1, C.cloth, true);
+      chair(k, um + s * 0.5, iv1 - 2.75, 0, L1, C.cloth, true);
     }
     for (let v = iv1 - 3.8; v > sv0 + 2.2; v -= 1.0)
       for (const s of [-1, 1]) for (const d of [0.55, 1.15]) chair(k, um + s * d, v, 0, L1, C.wood);
     k.flat(um, vm, 0.35, (iv1 - sv0) / 2 - 0.4, L1 + 0.012, C.red, D);
     k.light(um, vm, ceil - 0.8);
   }
+  grandWays(k, sh, door, cM, { L1, gW, uTop, uBot, tread, rise, vS, sw, vP, pt, du, cv, cw });
+}
+
+/**
+ * Where people walk and stay in the grand town hall (sim/LandmarkCrowds). The hall: in at the
+ * door, up the middle, along under the galleries (benches), round the information desk and the
+ * founder's bust; up the twin stairs to the galleries (looking down into the hall) and on into
+ * the mayor's office and the wedding room, both opening into the council chamber between them.
+ * Behind the hall the service hall: waiting benches, a counter with its clerks.
+ */
+function grandWays(k: Kit, sh: Shell, door: number, cM: number, g: { L1: number; gW: number; uTop: number; uBot: number; tread: number; rise: number; vS: number; sw: number; vP: number; pt: number; du: number; cv: number; cw: number }): void {
+  const B = k.B, { iu, iv0, iv1, ceil } = sh, { L1, gW, uTop, uBot, vS, sw, vP, du, cv, cw } = g;
+  const sv0 = vP + g.pt / 2, ug = iu - gW / 2, lane = iu - 1.6;
+  // The hall's middle line, the desk (a clerk behind it, someone asking) and the bust.
+  const c1 = k.node(0, iv0 + 3.4, B), c2 = k.node(0, iv0 + 7, B), cB = k.node(0, vP - 1.0, B);
+  k.path(door, c1, c2, cB);
+  k.spot(du, iv0 + 5.85, B, Math.PI, false, 'clerk', c2, [[du, iv0 + 7]]);
+  k.spot(du + 0.6, iv0 + 3.9, B, 0, false, 'client', c1);
+  k.spot(-du, iv0 + 3.75, B, 0, false, 'visitor', c1, [], [-du, iv0 + 5, B + 2.1]);
+  k.spot(1.5, (iv0 + vS - sw / 2) / 2 + 1, B, 2.6, false, 'visitor', c2, [], [0, (iv0 + vP) / 2, ceil - 1]);
+  k.spot(-1.2, (iv0 + vS - sw / 2) / 2 - 0.5, B, 0.4, false, 'visitor', c2, [], [-uTop, (iv0 + vP) / 2, L1 + 1.5]);
+  for (const s of [-1, 1]) {
+    // Under the gallery: a lane past the benches (people resting, looking up at the portraits).
+    let prev = k.node(s * lane, iv0 + 3.4, B);
+    k.path(c1, prev);
+    for (let v = iv0 + 5.1; v < vS - sw / 2 - 2; v += 4.2) {
+      const n = k.node(s * lane, v, B);
+      k.path(prev, n);
+      prev = n;
+      for (const dv of [-0.5, 0.5]) k.spot(s * (iu - 0.52), v + dv, B, s * Math.PI / 2, true, 'visitor', n, [[s * (iu - 1.2), v + dv]]);
+    }
+    // The stairs: from the foot by the middle, outwards up the flight to the gallery.
+    const f0 = k.node(s * (uBot - 0.6), vS, B), f1 = k.node(s * uBot, vS, B + g.rise * 0.5), f2 = k.node(s * (uTop - g.tread / 2), vS, L1);
+    const t = k.node(s * (uTop + 0.7), vS, L1), q = k.node(s * ug, vS, L1);
+    k.path(cB, f0, f1, f2, t, q);
+    // Along the gallery to its front, looking down into the hall between the columns.
+    const gaps: number[] = [];
+    for (let v = iv0 + 4.6; v < vS - sw / 2 - 1.2; v += 4.2) gaps.unshift(v);
+    let gp = q;
+    for (const v of gaps) {
+      const n = k.node(s * ug, v, L1);
+      k.path(gp, n);
+      gp = n;
+      k.spot(s * (uTop + 0.75), v, L1, s * Math.PI / 2, false, 'visitor', n, [], [0, v, B + 0.5]);
+    }
+    // Through the gallery's door into the room behind.
+    const gd = k.node(s * ug, vP - 0.7, L1), gi = k.node(s * ug, sv0 + 0.9, L1);
+    k.path(q, gd, gi);
+    // The door from the room into the chamber.
+    const rd = k.node(s * (cw + 0.75), sv0 + 1.4, L1), cd = k.node(s * (cw - 0.75), sv0 + 1.4, L1);
+    k.path(gi, rd, cd, cM);
+    if (s < 0) {
+      // The mayor's office: the mayor at the desk, an aide or a visitor in front of it.
+      const um = (-iu - cw - 0.125) / 2, oA = k.node(um, iv1 - 3.8, L1);
+      k.path(gi, oA, rd);
+      k.spot(um, iv1 - 0.85, L1, Math.PI, true, 'mayor', oA, [[um + 1.45, iv1 - 3.0], [um + 1.45, iv1 - 0.85]]);
+      for (const d of [-0.6, 0.6]) k.spot(um + d, iv1 - 3.0, L1, 0, true, 'aide', oA, [[um + d, iv1 - 3.5]]);
+    } else {
+      // The wedding room: the couple at the table, the registrar behind it, guests in rows.
+      const um = (cw + 0.125 + iu) / 2, wE = k.node(um, sv0 + 1.0, L1);
+      k.path(gi, wE, rd);
+      let prev = wE;
+      const rows: number[] = [];
+      for (let v = iv1 - 3.8; v > sv0 + 2.2; v -= 1.0) rows.unshift(v);
+      for (const v of rows) {
+        const n = k.node(um, v - 0.5, L1);
+        k.path(prev, n);
+        prev = n;
+        for (const s2 of [-1, 1]) for (const d of [0.55, 1.15]) k.spot(um + s2 * d, v, L1, 0, true, 'guest', n, [[um + s2 * d, v - 0.5]]);
+      }
+      const wF = k.node(um, iv1 - 3.2, L1);
+      k.path(prev, wF);
+      for (const d of [-0.5, 0.5]) k.spot(um + d, iv1 - 2.75, L1, 0, true, 'couple', wF, [[um + d, iv1 - 3.2]]);
+      k.spot(um, iv1 - 0.6, L1, Math.PI, false, 'registrar', wF, [[um + 1.55, iv1 - 3.2], [um + 1.55, iv1 - 0.6]]);
+    }
+  }
+  // The service hall: through the door behind the hall, rows of waiting benches facing the counter.
+  const sD = k.node(0, sv0 + 0.9, B);
+  k.path(cB, sD);
+  let prev = sD;
+  const bx = Math.min(iu * 0.45, 5), bl = Math.min(iu * 0.6, 5.5);
+  for (let row = 0, v = sv0 + 1.8; v < cv - 2 && row < 3; v += 1.5, row++) {
+    const n = k.node(0, v + 0.6, B);
+    k.path(prev, n);
+    prev = n;
+    for (const s of [-1, 1]) for (let u = bx - bl / 2 + 0.35; u < bx + bl / 2 - 0.3; u += 0.62) k.spot(s * u, v + 0.03, B, 0, true, 'client', n, [[s * u, v + 0.6]]);
+  }
+  // The counter: clients in front of it, clerks standing behind it (seated, a 1.1 m counter hid them), in round its ends.
+  const front: number[] = [], back: number[] = [];
+  const us: number[] = [];
+  for (let u = -iu + 2.5; u < iu - 2; u += 2.8) us.push(u);
+  const fe = [k.node(-(iu - 0.75), cv - 1.2, B)], be = [k.node(-(iu - 0.75), cv + 1.75, B)];
+  for (const u of us) {
+    const f = k.node(u, cv - 1.2, B), b = k.node(u, cv + 1.75, B);
+    front.push(f); back.push(b);
+    k.spot(u, cv - 0.75, B, 0, false, 'client', f);
+    k.spot(u, cv + 0.75, B, Math.PI, false, 'clerk', b);
+  }
+  fe.push(k.node(iu - 0.75, cv - 1.2, B));
+  be.push(k.node(iu - 0.75, cv + 1.75, B));
+  k.path(fe[0], ...front, fe[1]);
+  k.path(be[0], ...back, be[1]);
+  k.path(fe[0], be[0]);
+  k.path(fe[1], be[1]);
+  // (The middle line meets the counter's lane at the slot nearest the middle.)
+  let mid = 0;
+  for (let i = 1; i < us.length; i++) if (Math.abs(us[i]) < Math.abs(us[mid])) mid = i;
+  if (front.length) k.path(prev, front[mid]);
 }
 
 /** The compact layout (smaller and modern town halls): the hall in front, the council chamber behind it, one storey. */
-function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
+function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: number): void {
   const B = k.B;
   const { iu, iv0, iv1, ceil } = sh;
   const pt = 0.25, vP = iv0 + (iv1 - iv0) * 0.5;
@@ -834,15 +1012,32 @@ function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB): void {
   k.cyl(0, ev, er, er, B, B + 0.02, C.gold, { ...D, seg: 24 });
   k.cyl(0, ev, er * 0.65, er * 0.65, B, B + 0.025, mat(PLASTER, flagC), { ...D, seg: 24 });
   const du = -Math.min(iu - 2, 5);
-  k.box(du, ev, 1.4, 0.45, B, B + 1.1, C.wood, { ...DS, top: C.stone });
-  chair(k, du, ev + 0.9, Math.PI, B, C.red);
+  // (Low enough to see the clerk standing behind it.)
+  k.box(du, ev, 1.4, 0.45, B, B + 0.95, C.wood, { ...DS, top: C.stone });
   for (const s of [-1, 1]) {
     bench(k, s * (iu - 0.5), ev, s * Math.PI / 2, B, Math.max(1.2, Math.min(2.4, vP - iv0 - 2)), C.wood);
     plant(k, s * (iu - 0.8), iv0 + 0.9, B, C);
     portrait(k, s * (iu - 0.12), ev, s * Math.PI / 2, B + 1.8, C, r);
   }
   chandelier(k, 0, ev, ceil, 1.2, C, B);
-  chamber(k, -iu, iu, vP + pt / 2, iv1, B, ceil, C, r, flagC);
+  const cM = k.node(0, vP + pt / 2 + 0.9, B);
+  chamber(k, -iu, iu, vP + pt / 2, iv1, B, ceil, C, r, flagC, cM);
+
+  // Where people walk and stay (sim/LandmarkCrowds): in at the door, across the hall, through
+  // into the chamber; the clerk at the desk, someone asking there, people waiting on the benches.
+  const hC = k.node(0, ev, B), hB = k.node(0, vP - 0.9, B);
+  k.path(door, hC, hB, cM);
+  for (const s of [-1, 1]) {
+    const cs = k.node(s * (iu - 1.2), vP + pt / 2 + 0.9, B);
+    k.path(cM, cs);
+  }
+  k.spot(du, ev + 0.8, B, Math.PI, false, 'clerk', hC, [[du, ev + 1.6]]);
+  k.spot(du, ev - 0.95, B, 0, false, 'client', hC);
+  const bl = Math.max(1.2, Math.min(2.4, vP - iv0 - 2));
+  // (The right bench: the desk stands in front of the left one.)
+  for (const dv of bl > 1.6 ? [-0.45, 0.45] : [0]) k.spot(iu - 0.52, ev + dv, B, Math.PI / 2, true, 'visitor', hC, [[iu - 1.2, ev + dv]]);
+  k.spot(1.6, ev - er - 0.6, B, -0.3, false, 'visitor', hC, [], [0, ev, ceil - 0.8]);
+  k.spot(-0.9, iv0 + 2.4, B, 0.2, false, 'visitor', door, [], [0, vP, B + 3.2]);
 }
 
 /** Point on a superellipse |x/a|^n + |z/b|^n = 1 at angle t. */
