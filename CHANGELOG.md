@@ -2,10 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.058 — 2026-10-06
+## 0.059 — 2026-10-06
 
 - **Dresses and skirts no longer let skin poke through.** The skirt part is now shaped to each body: it starts close at the waist (no strip of skin between bodice and skirt, and no stiff shelf), clears the widest hips, bottom and thighs, and leaves room for the legs to move, so it is a bit wider, most of all lower down. It follows the legs better when walking, running and sitting, and the upper thighs inside a long skirt are hidden so they can't push through when someone sits down.
-- Fixed tears in every skirt and dress: the front split open from the knees down while walking, and the back hem opened into a V between the legs.
+- Fixed tears in every skirt and dress: the front split open from the knees down while walking, and the back hem opened into a V between the legs. Sitting in a skirt no longer shows skin on the lap.
 
 ## 0.057 — 2026-10-06
 

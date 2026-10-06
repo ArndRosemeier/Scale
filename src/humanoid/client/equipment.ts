@@ -592,13 +592,18 @@ export class EquipmentRig {
     const parts: ShellParts = { P: [], N: [], UV: [], SI: [], SW: [], E: [], I: [] };
     if (shoe) for (const cap of shoe.caps) buildToeCap(cap, st, src, P, parts, n);
     if (l.skirt) {
-      const hemY = this.buildSkirt(l, parts, n);
-      // A closed skirt hides the upper thighs inside it (they can't poke through when the legs
-      // swing or the wearer sits; only what's near the hem can be seen).
+      const { topY, hemY } = this.buildSkirt(l, parts, n);
+      // A closed skirt hides the hips and upper thighs inside it (they can't poke through when
+      // the legs swing or the wearer sits; only what's near the hem can be seen). A skirt over a
+      // shirt leaves the lower pelvis bare under it, which showed on the lap when sitting.
       if (!l.skirt.slits) {
         const cut = Math.max(hemY + 0.12, ch.rest[ch.boneIndex.get('lowerleg01.L')!].y + 0.08);
         const thighs = new Set([BODY_REGIONS.indexOf('thigh.L'), BODY_REGIONS.indexOf('thigh.R')]);
-        for (const v of body) if (thighs.has(st.region[v]) && pos[v * 3 + 1] > cut) covered[v] |= 1 << (order & 31);
+        const hips = new Set([BODY_REGIONS.indexOf('pelvis'), BODY_REGIONS.indexOf('buttocks')]);
+        for (const v of body) {
+          const y = pos[v * 3 + 1];
+          if ((thighs.has(st.region[v]) && y > cut) || (hips.has(st.region[v]) && y < topY - 0.02)) covered[v] |= 1 << (order & 31);
+        }
       }
     }
     if (l.hood) this.buildHood(parts, n);
@@ -661,9 +666,9 @@ export class EquipmentRig {
    * above it (fabric falls, it doesn't tuck in under the bottom), with room for the legs to
    * move, then flares. The top ring hugs the waist (no gap to see skin through). Coat and
    * jacket tails (slits, worn over trousers) keep the plain flared ellipse from the hips.
-   * Returns the hem height.
+   * Returns the heights of the waistband and the hem.
    */
-  private buildSkirt(l: ShellLayer, out: { P: number[]; N: number[]; UV: number[]; SI: number[]; SW: number[]; E: number[]; I: number[] }, base: number): number {
+  private buildSkirt(l: ShellLayer, out: { P: number[]; N: number[]; UV: number[]; SI: number[]; SW: number[]; E: number[]; I: number[] }, base: number): { topY: number; hemY: number } {
     const ch = this.ch;
     const fit = ch.geo.build.body.fit;
     const pel = ch.geo.build.body.sockets.pelvis.pos;
@@ -694,7 +699,7 @@ export class EquipmentRig {
         const t = r / rows;
         if (!ext) { R[r * (cols + 1) + c] = ell * (1 + sk.flare * t * 1.2 + t * 0.25); continue; }
         // Room for the legs to swing (more lower down, most at the front where knees come up).
-        const ease = off + (0.012 + 0.035 * (0.6 + 0.4 * Math.max(0, cz))) * smoothstep(0.1, 0.55, t) + (0.025 + 0.02 * Math.max(0, -cz)) * smoothstep(0.5, 1, t);
+        const ease = off + (0.012 + 0.035 * (0.6 + 0.4 * Math.max(0, cz))) * smoothstep(0.1, 0.55, t) + (0.025 + 0.03 * Math.max(0, -cz)) * smoothstep(0.5, 1, t);
         const e = ext[r * cols + c];
         hang = Math.max(hang, e > 0 ? e + ease : r === 0 ? ell * 0.8 : 0);
         R[r * (cols + 1) + c] = hang * (1 + sk.flare * t * 0.9 + t * 0.12);
@@ -725,20 +730,20 @@ export class EquipmentRig {
         out.UV.push(c / cols, 1 - t);
         // Weights: hips at the top, the thighs lower down, each side its own leg (shared by
         // both at the middle). A closed skirt follows the legs early and most at the front and
-        // sides (knees come up when walking and sitting); tails mostly at the sides. Below the
-        // knee the shins take part.
-        const legW = closed ? Math.min(0.9, t * (1.6 + 1.6 * Math.max(0, cz) + 1.2 * (1 - Math.abs(cz)))) * (1 - 0.4 * Math.max(0, -cz))
+        // sides; tails mostly at the sides. Below the knee the shins take part.
+        const legW = closed ? Math.min(0.9, t * (1.6 + 1.6 * Math.max(0, cz) + 1.2 * (1 - Math.abs(cz)))) * (1 - 0.2 * Math.max(0, -cz))
           : Math.min(0.85, t * 1.5) * (0.35 + 0.65 * Math.min(1, Math.abs(sx) * 1.4));
         // Character's left is −X. A wide blend at the back: the back hangs between the legs
         // (a narrow one pulled the hem up into a V when the legs split).
-        const bw = 0.35 + 0.55 * Math.max(0, -cz), pL = smoothstep(-bw, bw, -sx);
+        const bw = 0.35 + 0.25 * Math.max(0, -cz), pL = smoothstep(-bw, bw, -sx);
         const below = y < kneeY ? Math.min(1, (kneeY - y) / 0.25) * 0.7 : 0;
         // One shin slot: the shin of this side, fading out towards the middle front and back
         // where the side changes (by column, so the seam's columns 0 and cols agree). A hard
         // switch there tore the fabric open between the legs.
         const sh = below * Math.abs(2 * pL - 1);
         const wRoot = 1 - legW, wL = legW * pL * (1 - sh), wR = legW * (1 - pL) * (1 - sh);
-        out.SI.push(root, thL, thR, c % cols < cols / 2 ? shR : shL);
+        const shin = c % cols < cols / 2 ? shR : shL;
+        out.SI.push(root, thL, thR, shin);
         const a8 = Math.round(wRoot * 255), b8 = Math.min(255 - a8, Math.round(wL * 255)), c8 = Math.min(255 - a8 - b8, Math.round(wR * 255));
         out.SW.push(a8, b8, c8, 255 - a8 - b8 - c8);
         out.E.push(r === rows ? 1 : 0);
@@ -751,7 +756,7 @@ export class EquipmentRig {
       const a = v0 + r * (cols + 1) + c, b = a + cols + 1;
       out.I.push(a, b, a + 1, a + 1, b, b + 1);
     }
-    return topY - len;
+    return { topY, hemY: topY - len };
   }
 
   /** Hood: a skinned cap over the head with a face opening, draping onto the shoulders. */
