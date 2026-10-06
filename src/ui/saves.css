@@ -7,6 +7,13 @@
 .sv-continue .sv-line { font-size: 12px; font-weight: 500; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #menu .sv-main .sv-loadbtn { margin-top: 8px; padding: 8px; font-size: 14px; background: #2c3846; color: #e8ecf0; font-weight: 500; }
 #menu .sv-main .sv-loadbtn:hover { background: #3a4757; }
+#menu .sv-main .sv-btns { display: flex; gap: 8px; }
+#menu .sv-main .sv-btns .sv-loadbtn { flex: 1.4; }
+#menu .sv-main .sv-filebtn { margin-top: 8px; padding: 8px; font-size: 14px; background: #1c2430; color: #c8d2dc; font-weight: 500; border: 1px solid #34414f; flex: 1; }
+#menu .sv-main .sv-filebtn:hover { background: #2c3846; }
+.sv-fmsg { margin-top: 6px; font-size: 12px; color: #9aa8b6; text-align: center; }
+.sv-fmsg:empty { display: none; }
+.sv-fmsg.err, #dover .do-fmsg.err { color: #ff8a80; }
 .sv-or { margin: 16px 0 0; font-size: 12px; color: #8fa3b5; text-align: center; letter-spacing: 0.06em; text-transform: uppercase; }
 
 .sv-list { margin-top: 8px; max-height: 280px; overflow-y: auto; border: 1px solid #2c3846; border-radius: 8px; background: rgba(11, 14, 18, 0.6); }
@@ -24,6 +31,7 @@
 #menu .sv-row button, #pause .sv-row button { margin: 0; width: auto; padding: 5px 10px; font-size: 12px; border-radius: 5px; border: 1px solid #34414f; background: #1c2430; color: #e8ecf0; font-weight: 500; cursor: pointer; }
 #menu .sv-row button.sv-load, #pause .sv-row button.sv-load { background: #d8b56a; color: #1a1408; border-color: #d8b56a; font-weight: 600; }
 #menu .sv-row button.sv-load:hover, #pause .sv-row button.sv-load:hover { background: #e8c57a; }
+#menu .sv-row button.sv-file:hover, #pause .sv-row button.sv-file:hover, #dover .sv-row button.sv-file:hover { border-color: #d8b56a; color: #d8b56a; }
 #menu .sv-row button.sv-del:hover, #pause .sv-row button.sv-del:hover { border-color: #e8483b; color: #ff8a80; }
 .sv-row .sv-ask { font-size: 12px; color: #ff8a80; }
 #menu .sv-row button.sv-yes, #pause .sv-row button.sv-yes { border-color: #e8483b; color: #ff8a80; }
@@ -35,6 +43,8 @@
 .sv-pause .sv-status.ok b { color: #9fd49a; font-weight: 500; }
 .sv-pause .sv-saverow { display: flex; gap: 8px; margin-top: 8px; }
 .sv-pause .sv-saverow input { flex: 1; min-width: 0; background: #0f141a; color: #e8ecf0; border: 1px solid #34414f; border-radius: 6px; padding: 6px 10px; font-size: 14px; }
+.sv-pause .sv-filerow { display: flex; gap: 8px; margin-top: 6px; }
+.sv-pause .sv-filerow button { flex: 1; }
 .sv-pause .sv-saverow input:focus { outline: none; border-color: #d8b56a; }
 .sv-pause .sv-confirm { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(216, 181, 106, 0.08); border: 1px solid rgba(216, 181, 106, 0.4); font-size: 13px; color: #e8ecf0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sv-pause .sv-confirm[hidden], .sv-list[hidden] { display: none; }

@@ -5,6 +5,7 @@
  */
 import type { Game } from '../game/Game';
 import { fillSaveList } from './SaveUi';
+import { loadFromFile } from './saveFiles';
 import { saveStore } from '../game/save/SaveStore';
 
 const CSS = `
@@ -36,6 +37,7 @@ body.dcine-on > :not(#view):not(#dcine):not(#dover) { opacity: 0 !important; poi
 #dover.show { opacity: 1; }
 #dover .do-box { width: min(560px, 92vw); max-height: 88vh; overflow: auto; text-align: center; color: #f1e6e6; font: 400 15px/1.5 system-ui, sans-serif; }
 #dover h1 { margin: 0 0 .2em; font: 700 clamp(38px, 7vh, 72px)/1.05 system-ui, sans-serif; letter-spacing: .14em; color: #ff5d5d; text-shadow: 0 0 30px rgba(255,40,40,.35); }
+#dover .do-fmsg { margin-top: 10px; font-size: 13px; color: #d9b9b9; }
 #dover .do-sub { color: #d9b9b9; margin-bottom: 1.6em; }
 #dover .do-acts { display: flex; flex-direction: column; gap: 10px; align-items: stretch; margin: 0 auto; width: min(360px, 100%); }
 #dover button.do-btn { padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #f6eeee;
@@ -127,8 +129,8 @@ export class DefeatUi {
     o.id = 'dover';
     o.innerHTML = `<div class="do-box"><h1>GAME OVER</h1><div class="do-sub">${reason}</div>
       <div class="do-acts"><button type="button" class="do-btn main do-latest" hidden>Load the latest save</button>
-      <button type="button" class="do-btn do-load">Load a save…</button><button type="button" class="do-btn do-new">New game</button></div>
-      <div class="sv-list" hidden></div></div>`;
+      <button type="button" class="do-btn do-load">Load a save…</button><button type="button" class="do-btn do-file">Load from file…</button><button type="button" class="do-btn do-new">New game</button></div>
+      <div class="do-fmsg"></div><div class="sv-list" hidden></div></div>`;
     // Keys must not reach the game behind it (Esc would open the pause menu).
     o.addEventListener('keydown', (e) => e.stopPropagation());
     document.body.appendChild(o);
@@ -147,6 +149,8 @@ export class DefeatUi {
       list.hidden = !list.hidden;
       if (!list.hidden) void fillSaveList(list, (m) => { void this.g.saves.load(m.id); });
     };
+    const fmsg = $<HTMLDivElement>('.do-fmsg');
+    $<HTMLButtonElement>('.do-file').onclick = () => void loadFromFile((m) => { void this.g.saves.load(m.id); }, (t, err) => { fmsg.className = `do-fmsg${err ? ' err' : ''}`; fmsg.textContent = t; });
     $<HTMLButtonElement>('.do-new').onclick = () => { location.href = location.pathname; };
   }
 
