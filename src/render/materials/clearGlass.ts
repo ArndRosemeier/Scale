@@ -6,16 +6,19 @@
  */
 import * as THREE from 'three';
 import { G } from './globals';
+import { WEBGPU, gpuKit } from '../gpuMode';
 import { GLSL_ELEM_VERTEX_DECL, GLSL_ELEM_VERTEX_MAIN } from './glsl';
 
 let mat: THREE.MeshPhysicalMaterial | null = null;
 
 export function clearGlassMaterial(): THREE.MeshPhysicalMaterial {
+  if (WEBGPU) return gpuKit().clearGlassNodeMaterial() as unknown as THREE.MeshPhysicalMaterial;
   return (mat ??= make());
 }
 
 /** Clear glass whose elements (aElem) follow a state texture, like the facade material. */
 export function clearGlassElemMaterial(elemTex: THREE.Texture, elemW: number): THREE.MeshPhysicalMaterial {
+  if (WEBGPU) return gpuKit().clearGlassElemNodeMaterial(elemTex, elemW) as unknown as THREE.MeshPhysicalMaterial;
   const m = make();
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uElemTex = { value: elemTex };

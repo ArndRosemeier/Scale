@@ -56,7 +56,7 @@ export const enum Crop { Wheat = 0, Barley = 1, Green = 2, Maize = 3, Ploughed =
 /** Parcel id (mod 16) → crop. */
 export const CROP_OF = [0, 0, 0, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 6, 7];
 
-const WARP_K1 = 1 / 730, WARP_K2 = 1 / 910;
+export const WARP_K1 = 1 / 730, WARP_K2 = 1 / 910;
 
 export function parcelParams(seed: number): ParcelParams {
   const rng = new Rng(deriveSeed(seed, 'parcels'));

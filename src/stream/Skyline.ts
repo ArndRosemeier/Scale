@@ -11,6 +11,7 @@ import type { MaterialArrays } from '../render/TextureLibrary';
 import { G } from '../render/materials/globals';
 import { GLSL_COMMON } from '../render/materials/glsl';
 import { hitch } from '../debug/HitchLog';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 const TILE = 1500;
 
@@ -85,6 +86,8 @@ export class Skyline {
     g.instanceCount = n; // (InstancedBufferGeometry defaults to Infinity: WebGPU draws that count)
     for (const k of ['position', 'normal', 'uv']) g.setAttribute(k, box.getAttribute(k));
     const a0 = new Float32Array(n * 4), a1 = new Float32Array(n * 4);
+    // The node material reads scale and centre from attributes rather than the instance matrix.
+    const aS = WEBGPU ? new Float32Array(n * 4) : null, aP = WEBGPU ? new Float32Array(n * 4) : null;
     const mesh = new THREE.InstancedMesh(g, this.mat, n);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
     const R = t.records;
@@ -95,7 +98,9 @@ export class Skyline {
       mesh.setMatrixAt(i, m);
       a0.set([R[o + 7], R[o + 11], R[o + 12], R[o + 13]], i * 4); // layer, floorH, flags, cell
       a1.set([R[o + 8], R[o + 9], R[o + 10], (i * 0.618) % 1], i * 4);
+      if (aS && aP) { aS.set([s.x, s.y, s.z, 0], i * 4); aP.set([p.x, p.z, 0, 0], i * 4); }
     }
+    if (aS && aP) { g.setAttribute('iS', new THREE.InstancedBufferAttribute(aS, 4)); g.setAttribute('iP', new THREE.InstancedBufferAttribute(aP, 4)); }
     g.setAttribute('iA', new THREE.InstancedBufferAttribute(a0, 4));
     g.setAttribute('iB', new THREE.InstancedBufferAttribute(a1, 4));
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(t.cx, 100, t.cz), TILE);
@@ -121,6 +126,7 @@ export class Skyline {
 const _up = new THREE.Vector3(0, 1, 0);
 
 function skylineMaterial(arrays: MaterialArrays, mask: THREE.Texture, maskW: number, ruins: THREE.Vector4[]): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().skylineNodeMaterial(arrays, mask, maskW, ruins) as unknown as THREE.MeshStandardMaterial;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
   const uniforms = {
     uAlb: { value: arrays.albedo },

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import type { MaterialArrays } from '../TextureLibrary';
 import { G, aliveTexture } from './globals';
+import { WEBGPU, gpuKit } from '../gpuMode';
 import { GLSL_COMMON, GLSL_ELEM_VERTEX_DECL, GLSL_ELEM_VERTEX_MAIN } from './glsl';
 
 const FRAG_DECL = /* glsl */ `
@@ -293,6 +294,7 @@ Surf facadeSurface(vec2 uv, vec4 fp, int flags, float layerF, vec3 eyeDirW, vec3
 `;
 
 export function createFacadeMaterial(arrays: MaterialArrays, elemTex: THREE.Texture | null, elemW = 1, backPlaster = true): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().createFacadeNodeMaterial(arrays, elemTex, elemW, backPlaster) as unknown as THREE.MeshStandardMaterial;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide });
   const uniforms = {
     uAlb: { value: arrays.albedo },
@@ -367,6 +369,8 @@ diffuseColor.rgb = gS.albedo * gS.ao;`,
 
 /** Shadow depth material honouring destroyed elements (collapsed vertices cast no shadow). */
 export function createElemDepthMaterial(elemTex: THREE.Texture | null, elemW = 1): THREE.MeshDepthMaterial {
+  // On WebGPU the shadow pass reuses the facade's positionNode, which already collapses them.
+  if (WEBGPU) return undefined as unknown as THREE.MeshDepthMaterial;
   const mat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
   const uniforms = { uElemTex: { value: elemTex ?? aliveTexture() }, uElemW: { value: elemTex ? elemW : 1 } };
   mat.onBeforeCompile = (shader) => {

@@ -7,8 +7,12 @@ import { pass, renderOutput } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { makeSkyNode } from './sky';
+import { createFacadeNodeMaterial } from './facade';
+import { createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial } from './ground';
+import { clearGlassNodeMaterial, clearGlassElemNodeMaterial, skylineNodeMaterial } from './city';
 
-export { makeSkyNode };
+export { clearGlassNodeMaterial, clearGlassElemNodeMaterial, skylineNodeMaterial };
+export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 
 export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): THREE.WebGPURenderer {
   return new THREE.WebGPURenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true, forceWebGL });
