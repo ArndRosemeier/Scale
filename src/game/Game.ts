@@ -64,6 +64,8 @@ import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
 import { Compass } from '../ui/Compass';
 import { Barks } from '../ui/Barks';
+import { setSight } from '../render/screen';
+import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
@@ -278,6 +280,7 @@ export class Game {
     this.destruction = new Destruction(this.streamer, this.world, this.terrain, this.debris, this.dust, tex);
     this.renderer.scene.add(this.destruction.group);
     this.collision = new Collision(this.world, this.destruction, this.streamer);
+    setSight(makeSight(this.world));
     this.collision.obstacleProviders.push(landmarks.provider);
     this.underground = new Underground(macro, this.terrain, tex, (x, z) => this.terrain.height(x, z) + this.world.surfaceOffset(x, z));
     this.collision.under = this.underground;

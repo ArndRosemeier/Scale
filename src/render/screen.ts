@@ -9,6 +9,10 @@
  * with x and y mirrored, so things behind the player were drawn in front of him too. Here the
  * side of the camera comes from the view-space depth, which doesn't depend on the depth
  * convention. (tools/selftest.ts fails if `.project(` shows up anywhere else in src.)
+ *
+ * Markers over people (`markerOnScreen`: health tags, speech bubbles) also need the person in
+ * sight: not behind a building or a hill, and on the same side of the ground as the camera (no
+ * sewer crews' tags seen from the street). The game sets that test once (`setSight`).
  */
 import * as THREE from 'three';
 
@@ -53,3 +57,18 @@ export function onScreen(s: ScreenPoint, margin = 1): boolean {
 /** NDC → CSS pixels in a `w` × `h` view. */
 export function pxX(s: ScreenPoint, w: number): number { return (s.x * 0.5 + 0.5) * w; }
 export function pxY(s: ScreenPoint, h: number): number { return (-s.y * 0.5 + 0.5) * h; }
+
+/** Whether a point (a body, not its marker) can be seen from the camera; set by the game. */
+export type Sight = (x: number, y: number, z: number, cam: THREE.Camera) => boolean;
+let sight: Sight | null = null;
+
+export function setSight(fn: Sight | null): void { sight = fn; }
+
+/**
+ * A marker over someone: the marker point (x, y, z) projected into `out`; true when it is on screen
+ * (give or take `margin`) and the body at (x, bodyY, z) is in sight of the camera.
+ */
+export function markerOnScreen(x: number, y: number, z: number, bodyY: number, cam: THREE.Camera, out: ScreenPoint, margin = 1): boolean {
+  if (!onScreen(toScreen(x, y, z, cam, out), margin)) return false;
+  return !sight || sight(x, bodyY, z, cam);
+}

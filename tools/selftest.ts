@@ -54,6 +54,8 @@ import type { MacroPlan } from '../src/plan/types';
 import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
 import * as THREE from 'three';
 import { onScreen, screenPoint, toScreen } from '../src/render/screen';
+import { makeSight } from '../src/game/sightline';
+import type { WorldIndex as SightWorld } from '../src/world/WorldIndex';
 import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
 import { intersection } from '../src/core/clip';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
@@ -2946,6 +2948,15 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   };
   walk('src');
   check(strays.length === 0, `screen: every world-to-screen overlay goes through src/render/screen.ts (${strays.join(', ') || 'none elsewhere'})`);
+  // Markers over people need them in sight: same side of the ground, no wall in between.
+  let wall = Infinity;
+  const fake = { terrain: { height: () => 0 }, buildingAt: () => null, raycast: () => ({ t: wall, building: null }) } as unknown as SightWorld;
+  const see = makeSight(fake), cam = new THREE.PerspectiveCamera();
+  const look = (cy: number, y: number): boolean => { cam.position.set(0, cy, 0); return see(20, y, 0, cam); };
+  const street = look(2, 1.2), sewer = look(-6, -5), fromStreet = look(2, -5), fromSewer = look(-6, 1.2);
+  wall = 5;
+  const walled = look(2, 1.2);
+  check(street && sewer && !fromStreet && !fromSewer && !walled, `screen: no tags through the ground or walls (street ${street}, sewer ${sewer}, sewer from street ${fromStreet}, street from sewer ${fromSewer}, through a wall ${walled})`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

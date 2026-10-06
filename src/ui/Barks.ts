@@ -9,7 +9,7 @@
  * gap between new ones, a long pause per person, and most moments only bark some of the time.
  */
 import * as THREE from 'three';
-import { onScreen, pxX, pxY, screenPoint, toScreen } from '../render/screen';
+import { markerOnScreen, pxX, pxY, screenPoint } from '../render/screen';
 import type { Game } from '../game/Game';
 import { PState, type PedAgent } from '../sim/Pedestrians';
 
@@ -145,7 +145,7 @@ export class Barks {
     if (this.time < (this.quiet.get(a) ?? -Infinity)) return false;
     // Only where it can be seen.
     const cam = this.game.renderer.camera;
-    if (!onScreen(toScreen(a.x, a.y + 2.05, a.z, cam, this.p), 0.95)) return false;
+    if (!markerOnScreen(a.x, a.y + 2.05, a.z, a.y + 1.2, cam, this.p, 0.95)) return false;
     if (this.shown.length >= MAX_SHOWN) return false;
     const el = this.els.find((e) => !this.shown.some((s) => s.el === e))!;
     el.textContent = text;
@@ -164,7 +164,7 @@ export class Barks {
       const s = this.shown[i];
       s.t += dt;
       const gone = !s.a.alive || s.t > SHOW;
-      const off = hidden || !onScreen(toScreen(s.a.x, s.a.y + 2.05, s.a.z, cam, this.p), 1.05);
+      const off = hidden || !markerOnScreen(s.a.x, s.a.y + 2.05, s.a.z, s.a.y + 1.2, cam, this.p, 1.05);
       if (gone) { s.el.style.display = 'none'; this.shown.splice(i, 1); continue; }
       s.el.style.display = off ? 'none' : 'block';
       if (off) continue;
