@@ -27,6 +27,7 @@ import type { CityStreamer } from '../stream/CityStreamer';
 import type { Player } from '../player/Player';
 import type { Input } from './Input';
 import { statusOf } from '../shared/status';
+import { onScreen, screenPoint, vecToScreen } from '../render/screen';
 import { HUMANOID } from '../future/models';
 import { Role } from '../sim/Population';
 import { TARGET } from './abilities/tuning';
@@ -101,6 +102,7 @@ const DRONE_R = 0.6;
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _s = screenPoint();
 const _ray = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
 /** Click picking: how close (px) to a target's centre still counts as clicking it. */
@@ -549,8 +551,7 @@ export class Targeting {
   }
 
   private onScreen(c: THREE.Vector3): boolean {
-    _w.copy(c).project(this.w.camera);
-    return _w.z < 1 && Math.abs(_w.x) < 1 && Math.abs(_w.y) < 1;
+    return onScreen(vecToScreen(c, this.w.camera, _s));
   }
 
   /**
@@ -578,9 +579,8 @@ export class Targeting {
       const c = this.centre(t, _v);
       const dc = c.distanceTo(cam.position);
       if (c.distanceTo(p.pos) > (t.kind === 'prop' ? propRange : range)) return;
-      _w.copy(c).project(cam);
-      if (_w.z >= 1) return;
-      const px = Math.hypot((_w.x - nx) * halfW, (_w.y - ny) * halfH);
+      if (!vecToScreen(c, cam, _s).front) return;
+      const px = Math.hypot((_s.x - nx) * halfW, (_s.y - ny) * halfH);
       if (px >= bestPx) return;
       const cx = c.x - cam.position.x, cy = c.y - cam.position.y, cz = c.z - cam.position.z;
       const hit = W.raycast(cam.position.x, cam.position.y, cam.position.z, cx / dc, cy / dc, cz / dc, Math.max(0.1, dc - 1.5), Math.max(0.5, dc / 60));
@@ -630,11 +630,10 @@ export class Targeting {
       const c = this.centre(t, _v);
       const d = c.distanceTo(cam.position);
       if (d > (t.kind === 'prop' ? propRange : t.kind === 'threat' ? range * THREAT_RANGE : range)) return;
-      _w.copy(c).project(cam);
-      if (_w.z >= 1 || Math.abs(_w.x) > 0.95 || Math.abs(_w.y) > 0.95) return;
+      if (!onScreen(vecToScreen(c, cam, _s), 0.95)) return;
       // Screen distance from the crosshair (aspect-corrected), with a slight preference for the
       // living and moving over furniture.
-      const sx = _w.x * aspect, sy = _w.y;
+      const sx = _s.x * aspect, sy = _s.y;
       const score = Math.hypot(sx, sy) + (t.kind === 'prop' ? 0.12 : 0) + d * 0.0006 + (this.priority?.(t) ?? 0);
       list.push({ t, score });
     });

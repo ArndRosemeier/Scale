@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.058 — 2026-10-06
+
+- **Health tags no longer show up for people behind you.** On graphics cards that use the game's sharper depth mode, everything behind the camera was also projected onto the screen, mirrored: villains you ran away from got a second health bar in front of you, speech bubbles hung in empty air, and Tab or a click near a target could pick someone behind you. Every marker that follows something in the world (criminal health tags, target brackets and weak-spot rings, speech bubbles, target picking, the photo-flash glare) now goes through one shared piece of code that knows which side of the camera a point is on, and the self-test fails if any new marker tries to do it on its own.
+
 ## 0.057 — 2026-10-06
 
 - **Metro entrance stairs no longer go down and back up.** Where the street dipped or a sewer crossed the way, the passage from a station entrance sank, climbed again on a bare ramp and only then took the stairs down to the platform. The corridor under the street now only ever goes down (about 1 in 40 entrances was affected), and it no longer dips into its own station hall on the way (where it did, it cut through the hall's roof and lost its walls).

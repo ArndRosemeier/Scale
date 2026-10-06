@@ -5,10 +5,11 @@
  * no text, no objective).
  */
 import * as THREE from 'three';
+import { onScreen, pxX, pxY, screenPoint, toScreen } from '../render/screen';
 import type { Game } from '../game/Game';
 import type { CrimeSystem } from '../game/crime/CrimeSystem';
 
-const _p = new THREE.Vector3();
+const _p = screenPoint();
 const _q = new THREE.Vector3();
 
 export class CrimeHud {
@@ -86,13 +87,12 @@ export class CrimeHud {
     let n = 0;
     for (const a of s.fleeing()) {
       if (n >= this.tags.length) break;
-      _p.set(a.x, a.y + 2.2, a.z).project(cam);
-      if (_p.z > 1 || Math.abs(_p.x) > 1 || Math.abs(_p.y) > 1) continue;
+      if (!onScreen(toScreen(a.x, a.y + 2.2, a.z, cam, _p))) continue;
       const t = this.tags[n++];
       const d = cam.position.distanceTo(_q.set(a.x, a.y + 1.6, a.z));
       const k = Math.max(0.55, Math.min(1.15, 14 / Math.max(1, d)));
       t.el.style.display = 'flex';
-      t.el.style.transform = `translate(${((_p.x * 0.5 + 0.5) * W - 22).toFixed(1)}px, ${((-_p.y * 0.5 + 0.5) * Hh - 26).toFixed(1)}px) scale(${k.toFixed(2)})`;
+      t.el.style.transform = `translate(${(pxX(_p, W) - 22).toFixed(1)}px, ${(pxY(_p, Hh) - 26).toFixed(1)}px) scale(${k.toFixed(2)})`;
       const act = a.actor!;
       const w = `${Math.round(100 * Math.max(0, act.hp) / Math.max(1, act.maxHp))}%`;
       if (t.fill.style.width !== w) t.fill.style.width = w;
