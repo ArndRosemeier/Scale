@@ -507,7 +507,7 @@ function pewLen(p: Plan): number {
 function pewRows(p: Plan): number[] {
   const out: number[] = [];
   if (pewLen(p) <= 1.2) return out;
-  for (let v = Math.max(p.aisleStart, p.front + T + 5); v < p.tv - p.tdep - 0.6 - 1.5; v += 1.15) out.push(v);
+  for (let v = Math.max(p.aisleStart, p.front + T + 5); v < p.tv - p.tdep - 0.6 - 1.5; v += 1.25) out.push(v);
   return out;
 }
 /** Choir stalls along the chancel (v). */

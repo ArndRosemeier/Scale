@@ -826,7 +826,6 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: numb
   // Information desk and a bust of the founder.
   const du = -Math.min(uTop - 3, 8);
   k.box(du, iv0 + 5, 2, 0.5, B, B + 1.1, C.wood, { ...DS, top: C.stone });
-  chair(k, du, iv0 + 6, Math.PI, B, C.red);
   k.box(du, iv0 + 4.47, 0.5, 0.03, B + 1.1, B + 1.5, C.gold, D);
   k.box(-du, iv0 + 5, 0.55, 0.55, B, B + 1.3, C.stone, DS);
   figure(k, -du, iv0 + 5, B + 1.3, 1.1, mat(METAL, BRONZE), false);
@@ -848,7 +847,6 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: numb
   k.box(0, cv, iu - 1.5, 0.35, B, B + 1.1, C.wood, { ...DS, top: C.stone });
   for (let u = -iu + 2.5; u < iu - 2; u += 2.8) {
     k.box(u, cv - 0.05, 0.25, 0.03, B + 1.1, B + 1.45, C.dark, D);
-    chair(k, u, cv + 0.9, Math.PI, B, C.dark);
   }
   for (let row = 0, v = sv0 + 1.8; v < cv - 2 && row < 3; v += 1.5, row++)
     for (const s of [-1, 1]) bench(k, s * Math.min(iu * 0.45, 5), v, 0, B, Math.min(iu * 0.6, 5.5), C.wood);
@@ -868,7 +866,7 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: numb
     k.flat(um, vm + 0.6, (u1 - u0) / 2 - 0.5, Math.max(0.4, (iv1 - sv0) / 2 - 1.1), L1 + 0.012, C.red, D);
     k.box(um, iv1 - 1.8, 1.0, 0.45, L1, L1 + 0.76, C.wood, { ...DS, top: C.dark });
     chair(k, um, iv1 - 1.1, Math.PI, L1, C.red, true);
-    for (const s of [-1, 1]) chair(k, um + s * 0.6, iv1 - 2.8, 0, L1, C.dark);
+    for (const s of [-1, 1]) chair(k, um + s * 0.6, iv1 - 3.0, 0, L1, C.dark);
     const bu = u0 + 0.3, bh = Math.min(1.6, (iv1 - sv0) / 2 - 0.8);
     k.box(bu, vm, 0.25, bh, L1, L1 + 2.3, C.wood, D);
     for (let y = L1 + 0.4; y < L1 + 2.2; y += 0.45)
@@ -884,7 +882,7 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: numb
     k.box(um, iv1 - 1.6, 1.1, 0.45, L1, L1 + 0.78, C.cloth, DS);
     for (const s of [-1, 1]) {
       plant(k, um + s * 0.8, iv1 - 1.6, L1 + 0.78, C, 0.35, mat(PLASTER, s < 0 ? [1.3, 1.1, 1.15] : [1.2, 0.5, 0.6]));
-      chair(k, um + s * 0.5, iv1 - 2.6, 0, L1, C.cloth, true);
+      chair(k, um + s * 0.5, iv1 - 2.75, 0, L1, C.cloth, true);
     }
     for (let v = iv1 - 3.8; v > sv0 + 2.2; v -= 1.0)
       for (const s of [-1, 1]) for (const d of [0.55, 1.15]) chair(k, um + s * d, v, 0, L1, C.wood);
@@ -907,7 +905,7 @@ function grandWays(k: Kit, sh: Shell, door: number, cM: number, g: { L1: number;
   // The hall's middle line, the desk (a clerk behind it, someone asking) and the bust.
   const c1 = k.node(0, iv0 + 3.4, B), c2 = k.node(0, iv0 + 7, B), cB = k.node(0, vP - 1.0, B);
   k.path(door, c1, c2, cB);
-  k.spot(du, iv0 + 6, B, Math.PI, true, 'clerk', c2, [[du, iv0 + 7]]);
+  k.spot(du, iv0 + 5.85, B, Math.PI, false, 'clerk', c2, [[du, iv0 + 7]]);
   k.spot(du + 0.6, iv0 + 3.9, B, 0, false, 'client', c1);
   k.spot(-du, iv0 + 3.75, B, 0, false, 'visitor', c1, [], [-du, iv0 + 5, B + 2.1]);
   k.spot(1.5, (iv0 + vS - sw / 2) / 2 + 1, B, 2.6, false, 'visitor', c2, [], [0, (iv0 + vP) / 2, ceil - 1]);
@@ -947,7 +945,7 @@ function grandWays(k: Kit, sh: Shell, door: number, cM: number, g: { L1: number;
       const um = (-iu - cw - 0.125) / 2, oA = k.node(um, iv1 - 3.8, L1);
       k.path(gi, oA, rd);
       k.spot(um, iv1 - 1.1, L1, Math.PI, true, 'mayor', oA, [[um + 1.45, iv1 - 3.0], [um + 1.45, iv1 - 1.1]]);
-      for (const d of [-0.6, 0.6]) k.spot(um + d, iv1 - 2.8, L1, 0, true, 'aide', oA, [[um + d, iv1 - 3.5]]);
+      for (const d of [-0.6, 0.6]) k.spot(um + d, iv1 - 3.0, L1, 0, true, 'aide', oA, [[um + d, iv1 - 3.5]]);
     } else {
       // The wedding room: the couple at the table, the registrar behind it, guests in rows.
       const um = (cw + 0.125 + iu) / 2, wE = k.node(um, sv0 + 1.0, L1);
@@ -963,7 +961,7 @@ function grandWays(k: Kit, sh: Shell, door: number, cM: number, g: { L1: number;
       }
       const wF = k.node(um, iv1 - 3.2, L1);
       k.path(prev, wF);
-      for (const d of [-0.5, 0.5]) k.spot(um + d, iv1 - 2.6, L1, 0, true, 'couple', wF, [[um + d, iv1 - 3.2]]);
+      for (const d of [-0.5, 0.5]) k.spot(um + d, iv1 - 2.75, L1, 0, true, 'couple', wF, [[um + d, iv1 - 3.2]]);
       k.spot(um, iv1 - 0.6, L1, Math.PI, false, 'registrar', wF, [[um + 1.55, iv1 - 3.2], [um + 1.55, iv1 - 0.6]]);
     }
   }
@@ -978,7 +976,7 @@ function grandWays(k: Kit, sh: Shell, door: number, cM: number, g: { L1: number;
     prev = n;
     for (const s of [-1, 1]) for (let u = bx - bl / 2 + 0.35; u < bx + bl / 2 - 0.3; u += 0.62) k.spot(s * u, v + 0.03, B, 0, true, 'client', n, [[s * u, v + 0.6]]);
   }
-  // The counter: clients in front of it, clerks behind it (in round its ends).
+  // The counter: clients in front of it, clerks standing behind it (seated, a 1.1 m counter hid them), in round its ends.
   const front: number[] = [], back: number[] = [];
   const us: number[] = [];
   for (let u = -iu + 2.5; u < iu - 2; u += 2.8) us.push(u);
@@ -987,7 +985,7 @@ function grandWays(k: Kit, sh: Shell, door: number, cM: number, g: { L1: number;
     const f = k.node(u, cv - 1.2, B), b = k.node(u, cv + 1.75, B);
     front.push(f); back.push(b);
     k.spot(u, cv - 0.75, B, 0, false, 'client', f);
-    k.spot(u, cv + 0.9, B, Math.PI, true, 'clerk', b);
+    k.spot(u, cv + 0.75, B, Math.PI, false, 'clerk', b);
   }
   fe.push(k.node(iu - 0.75, cv - 1.2, B));
   be.push(k.node(iu - 0.75, cv + 1.75, B));
@@ -1014,7 +1012,6 @@ function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: nu
   k.cyl(0, ev, er * 0.65, er * 0.65, B, B + 0.025, mat(PLASTER, flagC), { ...D, seg: 24 });
   const du = -Math.min(iu - 2, 5);
   k.box(du, ev, 1.4, 0.45, B, B + 1.1, C.wood, { ...DS, top: C.stone });
-  chair(k, du, ev + 0.9, Math.PI, B, C.red);
   for (const s of [-1, 1]) {
     bench(k, s * (iu - 0.5), ev, s * Math.PI / 2, B, Math.max(1.2, Math.min(2.4, vP - iv0 - 2)), C.wood);
     plant(k, s * (iu - 0.8), iv0 + 0.9, B, C);
@@ -1032,7 +1029,7 @@ function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: nu
     const cs = k.node(s * (iu - 1.2), vP + pt / 2 + 0.9, B);
     k.path(cM, cs);
   }
-  k.spot(du, ev + 0.9, B, Math.PI, true, 'clerk', hC, [[du, ev + 1.6]]);
+  k.spot(du, ev + 0.8, B, Math.PI, false, 'clerk', hC, [[du, ev + 1.6]]);
   k.spot(du, ev - 0.95, B, 0, false, 'client', hC);
   const bl = Math.max(1.2, Math.min(2.4, vP - iv0 - 2));
   // (The right bench: the desk stands in front of the left one.)

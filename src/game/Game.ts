@@ -460,7 +460,8 @@ export class Game {
     this.crowd.outfit = (a) => this.halls.outfit(a);
     this.weather = new Weather(this);
     // Cups at the terraces first, then umbrellas in the rain.
-    this.crowd.heldFor = (a) => { const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
+    // (Nothing in hand inside a landmark: no coffee in the pews, no umbrella indoors.)
+    this.crowd.heldFor = (a) => { if (a.hall) return null; const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
     this.crowd.talking = (a, t) => this.terraces.talking(a, t);
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
@@ -676,7 +677,7 @@ export class Game {
     this.T('peds', () => this.peds.update(dt, this.sky.hoursAbs, pp.x, pp.z, dt * this.sky.timeScale));
     this.T('react', () => this.reactions.update(dt, this.player));
     this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));
-    this.T('halls', () => this.halls.update(dt, this.sky.hoursAbs, pp.x, pp.z));
+    this.T('halls', () => this.halls.update(dt, this.sky.hoursAbs, pp.x, pp.z, pp.y));
     this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs));
     // Cars only brake for a player on the street (not one under it in the sewer or metro).
     this.traffic.player = this.freeCam || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z) ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
