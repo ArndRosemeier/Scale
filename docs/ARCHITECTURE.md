@@ -989,7 +989,10 @@ sessions 10–12 and 14–16, weddings at 11, 13 and 15; a porter at the desk at
 citizens (staff the same every day, by spot), `PedAgent.inside` + `hall`: the street layer leaves them be,
 this layer walks them along the graph (straight legs, height from the landmark's floor), they arrive as
 street walkers from a door 35–110 m away (`onArrive` at the foot of the steps) and leave the same way.
-In range all at once on approach. A scare (fear > 0.5) sends them running out; knocked down they get
+In range all at once on approach. Walking, they keep 0.65 m to the one in front going the same way
+(a queue), let the lower id go first where ways cross or meet (no circles of waiting), step aside to
+the right for someone coming the other way (`HallDeps.clear`, `roomFor`), and wait for the hero (4 s
+for someone standing in the way, then they squeeze past); bodies closer than 0.34 m ease apart (`apart`). Nothing in hand inside (`heldFor`). A scare (fear > 0.5) sends them running out; knocked down they get
 up after 9 s and run; a breakable landmark below 85 % standing is emptied. Unlike other indoor people the
 hero bumps into them and can hit them (`Game.bodyContacts`, `Combat`, `Targeting` allow `hall`). Work
 clothes by role through `CrowdRenderer.outfit` (the priest in black, suits, the bride in white).

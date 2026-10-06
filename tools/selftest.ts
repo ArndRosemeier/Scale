@@ -2775,14 +2775,14 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const t0 = performance.now();
   const { RoadNet } = await import('../src/sim/RoadNet');
   const { Pedestrians, PState } = await import('../src/sim/Pedestrians');
-  const { LandmarkCrowds } = await import('../src/sim/LandmarkCrowds');
+  const { LandmarkCrowds, roomFor } = await import('../src/sim/LandmarkCrowds');
   const terrain = new Terrain(makeProfile({ seed: 9, size: 0.6 }));
   const macro = buildMacroPlan(terrain);
   const S = new LandmarkSolids(macro, terrain);
   const world = { buildingsIn: () => [], bridgeDeck: () => -Infinity, landmarks: S } as never;
   const pop = new Population(macro, 9);
   const peds = new Pedestrians(pop, new RoadNet(macro), world, terrain, macro, {} as never);
-  const halls = new LandmarkCrowds({ macro, terrain, world, peds, pop, floor: (x, y, z) => S.topAt(x, z, y, 0) });
+  const halls = new LandmarkCrowds({ macro, terrain, world, peds, pop, floor: (x, y, z) => S.topAt(x, z, y, 0), clear: (x, y, z) => roomFor(S, x, y, z) });
   const run = (lm: Landmark, hours: number, secs: number, onStep?: () => void, far = false) => {
     const px = lm.x + (far ? 5000 : 0), pz = lm.z;
     for (let t = 0; t < secs; t += 1 / 30) {
@@ -2818,6 +2818,22 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     run(lm, day + 26.5, 30);
     const nr = roles(lm);
     check(lm.kind === 'cathedral' ? ours().length === 0 : (nr.porter ?? 0) === 1 && ours().length === 1, `landmark people: the ${lm.kind} at 2:30 at night (${Object.entries(nr).map(([k, v]) => `${v} ${k}`).join(', ') || 'nobody'})`);
+    if (lm.kind === 'cathedral') {
+      // The end of the service: out in a queue, a little room to the one in front, nobody inside anybody
+      // (a few brushing past where the ways meet).
+      let pairs = 0, close = 0;
+      run(lm, day + 33.9, 1, undefined, true);
+      run(lm, day + 33.9, 5);
+      run(lm, day + 34.01, 60, () => {
+        const w = ours().filter((a) => a.inside && a.state !== PState.Sit);
+        for (let i = 0; i < w.length; i++) for (let j = i + 1; j < w.length; j++) {
+          if (Math.abs(w[i].y - w[j].y) > 1 || Math.abs(w[i].x - w[j].x) > 1 || Math.abs(w[i].z - w[j].z) > 1) continue;
+          pairs++;
+          if (Math.hypot(w[i].x - w[j].x, w[i].z - w[j].z) < 0.15) close++;
+        }
+      });
+      check(close <= pairs * 0.02, `landmark people: leaving the cathedral after the service, ${close} of ${pairs} near pairs inside each other (closer than 0.15 m)`);
+    }
   }
   console.log(`landmark people: ${(performance.now() - t0).toFixed(0)} ms`);
 }

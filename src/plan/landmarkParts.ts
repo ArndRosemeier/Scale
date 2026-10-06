@@ -826,7 +826,8 @@ function grandHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: numb
   // Information desk and a bust of the founder.
   const du = -Math.min(uTop - 3, 8);
   k.box(du, iv0 + 5, 2, 0.5, B, B + 1.1, C.wood, { ...DS, top: C.stone });
-  k.box(du, iv0 + 4.47, 0.5, 0.03, B + 1.1, B + 1.5, C.gold, D);
+  // (A plate on its front, not a sign on top: from the hall the clerk behind it is seen.)
+  k.box(du, iv0 + 4.47, 0.5, 0.03, B + 0.6, B + 1.0, C.gold, D);
   k.box(-du, iv0 + 5, 0.55, 0.55, B, B + 1.3, C.stone, DS);
   figure(k, -du, iv0 + 5, B + 1.3, 1.1, mat(METAL, BRONZE), false);
   for (const f of [0.3, 0.75]) chandelier(k, 0, iv0 + (hallV1 - iv0) * f, ceil, 1.6, C, B);

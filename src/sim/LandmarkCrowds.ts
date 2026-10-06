@@ -39,8 +39,12 @@ const PACE = [0.95, 1.3], RUN = 3.4;
 const LOOK = [7, 22], REST = [25, 70], VISIT = [3, 6];
 /** Arrivals: at most one per this many seconds per landmark (a group now and then). */
 const ARRIVE_EVERY = 2.5;
-/** Room kept to the one in front when walking (m), and how long they wait before squeezing past (s). */
-const GAP = 0.65, WAIT = 4;
+/** Room kept to the one in front when walking (m); how long they wait for someone in the way, and in a queue, before squeezing past (s). */
+const GAP = 0.65, WAIT = 4, QUEUE = 15;
+/** How fast they step aside for someone coming the other way (m/s). */
+const SIDE = 0.9;
+/** Closest two people come (centres, m), and how fast they ease apart when closer (m/s). */
+const BODY = 0.34, APART = 0.8;
 /** Seconds lying before getting up (knocked down indoors). */
 const GET_UP = 9;
 
@@ -58,6 +62,8 @@ export interface HallDeps {
   pop: Population;
   /** Floor height under a point (the landmark's solids), or -Infinity. */
   floor?: (x: number, y: number, z: number) => number;
+  /** Room for a body at a point on that floor (no solid at knee, chest or head height). */
+  clear?: (x: number, y: number, z: number) => boolean;
   /** Share of a breakable landmark still standing (destruction/LandmarkWreck): 1 when whole. */
   standing?: (index: number) => number;
 }
@@ -108,11 +114,19 @@ interface Guest {
   pace: number;
   /** Paused (looking at a commotion) for this many seconds. */
   pause: number;
-  /** Seconds kept waiting behind someone (or the hero) in the way. */
+  /** Seconds kept waiting for someone (or the hero) in the way; a moment more before walking on. */
   wait: number;
+  hold: number;
+  /** What they wait for (inTheWay). */
+  wk: number;
 }
 
 const hourIn = (h: number, [a, b]: number[]) => h >= a && h < b;
+
+/** HallDeps.clear from a landmark's solids: nothing at knee, chest or head height, and its floor underfoot. */
+export function roomFor(S: { hit(x: number, y: number, z: number): unknown; topAt(x: number, z: number, y: number, r: number): number }, x: number, y: number, z: number): boolean {
+  return !S.hit(x, y + 0.4, z) && !S.hit(x, y + 1.0, z) && !S.hit(x, y + 1.6, z) && Math.abs(S.topAt(x, z, y + 0.3, 0) - y) < 0.1;
+}
 
 export class LandmarkCrowds {
   private halls: Hall[] = [];
@@ -122,6 +136,10 @@ export class LandmarkCrowds {
   private hour = 12;
   private day = 0;
   private py = 0;
+  /** Set by inTheWay: someone coming the other way, close ahead. */
+  private oncoming = false;
+  /** Set by inTheWay: the one they let go first (across or towards them). */
+  private yieldTo: PedAgent | null = null;
   private nb: PedAgent[] = [];
   /** Is the player talking to this person (game/people)? They stay put meanwhile. */
   busy: ((a: PedAgent) => boolean) | null = null;
@@ -386,7 +404,7 @@ export class LandmarkCrowds {
   private guest(h: Hall, a: PedAgent, role: HallRole, pace: number): Guest {
     const g: Guest = {
       a, hall: h, role, spot: -1, mode: Mode.Stay, pts: [], nodes: [], wp: 0, sx: a.x, sy: a.y, sz: a.z, at: h.ins.exits[0].node,
-      near: false, t: 0, left: role === 'visitor' ? VISIT[0] + (hash32(a.cit.seed) % (VISIT[1] - VISIT[0] + 1)) : 1, out: false, run: false, pace, pause: 0, wait: 0,
+      near: false, t: 0, left: role === 'visitor' ? VISIT[0] + (hash32(a.cit.seed) % (VISIT[1] - VISIT[0] + 1)) : 1, out: false, run: false, pace, pause: 0, wait: 0, hold: 0, wk: 0,
     };
     h.guests.add(g);
     this.byAgent.set(a, g);
@@ -640,12 +658,31 @@ export class LandmarkCrowds {
     const dx = tx - a.x, dz = tz - a.z, d = Math.hypot(dx, dz);
     const sp = g.run ? RUN : g.pace, mv = sp * dt;
     a.state = PState.Walk;
-    // (A little room to the one in front, and the hero is not shoved down the steps; not for
-    // ever though: after a few seconds they squeeze past.)
-    if (!g.run && d > 1e-3 && this.inTheWay(a, dx / d, dz / d)) {
-      g.wait += dt;
-      if (g.wait < WAIT) { a.speed = 0; a.state = PState.Idle; return; }
-    } else g.wait = 0;
+    // (A little room to the one in front, as long as the queue waits (nearly), and the hero is not
+    // shoved down the steps; for someone standing in the way, only a few seconds, then they
+    // squeeze past. Stopped, they stand a moment: no stop-and-go stutter mid-step.)
+    const way = !g.run && d > 1e-3 ? this.inTheWay(a, dx / d, dz / d) : 0;
+    if (way !== g.wk) { g.wk = way; g.wait = 0; }
+    if (way && g.wait < (way === 2 ? QUEUE : WAIT)) { g.wait += dt; g.hold = 0.6; }
+    this.apart(a, dt);
+    if (g.hold > 0) {
+      g.hold -= dt;
+      a.speed = 0; a.state = PState.Idle;
+      // (Letting someone go first who is about to walk into them: out of their line, if there is room.)
+      const o = way === 2 ? this.yieldTo : null;
+      if (o && Math.hypot(o.x - a.x, o.z - a.z) < 0.6) {
+        const ox = -Math.sin(o.heading), oz = -Math.cos(o.heading);
+        const side = (a.x - o.x) * oz - (a.z - o.z) * ox >= 0 ? 1 : -1;
+        const sx = a.x + oz * side * SIDE * dt, sz = a.z - ox * side * SIDE * dt;
+        if (this.d.clear?.(sx + oz * side * 0.2, a.y, sz - ox * side * 0.2) ?? false) { a.x = sx; a.z = sz; }
+      }
+      return;
+    }
+    if (this.oncoming && way !== 2) {
+      // Aside to the right (where there is room and floor): the way back is the next leg's.
+      const rx = -dz / d, rz = dx / d, sx = a.x + rx * SIDE * dt, sz = a.z + rz * SIDE * dt;
+      if (this.d.clear?.(sx + rx * 0.2, a.y, sz + rz * 0.2) ?? false) { a.x = sx; a.z = sz; }
+    }
     if (d <= mv) {
       a.x = tx; a.z = tz; a.y = ty;
       const nd = g.nodes[g.wp];
@@ -673,21 +710,56 @@ export class LandmarkCrowds {
     a.heading += dh * Math.min(1, dt * 8);
   }
 
-  /** Someone close ahead (going the same way, or standing; not sitting) or the hero. */
-  private inTheWay(a: PedAgent, fx: number, fz: number): boolean {
+  /** Bodies do not overlap: walking (or waiting) people too close to someone ease apart, where there is room. */
+  private apart(a: PedAgent, dt: number): void {
+    let mx = 0, mz = 0;
+    for (const o of this.d.peds.neighbours(a.x, a.z, BODY, this.nb)) {
+      if (o === a || !o.hall || Math.abs(o.y - a.y) > 1) continue;
+      const ox = a.x - o.x, oz = a.z - o.z, d = Math.hypot(ox, oz);
+      if (d >= BODY) continue;
+      // (Exactly on top of each other: apart sideways, the lower id staying put.)
+      const nx = d > 1e-3 ? ox / d : o.id < a.id ? Math.cos(a.id) : 0, nz = d > 1e-3 ? oz / d : o.id < a.id ? Math.sin(a.id) : 0;
+      mx += nx * (BODY - d); mz += nz * (BODY - d);
+    }
+    const m = Math.hypot(mx, mz);
+    if (m < 1e-4) return;
+    const k = Math.min(m, APART * dt) / m, sx = a.x + mx * k, sz = a.z + mz * k;
+    if (this.d.clear?.(sx, a.y, sz) ?? false) { a.x = sx; a.z = sz; }
+  }
+
+  /**
+   * What is close ahead: 2, someone walking the same way (a queue: wait behind them); 1, the hero
+   * or someone standing there (wait a little); 0, nothing (or only people coming the other way,
+   * who pass, and people sitting).
+   */
+  private inTheWay(a: PedAgent, fx: number, fz: number): 0 | 1 | 2 {
     const ahead = (x: number, z: number, reach: number, side: number) => {
       const ox = x - a.x, oz = z - a.z, f = ox * fx + oz * fz;
       return f > 0.05 && f < reach && Math.abs(ox * fz - oz * fx) < side;
     };
     const po = this.d.peds.playerObstacle;
-    if (po && po.h > 0.6 && Math.abs(this.py - a.y) < 1.6 && ahead(po.x, po.z, po.r + 0.45, po.r + 0.25)) return true;
+    this.oncoming = false;
+    this.yieldTo = null;
+    let w: 0 | 1 | 2 = po && po.h > 0.6 && Math.abs(this.py - a.y) < 1.6 && ahead(po.x, po.z, po.r + 0.45, po.r + 0.25) ? 1 : 0;
     for (const o of this.d.peds.neighbours(a.x, a.z, GAP, this.nb)) {
       if (o === a || !o.hall || o.state === PState.Sit || Math.abs(o.y - a.y) > 1) continue;
-      // (Coming the other way: they pass each other.)
-      if (o.speed > 0.1 && -Math.sin(o.heading) * fx - Math.cos(o.heading) * fz < 0.3) continue;
-      if (ahead(o.x, o.z, GAP, 0.36)) return true;
+      const og = this.byAgent.get(o), walking = og?.mode === Mode.Walk;
+      const same = -Math.sin(o.heading) * fx - Math.cos(o.heading) * fz;
+      // (Right beside each other, going the same way: one of them lets the other go first.)
+      if (walking && same >= 0.3 && o.id < a.id && Math.hypot(o.x - a.x, o.z - a.z) < 0.35) return 2;
+      if (!ahead(o.x, o.z, GAP, 0.36)) continue;
+      // (On their way too, waiting or not: the same way, a queue, so wait behind them. Across
+      // or towards each other, the one who has to let the other go first is the one with the
+      // higher id (never round in a circle where three paths meet); coming towards each other
+      // they also step aside to their right.)
+      if (!walking) w = w || 1;
+      else if (same >= 0.7) return 2;
+      else {
+        if (same <= -0.3) this.oncoming = true;
+        if (o.id < a.id) { w = 2; this.yieldTo = o; }
+      }
     }
-    return false;
+    return w;
   }
 
   /** After a fall: the nearest nav point on their level is where they go on from. */

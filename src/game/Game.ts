@@ -51,7 +51,7 @@ import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
 import { RagdollSystem, type CarBox } from '../physics/ragdoll/RagdollSystem';
 import { Birds } from '../fauna/Birds';
-import { LandmarkCrowds } from '../sim/LandmarkCrowds';
+import { LandmarkCrowds, roomFor } from '../sim/LandmarkCrowds';
 import { Terraces } from '../sim/Terraces';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
@@ -455,6 +455,7 @@ export class Game {
     this.halls = new LandmarkCrowds({
       macro, terrain: this.terrain, world: this.world, peds: this.peds, pop: this.population,
       floor: (x, y, z) => this.world.landmarks?.topAt(x, z, y, 0) ?? -Infinity,
+      clear: (x, y, z) => !!this.world.landmarks && roomFor(this.world.landmarks, x, y, z),
       standing: (i) => this.destruction.landmarks?.share(i) ?? 1,
     });
     this.crowd.outfit = (a) => this.halls.outfit(a);
