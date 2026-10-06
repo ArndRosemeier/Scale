@@ -2,10 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.069 — 2026-10-06
+## 0.071 — 2026-10-06
 
 - **Super speed is a toggle now, and it steers itself.** Press its hotbar key (or tap its button) once to switch it on and again to switch it off; no more holding. It is slower than before (40 m/s at the first rank up to 100 m/s at the top, was 75 to 240), so the city keeps up with you. While it is on, you steer roughly and the runner does the rest: it swerves around cars, poles and trees, follows the street around walls, and brakes when the way straight ahead is blocked instead of slamming into it (keep pushing into a wall and it still runs up it, slowly). It no longer drops into manholes or metro stairwells: it runs around them, and at speed skims straight over them. In flight, pressing it still gives the dash burst.
 - **Super jump climbs while you hold Space.** You take off the moment you press it and keep rising for as long as you hold it, up to the jump's maximum height (about a second and a half to the top); let go and the climb stops, so you choose your height. You can steer the whole time you are in the air, at a good pace, so landing on a particular roof is easy. A quick tap is a small hop. Energy is paid for the height you actually gain. On the touch screen, the Jump button works the same way.
+
+## 0.070 — 2026-10-06
+
+- **Credit for the built-in characters.** The Woman and Man are based on "Woman_model" by Bananaboy from Blend Swap (Creative Commons Attribution 3.0). The credit is in `public/assets/bodies/LICENSE.txt` and shows when you point at either card in the character picker.
+
+## 0.069 — 2026-10-06
+
+- **Two new built-in characters: a woman and a man.** The start screen's character picker now offers **Woman** and **Man** next to the default human. Both are fully animated, with painted skin, short hair, eyebrows, lips and real irises. The woman is the new base model from Blend Swap; the man is made from the very same mesh and skeleton, reshaped (broader shoulders and chest, narrower hips, fuller thighs, thicker neck and arms, stronger jaw, 1.80 m tall), so the two move and fit exactly alike.
 
 ## 0.068 — 2026-10-06
 
