@@ -1,7 +1,8 @@
 /**
  * Save game UI: the list of saves (thumbnail, name, city, mode, game day / time, real date; load
  * and delete with an inline confirm), Continue / Load game on the start screen, Save / Load and the
- * autosave status in the pause menu, and the small "Saving…" indicator.
+ * autosave status in the pause menu, saving to and loading from a file (saveFiles.ts), and the
+ * small "Saving…" indicator.
  */
 import './saves.css';
 import type { Game } from '../game/Game';
@@ -10,6 +11,7 @@ import { agoLabel, gameTimeLabel, playTimeLabel, type SaveMeta } from '../game/s
 import { manualId, type SaveStatus } from '../game/save/SaveSystem';
 import { cityClass } from '../world/settings';
 import { MODE_INFO } from '../game/mode';
+import { hasSaveDialog, loadFromFile, writeSaveFile, writeStored } from './saveFiles';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const thumbHtml = (m: SaveMeta) => (m.thumb ? `<img src="${esc(m.thumb)}" alt="">` : '<div class="sv-noimg"></div>');
@@ -33,11 +35,17 @@ export async function fillSaveList(el: HTMLElement, onLoad: (m: SaveMeta) => voi
     r.className = 'sv-row';
     r.innerHTML = `${thumbHtml(m)}<div class="sv-info"><div class="sv-name">${esc(m.name)}</div>
       <div class="sv-sub">${saveLine(m)}</div><div class="sv-sub">${agoLabel(m.created)} · played <b>${playTimeLabel(m.playTime)}</b>${m.mode === 'normal' ? ` · ${m.karma} karma` : ''}</div></div>
-      <div class="sv-acts"><button type="button" class="sv-load">Load</button><button type="button" class="sv-del" title="Delete this save">✕</button></div>`;
+      <div class="sv-acts"><button type="button" class="sv-load">Load</button><button type="button" class="sv-file" title="Save to a file">⇩</button><button type="button" class="sv-del" title="Delete this save">✕</button></div>`;
     const acts = r.querySelector('.sv-acts') as HTMLElement;
     const normal = acts.innerHTML;
     const wire = () => {
       (acts.querySelector('.sv-load') as HTMLButtonElement).onclick = () => onLoad(m);
+      const file = acts.querySelector('.sv-file') as HTMLButtonElement;
+      file.onclick = async () => {
+        file.disabled = true;
+        try { await writeStored(m); file.title = 'Save to a file'; } catch (e) { console.warn('[saves] file', e); file.title = 'That save could not be written to a file'; }
+        file.disabled = false;
+      };
       (acts.querySelector('.sv-del') as HTMLButtonElement).onclick = () => {
         acts.innerHTML = `<span class="sv-ask">Delete?</span><button type="button" class="sv-yes">Delete</button><button type="button" class="sv-no">Keep</button>`;
         (acts.querySelector('.sv-yes') as HTMLButtonElement).onclick = async () => { await saveStore.remove(m.id); r.remove(); after?.(await saveStore.list()); };
@@ -99,13 +107,19 @@ export class MainMenuSaves {
       await saveStore.recover();
       const all = await saveStore.list();
       const latest = all[0];
-      if (!latest) { this.el.style.display = 'none'; return; }
       this.el.style.display = '';
+      if (!latest) {
+        // No saves in this browser: a save file can still be loaded.
+        this.el.innerHTML = `<button type="button" class="sv-filebtn">Load from file…</button><div class="sv-fmsg"></div><div class="sv-or">or a new city</div>`;
+        this.wireFile();
+        return;
+      }
       this.el.innerHTML = `<button type="button" class="sv-continue">${thumbHtml(latest)}<span class="sv-txt"><span class="sv-big">Continue</span>
         <span class="sv-line">${esc(latest.city)} (${cityClass(latest.size).toLowerCase()}) · ${MODE_INFO[latest.mode]?.name ?? latest.mode}</span>
         <span class="sv-line">${gameTimeLabel(latest.day, latest.hour)} · played ${playTimeLabel(latest.playTime)}</span>
         <span class="sv-line">${latest.kind === 'auto' ? 'Autosave' : esc(latest.name)} · ${agoLabel(latest.created)}</span></span></button>
-        <button type="button" class="sv-loadbtn">Load game… (${all.length})</button><div class="sv-or">or a new city</div>`;
+        <div class="sv-btns"><button type="button" class="sv-loadbtn">Load game… (${all.length})</button><button type="button" class="sv-filebtn" title="Load a game saved to a file (.scale)">Load from file…</button></div>
+        <div class="sv-fmsg"></div><div class="sv-or">or a new city</div>`;
       this.list.className = 'sv-list';
       this.list.hidden = true;
       this.el.insertBefore(this.list, this.el.querySelector('.sv-or'));
@@ -115,10 +129,19 @@ export class MainMenuSaves {
         this.list.hidden = !this.list.hidden;
         if (!this.list.hidden) await fillSaveList(this.list, (m) => this.onLoad(m), (l) => { btn.textContent = `Load game… (${l.length})`; if (!l.length) void this.refresh(); });
       };
+      this.wireFile();
     } catch (e) {
       console.warn('[saves] menu', e);
       this.el.style.display = 'none';
     }
+  }
+
+  private wireFile(): void {
+    const msg = this.el.querySelector('.sv-fmsg') as HTMLElement;
+    (this.el.querySelector('.sv-filebtn') as HTMLButtonElement).onclick = () => void loadFromFile((m) => this.onLoad(m), (t, err) => {
+      msg.className = `sv-fmsg${err ? ' err' : ''}`;
+      msg.textContent = t;
+    });
   }
 }
 
@@ -137,6 +160,7 @@ export class PauseSaves {
     this.el.className = 'sv-pause';
     this.el.innerHTML = `<div class="sv-head"><span>Saved games</span><span class="sv-status"></span></div>
       <div class="sv-saverow"><input type="text" maxlength="40" placeholder="Name of the save" title="Name of the save (the same name overwrites it)" spellcheck="false"><button type="button" class="sv-save">Save game</button><button type="button" class="sv-open">Load game…</button></div>
+      <div class="sv-filerow"><button type="button" class="sv-tofile" title="Download the game as a file (.scale) to keep, move to another computer or share">Save to file</button><button type="button" class="sv-fromfile" title="Load a game saved to a file (.scale)">Load from file…</button></div>
       <div class="sv-confirm" hidden><span></span><button type="button" class="sv-over">Overwrite</button><button type="button" class="sv-cancel">Cancel</button></div>
       <div class="sv-msg"></div><div class="sv-list" hidden></div>`;
     // Right under the title: saving and loading come first.
@@ -158,6 +182,8 @@ export class PauseSaves {
     $<HTMLButtonElement>('.sv-save').onclick = () => void this.trySave();
     $<HTMLButtonElement>('.sv-over').onclick = () => void this.doSave();
     $<HTMLButtonElement>('.sv-cancel').onclick = () => { this.confirm.hidden = true; };
+    $<HTMLButtonElement>('.sv-tofile').onclick = () => void this.toFile();
+    $<HTMLButtonElement>('.sv-fromfile').onclick = () => void loadFromFile((m) => { void this.game.saves.load(m.id); }, (t, err) => this.say(t, err));
     $<HTMLButtonElement>('.sv-open').onclick = () => {
       this.list.hidden = !this.list.hidden;
       if (!this.list.hidden) void this.fill();
@@ -175,6 +201,24 @@ export class PauseSaves {
       this.msg.textContent = `Loading "${m.name}"…`;
       void this.game.saves.load(m.id).then((ok) => { if (!ok) { this.msg.className = 'sv-msg err'; this.msg.textContent = 'That save could not be read.'; } });
     });
+  }
+
+  private say(text: string, err = false): void {
+    this.msg.className = `sv-msg${err ? ' err' : ''}`;
+    this.msg.textContent = text;
+  }
+
+  /** The game as it is now, as a download (named like a save; nothing stored in the browser). */
+  private async toFile(): Promise<void> {
+    try {
+      // Captured at the click (the game runs on behind the dialog), written once a place is chosen.
+      const { data, meta } = this.game.saves.snapshot(this.name.value.trim() || this.defaultName());
+      const file = await writeSaveFile(meta, async () => data);
+      if (file) this.say(hasSaveDialog() ? `Saved to "${file}"` : `Saved to "${file}" (your downloads)`);
+    } catch (e) {
+      console.warn('[saves] file', e);
+      this.say('Saving to a file failed — the game goes on.', true);
+    }
   }
 
   private sync(): void {

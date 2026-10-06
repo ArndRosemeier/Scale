@@ -191,6 +191,13 @@ export class SaveSystem {
     return this.write('manual', n, manualId(n));
   }
 
+  /** The running game as a save and its index entry, stored nowhere (Save to file). */
+  snapshot(name: string): { data: SaveData; meta: SaveMeta } {
+    const n = name.trim().slice(0, 40) || 'Saved game';
+    const data = this.capture('manual', n, manualId(n));
+    return { data, meta: this.meta(data, this.thumbnail()) };
+  }
+
   /** The rolling autosave: the oldest of the three slots. */
   async autosave(reason = 'manual'): Promise<SaveMeta | null> {
     if (this.leaving || !this.g.player || this.g.defeat?.holdSaves) return null;
