@@ -6,6 +6,7 @@
  * stands as plain slopes. Landmarks are not destructible: every vertex is element 0 of an
  * always-alive element texture. Parts of clear glass (`clear`: the glazed walkway of a helix
  * tower, glass orbs and crowns) go into a separate mesh drawn with a transparent glass material.
+ * Inside parts (`inner`: a starship's great hall) make a third pair, near only, drawn close by.
  */
 import type { Terrain } from '../world/terrain';
 import type { Landmark } from '../plan/landmarks';
@@ -21,13 +22,13 @@ type V3 = [number, number, number];
 const ROOF_FLAG = 128;
 
 /** The landmark's mesh for a LOD: its facade parts, or (clear) only its clear glass; diced into pieces with a dicer. */
-export function buildLandmarkMesh(lm: Landmark, terrain: Terrain, lod: number, clear = false, dicer?: Dicer): MeshBuilder {
+export function buildLandmarkMesh(lm: Landmark, terrain: Terrain, lod: number, clear = false, dicer?: Dicer, inner = false): MeshBuilder {
   const mb = new MeshBuilder(facadeSpecs());
   mb.setOrigin(Math.round(lm.x), Math.round(lm.base), Math.round(lm.z));
   mb.set('aSeed', (lm.seed % 10007) / 10007).set('aElem', 0);
   const E = new Emitter(mb, lod, dicer);
   for (const p of landmarkParts(lm, terrain)) {
-    if (p.hidden || (lod > 0 && p.detail) || !!p.clear !== clear) continue;
+    if (p.hidden || (lod > 0 && p.detail) || !!p.clear !== clear || !!p.inner !== inner) continue;
     E.part(p);
   }
   return mb;
@@ -38,6 +39,8 @@ export interface LandmarkMeshes {
   near: MeshBuilder;
   far: MeshBuilder;
   glass: [MeshBuilder, MeshBuilder] | null;
+  /** The inside (LmPart.inner): facade and clear glass meshes (either may be empty), or null. */
+  inner: [MeshBuilder, MeshBuilder] | null;
   /** Breakable (isWreckable): the piece table (landmarkDice PIECE_STRIDE) and its grid. */
   pieces: Float32Array | null;
   grid: WreckGrid | null;
@@ -46,16 +49,19 @@ export interface LandmarkMeshes {
 export function buildLandmarkMeshes(lm: Landmark, terrain: Terrain): LandmarkMeshes {
   if (!isWreckable(lm)) {
     const gn = buildLandmarkMesh(lm, terrain, 0, true);
-    return { near: buildLandmarkMesh(lm, terrain, 0), far: buildLandmarkMesh(lm, terrain, 1), glass: gn.empty ? null : [gn, buildLandmarkMesh(lm, terrain, 1, true)], pieces: null, grid: null };
+    const ins: [MeshBuilder, MeshBuilder] = [buildLandmarkMesh(lm, terrain, 0, false, undefined, true), buildLandmarkMesh(lm, terrain, 0, true, undefined, true)];
+    return { near: buildLandmarkMesh(lm, terrain, 0), far: buildLandmarkMesh(lm, terrain, 1), glass: gn.empty ? null : [gn, buildLandmarkMesh(lm, terrain, 1, true)], inner: ins[0].empty && ins[1].empty ? null : ins, pieces: null, grid: null };
   }
   const grid = wreckGrid(lm, landmarkParts(lm, terrain));
   const d0 = new Dicer(grid);
   const near = buildLandmarkMesh(lm, terrain, 0, false, d0);
   // (The near glass names pieces too: a glass dome or orb breaks like the rest.)
   const gn = buildLandmarkMesh(lm, terrain, 0, true, d0);
+  // (So does the inside: it breaks and drops with the pieces it stands in.)
+  const ins: [MeshBuilder, MeshBuilder] = [buildLandmarkMesh(lm, terrain, 0, false, d0, true), buildLandmarkMesh(lm, terrain, 0, true, d0, true)];
   const pieces = d0.table();
   const D = () => new Dicer(grid, pieces);
-  return { near, far: buildLandmarkMesh(lm, terrain, 1, false, D()), glass: gn.empty ? null : [gn, buildLandmarkMesh(lm, terrain, 1, true, D())], pieces, grid };
+  return { near, far: buildLandmarkMesh(lm, terrain, 1, false, D()), glass: gn.empty ? null : [gn, buildLandmarkMesh(lm, terrain, 1, true, D())], inner: ins[0].empty && ins[1].empty ? null : ins, pieces, grid };
 }
 
 class Emitter {
