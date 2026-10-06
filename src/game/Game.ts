@@ -684,6 +684,7 @@ export class Game {
         // Down or up a manhole: the scene moves the body and the camera.
         if (this.defeat.active) this.manhole.abort();
         else this.manhole.update(dt);
+        this.interiors.panels.hidePrompt();
       } else {
         this.abilities.enabled = !this.powers.open && !this.map.open && !this.people.talking;
         this.abilities.preUpdate(dt, this.input);

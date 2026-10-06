@@ -34,6 +34,8 @@ export interface LimbGoal {
   w: number;
   /** Arms: in the chest's frame (outward for this arm, up, forward); legs: in the body's frame. */
   pole?: [number, number, number];
+  /** Hands: laid flat, palm down, the fingers pointing this (world) way (on a floor, a ledge). */
+  flat?: THREE.Vector3 | null;
 }
 export interface LimbGoals {
   L?: LimbGoal; R?: LimbGoal;
@@ -90,6 +92,7 @@ const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE
 const _rt = new THREE.Vector3(), _rw = new THREE.Vector3(), _rg = new THREE.Vector3(), _rp = new THREE.Vector3();
 const _ra = new THREE.Vector3(), _rb = new THREE.Vector3(), _rc = new THREE.Vector3(), _rd = new THREE.Vector3(), _re = new THREE.Vector3(), _rf = new THREE.Vector3();
 const _rq = new THREE.Quaternion();
+const _m0 = new THREE.Matrix4(), _m1 = new THREE.Matrix4();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3();
 
 interface FingerRig {
@@ -1485,11 +1488,14 @@ export class Animator {
       const pole = h.pole ?? [0.4, -1, 0.2];
       _rp.set((s === 'L' ? -1 : 1) * pole[0], pole[1], -pole[2]).applyQuaternion(_rq);
       for (let k = 0; k < 2; k++) {
+        // (A flat hand first: the grip point moves with the wrist's turn.)
+        if (h.flat) this.flatHand(wr, s, h.flat, Math.min(1, h.w));
         wr.getWorldPosition(_rw);
         if (grip) grip.getWorldPosition(_rg); else _rg.copy(_rw);
         _rt.copy(h.p).sub(_rg).multiplyScalar(Math.min(1, h.w)).add(_rw);
         this.poleIK(sh, el, wr, _rt, _rp);
       }
+      if (h.flat) this.flatHand(wr, s, h.flat, Math.min(1, h.w));
     }
     ch.object.getWorldQuaternion(_q3);
     for (const s of ['L', 'R'] as const) {
@@ -1502,6 +1508,23 @@ export class Animator {
       _rt.copy(_rw).lerp(f.p, Math.min(1, f.w));
       this.poleIK(hip, knee, foot, _rt, _rp);
     }
+  }
+
+  /** Turn a wrist so the hand lies flat, palm down, the fingers along `dir` (horizontal). */
+  private flatHand(wr: THREE.Bone, s: Side, dir: THREE.Vector3, w: number) {
+    const ch = this.ch;
+    // The hand's frame now, from its joints (as bodyBuild's hand socket): toward the middle finger, the palm's normal.
+    const W = wr.getWorldPosition(_ra);
+    const d = ch.bone(`finger3-1.${s}`).getWorldPosition(_rb).sub(W).normalize();
+    const ac = ch.bone(`finger2-1.${s}`).getWorldPosition(_rc).sub(ch.bone(`finger5-1.${s}`).getWorldPosition(_rd));
+    const n = _re.crossVectors(d, ac).multiplyScalar(s === 'L' ? 1 : -1).normalize();
+    const m0 = _m0.makeBasis(d, n, _rc.crossVectors(d, n));
+    const fd = _rd.set(dir.x, 0, dir.z).normalize(), down = _rf.set(0, -1, 0);
+    const m1 = _m1.makeBasis(fd, down, _ra.crossVectors(fd, down));
+    _q.setFromRotationMatrix(m1.multiply(m0.transpose()));
+    _q2.identity().slerp(_q, w);
+    this.rotateWorldQ(wr, _q2);
+    wr.updateMatrixWorld(true);
   }
 
   /** Two-bone IK with the bend toward `pole` (a world direction from the root joint). */

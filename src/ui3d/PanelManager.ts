@@ -78,6 +78,9 @@ export class PanelManager {
     }
   }
 
+  /** No prompt (while a scripted scene has the body, a manhole climb …). */
+  hidePrompt(): void { this.showPrompt(''); }
+
   private showPrompt(html: string): void {
     if (html === this.shownPrompt) return;
     this.shownPrompt = html;

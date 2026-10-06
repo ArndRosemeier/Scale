@@ -21,7 +21,7 @@ import type { Input } from './Input';
 import type { Underground } from '../underground/Underground';
 import { shaftPoint, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SEWER_HW, SHAFT_IN, HOLE_R, type ManholeSpot } from '../underground/layout';
 import { kf, smooth, clamp, type Pose } from '../humanoid/client/anim/pose';
-import type { LimbGoals } from '../humanoid/client/anim/Animator';
+import type { LimbGoal, LimbGoals } from '../humanoid/client/anim/Animator';
 import { manholeCoverMap } from '../props/furniture';
 
 export interface ManholeHost {
@@ -58,7 +58,7 @@ const HAND_LAT = LID_LAT + HOLE_R + 0.2;
 const LID_DEST_LAT = LID_LAT + 0.15, LID_DEST_DS = 0.98;
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4();
-const _x = new THREE.Vector3(), _y = new THREE.Vector3(0, 1, 0), _z = new THREE.Vector3();
+const _x = new THREE.Vector3(), _y = new THREE.Vector3(0, 1, 0), _z = new THREE.Vector3(), _y2 = new THREE.Vector3();
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
 export class ManholeClimb {
@@ -147,6 +147,7 @@ export class ManholeClimb {
     const P = this.h.player;
     if (P.ragdoll || P.downT > 0) { this.abort(); return; }
     this.goals.L!.w = this.goals.R!.w = this.goals.footL!.w = this.goals.footR!.w = 0;
+    this.goals.L!.flat = this.goals.R!.flat = null;
     this.goals.curlW = 0;
     this.poseFn = null;
     this.overW = 1;
@@ -286,7 +287,9 @@ export class ManholeClimb {
         // The camera: from above while the head is out of the hole or just under the street, from
         // the sewer below (looking up the shaft at the legs).
         const head = this.h.player.pos.y + this.h.player.height * 0.9 - this.spot!.floor;
-        this.setCam(head > this.G - (h1 > h0 ? 0.5 : 0.25) ? 'shaft' : 'tube', 0);
+        // (Climbing up, once the view is from above it stays there: no flick back into the sewer.)
+        const shaft = head > this.G - (h1 > h0 ? 0.5 : 0.25) || (h1 > h0 && this.cam === 'shaft');
+        this.setCam(shaft ? 'shaft' : 'tube', 0);
       },
     };
   }
@@ -311,7 +314,7 @@ export class ManholeClimb {
       const a = smooth(0, 0.5, fr), swing = fr < 0.5 ? Math.sin(Math.PI * a) : 0;
       const y0 = Math.max(0, n * STEP), y1 = Math.max(0, (n + 1) * STEP);
       const y = y0 + (y1 - y0) * a;
-      const goal = g[key] as { p: THREE.Vector3; w: number };
+      const goal = g[key] as LimbGoal;
       if (hand) {
         this.handPoint(y0 + handOff, side, top, _v);
         this.handPoint(y1 + handOff, side, top, _w);
@@ -319,6 +322,7 @@ export class ManholeClimb {
         // On the street (the top): a flat palm, else gripping a rung.
         const street = (a < 0.5 ? y0 : y1) + handOff > top + 0.01;
         g.curl![key as 'L' | 'R'] = street ? 0.15 : 1.25;
+        goal.flat = street ? this.outward(side * 0.25, goal.flat) : null;
       } else {
         this.at(LADDER_LAT - 0.11 * k, side * 0.11, y + 0.075 * k, goal.p);
         minFoot = Math.min(minFoot, y);
@@ -368,6 +372,7 @@ export class ManholeClimb {
     for (const [key, sd] of [['L', -sdR], ['R', sdR]] as const) {
       this.at(HAND_LAT, sd * 0.2, G + 0.03, g[key]!.p);
       g[key]!.w = hw;
+      g[key]!.flat = this.outward(sd * 0.25, g[key]!.flat);
       g.curl![key] = 0.15;
     }
     g.curlW = hw;
@@ -427,6 +432,7 @@ export class ManholeClimb {
       lid.updateMatrixWorld(true);
       g[key]!.p.set(LID_R * 0.92, LID_T * 0.5, z).applyMatrix4(lid.matrixWorld);
       g[key]!.w = hw;
+      g[key]!.flat = null;
       g.curl![key] = 1.3;
     }
     g.curlW = hw;
@@ -506,7 +512,14 @@ export class ManholeClimb {
     return this.at(HAND_LAT, sd * 0.2, this.G + 0.03, out);
   }
 
-  private at(lat: number, ds: number, y: number, out: THREE.Vector3): THREE.Vector3 {
+  /** Across the trunk toward the street on the shaft's side (turned a little along it by `ds` per m). */
+  private outward(ds: number, out?: THREE.Vector3 | null): THREE.Vector3 {
+    const v = out ?? new THREE.Vector3();
+    this.at(1, ds, 0, v).sub(this.at(0, 0, 0, _y2));
+    return v.normalize();
+  }
+
+    private at(lat: number, ds: number, y: number, out: THREE.Vector3): THREE.Vector3 {
     const p = shaftPoint(this.spot!, lat, ds, y);
     return out.set(p[0], p[1], p[2]);
   }

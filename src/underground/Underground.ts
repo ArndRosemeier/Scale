@@ -992,7 +992,7 @@ export class Underground {
         }
         // The pool: rings of vertices, on the walkway (and the water, where it reaches the channel).
         const q = shaftPoint(m, LID_LAT, 0, 0.015);
-        const lit = open ? 0.6 : 0.35;
+        const lit = open ? 0.4 : 0.25;
         sh.set('color', lit, lit * 0.96, lit * 0.88);
         const base = sh.v(q[0], q[1], q[2], 0, 1, 0);
         const ring0 = base + 1;
