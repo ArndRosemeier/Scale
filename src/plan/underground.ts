@@ -168,6 +168,13 @@ export const HALL_SPAN = STATION_HALF + 6;
 export function sewerInvert(pts: number[], terrain: Terrain, culvert = false): number[] {
   const y: number[] = [];
   for (let i = 0; i < pts.length; i += 2) y.push(terrain.height(pts[i], pts[i + 1]) - 4.6);
+  // The ends (where trunks meet) go by the lowest ground around the node, the same for every trunk
+  // that meets there: a node on a river bank or at the edge of a cutting must not leave the vault
+  // standing out of the slope beside the street.
+  for (const k of [0, y.length - 1]) {
+    const x = pts[k * 2], z = pts[k * 2 + 1];
+    for (let a = 0; a < 8; a++) y[k] = Math.min(y[k], terrain.height(x + Math.cos(a * Math.PI / 4) * SEWER_SPAN, z + Math.sin(a * Math.PI / 4) * SEWER_SPAN) - 4.6);
+  }
   if (culvert) {
     // Under the river: 4.6 m under the bed at least, sloping no steeper than CULVERT_GRADE from the
     // banks (a lower envelope), so it can be walked down into and up out of.
