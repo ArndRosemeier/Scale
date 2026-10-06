@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.062 — 2026-10-06
+
+- **Power cores no longer hide inside things.** A core on a square or in a park used to sit exactly in the middle, which is where the fountain or statue stands, so it ended up inside the fountain where nobody could reach it (about a third of all cores in a sweep of 16 cities were buried like that). Cores now keep clear of fountains, statues, kiosks, trees, playgrounds, benches, café terraces, metro stairwells and water, and a core on a roof keeps clear of the air-conditioning units, water tanks and lift housings up there. `npx tsx tools/coresweep.ts <sizes> <seedA-seedB>` checks every core of many cities headlessly.
+
 ## 0.061 — 2026-10-06
 
 - **The way to the slime civilisation is open.** The living membrane that closed the tunnel out of a colony's chamber is gone: anyone can walk down to the Lumen now. The tunnel itself is much wider (and a little less steep), so the camera no longer gets squeezed against the rock behind you.
