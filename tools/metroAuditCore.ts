@@ -7,7 +7,7 @@
 import type { Terrain } from '../src/world/terrain';
 import type { MetroLine } from '../src/plan/types';
 import { tubeAt, boxAt, type Tube, type Box } from '../src/underground/Volumes';
-import { TUNNEL_HW, TUNNEL_H, STATION_HW, STATION_H, PLATFORM_H, SEWER_HW, SEWER_H, TRACK_OFF, CAR_L, CARS, CAR_W, CAR_FLOOR, trainsOn, carPose } from '../src/underground/layout';
+import { TUNNEL_HW, TUNNEL_H, STATION_HW, STATION_H, PLATFORM_H, SEWER_HW, SEWER_H, TRACK_OFF, CAR_L, CARS, CAR_W, CAR_FLOOR, trainsOn, carPose, ownHallHits } from '../src/underground/layout';
 
 export interface AuditLine { line: MetroLine; tube: Tube; stops: { s: number; hall: Box | null }[] }
 export interface AuditInput { terrain: Terrain; lines: AuditLine[]; sewers: Tube[]; halls: Box[]; passages?: { name: string; tube: Tube; hall: Box; ground: (x: number, z: number) => number }[] }
@@ -184,6 +184,8 @@ export function auditPassages(inp: AuditInput, inHole: (x: number, z: number) =>
       }
       for (const b of inp.halls) if (b !== ps.hall && boxAt(b, x, y + 1.1, z, 0) && y + 1.1 > b.y0) { r.hits++; break; }
     }
+    // Through its own hall's roof (a corridor over the hall pushed down too far).
+    r.hits += ownHallHits(ps.hall, P);
     const [ex, ey, ez] = at(t, total);
     const h = boxAt(ps.hall, ex, ey + 0.3, ez);
     r.endsOnPlatform = !!h && Math.abs(h.floor - (ps.hall.y0 + PLATFORM_H)) < 0.01 && Math.abs(ey - h.floor) < 0.05;
