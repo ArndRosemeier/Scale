@@ -665,10 +665,10 @@ function buildFurniture(G: Geos, f: Furn, y: number): void {
       B(0, 1.45, d + 0.003, w, h / 2, 0.003, [0.78, 0.86, 0.9], G.gloss);
       break;
     case 'tallMirror':
-      // Standing fitting mirror: wooden frame on two feet, the glass facing +z.
+      // Fitting mirror against a wall: wooden frame on two feet, the glass facing +z.
       B(0, h / 2 + 0.06, 0, w + 0.04, h / 2 + 0.04, d * 0.5, c);
       B(0, h / 2 + 0.06, d * 0.5 + 0.004, w, h / 2, 0.004, [0.8, 0.87, 0.92], G.gloss);
-      for (const sx of [-1, 1]) B(sx * (w - 0.04), 0.03, 0, 0.035, 0.03, 0.22, dark);
+      for (const sx of [-1, 1]) B(sx * (w - 0.04), 0.03, 0.1, 0.035, 0.03, 0.12, dark);
       break;
     case 'toilet':
       Cy(0, 0, 0.08, 0.38, 0.16, 0.19, c, 14, G.gloss);

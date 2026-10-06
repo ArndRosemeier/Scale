@@ -242,9 +242,9 @@ export class Interiors {
     // Stairs up from this storey, and arriving from the one below.
     const up = this.stairs(a, f) && this.stairs(a, f + 1);
     const below = f > 0 && this.stairs(a, f) && this.stairs(a, f - 1);
-    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift, a.stair, up, below);
+    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift, a.stair, up, below, f === 0 ? L.door : null);
     // Nothing standing in the way just inside the entrance (furniture is solid).
-    if (f === 0) plan.furniture = plan.furniture.filter((q) => q.kind === 'rug' || q.kind === 'painting' || Math.hypot(q.x - L.door.x, q.z - L.door.z) > 2.4 + Math.max(q.w, q.d) / 2);
+    if (f === 0) plan.furniture = plan.furniture.filter((q) => q.kind === 'rug' || q.kind === 'painting' || q.use === 'dress' || Math.hypot(q.x - L.door.x, q.z - L.door.z) > 2.4 + Math.max(q.w, q.d) / 2);
     // The elevator shaft runs through the slabs between floors it serves; the stairs cut their well.
     const shaft = a.lift ? liftRect(a.lift) : null;
     const floorHoles: number[][] = [], ceilHoles: number[][] = [];
@@ -283,7 +283,7 @@ export class Interiors {
     const mine = here.filter((c) => (c.seed >>> 3) % floors === plan.floor).slice(0, 24);
     const hour = hours % 24;
     const night = hour < 6.5 || hour > 23;
-    const spots: { x: number; z: number; yaw: number; use?: string }[] = plan.furniture.filter((f) => f.use);
+    const spots: { x: number; z: number; yaw: number; use?: string }[] = plan.furniture.filter((f) => f.use && f.use !== 'dress'); // (the fitting mirror is the hero's)
     // Fallback standing spots: random free points in the rooms (not on the stairs).
     if (spots.length < mine.length) {
       let seed = ref.desc.seed ^ (plan.floor * 7919);
