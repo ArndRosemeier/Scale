@@ -2,10 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.069 — 2026-10-06
+## 0.071 — 2026-10-06
 
 - **Dresses and skirts no longer let skin poke through.** The skirt part is now shaped to each body: it starts close at the waist (no strip of skin between bodice and skirt, and no stiff shelf), clears the widest hips, bottom and thighs, and leaves room for the legs to move, so it is a bit wider, most of all lower down. It follows the legs better when walking, running and sitting, and the upper thighs inside a long skirt are hidden so they can't push through when someone sits down.
 - Fixed tears in every skirt and dress: the front split open from the knees down while walking, and the back hem opened into a V between the legs. Sitting in a skirt no longer shows skin on the lap.
+
+## 0.070 — 2026-10-06
+
+- **Credit for the built-in characters.** The Woman and Man are based on "Woman_model" by Bananaboy from Blend Swap (Creative Commons Attribution 3.0). The credit is in `public/assets/bodies/LICENSE.txt` and shows when you point at either card in the character picker.
+
+## 0.069 — 2026-10-06
+
+- **Two new built-in characters: a woman and a man.** The start screen's character picker now offers **Woman** and **Man** next to the default human. Both are fully animated, with painted skin, short hair, eyebrows, lips and real irises. The woman is the new base model from Blend Swap; the man is made from the very same mesh and skeleton, reshaped (broader shoulders and chest, narrower hips, fuller thighs, thicker neck and arms, stronger jaw, 1.80 m tall), so the two move and fit exactly alike.
 
 ## 0.068 — 2026-10-06
 

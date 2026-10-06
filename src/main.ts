@@ -6,7 +6,7 @@ import { Game } from './game/Game';
 import { parseSeed } from './core/rng';
 import { cityRadius, cityClass } from './world/settings';
 import { cityName } from './plan/names';
-import { AvatarMenu, loadSelectedAvatar, loadSelectedLook } from './ui/AvatarMenu';
+import { AvatarMenu, isBuiltinAvatar, loadSelectedAvatar, loadSelectedLook } from './ui/AvatarMenu';
 import { disposeCreatorPreview } from './ui/CharacterCreator';
 import { Player } from './player/Player';
 import { normalizeLook } from './avatar/look';
@@ -93,7 +93,7 @@ async function start(save: SaveData | null = null): Promise<void> {
   if (save) {
     try {
       const id = save.character.id;
-      if (id && await avatarStore.get(id)) avatarStore.select(id);
+      if (id && (isBuiltinAvatar(id) || await avatarStore.get(id))) avatarStore.select(id);
       else { avatarStore.select(null); savedLook = save.character.look as CharacterLook | null; }
     } catch (e) { console.warn('[saves] character', e); }
   }
