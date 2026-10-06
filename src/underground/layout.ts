@@ -16,6 +16,43 @@ export const STATION_H = 7.5;
 export const PLATFORM_H = 1.05;
 export const SEWER_HW = 1.7;
 export const SEWER_H = 2.8;
+/**
+ * Manholes: a lid in the street every MANHOLE_EVERY m along a sewer trunk, over a square shaft on
+ * one side of the trunk that opens into the vault above the walkway. Across the trunk the shaft
+ * spans [SHAFT_IN, SEWER_HW] (SHAFT_IN is a vertex of the vault's profile, so the opening follows
+ * its faces), along it ±SHAFT_HS. A ladder runs up the outer wall from the walkway to the street.
+ */
+export const MANHOLE_EVERY = 45;
+export const SHAFT_IN = Math.cos((3 / 8) * Math.PI) * SEWER_HW;
+export const SHAFT_HS = 0.45;
+/** Lid (and shaft) centre across the trunk. */
+export const LID_LAT = (SHAFT_IN + SEWER_HW) / 2;
+/** Rungs across the trunk (off the wall), the rails' half spacing, the rung spacing. */
+export const LADDER_LAT = SEWER_HW - 0.16;
+export const LADDER_HW = 0.22;
+export const RUNG = 0.3;
+
+/** A manhole: lid centre on the street, the trunk's direction there, the shaft's side across it. */
+export interface ManholeSpot {
+  tube: Tube;
+  /** Arc length along the trunk. */
+  s: number;
+  x: number; z: number;
+  /** Unit direction of the trunk; side: +1 / −1, the shaft's side as a profile lateral (lateral vector (−dz, dx)). */
+  dx: number; dz: number; side: number;
+  /** Walkway floor under the shaft. */
+  floor: number;
+}
+
+/** World point of a manhole's frame: `lat` across the trunk on the shaft's side, `ds` along it, `y` over the walkway. */
+export function shaftPoint(m: ManholeSpot, lat: number, ds: number, y: number): [number, number, number] {
+  const l = lat * m.side;
+  return [m.x + m.dz * LID_LAT * m.side - m.dz * l + m.dx * ds, m.floor + y, m.z - m.dx * LID_LAT * m.side + m.dx * l + m.dz * ds];
+}
+
+/** The vault's profile vertices over the shaft, outer wall top to SHAFT_IN: [lat, height over the walkway]. */
+export const SHAFT_VAULT: [number, number][] = [0, 1, 2, 3].map((k) => [Math.cos((k / 8) * Math.PI) * SEWER_HW, 1.6 + Math.sin((k / 8) * Math.PI) * (SEWER_H - 1.6)]);
+
 /** Tracks run at ±TRACK_OFF from the line's centreline. */
 export const TRACK_OFF = 1.9;
 export const CAR_L = 18.5;

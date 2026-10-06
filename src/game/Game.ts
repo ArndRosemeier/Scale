@@ -106,6 +106,8 @@ import { SaveSystem } from './save/SaveSystem';
 import type { SaveData } from './save/model';
 import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
 import { Defeat } from './defeat/Defeat';
+import { ManholeClimb } from './ManholeClimb';
+import { shaftPoint, LADDER_LAT } from '../underground/layout';
 import { MedFleet } from './defeat/MedDrones';
 import { People } from './people/People';
 import { Fame } from './fame/Fame';
@@ -206,6 +208,8 @@ export class Game {
   saves!: SaveSystem;
   /** Defeated: the rescue drones, the hospital's revival ward, or game over (src/game/defeat). */
   defeat!: Defeat;
+  /** Going down / up a manhole (lid, ladder, the street's edge). */
+  manhole!: ManholeClimb;
   /** A save to put into the city once it has started (set before `start`, by main.ts). */
   pendingSave: SaveData | null = null;
   /** Where to stream in and put the player (a loaded save's spot; default: the main centre). */
@@ -509,8 +513,25 @@ export class Game {
     this.touch = new TouchControls(this);
     installDevtools(this);
     this.defeat = new Defeat(this);
+    this.manhole = new ManholeClimb({
+      player: this.player, camRig: this.camRig, camera: this.renderer.camera, input: this.input, underground: this.underground, scene: this.renderer.scene,
+      hideLid: (x, z) => this.props.flatten(x, z, 0.2),
+      sound: (id, x, y, z, gain, pitch) => this.audio.play(id, x, y, z, gain, pitch, 4, this.renderer.camera.position),
+    });
     {
       const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
+      // The nearest manhole: stand by it in the street ('down') or in the sewer ('up') and use it.
+      if (dev) dev.manhole = (dir: 'down' | 'up' = 'down', r = 400) => {
+        const p = this.player.pos, m = this.underground.nearestManhole(p.x, p.z, r);
+        if (!m) return 'no manhole within ' + r + ' m';
+        this.player.flying = false;
+        const at = dir === 'down' ? shaftPoint(m, -0.6, 1.5, this.underground.groundAt(m.x, m.z) - m.floor) : shaftPoint(m, LADDER_LAT - 0.6, 1.8, 0);
+        p.set(at[0], at[1], at[2]);
+        this.player.vel.set(0, 0, 0);
+        this.camRig.snap();
+        this.manhole.start(m, dir);
+        return { x: m.x, z: m.z, floor: m.floor, side: m.side };
+      };
       if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
       if (dev) dev.defeat = { status: () => this.defeat.status(), down: (kind?: Parameters<Defeat['down']>[0]) => this.defeat.down(kind), rep: (v: number) => { this.crime.rep.add(v - this.crime.rep.value, 'dev'); return this.crime.rep.value; } };
     }
@@ -626,7 +647,11 @@ export class Game {
       if (this.intro?.active) this.intro.update(dt);
       else if (this.freeCam) this.updateFreeCam(dt);
       else if (this.defeat.drives) { /* the defeat's scene moves the body and the camera (below) */ }
-      else {
+      else if (this.manhole.active) {
+        // Down or up a manhole: the scene moves the body and the camera.
+        if (this.defeat.active) this.manhole.abort();
+        else this.manhole.update(dt);
+      } else {
         this.abilities.enabled = !this.powers.open && !this.map.open && !this.people.talking;
         this.abilities.preUpdate(dt, this.input);
         this.defeat.gate();
@@ -1100,7 +1125,7 @@ export class Game {
     if (!m) return this.crime?.deeds.putDownHint() ?? null;
     if (under) return 'Manhole above — press <b>E</b> to climb out';
     if (this.player.height >= 2.4) return 'A manhole — you are too big to fit through';
-    return 'Manhole — press <b>E</b> to open it and climb down into the sewer';
+    return this.underground.isOpen(m) ? 'Open manhole — press <b>E</b> to climb down into the sewer' : 'Manhole — press <b>E</b> to open it and climb down into the sewer';
   }
 
   /** A free seat within reach of an ordinary-sized player on foot (benches, café chairs), or null. */
@@ -1124,7 +1149,7 @@ export class Game {
 
   /** E: open a manhole above a sewer and drop in; underground: climb out at the nearest manhole. */
   private manholeKey(): void {
-    if (this.freeCam || !this.input.hit('KeyE')) return;
+    if (this.freeCam || this.manhole.active || !this.input.hit('KeyE')) return;
     if (this.aftermath.use() || this.crime.use() || this.deeds.help() || this.slimeRealm?.use()) { this.input.pressed.delete('KeyE'); return; }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Sit down on a bench or café chair in reach, or get up again.
@@ -1138,18 +1163,9 @@ export class Game {
     const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
     // Nothing else to do with E: put down what you carry (a rescued cat, a found wallet).
     if (!m) { if (this.crime.deeds.putDown()) this.input.pressed.delete('KeyE'); return; }
-    if (under) {
-      const g = this.world.groundHeight(m.x, m.z);
-      p.set(m.x + 0.8, g + 0.2, m.z);
-      this.player.vel.set(0, 0, 0);
-      this.audio.play('door_close', p.x, p.y, p.z, 0.6, 0.8, 4, this.renderer.camera.position);
-    } else if (this.player.height < 2.4) {
-      this.underground.openManholes.push({ x: m.x, z: m.z });
-      this.underground.holes.push(m.x, m.z, 1, 0, 0.45, 0.45);
-      this.props.crush(m.x, m.z, 0.2); // the lid comes off
-      p.set(m.x, p.y, m.z);
-      this.audio.play('metal_bend', p.x, p.y, p.z, 0.5, 1.4, 4, this.renderer.camera.position);
-    }
+    // Climb out (pushing the lid off if it is on) or open the lid and climb down: see ManholeClimb.
+    if (under) { this.manhole.start(m, 'up'); this.input.pressed.delete('KeyE'); }
+    else if (ManholeClimb.fits(this.player.height)) { this.manhole.start(m, 'down'); this.input.pressed.delete('KeyE'); }
   }
 
   /**

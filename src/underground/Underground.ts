@@ -25,7 +25,7 @@ import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Vo
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
 import { pointInPoly } from '../core/geom2';
 import { G } from '../render/materials/globals';
-import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, nextTrainAt, carPose, DWELL, type TrainState } from './layout';
+import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, nextTrainAt, carPose, DWELL, SEWER_HW, MANHOLE_EVERY, SHAFT_IN, SHAFT_HS, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SHAFT_VAULT, shaftPoint, type ManholeSpot, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
 import { planRooms, type RoomPlan } from './rooms';
 import { buildRoom, buildCrawl, buildChamber, colonyLayout, type BuiltRoom, type RoomMats, type EmitterId } from './RoomMeshes';
@@ -116,6 +116,7 @@ export class Underground {
       for (const c of r.cuts) l.push({ ...c, side: r.side });
     }
     for (const c of this.rooms.colonies) { this.boxes.push(c.chamber); this.tubes.push(c.crawl); }
+    this.planManholes();
     for (const t of this.tubes) this.indexTube(t);
     for (const b of this.boxes) this.indexBox(b);
     // The deep realm below the colonies (its own field; meshes streamed by its worker).
@@ -446,11 +447,47 @@ export class Underground {
   }
 
   /** Manhole lids above the sewers (placed per loaded cell, every ~45 m along each trunk). */
-  private manholes = new Map<number, { x: number; z: number; tube: Tube }[]>();
+  private manholes = new Map<number, ManholeSpot[]>();
   /** Lids per cell (generated once; re-announced whenever the cell's props are rebuilt). */
   private manholeCells = new Map<number, { x: number; z: number; yaw: number }[]>();
+  /** Every manhole of the city, per trunk (planned once, see planManholes). */
+  private shafts = new Map<Tube, ManholeSpot[]>();
+  private allShafts: ManholeSpot[] = [];
   /** A manhole lid was placed (the game adds the visible lid prop). */
   onManhole?: (cell: number, x: number, z: number, yaw: number) => void;
+
+  /**
+   * Every MANHOLE_EVERY m along each trunk a shaft on one side (deterministic, the side flips
+   * where a side room's doorway or a crossing trunk is in the way), not in the river over a
+   * culvert, none within 10 m of another (crossing trunks).
+   */
+  private planManholes(): void {
+    this.sewerTubes.forEach((t, ti) => {
+      const total = t.cum[t.cum.length - 1];
+      const cuts = this.roomCuts.get(t) ?? [];
+      const list: ManholeSpot[] = [];
+      for (let s = MANHOLE_EVERY * 0.5, k = 0; s < total; s += MANHOLE_EVERY, k++) {
+        const q = pointOnTube(t, s);
+        if (!q) continue;
+        const first = hash01(ti * 977 + k * 31 + 7) < 0.5 ? 1 : -1;
+        let spot: ManholeSpot | null = null;
+        for (const side of [first, -first]) {
+          if (cuts.some((c) => c.side === side && s > c.s0 - SHAFT_HS - 0.8 && s < c.s1 + SHAFT_HS + 0.8)) continue;
+          const x = q.x - q.dz * LID_LAT * side, z = q.z + q.dx * LID_LAT * side;
+          if (this.terrain.isWater(x, z, 3)) break;
+          // A crossing trunk (a junction) under the shaft or the ladder.
+          if (this.sewerTubes.some((o) => o !== t && !!tubeAt(o, x, q.y + 1, z, 1.2))) continue;
+          if (this.allShafts.some((m) => Math.hypot(m.x - x, m.z - z) < 10)) break;
+          spot = { tube: t, s, x, z, dx: q.dx, dz: q.dz, side, floor: q.y };
+          break;
+        }
+        if (!spot) continue;
+        list.push(spot);
+        this.allShafts.push(spot);
+      }
+      this.shafts.set(t, list);
+    });
+  }
 
   private placeManholes(cellId: number): void {
     let lids = this.manholeCells.get(cellId);
@@ -466,28 +503,42 @@ export class Underground {
     const out: { x: number; z: number; yaw: number }[] = [];
     const poly = this.macro.cells[cellId]?.poly;
     if (!poly) return out;
-    const SPACING = 45;
-    for (const t of this.sewerTubes) {
-      const P = t.pts, C = t.cum;
-      const n = P.length / 3;
-      const total = C[n - 1];
-      for (let s = SPACING * 0.5; s < total; s += SPACING) {
-        let i = 0;
-        while (i < n - 2 && C[i + 1] < s) i++;
-        const f = (s - C[i]) / Math.max(1e-6, C[i + 1] - C[i]);
-        const x = P[i * 3] + (P[i * 3 + 3] - P[i * 3]) * f, z = P[i * 3 + 2] + (P[i * 3 + 5] - P[i * 3 + 2]) * f;
-        if (!pointInPoly(poly, x, z)) continue;
-        // No lids in the river over a culvert.
-        if (this.terrain.isWater(x, z, 3)) continue;
-        const key = Math.floor(x / 32) * 65536 + Math.floor(z / 32);
-        let l = this.manholes.get(key);
-        if (!l) this.manholes.set(key, (l = []));
-        if (l.some((m) => Math.hypot(m.x - x, m.z - z) < 10)) continue;
-        l.push({ x, z, tube: t });
-        out.push({ x, z, yaw: Math.atan2(P[i * 3 + 3] - P[i * 3], P[i * 3 + 5] - P[i * 3 + 2]) });
-      }
+    for (const m of this.allShafts) {
+      if (!pointInPoly(poly, m.x, m.z)) continue;
+      const key = Math.floor(m.x / 32) * 65536 + Math.floor(m.z / 32);
+      let l = this.manholes.get(key);
+      if (!l) this.manholes.set(key, (l = []));
+      if (!l.includes(m)) l.push(m);
+      out.push({ x: m.x, z: m.z, yaw: Math.atan2(m.dx, m.dz) });
     }
     return out;
+  }
+
+  /** Street height (what the terrain holes and lids sit on). */
+  groundAt(x: number, z: number): number { return this.ground(x, z); }
+
+  /** Is this manhole open (lid off)? */
+  isOpen(m: { x: number; z: number }): boolean {
+    return this.openManholes.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 0.5);
+  }
+
+  /** Take the lid off for good: a hole in the street (square, along the trunk), the shaft's cap gone. */
+  openManhole(m: ManholeSpot): void {
+    if (this.isOpen(m)) return;
+    this.openManholes.push({ x: m.x, z: m.z });
+    this.holes.push(m.x, m.z, m.dx, m.dz, SHAFT_HS, SHAFT_HS);
+    // The chunk drawing the shaft is rebuilt without its cap.
+    const ti = this.tubes.indexOf(m.tube);
+    let seg = 0;
+    while (seg < m.tube.cum.length - 2 && m.tube.cum[seg + 1] <= m.s) seg++;
+    const key = `t${ti}:${Math.floor(seg / 8) * 8}`;
+    const o = this.built.get(key);
+    if (o) {
+      this.group.remove(o);
+      o.traverse((c) => { const mm = c as THREE.Mesh; if (mm.isMesh) mm.geometry.dispose(); });
+      this.built.delete(key);
+    }
+    this.lastBuildPos.set(1e9, 0, 0);
   }
 
   /** Every placed manhole lid (cells loaded so far), e.g. for the map. */
@@ -496,8 +547,8 @@ export class Underground {
   }
 
   /** Nearest manhole lid within r (for E and hints). */
-  nearestManhole(x: number, z: number, r: number): { x: number; z: number; tube: Tube } | null {
-    let best: { x: number; z: number; tube: Tube } | null = null, bd = r;
+  nearestManhole(x: number, z: number, r: number): ManholeSpot | null {
+    let best: ManholeSpot | null = null, bd = r;
     const i0 = Math.floor((x - r) / 32), i1 = Math.floor((x + r) / 32), j0 = Math.floor((z - r) / 32), j1 = Math.floor((z + r) / 32);
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       for (const m of this.manholes.get(i * 65536 + j) ?? []) {
@@ -528,6 +579,7 @@ export class Underground {
     this.life.update(dt, player, under && this.inSewerArea(player.x, player.y + 0.5, player.z));
     this.slimes.update(dt, player, under);
     this.shaftMat.color.setScalar(0.5 * G.uDayLight.value);
+    this.lidGlowMat.color.copy(this.shaftMat.color);
     if (this.deep) {
       const c = cam.position, D = this.deep.plan;
       const camUnder = under || this.isUnder(c.x, c.y, c.z);
@@ -704,6 +756,8 @@ export class Underground {
       perim.push(perim[k] + Math.hypot(l1 - l0, h1 - h0));
     }
     const cuts = this.roomCuts.get(t) ?? [];
+    // Manhole shafts in this chunk's reach: the vault is open over them.
+    const shafts = sewer ? (this.shafts.get(t) ?? []).filter((m) => m.s > t.cum[i0] - SHAFT_HS && m.s < t.cum[i1] + SHAFT_HS) : [];
     const halls = this.boxes.filter((bb) => bb.kind === 'station');
     /** Exit signs: x, y, z, facing (fx, fz) each. */
     const signs: number[] = [];
@@ -747,7 +801,10 @@ export class Underground {
         const pieces = sewer && others.length ? keptPieces(others, myIdx, A, B, C, D, h0 <= 0 && h1 <= 0) : FULL;
         // Side room doorways: the wall on their side is cut out up to the door's top.
         const wallSide = l0 >= hw - 0.2 && l1 >= hw - 0.2 ? 1 : l0 <= -(hw - 0.2) && l1 <= -(hw - 0.2) ? -1 : 0;
-        const doors = wallSide && segCuts.length ? segCuts.filter((c) => c.side === wallSide) : [];
+        let doors = wallSide && segCuts.length ? segCuts.filter((c) => c.side === wallSide) : [];
+        // The vault over a manhole shaft: cut out along the shaft (the shaft's walls close it, see shaftMesh).
+        const archSide = sewer && Math.min(h0, h1) >= 1.6 - 1e-3 ? (Math.min(l0, l1) >= SHAFT_IN - 1e-3 ? 1 : Math.max(l0, l1) <= -SHAFT_IN + 1e-3 ? -1 : 0) : 0;
+        if (archSide && shafts.length) doors = shafts.filter((m) => m.side === archSide).map((m) => ({ s0: m.s - SHAFT_HS, s1: m.s + SHAFT_HS, top: Infinity, side: m.side }));
         for (const [pa, pb] of pieces) for (const [ta, tb, clip] of doors.length ? splitDoors(pa, pb, doors, s0, s1) : [[pa, pb, -Infinity] as [number, number, number]]) {
           let PA = A, PB = B, PC = C, PD = D, V0 = v0, V1 = v1;
           if (clip > -Infinity) {
@@ -838,7 +895,9 @@ export class Underground {
       }
     }
     const wet = new MeshBuilder([{ name: 'uv', size: 2 }]);
-    if (sty) this.sewerDressing(t, i0, i1, mb, wet, others.map((q) => q.o), cuts, sty);
+    // (Pipes, outlets and ribs keep clear of the shafts and their ladders.)
+    if (sty) this.sewerDressing(t, i0, i1, mb, wet, others.map((q) => q.o), [...cuts, ...shafts.map((m) => ({ s0: m.s - SHAFT_HS - 0.3, s1: m.s + SHAFT_HS + 0.3, top: 0, side: m.side }))], sty);
+    for (const m of shafts) if (m.s >= t.cum[i0] && m.s < t.cum[i1]) this.shaftMesh(m, mb, sty);
     // Dead ends get a brick end wall (ends that open into another sewer stay open).
     if (sewer) {
       const n = P.length / 3;
@@ -902,30 +961,36 @@ export class Underground {
       }
       g.add(new THREE.Mesh(toGeometry(wg.build()), this.waterMat));
       if (!wet.empty) g.add(new THREE.Mesh(toGeometry(wet.build()), this.waterMat));
-      // Daylight through the manhole lids (fades with the day): the lid glowing overhead and a soft
-      // pool of light on the walkways and the water under it — no beam standing in the way.
+      // Daylight through the manhole lids (fades with the day): the lid's pick holes glowing at the top
+      // of the shaft (an open one lets the sky in) and a soft pool of light on the walkway and the water.
       const sh = new MeshBuilder([{ name: 'color', size: 3, type: 'u8n' }]);
-      const total = t.cum[t.cum.length - 1];
-      for (let s = 22.5; s < total; s += 45) {
-        if (s < t.cum[i0] || s >= t.cum[i1]) continue;
-        const q = pointOnTube(t, s);
-        if (!q || this.terrain.isWater(q.x, q.z, 3)) continue;
-        const top = q.y + t.height - 0.03, SEG = 16, RINGS = 5, R = 1.5;
-        sh.set('color', 1, 0.96, 0.88);
-        const c0 = sh.v(q.x, top, q.z, 0, -1, 0);
-        for (let k = 0; k < SEG; k++) { const a = (k / SEG) * Math.PI * 2; sh.v(q.x + Math.cos(a) * 0.34, top, q.z + Math.sin(a) * 0.34, 0, -1, 0); }
-        for (let k = 0; k < SEG; k++) sh.tri(c0, c0 + 1 + k, c0 + 1 + ((k + 1) % SEG));
-        // The pool: rings of vertices, on the water inside the channel and on the walkways outside.
-        sh.set('color', 0.6, 0.58, 0.53);
-        const base = sh.v(q.x, q.y - 0.14, q.z, 0, 1, 0);
+      const glow = new MeshBuilder([{ name: 'color', size: 3, type: 'u8n' }]);
+      for (const m of shafts) {
+        if (m.s < t.cum[i0] || m.s >= t.cum[i1]) continue;
+        const open = this.isOpen(m), SEG = 16, RINGS = 5, R = open ? 1.8 : 1.5;
+        if (!open) {
+          // (Its own mesh, facing down only: from the street it must not shine through the lid.)
+          const c = shaftPoint(m, LID_LAT, 0, this.ground(m.x, m.z) - m.floor - 0.06);
+          glow.set('color', 1, 0.96, 0.88);
+          const c0 = glow.v(c[0], c[1], c[2], 0, -1, 0);
+          for (let k = 0; k < SEG; k++) { const a = (k / SEG) * Math.PI * 2; glow.v(c[0] + Math.cos(a) * 0.3, c[1], c[2] + Math.sin(a) * 0.3, 0, -1, 0); }
+          for (let k = 0; k < SEG; k++) glow.tri(c0, c0 + 1 + k, c0 + 1 + ((k + 1) % SEG));
+        }
+        // The pool: rings of vertices, on the walkway (and the water, where it reaches the channel).
+        const q = shaftPoint(m, LID_LAT, 0, 0.015);
+        const lit = open ? 1 : 0.6;
+        sh.set('color', lit, lit * 0.96, lit * 0.88);
+        const base = sh.v(q[0], q[1], q[2], 0, 1, 0);
         const ring0 = base + 1;
         for (let r = 1; r <= RINGS; r++) {
-          const rr = (r / RINGS) * R, f = Math.pow(1 - r / RINGS, 2) * 0.6;
+          const rr = (r / RINGS) * R, f = Math.pow(1 - r / RINGS, 2) * lit;
           sh.set('color', f, f * 0.96, f * 0.88);
           for (let k = 0; k < SEG; k++) {
-            const a = (k / SEG) * Math.PI * 2, ox = Math.cos(a) * rr, oz = Math.sin(a) * rr;
-            const lat = Math.abs(-q.dz * ox + q.dx * oz);
-            sh.v(q.x + ox, lat < 0.6 ? q.y - 0.14 : q.y + 0.015, q.z + oz, 0, 1, 0);
+            const a = (k / SEG) * Math.PI * 2;
+            // Across the trunk (u, from the centreline on the shaft's side) the pool stops at the wall.
+            const u = Math.min(SEWER_HW - 0.03, LID_LAT + Math.cos(a) * rr), v = Math.sin(a) * rr;
+            const p = shaftPoint(m, u, v, Math.abs(u) < 0.6 ? -0.14 : 0.015);
+            sh.v(p[0], p[1], p[2], 0, 1, 0);
           }
         }
         for (let k = 0; k < SEG; k++) sh.tri(base, ring0 + ((k + 1) % SEG), ring0 + k);
@@ -935,12 +1000,64 @@ export class Underground {
         }
       }
       if (!sh.empty) { const m = new THREE.Mesh(toGeometry(sh.build()), this.shaftMat); m.renderOrder = 3; g.add(m); }
+      if (!glow.empty) { const m = new THREE.Mesh(toGeometry(glow.build()), this.lidGlowMat); m.renderOrder = 3; g.add(m); }
     }
     return g;
   }
 
+  /**
+   * A manhole shaft (see MANHOLE_EVERY): its four walls from the vault's opening up to just under
+   * the street, the lid's underside while it is closed, and the ladder on the outer wall from the
+   * walkway to the top (rails, rungs every RUNG m, brackets into the wall).
+   */
+  private shaftMesh(m: ManholeSpot, mb: MeshBuilder, sty: SewerStyle | null): void {
+    const top = this.ground(m.x, m.z) - m.floor - 0.03, hs = SHAFT_HS;
+    const W = (lat: number, ds: number, y: number) => shaftPoint(m, lat, ds, y);
+    // Inward normal of a wall across the trunk (at lat, facing −side) and along it (at ±hs).
+    const nAcross = (sgn: number): [number, number, number] => [m.dz * m.side * sgn, 0, -m.dx * m.side * sgn];
+    const nAlong = (sgn: number): [number, number, number] => [m.dx * sgn, 0, m.dz * sgn];
+    const face = (A: number[], B: number[], C: number[], D: number[], n: [number, number, number], u0: number, u1: number, v0: number, v1: number, v2 = v1, v3 = v0) => {
+      const i = mb.v(A[0], A[1], A[2], n[0], n[1], n[2], u0, v0);
+      mb.v(B[0], B[1], B[2], n[0], n[1], n[2], u1, v3);
+      mb.v(C[0], C[1], C[2], n[0], n[1], n[2], u1, v2);
+      mb.v(D[0], D[1], D[2], n[0], n[1], n[2], u0, v1);
+      mb.quad(i, i + 1, i + 2, i + 3); mb.quad(i, i + 3, i + 2, i + 1);
+    };
+    if (sty) mb.set('aLayer', sty.layer).set('aTint', ...sty.tint);
+    // Outer wall (the trunk's wall going on up) and inner wall (from the vault).
+    face(W(SEWER_HW, -hs, 1.6), W(SEWER_HW, hs, 1.6), W(SEWER_HW, hs, top), W(SEWER_HW, -hs, top), nAcross(1), 0, hs * 2, 1.6, top);
+    const vin = SHAFT_VAULT[SHAFT_VAULT.length - 1][1];
+    face(W(SHAFT_IN, -hs, vin), W(SHAFT_IN, hs, vin), W(SHAFT_IN, hs, top), W(SHAFT_IN, -hs, top), nAcross(-1), 0, hs * 2, vin, top);
+    // End walls: down to the vault's curve.
+    for (const e of [-1, 1]) for (let k = 0; k + 1 < SHAFT_VAULT.length; k++) {
+      const [la, ya] = SHAFT_VAULT[k], [lb, yb] = SHAFT_VAULT[k + 1];
+      face(W(la, e * hs, ya), W(lb, e * hs, yb), W(lb, e * hs, top), W(la, e * hs, top), nAlong(-e), la, lb, ya, top, top, yb);
+    }
+    // The lid's underside (cast iron) while it is on.
+    if (!this.isOpen(m)) {
+      mb.set('aLayer', 11).set('aTint', 0.1, 0.1, 0.1);
+      face(W(SHAFT_IN, -hs, top + 0.01), W(SEWER_HW, -hs, top + 0.01), W(SEWER_HW, hs, top + 0.01), W(SHAFT_IN, hs, top + 0.01), [0, -1, 0], 0, 1, 0, 1);
+    }
+    // The ladder: galvanised rails and rungs, brackets into the wall.
+    mb.set('aLayer', 11).set('aTint', 0.46, 0.45, 0.42);
+    const L = LADDER_LAT, rt = top - 0.02;
+    for (const e of [-LADDER_HW, LADDER_HW]) {
+      const a = W(L, e, 0), b = W(L, e, rt);
+      mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.02, 0.02);
+      for (let y = 0.45; y < rt; y += 1.2) {
+        const p = W(L, e, y), q = W(SEWER_HW + 0.02, e, y);
+        mb.beam(p[0], p[1], p[2], q[0], q[1], q[2], 0.012, 0.02);
+      }
+    }
+    for (let y = RUNG; y < rt - 0.1; y += RUNG) {
+      const a = W(L, -LADDER_HW, y), b = W(L, LADDER_HW, y);
+      mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.015, 0.015);
+    }
+  }
+
   /** Daylight under the manholes (lid glow, light pool): additive, scaled by the daylight each frame. */
   private shaftMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, color: 0x000000, fog: false });
+  private lidGlowMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.FrontSide, color: 0x000000, fog: false });
 
   /**
    * A sewer chunk's furnishings by its trunk's style: pipes on brackets along the walls (stopping

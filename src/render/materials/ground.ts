@@ -16,25 +16,35 @@ export function createGroundMaterial(arrays: MaterialArrays): THREE.MeshStandard
     uTile: { value: arrays.tileMeters.slice(0, 16).concat(new Array(Math.max(0, 16 - arrays.tileMeters.length)).fill(2)) },
     uNight: G.uNight,
     uWet: G.uWet,
+    // Open manholes and metro entrances cut through the street's surfaces too.
+    uHoleA: terrainHoles.uHoleA, uHoleB: terrainHoles.uHoleB, uHoleN: terrainHoles.uHoleN,
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute float aLayer;\nvarying vec2 vMUv; varying float vLayer;`)
-      .replace('#include <uv_vertex>', `#include <uv_vertex>\nvMUv = uv; vLayer = aLayer;`);
+      .replace('#include <common>', `#include <common>\nattribute float aLayer;\nvarying vec2 vMUv; varying float vLayer; varying vec2 vHPos;`)
+      .replace('#include <uv_vertex>', `#include <uv_vertex>\nvMUv = uv; vLayer = aLayer;`)
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\nvHPos = (modelMatrix * vec4(transformed, 1.0)).xz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
         `#include <common>
 uniform sampler2DArray uAlb; uniform sampler2DArray uNrm; uniform float uTile[16];
-varying vec2 vMUv; varying float vLayer;
+varying vec2 vMUv; varying float vLayer; varying vec2 vHPos;
 uniform float uWet;
+uniform vec4 uHoleA[16]; uniform vec4 uHoleB[16]; uniform int uHoleN;
 ${GLSL_COMMON}
 vec4 gAR; vec4 gNH; vec2 gTuv; float gPud;`,
       )
       .replace(
         '#include <map_fragment>',
-        `int layer = int(vLayer + 0.5);
+        `for (int i = 0; i < 16; i++) {
+  if (i >= uHoleN) break;
+  vec2 hd = vHPos - uHoleA[i].xy;
+  float hu = dot(hd, uHoleA[i].zw), hv = -hd.x * uHoleA[i].w + hd.y * uHoleA[i].z;
+  if (abs(hu) < uHoleB[i].y && abs(hv) < uHoleB[i].x) discard;
+}
+int layer = int(vLayer + 0.5);
 gTuv = vMUv / uTile[layer];
 // Break up tiling with a large-scale rotation/offset per 37 m cell for natural layers.
 gAR = texture(uAlb, vec3(gTuv, vLayer));
@@ -69,7 +79,7 @@ if (uWet > 0.001) {
 }
 #endif`);
   };
-  mat.customProgramCacheKey = () => 'ground-v2';
+  mat.customProgramCacheKey = () => 'ground-v3';
   return mat;
 }
 
