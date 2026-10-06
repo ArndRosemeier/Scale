@@ -283,7 +283,14 @@ export class CityNews {
     };
     this.photos = this.photos.filter((p) => p.until > now);
     const photos = this.photos.map((p) => p.card).reverse();
-    const items = this.news.filter((n) => now - n.t < 36).slice(-(NEWS_CARDS - 1 - photos.length)).reverse();
+    // Newest first, one card per headline.
+    const seen = new Set<string>(), items: NewsItem[] = [];
+    for (let i = this.news.length - 1; i >= 0 && items.length < NEWS_CARDS - 1 - photos.length; i--) {
+      const n = this.news[i];
+      if (now - n.t >= 36 || seen.has(headline(n))) continue;
+      seen.add(headline(n));
+      items.push(n);
+    }
     const cards: NewsCard[] = [...photos, ...items.map((n) => ({ kind: storyKind(n), head: headline(n), sub: `${n.hood} · ${whenWord(n.t, now)}` }))];
     const a = areaCard();
     if (a) cards.push(a);

@@ -463,8 +463,8 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
     }
     for (const [b, p] of bands) {
       const v = ((b + 0.5) / 10) * 0.75;
-      // Strongest at both ends, faint in the middle.
-      const a = 0.1 + 0.16 * Math.abs(b - 4.5) / 4.5;
+      // Strongest at both ends (the rough end clearly red, not to be taken for a gang's turf), faint in the middle.
+      const a = b >= 5 ? 0.12 + 0.3 * (b - 4.5) / 4.5 : 0.1 + 0.16 * (4.5 - b) / 4.5;
       g.fillStyle = crimeColor(v, a);
       g.fill(p);
     }
