@@ -1510,7 +1510,7 @@ export class Underground {
     if (car) {
       const line = this.macro.metroLines[car.line];
       const name = this.stationNames.get(line.stations[car.next]) ?? '';
-      if (b.seat) return `Line ${line.name} to ${this.terminus(line, car.dir)} — next stop <b>${name}</b> · move or press <b>E</b> to get up`;
+      if (b.seat) return `Line ${line.name} to ${this.terminus(line, car.dir)} — ${car.dwell ? 'at' : 'next stop'} <b>${name}</b> · move or press <b>E</b> to get up`;
       if (seat) return car.open ? `<b>${name}</b> — press <b>E</b> to sit down, or walk out through the doors (departs in ${Math.ceil(car.left)} s)` : `Line ${line.name} to ${this.terminus(line, car.dir)} — next stop <b>${name}</b> · press <b>E</b> to sit down`;
       if (car.open) return `<b>${name}</b> — walk out through the doors or press <b>E</b> to get off (departs in ${Math.ceil(car.left)} s)`;
       if (car.dwell) return `<b>${name}</b> — doors closing`;

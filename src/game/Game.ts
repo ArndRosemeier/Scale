@@ -1085,6 +1085,8 @@ export class Game {
   private usableHint(): string | null {
     if (this.freeCam) return null;
     const metro = this.underground.metroHint(!!this.underground.ride && !this.player.seat && !!this.seatNear());
+    // On a platform bench the getting-up hint beats the platform's own.
+    if (metro && this.player.seat && !this.underground.ride) return 'Move or press <b>E</b> to get up';
     if (metro) return metro;
     // A hint offering E beats a passive one ("Bring the bag back …"): someone to help up right
     // here must show even while the player carries loot home.
