@@ -58,6 +58,11 @@ export interface PedAgent {
   /** Placed inside a building (interior): no street movement. */
   inside?: boolean;
   floorY?: number;
+  /**
+   * Indoors in a landmark one walks into (sim/LandmarkCrowds walks them): in plain view, so the
+   * hero bumps into them and can hit them like anyone on the street.
+   */
+  hall?: boolean;
   /** Underground (a sewer hideout's crew): walks the tunnels' and rooms' floors (Pedestrians.underFloor), never the street. */
   under?: boolean;
   /** Why the agent is down (Down state): the player's doing, a collapse, an accident, other (cars). */
@@ -712,8 +717,8 @@ export class Pedestrians {
   onRemove?: (a: PedAgent) => void;
 
   /** A citizen placed inside a building (sitting, sleeping or standing). */
-  spawnInside(c: Citizen, x: number, y: number, z: number, yaw: number, pose: 'sit' | 'sleep' | 'stand'): void {
-    if (this.byId.has(c.id)) return;
+  spawnInside(c: Citizen, x: number, y: number, z: number, yaw: number, pose: 'sit' | 'sleep' | 'stand'): PedAgent | null {
+    if (this.byId.has(c.id)) return null;
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y, heading: yaw, speed: 0, pref: 1.3, state: pose === 'sit' ? PState.Sit : pose === 'sleep' ? PState.Sleep : PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: x, lookZ: z, lookY: y,
@@ -721,13 +726,14 @@ export class Pedestrians {
     };
     this.agents.push(a);
     this.byId.set(c.id, a);
+    return a;
   }
 
   /** Remove the indoor agents of a building footprint (interior unloaded). */
   removeInside(poly: number[]): void {
     for (let i = this.agents.length - 1; i >= 0; i--) {
       const a = this.agents[i];
-      if (a.inside && pointInPolyFast(poly, a.x, a.z)) this.remove(i);
+      if (a.inside && !a.hall && pointInPolyFast(poly, a.x, a.z)) this.remove(i);
     }
   }
 
