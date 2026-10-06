@@ -2,14 +2,30 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.055 — 2026-10-06
+## 0.059 — 2026-10-06
 
 - **The town hall and the cathedral are full of people now**, by the time of day.
   - **Cathedral**: the priest is there from morning to evening. At the services at 9:00 and 18:00 the pews fill, the priest stands behind the altar and two altar servers sit in the choir stalls. Through the day visitors come and go. They stand at the aisle windows and the rose windows looking up at the glass, look up into the crossing or the dome, stop at the font and the pulpit, and rest in the pews. In the evening a few people sit and pray. At night it is empty.
-  - **Town hall** (open 8:00–18:00): clerks at the information desk and the service counter, people asking at the counter and waiting on the benches, visitors in the hall, on the benches under the galleries and up on the galleries looking down. Upstairs, the mayor sits at the desk with an aide in the office (9:00–17:00). Council sessions fill the chamber from 10:00 to 12:00 and 14:00 to 16:00. Weddings are at 11:00, 13:00 and 15:00 in the wedding room, with the couple at the table (the bride in white), the registrar and rows of guests. At night a porter sits at the desk.
+  - **Town hall** (open 8:00–18:00): clerks standing behind the information desk and the service counter, people asking at the counter and waiting on the benches, visitors in the hall, on the benches under the galleries and up on the galleries looking down. Upstairs, the mayor sits at the desk with an aide in the office (9:00–17:00). Council sessions fill the chamber from 10:00 to 12:00 and 14:00 to 16:00. Weddings are at 11:00, 13:00 and 15:00 in the wedding room, with the couple at the table (the bride in white), the registrar and rows of guests. At night a porter keeps the desk.
   - People walk in from down the street, up the steps and through the door to where they are going, and leave the same way. Staff come and go with their hours. The priest wears black and the clerks, mayor and council wear suits.
   - They react like people outside: a blast or a monster sends them running out of the door, a commotion makes them stop and look, and you bump into them and can knock them down (they get up after a few seconds and run). If the cathedral is badly damaged, everyone leaves.
+  - In a queue at the door they keep a little room to the one in front, and they wait for you to step aside rather than shoving you down the steps. Nobody holds a coffee cup or an umbrella inside.
 - The choir stalls in the cathedral now face each other across the chancel. They used to face the walls.
+
+## 0.058 — 2026-10-06
+
+- **Long speech bubbles wrap now.** A longer line over someone's head used to run out of its bubble; now it breaks onto several lines and the bubble grows taller, for every kind of bubble (passers-by, street characters, officers, protesters and fans). Longer lines also stay up a little longer so you can read them.
+
+## 0.057 — 2026-10-06
+
+- **Metro entrance stairs no longer go down and back up.** Where the street dipped or a sewer crossed the way, the passage from a station entrance sank, climbed again on a bare ramp and only then took the stairs down to the platform. The corridor under the street now only ever goes down (about 1 in 40 entrances was affected), and it no longer dips into its own station hall on the way (where it did, it cut through the hall's roof and lost its walls).
+## 0.056 — 2026-10-06
+
+- **You can talk to more people now**: people sitting on benches and café terraces (they stay seated), street performers and characters (the busker, the mime, the living statue, the chicken mascot, the doomsayer, the lost tourist, even the sleepwalker), police officers, paramedics, soldiers, shopkeepers and cleanup crews, as long as they are not busy fighting or fleeing. Each of them answers as what they are: the mime only mimes, the statue barely moves its lips, the officer introduces themselves by rank. Performers carry on with their act while you talk, and the map remembers them as what you met them as. Firefighters can be talked to as well. Cleanup workers no longer end the talk when they step back to their spot, the map remembers officers, paramedics and shopkeepers by their role too, and people met in a role are always grown-ups.
+
+## 0.055 — 2026-10-06
+
+- **Feedback**: a new "Feedback" link next to the version label, in the main menu and the pause menu, opens a small form. Pick Bug, Idea, Praise or Other, write your message, and Send opens your mail program with it ready to go (with the game version, city seed and browser added, if you like). The address it goes to is never written anywhere on the site or in its code; the game only puts it together at the moment you press Send, so spam bots scanning the page find nothing.
 
 ## 0.054 — 2026-10-06
 
