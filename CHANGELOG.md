@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.074 — 2026-10-06
+
+- **You can walk to the starship (and every other landmark) again.** In big cities the houses around a landmark's square could close into an unbroken ring, so the only way in was to fly (seed 873738 at full size had its starship, town hall, cathedral and stadium walled in). Now a paved way leads from the middle of each side of a landmark's square straight out to the street, and no house is built on it.
+
 ## 0.073 — 2026-10-06
 
 - **People you know no longer outrun you.** After you leave someone you talked to, they carry on at a walking pace (or ride, when they and where they are going are both far from you) instead of jumping along their day plan, which runs many times faster than real time. Their map dot moves the same way, and their body only shows up again near where they plausibly are, so you can't run away and find them waiting ahead of you. When you come back near them, they are back in the street around their dot, walking on to where their day takes them, so you can talk to them again.

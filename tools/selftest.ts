@@ -276,6 +276,28 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
   console.log(`seed ${seed} size ${size}: ${macro.cells.length} cells, ${macro.metroStations.length} stations, ${buildings} buildings checked in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
+// Landmark sites are never walled in by buildings: from the middle of each side, walking straight
+// out reaches a sidewalk or street before any building (seed 873738 at full size had its starship,
+// town hall, cathedral and stadium ringed by houses).
+{
+  const terrain = new Terrain(makeProfile({ seed: 873738, size: 1 }));
+  const macro = buildMacroPlan(terrain);
+  for (const lm of macro.landmarks.filter((l) => l.cell >= 0)) {
+    const plan = planCell(macro, macro.cells.find((c) => c.id === lm.cell)!, terrain);
+    const walk = [...plan.sidewalks, ...plan.carriageway];
+    const onWalk = (x: number, z: number) => walk.some((s) => pointInPoly(s.outer, x, z) && !s.holes.some((h) => pointInPoly(h, x, z)));
+    let open = 0;
+    for (const [du, dv] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      for (let d = 0; d < 300; d++) {
+        const pts = [-2.5, 0, 2.5].map((s) => siteToWorld(lm, du * (lm.hu + d) + (du ? 0 : s), dv * (lm.hv + d) + (dv ? 0 : s)));
+        if (pts.some(([x, z]) => plan.buildings.some((b) => pointInPoly(b.poly, x, z)))) break;
+        if (pts.every(([x, z]) => onWalk(x, z))) { open++; break; }
+      }
+    }
+    check(open === 4, `seed 873738 ${lm.name}: a way in from the street on every side (${open} of 4)`);
+  }
+}
+
 // Cafés, restaurants and their terraces (plan/eatery.ts, plan/terrace.ts): deterministic; outdoor
 // seating never on a footprint, in a doorway, at a crossing or in the walking corridor of a
 // sidewalk; parklets only in the parking strip of local streets; plausible counts per district;

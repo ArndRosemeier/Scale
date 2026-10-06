@@ -231,7 +231,11 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
     // A block holding a landmark site: the site is cut out (its ground comes later), the rest as usual.
     const hit = sites.filter((l) => shapeTouchesSite(blk, l));
     if (hit.length) {
-      const rest = difference(shapesToPolys([blk]), hit.map((l) => siteRect(l, -l.hu - 1.5, -l.hv - 1.5, l.hu + 1.5, l.hv + 1.5)));
+      // Paved approaches from the middle of each side out to the street, so buildings on the
+      // leftovers never wall a site in (one could only fly in otherwise).
+      const ways = hit.flatMap(siteApproaches);
+      for (const s of difference(shapesToPolys(intersection(ways, shapesToPolys([blk]))), hit.map((l) => l.site))) if (shapeArea(s) > 20) plan.plazas.push(s);
+      const rest = difference(shapesToPolys([blk]), [...hit.map((l) => siteRect(l, -l.hu - 1.5, -l.hv - 1.5, l.hu + 1.5, l.hv + 1.5)), ...ways]);
       // (Lots are cut from outlines alone: a site inside the block must not stay a hole.)
       for (const piece of rest.flatMap((sh) => withoutHoles(sh))) {
         const a = shapeArea(piece);
@@ -401,6 +405,15 @@ function withoutHoles(sh: Shape, depth = 0): Shape[] {
     for (const s of difference([ensureCCW(half)], sh.holes)) out.push(...withoutHoles(s, depth + 1));
   }
   return out;
+}
+
+/** Strips from the middle of each side of a site straight out (cut from the blocks round it). */
+function siteApproaches(lm: Landmark): Poly[] {
+  const w = clamp(Math.min(lm.hu, lm.hv) * 0.3, 8, 16) / 2, L = 400, hu = lm.hu, hv = lm.hv;
+  return [
+    siteRect(lm, -w, -hv - L, w, -hv + 1), siteRect(lm, -w, hv - 1, w, hv + L),
+    siteRect(lm, -hu - L, -w, -hu + 1, w), siteRect(lm, hu - 1, -w, hu + L, w),
+  ];
 }
 
 /** Does a block overlap a landmark's site? */
