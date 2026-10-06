@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.075 — 2026-10-06
+
+- **No more wall to walk through on the way down into the metro.** The ground is drawn in square tiles, and along every tile edge a curtain hangs a few metres down into the earth to hide the seams between them. It was hidden only once the camera itself was underground, so in an entrance corridor right under the street, with the camera still up at street level, a corridor crossing a tile edge had a wall across it that you walked through. It now stays hidden whenever you are in a stairwell or passage.
+- **Nobody walks on the tracks any more.** Commuters can no longer step off the edge of a platform. People halfway through a door when it shuts now stay on the train instead of being left standing where the car was. Anyone who does end up down on the track bed, for example knocked off the platform, climbs straight back up.
+
 ## 0.074 — 2026-10-06
 
 - **Manholes are climbed now, not teleported through.** Press E by a lid and the hero squats, lifts its edge and drags the heavy cover aside, turns round, lowers themselves over the edge and climbs down a ladder to the sewer's walkway, hands and feet on the rungs. From below, the hero walks to the ladder, climbs up, pushes the lid up and off if it is still on, and climbs out over the edge onto the street. Every manhole has a real brick shaft now, on one side of the sewer over the walkway, with the ladder on its wall and daylight falling in through the pick holes (more when the lid is off). The camera looks down the shaft from the street while the hero is in it and watches from inside the sewer below. An opened manhole stays open with its lid lying beside it, and the hole now cuts through the road surface too (before, an open manhole on the road was hidden under the asphalt).

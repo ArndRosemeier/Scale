@@ -25,7 +25,13 @@ export interface LifeReport {
 }
 
 /** Run station life around the hall `hallIdx` for `secs` seconds. */
-export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallIdx: number, secs: number): LifeReport {
+/**
+ * `slow` (0 … 1) holds people back in the doors (a crowd, the player in the way): boarding and
+ * alighting walk at that fraction of their pace, so the doors shut on some of them. `shove`: every few
+ * seconds someone waiting is made to walk at the tracks for a while, and someone else is put down
+ * on the track bed (as if knocked off the platform): neither may stay there.
+ */
+export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallIdx: number, secs: number, slow = 1, shove = false): LifeReport {
   const { input } = metroInput(macro, terrain);
   const halls = input.halls;
   const tubes: Tube[] = [...macro.metroLines.map(metroTube), ...input.sewers, ...(input.passages ?? []).map((p) => p.tube)];
@@ -67,6 +73,7 @@ export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallId
   const rep: LifeReport = { spawned: 0, boarded: 0, alighted: 0, left: 0, crossed: 0, stuck: 0, onTracks: 0, offFloor: 0, floorGap: 0, halls: 0 };
   const dt = 1 / 30;
   const bad = new Set<PedAgent>();
+  const pushed = new Map<PedAgent, { left: number; b: (typeof halls)[number] }>(), dropped = new Set<PedAgent>();
   for (let t = 0; t < secs; t += dt) {
     // Pedestrians first (as in the game), then the trains move, then station life places its riders.
     P.rebuildGrid();
@@ -83,9 +90,26 @@ export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallId
       } });
     });
     life.update(dt, px, py, pz);
+    if (slow < 1) for (const q of life.list) if ((q.mode === 'board' || q.mode === 'alight') && q.a.actor) q.a.actor.speed *= slow;
+    if (shove) {
+      const waiting = life.list.filter((q) => q.mode === 'wait' && !q.seated && q.hall >= 0 && !bad.has(q.a));
+      if (Math.floor(t / 4) !== Math.floor((t - dt) / 4) && waiting.length >= 2) {
+        pushed.set(waiting[0].a, { left: 3, b: halls[waiting[0].hall] });
+        const q = waiting[1], b = halls[q.hall];
+        q.a.x = b.cx; q.a.z = b.cz; q.a.y = b.y0;
+        dropped.add(q.a);
+      }
+      for (const [a, p] of pushed) {
+        if (p.left <= 0 || !a.actor) { pushed.delete(a); continue; }
+        p.left -= dt;
+        a.actor.goal = { x: p.b.cx * 2 - a.x, z: p.b.cz * 2 - a.z };
+        a.actor.speed = 1.4;
+      }
+    }
     // Walkers stay on floors: never down on the tracks, never off a floor.
     for (const q of life.list) {
       if (q.mode === 'ride' || bad.has(q.a)) continue;
+      if (dropped.delete(q.a)) continue;
       const a = q.a, f = floorAt(a.x, a.y + 0.5, a.z);
       if (f === null) { rep.offFloor++; bad.add(a); continue; }
       if (t > 1) rep.floorGap = Math.max(rep.floorGap, Math.abs(f - a.y));

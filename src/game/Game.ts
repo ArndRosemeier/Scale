@@ -1132,7 +1132,12 @@ export class Game {
       n++;
     }
     terrainHoles.uHoleN.value = n;
-    terrainHoles.uUnder.value = c.y < this.terrain.height(c.x, c.z) - 0.5 ? 1 : 0;
+    // Also while the player is in an entrance's stairwell or a passage with the camera still up at
+    // street level: the skirts along the tiles' edges hang through the passages there, walls one
+    // walked through on the way down.
+    const p = this.player.pos;
+    const under = c.y < this.terrain.height(c.x, c.z) - 0.5 || this.underground.inHole(c.x, c.z) || (!this.freeCam && this.underground.floorAt(p.x, p.y + 0.5, p.z) !== null);
+    terrainHoles.uUnder.value = under ? 1 : 0;
   }
 
   /** Inside a building (an active interior) or a landmark's rooms (the town hall)? */
