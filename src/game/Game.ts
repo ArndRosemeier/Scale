@@ -753,6 +753,8 @@ export class Game {
     const focus = this.freeCam ? cam.position : this.player.pos;
     this.sky.setShadowExtent(this.freeCam ? 80 + Math.max(0, cam.position.y - this.terrain.height(cam.position.x, cam.position.z)) * 1.5 : 25 + this.player.height * 12 + cam.position.distanceTo(this.player.pos) * 1.2);
     this.sky.underground = clamp(this.sky.underground + (this.camRig.underground ? dt : -dt) * 2.5, 0, 1);
+    // (The manhole climb cuts between the street and the sewer: the light follows at once, no washed-out sewer.)
+    if (this.manhole.active) this.sky.underground = this.camRig.underground ? 1 : 0;
     {
       // In the deep realm's caves: their own light (teal haze in the Glow, a red one in the Deep).
       const F = this.underground.deep?.field, c = this.renderer.camera.position;
