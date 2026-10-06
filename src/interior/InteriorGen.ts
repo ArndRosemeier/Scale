@@ -17,7 +17,7 @@ export type FurnKind =
   | 'diningTable' | 'chair' | 'kitchenRow' | 'fridge' | 'stove' | 'toilet' | 'bathtub' | 'sink' | 'shower'
   | 'desk' | 'officeChair' | 'monitor' | 'meetingTable' | 'shelf' | 'bookshelf' | 'plant' | 'floorLamp' | 'painting'
   | 'counter' | 'shopShelf' | 'rack' | 'cafeTable' | 'barCounter' | 'palletRack' | 'crate' | 'pew' | 'altar' | 'reception' | 'column' | 'clothesStack'
-  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain';
+  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror';
 
 export interface Room {
   type: RoomType;
@@ -40,7 +40,8 @@ export interface Furn {
   w: number; d: number; h: number;
   color: [number, number, number];
   /** People can use it: 'sit' | 'sleep' | 'work' | 'stand' */
-  use?: 'sit' | 'sleep' | 'work' | 'stand';
+  /** 'dress': the fitting mirror of a clothes shop (E there opens the character creator). */
+  use?: 'sit' | 'sleep' | 'work' | 'stand' | 'dress';
 }
 
 /** One flight of stairs: start (bottom) of its centre line, direction, width, run (m along), heights. */
@@ -222,6 +223,17 @@ class Frame {
  * `stair`: the building's stair core; `up`: stairs from this storey to the next (the core fits
  * both); `below`: stairs arrive from the storey below.
  */
+/** Ground-floor shop layout of a building: 0 café (eateries), 1 clothes shop, 2 grocery (see planFloor). */
+export function shopKindOf(b: BuildingDesc): number {
+  const sk = (b.seed >>> 7) % 9;
+  return b.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
+}
+
+/** Does the building have a clothes shop (with a fitting mirror) on its ground floor? */
+export function isClothesShop(b: BuildingDesc): boolean {
+  return (b.shopfront || b.use === 'retail') && b.style !== 'church' && b.use !== 'industrial' && b.use !== 'parking' && shopKindOf(b) % 3 === 1;
+}
+
 export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number, height: number, shopKind: number, lift: LiftShaft | null = null, stair: StairCore | null = null, up = false, below = false): FloorPlan {
   const r = new Rng((b.seed ^ (floor * 0x9e3779b1)) >>> 0);
   const F = new Frame(poly);
@@ -354,6 +366,13 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
         }
         put('rug', (u0 + uE) / 2, (vFront + vBack) / 2, along, Math.min(4, uE - u0 - 2), Math.min(3, vBack - vFront - 2), 0.01, r.pick(FABRIC));
         for (let u = u0 + 2; u < uE - 2; u += 3) put('painting', u, vBack - 0.06, along, 0.7, 0.04, 1.6, [0.75, 0.8, 0.85]);
+        // A full-length fitting mirror on a side wall, facing into the shop: change your look there.
+        // Several spots are offered; the first that survives the fit-inside filter below is kept.
+        const vm = (vFront + vBack) / 2;
+        for (const [u, v, du, dv] of [[u0 + 0.15, vm, 1, 0], [uE - 0.15, vm, -1, 0], [u0 + 0.15, vm - 1.5, 1, 0], [uE - 0.15, vm - 1.5, -1, 0], [(u0 + uE) / 2, vBack - 0.9, 0, -1]]) {
+          const a = F.P(u, v), b2 = F.P(u + du, v + dv);
+          put('tallMirror', u, v, Math.atan2(b2[0] - a[0], b2[1] - a[1]), 0.7, 0.08, 1.85, [0.3, 0.21, 0.14], 'dress');
+        }
       }
       // Wall shelving along the back wall, facing the shop.
       for (let u = u0 + 1.1; u + 1.9 < uE - 0.4; u += 2.0) put('shopShelf', u + 0.9, vBack - 0.32, along, 1.8, 0.5, 2.1, fixture);
@@ -494,6 +513,9 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     }
     return true;
   });
+  // One fitting mirror per clothes shop (spare candidate spots go).
+  const firstDress = plan.furniture.findIndex((f) => f.use === 'dress');
+  plan.furniture = plan.furniture.filter((f, i) => f.use !== 'dress' || i === firstDress);
   // Ceiling lights per room: one in the middle of a small room, a grid in big ones; homes and
   // cafés get pendant lamps (over the table where there is one), offices and shops panels.
   for (const room of plan.rooms) {

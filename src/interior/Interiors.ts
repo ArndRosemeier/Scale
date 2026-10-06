@@ -9,7 +9,7 @@ import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer, CellState } from '../stream/CityStreamer';
 import type { Collision } from '../world/Collision';
-import { planFloor, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore } from './InteriorGen';
+import { planFloor, shopKindOf, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore } from './InteriorGen';
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
 import { buildFloorMeshes, wallCollisionSegments, furnitureCollision } from './InteriorBuilder';
@@ -238,8 +238,7 @@ export class Interiors {
     if (!fl) return;
     const poly = this.floorPoly(a, f);
     // Cafés and restaurants (plan/eatery.ts) get the café layout (shopKind % 3 == 0), other shops never do.
-    const sk = (a.ref.desc.seed >>> 7) % 9;
-    const shopKind = a.ref.desc.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
+    const shopKind = shopKindOf(a.ref.desc);
     // Stairs up from this storey, and arriving from the one below.
     const up = this.stairs(a, f) && this.stairs(a, f + 1);
     const below = f > 0 && this.stairs(a, f) && this.stairs(a, f - 1);
@@ -440,6 +439,25 @@ export class Interiors {
       return false;
     }
     return true;
+  }
+
+  /** Fitting mirrors of the active interiors: centre, floor height and facing (yaw; the glass faces local +z). */
+  dressMirrors(): { x: number; z: number; y: number; yaw: number }[] {
+    const out: { x: number; z: number; y: number; yaw: number }[] = [];
+    for (const a of this.active.values()) for (const f of a.floors.values()) for (const fu of f.plan.furniture) if (fu.use === 'dress') out.push({ x: fu.x, z: fu.z, y: f.plan.y, yaw: fu.yaw });
+    return out;
+  }
+
+  /** The fitting mirror of a clothes shop within reach of (x, y, z), or null. */
+  dressMirrorNear(x: number, y: number, z: number, r = 1.5): { x: number; z: number } | null {
+    for (const a of this.active.values()) {
+      if (!pointInPoly(a.ref.poly, x, z)) continue;
+      for (const f of a.floors.values()) {
+        if (Math.abs(f.plan.y - y) > 0.6) continue;
+        for (const fu of f.plan.furniture) if (fu.use === 'dress' && Math.hypot(fu.x - x, fu.z - z) < r) return { x: fu.x, z: fu.z };
+      }
+    }
+    return null;
   }
 
   /**
