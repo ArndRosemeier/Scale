@@ -1705,3 +1705,8 @@ export function createFurnitureMaterial(): THREE.MeshStandardMaterial {
   m.customProgramCacheKey = () => 'furniture-v1';
   return m;
 }
+
+/** The manhole cover's picture (signage atlas cell 9) for a lid drawn outside the furniture batches. */
+export function manholeCoverMap(): { map: THREE.Texture; rect: [number, number, number, number] } {
+  return { map: getSignAtlas(), rect: cellRect(9) };
+}

@@ -28,6 +28,23 @@ import { ClipRig, clipLibrary, clipSettings } from './clips';
 
 export type GroundFn = (x: number, y: number, z: number) => number | null;
 
+/** A hand or foot onto a world point (see Animator.limbs): weight 0..1, the elbow / knee's bend direction. */
+export interface LimbGoal {
+  p: THREE.Vector3;
+  w: number;
+  /** Arms: in the chest's frame (outward for this arm, up, forward); legs: in the body's frame. */
+  pole?: [number, number, number];
+  /** Hands: laid flat, palm down, the fingers pointing this (world) way (on a floor, a ledge). */
+  flat?: THREE.Vector3 | null;
+}
+export interface LimbGoals {
+  L?: LimbGoal; R?: LimbGoal;
+  footL?: LimbGoal; footR?: LimbGoal;
+  /** Finger curl per hand (a grip ≈ 1.2, a flat palm ≈ 0.1) and its weight. */
+  curl?: { L?: number; R?: number };
+  curlW?: number;
+}
+
 export interface AnimInput {
   anim: AnimState;
   /** World velocity (m/s). */
@@ -75,6 +92,7 @@ const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE
 const _rt = new THREE.Vector3(), _rw = new THREE.Vector3(), _rg = new THREE.Vector3(), _rp = new THREE.Vector3();
 const _ra = new THREE.Vector3(), _rb = new THREE.Vector3(), _rc = new THREE.Vector3(), _rd = new THREE.Vector3(), _re = new THREE.Vector3(), _rf = new THREE.Vector3();
 const _rq = new THREE.Quaternion();
+const _m0 = new THREE.Matrix4(), _m1 = new THREE.Matrix4();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _v4 = new THREE.Vector3(), _v5 = new THREE.Vector3();
 
 interface FingerRig {
@@ -194,6 +212,11 @@ export class Animator {
    * physics/ragdoll): fills the pose, returns its weight 0..1. Foot IK is off while it leads.
    */
   override: ((p: Pose) => number) | null = null;
+  /**
+   * Hands (their grip points) and feet (ankles) onto world points after the pose, for a scripted
+   * scene (rungs of a ladder, a street's edge, a manhole lid): two-bone IK per limb, blended by its weight.
+   */
+  limbs: LimbGoals | null = null;
   // Superpower layer: pose scratch, crouch/dash weights, the leap's last vertical speed, heavy landing.
   private pw: Pose;
   private pwTmp: Pose;
@@ -417,6 +440,7 @@ export class Animator {
     this.apply(out);
     this.fingerPose(inp, action?.def, dt);
     if (action?.def.reach && actionCtx && this.actionW > 0.02) this.reachIK(action.def, actionCtx, this.actionW);
+    if (this.limbs) this.limbIK(this.limbs);
     // ---- IK & face (near only)
     if (lod === 0 && ground && ovW < 0.5 && (fam === 'ground' || fam === 'sit' || fam === 'stunned') && this.famW.get('ground')! > 0.5) this.footIK(ground, dt);
     else { this.footOff[0] = this.footOff[1] = 0; this.pelvisOff = approach(this.pelvisOff, 0, 8, dt); }
@@ -1351,6 +1375,12 @@ export class Animator {
       if (def.curl.L !== undefined) cL += (def.curl.L - cL) * w;
       if (def.curl.R !== undefined) cR += (def.curl.R - cR) * w;
     }
+    const lc = this.limbs?.curl;
+    if (lc) {
+      const w = clamp(this.limbs!.curlW ?? 1, 0, 1);
+      if (lc.L !== undefined) cL += (lc.L - cL) * w;
+      if (lc.R !== undefined) cR += (lc.R - cR) * w;
+    }
     // Flight: fists ahead, relaxed hands otherwise (empty hands only).
     const fw = inp.anim.move === 'fly' ? this.famW.get('glide')! : 0;
     if (fw > 0.01 && inp.main === 'none') cR += (this.flyCurl.R - cR) * fw;
@@ -1438,6 +1468,63 @@ export class Animator {
         this.poleIK(sh, el, wr, _rt, _rp);
       }
     }
+  }
+
+  /** Rest height of the hip joints over the feet, in world units (the character's current scale). */
+  hipWorld(): number {
+    return this.hipH * Math.max(1e-4, this.ch.object.getWorldScale(_v5).y);
+  }
+
+  /** Animator.limbs: hands by their grip points (two passes, as reachIK), feet by their ankles. */
+  private limbIK(g: LimbGoals) {
+    const ch = this.ch;
+    ch.object.updateMatrixWorld(true);
+    ch.bone('spine01').getWorldQuaternion(_rq);
+    for (const s of ['L', 'R'] as const) {
+      const h = g[s];
+      if (!h || h.w <= 0.001) continue;
+      const grip = ch.sockets.get(`grip.${s}`);
+      const sh = ch.bone(`upperarm01.${s}`), el = ch.bone(`lowerarm01.${s}`), wr = ch.bone(`wrist.${s}`);
+      const pole = h.pole ?? [0.4, -1, 0.2];
+      _rp.set((s === 'L' ? -1 : 1) * pole[0], pole[1], -pole[2]).applyQuaternion(_rq);
+      for (let k = 0; k < 2; k++) {
+        // (A flat hand first: the grip point moves with the wrist's turn.)
+        if (h.flat) this.flatHand(wr, s, h.flat, Math.min(1, h.w));
+        wr.getWorldPosition(_rw);
+        if (grip) grip.getWorldPosition(_rg); else _rg.copy(_rw);
+        _rt.copy(h.p).sub(_rg).multiplyScalar(Math.min(1, h.w)).add(_rw);
+        this.poleIK(sh, el, wr, _rt, _rp);
+      }
+      if (h.flat) this.flatHand(wr, s, h.flat, Math.min(1, h.w));
+    }
+    ch.object.getWorldQuaternion(_q3);
+    for (const s of ['L', 'R'] as const) {
+      const f = s === 'L' ? g.footL : g.footR;
+      if (!f || f.w <= 0.001) continue;
+      const hip = ch.bone(`upperleg01.${s}`), knee = ch.bone(`lowerleg01.${s}`), foot = ch.bone(`foot.${s}`);
+      const pole = f.pole ?? [0.15, 0, 1];
+      _rp.set((s === 'L' ? -1 : 1) * pole[0], pole[1], -pole[2]).applyQuaternion(_q3);
+      foot.getWorldPosition(_rw);
+      _rt.copy(_rw).lerp(f.p, Math.min(1, f.w));
+      this.poleIK(hip, knee, foot, _rt, _rp);
+    }
+  }
+
+  /** Turn a wrist so the hand lies flat, palm down, the fingers along `dir` (horizontal). */
+  private flatHand(wr: THREE.Bone, s: Side, dir: THREE.Vector3, w: number) {
+    const ch = this.ch;
+    // The hand's frame now, from its joints (as bodyBuild's hand socket): toward the middle finger, the palm's normal.
+    const W = wr.getWorldPosition(_ra);
+    const d = ch.bone(`finger3-1.${s}`).getWorldPosition(_rb).sub(W).normalize();
+    const ac = ch.bone(`finger2-1.${s}`).getWorldPosition(_rc).sub(ch.bone(`finger5-1.${s}`).getWorldPosition(_rd));
+    const n = _re.crossVectors(d, ac).multiplyScalar(s === 'L' ? 1 : -1).normalize();
+    const m0 = _m0.makeBasis(d, n, _rc.crossVectors(d, n));
+    const fd = _rd.set(dir.x, 0, dir.z).normalize(), down = _rf.set(0, -1, 0);
+    const m1 = _m1.makeBasis(fd, down, _ra.crossVectors(fd, down));
+    _q.setFromRotationMatrix(m1.multiply(m0.transpose()));
+    _q2.identity().slerp(_q, w);
+    this.rotateWorldQ(wr, _q2);
+    wr.updateMatrixWorld(true);
   }
 
   /** Two-bone IK with the bend toward `pole` (a world direction from the root joint). */
