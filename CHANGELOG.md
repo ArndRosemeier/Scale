@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.062 — 2026-10-06
+
+- **Two new built-in characters: a woman and a man.** The start screen's character picker now offers **Woman** and **Man** next to the default human. Both are fully animated, with painted skin, short hair, eyebrows, lips and real irises. The woman is the new base model from Blend Swap; the man is made from the very same mesh and skeleton, reshaped (broader shoulders and chest, narrower hips, thicker neck and arms, stronger jaw, 1.80 m tall), so the two move and fit exactly alike.
+
 ## 0.061 — 2026-10-06
 
 - **The way to the slime civilisation is open.** The living membrane that closed the tunnel out of a colony's chamber is gone: anyone can walk down to the Lumen now. The tunnel itself is much wider (and a little less steep), so the camera no longer gets squeezed against the rock behind you.
