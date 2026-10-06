@@ -11,10 +11,11 @@ import { Rng } from '../core/rng';
 
 export type RGB = [number, number, number];
 
-export const TOPS = ['tshirt', 'shirt', 'sweater', 'dress'] as const;
+/** 'none' = bare (nude is an option, never the default: random looks always dress). */
+export const TOPS = ['tshirt', 'shirt', 'sweater', 'dress', 'none'] as const;
 export const OUTERS = ['none', 'jacket', 'suitjacket', 'coat'] as const;
-export const BOTTOMS = ['jeans', 'trousers', 'shorts', 'skirt'] as const;
-export const SHOES = ['sneakers', 'shoes', 'boots'] as const;
+export const BOTTOMS = ['jeans', 'trousers', 'shorts', 'skirt', 'none'] as const;
+export const SHOES = ['sneakers', 'shoes', 'boots', 'none'] as const;
 export const HATS = ['none', 'cap', 'beanie'] as const;
 export const PATTERNS = ['plain', 'stripes', 'checks'] as const;
 
@@ -51,10 +52,10 @@ function vis(seed: number, primary: RGB, secondary: RGB, pattern = 'plain'): Ite
 export function outfitVisuals(o: OutfitSpec): EquipmentVisuals {
   const s = o.seed >>> 0;
   const eq: EquipmentVisuals = {};
-  eq.chest = { defId: o.top, visual: vis(s, o.topColor, o.topColor2, o.topPattern) };
-  if (o.top !== 'dress') eq.legs = { defId: o.bottom, visual: vis(s + 1, o.bottomColor, o.bottomColor, 'plain') };
+  if (o.top !== 'none') eq.chest = { defId: o.top, visual: vis(s, o.topColor, o.topColor2, o.topPattern) };
+  if (o.top !== 'dress' && o.bottom !== 'none') eq.legs = { defId: o.bottom, visual: vis(s + 1, o.bottomColor, o.bottomColor, 'plain') };
   if (o.outer !== 'none') eq.back = { defId: o.outer, visual: vis(s + 2, o.outerColor, o.outerColor.map((c) => c * 0.8) as RGB, o.outerLeather && o.outer === 'jacket' ? 'leather' : 'plain') };
-  eq.feet = { defId: o.shoes, visual: vis(s + 3, o.shoesColor, [1, 1, 1]) };
+  if (o.shoes !== 'none') eq.feet = { defId: o.shoes, visual: vis(s + 3, o.shoesColor, [1, 1, 1]) };
   if (o.hat !== 'none') eq.head = { defId: o.hat, visual: vis(s + 4, o.hatColor, o.hatColor) };
   return eq;
 }

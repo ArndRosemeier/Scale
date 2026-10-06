@@ -254,6 +254,7 @@ export class Game {
   }
 
   async start(progress: (msg: string, f: number) => void): Promise<void> {
+    const loadT0 = performance.now();
     this.profile = makeProfile(this.settings);
     progress('Generating materials', 0);
     const tex = new TextureLibrary();
@@ -580,13 +581,16 @@ export class Game {
     // round, content that only appears later (interiors, trees, furniture) staged via small meshes,
     // then simulating until frames are calm — so nothing compiles or uploads once the player sees it.
     progress('Preparing shaders', 0.97);
+    const shadersAt = performance.now();
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
       later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
-    console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms, ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs`);
+    console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms (${warm.programsCompiled} programs), ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs`);
+    if (warm.gateWaiting.length) console.log(`[warm-up] still waiting for shaders: ${warm.gateWaiting.join(", ")}`);
+    console.log(`[load] ${((performance.now() - loadT0) / 1000).toFixed(1)} s in all, ${((performance.now() - shadersAt) / 1000).toFixed(1)} s preparing shaders`);
     hitch.clear();
     // From now on nothing new may stall a frame on a shader compile.
     this.gate.adoptScene();

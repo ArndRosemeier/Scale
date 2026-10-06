@@ -108,10 +108,10 @@ export class Pose {
     return this.addS('wrist', side, wristX, 0, wristZ);
   }
   leg(side: Side, flex: number, abd = 0, twist = 0, knee = 0, ankle = 0, toe = 0) {
-    this.addS('upperleg01', side, flex * 0.8, twist, -abd * 0.8);
-    this.addS('upperleg02', side, flex * 0.2, 0, -abd * 0.2);
-    this.addS('lowerleg01', side, -knee * 0.75, 0, 0);
-    this.addS('lowerleg02', side, -knee * 0.25, 0, 0);
+    // The whole bend at the real hip and knee: upperleg02 / lowerleg02 start mid-thigh /
+    // mid-shin, and a share of the bend there kinked the thigh and shin.
+    this.addS('upperleg01', side, flex, twist, -abd);
+    this.addS('lowerleg01', side, -knee, 0, 0);
     this.addS('foot', side, -ankle, 0, 0);
     return this.addS('toes', side, toe, 0, 0);
   }
