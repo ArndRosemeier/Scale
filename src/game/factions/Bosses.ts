@@ -19,6 +19,7 @@
  */
 import { Rng, deriveSeed } from '../../core/rng';
 import type { VillainPower } from '../powers/Caster';
+import type { BossOpKind } from '../crime/Crime';
 import type { ArchetypeId } from './archetypes';
 import type { FactionMap } from './Factions';
 
@@ -39,13 +40,21 @@ export const BOSS = {
   jail: 72, jailMore: 24,
 };
 
-export interface BossKind { title: string; /** The boss's own power on top of the lieutenant's. */ power: VillainPower; first: string[]; last: string[] }
+export interface BossKind {
+  title: string;
+  /** The boss's own power on top of the lieutenant's. */
+  power: VillainPower;
+  /** The boss's own set piece (crime/BossOp), a threat event with the city response. */
+  op: BossOpKind;
+  first: string[];
+  last: string[];
+}
 
 export const BOSS_KINDS: Record<ArchetypeId, BossKind> = {
-  gang: { title: 'Kingpin', power: 'gust', first: ['Rook', 'Dice', 'Jax', 'Mags', 'Tiny', 'Vee', 'Knuckles', 'Rae'], last: ['Malone', 'Okafor', 'Rourke', 'Varga', 'Diaz', 'Kowalski', 'Brannigan'] },
-  syndicate: { title: 'Chairman', power: 'bolt', first: ['Victor', 'Helena', 'Augustin', 'Marguerite', 'Silas', 'Ines', 'Conrad'], last: ['Gilt', 'Ashworth', 'Castellane', 'Morrow', 'Vance', 'Sterling', 'Holloway'] },
-  techno: { title: 'Architect', power: 'stun', first: ['Nyx', 'Ada', 'Kade', 'Iris', 'Zero', 'Tamsin', 'Orrin'], last: ['Halden', 'Voss', 'Kerrigan', 'Lindqvist', 'Mercer', 'Ishikawa'] },
-  cult: { title: 'High Invoker', power: 'quake', first: ['Mordecai', 'Sable', 'Ezra', 'Lilith', 'Caspian', 'Wren', 'Thaddeus'], last: ['Vale', 'Ashgrove', 'Thorne', 'Blackwood', 'Crane', 'Mourne'] },
+  gang: { title: 'Kingpin', power: 'gust', op: 'takeover', first: ['Rook', 'Dice', 'Jax', 'Mags', 'Tiny', 'Vee', 'Knuckles', 'Rae'], last: ['Malone', 'Okafor', 'Rourke', 'Varga', 'Diaz', 'Kowalski', 'Brannigan'] },
+  syndicate: { title: 'Chairman', power: 'bolt', op: 'heist', first: ['Victor', 'Helena', 'Augustin', 'Marguerite', 'Silas', 'Ines', 'Conrad'], last: ['Gilt', 'Ashworth', 'Castellane', 'Morrow', 'Vance', 'Sterling', 'Holloway'] },
+  techno: { title: 'Architect', power: 'stun', op: 'uprising', first: ['Nyx', 'Ada', 'Kade', 'Iris', 'Zero', 'Tamsin', 'Orrin'], last: ['Halden', 'Voss', 'Kerrigan', 'Lindqvist', 'Mercer', 'Ishikawa'] },
+  cult: { title: 'High Invoker', power: 'quake', op: 'awakening', first: ['Mordecai', 'Sable', 'Ezra', 'Lilith', 'Caspian', 'Wren', 'Thaddeus'], last: ['Vale', 'Ashgrove', 'Thorne', 'Blackwood', 'Crane', 'Mourne'] },
 };
 
 export interface Boss {
@@ -57,13 +66,15 @@ export interface Boss {
   beaten: number;
   escapes: number;
   jailed: number;
+  /** Game hour of their last boss operation (-1: none yet). */
+  opAt: number;
 }
 
 /** One boss per group, seeded by the city and the group's kind (the same city, the same bosses). */
 export function planBosses(F: FactionMap, seed: number): Boss[] {
   return F.factions.map((f) => {
     const K = BOSS_KINDS[f.archetype], r = new Rng(deriveSeed(seed, 'boss', f.archetype));
-    return { faction: f.id, name: `${r.pick(K.first)} ${r.pick(K.last)}`, jailedUntil: -1, beaten: 0, escapes: 0, jailed: 0 };
+    return { faction: f.id, name: `${r.pick(K.first)} ${r.pick(K.last)}`, jailedUntil: -1, beaten: 0, escapes: 0, jailed: 0, opAt: -1 };
   });
 }
 
@@ -118,10 +129,10 @@ export function jail(b: Boss, now: number): number {
   return b.jailedUntil;
 }
 
-export interface SavedBoss { archetype: string; name: string; jailedUntil: number; beaten: number; escapes: number; jailed: number; notoriety: number }
+export interface SavedBoss { archetype: string; name: string; jailedUntil: number; beaten: number; escapes: number; jailed: number; notoriety: number; opAt?: number }
 
 export function saveBosses(F: FactionMap, bosses: readonly Boss[], not: readonly number[]): SavedBoss[] {
-  return bosses.map((b) => ({ archetype: F.factions[b.faction].archetype, name: b.name, jailedUntil: b.jailedUntil, beaten: b.beaten, escapes: b.escapes, jailed: b.jailed, notoriety: Math.round(not[b.faction] ?? 0) }));
+  return bosses.map((b) => ({ archetype: F.factions[b.faction].archetype, name: b.name, jailedUntil: b.jailedUntil, beaten: b.beaten, escapes: b.escapes, jailed: b.jailed, notoriety: Math.round(not[b.faction] ?? 0), opAt: Math.round(b.opAt * 100) / 100 }));
 }
 
 /** Put saved records back (matched by group kind; unknown or broken entries are skipped). */
@@ -138,6 +149,29 @@ export function restoreBosses(F: FactionMap, bosses: Boss[], not: number[], raw:
     b.beaten = Math.max(0, Math.round(n(o.beaten, 0)));
     b.escapes = Math.max(0, Math.round(n(o.escapes, 0)));
     b.jailed = Math.max(0, Math.round(n(o.jailed, 0)));
+    b.opAt = n(o.opAt, -1);
     not[f.id] = Math.max(0, Math.min(NOTORIETY.max, n(o.notoriety, 0)));
   }
+}
+
+/**
+ * Boss operations (Phase 4): now and then a group's boss comes out with a big crew for its set
+ * piece (BOSS_KINDS[…].op, crime/BossOp) — a threat event the whole city answers. Looked at every
+ * `every` s of play while the hero is in or next to the group's turf; at least `gap` game hours
+ * after its last one (the first: half that from the start), more often the more the group has it
+ * in for the hero. Never while the boss is behind bars or the group has collapsed.
+ */
+export const BOSS_OP = {
+  every: 30,
+  gap: { calm: 36, wary: 18, hunted: 8 } as Record<Heat, number>,
+  chance: { calm: 0.03, wary: 0.06, hunted: 0.12 } as Record<Heat, number>,
+  /** Free actor slots a boss operation needs (its crew is up to a dozen). */
+  room: 13,
+};
+
+/** Chance per look that a group's boss stages an operation now (0: not now). */
+export function bossOpChance(b: Boss | undefined, n: number, now: number, collapsed: boolean): number {
+  if (!b || collapsed || b.jailedUntil > now) return 0;
+  const h = heatOf(n), since = b.opAt < 0 ? now * 2 : now - b.opAt;
+  return since >= BOSS_OP.gap[h] ? BOSS_OP.chance[h] : 0;
 }

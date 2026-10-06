@@ -68,6 +68,12 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
     start: (d, site, seed, opts) => new Brood(d.g, site, seed, opts as BroodOpts),
     fallback: ['chitter', 'glimpse'],
   },
+  // A villain boss's operation (crime/BossOp, started by the crime system: opts.ev is its BossEvent).
+  boss: {
+    omen: () => false,
+    start: (_d, _site, _seed, opts) => (opts.ev as ThreatEvent | undefined) ?? null,
+    fallback: [],
+  },
   // The Murk breaking out of the sewers (started by the slime realm's war, never by the clock).
   murk: {
     omen: () => false,
@@ -231,6 +237,11 @@ export class ThreatDirector {
     this.stats.msAvg = this.stats.msAvg * 0.95 + (performance.now() - t0) * 0.05;
   }
 
+  /** Room for an event started from outside (a boss operation): nothing else running, events not switched off. */
+  canHost(): boolean {
+    return this.setting !== 'off' && !this.events.some((e) => e.active);
+  }
+
   /** Events wait while the player is underground, indoors or a towering giant (nobody would see it). */
   private ready(): boolean {
     const g = this.g, p = g.player.pos;
@@ -324,7 +335,7 @@ export class ThreatDirector {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
       // (A rampaging player is the incident: no alert marker on themselves.)
       if (!ev.active || ev.archetype === 'rampage') continue;
-      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : ev.archetype === 'brood' ? 'A swarm from the sewers — creatures attacking people' : 'Threat', always: true });
+      list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: (ev as ThreatEvent).title ?? ( ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : ev.archetype === 'brood' ? 'A swarm from the sewers — creatures attacking people' : 'Threat'), always: true });
       if (ev instanceof RobotMalfunction) for (const m of ev.units) {
         if (m.out || m.mode !== 'hostile' || Math.hypot(m.obj.x - p.x, m.obj.z - p.z) > 250) continue;
         list.push({ x: m.obj.x, z: m.obj.z, color: '#ff6b5e', kind: 'dot', title: 'A rogue machine' });

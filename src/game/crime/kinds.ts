@@ -15,6 +15,7 @@ import { Bomber } from './Bomber';
 import { Hijack } from './Hijack';
 import { Ritual } from './Ritual';
 import { SewerDen } from './SewerDen';
+import { BossOperation, BOSS_OP_TITLE } from './BossOp';
 
 export interface KindSpec {
   make(w: CrimeWorld, seed: number, near: { x: number; z: number } | null): Crime;
@@ -45,4 +46,9 @@ export const KINDS: Record<CrimeKind, KindSpec> = {
   // (A den's crew is posted in a sewer hideout by CrimeSystem; `make` without a site puts them at the point.)
   den: { make: (w, s, n) => { const x = n?.x ?? w.player.x, z = n?.z ?? w.player.z, y = w.player.y; return new SewerDen(w, s, { room: -1, spots: [0, 1, 2].map((i) => ({ x: x + i, y, z, fx: x, fz: z + 3, sit: false })), stash: { x, y, z }, cx: x, cy: y, cz: z }); }, ko: 9, resolved: 14, rep: 4, title: 'A den in the sewers', criminal: 'Crook', stopped: 'a sewer den' },
   bomber: { make: (w, s, n) => new Bomber(w, s, n), ko: 18, resolved: 32, rep: 8, title: 'A mad bomber — explosions in the street', criminal: 'Mad bomber', stopped: 'a mad bomber' },
+  // Boss operations (crime/BossOp): started by CrimeSystem when a group's boss comes out, never rolled.
+  heist: { make: (w, s, n) => new BossOperation(w, s, 'heist', n), ko: 14, resolved: 60, rep: 12, title: BOSS_OP_TITLE.heist, criminal: 'Heister', stopped: 'a bank heist' },
+  takeover: { make: (w, s, n) => new BossOperation(w, s, 'takeover', n), ko: 12, resolved: 50, rep: 10, title: BOSS_OP_TITLE.takeover, criminal: 'Wrecker', stopped: 'a gang takeover' },
+  uprising: { make: (w, s, n) => new BossOperation(w, s, 'uprising', n), ko: 12, resolved: 55, rep: 10, title: BOSS_OP_TITLE.uprising, criminal: 'Hacker', stopped: 'a machine uprising' },
+  awakening: { make: (w, s, n) => new BossOperation(w, s, 'awakening', n), ko: 12, resolved: 55, rep: 10, title: BOSS_OP_TITLE.awakening, criminal: 'Chanter', stopped: 'a great ritual' },
 };

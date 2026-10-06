@@ -196,6 +196,16 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(env);
       break;
     }
+    case 'cash': {
+      // A heist's take: a dark duffel bag with a band of notes showing, hanging from the hand.
+      const bag = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.7 }));
+      bag.rotation.x = Math.PI / 2;
+      bag.position.y = -0.12;
+      const notes = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.08), new THREE.MeshStandardMaterial({ color: 0x3b8f4a, roughness: 0.6 }));
+      notes.position.set(0, -0.01, 0);
+      g.add(bag, notes);
+      break;
+    }
     case 'bomb': {
       // A round black bomb with a short fuse (the mad bomber's): held in the palm.
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 9), new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.45, metalness: 0.35 }));

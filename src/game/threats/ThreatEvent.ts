@@ -130,4 +130,6 @@ export interface ThreatEvent {
   readonly ceiling?: number;
   /** Big bodies of the event (targetable, damageable). */
   readonly actors?: readonly ThreatActor[];
+  /** Its line on the map and compass (unset: by archetype). */
+  readonly title?: string;
 }

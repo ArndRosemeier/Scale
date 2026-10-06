@@ -23,9 +23,12 @@ import { type Actor, type ActorRole, makeActor, attach, release, setState, play,
 import { personStrength } from '../Consider';
 import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den';
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den' | BossOpKind;
+/** A boss operation (crime/BossOp): the group's boss and a big crew, a threat event with the city response. */
+export type BossOpKind = 'heist' | 'takeover' | 'uprising' | 'awakening';
+export const BOSS_OP_KINDS: readonly BossOpKind[] = ['heist', 'takeover', 'uprising', 'awakening'];
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
-export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual'];
+export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual', ...BOSS_OP_KINDS];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
 export type CrimeOutcome = 'arrested' | 'stopped' | 'escaped' | 'aborted';
 
@@ -41,7 +44,7 @@ export interface Loot {
 }
 
 export interface CrimeEvent {
-  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast' | 'done';
+  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast' | 'done' | 'broken';
   crime: Crime;
   who?: PedAgent;
 }
@@ -112,17 +115,24 @@ export interface CrimeWorld {
   clearLine?(ax: number, ay: number, az: number, bx: number, by: number, bz: number, skip: PedAgent): boolean;
   /** Robots standing free at the kerb in a ring around the player (a point beside one, the side to stand on). */
   machines?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
-  /** Open ground before a landmark in a ring around the player (the centre, the way the front faces). */
-  landmarks?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
-  /** A frame of a channelled operation's look (crime/Channeling): `share` of the work done, the ones at it. */
-  opFx?(look: 'hack' | 'fire' | 'frost' | 'storm', x: number, z: number, share: number, workers: readonly PedAgent[]): void;
+  /** Open ground before a landmark in a ring around the player (the centre, the way the front faces, which landmark). */
+  landmarks?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; kind?: string }[];
+  /** Shop doors of the tallest buildings in a ring around the player, tallest first (a bank to take). */
+  banks?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /** A frame of a channelled operation's look (crime/Channeling, crime/BossOp): `share` of the work done, the ones at it. */
+  opFx?(look: OpLook, x: number, z: number, share: number, workers: readonly PedAgent[]): void;
   /** A hack went through: `n` machines round about turn on the street for the crime's group. */
   hijack?(c: Crime, x: number, z: number, n: number): void;
   /** A ritual is complete: a burst of the element at the circle. */
   ritual?(c: Crime, x: number, z: number, element: 'fire' | 'frost' | 'storm'): void;
+  /** A boss operation's work is done (crime/BossOp): the heist's take, the street on fire, the fleet turned, the great burst. */
+  bossOpDone?(c: Crime, x: number, z: number): void;
 }
 
 export type CastStage = 'begin' | 'tell' | 'release' | 'hold' | 'end';
+
+/** The look of a channelled operation's work: a hack, a ritual of an element, a vault being drilled, a street being smashed up. */
+export type OpLook = 'hack' | 'fire' | 'frost' | 'storm' | 'drill' | 'riot';
 
 /** A lieutenant (VILLAINS_PLAN §3.3/§3.4): tougher, stronger, brave, with a few powers. */
 export const LIEUTENANT = { hp: 1.8, strength: 1.35 };

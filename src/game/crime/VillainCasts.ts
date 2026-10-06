@@ -27,7 +27,7 @@ import type { HurtKind } from '../PlayerHealth';
 import { BeamStyle, DecalKind } from '../powers/ElementFx';
 import { fireBurst } from '../powers/blastFx';
 import { VILLAIN_POWERS, CASTERS, segDist, type VillainPower } from '../powers/Caster';
-import type { CastStage } from './Crime';
+import type { CastStage, OpLook } from './Crime';
 
 interface Orb { kind: 'fire' | 'stun'; x: number; y: number; z: number; ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; T: number; arc: number; fuse: number; by_: PedAgent }
 interface Crack { ax: number; az: number; dx: number; dz: number; L: number; s: number; y: number; hitPlayer: boolean; hit: Set<PedAgent>; by_: PedAgent }
@@ -268,9 +268,34 @@ export class VillainCasts {
   // ------------------------------------------------------------------ channelled operations
 
   /** A frame of a hack or a ritual (CrimeWorld.opFx): `share` of the work done, the ones at it. */
-  opFx(look: 'hack' | 'fire' | 'frost' | 'storm', x: number, z: number, share: number, workers: readonly PedAgent[]): void {
+  opFx(look: OpLook, x: number, z: number, share: number, workers: readonly PedAgent[]): void {
     if (!this.near(x, z, 300)) return;
     const g = this.g, fx = g.elements.fx, y = g.world.groundHeight(x, z), t = this.time;
+    if (look === 'drill') {
+      // A thermal lance at the vault door: a white-hot point, a shower of orange sparks, smoke.
+      for (const w of workers) {
+        const hx = w.x - Math.sin(w.heading) * 0.55, hz = w.z - Math.cos(w.heading) * 0.55, hy = w.y + 0.95;
+        fx.glow(hx, hy, hz, 0, 0, 0, 0.06, 0.12 + share * 0.08, 0.08, WHITE, FIRE, 1, 1, 0);
+        for (let i = 0; i < 3; i++) fx.glow(hx, hy, hz, (Math.random() - 0.5) * 4, 1 + Math.random() * 3, (Math.random() - 0.5) * 4, 0.5, 0.04, 0.01, FIRE, FIRE_END, 1, 1, -9);
+        if (Math.random() < 0.15) fx.soft(hx, hy + 0.3, hz, 0, 0.6, 0, 1.4, 0.3, 1.2, SMOKE, SMOKE_END, 0.35, 0.5, -0.1);
+      }
+      // The door glowing as the cut goes round.
+      const a = t * 0.8;
+      fx.glow(x + Math.cos(a) * 0.5, y + 1 + Math.sin(a) * 0.5, z, 0, 0, 0, 0.3, 0.1, 0.05, FIRE, FIRE_END, 0.4 + share * 0.6, 1, 0);
+      return;
+    }
+    if (look === 'riot') {
+      // A burning barrel in the middle of the street, sparks and dust where the wreckers hammer.
+      for (let i = 0; i < 2; i++) fx.glow(x + (Math.random() - 0.5) * 0.4, y + 0.9, z + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 1.6 + Math.random() * 1.5, (Math.random() - 0.5) * 0.4, 0.55, 0.35, 0.12, FIRE, FIRE_END, 0.9, 1.5, 1);
+      if (Math.random() < 0.3) fx.soft(x, y + 1.6, z, 0, 1.2, 0, 3, 0.6, 2, SMOKE, SMOKE_END, 0.45, 0.4, -0.05);
+      for (const w of workers) {
+        if (Math.random() > 0.08) continue;
+        const hx = w.x - Math.sin(w.heading) * 0.7, hz = w.z - Math.cos(w.heading) * 0.7;
+        g.debris.chipBurst(hx, w.y + 0.6, hz, 4, 2.5, 0, 1, 0, DUST, 0.03, 0.8);
+        fx.glow(hx, w.y + 0.6, hz, 0, 1.5, 0, 0.25, 0.05, 0.01, FIRE, FIRE_END, 1, 1, -9);
+      }
+      return;
+    }
     if (look === 'hack') {
       // Sparks and a crackle from the hackers' hands to the robot's port; a cyan glow on it.
       for (const w of workers) {

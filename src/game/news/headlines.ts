@@ -34,17 +34,24 @@ const HEAD: Partial<Record<NewsWhat, Pair>> = {
   hijack: ['Robots hijacked in {hood}', 'Robot hijack stopped in {hood}'],
   ritual: ['Strange ritual in {hood}', 'Police end ritual in {hood}'],
   bomber: ['Bomb scare in {hood}', 'Bomber arrested in {hood}'],
+  heist: ['{Group} rob a bank in {hood}', 'Police foil bank heist in {hood}'],
+  takeover: ['{Group} take over streets in {hood}', 'Police end gang takeover in {hood}'],
+  uprising: ['{Group} turn the robots in {hood}', 'Machine uprising put down in {hood}'],
+  awakening: ['{Group} hold a great ritual in {hood}', 'Police break up great ritual in {hood}'],
 };
 const HERO: Partial<Record<NewsWhat, string>> = {
   snatch: 'Hero stops bag snatcher in {hood}', mugging: 'Hero saves mugging victim in {hood}', robbery: 'Hero foils robbery in {hood}',
   racket: 'Hero breaks up racket in {hood}', tagging: 'Hero stops taggers in {hood}', brawl: 'Hero ends street fight in {hood}',
   hijack: 'Hero stops robot hijack in {hood}', ritual: 'Hero breaks up ritual in {hood}', bomber: 'Hero stops mad bomber in {hood}',
+  heist: 'Hero foils bank heist in {hood}', takeover: 'Hero beats back gang takeover in {hood}', uprising: 'Hero stops machine uprising in {hood}',
+  awakening: 'Hero breaks up great ritual in {hood}',
 };
 
 /** What it is called in a sentence ("a mugging"). */
 const NOUN: Partial<Record<NewsWhat, string>> = {
   snatch: 'a bag snatching', mugging: 'a mugging', robbery: 'a robbery', racket: 'a shakedown', tagging: 'some tagging', brawl: 'a gang fight',
   hijack: 'a robot hijack', ritual: 'some weird ritual', bomber: 'a bomb scare',
+  heist: 'a bank heist', takeover: 'a gang takeover', uprising: 'robots running riot', awakening: 'a huge ritual',
 };
 
 export function fillNews(s: string, it: NewsItem): string {

@@ -47,6 +47,8 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     ritual: night ? 0.75 : evening ? 0.5 : 0.15,
     // Rare: a madman with a bag of bombs where the crowds are.
     bomber: busy ? 0.09 : 0.05,
+    // Never rolled: a boss operation is started by CrimeSystem when a group's boss comes out.
+    heist: 0, takeover: 0, uprising: 0, awakening: 0,
   };
 }
 
