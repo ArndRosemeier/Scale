@@ -11,7 +11,7 @@ import { agoLabel, gameTimeLabel, playTimeLabel, type SaveMeta } from '../game/s
 import { manualId, type SaveStatus } from '../game/save/SaveSystem';
 import { cityClass } from '../world/settings';
 import { MODE_INFO } from '../game/mode';
-import { downloadSave, downloadStored, loadFromFile } from './saveFiles';
+import { hasSaveDialog, loadFromFile, writeSaveFile, writeStored } from './saveFiles';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const thumbHtml = (m: SaveMeta) => (m.thumb ? `<img src="${esc(m.thumb)}" alt="">` : '<div class="sv-noimg"></div>');
@@ -43,9 +43,8 @@ export async function fillSaveList(el: HTMLElement, onLoad: (m: SaveMeta) => voi
       const file = acts.querySelector('.sv-file') as HTMLButtonElement;
       file.onclick = async () => {
         file.disabled = true;
-        const ok = await downloadStored(m).catch(() => false);
+        try { await writeStored(m); file.title = 'Save to a file'; } catch (e) { console.warn('[saves] file', e); file.title = 'That save could not be written to a file'; }
         file.disabled = false;
-        if (!ok) file.title = 'That save could not be read';
       };
       (acts.querySelector('.sv-del') as HTMLButtonElement).onclick = () => {
         acts.innerHTML = `<span class="sv-ask">Delete?</span><button type="button" class="sv-yes">Delete</button><button type="button" class="sv-no">Keep</button>`;
@@ -212,9 +211,10 @@ export class PauseSaves {
   /** The game as it is now, as a download (named like a save; nothing stored in the browser). */
   private async toFile(): Promise<void> {
     try {
+      // Captured at the click (the game runs on behind the dialog), written once a place is chosen.
       const { data, meta } = this.game.saves.snapshot(this.name.value.trim() || this.defaultName());
-      const file = await downloadSave(data, meta);
-      this.say(`Saved to "${file}" (your downloads)`);
+      const file = await writeSaveFile(meta, async () => data);
+      if (file) this.say(hasSaveDialog() ? `Saved to "${file}"` : `Saved to "${file}" (your downloads)`);
     } catch (e) {
       console.warn('[saves] file', e);
       this.say('Saving to a file failed — the game goes on.', true);
