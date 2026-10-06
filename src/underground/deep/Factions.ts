@@ -5,7 +5,7 @@
  *  - Lumen (soft, glowing teal, green, blue, amber): dwellers wandering their Hall and slipping in
  *    and out of their domes, tenders in the Gardens, carriers bringing things to the Archive, the
  *    council sitting in its ring pulsing in turn, children round the nursery, sentries in the
- *    Front's trench lobbing glowing bolts at the Murk coming over no-man's land (and fighting them
+ *    trench (in the Warrens' mouth) lobbing glowing bolts at the Murk coming over no-man's land (and fighting them
  *    hand to hand in the gaps), caravans on the roads, captives pulsing weakly in the Murk's pens.
  *    Shy of strangers (they hide in their domes), wary of acquaintances, greeting friends.
  *  - Murk (dark red, spiked, ember cores, glaring eyes): drones crawling the Warrens, jailers by the

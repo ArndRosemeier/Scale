@@ -4,8 +4,8 @@
  *
  *  - Areas of the deep realm come alive near the player (Factions agents spawned from the war's
  *    state: the Hall full or held by the Murk, the Front's guards, the Warrens' pens …).
- *  - The war (War.ts) runs on game time; raids happen live at the Front when the player is near,
- *    else they are decided by strength. Between raids the Front is a trench war that never stops
+ *  - The war (War.ts) runs on game time; raids happen live at the trench when the player is near,
+ *    else they are decided by strength. Between raids the Warrens' mouth is a trench war that never stops
  *    (TrenchWar): small pushes of Murk over no-man's land, shot down by the Lumen's sentries. A raid while the player is anywhere in the caves is
  *    announced. If the Murk hold the Hall and are strong they break out into the city at night
  *    (MurkBreach, a threat event: police, compass, music).
@@ -155,7 +155,7 @@ export class SlimeRealm {
       this.raidTick(dt);
       this.callTick(dt);
       const w = this.war;
-      this.trenchOn = this.live && w.front < 0.5 && this.F.areas.has('front');
+      this.trenchOn = this.live && w.front < 0.5 && this.F.areas.has('trench');
       this.trenches?.update(dt, this.trenchOn, !!w.raid, w.murk, w.lumen, w.front);
       this.F.update(dt, g.renderer.camera.position);
       this.lift(dt);
@@ -170,7 +170,7 @@ export class SlimeRealm {
       if (b.fac !== 'murk' || b.mode !== 'fight' || b.foe) continue;
       if (Math.hypot(b.x - p.x, b.z - p.z) < 30) { danger = 1; if (b.role === 'maw') battle = 1; }
     }
-    if (this.war.raid && this.where === 'front') battle = 1;
+    if (this.war.raid && this.nearTrench(60)) battle = 1;
     this.music.danger = danger; this.music.battle = battle;
     // The deep realm's look.
     if (D) {
@@ -199,7 +199,7 @@ export class SlimeRealm {
     const now = this.g.sky.hoursAbs, P = this.plan!;
     const p = this.g.player.pos;
     const fr = P.places.front;
-    this.live = !!fr && this.where !== 'none' && Math.hypot(p.x - fr.x, p.z - fr.z) < 140;
+    this.live = !!fr && this.where !== 'none' && (Math.hypot(p.x - fr.x, p.z - fr.z) < 140 || this.nearTrench(110));
     const night = G.uNight.value > 0.5;
     // The clock set back (the hour changed, an older save): the war goes on from now.
     const w = this.war;
@@ -220,23 +220,24 @@ export class SlimeRealm {
     const F = this.F, P = this.plan;
     if (!F || !P) return;
     const n = this.war.raid?.n ?? 6;
-    // They come up the ramp: spawned partway up, sent over no-man's land at the trench's gaps.
-    const ramp = P.nodes.filter((q) => q.name.startsWith('ramp'));
-    const start = ramp[Math.max(0, Math.floor(ramp.length * 0.25))] ?? P.nodes.find((q) => q.name === 'lip');
+    // They come out of the Warrens: over the berm, across no-man's land at the trench's gaps.
+    const start = P.nodes.find((q) => q.name === 'warrens');
+    const line = P.nodes.find((q) => q.name === 'murkLine');
     const gaps = P.nodes.filter((q) => q.name.startsWith('trench'));
-    if (!start || !gaps.length) return;
+    if (!start || !line || !gaps.length) return;
     for (let i = 0; i < n; i++) {
       const target = gaps[i % gaps.length];
-      const b = F.spawn('murk', i === 0 && n >= 9 ? 'brute' : 'raider', start.x + (Math.random() - 0.5) * 2, start.y, start.z + (Math.random() - 0.5) * 2, 'raid');
+      const b = F.spawn('murk', i === 0 && n >= 9 ? 'brute' : 'raider', start.x + (Math.random() - 0.5) * 6, start.y, start.z + (Math.random() - 0.5) * 6, 'raid');
       b.wait = i * 0.6;
-      F.goTo(b, target.id);
+      F.goTo(b, line.id);
+      b.path.push(...F.route(line.id, target.id));
       // Through the line, on into the Hall.
       const hall = P.nodes.find((q) => q.name === 'hall');
       if (hall) b.path.push(...F.route(target.id, hall.id));
     }
     this.raidT = 0;
     this.g.audio.play('murk_growl', start.x, start.y, start.z, 1, 0.6, 30, this.g.renderer.camera.position);
-    if (this.where !== 'none') this.g.powerHud.toast('The Murk are coming up the Throat — the Lumen are holding the Front', 'deny', 7000);
+    if (this.where !== 'none') this.g.powerHud.toast('The Murk are storming out of the Warrens — the Lumen are holding their trenches', 'deny', 7000);
   }
 
   private raidTick(dt: number): void {
@@ -244,24 +245,25 @@ export class SlimeRealm {
     if (!w.raid) return;
     this.raidT += dt;
     const raiders = F.blobs.filter((b) => b.area === 'raid' && b.mode !== 'dead');
-    const guards = F.blobs.filter((b) => b.area === 'front' && (b.role === 'guard' || b.role === 'sentry') && b.mode !== 'dead');
-    // Through: raiders in the Hall.
-    const hall = P.places.hall;
-    const through = raiders.filter((b) => Math.hypot(b.x - hall.x, b.z - hall.z) < 50).length;
+    const guards = F.blobs.filter((b) => (b.area === 'front' || b.area === 'trench') && (b.role === 'guard' || b.role === 'sentry') && b.mode !== 'dead');
+    // Through: raiders behind the trench, on the floor of the Throat.
+    const T = P.trench;
+    const through = raiders.filter((b) => (b.x - T.x) * T.ax + (b.z - T.z) * T.az < T.s - 5).length;
     const done = raiders.length === 0 || through >= 2 || this.raidT > 200 || !this.live;
     if (!done) return;
     const murkWon = through >= 2 || (raiders.length > 0 && guards.length === 0) || (this.raidT > 200 && raiders.length > guards.length);
-    const withPlayer = this.where === 'front' || this.where === 'glow';
+    const withPlayer = this.nearTrench(80);
     endRaid(w, murkWon);
-    if (!murkWon && withPlayer && this.raidT < 200) this.trust.add(8, 'helped the Lumen hold the Front');
-    this.g.powerHud.toast(murkWon ? 'The Murk broke through the Front' : 'The Murk fall back down the Throat', murkWon ? 'deny' : 'karma', 5000);
-    if (!murkWon) for (const b of raiders) { b.path = []; F.goTo(b, F.nodeNear(P.places.bottom.x, P.places.bottom.y, P.places.bottom.z, 'bottom')); b.area = 'retreat'; b.ttl = 60; }
+    if (!murkWon && withPlayer && this.raidT < 200) this.trust.add(8, 'helped the Lumen hold their trenches');
+    this.g.powerHud.toast(murkWon ? 'The Murk broke through the Lumen\'s trenches' : 'The Murk fall back into the Warrens', murkWon ? 'deny' : 'karma', 5000);
+    if (!murkWon) for (const b of raiders) { b.path = []; F.goTo(b, F.nodeNear(P.places.warrens.x, P.places.warrens.y, P.places.warrens.z, 'warrens')); b.area = 'retreat'; b.ttl = 60; }
     this.respawnFront();
     this.g.saves?.notable();
   }
 
-  /** The Front's and the Hall's populations follow the line. */
+  /** The trench's, the Front's and the Hall's populations follow the line. */
   private respawnFront(): void {
+    this.F?.despawn('trench');
     this.F?.despawn('front');
     this.F?.despawn('hall');
     this.F?.despawn('push');
@@ -316,13 +318,19 @@ export class SlimeRealm {
     }
   }
 
+  /** The player within `r` m (and on its level) of the trench line. */
+  private nearTrench(r: number): boolean {
+    const t = this.plan?.places.trench, p = this.g.player.pos;
+    return !!t && this.where !== 'none' && Math.hypot(p.x - t.x, p.z - t.z) < r && Math.abs(p.y - t.y) < 25;
+  }
+
   // ------------------------------------------------------------------ areas
 
   private areas(): void {
     const F = this.F!, P = this.plan!, p = this.g.player.pos;
     const list: [string, { x: number; y: number; z: number; r: number } | undefined][] = [
       ['hall', P.places.hall && { ...P.places.hall, r: 60 }], ['gardens', P.places.gardens], ['lake', P.places.lake], ['archive', P.places.archive],
-      ['front', P.places.front && { ...P.places.front, r: 30 }], ['lookout', P.places.lookout], ['warrens', P.places.warrens && { ...P.places.warrens, r: 55 }],
+      ['front', P.places.front && { ...P.places.front, r: 30 }], ['trench', P.places.trench && { ...P.places.trench, r: 30 }], ['lookout', P.places.lookout], ['warrens', P.places.warrens && { ...P.places.warrens, r: 55 }],
       ['heart', P.places.heart && { ...P.places.heart, r: 25 }],
       ...P.roads.map((r): [string, { x: number; y: number; z: number; r: number }] => [`road${r.colony}`, { x: r.pts[3], y: r.pts[4], z: r.pts[5], r: 20 }]),
     ];
@@ -382,15 +390,21 @@ export class SlimeRealm {
       case 'archive': for (let i = 0; i < 3; i++) lumen('carrier', at('archive'), 4); break;
       case 'lookout': lumen('guard', at('lookout'), 1, { ...at('lookout') }); break;
       case 'front': {
+        // The Lumen's rear guard in the gallery; once the Murk hold the Throat they come up to the lip too.
+        const post = { ...at('front') };
+        const n = w.front < 0.5 ? 3 : Math.max(2, Math.round(11 * w.lumen * (1 - w.front)));
+        for (let i = 0; i < n; i++) lumen('guard', post, 5, { ...post });
+        if (w.front >= 0.5 && at('lip')) for (let i = 0; i < 5; i++) murk('raider', at('lip'), 4);
+        break;
+      }
+      case 'trench': {
         const T = P.trench;
         if (w.front < 0.5) {
           // The Lumen hold their trench: sentries in the bays and at the gaps.
           const spots = [...T.gapPosts, ...T.posts.slice().sort(() => rnd() - 0.5).slice(0, TrenchWar.sentries(P, w.lumen, w.front))];
           for (const q of spots) { const b = F.spawn('lumen', 'sentry', q.x, q.y, q.z, area); b.den = { ...q }; b.wait = rnd() * 2; }
         } else {
-          // The Murk have taken it: they sit in the Lumen's trench, the Lumen hold on further back.
-          const post = { ...at('front') };
-          for (let i = 0; i < Math.max(2, Math.round(11 * w.lumen * (1 - w.front))); i++) lumen('guard', post, 5, { ...post });
+          // The Murk have taken it: they sit in the Lumen's trench.
           for (const q of T.posts.slice(0, 6)) { const b = F.spawn('murk', 'raider', q.x, q.y, q.z, area); b.den = { ...q }; }
         }
         break;
@@ -511,8 +525,8 @@ export class SlimeRealm {
     this.ambMurk ??= g.audio.loop('deep_murk', 50);
     this.ambGlow?.set(cam.x, cam.y, cam.z, glow * (this.where === 'road' ? 0.5 : 0.85));
     this.ambMurk?.set(cam.x, cam.y, cam.z, murk * 0.9);
-    // The noise of a fight at the Front.
-    const fr = this.plan!.places.front;
+    // The noise of the fight at the trenches.
+    const fr = this.plan!.places.noMans ?? this.plan!.places.trench;
     const fight = fr ? (this.war.raid ? 1 : this.trenchOn ? 0.45 : 0) : 0;
     this.battleLoop ??= g.audio.loop('slime_battle', 10);
     this.battleLoop?.set(fr?.x ?? cam.x, (fr?.y ?? cam.y) + 1, fr?.z ?? cam.z, fight * 0.8);
@@ -711,7 +725,7 @@ export class SlimeRealm {
     };
   }
 
-  /** Dev: a raid now (live if near the Front). */
+  /** Dev: a raid now (live if near the Front or the trench). */
   devRaid(): void { this.war.nextRaid = this.war.at; this.warT = 0; }
   devBreach(): void { this.war.front = 1; this.war.murk = 1; this.war.nextBreach = this.war.at; this.startBreach(); }
 }

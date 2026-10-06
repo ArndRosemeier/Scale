@@ -1177,10 +1177,11 @@ as distance LOD).
   * Plan (`plan.ts`, pure, deterministic per seed, ~0.1 s): a hub colony (nearest the centre) hosts the Glow
     `GLOW_DEPTH` (64 m) under the lowest ground over the realm, the Deep `DEEP_DROP` (52 m) lower. Shapes in a frame
     (origin at the Great Hall, u along the realm's axis): the Hall (ellipsoid, flat-cut, terraced `bowl` floor, pool,
-    the Spire rock column, hanging masses), Gardens, Lake (falls), Archive (mosaics), the Front gallery (a trench
-    war, `Trench`: three dug bays a metre deep behind rock parapets with sandbags and duckboards, two gaps between
-    them, a belt of thorn wire, craters in no-man's land, the Murk's berm short of the lip), the Throat (shaft cylinder + dome, a `helix` rock ramp, a rock bridge to a lookout niche), the Warrens
-    (pillars), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
+    the Spire rock column, hanging masses), Gardens, Lake (falls), Archive (mosaics), the Front gallery, the Throat (shaft cylinder + dome, a `helix` rock ramp, a rock bridge to a lookout niche), the Warrens
+    (pillars; their mouth by the Throat's floor walled in by rock boxes to a passage `MOUTH` 9.6 m wide, the shaft
+    re-opened after them: the trench war, `Trench`, framed from the shaft's axis towards the Warrens: three dug bays a
+    metre deep behind rock parapets with sandbags and duckboards, two gaps between them, a belt of thorn wire, craters
+    in no-man's land, the Murk's berm where the Warrens open), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
     `buildChamber`) a neck (r 2.3 m, roomy for the camera; no gate since 0.056), descending steeply until the wide gallery fits under the ground, then
     a gallery (r 5.2 m, grade ≤ 0.16) to the Hall's rim, a spiral first where the way is too short for the drop.
     Colonies within 950 m get roads. Tried over hub colonies / axes / distances until clear of every tube, box and
@@ -1211,9 +1212,9 @@ as distance LOD).
     `MurkActor` (ThreatActor: body, an exposed ember core on brutes and the Maw). Five instanced batches (Lumen blob
     shell / core, spiked dark red Murk shell with hot spines / ember core / glaring eyes).
   * The war (`War.ts`, pure, saved): Murk strength (grows from the Heart, not while the Maw is down), Lumen strength,
-    the front line; raids every 2.5–5.5 game hours — fought out live by agents when the player is near the Front,
-    else decided by strength. Between raids the Front is a trench war (`game/slimes/TrenchWar.ts`): pushes of 2–4
-    Murk every 6–13 s over no-man's land at the gaps (they leave the war's state alone unless the player kills
+    the front line; raids every 2.5–5.5 game hours — fought out live by agents when the player is near the Front or the trench,
+    else decided by strength. Between raids the Warrens' mouth is a trench war (`game/slimes/TrenchWar.ts`): pushes of 2–4
+    Murk out of the Warrens every 6–13 s over no-man's land at the gaps (they leave the war's state alone unless the player kills
     them), relief for fallen sentries, flares (sprites) over no-man's land; `tools/trenchsim.ts` runs it headlessly.
     Breakouts at night when the Murk hold the Hall (`MurkBreach`, threat archetype
     `murk`: police, compass, music).

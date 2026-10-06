@@ -1,9 +1,9 @@
 /**
- * The trench war at the Front (`SlimeRealm`), while the Lumen hold their line and the player is near:
- * it never stops.
+ * The trench war in the Warrens' mouth, at the foot of the Throat (`SlimeRealm`), while the Lumen hold
+ * their line and the player is near: it never stops.
  *
- *  - Pushes: every few seconds a handful of Murk come up the Throat, gather at their berm by the
- *    lip and go over, across no-man's land at the trench's gaps. The sentries lob bolts at them, the
+ *  - Pushes: every few seconds a handful of Murk come out of the Warrens, gather at their berm and go
+ *    over, across no-man's land at the trench's gaps. The sentries lob bolts at them, the
  *    thorn wire holds them up, the gaps are fought hand to hand; few get far. (The war's strength
  *    is not touched by these: only the raids decide the line. The Murk the player kills still count.)
  *  - Relief: Lumen fallen in the trench are replaced from behind, one at a time.
@@ -47,7 +47,7 @@ export class TrenchWar {
   }
 
   /**
-   * Per frame. `on`: the Lumen hold the line, the Front is populated and the player is near; `raid`:
+   * Per frame. `on`: the Lumen hold the line, the trench is populated and the player is near; `raid`:
    * a raid is on (no pushes of its own then); `murk`, `lumen`, `front`: the war's state.
    */
   update(dt: number, on: boolean, raid: boolean, murk: number, lumen: number, front: number): void {
@@ -69,33 +69,35 @@ export class TrenchWar {
       const T = P.trench, spots = [...T.gapPosts, ...T.posts.slice(0, TrenchWar.sentries(P, lumen, front))];
       const held = F.blobs.filter((b) => b.role === 'sentry' && b.mode !== 'dead' && b.den);
       const free = spots.find((q) => !held.some((b) => Math.hypot(b.den!.x - q.x, b.den!.z - q.z) < 0.3));
-      const from = P.places.front;
+      const from = P.places.bottom;
       if (free && from) {
-        const b = F.spawn('lumen', 'sentry', from.x + (Math.random() - 0.5) * 3, from.y, from.z + (Math.random() - 0.5) * 3, 'front');
+        const b = F.spawn('lumen', 'sentry', from.x + (Math.random() - 0.5) * 3, from.y, from.z + (Math.random() - 0.5) * 3, 'trench');
         b.den = { ...free };
         this.stats.relieved++;
       }
     }
   }
 
-  /** A push: Murk up the Throat's last stretch, over the berm, at the gaps. */
+  /** A push: Murk out of the Warrens, over their berm, at the gaps. */
   push(n: number, brute = false): void {
-    const F = this.F, P = this.P;
-    const ramp = P.nodes.filter((q) => q.name.startsWith('ramp'));
-    const start = ramp[0] ?? P.nodes.find((q) => q.name === 'lip');
-    const line = P.nodes.find((q) => q.name === 'murkLine') ?? P.nodes.find((q) => q.name === 'lip');
+    const F = this.F, P = this.P, T = P.trench;
+    const line = P.nodes.find((q) => q.name === 'murkLine');
     const gaps = P.nodes.filter((q) => q.name.startsWith('trench'));
-    const front = P.nodes.find((q) => q.name === 'front');
-    if (!start || !line || !gaps.length) return;
+    const back = P.nodes.find((q) => q.name === 'bottom');
+    if (!line || !gaps.length) return;
     for (let i = 0; i < n; i++) {
       const role = i === 0 && brute ? 'brute' : Math.random() < 0.6 ? 'raider' : 'drone';
-      const b = F.spawn('murk', role, start.x + (Math.random() - 0.5) * 2, start.y, start.z + (Math.random() - 0.5) * 2, 'push');
+      // Out of sight behind the berm, where the Warrens open.
+      const s = T.murkS + 8 + Math.random() * 6, l = (Math.random() - 0.5) * 10;
+      const x = T.x + T.ax * s + T.cx * l, z = T.z + T.az * s + T.cz * l;
+      const y = this.field.floorAt(x, T.y + 3, z, 8) ?? line.y;
+      const b = F.spawn('murk', role, x, y, z, 'push');
       b.wait = i * (0.4 + Math.random() * 0.6);
       b.ttl = 160;
       F.goTo(b, line.id);
       const gap = gaps[Math.floor(Math.random() * gaps.length)];
       b.path.push(...F.route(line.id, gap.id));
-      if (front) b.path.push(...F.route(gap.id, front.id));
+      if (back) b.path.push(...F.route(gap.id, back.id));
     }
     this.stats.pushes++;
     this.stats.murk += n;

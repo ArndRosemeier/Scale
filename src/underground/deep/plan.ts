@@ -8,12 +8,13 @@
  *    dwellings round a pool and the Spire (a rock column ringed with fungus shelves); the Gardens
  *    (a forest of giant mushrooms), the Lake (a falls from a crack in the vault), the Archive
  *    (their collection of surface things, and the mosaics).
- *  - The Front: a gallery where the Lumen hold their trench line against the Murk coming up out of
- *    the Throat — sandbagged bays with gaps between them, a belt of thorn wire, a cratered no-man's
- *    land and the Murk's own berm at the lip. The Throat is a shaft 50 m deep with a ramp
- *    spiralling down its wall and a natural bridge across it.
+ *  - The Front: a gallery from the Hall to the Throat, a shaft 50 m deep with a ramp spiralling down
+ *    its wall and a natural bridge across it. The Lumen hold its floor.
  *  - The Deep (Murk, ~110 m down): the Warrens (crystal spikes, hives, pens with captured Lumen)
  *    and the Heart chamber, where a shard of the falling star sits on a mound, veins running from it.
+ *  - Where the realms meet, the Warrens' mouth by the Throat's floor, closed in by fallen rock to a
+ *    passage: the Lumen's trench line — sandbagged bays with gaps between them, a belt of thorn wire,
+ *    a cratered no-man's land and the Murk's own berm where the Warrens open.
  *
  * The rock is one signed distance field (field.ts); this module lays out its shapes, the things
  * standing in it (decor), the light sources baked into the rock, and a waypoint graph the slimes
@@ -77,7 +78,7 @@ export interface DeepPlan {
   lift: { x: number; z: number; y0: number; y1: number; r: number };
   /** Archive mosaics: centre, inward normal, size. */
   mosaics: { x: number; y: number; z: number; nx: number; nz: number; w: number; h: number }[];
-  /** The Front's trench war: its frame and lines (see `Trench`). */
+  /** The trench war in the Warrens' mouth: its frame and lines (see `Trench`). */
   trench: Trench;
   /** The Heart: the star shard on its mound. */
   heart: { x: number; y: number; z: number };
@@ -89,14 +90,14 @@ export interface DeepPlan {
 }
 
 /**
- * The Front as a battlefield. Frame: origin (x, z) where the gallery leaves the Hall, `a` along it
- * towards the Throat, `c` across; distances `s` along, `l` across (m), floor height y.
+ * The Warrens' mouth as a battlefield. Frame: origin (x, z) on the Throat's axis, `a` towards the
+ * Warrens, `c` across; distances `s` along, `l` across (m), floor height y.
  *  - The Lumen's trench at `s`: dug bays (l0, l1) a metre deep behind sandbagged parapets, with
  *    gaps between them (`gaps`: l of each) where the Murk try to get through; `posts` are the
  *    fighting spots in the bays, `gapPosts` the spots guarding the gaps.
  *  - Thorn wire across `wire` (s band): it holds the Murk up under fire.
  *  - No-man's land over `noMans` (s band), pitted with craters.
- *  - The Murk's berm at `murkS`, by the lip of the Throat, where they gather to go over.
+ *  - The Murk's berm at `murkS`, where the Warrens open, where they gather to go over.
  */
 export interface Trench {
   x: number; y: number; z: number;
@@ -120,6 +121,8 @@ export const GLOW_DEPTH = 64, DEEP_DROP = 52;
 /** Road gallery: radius, share of the radius the floor lies under the axis, steepest grade. */
 const ROAD_R = 5.2, ROAD_FLAT = 0.5, ROAD_GRADE = 0.16;
 const NECK_R = 2.3, NECK_FLAT = 0.42, NECK_GRADE = 0.3;
+/** The Warrens' mouth: half width of the passage the fallen rock leaves, how far it runs from the Throat's axis. */
+const MOUTH = 9.6, MOUTH_END = 58;
 /** Farthest colony that gets a road (m from the Hall). */
 const ROAD_REACH = 950;
 
@@ -247,37 +250,53 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   gallery(at(268, 6, L2 - 1), at(284, -4, L2 - 2.6), 9, 9, 3, 1.1, 4);
   // The mound under the Heart.
   P('ell', true, 2.5, 0.4, 3, [hC.x, L2 - 3, hC.z, 7.5, 4.2, 7.5, 0, -1e9]);
+  // ---------------------------------------------------------------- where the realms meet
+  // The Lumen hold the floor of the Throat, the Murk the Warrens beyond. Between them the Warrens'
+  // mouth, closed in by fallen rock to a passage, is the battlefield (see `Trench`). Frame: s from the
+  // shaft's axis towards the Warrens, l across.
+  const tDl = Math.hypot(wC.x - tC.x, wC.z - tC.z);
+  const tAx = (wC.x - tC.x) / tDl, tAz = (wC.z - tC.z) / tDl, tCx = -tAz, tCz = tAx;
+  const across = Math.atan2(tCz, tCx);
+  const G0 = (s: number, l: number) => ({ x: tC.x + tAx * s + tCx * l, z: tC.z + tAz * s + tCz * l });
+  for (const side of [-1, 1]) {
+    const m = G0(MOUTH_END / 2, side * (MOUTH + 25));
+    P('box', true, 2.5, 1.0, 3, [m.x, L2 + 14, m.z, 25, 20, MOUTH_END / 2, across]);
+    // Fallen blocks along the passage's sides.
+    for (let s = 31; s < MOUTH_END; s += rng.range(4, 7)) {
+      const r = rng.range(1.6, 3), q = G0(s, side * (MOUTH + r * 0.5));
+      P('ell', true, 1.2, 1.1, 3, [q.x, L2 + rng.range(-0.5, 1.5), q.z, r, r * rng.range(0.8, 1.4), r, rng.range(0, 6.3), -1e9]);
+    }
+  }
+  // The shaft open again where the fallen rock reached into it.
+  P('cyl', false, 0.5, 1.0, 2, [tC.x, tC.z, L2 - 1, L2 + 38, R]);
   // Rock and air of the Throat that the Deep's caverns must not undo: the ramp, the bridge, the lookout.
   P('helix', true, 0.8, 0.25, 2, [tC.x, tC.z, rc, hw, 3.2, frontY, slope, a0, len]);
   P('cap', true, 1.5, 0.35, 2, [bA.x, yB - 1.6, bA.z, bE.x, yB - 1.6, bE.z, 1.65, 1.65, 0]);
   P('ell', false, 2, 0.7, 2, [look.x, yB + 2.2, look.z, 6, 4.2, 6, aB, yB + 0.05]);
 
-  // ---------------------------------------------------------------- the trench war at the Front
-  // Gallery frame: s along from fA towards the Throat, l across.
-  const gLen = Math.hypot(64, 14), gdu = 64 / gLen, gdv = 14 / gLen;
-  const tAx = ux * gdu - uz * gdv, tAz = uz * gdu + ux * gdv, tCx = -tAz, tCz = tAx;
-  const G = (s: number, l: number) => ({ x: fA.x + tAx * s + tCx * l, y: frontY, z: fA.z + tAz * s + tCz * l });
-  const across = Math.atan2(tCz, tCx);
-  const TS = 33;
+  // ---------------------------------------------------------------- the trench war
+  const tFloor = G0(40, 0);
+  const ty = new DeepField(prims, seed).floorAt(tFloor.x, L2 + 4, tFloor.z, 12) ?? L2 - 1;
+  const G = (s: number, l: number) => ({ ...G0(s, l), y: ty });
+  const TS = 30;
   const segs: [number, number][] = [[-7.8, -3.1], [-1.1, 2.5], [4.5, 7.9]];
   const gaps = [-2.1, 3.5];
   for (const [l0, l1] of segs) {
     const m = G(TS, (l0 + l1) / 2), q = G(TS + 1.4, (l0 + l1) / 2), hl = (l1 - l0) / 2;
     // The bay: a metre deep, its lips worn round.
-    P('box', false, 0.45, 0.25, 2, [m.x, frontY - 0.25, m.z, hl, 0.75, 0.85, across]);
+    P('box', false, 0.45, 0.25, 2, [m.x, ty - 0.25, m.z, hl, 0.75, 0.85, across]);
     // The parapet in front of it (sandbags go on top).
-    P('box', true, 0.3, 0.15, 2, [q.x, frontY + 0.2, q.z, hl + 0.25, 0.65, 0.45, across]);
+    P('box', true, 0.3, 0.15, 2, [q.x, ty + 0.2, q.z, hl + 0.25, 0.65, 0.45, across]);
   }
-  // The Throat's lip in the frame: the Murk's berm a few metres short of it, open where they come up.
-  const lipS = (lip.x - fA.x) * tAx + (lip.z - fA.z) * tAz, lipL = Math.max(-4, Math.min(4, (lip.x - fA.x) * tCx + (lip.z - fA.z) * tCz));
-  const murkS = Math.min(58, lipS - 6);
-  for (const [l0, l1] of [[-7.5, lipL - 1.8], [lipL + 1.8, 7.5]]) {
+  // The Murk's berm short of the Warrens, open where they come over.
+  const murkS = 51, mL = 0.4;
+  for (const [l0, l1] of [[-7.5, mL - 1.8], [mL + 1.8, 7.5]]) {
     if (l1 - l0 < 1.5) continue;
     const m = G(murkS, (l0 + l1) / 2);
-    P('box', true, 0.5, 0.45, 2, [m.x, frontY + 0.05, m.z, (l1 - l0) / 2, 0.6, 0.7, across]);
+    P('box', true, 0.5, 0.45, 2, [m.x, ty + 0.05, m.z, (l1 - l0) / 2, 0.6, 0.7, across]);
   }
   // Craters in no-man's land (not on the line the Murk come over by).
-  const noMans: [number, number] = [41, murkS - 3];
+  const noMans: [number, number] = [38, murkS - 3];
   const craters: Trench['craters'] = [];
   for (let i = 0; i < 40 && craters.length < 8; i++) {
     const s = rng.range(noMans[0] + 1, noMans[1]), l = rng.range(-6.2, 6.2), r = rng.range(1.5, 2.9);
@@ -286,7 +305,7 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     if (craters.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < o.r + r - 0.6)) continue;
     craters.push({ x: c.x, z: c.z, r });
     const d = rng.range(0.45, 0.8);
-    P('ell', false, 1.0, 0.35, 2, [c.x, frontY - d + r * 0.45, c.z, r, r * 0.45, r, 0, -1e9]);
+    P('ell', false, 1.0, 0.35, 2, [c.x, ty - d + r * 0.45, c.z, r, r * 0.45, r, 0, -1e9]);
   }
 
   // ---------------------------------------------------------------- roads
@@ -341,12 +360,24 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   place('gardens', 46, -66, L1 + 3, 14);
   place('lake', -40, 64, L1, 12);
   place('front', 72, 18, frontY, 6);
-  places['lip'] = { ...lip, r: 3 };
   {
-    const gp = (name: string, s: number, l: number, r: number) => { const p = G(s, l); const y = floorNear(p.x, frontY + 1, p.z); if (y !== null) places[name] = { x: p.x, y, z: p.z, r }; };
+    // The lip can sit on the edge of a knob of rock: the nearest clear floor at the gallery's level.
+    const clear = (x: number, z: number) => [[0, 0], [0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6]].every(([dx, dz]) => {
+      const y = field.floorAt(x + dx, frontY + 0.85, z + dz, 3);
+      return y !== null && Math.abs(y - frontY) < 0.4 && field.air(x + dx, y + 1.7, z + dz);
+    });
+    let best: V = lip, bd = Infinity;
+    for (let dx = -2.5; dx <= 2.5; dx += 0.5) for (let dz = -2.5; dz <= 2.5; dz += 0.5) {
+      const d = Math.hypot(dx, dz);
+      if (d < bd && clear(lip.x + dx, lip.z + dz)) { bd = d; best = { x: lip.x + dx, y: field.floorAt(lip.x + dx, frontY + 0.85, lip.z + dz, 3)!, z: lip.z + dz }; }
+    }
+    places['lip'] = { ...best, r: 3 };
+  }
+  {
+    const gp = (name: string, s: number, l: number, r: number) => { const p = G(s, l); const y = floorNear(p.x, ty + 1, p.z); if (y !== null) places[name] = { x: p.x, y, z: p.z, r }; };
     gp('trench', TS - 4, 0.7, 4);
     gp('noMans', (noMans[0] + noMans[1]) / 2, 0.8, 4);
-    gp('murkLine', murkS - 1.2, lipL, 3);
+    gp('murkLine', murkS - 1.2, mL, 3);
   }
   place('bottom', 142 + 8, 32, L2, 10);
   place('warrens', 214, 22, L2, 18);
@@ -511,81 +542,84 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
       }
     }
   }
-  // The Front: the Lumen's bays (duckboards, sandbags, lamps), thorn wire, a cratered no-man's land,
-  // the Murk's berm and their dead.
+  // The trench war in the Warrens' mouth: the Lumen's bays (duckboards, sandbags, lamps), thorn wire,
+  // a cratered no-man's land, the Murk's berm and their dead.
   const posts: Trench['posts'] = [], gapPosts: Trench['gapPosts'] = [];
   for (const [l0, l1] of segs) {
     for (let l = l0 + 0.35; l < l1 - 0.2; l += 0.9) {
-      const p = G(TS, l), y = floorNear(p.x, frontY - 0.2, p.z);
+      const p = G(TS, l), y = floorNear(p.x, ty - 0.2, p.z);
       if (y === null) continue;
       decor.push({ k: 'duck', x: p.x, y, z: p.z, s: 0.45, h: 0.6, yaw: across, c: 0, reg: 2 });
     }
     for (let l = l0 + 0.6; l < l1 - 0.3; l += 1.5) {
-      const p = G(TS - 0.1, l), y = floorNear(p.x, frontY - 0.2, p.z);
-      if (y !== null && y < frontY - 0.4) posts.push({ x: p.x, y, z: p.z });
+      const p = G(TS - 0.1, l), y = floorNear(p.x, ty - 0.2, p.z);
+      if (y !== null && y < ty - 0.4) posts.push({ x: p.x, y, z: p.z });
     }
     // Sandbags along the parapet, two rows and a few on top.
     for (const [ds, dy, step] of [[1.1, 0, 0.62], [1.65, 0, 0.62], [1.35, 0.3, 0.7]] as const) {
       for (let l = l0 - 0.1 + (dy ? 0.4 : 0); l < l1 + 0.1; l += step) {
-        const p = G(TS + ds, l), y = floorNear(p.x, frontY + 2, p.z);
-        if (y === null || y < frontY + 0.3) continue;
+        const p = G(TS + ds, l), y = floorNear(p.x, ty + 2, p.z);
+        if (y === null || y < ty + 0.3) continue;
         decor.push({ k: 'sack', x: p.x, y: y - 0.06 + dy, z: p.z, s: 0.32 + rng.range(-0.03, 0.03), h: 0.32, yaw: across + rng.range(-0.15, 0.15), c: rng.int(0, 3), reg: 2 });
       }
     }
     // Warm lamps in the bay, low (the light stays in the trench).
-    for (let l = l0 + 1; l < l1; l += 3) { const p = G(TS - 0.5, l); glow(p.x, frontY - 0.2, p.z, LUMEN[3], 4.5, 0.7); }
+    for (let l = l0 + 1; l < l1; l += 3) { const p = G(TS - 0.5, l); glow(p.x, ty - 0.2, p.z, LUMEN[3], 4.5, 0.7); }
   }
   for (const l of gaps) {
-    const p = G(TS + 0.6, l), y = floorNear(p.x, frontY + 1, p.z);
+    const p = G(TS + 0.6, l), y = floorNear(p.x, ty + 1, p.z);
     if (y !== null) gapPosts.push({ x: p.x, y, z: p.z });
     // A stake either side of the gap with a glowing tip: the Lumen's mark.
     for (const side of [-1.15, 1.15]) {
-      const q = G(TS + 0.9, l + side), yq = floorNear(q.x, frontY + 1, q.z);
+      const q = G(TS + 0.9, l + side), yq = floorNear(q.x, ty + 1, q.z);
       if (yq !== null) decor.push({ k: 'post', x: q.x, y: yq, z: q.z, s: 0.14, h: rng.range(1.2, 1.6), yaw: 0, c: 0, reg: 2 });
     }
   }
   // Thorn wire: knife rests end to end across the gallery, a little askew.
   const wire: [number, number] = [TS + 4.5, TS + 6.5];
   for (let l = -7.4; l < 7.6; l += 2.3) {
-    const s = rng.range(wire[0] + 0.4, wire[1] - 0.4), p = G(s, l + rng.range(-0.2, 0.2)), y = floorNear(p.x, frontY + 1, p.z);
+    const s = rng.range(wire[0] + 0.4, wire[1] - 0.4), p = G(s, l + rng.range(-0.2, 0.2)), y = floorNear(p.x, ty + 1, p.z);
     if (y === null) continue;
     decor.push({ k: 'wire', x: p.x, y, z: p.z, s: 1.15, h: 0.95, yaw: across + rng.range(-0.25, 0.25), c: 0, reg: 2 });
   }
   // Stakes of the wire's second row, broken thorns.
   for (let i = 0; i < 14; i++) {
-    const p = G(rng.range(wire[0] - 1, wire[1] + 2.5), rng.range(-7, 7)), y = floorNear(p.x, frontY + 1, p.z);
+    const p = G(rng.range(wire[0] - 1, wire[1] + 2.5), rng.range(-7, 7)), y = floorNear(p.x, ty + 1, p.z);
     if (y !== null) decor.push({ k: 'stake', x: p.x, y, z: p.z, s: 0.07, h: rng.range(0.4, 1.1), yaw: rng.range(0, 6.3), c: 0, reg: 2, tilt: rng.range(-0.5, 0.5) });
   }
   // No-man's land: ooze stains, the husks of fallen Murk, burnt-out glow where Lumen fell.
   for (let i = 0; i < 46; i++) {
-    const s = rng.range(wire[0] - 1, murkS + 1), l = rng.range(-6.8, 6.8), p = G(s, l), y = floorNear(p.x, frontY + 1.5, p.z);
+    const s = rng.range(wire[0] - 1, murkS + 1), l = rng.range(-6.8, 6.8), p = G(s, l), y = floorNear(p.x, ty + 1.5, p.z);
     if (y === null) continue;
     const murk = rng.chance(0.8);
     decor.push({ k: 'stain', x: p.x, y, z: p.z, s: rng.range(0.4, 1.3), h: 0, yaw: rng.range(0, 6.3), c: murk ? 1 : 0, reg: 2 });
     if (murk && rng.chance(0.45)) glow(p.x, y + 0.3, p.z, MURK[0], 2.5, 0.35);
   }
   for (let i = 0; i < 16; i++) {
-    const s = rng.range(wire[0] - 0.5, murkS - 1), l = rng.range(-6.5, 6.5), p = G(s, l), y = floorNear(p.x, frontY + 1.5, p.z);
+    const s = rng.range(wire[0] - 0.5, murkS - 1), l = rng.range(-6.5, 6.5), p = G(s, l), y = floorNear(p.x, ty + 1.5, p.z);
     if (y !== null) decor.push({ k: 'husk', x: p.x, y, z: p.z, s: rng.range(0.3, 0.6), h: 0, yaw: rng.range(0, 6.3), c: rng.int(0, 2), reg: 2 });
   }
   // The Murk's side: crystal spikes along their berm, its red glow.
   for (let i = 0; i < 18; i++) {
-    const p = G(murkS + rng.range(-0.5, 2.5), rng.range(-7.2, 7.2)), y = floorNear(p.x, frontY + 1.5, p.z);
-    if (y === null || Math.abs((p.x - fA.x) * tCx + (p.z - fA.z) * tCz - lipL) < 1.6) continue;
+    const p = G(murkS + rng.range(-0.5, 2.5), rng.range(-7.2, 7.2)), y = floorNear(p.x, ty + 1.5, p.z);
+    if (y === null || Math.abs((p.x - tC.x) * tCx + (p.z - tC.z) * tCz - mL) < 1.6) continue;
     const c = rng.int(0, 2), sz = rng.range(0.25, 0.7);
     decor.push({ k: 'murkCrystal', x: p.x, y, z: p.z, s: sz, h: sz * rng.range(2, 4), yaw: rng.range(0, 6.3), c, reg: 2, tilt: rng.range(-0.6, 0.6) });
   }
-  for (const l of [-5, 0, 5]) { const p = G(murkS + 2, l); glow(p.x, frontY + 1.2, p.z, MURK[0], 9, 0.7); }
-  const trench: Trench = { x: fA.x, y: frontY, z: fA.z, ax: tAx, az: tAz, cx: tCx, cz: tCz, s: TS, segs, gaps, posts, gapPosts, wire, noMans, craters, murkS };
-  for (const t of [0.15, 0.38]) {
+  for (const l of [-5, 0, 5]) { const p = G(murkS + 2, l); glow(p.x, ty + 1.2, p.z, MURK[0], 9, 0.7); }
+  const trench: Trench = { x: tC.x, y: ty, z: tC.z, ax: tAx, az: tAz, cx: tCx, cz: tCz, s: TS, segs, gaps, posts, gapPosts, wire, noMans, craters, murkS };
+  // Nothing of the Warrens' own on the battlefield.
+  for (let s = TS - 6; s <= MOUTH_END; s += 4) for (const l of [-6, 0, 6]) { const p = G(s, l); taken.push({ x: p.x, z: p.z, r: 4.2 }); }
+  for (const t of [0.15, 0.4, 0.65]) {
     const x = fA.x + (fB.x - fA.x) * t, z = fA.z + (fB.z - fA.z) * t;
     glow(x, frontY + 6, z, LUMEN[2], 11, 0.4);
   }
   // The Throat: crystals of both kinds where the realms meet; a pale glow at the lip.
   glow(lip.x, frontY + 2, lip.z, LUMEN[0], 10, 0.7);
   glow(places.lookout.x, places.lookout.y + 1.5, places.lookout.z, LUMEN[3], 7, 0.8);
-  // The Deep's red glow rising from the bottom of the shaft.
-  glow(tC.x, L2 + 4, tC.z, MURK[0], 46, 1.1);
+  // The Lumen's pale light on the floor of the shaft they hold; the Deep's red glow beyond the berm.
+  glow(tC.x, L2 + 4, tC.z, LUMEN[0], 30, 0.55);
+  { const p = G(murkS + 14, 0); glow(p.x, ty + 5, p.z, MURK[0], 34, 1.1); }
   glow(tC.x, L2 + 22, tC.z, MURK[1], 30, 0.45);
   for (let i = 0; i < 40; i++) {
     const s = (i + rng.range(0.1, 0.9)) * (len / 40), a = a0 + s / rc, yy = frontY + slope * s;
@@ -604,7 +638,7 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     taken.push({ x, z, r: s });
   });
   const hives: DeepPlan['hives'] = [];
-  for (const [u, v] of [[186, 30], [226, -10], [244, 48], [262, 4], [200, 60], [238, 16]]) {
+  for (const [u, v] of [[214, 44], [226, -10], [244, 48], [262, 4], [210, -14], [238, 16]]) {
     const p = F(u, v, L2 + 2);
     if (!p) continue;
     const r = rng.range(3, 5);
@@ -714,11 +748,8 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   const nL = node('lake', places.lake, 10); link(nLL, nL);
   const nF0 = node('frontIn', F(54, 15, frontY), 5); link(nF0, rimNode(48, 13));
   const nF = node('front', places.front, 5); link(nF0, nF);
-  // Through the trench line by its gaps, over no-man's land, past the Murk's berm to the lip.
-  const nNM = node('noMans', places.noMans, 4);
-  gaps.forEach((l, i) => { const p = G(TS, l); const y = floorNear(p.x, frontY + 1, p.z); const n = node(`trench${i}`, y === null ? null : { x: p.x, y, z: p.z }, 1); link(nF, n); link(n, nNM); });
-  const nML = node('murkLine', places.murkLine, 3); link(nNM, nML);
-  const nLip = node('lip', places.lip, 3); link(nML, nLip);
+  const nFE = node('frontEnd', F(106, 26, frontY), 4); link(nF, nFE);
+  const nLip = node('lip', places.lip, 3); link(nFE, nLip);
   // Down the ramp.
   let prev = nLip;
   for (let s = 14; s < len - 4; s += 14) {
@@ -728,7 +759,11 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     prev = n;
   }
   const nBot = node('bottom', places.bottom, 8); link(prev, nBot);
-  const nW = node('warrens', places.warrens, 16); link(nBot, nW);
+  // Through the trench line by its gaps, over no-man's land, past the Murk's berm into the Warrens.
+  const nNM = node('noMans', places.noMans, 4);
+  gaps.forEach((l, i) => { const p = G(TS, l); const y = floorNear(p.x, ty + 1, p.z); const n = node(`trench${i}`, y === null ? null : { x: p.x, y, z: p.z }, 1); link(nBot, n); link(n, nNM); });
+  const nML = node('murkLine', places.murkLine, 3); link(nNM, nML);
+  const nW = node('warrens', places.warrens, 16); link(nML, nW);
   const nHL = node('heartLink', F(276, 1, L2), 5); link(nW, nHL);
   const nH = node('heart', places.heart, 8); link(nHL, nH);
   pens.forEach((p, i) => link(nW, node(`pen${i}`, p, 3)));

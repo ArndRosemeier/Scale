@@ -37,15 +37,14 @@ export function runTrench(plan: DeepPlan, secs: number, player: 'away' | 'trench
   };
   const F = new Factions(host);
   const war = new TrenchWar(null, F, plan, field);
-  for (const q of [...T.gapPosts, ...T.posts.slice(0, TrenchWar.sentries(plan, 0.7, 0.08))]) { const b = F.spawn('lumen', 'sentry', q.x, q.y, q.z, 'front'); b.den = { ...q }; }
-  F.areas.set('front', 0);
-  // A raid (RAID=n): n Murk up the ramp at once, a brute first from 9 on, as SlimeRealm sends them.
+  for (const q of [...T.gapPosts, ...T.posts.slice(0, TrenchWar.sentries(plan, 0.7, 0.08))]) { const b = F.spawn('lumen', 'sentry', q.x, q.y, q.z, 'trench'); b.den = { ...q }; }
+  F.areas.set('trench', 0);
+  // A raid (RAID=n): n Murk out of the Warrens at once, a brute first from 9 on, as SlimeRealm sends them.
   const raid = Number(process.env.RAID ?? 0);
   if (raid) {
-    const ramp = plan.nodes.filter((q) => q.name.startsWith('ramp'));
-    const start = ramp[Math.max(0, Math.floor(ramp.length * 0.25))];
+    const start = plan.nodes.find((q) => q.name === 'warrens')!, line = plan.nodes.find((q) => q.name === 'murkLine')!;
     const gaps = plan.nodes.filter((q) => q.name.startsWith('trench')), hall = plan.nodes.find((q) => q.name === 'hall')!;
-    for (let i = 0; i < raid; i++) { const b = F.spawn('murk', i === 0 && raid >= 9 ? 'brute' : 'raider', start.x, start.y, start.z, 'raid'); b.wait = i * 0.6; F.goTo(b, gaps[i % gaps.length].id); b.path.push(...F.route(gaps[i % gaps.length].id, hall.id)); }
+    for (let i = 0; i < raid; i++) { const g = gaps[i % gaps.length]; const b = F.spawn('murk', i === 0 && raid >= 9 ? 'brute' : 'raider', start.x, start.y, start.z, 'raid'); b.wait = i * 0.6; F.goTo(b, line.id); b.path.push(...F.route(line.id, g.id), ...F.route(g.id, hall.id)); }
   }
   const dt = 1 / 30;
   const cam = { x: pp.x, y: pp.y, z: pp.z } as unknown as import('three').Vector3;
