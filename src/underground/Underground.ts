@@ -25,7 +25,7 @@ import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Vo
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
 import { pointInPoly } from '../core/geom2';
 import { G } from '../render/materials/globals';
-import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, nextTrainAt, carPose, DWELL, type TrainState } from './layout';
+import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, underpassRoute, routeEnv, TRAIN_SEATS, seatYaw, platformSeats, trainsOn, nextTrainAt, carPose, DWELL, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
 import { planRooms, type RoomPlan } from './rooms';
 import { buildRoom, buildCrawl, buildChamber, colonyLayout, type BuiltRoom, type RoomMats, type EmitterId } from './RoomMeshes';
@@ -116,6 +116,17 @@ export class Underground {
       for (const c of r.cuts) l.push({ ...c, side: r.side });
     }
     for (const c of this.rooms.colonies) { this.boxes.push(c.chamber); this.tubes.push(c.crawl); }
+    // An underpass between the two platforms of every hall (built before the entrances, which keep clear of it).
+    this.boxes.forEach((b, bi) => {
+      if (b.kind !== 'station') return;
+      const r = underpassRoute(b, routeEnv(this.tubes, this.boxes, b));
+      if (!r) return;
+      const t = makeTube('passage', r.pts, PASSAGE_HW, PASSAGE_H);
+      t.underpass = true;
+      this.tubes.push(t);
+      this.underpasses.set(bi, t);
+      this.doors.set(bi, [{ u: r.u, sv: 1 }, { u: r.u, sv: -1 }]);
+    });
     for (const t of this.tubes) this.indexTube(t);
     for (const b of this.boxes) this.indexBox(b);
     // The deep realm below the colonies (its own field; meshes streamed by its worker).
@@ -301,6 +312,8 @@ export class Underground {
 
   /** Doorways in the station halls' side walls (box index → box frame u, side ±1) where entrance passages arrive. */
   private doors = new Map<number, { u: number; sv: number }[]>();
+  /** Each hall's underpass between its two platforms (box index → passage; from the + side to the − side). */
+  readonly underpasses = new Map<number, Tube>();
 
   // ------------------------------------------------------------ queries
 
@@ -327,7 +340,7 @@ export class Underground {
     for (const c of this.cars) {
       if (Math.abs(c.x - x) > 10 || Math.abs(c.z - z) > 10) continue;
       const L = this.carLocal(c, x, y, z), f = c.y + CAR_FLOOR;
-      if (Math.abs(L.u) < CAR_L / 2 && Math.abs(L.v) < CAR_W / 2 && f <= y + 0.6 && f > y - 1.5 && (best === null || f > best)) best = f;
+      if (Math.abs(L.u) < CAR_L / 2 && Math.abs(L.v) < CAR_W / 2 + 0.1 && f <= y + 0.6 && f > y - 1.5 && (best === null || f > best)) best = f;
     }
     return best;
   }
@@ -820,8 +833,8 @@ export class Underground {
         mb.set('aLayer', 8).set('aTint', 0.8, 0.8, 0.78);
       }
       if (passage) {
-        // Stairs on the slope (steps every ~0.3 m of rise).
-        const rise = ay - by;
+        // Stairs on the slope (steps every ~0.3 m of rise), going down or up along the polyline.
+        const rise = Math.abs(ay - by);
         if (rise > 0.2) {
           const n = Math.ceil(rise / 0.17);
           // Steps square to this leg (not to the averaged corner direction).
@@ -1219,11 +1232,13 @@ export class Underground {
   /** Every car of every train at the last update: pose (centre on the track bed, heading), velocity, schedule. */
   readonly cars: TrainCar[] = [];
   /** The player's ride: train k of a line, the car's physical slot along the train, offset in the car (along, across). */
-  ride: { line: number; k: number; slot: number; u: number; v: number } | null = null;
+  ride: { line: number; k: number; slot: number; u: number; v: number; seated?: boolean } | null = null;
   /** The ridden car's frame last update (to carry the player's own steps inside it along). */
   private rideFrame: { x: number; z: number; fx: number; fz: number } | null = null;
   /** The player's body (set by the game): carried by the train it rides, pushed aside by trains. */
-  body: { pos: THREE.Vector3; vel: THREE.Vector3; grounded: boolean; height: number; radius: number; flying: boolean } | null = null;
+  body: { pos: THREE.Vector3; vel: THREE.Vector3; grounded: boolean; height: number; radius: number; flying: boolean; seat: { x: number; z: number; yaw: number } | null } | null = null;
+  /** Is someone (not the body) sitting on this seat already? (set by the game: its seated people). */
+  seatTaken: ((x: number, y: number, z: number) => boolean) | null = null;
 
   private computeCars(time: number): void {
     this.cars.length = 0;
@@ -1253,13 +1268,13 @@ export class Underground {
    * positive towards the platform side: trains run on the right-hand track, platforms are outside
    * the tracks), height over the car floor (h).
    */
-  private carLocal(c: TrainCar, x: number, y: number, z: number): { u: number; v: number; h: number } {
+  carLocal(c: TrainCar, x: number, y: number, z: number): { u: number; v: number; h: number } {
     const ox = x - c.x, oz = z - c.z;
     return { u: ox * c.dx + oz * c.dz, v: -ox * c.dz + oz * c.dx, h: y - (c.y + CAR_FLOOR) };
   }
 
   /** World point of car-local (u, v). */
-  private carWorld(c: TrainCar, u: number, v: number): [number, number] {
+  carWorld(c: TrainCar, u: number, v: number): [number, number] {
     return [c.x + c.dx * u - c.dz * v, c.z + c.dz * u + c.dx * v];
   }
 
@@ -1363,7 +1378,12 @@ export class Underground {
     }
     if (this.ride && car) {
       const r = this.ride;
-      if (this.rideFrame) {
+      if (r.seated && !b.seat) r.seated = false;
+      if (r.seated) {
+        // On a bench: held on the seat, facing the aisle, wherever the car goes.
+        const [x, z] = this.carWorld(car, r.u, r.v);
+        b.seat!.x = x; b.seat!.z = z; b.seat!.yaw = seatYaw(car, r.v);
+      } else if (this.rideFrame) {
         // The body's own steps inside the car (since the last update), in the car's frame.
         const f = this.rideFrame, ox = b.pos.x - f.x, oz = b.pos.z - f.z;
         const u = ox * f.fx + oz * f.fz, v = -ox * f.fz + oz * f.fx;
@@ -1445,7 +1465,7 @@ export class Underground {
   }
 
   /** The hall (box index) whose platform the body stands on, or -1. */
-  private platformAt(x: number, y: number, z: number): number {
+  platformAt(x: number, y: number, z: number): number {
     const n = this.near(x, z);
     if (!n.boxes.some((b) => b.kind === 'station')) return -1;
     return this.boxes.findIndex((b) => {
@@ -1482,13 +1502,16 @@ export class Underground {
   }
 
   /** On-screen hint for the metro (boarding, riding, arriving trains), or null. */
-  metroHint(): string | null {
+  /** `seat`: a free train seat is in reach (E sits down then, not off). */
+  metroHint(seat = false): string | null {
     const b = this.body;
     if (!b) return null;
     const car = this.ridden();
     if (car) {
       const line = this.macro.metroLines[car.line];
       const name = this.stationNames.get(line.stations[car.next]) ?? '';
+      if (b.seat) return `Line ${line.name} to ${this.terminus(line, car.dir)} — ${car.dwell ? 'at' : 'next stop'} <b>${name}</b> · move or press <b>E</b> to get up`;
+      if (seat) return car.open ? `<b>${name}</b> — press <b>E</b> to sit down, or walk out through the doors (departs in ${Math.ceil(car.left)} s)` : `Line ${line.name} to ${this.terminus(line, car.dir)} — next stop <b>${name}</b> · press <b>E</b> to sit down`;
       if (car.open) return `<b>${name}</b> — walk out through the doors or press <b>E</b> to get off (departs in ${Math.ceil(car.left)} s)`;
       if (car.dwell) return `<b>${name}</b> — doors closing`;
       return `Line ${line.name} to ${this.terminus(line, car.dir)} — next stop <b>${name}</b>`;
@@ -1513,6 +1536,40 @@ export class Underground {
     return `Platform — line ${line.name} to ${this.terminus(line, Math.sign(v) || 1)}`;
   }
 
+  /**
+   * A free seat within r of a point: a bench seat in the car the body rides, or a platform bench
+   * (world position on the floor, the way it faces, and for a car seat its car-local place).
+   */
+  seatNear(x: number, y: number, z: number, r: number): { x: number; z: number; yaw: number; car?: { u: number; v: number } } | null {
+    let best: { x: number; z: number; yaw: number; car?: { u: number; v: number } } | null = null, bd = r;
+    const car = this.ridden();
+    if (car) {
+      for (const [u, v] of TRAIN_SEATS) {
+        const [sx, sz] = this.carWorld(car, u, v), d = Math.hypot(sx - x, sz - z);
+        if (d >= bd || this.seatTaken?.(sx, car.y + CAR_FLOOR, sz)) continue;
+        bd = d; best = { x: sx, z: sz, yaw: seatYaw(car, v), car: { u, v } };
+      }
+      return best;
+    }
+    const bi = this.platformAt(x, y, z);
+    if (bi < 0) return null;
+    const b = this.boxes[bi];
+    for (const [u, v] of platformSeats(b)) {
+      const sx = b.cx + b.ux * u - b.uz * v, sz = b.cz + b.uz * u + b.ux * v, d = Math.hypot(sx - x, sz - z);
+      if (d >= bd || this.seatTaken?.(sx, y, sz)) continue;
+      // Facing the tracks.
+      const sv = Math.sign(v);
+      bd = d; best = { x: sx, z: sz, yaw: Math.atan2(-b.uz * sv, b.ux * sv) };
+    }
+    return best;
+  }
+
+  /** The body sat down on a car seat (seatNear's `car`): the ride holds it there. */
+  sitInCar(at: { u: number; v: number }): void {
+    if (!this.ride) return;
+    this.ride.u = at.u; this.ride.v = at.v; this.ride.seated = true;
+  }
+
   /** E on the metro: board the dwelling train next to the body, or get off at a station. Returns true if handled. */
   metroKey(): boolean {
     const b = this.body;
@@ -1524,6 +1581,7 @@ export class Underground {
       const r = this.ride!;
       const d = DOOR_U.reduce((p, q) => (Math.abs(q - r.u) < Math.abs(p - r.u) ? q : p));
       const [x, z] = this.carWorld(car, d, CAR_W / 2 + 0.6);
+      b.seat = null;
       b.pos.set(x, car.y + CAR_FLOOR, z);
       b.vel.set(0, 0, 0);
       this.ride = null;

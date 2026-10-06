@@ -2,9 +2,20 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.064 — 2026-10-06
+## 0.065 — 2026-10-06
 
 - **The Lumen's trench holds steadier**: when two or more of their spots are empty, fresh sentries now come every 2.5 s (was 7 s) from right behind the line instead of the floor of the Throat, so a lucky Murk push no longer snowballs into the whole line falling. The headless trench test is now repeatable (its dice are seeded per city).
+
+## 0.064 — 2026-10-06
+
+- **Metro stations are full of people now.**
+  - **Commuters** come down the entrance stairs from the street, some crossing to the far platform, and wait on the platforms: standing and looking down the tracks, or sitting on the benches.
+  - **Trains**: when a train pulls in and opens its doors, some riders get off and walk out and up the stairs to the street, and most of the people waiting step in, take a seat or stand by a door, and ride away. Trains near you carry passengers who sit along the benches, also in the car you ride in.
+- **Sit in the train**: the benches in the cars and on the platforms are seats now. Press **E** next to one to sit down (in a moving train too); the train carries you along on your seat, and on a platform bench you stay down in the station. Move or press **E** to get up again.
+- **Every platform can be reached on foot**: in more than half of the stations one platform (one direction of travel) had no way to it except by train. Every station now has an underpass under the tracks between its two platforms, with stairs down and up again on both sides.
+- **No more invisible ledges on the stairs**: where an entrance passage turned a corner right at the top or bottom of a flight, walking along one side of it ran into a step half a metre high. Every turn now has a level landing. Corridors that turned back and ran underneath their own stairs, and corridors running back alongside the first flight, now swing out to the side first.
+- Entrance routes are worked out about twice as fast as before (they only look at the tunnels and sewers near their station).
+
 ## 0.063 — 2026-10-06
 
 - **The town hall and the cathedral are full of people now**, by the time of day.
@@ -28,6 +39,7 @@ Every push raises the version by 0.001. Newest first.
 - **You can tell the slimes apart.** The Murk are blood red now, their spines glowing hotter towards the tips, and they have two slanted, glaring orange eyes (brighter when they fight). The Lumen stay soft, round and glowing.
 - **The Murk go for you on sight**: from 24 m away (was 17), and a Murk fighting a Lumen drops it for you once you come within 10 m. They also follow you further before giving up.
 - Fix: slimes following a route through the caves could get stuck forever trying to reach a waypoint at an edge (the Murk at the lip of the Throat, for example). Now they move on.
+
 ## 0.060 — 2026-10-06
 
 - **Save to file and Load from file use your computer's own file dialogs** where the browser has them (Chrome, Edge and Opera on a desktop): you choose the folder and name of a saved game, and pick the file to open from a normal Open window that shows Scale saves first. The dialogs remember the folder you used last. In other browsers (Firefox, Safari, iPad) saving still downloads the file, and loading uses the browser's file chooser.

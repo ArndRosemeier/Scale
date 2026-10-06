@@ -18,6 +18,8 @@ export interface Tube {
   /** Floor offset profile across (sewer channel): floor at |lat| < channel is lower. */
   channel?: number;
   channelDepth?: number;
+  /** A station's cross-platform underpass (a passage that entrance routes keep clear of). */
+  underpass?: boolean;
 }
 
 export interface Box {
