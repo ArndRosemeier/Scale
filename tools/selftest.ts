@@ -465,7 +465,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(!/NaN|undefined|Infinity/.test(txt), `${d.id} rank ${r} text: ${txt}`);
     if (!d.granted) check((T.KARMA_COST as Record<string, readonly number[]>)[d.id]?.length === d.maxRank, `${d.id}: karma cost for every rank`);
   }
-  for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.flightBoost(r) * 1.1, `super speed rank ${r} clearly faster than flight boost`);
+  for (let r = 1; r <= T.MAX_RANK; r++) check(T.SPEED_TOP[r] > T.SPEED_TOP[r - 1] && T.SPEED_TOP[r] <= 100, `super speed rank ${r}: faster than the rank below, at most 100 m/s`);
   check(LEGACY_IDS.dash === 'speed', 'dash folds into super speed');
   // A Normal save from before the fold: dash rank 3 on slot 2 becomes super speed rank 3 there.
   const store = new Map<string, string>();

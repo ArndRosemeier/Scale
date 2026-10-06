@@ -1,11 +1,12 @@
 /**
  * Runs the player's powers: applies ranks to the existing mechanics (Player flight, size and
  * super speed, Interactions punch and blast), owns the energy pool and cooldowns, and routes
- * input — digits 1–9, 0 trigger (and select) hotbar slots, Space charges the super jump, F toggles flight.
+ * input — digits 1–9, 0 trigger (and select) hotbar slots, Space drives the super jump, F toggles flight.
  *
  * Trigger kinds: tap powers go off on the press (cooldown, energy); held powers (laser eyes,
  * ice path, hydrokinesis) run while the key or button is held and drain energy per second;
- * super speed dashes on a tap and runs while held.
+ * super speed is a toggle on foot (a press in flight dashes). The super jump takes off on the
+ * press and keeps climbing while Space is held, up to the rank's height.
  *
  * Call order per frame: `preUpdate` before Player.update (gates Space / F, sets the running
  * speed), `postUpdate` after the in-world panels had their look at the digit keys. The
@@ -19,7 +20,7 @@ import type { Progress } from './Progress';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
   ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE,
-  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, FIREBALL, FIREBALL_COOLDOWN, NOVA, NOVA_COOLDOWN,
+  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, FIREBALL, FIREBALL_COOLDOWN, NOVA, NOVA_COOLDOWN,
   BOLT, BOLT_COOLDOWN, QUAKE, QUAKE_COOLDOWN, GUST, GUST_COOLDOWN, SHRINK, SHRINK_COOLDOWN,
 } from './tuning';
 
@@ -55,18 +56,21 @@ const TAP: Partial<Record<AbilityId, { cost: number; cd: number[] }>> = {
 };
 
 /** Held powers: energy per second (super speed runs for free, like flight). */
-const DRAIN: Partial<Record<AbilityId, number>> = { laser: LASER.drain, icePath: ICE.drain, hydro: HYDRO.drain, speed: SPEED.cost };
+const DRAIN: Partial<Record<AbilityId, number>> = { laser: LASER.drain, icePath: ICE.drain, hydro: HYDRO.drain };
 
 export class AbilitySystem {
   energy = 0;
   selected = 0;
   /** Cooldown left per ability (s) and its full length (for the HUD sweep). */
   readonly cooldown = new Map<AbilityId, { left: number; full: number }>();
-  /** Super jump charge 0..1 while held (-1: not charging). */
+  /** Super jump climb 0..1 (share of the rank's height gained) while Space is held (-1: not climbing). */
   charge = -1;
-  private chargeT = 0;
   private chargeSrc: string | null = null;
-  /** The held power this frame (laser, ice path, hydrokinesis, super speed): id, rank, seconds held. */
+  /** The climbing super jump: take-off height, highest point allowed, height paid for, seconds. */
+  private ascent = { y0: 0, top: 0, paid: 0, t: 0, lastY: 0 };
+  /** Super speed switched on (a toggle; it runs on foot, flight ignores it). */
+  speedOn = false;
+  /** The held power this frame (laser, ice path, hydrokinesis): id, rank, seconds held. */
   channel: { id: AbilityId; rank: number; t: number } | null = null;
   private channelSrc: string | null = null;
   hooks: AbilityHooks = {};
@@ -87,8 +91,8 @@ export class AbilitySystem {
 
   /** Is this power in use right now (held, running, flying, charging)? For the HUD. */
   active(id: AbilityId): boolean {
-    if (this.channel?.id === id && (id !== 'speed' || this.player.speedTop > 0)) return true;
-    return (id === 'flight' && this.player.flying) || (id === 'superJump' && this.charge >= 0);
+    if (this.channel?.id === id) return true;
+    return (id === 'flight' && this.player.flying) || (id === 'superJump' && this.charge >= 0) || (id === 'speed' && this.speedOn);
   }
 
   /** Before Player.update: apply ranks to the mechanics and take over Space / F where needed. */
@@ -106,15 +110,15 @@ export class AbilitySystem {
     this.energy = Math.min(this.maxEnergy, this.energy + this.regen * dt);
     // F without flight: a hint instead of nothing.
     if (input.hit('KeyF') && rf === 0 && this.enabled) this.hooks.deny?.('Flight is locked — press P to see your powers');
-    // Super jump on Space: tap = normal jump, hold = charge.
+    // Super jump on Space: takes off on the press, climbs while held.
     const sj = this.rank('superJump') > 0;
     p.jumpOnSpace = !sj;
-    if (!this.enabled) { this.cancelCharge(); this.endChannel(); return; }
-    if (sj && !p.flying) {
-      if (input.hit('Space') && p.grounded && this.charge < 0) this.beginCharge('Space');
-    }
+    if (this.rank('speed') <= 0) this.speedOn = false;
+    if (!this.enabled) { this.cancelCharge(); this.endChannel(); p.speedTop = 0; return; }
+    if (sj && !p.flying && input.hit('Space') && p.grounded && this.charge < 0) this.beginCharge('Space');
     this.updateCharge(dt, input);
     this.updateChannel(dt, input);
+    p.speedTop = this.speedOn && !p.flying ? SPEED_TOP[this.rank('speed')] : 0;
   }
 
   /** After the panels consumed their digits: hotbar keys. */
@@ -154,6 +158,7 @@ export class AbilitySystem {
       this.beginCharge(src);
       return;
     }
+    if (id === 'speed' && !this.player.flying) { this.speedOn = !this.speedOn; return; }
     if (ABILITY[id].trigger === 'hold') { this.beginChannel(id, src); return; }
     this.use(id);
   }
@@ -201,7 +206,7 @@ export class AbilitySystem {
     }
   }
 
-  /** Super speed tapped: a dash burst where you look. */
+  /** Super speed pressed in flight: a dash burst where you look. */
   private dash(r: number): boolean {
     if (this.cooldown.get('speed')) { this.hooks.deny?.('Dash is recharging'); return false; }
     if (!this.spend(DASH.cost)) return false;
@@ -240,17 +245,13 @@ export class AbilitySystem {
   }
 
   private endChannel(): void {
-    const c = this.channel;
     this.channel = null;
     this.channelSrc = null;
-    this.player.speedTop = 0;
-    // A short press of super speed is a dash.
-    if (c && c.id === 'speed' && c.t < SPEED.tapTime && this.enabled) this.dash(c.rank);
   }
 
   private updateChannel(dt: number, input: Input): void {
     const c = this.channel;
-    if (!c || !this.channelSrc) { this.player.speedTop = 0; return; }
+    if (!c || !this.channelSrc) return;
     if (!this.isHeld(this.channelSrc, input) || this.rank(c.id) <= 0) { this.endChannel(); return; }
     c.t += dt;
     c.rank = this.rank(c.id);
@@ -259,16 +260,24 @@ export class AbilitySystem {
       if (this.energy < drain * dt) { this.hooks.deny?.('Out of energy'); this.channel = null; this.channelSrc = null; return; }
       this.energy -= drain * dt;
     }
-    // Super speed runs once the press is longer than a tap (on foot; in flight it only dashes).
-    this.player.speedTop = c.id === 'speed' && c.t >= SPEED.tapTime && !this.player.flying ? SPEED_TOP[c.rank] : 0;
   }
 
-  // ---- super jump charge
+  // ---- super jump: take off on the press, climb while held
   private beginCharge(src: string): void {
-    if (this.cooldown.get('superJump')) return;
+    const p = this.player, r = this.rank('superJump');
+    if (this.cooldown.get('superJump') || p.seat || p.downT > 0 || p.ragdoll || p.puppet) return;
+    const normalH = (p.jumpSpeed * p.jumpSpeed) / (2 * 9.81);
+    const a = this.ascent;
+    a.y0 = a.lastY = p.pos.y;
+    a.top = p.pos.y + Math.max(normalH, JUMP_HEIGHT[r] * p.k);
+    a.paid = 0;
+    a.t = 0;
     this.charge = 0;
-    this.chargeT = 0;
     this.chargeSrc = src;
+    p.superLaunch(p.jumpSpeed, 0.05);
+    this.startCooldown('superJump', JUMP.cooldown);
+    this.hooks.sound?.('whoosh_takeoff', 0.4, 1.15);
+    this.hooks.leapFx?.(0.35);
   }
 
   private cancelCharge(): void {
@@ -277,28 +286,36 @@ export class AbilitySystem {
     this.player.jumpCharge = -1;
   }
 
+  /**
+   * While Space is held the body climbs (full height in about a second and a half, at any rank)
+   * and eases off near the top so the arc peaks at the rank's height; on release the climb is cut
+   * to a short coast, so the height is where one lets go. Energy is paid for the height gained
+   * (JUMP.cost for the full height).
+   */
   private updateCharge(dt: number, input: Input): void {
     if (this.charge < 0 || !this.chargeSrc) return;
-    const p = this.player;
+    const p = this.player, a = this.ascent, g = 9.81;
     if (p.flying) { this.cancelCharge(); return; }
-    this.chargeT += dt;
-    this.charge = Math.min(1, Math.max(0, (this.chargeT - JUMP.tapTime) / JUMP.chargeTime));
-    p.jumpCharge = this.charge;
-    if (this.isHeld(this.chargeSrc, input)) return;
-    // Released: a tap is an ordinary jump; a charge leaps (energy permitting).
-    const f = this.charge, t = this.chargeT;
-    this.cancelCharge();
-    if (!p.grounded) return;
-    const r = this.rank('superJump');
-    if (t < JUMP.tapTime || f <= 0.02) { p.launch(p.jumpSpeed); return; }
-    const cost = JUMP.cost * f;
-    if (this.energy < cost) { this.hooks.deny?.('Not enough energy'); p.launch(p.jumpSpeed); return; }
-    this.energy -= cost;
-    const normalH = (p.jumpSpeed * p.jumpSpeed) / (2 * 9.81);
-    const h = normalH + (JUMP_HEIGHT[r] * p.k - normalH) * f;
-    p.superLaunch(Math.sqrt(2 * 9.81 * h), f);
-    this.startCooldown('superJump', JUMP.cooldown);
-    this.hooks.sound?.('whoosh_takeoff', 0.35 + f * 0.4, 1.2 - f * 0.3);
-    this.hooks.leapFx?.(f);
+    const sk = Math.sqrt(p.k);
+    if (!this.isHeld(this.chargeSrc, input)) { p.vel.y = Math.min(p.vel.y, 5 * sk); this.cancelCharge(); return; }
+    a.t += dt;
+    // Landed again (a ceiling, a low roof) or stuck under one: the climb is over.
+    if ((p.grounded && a.t > 0.1) || (a.t > 0.15 && p.pos.y - a.lastY < 1e-3 && p.vel.y <= 0.01)) { this.cancelCharge(); return; }
+    a.lastY = p.pos.y;
+    const span = a.top - a.y0, gained = Math.max(0, p.pos.y - a.y0);
+    // Pay for the height gained so far.
+    const owe = JUMP.cost * Math.min(1, gained / span) - a.paid;
+    if (owe > 0) {
+      if (this.energy < owe) { this.hooks.deny?.('Not enough energy'); this.cancelCharge(); return; }
+      this.energy -= owe;
+      a.paid += owe;
+    }
+    const vUp = Math.max(8 * sk, span / 1.2);
+    const vCap = Math.min(vUp, Math.sqrt(2 * g * Math.max(0, a.top - p.pos.y)));
+    // Thrust against gravity (Player.update subtracts g·dt afterwards).
+    if (p.vel.y < vCap) p.vel.y = Math.min(vCap + g * dt, p.vel.y + (vUp / 0.3 + g) * dt);
+    p.grounded = false;
+    this.charge = Math.min(1, gained / span);
+    p.leap = Math.max(p.leap, 0.05, this.charge);
   }
 }
