@@ -87,6 +87,8 @@ interface Commuter {
   /** Seconds in the mode; the walk's no-progress watch. */
   t: number;
   best: number; stall: number;
+  /** Was knocked down (lying, or up again but not yet sent on). */
+  downed?: boolean;
 }
 
 const carKey = (c: MetroCar) => `${c.line}:${c.k}:${c.slot}`;
@@ -114,8 +116,9 @@ export class StationLife {
     this.time += dt;
     const cars = new Map<string, MetroCar>();
     for (const c of this.m.cars) cars.set(carKey(c), c);
-    // Gone (despawned, knocked out by someone, taken over): forget.
-    this.people = this.people.filter((q) => q.a.alive && q.a.actor?.owner === METRO_OWNER && q.a.state !== PState.Down);
+    // Gone (despawned, taken over): forget. (Knocked down: still theirs; they get up again, and one
+    // knocked off the platform and forgotten got up on the track bed with nobody to see to them.)
+    this.people = this.people.filter((q) => q.a.alive && q.a.actor?.owner === METRO_OWNER);
     // Halls around the player.
     this.m.boxes.forEach((b, bi) => {
       if (b.kind !== 'station') return;
@@ -392,7 +395,19 @@ export class StationLife {
     const a = q.a, act = a.actor!;
     q.t += dt;
     act.move = null;
-    if (q.mode !== 'ride') this.offTracks(q);
+    if (q.mode !== 'ride' || a.state === PState.Down) this.offTracks(q);
+    // Lying down (knocked over): nothing to do until they are up again (CrimeSystem's upkeep); then
+    // out of whatever they were doing (a train they were in may be long gone) and to a place to wait.
+    if (a.state === PState.Down) { act.goal = null; act.speed = 0; q.downed = true; return; }
+    if (q.downed) {
+      q.downed = false;
+      const bi = this.hallOf(q);
+      if (bi < 0) { this.drop(q); return; }
+      q.hall = bi; q.car = ''; q.seated = false;
+      q.side = Math.sign(this.boxV(this.m.boxes[bi], a.x, a.z)) || q.side || 1;
+      q.spot = this.pickSpot(bi, q.side);
+      this.walk(q, [q.spot.x, q.spot.z], 'wait');
+    }
     switch (q.mode) {
       case 'walk': {
         if (!this.follow(q, dt, a.pref)) break;
@@ -457,8 +472,15 @@ export class StationLife {
    * Down on the tracks after all (knocked off the platform, left over a car that pulled out): back up
    * onto the platform beside them, rather than walking the track bed with no way up.
    */
+  /** The hall the commuter belongs to, else the one it stands in (horizontally), or -1. */
+  private hallOf(q: Commuter): number {
+    if (this.m.boxes[q.hall]) return q.hall;
+    const a = q.a;
+    return this.m.boxes.findIndex((b) => b.kind === 'station' && Math.abs((a.x - b.cx) * b.ux + (a.z - b.cz) * b.uz) < b.hu && Math.abs(this.boxV(b, a.x, a.z)) < b.hv && Math.abs(a.y - b.y0) < 3);
+  }
+
   private offTracks(q: Commuter): void {
-    const a = q.a, b = this.m.boxes[q.hall];
+    const a = q.a, b = this.m.boxes[this.hallOf(q)];
     // (Track-bed level only: the underpass runs beneath the hall.)
     if (!b || a.y > b.y0 + PLATFORM_H - 0.5 || a.y < b.y0 - 0.5) return;
     const u = (a.x - b.cx) * b.ux + (a.z - b.cz) * b.uz, v = this.boxV(b, a.x, a.z);
