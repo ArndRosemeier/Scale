@@ -273,7 +273,9 @@ function routeVariant(b: Box, gx: number, gz: number, ux: number, uz: number, gr
       ys[ns] = Math.min(ys[ns], env.cap(x, z) + 0.45 * d);
     }
   }
-  for (let k = 1; k <= ns; k++) ys[k] = Math.min(ys[k], ys[k - 1] + STAIR_SLOPE * step);
+  // Never climbing again on the way down (a dip under a sewer or a hollow in the street would
+  // otherwise make the corridor go down and back up before the flights); then no steeper than a stair.
+  for (let k = 1; k <= ns; k++) ys[k] = Math.min(ys[k], ys[k - 1]);
   for (let k = ns - 1; k >= 0; k--) ys[k] = Math.min(ys[k], ys[k + 1] + STAIR_SLOPE * step);
   for (let k = 0; k <= ns; k++) add(ox + ((qx - ox) * k) / ns, ys[k], oz + ((qz - oz) * k) / ns);
   const yq = ys[ns];
