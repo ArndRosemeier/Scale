@@ -168,6 +168,13 @@ export const HALL_SPAN = STATION_HALF + 6;
 export function sewerInvert(pts: number[], terrain: Terrain, culvert = false): number[] {
   const y: number[] = [];
   for (let i = 0; i < pts.length; i += 2) y.push(terrain.height(pts[i], pts[i + 1]) - 4.6);
+  // The ends (where trunks meet) go by the lowest ground around the node, the same for every trunk
+  // that meets there: a node on a river bank or at the edge of a cutting must not leave the vault
+  // standing out of the slope beside the street.
+  for (const k of [0, y.length - 1]) {
+    const x = pts[k * 2], z = pts[k * 2 + 1];
+    for (let a = 0; a < 8; a++) y[k] = Math.min(y[k], terrain.height(x + Math.cos(a * Math.PI / 4) * SEWER_SPAN, z + Math.sin(a * Math.PI / 4) * SEWER_SPAN) - 4.6);
+  }
   if (culvert) {
     // Under the river: 4.6 m under the bed at least, sloping no steeper than CULVERT_GRADE from the
     // banks (a lower envelope), so it can be walked down into and up out of.
@@ -187,11 +194,45 @@ export function sewerInvert(pts: number[], terrain: Terrain, culvert = false): n
     const e = bed.slice();
     for (let i = 1; i < e.length; i++) e[i] = Math.min(e[i], e[i - 1] + CULVERT_GRADE * (cum[i] - cum[i - 1]));
     for (let i = e.length - 2; i >= 0; i--) e[i] = Math.min(e[i], e[i + 1] + CULVERT_GRADE * (cum[i + 1] - cum[i]));
-    return e;
+    y.splice(0, y.length, ...e);
+  } else {
+    for (let it = 0; it < 4; it++) for (let i = 1; i + 1 < y.length; i++) y[i] = (y[i - 1] + y[i] * 2 + y[i + 1]) / 4;
   }
-  for (let it = 0; it < 4; it++) for (let i = 1; i + 1 < y.length; i++) y[i] = (y[i - 1] + y[i] * 2 + y[i + 1]) / 4;
+  // The smoothing lifts the invert where the street runs through a dip, and the street can dip
+  // between the points: keep SEWER_COVER of soil over the vault everywhere along the trunk (and
+  // across its width) by lowering the floor there, then ease the dents (downwards only).
+  const n = y.length;
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+    for (let i = 0; i + 1 < n; i++) {
+      const ax = pts[i * 2], az = pts[i * 2 + 1], bx = pts[i * 2 + 2], bz = pts[i * 2 + 3];
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 1e-6) continue;
+      const nx = -(bz - az) / L, nz = (bx - ax) / L;
+      for (let s = 0; s <= L; s += Math.min(2, L)) {
+        const f = s / L, x = ax + (bx - ax) * f, z = az + (bz - az) * f;
+        let g = Infinity;
+        for (const o of [-SEWER_SPAN, 0, SEWER_SPAN]) g = Math.min(g, terrain.height(x + nx * o, z + nz * o));
+        const e = y[i] + (y[i + 1] - y[i]) * f - (g - SEWER_DEPTH_MIN);
+        if (e <= 1e-3) continue;
+        // Interior points drop together; a trunk's ends stay where the crossing trunks meet them
+        // (right at a node the street is level with the node, so the far point takes the drop).
+        const a0 = i > 0, b0 = i + 1 < n - 1;
+        if (a0 && b0) { y[i] -= e; y[i + 1] -= e; }
+        else if (b0) y[i + 1] -= e / Math.max(f, 0.25);
+        else if (a0) y[i] -= e / Math.max(1 - f, 0.25);
+        else continue;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+    for (let it = 0; it < 2; it++) for (let i = 1; i + 1 < n; i++) y[i] = Math.min(y[i], (y[i - 1] + y[i] * 2 + y[i + 1]) / 4);
+  }
   return y;
 }
+
+/** Deepest the street may come to a sewer's floor (vault 2.8 m + 1 m of soil), and the half width checked. */
+const SEWER_DEPTH_MIN = 3.8, SEWER_SPAN = 1.7;
 
 /** Steepest slope of a culvert's floor (walkable). */
 export const CULVERT_GRADE = 0.3;
