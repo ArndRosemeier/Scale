@@ -2,6 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.063 — 2026-10-06
+
+- **The town hall and the cathedral are full of people now**, by the time of day.
+  - **Cathedral**: the priest is there from morning to evening. At the services at 9:00 and 18:00 the pews fill, the priest stands behind the altar and two altar servers sit in the choir stalls. Through the day visitors come and go. They stand at the aisle windows and the rose windows looking up at the glass, look up into the crossing or the dome, stop at the font and the pulpit, and rest in the pews. In the evening a few people sit and pray. At night it is empty.
+  - **Town hall** (open 8:00–18:00): clerks standing behind the information desk and the service counter, people asking at the counter and waiting on the benches, visitors in the hall, on the benches under the galleries and up on the galleries looking down. Upstairs, the mayor sits at the desk with an aide in the office (9:00–17:00). Council sessions fill the chamber from 10:00 to 12:00 and 14:00 to 16:00. Weddings are at 11:00, 13:00 and 15:00 in the wedding room, with the couple at the table (the bride in white), the registrar and rows of guests. At night a porter keeps the desk.
+  - People walk in from down the street, up the steps and through the door to where they are going, and leave the same way. Staff come and go with their hours. The priest wears black and the clerks, mayor and council wear suits.
+  - They react like people outside: a blast or a monster sends them running out of the door, a commotion makes them stop and look, and you bump into them and can knock them down (they get up after a few seconds and run). If the cathedral is badly damaged, everyone leaves.
+  - In a queue at the door they keep a little room to the one in front, and they wait for you to step aside rather than shoving you down the steps. Nobody holds a coffee cup or an umbrella inside.
+- The choir stalls in the cathedral now face each other across the chancel. They used to face the walls.
+
 ## 0.061 — 2026-10-06
 
 - **The way to the slime civilisation is open.** The living membrane that closed the tunnel out of a colony's chamber is gone: anyone can walk down to the Lumen now. The tunnel itself is much wider (and a little less steep), so the camera no longer gets squeezed against the rock behind you.

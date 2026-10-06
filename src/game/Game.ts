@@ -51,6 +51,7 @@ import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
 import { RagdollSystem, type CarBox } from '../physics/ragdoll/RagdollSystem';
 import { Birds } from '../fauna/Birds';
+import { LandmarkCrowds, roomFor } from '../sim/LandmarkCrowds';
 import { Terraces } from '../sim/Terraces';
 import { Interiors } from '../interior/Interiors';
 import { interiorWarmup } from '../interior/InteriorBuilder';
@@ -154,6 +155,8 @@ export class Game {
   birds!: Birds;
   /** People at the café and restaurant terraces (sim/Terraces). */
   terraces!: Terraces;
+  /** People inside the town hall and the cathedral (sim/LandmarkCrowds). */
+  halls!: LandmarkCrowds;
   interiors!: Interiors;
   underground!: Underground;
   gate!: ShaderGate;
@@ -449,9 +452,17 @@ export class Game {
     this.birds = new Birds({ terrain: this.terrain, world: this.world, peds: this.peds, traffic: this.traffic, drones: this.future.drones, dust: this.dust, debris: this.debris, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
     this.renderer.scene.add(this.birds.mesh);
     this.terraces = new Terraces({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, pop: this.population, props: this.props, destruction: this.destruction, loop: (id, r) => this.audio.loop(id, r) });
+    this.halls = new LandmarkCrowds({
+      macro, terrain: this.terrain, world: this.world, peds: this.peds, pop: this.population,
+      floor: (x, y, z) => this.world.landmarks?.topAt(x, z, y, 0) ?? -Infinity,
+      clear: (x, y, z) => !!this.world.landmarks && roomFor(this.world.landmarks, x, y, z),
+      standing: (i) => this.destruction.landmarks?.share(i) ?? 1,
+    });
+    this.crowd.outfit = (a) => this.halls.outfit(a);
     this.weather = new Weather(this);
     // Cups at the terraces first, then umbrellas in the rain.
-    this.crowd.heldFor = (a) => { const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
+    // (Nothing in hand inside a landmark: no coffee in the pews, no umbrella indoors.)
+    this.crowd.heldFor = (a) => { if (a.hall) return null; const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
     this.crowd.talking = (a, t) => this.terraces.talking(a, t);
     this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
@@ -512,6 +523,17 @@ export class Game {
     {
       const dev = (window as unknown as { dev?: Record<string, unknown> }).dev;
       if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
+      if (dev) dev.halls = { stats: () => this.halls.stats, list: () => this.halls.report(), go: (kind: 'cathedral' | 'townhall' = 'cathedral') => {
+        // Just inside the door, looking in.
+        const d = this.halls.door(kind);
+        if (!d) return null;
+        this.freeCam = false;
+        this.player.pos.set(d.x, d.y + 0.1, d.z);
+        this.player.vel.set(0, 0, 0);
+        this.camRig.yaw = d.yaw;
+        return d;
+      } };
+      this.halls.busy = (a) => this.people.partner === a;
       if (dev) dev.defeat = { status: () => this.defeat.status(), down: (kind?: Parameters<Defeat['down']>[0]) => this.defeat.down(kind), rep: (v: number) => { this.crime.rep.add(v - this.crime.rep.value, 'dev'); return this.crime.rep.value; } };
     }
     this.saves = new SaveSystem(this);
@@ -656,6 +678,7 @@ export class Game {
     this.T('peds', () => this.peds.update(dt, this.sky.hoursAbs, pp.x, pp.z, dt * this.sky.timeScale));
     this.T('react', () => this.reactions.update(dt, this.player));
     this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));
+    this.T('halls', () => this.halls.update(dt, this.sky.hoursAbs, pp.x, pp.z, pp.y));
     this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs));
     // Cars only brake for a player on the street (not one under it in the sewer or metro).
     this.traffic.player = this.freeCam || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z) ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
@@ -787,7 +810,7 @@ export class Game {
     this.props.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
     this.future.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
     if (k > 0.45) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
-      if (this.dashHit.has(a) || a.state === 5 || a.inside || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
+      if (this.dashHit.has(a) || a.state === 5 || (a.inside && !a.hall) || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
       if (segDist(a.x, a.z) > r + 0.3) continue;
       this.dashHit.add(a);
       // Flung forward and aside: the "from" point lies behind them on the dash line (a runner
@@ -817,7 +840,8 @@ export class Game {
     const pm = p.mass, pr = p.radius;
     const near = this.peds.neighbours(p.pos.x, p.pos.z, pr + 1.5, []);
     for (const a of near) {
-      if (a.state === 5 || a.inside) continue;
+      // (Indoors only those in a landmark's hall are in reach; seated ones stay in their seat.)
+      if (a.state === 5 || (a.inside && (!a.hall || a.state === PState.Sit))) continue;
       if (Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
       const dx = p.pos.x - a.x, dz = p.pos.z - a.z;
       const d = Math.hypot(dx, dz);
