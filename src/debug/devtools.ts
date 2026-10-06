@@ -129,7 +129,7 @@ export function installDevtools(game: Game): void {
     },
     /** Rats and the wandering slime around the player (calm: they stay put). */
     sewerLife: (calm?: boolean) => { if (calm !== undefined) game.underground.life.calm = calm; return game.underground.life.stats; },
-    /** The deep realm: go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …), places, status. */
+    /** The deep realm: go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'trench' | 'noMans' | 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …), places, status. */
     deep: {
       places: () => Object.keys(game.underground.deep?.plan.places ?? {}),
       go(name = 'hall'): { x: number; y: number; z: number } | null {

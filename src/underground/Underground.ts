@@ -138,7 +138,6 @@ export class Underground {
       });
       if (plan) {
         const field = new DeepField(plan.prims, plan.seed);
-        for (const r of plan.roads) field.barriers.push({ x: r.gate.x, y: r.gate.y, z: r.gate.z, nx: r.gate.nx, nz: r.gate.nz, r: r.gate.r + 0.4, closed: true });
         const skip = plan.roads.map((r) => this.rooms.colonies[r.colony].chamber).map((b) => ({ cx: b.cx, cz: b.cz, y0: b.y0, y1: b.y1, ux: b.ux, uz: b.uz, hu: b.hu, hv: b.hv }));
         this.deep = { plan, field, meshes: new DeepMeshes(plan, skip) };
         this.group.add(this.deep.meshes.group);

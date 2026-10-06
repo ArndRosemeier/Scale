@@ -2,15 +2,29 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.061 — 2026-10-06
+## 0.062 — 2026-10-06
 
 - **Metro stations are full of people now.**
   - **Commuters** come down the entrance stairs from the street, some crossing to the far platform, and wait on the platforms: standing and looking down the tracks, or sitting on the benches.
   - **Trains**: when a train pulls in and opens its doors, some riders get off and walk out and up the stairs to the street, and most of the people waiting step in, take a seat or stand by a door, and ride away. Trains near you carry passengers who sit along the benches, also in the car you ride in.
-- **Sit in the train**: the benches in the cars and on the platforms are seats now. Press **E** next to one to sit down; the train carries you along on your seat. Move or press **E** to get up again.
+- **Sit in the train**: the benches in the cars and on the platforms are seats now. Press **E** next to one to sit down (in a moving train too); the train carries you along on your seat, and on a platform bench you stay down in the station. Move or press **E** to get up again.
 - **Every platform can be reached on foot**: in more than half of the stations one platform (one direction of travel) had no way to it except by train. Every station now has an underpass under the tracks between its two platforms, with stairs down and up again on both sides.
 - **No more invisible ledges on the stairs**: where an entrance passage turned a corner right at the top or bottom of a flight, walking along one side of it ran into a step half a metre high. Every turn now has a level landing. Corridors that turned back and ran underneath their own stairs, and corridors running back alongside the first flight, now swing out to the side first.
 - Entrance routes are worked out about twice as fast as before (they only look at the tunnels and sewers near their station).
+
+## 0.061 — 2026-10-06
+
+- **The way to the slime civilisation is open.** The living membrane that closed the tunnel out of a colony's chamber is gone: anyone can walk down to the Lumen now. The tunnel itself is much wider (and a little less steep), so the camera no longer gets squeezed against the rock behind you.
+- **Where the Lumen and the Murk meet is a WW1-style battlefield now.** The see-through barricade in the Front gallery is gone (the gallery is open, a few Lumen guards stand there). The war is fought where the two realms actually touch: at the foot of the Throat, where the Lumen hold the floor of the shaft and the Warrens open beyond. Fallen rock narrows the Warrens' mouth to a passage, and across it:
+  - **The Lumen's trench**: three bays dug a metre deep across the passage, with duckboards on the floor and sandbags on the parapet, lit low from inside, and two gaps between the bays marked with glowing stakes. Lumen sentries stand in the bays and lob glowing bolts over the parapet; at the gaps they fight hand to hand.
+  - **Thorn wire** in front of the trench (knife rests wound with thorny strands). Murk caught in it slow to a crawl.
+  - **No-man's land**: craters, dark ooze where Murk burst, the husks of dead Murk, broken stakes, the faded glow of fallen Lumen.
+  - **The Murk's berm** where the passage opens into the Warrens, studded with their red crystals, where they gather to go over.
+  - **The war never stops**: every few seconds a handful of Murk come out of the Warrens and charge across no-man's land at the gaps. Most are shot down before they get far; a few reach the line and die there. Fallen sentries are replaced from behind, and the Lumen send glowing flares up over no-man's land that hang and slowly sink. These endless pushes don't change how the war stands (only the raids do, as before, and big raids can still break through); Murk you kill there still count.
+  - The floor of the Throat glows the Lumen's pale teal now, the Deep's red glow starts beyond the berm. Two Murk hives moved out of the passage.
+- **You can tell the slimes apart.** The Murk are blood red now, their spines glowing hotter towards the tips, and they have two slanted, glaring orange eyes (brighter when they fight). The Lumen stay soft, round and glowing.
+- **The Murk go for you on sight**: from 24 m away (was 17), and a Murk fighting a Lumen drops it for you once you come within 10 m. They also follow you further before giving up.
+- Fix: slimes following a route through the caves could get stuck forever trying to reach a waypoint at an edge (the Murk at the lip of the Throat, for example). Now they move on.
 
 ## 0.060 — 2026-10-06
 

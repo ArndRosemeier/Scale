@@ -10,7 +10,7 @@
  *   sdf > 0  rock
  *
  * Queries for walkers: `floorAt` (sphere-traced down), `ceilingAt` (up), `contains` (air with a
- * margin, no climbing up steep faces, closed membranes are solid), `lineClear` (line of sight).
+ * margin, no climbing up steep faces), `lineClear` (line of sight).
  */
 import { Noise } from '../../core/noise';
 
@@ -38,9 +38,6 @@ export interface Prim {
   reg: number;
 }
 
-/** A membrane across a passage: solid for walkers while closed. */
-export interface Barrier { x: number; y: number; z: number; nx: number; nz: number; r: number; closed: boolean }
-
 const CELL = 16;
 /** Grid cells with no shape nearby: solid rock (every shape is listed in the cells round it, with a margin). */
 const FAR = 50;
@@ -48,7 +45,6 @@ const FAR = 50;
 export class DeepField {
   readonly prims: Prim[];
   readonly bounds: [number, number, number, number, number, number];
-  barriers: Barrier[] = [];
   private grid = new Map<number, number[]>();
   private noise: Noise;
   /** Last evaluated point's dominant shape (region / roughness lookups right after an sdf call). */
@@ -181,18 +177,11 @@ export class DeepField {
   }
 
   /**
-   * A walker's probe (feet + 0.3) may stand here: in air (margin), not inside a closed membrane,
-   * and not climbing a steep face (the floor under it is not more than a step above the feet
-   * unless the slope is walkable).
+   * A walker's probe (feet + 0.3) may stand here: in air (margin), and not climbing a steep face
+   * (the floor under it is not more than a step above the feet unless the slope is walkable).
    */
   contains(x: number, y: number, z: number, margin: number): boolean {
     if (this.sdf(x, y, z) >= -Math.max(0.02, margin)) return false;
-    for (const b of this.barriers) {
-      if (!b.closed) continue;
-      const dx = x - b.x, dz = z - b.z;
-      const along = dx * b.nx + dz * b.nz;
-      if (Math.abs(along) < 0.35 && Math.hypot(dx - along * b.nx, y - b.y, dz - along * b.nz) < b.r) return false;
-    }
     const f = this.floorAt(x, y, z, 1.2);
     if (f !== null && f > y - 0.22) {
       const n = this.normal(x, f + 0.05, z, _n);
