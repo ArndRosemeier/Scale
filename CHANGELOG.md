@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.067 — 2026-10-06
+## 0.068 — 2026-10-06
 
 - Fix: **sewer pipes no longer stick out of the streets.** Where a street ran through a dip, the sewer under it stayed too high and its brick vault broke through the road (seed 1234 at size 0.5, for example). Every sewer now stays at least a metre under the street along its whole length and width (also where streets meet on a steep river bank); under dips it simply runs a little deeper. `npx tsx tools/sewersweep.ts <sizes> <seedA-seedB>` checks any city for this.
+
+## 0.067 — 2026-10-06
+
+- **Power cores no longer hide inside things.** A core on a square or in a park used to sit exactly in the middle, which is where the fountain or statue stands, so it ended up inside the fountain where nobody could reach it (about a third of all cores in a sweep of 16 cities were buried like that). Cores now keep clear of fountains, statues, kiosks, trees, playgrounds, benches, café terraces, metro stairwells and water, and a core on a roof keeps clear of the air-conditioning units, water tanks and lift housings up there. `npx tsx tools/coresweep.ts <sizes> <seedA-seedB>` checks every core of many cities headlessly.
 
 ## 0.066 — 2026-10-06
 
