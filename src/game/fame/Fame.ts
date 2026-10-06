@@ -207,7 +207,8 @@ export class Fame {
       const r = g.peds.buildRoute(x, z, p.x, p.z);
       if (!r || r.length < 6) continue;
       x = r[3]; z = r[4];
-      if (g.world.buildingAt(x, z) || Math.hypot(x - p.x, z - p.z) < r0 * 0.6) continue;
+      const dd = Math.hypot(x - p.x, z - p.z);
+      if (g.world.buildingAt(x, z) || dd < r0 * 0.6 || dd > r1 * 1.2) continue;
       const route = g.peds.buildRoute(x, z, p.x, p.z);
       const o = { x, z, route };
       if (!g.crime.visible(x, g.world.groundHeight(x, z) + 1.2, z)) return o;
@@ -345,6 +346,8 @@ export class Fame {
     if (d < 0.7) { stand(act); return true; }
     // Far off: the sidewalks (a new route now and then, the hero moves on); close: straight there.
     const far = Math.hypot(p.x - a.x, p.z - a.z) > 18;
+    // The route leads no nearer (a detour round a square, a park): straight there instead.
+    if (m.stuckT > 5 && act.route) { act.route = null; act.replanT = 10; }
     if (far && (!act.route || act.wp * 3 >= act.route.length) && act.replanT <= 0) {
       act.replanT = 3;
       const r = this.g.peds.buildRoute(a.x, a.z, tx, tz);
