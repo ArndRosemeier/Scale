@@ -459,7 +459,8 @@ export class StationLife {
    */
   private offTracks(q: Commuter): void {
     const a = q.a, b = this.m.boxes[q.hall];
-    if (!b || a.y > b.y0 + PLATFORM_H - 0.5) return;
+    // (Track-bed level only: the underpass runs beneath the hall.)
+    if (!b || a.y > b.y0 + PLATFORM_H - 0.5 || a.y < b.y0 - 0.5) return;
     const u = (a.x - b.cx) * b.ux + (a.z - b.cz) * b.uz, v = this.boxV(b, a.x, a.z);
     if (Math.abs(u) > b.hu || Math.abs(v) > PLATFORM_EDGE) return;
     const side = Math.sign(v) || q.side || 1;
