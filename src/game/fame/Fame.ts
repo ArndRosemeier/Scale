@@ -29,6 +29,7 @@ import { FAME, FAME_LINES, pressCount, protestSize, remarkKind, tvCrew } from '.
 import { PLACARDS, FAN_SIGNS, FAN_SIGNS_FROM } from '../../humanoid/client/placards';
 import { HeroStatue } from './HeroStatue';
 import { PressPhoto } from './PressPhoto';
+import { onScreen, screenPoint, toScreen } from '../../render/screen';
 
 type Kind = 'photo' | 'reporter' | 'camera' | 'fan' | 'protester' | 'admirer';
 type Phase = 'come' | 'work' | 'leave';
@@ -572,8 +573,7 @@ export class Fame {
     g.audio.play('camera_shutter', x, y, z, 0.5, 0.95 + Math.random() * 0.1, 3, cam);
     // Up close and facing the camera: the screen flashes faintly.
     if (d < 14 && !g.map.open) {
-      const v = new THREE.Vector3(x, y, z).project(g.renderer.camera);
-      if (v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1) this.overlayT = Math.max(this.overlayT, 0.1 * (1 - d / 14) + 0.04);
+      if (onScreen(toScreen(x, y, z, g.renderer.camera, screenPoint()), 0.999)) this.overlayT = Math.max(this.overlayT, 0.1 * (1 - d / 14) + 0.04);
     }
   }
 

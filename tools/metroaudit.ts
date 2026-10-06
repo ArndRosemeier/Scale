@@ -8,7 +8,7 @@ import { buildMacroPlan } from '../src/plan/macro';
 import { planCell, ENTRANCE_L, ENTRANCE_W } from '../src/plan/cell';
 import { CURB_H } from '../src/build/ground';
 import { makeTube } from '../src/underground/Volumes';
-import { metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, PASSAGE_HW, PASSAGE_H } from '../src/underground/layout';
+import { metroTube, sewerTube, stationHalls, entranceRoute, underpassRoute, routeEnv, PASSAGE_HW, PASSAGE_H } from '../src/underground/layout';
 import { auditLines, auditPassages, type AuditInput } from './metroAuditCore';
 import type { MacroPlan } from '../src/plan/types';
 
@@ -25,6 +25,16 @@ export function metroInput(macro: MacroPlan, terrain: Terrain): { input: AuditIn
   const ground = (x: number, z: number) => terrain.height(x, z) + CURB_H;
   const holes: number[] = [];
   const passages: NonNullable<AuditInput['passages']> = [];
+  // Every hall's underpass between its platforms first (the entrances keep clear of them).
+  const tubes = [...lines.map((l) => l.tube), ...sewers];
+  for (const hall of halls) {
+    const r = underpassRoute(hall, routeEnv(tubes, halls, hall));
+    if (!r) continue;
+    const t = makeTube('passage', r.pts, PASSAGE_HW, PASSAGE_H);
+    t.underpass = true;
+    tubes.push(t);
+    passages.push({ name: `${macro.metroStations[hall.station!].name} hall ${hall.hall} underpass`, tube: t, hall, ground });
+  }
   for (const cell of macro.cells) {
     const [x0, z0, x1, z1] = cellBounds(cell.poly);
     if (!halls.some((b) => b.cx > x0 - 150 && b.cx < x1 + 150 && b.cz > z0 - 150 && b.cz < z1 + 150)) continue;
@@ -32,7 +42,7 @@ export function metroInput(macro: MacroPlan, terrain: Terrain): { input: AuditIn
     for (let i = 0; i < E.length; i += 6) {
       const hall = halls.find((b) => b.station === E[i + 4] && b.hall === E[i + 5] >> 1);
       if (!hall) continue;
-      const r = entranceRoute(hall, E[i], E[i + 1], E[i + 2], E[i + 3], ground, routeEnv([...lines.map((l) => l.tube), ...sewers], halls, hall));
+      const r = entranceRoute(hall, E[i], E[i + 1], E[i + 2], E[i + 3], ground, routeEnv(tubes, halls, hall));
       passages.push({ name: `${macro.metroStations[E[i + 4]].name} hall ${E[i + 5] >> 1} end ${E[i + 5] & 1}`, tube: makeTube('passage', r.pts, PASSAGE_HW, PASSAGE_H), hall, ground });
       holes.push(E[i], E[i + 1], E[i + 2], E[i + 3]);
     }
@@ -69,7 +79,7 @@ if (process.argv[1]?.replace(/\\/g, '/').endsWith('tools/metroaudit.ts')) {
     console.log(`seed ${seed} size ${size}: ${macro.metroLines.length} lines, ${macro.metroStations.length} stations, ${input.halls.length} halls, ${input.passages?.length} entrances (${(performance.now() - t0).toFixed(0)} ms)`);
     for (const r of auditLines(input)) console.log('  line', fmt(r));
     const P = auditPassages(input, inHole);
-    const bad = P.filter((p) => p.maxSlope > 0.65 || p.floorErr > 0.05 || p.ceilingOut > 0 || p.hits > 0 || !p.endsOnPlatform);
+    const bad = P.filter((p) => p.ledge > 0.4 || p.maxSlope > 0.65 || p.floorErr > 0.05 || p.ceilingOut > 0 || p.hits > 0 || !p.endsOnPlatform);
     const worst = (k: keyof (typeof P)[0]) => Math.max(...P.map((p) => Number(p[k])));
     console.log(`  entrances: ${P.length}, worst slope ${worst('maxSlope').toFixed(2)}, floor err ${worst('floorErr').toFixed(2)}, ceiling over street ${worst('ceilingOut').toFixed(2)}, cutting other volumes ${P.filter((p) => p.hits).length}, not ending on the platform ${P.filter((p) => !p.endsOnPlatform).length}`);
     for (const p of bad.slice(0, 8)) console.log('   ', fmt(p));

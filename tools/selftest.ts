@@ -49,13 +49,18 @@ import type { Destruction } from '../src/destruction/Destruction';
 import type { MeshData } from '../src/build/meshBuilder';
 import type { MaterialArrays } from '../src/render/TextureLibrary';
 import { LandmarkSolids } from '../src/world/LandmarkSolids';
+import { auditWays } from './landmarkWays';
+import { landmarkInterior } from '../src/plan/landmarkParts';
 import { Rng as MRng } from '../src/core/rng';
 import type { MacroPlan } from '../src/plan/types';
 import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
 import * as THREE from 'three';
+import { onScreen, screenPoint, toScreen } from '../src/render/screen';
+import { makeSight } from '../src/game/sightline';
+import type { WorldIndex as SightWorld } from '../src/world/WorldIndex';
 import { AIRPORT_MIN_RADIUS } from '../src/world/airfield';
 import { intersection } from '../src/core/clip';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { nameOf, traitsOf, temperamentOf, jobOf, interestOf, moodOf, moodWord, TEMPERAMENTS, type Temperament } from '../src/game/people/identity';
 import { pickLine, ruleAnswer, fill, dirWord, type TalkFacts } from '../src/game/people/talk';
 import { LINES, CHAT, type Topic } from '../src/game/people/lines';
@@ -252,8 +257,8 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     check(r.carsOutside === 0 && r.carDy < 0.05 && r.carLateral < 0.3, `${at}: trains on the track, stopping inside the halls (${r.carsOutside} cars outside, ${r.carDy.toFixed(2)} m off the bed)`);
   }
   for (const p of auditPassages(mi, inHole)) {
-    check(p.maxSlope <= 0.65 && p.floorErr <= 0.05 && p.ceilingOut <= 0 && p.hits === 0 && p.endsOnPlatform,
-      `seed ${seed} entrance ${p.name}: walkable to the platform (slope ${p.maxSlope.toFixed(2)}, floor err ${p.floorErr.toFixed(2)}, ceiling ${p.ceilingOut.toFixed(2)}, cuts ${p.hits}, on platform ${p.endsOnPlatform})`);
+    check(p.maxSlope <= 0.65 && p.floorErr <= 0.05 && p.ceilingOut <= 0 && p.hits === 0 && p.endsOnPlatform && p.ledge <= 0.45,
+      `seed ${seed} entrance ${p.name}: walkable to the platform (slope ${p.maxSlope.toFixed(2)}, floor err ${p.floorErr.toFixed(2)}, ceiling ${p.ceilingOut.toFixed(2)}, cuts ${p.hits}, on platform ${p.endsOnPlatform}, ledge ${p.ledge.toFixed(2)})`);
   }
   // Population: plans are deterministic and every trip connects consecutive stays.
   const pop = new Population(macro, seed);
@@ -1344,12 +1349,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const gates = plan.nodes.filter((q2) => q2.name.startsWith('gate'));
     check(gates.length === plan.roads.length && gates.every((g2) => seen.has(g2.id)), `deep seed ${seed}: every gate (${gates.length}) leads down to the Heart`);
     // The trench war in the Warrens' mouth: the line laid out, the Lumen's sentries hold it against the endless pushes
-    // (most Murk fall in no-man's land, hardly any get past), and the Murk go for a player in their way.
+    // (most Murk fall in no-man's land, hardly any get past, the fallen are replaced; dice seeded per realm),
+    // and the Murk go for a player in their way.
     const T = plan.trench;
     check(T.segs.length === 3 && T.posts.length >= 5 && T.gapPosts.length === 2 && T.craters.length >= 3 && ['trench', 'noMans', 'murkLine'].every((k) => !!plan.places[k]) && ['trench0', 'trench1', 'noMans', 'murkLine'].every((k) => plan.nodes.some((q2) => q2.name === k)),
       `deep seed ${seed}: the Warrens' mouth is a trench line (${T.segs.length} bays, ${T.posts.length} spots, ${T.gapPosts.length} gaps, ${T.craters.length} craters)`);
     const tw = runTrench(plan, 150, 'away');
-    check(tw.spawned >= 20 && tw.killed >= tw.spawned * 0.6 && tw.past <= 2 && tw.sentriesLost <= 4, `deep seed ${seed}: the Lumen hold the trench (${tw.spawned} Murk came, ${tw.killed} fell, ${tw.reachedLine} reached the line, ${tw.past} got past; ${tw.sentriesLost} sentries lost; ${tw.hits}/${tw.bolts} bolts hit)`);
+    check(tw.spawned >= 20 && tw.killed >= tw.spawned * 0.6 && tw.past <= 2 && tw.sentriesLost <= 12, `deep seed ${seed}: the Lumen hold the trench (${tw.spawned} Murk came, ${tw.killed} fell, ${tw.reachedLine} reached the line, ${tw.past} got past; ${tw.sentriesLost} sentries lost; ${tw.hits}/${tw.bolts} bolts hit)`);
     const tp = runTrench(plan, 60, 'noMans');
     check(tp.playerHits >= 3, `deep seed ${seed}: the Murk go for a player in no-man's land (${tp.playerHits} hits in 60 s)`);
     console.log(`deep seed ${seed}: ${plan.roads.length} roads, ${plan.prims.length} shapes, ${plan.decor.length} decor, ${plan.glows.length / 7} lights, ${plan.nodes.length} waypoints, Glow at ${plan.yGlow.toFixed(0)} m, Deep at ${plan.yDeep.toFixed(0)} m, in ${ms.toFixed(0)} ms`);
@@ -2746,6 +2752,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     }
     const floor = y;
     check(blocked === 0 && maxStep < 0.45 && inside && floor >= lm.base - 0.01, `cathedral ${style}: walk in from the square to the nave (${blocked} blocked, steps up to ${maxStep.toFixed(2)} m, floor ${floor.toFixed(2)} m, inside ${inside})`);
+    // Its people's ways (sim/LandmarkCrowds): clear of the stone, on the floor, all reachable.
+    const ways = auditWays(lm, landmarkInterior(lm, flat)!, solids, flat);
+    const who = new Set(landmarkInterior(lm, flat)!.spots.map((sp) => sp.who));
+    check(!ways.bad.length && ['priest', 'server', 'faithful', 'visitor'].every((w) => who.has(w as never)), `cathedral ${style}: ${ways.legs} walkway legs and ${ways.spots} spots clear, on the floor and reachable (${ways.bad.slice(0, 3).join('; ') || 'ok'})`);
     // Destruction: glass, walls, meshes, save.
     let badElem = 0;
     const data = (): LandmarkWreckData => {
@@ -2809,9 +2819,80 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     }
     check(up <= 0.31 && down < 0.31 && blocked === 0 && Math.abs(y - lm.base) < 0.05 && !!S.insideAt(x, y + 1, z),
       `seed ${seed} size ${size}: walk in to the ${lm.kind} (steps up to ${up.toFixed(2)} m, drops ${down.toFixed(2)} m, ${blocked} blocked, floor ${(y - lm.base).toFixed(2)} m)`);
+    const ways = auditWays(lm, landmarkInterior(lm, terrain)!, S, terrain);
+    check(!ways.bad.length, `seed ${seed} size ${size}: the ${lm.kind}'s ${ways.legs} walkway legs and ${ways.spots} spots clear, on the floor and reachable (${ways.bad.slice(0, 3).join('; ') || 'ok'})`);
   }
 }
 
+
+// People in the landmarks (sim/LandmarkCrowds): who is there by the hour, nobody inside a wall or
+// floating, they walk their ways, a scare empties the building, at night the town hall's porter.
+{
+  const t0 = performance.now();
+  const { RoadNet } = await import('../src/sim/RoadNet');
+  const { Pedestrians, PState } = await import('../src/sim/Pedestrians');
+  const { LandmarkCrowds, roomFor } = await import('../src/sim/LandmarkCrowds');
+  const terrain = new Terrain(makeProfile({ seed: 9, size: 0.6 }));
+  const macro = buildMacroPlan(terrain);
+  const S = new LandmarkSolids(macro, terrain);
+  const world = { buildingsIn: () => [], bridgeDeck: () => -Infinity, landmarks: S } as never;
+  const pop = new Population(macro, 9);
+  const peds = new Pedestrians(pop, new RoadNet(macro), world, terrain, macro, {} as never);
+  const halls = new LandmarkCrowds({ macro, terrain, world, peds, pop, floor: (x, y, z) => S.topAt(x, z, y, 0), clear: (x, y, z) => roomFor(S, x, y, z) });
+  const run = (lm: Landmark, hours: number, secs: number, onStep?: () => void, far = false) => {
+    const px = lm.x + (far ? 5000 : 0), pz = lm.z;
+    for (let t = 0; t < secs; t += 1 / 30) {
+      peds.update(1 / 30, hours + t / 3600, px, pz, 1 / 30);
+      halls.update(1 / 30, hours + t / 3600, px, pz);
+      onStep?.();
+    }
+  };
+  const ours = () => peds.agents.filter((a) => a.alive && a.hall);
+  const roles = (lm: Landmark) => halls.report().find((h) => h.name === lm.name)?.people ?? {};
+  for (const lm of macro.landmarks.filter((l) => l.kind === 'cathedral' || l.kind === 'townhall')) {
+    const day = 3 * 24, hour = lm.kind === 'cathedral' ? 9.5 : 10.5;
+    let wall = 0, lost = 0, n = 0;
+    run(lm, day + hour, 90, () => {
+      for (const a of ours()) {
+        n++;
+        if (!Number.isFinite(a.x + a.y + a.z)) { lost++; continue; }
+        if (S.hit(a.x, a.y + 1.0, a.z)) wall++;
+        const f = Math.max(terrain.height(a.x, a.z), S.topAt(a.x, a.z, a.y + 0.35, 0));
+        if (Math.abs(f - a.y) > 0.35) lost++;
+      }
+    });
+    const r = roles(lm), count = ours().length;
+    const staff = lm.kind === 'cathedral' ? (r.priest ?? 0) === 1 && (r.faithful ?? 0) >= 10 && (r.server ?? 0) >= 1 : (r.clerk ?? 0) >= 2 && (r.councillor ?? 0) >= 3 && (r.mayor ?? 0) === 1;
+    const walking = ours().filter((a) => a.state === PState.Walk).length, seated = ours().filter((a) => a.state === PState.Sit).length;
+    check(count >= 15 && staff && wall === 0 && lost === 0 && seated > 3, `landmark people: the ${lm.kind} at ${Math.floor(hour)}:30 (${count} people: ${Object.entries(r).map(([k, v]) => `${v} ${k}`).join(', ')}; ${seated} seated, ${walking} walking; ${wall} of ${n} samples in a wall, ${lost} off the floor)`);
+    // A blast nearby: everyone runs out (and away down the street: here they just vanish at the steps).
+    for (const a of ours()) a.fear = 1.2;
+    run(lm, day + hour + 0.03, 40);
+    check(ours().filter((a) => a.inside).length === 0, `landmark people: a scare empties the ${lm.kind} (${ours().length} still inside after 40 s)`);
+    // Night (come back to it): the cathedral closed and empty, the town hall's porter at the desk.
+    run(lm, day + 26.5, 1, undefined, true);
+    run(lm, day + 26.5, 30);
+    const nr = roles(lm);
+    check(lm.kind === 'cathedral' ? ours().length === 0 : (nr.porter ?? 0) === 1 && ours().length === 1, `landmark people: the ${lm.kind} at 2:30 at night (${Object.entries(nr).map(([k, v]) => `${v} ${k}`).join(', ') || 'nobody'})`);
+    if (lm.kind === 'cathedral') {
+      // The end of the service: out in a queue, a little room to the one in front, nobody inside anybody
+      // (a few brushing past where the ways meet).
+      let pairs = 0, close = 0;
+      run(lm, day + 33.9, 1, undefined, true);
+      run(lm, day + 33.9, 5);
+      run(lm, day + 34.01, 60, () => {
+        const w = ours().filter((a) => a.inside && a.state !== PState.Sit);
+        for (let i = 0; i < w.length; i++) for (let j = i + 1; j < w.length; j++) {
+          if (Math.abs(w[i].y - w[j].y) > 1 || Math.abs(w[i].x - w[j].x) > 1 || Math.abs(w[i].z - w[j].z) > 1) continue;
+          pairs++;
+          if (Math.hypot(w[i].x - w[j].x, w[i].z - w[j].z) < 0.15) close++;
+        }
+      });
+      check(close <= pairs * 0.02, `landmark people: leaving the cathedral after the service, ${close} of ${pairs} near pairs inside each other (closer than 0.15 m)`);
+    }
+  }
+  console.log(`landmark people: ${(performance.now() - t0).toFixed(0)} ms`);
+}
 
 // People (NPC_PERSONALITY_PLAN phase 1): names, personalities, talk lines, memory.
 {
@@ -2965,6 +3046,63 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(whenWord(30, 30.2) === 'just now' && whenWord(2, 30) === 'last night' && whenWord(10, 40) === 'yesterday', 'news: when words');
   check(['safe', 'quiet', 'mixed', 'rough', 'dangerous'].every((s) => localRemark(s as Safety, 0.5).length > 5) && safetyOf(0.05) === 'safe' && safetyOf(0.8) === 'dangerous', 'news: a word about the streets for every level');
   console.log(`news: ${H1.list.length} neighbourhoods, ${off} off-screen crimes in 600 ticks (${stopped} stopped), start block index ${base[start].toFixed(2)}, in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Screen overlays (health tags, target brackets, speech bubbles): one projection for all of them,
+// right in front of and behind the camera with either depth convention (src/render/screen.ts).
+{
+  const s = screenPoint();
+  let bad = 0;
+  for (const rev of [false, true]) {
+    const cam = new THREE.PerspectiveCamera(60, 1.6, 0.05, 60000);
+    (cam as unknown as { _reversedDepth: boolean })._reversedDepth = rev;
+    cam.position.set(10, 2, 5); cam.lookAt(10, 2, -5); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+    for (const d of [0.5, 3, 40, 900]) {
+      if (!onScreen(toScreen(10.2, 2.1, 5 - d, cam, s)) || s.depth < d * 0.99) bad++; // ahead
+      if (toScreen(10.2, 2.1, 5 + d, cam, s).front || onScreen(s)) bad++; // behind
+    }
+    if (onScreen(toScreen(10, 2, 5.03, cam, s))) bad++; // just behind the lens
+  }
+  check(bad === 0, `screen: overlays only for what is in front of the camera, with or without reversed depth (${bad} wrong)`);
+  // Nothing else may project world points to the screen on its own: `.project(` with a `z > 1`
+  // test lets things behind the camera through (mirrored) under the reversed depth buffer.
+  const strays: string[] = [];
+  const walk = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walk(full); continue; }
+      if (!/\.ts$/.test(f) || full.endsWith('render/screen.ts')) continue;
+      const txt = readFileSync(full, 'utf8');
+      if (/\.project\(\s*[\w.]*cam/i.test(txt)) strays.push(full);
+    }
+  };
+  walk('src');
+  check(strays.length === 0, `screen: every world-to-screen overlay goes through src/render/screen.ts (${strays.join(', ') || 'none elsewhere'})`);
+  // Markers over people need them in sight: same side of the ground, no wall in between.
+  let wall = Infinity;
+  const fake = { terrain: { height: () => 0 }, buildingAt: () => null, raycast: () => ({ t: wall, building: null }) } as unknown as SightWorld;
+  // The camera's side is the game's own flag, not its depth: in a shallow sewer it is barely under the street.
+  let camUnder = false;
+  const see = makeSight(fake, () => camUnder, (_x, y) => y < -1.5), cam = new THREE.PerspectiveCamera();
+  const look = (under: boolean, cy: number, feet: number): boolean => { camUnder = under; cam.position.set(0, cy, 0); return see(20, feet, 0, cam); };
+  const street = look(false, 2, 0), sewer = look(true, -0.8, -2.4), fromStreet = look(false, 2, -2.4), fromSewer = look(true, -0.8, 0);
+  wall = 5;
+  const walled = look(false, 2, 0);
+  check(street && sewer && !fromStreet && !fromSewer && !walled, `screen: no tags through the ground or walls (street ${street}, sewer ${sewer}, sewer from street ${fromStreet}, street from sewer ${fromSewer}, through a wall ${walled})`);
+}
+
+// Station life: commuters come down the real entrance stairs (Pedestrians' own steps over the
+// underground floors), cross by the underpass, wait, board, ride, get off and walk up and out;
+// nobody stalls on a step, leaves the floor or ends up on the tracks.
+{
+  const { runLife } = await import('./metrolife');
+  const t0 = performance.now();
+  const terrain = new Terrain(makeProfile({ seed: 1, size: 0.5 }));
+  const macro = buildMacroPlan(terrain);
+  const r = runLife(macro, terrain, 1, 9, 150);
+  check(r.stuck === 0 && r.offFloor === 0 && r.onTracks === 0 && r.floorGap < 0.3, `metro life: every commuter keeps to the floors (${r.stuck} stalled, ${r.offFloor} off the floor, ${r.onTracks} on the tracks, worst gap ${r.floorGap.toFixed(2)} m)`);
+  check(r.boarded > 0 && r.alighted > 0 && r.left > 0 && r.crossed > 0, `metro life: people board, get off, cross and leave (${r.boarded} / ${r.alighted} / ${r.crossed} / ${r.left})`);
+  console.log(`metro life: ${r.spawned} commuters, ${r.boarded} boarded, ${r.alighted} got off, ${r.left} walked out, in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
