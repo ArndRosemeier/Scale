@@ -1267,6 +1267,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const { tubeAt, boxAt } = await import('../src/underground/Volumes');
   const { planDeep } = await import('../src/underground/deep/plan');
   const { DeepField, primBounds } = await import('../src/underground/deep/field');
+  const { runTrench } = await import('./trenchsim');
   for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
     const terrain = new Terrain(makeProfile({ seed, size }));
     const macro = buildMacroPlan(terrain);
@@ -1326,6 +1327,15 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     while (q.length) for (const m of adj[q.shift()!]) if (!seen.has(m)) { seen.add(m); q.push(m); }
     const gates = plan.nodes.filter((q2) => q2.name.startsWith('gate'));
     check(gates.length === plan.roads.length && gates.every((g2) => seen.has(g2.id)), `deep seed ${seed}: every gate (${gates.length}) leads down to the Heart`);
+    // The trench war in the Warrens' mouth: the line laid out, the Lumen's sentries hold it against the endless pushes
+    // (most Murk fall in no-man's land, hardly any get past), and the Murk go for a player in their way.
+    const T = plan.trench;
+    check(T.segs.length === 3 && T.posts.length >= 5 && T.gapPosts.length === 2 && T.craters.length >= 3 && ['trench', 'noMans', 'murkLine'].every((k) => !!plan.places[k]) && ['trench0', 'trench1', 'noMans', 'murkLine'].every((k) => plan.nodes.some((q2) => q2.name === k)),
+      `deep seed ${seed}: the Warrens' mouth is a trench line (${T.segs.length} bays, ${T.posts.length} spots, ${T.gapPosts.length} gaps, ${T.craters.length} craters)`);
+    const tw = runTrench(plan, 150, 'away');
+    check(tw.spawned >= 20 && tw.killed >= tw.spawned * 0.6 && tw.past <= 2 && tw.sentriesLost <= 4, `deep seed ${seed}: the Lumen hold the trench (${tw.spawned} Murk came, ${tw.killed} fell, ${tw.reachedLine} reached the line, ${tw.past} got past; ${tw.sentriesLost} sentries lost; ${tw.hits}/${tw.bolts} bolts hit)`);
+    const tp = runTrench(plan, 60, 'noMans');
+    check(tp.playerHits >= 3, `deep seed ${seed}: the Murk go for a player in no-man's land (${tp.playerHits} hits in 60 s)`);
     console.log(`deep seed ${seed}: ${plan.roads.length} roads, ${plan.prims.length} shapes, ${plan.decor.length} decor, ${plan.glows.length / 7} lights, ${plan.nodes.length} waypoints, Glow at ${plan.yGlow.toFixed(0)} m, Deep at ${plan.yDeep.toFixed(0)} m, in ${ms.toFixed(0)} ms`);
   }
   // The war: deterministic; left alone with strong Murk the line falls back; the Maw brought down stops them growing.
@@ -2058,6 +2068,30 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const m = migrate(v0), up = parseSave(v0);
   check(m.v === SAVE_VERSION && up.city.seed === 99 && up.city.size === 0.3 && up.mode === 'sandbox' && up.player.x === 10 && up.player.z === -4 && up.player.height === 3 && up.sky.day === 2 && up.sky.hour === 7.5,
     `saves: version 0 migrates to ${SAVE_VERSION} (${JSON.stringify({ seed: up.city.seed, x: up.player.x, day: up.sky.day })})`);
+  // Save files: a save written to a file reads back unchanged (gzip and plain), the same file always gets
+  // the same id of its own, an old save in a file migrates, and junk / foreign JSON / newer saves are refused.
+  {
+    const { encodeSaveFile, decodeSaveFile, importedId, saveFileName } = await import('../src/game/save/files');
+    const meta = { id: full.id, name: full.name, kind: full.kind, seed: full.city.seed, size: full.city.size, mode: full.mode, city: 'Lindenford', day: 2, hour: 18.75, created: full.created, playTime: full.playTime, karma: 12, thumb: 'data:image/jpeg;base64,AAAA' };
+    const blob = await encodeSaveFile(full, meta);
+    const bytes = await blob.arrayBuffer(), u = new Uint8Array(bytes);
+    const back2 = await decodeSaveFile(bytes);
+    const plain = await decodeSaveFile(new TextEncoder().encode(serializeSave(full)).buffer as ArrayBuffer);
+    check(u[0] === 0x1f && u[1] === 0x8b && JSON.stringify(back2.data) === JSON.stringify(full) && back2.meta?.thumb === meta.thumb && back2.meta?.karma === 12 && JSON.stringify(plain.data) === JSON.stringify(full) && plain.meta === null,
+      `save files: round trip (gzip ${u[0] === 0x1f}, ${bytes.byteLength} B of ${serializeSave(full).length})`);
+    check(importedId(back2.data) === importedId(full) && importedId(full).startsWith('file-') && importedId({ ...full, created: full.created + 1 }) !== importedId(full), `save files: own stable id (${importedId(full)})`);
+    const oldFile = await decodeSaveFile(new TextEncoder().encode(JSON.stringify({ scale: 'save', meta: null, data: { v: 0, id: 'old', name: 'Old', seed: 99, size: 0.3, mode: 'sandbox', pos: [10, 2, -4] } })).buffer as ArrayBuffer);
+    check(oldFile.data.v === SAVE_VERSION && oldFile.data.city.seed === 99 && oldFile.data.player.x === 10, 'save files: an old save in a file migrates');
+    const refused: string[] = [];
+    const junks = ['hello', '{"a":1}', '[1,2]', JSON.stringify({ scale: 'save', data: { v: SAVE_VERSION + 1, city: { seed: 1, size: 0.5 } } })].map((t) => new TextEncoder().encode(t));
+    junks.push(new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 4]));
+    for (const junk of junks) {
+      try { await decodeSaveFile(junk.buffer as ArrayBuffer); } catch (e) { refused.push((e as Error).message); }
+    }
+    check(refused.length === 5 && refused[3].includes('newer'), `save files: junk is refused with a message (${refused.join(' | ')})`);
+    const fn1 = saveFileName('Port Haven', 'My: save/1', 2, 18.75), fn2 = saveFileName('Port Haven', 'Day 3 18:45', 2, 18.75);
+    check(fn1 === 'Scale - Port Haven - My save1 - Day 3 18-45.scale' && fn2 === 'Scale - Port Haven - Day 3 18-45.scale', `save files: file names (${fn1} / ${fn2})`);
+  }
   // Damage codec: index sets round trip (empty, single, runs, gaps, big indices, unsorted with duplicates).
   const sets: number[][] = [[], [0], [5], [0, 1, 2, 3], [1, 3, 5, 7], [100000, 100001, 4_000_000], [9, 3, 3, 4, 8, 2, 2]];
   let rng = 12345;

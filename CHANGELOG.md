@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.059 — 2026-10-06
+## 0.062 — 2026-10-06
 
 - **The town hall and the cathedral are full of people now**, by the time of day.
   - **Cathedral**: the priest is there from morning to evening. At the services at 9:00 and 18:00 the pews fill, the priest stands behind the altar and two altar servers sit in the choir stalls. Through the day visitors come and go. They stand at the aisle windows and the rose windows looking up at the glass, look up into the crossing or the dome, stop at the font and the pulpit, and rest in the pews. In the evening a few people sit and pray. At night it is empty.
@@ -11,6 +11,27 @@ Every push raises the version by 0.001. Newest first.
   - They react like people outside: a blast or a monster sends them running out of the door, a commotion makes them stop and look, and you bump into them and can knock them down (they get up after a few seconds and run). If the cathedral is badly damaged, everyone leaves.
   - In a queue at the door they keep a little room to the one in front, and they wait for you to step aside rather than shoving you down the steps. Nobody holds a coffee cup or an umbrella inside.
 - The choir stalls in the cathedral now face each other across the chancel. They used to face the walls.
+
+## 0.061 — 2026-10-06
+
+- **The way to the slime civilisation is open.** The living membrane that closed the tunnel out of a colony's chamber is gone: anyone can walk down to the Lumen now. The tunnel itself is much wider (and a little less steep), so the camera no longer gets squeezed against the rock behind you.
+- **Where the Lumen and the Murk meet is a WW1-style battlefield now.** The see-through barricade in the Front gallery is gone (the gallery is open, a few Lumen guards stand there). The war is fought where the two realms actually touch: at the foot of the Throat, where the Lumen hold the floor of the shaft and the Warrens open beyond. Fallen rock narrows the Warrens' mouth to a passage, and across it:
+  - **The Lumen's trench**: three bays dug a metre deep across the passage, with duckboards on the floor and sandbags on the parapet, lit low from inside, and two gaps between the bays marked with glowing stakes. Lumen sentries stand in the bays and lob glowing bolts over the parapet; at the gaps they fight hand to hand.
+  - **Thorn wire** in front of the trench (knife rests wound with thorny strands). Murk caught in it slow to a crawl.
+  - **No-man's land**: craters, dark ooze where Murk burst, the husks of dead Murk, broken stakes, the faded glow of fallen Lumen.
+  - **The Murk's berm** where the passage opens into the Warrens, studded with their red crystals, where they gather to go over.
+  - **The war never stops**: every few seconds a handful of Murk come out of the Warrens and charge across no-man's land at the gaps. Most are shot down before they get far; a few reach the line and die there. Fallen sentries are replaced from behind, and the Lumen send glowing flares up over no-man's land that hang and slowly sink. These endless pushes don't change how the war stands (only the raids do, as before, and big raids can still break through); Murk you kill there still count.
+  - The floor of the Throat glows the Lumen's pale teal now, the Deep's red glow starts beyond the berm. Two Murk hives moved out of the passage.
+- **You can tell the slimes apart.** The Murk are blood red now, their spines glowing hotter towards the tips, and they have two slanted, glaring orange eyes (brighter when they fight). The Lumen stay soft, round and glowing.
+- **The Murk go for you on sight**: from 24 m away (was 17), and a Murk fighting a Lumen drops it for you once you come within 10 m. They also follow you further before giving up.
+- Fix: slimes following a route through the caves could get stuck forever trying to reach a waypoint at an edge (the Murk at the lip of the Throat, for example). Now they move on.
+## 0.060 — 2026-10-06
+
+- **Save to file and Load from file use your computer's own file dialogs** where the browser has them (Chrome, Edge and Opera on a desktop): you choose the folder and name of a saved game, and pick the file to open from a normal Open window that shows Scale saves first. The dialogs remember the folder you used last. In other browsers (Firefox, Safari, iPad) saving still downloads the file, and loading uses the browser's file chooser.
+
+## 0.059 — 2026-10-06
+
+- **Save a game to a file, and load it back from one.** The pause menu has two new buttons under Save game: **Save to file** downloads the game as it is right now as a small `.scale` file (named after the city, your save's name and the game time), and **Load from file…** opens a file and plays it. Every save in the Load game list also has a ⇩ button that downloads it. The start screen has **Load from file…** next to Load game (it is there even when the browser has no saves at all), and so does the game over screen. Use it to keep a game safe, carry it to another computer or browser, or send it to a friend. A game loaded from a file also lands in Your saves, so it can be continued later; loading the same file twice replaces the earlier copy rather than adding a second one. Files from older versions of the game still load, and a file that is not a save, is damaged or comes from a newer version gets a clear message instead.
 
 ## 0.058 — 2026-10-06
 

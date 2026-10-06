@@ -443,7 +443,101 @@ function decor(d: Decor, lit: Geo, emis: Geo): void {
     }
     case 'egg': lathe(emis, d.x, d.y - 0.02, d.z, d.yaw, 0, [[0.001, 0], [d.s * 0.8, d.s * 0.2], [d.s, d.s * 0.6], [d.s * 0.75, d.s * 1.05], [0.001, d.s * 1.3]], 10, (r) => sc(LUMEN_COL[d.c % 3], 0.35 + r * 0.12)); break;
     case 'bone': for (let i = 0; i < 6; i++) { const a = rnd() * 6.28, r = rnd() * d.s; boxAt(lit, d.x + Math.cos(a) * r, d.y + 0.08, d.z + Math.sin(a) * r, 0.1 + rnd() * 0.2, 0.06 + rnd() * 0.08, 0.08 + rnd() * 0.15, rnd() * 6.28, [0.45, 0.42, 0.4]); } break;
+    // ---- the trench war at the Front (yaw: the direction the thing runs along, as an angle in x/z)
+    case 'sack': {
+      // A sandbag of dried membrane, stuffed with grit: a soft pillow, tied at the ends.
+      const t = 0.85 + rnd() * 0.25;
+      pillow(lit, d.x, d.y + d.h * 0.45, d.z, d.yaw, d.s, d.h * 0.55, d.s * 0.5, [0.52 * t, 0.43 * t, 0.3 * t]);
+      break;
+    }
+    case 'duck': {
+      // Duckboards on the trench floor: two rails along the trench, slats across.
+      const ax = Math.cos(d.yaw), az = Math.sin(d.yaw), cx = -az, cz = ax;
+      const wood: C3 = [0.3, 0.22, 0.15];
+      for (const side of [-0.22, 0.22]) beam(lit, d.x + cx * side - ax * d.s, d.y + 0.04, d.z + cz * side - az * d.s, d.x + cx * side + ax * d.s, d.y + 0.04, d.z + cz * side + az * d.s, 0.035, sc(wood, 0.8));
+      for (let i = -2; i <= 2; i++) {
+        const o = (i / 2) * d.s * 0.85, c = sc(wood, 0.85 + rnd() * 0.3);
+        beam(lit, d.x + ax * o - cx * 0.3, d.y + 0.09, d.z + az * o - cz * 0.3, d.x + ax * o + cx * 0.3, d.y + 0.09 + (rnd() - 0.5) * 0.03, d.z + az * o + cz * 0.3, 0.045, c);
+      }
+      break;
+    }
+    case 'wire': {
+      // A knife rest of thorn wire: an X of stakes at each end, a bar along the top, thorny strands
+      // wound round it with a faint glint on the thorns.
+      const ax = Math.cos(d.yaw), az = Math.sin(d.yaw), cx = -az, cz = ax;
+      const dark: C3 = [0.15, 0.12, 0.14];
+      const H = d.h, w = H * 0.55;
+      for (const e of [-d.s, d.s]) {
+        const ex = d.x + ax * e, ez = d.z + az * e;
+        beam(lit, ex - cx * w, d.y - 0.05, ez - cz * w, ex + cx * w * 0.2, d.y + H, ez + cz * w * 0.2, 0.035, dark);
+        beam(lit, ex + cx * w, d.y - 0.05, ez + cz * w, ex - cx * w * 0.2, d.y + H, ez - cz * w * 0.2, 0.035, dark);
+      }
+      beam(lit, d.x - ax * d.s, d.y + H * 0.8, d.z - az * d.s, d.x + ax * d.s, d.y + H * 0.8, d.z + az * d.s, 0.03, dark);
+      // Strands: loops round the frame from end to end.
+      const loops = 7, seg = loops * 6;
+      let px = 0, py = 0, pz = 0;
+      for (let i = 0; i <= seg; i++) {
+        const t = i / seg, a = t * loops * Math.PI * 2;
+        const along = -d.s + t * d.s * 2, r = w * (0.75 + 0.2 * Math.sin(t * 17));
+        const x = d.x + ax * along + cx * Math.cos(a) * r, y = d.y + H * 0.45 + Math.sin(a) * H * 0.48, z = d.z + az * along + cz * Math.cos(a) * r;
+        if (i > 0) {
+          beam(lit, px, Math.max(d.y + 0.03, py), pz, x, Math.max(d.y + 0.03, y), z, 0.012, sc(dark, 1.3));
+          if (i % 2 === 0) {
+            // A thorn sticking out, glinting at the tip.
+            const tx = (rnd() - 0.5) * 0.16, ty = (rnd() - 0.2) * 0.14, tz = (rnd() - 0.5) * 0.16;
+            beam(lit, x, Math.max(d.y + 0.03, y), z, x + tx, Math.max(d.y + 0.05, y + ty), z + tz, 0.008, dark);
+            if (i % 6 === 0) boxAt(emis, x + tx, Math.max(d.y + 0.05, y + ty), z + tz, 0.012, 0.012, 0.012, 0, sc(LUMEN_COL[0], 0.5));
+          }
+        }
+        px = x; py = y; pz = z;
+      }
+      break;
+    }
+    case 'stake': lathe(lit, d.x, d.y - 0.1, d.z, d.yaw, d.tilt ?? 0, [[d.s, 0], [d.s * 0.7, d.h * 0.7], [0.005, d.h]], 5, () => [0.17, 0.13, 0.15]); break;
+    case 'stain': {
+      // A splash on the floor: dark ooze where a Murk burst (c 1), a dead glow where a Lumen fell (c 0).
+      const n = 11, base = emis.count;
+      const core: C3 = d.c ? [0.075, 0.012, 0.018] : [0.03, 0.12, 0.1], rim: C3 = d.c ? [0.03, 0.008, 0.012] : [0.01, 0.04, 0.035];
+      emis.vert(d.x, d.y + 0.025, d.z, 0, 1, 0, core[0], core[1], core[2]);
+      for (let i = 0; i <= n; i++) {
+        const a = d.yaw + (i % n) / n * Math.PI * 2, r = d.s * (i % n === 0 ? 0.8 : 0.55 + rnd() * 0.6);
+        emis.vert(d.x + Math.cos(a) * r, d.y + 0.02, d.z + Math.sin(a) * r, 0, 1, 0, rim[0], rim[1], rim[2]);
+      }
+      for (let i = 0; i < n; i++) emis.tri(base, base + 2 + i, base + 1 + i);
+      // Droplets round it.
+      for (let i = 0; i < 4; i++) { const a = rnd() * 6.28, r = d.s * (1 + rnd() * 0.6); boxAt(emis, d.x + Math.cos(a) * r, d.y + 0.02, d.z + Math.sin(a) * r, 0.04 + rnd() * 0.05, 0.004, 0.04 + rnd() * 0.05, a, rim); }
+      break;
+    }
+    case 'husk': {
+      // A fallen Murk: a slumped, emptied shell with its spines, a last ember in a crack.
+      lathe(lit, d.x, d.y - 0.05, d.z, d.yaw, 0, [[d.s * 1.1, 0], [d.s, d.s * 0.18], [d.s * 0.7, d.s * 0.36], [0.01, d.s * 0.42]], 9, (r, k) => (k % 3 === 0 ? [0.08, 0.05, 0.06] : [0.14, 0.09, 0.1]));
+      for (let i = 0; i < 6; i++) {
+        const a = d.yaw + (i / 6) * Math.PI * 2 + rnd() * 0.5, r = d.s * (0.3 + rnd() * 0.5);
+        const x = d.x + Math.cos(a) * r, z = d.z + Math.sin(a) * r, y = d.y + d.s * 0.36 * (1 - r / d.s / 1.1);
+        beam(lit, x, y, z, x + Math.cos(a) * 0.12, y + 0.18 + rnd() * 0.12, z + Math.sin(a) * 0.12, 0.025, [0.09, 0.06, 0.07]);
+      }
+      if (d.c === 0) boxAt(emis, d.x, d.y + d.s * 0.3, d.z, d.s * 0.25, 0.01, 0.02, d.yaw, [0.55, 0.08, 0.04]);
+      break;
+    }
   }
+}
+
+/** A soft pillow (a sandbag): an ellipsoid flattened at the bottom, long along (cos yaw, sin yaw). */
+function pillow(g: Geo, x: number, y: number, z: number, yaw: number, hx: number, hy: number, hz: number, c: C3): void {
+  const ax = Math.cos(yaw), az = Math.sin(yaw), cx = -az, cz = ax;
+  const U = 8, V = 5, base = g.count;
+  for (let j = 0; j <= V; j++) {
+    const th = -Math.PI / 2 + (j / V) * Math.PI, ct = Math.cos(th), st = Math.sin(th);
+    for (let i = 0; i <= U; i++) {
+      const ph = (i / U) * Math.PI * 2, cp = Math.cos(ph), sp = Math.sin(ph);
+      // Squarish in plan (sandbags are boxes gone soft), flat underneath.
+      const sq = (v: number) => Math.sign(v) * Math.pow(Math.abs(v), 0.6);
+      const lx = sq(ct * cp) * hx, lz = sq(ct * sp) * hz, ly = Math.max(-0.55, st) * hy;
+      const shade = 0.8 + 0.2 * st;
+      g.vert(x + ax * lx + cx * lz, y + ly, z + az * lx + cz * lz, ax * ct * cp + cx * ct * sp, st, az * ct * cp + cz * ct * sp, c[0] * shade, c[1] * shade, c[2] * shade);
+    }
+  }
+  for (let j = 0; j < V; j++) for (let i = 0; i < U; i++) { const a = base + j * (U + 1) + i, b = a + U + 1; g.quad(a, b, b + 1, a + 1); }
 }
 
 /** A thin round-ish beam between two points (four sides). */
