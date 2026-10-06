@@ -204,8 +204,9 @@ export function getHumanStatic(as: HumanAssets): HumanStatic {
     const v = src[r];
     const p = [base[v * 3], base[v * 3 + 1], base[v * 3 + 2]];
     // Dominant bone (largest weight).
-    let bb = as.skinIdx[v * 4], bw = as.skinW[v * 4];
-    for (let k = 1; k < 4; k++) if (as.skinW[v * 4 + k] > bw) { bw = as.skinW[v * 4 + k]; bb = as.skinIdx[v * 4 + k]; }
+    const rsi = as.regionSkinIdx, rsw = as.regionSkinW;
+    let bb = rsi[v * 4], bw = rsw[v * 4];
+    for (let k = 1; k < 4; k++) if (rsw[v * 4 + k] > bw) { bw = rsw[v * 4 + k]; bb = rsi[v * 4 + k]; }
     const name = m.bones[bb].name;
     const side = name.endsWith('.L') ? 'L' : name.endsWith('.R') ? 'R' : '';
     let reg: BodyRegion, t = 0;
