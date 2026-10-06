@@ -51,6 +51,7 @@ import type { Destruction } from '../src/destruction/Destruction';
 import type { MeshData } from '../src/build/meshBuilder';
 import type { MaterialArrays } from '../src/render/TextureLibrary';
 import { LandmarkSolids } from '../src/world/LandmarkSolids';
+import { marvelHall, marvelDoors } from '../src/plan/marvelParts';
 import { auditWays } from './landmarkWays';
 import { landmarkInterior } from '../src/plan/landmarkParts';
 import { Rng as MRng } from '../src/core/rng';
@@ -2573,7 +2574,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
     return lm;
   };
-  let missing = 0, nan = 0, out = 0, empty = 0, maxTris = 0, farBig = 0;
+  let missing = 0, nan = 0, out = 0, empty = 0, maxTris = 0, farBig = 0, maxInner = 0;
   const looks = new Map<number, Set<string>>();
   for (let style = 0; style < MARVEL_STYLES; style++) for (let seed = 1; seed <= 6; seed++) for (const R of [1300, 3500, 9000]) {
     const lm = make(style as MS, seed, R);
@@ -2589,12 +2590,14 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     if (!m0.index.length || !m1.index.length) empty++;
     if (m1.index.length > m0.index.length) farBig++;
     maxTris = Math.max(maxTris, m0.index.length / 3);
+    if (parts.some((p) => p.inner)) maxInner = Math.max(maxInner, buildLandmarkMesh(lm, flat, 0, false, undefined, true).build().index.length / 3);
     if (!looks.has(style)) looks.set(style, new Set());
     looks.get(style)!.add(Object.values(lm.p).map((v) => v.toFixed(1)).join('/'));
   }
   check(missing === 0 && nan === 0, `marvels: every family designs and builds (${missing} missing, ${nan} non-finite parts)`);
   check(out === 0, `marvels: structures inside their sites (${out} points out)`);
   check(empty === 0 && farBig === 0 && maxTris < 60000, `marvels: near and far meshes (${empty} empty, ${farBig} far bigger), at most ${(maxTris / 1000).toFixed(1)}k triangles`);
+  check(maxInner < 150000, `marvels: insides (drawn close by only) at most ${(maxInner / 1000).toFixed(1)}k triangles`);
   check([...looks.values()].every((v) => v.size >= 6), `marvels: each family differs from seed to seed (${[...looks.values()].map((v) => v.size).join(', ')} looks from 6 seeds × 3 sizes)`);
   // The helix: up the walkway from its foot to the roof, on its floor all the way, never inside a wall.
   {
@@ -2832,6 +2835,76 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     results.push(`${style}: ${w.n} pieces, ${panes} panes`);
   }
   console.log(`cathedrals: ${results.join('; ')} in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// The starship's great hall (interior/design, plan/marvelParts): in from the square through a lobby
+// door and the hull to the hall floor; up every flight to its level; from every gallery through a
+// room's door; all without a wall in the way or a step a walker can't take.
+{
+  const t0 = performance.now();
+  const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
+  const results: string[] = [];
+  for (const seed of [1, 3, 4]) {
+    const r = new MRng(seed * 101);
+    const d = marvelDesign(0, 7000)(r.fork('design'), 1)!;
+    const lm: Landmark = { id: 0, kind: 'marvel', name: 'test', cell: 0, x: 40, z: -20, angle: 0.4, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: 0, seed: r.nextU32(), style: 0, p: d.p };
+    lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
+    landmarkParts(lm, flat);
+    const hall = marvelHall(lm);
+    check(!!hall && hall.levels.length >= 6, `starship ${seed}: a great hall with galleries (${hall?.levels.length ?? 0} levels)`);
+    if (!hall) continue;
+    const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    // Walk a polyline of local points from height y: blocked samples and the biggest step up.
+    const walk = (pts: [number, number][], y: number) => {
+      let blocked = 0, maxStep = 0;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        for (let s = 0; s <= L; s += 0.2) {
+          const [x, z] = siteToWorld(lm, pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / L, pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / L);
+          const ny = Math.max(0, solids.topAt(x, z, y + 0.45, 0));
+          maxStep = Math.max(maxStep, ny - y);
+          y = ny;
+          for (const h of [0.3, 1.0, 1.7]) if (solids.hit(x, y + h, z)) { blocked++; break; }
+        }
+      }
+      return { blocked, maxStep, y };
+    };
+    const doors = marvelDoors(lm);
+    let inBlocked = 0, inStep = 0, inFloor = 0, inside = true;
+    for (const a of doors) {
+      const e = Math.min(lm.hu / Math.max(1e-6, Math.abs(Math.cos(a))), lm.hv / Math.max(1e-6, Math.abs(Math.sin(a)))) - 0.5, i = hall.voidR * 0.6;
+      const inn = walk([[Math.cos(a) * e, Math.sin(a) * e], [Math.cos(a) * i, Math.sin(a) * i]], 0);
+      const [ix, iz] = siteToWorld(lm, Math.cos(a) * i, Math.sin(a) * i);
+      inBlocked += inn.blocked; inStep = Math.max(inStep, inn.maxStep); inFloor = Math.max(inFloor, Math.abs(inn.y - lm.base));
+      inside &&= !!solids.insideAt(ix, inn.y + 1, iz);
+    }
+    check(doors.length >= 3 && inBlocked === 0 && inStep < 0.45 && inFloor < 0.05 && inside, `starship ${seed}: walk in from the square through each of the ${doors.length} doors to the hall floor (${inBlocked} blocked, steps up to ${inStep.toFixed(2)} m, inside ${inside})`);
+    let badFlights = 0, badRooms = 0;
+    for (const st of hall.design.stairs) {
+      const run = st.n * st.tread;
+      const w = walk([[st.from[0] - st.dir[0] * 0.6, st.from[1] - st.dir[1] * 0.6], [st.from[0] + st.dir[0] * (run + 0.8), st.from[1] + st.dir[1] * (run + 0.8)]], st.y0);
+      if (w.blocked || w.maxStep > 0.45 || Math.abs(w.y - st.y1) > 0.05) { badFlights++; if (badFlights < 3) results.push(`flight ${st.y0.toFixed(0)}→${st.y1.toFixed(0)}: ${w.blocked} blocked, step ${w.maxStep.toFixed(2)}, ends ${w.y.toFixed(2)}`); }
+    }
+    for (const room of hall.design.rooms) {
+      const out: [number, number] = [room.door[0] - room.facing[0] * -1.6, room.door[1] - room.facing[1] * -1.6];
+      const inDoor: [number, number] = [room.door[0] - room.facing[0] * 1.2, room.door[1] - room.facing[1] * 1.2];
+      const w = walk([out, room.door, inDoor], room.y);
+      if (w.blocked || Math.abs(w.y - room.y) > 0.05) { badRooms++; if (badRooms < 3) results.push(`room at ${room.y.toFixed(0)}: ${w.blocked} blocked, floor ${w.y.toFixed(2)}`); }
+    }
+    // Round each gallery: no wall or rail across the walkway.
+    let badRing = 0;
+    for (const y of hall.levels) {
+      const pts: [number, number][] = [];
+      const rm = hall.voidR + 1.8, sz = lm.p.ell;
+      for (let i = 0; i <= 96; i++) { const t = (i / 96) * Math.PI * 2; pts.push([Math.cos(t) * rm, Math.sin(t) * rm * sz]); }
+      const w = walk(pts, y);
+      if (w.blocked || Math.abs(w.y - y) > 0.05) badRing++;
+    }
+    check(badRing === 0, `starship ${seed}: round every gallery unhindered (${badRing} of ${hall.levels.length} blocked)`);
+    check(badFlights === 0, `starship ${seed}: every one of the ${hall.design.stairs.length} flights climbs clear to its level (${badFlights} bad)`);
+    check(badRooms === 0, `starship ${seed}: every one of the ${hall.design.rooms.length} rooms is walkable in through its door (${badRooms} bad)`);
+  }
+  console.log(`starship halls in ${(performance.now() - t0).toFixed(0)} ms ${results.join('; ')}`);
 }
 
 // Front doors in real cities: from the square up the steps (however far below the floor it lies)

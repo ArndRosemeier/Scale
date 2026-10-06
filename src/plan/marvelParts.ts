@@ -18,7 +18,11 @@
  */
 import type { Rng } from '../core/rng';
 import type { Landmark } from './landmarks';
-import { Kit, mat, WHITE, WIN, CURTAIN, ROOF, CONC, PANEL, GLASS, METAL, GRANITE, METAL_ROOF, GRAVEL, GREEN_ROOF, type PartMat, type RGB } from './landmarkParts';
+import { Kit, mat, entranceSteps, WHITE, WIN, CURTAIN, ROOF, CONC, PANEL, GLASS, METAL, GRANITE, METAL_ROOF, GRAVEL, GREEN_ROOF, type PartMat, type RGB } from './landmarkParts';
+import { designHall, type HallPlan } from '../interior/design/hall';
+import { emitDesign } from '../interior/design/emit';
+import { scifiTheme } from '../interior/design/theme';
+import { ellipseStar, type Volume } from '../interior/design/types';
 
 export const MARVEL_STYLES = 8;
 export const enum MS { Starship = 0, Helix = 1, Porous = 2, Twist = 3, Skyship = 4, Halo = 5, Orbs = 6, Stack = 7 }
@@ -56,12 +60,28 @@ function sample(f: (t: number) => number, t0: number, t1: number, B: number, H: 
   return out;
 }
 
-/** A lathe in bands of alternating material, cut at the given fractions of the height. */
-function bandedLathe(k: Kit, f: (t: number) => number, cuts: number[], B: number, H: number, mats: PartMat[], sx: number, sz: number): void {
+/**
+ * A lathe in bands of alternating material, cut at the given fractions of the height. Below
+ * `hollow` (a fraction) the bands are a shell `wall` thick, in short rings (so the collision
+ * follows the taper), open inside.
+ */
+function bandedLathe(k: Kit, f: (t: number) => number, cuts: number[], B: number, H: number, mats: PartMat[], sx: number, sz: number, hollow = 0, wall = 1.2): void {
   for (let i = 0; i + 1 < cuts.length; i++) {
-    const p = k.lathe(0, 0, sample(f, cuts[i], cuts[i + 1], B, H), sx, sz, mats[i % mats.length], { seg: 40 });
+    let t0 = cuts[i];
+    const t1 = cuts[i + 1];
+    while (t0 < hollow - 1e-6 && t0 < t1 - 1e-6) {
+      const tb = Math.min(t1, hollow, t0 + 6 / H);
+      const out = sample(f, t0, tb, B, H, H / 2.5);
+      const ring = out.slice();
+      for (let j = out.length - 2; j >= 0; j -= 2) ring.push(Math.max(0.5, out[j] - wall), out[j + 1]);
+      ring.push(ring[0], ring[1]);
+      k.lathe(0, 0, ring, sx, sz, mats[i % mats.length], { seg: 40 });
+      t0 = tb;
+    }
+    if (t0 >= t1 - 1e-6) continue;
+    const p = k.lathe(0, 0, sample(f, t0, t1, B, H), sx, sz, mats[i % mats.length], { seg: 40 });
     // Inner joints need no caps.
-    if (i + 2 < cuts.length) p.noSides = true;
+    if (i + 2 < cuts.length || t0 > cuts[i]) p.noSides = true;
   }
 }
 
@@ -100,6 +120,10 @@ function starship(k: Kit, lm: Landmark, r: Rng, L: Look): void {
         const st = t < 0.36 ? 1 : t < 0.4 ? 0.82 : t < 0.68 ? 0.86 : t < 0.72 ? 0.66 : 0.7;
         return t < 0.74 ? R * st : R * 0.7 * Math.pow(Math.max(0, 1 - (t - 0.74) / 0.26), 0.7) + R * tip * 0.5;
       };
+  // The inside (its own seed, so the outside stays as it was): a great hall up the middle.
+  const hall = starshipHall(lm, f, B, H, P.ell);
+  if (hall) halls.set(lm, hall);
+  const hollow = hall ? (hall.top - B) / H : 0, DOOR_T = 3.4 / H;
   // Bands: hull sections with windows, thin glass rings between them.
   const nb = r.int(5, 9), cuts = [0];
   for (let i = 1; i < nb; i++) {
@@ -109,7 +133,10 @@ function starship(k: Kit, lm: Landmark, r: Rng, L: Look): void {
   cuts.push(nose * 0.96, 1);
   const mats: PartMat[] = [];
   for (let i = 0; i + 1 < cuts.length; i++) mats.push(i % 2 ? L.glass : i === cuts.length - 2 ? L.hullPlain : L.hull);
-  bandedLathe(k, f, cuts, B, H, mats, 1, P.ell);
+  if (hall) {
+    // The doorways at the foot: the hull's lowest ring is wall pieces with gaps on the site's axes.
+    bandedLathe(k, f, [DOOR_T, ...cuts.slice(1)], B, H, mats, 1, P.ell, hollow);
+  } else bandedLathe(k, f, cuts, B, H, mats, 1, P.ell);
   // Needle and beacon.
   k.cyl(0, 0, R * 0.05, 0.3, B + H, B + H * 1.04, L.accent, { solid: false, seg: 8 });
   // Fins: swept buttresses from the ground up the hull (convex leading edge, like a rocket's),
@@ -121,13 +148,15 @@ function starship(k: Kit, lm: Landmark, r: Rng, L: Look): void {
     const a = a0 + (i / fins) * Math.PI * 2;
     k.sub(0, 0, a, () => {
       const inner = f(P.finTop) * 0.85, foot = P.engines ? ph * 1.05 : H * 0.03;
-      const out: number[] = [R * 0.5, B, P.finR, B];
+      // (Its root runs up the hull's skin; with a hall inside it must not reach in.)
+      const skin = (t: number) => f(t) / Math.hypot(Math.cos(a), Math.sin(a) / P.ell) * 0.94;
+      const out: number[] = [hall ? skin(0) : R * 0.5, B, P.finR, B];
       const n = 12;
       for (let j = 0; j <= n; j++) {
         const s = j / n;
         out.push(inner + (P.finR - inner) * (1 - Math.pow(s, bulge)), B + foot + s * (top - foot));
       }
-      out.push(R * 0.3, B + top + R * 0.4);
+      out.push(hall ? skin(P.finTop) * 0.9 : R * 0.3, B + top + R * 0.4);
       k.prism(0, 0, out, th, L.hull, { top: L.accent });
       // A stripe along the fin's leading edge (near only).
       for (let j = 0; j < n; j++) {
@@ -145,7 +174,8 @@ function starship(k: Kit, lm: Landmark, r: Rng, L: Look): void {
   if (P.boosters) {
     const br = R * r.range(0.32, 0.45), bh = H * r.range(0.32, 0.55);
     for (let i = 0; i < fins; i++) {
-      const a = a0 + ((i + 0.5) / fins) * Math.PI * 2, d = f(0.2) * 0.92 + br * 0.75;
+      // (Hugging the hull, or just touching it when there is a hall inside.)
+      const a = a0 + ((i + 0.5) / fins) * Math.PI * 2, d = hall ? Math.max(f(0), f(0.2)) + br * 1.03 : f(0.2) * 0.92 + br * 0.75;
       const bu = Math.cos(a) * d, bv = Math.sin(a) * d * P.ell;
       const bf = (t: number) => (t < 0.82 ? br * (t < 0.04 ? 0.8 + t * 5 : 1) : br * Math.sqrt(Math.max(0, 1 - (t - 0.82) / 0.18)) + 0.3);
       const cutsB = [0, 0.3, 0.31, 0.62, 0.63, 1];
@@ -162,9 +192,106 @@ function starship(k: Kit, lm: Landmark, r: Rng, L: Look): void {
     const g = k.lathe(0, 0, [rin + ext - 0.3, y, rin + ext - 0.3, y + 1.3], 1, P.ell, L.clear, { clear: true, detail: true });
     g.noSides = true;
   }
-  // The lobby at the foot: a glazed drum round the hull.
+  // The lobby at the foot: a glazed drum round the hull (with a hall: a way in between each fin
+  // and the gap after it, clear of fins and boosters).
+  if (hall) {
+    const doors = Array.from({ length: fins }, (_, i) => a0 + ((i + 0.17) / fins) * Math.PI * 2);
+    hallDoors.set(lm, doors);
+    starshipInside(k, hall, f, B, P.ell, L, doors);
+    return;
+  }
   const lr = f(0) * P.ell * 1.08 + 4;
   k.cyl(0, 0, lr, lr, B, B + 7, L.glass, { foot: true, top: L.roof, seg: 40 });
+}
+
+const halls = new WeakMap<Landmark, HallPlan>(), hallDoors = new WeakMap<Landmark, number[]>();
+/** The local angles of a starship's lobby doors (after its parts were made). */
+export function marvelDoors(lm: Landmark): number[] { return hallDoors.get(lm) ?? []; }
+/** A starship's great hall as planned (after its parts were made: plan/landmarkParts), or null. */
+export function marvelHall(lm: Landmark): HallPlan | null { return halls.get(lm) ?? null; }
+
+/** Lobby height, hull skin thickness and door width at the foot of a starship with a hall. */
+const LOBBY_H = 7, SKIN = 1.2, DOOR_W = 4.2;
+
+/** The starship's great hall: the designer's plan for the hull's lower part, or null if too slim. */
+function starshipHall(lm: Landmark, f: (t: number) => number, B: number, H: number, ell: number): HallPlan | null {
+  const vol: Volume = { y0: B, y1: B + H, section: (y) => ellipseStar(0, 0, f((y - B) / H) - SKIN - 0.1, ell) };
+  return designHall(vol, {
+    y0: B, yMax: B + Math.min(66, Math.max(40, H * 0.08)), levelH: 5, slab: 0.5, walk: 3.6, depth: 13, minDepth: 8, roomW: 11,
+    mix: ['quarters', 'quarters', 'lab', 'mess', 'quarters', 'lounge', 'storage', 'lab', 'control', 'quarters', 'lounge'],
+    seed: (lm.seed ^ 0x51f1) >>> 0, bridgeEvery: 3,
+  });
+}
+
+/**
+ * Inside the starship: the lobby drum round the foot with doors on the site's four axes (where
+ * the site's approaches arrive), doorways through the hull, the great hall from the designer, and
+ * a glowing core up the middle of the void with bridges out to it every few levels.
+ */
+function starshipInside(k: Kit, hall: HallPlan, f: (t: number) => number, B: number, ell: number, L: Look, doorsAt: number[]): void {
+  const T = scifiTheme(L.accent.tint);
+  const rh = f(0), lr = rh * 1.08 + 4, F = k.F;
+  const P = (a: number, rr: number, sz = ell): [number, number] => [Math.cos(a) * rr, Math.sin(a) * rr * sz];
+  // The floor: one plate under lobby and hall, down to the ground.
+  k.cyl(0, 0, lr, lr, F, B, L.hullPlain, { top: T.walk, seg: 40 });
+  // Ring pieces round (u, v) radius rr scaled by sz, with gaps at the doors (half width hw).
+  const ring = (rr: number, sz: number, y0: number, y1: number, th: number, m: PartMat, seg: number, hw: number) => {
+    for (let j = 0; j < seg; j++) {
+      const a0 = (j / seg) * Math.PI * 2, a1 = ((j + 1) / seg) * Math.PI * 2, am = (a0 + a1) / 2;
+      const p0 = P(a0, rr, sz), p1 = P(a1, rr, sz);
+      // (On an oval ring the door's direction is a different angle along the ring.)
+      if (doorsAt.some((d) => { const t = Math.atan2(Math.sin(d), Math.cos(d) * sz); return Math.abs(Math.atan2(Math.sin(am - t), Math.cos(am - t))) * rr * Math.min(1, sz) < hw + (Math.PI * rr) / seg; })) {
+        // A door piece: only the lintel above it.
+        k.box((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 2 + 0.05, th / 2, y0 + 3.2, y1, m, { rot: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) });
+        continue;
+      }
+      k.box((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 2 + 0.05, th / 2, y0, y1, m, { rot: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) });
+    }
+  };
+  // The drum (glass, its roof a ring from the hull out) and the hull's foot with its doorways.
+  ring(lr, 1, B, B + LOBBY_H, 0.3, L.glass, 48, DOOR_W / 2);
+  // (Plates from the hull's skin, oval or not, out to the round drum.)
+  for (let j = 0; j < 48; j++) {
+    const a0 = (j / 48) * Math.PI * 2, a1 = ((j + 1) / 48) * Math.PI * 2;
+    const t0 = Math.atan2(Math.sin(a0), Math.cos(a0) * ell), t1 = Math.atan2(Math.sin(a1), Math.cos(a1) * ell);
+    k.rampQ([P(t0, rh), P(t1, rh), P(a1, lr + 0.4, 1), P(a0, lr + 0.4, 1)], B + LOBBY_H - 0.4, B + LOBBY_H, B + LOBBY_H, 0, L.roof, { top: L.roof, noSides: true, map: 0 });
+  }
+  ring(rh - SKIN / 2, ell, B, B + 3.4, SKIN, L.hullPlain, 56, DOOR_W / 2);
+  for (const d of doorsAt) {
+    // Steps down to the square outside each door (the floor stands at the site's highest ground).
+    k.sub(0, 0, d + Math.PI / 2, () => entranceSteps(k, -lr, DOOR_W / 2 + 0.4, B, mat(GRANITE, [0.8, 0.8, 0.82])));
+    // A glowing frame round the lobby door, benches and planters along the lobby.
+    const [du, dv] = P(d, lr - 0.4, 1);
+    k.box(du, dv, 0.15, DOOR_W / 2 + 0.3, B + 3.2, B + 3.45, T.glow, { detail: true, map: 0, rot: d });
+  }
+  // The great hall (drawn only close by: the hull hides it).
+  const top = hall.top, cr = Math.max(1.8, hall.voidR * 0.14);
+  k.inner(() => {
+    emitDesign(k, hall.design, T);
+    // The core: a glowing column with metal rings, standing in a pool of light.
+    k.cyl(0, 0, cr, cr, B, top - 0.5, T.glow, { detail: true, map: 0, seg: 20 });
+    k.solidCyl(0, 0, cr, B, top);
+    for (let y = B + 6; y < top - 2; y += 9) k.cyl(0, 0, cr + 0.4, cr + 0.4, y, y + 0.6, T.trim, { detail: true, map: 0, seg: 20 });
+    k.cyl(0, 0, cr + 3, cr + 3, B, B + 0.06, T.glow, { detail: true, map: 0, seg: 28 });
+    // Bridges from the galleries to a ring round the core on every third level.
+    hall.levels.forEach((y, i) => {
+      if (!hall.bridges[i]) return;
+      const rin = cr + 1.2, rout = cr + 4.2;
+      k.lathe(0, 0, [rin, y - 0.4, rout, y - 0.4, rout, y, rin, y, rin, y - 0.4], 1, 1, T.walk, { detail: true, solid: true, map: 0, seg: 28 });
+      for (const w of hall.bridges[i] ?? []) {
+        const a = ((w + 0.5) / hall.n) * Math.PI * 2;
+        const p0 = P(a, rout - 0.3, 1), p1 = P(a, hall.voidR + 0.4);
+        const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+        k.box((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, len / 2, 1.2, y - 0.4, y, T.walk, { detail: true, solid: true, map: 0, rot: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) });
+        for (const s of [-1, 1]) k.box((p0[0] + p1[0]) / 2 - Math.sin(Math.atan2(p1[1] - p0[1], p1[0] - p0[0])) * 1.15 * s, (p0[1] + p1[1]) / 2 + Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0])) * 1.15 * s, len / 2, 0.04, y, y + 0.08, T.glow, { detail: true, map: 0, rot: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) });
+      }
+    });
+  });
+  // Indoors: the whole hall (lobby ring and galleries), lit up the core.
+  const poly: [number, number][] = [];
+  for (let j = 0; j < 24; j++) poly.push(P((j / 24) * Math.PI * 2, rh));
+  k.roomPoly(poly, B - 0.5, top);
+  for (let y = B + 4; y < top; y += 10) for (const a of [0, 2.1, 4.2]) { const [u, v] = P(a, cr + 2, 1); k.light(u, v, y); }
 }
 
 // ------------------------------------------------------------------ 1 helix tower

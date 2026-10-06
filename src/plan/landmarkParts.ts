@@ -99,6 +99,11 @@ export interface LmPart {
    * hidden solid) goes with them.
    */
   pane?: boolean;
+  /**
+   * Part of a walkable inside that the outside hides (a hall's galleries, rooms and furniture):
+   * built into a mesh of its own (build/landmarks) that is only drawn close by.
+   */
+  inner?: boolean;
 }
 
 /** A walkable inside (the town hall's): its outline, height range and where its room lights hang. */
@@ -362,6 +367,18 @@ export class Kit {
   /** A walkable room over the local rectangle (u0, v0)–(u1, v1), from y0 to y1. */
   room(u0: number, v0: number, u1: number, v1: number, y0: number, y1: number): void {
     this.inside.rooms.push({ poly: [...this.W(u0, v0), ...this.W(u1, v0), ...this.W(u1, v1), ...this.W(u0, v1)], y0, y1 });
+  }
+
+  /** Mark the parts `fn` adds as inside parts (LmPart.inner). */
+  inner(fn: () => void): void {
+    const n0 = this.parts.length;
+    fn();
+    for (let i = n0; i < this.parts.length; i++) this.parts[i].inner = true;
+  }
+
+  /** A walkable room of any outline (local points, CCW), from y0 to y1. */
+  roomPoly(pts: [number, number][], y0: number, y1: number): void {
+    this.inside.rooms.push({ poly: pts.flatMap(([u, v]) => this.W(u, v)), y0, y1 });
   }
 
   /** A nav point (sim/LandmarkCrowds) at a local point, standing height y; returns its index. */
