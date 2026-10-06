@@ -37,6 +37,8 @@ export const KARMA = {
   helpUpCollapse: 8,
   /** … someone the player knocked down personally. */
   helpUpOwn: 0,
+  /** Reputation for helping someone up (not someone you knocked down yourself): a little. */
+  helpUpRep: 1,
   /** Power core with the karma bonus. */
   coreKarma: 40,
 };

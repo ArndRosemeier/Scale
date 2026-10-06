@@ -2,6 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.054 — 2026-10-06
+
+- **Your reputation is felt in the street now.**
+  - **The press**: once you are well known (reputation 35 and up), photographers turn up when you are out on foot, gather round you, raise their cameras and flash away ("Over here!", "Front page!"), more of them the more famous you are, and right after you stop a crime. **Their photo of you goes up on the big billboard screens** with a headline in a news bar ("CITY HERO DOES IT AGAIN", "WHO IS THE MYSTERY HERO?", and "MENACE ON THE LOOSE" when the city has turned on you). From 65 a TV crew comes along: a reporter holding out a microphone and a camera operator.
+  - **Fans** (50 and up): now and then someone runs up to take a photo of you with their phone, and passers-by call out to you ("It's the hero!") in golden speech bubbles.
+  - **A statue**: keep your reputation at 80 or above for a while and the city council votes for a statue of you on the town hall square. It is built behind a fence and under a tarp, then unveiled with a fanfare, confetti and a cheering crowd with signs: a bronze statue of your hero, fist raised, on a stone plinth with a plaque. It stays in your saves.
+  - **Protesters**: below 0, people gather with placards ("GO HOME HERO", "WHO PAYS FOR THIS?"), chant against you in red speech bubbles to a drum, boo when you walk up and follow you about. The lower your reputation, the bigger the crowd. Passers-by grumble at you. If your reputation stays below 0, protesters pull your statue down; it lies on the paving with its plaque sprayed over (raise your reputation to 80 again and it is rebuilt).
+- **The police and the army escalate against you at any size now**, not only as a giant. With a reputation of −40 or lower, wrecking things gets you warned, warned again, and then hunted: the police, SWAT and the National Guard for a human-sized hero, the full army and air support for a giant. The lower your reputation, the less destruction it takes. At −70 and below the police hunt you on sight: the first officer who sees you goes after you.
+- **Helping someone up raises your reputation a little** (+1; not for people you knocked down yourself).
+
 ## 0.053 — 2026-10-06
 
 - **The city lives its own life now, and you hear about it.** Crime happens all over the city, not just near you. The police stop some of it, and the neighbourhoods get safer or rougher over time.

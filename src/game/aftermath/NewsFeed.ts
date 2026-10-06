@@ -28,6 +28,11 @@ export class NewsFeed {
   readonly cam = new THREE.PerspectiveCamera(FEED.fov, FEED.w / FEED.h, 1, 9000);
   /** What the drone films (null: off). */
   target: FeedTarget | null = null;
+  /**
+   * A still picture for the same screens while the drone films nothing (game/fame/PressPhoto: a press
+   * photo of the hero with a headline), the feed's HDR encoding; null / strength 0: none.
+   */
+  still: { tex: THREE.Texture; strength: number } | null = null;
   private t = 0;
   private renderT = 0;
   private orbit = Math.random() * Math.PI * 2;
@@ -63,7 +68,12 @@ export class NewsFeed {
     const g = this.g, signs = g.future.signs, p = g.player.pos;
     const want = !!this.target && !!this.rt && this.billboardsNear() && !g.camRig.underground;
     this.on += ((want ? 1 : 0) - this.on) * Math.min(1, dt * 1.5);
-    if (this.on < 0.01 || !this.rt) { signs.feed(this.rt?.texture ?? null, p.x, p.z, FEED.showR, 0); return; }
+    if (this.on < 0.01 || !this.rt) {
+      const S = this.still;
+      if (S && S.strength > 0.01 && !this.target) signs.feed(S.tex, p.x, p.z, FEED.showR, S.strength);
+      else signs.feed(this.rt?.texture ?? null, p.x, p.z, FEED.showR, 0);
+      return;
+    }
     signs.feed(this.rt.texture, p.x, p.z, FEED.showR, this.on);
     this.renderT -= dt;
     if (!want || this.renderT > 0) return;

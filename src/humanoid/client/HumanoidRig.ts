@@ -170,6 +170,12 @@ export class HumanoidRig {
     svc.collect();
   }
 
+  /** What it wears now (the last setEquipment). */
+  get outfit(): EquipmentVisuals | undefined { return this.pendingEq; }
+
+  /** Dressed: the body built and the outfit on (the placeholder capsule gone). */
+  get dressed(): boolean { return !!this.char && !this.placeholder; }
+
   setEquipment(eq: EquipmentVisuals | undefined) {
     this.pendingEq = eq;
     this.equipment?.set(eq);

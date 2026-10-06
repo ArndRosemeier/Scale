@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { ItemVisual } from '../../items/types';
 import type { RigidPart, WearableSpec, BodyFit } from '../../items/wearable';
+import { PLACARDS, FAN_SIGNS, FAN_SIGNS_FROM } from './placards';
 
 type C3 = [number, number, number];
 
@@ -36,6 +37,12 @@ export function streetWearable(defId: string, v: ItemVisual): WearableSpec | nul
 
 /** Held costume items (null: not one of these). */
 export function streetHeld(defId: string): THREE.Object3D | null {
+  if (defId.startsWith('placard_')) return placard(Number(defId.slice(8)) || 0);
+  // (The cameras turned in the grip: lens forward when the hands are up at the eye: take_photo, shoulder_cam.)
+  const turned = (o: THREE.Object3D, dx = 0, dz = 0) => { o.rotation.set(Math.PI / 2, 0, Math.PI); o.position.set(dx, 0, dz); return new THREE.Group().add(o); };
+  if (defId === 'presscam') return turned(pressCamera(), 0.17, -0.02);
+  if (defId === 'mic') return microphone();
+  if (defId === 'tvcam') return turned(tvCamera());
   if (defId !== 'flyer') return null;
   // A flyer pinched in the fist, standing up out of the thumb side.
   const g = new THREE.Group();
@@ -43,6 +50,77 @@ export function streetHeld(defId: string): THREE.Object3D | null {
   m.position.set(0, 0.1, 0.02);
   m.rotation.y = Math.PI / 2;
   g.add(m);
+  return g;
+}
+
+/**
+ * A protest placard (fame: protesters, fans): a painted board on a stick, held up high (the raised
+ * torch grip: the stick upright, +Y), the text on both faces.
+ */
+function placard(i: number): THREE.Object3D {
+  const g = new THREE.Group();
+  const text = i < FAN_SIGNS_FROM ? PLACARDS[i % PLACARDS.length] : FAN_SIGNS[(i - FAN_SIGNS_FROM) % FAN_SIGNS.length];
+  const fan = i >= FAN_SIGNS_FROM;
+  const bg = fan ? '#fff4c2' : ['#f4f1e8', '#f6e27a', '#ffffff', '#f2c9a0'][i % 4];
+  const fg = fan ? '#c0182a' : ['#141414', '#b3261e', '#1b2a8a', '#141414'][i % 4];
+  const stick = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.05, 0.025), std([0.55, 0.4, 0.25], 0.9));
+  stick.position.y = 0.2;
+  const face = new THREE.MeshStandardMaterial({ map: textTexture(text, bg, fg, 384, 256), roughness: 0.9 });
+  const edge = std([0.75, 0.7, 0.6], 0.9);
+  // (Board faces ±X: the hand's palm side and back — turned to face forward by the grip.)
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.42, 0.62), [face, face, edge, edge, edge, edge]);
+  board.position.set(0, 0.72, 0);
+  g.add(stick, board);
+  return g;
+}
+
+/** A press photographer's camera: body, a big lens and a flash head on top (its lamp: `flash`). */
+function pressCamera(): THREE.Object3D {
+  const g = new THREE.Group();
+  const black = std([0.04, 0.04, 0.045], 0.45, 0.3);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.075), black);
+  body.position.set(0, 0.06, 0.04);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.04, 0.12, 14), black);
+  lens.rotation.x = Math.PI / 2;
+  lens.position.set(0, 0.055, 0.13);
+  const glass = new THREE.Mesh(new THREE.CircleGeometry(0.03, 14), new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.05, metalness: 0.8 }));
+  glass.position.set(0, 0.055, 0.191);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.06), black);
+  head.position.set(0, 0.14, 0.05);
+  const lamp = new THREE.Mesh(new THREE.PlaneGeometry(0.058, 0.035), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+  lamp.position.set(0, 0.14, 0.081);
+  lamp.name = 'flash';
+  g.add(body, lens, glass, head, lamp);
+  return g;
+}
+
+/** A TV reporter's microphone with the channel's cube on it. */
+function microphone(): THREE.Object3D {
+  const g = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.011, 0.2, 10), std([0.08, 0.08, 0.09], 0.4, 0.4));
+  shaft.position.y = 0.06;
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), std([0.15, 0.15, 0.16], 0.9));
+  ball.position.y = 0.18;
+  const cube = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.045, 0.055), new THREE.MeshStandardMaterial({ map: textTexture('6', '#c61f2b', '#ffffff', 64, 64), roughness: 0.5 }));
+  cube.position.y = 0.12;
+  g.add(shaft, ball, cube);
+  return g;
+}
+
+/** A TV camera carried by its handle (put on the shoulder while filming: the action's pose). */
+function tvCamera(): THREE.Object3D {
+  const g = new THREE.Group();
+  const grey = std([0.18, 0.18, 0.2], 0.5, 0.3), black = std([0.04, 0.04, 0.045], 0.45, 0.3);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.17, 0.38), grey);
+  body.position.set(0, -0.02, 0.06);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.16, 14), black);
+  lens.rotation.x = Math.PI / 2;
+  lens.position.set(0, 0, 0.32);
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.035, 0.03), new THREE.MeshBasicMaterial({ color: 0xfff2d0, toneMapped: false }));
+  lamp.position.set(0, 0.09, 0.2);
+  const red = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }));
+  red.position.set(0.04, 0.07, 0.24);
+  g.add(body, lens, lamp, red);
   return g;
 }
 

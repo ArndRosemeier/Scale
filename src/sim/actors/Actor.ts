@@ -22,6 +22,8 @@ export type ActorRole = 'criminal' | 'victim' | 'police' | 'shopkeeper' | 'owner
 export const AFTERMATH_OWNER = -2;
 /** Owner id of the street characters (src/game/street: buskers, the doomsayer, living statues …): their own budget. */
 export const STREET_OWNER = -3;
+/** Owner id of the people fame brings (src/game/fame: photographers, a TV crew, fans, protesters): their own budget. */
+export const FAME_OWNER = -4;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';

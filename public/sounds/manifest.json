@@ -1025,5 +1025,37 @@
     "loop": true,
     "gain": 0.4,
     "description": "a fire in an oil drum: crackles and pops over a soft roar (procedural, tools/synthSewer.mjs)"
+  },
+  "camera_shutter": {
+    "files": [
+      "camera_shutter.wav"
+    ],
+    "loop": false,
+    "gain": 0.55,
+    "description": "a press camera: mirror slap and shutter, the flash recharging (procedural, tools/synthFame.mjs)"
+  },
+  "crowd_boo": {
+    "files": [
+      "crowd_boo.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a small crowd booing, a whistle (procedural, tools/synthFame.mjs)"
+  },
+  "protest_chant": {
+    "files": [
+      "protest_chant.wav"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "protesters chanting 'Go home!' to a drum (procedural loop, tools/synthFame.mjs)"
+  },
+  "fanfare": {
+    "files": [
+      "fanfare.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a short brass fanfare: the hero's statue unveiled (procedural, tools/synthFame.mjs)"
   }
 }

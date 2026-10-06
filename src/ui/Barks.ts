@@ -136,9 +136,10 @@ export class Barks {
   /**
    * A short line over someone (where it can be seen; sparse — see the limits above). Also for the
    * aftermath's people and the street characters (`pause`: their own, shorter wait before the next
-   * line). False when it was not shown.
+   * line). `tone`: an angry (red) or a cheering (golden) bubble instead of the plain one (game/fame:
+   * protesters and booing passers-by, fans). False when it was not shown.
    */
-  say(a: PedAgent, text: string, pause = PERSON_PAUSE): boolean {
+  say(a: PedAgent, text: string, pause = PERSON_PAUSE, tone?: 'angry' | 'cheer'): boolean {
     if (this.gapT > 0 || this.shown.some((s) => s.a === a)) return false;
     if (this.time < (this.quiet.get(a) ?? -Infinity)) return false;
     // Only where it can be seen.
@@ -149,6 +150,8 @@ export class Barks {
     const el = this.els.find((e) => !this.shown.some((s) => s.el === e))!;
     el.textContent = text;
     el.classList.remove('out');
+    el.classList.toggle('angry', tone === 'angry');
+    el.classList.toggle('cheer', tone === 'cheer');
     this.shown.push({ a, el, t: 0 });
     this.quiet.set(a, this.time + pause);
     this.gapT = GAP;
