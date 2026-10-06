@@ -91,7 +91,8 @@ export function matches(w: When, f: TalkFacts): boolean {
 /** How specific an entry is: the number of criteria it names. */
 export function specificity(w: When): number {
   let n = 0;
-  for (const k in w) if ((w as Record<string, unknown>)[k] !== undefined) n++;
+  // (A line for a special character — the mime, the officer — beats any temperament or memory line.)
+  for (const k in w) if ((w as Record<string, unknown>)[k] !== undefined) n += k === 'title' ? 6 : 1;
   return n;
 }
 
@@ -185,7 +186,8 @@ export class RuleBackend implements TalkBackend {
 /** The rule answer (synchronous): the job topic adds a line about their hobby. */
 export function ruleAnswer(req: TalkRequest): Picked {
   const p = pickLine(req.topic, req.facts, req.seed, req.used);
-  if (req.topic !== 'job' || req.facts.job.kind === 'pupil') return p;
+  // (Pupils, and special characters answering as what they are — the mime, the officer — say no more.)
+  if (req.topic !== 'job' || req.facts.job.kind === 'pupil' || p.id.startsWith('js')) return p;
   const h = pickLine('hobby', req.facts, req.seed + 1, req.used);
   return { id: `${p.id} ${h.id}`, text: `${p.text} ${h.text}` };
 }

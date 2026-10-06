@@ -14,7 +14,7 @@ import { PState, type PedAgent } from '../sim/Pedestrians';
 
 const RANGE = 25;
 const MAX_SHOWN = 3;
-/** Seconds a bubble stays; between two new bubbles; before the same person speaks again. */
+/** Seconds a short bubble stays (longer lines longer, see showFor); between two new bubbles; before the same person speaks again. */
 const SHOW = 2.6, GAP = 0.9, PERSON_PAUSE = 25;
 /** Small talk: seconds between two lines (random within). */
 const CHAT_MIN = 14, CHAT_MAX = 28;
@@ -163,13 +163,14 @@ export class Barks {
     for (let i = this.shown.length - 1; i >= 0; i--) {
       const s = this.shown[i];
       s.t += dt;
-      const gone = !s.a.alive || s.t > SHOW;
+      const show = showFor(s.el.textContent ?? '');
+      const gone = !s.a.alive || s.t > show;
       this.p.set(s.a.x, s.a.y + 2.05, s.a.z).project(cam);
       const off = hidden || this.p.z > 1 || Math.abs(this.p.x) > 1.05 || Math.abs(this.p.y) > 1.05;
       if (gone) { s.el.style.display = 'none'; this.shown.splice(i, 1); continue; }
       s.el.style.display = off ? 'none' : 'block';
       if (off) continue;
-      if (s.t > SHOW - 0.35) s.el.classList.add('out');
+      if (s.t > show - 0.35) s.el.classList.add('out');
       const d = cam.position.distanceTo(_v.set(s.a.x, s.a.y + 1.8, s.a.z));
       const k = Math.max(0.7, Math.min(1.1, 9 / Math.max(1, d)));
       s.el.style.transform = `translate(${((this.p.x * 0.5 + 0.5) * W).toFixed(1)}px, ${((-this.p.y * 0.5 + 0.5) * H).toFixed(1)}px) translate(-50%, -100%) scale(${k.toFixed(2)})`;
@@ -178,6 +179,11 @@ export class Barks {
 }
 
 const _v = new THREE.Vector3();
+
+/** Seconds a line stays up: SHOW for a short one, longer lines a little more so they can be read. */
+function showFor(text: string): number {
+  return Math.min(6, Math.max(SHOW, 1.2 + text.length * 0.06));
+}
 
 function pick(l: Lines): string {
   return l[Math.floor(Math.random() * l.length)];
