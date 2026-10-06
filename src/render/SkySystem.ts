@@ -44,6 +44,12 @@ export class SkySystem {
     this.envSky.scale.setScalar(1000);
     this.envScene.add(this.envSky);
     this.pmrem = new THREE.PMREMGenerator(renderer);
+    // An environment map from the start: it is part of every lit material's program key, so
+    // shaders compiled before the first frame (the loading warm-up, streamed cells) would
+    // otherwise all be compiled again — one after the other — once the first frame sets it.
+    // (The first update re-renders it for the real sun.)
+    this.envRT = this.pmrem.fromScene(this.envScene, 0, 1, 2000);
+    scene.environment = this.envRT.texture;
 
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(4096, 4096);

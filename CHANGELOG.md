@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.073 — 2026-10-06
+
+- **"Preparing shaders" is much shorter.** The shaders were already meant to compile in parallel on the graphics driver's own threads, but that compile ran before the sky had made its environment light. The first frame then added it, and that changed every lit material, so about 40 shaders were compiled a second time, one after the other, while the loading screen waited (and the parallel work had been thrown away). The environment light now exists from the start, so the parallel compile is the only one. The first frame's new content (cars, effects, the first crowd) now also compiles in parallel instead of one by one. About a quarter fewer shaders are built at the start (154 to 106).
+- The browser console now shows how long loading took in all and how much of it was preparing shaders.
+
 ## 0.072 — 2026-10-06
 
 - **Dresses and skirts no longer let skin poke through.** The skirt part is now shaped to each body: it starts close at the waist (no strip of skin between bodice and skirt, and no stiff shelf), clears the widest hips, bottom and thighs, and leaves room for the legs to move, so it is a bit wider, most of all lower down. It follows the legs better when walking, running and sitting, and the upper thighs inside a long skirt are hidden so they can't push through when someone sits down.

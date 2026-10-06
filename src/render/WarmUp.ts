@@ -60,6 +60,8 @@ export interface WarmReport {
   calmMs: number;
   totalMs: number;
   programs: number;
+  /** Programs that existed when the parallel compile had finished (the rest were compiled while rendering). */
+  programsCompiled: number;
 }
 
 export const LEGACY_WARMUP = new URLSearchParams(location.search).get('warm') === '0';
@@ -71,7 +73,7 @@ export async function warmUp(host: WarmHost, progress: (f: number) => void, opts
 async function current(host: WarmHost, progress: (f: number) => void, opts: WarmOpts): Promise<WarmReport> {
   const R = host.renderer, gl = R.gl, scene = R.scene, cam = R.camera;
   const t0 = performance.now();
-  const rep: WarmReport = { legacy: false, textures: 0, texMs: 0, compileMs: 0, views: 0, viewsMs: 0, calmMs: 0, totalMs: 0, programs: 0 };
+  const rep: WarmReport = { legacy: false, textures: 0, texMs: 0, compileMs: 0, views: 0, viewsMs: 0, calmMs: 0, totalMs: 0, programs: 0, programsCompiled: 0 };
   // 1. Staging, in front of the camera (moved along into every view below).
   const stage = new THREE.Group();
   stage.name = 'warm-stage';
@@ -103,8 +105,11 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   const tc = performance.now();
   await R.compileAsync(scene);
   rep.compileMs = performance.now() - tc;
-  host.startLoop();
+  rep.programsCompiled = (gl.info.programs ?? []).length;
+  // (Gate first: startLoop runs the first frame at once, and what that frame adds — vehicle and
+  // FX batches, the first crowd — would otherwise compile one program after the other in it.)
   host.gate.enabled = true;
+  host.startLoop();
   progress(0.4);
   // 5. Views: real frames from all round and from the given shots, empty batches drawn once.
   const tv = performance.now();
@@ -160,7 +165,7 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
 async function legacy(host: WarmHost, progress: (f: number) => void, opts: WarmOpts): Promise<WarmReport> {
   const R = host.renderer, scene = R.scene, cam = R.camera;
   const t0 = performance.now();
-  const rep: WarmReport = { legacy: true, textures: 0, texMs: 0, compileMs: 0, views: 0, viewsMs: 0, calmMs: 0, totalMs: 0, programs: 0 };
+  const rep: WarmReport = { legacy: true, textures: 0, texMs: 0, compileMs: 0, views: 0, viewsMs: 0, calmMs: 0, totalMs: 0, programs: 0, programsCompiled: 0 };
   host.startLoop();
   const warm = new THREE.Group();
   for (const o of opts.staging ?? []) warm.add(o);
