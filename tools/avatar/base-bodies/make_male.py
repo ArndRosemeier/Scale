@@ -28,12 +28,12 @@ SCALES = {
     'DEF-stomach': (1.06, 0.96, 1.0),
     'DEF-pectoralis.#': (1.15, 1.15, 1.15),
     'breast.#': (0.80, 0.80, 0.32),
-    '*Shoulder': (1.15, 1.15, 1.30),
-    'DEF-deltoid.#': (1.18, 1.18, 1.12),
+    '*Shoulder': (1.2, 1.2, 1.8),
+    'DEF-deltoid.#': (1.26, 1.26, 1.14),
     'DEF-scapula.#': (1.12, 1.12, 1.12),
     'DEF-trapezius1.#': (1.2, 1.2, 1.1),
     'DEF-trapezius2.#': (1.15, 1.15, 1.1),
-    'DEF-lat_dorsi.#': (1.15, 1.15, 1.1),
+    'DEF-lat_dorsi.#': (1.22, 1.22, 1.1),
     '*UpperArm': (1.2, 1.2, 1.03),
     '*LowerArm': (1.16, 1.16, 1.03),
     'DEF-forearm.02.#': (1.12, 1.12, 1.03),
@@ -56,7 +56,7 @@ SCALES = {
 }
 FINGERS = (1.10, 1.10, 1.06)
 # Torso width by height (m, factor): broader waist, narrower pelvis; arms are left out.
-WIDTH = [(0.50, 1.0), (0.72, 0.97), (0.90, 0.89), (0.98, 0.92), (1.06, 1.02), (1.14, 1.11), (1.24, 1.09), (1.38, 1.0)]
+WIDTH = [(0.50, 1.0), (0.72, 0.97), (0.90, 0.89), (0.98, 0.92), (1.06, 1.02), (1.14, 1.16), (1.24, 1.21), (1.38, 1.1)]
 ARM = ('Arm', 'Hand', 'forearm', 'f_', 'thumb', 'palm')
 HEIGHT = 1.80
 

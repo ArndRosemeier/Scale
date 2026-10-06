@@ -1,5 +1,8 @@
-Built-in characters
-===================
+Woman / Man base bodies
+=======================
+
+Not shipped as characters any more: tools/avatar/base-bodies/conform.py fits every
+human in the game onto them (public/assets/human/conform.*).
 
 woman.glb: "Woman_model" by Bananaboy
   http://www.blendswap.com/blends/view/73627
@@ -11,7 +14,5 @@ woman.glb: "Woman_model" by Bananaboy
 man.glb: based on "Woman_model" by Bananaboy (same source and licence as above),
   modified: reshaped into a male body and textured by tools/avatar/base-bodies/
   (make_male.py, paint_skin.py).
-
-woman.png / man.png: picker thumbnails rendered from the two models.
 
 The modifications are offered under the same licence, CC BY 3.0.
