@@ -65,6 +65,8 @@ import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
 import { Compass } from '../ui/Compass';
 import { Barks } from '../ui/Barks';
+import { setSight } from '../render/screen';
+import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
@@ -291,6 +293,7 @@ export class Game {
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
     this.underground.sound = this.audio;
+    setSight(makeSight(this.world, () => this.camRig?.underground ?? false, (x, y, z) => this.underground.isUnder(x, y, z)));
     this.stimuli.on((s) => this.underground.onStimulus(s.kind, s.x, s.y, s.z, s.radius));
     this.renderer.scene.add(this.underground.group);
     this.net = new RoadNet(macro);

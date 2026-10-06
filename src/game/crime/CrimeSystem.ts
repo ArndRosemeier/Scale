@@ -1588,7 +1588,8 @@ export class CrimeSystem {
     this.markT = 0.4;
     const list: MapMarker[] = [];
     for (const c of this.crimes) {
-      if (!c.committed || !c.active) continue;
+      // A sewer den's crew stays off the map: finding them down there is the point.
+      if (!c.committed || !c.active || c.kind === 'den') continue;
       // A group's operation: its colour and name.
       const f = this.factionOf(c), color = f ? f.palette.map : '#ff3b30', by = f ? `${f.emblem} ${f.name}: ` : '';
       for (const a of c.criminals) {
