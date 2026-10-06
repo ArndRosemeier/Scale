@@ -2,9 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.078 — 2026-10-06
+
+- **You can walk to the starship (and every other landmark) again.** In big cities the houses around a landmark's square could close into an unbroken ring, so the only way in was to fly (seed 873738 at full size had its starship, town hall, cathedral and stadium walled in). Now a paved way leads from the middle of each side of a landmark's square straight out to the street. No house, café terrace, fountain, statue or bench is put on it.
+
 ## 0.077 — 2026-10-06
 
-- **You can walk to the starship (and every other landmark) again.** In big cities the houses around a landmark's square could close into an unbroken ring, so the only way in was to fly (seed 873738 at full size had its starship, town hall, cathedral and stadium walled in). Now a paved way leads from the middle of each side of a landmark's square straight out to the street, and no house is built on it.
+- **No more walls to walk through in the metro entrances.** Two things from above could stand across an entrance passage as a wall without substance:
+  - The ground is drawn in square tiles, and along every tile edge a curtain hangs a few metres into the earth to hide the seams. It was hidden only once the camera itself was underground, so in a corridor right under the street the camera, still at street level, showed it across the way. It now stays hidden whenever you are in a stairwell or passage.
+  - The shafts of the sewer manholes run from the sewer straight up to the street, through anything in between. They now keep clear of metro tunnels, halls and side rooms, and of the ground around every station where its stairs run.
+- **Nobody walks on the tracks any more.** Commuters can no longer step off the edge of a platform. People halfway through a door when it shuts stay on the train. Someone knocked over in a train standing at a platform, or knocked off the platform, no longer gets up on the track bed and wanders there: they are lifted back onto the platform and go back to waiting.
 
 ## 0.076 — 2026-10-06
 

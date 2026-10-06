@@ -3151,6 +3151,9 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const r = runLife(macro, terrain, 1, 9, 150);
   check(r.stuck === 0 && r.offFloor === 0 && r.onTracks === 0 && r.floorGap < 0.3, `metro life: every commuter keeps to the floors (${r.stuck} stalled, ${r.offFloor} off the floor, ${r.onTracks} on the tracks, worst gap ${r.floorGap.toFixed(2)} m)`);
   check(r.boarded > 0 && r.alighted > 0 && r.left > 0 && r.crossed > 0, `metro life: people board, get off, cross and leave (${r.boarded} / ${r.alighted} / ${r.crossed} / ${r.left})`);
+  // Pushed at the tracks, or knocked down onto them: nobody stays down there.
+  const s = runLife(macro, terrain, 1, 9, 60, 1, true);
+  check(s.onTracks === 0 && s.offFloor === 0, `metro life: shoved commuters stop at the platform edge, knocked-off ones climb back (${s.onTracks} on the tracks)`);
   console.log(`metro life: ${r.spawned} commuters, ${r.boarded} boarded, ${r.alighted} got off, ${r.left} walked out, in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 

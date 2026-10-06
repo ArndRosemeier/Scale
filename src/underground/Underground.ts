@@ -53,6 +53,9 @@ export interface UnderSound {
 
 export interface Entrance { x: number; z: number; ux: number; uz: number; station: number; /** hall * 2 + end */ end: number; passage: Tube | null; /** descent direction */ dx: number; dz: number; cell: number; /** index of the hall's box */ box: number }
 
+/** How far beyond a station hall (along / across it) its entrance passages may run: no manhole shafts there. */
+const SHAFT_CLEAR_U = 55, SHAFT_CLEAR_V = 50;
+
 export class Underground {
   readonly group = new THREE.Group();
   readonly tubes: Tube[] = [];
@@ -127,9 +130,9 @@ export class Underground {
       this.underpasses.set(bi, t);
       this.doors.set(bi, [{ u: r.u, sv: 1 }, { u: r.u, sv: -1 }]);
     });
-    this.planManholes();
     for (const t of this.tubes) this.indexTube(t);
     for (const b of this.boxes) this.indexBox(b);
+    this.planManholes();
     // The deep realm below the colonies (its own field; meshes streamed by its worker).
     try {
       const halls = this.boxes.filter((b) => b.kind === 'station');
@@ -492,6 +495,8 @@ export class Underground {
           // A crossing trunk (a junction) under the shaft or the ladder.
           if (this.sewerTubes.some((o) => o !== t && !!tubeAt(o, x, q.y + 1, z, 1.2))) continue;
           if (this.allShafts.some((m) => Math.hypot(m.x - x, m.z - z) < 10)) break;
+          // Not up through a metro tunnel, a hall or a room, nor where a station's entrance stairs go.
+          if (this.shaftBlocked(x, z, q.y)) continue;
           spot = { tube: t, s, x, z, dx: q.dx, dz: q.dz, side, floor: q.y };
           break;
         }
@@ -501,6 +506,29 @@ export class Underground {
       }
       this.shafts.set(t, list);
     });
+  }
+
+  /**
+   * Would a manhole shaft at (x, z) from the trunk's floor up to the street cut another volume? A
+   * shaft drawn through a station's stairs or hall stood there as a wall one walked through. The
+   * entrance passages are only laid out once their cell loads, so the ground around every station
+   * hall (as far as entrance passages reach) is kept clear of shafts as a whole.
+   */
+  private shaftBlocked(x: number, z: number, floor: number): boolean {
+    for (const b of this.boxes) {
+      if (b.kind !== 'station') continue;
+      const u = Math.abs((x - b.cx) * b.ux + (z - b.cz) * b.uz), v = Math.abs(-(x - b.cx) * b.uz + (z - b.cz) * b.ux);
+      if (u < b.hu + SHAFT_CLEAR_U && v < b.hv + SHAFT_CLEAR_V) return true;
+    }
+    const top = this.ground(x, z), r = SHAFT_HS + 0.3;
+    for (let y = floor + 1; y < top; y += 0.8) {
+      for (const [ox, oz] of [[0, 0], [r, r], [r, -r], [-r, r], [-r, -r]]) {
+        const px = x + ox, pz = z + oz, n = this.near(px, pz);
+        if (n.tubes.some((t) => t.kind !== 'sewer' && !!tubeAt(t, px, y, pz, 0.3))) return true;
+        if (n.boxes.some((b) => !!boxAt(b, px, y, pz, 0.3))) return true;
+      }
+    }
+    return false;
   }
 
   private placeManholes(cellId: number): void {
