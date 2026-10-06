@@ -277,12 +277,12 @@ function starshipInside(k: Kit, hall: HallPlan, f: (t: number) => number, B: num
     hall.levels.forEach((y, i) => {
       if (!hall.bridges[i]) return;
       const rin = cr + 1.2, rout = cr + 4.2;
-      k.lathe(0, 0, [rin, y - 0.4, rout, y - 0.4, rout, y, rin, y, rin, y - 0.4], 1, 1, T.walk, { detail: true, solid: true, map: 0, seg: 28 });
+      k.lathe(0, 0, [rin, y - 0.4, rout, y - 0.4, rout, y, rin, y, rin, y - 0.4], 1, 1, T.walk, { detail: true, solid: true, deck: true, map: 0, seg: 28 });
       for (const w of hall.bridges[i] ?? []) {
         const a = ((w + 0.5) / hall.n) * Math.PI * 2;
         const p0 = P(a, rout - 0.3, 1), p1 = P(a, hall.voidR + 0.4);
         const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
-        k.box((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, len / 2, 1.2, y - 0.4, y, T.walk, { detail: true, solid: true, map: 0, rot: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) });
+        k.box((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, len / 2, 1.2, y - 0.4, y, T.walk, { detail: true, solid: true, deck: true, map: 0, rot: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) });
         for (const s of [-1, 1]) k.box((p0[0] + p1[0]) / 2 - Math.sin(Math.atan2(p1[1] - p0[1], p1[0] - p0[0])) * 1.15 * s, (p0[1] + p1[1]) / 2 + Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0])) * 1.15 * s, len / 2, 0.04, y, y + 0.08, T.glow, { detail: true, map: 0, rot: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) });
       }
     });

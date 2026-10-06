@@ -51,6 +51,7 @@ import type { Destruction } from '../src/destruction/Destruction';
 import type { MeshData } from '../src/build/meshBuilder';
 import type { MaterialArrays } from '../src/render/TextureLibrary';
 import { LandmarkSolids } from '../src/world/LandmarkSolids';
+import { insideObstacle } from '../src/world/Collision';
 import { marvelHall, marvelDoors } from '../src/plan/marvelParts';
 import { auditWays } from './landmarkWays';
 import { landmarkInterior } from '../src/plan/landmarkParts';
@@ -2847,13 +2848,33 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   for (const seed of [1, 3, 4]) {
     const r = new MRng(seed * 101);
     const d = marvelDesign(0, 7000)(r.fork('design'), 1)!;
-    const lm: Landmark = { id: 0, kind: 'marvel', name: 'test', cell: 0, x: 40, z: -20, angle: 0.4, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: 0, seed: r.nextU32(), style: 0, p: d.p };
+    // (Its site on a slope: foundations reach 1.5 m down, as on real ground.)
+    const lm: Landmark = { id: 0, kind: 'marvel', name: 'test', cell: 0, x: 40, z: -20, angle: 0.4, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: -1.5, seed: r.nextU32(), style: 0, p: d.p };
     lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
     landmarkParts(lm, flat);
     const hall = marvelHall(lm);
     check(!!hall && hall.levels.length >= 6, `starship ${seed}: a great hall with galleries (${hall?.levels.length ?? 0} levels)`);
     if (!hall) continue;
     const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    // The player's rules (world/Collision, player/Player): a 1.8 m walker of radius 0.3 stands on tops at
+    // least 0.7 m deep (or decks) up to 0.5 m above its feet; taller tops within its radius stop it.
+    const STEP = 0.5, MINH = 0.7, R = 0.3, HGT = 1.8;
+    const groundAt = (x: number, z: number, y: number) => {
+      let g = 0;
+      solids.provider(x - 0.01, z - 0.01, x + 0.01, z + 0.01, (o) => {
+        if ((o.y1 - o.y0 < MINH && !o.deck) || o.y1 > y + STEP || o.y1 <= g) return;
+        if (insideObstacle(o, x, z, 0)) g = o.y1;
+      });
+      return g;
+    };
+    const stopped = (x: number, z: number, y: number) => {
+      let hit = false;
+      solids.provider(x - R - 6, z - R - 6, x + R + 6, z + R + 6, (o) => {
+        if (hit || o.y1 - o.y0 < HGT * 0.4 || y >= o.y1 - STEP || y + HGT <= o.y0) return;
+        if (insideObstacle(o, x, z, R)) hit = true;
+      });
+      return hit;
+    };
     // Walk a polyline of local points from height y: blocked samples and the biggest step up.
     const walk = (pts: [number, number][], y: number) => {
       let blocked = 0, maxStep = 0;
@@ -2861,10 +2882,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
         const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
         for (let s = 0; s <= L; s += 0.2) {
           const [x, z] = siteToWorld(lm, pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / L, pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / L);
-          const ny = Math.max(0, solids.topAt(x, z, y + 0.45, 0));
+          const ny = groundAt(x, z, y);
           maxStep = Math.max(maxStep, ny - y);
           y = ny;
-          for (const h of [0.3, 1.0, 1.7]) if (solids.hit(x, y + h, z)) { blocked++; break; }
+          if (stopped(x, z, y)) blocked++;
         }
       }
       return { blocked, maxStep, y };

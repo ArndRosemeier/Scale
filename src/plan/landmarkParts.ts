@@ -84,6 +84,8 @@ export interface LmPart {
   hh?: number;
   /** Clear glass: drawn by the transparent glass mesh, not the facade one. */
   clear?: boolean;
+  /** A floor to walk on however thin (PartObstacle.deck). */
+  deck?: boolean;
   /** Vault, dome, cylinder: seen from inside (the faces turned inward, no end caps). */
   inward?: boolean;
   /** Dome or cylinder: only the half on the part's +v side (an apse's half dome or roof). */
@@ -155,6 +157,8 @@ export interface PartObstacle {
   dead?: boolean;
   /** Window glass (LmPart.pane): follows the glass pieces, not the wall's. */
   pane?: boolean;
+  /** Walkable however thin (world/Collision: ground for any walker). */
+  deck?: boolean;
 }
 
 // Facade flags (build/buildingShell FF): windows, curtain wall, arched, roof, front, stained glass.
@@ -186,6 +190,8 @@ export interface Opt {
   seg?: number;
   /** Clear glass (see LmPart.clear). */
   clear?: boolean;
+  /** Walkable however thin (LmPart.deck). */
+  deck?: boolean;
 }
 
 /** Builds parts in a local frame (nested frames for sub-assemblies like planes). */
@@ -252,6 +258,7 @@ export class Kit {
       map: o.map ?? (o.detail ? 0 : map), seg: o.seg ?? p.seg,
     };
     if (o.clear) part.clear = true;
+    if (o.deck) part.deck = true;
     this.parts.push(part);
     return part;
   }
@@ -1642,7 +1649,15 @@ export function partObstacles(parts: LmPart[]): PartObstacle[] {
   const out: PartObstacle[] = [];
   for (const p of parts) {
     if (!p.solid) continue;
-    const y0 = Math.min(p.y0, p.foot ?? p.y0);
+    const first = out.length;
+    obstaclesOf(p, out);
+    if (p.deck) for (let i = first; i < out.length; i++) out[i].deck = true;
+  }
+  return out;
+}
+
+function obstaclesOf(p: LmPart, out: PartObstacle[]): void {
+  const y0 = Math.min(p.y0, p.foot ?? p.y0);
     const ux = Math.cos(p.a), uz = Math.sin(p.a);
     switch (p.k) {
       case PK.Cyl: case PK.Dome: {
@@ -1662,8 +1677,6 @@ export function partObstacles(parts: LmPart[]): PartObstacle[] {
       default:
         out.push({ cyl: false, x: p.x, z: p.z, r: 0, hx: Math.max(p.hx, p.hx2 ?? 0), hz: p.hz, ux, uz, y0, y1: p.y1, ...(p.pane ? { pane: true } : {}) });
     }
-  }
-  return out;
 }
 
 /** Is a lathe profile closed (a ring)? */

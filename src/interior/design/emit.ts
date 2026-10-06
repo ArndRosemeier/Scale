@@ -16,7 +16,7 @@ const DOOR_H = 2.3;
 export function emitDesign(k: Kit, D: Design, T: Theme): void {
   for (const f of D.floors) {
     const m = f.fn === 'gallery' ? T.walk : f.fn === 'hall' ? T.wall : T.floor;
-    k.rampQ(f.q, f.y - f.th, f.y, f.y, 0, m, { ...DS, top: m, noSides: f.fn !== 'gallery' && f.fn !== 'hall' });
+    k.rampQ(f.q, f.y - f.th, f.y, f.y, 0, m, { ...DS, deck: true, top: m, noSides: f.fn !== 'gallery' && f.fn !== 'hall' });
   }
   for (const w of D.walls) {
     if (w.kind === 'rail') { rail(k, w.a, w.b, w.y0, w.y1, T); continue; }
@@ -40,7 +40,7 @@ export function emitDesign(k: Kit, D: Design, T: Theme): void {
     for (let i = 0; i < s.n; i++) {
       const c: P2 = [s.from[0] + s.dir[0] * (i + 0.5) * tread, s.from[1] + s.dir[1] * (i + 0.5) * tread];
       const top = s.y0 + (i + 1) * rise;
-      k.box(c[0], c[1], tread / 2 + 0.02, s.width / 2, Math.max(s.y0 - 0.3, top - 0.9), top, T.trim, { ...DS, rot, top: T.walk });
+      k.box(c[0], c[1], tread / 2 + 0.02, s.width / 2, Math.max(s.y0 - 0.3, top - 0.9), top, T.trim, { ...DS, deck: true, rot, top: T.walk });
     }
   }
   for (const room of D.rooms) furnish(k, room, T);
