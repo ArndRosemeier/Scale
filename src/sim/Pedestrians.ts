@@ -322,13 +322,7 @@ export class Pedestrians {
     if (this.shelter?.(ax, az, bx, bz)) return;
     const route = this.buildRoute(ax, az, bx, bz);
     if (!route) return;
-    const id = this.nextId++;
-    const r = hashToFloat(hash32(c.seed));
-    const pref = c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35;
-    const a: PedAgent = {
-      id, cit: c, x: route[0], z: route[1], y: 0, heading: 0, speed: pref, pref, state: PState.Walk, route, wp: 1, dest,
-      fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
-    };
+    const a = this.walker(c, route, dest);
     // Place along the route by progress.
     if (this.pendingCarDest) { a.carDest = this.pendingCarDest; this.pendingCarDest = null; }
     // (A remembered person appears only near where they plausibly are, not where the schedule ran ahead to.)
@@ -344,6 +338,39 @@ export class Pedestrians {
     this.agents.push(a);
     this.byId.set(c.id, a);
     this.stats.spawned++;
+  }
+
+  /** A walker at the start of a route. */
+  private walker(c: Citizen, route: Float32Array, dest: { x: number; z: number } | null): PedAgent {
+    const r = hashToFloat(hash32(c.seed));
+    const pref = c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35;
+    return {
+      id: this.nextId++, cit: c, x: route[0], z: route[1], y: 0, heading: 0, speed: pref, pref, state: PState.Walk, route, wp: 1, dest,
+      fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
+    };
+  }
+
+  /**
+   * Put a remembered citizen back in the street where they plausibly are (x, z), walking on to a
+   * place (their trip's end, or where they are staying). The schedule only offers each walk once a
+   * day, so this is how you find them again after their body went out of range. Null: not now
+   * (no walkway near there, already there, the street is full).
+   */
+  bringBack(c: Citizen, x: number, z: number, to: PlaceRef): PedAgent | null {
+    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS) return null;
+    const ref = this.resolve(to);
+    let bx: number, bz: number, dest: { x: number; z: number } | null = null;
+    if (ref) { const d = doorOf(ref.desc); bx = d.x; bz = d.z; dest = { x: bx, z: bz }; }
+    else { const cc = this.macro.cells[to.cell]?.centroid; if (!cc) return null; bx = cc[0]; bz = cc[1]; }
+    if (Math.hypot(bx - x, bz - z) < 4) return null;
+    const route = this.buildRoute(x, z, bx, bz);
+    if (!route || Math.hypot(route[0] - x, route[1] - z) > PIN_R * 2) return null;
+    const a = this.walker(c, route, dest);
+    a.y = this.groundY(a.x, a.z, a.onRoad, a.heading);
+    this.agents.push(a);
+    this.byId.set(c.id, a);
+    this.stats.spawned++;
+    return a;
   }
 
   private pendingCarDest: { x: number; z: number } | null = null;

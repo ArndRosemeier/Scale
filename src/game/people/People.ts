@@ -102,6 +102,8 @@ export class People {
   private cache = new Map<number, Person>();
   private markT = 0;
   private driftT = 0;
+  /** Next time (this.time) to try bringing a known person back into the street, per citizen id. */
+  private backT = new Map<number, number>();
   private markKey = '';
   private greeted = new Map<number, number>();
   private time = 0;
@@ -508,6 +510,7 @@ export class People {
     for (const k of this.known) {
       const spot = this.whereNow(k, now, dt);
       if (!spot) continue;
+      this.bringBack(k, now);
       const p = this.person(k.cit);
       const op = opinionOf(k, rep, p.traits.a);
       const color = op >= 40 ? '#8ff0b4' : op <= -30 ? '#ffa894' : '#a9d6ff';
@@ -532,6 +535,24 @@ export class People {
     const n = onTheirWay(k.x, k.z, T.x, T.z, P.x, P.z, dt);
     k.x = n.x; k.z = n.z;
     return { x: k.x, z: k.z, exact: T.exact };
+  }
+
+  /**
+   * Near you but out of range of their body (it went too far, or the schedule offered their walk
+   * only once): put them back in the street at their dot, walking on to where their day is taking them.
+   */
+  private bringBack(k: Known, now: number): void {
+    const peds = this.g.peds, P = this.g.player.pos;
+    if (peds.agentOf(k.cit.id) || Math.hypot(k.x - P.x, k.z - P.z) > PEOPLE.backR) return;
+    if ((this.backT.get(k.cit.id) ?? 0) > this.time) return;
+    this.backT.set(k.cit.id, this.time + PEOPLE.backEvery);
+    const st = peds.pop.stateAt(k.cit, now);
+    const to = st.trip?.to ?? st.stay?.place;
+    if (!to) return;
+    // (Already at the place they are staying at: indoors, where the interiors put them.)
+    const at = peds.placeSpot(to);
+    if (!st.trip && at && Math.hypot(at.x - k.x, at.z - k.z) < 30) return;
+    peds.bringBack(k.cit, k.x, k.z, to);
   }
 
   /** Where their day plan has them now (a place, or a point on the way between two). */

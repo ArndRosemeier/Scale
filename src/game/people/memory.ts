@@ -30,6 +30,8 @@ export const PEOPLE = {
    * taxi) when both they and that place are this far from you (m).
    */
   walk: 1.5, ride: 9, rideFrom: 400,
+  /** Out of their body's range but this near you (m), they are put back in the street, tried every backEvery s. */
+  backR: 300, backEvery: 8,
 } as const;
 
 /**
