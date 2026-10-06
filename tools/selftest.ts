@@ -254,8 +254,8 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     check(r.carsOutside === 0 && r.carDy < 0.05 && r.carLateral < 0.3, `${at}: trains on the track, stopping inside the halls (${r.carsOutside} cars outside, ${r.carDy.toFixed(2)} m off the bed)`);
   }
   for (const p of auditPassages(mi, inHole)) {
-    check(p.maxSlope <= 0.65 && p.floorErr <= 0.05 && p.ceilingOut <= 0 && p.hits === 0 && p.endsOnPlatform,
-      `seed ${seed} entrance ${p.name}: walkable to the platform (slope ${p.maxSlope.toFixed(2)}, floor err ${p.floorErr.toFixed(2)}, ceiling ${p.ceilingOut.toFixed(2)}, cuts ${p.hits}, on platform ${p.endsOnPlatform})`);
+    check(p.maxSlope <= 0.65 && p.floorErr <= 0.05 && p.ceilingOut <= 0 && p.hits === 0 && p.endsOnPlatform && p.ledge <= 0.45,
+      `seed ${seed} entrance ${p.name}: walkable to the platform (slope ${p.maxSlope.toFixed(2)}, floor err ${p.floorErr.toFixed(2)}, ceiling ${p.ceilingOut.toFixed(2)}, cuts ${p.hits}, on platform ${p.endsOnPlatform}, ledge ${p.ledge.toFixed(2)})`);
   }
   // Population: plans are deterministic and every trip connects consecutive stays.
   const pop = new Population(macro, seed);
@@ -3024,6 +3024,20 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(whenWord(30, 30.2) === 'just now' && whenWord(2, 30) === 'last night' && whenWord(10, 40) === 'yesterday', 'news: when words');
   check(['safe', 'quiet', 'mixed', 'rough', 'dangerous'].every((s) => localRemark(s as Safety, 0.5).length > 5) && safetyOf(0.05) === 'safe' && safetyOf(0.8) === 'dangerous', 'news: a word about the streets for every level');
   console.log(`news: ${H1.list.length} neighbourhoods, ${off} off-screen crimes in 600 ticks (${stopped} stopped), start block index ${base[start].toFixed(2)}, in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Station life: commuters come down the real entrance stairs (Pedestrians' own steps over the
+// underground floors), cross by the underpass, wait, board, ride, get off and walk up and out;
+// nobody stalls on a step, leaves the floor or ends up on the tracks.
+{
+  const { runLife } = await import('./metrolife');
+  const t0 = performance.now();
+  const terrain = new Terrain(makeProfile({ seed: 1, size: 0.5 }));
+  const macro = buildMacroPlan(terrain);
+  const r = runLife(macro, terrain, 1, 9, 150);
+  check(r.stuck === 0 && r.offFloor === 0 && r.onTracks === 0 && r.floorGap < 0.3, `metro life: every commuter keeps to the floors (${r.stuck} stalled, ${r.offFloor} off the floor, ${r.onTracks} on the tracks, worst gap ${r.floorGap.toFixed(2)} m)`);
+  check(r.boarded > 0 && r.alighted > 0 && r.left > 0 && r.crossed > 0, `metro life: people board, get off, cross and leave (${r.boarded} / ${r.alighted} / ${r.crossed} / ${r.left})`);
+  console.log(`metro life: ${r.spawned} commuters, ${r.boarded} boarded, ${r.alighted} got off, ${r.left} walked out, in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
