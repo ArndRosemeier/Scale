@@ -344,7 +344,8 @@ export class Player {
     this.integrate(dt);
     // Parkour at super speed: running into a wall carries on up it (up to the roof), running
     // into a car or a bench vaults over it.
-    if (fast && this.blocked && moving) {
+    // (Not out of a hop: a façade grazed in the air would carry the runner up onto a roof.)
+    if (fast && this.blocked && moving && !this.hopping) {
       const hs = Math.hypot(this.vel.x, this.vel.z);
       const into = this.blocked.speed;
       if (into > 4 * sk || hs > 6 * sk) {
