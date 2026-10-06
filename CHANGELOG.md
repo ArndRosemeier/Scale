@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.068 — 2026-10-06
+## 0.069 — 2026-10-06
 
 - **Two new built-in characters: a woman and a man.** The start screen's character picker now offers **Woman** and **Man** next to the default human. Both are fully animated, with painted skin, short hair, eyebrows, lips and real irises. The woman is the new base model from Blend Swap; the man is made from the very same mesh and skeleton, reshaped (broader shoulders and chest, narrower hips, fuller thighs, thicker neck and arms, stronger jaw, 1.80 m tall), so the two move and fit exactly alike.
+
+## 0.068 — 2026-10-06
+
+- Fix: **sewer pipes no longer stick out of the streets.** Where a street ran through a dip, the sewer under it stayed too high and its brick vault broke through the road (seed 1234 at size 0.5, for example). Every sewer now stays at least a metre under the street along its whole length and width (also where streets meet on a steep river bank); under dips it simply runs a little deeper. `npx tsx tools/sewersweep.ts <sizes> <seedA-seedB>` checks any city for this.
 
 ## 0.067 — 2026-10-06
 
