@@ -2,9 +2,40 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.062 — 2026-10-06
+## 0.067 — 2026-10-06
 
 - **Power cores no longer hide inside things.** A core on a square or in a park used to sit exactly in the middle, which is where the fountain or statue stands, so it ended up inside the fountain where nobody could reach it (about a third of all cores in a sweep of 16 cities were buried like that). Cores now keep clear of fountains, statues, kiosks, trees, playgrounds, benches, café terraces, metro stairwells and water, and a core on a roof keeps clear of the air-conditioning units, water tanks and lift housings up there. `npx tsx tools/coresweep.ts <sizes> <seedA-seedB>` checks every core of many cities headlessly.
+
+## 0.066 — 2026-10-06
+
+- **The Lumen's trench holds steadier**: when two or more of their spots are empty, fresh sentries now come every 2.5 s (was 7 s) from right behind the line instead of the floor of the Throat, so a lucky Murk push no longer snowballs into the whole line falling. The headless trench test is now repeatable (its dice are seeded per city).
+
+## 0.065 — 2026-10-06
+
+- **Health tags no longer show up for people behind you.** On graphics cards that use the game's sharper depth mode, everything behind the camera was also projected onto the screen, mirrored: villains you ran away from got a second health bar in front of you, speech bubbles hung in empty air, and Tab or a click near a target could pick someone behind you. Every marker that follows something in the world (criminal health tags, target brackets and weak-spot rings, speech bubbles, target picking, the photo-flash glare) now goes through one shared piece of code that knows which side of the camera a point is on, and the self-test fails if any new marker tries to do it on its own.
+- **No more tags through walls and floors.** Health tags and speech bubbles only show for people you could actually see: not for a sewer crew under your feet while you walk the street (or the street above while you are in the sewers), and not for someone behind a building or a hill.
+- **Sewer hideouts stay off the map.** A crew holed up in the sewers no longer shows on the map or the compass; you have to find them down there.
+
+
+## 0.064 — 2026-10-06
+
+- **Metro stations are full of people now.**
+  - **Commuters** come down the entrance stairs from the street, some crossing to the far platform, and wait on the platforms: standing and looking down the tracks, or sitting on the benches.
+  - **Trains**: when a train pulls in and opens its doors, some riders get off and walk out and up the stairs to the street, and most of the people waiting step in, take a seat or stand by a door, and ride away. Trains near you carry passengers who sit along the benches, also in the car you ride in.
+- **Sit in the train**: the benches in the cars and on the platforms are seats now. Press **E** next to one to sit down (in a moving train too); the train carries you along on your seat, and on a platform bench you stay down in the station. Move or press **E** to get up again.
+- **Every platform can be reached on foot**: in more than half of the stations one platform (one direction of travel) had no way to it except by train. Every station now has an underpass under the tracks between its two platforms, with stairs down and up again on both sides.
+- **No more invisible ledges on the stairs**: where an entrance passage turned a corner right at the top or bottom of a flight, walking along one side of it ran into a step half a metre high. Every turn now has a level landing. Corridors that turned back and ran underneath their own stairs, and corridors running back alongside the first flight, now swing out to the side first.
+- Entrance routes are worked out about twice as fast as before (they only look at the tunnels and sewers near their station).
+
+## 0.063 — 2026-10-06
+
+- **The town hall and the cathedral are full of people now**, by the time of day.
+  - **Cathedral**: the priest is there from morning to evening. At the services at 9:00 and 18:00 the pews fill, the priest stands behind the altar and two altar servers sit in the choir stalls. Through the day visitors come and go. They stand at the aisle windows and the rose windows looking up at the glass, look up into the crossing or the dome, stop at the font and the pulpit, and rest in the pews. In the evening a few people sit and pray. At night it is empty.
+  - **Town hall** (open 8:00–18:00): clerks standing behind the information desk and the service counter, people asking at the counter and waiting on the benches, visitors in the hall, on the benches under the galleries and up on the galleries looking down. Upstairs, the mayor sits at the desk with an aide in the office (9:00–17:00). Council sessions fill the chamber from 10:00 to 12:00 and 14:00 to 16:00. Weddings are at 11:00, 13:00 and 15:00 in the wedding room, with the couple at the table (the bride in white), the registrar and rows of guests. At night a porter keeps the desk.
+  - People walk in from down the street, up the steps and through the door to where they are going, and leave the same way. Staff come and go with their hours. The priest wears black and the clerks, mayor and council wear suits.
+  - They react like people outside: a blast or a monster sends them running out of the door, a commotion makes them stop and look, and you bump into them and can knock them down (they get up after a few seconds and run). If the cathedral is badly damaged, everyone leaves.
+  - In a queue at the door they keep a little room to the one in front, and they wait for you to step aside rather than shoving you down the steps. Nobody holds a coffee cup or an umbrella inside.
+- The choir stalls in the cathedral now face each other across the chancel. They used to face the walls.
 
 ## 0.061 — 2026-10-06
 
@@ -19,6 +50,7 @@ Every push raises the version by 0.001. Newest first.
 - **You can tell the slimes apart.** The Murk are blood red now, their spines glowing hotter towards the tips, and they have two slanted, glaring orange eyes (brighter when they fight). The Lumen stay soft, round and glowing.
 - **The Murk go for you on sight**: from 24 m away (was 17), and a Murk fighting a Lumen drops it for you once you come within 10 m. They also follow you further before giving up.
 - Fix: slimes following a route through the caves could get stuck forever trying to reach a waypoint at an edge (the Murk at the lip of the Throat, for example). Now they move on.
+
 ## 0.060 — 2026-10-06
 
 - **Save to file and Load from file use your computer's own file dialogs** where the browser has them (Chrome, Edge and Opera on a desktop): you choose the folder and name of a saved game, and pick the file to open from a normal Open window that shows Scale saves first. The dialogs remember the folder you used last. In other browsers (Firefox, Safari, iPad) saving still downloads the file, and loading uses the browser's file chooser.
