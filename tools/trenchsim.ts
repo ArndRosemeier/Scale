@@ -3,7 +3,7 @@
  * the Murk's pushes (and optionally a raid), with the player standing in the trench or away.
  * Reports where the Murk fell (how far they got) and what the Lumen lost.
  *
- *   npx tsx tools/trenchsim.ts [seed] [size] [seconds] [player: away|trench|noMans]
+ *   npx tsx tools/trenchsim.ts [seed] [size] [seconds] [player: away|trench|noMans]   (DICE=n: other dice)
  */
 import { deepFor } from './deepsweep';
 import { DeepField } from '../src/underground/deep/field';
@@ -13,8 +13,18 @@ import type { DeepPlan } from '../src/underground/deep/plan';
 
 export interface TrenchRun { spawned: number; killed: number; past: number; reachedLine: number; sentriesLost: number; playerHits: number; bolts: number; hits: number; sAtDeath: number[]; alive: string[] }
 
-/** Run the trench war for `secs` seconds; `player`: where the player stands. */
-export function runTrench(plan: DeepPlan, secs: number, player: 'away' | 'trench' | 'noMans' = 'away'): TrenchRun {
+/**
+ * Run the trench war for `secs` seconds; `player`: where the player stands. The game's dice
+ * (`Math.random`) are seeded for the run (`rng`, default from the realm's seed), so a run repeats.
+ */
+export function runTrench(plan: DeepPlan, secs: number, player: 'away' | 'trench' | 'noMans' = 'away', rng = plan.seed): TrenchRun {
+  const random = Math.random;
+  let a = rng >>> 0;
+  Math.random = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  try { return run(plan, secs, player); } finally { Math.random = random; }
+}
+
+function run(plan: DeepPlan, secs: number, player: 'away' | 'trench' | 'noMans'): TrenchRun {
   const field = new DeepField(plan.prims, plan.seed);
   const T = plan.trench;
   const at = (s: number, l: number) => { const x = T.x + T.ax * s + T.cx * l, z = T.z + T.az * s + T.cz * l; return { x, y: field.floorAt(x, T.y + 1.5, z, 5) ?? T.y, z }; };
@@ -72,7 +82,7 @@ if (isMain) {
   const player = (process.argv[5] ?? 'away') as 'away' | 'trench' | 'noMans';
   const { plan } = deepFor(seed, size);
   if (!plan) { console.log('no realm'); process.exit(1); }
-  const r = runTrench(plan, secs, player);
+  const r = runTrench(plan, secs, player, process.env.DICE ? Number(process.env.DICE) : plan.seed);
   const T = plan.trench;
   const hist = new Map<string, number>();
   for (const s of r.sAtDeath) { const k = s > T.noMans[1] ? 'at their berm' : s > T.wire[1] ? "no-man's land" : s > T.wire[0] ? 'in the wire' : s > T.s - 2 ? 'at the line' : 'past the line'; hist.set(k, (hist.get(k) ?? 0) + 1); }

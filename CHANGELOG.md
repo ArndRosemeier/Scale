@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.062 — 2026-10-06
+
+- **The Lumen's trench holds steadier**: when two or more of their spots are empty, fresh sentries now come every 2.5 s (was 7 s) from right behind the line instead of the floor of the Throat, so a lucky Murk push no longer snowballs into the whole line falling. The headless trench test is now repeatable (its dice are seeded per city).
+
 ## 0.061 — 2026-10-06
 
 - **The way to the slime civilisation is open.** The living membrane that closed the tunnel out of a colony's chamber is gone: anyone can walk down to the Lumen now. The tunnel itself is much wider (and a little less steep), so the camera no longer gets squeezed against the rock behind you.
