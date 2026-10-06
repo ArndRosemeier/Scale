@@ -19,7 +19,7 @@ import type { Player } from '../player/Player';
 import type { CameraRig } from '../player/CameraRig';
 import type { Input } from './Input';
 import type { Underground } from '../underground/Underground';
-import { shaftPoint, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SEWER_HW, SHAFT_IN, type ManholeSpot } from '../underground/layout';
+import { shaftPoint, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SEWER_HW, SHAFT_IN, HOLE_R, type ManholeSpot } from '../underground/layout';
 import { kf, smooth, clamp, type Pose } from '../humanoid/client/anim/pose';
 import type { LimbGoals } from '../humanoid/client/anim/Animator';
 import { manholeCoverMap } from '../props/furniture';
@@ -52,6 +52,8 @@ const CLIMB_V = 0.95;
 const STEP = 2 * RUNG;
 /** Where the hero stands on the street beside the hole (across the trunk, past the ladder's wall). */
 const STREET_LAT = SEWER_HW + 0.42;
+/** Where the hands press on the street beyond the hole's edge (across the trunk). */
+const HAND_LAT = LID_LAT + HOLE_R + 0.2;
 /** Where an opened lid ends up: beside the hole on the street. */
 const LID_DEST_LAT = LID_LAT + 0.15, LID_DEST_DS = 0.98;
 
@@ -61,7 +63,8 @@ const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
 export class ManholeClimb {
   /** The scene in progress (null: none). */
-  private spot: ManholeSpot | null = null;
+  /** The manhole being climbed (null: none). */
+  spot: ManholeSpot | null = null;
   private dir: 'down' | 'up' = 'down';
   private segs: Segment[] = [];
   private seg = 0;
@@ -215,9 +218,10 @@ export class ManholeClimb {
     const P = this.h.player;
     const wallYaw = this.yawAcross(1);
     const out: Segment[] = [];
-    out.push(this.walkTo(this.ladderLat(), 0, 0, wallYaw));
+    // (The sewer camera from the start: the orbit one has no room behind the hero in the trunk.)
+    out.push(this.walkTo(this.ladderLat(), 0, 0, wallYaw, 'tube'));
     // Onto the ladder: hands and feet find the rungs.
-    out.push({ dur: 0.4, run: (u) => { this.climbAt(0, true); this.overW = smooth(0, 1, u); this.fadeGoals(u); } });
+    out.push({ dur: 0.4, run: (u) => { this.climbAt(0, true); this.overW = smooth(0, 1, u); this.fadeGoals(u); this.setCam('tube', 0.6); } });
     const hTop = this.hTop();
     if (!this.lidOpened) {
       const hPush = this.hPush();
@@ -243,7 +247,7 @@ export class ManholeClimb {
   // ------------------------------------------------------------------ segments
 
   /** Walk (gait from the puppet's velocity) to a point of the frame, then turn to `yaw`. */
-  private walkTo(lat: number, ds: number, y: number, yaw: number): Segment {
+  private walkTo(lat: number, ds: number, y: number, yaw: number, cam: CamMode = 'orbit'): Segment {
     const P = this.h.player;
     const from = P.pos.clone(), fromYaw = P.yaw;
     const to = this.at(lat, ds, y, new THREE.Vector3());
@@ -267,7 +271,7 @@ export class ManholeClimb {
         }
         this.poseFn = null;
         this.overW = 0;
-        this.setCam('orbit', 0.5);
+        this.setCam(cam, 0.6);
       },
     };
   }
@@ -279,9 +283,10 @@ export class ManholeClimb {
       dur, run: (u) => {
         const hh = h0 + (h1 - h0) * u;
         this.climbAt(hh, h1 > h0);
-        // The camera: from above while the head is in the shaft, from the sewer below the vault.
+        // The camera: from above while the head is out of the hole or just under the street, from
+        // the sewer below (looking up the shaft at the legs).
         const head = this.h.player.pos.y + this.h.player.height * 0.9 - this.spot!.floor;
-        this.setCam(head > 2.55 ? 'shaft' : 'tube', 0);
+        this.setCam(head > this.G - (h1 > h0 ? 0.5 : 0.25) ? 'shaft' : 'tube', 0);
       },
     };
   }
@@ -352,15 +357,16 @@ export class ManholeClimb {
     const k = this.k, G = this.G, g = this.goals, hT = this.hTop();
     const sdR = -this.spot!.side;
     const lb = this.ladderLat(), hipC = hT + 0.8 * k;
-    const lat = kf(u, [[0, lb], [0.3, lb + 0.06], [0.55, SEWER_HW - 0.1], [0.85, STREET_LAT - 0.15], [1, STREET_LAT]]);
-    const hip = kf(u, [[0, hipC], [0.3, hT + 0.86 * k], [0.55, G + 0.4 * k], [0.85, G + this.hipW * 0.96], [1, G + this.hipW]]);
+    // (The hips stay low, a knee up on the edge, until the hands let go of the street.)
+    const lat = kf(u, [[0, lb], [0.3, lb + 0.06], [0.55, HAND_LAT - 0.25], [0.75, HAND_LAT - 0.05], [0.9, STREET_LAT - 0.1], [1, STREET_LAT]]);
+    const hip = kf(u, [[0, hipC], [0.3, hT + 0.86 * k], [0.55, G + 0.12 * k], [0.75, G + 0.3 * k], [0.9, G + this.hipW * 0.9], [1, G + this.hipW]]);
     this.placeHips(lat, 0, hip);
     this.h.player.yaw = this.yawAcross(1);
     this.h.player.puppet = 'idle';
     // Hands flat on the street past the edge until the body is up.
-    const hw = 1 - smooth(0.62, 0.8, u);
+    const hw = 1 - smooth(0.74, 0.86, u);
     for (const [key, sd] of [['L', -sdR], ['R', sdR]] as const) {
-      this.at(SEWER_HW + 0.1, sd * 0.2, G + 0.03, g[key]!.p);
+      this.at(HAND_LAT, sd * 0.2, G + 0.03, g[key]!.p);
       g[key]!.w = hw;
       g.curl![key] = 0.15;
     }
@@ -368,7 +374,7 @@ export class ManholeClimb {
     // Feet: on the top rungs, the right one onto the street's edge, then the left.
     const footRung = (sd: number, out: THREE.Vector3) => this.at(LADDER_LAT - 0.11 * k, sd * 0.11, hT + 0.075 * k, out);
     const footStreet = (sd: number, la: number, out: THREE.Vector3) => this.at(la, sd * 0.13, G + 0.08 * k, out);
-    const rUp = smooth(0.3, 0.5, u), lUp = smooth(0.58, 0.8, u);
+    const rUp = smooth(0.3, 0.5, u), lUp = smooth(0.7, 0.88, u);
     footRung(sdR, _v); footStreet(sdR, SEWER_HW + 0.14, _w);
     g.footR!.p.lerpVectors(_v, _w, rUp);
     this.toward(g.footR!.p, -0.15 * Math.sin(Math.PI * rUp), 0.12 * Math.sin(Math.PI * rUp));
@@ -376,16 +382,16 @@ export class ManholeClimb {
     g.footL!.p.lerpVectors(_v, _w, lUp);
     this.toward(g.footL!.p, -0.12 * Math.sin(Math.PI * lUp), 0.15 * Math.sin(Math.PI * lUp));
     // The left foot leaves its rung when the body is too high for it; both fade as the hero stands.
-    const stand = 1 - smooth(0.85, 1, u);
+    const stand = 1 - smooth(0.88, 1, u);
     g.footR!.w = stand;
     g.footL!.w = stand * (lUp > 0 ? 1 : 1 - smooth(0.4, 0.55, u) * 0.6);
     this.poseFn = (p) => {
-      p.spine(kf(u, [[0, -0.12], [0.3, -0.5], [0.55, -0.8], [0.85, -0.25], [1, 0]]));
+      p.spine(kf(u, [[0, -0.12], [0.3, -0.5], [0.55, -0.8], [0.75, -0.7], [0.9, -0.2], [1, 0]]));
       p.neck(kf(u, [[0, 0.3], [0.55, 0.35], [1, 0]]));
       const af = kf(u, [[0, 2.2], [0.3, 1.0], [0.55, 0.6], [0.85, 0.2], [1, 0]]), ae = kf(u, [[0, 1.0], [0.3, 0.25], [0.55, 0.15], [1, 0]]);
       for (const s of ['L', 'R'] as const) p.arm(s, af, 0.25 * (1 - u), 0, ae, 0.4 * (1 - u));
-      p.leg('R', kf(u, [[0, 1.0], [0.3, 0.4], [0.45, 1.9], [0.6, 1.7], [0.85, 0.3], [1, 0]]), 0.1, 0, kf(u, [[0, 1.4], [0.3, 0.3], [0.45, 2.2], [0.6, 1.8], [0.85, 0.3], [1, 0]]));
-      p.leg('L', kf(u, [[0, 1.0], [0.3, 0.4], [0.58, 0.2], [0.7, 1.5], [0.85, 0.3], [1, 0]]), 0.1, 0, kf(u, [[0, 1.4], [0.3, 0.3], [0.58, 0.4], [0.7, 1.7], [0.85, 0.3], [1, 0]]));
+      p.leg('R', kf(u, [[0, 1.0], [0.3, 0.4], [0.45, 1.9], [0.75, 1.7], [0.92, 0.3], [1, 0]]), 0.1, 0, kf(u, [[0, 1.4], [0.3, 0.3], [0.45, 2.2], [0.75, 1.8], [0.92, 0.3], [1, 0]]));
+      p.leg('L', kf(u, [[0, 1.0], [0.3, 0.4], [0.7, 0.2], [0.8, 1.5], [0.92, 0.3], [1, 0]]), 0.1, 0, kf(u, [[0, 1.4], [0.3, 0.3], [0.7, 0.4], [0.8, 1.7], [0.92, 0.3], [1, 0]]));
     };
     this.overW = 1;
   }
@@ -443,6 +449,8 @@ export class ManholeClimb {
   private lidFromBelow(u: number, h: number): void {
     const s = this.spot!, G = this.G, g = this.goals;
     this.climbAt(h, true);
+    // (From above: the lid lifting off the street, the hand under it.)
+    this.setCam('shaft', 0);
     const lid = this.ensureLid();
     if (!this.lidOpened) {
       this.lidOpened = true;
@@ -454,8 +462,9 @@ export class ManholeClimb {
       this.sound('metal_bend', 0.5, 1.4);
     }
     if (u >= 0.8 && lid.userData.down !== true) { lid.userData.down = true; this.sound('door_close', 0.7, 0.55); }
-    const lift = kf(u, [[0.15, 0], [0.35, 0.16], [0.6, 0.12], [0.8, 0]]);
-    const tilt = kf(u, [[0.15, 0], [0.35, -0.25], [0.6, -0.15], [0.8, 0]]);
+    // (Raised only as far as the arm reaches from the ladder's top rungs.)
+    const lift = kf(u, [[0.15, 0], [0.35, 0.05], [0.6, 0.04], [0.8, 0]]);
+    const tilt = kf(u, [[0.15, 0], [0.35, -0.3], [0.6, -0.2], [0.8, 0]]);
     const m = kf(u, [[0.35, 0], [0.8, 1]]);
     this.poseLid(lid, LID_LAT + (LID_DEST_LAT - LID_LAT) * m, s.side * LID_DEST_DS * m, G + lift, tilt);
     // The right hand (lid frame: the hero faces +x, the right is +z) under the lid while it is in reach.
@@ -494,7 +503,7 @@ export class ManholeClimb {
   /** A hand's grip point for a hold at height y: on a rung, or flat on the street above the top. */
   private handPoint(y: number, sd: number, top: number, out: THREE.Vector3): THREE.Vector3 {
     if (y <= top + 0.01) return this.at(LADDER_LAT - 0.03, sd * (LADDER_HW - 0.06), y, out);
-    return this.at(SEWER_HW + 0.1, sd * 0.2, this.G + 0.03, out);
+    return this.at(HAND_LAT, sd * 0.2, this.G + 0.03, out);
   }
 
   private at(lat: number, ds: number, y: number, out: THREE.Vector3): THREE.Vector3 {
@@ -646,9 +655,12 @@ export class ManholeClimb {
         this.camLook.copy(head);
         rig.underground = false;
       } else {
-        // In the sewer, along the trunk from the ladder, at head height.
-        this.at(-0.2, this.camDs, 1.6, this.camPos);
-        this.camLook.set(P.pos.x, Math.min(P.pos.y + P.height * 0.6, s.floor + 2.4), P.pos.z);
+        // In the sewer, along the trunk from the ladder, at head height; once the hero is up in the
+        // shaft, gliding in under its mouth to look up it.
+        const f = 0.6 * smooth(0.4, 1.6, P.pos.y - s.floor);
+        this.at(-0.2 + (SHAFT_IN + 0.25 + 0.2) * f, this.camDs * (1 - 0.7 * f), 1.6 + 0.1 * f, this.camPos);
+        const look = P.pos.y + P.height * (0.6 - 0.5 * f);
+        this.camLook.set(P.pos.x, look * f + Math.min(look, s.floor + 2.4) * (1 - f), P.pos.z);
         rig.underground = true;
       }
       cam.position.copy(this.camPos);
@@ -658,9 +670,13 @@ export class ManholeClimb {
       this.camBlend = Math.min(1, this.camBlend + dt / Math.max(0.01, this.camBlendDur));
       const a = smooth(0, 1, this.camBlend);
       cam.position.lerpVectors(this.camFrom.pos, cam.position, a);
-      // Into a scripted view the hero stays in the middle of the picture all the way.
+      // The hero stays in the middle of the picture all the way (back into the rig's own view at the end).
       if (this.cam !== 'orbit') cam.lookAt(this.camLook);
-      else cam.quaternion.slerpQuaternions(this.camFrom.quat, cam.quaternion, a);
+      else {
+        _q.copy(cam.quaternion);
+        cam.lookAt(P.pivot(_x));
+        cam.quaternion.slerp(_q, smooth(0.6, 1, this.camBlend));
+      }
     }
   }
 }

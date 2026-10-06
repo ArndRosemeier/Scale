@@ -20,16 +20,20 @@ export const SEWER_H = 2.8;
  * Manholes: a lid in the street every MANHOLE_EVERY m along a sewer trunk, over a square shaft on
  * one side of the trunk that opens into the vault above the walkway. Across the trunk the shaft
  * spans [SHAFT_IN, SEWER_HW] (SHAFT_IN is a vertex of the vault's profile, so the opening follows
- * its faces), along it ±SHAFT_HS. A ladder runs up the outer wall from the walkway to the street.
+ * its faces), along it ±SHAFT_HS. Its top is a round neck (HOLE_R, COLLAR deep) under the round lid.
+ * A ladder runs up from the walkway to the street, off the outer wall so that it fits the neck.
  */
 export const MANHOLE_EVERY = 45;
 export const SHAFT_IN = Math.cos((3 / 8) * Math.PI) * SEWER_HW;
 export const SHAFT_HS = 0.45;
 /** Lid (and shaft) centre across the trunk. */
 export const LID_LAT = (SHAFT_IN + SEWER_HW) / 2;
-/** Rungs across the trunk (off the wall), the rails' half spacing, the rung spacing. */
-export const LADDER_LAT = SEWER_HW - 0.16;
-export const LADDER_HW = 0.22;
+/** The round hole in the street (radius) and the depth of the round neck under it. */
+export const HOLE_R = 0.36;
+export const COLLAR = 0.4;
+/** Rungs across the trunk (off the wall, inside the neck), the rails' half spacing, the rung spacing. */
+export const LADDER_LAT = LID_LAT + 0.2;
+export const LADDER_HW = 0.2;
 export const RUNG = 0.3;
 
 /** A manhole: lid centre on the street, the trunk's direction there, the shaft's side across it. */

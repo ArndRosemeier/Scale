@@ -25,7 +25,7 @@ import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Vo
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
 import { pointInPoly } from '../core/geom2';
 import { G } from '../render/materials/globals';
-import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, nextTrainAt, carPose, DWELL, SEWER_HW, MANHOLE_EVERY, SHAFT_IN, SHAFT_HS, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SHAFT_VAULT, shaftPoint, type ManholeSpot, type TrainState } from './layout';
+import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, routeEnv, trainsOn, nextTrainAt, carPose, DWELL, SEWER_HW, MANHOLE_EVERY, SHAFT_IN, SHAFT_HS, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SHAFT_VAULT, HOLE_R, COLLAR, shaftPoint, type ManholeSpot, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
 import { planRooms, type RoomPlan } from './rooms';
 import { buildRoom, buildCrawl, buildChamber, colonyLayout, type BuiltRoom, type RoomMats, type EmitterId } from './RoomMeshes';
@@ -343,6 +343,8 @@ export class Underground {
     const H = this.holes;
     for (let i = 0; i < H.length; i += 6) {
       const dx = x - H[i], dz = z - H[i + 1];
+      // (A negative half length: a round hole of radius H[i + 4].)
+      if (H[i + 5] < 0) { if (dx * dx + dz * dz < H[i + 4] * H[i + 4]) return true; continue; }
       const u = dx * H[i + 2] + dz * H[i + 3], v = -dx * H[i + 3] + dz * H[i + 2];
       if (Math.abs(u) < H[i + 5] && Math.abs(v) < H[i + 4]) return true;
     }
@@ -521,11 +523,11 @@ export class Underground {
     return this.openManholes.some((o) => Math.hypot(o.x - m.x, o.z - m.z) < 0.5);
   }
 
-  /** Take the lid off for good: a hole in the street (square, along the trunk), the shaft's cap gone. */
+  /** Take the lid off for good: a round hole in the street, the shaft's cap gone. */
   openManhole(m: ManholeSpot): void {
     if (this.isOpen(m)) return;
     this.openManholes.push({ x: m.x, z: m.z });
-    this.holes.push(m.x, m.z, m.dx, m.dz, SHAFT_HS, SHAFT_HS);
+    this.holes.push(m.x, m.z, 1, 0, HOLE_R, -1);
     // The chunk drawing the shaft is rebuilt without its cap.
     const ti = this.tubes.indexOf(m.tube);
     let seg = 0;
@@ -977,7 +979,7 @@ export class Underground {
         }
         // The pool: rings of vertices, on the walkway (and the water, where it reaches the channel).
         const q = shaftPoint(m, LID_LAT, 0, 0.015);
-        const lit = open ? 1 : 0.6;
+        const lit = open ? 0.6 : 0.35;
         sh.set('color', lit, lit * 0.96, lit * 0.88);
         const base = sh.v(q[0], q[1], q[2], 0, 1, 0);
         const ring0 = base + 1;
@@ -1032,10 +1034,38 @@ export class Underground {
       const [la, ya] = SHAFT_VAULT[k], [lb, yb] = SHAFT_VAULT[k + 1];
       face(W(la, e * hs, ya), W(lb, e * hs, yb), W(lb, e * hs, top), W(la, e * hs, top), nAlong(-e), la, lb, ya, top, top, yb);
     }
-    // The lid's underside (cast iron) while it is on.
+    // The round neck under the street: a brick cylinder down to a slab closing the square shaft round it.
+    const y0 = top - COLLAR, N = 24, hu = (SEWER_HW - SHAFT_IN) / 2;
+    const ang: number[] = [];
+    for (let k = 0; k < N; k++) ang.push((k / N) * Math.PI * 2);
+    const ca = Math.atan2(hs, hu);
+    ang.push(ca, Math.PI - ca, Math.PI + ca, Math.PI * 2 - ca);
+    ang.sort((a, b) => a - b);
+    const C = (a: number, r: number, y: number) => W(LID_LAT + Math.cos(a) * r, Math.sin(a) * r, y);
+    for (let k = 0; k < ang.length; k++) {
+      const a0 = ang[k], a1 = k + 1 < ang.length ? ang[k + 1] : ang[0] + Math.PI * 2;
+      // Cylinder (normal toward the centre).
+      const am = (a0 + a1) / 2;
+      const nc: [number, number, number] = [0, 0, 0];
+      { const c = W(LID_LAT, 0, 0), q = C(am, 1, 0); nc[0] = c[0] - q[0]; nc[2] = c[2] - q[2]; }
+      face(C(a0, HOLE_R, y0), C(a1, HOLE_R, y0), C(a1, HOLE_R, top + 0.03), C(a0, HOLE_R, top + 0.03), nc, a0 * HOLE_R, a1 * HOLE_R, y0, top + 0.03);
+      // Slab: from the circle out to the square shaft's walls.
+      const ro = (a: number) => Math.min(hu / Math.max(1e-6, Math.abs(Math.cos(a))), hs / Math.max(1e-6, Math.abs(Math.sin(a))));
+      face(C(a0, HOLE_R, y0), C(a1, HOLE_R, y0), C(a1, ro(a1), y0), C(a0, ro(a0), y0), [0, -1, 0], 0, 1, 0, 1);
+    }
     if (!this.isOpen(m)) {
+      // The lid's underside (cast iron) while it is on.
       mb.set('aLayer', 11).set('aTint', 0.1, 0.1, 0.1);
-      face(W(SHAFT_IN, -hs, top + 0.01), W(SEWER_HW, -hs, top + 0.01), W(SEWER_HW, hs, top + 0.01), W(SHAFT_IN, hs, top + 0.01), [0, -1, 0], 0, 1, 0, 1);
+      const c = W(LID_LAT, 0, top + 0.01), c0 = mb.v(c[0], c[1], c[2], 0, -1, 0, 0, 0);
+      for (const a of ang) { const q = C(a, HOLE_R, top + 0.01); mb.v(q[0], q[1], q[2], 0, -1, 0, 0, 0); }
+      for (let k = 0; k < ang.length; k++) { const k1 = (k + 1) % ang.length; mb.tri(c0, c0 + 1 + k, c0 + 1 + k1); mb.tri(c0, c0 + 1 + k1, c0 + 1 + k); }
+    } else {
+      // The lid's cast-iron frame round the open hole, flush with the street.
+      mb.set('aLayer', 11).set('aTint', 0.12, 0.12, 0.12);
+      for (let k = 0; k < ang.length; k++) {
+        const a0 = ang[k], a1 = k + 1 < ang.length ? ang[k + 1] : ang[0] + Math.PI * 2;
+        face(C(a0, HOLE_R, top + 0.04), C(a1, HOLE_R, top + 0.04), C(a1, HOLE_R + 0.07, top + 0.04), C(a0, HOLE_R + 0.07, top + 0.04), [0, 1, 0], 0, 1, 0, 1);
+      }
     }
     // The ladder: galvanised rails and rungs, brackets into the wall.
     mb.set('aLayer', 11).set('aTint', 0.46, 0.45, 0.42);
@@ -1043,7 +1073,7 @@ export class Underground {
     for (const e of [-LADDER_HW, LADDER_HW]) {
       const a = W(L, e, 0), b = W(L, e, rt);
       mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.02, 0.02);
-      for (let y = 0.45; y < rt; y += 1.2) {
+      for (let y = 0.45; y < y0 - 0.1; y += 1.2) {
         const p = W(L, e, y), q = W(SEWER_HW + 0.02, e, y);
         mb.beam(p[0], p[1], p[2], q[0], q[1], q[2], 0.012, 0.02);
       }

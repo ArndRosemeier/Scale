@@ -644,6 +644,10 @@ export class Game {
   private tick(dt: number, render: boolean): void {
     if (this.input.hit('F8')) this.freeCam = !this.freeCam;
     this.T('player', () => {
+      // Cars stop short of a manhole the hero is climbing (the lid lies beside it on the road).
+      const ms = this.manhole.spot, H = this.traffic.holds;
+      H.length = 0;
+      if (ms) H.push({ x: ms.x, z: ms.z, r: 1.7 });
       if (this.intro?.active) this.intro.update(dt);
       else if (this.freeCam) this.updateFreeCam(dt);
       else if (this.defeat.drives) { /* the defeat's scene moves the body and the camera (below) */ }
@@ -1102,6 +1106,7 @@ export class Game {
 
   /** On-screen hint for something usable where the player stands (null: nothing). */
   private usableHint(): string | null {
+    if (this.manhole.active) return null;
     if (this.freeCam) return null;
     const metro = this.underground.metroHint();
     if (metro) return metro;

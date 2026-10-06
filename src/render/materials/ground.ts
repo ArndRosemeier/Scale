@@ -42,7 +42,7 @@ vec4 gAR; vec4 gNH; vec2 gTuv; float gPud;`,
   if (i >= uHoleN) break;
   vec2 hd = vHPos - uHoleA[i].xy;
   float hu = dot(hd, uHoleA[i].zw), hv = -hd.x * uHoleA[i].w + hd.y * uHoleA[i].z;
-  if (abs(hu) < uHoleB[i].y && abs(hv) < uHoleB[i].x) discard;
+  if (uHoleB[i].y < 0.0 ? dot(hd, hd) < uHoleB[i].x * uHoleB[i].x : abs(hu) < uHoleB[i].y && abs(hv) < uHoleB[i].x) discard;
 }
 int layer = int(vLayer + 0.5);
 gTuv = vMUv / uTile[layer];
@@ -79,7 +79,7 @@ if (uWet > 0.001) {
 }
 #endif`);
   };
-  mat.customProgramCacheKey = () => 'ground-v3';
+  mat.customProgramCacheKey = () => 'ground-v4';
   return mat;
 }
 
@@ -140,7 +140,7 @@ for (int i = 0; i < 16; i++) {
   if (i >= uHoleN) break;
   vec2 d = vWPos.xz - uHoleA[i].xy;
   float u = dot(d, uHoleA[i].zw), v = -d.x * uHoleA[i].w + d.y * uHoleA[i].z;
-  if (abs(u) < uHoleB[i].y && abs(v) < uHoleB[i].x) discard;
+  if (uHoleB[i].y < 0.0 ? dot(d, d) < uHoleB[i].x * uHoleB[i].x : abs(u) < uHoleB[i].y && abs(v) < uHoleB[i].x) discard;
 }
 float slope = 1.0 - clamp(vWNrm.y, 0.0, 1.0);
 float n = fbm2(vMUv * 0.02);
@@ -161,7 +161,7 @@ diffuseColor.rgb = a.rgb * mix(0.85, 1.1, n) * mix(1.0, nn.a, 0.8);`,
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;')
       .replace('#include <normal_fragment_maps>', 'normal = perturbNormalUV(-vViewPosition, normal, gTuv, gTn, 1.0);');
   };
-  mat.customProgramCacheKey = () => 'terrain-v5' + (land ? '-' + seed : '');
+  mat.customProgramCacheKey = () => 'terrain-v6' + (land ? '-' + seed : '');
   return mat;
 }
 
