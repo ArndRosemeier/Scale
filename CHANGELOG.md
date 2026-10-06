@@ -2,6 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.061 — 2026-10-06
+
+- **Metro stations are full of people now.**
+  - **Commuters** come down the entrance stairs from the street, some crossing to the far platform, and wait on the platforms: standing and looking down the tracks, or sitting on the benches.
+  - **Trains**: when a train pulls in and opens its doors, some riders get off and walk out and up the stairs to the street, and most of the people waiting step in, take a seat or stand by a door, and ride away. Trains near you carry passengers who sit along the benches, also in the car you ride in.
+- **Sit in the train**: the benches in the cars and on the platforms are seats now. Press **E** next to one to sit down; the train carries you along on your seat. Move or press **E** to get up again.
+- **Every platform can be reached on foot**: in more than half of the stations one platform (one direction of travel) had no way to it except by train. Every station now has an underpass under the tracks between its two platforms, with stairs down and up again on both sides.
+- **No more invisible ledges on the stairs**: where an entrance passage turned a corner right at the top or bottom of a flight, walking along one side of it ran into a step half a metre high. Every turn now has a level landing. Corridors that turned back and ran underneath their own stairs, and corridors running back alongside the first flight, now swing out to the side first.
+- Entrance routes are worked out about twice as fast as before (they only look at the tunnels and sewers near their station).
+
 ## 0.060 — 2026-10-06
 
 - **Save to file and Load from file use your computer's own file dialogs** where the browser has them (Chrome, Edge and Opera on a desktop): you choose the folder and name of a saved game, and pick the file to open from a normal Open window that shows Scale saves first. The dialogs remember the folder you used last. In other browsers (Firefox, Safari, iPad) saving still downloads the file, and loading uses the browser's file chooser.
