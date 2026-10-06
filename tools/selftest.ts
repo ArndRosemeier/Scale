@@ -2804,7 +2804,7 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const st = pop.stateAt(list[0].cit, 30);
   check(!!(st.stay || st.trip), 'people: a remembered person is somewhere on their day plan');
   // Special characters (street performers, officers, medics …) answer as what they are.
-  const specials = [...Object.values(STREET_KINDS).map((k) => k.title.toLowerCase()), 'police officer', 'paramedic', 'soldier', 'shopkeeper', 'cleanup worker'];
+  const specials = [...Object.values(STREET_KINDS).map((k) => k.title.toLowerCase()), 'police officer', 'paramedic', 'soldier', 'shopkeeper', 'cleanup worker', 'firefighter'];
   const own = (tp: Topic, t: string) => {
     const id = pickLine(tp, { ...base, temper: 'grumpy', met: 3, deed: 'helped', job: { kind: 'street', title: t } }, 3).id.split('#')[0];
     return !!LINES[tp].find((e) => e.id === id)?.when.title?.includes(t);

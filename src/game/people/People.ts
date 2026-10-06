@@ -37,6 +37,8 @@ export const TALK_OWNER = -4;
 export const TALK = {
   /** Talking range to the person in front of you, and to the targeted one (m, from the body's edge). */
   reach: 1.8, targetReach: 3.5,
+  /** Someone another system drives may be busy this long (s) before the talk ends (a worker stepping back to their spot). */
+  busy: 3,
   /** The talk ends when you are this far apart (m). */
   leave: 5,
   /** Seconds of nothing said before they walk on. */
@@ -72,6 +74,10 @@ interface Session {
   foreign: Actor | null;
   /** What they are to you right now (their job, or the busker, the officer …). */
   job: Job;
+  /** Their age as that (an officer or a paramedic is a grown-up, whoever the citizen behind is). */
+  years: number;
+  /** Seconds the foreign actor has been busy (a worker running back to their spot): a moment is fine. */
+  busy: number;
   /** Seconds since the last thing said. */
   idle: number;
   /** Closing after a goodbye: seconds left. */
@@ -296,14 +302,16 @@ export class People {
     // indoor ones where they stand; everyone else stops and turns to you.
     const foreign = a.actor ?? null;
     const job = this.jobFor(a);
-    if (foreign && foreign.owner === STREET_OWNER) k.title = job.title;
+    if (foreign && job.title !== p.job.title) k.title = job.title;
+    else delete k.title;
+    const years = foreign && foreign.owner !== STREET_OWNER && job.title !== p.job.title ? Math.min(60, Math.max(22, p.years)) : p.years;
     let act: Actor | null = null;
     if (!foreign && !a.inside && a.state !== PState.Sit) {
       act = makeActor('bystander', TALK_OWNER, { title: p.full, face: { x: P.pos.x, y: P.pos.y + P.height * 0.9, z: P.pos.z } });
       a.actor = act;
     }
     if (!foreign && a.state !== PState.Sit) a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
-    this.session = { a, p, k, act, foreign, job, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time };
+    this.session = { a, p, k, act, foreign, job, years, busy: 0, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time };
     // Opinion and mood before the menu: the header shows them.
     const f = this.facts(this.session);
     if (act) act.mood = actorMood(f);
@@ -362,7 +370,7 @@ export class People {
 
   private header(f: TalkFacts): { name: string; sub: string; known: string } {
     const s = this.session!, p = s.p;
-    const age = p.cit.role === Role.Child ? `${p.years}` : `about ${Math.round(p.years / 5) * 5}`;
+    const age = p.cit.role === Role.Child && s.years === p.years ? `${p.years}` : `about ${Math.round(s.years / 5) * 5}`;
     const sub = `${s.job.title.charAt(0).toUpperCase()}${s.job.title.slice(1)} · ${age} · ${p.temper} · ${MOOD_LABEL[f.moodWord]}`;
     const k = s.k;
     const known = s.metBefore > 0
@@ -384,7 +392,7 @@ export class People {
     const boss = f ? g.crime.bosses.find((b) => b.faction === f.id) ?? null : null;
     const C = g.consequences;
     return {
-      first: p.first, last: p.last, full: p.full, years: p.years, child: p.cit.role === Role.Child, senior: p.years >= 66,
+      first: p.first, last: p.last, full: p.full, years: s.years, child: p.cit.role === Role.Child && s.years === p.years, senior: s.years >= 66,
       traits: p.traits, temper: p.temper, job: s.job, interest: p.interest, mood, moodWord: moodWord(mood, trouble),
       met: s.metBefore, deed: k.deed, days: Math.max(0, (now - s.lastBefore) / 24),
       opinion, hour: g.sky.hour, weather, trouble,
@@ -456,7 +464,8 @@ export class People {
       s.idle += dt;
       if (s.act) s.act.face = { x: P.pos.x, y: P.pos.y + P.height * 0.9, z: P.pos.z };
       else if (!s.foreign && a.state !== PState.Sit) a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
-      const lost = !a.alive || (s.act && a.actor !== s.act) || (s.foreign && (a.actor !== s.foreign || !this.friendlyActor(s.foreign))) || a.state === PState.Down || a.ragdoll;
+      if (s.foreign) s.busy = this.friendlyActor(s.foreign) ? 0 : s.busy + dt;
+      const lost = !a.alive || (s.act && a.actor !== s.act) || (s.foreign && (a.actor !== s.foreign || s.foreign.hostile || s.busy > TALK.busy)) || a.state === PState.Down || a.ragdoll;
       if (s.closing > 0) { s.closing -= dt; if (s.closing <= 0) this.end(); }
       else if (lost || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) > TALK.leave || s.idle > TALK.idle || !this.canTalk() || this.harmSince(a.x, a.z, s.since)) this.end();
     }

@@ -84,7 +84,7 @@ export class FireCrew {
       const c = g.population.synthetic(hash32(car.id * 977 + i * 31 + 11) || 1);
       const a = g.peds.spawnAt(c, car.x + Math.cos(car.yaw) * (i ? 1.6 : -1.6), car.z - Math.sin(car.yaw) * (i ? 1.6 : -1.6), car.yaw, false);
       if (!a) break;
-      attach(a, makeActor('worker', AFTERMATH_OWNER, { outfit: firefighterOutfit(c.seed), mood: 'focused', held: null }));
+      attach(a, makeActor('worker', AFTERMATH_OWNER, { outfit: firefighterOutfit(c.seed), mood: 'focused', held: null, title: 'Firefighter' }));
       E.crew.push(a);
     }
   }

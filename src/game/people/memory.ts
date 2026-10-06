@@ -49,7 +49,7 @@ export interface Known {
   street: string | null;
   /** Line keys they already said to you. */
   said: string[];
-  /** Met as a street performer (busker, mime …): what the map calls them. */
+  /** Met last as something other than their own job (a busker, an officer …): what the map calls them. */
   title?: string;
   notes: { t: number; text: string }[];
 }
