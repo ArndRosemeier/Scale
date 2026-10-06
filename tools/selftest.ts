@@ -49,6 +49,8 @@ import type { Destruction } from '../src/destruction/Destruction';
 import type { MeshData } from '../src/build/meshBuilder';
 import type { MaterialArrays } from '../src/render/TextureLibrary';
 import { LandmarkSolids } from '../src/world/LandmarkSolids';
+import { auditWays } from './landmarkWays';
+import { landmarkInterior } from '../src/plan/landmarkParts';
 import { Rng as MRng } from '../src/core/rng';
 import type { MacroPlan } from '../src/plan/types';
 import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
@@ -2694,6 +2696,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     }
     const floor = y;
     check(blocked === 0 && maxStep < 0.45 && inside && floor >= lm.base - 0.01, `cathedral ${style}: walk in from the square to the nave (${blocked} blocked, steps up to ${maxStep.toFixed(2)} m, floor ${floor.toFixed(2)} m, inside ${inside})`);
+    // Its people's ways (sim/LandmarkCrowds): clear of the stone, on the floor, all reachable.
+    const ways = auditWays(lm, landmarkInterior(lm, flat)!, solids, flat);
+    const who = new Set(landmarkInterior(lm, flat)!.spots.map((sp) => sp.who));
+    check(!ways.bad.length && ['priest', 'server', 'faithful', 'visitor'].every((w) => who.has(w as never)), `cathedral ${style}: ${ways.legs} walkway legs and ${ways.spots} spots clear, on the floor and reachable (${ways.bad.slice(0, 3).join('; ') || 'ok'})`);
     // Destruction: glass, walls, meshes, save.
     let badElem = 0;
     const data = (): LandmarkWreckData => {
@@ -2757,9 +2763,64 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     }
     check(up <= 0.31 && down < 0.31 && blocked === 0 && Math.abs(y - lm.base) < 0.05 && !!S.insideAt(x, y + 1, z),
       `seed ${seed} size ${size}: walk in to the ${lm.kind} (steps up to ${up.toFixed(2)} m, drops ${down.toFixed(2)} m, ${blocked} blocked, floor ${(y - lm.base).toFixed(2)} m)`);
+    const ways = auditWays(lm, landmarkInterior(lm, terrain)!, S, terrain);
+    check(!ways.bad.length, `seed ${seed} size ${size}: the ${lm.kind}'s ${ways.legs} walkway legs and ${ways.spots} spots clear, on the floor and reachable (${ways.bad.slice(0, 3).join('; ') || 'ok'})`);
   }
 }
 
+
+// People in the landmarks (sim/LandmarkCrowds): who is there by the hour, nobody inside a wall or
+// floating, they walk their ways, a scare empties the building, at night the town hall's porter.
+{
+  const t0 = performance.now();
+  const { RoadNet } = await import('../src/sim/RoadNet');
+  const { Pedestrians, PState } = await import('../src/sim/Pedestrians');
+  const { LandmarkCrowds } = await import('../src/sim/LandmarkCrowds');
+  const terrain = new Terrain(makeProfile({ seed: 9, size: 0.6 }));
+  const macro = buildMacroPlan(terrain);
+  const S = new LandmarkSolids(macro, terrain);
+  const world = { buildingsIn: () => [], bridgeDeck: () => -Infinity, landmarks: S } as never;
+  const pop = new Population(macro, 9);
+  const peds = new Pedestrians(pop, new RoadNet(macro), world, terrain, macro, {} as never);
+  const halls = new LandmarkCrowds({ macro, terrain, world, peds, pop, floor: (x, y, z) => S.topAt(x, z, y, 0) });
+  const run = (lm: Landmark, hours: number, secs: number, onStep?: () => void, far = false) => {
+    const px = lm.x + (far ? 5000 : 0), pz = lm.z;
+    for (let t = 0; t < secs; t += 1 / 30) {
+      peds.update(1 / 30, hours + t / 3600, px, pz, 1 / 30);
+      halls.update(1 / 30, hours + t / 3600, px, pz);
+      onStep?.();
+    }
+  };
+  const ours = () => peds.agents.filter((a) => a.alive && a.hall);
+  const roles = (lm: Landmark) => halls.report().find((h) => h.name === lm.name)?.people ?? {};
+  for (const lm of macro.landmarks.filter((l) => l.kind === 'cathedral' || l.kind === 'townhall')) {
+    const day = 3 * 24, hour = lm.kind === 'cathedral' ? 9.5 : 10.5;
+    let wall = 0, lost = 0, n = 0;
+    run(lm, day + hour, 90, () => {
+      for (const a of ours()) {
+        n++;
+        if (!Number.isFinite(a.x + a.y + a.z)) { lost++; continue; }
+        if (S.hit(a.x, a.y + 1.0, a.z)) wall++;
+        const f = Math.max(terrain.height(a.x, a.z), S.topAt(a.x, a.z, a.y + 0.35, 0));
+        if (Math.abs(f - a.y) > 0.35) lost++;
+      }
+    });
+    const r = roles(lm), count = ours().length;
+    const staff = lm.kind === 'cathedral' ? (r.priest ?? 0) === 1 && (r.faithful ?? 0) >= 10 && (r.server ?? 0) >= 1 : (r.clerk ?? 0) >= 2 && (r.councillor ?? 0) >= 3 && (r.mayor ?? 0) === 1;
+    const walking = ours().filter((a) => a.state === PState.Walk).length, seated = ours().filter((a) => a.state === PState.Sit).length;
+    check(count >= 15 && staff && wall === 0 && lost === 0 && seated > 3, `landmark people: the ${lm.kind} at ${Math.floor(hour)}:30 (${count} people: ${Object.entries(r).map(([k, v]) => `${v} ${k}`).join(', ')}; ${seated} seated, ${walking} walking; ${wall} of ${n} samples in a wall, ${lost} off the floor)`);
+    // A blast nearby: everyone runs out (and away down the street: here they just vanish at the steps).
+    for (const a of ours()) a.fear = 1.2;
+    run(lm, day + hour + 0.03, 40);
+    check(ours().filter((a) => a.inside).length === 0, `landmark people: a scare empties the ${lm.kind} (${ours().length} still inside after 40 s)`);
+    // Night (come back to it): the cathedral closed and empty, the town hall's porter at the desk.
+    run(lm, day + 26.5, 1, undefined, true);
+    run(lm, day + 26.5, 30);
+    const nr = roles(lm);
+    check(lm.kind === 'cathedral' ? ours().length === 0 : (nr.porter ?? 0) === 1 && ours().length === 1, `landmark people: the ${lm.kind} at 2:30 at night (${Object.entries(nr).map(([k, v]) => `${v} ${k}`).join(', ') || 'nobody'})`);
+  }
+  console.log(`landmark people: ${(performance.now() - t0).toFixed(0)} ms`);
+}
 
 // People (NPC_PERSONALITY_PLAN phase 1): names, personalities, talk lines, memory.
 {

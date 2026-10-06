@@ -412,15 +412,23 @@ export function cathedral(k: Kit, lm: Landmark, r0: Rng): void {
     k.dome(0, back, nw, nw, apseTop, apseTop + nw * 0.8, roofM, { seg: 16, solid: false }).half = true;
   }
   // Steps up to the door from the square.
-  entranceSteps(k, stepV, stepW, B, C.step);
+  const foot = entranceSteps(k, stepV, stepW, B, C.step);
 
   // ------------------------------------------------------------ inside
 
-  furnish(k, { B, nw, front, back, tv, tdep, tl, Sn, crownN, aisleStart, doorW, doorH, st }, C, r);
+  const p: Plan = { B, nw, front, back, tv, tdep, tl, Sn, crownN, aisleStart, doorW, doorH, st, ao, Sa, bays, stepV, foot };
+  furnish(k, p, C, r);
+  walkways(k, p);
   void r0;
 }
 
-interface Plan { B: number; nw: number; front: number; back: number; tv: number; tdep: number; tl: number; Sn: number; crownN: number; aisleStart: number; doorW: number; doorH: number; st: number }
+interface Plan {
+  B: number; nw: number; front: number; back: number; tv: number; tdep: number; tl: number; Sn: number; crownN: number; aisleStart: number; doorW: number; doorH: number; st: number;
+  /** Outer edge of the aisles, their vault springing, the pillar positions of each aisle stretch. */
+  ao: number; Sa: number; bays: number[][];
+  /** Where the entrance steps start and where they meet the square. */
+  stepV: number; foot: number;
+}
 type Pal = { [k in 'floorA' | 'floorB' | 'wood' | 'dark' | 'red' | 'cloth' | 'gold' | 'iron' | 'flame' | 'lead' | 'step']: PartMat };
 
 /** Pews, the crossing's floor, the chancel with altar and choir stalls, pulpit, font, lamps. */
@@ -441,14 +449,14 @@ function furnish(k: Kit, p: Plan, C: Pal, r: Rng): void {
       k.flat(u + hu, v + hv, hu, hv, B + 0.006, C.floorB, D);
     }
   // Pews in two blocks either side of the runner, facing the altar.
-  const pw = iw - 0.7 - 1.4;
-  if (pw > 1.2) for (let v = Math.max(p.aisleStart, front + T + 5); v < v1 - 1.5; v += 1.15) for (const s of [-1, 1]) bench(k, s * (1.4 + pw / 2), v, 0, B, pw, C.wood);
+  const pw = pewLen(p);
+  for (const v of pewRows(p)) for (const s of [-1, 1]) bench(k, s * (1.4 + pw / 2), v, 0, B, pw, C.wood);
   // Chancel: a raised floor from the crossing into the apse, choir stalls, the altar.
   const c0 = tv + tdep + 0.5, top = B + 0.45;
   if (back > c0) k.box(0, (c0 + back) / 2, iw, (back - c0) / 2, B - 0.5, top, C.floorA, { ...DS, top: C.floorA });
   k.cyl(0, back, iw - 0.05, iw - 0.05, B - 0.5, top, C.floorA, { ...DS, seg: 20 });
   k.box(0, c0 - 0.2, iw * 0.6, 0.2, B - 0.5, B + 0.22, C.floorA, DS);
-  for (let v = c0 + 1.5; v < back - 0.6; v += 1.2) for (const s of [-1, 1]) bench(k, s * (iw - 0.6), v, -s * Math.PI / 2, top, 1.0, C.wood);
+  for (const v of stallRows(p)) for (const s of [-1, 1]) bench(k, s * (iw - 0.6), v, s * Math.PI / 2, top, 1.0, C.wood);
   const av = back + Math.min(1.2, iw * 0.25);
   k.box(0, av, 1.7, 0.6, top, top + 1.0, C.cloth, DS);
   k.box(0, av - 0.62, 1.5, 0.02, top + 0.15, top + 0.9, C.red, D);
@@ -490,4 +498,92 @@ function furnish(k: Kit, p: Plan, C: Pal, r: Rng): void {
   lamp(0, tv);
   for (const s of [-1, 1]) if (p.tl - T - nw > 6) lamp(s * (nw + p.tl - T) / 2, tv);
   void r;
+}
+
+/** Pew length (each block) and rows (v), facing the altar; none in a narrow nave. */
+function pewLen(p: Plan): number {
+  return p.nw - T - 0.7 - 1.4;
+}
+function pewRows(p: Plan): number[] {
+  const out: number[] = [];
+  if (pewLen(p) <= 1.2) return out;
+  for (let v = Math.max(p.aisleStart, p.front + T + 5); v < p.tv - p.tdep - 0.6 - 1.5; v += 1.15) out.push(v);
+  return out;
+}
+/** Choir stalls along the chancel (v). */
+function stallRows(p: Plan): number[] {
+  const out: number[] = [];
+  for (let v = p.tv + p.tdep + 0.5 + 1.5; v < p.back - 0.6; v += 1.2) out.push(v);
+  return out;
+}
+
+/**
+ * Where people walk and stay (sim/LandmarkCrowds): up the steps and in at the west door, up the
+ * middle between the pews (a lane along each row to its seats), across the crossing into the
+ * transept arms and the aisles, up into the chancel. Spots: the pews, the choir stalls, the altar
+ * (the priest), and places to stand and look: at the aisle windows, the roses, up into the
+ * crossing, at the font and the pulpit.
+ */
+function walkways(k: Kit, p: Plan): void {
+  const { B, nw, front, back, tv, tdep, tl } = p;
+  const iw = nw - T, top = B + 0.45, c0 = tv + tdep + 0.5;
+  const av = back + Math.min(1.2, iw * 0.25);
+  const segs = p.bays.map((vs) => [vs[0], vs[vs.length - 1]]);
+  /** Middle of the aisles (between the arcade's plinths and the outer wall). */
+  const ua = (nw + 0.3 + p.ao - T) / 2;
+  const arm = segs.length ? ua : (nw + tl - T) / 2;
+  const d = k.node(0, front + T + 0.9, B);
+  k.exit(d, [[0, front, B], [0, p.stepV, B]], 0, p.foot);
+  const nF = k.node(0, front + T + 3, B);
+  k.path(d, nF);
+  // Up the middle: a lane along each pew row, its seats off it.
+  const pw = pewLen(p);
+  let last = nF;
+  for (const v of pewRows(p)) {
+    const n = k.node(0, v + 0.57, B);
+    k.path(last, n);
+    last = n;
+    for (const s of [-1, 1]) for (let u = 1.4 + 0.32; u < 1.4 + pw - 0.25; u += 0.62) k.spot(s * u, v + 0.03, B, 0, true, 'faithful', n, [[s * u, v + 0.57]]);
+  }
+  const nP = k.node(0, tv - tdep - 0.9, B);
+  const nC = k.node(0, tv, B);
+  k.path(last, nP, nC);
+  // The crossing: look up into the vault or the dome.
+  const up = p.st === 2 ? p.crownN + 6 : p.crownN;
+  for (const [u, v] of [[-1.6, tv - 1.2], [1.4, tv + 0.9], [0.3, tv - 2.2]]) k.spot(u, v, B, Math.atan2(u, tv - v), false, 'visitor', nC, [], [0, tv, up]);
+  // The transept arms, a rose at each end; the aisles off them.
+  const R = Math.min(tdep - T - 1, (p.Sn - (B + 3)) * 0.3, 7), cy = p.Sn - R - 0.6;
+  for (const s of [-1, 1]) {
+    const a = k.node(s * arm, tv, B), e = k.node(s * (tl - T - 2.4), tv, B);
+    k.path(nC, a, e);
+    k.spot(s * (tl - T - 2.4), tv + 0.5, B, -s * Math.PI / 2, false, 'visitor', e, [], R >= 2 ? [s * (tl - T / 2), tv, cy] : [s * (tl - T / 2), tv, B + 4]);
+    k.spot(s * (tl - T - 2.4), tv - 0.7, B, -s * Math.PI / 2 + s * 0.4, false, 'visitor', e, [], R >= 2 ? [s * (tl - T / 2), tv, cy] : [s * (tl - T / 2), tv, B + 4]);
+    for (const vs of p.bays) {
+      const west = vs[0] < tv;
+      const mids = vs.slice(1).map((v, i) => (v + vs[i]) / 2);
+      if (west) mids.reverse();
+      let prev = a;
+      for (const vm of mids) {
+        const n = k.node(s * ua, vm, B);
+        k.path(prev, n);
+        prev = n;
+        // At the window of each bay, looking up at its glass.
+        k.spot(s * (p.ao - T - 0.9), vm, B, -s * Math.PI / 2, false, 'visitor', n, [], [s * (p.ao - T / 2), vm, (B + 2.6 + p.Sa - 0.4) / 2 + 0.8]);
+      }
+    }
+  }
+  // The font by the door, the pulpit at the crossing, the view down the nave from the door.
+  const fu = iw - 1.6, fv = front + T + 2.6, pu = -(iw - 1.3), pv = tv - tdep - 1.2;
+  k.spot(fu - 1.2, fv, B, -Math.PI / 2, false, 'visitor', nF, [], [fu, fv, B + 1]);
+  k.spot(pu + 1.5, pv + 0.3, B, Math.PI / 2, false, 'visitor', nP, [], [pu, pv, B + 2.6]);
+  k.spot(-1.5, front + T + 2.2, B, 0, false, 'visitor', nF, [], [0, back, B + 8]);
+  k.spot(1.6, front + T + 2.0, B, -0.15, false, 'visitor', nF, [], [0, back, B + 10]);
+  // Chancel: up its steps, the stalls either side, the altar (the priest behind it at a service,
+  // in front of it praying, or by the pulpit).
+  const h0 = k.node(0, c0 - 0.9, B), h1 = k.node(0, c0 + 0.8, top), hA = k.node(0, av - 1.5, top);
+  k.path(nC, h0, h1, hA);
+  for (const v of stallRows(p)) for (const s of [-1, 1]) for (const dv of [-0.25, 0.25]) k.spot(s * (iw - 0.62), v + dv, top, s * Math.PI / 2, true, 'server', h1, [[s * (iw - 1.25), v + dv]]);
+  k.spot(0, av + 1.0, top, Math.PI, false, 'priest', hA, [[2.3, av - 1.0], [2.3, av + 1.0]]);
+  k.spot(0, av - 1.1, top, 0, false, 'priest', hA);
+  k.spot(pu + 1.1, pv - 0.4, B, 0.6, false, 'priest', nP);
 }

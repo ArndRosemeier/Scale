@@ -973,6 +973,28 @@ Part of the cell plan (pure, in the workers, checked in `selftest.ts`), lived in
   Awnings fall when the wall behind them breaks. Ambience: one positional loop `terrace_murmur` at the
   nearest busy terrace (`tools/synthTerrace.mjs`). ≈ 0.02 ms/frame.
 
+### People inside the landmarks (`src/sim/LandmarkCrowds.ts`, `game.halls`)
+The town hall and the cathedral (the landmarks one walks into) are lived in near the player (150 m in,
+190 m out). Their plans (`plan/landmarkParts` `townhallInterior`/`grandWays`, `plan/cathedralParts`
+`walkways`) lay down where people go as part of `LmInterior`: a nav graph (`nav` points x, y, z and
+`links`), the way out (`exits`: the point inside the door, the step top, the foot of the steps) and
+`spots` to sit or stand at (facing, who uses it: visitor, faithful, priest, server, clerk, client, mayor,
+aide, councillor, registrar, couple, guest; a `via` path off the graph, e.g. along a pew row; a point
+to look at: a window, the dome, a portrait). `tools/landmarkWays.ts` checks every leg against the solids
+and the floor (self-test; `npx tsx tools/landmarkWays.ts <size> <seedA-seedB>` sweeps cities).
+Who is there follows the hour (`HALL_HOURS`): the priest 7–20, services at 9 and 18 (pews 45 % full,
+servers in the choir stalls, the priest behind the altar), visitors through the day; the town hall 8–18
+with clerks, clients at the counter and on the benches, visitors, the mayor and an aide 9–17, council
+sessions 10–12 and 14–16, weddings at 11, 13 and 15; a porter at the desk at night. People are synthetic
+citizens (staff the same every day, by spot), `PedAgent.inside` + `hall`: the street layer leaves them be,
+this layer walks them along the graph (straight legs, height from the landmark's floor), they arrive as
+street walkers from a door 35–110 m away (`onArrive` at the foot of the steps) and leave the same way.
+In range all at once on approach. A scare (fear > 0.5) sends them running out; knocked down they get
+up after 9 s and run; a breakable landmark below 85 % standing is emptied. Unlike other indoor people the
+hero bumps into them and can hit them (`Game.bodyContacts`, `Combat`, `Targeting` allow `hall`). Work
+clothes by role through `CrowdRenderer.outfit` (the priest in black, suits, the bride in white).
+`dev.halls.go('cathedral' | 'townhall')`, `dev.halls.list()`, `dev.halls.stats()`.
+
 ### Street characters (`src/game/street`)
 Eccentric people who make the streets feel lived in, near the player only. Twelve kinds: a doomsayer in a
 sandwich board ("THE END IS NIGH", finger to the sky, hints at the falling star, giants from the river and
