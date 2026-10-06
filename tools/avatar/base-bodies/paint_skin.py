@@ -162,8 +162,8 @@ def paint_body(P, N, uv, tris, cav, landmarks, male):
     # Areolas.
     for k in ('tipL', 'tipR'):
         r = 0.011 if male else 0.017
-        d = np.linalg.norm(X - L[k], axis=1)
-        a = smoothstep(r, r * 0.7, d) * (Nn[:, 2] > 0.2)
+        d = np.hypot(X[:, 0] - L[k][0], X[:, 1] - L[k][1])  # seen from the front
+        a = smoothstep(r, r * 0.7, d) * (Nn[:, 2] > 0.2) * (X[:, 2] > L[k][2] - 0.04)
         col = mix(col, col * srgb((170, 110, 100)) / base, a * 0.75)
     # Lips.
     m = L['mouth']
@@ -346,6 +346,12 @@ def main(src, dst, male, ref=None):
         if not len(cand):
             cand = np.argsort(-w)[:20]
         L['tip' + s] = P[cand[np.argmax(P[cand, 2])]]
+        if male:
+            # The flattened chest drew the breast tip inwards: put the nipple where a man's
+            # sits instead (about 20 cm apart, a little below the old tip's height).
+            tx, ty = (0.098 if s == 'L' else -0.098), L['tip' + s][1] - 0.025
+            near = np.flatnonzero(np.hypot(P[:, 0] - tx, P[:, 1] - ty) < 0.03)
+            L['tip' + s] = np.array([tx, ty, P[near, 2].max()])
     tipw = np.array([('f_' in n and n.split('.')[1] == '03') or ('thumb.03' in n) for n in names])
     L['fingers_w'] = (Wt * tipw[Jt]).sum(1)
     # Cavity: how far each vertex sits below the mean of its neighbours (along its normal).

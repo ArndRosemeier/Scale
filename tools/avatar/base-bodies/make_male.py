@@ -213,6 +213,11 @@ def smooth(P, wid, edges, mask, iters):
     return Q[wid]
 
 
+def smoothstep(e0, e1, x):
+    t = np.clip((x - e0) / (e1 - e0), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
 def falloff(P, c, r, scale=(1, 1, 1)):
     d = (P - c) / np.array(scale)
     return np.exp(-(d * d).sum(1) / (r * r))
@@ -241,6 +246,15 @@ def sculpt(body, names, head0, head1):
     b = falloff(Pw, pubis + np.array([0, -0.035, 0]), 0.03, (1.0, 1.4, 1)) * (Pw[:, 2] > pubis[2] - 0.05)
     Pw[:, 2] += 0.03 * b
     Pw[:, 1] -= 0.008 * b
+    # Inner thighs: the narrower pelvis leaves a gap below the crotch (legs like an O); fill
+    # the inner side of each thigh out towards the other, most just below the crotch.
+    for sx, leg, knee in ((1, 'LeftUpperLeg', 'LeftLowerLeg'), (-1, 'RightUpperLeg', 'RightLowerLeg')):
+        h, kn = head1[bi[leg]], head1[bi[knee]]
+        axis = h[0] + (Pw[:, 1] - h[1]) / (kn[1] - h[1]) * (kn[0] - h[0])
+        side = (np.sign(Pw[:, 0]) == sx) & (sx * (Pw[:, 0] - axis) < 0)
+        k = 0.2 * smoothstep(crotch[1] - 0.24, crotch[1] - 0.04, Pw[:, 1]) * smoothstep(crotch[1] + 0.02, crotch[1] - 0.01, Pw[:, 1])
+        Pw[:, 0] = np.where(side, axis + (Pw[:, 0] - axis) * (1 + k), Pw[:, 0])
+    Pw = smooth_w(Pw, edges, np.clip(falloff(Pw, crotch, 0.05) * 1.5, 0, 1), 15)
     # Chest: each breast (already shrunk by its bone) is replaced by a taut membrane spanned by
     # the skin around it, which takes the fold under the breast with it; a modest pectoral
     # swell is added on top.
