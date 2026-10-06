@@ -6,11 +6,12 @@
  * spots are rings on its body (bright and pulsing while exposed) and named in the frame.
  */
 import * as THREE from 'three';
+import { onScreen, pxX, pxY, screenPoint, toScreen, vecToScreen } from '../render/screen';
 import type { Targeting } from '../game/Targeting';
 import { statusOf } from '../shared/status';
 
 const _c = new THREE.Vector3();
-const _t = new THREE.Vector3();
+const _t = screenPoint();
 
 export class TargetHud {
   private mark: HTMLDivElement;
@@ -67,13 +68,13 @@ export class TargetHud {
     // Brackets: project the body's bottom and top.
     const c = T.centre(t, _c);
     const h = T.height(t);
-    _t.copy(c).project(this.camera);
-    const behind = _t.z > 1;
-    let sx = (_t.x * 0.5 + 0.5) * W, sy = (-_t.y * 0.5 + 0.5) * H;
+    vecToScreen(c, this.camera, _t);
+    const behind = !_t.front;
+    let sx = pxX(_t, W), sy = pxY(_t, H);
     const on = !behind && sx > 0 && sx < W && sy > 0 && sy < H;
     if (on) {
-      _t.set(c.x, c.y + h * 0.55, c.z).project(this.camera);
-      const top = (-_t.y * 0.5 + 0.5) * H;
+      toScreen(c.x, c.y + h * 0.55, c.z, this.camera, _t);
+      const top = pxY(_t, H);
       const half = Math.max(12, Math.min(H * 0.4, (sy - top) * 1.1));
       const wHalf = Math.max(12, half * (t.kind === 'car' ? 1.4 : t.kind === 'person' || t.kind === 'bot' ? 0.55 : 0.9));
       this.mark.classList.remove('edge');
@@ -101,11 +102,10 @@ export class TargetHud {
     const weak = info.zones?.filter((z) => z.weak || z.sel) ?? [];
     for (const z of weak) {
       if (zi >= this.zoneEls.length) break;
-      _t.set(z.x, z.y, z.z).project(this.camera);
-      if (_t.z > 1 || Math.abs(_t.x) > 1 || Math.abs(_t.y) > 1) continue;
+      if (!onScreen(toScreen(z.x, z.y, z.z, this.camera, _t))) continue;
       const e = this.zoneEls[zi++];
       e.style.display = 'block';
-      e.style.transform = `translate(${(_t.x * 0.5 + 0.5) * W}px, ${(-_t.y * 0.5 + 0.5) * H}px)`;
+      e.style.transform = `translate(${pxX(_t, W)}px, ${pxY(_t, H)}px)`;
       e.classList.toggle('on', z.exposed);
       e.classList.toggle('sel', z.sel);
     }

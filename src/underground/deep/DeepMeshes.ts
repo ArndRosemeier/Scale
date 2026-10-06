@@ -1,12 +1,10 @@
 /**
  * Drawing the deep realm: rock and decor chunks from the deep worker (built nearest first within
- * reach of the camera, dropped far away), and the things that move or shimmer — the membranes
- * (gates, the Front's barricade), water, the falls, the Heart, spores drifting in the air, the
- * Lumen lift, the mosaics in the Archive.
+ * reach of the camera, dropped far away), and the things that move or shimmer — water, the
+ * falls, the Heart, spores drifting in the air, the Lumen lift, the mosaics in the Archive.
  *
  * Materials (all warmed at start through stand-ins): the cave material (lit, plus the light baked
- * into every vertex as emission), an unlit glow material, the membrane, the falls, the spores and
- * the shard. No lights of its own: the realm glows by itself (and the player's headlamp).
+ * into every vertex as emission), an unlit glow material, the falls, the spores and the shard. No lights of its own: the realm glows by itself (and the player's headlamp).
  */
 import * as THREE from 'three';
 import type { DeepPlan } from './plan';
@@ -29,17 +27,12 @@ export class DeepMeshes {
   readonly caveMat: THREE.MeshStandardMaterial;
   /** Glowing decor: held low (the frame's tone mapping washes bright glows out to pastel). */
   readonly glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, color: new THREE.Color(0.6, 0.6, 0.6) });
-  private membraneU = { uT: { value: 0 }, uOpen: { value: 0 }, uColor: { value: new THREE.Color(0.25, 1.0, 0.8) } };
-  private membraneMat: THREE.ShaderMaterial;
   private fallsU = { uT: { value: 0 } };
   private fallsMat: THREE.ShaderMaterial;
   private sporeU = { uT: { value: 0 }, uColor: { value: new THREE.Color(0.3, 1.0, 0.8) }, uScale: { value: 300 } };
   private sporeMat: THREE.ShaderMaterial;
   private shardU = { uI: { value: 1.3 }, uT: { value: 0 } };
   private waterMat = (() => { const m = createWaterMaterial(true); m.envMapIntensity = 0.02; m.roughness = 0.08; m.color.set(0x0b2a2a); return m; })();
-  /** Gate membranes per colony (scaled away when open). */
-  readonly gates = new Map<number, THREE.Mesh>();
-  private gateOpen = new Map<number, number>();
   private spores: THREE.Points;
   private lift: THREE.Points;
   private liftOn = 0;
@@ -63,33 +56,6 @@ export class DeepMeshes {
     };
     cave.customProgramCacheKey = () => 'deep-cave';
     this.caveMat = cave;
-    this.membraneMat = new THREE.ShaderMaterial({
-      uniforms: this.membraneU, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-      vertexShader: /* glsl */ `
-        uniform float uT;
-        varying vec2 vUv;
-        varying vec3 vP;
-        void main() {
-          vUv = uv;
-          vec3 p = position;
-          float r = length(uv - 0.5) * 2.0;
-          p.z += sin(uv.x * 9.0 + uT * 1.7) * sin(uv.y * 7.0 - uT * 1.3) * 0.06 * (1.0 - r);
-          vP = p;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-        }`,
-      fragmentShader: /* glsl */ `
-        uniform float uT;
-        uniform vec3 uColor;
-        varying vec2 vUv;
-        void main() {
-          vec2 q = vUv - 0.5;
-          float r = length(q) * 2.0;
-          float cells = 0.5 + 0.5 * sin(q.x * 38.0 + sin(q.y * 21.0 + uT) * 2.0) * sin(q.y * 34.0 - uT * 0.7);
-          float rim = smoothstep(0.55, 1.0, r);
-          float a = (0.16 + 0.22 * cells + 0.5 * rim) * (1.0 - smoothstep(0.96, 1.0, r));
-          gl_FragColor = vec4(uColor * (0.6 + 0.8 * cells + rim), a);
-        }`,
-    });
     this.fallsMat = new THREE.ShaderMaterial({
       uniforms: this.fallsU, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
       vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -164,25 +130,6 @@ export class DeepMeshes {
       this.lift.renderOrder = 6;
       this.lift.visible = false;
       this.group.add(this.lift);
-    }
-    // Gates: a membrane across each road's neck.
-    for (const r of plan.roads) {
-      const m = new THREE.Mesh(new THREE.CircleGeometry(r.gate.r, 28), this.membraneMat);
-      m.position.set(r.gate.x, r.gate.y, r.gate.z);
-      m.lookAt(r.gate.x + r.gate.nx, r.gate.y, r.gate.z + r.gate.nz);
-      m.renderOrder = 7;
-      this.gates.set(r.colony, m);
-      this.group.add(m);
-    }
-    // The barricade at the Front.
-    {
-      const B = plan.barricade;
-      const g = new THREE.PlaneGeometry(B.hw * 2, B.h, 12, 6);
-      const m = new THREE.Mesh(g, this.membraneMat);
-      m.position.set(B.x, B.y + B.h / 2, B.z);
-      m.lookAt(B.x + B.nx, B.y + B.h / 2, B.z + B.nz);
-      m.renderOrder = 7;
-      this.group.add(m);
     }
     // Water.
     for (const w of plan.water) {
@@ -331,7 +278,6 @@ export class DeepMeshes {
     this.time += dt;
     const show = under && this.near(cam, 200);
     this.group.visible = show || this.inView(cam);
-    this.membraneU.uT.value = this.time;
     this.fallsU.uT.value = this.time;
     this.sporeU.uT.value = this.time;
     (this.lift.material as THREE.ShaderMaterial).uniforms.uT.value = this.time;
@@ -346,12 +292,6 @@ export class DeepMeshes {
     this.lift.visible = show && this.liftOn > 0.02;
     (this.lift.material as THREE.ShaderMaterial).uniforms.uColor.value.setRGB(0.4 * this.liftOn, 1.0 * this.liftOn, 0.85 * this.liftOn);
     if (this.kinMosaic) this.kinMosaic.visible = o.kin;
-    for (const [c, m] of this.gates) {
-      const t = this.gateOpen.get(c) ?? 0;
-      m.visible = t < 0.98;
-      const s = Math.max(0.001, 1 - t);
-      m.scale.set(s, s, 1);
-    }
     void G;
     if (!this.worker || !this.list || !this.group.visible) return;
     // Pick chunks when the camera moved a few metres.
@@ -389,9 +329,6 @@ export class DeepMeshes {
 
   /** From the surface nothing of it shows (the ground is in between): only underground or nearby. */
   private inView(cam: THREE.Vector3): boolean { return this.near(cam, 60) && cam.y < this.bounds[4]; }
-
-  /** Gate of a colony opening (0 shut … 1 open). */
-  setGate(colony: number, open: number): void { this.gateOpen.set(colony, open); }
 
   /** How many chunks are still to build near the camera (tests wait for 0). */
   get busy(): number { return this.queue.length + this.inFlight; }

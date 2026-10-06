@@ -178,6 +178,12 @@ export class LandmarkWrecks {
     return s;
   }
 
+  /** Share of a breakable landmark's pieces standing (1: whole, or not breakable). */
+  share(index: number): number {
+    const w = this.wrecks.find((x) => x.d.index === index);
+    return w ? this.standing(index) / Math.max(1, w.n) : 1;
+  }
+
   get busy(): boolean { return this.falls.length > 0 || this.startQ.length > 0 || this.heap.size > 0; }
 
   // ------------------------------------------------------------ impacts

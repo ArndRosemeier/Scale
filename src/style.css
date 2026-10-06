@@ -401,12 +401,11 @@ body.looking #crosshair { display: block; }
 #map .map-key .turf { display: inline-block; width: 14px; height: 10px; border-radius: 2px; border: 1.5px dashed; box-sizing: border-box; vertical-align: -1px; }
 #map .map-turf .map-key { margin-top: 4px; margin-left: 22px; }
 
-/* Barks (src/ui/Barks.ts): short speech bubbles over people. */
-.bark { position: fixed; left: 0; top: 0; display: none; max-width: 200px; padding: 5px 10px 6px; margin-top: -6px; background: rgba(252, 251, 247, 0.94); color: #1d242b; border-radius: 12px; font: 600 12px/1.25 system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; z-index: 4; transform-origin: 50% 100%; white-space: nowrap; transition: opacity 0.35s; will-change: transform; }
+/* Barks (src/ui/Barks.ts): speech bubbles over people. Long lines wrap and the bubble grows taller. */
+.bark { position: fixed; left: 0; top: 0; display: none; width: max-content; max-width: 210px; padding: 5px 10px 6px; margin-top: -6px; background: rgba(252, 251, 247, 0.94); color: #1d242b; border-radius: 12px; font: 600 12px/1.25 system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; z-index: 4; transform-origin: 50% 100%; white-space: normal; overflow-wrap: break-word; transition: opacity 0.35s; will-change: transform; }
 .bark::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(252, 251, 247, 0.94); }
 .bark.out { opacity: 0; }
-/* Fame (src/game/fame): protesters and booing passers-by; fans. Long chants wrap inside the bubble. */
-.bark.angry, .bark.cheer { white-space: normal; width: max-content; max-width: 220px; }
+/* Fame (src/game/fame): protesters and booing passers-by; fans. */
 .bark.angry { background: rgba(196, 38, 38, 0.94); color: #fff; }
 .bark.angry::after { border-top-color: rgba(196, 38, 38, 0.94); }
 .bark.cheer { background: rgba(255, 214, 92, 0.96); color: #2a1d00; }

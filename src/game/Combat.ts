@@ -100,7 +100,7 @@ export class Combat {
     const maxHp = this.maxHpOf(a);
     let hp = this.hpOf(a);
     const res: HitResult = { effect: 'none', damage: 0, hp, maxHp };
-    if (!a.alive || a.inside || J < COMBAT.minJ) return res;
+    if (!a.alive || (a.inside && !a.hall) || J < COMBAT.minJ) return res;
     const act = a.actor;
     if (act && (act.state === 'arrested' || act.state === 'gone')) return res;
     const scale = statusOf(a)?.scale ?? 1;
