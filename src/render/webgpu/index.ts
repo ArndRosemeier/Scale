@@ -19,6 +19,13 @@ export { createBarkNodeMaterial, createLeafNodeMaterial, createFarTreeNodeMateri
 import { createVehicleNodeMaterial } from './vehicles';
 import { createFurnitureNodeMaterial } from './furniture';
 export { createVehicleNodeMaterial, createFurnitureNodeMaterial };
+import { createRainNodeMaterial } from './weather';
+import { createDustNodeMaterial, createBeamNodeMaterial, createPowerParticleNodeMaterial, createDecalNodeMaterial, createSmokeColumnNodeMaterial, createStarFxNodeMaterial, createStarParticlesNode } from './effects';
+import { createBroodNodeMaterial, createBirdNodeMaterial, createCreatureNodeMaterial, createDebrisNodeMaterial, bronzeNodeMaterial } from './creatures';
+import { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMaterial } from './signs';
+export { createRainNodeMaterial, createDustNodeMaterial, createBeamNodeMaterial, createPowerParticleNodeMaterial, createDecalNodeMaterial, createSmokeColumnNodeMaterial, createStarFxNodeMaterial, createStarParticlesNode };
+export { createBroodNodeMaterial, createBirdNodeMaterial, createCreatureNodeMaterial, createDebrisNodeMaterial, bronzeNodeMaterial };
+export { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMaterial };
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 
 export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): THREE.WebGPURenderer {

@@ -14,6 +14,7 @@
  */
 import * as THREE from 'three';
 import { G } from '../../render/materials/globals';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 
 // ---------------------------------------------------------------- beams
 
@@ -48,7 +49,7 @@ class Beams {
     g.setAttribute('iC', this.ic);
     g.instanceCount = 0;
     this.geo = g;
-    const mat = new THREE.ShaderMaterial({
+    const mat = WEBGPU ? gpuKit().createBeamNodeMaterial(uTime) as unknown as THREE.ShaderMaterial : new THREE.ShaderMaterial({
       uniforms: { uTime },
       transparent: true,
       depthWrite: false,
@@ -173,7 +174,7 @@ class Particles {
     g.setAttribute('iC', this.aC);
     g.instanceCount = 0;
     this.geo = g;
-    const mat = new THREE.ShaderMaterial({
+    const mat = WEBGPU ? gpuKit().createPowerParticleNodeMaterial(additive) as unknown as THREE.ShaderMaterial : new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -307,7 +308,7 @@ class Decals {
     const g = new THREE.PlaneGeometry(1, 1);
     this.attr = new THREE.InstancedBufferAttribute(new Float32Array(DECAL_CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('iD', this.attr);
-    const mat = new THREE.ShaderMaterial({
+    const mat = WEBGPU ? gpuKit().createDecalNodeMaterial(uTime, G.uNight) as unknown as THREE.ShaderMaterial : new THREE.ShaderMaterial({
       uniforms: { uTime, uNight: G.uNight },
       transparent: true,
       depthWrite: false,

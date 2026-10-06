@@ -9,6 +9,7 @@
  *    the streams of light that spiral from the shard into the player.
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 
 const GLOW_VS = /* glsl */ `
 uniform float uSize;
@@ -126,7 +127,13 @@ void main() {
 }`;
 
 function additive(vs: string, fs: string, uniforms: Record<string, THREE.IUniform>): THREE.ShaderMaterial {
+  if (WEBGPU) return gpuKit().createStarFxNodeMaterial(starKind(vs), uniforms, true) as unknown as THREE.ShaderMaterial;
   return new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: fs, uniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+}
+
+/** Which of the shaders above (WebGPU: the node material standing in for it). */
+function starKind(vs: string): 'glow' | 'disc' | 'trail' | 'shard' {
+  return vs === GLOW_VS ? 'glow' : vs === DISC_VS ? 'disc' : vs === TRAIL_VS ? 'trail' : 'shard';
 }
 
 export class Glow {
@@ -246,7 +253,9 @@ class Particles {
     g.setAttribute('position', this.P);
     g.setAttribute('aColor', this.C);
     g.setAttribute('aSize', this.S);
-    this.points = new THREE.Points(g, additive(PART_VS, PART_FS, this.u));
+    // (WebGPU: no sized points; an instanced quad mesh reading the same attributes.)
+    this.points = WEBGPU ? gpuKit().createStarParticlesNode(this.P, this.C, this.S, this.u.uScale) as unknown as THREE.Points
+      : new THREE.Points(g, additive(PART_VS, PART_FS, this.u));
     this.points.frustumCulled = false;
     this.points.renderOrder = 11;
   }
@@ -339,7 +348,8 @@ export class StarFx {
     this.chestGlow = new Glow(this.quad, new THREE.Color(0.5, 0.95, 1.6), 0.6, 0, 8);
     for (const g of [this.flash, this.shardGlow, this.chestGlow]) { g.mesh.visible = false; this.group.add(g.mesh); }
     // The shard: a tall crystal and two smaller ones leaning out of it.
-    const sm = new THREE.ShaderMaterial({ vertexShader: SHARD_VS, fragmentShader: SHARD_FS, uniforms: this.shardU, toneMapped: false });
+    const sm = WEBGPU ? gpuKit().createStarFxNodeMaterial('shard', this.shardU, false) as unknown as THREE.ShaderMaterial
+      : new THREE.ShaderMaterial({ vertexShader: SHARD_VS, fragmentShader: SHARD_FS, uniforms: this.shardU, toneMapped: false });
     const parts: [number, number, number, number, number, number][] = [
       // sx, sy, sz, tiltX, tiltZ, offset
       [0.12, 0.44, 0.12, 0.0, 0.0, 0],
@@ -358,7 +368,9 @@ export class StarFx {
     const disc = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
     this.ground = new THREE.Mesh(disc, additive(DISC_VS, DISC_FS, this.groundU));
     this.ground.renderOrder = 8;
-    const sc = new THREE.ShaderMaterial({ vertexShader: DISC_VS, fragmentShader: DISC_FS, uniforms: this.scorchU, transparent: true, depthWrite: false, toneMapped: false });
+    const sc = WEBGPU ? gpuKit().createStarFxNodeMaterial('disc', this.scorchU, false) as unknown as THREE.ShaderMaterial
+      : new THREE.ShaderMaterial({ vertexShader: DISC_VS, fragmentShader: DISC_FS, uniforms: this.scorchU, transparent: true, depthWrite: false, toneMapped: false });
+    if (WEBGPU) { sc.transparent = true; sc.depthWrite = false; }
     this.scorch = new THREE.Mesh(disc, sc);
     this.scorch.renderOrder = 7;
     this.ground.visible = this.scorch.visible = false;
@@ -404,7 +416,7 @@ export class StarFx {
     g.add(sh);
     const gr = this.ground.clone(); gr.visible = true; gr.scale.setScalar(0.1);
     const sc = this.scorch.clone(); sc.visible = true; sc.scale.setScalar(0.1);
-    const pts = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)).setAttribute('aColor', new THREE.Float32BufferAttribute([0, 0, 0], 3)).setAttribute('aSize', new THREE.Float32BufferAttribute([1], 1)), this.particles.points.material);
+    const pts = WEBGPU ? this.particles.points.clone() : new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)).setAttribute('aColor', new THREE.Float32BufferAttribute([0, 0, 0], 3)).setAttribute('aSize', new THREE.Float32BufferAttribute([1], 1)), this.particles.points.material);
     g.add(gr, sc, pts);
     return g;
   }

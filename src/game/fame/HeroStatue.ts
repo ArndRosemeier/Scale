@@ -14,6 +14,7 @@
  * The state is kept per city in localStorage (as the reputation) and in saves.
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import type { Game } from '../Game';
 import type { Landmark } from '../../plan/landmarks';
 import type { Obstacle } from '../../world/Collision';
@@ -362,6 +363,7 @@ function bronze(root: THREE.Object3D): void {
     for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       if (done.has(m)) continue;
       done.add(m);
+      if (WEBGPU) { gpuKit().bronzeNodeMaterial(m, BRONZE); continue; }
       const std = m as THREE.MeshStandardMaterial;
       if (!std.isMeshStandardMaterial) { if ((m as THREE.MeshBasicMaterial).color) (m as THREE.MeshBasicMaterial).color.copy(BRONZE); continue; }
       const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey.bind(m);

@@ -14,6 +14,7 @@
  * flock still reads as flapping V shapes instead of vanishing (uBirdPx).
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 /** Vertex part ids (aPart). */
 const BODY = 0, WING = 1, BEAK = 2, TAIL = 3;
@@ -71,6 +72,7 @@ export interface BirdUniforms {
 }
 
 export function createBirdMaterial(u: BirdUniforms): THREE.MeshLambertMaterial {
+  if (WEBGPU) return gpuKit().createBirdNodeMaterial(u) as unknown as THREE.MeshLambertMaterial;
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, flatShading: true });
   mat.name = 'birds';
   mat.onBeforeCompile = (sh) => {

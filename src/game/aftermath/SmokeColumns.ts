@@ -12,6 +12,7 @@
  */
 import * as THREE from 'three';
 import { G } from '../../render/materials/globals';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 
 /** A column of smoke: where it rises from, how tall / wide / dense, burning at its base. */
 export interface SmokeColumn {
@@ -66,7 +67,7 @@ export class SmokeColumns {
     g.setAttribute('iC', this.aC);
     g.instanceCount = 0;
     this.geo = g;
-    const mat = new THREE.ShaderMaterial({
+    const mat = WEBGPU ? gpuKit().createSmokeColumnNodeMaterial(this.uniforms, SMOKE.rise) as unknown as THREE.ShaderMaterial : new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
       fog: true,
@@ -153,7 +154,7 @@ export class SmokeColumns {
           #include <colorspace_fragment>
         }`,
     });
-    Object.assign(mat.uniforms, this.uniforms);
+    if (!WEBGPU) Object.assign(mat.uniforms, this.uniforms);
     this.mesh = new THREE.Mesh(g, mat);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 9;

@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { Game } from '../game/Game';
 import { WeatherSchedule, WEATHER, WEATHER_KINDS, WEATHER_LABEL, climateOf, stepWet, type WeatherKind, type WeatherParams } from '../world/weather';
 import { G } from './materials/globals';
+import { WEBGPU, gpuKit } from './gpuMode';
 import { vegetationUniforms } from '../props/vegetation';
 import { clamp, lerp, smoothstep } from '../core/math';
 import { hash32, hashToFloat } from '../core/rng';
@@ -336,7 +337,8 @@ class RainFx {
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('aDrop', new THREE.BufferAttribute(drop, 4));
     geo.setDrawRange(0, 0);
-    this.mat = new THREE.ShaderMaterial({
+    if (WEBGPU) this.mat = gpuKit().createRainNodeMaterial() as unknown as THREE.ShaderMaterial;
+    else this.mat = new THREE.ShaderMaterial({
       uniforms: {
         uCam: { value: new THREE.Vector3() }, uBox: { value: 30 }, uVel: { value: new THREE.Vector3(0, -9, 0) }, uLen: { value: 0.05 },
         uT: { value: 0 }, uAlpha: { value: 0 }, uCol: { value: new THREE.Color(0.7, 0.75, 0.8) },

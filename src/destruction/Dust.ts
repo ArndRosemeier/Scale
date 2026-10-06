@@ -4,6 +4,7 @@
  * fading and drag are evaluated in the vertex shader from the current time.
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 const CAP = 3000;
 
@@ -32,7 +33,7 @@ export class Dust {
     g.setAttribute('a2', this.a2);
     g.setAttribute('a3', this.a3);
     g.instanceCount = CAP;
-    const mat = new THREE.ShaderMaterial({
+    const mat = WEBGPU ? gpuKit().createDustNodeMaterial(this.uTime) as unknown as THREE.ShaderMaterial : new THREE.ShaderMaterial({
       uniforms: { uTime: this.uTime, fogColor: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0.3, 0.8, 0.2) } },
       transparent: true,
       depthWrite: false,
