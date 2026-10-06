@@ -43,6 +43,7 @@ import { ATTRACTION_KINDS, inSite, siteToWorld, siteRect, marvelDesign, marvelCo
 import { landmarkParts, partOutline, solidFootprints, partObstacles, helixFloorAt, PK } from '../src/plan/landmarkParts';
 import { MARVEL_STYLES, MS } from '../src/plan/marvelParts';
 import { PIECE_STRIDE } from '../src/build/landmarkDice';
+import { LID_LAT } from '../src/underground/layout';
 import { LandmarkWrecks } from '../src/destruction/LandmarkWreck';
 import { GLASS_IMPULSE } from '../src/destruction/wallStrength';
 import type { LandmarkWreckData } from '../src/stream/CityStreamer';
@@ -2475,7 +2476,8 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       }
     }
     check(overlaps === 0 && wet === 0 && outside === 0, `${at}: sites apart (${overlaps} overlaps), dry (${wet}) and inside their cells (${outside} corners out)`);
-    // Sewer manholes (every 45 m along the trunks, as Underground lays them) stay off the sites.
+    // Sewer manholes (every 45 m along the trunks, as Underground lays them, on either side of the
+    // trunk over its shaft) stay off the sites.
     let lids = 0;
     for (const sw of macro.sewers) {
       let acc = 0;
@@ -2483,7 +2485,8 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
         const ax = sw.pts[i], az = sw.pts[i + 1], bx = sw.pts[i + 2], bz = sw.pts[i + 3], d = Math.hypot(bx - ax, bz - az);
         for (let s = Math.ceil((acc - 22.5) / 45) * 45 + 22.5; s < acc + d; s += 45) {
           const f = (s - acc) / d, x = ax + (bx - ax) * f, z = az + (bz - az) * f;
-          if (L.some((l) => inSite(l, x, z, 1))) lids++;
+          const nx = -(bz - az) / d * LID_LAT, nz = (bx - ax) / d * LID_LAT;
+          if (L.some((l) => inSite(l, x + nx, z + nz, 1) || inSite(l, x - nx, z - nz, 1))) lids++;
         }
         acc += d;
       }

@@ -141,6 +141,8 @@ export class Traffic {
   readonly obstacles: { x: number; z: number; r: number }[] = [];
   /** Road closures (police cars parked across a street as a roadblock), kept by their owner. */
   readonly blocks: { x: number; z: number; r: number }[] = [];
+  /** Spots the hero is busy at on the road (an open manhole being climbed), kept by the game. */
+  readonly holds: { x: number; z: number; r: number }[] = [];
   /** Spawn weight of patrol cars at a point (ordinary cars weigh ~110 together; default 1.2). */
   policeWeight: ((x: number, z: number) => number) | null = null;
   onCrash?: (v: Vehicle, x: number, y: number, z: number, speed: number) => void;
@@ -802,11 +804,11 @@ export class Traffic {
   }
   /** Gap (m, from the front bumper) to the nearest obstacle in the lane corridor ahead. */
   private obstacleAhead(v: Vehicle, look: number): number {
-    if (!this.obstacles.length && !this.wrecks.length && !this.blocks.length) return Infinity;
+    if (!this.obstacles.length && !this.wrecks.length && !this.blocks.length && !this.holds.length) return Infinity;
     const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
     const reach = look + v.length;
     let best = Infinity;
-    for (const O of [this.obstacles, this.wrecks, this.blocks]) for (const o of O) {
+    for (const O of [this.obstacles, this.wrecks, this.blocks, this.holds]) for (const o of O) {
       if (O === this.blocks && v.siren) continue; // (the roadblock lets its own through)
       const dx = o.x - v.x, dz = o.z - v.z;
       if (dx > reach || dx < -reach || dz > reach || dz < -reach) continue;

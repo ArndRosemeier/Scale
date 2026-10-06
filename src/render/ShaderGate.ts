@@ -30,6 +30,13 @@ interface Pending {
 
 /** Hidden meshes leave layer 0 for this layer (cameras and shadow cameras render layer 0). */
 const HIDDEN_LAYER = 30;
+/** A mesh waits at most this long for its program, then it is shown anyway. */
+const GIVE_UP_MS = 8000;
+
+/** Released by three (no material uses it any more): deleted, it will never report ready. */
+function released(p: { isReady(): boolean }): boolean {
+  return (p as { usedTimes?: number }).usedTimes === 0;
+}
 
 export class ShaderGate {
   readonly stats = { checked: 0, passed: 0, standins: 0, hidden: 0, swapped: 0, shadowWaits: 0, late: [] as { what: string; ms: number }[] };
@@ -86,7 +93,12 @@ export class ShaderGate {
     if (this.pending.length) {
       const now = performance.now();
       this.pending = this.pending.filter((p) => {
-        if (p.prog ? !p.prog.isReady() : !this.ready(p.real)) return true;
+        // The program asked for can be released before it is ready (its material switched to
+        // another variant meanwhile, e.g. an instanced batch got its colours): a deleted program
+        // never reports ready, so ask again for the one the mesh needs now.
+        if (p.prog && released(p.prog)) p.prog = this.request(p.mesh, p.real);
+        // (Never wait forever: past the limit it is shown and compiles when drawn.)
+        if (now - p.t0 < GIVE_UP_MS && (p.prog ? !p.prog.isReady() : !this.ready(p.real))) return true;
         this.restore(p);
         const ms = now - p.t0;
         this.stats.swapped++;
@@ -99,7 +111,7 @@ export class ShaderGate {
     }
     if (this.shadowWait.length) {
       this.shadowWait = this.shadowWait.filter((w) => {
-        if (!w.progs.every((p) => p.isReady())) return true;
+        if (!w.progs.every((p) => released(p) || p.isReady())) return true;
         if (!this.pending.some((p) => p.mesh === w.mesh)) {
           const c = this.shadowCast.get(w.mesh);
           w.mesh.castShadow = c ?? true;
@@ -127,6 +139,11 @@ export class ShaderGate {
   }
 
   get busy(): number { return this.pending.length + this.warm.length; }
+
+  /** What is still waiting for its shader (for the warm-up report). */
+  waiting(): string[] {
+    return [...this.pending.map((p) => describe(p.mesh, p.real)), ...this.warm.map((w) => `precompile ${w.o.name || w.o.type}`)];
+  }
 
   // ------------------------------------------------------------------
 
@@ -241,6 +258,14 @@ export class ShaderGate {
   private compileFor(mesh: THREE.Mesh): void {
     const root = { traverse: (cb: (o: THREE.Object3D) => void) => cb(mesh), traverseVisible: () => {} } as unknown as THREE.Object3D;
     this.asScenePass(() => this.renderer.compile(root, this.camera, this.lightScene));
+  }
+
+  /** Request the program of a material as drawn on this mesh (whatever the mesh shows now). */
+  private request(mesh: THREE.Mesh, m: THREE.Material): { isReady(): boolean } | null {
+    const proxy = Object.create(mesh) as THREE.Mesh;
+    proxy.material = m;
+    this.compileFor(proxy);
+    return this.props.get(m).currentProgram ?? null;
   }
 
   /** Is the stand-in's program compiled for this mesh type (instanced / skinned / …)? */
