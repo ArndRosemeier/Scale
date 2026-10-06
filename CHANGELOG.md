@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.053 — 2026-10-06
+
+- **You can talk to more people now**: people sitting on benches and café terraces (they stay seated), street performers and characters (the busker, the mime, the living statue, the chicken mascot, the doomsayer, the lost tourist, even the sleepwalker), police officers, paramedics, soldiers, shopkeepers and cleanup crews, as long as they are not busy fighting or fleeing. Each of them answers as what they are: the mime only mimes, the statue barely moves its lips, the officer introduces themselves by rank. Performers carry on with their act while you talk, and the map remembers them as what you met them as.
 ## 0.052 — 2026-10-05
 
 - **Playable on an iPad (and other touch screens)**: touch the screen and on-screen controls appear; a mouse moving switches back.

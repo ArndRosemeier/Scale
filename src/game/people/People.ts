@@ -14,7 +14,7 @@
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role, type Citizen } from '../../sim/Population';
-import { makeActor, release, type Actor, type Mood } from '../../sim/actors/Actor';
+import { makeActor, release, STREET_OWNER, type Actor, type Mood } from '../../sim/actors/Actor';
 import { cityName, streetName } from '../../plan/names';
 import { gameTimeLabel } from '../save/model';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -24,6 +24,12 @@ import { CHAT, type Topic } from './lines';
 import { PEOPLE, newKnown, opinionOf, applyDeed, addSaid, addNote, remember, savePeople, restorePeople, type Known, type Deed } from './memory';
 import { TalkUi } from '../../ui/TalkUi';
 import { hashCombine } from '../../core/rng';
+
+/** Roles and actor states of people other systems drive who will still talk to you. */
+const TALK_ROLES = new Set<string>(['bystander', 'shopkeeper', 'owner', 'police', 'medic', 'worker', 'soldier', 'victim']);
+const TALK_STATES = new Set<string>(['idle', 'walk', 'point', 'cheer']);
+/** Titles for roles without one of their own. */
+export const ROLE_JOB: Record<string, string> = { police: 'police officer', medic: 'paramedic', soldier: 'soldier', shopkeeper: 'shopkeeper', worker: 'cleanup worker' };
 
 /** Owner id of the people you are talking to (sim/actors/Actor owners). */
 export const TALK_OWNER = -4;
@@ -62,6 +68,10 @@ interface Session {
   k: Known;
   /** Our actor on them (null: indoors, where they are only turned to face you). */
   act: Actor | null;
+  /** Driven by another system (a street performer, an officer): left to it; the talk ends when it turns away. */
+  foreign: Actor | null;
+  /** What they are to you right now (their job, or the busker, the officer …). */
+  job: Job;
   /** Seconds since the last thing said. */
   idle: number;
   /** Closing after a goodbye: seconds left. */
@@ -134,8 +144,26 @@ export class People {
   /** The target frame's name and sub line for a person ("Mara Okonkwo", "shop assistant · knows you"). */
   label(a: PedAgent): { name: string; kind: string; ours: boolean } {
     const p = this.person(a.cit), k = this.find(a.cit.id);
-    const job = p.job.title.charAt(0).toUpperCase() + p.job.title.slice(1);
-    return { name: p.full, kind: k ? `${job} · knows you` : job, ours: a.actor?.owner === TALK_OWNER };
+    const t = this.jobFor(a).title;
+    const job = t.charAt(0).toUpperCase() + t.slice(1);
+    // (A criminal keeps the crime layer's name: "Harbour Kings thug (knife)".)
+    const ours = !a.actor || a.actor.owner === TALK_OWNER || this.friendlyActor(a.actor);
+    return { name: p.full, kind: k ? `${job} · knows you` : job, ours };
+  }
+
+  /** What they are doing now when it is not their everyday job: a busker, an officer, a medic … */
+  jobFor(a: PedAgent): Job {
+    const act = a.actor, base = this.person(a.cit).job;
+    if (!act || act.owner === TALK_OWNER) return base;
+    const t = act.title ?? ROLE_JOB[act.role];
+    if (!t) return base;
+    const kind: Job['kind'] = act.role === 'police' || act.role === 'medic' || act.role === 'soldier' ? 'civic' : act.role === 'shopkeeper' ? 'shop' : act.owner === STREET_OWNER ? 'street' : base.kind;
+    return { kind, title: t.toLowerCase() };
+  }
+
+  /** Someone another system drives (a street performer, an officer on patrol) who can still be talked to. */
+  private friendlyActor(act: Actor): boolean {
+    return !act.hostile && TALK_ROLES.has(act.role) && TALK_STATES.has(act.state);
   }
 
   /** A passer-by's bit of small talk in their temperament (null: they keep quiet). */
@@ -204,8 +232,9 @@ export class People {
   }
 
   private willTalk(a: PedAgent): boolean {
-    if (!a.alive || a.actor || a.evac || a.ragdoll) return false;
-    return a.state === PState.Walk || a.state === PState.Wait || a.state === PState.Idle || a.state === PState.Gawk || a.state === PState.Film;
+    if (!a.alive || a.evac || a.ragdoll) return false;
+    if (a.actor) return a.actor.owner !== TALK_OWNER && this.friendlyActor(a.actor) && a.state !== PState.Down;
+    return a.state === PState.Walk || a.state === PState.Wait || a.state === PState.Idle || a.state === PState.Gawk || a.state === PState.Film || a.state === PState.Sit;
   }
 
   /** The person E would talk to now, or null. */
@@ -259,13 +288,18 @@ export class People {
     const before = this.find(a.cit.id);
     const metBefore = before ? before.met : 0, lastBefore = before ? before.last : this.g.sky.hoursAbs;
     const k = this.note(a, 'talked');
+    // Their own owner keeps someone it drives (a busker plays on); seated people stay in their seat,
+    // indoor ones where they stand; everyone else stops and turns to you.
+    const foreign = a.actor ?? null;
+    const job = this.jobFor(a);
+    if (foreign && foreign.owner === STREET_OWNER) k.title = job.title;
     let act: Actor | null = null;
-    if (!a.inside) {
+    if (!foreign && !a.inside && a.state !== PState.Sit) {
       act = makeActor('bystander', TALK_OWNER, { title: p.full, face: { x: P.pos.x, y: P.pos.y + P.height * 0.9, z: P.pos.z } });
       a.actor = act;
     }
-    a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
-    this.session = { a, p, k, act, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time };
+    if (!foreign && a.state !== PState.Sit) a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
+    this.session = { a, p, k, act, foreign, job, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time };
     // Opinion and mood before the menu: the header shows them.
     const f = this.facts(this.session);
     if (act) act.mood = actorMood(f);
@@ -325,7 +359,7 @@ export class People {
   private header(f: TalkFacts): { name: string; sub: string; known: string } {
     const s = this.session!, p = s.p;
     const age = p.cit.role === Role.Child ? `${p.years}` : `about ${Math.round(p.years / 5) * 5}`;
-    const sub = `${p.job.title.charAt(0).toUpperCase()}${p.job.title.slice(1)} · ${age} · ${p.temper} · ${MOOD_LABEL[f.moodWord]}`;
+    const sub = `${s.job.title.charAt(0).toUpperCase()}${s.job.title.slice(1)} · ${age} · ${p.temper} · ${MOOD_LABEL[f.moodWord]}`;
     const k = s.k;
     const known = s.metBefore > 0
       ? `Met ${s.metBefore === 1 ? 'once' : `${s.metBefore} times`} · first on ${gameTimeLabel(Math.floor(k.first / 24), k.first % 24)} · ${opinionWord(f.opinion)}`
@@ -347,7 +381,7 @@ export class People {
     const C = g.consequences;
     return {
       first: p.first, last: p.last, full: p.full, years: p.years, child: p.cit.role === Role.Child, senior: p.years >= 66,
-      traits: p.traits, temper: p.temper, job: p.job, interest: p.interest, mood, moodWord: moodWord(mood, trouble),
+      traits: p.traits, temper: p.temper, job: s.job, interest: p.interest, mood, moodWord: moodWord(mood, trouble),
       met: s.metBefore, deed: k.deed, days: Math.max(0, (now - s.lastBefore) / 24),
       opinion, hour: g.sky.hour, weather, trouble,
       threat: C.log.some((e) => e.cause === 'threat' && C.time - e.t < 900),
@@ -416,8 +450,8 @@ export class People {
       const P = this.g.player, a = s.a;
       s.idle += dt;
       if (s.act) s.act.face = { x: P.pos.x, y: P.pos.y + P.height * 0.9, z: P.pos.z };
-      else a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
-      const lost = !a.alive || (s.act && a.actor !== s.act) || a.state === PState.Down || a.ragdoll;
+      else if (!s.foreign && a.state !== PState.Sit) a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
+      const lost = !a.alive || (s.act && a.actor !== s.act) || (s.foreign && (a.actor !== s.foreign || !this.friendlyActor(s.foreign))) || a.state === PState.Down || a.ragdoll;
       if (s.closing > 0) { s.closing -= dt; if (s.closing <= 0) this.end(); }
       else if (lost || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) > TALK.leave || s.idle > TALK.idle || !this.canTalk() || this.harmSince(a.x, a.z, s.since)) this.end();
     }
@@ -458,7 +492,7 @@ export class People {
       const color = op >= 40 ? '#8ff0b4' : op <= -30 ? '#ffa894' : '#a9d6ff';
       const times = k.met === 1 ? 'met once' : `met ${k.met} times`;
       const at = spot.exact ? '' : ' · somewhere around here';
-      list.push({ x: spot.x, z: spot.z, color, kind: 'faint', title: `${p.full}, ${p.job.title} — ${times}, last on ${gameTimeLabel(Math.floor(k.last / 24), k.last % 24)} · ${opinionWord(op)}${at}` });
+      list.push({ x: spot.x, z: spot.z, color, kind: 'faint', title: `${p.full}, ${k.title ?? p.job.title} — ${times}, last on ${gameTimeLabel(Math.floor(k.last / 24), k.last % 24)} · ${opinionWord(op)}${at}` });
     }
     const key = list.map((m) => `${m.x.toFixed(0)},${m.z.toFixed(0)},${m.color}`).join(';');
     if (key !== this.markKey) { this.markKey = key; g.map.setMarkers('people', list); }

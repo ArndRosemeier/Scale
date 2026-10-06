@@ -2771,7 +2771,7 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     }
   }
   check(none === 0 && raw === 0, `people: every topic has a line for everybody (${none} without, ${raw} with unfilled tokens, of ${n})`);
-  const unused = topics.flatMap((tp) => LINES[tp].filter((e) => ![...seen[tp]].some((id) => id.split(' ').some((x) => x.startsWith(`${e.id}#`)))).map((e) => e.id));
+  const unused = topics.flatMap((tp) => LINES[tp].filter((e) => !e.when.title && ![...seen[tp]].some((id) => id.split(' ').some((x) => x.startsWith(`${e.id}#`)))).map((e) => e.id));
   check(unused.length <= 6, `people: almost every line gets said by someone (${unused.length} never: ${unused.join(' ')})`);
   // The most specific line wins; a person does not repeat themselves.
   const base = { first: 'Ann', last: 'Lee', full: 'Ann Lee', years: 40, child: false, senior: false, traits: { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 }, job: { kind: 'office' as const, title: 'office worker' }, interest: 'chess', mood: 0, moodWord: 'fine' as const, days: 0, opinion: 0, hour: 12, weather: 'fair', trouble: 0, threat: false, street: 'Elm Street', metStreet: 'Elm Street', city: 'X', group: null, boss: null, giant: false };
@@ -2799,6 +2799,16 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(restorePeople({ people: [{ cit: { id: 1 } }, 'junk', null] }).length === 0 && restorePeople(null).length === 0, 'people: a damaged list loads empty, not broken');
   const st = pop.stateAt(list[0].cit, 30);
   check(!!(st.stay || st.trip), 'people: a remembered person is somewhere on their day plan');
+  // Special characters (street performers, officers, medics …) answer as what they are.
+  const specials = [...Object.values(STREET_KINDS).map((k) => k.title.toLowerCase()), 'police officer', 'paramedic', 'soldier', 'shopkeeper', 'cleanup worker'];
+  const own = (tp: Topic, t: string) => {
+    const id = pickLine(tp, { ...base, temper: 'grumpy', met: 3, deed: 'helped', job: { kind: 'street', title: t } }, 3).id.split('#')[0];
+    return !!LINES[tp].find((e) => e.id === id)?.when.title?.includes(t);
+  };
+  const miss = specials.filter((t) => !own('hello', t) || !own('job', t));
+  check(miss.length === 0, `people: every special character greets you and tells you what they do in their own words (missing: ${miss.join(', ')})`);
+  const mime = ruleAnswer({ topic: 'job', facts: { ...base, temper: 'chatty', met: 0, deed: null, job: { kind: 'street', title: 'mime' } }, seed: 4, used: new Set() });
+  check(mime.id.startsWith('js2#') && !mime.id.includes(' '), `people: the mime only mimes (${mime.text})`);
   console.log(`people: ${TEMPERAMENTS.length} temperaments, ${topics.reduce((s, t) => s + LINES[t].length, 0)} line rules, ${n} answers in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
