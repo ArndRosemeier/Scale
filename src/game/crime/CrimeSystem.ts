@@ -23,7 +23,7 @@ import { cityOutfit } from '../../humanoid/client/wardrobe';
 import { hash32 } from '../../core/rng';
 import { pointInPoly } from '../../core/geom2';
 import { statusOf } from '../../shared/status';
-import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, STREET_OWNER, type ActorRole } from '../../sim/actors/Actor';
+import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, type ActorRole } from '../../sim/actors/Actor';
 import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
 import { Reputation } from '../Reputation';
@@ -1149,10 +1149,10 @@ export class CrimeSystem {
     for (const a of this.g.peds.agents) {
       const act = a.actor;
       if (!act) continue;
-      // (Soldiers, the aftermath's people and the street characters have their own budgets:
-      // response/forces, game/aftermath, game/street.)
+      // (Soldiers, the aftermath's people, the street characters and fame's people have their own
+      // budgets: response/forces, game/aftermath, game/street, game/fame.)
       const uniformed = act.role === 'police' || act.role === 'soldier';
-      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER) n++;
+      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER) n++;
       tickActor(act, dt);
       if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && uniformed))) {
         act.upT -= dt;

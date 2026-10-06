@@ -103,6 +103,7 @@ import { PauseSaves, SaveIndicator } from '../ui/SaveUi';
 import { Defeat } from './defeat/Defeat';
 import { MedFleet } from './defeat/MedDrones';
 import { People } from './people/People';
+import { Fame } from './fame/Fame';
 
 export class Game {
   readonly renderer: Renderer;
@@ -207,6 +208,8 @@ export class Game {
   deeds!: Deeds;
   /** The city's people as individuals: names, personalities, talking (E), who remembers you (game/people). */
   people!: People;
+  /** Reputation made visible: the press, fans, protesters, the hero's statue (game/fame). */
+  fame!: Fame;
   powerHud!: PowerHud;
   powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
@@ -636,6 +639,7 @@ export class Game {
     this.T('crime', () => this.crime.update(dt));
     this.T('street', () => this.street?.update(dt));
     this.T('people', () => this.people?.update(dt));
+    if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
     this.T('army', () => { this.hostile.update(dt); this.forces.update(dt); });
@@ -909,6 +913,7 @@ export class Game {
       },
       sound: (id, x, y, z, g) => this.audio.play(id, x, y, z, g, 1, 8, cam.position),
       markers: (m) => this.map.setMarkers('deeds', m),
+      rep: (d, reason) => this.crime?.rep.add(d, reason),
     };
     if (normal) {
       const cores = new PowerCores(
@@ -950,6 +955,7 @@ export class Game {
     this.street = new StreetLife(this);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
+    this.fame = new Fame(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)

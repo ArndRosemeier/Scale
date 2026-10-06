@@ -157,6 +157,11 @@ export interface SaveData {
    * `restorePeople`); older saves have none (null: the browser's own record for the city stays).
    */
   people?: unknown;
+  /**
+   * Fame (game/fame): the hero's statue in front of the town hall ({ statue: { state, t } }, sanitised
+   * by StatueClock.restore); older saves have none (the browser's own record for the city stays).
+   */
+  fame?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -294,6 +299,7 @@ export function parseSave(input: string | unknown): SaveData {
       bosses: (Array.isArray(obj(o.factions).bosses) ? (obj(o.factions).bosses as unknown[]) : []).slice(0, 16),
     } : null,
     ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
+    ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
   };
 }
 

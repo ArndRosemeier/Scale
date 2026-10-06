@@ -1,16 +1,17 @@
 /**
- * The army against a rampaging giant player (THREATS_PLAN §5 question 2, PLAYGROUND_PLAN §0
+ * The army against a rampaging player (THREATS_PLAN §5 question 2, PLAYGROUND_PLAN §0
  * decision 19: "Army vs the player: yes, without a cap — a rampaging, low-reputation player gets the
  * full response ladder, after a clear warning sequence"). Pure rules: no three.js, no game — the
  * game's `HostilePlayer` (threats/PlayerRampage.ts) and the headless checks (tools/selftest.ts) share them.
  *
  *  - Fury: a decaying meter of the player's own destruction (buildings brought down, facades
  *    smashed, people knocked down, cars wrecked, officers and soldiers attacked).
- *  - The watch (`RampageWatch`): a giant (≥ RAMPAGE.minHeight) with a low reputation whose fury
- *    climbs is warned, then warned a last time, then the city treats them as a major threat — the
- *    response ladder from patrol cars to the army, the air and, rarely, the last resort. Standing
- *    down (no destruction for a while, or human-sized again) ends it; a relapse soon after brings the
- *    army back without new warnings.
+ *  - The watch (`RampageWatch`): a player of any size with a feared reputation whose fury climbs is
+ *    warned, then warned a last time, then the city treats them as a major threat. The lower the
+ *    reputation, the less destruction it takes (`furyScale`). A giant gets the whole ladder, from
+ *    patrol cars to the army, the air and, rarely, the last resort; a human-sized player the police,
+ *    SWAT and the National Guard (`ladderTop`). Standing down (no destruction for a while, or a
+ *    giant human-sized again) ends it; a relapse soon after brings the army back without new warnings.
  *  - The player's body as the army sees it (`PLAYER_ZONES`, RAMPAGE.hp): army damage points are
  *    turned into the player's health.
  *  - `simulatePlayerBattle`: the battle model (BattleModel) against a giant standing in the street or
@@ -20,10 +21,14 @@ import { Rng } from '../../core/rng';
 import { ARMY, FORCE, levelSquads, regroup, stepForces, type ForceKind, type MonsterView, type PathView, type Squad, type ZoneView } from '../response/forces/BattleModel';
 
 export const RAMPAGE = {
-  /** A giant: the player at least this tall (m; THREATS_PLAN size tier T2 and up). */
+  /** A giant: the player at least this tall (m; THREATS_PLAN size tier T2 and up): the whole ladder. */
   minHeight: 6,
-  /** Reputation at or below this (feared): the city takes a giant on the loose for a threat. */
+  /** Reputation at or below this (feared): the city takes a player on the loose for a threat. */
   rep: -40,
+  /** At the bottom of the reputation scale (−100) the warnings come at this share of the fury (`furyScale`). */
+  lowScale: 0.4,
+  /** The highest response level against a human-sized player (3: the National Guard; giants: 5). */
+  smallTop: 3,
   /** What the player's own destruction adds to the fury; it halves every `half` s. */
   fury: { collapse: 3, perStorey: 0.35, facade: 0.25, person: 0.6, car: 0.4, officer: 1.2, half: 75 },
   /** The first warning at `warn`; the last one `gap` s later (still above `warn`); the army `gap` s after that (still above `act`). */
@@ -74,6 +79,17 @@ export function furyOf(e: FuryEntry): number {
   return 0;
 }
 
+/** The share of the fury that brings the warnings at this reputation: 1 at RAMPAGE.rep, down to `lowScale` at −100. */
+export function furyScale(rep: number): number {
+  const k = Math.max(0, Math.min(1, (RAMPAGE.rep - rep) / (RAMPAGE.rep + 100)));
+  return 1 - (1 - RAMPAGE.lowScale) * k;
+}
+
+/** The top of the response ladder against the player at this height: the army and the air only for a giant. */
+export function ladderTop(height: number): number {
+  return height >= RAMPAGE.minHeight ? 5 : RAMPAGE.smallTop;
+}
+
 export type WatchState = 'calm' | 'warned' | 'final' | 'hostile';
 export type WatchSignal = 'warn' | 'final' | 'hostile' | 'lapse' | 'standDown';
 
@@ -88,6 +104,8 @@ export class RampageWatch {
   now = 0;
   /** When the last warning was given (−∞: never). */
   warnedAt = -1e9;
+  /** It began with a giant: shrinking back to human size stands it down (a human-sized one only by stopping). */
+  big = false;
   stats = { warnings: 0, finals: 0, hostile: 0, lapsed: 0, stoodDown: 0 };
 
   /**
@@ -101,10 +119,13 @@ export class RampageWatch {
     this.fury = this.fury * Math.pow(0.5, dt / R.fury.half) + added;
     this.quiet = added > 0 ? 0 : this.quiet + dt;
     this.small = height < R.minHeight ? this.small + dt : 0;
-    const giant = height >= R.minHeight, eligible = giant && rep <= R.rep;
+    const giant = height >= R.minHeight, eligible = rep <= R.rep;
+    // (The lower the reputation, the less it takes.)
+    const k = furyScale(rep), warn = R.warn * k, act = R.act * k;
     switch (this.state) {
       case 'calm':
-        if (!eligible || this.fury < R.warn) return null;
+        if (!eligible || this.fury < warn) return null;
+        this.big = giant;
         // Warned not long ago: no more warnings.
         if (this.now - this.warnedAt < R.memory) return this.go('hostile');
         this.warnedAt = this.now;
@@ -112,13 +133,14 @@ export class RampageWatch {
         return this.go('warned');
       case 'warned':
       case 'final':
-        if (this.fury < R.warn * R.lapse || !giant) { this.stats.lapsed++; this.go('calm'); return 'lapse'; }
+        if (this.fury < warn * R.lapse || (this.big && !giant)) { this.stats.lapsed++; this.go('calm'); return 'lapse'; }
         if (this.t < R.gap) return null;
-        if (this.state === 'warned' && this.fury >= R.warn) { this.warnedAt = this.now; this.stats.finals++; return this.go('final'); }
-        if (this.state === 'final' && this.fury >= R.act && eligible) return this.go('hostile');
+        if (this.state === 'warned' && this.fury >= warn) { this.warnedAt = this.now; this.stats.finals++; return this.go('final'); }
+        if (this.state === 'final' && this.fury >= act && eligible) return this.go('hostile');
         return null;
       case 'hostile':
-        if (this.t >= R.minHostile && (this.quiet >= R.quietT || this.small >= R.smallT)) { this.stats.stoodDown++; this.reset(); return 'standDown'; }
+        if (giant) this.big = true;
+        if (this.t >= R.minHostile && (this.quiet >= R.quietT || (this.big && this.small >= R.smallT))) { this.stats.stoodDown++; this.reset(); return 'standDown'; }
         return null;
     }
   }
@@ -131,7 +153,8 @@ export class RampageWatch {
   }
 
   /** Dev: the army comes now (no warnings). */
-  force(): WatchSignal {
+  force(height = RAMPAGE.minHeight): WatchSignal {
+    this.big = height >= RAMPAGE.minHeight;
     this.warnedAt = this.now;
     this.fury = Math.max(this.fury, RAMPAGE.act);
     this.quiet = 0;
@@ -145,6 +168,7 @@ export class RampageWatch {
     this.state = 'calm';
     this.t = 0;
     this.quiet = 0;
+    this.big = false;
   }
 
   /** Taken into custody: it is over, and the slate is clean — another rampage gets its warnings again. */

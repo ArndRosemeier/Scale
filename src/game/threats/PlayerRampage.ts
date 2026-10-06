@@ -27,13 +27,13 @@ import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 import { DKind } from '../../future/Drones';
 import type { HarmEntry } from '../Consequences';
-import { PLAYER_ZONES, RAMPAGE, RampageWatch, furyOf, playerDamage, playerPath, playerSpawn } from './rampageRules';
+import { PLAYER_ZONES, RAMPAGE, RampageWatch, furyOf, furyScale, ladderTop, playerDamage, playerPath, playerSpawn } from './rampageRules';
 
 let EVENT_ID = 5000;
 
 /** The giant player's body as the police and the army see it (never a target for the player). */
 export class PlayerBody implements ThreatActor {
-  readonly name = 'Rampaging giant';
+  get name(): string { return this.g.player.height >= RAMPAGE.minHeight ? 'Rampaging giant' : 'Public menace'; }
   readonly self = true;
   readonly maxHp = RAMPAGE.hp;
   readonly zones: ThreatZone[];
@@ -153,6 +153,8 @@ export class PlayerRampage implements ThreatEvent, ArmyFoe {
   get y(): number { return this.body.y; }
   get z(): number { return this.g.player.pos.z; }
   get radius(): number { return RAMPAGE.radius + this.g.player.height * RAMPAGE.radiusK; }
+  /** Human-sized: police, SWAT and the National Guard; a giant: tanks, the air and the last resort too. */
+  get ceiling(): number { return ladderTop(this.g.player.height); }
   get s(): number { return this.route.length; }
   get zones(): ThreatZone[] { return this.body.zones; }
   get aggro(): ReadonlyMap<string, number> { return this.body.aggro; }
@@ -301,14 +303,16 @@ export class HostilePlayer {
     const g = this.g, H = g.powerHud, p = g.player.pos;
     switch (sig) {
       case 'warn':
-        H.toast('<b>Warning</b> — the city sees a giant on the rampage. Stop the destruction, or the army is called in', 'warn', 6000);
+        H.toast(this.giant()
+          ? '<b>Warning</b> — the city sees a giant on the rampage. Stop the destruction, or the army is called in'
+          : '<b>Warning</b> — the city has had enough of you. Stop the destruction, or the police and the National Guard come for you', 'warn', 6000);
         g.audio.play2d('siren_short', 0.6);
         this.shout(['Stand down! Now!', 'Stop right there!', 'This is your only warning!']);
         g.future.drones.incident(DKind.Police, p.x, p.z, p.x, p.z);
         this.note('warning');
         break;
       case 'final':
-        H.toast('<b>Final warning</b> — the National Guard is being called. Stop now, or shrink back to human size', 'warn', 6000);
+        H.toast(this.giant() ? '<b>Final warning</b> — the National Guard is being called. Stop now, or shrink back to human size' : '<b>Final warning</b> — SWAT and the National Guard are on standby. Stop now', 'warn', 6000);
         g.audio.play2d('siren_short', 0.8);
         this.shout(['Last warning!', 'The Guard is coming — stand down!']);
         this.note('final warning');
@@ -321,7 +325,9 @@ export class HostilePlayer {
         if (!ev) break;
         this.ev = ev;
         g.forces.hostilePlayer = true;
-        H.toast('The city treats you as a threat — the army is coming. Stand down (no more destruction, or human size) to end it', 'warn', 7000);
+        H.toast(this.giant()
+          ? 'The city treats you as a threat — the army is coming. Stand down (no more destruction, or human size) to end it'
+          : 'The city treats you as a threat — the police, SWAT and the National Guard are coming. Stop the destruction to end it', 'warn', 7000);
         this.note(`hostile: incident #${ev.id}`);
         break;
       }
@@ -338,6 +344,8 @@ export class HostilePlayer {
         break;
     }
   }
+
+  private giant(): boolean { return this.g.player.height >= RAMPAGE.minHeight; }
 
   /** While warned: the red alert on the screens round the player, a police drone overhead. */
   private warnings(dt: number): void {
@@ -375,7 +383,7 @@ export class HostilePlayer {
     const W = this.watch;
     return {
       enabled: this.enabled, state: W.state, fury: +W.fury.toFixed(2), t: +W.t.toFixed(1), quiet: +W.quiet.toFixed(1),
-      height: +this.g.player.height.toFixed(1), rep: this.g.crime.rep.value, incident: this.ev?.snapshot() ?? null, stats: { ...W.stats },
+      height: +this.g.player.height.toFixed(1), rep: this.g.crime.rep.value, warnAt: +(RAMPAGE.warn * furyScale(this.g.crime.rep.value)).toFixed(2), top: ladderTop(this.g.player.height), incident: this.ev?.snapshot() ?? null, stats: { ...W.stats },
       log: this.log.slice(-8).map((l) => `${l.t}: ${l.what}`),
     };
   }
@@ -390,8 +398,8 @@ export class HostilePlayer {
       status: () => this.status(),
       /** Add fury now (as if the player had levelled that much). */
       fury: (n = RAMPAGE.act + 2) => { this.watch.fury += n; return this.status(); },
-      /** Skip the warnings: the army comes for the player now (needs a giant). */
-      now: () => { if (this.watch.state !== 'hostile') this.signal(this.watch.force()); return this.status(); },
+      /** Skip the warnings: the response comes for the player now (the army and the air for a giant). */
+      now: () => { if (this.watch.state !== 'hostile') this.signal(this.watch.force(this.g.player.height)); return this.status(); },
       /** Stand down now. */
       stop: () => { if (this.watch.state === 'hostile') { this.watch.reset(); this.signal('standDown'); } return this.status(); },
       enabled: (on?: boolean) => { if (on !== undefined) this.enabled = on; return this.enabled; },

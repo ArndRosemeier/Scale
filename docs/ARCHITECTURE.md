@@ -769,13 +769,16 @@ every frame (`prof.threats`).
   tested; PLAYGROUND_PLAN §0 decision 19: no cap, after a clear warning sequence). `HostilePlayer` reads the player's own
   entries in the collateral ledger as a decaying **fury** (a building brought down 3 + 0.35 per storey, a facade 0.25 at
   most every 1.5 s, a bystander 0.6, an officer or soldier 1.2, a car wrecked 0.4; criminals nothing; halves every 75 s).
-  The **watch** (`RampageWatch`): a giant (≥ 6 m) with a feared reputation (≤ −40) whose fury reaches 6 is warned (a toast,
+  The **watch** (`RampageWatch`): a player of any size with a feared reputation (≤ −40) whose fury reaches 6 (× `furyScale`:
+  1 at −40 down to 0.4 at −100 — the lower the reputation, the less it takes) is warned (a toast,
   a siren whoop, the nearest officer shouts, a police drone comes over, the screens round about show the red alert);
   20 s later, still at it, the final warning; 20 s after that, fury ≥ 9: **hostile** — a `PlayerRampage` event (archetype
   `rampage`, major, never on foot) that the response escalates against like a monster's: patrol cars and a cordon,
   evacuation sirens, SWAT and patrol officers firing from a distance (GIANT), the National Guard and the army and air
-  (levels 3 and 4), and, rarely, level 5. Below fury 3 while warned (or no longer a giant), the warnings lapse. Standing down — no destruction
-  for 45 s, or human-sized for 20 s, but never within 240 s of the army being called (once mobilised the Guard and
+  (levels 3 and 4), and, rarely, level 5 — for a giant; a human-sized player's incident has `ceiling` 3
+  (`ladderTop`: police, SWAT and the National Guard; ResponseDirector never escalates an incident past its event's
+  `ceiling`, and steps one down that is above it, a giant who shrank). Below fury 3 while warned (or a giant no longer one), the warnings lapse. Standing down — no destruction
+  for 45 s, or (a rampage begun as a giant) human-sized for 20 s, but never within 240 s of the army being called (once mobilised the Guard and
   the tanks get there) — ends it (`abandoned`; the fury is spent); a relapse within 5 min brings the army
   back without new warnings. Brought down (knocked out by the response): `stopped`, taken into custody (Justice.arrested) — a clean slate (`served`): the next rampage is warned first.
   * **The player's body** (`PlayerBody`, a ThreatActor with `self`: the police's and the army's target, never in
@@ -1225,6 +1228,32 @@ matching line, avoids repeats, fills tokens, and defines `TalkBackend` (rules no
 the hero), Deeds.onHelped and Reactions.onKnockDown feed memory, known people greet you as you pass, the `people` map
 layer draws `faint` dots (live agent, else the day plan's place via `Pedestrians.placeSpot`). Kept per city in
 localStorage (`scale.people.v1.*`) and in saves (`SaveData.people`). `dev.people.list()` / `.forget()`.
+
+### Fame (`src/game/fame`)
+
+The reputation made visible (rules and thresholds in `fameRules.ts`, pure, tested). `Fame` (game.fame) sends people to the
+hero when they are out on foot, human-sized and above ground (actors, owner `FAME_OWNER`, own budget): **photographers**
+from rep 35 (1–3, `presscam` held, `take_photo` action, a pooled additive flash sprite at the camera, a faint `#fameflash`
+screen flash up close, `camera_shutter`), sooner after a crime stopped (Reputation listener); a **TV crew** from 65
+(`mic` + `interview`, `tvcam` + `shoulder_cam`); **fans** from 50 (phone, golden bubble, a flash, a cheer); passers-by
+within 7 m hail the hero (≥ 30) or grumble (< 0) once each. Below 0 **protesters** (3 + |rep|/9, up to 12) with placards
+(`placard_<i>` held items, texts in `humanoid/client/placards.ts`, the raised torch grip; `chant` action) gather on the
+camera's side 8–15 m from the hero, chant in red bubbles (Barks `tone`) to the `protest_chant` loop, boo
+(`crowd_boo`) when the hero walks up, and follow. Danger (blast, gunfire, a giant) makes any of them run; hitting
+one is hurting a bystander. Sounds: `tools/synthFame.mjs`.
+`PressPhoto`: a photographer's first flash of a visit (at most every 75 s) renders the scene once from their camera into
+a small HDR target, reads it back, composes a news page on a canvas (tone mapped, a vignette, a news bar with a headline
+by reputation band) and hands it to the billboard screens as `NewsFeed.still` (half float, in the live feed's encoding;
+the live feed wins while it runs) for 75 s with fades; the bare picture also goes to `game.city.postPhoto` when the
+city news layer exists.
+`HeroStatue`: `StatueClock` votes a statue after the reputation held ≥ 80 for 45 s, builds it for 150 s (a fenced site,
+scaffolding, a figure under a tarp on the town hall square, off the fountain), unveils it (fanfare, confetti, a cheering
+crowd with fan signs when the hero is near) and pulls it down after 40 s below 0 (lying in front of the plinth, the
+plaque sprayed over). The statue is a `HumanoidRig` of the hero's appearance and outfit at 1.6 × scale, posed once
+(`hero_pose`), its materials patched to bronze in the shader (`lights_physical_fragment`). Kept per city in localStorage
+(`scale.statue.v1.*`) and in saves (`SaveData.fame`). The low end is the justice layer's **manhunt** (rep ≤ −70: an
+officer within 26 m makes the player wanted) and the rampage watch above. `dev.fame.status() / rep(v) / press() / tv() /
+fan() / protest() / photo() / statue('build'|'unveil'|'topple'|'remove'|'go')`.
 
 ### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
 * Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the

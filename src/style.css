@@ -405,6 +405,11 @@ body.looking #crosshair { display: block; }
 .bark { position: fixed; left: 0; top: 0; display: none; max-width: 200px; padding: 5px 10px 6px; margin-top: -6px; background: rgba(252, 251, 247, 0.94); color: #1d242b; border-radius: 12px; font: 600 12px/1.25 system-ui, sans-serif; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); pointer-events: none; z-index: 4; transform-origin: 50% 100%; white-space: nowrap; transition: opacity 0.35s; will-change: transform; }
 .bark::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(252, 251, 247, 0.94); }
 .bark.out { opacity: 0; }
+/* Fame (src/game/fame): protesters and booing passers-by; fans. */
+.bark.angry { background: rgba(196, 38, 38, 0.94); color: #fff; }
+.bark.angry::after { border-top-color: rgba(196, 38, 38, 0.94); }
+.bark.cheer { background: rgba(255, 214, 92, 0.96); color: #2a1d00; }
+.bark.cheer::after { border-top-color: rgba(255, 214, 92, 0.96); }
 
 /* Hidden admin console (src/ui/AdminConsole.ts, Ctrl+Shift+F12). */
 #admin { position: fixed; right: 16px; top: 64px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 220px); display: none; flex-direction: column; background: rgba(14, 18, 24, 0.94); border: 1px solid #2c3846; border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,0.45); color: #d8dee6; font: 12px/1.35 system-ui, sans-serif; z-index: 40; }
@@ -453,6 +458,8 @@ body.looking #crosshair { display: block; }
 #tzones i.sel { width: 26px; height: 26px; margin: -13px 0 0 -13px; border: 2px dashed #7fd3ff; }
 #tzones i.sel.on { border-style: solid; border-color: #ffcf6e; }
 /* The aftermath (src/game/aftermath): the last resort's flash; the casualty ledger chip (pictograms and numbers). */
+/* A press photographer's flash up close (src/game/fame/Fame.ts). */
+#fameflash { position: fixed; inset: 0; pointer-events: none; z-index: 18; background: #fff; opacity: 0; }
 #nukeflash { position: fixed; inset: 0; pointer-events: none; z-index: 19; background: radial-gradient(circle at 50% 40%, #fffdf6 0%, #fff4dc 55%, #ffe2b0 100%); opacity: 0; }
 #casualties { position: fixed; left: 50%; top: 58px; transform: translateX(-50%); display: none; gap: 10px; padding: 3px 10px; border-radius: 12px; background: rgba(14, 16, 20, 0.62); box-shadow: 0 0 0 1px rgba(255,255,255,0.08); z-index: 5; font: 700 12px/18px system-ui, sans-serif; color: #eef1f4; }
 #casualties.on { display: flex; }

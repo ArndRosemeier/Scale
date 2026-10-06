@@ -264,7 +264,9 @@ export class ResponseDirector {
       const s = ev.strength(), U = RESPONSE, major = ev.tier === 'major';
       if (inc.level === 0 && ((inc.t >= (major ? U.major.up1 : U.up1.after) && s > U.up1.strength) || (inc.t >= U.up1.hurtAfter && ev.hurt >= U.up1.hurt))) this.goTo(inc, 1);
       else if (inc.level === 1 && inc.levelT >= (major ? U.major.up2 : U.up2.after) && s > U.up2.strength) this.goTo(inc, 2);
-      else if (inc.level >= 2 && this.levels.get(inc.level + 1)?.when(inc)) this.goTo(inc, inc.level + 1);
+      else if (inc.level >= 2 && inc.level < (ev.ceiling ?? Infinity) && this.levels.get(inc.level + 1)?.when(inc)) this.goTo(inc, inc.level + 1);
+      // (Over its ceiling — a rampaging giant shrank back to human size: the heavy levels pull back.)
+      else if (inc.level > 2 && inc.level > (ev.ceiling ?? Infinity)) this.goTo(inc, inc.level - 1);
     } else {
       // Over: stand down in steps.
       inc.calmT += dt;
