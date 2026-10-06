@@ -96,6 +96,7 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { StationLife } from './metro/StationLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
 import { ResponseDirector } from './response/ResponseDirector';
@@ -189,6 +190,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** Commuters on the metro's stairs, platforms and trains near the player. */
+  stationLife: StationLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
   threats!: ThreatDirector;
   /** The slime civilisation under the city: the Lumen and the Murk, their war, the Lumen's trust. */
@@ -413,6 +416,7 @@ export class Game {
       this.collision.roofEquipmentIn,
     );
     this.underground.body = this.player;
+    this.underground.seatTaken = (x, y, z) => this.peds.neighbours(x, z, 0.4, []).some((a) => Math.abs(a.y - y) < 1 && (a.state === PState.Sit || a.actor?.move === 'sit'));
     this.renderer.scene.add(this.props.group);
     this.props.onBreak = (p) => this.audio.play(p.tree ? 'tree_crack_fall' : 'metal_bend', p.x, p.y + 1, p.z, 0.8, 1, 8, cam.position);
     for (const c of this.streamer.cells.values()) if (c.status === 'ready') { this.addParked(c); this.props.addCell(c, macro.cells[c.id].district); this.underground.addCell(c); }
@@ -673,6 +677,7 @@ export class Game {
     this.T('aftermath', () => this.aftermath.update(dt));
     this.T('underground', () => {
       this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
+      this.stationLife?.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z);
       this.rideFx(dt);
       this.updateHoles();
       this.manholeKey();
@@ -982,6 +987,7 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
     this.fame = new Fame(this);
@@ -1104,9 +1110,11 @@ export class Game {
   }
 
   /** A free seat within reach of an ordinary-sized player on foot (benches, café chairs), or null. */
-  private seatNear(): { x: number; z: number; yaw: number } | null {
+  private seatNear(): { x: number; z: number; yaw: number; car?: { u: number; v: number } } | null {
     const P = this.player;
     if (P.flying || !P.grounded || P.height > 2.4 || P.height < 1.2 || P.downT > 0 || P.ragdoll) return null;
+    // Underground: train seats, platform benches.
+    if (this.underground.isUnder(P.pos.x, P.pos.y + 0.5, P.pos.z) || this.underground.ride) return this.underground.seatNear(P.pos.x, P.pos.y, P.pos.z, 1.3);
     let best: { x: number; z: number; yaw: number } | null = null, bd = 1.3;
     this.props.query(P.pos.x, P.pos.z, 1.6, (pr) => {
       if (pr.broken || !/^furn:(bench|cafeChair):/.test(pr.kind)) return;
@@ -1126,13 +1134,19 @@ export class Game {
   private manholeKey(): void {
     if (this.freeCam || !this.input.hit('KeyE')) return;
     if (this.aftermath.use() || this.crime.use() || this.deeds.help() || this.slimeRealm?.use()) { this.input.pressed.delete('KeyE'); return; }
-    if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
-    // Sit down on a bench or café chair in reach, or get up again.
+    // Get up from a seat (before the metro: seated in a train, E gets up rather than off).
     if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }
+    if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();
-    if (seat) { this.player.sitOn(seat.x, seat.z, seat.yaw); this.input.pressed.delete('KeyE'); return; }
+    // Sit down on a bench or café chair in reach (a train seat: the ride holds you on it).
+    if (seat) {
+      this.player.sitOn(seat.x, seat.z, seat.yaw);
+      if ('car' in seat && seat.car && this.player.seat) this.underground.sitInCar(seat.car);
+      this.input.pressed.delete('KeyE');
+      return;
+    }
     const p = this.player.pos;
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
     const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;

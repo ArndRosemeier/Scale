@@ -151,7 +151,7 @@ export function auditLines(inp: AuditInput): LineReport[] {
   return out;
 }
 
-export interface PassageReport { name: string; maxSlope: number; floorErr: number; ceilingOut: number; hits: number; endsOnPlatform: boolean }
+export interface PassageReport { name: string; maxSlope: number; floorErr: number; ceilingOut: number; hits: number; endsOnPlatform: boolean; /** Highest step between floor samples 0.2 m apart anywhere across the passage (a ledge where it turns). */ ledge: number }
 
 /**
  * Entrance passages: walkable slope everywhere, the floor query along the walk equals the passage
@@ -160,10 +160,12 @@ export interface PassageReport { name: string; maxSlope: number; floorErr: numbe
  */
 export function auditPassages(inp: AuditInput, inHole: (x: number, z: number) => boolean): PassageReport[] {
   const out: PassageReport[] = [];
-  const vols = [...inp.lines.map((l) => l.tube), ...inp.sewers];
+  const under = (inp.passages ?? []).map((p) => p.tube).filter((t) => t.underpass);
   for (const ps of inp.passages ?? []) {
+    // (The halls' underpasses count as other volumes for every passage but themselves.)
+    const vols = [...inp.lines.map((l) => l.tube), ...inp.sewers, ...under.filter((u) => u !== ps.tube)];
     const t = ps.tube, P = t.pts, n = P.length / 3;
-    const r: PassageReport = { name: ps.name, maxSlope: 0, floorErr: 0, ceilingOut: 0, hits: 0, endsOnPlatform: false };
+    const r: PassageReport = { name: ps.name, maxSlope: 0, floorErr: 0, ceilingOut: 0, hits: 0, endsOnPlatform: false, ledge: passageLedge(t) };
     for (let i = 0; i + 1 < n; i++) {
       const L2 = t.cum[i + 1] - t.cum[i];
       if (L2 > 1e-3) r.maxSlope = Math.max(r.maxSlope, Math.abs(P[i * 3 + 4] - P[i * 3 + 1]) / L2);
@@ -176,7 +178,7 @@ export function auditPassages(inp: AuditInput, inHole: (x: number, z: number) =>
       for (const v of [t, ...vols]) { const h = tubeAt(v, x, y + 0.3, z); if (h && h.floor <= y + 0.9) best = Math.max(best, h.floor); }
       for (const b of inp.halls) { const h = boxAt(b, x, y + 0.3, z); if (h && h.floor <= y + 0.9) best = Math.max(best, h.floor); }
       r.floorErr = Math.max(r.floorErr, Math.abs(best - y));
-      if (!inHole(x, z)) r.ceilingOut = Math.max(r.ceilingOut, y + 2.0 - (ps.ground(x, z) - 0.15));
+      if (!inHole(x, z) && !t.underpass) r.ceilingOut = Math.max(r.ceilingOut, y + 2.0 - (ps.ground(x, z) - 0.15));
       // Other volumes cut by the passage's walking space (feet to 2.2 m).
       for (const v of vols) {
         const h = tubeAt(v, x, y + 1.1, z, -0.3);
@@ -185,11 +187,37 @@ export function auditPassages(inp: AuditInput, inHole: (x: number, z: number) =>
       for (const b of inp.halls) if (b !== ps.hall && boxAt(b, x, y + 1.1, z, 0) && y + 1.1 > b.y0) { r.hits++; break; }
     }
     // Through its own hall's roof (a corridor over the hall pushed down too far).
-    r.hits += ownHallHits(ps.hall, P);
+    if (!t.underpass) r.hits += ownHallHits(ps.hall, P);
     const [ex, ey, ez] = at(t, total);
     const h = boxAt(ps.hall, ex, ey + 0.3, ez);
     r.endsOnPlatform = !!h && Math.abs(h.floor - (ps.hall.y0 + PLATFORM_H)) < 0.01 && Math.abs(ey - h.floor) < 0.05;
     out.push(r);
   }
   return out;
+}
+
+/**
+ * Highest step between neighbouring floor samples (0.2 m apart, along and across) anywhere inside a
+ * passage, off its centre line too: what a walker keeping to one side meets (a slope running into a
+ * turn leaves a ledge across the corner).
+ */
+export function passageLedge(t: Tube): number {
+  const P = t.pts, hw = t.halfWidth - 0.3, d = 0.2;
+  const fl = (x: number, z: number) => tubeAt(t, x, 0, z, -0.3, true)?.floor ?? null;
+  let worst = 0;
+  for (let i = 0; i + 5 < P.length; i += 3) {
+    const ax = P[i], az = P[i + 2], L = Math.hypot(P[i + 3] - ax, P[i + 5] - az);
+    if (L < 1e-3) continue;
+    const ux = (P[i + 3] - ax) / L, uz = (P[i + 5] - az) / L;
+    for (let a = -hw; a <= L + hw; a += d) for (let c = -hw; c <= hw; c += d) {
+      const x = ax + ux * a - uz * c, z = az + uz * a + ux * c, f = fl(x, z);
+      if (f === null) continue;
+      for (const [nx, nz] of [[ux * d, uz * d], [-uz * d, ux * d]]) {
+        // The floor a walker standing at f finds a step on (as Underground.floorAt: in reach of the feet).
+        const h = tubeAt(t, x + nx, f + 0.5, z + nz, -0.3);
+        if (h && h.floor <= f + 1.1) worst = Math.max(worst, Math.abs(h.floor - f));
+      }
+    }
+  }
+  return worst;
 }

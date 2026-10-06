@@ -110,6 +110,23 @@ export function installDevtools(game: Game): void {
       game.camRig.yaw = Math.atan2(-r.nx, -r.nz);
       return { room: r.id, kind: r.kind, x: Math.round(x), z: Math.round(z) };
     },
+    /** Metro: put the player on a platform of the nearest station hall (skip: the next ones; side ±1), or just the commuter stats. */
+    metro: {
+      stats: () => ({ ...game.stationLife?.stats, now: game.stationLife?.count, modes: game.stationLife?.list.reduce((m, q) => ((m[q.mode] = (m[q.mode] ?? 0) + 1), m), {} as Record<string, number>) }),
+      go(skip = 0, side = 1, u = 0): { station: number; x: number; z: number } | null {
+        const U = game.underground, p = game.player.pos;
+        const halls = U.boxes.filter((b) => b.kind === 'station').sort((a, b) => Math.hypot(a.cx - p.x, a.cz - p.z) - Math.hypot(b.cx - p.x, b.cz - p.z));
+        const b = halls[skip];
+        if (!b) return null;
+        const v = side * (b.hv - 3);
+        const x = b.cx + b.ux * u - b.uz * v, z = b.cz + b.uz * u + b.ux * v;
+        (game as unknown as { freeCam: boolean }).freeCam = false;
+        game.player.pos.set(x, b.y0 + 1.05 + 0.1, z);
+        game.player.vel.set(0, 0, 0);
+        game.camRig.yaw = Math.atan2(b.uz * side, -b.ux * side);
+        return { station: b.station ?? -1, x: Math.round(x), z: Math.round(z) };
+      },
+    },
     /** Rats and the wandering slime around the player (calm: they stay put). */
     sewerLife: (calm?: boolean) => { if (calm !== undefined) game.underground.life.calm = calm; return game.underground.life.stats; },
     /** The deep realm: go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …), places, status. */
