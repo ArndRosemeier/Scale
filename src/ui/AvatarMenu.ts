@@ -17,7 +17,9 @@ const MAX_BYTES = 200e6;
 
 const BASE = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
 
-/** Built-in characters: rigged GLBs shipped with the game (tools/avatar/base-bodies/). */
+/** Built-in characters: rigged GLBs shipped with the game (tools/avatar/base-bodies/).
+ *  Both are "Woman_model" by Bananaboy (CC BY 3.0), see public/assets/bodies/LICENSE.txt. */
+const BUILTIN_CREDIT = 'Based on "Woman_model" by Bananaboy (Blend Swap), CC BY 3.0';
 const BUILTIN = [
   { id: 'builtin:woman', name: 'Woman', file: 'woman.glb' },
   { id: 'builtin:man', name: 'Man', file: 'man.glb' },
@@ -82,6 +84,7 @@ export class AvatarMenu {
       c.innerHTML = `<div class="thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span>👤</span>'}</div><div class="name"></div><div class="sub"></div>${id && !builtin ? '<button type="button" class="del" title="Delete">×</button>' : ''}${edit ? '<button type="button" class="edit" title="Edit">✎</button>' : ''}`;
       (c.querySelector('.name') as HTMLElement).textContent = name;
       (c.querySelector('.sub') as HTMLElement).textContent = sub;
+      if (builtin) c.title = BUILTIN_CREDIT;
       c.onclick = (e) => {
         const t = e.target as HTMLElement;
         if (t.classList.contains('del') || t.classList.contains('edit')) return;
