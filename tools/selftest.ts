@@ -1245,6 +1245,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(comps === 1, `sewers seed ${seed}: one network (${comps} parts, ${culverts} culverts under the rivers)`);
     check(step < 0.01, `sewers seed ${seed}: trunks meet level at the junctions (largest step ${step.toFixed(3)} m)`);
     check(!culverts || (grade <= 0.31 && cover >= 1.5), `sewers seed ${seed}: culverts walkable and covered (grade ${grade.toFixed(2)}, cover ${cover.toFixed(1)} m)`);
+    let steep = 0;
+    S.forEach((s, i) => {
+      if (s.culvert) return;
+      const P = sew[i].pts;
+      for (let k = 3; k < P.length; k += 3) { const L = Math.hypot(P[k] - P[k - 3], P[k + 2] - P[k - 1]); if (L > 0.5) steep = Math.max(steep, Math.abs(P[k + 1] - P[k - 2]) / L); }
+    });
+    check(steep <= 0.31, `sewers seed ${seed}: trunks walkable (steepest ${steep.toFixed(2)})`);
     const tubes = [...macro.metroLines.map(metroTube), ...sew];
     const rooms = planRooms(macro, terrain, tubes, stationHalls(macro));
     const hints = planSewerHints(macro, tubes, rooms);
@@ -1253,6 +1260,17 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const arrows = n('arrow'), marks = n('mark'), chev = n('chevron'), scouts = n('scout');
     const sewerColonies = rooms.colonies.filter((c) => rooms.rooms[c.room].net === 'sewer').length;
     check(!sewerColonies || (arrows >= junctions * 0.9 && marks >= junctions * 1.8 && chev > 100 && scouts >= 1), `sewers seed ${seed}: the Lumen's signs show the way at the junctions (${arrows} arrows and ${marks} signs at ${junctions} junctions, ${chev} chevrons, ${scouts} scouts, ${sewerColonies} colonies off the sewers)`);
+  }
+}
+
+// ---- no sewer breaks through the street: soil over every trunk's vault along its whole length
+// (seed 1234 @0.5 once had a brick trunk standing out of a street in a dip).
+{
+  const { sewerBreaches, MIN_COVER } = await import('./sewersweep');
+  for (const [seed, size] of [[1234, 0.5], [42, 0.6], [7, 0.4], [17, 0.75]] as const) {
+    const { breaches, trunks } = sewerBreaches(seed, size);
+    const w = breaches.reduce((m, q) => Math.min(m, q.ground - q.crown), Infinity);
+    check(!breaches.length, `sewers seed ${seed} @${size}: every trunk under the ground (${breaches.length} of ${trunks} with less than ${MIN_COVER} m over the vault${breaches.length ? `, worst ${w.toFixed(2)} m` : ''})`);
   }
 }
 
