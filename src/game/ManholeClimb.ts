@@ -178,7 +178,7 @@ export class ManholeClimb {
     const s = this.spot!, P = this.h.player, G = this.G;
     const holeYaw = this.yawAcross(-1);
     const out: Segment[] = [];
-    // Walk to the lid's side (opposite the ladder's wall: the hero turns his back to the hole there).
+    // Walk to the lid's side (opposite the ladder's wall: the hero turns their back to the hole there).
     out.push(this.walkTo(STREET_LAT, 0, G, holeYaw));
     // Lift the lid and drag it aside.
     out.push({ dur: 2.6, run: (u) => this.lidFromStreet(u) });
