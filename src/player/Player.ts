@@ -78,6 +78,8 @@ export class Player {
    * control, no physics; the scene sets the position and facing, the body shows this move state.
    */
   puppet: MoveState | null = null;
+  /** The puppet's velocity as the animation sees it (a scripted walk keeps its gait; zero: standing). */
+  readonly puppetVel = new THREE.Vector3();
   get animClock(): number { return this.animTime; }
   /** Walking into walls: the obstacle hit this frame (for destruction). */
   blocked: { x: number; z: number; nx: number; nz: number; speed: number } | null = null;
@@ -150,7 +152,7 @@ export class Player {
 
   update(dt: number, input: Input, camYaw: number, camPitch: number): void {
     if (this.puppet) {
-      this.vel.set(0, 0, 0);
+      this.vel.copy(this.puppetVel);
       this.grounded = true;
       this.seat = null;
       this.autoMove = false;

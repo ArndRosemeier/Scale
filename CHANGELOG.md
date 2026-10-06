@@ -2,12 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.074 — 2026-10-06
+## 0.075 — 2026-10-06
 
 - **Every human is now built on the new Woman and Man bodies.** NPCs and the character you create get their proportions, body shape and face, while height, weight, age, muscle, the face sliders, the other races, clothes and facial expressions all keep working as before. Crowds perform the same (same mesh size and detail levels).
 - **Better bending.** Humans now use the Woman's skin weights, so shoulders, elbows, hips and knees deform more smoothly. Jumps, flight and other procedural poses bend the legs at the real hip and knee instead of kinking the thigh and shin.
 - **Superman flight.** At speed the hero flies with the right fist stretched out ahead, the left arm straight back along the body with the hand flat against the thigh, legs together and toes pointed. Boosting still puts both fists forward.
 - The character creator can leave top, trousers or shoes off ("none"). Nude is an option only; new characters still start dressed.
+
+## 0.074 — 2026-10-06
+
+- **Manholes are climbed now, not teleported through.** Press E by a lid and the hero squats, lifts its edge and drags the heavy cover aside, turns round, lowers themselves over the edge and climbs down a ladder to the sewer's walkway, hands and feet on the rungs. From below, the hero walks to the ladder, climbs up, pushes the lid up and off if it is still on, and climbs out over the edge onto the street. Every manhole has a real brick shaft now, on one side of the sewer over the walkway, with the ladder on its wall and daylight falling in through the pick holes (more when the lid is off). The camera looks down the shaft from the street while the hero is in it and watches from inside the sewer below. An opened manhole stays open with its lid lying beside it, and the hole now cuts through the road surface too (before, an open manhole on the road was hidden under the asphalt).
+- The hole in the street is round like its lid, with a cast-iron frame and a round brick neck under it before the square shaft opens out; the ladder stands inside the neck. Over the edge, the hands lie flat on the street, palms down, until the hero is up on one knee, then they stand. Cars wait while the hero is busy at the hole instead of driving over them, the camera no longer squeezes into the hero's face in the sewer, the lid lifting off is watched from the street, and the "press E" prompt is hidden during the climb.
 
 ## 0.073 — 2026-10-06
 
