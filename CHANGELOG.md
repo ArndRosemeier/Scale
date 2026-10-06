@@ -2,6 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.060 — 2026-10-06
+
+- **Save to file and Load from file use your computer's own file dialogs** where the browser has them (Chrome, Edge and Opera on a desktop): you choose the folder and name of a saved game, and pick the file to open from a normal Open window that shows Scale saves first. The dialogs remember the folder you used last. In other browsers (Firefox, Safari, iPad) saving still downloads the file, and loading uses the browser's file chooser.
+
+## 0.059 — 2026-10-06
+
+- **Save a game to a file, and load it back from one.** The pause menu has two new buttons under Save game: **Save to file** downloads the game as it is right now as a small `.scale` file (named after the city, your save's name and the game time), and **Load from file…** opens a file and plays it. Every save in the Load game list also has a ⇩ button that downloads it. The start screen has **Load from file…** next to Load game (it is there even when the browser has no saves at all), and so does the game over screen. Use it to keep a game safe, carry it to another computer or browser, or send it to a friend. A game loaded from a file also lands in Your saves, so it can be continued later; loading the same file twice replaces the earlier copy rather than adding a second one. Files from older versions of the game still load, and a file that is not a save, is damaged or comes from a newer version gets a clear message instead.
+
+## 0.058 — 2026-10-06
+
+- **Long speech bubbles wrap now.** A longer line over someone's head used to run out of its bubble; now it breaks onto several lines and the bubble grows taller, for every kind of bubble (passers-by, street characters, officers, protesters and fans). Longer lines also stay up a little longer so you can read them.
+
 ## 0.057 — 2026-10-06
 
 - **Metro entrance stairs no longer go down and back up.** Where the street dipped or a sewer crossed the way, the passage from a station entrance sank, climbed again on a bare ramp and only then took the stairs down to the platform. The corridor under the street now only ever goes down (about 1 in 40 entrances was affected), and it no longer dips into its own station hall on the way (where it did, it cut through the hall's roof and lost its walls).
