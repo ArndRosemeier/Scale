@@ -79,7 +79,9 @@ export class Renderer {
 
   /** The WebGPU renderer needs an async start (device, adapter) before it can render. */
   async init(): Promise<void> {
-    if (this.webgpu) await (this.gl as unknown as { init(): Promise<unknown> }).init();
+    if (!this.webgpu) return;
+    await (this.gl as unknown as { init(): Promise<unknown> }).init();
+    gpuKit().flipPolygonOffsets(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['flipPolygonOffsets']>[0]);
   }
 
   setPixelRatio(pr: number): void {

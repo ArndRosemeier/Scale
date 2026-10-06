@@ -25,6 +25,32 @@ export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): 
   return new THREE.WebGPURenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true, forceWebGL });
 }
 
+/**
+ * Polygon offset with reversed depth: WebGLRenderer flips the slope factor when the depth buffer
+ * is reversed, three's WebGPU and WebGL2 backends do not, so decals and the street surfaces
+ * (polygonOffsetFactor -1: "nearer") would sink behind what they should cover. Flip it the same
+ * way. Call after `renderer.init()`, once the backend is chosen.
+ */
+export function flipPolygonOffsets(renderer: THREE.WebGPURenderer): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const backend = renderer.backend as any;
+  if (backend.pipelineUtils) {
+    const pu = backend.pipelineUtils;
+    const create = pu.createRenderPipeline.bind(pu);
+    pu.createRenderPipeline = (renderObject: { material: THREE.Material }, promises: unknown) => {
+      const m = renderObject.material;
+      if (!m.polygonOffset) return create(renderObject, promises);
+      const f = m.polygonOffsetFactor;
+      m.polygonOffsetFactor = -f;
+      try { return create(renderObject, promises); } finally { m.polygonOffsetFactor = f; }
+    };
+  } else if (backend.state?.setPolygonOffset) {
+    const st = backend.state;
+    const set = st.setPolygonOffset.bind(st);
+    st.setPolygonOffset = (on: boolean, factor: number, units: number) => set(on, -factor, units);
+  }
+}
+
 export function createPMREM(renderer: unknown): THREE.PMREMGenerator {
   return new THREE.PMREMGenerator(renderer as THREE.WebGPURenderer);
 }
