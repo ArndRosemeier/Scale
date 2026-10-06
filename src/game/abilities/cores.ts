@@ -4,7 +4,9 @@
  *  1. `planCoreSites(macro, terrain)`: the city-wide list from the macro plan. Metro platform
  *     and sewer walkway sites are exact already; roof / plaza / park sites name a cell.
  *  2. `resolveCoreSite(site, plan, terrain)`: the exact spot once that cell's plan exists
- *     (streamed in the game, `planCell` in tests) — a flat roof, a plaza or a park lawn.
+ *     (streamed in the game, `planCell` in tests) — a flat roof, a plaza or a park lawn, kept
+ *     clear of whatever stands there (fountains, statues, kiosks, trees, metro stairwells, rooftop
+ *     equipment): a core must never sit inside something solid where it can't be picked up.
  *
  * A mix of easy (plazas, parks) and hard spots (high roofs, deep platforms, sewers), so
  * some cores need powers (super jump, flight) to reach.
@@ -16,6 +18,8 @@ import type { CellPlan } from '../../plan/cell';
 import type { Shape } from '../../core/clip';
 import type { Terrain } from '../../world/terrain';
 import { buildingLayout } from '../../build/buildingLayout';
+import { roofEquipment, type RoofItem } from '../../build/buildingShell';
+import { propR } from '../../plan/terrace';
 import { sewerInvert } from '../../plan/underground';
 import { STATION_HW, PLATFORM_W, PLATFORM_H } from '../../underground/layout';
 import { CORES, ENERGY, KARMA } from './tuning';
@@ -120,13 +124,17 @@ export function resolveCoreSite(s: CoreSite, plan: CellPlan | null, terrain: Ter
   if (s.kind === 'roof') {
     const flat = plan.buildings.filter((b) => b.roof === 'flat' && b.floors >= 1);
     if (flat.length) {
-      // Height preference: sorted by height, pick around the site's preferred quantile.
+      // Height preference: sorted by height, pick around the site's preferred quantile (and its
+      // neighbours when equipment fills that roof).
       const L = flat.map((b) => ({ b, L: buildingLayout(b, terrain, 0) })).sort((p, q) => p.L.height - q.L.height || p.b.id - q.b.id);
-      const i = Math.min(L.length - 1, Math.floor(s.height * L.length));
-      const { L: lay } = L[i];
-      const top = lay.tiers[lay.tiers.length - 1].poly;
-      const pt = interiorPoint(top, [], rng);
-      if (pt) return { x: pt[0], y: lay.base + lay.height, z: pt[1], surface: 'roof' };
+      const i0 = Math.min(L.length - 1, Math.floor(s.height * L.length));
+      for (let k = 0; k < Math.min(L.length, 7); k++) {
+        const { b, L: lay } = L[i0 + (k & 1 ? (k + 1) >> 1 : -(k >> 1))] ?? L[i0];
+        const top = lay.tiers[lay.tiers.length - 1].poly, y = lay.base + lay.height;
+        const items = roofEquipment(b, top, y);
+        const pt = interiorPoint(top, [], rng, (x, z) => items.some((it) => onRoofItem(it, x, z, CLEAR)));
+        if (pt) return { x: pt[0], y, z: pt[1], surface: 'roof' };
+      }
     }
   }
   const order: Shape[][] = s.kind === 'park' ? [plan.parks, plan.plazas] : [plan.plazas, plan.parks];
@@ -134,15 +142,44 @@ export function resolveCoreSite(s: CoreSite, plan: CellPlan | null, terrain: Ter
     const list = shapes.filter((sh) => sh.outer.length >= 6);
     if (!list.length) continue;
     const sh = list[rng.int(0, list.length - 1)];
-    const pt = interiorPoint(sh.outer, sh.holes, rng, plan);
+    const pt = interiorPoint(sh.outer, sh.holes, rng, (x, z) => groundBlocked(plan, terrain, x, z));
     if (pt) return { x: pt[0], y: terrain.height(pt[0], pt[1]), z: pt[1], surface: 'ground' };
   }
   return null;
 }
 
-/** A point well inside a polygon (outside its holes and, with a plan, off buildings). */
-function interiorPoint(poly: number[], holes: number[][], rng: Rng, plan?: CellPlan): [number, number] | null {
-  const ok = (x: number, z: number) => pointInPoly(poly, x, z) && !holes.some((h) => pointInPoly(h, x, z)) && !(plan && plan.buildings.some((b) => pointInPoly(b.poly, x, z))) && edgeDist(poly, x, z) > 1.2;
+/** Free space kept between a core and anything solid (m). */
+const CLEAR = 1;
+
+/** Whether a ground spot is taken: buildings, props (fountains, statues, kiosks, …), metro stairwells, water. */
+function groundBlocked(plan: CellPlan, terrain: Terrain, x: number, z: number): boolean {
+  if (plan.buildings.some((b) => pointInPoly(b.poly, x, z))) return true;
+  const P = plan.props;
+  for (let i = 0; i < P.length; i += 6) {
+    if (P[i] === PROP_MANHOLE) continue; // flush with the ground
+    const r = propR(P[i]) * Math.max(1, P[i + 4]) + CLEAR;
+    const dx = P[i + 1] - x, dz = P[i + 2] - z;
+    if (dx * dx + dz * dz < r * r) return true;
+  }
+  const E = plan.entrances;
+  for (let i = 0; i < E.length; i += 6) if (Math.hypot(E[i] - x, E[i + 1] - z) < 3.5 + CLEAR) return true;
+  return terrain.isWater(x, z, 1);
+}
+const PROP_MANHOLE = 18;
+
+/** Whether (x, z) is on (or within m of) a piece of rooftop equipment. */
+function onRoofItem(it: RoofItem, x: number, z: number, m: number): boolean {
+  const dx = x - it.x, dz = z - it.z;
+  if (it.kind === 'tank') return Math.hypot(dx, dz) < it.hx + m;
+  // Box axes as in Collision: hx along (cos yaw, -sin yaw), hz across it.
+  const c = Math.cos(it.yaw), sn = Math.sin(it.yaw);
+  const u = dx * c - dz * sn, v = dx * sn + dz * c;
+  return Math.abs(u) < it.hx + m && Math.abs(v) < it.hz + m;
+}
+
+/** A point well inside a polygon (outside its holes and off anything `blocked`). */
+function interiorPoint(poly: number[], holes: number[][], rng: Rng, blocked: (x: number, z: number) => boolean): [number, number] | null {
+  const ok = (x: number, z: number) => pointInPoly(poly, x, z) && !holes.some((h) => pointInPoly(h, x, z)) && edgeDist(poly, x, z) > 1.2 && !blocked(x, z);
   const [cx, cz] = polyCentroid(poly);
   if (ok(cx, cz)) return [cx, cz];
   const [x0, z0, x1, z1] = polyBounds(poly);

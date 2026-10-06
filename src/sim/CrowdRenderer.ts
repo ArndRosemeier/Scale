@@ -137,6 +137,8 @@ export class CrowdRenderer {
   talking: ((a: PedAgent, time: number) => boolean) | null = null;
   /** Adjust a person's looks before they are built (game/street: body paint on living statues and mimes). */
   appearance: ((a: PedAgent, app: HumanoidAppearance) => void) | null = null;
+  /** Work clothes for someone (the priest, a clerk: sim/LandmarkCrowds), or null for their own. */
+  outfit: ((a: PedAgent) => EquipmentVisuals | null) | null = null;
   stats = { crowd: 0, rigs: 0 };
 
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
@@ -184,8 +186,10 @@ export class CrowdRenderer {
     const female = c.gender < 0.5;
     const formal = c.role === Role.Worker ? 0.45 : 0.08;
     // Actors may wear a uniform (police).
-    const eq = a.actor?.outfit ?? cityOutfit(c.seed, c.gender, c.age, formal, 0.3);
-    const held = heldItem(c.seed);
+    const work = a.actor?.outfit ? null : this.outfit?.(a) ?? null;
+    const eq = a.actor?.outfit ?? (work ? { ...work } : cityOutfit(c.seed, c.gender, c.age, formal, 0.3));
+    // (Nothing in the hand at work.)
+    const held = work ? undefined : heldItem(c.seed);
     if (held) eq.mainhand = held;
     const kind = eq.back?.defId === 'suitjacket' ? 'suit' : eq.back?.defId === 'coat' ? 'coat' : eq.chest?.defId === 'dress' ? 'dress' : eq.legs?.defId === 'skirt' ? 'skirt' : eq.back?.defId === 'jacket' ? 'jacket' : 'casual';
     let ti = this.templates.findIndex((t) => t.female === female && t.outfit === kind);
