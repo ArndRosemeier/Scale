@@ -68,6 +68,9 @@ export class Collision {
     ceilingAt(x: number, y: number, z: number): number;
   } | null = null;
 
+  /** Set by the player while running at super speed: holes in the street (manholes, stairwells) carry the feet. */
+  skimHoles = false;
+
   private refsG: BuildingRef[] = [];
   /** Entrance steps per building (refs die with their cell, so this frees itself). */
   private stoops = new WeakMap<BuildingRef, Stoop | null>();
@@ -134,7 +137,7 @@ export class Collision {
     let g = this.world.terrain.height(x, z) + this.world.surfaceOffset(x, z);
     if (this.under) {
       const uf = this.under.floorAt(x, yRef + 0.3, z);
-      if (this.under.inHole(x, z)) return uf ?? g - 8;
+      if (this.under.inHole(x, z)) return this.skimHoles && yRef > g - 0.5 ? g : uf ?? g - 8;
       // Below the street only underground floors count; over none (track pit, gap, or a jump that
       // left the hall's volume) keep falling - never pop up to the street (a jump in a station
       // used to land the player on the street above).
