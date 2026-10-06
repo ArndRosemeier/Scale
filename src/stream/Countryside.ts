@@ -19,6 +19,7 @@ import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFa
 import { TERRAIN_ROOT } from '../world/boundary';
 import type { Obstacle } from '../world/Collision';
 import { hash32, hashToFloat } from '../core/rng';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 /** Full tree models nearer than this (m). */
 const NEAR = 75;
@@ -378,6 +379,7 @@ function clumpGeometry(conifer: boolean): THREE.BufferGeometry {
 
 /** Clump material: instance colour, darker towards the base of the crown. */
 function createClumpMaterial(): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().createClumpNodeMaterial() as unknown as THREE.MeshStandardMaterial;
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader

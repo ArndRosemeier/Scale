@@ -12,6 +12,10 @@ import { createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMat
 import { clearGlassNodeMaterial, clearGlassElemNodeMaterial, skylineNodeMaterial } from './city';
 
 export { clearGlassNodeMaterial, clearGlassElemNodeMaterial, skylineNodeMaterial };
+import { undergroundTrainNodeMaterial, deepCaveNodeMaterial, deepFallsNodeMaterial, deepMotesNode, deepShardNodeMaterial } from './underground';
+export { undergroundTrainNodeMaterial, deepCaveNodeMaterial, deepFallsNodeMaterial, deepMotesNode, deepShardNodeMaterial };
+import { createBarkNodeMaterial, createLeafNodeMaterial, createFarTreeNodeMaterial, createClumpNodeMaterial } from './vegetation';
+export { createBarkNodeMaterial, createLeafNodeMaterial, createFarTreeNodeMaterial, createClumpNodeMaterial };
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 
 export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): THREE.WebGPURenderer {

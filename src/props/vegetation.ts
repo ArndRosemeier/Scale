@@ -20,6 +20,7 @@
 import * as THREE from 'three';
 import { Rng, hash2i, hashToFloat } from '../core/rng';
 import { Noise } from '../core/noise';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export type TreeSpecies = 'plane' | 'linden' | 'maple' | 'oak' | 'birch' | 'pine' | 'palm' | 'cypress' | 'chestnut' | 'ginkgo';
 export const TREE_SPECIES: TreeSpecies[] = ['plane', 'linden', 'maple', 'oak', 'birch', 'pine', 'palm', 'cypress', 'chestnut', 'ginkgo'];
@@ -1743,6 +1744,7 @@ export function applyVegetationShadow(mesh: THREE.Mesh) {
 
 export function createBarkMaterial(): THREE.MeshStandardMaterial {
   const tex = getBarkTextures();
+  if (WEBGPU) return gpuKit().createBarkNodeMaterial(tex.map, tex.normal, BARK_STRIPS, vegetationUniforms) as unknown as THREE.MeshStandardMaterial;
   const m = new THREE.MeshStandardMaterial({
     map: tex.map,
     normalMap: tex.normal,
@@ -1797,6 +1799,7 @@ export function createLeafMaterial(species?: TreeSpecies): THREE.MeshStandardMat
   m.shadowSide = THREE.DoubleSide;
   const autumn = AUTUMN.map((a) => new THREE.Vector4(srgbToLin(a[0]), srgbToLin(a[1]), srgbToLin(a[2]), a[3]));
   const trans = species === 'pine' || species === 'cypress' ? 0.35 : 0.85;
+  if (WEBGPU) return gpuKit().createLeafNodeMaterial(tex, autumn, trans, vegetationUniforms) as unknown as THREE.MeshStandardMaterial;
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSeason = vegetationUniforms.uSeason;
     shader.uniforms.uAutumn = { value: autumn };
@@ -1867,6 +1870,7 @@ export function createLeafMaterial(species?: TreeSpecies): THREE.MeshStandardMat
 }
 
 export function createFarTreeMaterial(): THREE.Material {
+  if (WEBGPU) return gpuKit().createFarTreeNodeMaterial(vegetationUniforms) as unknown as THREE.Material;
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSeason = vegetationUniforms.uSeason;
