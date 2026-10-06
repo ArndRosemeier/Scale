@@ -125,6 +125,8 @@ const GROUND_REUSE = 0.4;
 const ACTOR_RESERVE = 48;
 const SCAN_R = 480;
 const DESPAWN_R = 620;
+/** A remembered person's body appears at most this far from where they plausibly are (m). */
+const PIN_R = 40;
 const HASH = 1 << 14;
 
 interface Pending { cit: Citizen; trip: Trip }
@@ -324,7 +326,13 @@ export class Pedestrians {
     };
     // Place along the route by progress.
     if (this.pendingCarDest) { a.carDest = this.pendingCarDest; this.pendingCarDest = null; }
-    if (progress > 0) this.advanceAlong(a, progress * routeLength(route));
+    // (A remembered person appears only near where they plausibly are, not where the schedule ran ahead to.)
+    const pin = this.placeFor?.(c);
+    if (pin) {
+      const at = routeNearest(route, pin.x, pin.z);
+      if (at.d > PIN_R) return;
+      this.advanceAlong(a, at.along);
+    } else if (progress > 0) this.advanceAlong(a, progress * routeLength(route));
     // (Already under way: not where an alert keeps people indoors either.)
     if (progress > 0 && this.shelter?.(a.x, a.z, a.x, a.z)) return;
     a.y = this.groundY(a.x, a.z, a.onRoad, a.heading);
@@ -338,6 +346,11 @@ export class Pedestrians {
   onArrive?: (a: PedAgent) => boolean;
   /** Called when an agent reaches its parked car (trip continues by car). */
   onCarReady?: (a: PedAgent) => void;
+  /**
+   * Where a citizen plausibly is now (a remembered person: People keeps them moving at walking
+   * pace), or null: wherever the schedule says. Their schedule's body only appears near it.
+   */
+  placeFor?: (c: Citizen) => { x: number; z: number } | null;
   /** A trip from a to b is not started (people stay where they are: an alert over the district). */
   shelter?: (ax: number, az: number, bx: number, bz: number) => boolean;
 
@@ -714,6 +727,8 @@ export class Pedestrians {
   /** A citizen placed inside a building (sitting, sleeping or standing). */
   spawnInside(c: Citizen, x: number, y: number, z: number, yaw: number, pose: 'sit' | 'sleep' | 'stand'): void {
     if (this.byId.has(c.id)) return;
+    const pin = this.placeFor?.(c);
+    if (pin && Math.hypot(pin.x - x, pin.z - z) > PIN_R * 2) return;
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y, heading: yaw, speed: 0, pref: 1.3, state: pose === 'sit' ? PState.Sit : pose === 'sleep' ? PState.Sleep : PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: x, lookZ: z, lookY: y,
@@ -764,6 +779,19 @@ function dist2(r: BuildingRef, x: number, z: number): number {
 }
 function hashCell(i: number, j: number): number {
   return (Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) & (HASH - 1);
+}
+/** The route point nearest (x, z): its distance and how far along the route it lies. */
+export function routeNearest(r: Float32Array, x: number, z: number): { d: number; along: number } {
+  let best = Math.hypot(r[0] - x, r[1] - z), along = 0, run = 0;
+  for (let i = 3; i < r.length; i += 3) {
+    const ax = r[i - 3], az = r[i - 2], dx = r[i] - ax, dz = r[i + 1] - az;
+    const l = Math.hypot(dx, dz);
+    const t = l > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (l * l))) : 0;
+    const d = Math.hypot(ax + dx * t - x, az + dz * t - z);
+    if (d < best) { best = d; along = run + l * t; }
+    run += l;
+  }
+  return { d: best, along };
 }
 function routeLength(r: Float32Array): number {
   let s = 0;

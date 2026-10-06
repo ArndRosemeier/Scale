@@ -1238,7 +1238,8 @@ matching line, avoids repeats, fills tokens, and defines `TalkBackend` (rules no
 `Population.stateAt` finds them anywhere), opinion = own deeds + reputation × agreeableness, save sanitising.
 `People.ts` ties it to the game: E talks (Game.manholeKey, after standing up from a seat; `TALK_OWNER` actor faces
 the hero), Deeds.onHelped and Reactions.onKnockDown feed memory, known people greet you as you pass, the `people` map
-layer draws `faint` dots (live agent, else the day plan's place via `Pedestrians.placeSpot`). Kept per city in
+layer draws `faint` dots (live agent, else their last place moving towards the day plan's at a walk, `onTheirWay`;
+the plan runs at the day's speed, far faster). `Pedestrians.placeFor` lets their body appear only near that point. Kept per city in
 localStorage (`scale.people.v1.*`) and in saves (`SaveData.people`). `dev.people.list()` / `.forget()`.
 
 ### Fame (`src/game/fame`)

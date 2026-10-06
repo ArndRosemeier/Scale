@@ -24,7 +24,26 @@ export const PEOPLE = {
   talk: 2, talkMax: 10, helped: 25, saved: 40, hurt: -30,
   /** Reputation's weight in the opinion: base + agreeableness × this. */
   repBase: 0.15, repAgree: 0.35,
+  /**
+   * Out of sight, a known person heads for where their day plan has them at a walking pace (m/s,
+   * real time; the plan itself runs at the day's speed, many times faster), or riding (car, metro,
+   * taxi) when both they and that place are this far from you (m).
+   */
+  walk: 1.5, ride: 9, rideFrom: 400,
 } as const;
+
+/**
+ * One step (dt real seconds) of a known person out of sight, from (x, z) towards their day plan's
+ * place (tx, tz), with the hero at (px, pz): never faster than a walk anywhere near you.
+ */
+export function onTheirWay(x: number, z: number, tx: number, tz: number, px: number, pz: number, dt: number): { x: number; z: number } {
+  const dx = tx - x, dz = tz - z, d = Math.hypot(dx, dz);
+  if (d < 1e-3 || !(dt > 0)) return { x, z };
+  const R = PEOPLE.rideFrom;
+  const ride = d > R && Math.hypot(x - px, z - pz) > R && Math.hypot(tx - px, tz - pz) > R;
+  const step = Math.min(d, (ride ? PEOPLE.ride : PEOPLE.walk) * dt);
+  return { x: x + (dx / d) * step, z: z + (dz / d) * step };
+}
 
 export type Deed = 'talked' | 'helped' | 'saved' | 'hurt';
 
