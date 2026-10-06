@@ -76,7 +76,7 @@ export const TERRACE_PALETTE: [number, number, number][][] = [
 
 /** Prop radii used for clearance (chairs, tables, …) and of the furniture already there. */
 const R_CHAIR = 0.24, R_TABLE = 0.38, R_PLANTER = 0.45;
-const propR = (t: number): number =>
+export const propR = (t: number): number =>
   t === PT.Tree ? 1.1 : t === PT.Fountain ? 4 : t === PT.Statue ? 2.2 : t === PT.Kiosk ? 2 : t === PT.PlayGround ? 5
     : t === PT.Bench ? 1.1 : t === PT.Lamp || t === PT.TrafficLight || t === PT.StopSign ? 0.4 : t === PT.Bush || t === PT.Hedge ? 0.9 : 0.6;
 

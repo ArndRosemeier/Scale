@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.067 — 2026-10-06
+
+- **Power cores no longer hide inside things.** A core on a square or in a park used to sit exactly in the middle, which is where the fountain or statue stands, so it ended up inside the fountain where nobody could reach it (about a third of all cores in a sweep of 16 cities were buried like that). Cores now keep clear of fountains, statues, kiosks, trees, playgrounds, benches, café terraces, metro stairwells and water, and a core on a roof keeps clear of the air-conditioning units, water tanks and lift housings up there. `npx tsx tools/coresweep.ts <sizes> <seedA-seedB>` checks every core of many cities headlessly.
+
 ## 0.066 — 2026-10-06
 
 - **The Lumen's trench holds steadier**: when two or more of their spots are empty, fresh sentries now come every 2.5 s (was 7 s) from right behind the line instead of the floor of the Throat, so a lucky Murk push no longer snowballs into the whole line falling. The headless trench test is now repeatable (its dice are seeded per city).
