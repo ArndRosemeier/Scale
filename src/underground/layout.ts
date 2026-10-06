@@ -202,7 +202,7 @@ export function entranceRoute(b: Box, gx: number, gz: number, ux: number, uz: nu
     // Too steep a stair (the corridor had to dive right behind the opening) counts as blocked.
     let steep = 0;
     for (let i = 0; i + 5 < r.pts.length; i += 3) if (Math.abs(r.pts[i + 4] - r.pts[i + 1]) > 0.65 * Math.hypot(r.pts[i + 3] - r.pts[i], r.pts[i + 5] - r.pts[i + 2]) + 1e-6) steep++;
-    const hits = (env.blocked ? routeHits(r.pts, env.blocked) : 0) + steep * 1000;
+    const hits = (env.blocked ? routeHits(r.pts, env.blocked) : 0) + ownHallHits(b, r.pts) + steep * 1000;
     if (hits < bestHits) { best = r; bestHits = hits; }
     if (hits === 0) return r;
   }
@@ -215,6 +215,25 @@ export interface RouteEnv {
   cap?: (x: number, z: number) => number;
   /** Does the walking space at (x, feet y, z) cut through another volume? */
   blocked?: (x: number, y: number, z: number) => boolean;
+}
+
+/**
+ * Samples (one a metre) where an entrance passage runs through its own hall above the platform:
+ * a corridor pushed down (under a sewer) while still over the hall would cut through its roof.
+ * Only the stub through the doorway, at platform level, belongs inside.
+ */
+export function ownHallHits(b: Box, pts: number[]): number {
+  const sy = b.y0 + PLATFORM_H;
+  let hits = 0;
+  for (let i = 0; i + 5 < pts.length; i += 3) {
+    const L = Math.hypot(pts[i + 3] - pts[i], pts[i + 5] - pts[i + 2]), n = Math.max(1, Math.ceil(L));
+    for (let k = 0; k < n; k++) {
+      const f = k / n, x = pts[i] + (pts[i + 3] - pts[i]) * f, y = pts[i + 1] + (pts[i + 4] - pts[i + 1]) * f, z = pts[i + 2] + (pts[i + 5] - pts[i + 2]) * f;
+      const dx = x - b.cx, dz = z - b.cz, u = dx * b.ux + dz * b.uz, v = -dx * b.uz + dz * b.ux;
+      if (Math.abs(u) < b.hu + PASSAGE_HW && Math.abs(v) < b.hv + PASSAGE_HW - 0.1 && y > sy + 0.3 && y < b.y1 + 0.2) hits++;
+    }
+  }
+  return hits;
 }
 
 function routeHits(pts: number[], blocked: (x: number, y: number, z: number) => boolean): number {
