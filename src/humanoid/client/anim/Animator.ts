@@ -1116,7 +1116,7 @@ export class Animator {
       // Superman: the right fist stretched straight ahead past the head, the left arm straight
       // back along the body with the hand flat against the thigh (both fists ahead when
       // boosting), legs together and straight, toes pointed, back arched, head up.
-      q.arm('R', 2.95, 0.28, 0, 0.02, 0.15, 0);
+      q.arm('R', 3.25, 0.2, 0, 0.02, 0.15, 0);
       q.arm('L', -0.1 + 3.05 * boost, 0.04 + 0.24 * boost, 0, 0.02, 0.15 * boost, 0);
       q.add('clavicle.R', -0.25, 0, 0);
       q.add('clavicle.L', -0.25 * boost, 0, 0);
