@@ -25,7 +25,13 @@ export interface LifeReport {
 }
 
 /** Run station life around the hall `hallIdx` for `secs` seconds. */
-export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallIdx: number, secs: number): LifeReport {
+/**
+ * `slow` (0 … 1) holds people back in the doors (a crowd, the player in the way): boarding and
+ * alighting walk at that fraction of their pace, so the doors shut on some of them. `shove`: every few
+ * seconds someone waiting is made to walk at the tracks for a while, and someone else is put down
+ * on the track bed (as if knocked off the platform): neither may stay there.
+ */
+export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallIdx: number, secs: number, slow = 1, shove = false): LifeReport {
   const { input } = metroInput(macro, terrain);
   const halls = input.halls;
   const tubes: Tube[] = [...macro.metroLines.map(metroTube), ...input.sewers, ...(input.passages ?? []).map((p) => p.tube)];
@@ -67,6 +73,8 @@ export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallId
   const rep: LifeReport = { spawned: 0, boarded: 0, alighted: 0, left: 0, crossed: 0, stuck: 0, onTracks: 0, offFloor: 0, floorGap: 0, halls: 0 };
   const dt = 1 / 30;
   const bad = new Set<PedAgent>();
+  const pushed = new Map<PedAgent, { left: number; b: (typeof halls)[number] }>(), dropped = new Set<PedAgent>();
+  const knocked = new Map<PedAgent, { up: number; b: (typeof halls)[number] }>();
   for (let t = 0; t < secs; t += dt) {
     // Pedestrians first (as in the game), then the trains move, then station life places its riders.
     P.rebuildGrid();
@@ -83,9 +91,45 @@ export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallId
       } });
     });
     life.update(dt, px, py, pz);
+    if (slow < 1) for (const q of life.list) if ((q.mode === 'board' || q.mode === 'alight') && q.a.actor) q.a.actor.speed *= slow;
+    if (shove) {
+      const waiting = life.list.filter((q) => q.mode === 'wait' && !q.seated && q.hall >= 0 && !bad.has(q.a));
+      if (Math.floor(t / 4) !== Math.floor((t - dt) / 4) && waiting.length >= 3) {
+        pushed.set(waiting[0].a, { left: 3, b: halls[waiting[0].hall] });
+        const q = waiting[1], b = halls[q.hall];
+        q.a.x = b.cx; q.a.z = b.cz; q.a.y = b.y0;
+        dropped.add(q.a);
+        // Knocked flying at the tracks (as by a blow); up again after a while (CrimeSystem's upkeep).
+        const k = waiting[2].a, kb = halls[waiting[2].hall], d = Math.hypot(kb.cx - k.x, kb.cz - k.z) || 1;
+        k.state = PState.Down; k.stateT = 0; k.vx = (kb.cx - k.x) / d * 4; k.vz = (kb.cz - k.z) / d * 4; k.vy = 2.5;
+        knocked.set(k, { up: t + 2.5, b: kb });
+      }
+      // Knocked over inside a train standing at the platform, lying there as it pulls out.
+      const rider = life.list.find((q) => q.mode === 'ride' && !knocked.has(q.a) && halls.some((b) => boxAt(b, q.a.x, q.a.y + 0.5, q.a.z)));
+      if (rider && Math.floor(t / 4) !== Math.floor((t - dt) / 4)) {
+        const kb = halls.find((b) => boxAt(b, rider.a.x, rider.a.y + 0.5, rider.a.z))!;
+        rider.a.state = PState.Down; rider.a.stateT = 0; rider.a.vx = rider.a.vz = 0; rider.a.vy = 0.5;
+        knocked.set(rider.a, { up: t + 30, b: kb });
+      }
+      for (const [k, w] of knocked) {
+        if (k.state === PState.Down && t >= w.up) { k.state = PState.Idle; k.vx = k.vz = k.vy = 0; k.stateT = 0; }
+        if (t < w.up + 0.2) continue;
+        knocked.delete(k);
+        // Up again: not on the track bed (if still one of the commuters or not).
+        const h = boxAt(w.b, k.x, k.y + 0.5, k.z);
+        if (k.alive && h && Math.abs(h.v) < PLATFORM_EDGE - 0.3 && k.y < w.b.y0 + 0.5) rep.onTracks++;
+      }
+      for (const [a, p] of pushed) {
+        if (p.left <= 0 || !a.actor) { pushed.delete(a); continue; }
+        p.left -= dt;
+        a.actor.goal = { x: p.b.cx * 2 - a.x, z: p.b.cz * 2 - a.z };
+        a.actor.speed = 1.4;
+      }
+    }
     // Walkers stay on floors: never down on the tracks, never off a floor.
     for (const q of life.list) {
       if (q.mode === 'ride' || bad.has(q.a)) continue;
+      if (dropped.delete(q.a) || knocked.has(q.a)) continue;
       const a = q.a, f = floorAt(a.x, a.y + 0.5, a.z);
       if (f === null) { rep.offFloor++; bad.add(a); continue; }
       if (t > 1) rep.floorGap = Math.max(rep.floorGap, Math.abs(f - a.y));
@@ -93,7 +137,7 @@ export function runLife(macro: MacroPlan, terrain: Terrain, seed: number, hallId
         const h = boxAt(b, a.x, a.y + 0.5, a.z);
         if (h && Math.abs(h.v) < PLATFORM_EDGE - 0.3 && a.y < b.y0 + 0.5 && !cars.some((c) => Math.abs(carLocal(c, a.x, a.y, a.z).u) < CAR_L / 2 && Math.abs(carLocal(c, a.x, a.y, a.z).v) < CAR_W / 2)) { rep.onTracks++; bad.add(a); }
       }
-      if (a.state === PState.Down) bad.add(a);
+      if (a.state === PState.Down && !knocked.has(a)) bad.add(a);
     }
   }
   Object.assign(rep, life.stats);

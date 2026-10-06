@@ -132,6 +132,8 @@ const SCAN_R = 480;
 const DESPAWN_R = 620;
 /** A remembered person's body appears at most this far from where they plausibly are (m). */
 const PIN_R = 40;
+/** Underground walkers never step down further than this (off a platform onto the tracks). */
+const UNDER_DROP = 0.6;
 const HASH = 1 << 14;
 
 interface Pending { cit: Citizen; trip: Trip }
@@ -590,7 +592,8 @@ export class Pedestrians {
       if (a.under) {
         // (Not through the walls: only onto floor there is.)
         const f = this.underFloor?.(a.x + a.vx * dt, a.y + 0.5, a.z + a.vz * dt) ?? null;
-        if (f !== null && f <= a.y + 0.5) { a.x += a.vx * dt; a.z += a.vz * dt; } else { a.vx = a.vz = 0; }
+        const f0 = this.underFloor?.(a.x, a.y + 0.5, a.z) ?? f;
+        if (f !== null && f <= a.y + 0.5 && (f0 ?? f) - f < UNDER_DROP) { a.x += a.vx * dt; a.z += a.vz * dt; } else { a.vx = a.vz = 0; }
       } else { a.x += a.vx * dt; a.z += a.vz * dt; }
       a.y += a.vy * dt;
       const g = a.under ? this.underFloor?.(a.x, a.y + 0.6, a.z) ?? a.y : this.groundOf(a, NaN, a.y);
@@ -705,8 +708,9 @@ export class Pedestrians {
     if (sp > maxSp) { vx *= maxSp / sp; vz *= maxSp / sp; }
     a.speed += (Math.hypot(vx, vz) - a.speed) * Math.min(1, dt * 4);
     if (a.under) {
-      // Underground: only where there is floor within a step (else slide along the wall, or stop).
-      const ok = (x: number, z: number) => { const f = this.underFloor?.(x, a.y + 0.5, z) ?? null; return f !== null && f - a.y < 0.45; };
+      // Underground: only where there is floor within a step up or down (else slide along the wall,
+      // or stop): never off a ledge (a platform's edge onto the tracks).
+      const ok = (x: number, z: number) => { const f = this.underFloor?.(x, a.y + 0.5, z) ?? null; return f !== null && f - a.y < 0.45 && a.y - f < UNDER_DROP; };
       if (ok(a.x + vx * dt, a.z + vz * dt)) { a.x += vx * dt; a.z += vz * dt; }
       else if (ok(a.x + vx * dt, a.z)) { a.x += vx * dt; vz = 0; }
       else if (ok(a.x, a.z + vz * dt)) { a.z += vz * dt; vx = 0; }

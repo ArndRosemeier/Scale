@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.077 — 2026-10-06
+
+- **No more walls to walk through in the metro entrances.** Two things from above could stand across an entrance passage as a wall without substance:
+  - The ground is drawn in square tiles, and along every tile edge a curtain hangs a few metres into the earth to hide the seams. It was hidden only once the camera itself was underground, so in a corridor right under the street the camera, still at street level, showed it across the way. It now stays hidden whenever you are in a stairwell or passage.
+  - The shafts of the sewer manholes run from the sewer straight up to the street, through anything in between. They now keep clear of metro tunnels, halls and side rooms, and of the ground around every station where its stairs run.
+- **Nobody walks on the tracks any more.** Commuters can no longer step off the edge of a platform. People halfway through a door when it shuts stay on the train. Someone knocked over in a train standing at a platform, or knocked off the platform, no longer gets up on the track bed and wanders there: they are lifted back onto the platform and go back to waiting.
+
 ## 0.076 — 2026-10-06
 
 - **Every human is now built on the new Woman and Man bodies.** NPCs and the character you create get their proportions, body shape and face, while height, weight, age, muscle, the face sliders, the other races, clothes and facial expressions all keep working as before. Crowds perform the same (same mesh size and detail levels).
