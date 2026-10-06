@@ -36,7 +36,7 @@ import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } fro
 import { parseStemManifest } from '../src/audio/music/StemPlayer';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
-import { Justice } from '../src/game/crime/Justice';
+import { Justice, JUSTICE } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
 import { ATTRACTION_KINDS, inSite, siteToWorld, siteRect, marvelDesign, marvelCount, type Landmark } from '../src/plan/landmarks';
 import { landmarkParts, partOutline, solidFootprints, partObstacles, helixFloorAt, PK } from '../src/plan/landmarkParts';
@@ -1590,11 +1590,36 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(u.crew < 6 && u.crew > 0 && q.morale < ARMY.breakAt && moraleStep(q, 0.5) !== 'ok', `army: losses drop a squad's morale until the line breaks (${u.crew} left, morale ${q.morale.toFixed(2)})`);
   }
 
+  // Fame (game/fame): the press, fans and protesters by the reputation; the statue voted, built,
+  // unveiled and pulled down; the justice layer's manhunt at the bottom.
+  {
+    const { FAME, StatueClock, pressCount, protestSize, remarkKind, tvCrew } = await import('../src/game/fame/fameRules');
+    check(pressCount(FAME.pressAt - 1) === 0 && pressCount(FAME.pressAt) === 1 && pressCount(100) === 3 && !tvCrew(FAME.tvAt - 1) && tvCrew(FAME.tvAt),
+      'fame: no press below the threshold, one photographer at it, three for a city hero; a TV crew from its own threshold');
+    check(protestSize(0) === 0 && protestSize(-1) === 3 && protestSize(-50) > protestSize(-10) && protestSize(-100) === 12 && remarkKind(50) === 'hail' && remarkKind(-5) === 'boo' && remarkKind(10) === null,
+      `fame: protests only below 0, bigger the more hated (${protestSize(-1)}, ${protestSize(-50)}, ${protestSize(-100)}); passers-by hail a hero, boo a hated one`);
+    const run = (C: InstanceType<typeof StatueClock>, secs: number, rep: number) => { const out: string[] = []; for (let t = 0; t < secs; t += 0.5) { const x = C.step(0.5, rep); if (x) out.push(x); } return out; };
+    const C = new StatueClock();
+    const a = [...run(C, FAME.statueHold - 5, 90), ...run(C, 10, 70), ...run(C, FAME.statueHold + 1, 90)];
+    const b = run(C, FAME.buildT + 1, 60);
+    const c = [...run(C, FAME.toppleHold - 5, -10), ...run(C, 10, 5), ...run(C, FAME.toppleHold + 1, -10)];
+    check(a.join() === 'voted' && b.join() === 'unveiled' && C.stats.unveiled === 1 && c.join() === 'toppled' && C.state === 'toppled',
+      `fame: the statue is voted only after the reputation held high, built, unveiled, and pulled down only after it held below 0 (${[...a, ...b, ...c].join(' → ')})`);
+    const D = new StatueClock();
+    run(D, FAME.statueHold + 1, 90);
+    const d = run(D, FAME.toppleHold + 1, -20);
+    const E = new StatueClock();
+    E.restore(JSON.parse(JSON.stringify(C.serialize())));
+    E.restore({ state: 'bogus', t: 'x' });
+    check(d.join() === 'cancelled' && D.state === 'none' && E.state === 'none' && run(C, FAME.statueHold + 1, 95).join() === 'voted',
+      'fame: a statue being built for a hero who falls from grace is called off; a pulled-down one is rebuilt when the city loves them again; bad saves are ignored');
+  }
+
   // The army against a rampaging giant player (PLAYGROUND_PLAN decision 19): the warning sequence,
   // standing down, a relapse; the army ringing a giant, following one who walks off, wearing a
   // passive one down in a bounded time.
   {
-    const { RAMPAGE, RampageWatch, furyOf, simulatePlayerBattle, playerPath, playerSpawn } = await import('../src/game/threats/rampageRules');
+    const { RAMPAGE, RampageWatch, furyOf, furyScale, ladderTop, simulatePlayerBattle, playerPath, playerSpawn } = await import('../src/game/threats/rampageRules');
     const { ARMY } = await import('../src/game/response/forces/BattleModel');
     const run = (W: InstanceType<typeof RampageWatch>, secs: number, perS: number, height = 20, rep = -60) => {
       const out: string[] = [];
@@ -1610,11 +1635,16 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(seq[0] === 'warn' && seq[1] === 'final' && seq[2] === 'hostile' && W1.state === 'hostile', `rampage: warning, final warning, then the army (${seq.join(' → ')})`);
     const tHostile = (() => { const W = new RampageWatch(); for (let t = 0; t < 200; t += 0.5) if (W.step(0.5, 0.25, 20, -60) === 'hostile') return t; return -1; })();
     check(tHostile >= RAMPAGE.gap * 2, `rampage: never hostile before both warnings had their time (${tHostile} s ≥ ${RAMPAGE.gap * 2} s)`);
-    // Not for a human-sized player, nor for one the city does not fear.
-    check(run(new RampageWatch(), 120, 0.5, 2).length === 0 && run(new RampageWatch(), 120, 0.5, 20, 10).length === 0, 'rampage: no warnings for a human-sized player or a giant with a decent reputation');
+    // Not for a player the city does not fear, of any size; a feared human-sized one is warned too
+    // (and gets the police, SWAT and the Guard at most); the lower the reputation, the sooner.
+    const small = run(new RampageWatch(), 120, 0.5, 1.8);
+    check(run(new RampageWatch(), 120, 0.5, 20, 10).length === 0 && run(new RampageWatch(), 120, 0.5, 1.8, -10).length === 0, 'rampage: no warnings for a player with a decent reputation, giant or not');
+    check(small[0] === 'warn' && small.includes('hostile') && ladderTop(1.8) === 3 && ladderTop(20) === 5, `rampage: a feared human-sized player is warned and then hunted, up to the National Guard (${small.join(' → ')})`);
+    const firstWarn = (rep: number) => { const W = new RampageWatch(); for (let t = 0; t < 200; t += 0.5) if (W.step(0.5, 0.1, 1.8, rep) === 'warn') return t; return -1; };
+    check(furyScale(RAMPAGE.rep) === 1 && Math.abs(furyScale(-100) - RAMPAGE.lowScale) < 1e-9 && firstWarn(-95) > 0 && firstWarn(-95) < firstWarn(-45), `rampage: the lower the reputation, the less destruction brings the warnings (${firstWarn(-95)} s at −95, ${firstWarn(-45)} s at −45)`);
     // Stopping after the first warning: the warnings lapse, no army.
     const W2 = new RampageWatch();
-    const s2 = [...run(W2, 6, 2), ...run(W2, 200, 0)];
+    const s2 = [...run(W2, 6, 2, 20, RAMPAGE.rep), ...run(W2, 200, 0, 20, RAMPAGE.rep)];
     check(s2[0] === 'warn' && s2.includes('lapse') && !s2.includes('hostile') && W2.state === 'calm', `rampage: stopping after a warning lets it lapse (${s2.join(' → ')})`);
     // Hostile, then standing down: quiet for a while, or human-sized again.
     const W3 = new RampageWatch();
@@ -1624,7 +1654,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     run(W4, 120, 0.5);
     const early = run(W4, RAMPAGE.minHostile - 90, 0, 1.8);
     const s4 = run(W4, 160, 0.5, 1.8);
-    check(s3.includes('standDown') && W3.state === 'calm' && s4.includes('standDown'), 'rampage: standing down ends it (no destruction for a while, or human-sized again)');
+    // (Shrinking stands down a giant's rampage only: a human-sized one has to stop.)
+    const W4b = new RampageWatch();
+    run(W4b, 120, 0.5, 1.8);
+    run(W4b, RAMPAGE.minHostile - 90, 0.2, 1.8);
+    const s4b = run(W4b, 160, 0.2, 1.8);
+    check(s3.includes('standDown') && W3.state === 'calm' && s4.includes('standDown') && !s4b.includes('standDown'), 'rampage: standing down ends it (no destruction for a while, or a giant human-sized again)');
     check(early.length === 0, `rampage: once mobilised the army keeps at it for ${RAMPAGE.minHostile} s at least (the Guard and the tanks get there)`);
     // A relapse soon after: the army comes back without new warnings; much later, warnings again.
     const r1 = run(W3, 30, 0.6);
@@ -2315,6 +2350,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const m = new Justice({ ...host, witnesses: () => 5 });
   m.record({ ...e('collapse', {}, 6), cause: 'threat' });
   check(m.stats.collapses === 0 && m.heat === 0, "justice: a monster's collapse is not booked to the player");
+  // A manhunt for a public menace: an officer close by is enough (no offence), not for a merely disliked hero.
+  let hunted = 0;
+  const hunt = (repV: number) => { const H = new Justice({ ...host, time: 100, officersNear: () => 1, repValue: () => repV, pursue: () => { hunted++; } }); H.update(0.5); return H.wanted; };
+  check(hunt(JUSTICE.manhunt - 5) === 1 && hunt(JUSTICE.manhunt + 15) === 0 && hunted > 0, 'justice: a public menace is hunted by the first officer who sees them; a disliked hero is not');
 }
 
 // Landmarks (plan/landmarks.ts, plan/landmarkParts.ts): deterministic; a town hall and a stadium in

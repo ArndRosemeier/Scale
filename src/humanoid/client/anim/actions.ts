@@ -617,6 +617,50 @@ function offer(p: Pose, t: number) {
   p.spine(-0.05 * u, -0.1 * u);
 }
 
+/** A press photographer: the camera up at the eye in both hands (a 3 s cycle: down a moment, up, shoot). */
+function takePhoto(p: Pose, _t: number, c: ActionCtx) {
+  const u = (c.elapsed % 3) / 3;
+  const up = kf(u, [[0, 0.35], [0.12, 1], [0.85, 1], [1, 0.35]]);
+  p.arm('R', 1.45 * up, -0.35 * up, 0.3 * up, 1.9 * up, 0.5 * up);
+  p.arm('L', 1.3 * up, -0.8 * up, -0.2 * up, 1.6 * up, -0.2 * up);
+  p.neck(-0.05 * up, 0, 0);
+}
+
+/** A camera operator: the TV camera on the right shoulder, the left hand on the lens. */
+function shoulderCam(p: Pose, _t: number, c: ActionCtx) {
+  const sway = Math.sin(c.elapsed * 0.9) * 0.04;
+  p.arm('R', 1.05 + sway, 0.75, -0.6, 2.35, 0.6, 0.2);
+  p.arm('L', 1.45 + sway, -0.05, 0.4, 1.0, -0.4, 0.1);
+  p.neck(0, 0.12, 0);
+}
+
+/** A TV reporter: the microphone held out to whoever speaks, the other hand talking. */
+function interview(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed, g = 0.5 + 0.5 * Math.sin(e * 2.1);
+  p.arm('R', 1.2, 0.2, -0.2, 0.9, 0.9, 0.3);
+  p.arm('L', 0.4 + g * 0.3, 0.15 + g * 0.15, 0.6, 1.2 + g * 0.3, 1.0, 0, 0.2 * g);
+  p.neck(Math.sin(e * 2.7) * 0.05, Math.sin(e * 0.8) * 0.1);
+}
+
+/** A protester: the placard up high in the right hand (as the raised torch), the left fist pumping. */
+function chant(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed, beat = Math.max(0, Math.sin(e * PI * 1.6));
+  p.arm('R', 1.7 + beat * 0.12, 0.5, -0.4, 0.45 - beat * 0.1, 0.3, -0.9, -0.4);
+  p.arm('L', 1.9 + beat * 0.6, 0.3, 0, 1.6 - beat * 0.9, 0.6);
+  p.neck(0.15 + beat * 0.1, 0, 0);
+  p.root.y += beat * 0.03;
+}
+
+/** The hero's statue: chest out, one fist raised to the sky, the other on the hip, a stride. */
+function heroPose(p: Pose) {
+  p.arm('R', 2.75, 0.35, 0, 0.15, 0.6);
+  p.arm('L', -0.1, 0.65, -0.9, 1.9, 0.2, 0.3);
+  p.leg('L', 0.3, 0.06, 0, 0.15);
+  p.leg('R', -0.15, 0.06);
+  p.spine(-0.08, 0.1);
+  p.neck(0.3, -0.15);
+}
+
 export const ACTIONS: Record<string, ActionDef> = {
   hands_up: { mask: 'upper', blendIn: 0.15, blendOut: 0.2, pose: handsUp, mood: 'afraid' },
   cower: { mask: 'full', blendIn: 0.2, blendOut: 0.25, pose: cower, mood: 'afraid' },
@@ -671,4 +715,9 @@ export const ACTIONS: Record<string, ActionDef> = {
   sleepwalk: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: sleepwalk, loop: true },
   read_map: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: readMap, loop: true },
   offer: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: offer, mood: 'happy' },
+  take_photo: { mask: 'upper', blendIn: 0.1, blendOut: 0.12, pose: takePhoto, mood: 'focused', loop: true },
+  shoulder_cam: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: shoulderCam, mood: 'focused', loop: true },
+  interview: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: interview, mood: 'happy', loop: true },
+  chant: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: chant, mood: 'angry', loop: true },
+  hero_pose: { mask: 'full', blendIn: 0.1, blendOut: 0.1, pose: heroPose, mood: 'happy', loop: true },
 };

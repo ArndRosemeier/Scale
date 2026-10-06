@@ -3,7 +3,8 @@
  * cars, collapses or a small everyday accident — earns karma. People the player knocked
  * down personally earn nothing. Every 50–110 s someone near the player trips and falls
  * (Normal mode), so there is always a way to do good. People who need help show on the
- * minimap; standing next to one, E helps them up and they wave thanks.
+ * minimap; standing next to one, E helps them up and they wave thanks (and the city's reputation
+ * rises a little).
  */
 import type { Pedestrians, PedAgent } from '../sim/Pedestrians';
 import { PState } from '../sim/Pedestrians';
@@ -19,6 +20,8 @@ export interface DeedHooks {
   markers?: (m: MapMarker[]) => void;
   /** Can the player get to this person (not indoors, not in the water, lying on a real surface)? */
   reachable?: (a: PedAgent) => boolean;
+  /** The city's reputation (helping someone up raises it a little). */
+  rep?: (amount: number, reason: string) => void;
 }
 
 export class Deeds {
@@ -74,6 +77,7 @@ export class Deeds {
       if (cause === 'player') this.hooks.toast?.('You helped them up — no karma for someone <b>you</b> knocked down', 'info');
       else this.progress.addKarma(cause === 'collapse' ? KARMA.helpUpCollapse : KARMA.helpUp, 'helped someone up');
     }
+    if (cause !== 'player') this.hooks.rep?.(KARMA.helpUpRep, 'helped someone up');
     this.onHelped?.(a);
     // (Not '': with nobody left to mark the new key is '' too, and the old marker stayed.)
     this.markerKey = '#stale';

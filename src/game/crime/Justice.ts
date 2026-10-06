@@ -11,6 +11,9 @@
  * reputation lost, heat cleared. Atonement: heat cools off by itself when not wanted; stopping
  * crimes cools it faster; walking up to an officer or a police car and pressing E (turning yourself
  * in) clears it at a smaller cost.
+ *
+ * A manhunt (reputation ≤ JUSTICE.manhunt, "public menace"): officers who come near the player go
+ * after them at once, offence or not.
  */
 import type { HarmEntry } from '../Consequences';
 import type { PedAgent } from '../../sim/Pedestrians';
@@ -49,6 +52,8 @@ export const JUSTICE = {
   grace: 40,
   fineBase: 10, finePer: 10,
   turnInBase: 5, turnInPer: 6,
+  /** Reputation at or below this: any officer within `manhuntR` m makes the player wanted (at most every `manhuntGap` s). */
+  manhunt: -70, manhuntR: 26, manhuntGap: 45,
   /** Breaking a facade in front of witnesses (at most every 2 s). */
   facade: { heat: 0.45, karma: 1, rep: 0.6 },
   /** A collapse the player caused (always known): base + per storey that came down (≤ 12). */
@@ -65,6 +70,7 @@ export class Justice {
   private recent = new WeakMap<object, number>();
   private propT = 0;
   private hurtT = -99;
+  private huntT = -1e9;
   stats = { offences: 0, arrests: 0, turnIns: 0, escapes: 0, collapses: 0 };
   private felled = new WeakSet<object>();
   /** Called when the wanted level changes (HUD). */
@@ -166,6 +172,13 @@ export class Justice {
     const H = this.h;
     if (this.wanted <= 0) {
       this.heat = Math.max(0, this.heat - JUSTICE.decay * dt);
+      // A manhunt: the first officer who sees the public menace goes after them.
+      if (H.repValue() <= JUSTICE.manhunt && H.time - this.huntT > JUSTICE.manhuntGap && H.officersNear(H.player.x, H.player.z, JUSTICE.manhuntR) > 0) {
+        this.huntT = H.time;
+        H.toast('An officer recognises you — the city wants you behind bars', 'warn');
+        this.heat = Math.max(this.heat, this.thresholds()[0]);
+        this.levelUp();
+      }
       return;
     }
     // Out of reach of every officer long enough: one level down.

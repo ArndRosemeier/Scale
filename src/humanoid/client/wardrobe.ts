@@ -116,7 +116,8 @@ function beaniePart(c: C3): RigidPart {
 
 export function itemDef(defId: string): { visual: { shape: string }; category?: string; twoHanded?: boolean; tool?: boolean } | undefined {
   // An umbrella is held up like a torch (the raised-arm grip, shaft upright).
-  return { visual: { shape: defId }, category: defId === 'umbrella' ? 'light' : 'trinket' };
+  // So is a protest placard.
+  return { visual: { shape: defId }, category: defId === 'umbrella' || defId.startsWith('placard_') ? 'light' : 'trinket' };
 }
 
 export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {

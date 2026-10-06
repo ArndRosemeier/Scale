@@ -126,6 +126,8 @@ export interface ThreatEvent {
   readonly tier?: 'minor' | 'major';
   /** Officers may go in on foot and strike it (rogue robots yes; a 40 m monster no: they hold the lines). */
   readonly engageOnFoot?: boolean;
+  /** The highest response level it may reach (unset: no limit; a human-sized rampaging player: the Guard). */
+  readonly ceiling?: number;
   /** Big bodies of the event (targetable, damageable). */
   readonly actors?: readonly ThreatActor[];
 }
