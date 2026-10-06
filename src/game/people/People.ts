@@ -21,7 +21,7 @@ import type { MapMarker } from '../../ui/map/GameMap';
 import { nameOf, traitsOf, temperamentOf, jobOf, interestOf, moodOf, moodWord, yearsOf, MOOD_LABEL, type Traits, type Temperament, type Job } from './identity';
 import { RuleBackend, ruleAnswer, dirWord, type TalkBackend, type TalkFacts, type Picked } from './talk';
 import { CHAT, type Topic } from './lines';
-import { PEOPLE, newKnown, opinionOf, applyDeed, addSaid, addNote, remember, savePeople, restorePeople, type Known, type Deed } from './memory';
+import { PEOPLE, onTheirWay, newKnown, opinionOf, applyDeed, addSaid, addNote, remember, savePeople, restorePeople, type Known, type Deed } from './memory';
 import { TalkUi } from '../../ui/TalkUi';
 import { hashCombine } from '../../core/rng';
 
@@ -101,6 +101,9 @@ export class People {
   private session: Session | null = null;
   private cache = new Map<number, Person>();
   private markT = 0;
+  private driftT = 0;
+  /** Next time (this.time) to try bringing a known person back into the street, per citizen id. */
+  private backT = new Map<number, number>();
   private markKey = '';
   private greeted = new Map<number, number>();
   private time = 0;
@@ -117,6 +120,8 @@ export class People {
       destinations: () => this.destinations(),
     });
     try { this.known.push(...restorePeople(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null'))); } catch { /* storage unavailable */ }
+    // People you know appear where they plausibly are, not where their schedule ran ahead to.
+    g.peds.placeFor = (c) => { const k = this.find(c.id); return k ? { x: k.x, z: k.z } : null; };
     // Helping someone up: they remember it (and you, if they did not know you yet).
     const prevHelp = g.deeds.onHelped;
     g.deeds.onHelped = (a) => { prevHelp?.(a); this.note(a, 'helped'); };
@@ -499,10 +504,13 @@ export class People {
   /** Faint dots on the map where the people you met are now. */
   private markers(): void {
     const g = this.g, now = g.sky.hoursAbs, rep = g.crime?.rep.value ?? 0;
+    const dt = Math.min(10, this.time - this.driftT);
+    this.driftT = this.time;
     const list: MapMarker[] = [];
     for (const k of this.known) {
-      const spot = this.whereNow(k, now);
+      const spot = this.whereNow(k, now, dt);
       if (!spot) continue;
+      this.bringBack(k, now);
       const p = this.person(k.cit);
       const op = opinionOf(k, rep, p.traits.a);
       const color = op >= 40 ? '#8ff0b4' : op <= -30 ? '#ffa894' : '#a9d6ff';
@@ -514,11 +522,42 @@ export class People {
     if (key !== this.markKey) { this.markKey = key; g.map.setMarkers('people', list); }
   }
 
-  /** Where a known person is now: their live body near the player, else their day plan's place. */
-  whereNow(k: Known, now: number): { x: number; z: number; exact: boolean } | null {
-    const peds = this.g.peds;
-    const a = peds.agentOf(k.cit.id);
+  /**
+   * Where a known person is now: their live body near the player; else on their way (dt seconds of
+   * it, at a plausible pace) from where they were last towards where their day plan has them.
+   */
+  whereNow(k: Known, now: number, dt = 0): { x: number; z: number; exact: boolean } | null {
+    const a = this.g.peds.agentOf(k.cit.id);
     if (a && a.alive) { k.x = a.x; k.z = a.z; return { x: a.x, z: a.z, exact: true }; }
+    const T = this.planSpot(k, now);
+    if (!T) return { x: k.x, z: k.z, exact: false };
+    const P = this.g.player.pos;
+    const n = onTheirWay(k.x, k.z, T.x, T.z, P.x, P.z, dt);
+    k.x = n.x; k.z = n.z;
+    return { x: k.x, z: k.z, exact: T.exact };
+  }
+
+  /**
+   * Near you but out of range of their body (it went too far, or the schedule offered their walk
+   * only once): put them back in the street at their dot, walking on to where their day is taking them.
+   */
+  private bringBack(k: Known, now: number): void {
+    const peds = this.g.peds, P = this.g.player.pos;
+    if (peds.agentOf(k.cit.id) || Math.hypot(k.x - P.x, k.z - P.z) > PEOPLE.backR) return;
+    if ((this.backT.get(k.cit.id) ?? 0) > this.time) return;
+    this.backT.set(k.cit.id, this.time + PEOPLE.backEvery);
+    const st = peds.pop.stateAt(k.cit, now);
+    const to = st.trip?.to ?? st.stay?.place;
+    if (!to) return;
+    // (Already at the place they are staying at: indoors, where the interiors put them.)
+    const at = peds.placeSpot(to);
+    if (!st.trip && at && Math.hypot(at.x - k.x, at.z - k.z) < 30) return;
+    peds.bringBack(k.cit, k.x, k.z, to);
+  }
+
+  /** Where their day plan has them now (a place, or a point on the way between two). */
+  private planSpot(k: Known, now: number): { x: number; z: number; exact: boolean } | null {
+    const peds = this.g.peds;
     const st = peds.pop.stateAt(k.cit, now);
     if (st.stay) return peds.placeSpot(st.stay.place);
     if (st.trip) {
