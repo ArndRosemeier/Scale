@@ -347,10 +347,16 @@ export class Fame {
     const far = Math.hypot(p.x - a.x, p.z - a.z) > 18;
     if (far && (!act.route || act.wp * 3 >= act.route.length) && act.replanT <= 0) {
       act.replanT = 3;
-      act.route = this.g.peds.buildRoute(a.x, a.z, tx, tz);
+      const r = this.g.peds.buildRoute(a.x, a.z, tx, tz);
+      // (A route that ends no nearer than here — the hero on a square, a plaza, off the sidewalks — is no use: straight across.)
+      const n = r ? r.length : 0;
+      act.route = r && n >= 3 && Math.hypot(r[n - 3] - tx, r[n - 2] - tz) < d - 6 ? r : null;
       act.wp = 1;
+      if (!act.route) act.replanT = 10;
     }
     if (act.route && far && followRoute(a, act, speed)) return false;
+    // At the route's end, still far: straight on for a while rather than round the block again.
+    if (act.route) act.replanT = Math.max(act.replanT, 10);
     act.route = null;
     goTo(act, tx, tz, d > 4 ? speed : Math.min(speed, 1.3));
     return false;
