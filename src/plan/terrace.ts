@@ -189,6 +189,8 @@ export function placeEateries(plan: CellPlan, cell: CellInfo, macro: MacroPlan, 
   const ok = (x: number, z: number, r: number, opt: { onRoad?: boolean; ownDoor?: number; noJunction?: boolean } = {}): boolean => {
     if (!pointInPoly(cell.poly, x, z) || terrain.isWater(x, z, 1)) return false;
     if (inBuilding(x, z, r + 0.05)) return false;
+    // (The ways onto a landmark's square stay clear.)
+    if (plan.approaches.some((w) => pointInPoly(w, x, z) || distPointPolyEdge(w, x, z) < r)) return false;
     if (!clearOfWalk(plan.streets, x, z, r, opt.onRoad, sbox)) return false;
     for (let k = 0; k < doors.length; k++) {
       const need = k === opt.ownDoor ? 0.75 + r : DOOR_CLEAR + r;

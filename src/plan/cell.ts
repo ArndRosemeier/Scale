@@ -83,6 +83,8 @@ export interface CellPlan {
   blocks: Shape[];
   promenade: Shape[];
   plazas: Shape[];
+  /** The paved ways onto landmark sites (part of the plazas): kept clear of furniture and terraces. */
+  approaches: Poly[];
   parks: Shape[];
   /** Back yards / courtyards / gardens. */
   yards: Shape[];
@@ -141,7 +143,7 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
   const g = GRAMMAR[cell.district];
   const plan: CellPlan = {
     id: cell.id, district: cell.district, streets: [], carriageway: [], sidewalks: [], blocks: [], promenade: [],
-    plazas: [], parks: [], yards: [], paved: [], lots: [], buildings: [], props: [], junctions: [], bounds: polyBounds(cell.poly), entrances: [], eateries: [],
+    plazas: [], approaches: [], parks: [], yards: [], paved: [], lots: [], buildings: [], props: [], junctions: [], bounds: polyBounds(cell.poly), entrances: [], eateries: [],
     landmarks: [],
   };
   const sites = landmarksOfCell(macro, cell.id);
@@ -234,7 +236,7 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
       // Paved approaches from the middle of each side out to the street, so buildings on the
       // leftovers never wall a site in (one could only fly in otherwise).
       const ways = hit.flatMap(siteApproaches);
-      for (const s of difference(shapesToPolys(intersection(ways, shapesToPolys([blk]))), hit.map((l) => l.site))) if (shapeArea(s) > 20) plan.plazas.push(s);
+      for (const s of difference(shapesToPolys(intersection(ways, shapesToPolys([blk]))), hit.map((l) => l.site))) if (shapeArea(s) > 20) { plan.plazas.push(s); plan.approaches.push(s.outer); }
       const rest = difference(shapesToPolys([blk]), [...hit.map((l) => siteRect(l, -l.hu - 1.5, -l.hv - 1.5, l.hu + 1.5, l.hv + 1.5)), ...ways]);
       // (Lots are cut from outlines alone: a site inside the block must not stay a hole.)
       for (const piece of rest.flatMap((sh) => withoutHoles(sh))) {
@@ -937,11 +939,12 @@ function placeProps(plan: CellPlan, cell: CellInfo, macro: MacroPlan, g: Grammar
   for (const pz of plan.plazas) {
     const area = shapeArea(pz);
     const c = polyCentroid(pz.outer);
-    if (area > 300 && pointInPoly(pz.outer, c[0], c[1]) && !plan.buildings.some((b) => pointInPoly(b.poly, c[0], c[1]))) push(r.chance(0.5) ? PropType.Fountain : PropType.Statue, c[0], c[1], r.range(0, 6.28), 1, r.int(0, 3));
+    const onWay = (x: number, z: number) => plan.approaches.some((w) => pointInPoly(w, x, z));
+    if (area > 300 && pointInPoly(pz.outer, c[0], c[1]) && !onWay(c[0], c[1]) && !plan.buildings.some((b) => pointInPoly(b.poly, c[0], c[1]))) push(r.chance(0.5) ? PropType.Fountain : PropType.Statue, c[0], c[1], r.range(0, 6.28), 1, r.int(0, 3));
     const [x0, z0, x1, z1] = polyBounds(pz.outer);
     for (let k = 0; k < Math.min(10, area / 150); k++) {
       const x = r.range(x0, x1), z = r.range(z0, z1);
-      if (!pointInPoly(pz.outer, x, z) || !free(x, z, 3)) continue;
+      if (!pointInPoly(pz.outer, x, z) || !free(x, z, 3) || onWay(x, z)) continue;
       if (plan.buildings.some((b) => pointInPoly(b.poly, x, z))) continue;
       push(r.pick([PropType.Bench, PropType.Planter, PropType.Tree, PropType.Tree, PropType.Bin]), x, z, r.range(0, 6.28), 1, r.int(0, 3));
     }

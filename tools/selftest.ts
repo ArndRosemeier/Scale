@@ -296,6 +296,15 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
       }
     }
     check(open === 4, `seed 873738 ${lm.name}: a way in from the street on every side (${open} of 4)`);
+    let cluttered = 0;
+    // (Awnings hang overhead on the fronts beside the way, so they don't count.)
+    for (let i = 0; i < plan.props.length; i += 6) if (plan.props[i] !== PropType.Awning && plan.approaches.some((w) => pointInPoly(w, plan.props[i + 1], plan.props[i + 2]))) cluttered++;
+    const onWay = (x: number, z: number) => plan.approaches.some((w) => pointInPoly(w, x, z));
+    for (const e of plan.eateries) {
+      for (let i = 0; i < e.tables.length; i += 3) if (onWay(e.tables[i], e.tables[i + 1])) cluttered++;
+      for (let i = 0; i < e.seats.length; i += 4) if (onWay(e.seats[i], e.seats[i + 1])) cluttered++;
+    }
+    check(cluttered === 0, `seed 873738 ${lm.name}: its approaches kept clear of furniture and terraces (${cluttered} in the way)`);
   }
 }
 
