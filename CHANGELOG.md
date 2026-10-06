@@ -2,10 +2,15 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.068 — 2026-10-06
+## 0.069 — 2026-10-06
 
 - **Super speed is a toggle now, and it steers itself.** Press its hotbar key (or tap its button) once to switch it on and again to switch it off; no more holding. It is slower than before (40 m/s at the first rank up to 100 m/s at the top, was 75 to 240), so the city keeps up with you. While it is on, you steer roughly and the runner does the rest: it swerves around cars, poles and trees, follows the street around walls, and brakes when the way straight ahead is blocked instead of slamming into it (keep pushing into a wall and it still runs up it, slowly). It no longer drops into manholes or metro stairwells: it runs around them, and at speed skims straight over them. In flight, pressing it still gives the dash burst.
 - **Super jump climbs while you hold Space.** You take off the moment you press it and keep rising for as long as you hold it, up to the jump's maximum height (about a second and a half to the top); let go and the climb stops, so you choose your height. You can steer the whole time you are in the air, at a good pace, so landing on a particular roof is easy. A quick tap is a small hop. Energy is paid for the height you actually gain. On the touch screen, the Jump button works the same way.
+
+## 0.068 — 2026-10-06
+
+- Fix: **sewer pipes no longer stick out of the streets.** Where a street ran through a dip, the sewer under it stayed too high and its brick vault broke through the road (seed 1234 at size 0.5, for example). Every sewer now stays at least a metre under the street along its whole length and width (also where streets meet on a steep river bank); under dips it simply runs a little deeper. `npx tsx tools/sewersweep.ts <sizes> <seedA-seedB>` checks any city for this.
+
 ## 0.067 — 2026-10-06
 
 - **Power cores no longer hide inside things.** A core on a square or in a park used to sit exactly in the middle, which is where the fountain or statue stands, so it ended up inside the fountain where nobody could reach it (about a third of all cores in a sweep of 16 cities were buried like that). Cores now keep clear of fountains, statues, kiosks, trees, playgrounds, benches, café terraces, metro stairwells and water, and a core on a roof keeps clear of the air-conditioning units, water tanks and lift housings up there. `npx tsx tools/coresweep.ts <sizes> <seedA-seedB>` checks every core of many cities headlessly.
