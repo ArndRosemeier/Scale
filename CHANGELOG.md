@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.074 — 2026-10-06
+
+- **Manholes are climbed now, not teleported through.** Press E by a lid and the hero squats, lifts its edge and drags the heavy cover aside, turns round, lowers themselves over the edge and climbs down a ladder to the sewer's walkway, hands and feet on the rungs. From below, the hero walks to the ladder, climbs up, pushes the lid up and off if it is still on, and climbs out over the edge onto the street. Every manhole has a real brick shaft now, on one side of the sewer over the walkway, with the ladder on its wall and daylight falling in through the pick holes (more when the lid is off). The camera looks down the shaft from the street while the hero is in it and watches from inside the sewer below. An opened manhole stays open with its lid lying beside it, and the hole now cuts through the road surface too (before, an open manhole on the road was hidden under the asphalt).
+- The hole in the street is round like its lid, with a cast-iron frame and a round brick neck under it before the square shaft opens out; the ladder stands inside the neck. Over the edge, the hands lie flat on the street, palms down, until the hero is up on one knee, then they stand. Cars wait while the hero is busy at the hole instead of driving over them, the camera no longer squeezes into the hero's face in the sewer, the lid lifting off is watched from the street, and the "press E" prompt is hidden during the climb.
+
 ## 0.073 — 2026-10-06
 
 - **People you know no longer outrun you.** After you leave someone you talked to, they carry on at a walking pace (or ride, when they and where they are going are both far from you) instead of jumping along their day plan, which runs many times faster than real time. Their map dot moves the same way, and their body only shows up again near where they plausibly are, so you can't run away and find them waiting ahead of you. When you come back near them, they are back in the street around their dot, walking on to where their day takes them, so you can talk to them again.
