@@ -1,0 +1,9 @@
+Built-in characters
+===================
+
+woman.glb is the base female model Arnd Rosemeier found on Blend Swap (converted with
+tools/avatar), with skin, hair and eye textures painted by tools/avatar/base-bodies/.
+man.glb is derived from the same mesh, skeleton and UVs by tools/avatar/base-bodies/
+(reshaped and textured there). woman.png / man.png are their picker thumbnails.
+
+Source model, author and licence on Blend Swap: to be filled in.
