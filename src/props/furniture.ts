@@ -27,6 +27,7 @@
 import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { Noise } from '../core/noise';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth' | 'evCharger'
   | 'cafeTable' | 'cafeChair' | 'parasol' | 'awning' | 'menuBoard' | 'terraceRail' | 'parklet';
@@ -1496,6 +1497,7 @@ function getSignAtlas(): THREE.CanvasTexture {
 // ---------------------------------------------------------------------------------------------
 
 export function createFurnitureMaterial(): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().createFurnitureNodeMaterial(getSignAtlas(), furnitureUniforms) as unknown as THREE.MeshStandardMaterial;
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   const sign = getSignAtlas();
   m.onBeforeCompile = (shader) => {

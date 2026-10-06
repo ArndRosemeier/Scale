@@ -16,6 +16,9 @@ import { undergroundTrainNodeMaterial, deepCaveNodeMaterial, deepFallsNodeMateri
 export { undergroundTrainNodeMaterial, deepCaveNodeMaterial, deepFallsNodeMaterial, deepMotesNode, deepShardNodeMaterial };
 import { createBarkNodeMaterial, createLeafNodeMaterial, createFarTreeNodeMaterial, createClumpNodeMaterial } from './vegetation';
 export { createBarkNodeMaterial, createLeafNodeMaterial, createFarTreeNodeMaterial, createClumpNodeMaterial };
+import { createVehicleNodeMaterial } from './vehicles';
+import { createFurnitureNodeMaterial } from './furniture';
+export { createVehicleNodeMaterial, createFurnitureNodeMaterial };
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 
 export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): THREE.WebGPURenderer {
