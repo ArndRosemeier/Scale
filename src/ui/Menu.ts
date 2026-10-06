@@ -3,6 +3,7 @@
  */
 import type { Game } from '../game/Game';
 import { versionLink } from './Changelog';
+import { feedbackLink } from './Feedback';
 import { SOUND_CATEGORIES, defaultMix, type SoundCategory } from '../audio/Audio';
 import { saveTimeScale } from '../render/SkySystem';
 import type { WeatherSetting } from '../render/Weather';
@@ -90,7 +91,9 @@ export class Menu {
         <div class="row" id="pInvRow"><label>Invulnerable</label><input id="pInv" type="checkbox"></div>
         <div class="buttons"><button id="pResume">Resume</button><button id="pHelp">Controls</button><button id="pNew">New city…</button></div>
       </div>`;
-    this.el.querySelector('h2')?.after(versionLink());
+    const ver = versionLink();
+    this.el.querySelector('h2')?.after(ver);
+    ver.after(feedbackLink());
     document.body.appendChild(this.el);
     this.help = document.createElement('div');
     this.help.id = 'help';
