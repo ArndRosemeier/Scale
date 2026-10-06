@@ -17,7 +17,7 @@ const MAX_SHOWN = 3;
 /** Seconds a bubble stays; between two new bubbles; before the same person speaks again. */
 const SHOW = 2.6, GAP = 0.9, PERSON_PAUSE = 25;
 /** Small talk: seconds between two lines (random within). */
-const CHAT_MIN = 20, CHAT_MAX = 40;
+const CHAT_MIN = 14, CHAT_MAX = 28;
 
 type Lines = readonly string[];
 const L = {

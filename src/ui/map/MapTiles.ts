@@ -449,20 +449,23 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
   for (const [tint, p] of byTint) { g.fillStyle = tint; g.fill(p); }
   g.globalAlpha = 1;
 
-  // Crime layer: a subtle heat tint per district (safe: none; rough: amber to red).
+  // Crime layer: every block tinted by its live crime index (game/news), green where it is safe and
+  // the police are many, through yellow to red where crime is high (ten bands).
   if (layers.crime && w.crimeIndex) {
     const bands = new Map<number, Path2D>();
     for (const i of cellVis) {
       const v = w.crimeIndex[i];
-      if (v < 0.3 || macro.cells[i].district === 'water') continue;
-      const b = Math.min(5, Math.floor((v - 0.3) / 0.12));
+      if (macro.cells[i].district === 'water') continue;
+      const b = Math.max(0, Math.min(9, Math.floor((v / 0.75) * 10)));
       let p = bands.get(b);
       if (!p) bands.set(b, (p = new Path2D()));
       addPoly(p, macro.cells[i].poly, true);
     }
     for (const [b, p] of bands) {
-      const t = b / 5;
-      g.fillStyle = `rgba(${Math.round(225 + 15 * t)}, ${Math.round(150 - 110 * t)}, ${Math.round(40 - 10 * t)}, ${(0.1 + 0.2 * t).toFixed(3)})`;
+      const v = ((b + 0.5) / 10) * 0.75;
+      // Strongest at both ends, faint in the middle.
+      const a = 0.1 + 0.16 * Math.abs(b - 4.5) / 4.5;
+      g.fillStyle = crimeColor(v, a);
       g.fill(p);
     }
   }
@@ -700,4 +703,13 @@ function addPolyF(p: Path2D, a: Float32Array, o: number, n: number, close: boole
 function addLine(g: CanvasRenderingContext2D, pts: ArrayLike<number>): void {
   g.moveTo(pts[0], pts[1]);
   for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]);
+}
+
+/** The crime layer's colour for an index (0..1): green (safe, many police) through yellow to red. */
+export function crimeColor(v: number, alpha: number): string {
+  const t = Math.max(0, Math.min(1, v / 0.75));
+  const r = t < 0.5 ? 47 + (230 - 47) * (t / 0.5) : 230 - (230 - 214) * ((t - 0.5) / 0.5);
+  const gg = t < 0.5 ? 175 + (194 - 175) * (t / 0.5) : 194 - (194 - 52) * ((t - 0.5) / 0.5);
+  const b = t < 0.5 ? 100 - (100 - 41) * (t / 0.5) : 41 + (40 - 41) * ((t - 0.5) / 0.5);
+  return `rgba(${Math.round(r)}, ${Math.round(gg)}, ${Math.round(b)}, ${alpha.toFixed(3)})`;
 }
