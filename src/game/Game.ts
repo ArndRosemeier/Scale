@@ -1084,7 +1084,7 @@ export class Game {
   /** On-screen hint for something usable where the player stands (null: nothing). */
   private usableHint(): string | null {
     if (this.freeCam) return null;
-    const metro = this.underground.metroHint();
+    const metro = this.underground.metroHint(!!this.underground.ride && !this.player.seat && !!this.seatNear());
     if (metro) return metro;
     // A hint offering E beats a passive one ("Bring the bag back …"): someone to help up right
     // here must show even while the player carries loot home.
@@ -1136,6 +1136,14 @@ export class Game {
     if (this.aftermath.use() || this.crime.use() || this.deeds.help() || this.slimeRealm?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Get up from a seat (before the metro: seated in a train, E gets up rather than off).
     if (this.player.seat) { this.player.standUp(); this.input.pressed.delete('KeyE'); return; }
+    // In a train, a free seat in reach wins over the doors (getting off: walk out an open door).
+    const rideSeat = this.underground.ride ? this.seatNear() : null;
+    if (rideSeat && 'car' in rideSeat && rideSeat.car) {
+      this.player.sitOn(rideSeat.x, rideSeat.z, rideSeat.yaw);
+      if (this.player.seat) this.underground.sitInCar(rideSeat.car);
+      this.input.pressed.delete('KeyE');
+      return;
+    }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }

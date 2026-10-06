@@ -196,7 +196,8 @@ export class Player {
         const s = this.seat;
         this.pos.x += (s.x - this.pos.x) * Math.min(1, dt * 8);
         this.pos.z += (s.z - this.pos.z) * Math.min(1, dt * 8);
-        this.pos.y = this.world.groundHeight(this.pos.x, this.pos.z, this.pos.y + 0.5);
+        // The collision's ground knows station halls and train floors (the world's only the street).
+        this.pos.y = this.collision ? this.collision.groundAt(this.pos.x, this.pos.z, this.pos.y + 0.5, 0.3) : this.world.groundHeight(this.pos.x, this.pos.z, this.pos.y + 0.5);
         this.vel.set(0, 0, 0);
         let d = s.yaw - this.yaw;
         while (d > Math.PI) d -= Math.PI * 2;
