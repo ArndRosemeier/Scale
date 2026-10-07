@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.103 — 2026-10-07
+
+- **Player's manual.** A "Manual" link next to Feedback on the start screen (and in the pause menu) opens a 25-page illustrated PDF manual: getting started, controls, powers, landmarks, places to explore, people and favours, crime and the six organisations, big threats and the army, reputation, and what happens when you go down. Spoiler-light by design.
+
 ## 0.102 — 2026-10-07
 
 - **The police really stop a public menace.** With a reputation of −70 or worse, being taken down by the police is the end: the hero stays down, the officers come and cuff them, and it is game over ("Arrested — taken into custody"). No more waking up and walking off. If no officer can get to the body, backup takes the hero in after 20 seconds anyway.
