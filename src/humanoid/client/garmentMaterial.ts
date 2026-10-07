@@ -155,8 +155,10 @@ void garmentEval() {
       float star = h_star5(q * vec2(1.0, 1.0) - vec2(0.0, -0.004), 0.056, 0.42);
       m = disc * smoothstep(-0.002, 0.002, star) * front;
     } else if (d < 2.5) {
-      float bolt = min(min(h_seg2(q, vec2(0.06, 0.12), vec2(-0.03, 0.006)), h_seg2(q, vec2(-0.03, 0.006), vec2(0.032, 0.006))), h_seg2(q, vec2(0.032, 0.006), vec2(-0.06, -0.12)));
-      m = (1.0 - smoothstep(0.016, 0.02, bolt)) * front;
+      // A zigzag: down-left, a sharp kink back right, down-left again to a point (wide at the top).
+      float bolt = min(min(h_seg2(q, vec2(0.055, 0.12), vec2(-0.045, 0.012)), h_seg2(q, vec2(-0.045, 0.012), vec2(0.045, -0.012))), h_seg2(q, vec2(0.045, -0.012), vec2(-0.05, -0.125)));
+      float w = mix(0.008, 0.018, smoothstep(-0.125, 0.12, q.y));
+      m = (1.0 - smoothstep(w - 0.002, w + 0.002, bolt)) * front;
     } else if (d < 3.5) {
       float v = q.y + 0.07 - 0.75 * ax;
       m = smoothstep(-0.003, 0.003, v) * (1.0 - smoothstep(0.042, 0.048, v)) * (1.0 - smoothstep(0.19, 0.2, ax)) * step(0.45 * H, b.y);

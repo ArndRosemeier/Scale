@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.106 — 2026-10-07
+
+- **Smoother hero masks.** The cowl and full mask are smooth stretch fabric like the tights (no more grainy speckle), and they hug the face round the eye holes and the cowl's jaw opening, so there is no dark rim or see-through sliver at the edges. The lightning bolt design is a proper zigzag.
+
 ## 0.105 — 2026-10-07
 
 - **Superhero tights and masks.** The character creator (and the fitting mirror in clothes shops) has a new **Hero** tab. **Tights**: a skin-tight, slightly shiny bodysuit in any colour with an accent colour and a design: plain, star emblem, lightning bolt, chevron, side stripes, or trunks with a golden belt; gloves in the suit or accent colour if wanted. Putting the tights on takes off the everyday clothes and pulls on boots in the accent colour; anything added back in Outfit is worn over them. **Masks**: a domino mask round the eyes, a cowl (head, nose and neck covered, mouth and chin free), or a full mask with only the eyes open. Hair and beard hide under a cowl or full mask; the eyes still blink and look around.

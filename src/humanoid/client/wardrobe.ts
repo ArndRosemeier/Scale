@@ -66,7 +66,7 @@ export function resolveWearable(defId: string, v: ItemVisual): WearableSpec | nu
     case 'gloves': return L({ kind: 'shell', regions: [{ region: 'hand.L' }, { region: 'hand.R' }, { region: 'forearm.L', from: 0.8 }, { region: 'forearm.R', from: 0.8 }], offset: 0.002, layer: 1, material: mat(c, 'leather', { roughness: 0.5, wear: 0.05 }) });
     case 'mask_domino': return { layers: [], eyeMask: { color: c } };
     case 'mask_cowl': case 'mask_full': return {
-      layers: [{ kind: 'shell', regions: [{ region: 'scalp' }, { region: 'face' }, { region: 'neck' }], faceCut: defId === 'mask_cowl' ? 'cowl' : 'full', offset: 0.003, layer: 5, material: mat(c, 'leather', { roughness: 0.5, sheen: 0.4, wear: 0.03 }), trim: { width: 0.004, color: [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6] } }],
+      layers: [{ kind: 'shell', regions: [{ region: 'scalp' }, { region: 'face' }, { region: 'neck' }], faceCut: defId === 'mask_cowl' ? 'cowl' : 'full', offset: 0.003, layer: 5, material: mat(c, 'hero', { roughness: 0.45, sheen: 0.55, wear: 0.02 }), trim: { width: 0.004, color: [c[0] * 0.75, c[1] * 0.75, c[2] * 0.75] } }],
       eyeMask: { color: c, under: true }, hideHair: true, hideBeard: true,
     };
     // Costumes of the street characters (game/street).

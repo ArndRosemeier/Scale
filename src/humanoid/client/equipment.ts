@@ -548,10 +548,22 @@ export class EquipmentRig {
     // the creases under the chin and at the eye corners.)
     const off = l.faceCut ? 0.008 : Math.max(0.002, l.offset) * 1.25 + 0.004 + order * 0.002;
     const P = new Float32Array(n * 3), N = new Float32Array(n * 3);
+    // A mask hugs the skin towards its openings (eye holes, the cowl's jaw): standing off there,
+    // its inner side and the gap under it showed as a dark rim and grey slivers.
+    const offs = new Float32Array(n).fill(off);
+    if (l.faceCut) {
+      const sf = st.face.array as Float32Array;
+      for (let i = 0; i < n; i++) {
+        const v = src[i];
+        if (st.region[v] !== FACE_REGION) continue;
+        const d = maskDepth(l.faceCut, sf[v * 3], sf[v * 3 + 1], sf[v * 3 + 2]);
+        offs[i] = off * (0.3 + 0.7 * Math.min(1, Math.max(0, d / 1.5)));
+      }
+    }
     for (let i = 0; i < n; i++) {
       const v = src[i];
       for (let k = 0; k < 3; k++) {
-        P[i * 3 + k] = pos[v * 3 + k] + nrm[v * 3 + k] * off;
+        P[i * 3 + k] = pos[v * 3 + k] + nrm[v * 3 + k] * offs[i];
         N[i * 3 + k] = nrm[v * 3 + k];
       }
     }
@@ -578,8 +590,8 @@ export class EquipmentRig {
           const v = src[i];
           const dx = P[i * 3] - pos[v * 3], dy = P[i * 3 + 1] - pos[v * 3 + 1], dz = P[i * 3 + 2] - pos[v * 3 + 2];
           const d = dx * nrm[v * 3] + dy * nrm[v * 3 + 1] + dz * nrm[v * 3 + 2];
-          if (d < off * 0.6) {
-            const k = off * 0.6 - d;
+          if (d < offs[i] * 0.6) {
+            const k = offs[i] * 0.6 - d;
             P[i * 3] += nrm[v * 3] * k; P[i * 3 + 1] += nrm[v * 3 + 1] * k; P[i * 3 + 2] += nrm[v * 3 + 2] * k;
           }
         }
