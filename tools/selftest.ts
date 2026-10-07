@@ -39,7 +39,7 @@ import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } fro
 import { parseStemManifest } from '../src/audio/music/StemPlayer';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
-import { Justice, JUSTICE } from '../src/game/crime/Justice';
+import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
 import { ATTRACTION_KINDS, inSite, siteToWorld, siteRect, marvelDesign, marvelCount, type Landmark } from '../src/plan/landmarks';
 import { landmarkParts, partOutline, solidFootprints, partObstacles, helixFloorAt, PK } from '../src/plan/landmarkParts';
@@ -2495,6 +2495,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   let hunted = 0;
   const hunt = (repV: number) => { const H = new Justice({ ...host, time: 100, officersNear: () => 1, repValue: () => repV, pursue: () => { hunted++; } }); H.update(0.5); return H.wanted; };
   check(hunt(JUSTICE.manhunt - 5) === 1 && hunt(JUSTICE.manhunt + 15) === 0 && hunted > 0, 'justice: a public menace is hunted by the first officer who sees them; a disliked hero is not');
+  check(lockedAway(JUSTICE.manhunt) && lockedAway(-100) && !lockedAway(JUSTICE.manhunt + 1) && !lockedAway(0), 'justice: a public menace arrested is locked away for good (game over); a merely disliked hero gets a fine');
 }
 
 // Landmarks (plan/landmarks.ts, plan/landmarkParts.ts): deterministic; a town hall and a stadium in

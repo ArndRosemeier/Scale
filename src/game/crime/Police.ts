@@ -149,7 +149,7 @@ export class Police {
   readonly units: Unit[] = [];
   private calls: { crime: Crime | null; at: number; swat?: boolean }[] = [];
   private seed = 0x9e1;
-  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0, atPlayer: 0, heldAtPlayer: 0 };
+  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0, atPlayer: 0, heldAtPlayer: 0, rejoined: 0 };
 
   constructor(private h: PoliceHost) {}
 
@@ -166,6 +166,15 @@ export class Police {
     for (const u of this.units) {
       if (have >= want) break;
       if (u.job.kind === 'crime' && u.state === 'scene' && !u.job.crime.active && Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z) < 250) { u.job = { kind: 'player' }; have++; }
+    }
+    // So do units on their way back to the car (an arrest just made, a crime cleared): attacked, or
+    // the player wanted again, they turn round instead of walking off.
+    for (const u of this.units) {
+      if (have >= want) break;
+      if (u.state !== 'leaving' || u.job.kind === 'incident' || !u.car.alive || u.car.state >= VState.Abandoned) continue;
+      if (Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z) > 250) continue;
+      this.rejoin(u);
+      have++;
     }
     for (; have < want; have++) this.calls.push({ crime: null, at: this.h.time + 2 + have * 6 });
     // Wanted enough to be shot at: a SWAT van joins (once).
@@ -356,6 +365,17 @@ export class Police {
       u.officers.push(o);
       H.sound('door_open', x, 1, z, 0.6);
     }
+  }
+
+  /** A leaving unit back on the wanted player: the officers still out turn round, the ones in the car get out again. */
+  private rejoin(u: Unit): void {
+    u.job = { kind: 'player', swat: u.job.kind === 'player' ? u.job.swat : undefined };
+    u.officers = u.officers.filter((o) => o.alive);
+    u.state = 'scene';
+    u.t = 0;
+    u.idleT = 0;
+    u.car.fear = 0.35;
+    this.stats.rejoined++;
   }
 
   private leave(u: Unit): void {

@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.101 — 2026-10-07
+
+- **The police really stop a public menace.** With a reputation of −70 or worse, being taken down by the police is the end: the hero stays down, the officers come and cuff them, and it is game over ("Arrested — taken into custody"). No more waking up and walking off. If no officer can get to the body, backup takes the hero in after 20 seconds anyway.
+- **Officers no longer walk away from a fight.** Officers heading back to their car after an arrest turn round and come after the hero again when attacked (or when the hero is wanted again), instead of ignoring it; the ones already in the car get back out.
+
 ## 0.100 — 2026-10-07
 
 - **"Awakened tree" works next to any tree.** The debug entry only looked for street, park and cemetery trees and reported a misleading "unknown archetype" when none was found. It now also wakes forest and countryside trees (the woken tree leaves its spot for good), and it says "no tree standing nearby" when there really is none.
