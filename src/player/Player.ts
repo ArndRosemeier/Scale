@@ -143,7 +143,7 @@ export class Player {
 
   constructor(seed: number, private world: WorldIndex) {
     const look = Player.look;
-    this.app = look ? structuredClone(look.appearance) : randomAppearance('human', seed, {});
+    this.app = look ? structuredClone(look.appearance) : { ...randomAppearance('human', seed, {}), faceDetail: 0 };
     this.rig = new HumanoidRig(this.app, { castShadow: true, priority: -10, ground: (x, y, z) => this.collision ? this.collision.groundAt(x, z, y + 0.4, 0.3) : this.world.groundHeight(x, z, y + 0.4) });
     this.rig.setEquipment(look ? outfitVisuals(look.outfit) : cityOutfit(seed, this.app.gender, this.app.age, 0.2, 0.3));
     // The random human is normalised to the 1.8 m base height; a created character keeps

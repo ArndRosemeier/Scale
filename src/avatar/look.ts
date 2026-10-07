@@ -95,6 +95,7 @@ export function randomLook(seed: number, gender?: number): CharacterLook {
   const r = new Rng(seed ^ 0x2c1b);
   const g = gender ?? (r.chance(0.5) ? r.range(0.02, 0.15) : r.range(0.85, 0.98));
   const appearance = randomAppearance('human', seed, { gender: g, age: r.range(0.45, 0.68) });
+  appearance.faceDetail = 0;
   const outfit = outfitFromVisuals(cityOutfit(seed, appearance.gender, appearance.age, r.range(0, 0.5), r.range(0, 0.6)), seed);
   return { appearance, outfit };
 }
@@ -103,6 +104,8 @@ export function randomLook(seed: number, gender?: number): CharacterLook {
 export function normalizeLook(l: CharacterLook): CharacterLook {
   const base = randomLook(l.appearance?.seed ?? 1, l.appearance?.gender);
   const a = { ...base.appearance, ...l.appearance };
+  // A hero saved before the random face tweaks became a slider gets the plain face.
+  a.faceDetail = l.appearance?.faceDetail ?? 0;
   // (Cheeks, face width and expression came later: a character saved before keeps its face — 0, not a random value.)
   a.face = { ...base.appearance.face, cheekFullness: 0, faceWidth: 0, smile: 0, ...l.appearance?.face };
   a.body = { ...base.appearance.body, ...l.appearance?.body };

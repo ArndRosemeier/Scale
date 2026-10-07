@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.091 — 2026-10-07
+
+- **Your hero starts from the plain face.** City people still get small random differences in nose, lips, eyes and ears, but your own character no longer does, so the face sliders work from the clean base face. A new "Random tweaks" slider on the Face page adds them back if you want them.
+- **Faces look closer to the original model:** eyebrows sit lower, nearer the eyes, and are a bit fuller and darker; a dark lash line runs along the upper lids; lips are rosier.
+
 ## 0.090 — 2026-10-07
 
 - **The procession's lantern really shows now,** a green-lit lantern held up in the necromancer's hand.

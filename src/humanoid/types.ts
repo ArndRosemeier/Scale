@@ -17,6 +17,9 @@ export interface HumanoidAppearance {
   raceMix: number;
   /** Deterministic seed for fine details (freckles, scars, hair strands...). */
   seed: number;
+  /** 0..1 strength of the seeded random face/body tweaks that make every person unique.
+   *  Absent: 1 (city people). The hero defaults to 0, the plain face the sliders describe. */
+  faceDetail?: number;
 
   // ---- MakeHuman macro parameters, 0..1 ----
   /** 0 = female, 1 = male (continuous). */
