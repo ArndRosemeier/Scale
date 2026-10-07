@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.100 — 2026-10-07
+
+- **"Awakened tree" works next to any tree.** The debug entry only looked for street, park and cemetery trees and reported a misleading "unknown archetype" when none was found. It now also wakes forest and countryside trees (the woken tree leaves its spot for good), and it says "no tree standing nearby" when there really is none.
+- **Other villain debug entries try harder.** Crimes and boss operations that cannot start straight ahead now also try nearer, farther and to the sides before giving up, and the procession explains that it needs people walking about.
+
 ## 0.099 — 2026-10-07
 
 - **Shoulders sit lower.** People no longer hold their collarbones up as in a shrug: the shoulder line now slopes down from the neck, the neck shows its full length, and the arms hang from lower, closer shoulders.

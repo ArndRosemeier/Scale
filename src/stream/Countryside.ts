@@ -42,6 +42,8 @@ interface FTile {
 
 interface Batch { meshes: THREE.InstancedMesh[]; cap: number }
 
+const goneKey = (x: number, z: number) => `${Math.round(x * 10)},${Math.round(z * 10)}`;
+
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _c = new THREE.Color();
 
 export class Countryside {
@@ -61,6 +63,8 @@ export class Countryside {
   private detailKey = '';
   private nearKey = '';
   stats = { tiles: 0, trees: 0, clumps: 0, drawnFull: 0, drawnHull: 0, bytes: 0 };
+  /** Trees that have left their spot (an awakened tree walked off): gone from tiles loaded later too. */
+  private gone = new Set<string>();
 
   constructor(private pool: WorkerPool, private ext: number) {
     this.group.name = 'countryside';
@@ -157,6 +161,7 @@ export class Countryside {
       (r) => {
         if (this.tiles.get(t.key) !== t) return;
         t.recs = r.trees;
+        if (this.gone.size) for (let o = 0; o < t.recs.length; o += FOREST_STRIDE) if (this.gone.has(goneKey(t.recs[o], t.recs[o + 2]))) t.recs[o + 3] = 0;
         t.bytes = r.trees.byteLength;
         t.status = 'ready';
         // Clumps right away (hidden): results arrive spread over frames, the swap stays cheap.
@@ -325,11 +330,39 @@ export class Countryside {
         const x = R[o], z = R[o + 2];
         if (x < x0 - 1 || x > x1 + 1 || z < z0 - 1 || z > z1 + 1) continue;
         const K = FOREST_KINDS[R[o + 5]];
-        if (K.species === 'shrub') continue;
+        if (K.species === 'shrub' || R[o + 3] === 0) continue;
         const sc = R[o + 3];
         out({ cyl: true, x, z, r: Math.max(0.15, 0.3 * sc), hx: 0, hz: 0, ux: 1, uz: 0, y0: R[o + 1], y1: R[o + 1] + K.height * sc });
       }
     }
+  }
+
+  /** The nearest real tree (no shrub) of the loaded fine tiles within r of a point, or null. */
+  nearestTree(x: number, z: number, r: number): { x: number; y: number; z: number; scale: number; yaw: number; species: TreeSpecies; variant: number } | null {
+    let best: ReturnType<Countryside['nearestTree']> = null, bd = r;
+    for (const t of this.tiles.values()) {
+      const R = t.recs;
+      if (!R || t.size > FOREST_DETAIL || x < t.x0 - bd || x > t.x0 + t.size + bd || z < t.z0 - bd || z > t.z0 + t.size + bd) continue;
+      for (let o = 0; o < R.length; o += FOREST_STRIDE) {
+        const K = FOREST_KINDS[R[o + 5]];
+        if (K.species === 'shrub' || R[o + 3] === 0) continue;
+        const d = Math.hypot(R[o] - x, R[o + 2] - z);
+        if (d < bd) { bd = d; best = { x: R[o], y: R[o + 1], z: R[o + 2], scale: R[o + 3], yaw: R[o + 4], species: K.species as TreeSpecies, variant: K.variant }; }
+      }
+    }
+    return best;
+  }
+
+  /** A tree leaves its spot for good (an awakened tree): no longer drawn or in the way. */
+  uproot(x: number, z: number): void {
+    this.gone.add(goneKey(x, z));
+    for (const t of this.tiles.values()) {
+      const R = t.recs;
+      if (!R || x < t.x0 - 1 || x > t.x0 + t.size + 1 || z < t.z0 - 1 || z > t.z0 + t.size + 1) continue;
+      for (let o = 0; o < R.length; o += FOREST_STRIDE) if (Math.abs(R[o] - x) < 0.05 && Math.abs(R[o + 2] - z) < 0.05) R[o + 3] = 0;
+    }
+    this.lastNear.set(1e9, 0, 0);
+    this.nearKey = '';
   }
 
   /** One tiny mesh per material for background shader compilation (not added to the scene). */
