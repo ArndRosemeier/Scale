@@ -116,7 +116,8 @@ export class Sidekick {
     g.renderer.scene.add(this.fx.group);
     this.beam = new THREE.Mesh(
       new THREE.CylinderGeometry(0.5, 0.18, 50, 12, 1, true).translate(0, 25, 0),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(SHARD_COLOR), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+      // Plain blending in a pale tint and no fog: added light vanishes against a bright day sky.
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(SHARD_COLOR).lerp(new THREE.Color(0xffffff), 0.55), transparent: true, opacity: 0, depthWrite: false, fog: false, side: THREE.DoubleSide }),
     );
     this.beam.castShadow = this.beam.receiveShadow = false;
     this.beam.visible = false;
@@ -223,13 +224,16 @@ export class Sidekick {
       this.fx.ground.visible = true;
       this.fx.scorch.visible = false;
       this.fx.shardGlow.set(this.v.set(s.x, s.y + 0.35, s.z), 0.55 * pulse, 0.5);
-      // The column of light: faint, a little stronger closer (none beyond the pull).
+      // The column of light: wider and taller with distance so it stays a few pixels wide and
+      // over the roofs (a thin line is lost at 100 m), a little stronger in the pull.
       const kb = d < SHARD.pullR ? 1 - d / SHARD.pullR : 0;
+      const w = Math.max(1, d / 40);
       this.beam.position.set(s.x, s.y, s.z);
-      this.beam.material.opacity = kb > 0 ? (0.05 + 0.08 * kb) * pulse : 0;
-      this.beam.visible = kb > 0;
+      this.beam.scale.set(w, Math.max(1, d / 120), w);
+      this.beam.material.opacity = (0.16 + 0.08 * kb) * pulse;
+      this.beam.visible = true;
       if (d < 80 && Math.random() < dt * 6) this.fx.particles.mote(this.v.set(s.x + (Math.random() - 0.5) * 0.8, s.y + 0.1, s.z + (Math.random() - 0.5) * 0.8), 2.5, 0.06);
-    }
+    } else this.beam.visible = false;
     this.watchGang(d);
     // The pull: the hum and the glow at the screen's edge, stronger closer.
     const k = d < SHARD.pullR ? 1 - d / SHARD.pullR : 0;
@@ -255,8 +259,8 @@ export class Sidekick {
     const ex = 50 + (sx / m) * 50, ey = 50 + (sy / m) * 50;
     // (Close by, it is in plain sight: no need to point.)
     const near = Math.min(1, Math.max(0, (d - 12) / 25));
-    const a = (0.25 + 0.35 * k) * (0.65 + 0.35 * Math.sin(this.time * 2.4)) * near;
-    this.edge.style.background = `radial-gradient(ellipse 40% 46% at ${ex.toFixed(1)}% ${ey.toFixed(1)}%, rgba(140, 200, 255, 0.9) 0%, rgba(110, 160, 255, 0.35) 40%, rgba(110, 160, 255, 0) 100%)`;
+    const a = (0.55 + 0.4 * k) * (0.85 + 0.15 * Math.sin(this.time * 2.4)) * near;
+    this.edge.style.background = `radial-gradient(ellipse 34% 40% at ${ex.toFixed(1)}% ${ey.toFixed(1)}%, rgba(90, 170, 255, 0.95) 0%, rgba(70, 130, 255, 0.55) 35%, rgba(70, 130, 255, 0) 100%)`;
     this.edge.style.opacity = a.toFixed(3);
   }
 
