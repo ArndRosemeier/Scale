@@ -29,7 +29,7 @@ Common foundation: a `ThreatActor` (HP, armour, weak spots as local hitspheres, 
 4. **Brood — swarm** (T1–T2, 40–150 units). Boids over streets and walls; chase people, flip cars, gnaw robots; small but everywhere-destruction. Chittering wave, dark carpet. The entry-level threat: a weak hero can fight single creatures; fire wave/chain lightning clear clumps. Pairs with a "Mother" Strider later. Instanced + vertex animation like the birds.
 5. **Roc — flying beast** (T2–T3). Perches on towers/roof edges, dives on helicopters/drones, carries off a bus; perch weight crushes top floors, wing gusts throw debris. Weak player: catch falling people; medium: whirlwind grounds it; strong: aerial fight.
 
-### Aliens (escalation: scouts → abduction → landing → invasion)
+### Aliens (escalation: scouts → abduction → landing → invasion) — superseded by docs/ALIENS_PLAN.md
 6. **Scout drones** (T1) — silent lights at night (omen), scanning people with light cones; reuse the drone layer; downed scouts drop loot/power cores.
 7. **Abduction craft** (T2) — hovers and beams up cars and people; the player pulls people out (rescue) or shrinks the craft.
 8. **Landing craft & tripods** (T3) — three IK legs and a dome, heat ray reusing the laser-eyes beam/heat accumulation; shields fall after pylon generators are destroyed (CoH); weak spots at leg joints; toppling a tripod onto a building is spectacular.
@@ -93,7 +93,7 @@ Roadmap:
 - **Phase A — Robot malfunction** (minor, ~2 weeks): hostile controller for robots/drones/service robots, police levels 0–2, first evacuation to metro entrances, siren stimulus, cause-aware consequences, ThreatClock with omens. Tests: deterministic clock schedule, first event ≥ T; spawning → ≥ 3 police cars tasked within 20 s, siren stimulus, fleeing people.
 - **Phase B — Strider from the river** (flagship, ~5–6 weeks): GiantBody refactor, segmented rig, arterial route to downtown, full ladder 0–4 with tanks, helicopters, jets, triage tent, rescues, smoke columns, billboard alerts, aftermath. Tests: route reaches downtown for 20 seeds; abstract army-vs-Strider battle deterministic, army win rate 25–55% over 50 seeds; ≥ 60% of people within 300 m flee within 15 s; level ≥ 3 within 3 min; footsteps break buildings; downed helicopter becomes a wreck; rescues give karma; climax frame time within budget.
 - **Phase C — Swarm + Burrower** (~4 weeks): swarm instancing, sewer/metro use, sinkholes (lift the 16-hole limit), metro suspension.
-- **Phase D — Aliens** (~6 weeks): scouts and infiltrators as omens, abduction craft, tripods with pylons, mothership climax.
+- **Phase D — Aliens**: replaced by docs/ALIENS_PLAN.md (2026-10-07): the Wardens watch and never meddle; forbidden aliens sneak in.
 - **Phase E**: Leviathan and bridges, Roc, giant mech, the player leading the army (rally, airstrikes), reconstruction.
 
 ## 5. Open questions (recommended defaults)
