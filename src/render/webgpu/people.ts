@@ -77,7 +77,7 @@ export function createSkinNodeMaterial(opts: { expr: boolean; exprTex: THREE.Tex
   const units = Math.max(1, opts.exprUnits);
   if (opts.expr && opts.exprTex) {
     const exprTex = opts.exprTex;
-    const uExprW = uniformArray(u.uExprW.value, 'float');
+    const uExprW = uniformArray(u.uExprW.value, 'float').setName('uExprW');
     const uFaceScale = U(u.uFaceScale);
     const aExpr = attribute('aExpr', 'float');
     displaceBeforeSkinning(material, () => Fn(() => {

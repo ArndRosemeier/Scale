@@ -7,7 +7,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, vec3, fract, floor, mix, sub, mul, buffer, storage, instanceIndex, mat4, instancedBufferAttribute,
-  instancedDynamicBufferAttribute, OnBeforeFrameUpdate,
+  instancedDynamicBufferAttribute, OnBeforeFrameUpdate, int,
 } from 'three/tsl';
 
 /** vhHash / fh */
@@ -30,12 +30,44 @@ export const noise3 = Fn(([x]) => {
 
 const interleaved = new WeakMap<THREE.BufferAttribute, THREE.InstancedInterleavedBuffer>();
 
+/** Our interleaved copy of an instance matrix attribute, kept in step with its version. */
+function interleavedOf(m: THREE.InstancedBufferAttribute): THREE.InstancedInterleavedBuffer {
+  let ib = interleaved.get(m);
+  if (!ib) {
+    ib = new THREE.InstancedInterleavedBuffer(m.array, 16, 1);
+    interleaved.set(m, ib);
+  }
+  const b = ib;
+  OnBeforeFrameUpdate(() => {
+    if (b.version !== m.version) b.version = m.version;
+  });
+  return ib;
+}
+
 /**
  * The current object's instance matrix (vertex stage), or null when it is not an InstancedMesh.
  * Call inside an `Fn((_, builder) => ...)`. Mirrors three's own instancing node (accessors/Instance.js):
  * a uniform buffer while it fits, else per-instance vertex attributes (our own interleaved copy of
  * the matrices, kept in step with their version).
  */
+/**
+ * Only the current instance's translation (instanceMatrix[3].xyz), or null when not instanced. On
+ * the vertex-attribute path this reads one column (1 attribute slot instead of 4), which keeps
+ * meshes with many attributes within WebGPU's 16 (see shareInstancedShaders in ./index).
+ */
+export function instanceTranslationOf(builder): unknown | null {
+  const o = builder.object;
+  if (!o || o.isInstancedMesh !== true || !o.instanceMatrix || o.instanceMatrix.isInstancedBufferAttribute !== true) return null;
+  const m = o.instanceMatrix;
+  const count = Math.max(m.count, 1);
+  if (m.isStorageInstancedBufferAttribute === true || count * 16 * 4 <= builder.getUniformBufferLimit()) {
+    return (instanceMatrixOf(builder) as { element(i: unknown): { xyz: unknown } }).element(int(3)).xyz;
+  }
+  const ib = interleavedOf(m);
+  const bufferFn = m.usage === THREE.DynamicDrawUsage ? instancedDynamicBufferAttribute : instancedBufferAttribute;
+  return bufferFn(ib, 'vec4', 16, 12).xyz;
+}
+
 export function instanceMatrixOf(builder): unknown | null {
   const o = builder.object;
   if (!o || o.isInstancedMesh !== true || !o.instanceMatrix || o.instanceMatrix.isInstancedBufferAttribute !== true) return null;
@@ -43,14 +75,7 @@ export function instanceMatrixOf(builder): unknown | null {
   const count = Math.max(m.count, 1);
   if (m.isStorageInstancedBufferAttribute === true) return storage(m, 'mat4', count).element(instanceIndex);
   if (count * 16 * 4 <= builder.getUniformBufferLimit()) return buffer(m.array, 'mat4', count).element(instanceIndex);
-  let ib = interleaved.get(m);
-  if (!ib) {
-    ib = new THREE.InstancedInterleavedBuffer(m.array, 16, 1);
-    interleaved.set(m, ib);
-  }
-  OnBeforeFrameUpdate(() => {
-    if (ib.version !== m.version) ib.version = m.version;
-  });
+  const ib = interleavedOf(m);
   const bufferFn = m.usage === THREE.DynamicDrawUsage ? instancedDynamicBufferAttribute : instancedBufferAttribute;
   return mat4(bufferFn(ib, 'vec4', 16, 0), bufferFn(ib, 'vec4', 16, 4), bufferFn(ib, 'vec4', 16, 8), bufferFn(ib, 'vec4', 16, 12));
 }

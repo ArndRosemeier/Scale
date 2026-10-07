@@ -121,3 +121,11 @@ Ordered by how much of the screen they cover (port first what is always visible)
   attribute / buffer limits: 586 → 210 pipelines headless. Glass and environment reflections were
   compared on Dawn (SwiftShader) against WebGL2 on a test page: same; the PC difference is still
   open.
+- 2026-10-07 (evening): PC at 64d3c9c: WebGPU 53–57 s (WebGL 8–17 s), fps 57 day / 50 night (was
+  40 / 43), no pipeline errors, windows now match. Headless (real WebGPU) the pipeline builds were
+  2/3 of the compile phase; they run strictly one after another. 48 of 141 were copies differing
+  only in a uniform array's generated name (leaves per species, facades per chunk) or in the
+  props' instance matrix (a uniform buffer sized per batch): uniform arrays now have fixed names
+  and props read just the translation, so they fit the attribute path. 141 → 93 pipelines in
+  advance, warm-up 100 → 71 s headless. The gate's calm wait (16–20 s on the PC) is the next
+  target; `[gate] background compiles done at …` now logs when it goes idle.

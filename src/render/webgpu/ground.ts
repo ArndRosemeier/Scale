@@ -38,14 +38,14 @@ const GroundSurf = struct({ alb: 'vec3', rough: 'float', pud: 'float', tuv: 'vec
 const TerrainSurf = struct({ albedo: 'vec3', rough: 'float', tn: 'vec2', tuv: 'vec2' }, 'TerrainSurf');
 
 function tiles(arrays: MaterialArrays) {
-  return uniformArray(arrays.tileMeters.slice(0, 16).concat(new Array(Math.max(0, 16 - arrays.tileMeters.length)).fill(2)), 'float');
+  return uniformArray(arrays.tileMeters.slice(0, 16).concat(new Array(Math.max(0, 16 - arrays.tileMeters.length)).fill(2)), 'float').setName('uTile');
 }
 
 let holes: { A: unknown; B: unknown; N: unknown; under: unknown } | null = null;
 function holeNodes() {
   if (!holes) holes = {
-    A: uniformArray(terrainHoles.uHoleA.value, 'vec4'),
-    B: uniformArray(terrainHoles.uHoleB.value, 'vec4'),
+    A: uniformArray(terrainHoles.uHoleA.value, 'vec4').setName('uHoleA'),
+    B: uniformArray(terrainHoles.uHoleB.value, 'vec4').setName('uHoleB'),
     N: shared(terrainHoles.uHoleN),
     under: shared(terrainHoles.uUnder),
   };

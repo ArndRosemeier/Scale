@@ -40,8 +40,8 @@ const SkySurf = struct({ col: 'vec3', rough: 'float', metal: 'float', emis: 'vec
  */
 export function skylineNodeMaterial(arrays: MaterialArrays, mask: THREE.Texture, maskW: number, ruins: THREE.Vector4[]): THREE.MeshStandardNodeMaterial {
   const mat = new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
-  const uTile = uniformArray(arrays.tileMeters.slice(0, 24).concat(new Array(Math.max(0, 24 - arrays.tileMeters.length)).fill(2)), 'float');
-  const uRuin = uniformArray(ruins, 'vec4');
+  const uTile = uniformArray(arrays.tileMeters.slice(0, 24).concat(new Array(Math.max(0, 24 - arrays.tileMeters.length)).fill(2)), 'float').setName('uTile');
+  const uRuin = uniformArray(ruins, 'vec4').setName('uRuin');
   const { uNight, uLitFrac } = GN;
   const iA = attribute('iA', 'vec4'), iB = attribute('iB', 'vec4'), iS = attribute('iS', 'vec4'), iP = attribute('iP', 'vec4');
 

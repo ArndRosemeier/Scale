@@ -215,7 +215,7 @@ export function createLeafNodeMaterial(atlas: THREE.Texture, autumn: THREE.Vecto
   const vOcc = attribute('aOcc', 'float');
   mat.positionNode = windPosition(U, 1.0, () => vTint);
   const uSeason = shared(U.uSeason);
-  const uAutumn = uniformArray(autumn, 'vec4');
+  const uAutumn = uniformArray(autumn, 'vec4').setName('uAutumn');
   const vMapUv = uv();
 
   mat.colorNode = Fn(() => {

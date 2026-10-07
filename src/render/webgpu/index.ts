@@ -67,8 +67,10 @@ function shareInstancedShaders(renderer: THREE.WebGPURenderer): void {
     const attrs = Object.values(o.geometry.attributes);
     const buffers = new Set(attrs.map((a) => (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute).data : a));
     const extra = o.instanceColor ? 1 : 0;
-    // (Margin: materials can read more attributes than the geometry lists, e.g. packed ones.)
-    if (attrs.length + extra + 4 > 12 || buffers.size + extra + 1 > 8) return;
+    // (Our own nodes can read the matrix again, as attributes of their own: up to 4 slots and a
+    // buffer, unless the material says how many it reads.)
+    const own = (renderObject.material?.userData?.instanceReads as number | undefined) ?? 4;
+    if (attrs.length + extra + 4 + own > 16 || buffers.size + extra + 1 + (own > 0 ? 1 : 0) > 8) return;
     builder.getUniformBufferLimit = () => 0;
   };
 }

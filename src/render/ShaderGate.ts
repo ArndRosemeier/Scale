@@ -89,6 +89,7 @@ export class ShaderGate {
    */
   gpuCompile: ((o: THREE.Object3D) => Promise<unknown>) | null = null;
   private gpuPending = 0;
+  private idleLogAt = -1e9;
 
   private updateWebGPU(): void {
     if (!this.queue.length || !this.gpuCompile) return;
@@ -113,6 +114,11 @@ export class ShaderGate {
       this.gpuPending++;
       const show = (): void => {
         this.gpuPending--;
+        if (this.gpuPending === 0 && performance.now() - this.idleLogAt > 30000) {
+          this.idleLogAt = performance.now();
+          const longest = this.stats.late.reduce((a, l) => Math.max(a, l.ms), 0);
+          console.log(`[gate] background compiles done at ${(performance.now() / 1000).toFixed(1)} s: ${this.stats.hidden} meshes waited so far, longest ${longest} ms`);
+        }
         for (const o of fresh) if (o.layers.isEnabled(HIDDEN_LAYER)) { o.layers.enable(0); o.layers.disable(HIDDEN_LAYER); }
         this.stats.swapped += fresh.length;
         const ms = performance.now() - t0;

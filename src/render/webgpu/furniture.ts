@@ -16,7 +16,7 @@ import {
 } from 'three/tsl';
 import { shared } from './common';
 import { setDiffuse } from './ground';
-import { noise3 as fn, instanceMatrixOf } from './propsCommon';
+import { noise3 as fn, instanceTranslationOf } from './propsCommon';
 
 const FurnSurf = struct({ base: 'vec3', rough: 'float', metal: 'float', emis: 'vec3' }, 'FurnitureSurf');
 
@@ -25,6 +25,8 @@ export function createFurnitureNodeMaterial(
   U: { uTime: { value: number }; uNight: { value: number }; uLampOn: { value: number } },
 ): THREE.MeshStandardNodeMaterial {
   const m = new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
+  // (Attribute slots the nodes below read from the instance matrix besides three's own: one column.)
+  m.userData.instanceReads = 1;
   const uTime = shared(U.uTime), uNight = shared(U.uNight), uLampOn = shared(U.uLampOn);
 
   // Vertex.
@@ -49,8 +51,8 @@ export function createFurnitureNodeMaterial(
   })(), 'vPaint');
   // vOPos = position (+ instanceMatrix[3].xyz * 0.73 when instanced).
   const vOPos = varying(Fn((_, builder) => {
-    const im = instanceMatrixOf(builder);
-    return im ? positionGeometry.add(im.element(int(3)).xyz.mul(0.73)) : positionGeometry;
+    const t = instanceTranslationOf(builder);
+    return t ? positionGeometry.add(t.mul(0.73)) : positionGeometry;
   })(), 'vOPos');
 
   const surface = Fn(() => {

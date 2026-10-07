@@ -84,3 +84,14 @@ of nested `render()` calls. `compileAsync` only helps when all of these are the 
 frame: compile through `Renderer.compileAsync` (it targets the scene's render target at the top
 level, like `Post.render`), never swap `scene.environment` for a new texture, and don't render
 the scene from inside a node (`pass()`).
+
+## Shaders shared between materials
+
+three builds each pipeline one after the other (compileAsync waits for every pipeline before the
+next object), ~100 ms each on the PC, so every distinct shader counts. Two materials share a
+pipeline only when their WGSL is identical, and a `uniformArray` / `buffer` is written into the
+code as `NodeBuffer_<node id>`, a new name per material: give each one a fixed name with
+`.setName('uTile')` (unique within one shader). Instanced matrices go through the attribute path
+where they fit (shareInstancedShaders in `webgpu/index.ts`); a material whose nodes read the
+matrix again declares how many attribute slots that takes in `userData.instanceReads` (default 4),
+and reads only what it needs (`instanceTranslationOf` is one slot).

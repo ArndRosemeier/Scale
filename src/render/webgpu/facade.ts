@@ -61,7 +61,7 @@ const interiorRoom = Fn(([local, room, id, vt, office]) => {
 export function createFacadeNodeMaterial(arrays: MaterialArrays, elemTex: THREE.Texture | null, elemW = 1, backPlaster = true): THREE.MeshStandardNodeMaterial {
   const mat = new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 1, metalness: 0, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide });
   const tiles = arrays.tileMeters.slice(0, 24).concat(new Array(Math.max(0, 24 - arrays.tileMeters.length)).fill(2));
-  const uTile = uniformArray(tiles, 'float');
+  const uTile = uniformArray(tiles, 'float').setName('uTile');
   const albTex = arrays.albedo, nrmTex = arrays.normal;
   const { uNight, uDayLight, uLitFrac, uShopLit, uEatLit, uWet } = GN;
 
