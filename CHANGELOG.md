@@ -2,13 +2,23 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.114 — 2026-10-07
+## 0.116 — 2026-10-07
 
 - **Your sidekick is around.** Once you have given someone the second shard, they become a full companion: they hang about nearby (not glued to your heels), fly to keep up when you go far, land close to you, and if you leave them far behind they catch up out of sight and fly in rather than popping up.
-- **They fight in their own way.** When a fight breaks out near you they join in with punches and now and then a fireball. The proud and hard go for the leader, the nervous first shout people clear, everyone else jumps straight in, and they say so in short bubbles.
+- **They fight in their own way.** When a fight breaks out near you they join in with punches and now and then their own power, which the shard picks by who they are: fireballs or lightning for the curious and outgoing, a ground quake for the hard-headed, a stunning flash for the dutiful, a blast of wind for the nervous. The awakening tells you which one they got. The proud and hard go for the leader, the nervous first shout people clear, everyone else jumps straight in, and they say so in short bubbles.
 - **Press K to call them** (touch: "Call sidekick" under More). They come at full speed and stay close for a while.
 - **They stay out of trouble with the police.** If the police are after you, your sidekick keeps their distance and tells you so; they never fight officers and their actions never cost you reputation.
 - **When they go down,** the hospital's med drones lift them away to be revived. Most come back after a while, but one time in five the revival fails. Then the city mourns them, they get a grave with their name in a cemetery (shown on the map), and about a day and a half later news of another glowing stone comes in.
+- **The second shard is easier to find and take.** On the map it now has its own glowing crystal mark (also in the legend) instead of looking like a power core, walking into it takes it just like a core, a clear "You carry the second shard" label shows while you have it, and offering it is the first choice when you talk to someone.
+- **Your sidekick no longer gets stuck on parked cars.** In a fight they could land on a car roof and freeze there; they now always come down on the street.
+
+## 0.115 — 2026-10-07
+
+- **Every sewer ladder leads out.** About one manhole shaft in twelve lay outside every city block, so standing at its ladder never showed the E prompt. Every shaft now has its E prompt from the start, and its lid lies on the street of the nearest block. The decorative maintenance ladders on the metro tunnel walls, which led nowhere, are gone.
+
+## 0.114 — 2026-10-07
+
+- **Traffic lights no longer throw an error after the road network rebuilds.** When the city streamed new streets in or dropped far ones, the traffic lights still on screen kept the old network's junction numbers for a moment (or for good, if no light of that kind was near you any more), and reading their colour hit a junction that no longer existed. The console showed "[props] TypeError … reading 'signal'". The lights now switch to the new network in the same frame, and lights that are no longer drawn are forgotten.
 
 ## 0.113 — 2026-10-07
 
