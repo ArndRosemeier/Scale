@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.101 — 2026-10-07
+
+- **Shoulders stay down while people move.** The standing, walking and running animations still pulled the collarbones up into a shrug a moment after any change (0.099 only fixed the pose without animation). Every animation now keeps the shoulders sloping down from the neck.
+
 ## 0.100 — 2026-10-07
 
 - **"Awakened tree" works next to any tree.** The debug entry only looked for street, park and cemetery trees and reported a misleading "unknown archetype" when none was found. It now also wakes forest and countryside trees (the woken tree leaves its spot for good), and it says "no tree standing nearby" when there really is none.
