@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.108 — 2026-10-07
+## 0.109 — 2026-10-07
 
 - **Nothing blocks the front door any more.** House interiors were laid out without looking at where the street door is, so about one door in three opened onto a wall, the lift shaft or the staircase. Now the stairs and the lift are placed clear of the way in, room walls across it get an opening, and nothing solid stands right behind the door. A sweep over 16,679 buildings found 0.2% with a narrower way in (odd little triangular houses), down from 33%. A few such tiny houses now go without inner stairs rather than have them right behind the door.
+
+## 0.108 — 2026-10-07
+
+- **Shoulders no longer sit back.** In every animation the shoulders were pulled behind the chest, so the arms hung from the back of the body. The collarbones now come forward and the arms hang along the side of the body, as in the procedural pose.
 
 ## 0.107 — 2026-10-07
 
