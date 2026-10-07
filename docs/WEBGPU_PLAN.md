@@ -142,3 +142,8 @@ Ordered by how much of the screen they cover (port first what is always visible)
   time their count outgrew the capacity (×2 steps). Capacities now start at 512 and grow ×4
   (`batchCap`). After that WebGPU holds 42–47 fps at High (WebGL 60 at Ultra), open.
   `&buildlog` prints every 10 s what had node shaders built and the fps.
+- 2026-10-07 (late): PC `&buildlog` (d17db81): of ~1900 node builds in the first 4 minutes ~1000
+  were the far skyline (an InstancedMesh per 1.5 km tile, rebuilt whenever a tile got more
+  buildings), then cars (~240 incl. shadow), trees and props (~200, one per kind), people (each
+  person's own materials), facades (a few every 10 s while streaming). The skyline is now one
+  instanced mesh for the whole city, grown in ×4 steps (WebGL screenshot identical).
