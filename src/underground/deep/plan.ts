@@ -1,9 +1,10 @@
 /**
- * The deep realm under a city (pure data, deterministic per seed): where the slimes really live.
+ * The deep realms under a city (pure data, deterministic per seed): where the slimes really live.
+ * Every hidden colony leads down into a realm of its own (planDeeps); each has its own battleground.
  *
- *  - Roads: from a hidden colony's chamber a neck (roomy enough for a camera behind the player)
+ *  - Road: from the colony's chamber a neck (roomy enough for a camera behind the player)
  *    widens into a broad descending gallery — spiralling down where the way is short — to the
- *    Great Hall. Colonies within reach each get their road; the others stay outposts.
+ *    Great Hall.
  *  - The Glow (Lumen, ~60 m down): the Great Hall, a domed cavern with terraced slopes covered in
  *    dwellings round a pool and the Spire (a rock column ringed with fungus shelves); the Gardens
  *    (a forest of giant mushrooms), the Lake (a falls from a crack in the vault), the Archive
@@ -14,14 +15,15 @@
  *    and the Heart chamber, where a shard of the falling star sits on a mound, veins running from it.
  *  - Where the realms meet, the Warrens' mouth by the Throat's floor, closed in by fallen rock to a
  *    passage: the Lumen's trench line — sandbagged bays with gaps between them, a belt of thorn wire,
- *    a cratered no-man's land and the Murk's own berm where the Warrens open.
+ *    a cratered no-man's land and the Murk's own berm where the Warrens open. Its style differs from
+ *    realm to realm (BattleStyle: a second line, a chasm with one bridge, flooded craters, a siege wall).
  *
  * The rock is one signed distance field (field.ts); this module lays out its shapes, the things
  * standing in it (decor), the light sources baked into the rock, and a waypoint graph the slimes
  * walk. Frame: origin O at the Hall's centre, u along the realm's axis, v across.
  */
 import { Rng, deriveSeed } from '../../core/rng';
-import type { Colony } from '../rooms';
+import type { Colony, RoomPlan } from '../rooms';
 import { DeepField, primBounds, type Prim } from './field';
 
 export type DecorKind =
@@ -111,6 +113,11 @@ export interface Trench {
   noMans: [number, number];
   craters: { x: number; z: number; r: number }[];
   murkS: number;
+  /** The battleground's style (see `Battle`), the passage's half width, s of a second line behind (or null), the chasm (or null). */
+  style: BattleStyle;
+  hw: number;
+  rear: number | null;
+  chasm: { s: number; r: number; l: number } | null;
 }
 
 /** Tests a point against what is already underground (tunnels, rooms) and the ground above (cover). */
@@ -121,10 +128,8 @@ export const GLOW_DEPTH = 64, DEEP_DROP = 52;
 /** Road gallery: radius, share of the radius the floor lies under the axis, steepest grade. */
 const ROAD_R = 5.2, ROAD_FLAT = 0.5, ROAD_GRADE = 0.16;
 const NECK_R = 2.3, NECK_FLAT = 0.42, NECK_GRADE = 0.3;
-/** The Warrens' mouth: half width of the passage the fallen rock leaves, how far it runs from the Throat's axis. */
-const MOUTH = 9.6, MOUTH_END = 58;
-/** Farthest colony that gets a road (m from the Hall). */
-const ROAD_REACH = 950;
+/** Rock kept between two realms (m). */
+const REALM_GAP = 14;
 
 export interface PlanInput {
   seed: number;
@@ -137,32 +142,113 @@ export interface PlanInput {
 }
 
 /**
- * Plan the realm. Tries hub colonies and axis directions until the whole realm lies deep under the
- * ground and its roads clear of everything else; null when no colony can host it.
+ * Plan the realms: one below every colony, each reached from it alone, each with its own
+ * battleground (a different style for each, see `Battle`). Colonies nearest the centre first; a
+ * realm keeps clear of those planned before it. Tries axis directions and distances until the whole
+ * realm lies deep under the ground and its road clear of everything else; a colony where nothing
+ * fits gets none.
  */
-export function planDeep(inp: PlanInput): DeepPlan | null {
-  const { colonies } = inp;
-  if (!colonies.length) return null;
-  const rng = new Rng(deriveSeed(inp.seed, 'deep'));
-  // The colony nearest the city centre hosts the Hall first.
-  const order = colonies.slice().sort((a, b) => Math.hypot(a.chamber.cx, a.chamber.cz) - Math.hypot(b.chamber.cx, b.chamber.cz));
+export function planDeeps(inp: PlanInput): DeepPlan[] {
+  const out: DeepPlan[] = [];
+  const order = inp.colonies.slice().sort((a, b) => Math.hypot(a.chamber.cx, a.chamber.cz) - Math.hypot(b.chamber.cx, b.chamber.cz));
+  const styles = new Rng(deriveSeed(inp.seed, 'battles')).shuffle(BATTLE_STYLES.slice());
   for (const hub of order) {
-    const base = Math.atan2(hub.chamber.uz, hub.chamber.ux);
-    const turns = [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI];
-    const jitter = rng.range(-0.25, 0.25);
-    for (const t of turns) {
-      for (const dist of [150, 190, 120]) {
-        const p = tryPlan(inp, hub, base + t + jitter, dist, rng.nextU32());
-        if (p) return p;
-      }
+    const before = out.map((p) => new DeepField(p.prims, p.seed));
+    const blocked: Blocked = (x, y, z) => inp.blocked(x, y, z) || before.some((F) => F.near(x, y, z) && F.sdf(x, y, z) < REALM_GAP);
+    const p = planRealm({ ...inp, blocked }, hub, styles[out.length % styles.length]);
+    if (p) out.push(p);
+  }
+  return out;
+}
+
+/** The realm below one colony (null: nothing fits). */
+export function planRealm(inp: PlanInput, hub: Colony, style: BattleStyle = 'line'): DeepPlan | null {
+  const rng = new Rng(deriveSeed(inp.seed, 'deep' + hub.id));
+  const base = Math.atan2(hub.chamber.uz, hub.chamber.ux);
+  const turns = [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI, 2.3, -2.3];
+  const jitter = rng.range(-0.25, 0.25);
+  for (const t of turns) {
+    for (const dist of [150, 190, 120, 240, 95]) {
+      const p = tryPlan(inp, hub, base + t + jitter, dist, rng.nextU32(), style);
+      if (p) return p;
     }
   }
   return null;
 }
 
+/**
+ * A colony nothing fits below (rare: crowded by stations) would be a dead end: its room loses the gap
+ * and it is dropped; the others are numbered anew (colony ids are indices), their realms and roads with them.
+ * Returns the dropped ones (the caller takes their chamber and crawl out of its volumes).
+ */
+export function dropOutposts(rooms: RoomPlan, plans: DeepPlan[]): Colony[] {
+  const keep = rooms.colonies.filter((c) => plans.some((p) => p.hub === c.id));
+  const gone = rooms.colonies.filter((c) => !keep.includes(c));
+  if (!gone.length) return gone;
+  for (const c of gone) { const r = rooms.rooms[c.room]; r.gap = null; r.colony = -1; c.chamber.colony = undefined; }
+  const id = new Map(keep.map((c, i) => [c.id, i]));
+  for (const p of plans) {
+    p.hub = id.get(p.hub)!;
+    for (const r of p.roads) r.colony = id.get(r.colony)!;
+    for (const n of p.nodes) { const m = /^gate(\d+)$/.exec(n.name); if (m) n.name = `gate${id.get(Number(m[1]))}`; }
+  }
+  keep.forEach((c, i) => { c.id = i; c.chamber.colony = i; rooms.rooms[c.room].colony = i; });
+  rooms.colonies.length = 0;
+  rooms.colonies.push(...keep);
+  return gone;
+}
+
+/** The first realm (tests, tools). */
+export function planDeep(inp: PlanInput): DeepPlan | null { return planDeeps(inp)[0] ?? null; }
+
+/**
+ * The battleground in a realm's Warrens' mouth, laid out procedurally. Every style keeps the same
+ * frame (the Lumen's trench of bays and gaps, thorn wire, no-man's land, the Murk's berm) and varies
+ * on it; the passage's width, the number of bays, the depths vary in every realm.
+ *  - line: one trench line.
+ *  - double: a second line of bays behind the first, more sentries further back.
+ *  - chasm: a chasm across no-man's land, one rock bridge over it: the Murk come over single file.
+ *  - flooded: many craters, deeper, standing full of water.
+ *  - siege: the Murk's berm is a high wall bristling with crystal spikes.
+ */
+export type BattleStyle = 'line' | 'double' | 'chasm' | 'flooded' | 'siege';
+export const BATTLE_STYLES: BattleStyle[] = ['line', 'chasm', 'flooded', 'double', 'siege'];
+export interface Battle {
+  style: BattleStyle;
+  /** Half width of the passage; s of the trench line, of the Murk's berm; l of the berm's gap. */
+  hw: number; ts: number; murkS: number; mL: number;
+  segs: [number, number][]; gaps: number[];
+  rear: { s: number; segs: [number, number][] } | null;
+  chasm: { s: number; r: number; l: number } | null;
+  noMans: [number, number];
+  wire: [number, number];
+}
+
+export function battleFor(style: BattleStyle, rng: Rng): Battle {
+  const hw = rng.range(8.6, 12);
+  const ts = 30 + rng.range(0, 2.5) + (style === 'double' ? 6 : 0);
+  const n = Math.max(2, Math.min(4, Math.round((hw * 2 - 3.2) / 5)));
+  const a = -hw + 1.6, b = hw - 1.6, gapW = 2, len = (b - a - (n - 1) * gapW) / n;
+  const segs: [number, number][] = [], gaps: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const l0 = a + i * (len + gapW);
+    segs.push([l0, l0 + len]);
+    if (i > 0) gaps.push(l0 - gapW / 2);
+  }
+  const chasm = style === 'chasm' ? { s: ts + 16, r: 2.6, l: rng.range(-hw + 3.5, hw - 3.5) } : null;
+  const murkS = chasm ? chasm.s + 9 : ts + rng.range(19, 24);
+  return {
+    style, hw, ts, murkS, mL: rng.range(-hw / 3, hw / 3), segs, gaps,
+    rear: style === 'double' ? { s: ts - 7, segs: [[a, -1.2], [1.2, b]] } : null,
+    chasm,
+    noMans: [ts + 8, chasm ? chasm.s - 3.6 : murkS - 3],
+    wire: [ts + 4.5, ts + 6.5],
+  };
+}
+
 type V = { x: number; y: number; z: number };
 
-function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: number): DeepPlan | null {
+function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: number, style: BattleStyle): DeepPlan | null {
   const rng = new Rng(seed);
   const ux = Math.cos(ang), uz = Math.sin(ang);
   const ch = hub.chamber;
@@ -258,12 +344,15 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   const tAx = (wC.x - tC.x) / tDl, tAz = (wC.z - tC.z) / tDl, tCx = -tAz, tCz = tAx;
   const across = Math.atan2(tCz, tCx);
   const G0 = (s: number, l: number) => ({ x: tC.x + tAx * s + tCx * l, z: tC.z + tAz * s + tCz * l });
+  // The battleground's shape (its style and measures, see `Battle`).
+  const B = battleFor(style, new Rng(deriveSeed(seed, 'battle')));
+  const mouthEnd = B.murkS + 7;
   for (const side of [-1, 1]) {
-    const m = G0(MOUTH_END / 2, side * (MOUTH + 25));
-    P('box', true, 2.5, 1.0, 3, [m.x, L2 + 14, m.z, 25, 20, MOUTH_END / 2, across]);
+    const m = G0(mouthEnd / 2, side * (B.hw + 25));
+    P('box', true, 2.5, 1.0, 3, [m.x, L2 + 14, m.z, 25, 20, mouthEnd / 2, across]);
     // Fallen blocks along the passage's sides.
-    for (let s = 31; s < MOUTH_END; s += rng.range(4, 7)) {
-      const r = rng.range(1.6, 3), q = G0(s, side * (MOUTH + r * 0.5));
+    for (let s = 31; s < mouthEnd; s += rng.range(4, 7)) {
+      const r = rng.range(1.6, 3), q = G0(s, side * (B.hw + r * 0.5));
       P('ell', true, 1.2, 1.1, 3, [q.x, L2 + rng.range(-0.5, 1.5), q.z, r, r * rng.range(0.8, 1.4), r, rng.range(0, 6.3), -1e9]);
     }
   }
@@ -275,37 +364,51 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   P('ell', false, 2, 0.7, 2, [look.x, yB + 2.2, look.z, 6, 4.2, 6, aB, yB + 0.05]);
 
   // ---------------------------------------------------------------- the trench war
-  const tFloor = G0(40, 0);
+  const tFloor = G0(B.ts + 10, 0);
   const ty = new DeepField(prims, seed).floorAt(tFloor.x, L2 + 4, tFloor.z, 12) ?? L2 - 1;
   const G = (s: number, l: number) => ({ ...G0(s, l), y: ty });
-  const TS = 30;
-  const segs: [number, number][] = [[-7.8, -3.1], [-1.1, 2.5], [4.5, 7.9]];
-  const gaps = [-2.1, 3.5];
-  for (const [l0, l1] of segs) {
-    const m = G(TS, (l0 + l1) / 2), q = G(TS + 1.4, (l0 + l1) / 2), hl = (l1 - l0) / 2;
-    // The bay: a metre deep, its lips worn round.
-    P('box', false, 0.45, 0.25, 2, [m.x, ty - 0.25, m.z, hl, 0.75, 0.85, across]);
-    // The parapet in front of it (sandbags go on top).
-    P('box', true, 0.3, 0.15, 2, [q.x, ty + 0.2, q.z, hl + 0.25, 0.65, 0.45, across]);
-  }
-  // The Murk's berm short of the Warrens, open where they come over.
-  const murkS = 51, mL = 0.4;
-  for (const [l0, l1] of [[-7.5, mL - 1.8], [mL + 1.8, 7.5]]) {
+  const TS = B.ts, segs = B.segs, gaps = B.gaps, murkS = B.murkS, mL = B.mL, hwB = B.hw;
+  /** A line of bays at `at`: a metre deep, lips worn round, the parapet in front (sandbags go on top). */
+  const bays = (at: number, list: [number, number][]) => {
+    for (const [l0, l1] of list) {
+      const m = G(at, (l0 + l1) / 2), q = G(at + 1.4, (l0 + l1) / 2), hl = (l1 - l0) / 2;
+      P('box', false, 0.45, 0.25, 2, [m.x, ty - 0.25, m.z, hl, 0.75, 0.85, across]);
+      P('box', true, 0.3, 0.15, 2, [q.x, ty + 0.2, q.z, hl + 0.25, 0.65, 0.45, across]);
+    }
+  };
+  bays(TS, segs);
+  if (B.rear) bays(B.rear.s, B.rear.segs);
+  // The Murk's berm short of the Warrens, open where they come over (a high wall when they besiege).
+  const bermH = B.style === 'siege' ? 1.25 : 0.6;
+  for (const [l0, l1] of [[-hwB + 1.5, mL - 1.8], [mL + 1.8, hwB - 1.5]]) {
     if (l1 - l0 < 1.5) continue;
     const m = G(murkS, (l0 + l1) / 2);
-    P('box', true, 0.5, 0.45, 2, [m.x, ty + 0.05, m.z, (l1 - l0) / 2, 0.6, 0.7, across]);
+    P('box', true, 0.5, 0.45, 2, [m.x, ty + bermH - 0.55, m.z, (l1 - l0) / 2, bermH, 0.7 + (bermH - 0.6), across]);
   }
-  // Craters in no-man's land (not on the line the Murk come over by).
-  const noMans: [number, number] = [38, murkS - 3];
-  const craters: Trench['craters'] = [];
-  for (let i = 0; i < 40 && craters.length < 8; i++) {
-    const s = rng.range(noMans[0] + 1, noMans[1]), l = rng.range(-6.2, 6.2), r = rng.range(1.5, 2.9);
-    if (l + r > -0.6 && l - r < 2.2) continue;
+  // A chasm across no-man's land, with one rock bridge over it.
+  const chasm = B.chasm;
+  if (chasm) {
+    const c = G(chasm.s, 0), b = G(chasm.s, chasm.l);
+    P('ell', false, 1.2, 0.6, 2, [c.x, ty - 1, c.z, hwB + 4, 6, chasm.r, across, -1e9]);
+    P('box', true, 0.6, 0.45, 2, [b.x, ty - 3, b.z, 1.4, 3, chasm.r + 1.2, across]);
+  }
+  // Craters in no-man's land (not on the line the Murk come over by); flooded ones hold water.
+  const noMans = B.noMans;
+  const craters: Trench['craters'] = [], pools: { x: number; z: number; r: number; y: number }[] = [];
+  const wantCraters = B.style === 'flooded' ? 13 : 8;
+  for (let i = 0; i < 80 && craters.length < wantCraters; i++) {
+    const s = rng.range(noMans[0] + 1, noMans[1]), l = rng.range(-hwB + 2.2, hwB - 2.2), r = rng.range(1.5, B.style === 'flooded' ? 3.3 : 2.9);
+    // (The lane the Murk come down from their gap stays clear.)
+    if (Math.abs(l - mL) < r + 1.4) continue;
+    // (Nor the ways from the trench's gaps to the middle of no-man's land.)
+    const nmS = (noMans[0] + noMans[1]) / 2;
+    if (gaps.some((gl) => segDist(s, l, TS, gl, nmS, mL) < r + 1.2)) continue;
     const c = G(s, l);
     if (craters.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < o.r + r - 0.6)) continue;
     craters.push({ x: c.x, z: c.z, r });
-    const d = rng.range(0.45, 0.8);
+    const d = B.style === 'flooded' ? rng.range(0.9, 1.3) : rng.range(0.45, 0.8);
     P('ell', false, 1.0, 0.35, 2, [c.x, ty - d + r * 0.45, c.z, r, r * 0.45, r, 0, -1e9]);
+    if (B.style === 'flooded') pools.push({ x: c.x, z: c.z, r: r * 0.8, y: ty - d + 0.45 });
   }
 
   // ---------------------------------------------------------------- roads
@@ -314,12 +417,6 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   const hubRoad = planRoad(inp, hub, ox, oz, ux, uz, hallRx, hallRz, hallFloor, prims, true, rng);
   if (!hubRoad) { inp.why?.('hub road'); return null; }
   roads.push(hubRoad);
-  for (const c of inp.colonies) {
-    if (c === hub) continue;
-    if (Math.hypot(c.chamber.cx - ox, c.chamber.cz - oz) > ROAD_REACH) continue;
-    const r = planRoad(inp, c, ox, oz, ux, uz, hallRx, hallRz, hallFloor, prims, false, rng);
-    if (r) roads.push(r);
-  }
 
   const field = new DeepField(prims, seed);
   // Deep enough everywhere: the realm's air stays well under the ground (sampled).
@@ -376,7 +473,7 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   {
     const gp = (name: string, s: number, l: number, r: number) => { const p = G(s, l); const y = floorNear(p.x, ty + 1, p.z); if (y !== null) places[name] = { x: p.x, y, z: p.z, r }; };
     gp('trench', TS - 4, 0.7, 4);
-    gp('noMans', (noMans[0] + noMans[1]) / 2, 0.8, 4);
+    gp('noMans', (noMans[0] + noMans[1]) / 2, mL, 4);
     gp('murkLine', murkS - 1.2, mL, 3);
   }
   place('bottom', 142 + 8, 32, L2, 10);
@@ -545,27 +642,31 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   // The trench war in the Warrens' mouth: the Lumen's bays (duckboards, sandbags, lamps), thorn wire,
   // a cratered no-man's land, the Murk's berm and their dead.
   const posts: Trench['posts'] = [], gapPosts: Trench['gapPosts'] = [];
-  for (const [l0, l1] of segs) {
-    for (let l = l0 + 0.35; l < l1 - 0.2; l += 0.9) {
-      const p = G(TS, l), y = floorNear(p.x, ty - 0.2, p.z);
-      if (y === null) continue;
-      decor.push({ k: 'duck', x: p.x, y, z: p.z, s: 0.45, h: 0.6, yaw: across, c: 0, reg: 2 });
-    }
-    for (let l = l0 + 0.6; l < l1 - 0.3; l += 1.5) {
-      const p = G(TS - 0.1, l), y = floorNear(p.x, ty - 0.2, p.z);
-      if (y !== null && y < ty - 0.4) posts.push({ x: p.x, y, z: p.z });
-    }
-    // Sandbags along the parapet, two rows and a few on top.
-    for (const [ds, dy, step] of [[1.1, 0, 0.62], [1.65, 0, 0.62], [1.35, 0.3, 0.7]] as const) {
-      for (let l = l0 - 0.1 + (dy ? 0.4 : 0); l < l1 + 0.1; l += step) {
-        const p = G(TS + ds, l), y = floorNear(p.x, ty + 2, p.z);
-        if (y === null || y < ty + 0.3) continue;
-        decor.push({ k: 'sack', x: p.x, y: y - 0.06 + dy, z: p.z, s: 0.32 + rng.range(-0.03, 0.03), h: 0.32, yaw: across + rng.range(-0.15, 0.15), c: rng.int(0, 3), reg: 2 });
+  const dress = (at: number, list: [number, number][]) => {
+    for (const [l0, l1] of list) {
+      for (let l = l0 + 0.35; l < l1 - 0.2; l += 0.9) {
+        const p = G(at, l), y = floorNear(p.x, ty - 0.2, p.z);
+        if (y === null) continue;
+        decor.push({ k: 'duck', x: p.x, y, z: p.z, s: 0.45, h: 0.6, yaw: across, c: 0, reg: 2 });
       }
+      for (let l = l0 + 0.6; l < l1 - 0.3; l += 1.5) {
+        const p = G(at - 0.1, l), y = floorNear(p.x, ty - 0.2, p.z);
+        if (y !== null && y < ty - 0.4) posts.push({ x: p.x, y, z: p.z });
+      }
+      // Sandbags along the parapet, two rows and a few on top.
+      for (const [ds, dy, step] of [[1.1, 0, 0.62], [1.65, 0, 0.62], [1.35, 0.3, 0.7]] as const) {
+        for (let l = l0 - 0.1 + (dy ? 0.4 : 0); l < l1 + 0.1; l += step) {
+          const p = G(at + ds, l), y = floorNear(p.x, ty + 2, p.z);
+          if (y === null || y < ty + 0.3) continue;
+          decor.push({ k: 'sack', x: p.x, y: y - 0.06 + dy, z: p.z, s: 0.32 + rng.range(-0.03, 0.03), h: 0.32, yaw: across + rng.range(-0.15, 0.15), c: rng.int(0, 3), reg: 2 });
+        }
+      }
+      // Warm lamps in the bay, low (the light stays in the trench).
+      for (let l = l0 + 1; l < l1; l += 3) { const p = G(at - 0.5, l); glow(p.x, ty - 0.2, p.z, LUMEN[3], 4.5, 0.7); }
     }
-    // Warm lamps in the bay, low (the light stays in the trench).
-    for (let l = l0 + 1; l < l1; l += 3) { const p = G(TS - 0.5, l); glow(p.x, ty - 0.2, p.z, LUMEN[3], 4.5, 0.7); }
-  }
+  };
+  dress(TS, segs);
+  if (B.rear) dress(B.rear.s, B.rear.segs);
   for (const l of gaps) {
     const p = G(TS + 0.6, l), y = floorNear(p.x, ty + 1, p.z);
     if (y !== null) gapPosts.push({ x: p.x, y, z: p.z });
@@ -575,41 +676,60 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
       if (yq !== null) decor.push({ k: 'post', x: q.x, y: yq, z: q.z, s: 0.14, h: rng.range(1.2, 1.6), yaw: 0, c: 0, reg: 2 });
     }
   }
-  // Thorn wire: knife rests end to end across the gallery, a little askew.
-  const wire: [number, number] = [TS + 4.5, TS + 6.5];
-  for (let l = -7.4; l < 7.6; l += 2.3) {
+  // Thorn wire: knife rests end to end across the passage, a little askew.
+  const wire = B.wire;
+  for (let l = -hwB + 2.2; l < hwB - 2; l += 2.3) {
     const s = rng.range(wire[0] + 0.4, wire[1] - 0.4), p = G(s, l + rng.range(-0.2, 0.2)), y = floorNear(p.x, ty + 1, p.z);
     if (y === null) continue;
     decor.push({ k: 'wire', x: p.x, y, z: p.z, s: 1.15, h: 0.95, yaw: across + rng.range(-0.25, 0.25), c: 0, reg: 2 });
   }
   // Stakes of the wire's second row, broken thorns.
   for (let i = 0; i < 14; i++) {
-    const p = G(rng.range(wire[0] - 1, wire[1] + 2.5), rng.range(-7, 7)), y = floorNear(p.x, ty + 1, p.z);
+    const p = G(rng.range(wire[0] - 1, wire[1] + 2.5), rng.range(-hwB + 2.6, hwB - 2.6)), y = floorNear(p.x, ty + 1, p.z);
     if (y !== null) decor.push({ k: 'stake', x: p.x, y, z: p.z, s: 0.07, h: rng.range(0.4, 1.1), yaw: rng.range(0, 6.3), c: 0, reg: 2, tilt: rng.range(-0.5, 0.5) });
   }
   // No-man's land: ooze stains, the husks of fallen Murk, burnt-out glow where Lumen fell.
+  const ld = hwB - 2.8;
   for (let i = 0; i < 46; i++) {
-    const s = rng.range(wire[0] - 1, murkS + 1), l = rng.range(-6.8, 6.8), p = G(s, l), y = floorNear(p.x, ty + 1.5, p.z);
-    if (y === null) continue;
+    const s = rng.range(wire[0] - 1, murkS + 1), l = rng.range(-ld, ld), p = G(s, l), y = floorNear(p.x, ty + 1.5, p.z);
+    if (y === null || y < ty - 0.6) continue;
     const murk = rng.chance(0.8);
     decor.push({ k: 'stain', x: p.x, y, z: p.z, s: rng.range(0.4, 1.3), h: 0, yaw: rng.range(0, 6.3), c: murk ? 1 : 0, reg: 2 });
     if (murk && rng.chance(0.45)) glow(p.x, y + 0.3, p.z, MURK[0], 2.5, 0.35);
   }
   for (let i = 0; i < 16; i++) {
-    const s = rng.range(wire[0] - 0.5, murkS - 1), l = rng.range(-6.5, 6.5), p = G(s, l), y = floorNear(p.x, ty + 1.5, p.z);
-    if (y !== null) decor.push({ k: 'husk', x: p.x, y, z: p.z, s: rng.range(0.3, 0.6), h: 0, yaw: rng.range(0, 6.3), c: rng.int(0, 2), reg: 2 });
+    const s = rng.range(wire[0] - 0.5, murkS - 1), l = rng.range(-ld, ld), p = G(s, l), y = floorNear(p.x, ty + 1.5, p.z);
+    if (y !== null && y > ty - 0.6) decor.push({ k: 'husk', x: p.x, y, z: p.z, s: rng.range(0.3, 0.6), h: 0, yaw: rng.range(0, 6.3), c: rng.int(0, 2), reg: 2 });
   }
-  // The Murk's side: crystal spikes along their berm, its red glow.
-  for (let i = 0; i < 18; i++) {
-    const p = G(murkS + rng.range(-0.5, 2.5), rng.range(-7.2, 7.2)), y = floorNear(p.x, ty + 1.5, p.z);
+  // The Murk's side: crystal spikes along their berm (a palisade of tall ones when they besiege), its red glow.
+  const siege = B.style === 'siege';
+  for (let i = 0; i < (siege ? 46 : 18); i++) {
+    const p = G(murkS + rng.range(-0.5, siege ? 1.5 : 2.5), rng.range(-hwB + 1.6, hwB - 1.6)), y = floorNear(p.x, ty + 3, p.z);
     if (y === null || Math.abs((p.x - tC.x) * tCx + (p.z - tC.z) * tCz - mL) < 1.6) continue;
-    const c = rng.int(0, 2), sz = rng.range(0.25, 0.7);
-    decor.push({ k: 'murkCrystal', x: p.x, y, z: p.z, s: sz, h: sz * rng.range(2, 4), yaw: rng.range(0, 6.3), c, reg: 2, tilt: rng.range(-0.6, 0.6) });
+    const c = rng.int(0, 2), sz = siege ? rng.range(0.5, 1.1) : rng.range(0.25, 0.7);
+    decor.push({ k: 'murkCrystal', x: p.x, y, z: p.z, s: sz, h: sz * rng.range(siege ? 3 : 2, siege ? 5.5 : 4), yaw: rng.range(0, 6.3), c, reg: 2, tilt: rng.range(-0.6, 0.6) * (siege ? 0.4 : 1) });
   }
-  for (const l of [-5, 0, 5]) { const p = G(murkS + 2, l); glow(p.x, ty + 1.2, p.z, MURK[0], 9, 0.7); }
-  const trench: Trench = { x: tC.x, y: ty, z: tC.z, ax: tAx, az: tAz, cx: tCx, cz: tCz, s: TS, segs, gaps, posts, gapPosts, wire, noMans, craters, murkS };
+  if (siege) {
+    // Towers of hive at the wall's ends, glaring.
+    for (const side of [-1, 1]) {
+      const p = G(murkS + 1.5, side * (hwB - 2.6)), y = floorNear(p.x, ty + 3, p.z);
+      if (y === null) continue;
+      decor.push({ k: 'hive', x: p.x, y, z: p.z, s: 2.2, h: 5.5, yaw: rng.range(0, 6.3), c: 0, reg: 3 });
+      glow(p.x, y + 4, p.z, MURK[0], 12, 0.9);
+    }
+  }
+  for (const l of [-hwB / 2, 0, hwB / 2]) { const p = G(murkS + 2, l); glow(p.x, ty + 1.2, p.z, MURK[0], 9, 0.7); }
+  // The chasm: a red glow rising out of it, stakes marking the bridge on the Lumen's side.
+  if (chasm) {
+    for (const l of [-hwB / 2, hwB / 2]) { const p = G(chasm.s, l); glow(p.x, ty - 4, p.z, MURK[1], 10, 0.7); }
+    for (const side of [-1.6, 1.6]) {
+      const q = G(chasm.s - chasm.r - 0.8, chasm.l + side), yq = floorNear(q.x, ty + 1, q.z);
+      if (yq !== null) decor.push({ k: 'post', x: q.x, y: yq, z: q.z, s: 0.14, h: 1.4, yaw: 0, c: 0, reg: 2 });
+    }
+  }
+  const trench: Trench = { x: tC.x, y: ty, z: tC.z, ax: tAx, az: tAz, cx: tCx, cz: tCz, s: TS, segs, gaps, posts, gapPosts, wire, noMans, craters, murkS, style: B.style, hw: hwB, rear: B.rear?.s ?? null, chasm };
   // Nothing of the Warrens' own on the battlefield.
-  for (let s = TS - 6; s <= MOUTH_END; s += 4) for (const l of [-6, 0, 6]) { const p = G(s, l); taken.push({ x: p.x, z: p.z, r: 4.2 }); }
+  for (let s = (B.rear?.s ?? TS) - 6; s <= mouthEnd; s += 4) for (let l = -hwB; l <= hwB; l += 6) { const p = G(s, l); taken.push({ x: p.x, z: p.z, r: 4.2 }); }
   for (const t of [0.15, 0.4, 0.65]) {
     const x = fA.x + (fB.x - fA.x) * t, z = fA.z + (fB.z - fA.z) * t;
     glow(x, frontY + 6, z, LUMEN[2], 11, 0.4);
@@ -637,10 +757,12 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     if (s > 0.6 || r.chance(0.25)) glow(x, y + s * 2, z, MURK[c], 4 + s * 4, 0.6);
     taken.push({ x, z, r: s });
   });
+  // (Not in the rock that closes in the Warrens' mouth: its length differs from realm to realm.)
+  const inMouth = (p: { x: number; z: number }) => (p.x - tC.x) * tAx + (p.z - tC.z) * tAz < mouthEnd + 6;
   const hives: DeepPlan['hives'] = [];
   for (const [u, v] of [[214, 44], [226, -10], [244, 48], [262, 4], [210, -14], [238, 16]]) {
     const p = F(u, v, L2 + 2);
-    if (!p) continue;
+    if (!p || inMouth(p)) continue;
     const r = rng.range(3, 5);
     hives.push({ ...p, r });
     decor.push({ k: 'hive', x: p.x, y: p.y, z: p.z, s: r, h: r * rng.range(1.3, 1.8), yaw: rng.range(0, 6.3), c: 0, reg: 3 });
@@ -648,9 +770,10 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     taken.push({ x: p.x, z: p.z, r: r + 1 });
   }
   const pens: DeepPlan['pens'] = [];
-  for (const [u, v] of [[206, 10], [236, -24], [250, 22]]) {
+  for (const [u, v] of [[206, 10], [236, -24], [250, 22], [258, -16], [222, 30]]) {
+    if (pens.length >= 3) break;
     const p = F(u, v, L2 + 2);
-    if (!p) continue;
+    if (!p || inMouth(p)) continue;
     pens.push({ ...p, r: 2.4 });
     decor.push({ k: 'pen', x: p.x, y: p.y, z: p.z, s: 2.4, h: 2.2, yaw: rng.range(0, 6.3), c: 0, reg: 3 });
     glow(p.x, p.y + 1, p.z, LUMEN[0], 6, 0.35);
@@ -688,6 +811,8 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     { x: pool.x, y: L1 - 0.35, z: pool.z, rx: 12.2, rz: 8.4, yaw: yawW + 0.4, reg: 1 },
     { ...at(-36, 74, L1 - 0.6), rx: 26, rz: 15, yaw: yawW - 0.3, reg: 1 },
   ];
+  // Flooded craters on the battleground.
+  for (const q of pools) water.push({ x: q.x, y: q.y, z: q.z, rx: q.r, rz: q.r, yaw: 0, reg: 2 });
   glow(pool.x, L1, pool.z, LUMEN[2], 12, 0.4);
   const falls: Falls[] = [];
   {
@@ -761,8 +886,29 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   const nBot = node('bottom', places.bottom, 8); link(prev, nBot);
   // Through the trench line by its gaps, over no-man's land, past the Murk's berm into the Warrens.
   const nNM = node('noMans', places.noMans, 4);
-  gaps.forEach((l, i) => { const p = G(TS, l); const y = floorNear(p.x, ty + 1, p.z); const n = node(`trench${i}`, y === null ? null : { x: p.x, y, z: p.z }, 1); link(nBot, n); link(n, nNM); });
-  const nML = node('murkLine', places.murkLine, 3); link(nNM, nML);
+  // A second line behind: through its one gap first.
+  let nRear = nBot;
+  if (B.rear) {
+    const at = (name: string, s: number) => { const p = G(s, 0); const y = floorNear(p.x, ty + 1, p.z); return node(name, y === null ? null : { x: p.x, y, z: p.z }, 1); };
+    const g0 = at('rearGap', B.rear.s);
+    link(nBot, g0);
+    // Out in the open between the lines before turning to a gap of the front line.
+    nRear = at('betweenLines', (B.rear.s + TS) / 2);
+    link(g0, nRear);
+  }
+  // Each gap is gone through straight: a waypoint just behind it and one just out in front (a slant clips the bays).
+  gaps.forEach((l, i) => {
+    const at = (name: string, s: number, r: number) => { const p = G(s, l); const y = floorNear(p.x, ty + 1, p.z); return node(name, y === null ? null : { x: p.x, y, z: p.z }, r); };
+    const back = at(`gapBack${i}`, TS - 2.6, 1), n = at(`trench${i}`, TS, 1), out = at(`gapOut${i}`, TS + 2.6, 1);
+    link(nRear, back); link(back, n); link(n, out); link(out, nNM);
+  });
+  const nML = node('murkLine', places.murkLine, 3);
+  if (chasm) {
+    // Over the chasm only by its bridge.
+    const end = (name: string, ds: number) => { const p = G(chasm.s + ds, chasm.l); const y = floorNear(p.x, ty + 1, p.z); return node(name, y === null ? null : { x: p.x, y, z: p.z }, 1.2); };
+    const nB0 = end('bridge0', -chasm.r - 1.6), nB1 = end('bridge1', chasm.r + 1.6);
+    link(nNM, nB0); link(nB0, nB1); link(nB1, nML);
+  } else link(nNM, nML);
   const nW = node('warrens', places.warrens, 16); link(nML, nW);
   const nHL = node('heartLink', F(276, 1, L2), 5); link(nW, nHL);
   const nH = node('heart', places.heart, 8); link(nHL, nH);
@@ -956,4 +1102,11 @@ function angleDiff(a: number, b: number): number {
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   return d;
+}
+
+/** Distance from (x, y) to the segment (ax, ay)–(bx, by). */
+function segDist(x: number, y: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+  const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2)) : 0;
+  return Math.hypot(x - ax - dx * t, y - ay - dy * t);
 }

@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.116 — 2026-10-07
+
+- **Every slime colony leads down into its own realm.** A city now has 2–3 hidden colonies, all near the centre, and none is a dead end any more: each opens into a deep realm of its own with its own Lumen home, its own Murk lair and its own war. Each realm's battleground is different, chosen per city: a single trench line, a double line, a chasm with one rock bridge across no-man's land, flooded craters, or a Murk siege wall with a crystal forest and hive towers. Width, depth and the Murk's lane vary too. Wars in the other realms go on while you are away. Murk that cannot walk straight at you (over their berm, across the chasm) now go round to reach you.
+- **The Lumen's sewer signs are much easier to see.** Big glowing arrows on both walkways at each junction, wider chevrons along the way that never fade below 60%, and bigger, brighter colony signs on the walls at eye height.
+
 ## 0.115 — 2026-10-07
 
 - **Every sewer ladder leads out.** About one manhole shaft in twelve lay outside every city block, so standing at its ladder never showed the E prompt. Every shaft now has its E prompt from the start, and its lid lies on the street of the nearest block. The decorative maintenance ladders on the metro tunnel walls, which led nowhere, are gone.
