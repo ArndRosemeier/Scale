@@ -5,7 +5,7 @@
  * whose gap opens off a sewer room the network is searched outwards (shortest way along the
  * trunks), and the Lumen have left their sign on it:
  *
- *  - Marks: at every junction, on the wall of the branch that leads towards the nearest colony
+ *  - Marks: at every junction, at eye height, on the wall of the branch that leads towards the nearest colony
  *    (a few metres in), that colony's own glowing sign — the same ones that cover its chamber's
  *    walls. Faint far away, brighter the nearer one gets. Following the marks leads to the room
  *    with the gap.
@@ -22,7 +22,7 @@ import type { RoomPlan } from './rooms';
 import { MinHeap } from '../core/heap';
 
 export interface SewerHint {
-  /** mark: the colony's sign on a wall; arrow: a smear on the junction floor into the right branch;
+  /** mark: the colony's sign on a wall; arrow: a big arrow on the junction's walkways into the right branch;
    *  chevron: a glowing V on the walkway pointing the way; scout: a lone Lumen who flees down the branch. */
   kind: 'mark' | 'arrow' | 'chevron' | 'scout';
   x: number; y: number; z: number;
@@ -107,8 +107,11 @@ export function planSewerHints(macro: MacroPlan, tubes: Tube[], rooms: RoomPlan)
     const p0 = pointOnTube(T(k), fromA ? Math.min(L, 2) : Math.max(0, L - 2));
     if (!p0) continue;
     const dx = fromA ? p0.dx : -p0.dx, dz = fromA ? p0.dz : -p0.dz;
-    const qa = spot(k, fromA ? Math.min(L / 2, 3.2) : Math.max(L / 2, L - 3.2), 0);
-    if (qa) out.push({ kind: 'arrow', x: qa.x, y: qa.y, z: qa.z, nx: dx, nz: dz, s: strength, sign: sg });
+    // On both walkways (the middle is the channel).
+    for (const side of [1, -1]) {
+      const qa = spot(k, fromA ? Math.min(L / 2, 3.4) : Math.max(L / 2, L - 3.4), side * (hw - 0.55));
+      if (qa) out.push({ kind: 'arrow', x: qa.x, y: qa.y, z: qa.z, nx: dx, nz: dz, s: strength, sign: sg });
+    }
     if (d < SCOUT_REACH && arms >= 3 && hashf(n * 7919 + k) < 0.55) {
       const sd = (n + k) % 2 ? 1 : -1;
       const qs = spot(k, fromA ? Math.min(L / 2, 2.2) : Math.max(L / 2, L - 2.2), sd * (hw - 0.45));
@@ -128,7 +131,7 @@ export function planSewerHints(macro: MacroPlan, tubes: Tube[], rooms: RoomPlan)
       const left = d - u;
       if (left > TRAIL_REACH) continue;
       const s = fromA ? u : L - u;
-      const q = spot(k, s, side * (hw - 0.5));
+      const q = spot(k, s, side * (hw - 0.55));
       if (!q) continue;
       const p = pointOnTube(T(k), s);
       if (!p) continue;

@@ -1230,7 +1230,7 @@ as distance LOD).
   instanced mesh (`ratGeometry`) plus their eyes. Every few minutes a lone slime oozing along a walkway (drawn with
   the colonies' blobs: `Slimes.blob`): freezes, flees and squeezes into the wall; a hit splatters it.
   `dev.sewerLife(calm)`.
-* Hidden colonies (2–5 per city, far out): a gap in the back wall of a quiet side room opens into a
+* Hidden colonies (2–3 per city, nearest the centre first, ≥ 800 m apart; each leads into a deep realm of its own): a gap in the back wall of a quiet side room opens into a
   rough crawl passage (`Tube` kind `crawl`) sinking to a chamber at depth (under the lowest ground
   within 32 m, so hillside foundations never reach it). Slimes live there (`Slimes.ts`, one
   colony active at a time, two instanced meshes, one unlit material): moss gardens, domes and
@@ -1241,18 +1241,23 @@ as distance LOD).
   them into drops that flow away; the colony then hides for ten minutes. A few rooms near colonies
   have a faint glowing trail, sometimes with a lone one that slips into a crack. No markers, no
   text. `dev.colony(i)` puts a tester in the room with the gap.
-* The deep realm (`underground/deep`): the slime civilisation below the colonies.
-  * Plan (`plan.ts`, pure, deterministic per seed, ~0.1 s): a hub colony (nearest the centre) hosts the Glow
+* The deep realms (`underground/deep`): the slime civilisation below the colonies, one realm below each
+  (`planDeeps`, nearest the centre first; a realm keeps 14 m of rock from the ones before it). Underground keeps them in
+  `deeps`; `deep` is the one whose Hall is nearest the camera (the live one: its agents, trench and war).
+  * Plan (`plan.ts`, pure, deterministic per seed, ~0.1 s per realm): its colony hosts the Glow
     `GLOW_DEPTH` (64 m) under the lowest ground over the realm, the Deep `DEEP_DROP` (52 m) lower. Shapes in a frame
     (origin at the Great Hall, u along the realm's axis): the Hall (ellipsoid, flat-cut, terraced `bowl` floor, pool,
     the Spire rock column, hanging masses), Gardens, Lake (falls), Archive (mosaics), the Front gallery, the Throat (shaft cylinder + dome, a `helix` rock ramp, a rock bridge to a lookout niche), the Warrens
     (pillars; their mouth by the Throat's floor walled in by rock boxes to a passage `MOUTH` 9.6 m wide, the shaft
-    re-opened after them: the trench war, `Trench`, framed from the shaft's axis towards the Warrens: three dug bays a
-    metre deep behind rock parapets with sandbags and duckboards, two gaps between them, a belt of thorn wire, craters
-    in no-man's land, the Murk's berm where the Warrens open), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
+    re-opened after them: the trench war, `Trench`, framed from the shaft's axis towards the Warrens: 2–4 dug bays a
+    metre deep behind rock parapets with sandbags and duckboards, gaps between them, a belt of thorn wire, craters
+    in no-man's land, the Murk's berm where the Warrens open; each realm its own `BattleStyle`, shuffled per city:
+    `line`, `double` (a second line behind), `chasm` (a rift across no-man's land, one rock bridge), `flooded`
+    (deeper water-filled craters), `siege` (a high Murk wall, a crystal forest, hive towers); width, depth and
+    the Murk's lane vary), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
     `buildChamber`) a neck (r 2.3 m, roomy for the camera; no gate since 0.056), descending steeply until the wide gallery fits under the ground, then
     a gallery (r 5.2 m, grade ≤ 0.16) to the Hall's rim, a spiral first where the way is too short for the drop.
-    Colonies within 950 m get roads. Tried over hub colonies / axes / distances until clear of every tube, box and
+    Each realm has the one road from its own colony. Tried over axes / distances until clear of every tube, box and
     the station surroundings and ≥ 14 m under the ground. Decor (dwellings, mushrooms, fungus, crystals, shelves,
     strands, stones, stalactites, hives, pens, salvaged things), ~500 baked light sources, water, falls, veins, the
     lift column, and a waypoint graph whose edges are walked on the field (detour nodes round obstacles).
@@ -1289,9 +1294,10 @@ as distance LOD).
   * Trust (`Trust.ts`, per city, saved): tiers Shunned / Stranger / Noticed (they stop hiding) / Welcome (greetings, lift,
     pebbles) / Ally / Kin; grants the Slime call (`Progress.granted`, `AbilitySystem.special`).
   * The game side (`game/slimes/SlimeRealm.ts`): areas, raids, the trench war, pens (E), the lift, the Heart's resonance,
-    pebbles, ambience, the Slime call, breakouts, toasts, saves (`SaveData.slimes`, version 3), a safety net for
-    bodies below the realm. Sounds: `tools/synthDeep.mjs`. Admin console section "Slimes"; `dev.deep.go(place)`,
-    `dev.deep.status()`, `dev.slimes.status() | trust(v) | raid() | breach() | war(patch)`.
+    pebbles, ambience, the Slime call, breakouts, toasts, saves (`SaveData.slimes`, version 3: `wars` by colony,
+    `war` the first realm's for older saves), a safety net for bodies below the realm. Every realm has its own war
+    (the others step unseen); going down another colony rebinds `Factions` (`rebind`) and a new `TrenchWar`. Sounds: `tools/synthDeep.mjs`. Admin console section "Slimes"; `dev.deep.go(place, realm?)`,
+    `dev.deep.realms()`, `dev.deep.status()`, `dev.slimes.status() | trust(v) | raid() | breach() | war(patch)`.
 * Volume queries (`floorAt`, `contains`, `cameraFree`, …) go through a 32 m grid of tubes and boxes.
 * Terrain holes: shader discard plus a collision query.
 

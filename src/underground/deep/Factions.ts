@@ -70,6 +70,8 @@ export interface Blob {
   vx: number; vz: number;
   /** Following a path: nearest it has come to the waypoint, seconds since it got any nearer. */
   best: number; bestT: number;
+  /** Murk: seconds left going round by the waypoints to a player they could not walk straight at (a berm, a crater). */
+  detour?: number;
 }
 
 /** A Lumen called to the surface: what it does (the game resolves the target by kind and object). */
@@ -170,9 +172,18 @@ export class Factions {
       this.group.add(m);
     }
     this.lCore.renderOrder = 4; this.lShell.renderOrder = 5; this.mCore.renderOrder = 5;
-    const P = host.plan;
-    this.adj = P.nodes.map(() => []);
-    for (const [a, b] of P.edges) { this.adj[a].push(b); this.adj[b].push(a); }
+    this.rebind(host.plan, host.field);
+  }
+
+  /** Another realm (each colony has its own): its nav graph; everyone below ground goes (those up in the streets stay). */
+  rebind(plan: DeepPlan, field: DeepField): void {
+    this.host.plan = plan;
+    this.host.field = field;
+    this.adj = plan.nodes.map(() => []);
+    for (const [a, b] of plan.edges) { this.adj[a].push(b); this.adj[b].push(a); }
+    for (let i = this.blobs.length - 1; i >= 0; i--) if (!this.blobs[i].surface) this.blobs.splice(i, 1);
+    this.areas.clear();
+    this.drops.length = 0; this.spits.length = 0; this.bolts.length = 0;
   }
 
   // ------------------------------------------------------------------ spawning
@@ -508,11 +519,13 @@ export class Factions {
     const dp = Math.hypot(b.x - P.x, b.z - P.z), dy = Math.abs(b.y + b.r - (P.y + P.h * 0.4));
     const S = ROLE[b.role];
     b.glow += ((b.mode === 'fight' ? 1.3 : 0.75) - b.glow) * Math.min(1, dt * 2);
+    // A detour lasts till its path is walked (or 20 s).
+    if (b.detour) b.detour = b.mode === 'go' ? Math.max(0, b.detour - dt) : 0;
     // Pick a fight: the player first, whenever in reach and in sight (dropping a Lumen for them when
     // they come close), else the nearest Lumen.
-    if ((b.mode !== 'fight' || (b.foe && dp < SWITCH)) && (b.t * 4 + b.id * 0.37) % 1 < dt * 4) {
+    if (!b.detour && (b.mode !== 'fight' || (b.foe && dp < SWITCH)) && (b.t * 4 + b.id * 0.37) % 1 < dt * 4) {
       const sees = dp < (b.mode === 'fight' ? SWITCH : AGGRO * (b.role === 'maw' ? 1.6 : 1)) && dy < 8 && this.host.clear(b.x, b.y + b.r, b.z, P.x, P.y + P.h * 0.6, P.z);
-      if (sees) { b.foe = null; b.mode = 'fight'; if (b.cd < 0.3) this.host.sound(b.role === 'maw' ? 'maw_roar' : 'murk_growl', b.x, b.y, b.z, b.role === 'maw' ? 1 : 0.55, b.role === 'brute' ? 0.7 : 1 + Math.random() * 0.3); b.cd = 0.6; }
+      if (sees) { b.foe = null; if (b.mode !== 'fight') { b.best = Infinity; b.bestT = 0; } b.mode = 'fight'; if (b.cd < 0.3) this.host.sound(b.role === 'maw' ? 'maw_roar' : 'murk_growl', b.x, b.y, b.z, b.role === 'maw' ? 1 : 0.55, b.role === 'brute' ? 0.7 : 1 + Math.random() * 0.3); b.cd = 0.6; }
       else if (b.mode !== 'fight') {
         const l = this.nearest(b, 'lumen', b.role === 'raider' || b.role === 'breacher' ? 16 : 9);
         if (l && l.role !== 'captive' && l.mode !== 'hidden') { b.foe = l; b.mode = 'fight'; }
@@ -540,6 +553,12 @@ export class Factions {
           b.cd = b.role === 'maw' ? 1.4 : 2.6;
           return;
         }
+      }
+      // No nearer for a while (a wall in the way): round by the waypoints, then at them again.
+      if (dp < b.best - 0.3) { b.best = dp; b.bestT = 0; } else if ((b.bestT += dt) > 2 && dp > reach + 1) {
+        const r = this.route(this.nodeNear(b.x, b.y, b.z), this.nodeNear(P.x, P.y, P.z));
+        b.best = Infinity; b.bestT = 0;
+        if (r.length) { b.path = r; b.mode = 'go'; b.detour = 20; this.nextWaypoint(b); return; }
       }
       if (dp > reach) { this.walk(b, dt, S.speed * (b.lunge > 0 ? 2.5 : 1)); if (dp < reach + 2.2 && b.cd <= 0 && b.lunge <= 0) { b.lunge = 0.35; } return; }
       if (b.cd <= 0) {
