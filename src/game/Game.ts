@@ -113,6 +113,7 @@ import { Defeat } from './defeat/Defeat';
 import { ManholeClimb } from './ManholeClimb';
 import { shaftPoint, LADDER_LAT } from '../underground/layout';
 import { MedFleet } from './defeat/MedDrones';
+import { Arcade } from './Arcade';
 import { Wardrobe } from './Wardrobe';
 import { People } from './people/People';
 import { Fame } from './fame/Fame';
@@ -235,6 +236,7 @@ export class Game {
   people!: People;
   /** Fitting mirrors of clothes shops (E: character creator). */
   wardrobe!: Wardrobe;
+  arcade!: Arcade;
   /** Reputation made visible: the press, fans, protesters, the hero's statue (game/fame). */
   fame!: Fame;
   powerHud!: PowerHud;
@@ -707,6 +709,7 @@ export class Game {
         else this.manhole.update(dt);
         this.interiors.panels.hidePrompt();
       } else {
+        this.arcade?.takeInput();
         this.abilities.enabled = !this.powers.open && !this.map.open && !this.people.talking;
         this.abilities.preUpdate(dt, this.input);
         this.defeat.gate();
@@ -746,6 +749,7 @@ export class Game {
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
+    this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => this.street?.update(dt));
     this.T('people', () => this.people?.update(dt));
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
@@ -1044,7 +1048,7 @@ export class Game {
         if (Math.abs(a.y - g) > 1.2) return false;
         return !this.terrain.isWater(a.x, a.z, 0) || this.world.bridgeDeck(a.x, a.z) > -Infinity;
       },
-      sound: (id, x, y, z, g) => this.audio.play(id, x, y, z, g, 1, 8, cam.position),
+      sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
       markers: (m) => this.map.setMarkers('deeds', m),
       rep: (d, reason) => this.crime?.rep.add(d, reason),
     };
@@ -1092,6 +1096,7 @@ export class Game {
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
     this.wardrobe = new Wardrobe(this);
+    this.arcade = new Arcade(this);
     this.fame = new Fame(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
@@ -1194,6 +1199,7 @@ export class Game {
   private usableHint(): string | null {
     if (this.manhole.active) return null;
     if (this.freeCam) return null;
+    if (this.arcade?.playing) return this.arcade.hint();
     const metro = this.underground.metroHint(!!this.underground.ride && !this.player.seat && !!this.seatNear());
     // On a platform bench the getting-up hint beats the platform's own.
     if (metro && this.player.seat && !this.underground.ride) return 'Move or press <b>E</b> to get up';
@@ -1208,6 +1214,8 @@ export class Game {
     const slime = this.slimeRealm?.hint();
     if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';
+    const arcade = this.arcade?.hint();
+    if (arcade) return arcade;
     const dress = this.wardrobe?.hint();
     if (dress) return dress;
     const talk = this.people?.hint();
@@ -1261,6 +1269,8 @@ export class Game {
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
     // At a clothes shop's fitting mirror: change your look.
     if (this.wardrobe?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // At an arcade cabinet: play.
+    if (this.arcade?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();

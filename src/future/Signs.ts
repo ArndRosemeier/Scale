@@ -26,6 +26,7 @@ import { kioskPedestalGeometry } from './models';
 import { signAtlas, fasciaRect, bladeRect, holoRect, slideRect, ART } from './signArt';
 import type { FutureCtx } from './ctx';
 import { NameAtlas, NAME_SLOTS } from './eateryArt';
+import { isArcade } from '../interior/InteriorGen';
 import { eateryName, type Eatery } from '../plan/eatery';
 
 const enum SMode { Static = 0, Ticker = 1, Shine = 2, Slides = 3, Chase = 4 }
@@ -198,7 +199,7 @@ export class Signs {
     const d = ref.desc;
     const h = deriveSeed(this.ctx.seed, 'signs', ref.cell.id, ref.index);
     const r1 = hashToFloat(h), r2 = hashToFloat(hash32(h + 1)), r3 = hashToFloat(hash32(h + 2));
-    const wantFascia = d.shopfront && !d.eatery && r1 < dens * 0.85;
+    const wantFascia = d.shopfront && !d.eatery && !isArcade(d) && r1 < dens * 0.85;
     if (d.eatery) this.placeName(ref, h, out);
     const wantBlade = d.shopfront && d.floors >= 3 && r2 < dens * 0.3;
     const wantScreen = (district === 'downtown' || district === 'commercial') && d.floors >= 5 && r3 < dens * 0.25;

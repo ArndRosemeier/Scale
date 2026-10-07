@@ -5,19 +5,20 @@
  */
 import { Rng } from '../core/rng';
 import { minAreaRect, polyArea, pointInPoly, type Poly } from '../core/geom2';
+import { hash32 } from '../core/rng';
 import { intersection } from '../core/clip';
 import type { BuildingDesc } from '../plan/building';
 
 export type RoomType =
   | 'living' | 'bedroom' | 'kitchen' | 'bath' | 'hall' | 'office' | 'meeting' | 'shop' | 'cafe' | 'storage'
-  | 'warehouse' | 'nave' | 'lobby' | 'corridor' | 'stairs' | 'parking';
+  | 'warehouse' | 'nave' | 'lobby' | 'corridor' | 'stairs' | 'parking' | 'arcade';
 
 export type FurnKind =
   | 'bed' | 'bedDouble' | 'wardrobe' | 'nightstand' | 'sofa' | 'armchair' | 'coffeeTable' | 'tvStand' | 'tv' | 'rug'
   | 'diningTable' | 'chair' | 'kitchenRow' | 'fridge' | 'stove' | 'toilet' | 'bathtub' | 'sink' | 'shower'
   | 'desk' | 'officeChair' | 'monitor' | 'meetingTable' | 'shelf' | 'bookshelf' | 'plant' | 'floorLamp' | 'painting'
   | 'counter' | 'shopShelf' | 'rack' | 'cafeTable' | 'barCounter' | 'palletRack' | 'crate' | 'pew' | 'altar' | 'reception' | 'column' | 'clothesStack'
-  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror';
+  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror' | 'arcade';
 
 export interface Room {
   type: RoomType;
@@ -42,6 +43,8 @@ export interface Furn {
   /** People can use it: 'sit' | 'sleep' | 'work' | 'stand' */
   /** 'dress': the fitting mirror of a clothes shop (E there opens the character creator). */
   use?: 'sit' | 'sleep' | 'work' | 'stand' | 'dress';
+  /** A video game cabinet's game (arcade/games GAMES index). */
+  game?: number;
 }
 
 /** One flight of stairs: start (bottom) of its centre line, direction, width, run (m along), heights. */
@@ -234,6 +237,28 @@ export function isClothesShop(b: BuildingDesc): boolean {
   return (b.shopfront || b.use === 'retail') && b.style !== 'church' && b.use !== 'industrial' && b.use !== 'parking' && shopKindOf(b) % 3 === 1;
 }
 
+/** Video game cabinet: width, depth, height; screen and marquee on the front (+z) face (game/Arcade). */
+export const CABINET = { w: 1.7, d: 0.9, h: 3.0 };
+/** Cabinet colours by game (matching arcade/games GAMES order). */
+const CABINET_COLORS: [number, number, number][] = [[0.12, 0.2, 0.42], [0.55, 0.12, 0.1], [0.08, 0.3, 0.14], [0.1, 0.1, 0.12], [0.42, 0.1, 0.4], [0.75, 0.74, 0.7]];
+const ARCADE_GAMES = CABINET_COLORS.length;
+
+const arcadeCache = new WeakMap<BuildingDesc, boolean>();
+/**
+ * Does the building have an arcade (a hall of video game cabinets) on its ground floor? One in
+ * about sixty general stores with a deep enough, high enough ground floor (commercial streets).
+ */
+export function isArcade(b: BuildingDesc): boolean {
+  let v = arcadeCache.get(b);
+  if (v === undefined) {
+    v = (b.shopfront || b.use === 'retail') && !b.eatery && b.style !== 'church' && b.use !== 'industrial' && b.use !== 'parking'
+      && b.groundH >= 3.6 && shopKindOf(b) % 3 === 2 && hash32(b.seed ^ 0x3a7c11d) % 60 === 0;
+    if (v) { const r = minAreaRect(b.poly); v = Math.min(r.hu, r.hv) >= 4.6 && Math.max(r.hu, r.hv) >= 6; }
+    arcadeCache.set(b, v);
+  }
+  return v;
+}
+
 export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number, height: number, shopKind: number, lift: LiftShaft | null = null, stair: StairCore | null = null, up = false, below = false, door: { x: number; z: number } | null = null): FloorPlan {
   const r = new Rng((b.seed ^ (floor * 0x9e3779b1)) >>> 0);
   const F = new Frame(poly);
@@ -337,6 +362,46 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
         const p = F.P(u, v);
         if (use === 'parking') plan.furniture.push({ kind: 'column', x: p[0], z: p[1], yaw: 0, w: 0.5, d: 0.5, h: height, color: [0.7, 0.7, 0.7] });
         else if (r.chance(0.7)) plan.furniture.push({ kind: r.chance(0.6) ? 'palletRack' : 'crate', x: p[0], z: p[1], yaw: F.yaw, w: 2.6, d: 1.1, h: r.range(1.2, 3.5), color: [0.35, 0.4, 0.5] });
+      }
+    }
+  } else if (ground && isArcade(b)) {
+    // Arcade: one dim hall, video game cabinets along the walls facing in, and back-to-back
+    // islands down the middle where the hall is deep enough. The games go round in turn.
+    const hall = clipRoom(F.rect(u0, -hv, uE, hv));
+    plan.rooms.push({ type: 'arcade', poly: hall ?? poly, floorMat: 'carpet', wallColor: [0.17, 0.14, 0.26] });
+    const { w: CW, d: CD, h: CH } = CABINET;
+    const stairPoly = st ? coreRect(st, 0, 0.4) : null;
+    const standSpot = (f: Furn): [number, number] => [f.x + Math.sin(f.yaw) * (CD / 2 + 0.8), f.z + Math.cos(f.yaw) * (CD / 2 + 0.8)];
+    const inFootprint = (f: Furn, x: number, z: number, m: number): boolean => {
+      const c = Math.cos(f.yaw), sn = Math.sin(f.yaw), dx = x - f.x, dz = z - f.z;
+      return Math.abs(dx * c - dz * sn) <= f.w / 2 + m && Math.abs(dx * sn + dz * c) <= f.d / 2 + m;
+    };
+    let game = (b.seed >>> 5) % ARCADE_GAMES;
+    const cab = (u: number, v: number, du: number, dv: number) => {
+      if (plan.furniture.length >= 18) return;
+      const a = F.P(u, v), b2 = F.P(u + du, v + dv);
+      const f: Furn = { kind: 'arcade', x: a[0], z: a[1], yaw: Math.atan2(b2[0] - a[0], b2[1] - a[1]), w: CW, d: CD, h: CH, color: CABINET_COLORS[game], game };
+      if (!fitsStorey(f) || (door && Math.hypot(f.x - door.x, f.z - door.z) < 3.4)) return;
+      // Room to stand and play in front of it, and in front of the ones already placed.
+      const st = standSpot(f);
+      if (!pointInPoly(poly, st[0], st[1]) || (stairPoly && pointInPoly(stairPoly, st[0], st[1]))) return;
+      for (const o of plan.furniture) if (inFootprint(o, st[0], st[1], 0.35) || inFootprint(f, ...standSpot(o), 0.35)) return;
+      plan.furniture.push(f);
+      game = (game + 1) % ARCADE_GAMES;
+    };
+    const step = CW + 0.25;
+    const vWall = hv - CD / 2 - 0.08;
+    for (let u = u0 + CW / 2 + 0.3; u < uE - CW / 2 - 0.3; u += step) cab(u, vWall, 0, -1);
+    for (let v = hv - CD - 0.08 - CW / 2 - 0.2; v > -hv + 3; v -= step) {
+      cab(u0 + CD / 2 + 0.08, v, 1, 0);
+      cab(uE - CD / 2 - 0.08, v, -1, 0);
+    }
+    // Islands: room to stand in front of the back wall's row and of the window side.
+    const vc = -0.4;
+    if (vc + 2 * CD + 2.8 <= vWall - CD / 2 && vc - 2 * CD - 2.8 >= -hv) {
+      for (let u = u0 + CD + 3.4 + CW / 2; u < uE - CD - 3.4 - CW / 2; u += step) {
+        cab(u, vc - CD / 2 - 0.02, 0, -1);
+        cab(u, vc + CD / 2 + 0.02, 0, 1);
       }
     }
   } else if (ground && (b.shopfront || use === 'retail')) {
@@ -534,7 +599,7 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
   // cafés get pendant lamps (over the table where there is one), offices and shops panels.
   for (const room of plan.rooms) {
     const fx = room.type === 'living' || room.type === 'bedroom' || room.type === 'kitchen' || room.type === 'cafe' ? 1
-      : room.type === 'bath' || room.type === 'corridor' || room.type === 'hall' || room.type === 'stairs' || room.type === 'storage' ? 2 : 0;
+      : room.type === 'bath' || room.type === 'corridor' || room.type === 'hall' || room.type === 'stairs' || room.type === 'storage' || room.type === 'arcade' ? 2 : 0;
     const bb = polyBox(room.poly);
     const cu = (bb[0] + bb[2]) / 2, cz = (bb[1] + bb[3]) / 2;
     const big = Math.max(bb[2] - bb[0], bb[3] - bb[1]) > 7;

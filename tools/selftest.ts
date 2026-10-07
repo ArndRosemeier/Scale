@@ -28,6 +28,7 @@ import { buildRuralTile } from '../src/build/rural';
 import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
+import { arcadeChecks } from './arcadeTest';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
@@ -3507,11 +3508,40 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(!!e && feet(e, 50, 43 + 0.75 - e.at) > 1.85, `speed hop: one hop over two people in a row (feet ${e ? feet(e, 50, 43 + 0.75 - e.at).toFixed(2) : '-'} m over the second)`);
 }
 
+// Energy: no regeneration in flight; a giant body costs upkeep (even at 10 m, ~20 s at 100 m) and an
+// empty pool shrinks it back to 10 m.
+{
+  const { AbilitySystem } = await import('../src/game/abilities/AbilitySystem');
+  const { ENERGY, GIANT, sizeUpkeep } = await import('../src/game/abilities/tuning');
+  const prog = { sandbox: false, bonusMax: 0, bonusRegen: 0, rank: () => 0 } as any;
+  const pl = { flying: false, height: 1.8, maxHeight: 100, sizeOverride: false, events: {} } as any;
+  const ab = new AbilitySystem(prog, pl, {} as any, {} as any);
+  const run = (sec: number) => { for (let t = 0; t < sec; t += 0.05) { pl.maxHeight = 100; (ab as any).updateEnergy(0.05); } };
+  ab.energy = 50; pl.flying = true; run(5);
+  check(Math.abs(ab.energy - 50) < 1e-6, `energy: no regeneration in flight (${ab.energy.toFixed(1)})`);
+  pl.flying = false; run(2);
+  check(ab.energy > 60, `energy: regenerates on the ground (${ab.energy.toFixed(1)})`);
+  check(Math.abs(sizeUpkeep(GIANT.even) - ENERGY.regen) < 1e-6 && sizeUpkeep(1.8) === 0 && sizeUpkeep(4) < ENERGY.regen / 2, 'energy: size upkeep free at 1.8 m, eats regen at 10 m');
+  ab.energy = ab.maxEnergy; pl.height = 100;
+  let t = 0; while (!ab.exhausted && t < 60) { (ab as any).updateEnergy(0.05); t += 0.05; }
+  check(t > 17 && t < 23, `energy: a full pool holds 100 m for about 20 s (${t.toFixed(1)} s)`);
+  check(ab.exhausted, 'energy: running dry as a giant exhausts');
+  run(3);
+  check(Math.abs(pl.height - GIANT.fallback) < 1e-6 && pl.maxHeight <= GIANT.fallback, `energy: exhausted giant shrinks to 10 m and is capped there (${pl.height.toFixed(2)} m)`);
+  let tr = 0; while (ab.exhausted && tr < 30) { (ab as any).updateEnergy(0.05); tr += 0.05; }
+  check(!ab.exhausted && tr > 1 && tr < 10, `energy: an exhausted giant at 10 m refills and the cap lifts (${tr.toFixed(1)} s)`);
+  run(10);
+  check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 10 m holds the recovered pool (${ab.energy.toFixed(1)})`);
+}
+
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
 cmuBvhChecks(check);
 
 // Villain groups, Phase 4: boss operations as threat events, the eco-radicals, the necromancers (tools/villainTest.ts).
 await villainChecks(check);
+
+// Arcades: halls of video game cabinets on shopping streets, and their games (tools/arcadeTest.ts).
+arcadeChecks(check);
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');
