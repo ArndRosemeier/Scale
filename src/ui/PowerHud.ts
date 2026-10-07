@@ -18,6 +18,7 @@ export class PowerHud {
   private chip: HTMLDivElement;
   private shown = '';
   private lastE = '';
+  private lastTrend = '';
   private lastDeny = '';
   private lastDenyT = 0;
 
@@ -108,6 +109,13 @@ export class PowerHud {
       el.classList.toggle('cooling', f > 0);
       el.classList.toggle('on', a.active(id));
     });
+    const trend = a.energyRate < -0.05 ? 'drain' : a.energyRate < 0.05 && a.energy < a.maxEnergy ? 'hold' : '';
+    if (trend !== this.lastTrend) {
+      this.lastTrend = trend;
+      this.energyFill.classList.toggle('drain', trend === 'drain');
+      this.energyFill.classList.toggle('hold', trend === 'hold');
+      this.energyFill.parentElement!.title = trend === 'drain' ? 'Energy — your giant size is draining it' : trend === 'hold' ? 'Energy — not recovering (flying, or your size eats the regeneration)' : 'Energy';
+    }
     const e = `${Math.floor(a.energy)}/${Math.round(a.maxEnergy)}|${a.charge.toFixed(2)}`;
     if (e !== this.lastE) {
       this.lastE = e;

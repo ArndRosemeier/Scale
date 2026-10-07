@@ -21,7 +21,7 @@ import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
   ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE,
   SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, FIREBALL, FIREBALL_COOLDOWN, NOVA, NOVA_COOLDOWN,
-  BOLT, BOLT_COOLDOWN, QUAKE, QUAKE_COOLDOWN, GUST, GUST_COOLDOWN, SHRINK, SHRINK_COOLDOWN,
+  BOLT, BOLT_COOLDOWN, QUAKE, QUAKE_COOLDOWN, GUST, GUST_COOLDOWN, SHRINK, SHRINK_COOLDOWN, GIANT, sizeUpkeep,
 } from './tuning';
 
 export interface AbilityHooks {
@@ -80,6 +80,11 @@ export class AbilitySystem {
   special: Partial<Record<AbilityId, { cost: number; cd: number[]; run: (rank: number) => boolean }>> = {};
   /** Input disabled (UI open, free camera). */
   enabled = true;
+  /** Out of energy as a giant: the body shrinks back to GIANT.fallback and stays capped there until
+   *  the pool is back to GIANT.recover of max. */
+  exhausted = false;
+  /** Net energy change per second from regeneration and size upkeep last frame (for the HUD). */
+  energyRate = 0;
 
   constructor(readonly progress: Progress, readonly player: Player, private interactions: Interactions, private cam: THREE.Camera) {
     this.energy = this.maxEnergy;
@@ -107,7 +112,7 @@ export class AbilitySystem {
     p.flightBoost = FLIGHT_BOOST_MUL[rf] || FLIGHT_BOOST_MUL[FLIGHT_BOOST_MUL.length - 1];
     [p.minHeight, p.maxHeight] = SIZE_RANGE[rz];
     for (const [id, c] of this.cooldown) { c.left -= dt; if (c.left <= 0) this.cooldown.delete(id); }
-    this.energy = Math.min(this.maxEnergy, this.energy + this.regen * dt);
+    this.updateEnergy(dt);
     // F without flight: a hint instead of nothing.
     if (input.hit('KeyF') && rf === 0 && this.enabled) this.hooks.deny?.('Flight is locked — press P to see your powers');
     // Super jump on Space: takes off on the press, climbs while held.
@@ -119,6 +124,33 @@ export class AbilitySystem {
     this.updateCharge(dt, input);
     this.updateChannel(dt, input);
     p.speedTop = this.speedOn && !p.flying ? SPEED_TOP[this.rank('speed')] : 0;
+  }
+
+  /** Regeneration (none in flight) minus the upkeep of a giant body; an empty pool shrinks a giant. */
+  private updateEnergy(dt: number): void {
+    const p = this.player;
+    if (this.progress.sandbox || p.sizeOverride) {
+      this.exhausted = false;
+      this.energyRate = this.regen;
+      this.energy = Math.min(this.maxEnergy, this.energy + this.regen * dt);
+      return;
+    }
+    const gain = (p.flying ? 0 : this.regen) - sizeUpkeep(p.height);
+    this.energyRate = gain;
+    this.energy = Math.max(0, Math.min(this.maxEnergy, this.energy + gain * dt));
+    if (!this.exhausted && this.energy <= 0 && p.height > GIANT.fallback && gain < 0) {
+      this.exhausted = true;
+      this.hooks.deny?.('Out of energy — you shrink back');
+    }
+    if (this.exhausted && this.energy >= this.maxEnergy * GIANT.recover) this.exhausted = false;
+    if (this.exhausted) {
+      // Shrink smoothly (not a snap) and keep the size cap at the current height on the way down.
+      if (p.height > GIANT.fallback) {
+        p.height = Math.max(GIANT.fallback, p.height * Math.exp(-GIANT.shrinkRate * dt));
+        p.events.onSizeChange?.(p.height, -1);
+      }
+      p.maxHeight = Math.min(p.maxHeight, Math.max(GIANT.fallback, p.height));
+    }
   }
 
   /** After the panels consumed their digits: hotbar keys. */

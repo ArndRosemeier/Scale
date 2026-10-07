@@ -54,6 +54,19 @@ export const ENERGY = {
   sandboxRegen: 1000,
 };
 
+/** Upkeep of a giant body (energy / s by height). Below 1.8 m it is free; it climbs to the base
+ *  regeneration at 10 m (a 10 m giant just holds even) and on to `top` at 100 m, where a full
+ *  pool lasts about 20 s. Out of energy, the body shrinks back to `fallback` and may grow again
+ *  once the pool is back to `recover` of max. Flight costs nothing but stops regeneration. */
+export const GIANT = { even: 10, top: 100, drainTop: 14, fallback: 10, recover: 0.25, shrinkRate: 1.2 };
+
+/** Energy per second it takes to keep a body of height h (m). */
+export function sizeUpkeep(h: number): number {
+  if (h <= 1.8) return 0;
+  if (h <= GIANT.even) return ENERGY.regen * (h - 1.8) / (GIANT.even - 1.8);
+  return ENERGY.regen + (GIANT.drainTop - ENERGY.regen) * (h - GIANT.even) / (GIANT.top - GIANT.even);
+}
+
 /** Super strength (passive). Punch impulse in N·s at 1.8 m (× k²); index = rank. Rank 0 is an
  *  ordinary punch: shoves people, never breaks a wall or a window. */
 export const PUNCH_IMPULSE = [200, 900, 25000, 60000, 200000, 400000];
