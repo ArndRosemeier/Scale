@@ -168,7 +168,7 @@ export function planRealm(inp: PlanInput, hub: Colony, style: BattleStyle = 'lin
   const turns = [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI, 2.3, -2.3];
   const jitter = rng.range(-0.25, 0.25);
   for (const t of turns) {
-    for (const dist of [150, 190, 120]) {
+    for (const dist of [150, 190, 120, 240, 95]) {
       const p = tryPlan(inp, hub, base + t + jitter, dist, rng.nextU32(), style);
       if (p) return p;
     }
@@ -378,6 +378,9 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     const s = rng.range(noMans[0] + 1, noMans[1]), l = rng.range(-hwB + 2.2, hwB - 2.2), r = rng.range(1.5, B.style === 'flooded' ? 3.3 : 2.9);
     // (The lane the Murk come down from their gap stays clear.)
     if (Math.abs(l - mL) < r + 1.4) continue;
+    // (Nor the ways from the trench's gaps to the middle of no-man's land.)
+    const nmS = (noMans[0] + noMans[1]) / 2;
+    if (gaps.some((gl) => segDist(s, l, TS, gl, nmS, mL) < r + 1.2)) continue;
     const c = G(s, l);
     if (craters.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < o.r + r - 0.6)) continue;
     craters.push({ x: c.x, z: c.z, r });
@@ -858,7 +861,10 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   const nBot = node('bottom', places.bottom, 8); link(prev, nBot);
   // Through the trench line by its gaps, over no-man's land, past the Murk's berm into the Warrens.
   const nNM = node('noMans', places.noMans, 4);
-  gaps.forEach((l, i) => { const p = G(TS, l); const y = floorNear(p.x, ty + 1, p.z); const n = node(`trench${i}`, y === null ? null : { x: p.x, y, z: p.z }, 1); link(nBot, n); link(n, nNM); });
+  // A second line behind: through its one gap first.
+  let nRear = nBot;
+  if (B.rear) { const p = G(B.rear.s, 0); const y = floorNear(p.x, ty + 1, p.z); nRear = node('rearGap', y === null ? null : { x: p.x, y, z: p.z }, 1); link(nBot, nRear); }
+  gaps.forEach((l, i) => { const p = G(TS, l); const y = floorNear(p.x, ty + 1, p.z); const n = node(`trench${i}`, y === null ? null : { x: p.x, y, z: p.z }, 1); link(nRear, n); link(n, nNM); });
   const nML = node('murkLine', places.murkLine, 3);
   if (chasm) {
     // Over the chasm only by its bridge.
@@ -1059,4 +1065,11 @@ function angleDiff(a: number, b: number): number {
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   return d;
+}
+
+/** Distance from (x, y) to the segment (ax, ay)–(bx, by). */
+function segDist(x: number, y: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+  const t = L2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2)) : 0;
+  return Math.hypot(x - ax - dx * t, y - ay - dy * t);
 }
