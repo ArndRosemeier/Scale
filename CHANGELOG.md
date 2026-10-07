@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.079 — 2026-10-06
+## 0.082 — 2026-10-07
 
 - **People behave like who they are.** Everyone already had a personality; now it shows in the street:
   - Outgoing, orderly people walk briskly, dreamers dawdle. The calm get over a scare quickly; the nervous keep running longer. The curious stand and stare longer at a spectacle.
@@ -12,6 +12,23 @@ Every push raises the version by 0.001. Newest first.
   - People who know and like you stop and wave when they say hello. People you saved greet you as their hero.
   - Victims of a crime you stop, and people whose stolen things you bring back, now remember being saved by you.
   - What people shout when they run, gawk, film, fall or thank you is in their own temperament (grumpy, anxious, chatty and so on).
+
+## 0.081 — 2026-10-07
+
+- **Change your look at the tailor's.** Clothes shops now have a full-length fitting mirror on a side wall. Step up to it and press E: the character creator opens on your hero's current look, and saving changes the hero on the spot (and keeps the look as your selected character for the next game). The game is paused for input while the creator is open, and Esc closes it without opening the pause menu. The four nearest clothes shops show on the map in lilac.
+- **Underwear can be switched off in the character creator** (Outfit tab, "Underwear: shown / removed"). With top, trousers and shoes on "none" and underwear removed, the character is fully nude, in the creator and in the city. It stays on by default.
+- **The separate Woman and Man characters are gone from the start screen's character picker.** Every human is built on those bodies now, and the creator does everything they did. A save or a selection that still points to one of them starts with the default human. The body credit (Bananaboy, CC BY 3.0) is shown at the bottom of the creator, and the clothes shops are in the map legend.
+- **Men have broader shoulders.** The male base body was too narrow at the shoulders, so walking men swung their hands in front of the crotch. Walkers also carry their arms a little away from the body now, so the forward hand no longer swings in front of the hips.
+
+## 0.080 — 2026-10-06
+
+- **The starship has an inside.** Doors between its fins open into a lobby at its foot. Beyond it a great hall rises dozens of metres through the middle of the ship around a glowing core. Every storey has a gallery with glass rails running around the hall, with cabins, labs, mess rooms, lounges, control rooms and stores behind it. Stairs climb from level to level, and bridges cross the hall every few storeys. The rooms are furnished from a sci-fi prop set (bunks, lockers, consoles, holo tables, screens, crates and more).
+- This is the first job of a new interior designer that works on any shape (round, oval, tapering), not only boxes. Its look comes from a swappable prop set, so other buildings and themes can follow.
+
+## 0.079 — 2026-10-06
+
+- **Super speed hops over people.** Running at super speed, the hero now hops over someone a little ahead, and over cars, vans and benches too, in a short, snappy hurdle that keeps the speed. It only hops when the arc is clear (no wall, bus, tree or overhang in the way) and the landing spot is free and on about the same level; several people in a row are cleared in one hop.
+- **Brushing past someone is no misdeed any more.** When a hop is not possible, the person still stumbles out of the way, but it costs no reputation or karma, draws no police, does them no harm and they get up on their own. Instead they call after you in a red bubble low on the screen ("Mara, behind you: “Slow down, hero!”"). Helping such a person up earns nothing, like anyone you knocked down yourself. Dashes and giants running through crowds count as before. A hop that grazes a façade in the air no longer turns into a wall run up onto the roof.
 
 ## 0.078 — 2026-10-06
 

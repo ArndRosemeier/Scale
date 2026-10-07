@@ -17,7 +17,7 @@ export type FurnKind =
   | 'diningTable' | 'chair' | 'kitchenRow' | 'fridge' | 'stove' | 'toilet' | 'bathtub' | 'sink' | 'shower'
   | 'desk' | 'officeChair' | 'monitor' | 'meetingTable' | 'shelf' | 'bookshelf' | 'plant' | 'floorLamp' | 'painting'
   | 'counter' | 'shopShelf' | 'rack' | 'cafeTable' | 'barCounter' | 'palletRack' | 'crate' | 'pew' | 'altar' | 'reception' | 'column' | 'clothesStack'
-  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain';
+  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror';
 
 export interface Room {
   type: RoomType;
@@ -40,7 +40,8 @@ export interface Furn {
   w: number; d: number; h: number;
   color: [number, number, number];
   /** People can use it: 'sit' | 'sleep' | 'work' | 'stand' */
-  use?: 'sit' | 'sleep' | 'work' | 'stand';
+  /** 'dress': the fitting mirror of a clothes shop (E there opens the character creator). */
+  use?: 'sit' | 'sleep' | 'work' | 'stand' | 'dress';
 }
 
 /** One flight of stairs: start (bottom) of its centre line, direction, width, run (m along), heights. */
@@ -222,7 +223,18 @@ class Frame {
  * `stair`: the building's stair core; `up`: stairs from this storey to the next (the core fits
  * both); `below`: stairs arrive from the storey below.
  */
-export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number, height: number, shopKind: number, lift: LiftShaft | null = null, stair: StairCore | null = null, up = false, below = false): FloorPlan {
+/** Ground-floor shop layout of a building: 0 café (eateries), 1 clothes shop, 2 grocery (see planFloor). */
+export function shopKindOf(b: BuildingDesc): number {
+  const sk = (b.seed >>> 7) % 9;
+  return b.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
+}
+
+/** Does the building have a clothes shop (with a fitting mirror) on its ground floor? */
+export function isClothesShop(b: BuildingDesc): boolean {
+  return (b.shopfront || b.use === 'retail') && b.style !== 'church' && b.use !== 'industrial' && b.use !== 'parking' && shopKindOf(b) % 3 === 1;
+}
+
+export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number, height: number, shopKind: number, lift: LiftShaft | null = null, stair: StairCore | null = null, up = false, below = false, door: { x: number; z: number } | null = null): FloorPlan {
   const r = new Rng((b.seed ^ (floor * 0x9e3779b1)) >>> 0);
   const F = new Frame(poly);
   const plan: FloorPlan = { floor, y, height, rooms: [], walls: [], furniture: [], flights: [], landings: [], stairHole: null, lift: null, lights: [], fixtures: [] };
@@ -269,6 +281,25 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
   // --- stair core: a stair hall across the end of the floor that holds it
   let uE = hu;
   const st = stair && coreFits(stair, poly) && style !== 'church' ? stair : null;
+  // A piece fits when it lies fully inside the storey (with a margin from the walls; edge
+  // midpoints too, so nothing reaches across an inner corner of an L-shaped storey) and clear
+  // of the stair core and the lift with its landing.
+  const fitsStorey = (f: Furn): boolean => {
+    const c = Math.cos(f.yaw), sn = Math.sin(f.yaw);
+    const w = f.w / 2 + 0.05, d = f.d / 2 + 0.05;
+    for (const [lx, lz] of [[-w, -d], [w, -d], [w, d], [-w, d], [0, 0], [0, -d], [w, 0], [0, d], [-w, 0]]) {
+      const x = f.x + lx * c + lz * sn, z = f.z - lx * sn + lz * c;
+      if (!pointInPoly(poly, x, z)) return false;
+    }
+    if (st && pointInPoly(coreRect(st, 0, 0.4), f.x, f.z)) return false;
+    if (plan.lift) {
+      const l = plan.lift;
+      const dx = f.x - l.cx, dz = f.z - l.cz;
+      const u = dx * l.ux + dz * l.uz, v = -dx * l.uz + dz * l.ux;
+      if (u > -l.hu - 0.7 && u < l.hu + LANDING + 0.4 && Math.abs(v) < l.hv + 0.7) return false;
+    }
+    return true;
+  };
   if (st) {
     const r = coreRect(st, -1.4);
     const proj: number[] = [];
@@ -353,10 +384,31 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
           put('clothesStack', u, v, along, 1.2, 0.6, 0.8, r.pick(FABRIC));
         }
         put('rug', (u0 + uE) / 2, (vFront + vBack) / 2, along, Math.min(4, uE - u0 - 2), Math.min(3, vBack - vFront - 2), 0.01, r.pick(FABRIC));
-        for (let u = u0 + 2; u < uE - 2; u += 3) put('painting', u, vBack - 0.06, along, 0.7, 0.04, 1.6, [0.75, 0.8, 0.85]);
       }
+      // Clothes shop: a full-length fitting mirror flat against a wall, facing into the shop
+      // (change your look there). The first spot that fits: along the back wall, else the side
+      // walls (not mid-wall, where a stair hall has its door); the back wall's shelves and
+      // pictures leave its stretch free.
+      let mirrorU: number | null = null;
+      if (clothing) {
+        const spots: [number, number, number, number][] = [];
+        // (Not across the storage room's door, at 0.8–0.9 of the back wall: see wallLine above.)
+        for (let u = u0 + 0.55; u < uE - 0.5; u += 0.5) { const t = (u - u0) / (uE - u0); if (t < 0.74 || t > 0.96) spots.push([u, vBack - 0.1, 0, -1]); }
+        for (const v of [vBack - 0.9, vBack - 1.6, vFront + 2.2, vFront + 2.9]) spots.push([uE - 0.15, v, -1, 0], [u0 + 0.15, v, 1, 0]);
+        for (const [u, v, du, dv] of spots) {
+          const a = F.P(u, v), b2 = F.P(u + du, v + dv);
+          const m: Furn = { kind: 'tallMirror', x: a[0], z: a[1], yaw: Math.atan2(b2[0] - a[0], b2[1] - a[1]), w: 0.7, d: 0.08, h: 1.85, color: [0.3, 0.21, 0.14], use: 'dress' };
+          // (Interiors keeps the way in from the street door clear: see buildFloor.)
+          if (!fitsStorey(m) || (door && Math.hypot(m.x - door.x, m.z - door.z) < 3)) continue;
+          plan.furniture.push(m);
+          if (dv) mirrorU = u;
+          break;
+        }
+      }
+      const clearOfMirror = (u: number, half: number) => mirrorU === null || Math.abs(u - mirrorU) > half + 0.45;
+      if (clothing) for (let u = u0 + 2; u < uE - 2; u += 3) if (clearOfMirror(u, 0.35)) put('painting', u, vBack - 0.06, along, 0.7, 0.04, 1.6, [0.75, 0.8, 0.85]);
       // Wall shelving along the back wall, facing the shop.
-      for (let u = u0 + 1.1; u + 1.9 < uE - 0.4; u += 2.0) put('shopShelf', u + 0.9, vBack - 0.32, along, 1.8, 0.5, 2.1, fixture);
+      for (let u = u0 + 1.1; u + 1.9 < uE - 0.4; u += 2.0) if (clearOfMirror(u + 0.9, 0.9)) put('shopShelf', u + 0.9, vBack - 0.32, along, 1.8, 0.5, 2.1, fixture);
       // Checkout by the entrance with a register, a display table and plants in the window.
       put('counter', uE - 1.6, vFront + 1.5, F.yaw, 1.8, 0.7, 1.0, WOOD[1], 'stand');
       put('monitor', uE - 1.6, vFront + 1.5, F.yaw + Math.PI, 0.5, 0.3, 0.3, [0.1, 0.1, 0.1]);
@@ -476,24 +528,8 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
   // Interior walls are laid out on the storey's rectangle: keep only their parts inside the
   // real outline (cut or irregular footprints had walls standing out in the street).
   plan.walls = plan.walls.flatMap((w) => clipWall(w, poly));
-  // Keep only furniture fully inside the storey (with a margin from the walls; edge midpoints
-  // too, so nothing reaches across an inner corner of an L-shaped storey).
-  plan.furniture = plan.furniture.filter((f) => {
-    const c = Math.cos(f.yaw), sn = Math.sin(f.yaw);
-    const w = f.w / 2 + 0.05, d = f.d / 2 + 0.05;
-    for (const [lx, lz] of [[-w, -d], [w, -d], [w, d], [-w, d], [0, 0], [0, -d], [w, 0], [0, d], [-w, 0]]) {
-      const x = f.x + lx * c + lz * sn, z = f.z - lx * sn + lz * c;
-      if (!pointInPoly(poly, x, z)) return false;
-    }
-    if (st && pointInPoly(coreRect(st, 0, 0.4), f.x, f.z)) return false;
-    if (plan.lift) {
-      const l = plan.lift;
-      const dx = f.x - l.cx, dz = f.z - l.cz;
-      const u = dx * l.ux + dz * l.uz, v = -dx * l.uz + dz * l.ux;
-      if (u > -l.hu - 0.7 && u < l.hu + LANDING + 0.4 && Math.abs(v) < l.hv + 0.7) return false;
-    }
-    return true;
-  });
+  // Keep only furniture that fits the storey (see fitsStorey).
+  plan.furniture = plan.furniture.filter(fitsStorey);
   // Ceiling lights per room: one in the middle of a small room, a grid in big ones; homes and
   // cafés get pendant lamps (over the table where there is one), offices and shops panels.
   for (const room of plan.rooms) {

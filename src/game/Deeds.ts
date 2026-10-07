@@ -74,10 +74,10 @@ export class Deeds {
     const cause = a.downBy ?? 'other';
     a.downBy = undefined;
     if (!this.progress.sandbox) {
-      if (cause === 'player') this.hooks.toast?.('You helped them up — no karma for someone <b>you</b> knocked down', 'info');
+      if (cause === 'player' || cause === 'brush') this.hooks.toast?.('You helped them up — no karma for someone <b>you</b> knocked down', 'info');
       else this.progress.addKarma(cause === 'collapse' ? KARMA.helpUpCollapse : KARMA.helpUp, 'helped someone up');
     }
-    if (cause !== 'player') this.hooks.rep?.(KARMA.helpUpRep, 'helped someone up');
+    if (cause !== 'player' && cause !== 'brush') this.hooks.rep?.(KARMA.helpUpRep, 'helped someone up');
     this.onHelped?.(a);
     // (Not '': with nobody left to mark the new key is '' too, and the old marker stayed.)
     this.markerKey = '#stale';
@@ -108,7 +108,7 @@ export class Deeds {
     this.markT = 0.5;
     const list: MapMarker[] = [];
     for (const a of this.peds.agents) {
-      if (a.state !== PState.Down || !a.alive || a.actor || a.downBy === 'player' || a.downBy === undefined) continue;
+      if (a.state !== PState.Down || !a.alive || a.actor || a.downBy === 'player' || a.downBy === 'brush' || a.downBy === undefined) continue;
       if (Math.hypot(a.x - p.pos.x, a.z - p.pos.z) > 160) continue;
       // Out of reach (indoors, in the river, stuck at a height where nobody can get to them): no
       // marker that leads nowhere — they are looked after by someone else and leave.
