@@ -164,6 +164,19 @@ export class Barks {
   }
 
   /**
+   * A line in a scene (the shard's awakening): shown now, past the gap between bubbles and the
+   * person's pause (their earlier bubble gives way; with every bubble taken, the oldest does).
+   */
+  line(a: PedAgent, text: string): void {
+    const mine = this.shown.findIndex((s) => s.a === a);
+    if (mine >= 0) { this.shown[mine].el.style.display = 'none'; this.shown.splice(mine, 1); }
+    if (this.shown.length >= MAX_SHOWN) { this.shown[0].el.style.display = 'none'; this.shown.shift(); }
+    this.gapT = 0;
+    this.quiet.delete(a);
+    this.say(a, text, PERSON_PAUSE);
+  }
+
+  /**
    * Someone calls after the hero (brushed past at super speed): a stern (red) bubble low on the
    * screen with their name, since at that speed they are behind before a bubble over them could be read.
    */

@@ -117,6 +117,7 @@ import { Arcade } from './Arcade';
 import { Wardrobe } from './Wardrobe';
 import { People } from './people/People';
 import { Fame } from './fame/Fame';
+import { Sidekick } from './sidekick/Sidekick';
 
 /** What someone a super speed runner brushed past calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -239,6 +240,8 @@ export class Game {
   arcade!: Arcade;
   /** Reputation made visible: the press, fans, protesters, the hero's statue (game/fame). */
   fame!: Fame;
+  /** The second shard and the person who takes it: the sidekick (game/sidekick). */
+  sidekick!: Sidekick;
   powerHud!: PowerHud;
   powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
@@ -571,6 +574,13 @@ export class Game {
         return { x: m.x, z: m.z, floor: m.floor, side: m.side };
       };
       if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
+      if (dev) dev.sidekick = {
+        status: () => this.sidekick.status(),
+        report: (gang?: boolean) => this.sidekick.devReport(gang),
+        go: (back?: number) => this.sidekick.devGo(back),
+        take: () => { this.sidekick.take(); return this.sidekick.status(); },
+        reset: () => { this.sidekick.devReset(); return this.sidekick.status(); },
+      };
       if (dev) dev.halls = { stats: () => this.halls.stats, list: () => this.halls.report(), go: (kind: 'cathedral' | 'townhall' = 'cathedral') => {
         // Just inside the door, looking in.
         const d = this.halls.door(kind);
@@ -603,7 +613,7 @@ export class Game {
     const shadersAt = performance.now();
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
-      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
@@ -752,7 +762,7 @@ export class Game {
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => this.street?.update(dt));
-    this.T('people', () => this.people?.update(dt));
+    this.T('people', () => { this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
@@ -1099,6 +1109,7 @@ export class Game {
     this.wardrobe = new Wardrobe(this);
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);
+    this.sidekick = new Sidekick(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)
@@ -1219,6 +1230,8 @@ export class Game {
     if (arcade) return arcade;
     const dress = this.wardrobe?.hint();
     if (dress) return dress;
+    const shard = this.sidekick?.hint();
+    if (shard) return shard;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1272,6 +1285,8 @@ export class Game {
     if (this.wardrobe?.use()) { this.input.pressed.delete('KeyE'); return; }
     // At an arcade cabinet: play.
     if (this.arcade?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // Take the glowing stone (the second shard).
+    if (this.sidekick?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();
