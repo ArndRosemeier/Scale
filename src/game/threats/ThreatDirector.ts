@@ -23,6 +23,8 @@ import { RogueMachines } from './RogueMachines';
 import { RobotMalfunction, robotOmen, type RobotEventOpts } from './RobotMalfunction';
 import type { DamageResult, DamageSource, ThreatActor, ThreatEvent } from './ThreatEvent';
 import { Strider, STRIDER, STRIDER_RIG, type StriderOpts } from './Strider';
+import { AwakenedTree } from './AwakenedTree';
+import type { StreetProp } from '../../props/PropRenderer';
 import { planStriderRoute, type StriderRoute } from './StriderRoute';
 import { CreatureMesh } from './rig/CreatureMesh';
 import { FacadeFires } from './FacadeFires';
@@ -72,6 +74,23 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
   boss: {
     omen: () => false,
     start: (_d, _site, _seed, opts) => (opts.ev as ThreatEvent | undefined) ?? null,
+    fallback: [],
+  },
+  // A tree sung awake by the eco-radicals' Elder (crime/BossOp 'treewake': opts.prop is the tree;
+  // from the console the nearest tree to the site). opts.ready skips its rise.
+  tree: {
+    omen: () => false,
+    start: (d, site, seed, opts) => {
+      let prop = (opts.prop as StreetProp | undefined) ?? null;
+      if (!prop) {
+        let bd = 80;
+        d.g.props.query(site.x, site.z, 80, (p) => { const dd = Math.hypot(p.x - site.x, p.z - site.z); if (p.tree && !p.broken && dd < bd) { bd = dd; prop = p; } });
+      }
+      if (!prop) return null;
+      const t = new AwakenedTree(d.g, prop, seed);
+      if (opts.ready) t.devReady();
+      return t;
+    },
     fallback: [],
   },
   // The Murk breaking out of the sewers (started by the slime realm's war, never by the clock).
@@ -154,6 +173,7 @@ export class ThreatDirector {
   /** Is this object part of a threat (a machine gone rogue, a monster)? Fair game for the player. */
   isHostile(ref: object): boolean {
     if (ref instanceof Strider) return true;
+    if (ref instanceof AwakenedTree) return !ref.defeated;
     const m = (ref as { mal?: { mode: string } }).mal;
     return !!m && m.mode === 'hostile';
   }
@@ -200,6 +220,9 @@ export class ThreatDirector {
   private obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
     for (const ev of this.events) if (ev instanceof Strider) ev.obstacles(x0, z0, x1, z1, out);
     for (const r of this.remains) r.obstacles(x0, z0, x1, z1, out);
+    // Awakened trees, walking or rooted where they were beaten.
+    for (const ev of this.events) if (ev instanceof AwakenedTree) ev.obstacles(x0, z0, x1, z1, out);
+    for (const t of AwakenedTree.grove()) t.obstacles(x0, z0, x1, z1, out);
   }
 
   update(dt: number): void {
@@ -330,9 +353,11 @@ export class ThreatDirector {
     this.markT = 0.5;
     const list: MapMarker[] = [];
     const p = this.g.player.pos;
+    for (const t of AwakenedTree.grove()) list.push({ x: t.x, z: t.z, color: '#5a7d3a', kind: 'dot', title: 'A gnarled old tree — it walked here' });
     for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
+      if (ev instanceof AwakenedTree && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#5a7d3a', kind: 'dot', title: 'A gnarled old tree — it walked here' });
       // (A rampaging player is the incident: no alert marker on themselves.)
       if (!ev.active || ev.archetype === 'rampage') continue;
       list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: (ev as ThreatEvent).title ?? ( ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : ev.archetype === 'brood' ? 'A swarm from the sewers — creatures attacking people' : 'Threat'), always: true });

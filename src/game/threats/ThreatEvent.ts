@@ -73,6 +73,11 @@ export interface ThreatActor {
   conStrength(): number;
   /** The player's own body (a rampaging giant: the police's and the army's target, never the player's). */
   readonly self?: boolean;
+  /**
+   * An element from the powers lands on it (fire, frost, lightning): its own reaction (an awakened
+   * tree catches fire) and the multiplier on the power's damage. Absent: 1.
+   */
+  onElement?(el: 'fire' | 'frost' | 'shock', dur: number): number;
 }
 
 /** Points of damage per N·s of impulse (punches, shoves, blows on a threat actor). */

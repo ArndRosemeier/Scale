@@ -573,6 +573,14 @@ export class PropRenderer {
     return n;
   }
 
+  /** Gone from its spot without a fall (a tree sung awake walks off as a threat, src/game/threats/AwakenedTree). */
+  uproot(p: Prop): void {
+    if (p.broken) return;
+    p.broken = true;
+    this.dirty = true;
+    this.farDirty = true;
+  }
+
   onBreak?: (p: { x: number; y: number; z: number; tree: boolean }) => void;
 
   private topple(p: Prop, jx: number, jy: number, jz: number): void {
