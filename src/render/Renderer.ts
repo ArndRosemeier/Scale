@@ -82,6 +82,7 @@ export class Renderer {
     if (!this.webgpu) return;
     await (this.gl as unknown as { init(): Promise<unknown> }).init();
     gpuKit().afterInit(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['afterInit']>[0]);
+    if (new URLSearchParams(location.search).has('offscreen')) gpuKit().offscreen(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['offscreen']>[0]);
   }
 
   setPixelRatio(pr: number): void {
@@ -113,19 +114,55 @@ export class Renderer {
    * get different keys (sRGB, AgX) and never be used.
    */
   asScenePass<T>(fn: () => T): T {
-    if (this.post) return fn();
     const prev = this.gl.getRenderTarget();
-    this.gl.setRenderTarget(this.composer.readBuffer);
+    this.gl.setRenderTarget(this.post ? this.post.sceneTarget as unknown as THREE.WebGLRenderTarget : this.composer.readBuffer);
     try { return fn(); } finally { this.gl.setRenderTarget(prev); }
   }
 
   /** compileAsync with matching program keys (see asScenePass). */
   compileAsync(obj: THREE.Object3D, target: THREE.Scene = this.scene): Promise<unknown> {
-    const p = this.asScenePass(() => this.gl.compileAsync(obj, this.camera, target));
-    if (!this.webgpu) return p;
+    if (!this.webgpu) return this.asScenePass(() => this.gl.compileAsync(obj, this.camera, target));
+    // three's WebGPU compileAsync only takes what the camera sees, and builds one pipeline after
+    // the other. Everything else was then built in the frames, one by one, blocking each. So:
+    // no frustum culling and empty instanced batches as one instance while it collects the
+    // objects (that part runs at once), and the scene in parts, compiled side by side.
+    const undo: (() => void)[] = [];
+    obj.traverseVisible((o) => {
+      if (o.frustumCulled) { o.frustumCulled = false; undo.push(() => { o.frustumCulled = true; }); }
+      const im = o as THREE.InstancedMesh;
+      if (im.isInstancedMesh && im.count === 0 && im.instanceMatrix.count > 0) { im.count = 1; undo.push(() => { im.count = 0; }); }
+    });
+    let jobs: Promise<unknown>[];
+    try {
+      jobs = this.asScenePass(() => compileParts(obj, 16).map((part) => this.gl.compileAsync(part, this.camera, target)));
+    } finally {
+      for (const u of undo) u();
+    }
     // A pipeline that fails to build never settles its promise: never let loading wait on it.
     let timer = 0;
-    const late = new Promise((res) => { timer = window.setTimeout(() => { console.warn('[warm-up] compileAsync still pending after 30 s, going on'); res(null); }, 30000); });
-    return Promise.race([p, late]).finally(() => clearTimeout(timer));
+    const late = new Promise((res) => { timer = window.setTimeout(() => { console.warn('[warm-up] compileAsync still pending after 60 s, going on'); res(null); }, 60000); });
+    return Promise.race([Promise.all(jobs), late]).finally(() => clearTimeout(timer));
   }
+}
+
+/** Splits a tree into about `n` visible subtrees of similar renderable counts (whole subtrees, no overlaps). */
+function compileParts(root: THREE.Object3D, n: number): THREE.Object3D[] {
+  const counts = new Map<THREE.Object3D, number>();
+  const count = (o: THREE.Object3D): number => {
+    let c = (o as THREE.Mesh).geometry ? 1 : 0;
+    for (const ch of o.children) if (ch.visible) c += count(ch);
+    counts.set(o, c);
+    return c;
+  };
+  const limit = Math.max(1, Math.ceil(count(root) / n));
+  const parts: THREE.Object3D[] = [];
+  const take = (o: THREE.Object3D): void => {
+    const c = counts.get(o) ?? 0;
+    if (c === 0) return;
+    // (A renderable is taken with its children: compiling it compiles them too.)
+    if (c <= limit || (o as THREE.Mesh).geometry || !o.children.length) { parts.push(o); return; }
+    for (const ch of o.children) if (ch.visible) take(ch);
+  };
+  take(root);
+  return parts;
 }

@@ -250,6 +250,7 @@ export class Game {
     this.gate = new ShaderGate(this.renderer.gl, this.renderer.scene, this.renderer.camera, (fn) => this.renderer.asScenePass(fn));
     this.gate.enabled = false; // the start-up warm-up compiles everything present
     (window as unknown as { shaderGate: ShaderGate }).shaderGate = this.gate;
+    if (this.renderer.webgpu) this.gate.gpuCompile = (o) => this.renderer.compileAsync(o);
     this.input = new Input(canvas);
   }
 
@@ -589,7 +590,7 @@ export class Game {
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
-    console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms (${warm.programsCompiled} programs), ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs`);
+    console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms (${warm.programsCompiled} programs), ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs${warm.nodeBuilds ? `, node builds ${warm.nodeBuilds.join(' / ')} (pipelines ${(window as unknown as { nodeBuilds: { asyncPipes: number } }).nodeBuilds.asyncPipes} in advance, ${(window as unknown as { nodeBuilds: { syncPipes: number } }).nodeBuilds.syncPipes} while drawing)` : ''}`);
     if (warm.gateWaiting.length) console.log(`[warm-up] still waiting for shaders: ${warm.gateWaiting.join(", ")}`);
     console.log(`[load] ${((performance.now() - loadT0) / 1000).toFixed(1)} s in all, ${((performance.now() - shadersAt) / 1000).toFixed(1)} s preparing shaders`);
     hitch.clear();

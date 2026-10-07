@@ -75,3 +75,12 @@ How the GLSL materials are ported for `?gpu=webgpu` (see WEBGPU_PLAN.md). Worked
 `npx tsc --noEmit -p .` must pass. Visual checks run the game with `?gpu=webgpu-gl` (headless
 SwiftShader) or `?gpu=webgpu` (real GPU) next to plain WebGL; `renderer.gl.debug.getShaderAsync(scene,
 camera, mesh)` shows the generated shader.
+
+## Pipelines built ahead must match
+
+three keys each render pipeline by the material, the object (instanced meshes by uuid), the
+scene's environment and fog nodes, the lights, and the render context, which includes the depth
+of nested `render()` calls. `compileAsync` only helps when all of these are the same as in the
+frame: compile through `Renderer.compileAsync` (it targets the scene's render target at the top
+level, like `Post.render`), never swap `scene.environment` for a new texture, and don't render
+the scene from inside a node (`pass()`).

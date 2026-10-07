@@ -3,7 +3,7 @@
  * default WebGL build does not carry three's node system. See docs/WEBGPU_PLAN.md.
  */
 import * as THREE from 'three/webgpu';
-import { pass, renderOutput } from 'three/tsl';
+import { renderOutput, texture } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { makeSkyNode, makeStarsNode } from './sky';
@@ -46,6 +46,15 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   flipPolygonOffsets(renderer);
   packBeforeRender(renderer);
   watchVertexBuffers(renderer);
+  countNodeBuilds(renderer);
+}
+
+/** Node shader builds so far, and pipelines built ahead (compileAsync) or on the spot while drawing. */
+export const nodeBuilds = { count: 0, syncPipes: 0, asyncPipes: 0 };
+
+function countNodeBuilds(renderer: THREE.WebGPURenderer): void {
+  renderer.debug.onNodeBuilderCreated = () => { nodeBuilds.count++; };
+  (window as unknown as { nodeBuilds: typeof nodeBuilds }).nodeBuilds = nodeBuilds;
 }
 
 /** Warns about pipelines over WebGPU's vertex buffer limit, also on the WebGL2 backend (where they would work). */
@@ -61,6 +70,7 @@ function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
       const o = renderObject.object, g = o.geometry;
       console.warn(`[webgpu] ${n} vertex buffers (WebGPU allows 8): ${o.type} "${o.name}" ${renderObject.material.type} attributes ${Object.keys(g.attributes).join(',')}`);
     }
+    if (promises) nodeBuilds.asyncPipes++; else nodeBuilds.syncPipes++;
     return create(renderObject, promises);
   };
 }
@@ -94,6 +104,30 @@ export async function readPixels(renderer: THREE.WebGPURenderer, rt: THREE.Rende
   const row = w * 4, out = new Uint16Array(row * h);
   for (let y = 0; y < h; y++) out.set(data.subarray(y * row, y * row + row), (h - 1 - y) * row);
   return out;
+}
+
+/**
+ * Test aid (`&offscreen`): the final image goes into a render target instead of the canvas, and
+ * `window.grabFrame()` returns it as a PNG data URL. Headless Chrome on SwiftShader loses the
+ * WebGPU device on the first canvas present, but renders into targets fine.
+ */
+export function offscreen(renderer: THREE.WebGPURenderer): void {
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const rt = new THREE.RenderTarget(size.x, size.y);
+  renderer.setOutputRenderTarget(rt);
+  (window as unknown as { grabFrame: () => Promise<string> }).grabFrame = async () => {
+    const w = rt.width, h = rt.height;
+    const px = await readPixels(renderer, rt, w, h) as unknown as Uint8Array;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d')!;
+    const img = ctx.createImageData(w, h);
+    // (readPixels gives rows bottom-first, like WebGL.)
+    for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255;
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL('image/png');
+  };
 }
 
 /**
@@ -149,21 +183,30 @@ export function createPMREM(renderer: unknown): THREE.PMREMGenerator {
 /** The game's post-processing (HDR scene → bloom → tone mapping and sRGB → SMAA) as a node pipeline. */
 export class Post {
   private pipeline: THREE.RenderPipeline;
-  private scene: ReturnType<typeof pass>;
+  /** The scene is drawn here (HDR) by a plain render, not by a pass() node inside the pipeline. */
+  private target: THREE.RenderTarget;
   private bloomNode: ReturnType<typeof bloom>;
   private bloomOn = true;
   private smaaOn = true;
+  private size = new THREE.Vector2();
 
-  constructor(renderer: THREE.WebGPURenderer, scene: THREE.Scene, camera: THREE.Camera) {
+  constructor(private renderer: THREE.WebGPURenderer, private scene: THREE.Scene, private camera: THREE.Camera) {
     this.pipeline = new THREE.RenderPipeline(renderer);
     this.pipeline.outputColorTransform = false;
-    this.scene = pass(scene, camera);
-    this.bloomNode = bloom(this.scene.getTextureNode('output'), 0.16, 0.5, 2.0);
+    // (A pass() node renders the scene from inside the pipeline's own render, a nested render
+    // call: three keys every pipeline by that, so compileAsync, which runs at the top level,
+    // built pipelines the frames never used, and the frames built theirs one by one.)
+    this.target = new THREE.RenderTarget(1, 1, { type: THREE.HalfFloatType });
+    this.target.texture.name = 'scene';
+    const depth = new THREE.DepthTexture(1, 1);
+    depth.isRenderTargetTexture = true;
+    this.target.depthTexture = depth;
+    this.bloomNode = bloom(texture(this.target.texture), 0.16, 0.5, 2.0);
     this.build();
   }
 
   private build(): void {
-    const col = this.scene.getTextureNode('output');
+    const col = texture(this.target.texture);
     let out = this.bloomOn ? col.add(this.bloomNode) : col;
     out = renderOutput(out);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -183,6 +226,18 @@ export class Post {
   }
 
   render(): void {
+    const r = this.renderer;
+    r.getDrawingBufferSize(this.size);
+    if (this.target.width !== this.size.x || this.target.height !== this.size.y) this.target.setSize(this.size.x, this.size.y);
+    const prev = r.getRenderTarget();
+    r.setRenderTarget(this.target);
+    r.render(this.scene, this.camera);
+    r.setRenderTarget(prev);
     this.pipeline.render();
+  }
+
+  /** Where the scene is drawn: compiles target it so they build the pipelines the frames use. */
+  get sceneTarget(): THREE.RenderTarget {
+    return this.target;
   }
 }

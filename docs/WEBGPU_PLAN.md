@@ -95,3 +95,19 @@ Ordered by how much of the screen they cover (port first what is always visible)
   its device on the first frame even for a plain cube, so real WebGPU is checked on Arnd's PC.
   Open: GPU timer (quality auto-levels) on WebGPU; `info.programs` counts; vertex-buffer limit (8)
   for very large instanced meshes (furniture > ~1024 instances) to watch on real hardware.
+- 2026-10-07: first runs on Arnd's PC (RTX 5070): everything renders, but loading 53–75 s
+  (WebGL 10–20 s), fps 33–52. Cause of the loading time: the pipelines built ahead
+  (`compileAsync`) never matched the ones the frames used, so ~4 of 5 were built on the spot while
+  drawing, one by one. Three mismatches, all fixed: (1) three keys a pipeline by its render
+  context, which includes the render call depth, and a `pass()` node renders the scene from inside
+  the post pipeline's render; the scene is now drawn by a plain render into Post's own target;
+  (2) every sky refresh made a new environment texture (new node, new key for every lit
+  material); PMREM now re-renders into the same target on WebGPU; (3) `compileAsync` only takes
+  what the camera sees and builds one pipeline after the other: Renderer.compileAsync turns
+  frustum culling off while it collects and compiles the scene in ~16 parts side by side. The
+  shader gate now also works on WebGPU: new meshes are compiled with compileAsync and hidden until
+  it finishes (the frames skip a pipeline still being built). Headless webgpu-gl: shader
+  preparation 260–400 s → 120–140 s, pipelines built while drawing 436 → 84 (the rest are
+  shadow-map pipelines, which compileAsync cannot build). `[warm-up]` line now shows node builds
+  and pipelines in advance / while drawing. `&offscreen` sends the final image to a render
+  target (`window.grabFrame()` returns a PNG) for headless real-WebGPU checks.

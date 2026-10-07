@@ -64,6 +64,8 @@ export interface WarmReport {
   programsCompiled: number;
   /** What the shader gate was still waiting for when the warm-up ended. */
   gateWaiting: string[];
+  /** WebGPU only: node shader builds after compile, after the views, at the end. */
+  nodeBuilds?: number[];
 }
 
 export const LEGACY_WARMUP = new URLSearchParams(location.search).get('warm') === '0';
@@ -108,6 +110,8 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   await R.compileAsync(scene);
   rep.compileMs = performance.now() - tc;
   rep.programsCompiled = (gl.info.programs ?? []).length;
+  const builds = (window as unknown as { nodeBuilds?: { count: number } }).nodeBuilds;
+  if (builds) rep.nodeBuilds = [builds.count];
   // (Gate first: startLoop runs the first frame at once, and what that frame adds — vehicle and
   // FX batches, the first crowd — would otherwise compile one program after the other in it.)
   host.gate.enabled = true;
@@ -147,11 +151,14 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
     progress(0.4 + 0.4 * ((i + 1) / views.length));
   }
   rep.viewsMs = performance.now() - tv;
+  if (builds) rep.nodeBuilds!.push(builds.count);
   scene.remove(stage);
   // 6. Calm frames; meanwhile the gate's parallel compiles finish (not waiting forever on one).
   const tw = performance.now();
   let calm = 0;
-  while ((calm < 20 || (host.gate.busy > 0 && performance.now() - tw < 3000)) && performance.now() - tw < 8000) {
+  // (WebGPU: new meshes stay hidden until their background compile is done; wait for those longer.)
+  const busyMs = R.webgpu ? 20000 : 3000;
+  while ((calm < 20 || (host.gate.busy > 0 && performance.now() - tw < busyMs)) && performance.now() - tw < Math.max(8000, busyMs)) {
     const f0 = performance.now();
     await host.nextFrame();
     calm = performance.now() - f0 < 45 ? calm + 1 : 0;
@@ -161,6 +168,7 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   rep.totalMs = performance.now() - t0;
   rep.programs = (gl.info.programs ?? []).length;
   rep.gateWaiting = host.gate.waiting().slice(0, 20);
+  if (builds) rep.nodeBuilds!.push(builds.count);
   return rep;
 }
 

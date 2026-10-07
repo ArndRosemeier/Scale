@@ -65,8 +65,6 @@ export class ShaderGate {
     // The shadow pass renders with the scene's lights but without fog / environment.
     this.shadowScene = new THREE.Scene();
     (this.shadowScene as unknown as { traverseVisible: (cb: (o: THREE.Object3D) => void) => void }).traverseVisible = (cb) => { for (const l of this.lights) cb(l); };
-    // WebGPU builds its pipelines asynchronously by itself: no gate (see docs/WEBGPU_PLAN.md).
-    if (WEBGPU) { this.enabled = false; return; }
     // Every subtree added anywhere is looked at once.
     const gate = this;
     const add = THREE.Object3D.prototype.add;
@@ -83,9 +81,53 @@ export class ShaderGate {
     this.queue.length = 0;
   }
 
+  /**
+   * WebGPU: how to compile a subtree in the background (the renderer's compileAsync). Its
+   * pipelines are built off the render path, and the frames skip a mesh whose pipeline is still
+   * being built; but a mesh drawn before that request would have them built on the spot, so new
+   * meshes leave the camera's layer until their compile has finished.
+   */
+  gpuCompile: ((o: THREE.Object3D) => Promise<unknown>) | null = null;
+  private gpuPending = 0;
+
+  private updateWebGPU(): void {
+    if (!this.queue.length || !this.gpuCompile) return;
+    const q = this.queue;
+    this.queue = [];
+    for (const root of q) {
+      if (!this.inScene(root)) continue;
+      const fresh: THREE.Object3D[] = [];
+      root.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (!m || this.seen.get(o) === m) return;
+        this.seen.set(o, m);
+        this.stats.checked++;
+        if (o.layers.isEnabled(0)) fresh.push(o);
+      });
+      if (!fresh.length) continue;
+      const t0 = performance.now();
+      const done = this.gpuCompile(root);
+      // (After the call: it has already collected what to compile, by layer.)
+      for (const o of fresh) { o.layers.disable(0); o.layers.enable(HIDDEN_LAYER); }
+      this.stats.hidden += fresh.length;
+      this.gpuPending++;
+      const show = (): void => {
+        this.gpuPending--;
+        for (const o of fresh) if (o.layers.isEnabled(HIDDEN_LAYER)) { o.layers.enable(0); o.layers.disable(HIDDEN_LAYER); }
+        this.stats.swapped += fresh.length;
+        const ms = performance.now() - t0;
+        if (ms > 100) {
+          this.stats.late.push({ what: describe(fresh[0] as THREE.Mesh, (fresh[0] as THREE.Mesh).material as THREE.Material), ms: Math.round(ms) });
+          if (this.stats.late.length > 200) this.stats.late.shift();
+        }
+      };
+      done.then(show, (e) => { console.warn('[gate] compile', e); show(); });
+    }
+  }
+
   /** Per frame, before rendering. */
   update(): void {
-    if (WEBGPU) return;
+    if (WEBGPU) { this.updateWebGPU(); return; }
     if (this.queue.length && performance.now() - this.lightsAt > 2000) this.refreshLights();
     // New objects.
     if (this.queue.length) {
@@ -134,7 +176,7 @@ export class ShaderGate {
    */
   precompile(o: THREE.Object3D): void {
     if (WEBGPU) {
-      void (this.renderer as unknown as { compileAsync(o: THREE.Object3D, c: THREE.Camera, s: THREE.Scene): Promise<void> }).compileAsync(o, this.camera, this.scene).catch((e) => console.warn('[gate] precompile', e));
+      void this.asScenePass(() => (this.renderer as unknown as { compileAsync(o: THREE.Object3D, c: THREE.Camera, s: THREE.Scene): Promise<void> }).compileAsync(o, this.camera, this.scene)).catch((e) => console.warn('[gate] precompile', e));
       return;
     }
     this.refreshLights();
@@ -146,7 +188,7 @@ export class ShaderGate {
     this.warm.push({ o, t0: performance.now() });
   }
 
-  get busy(): number { return this.pending.length + this.warm.length; }
+  get busy(): number { return this.pending.length + this.warm.length + this.gpuPending; }
 
   /** What is still waiting for its shader (for the warm-up report). */
   waiting(): string[] {

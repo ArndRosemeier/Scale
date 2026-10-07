@@ -249,10 +249,17 @@ export class SkySystem {
     if (this.lastEnvSun.distanceTo(this.sunDir) > 0.02 || Math.abs(envWx - this.envWx) > 0.08) {
       this.lastEnvSun.copy(this.sunDir);
       this.envWx = envWx;
-      const rt = this.pmrem.fromScene(this.envScene, 0, 1, 2000);
-      if (this.envRT) this.envRT.dispose();
-      this.envRT = rt;
-      this.scene.environment = rt.texture;
+      if (WEBGPU) {
+        // Into the same target: a new environment texture changes every lit material's
+        // pipeline key there, and they would all be built again (the ones the loading
+        // screen prepared too).
+        this.pmrem.fromScene(this.envScene, 0, 1, 2000, { renderTarget: this.envRT } as never);
+      } else {
+        const rt = this.pmrem.fromScene(this.envScene, 0, 1, 2000);
+        if (this.envRT) this.envRT.dispose();
+        this.envRT = rt;
+        this.scene.environment = rt.texture;
+      }
       this.envBase = lerp(0.05, 0.22, day) * (1 - 0.3 * wx.dark);
     }
     // Underground: no sun or sky; a faint neutral fill, dense dark haze, slightly higher exposure.
