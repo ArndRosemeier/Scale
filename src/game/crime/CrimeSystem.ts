@@ -639,6 +639,12 @@ export class CrimeSystem {
       a.actor!.outfit = lieutenantOutfit(by, a.cit.seed);
       a.actor!.title = `${by.emblem} ${by.name} · ${L.title}`;
     });
+    // A procession's leader carries a lantern lit in the group's colour.
+    const L = c instanceof Procession ? c.leader?.actor : null;
+    if (L?.outfit) {
+      const glow = (L.faction != null ? this.factions.factions[L.faction] : f)?.palette.accent ?? f.palette.accent;
+      L.outfit = { ...L.outfit, mainhand: { defId: 'lantern', visual: { shape: 'lantern', seed: 1, primary: glow, secondary: glow, accent: glow, material: 'plain', glow: 1, glowColor: glow } } } as typeof L.outfit;
+    }
     // A group hunting the hero: its members stand and fight.
     for (const a of c.criminals) if (a.actor && heatOf(this.notoriety[a.actor.faction ?? f.id] ?? 0) === 'hunted') a.actor.memo.grudge = 1;
   }

@@ -215,6 +215,29 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(m, fuse);
       break;
     }
+    case 'lantern': {
+      // A procession's lantern (the necromancers'): a bail in the fist, the lit glass hanging below.
+      const iron = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.5, metalness: 0.6 });
+      const glow = new THREE.Color().setRGB(...(v.glowColor ?? v.accent ?? v.primary), THREE.SRGBColorSpace);
+      const glass = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 2.4, roughness: 0.3 });
+      const bail = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.005, 5, 12, Math.PI), iron);
+      bail.rotation.z = Math.PI;
+      bail.position.y = 0.0;
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.05, 6), iron);
+      cap.position.y = -0.065;
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.13, 6), glass);
+      body.position.y = -0.155;
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.056, 0.02, 6), iron);
+      base.position.y = -0.23;
+      g.add(bail, cap, body, base);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.14, 0.006), iron);
+        bar.position.set(Math.cos(a) * 0.05, -0.155, Math.sin(a) * 0.05);
+        g.add(bar);
+      }
+      break;
+    }
     case 'umbrella': {
       // Held up beside the head (raised grip): a short shaft to the canopy just above it.
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.75, 6), new THREE.MeshStandardMaterial({ color: 0x222222 }));

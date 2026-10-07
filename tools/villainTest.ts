@@ -234,7 +234,7 @@ function ecoNecroChecks(check: Check): void {
       check(!!fo.chest && !!lo.chest && !!bo.chest && JSON.stringify(factionOutfit(f, 7)) === JSON.stringify(fo), `outfits: ${a} members, lieutenants and bosses dressed (seeded)`);
     }
     const sk = skeletonOutfit(null, 3) as unknown as Record<string, { defId: string; visual: { material: string } }>;
-    check(sk.head.defId === 'skull' && sk.chest.visual.material === 'bones' && sk.legs.visual.material === 'bones', 'outfits: a skeleton is bones on black with a skull');
+    check(sk.head.defId === 'skull' && sk.chest.defId === 'skeleton' && sk.legs.defId === 'no-underwear' && !sk.feet, 'outfits: a skeleton is bare bones with a skull, nothing else worn');
   }
 
   // ---- sabotage: the robot first, else a parked car; left alone the machines are wrecked

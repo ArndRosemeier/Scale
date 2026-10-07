@@ -83,6 +83,8 @@ export interface BodyFit {
   /** Horns/ears that helmets must leave room for. */
   earPoint: number;
   hasHorns: boolean;
+  /** Joint-to-joint lengths (rest pose) for parts that follow the skeleton (the raised dead's bones). */
+  bones?: { upperArm: number; forearm: number; thigh: number; shin: number; neck: number; chest: number; spine: number };
 }
 
 export interface WearableSpec {

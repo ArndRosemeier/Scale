@@ -94,10 +94,10 @@ export function skeletonOutfit(f: Faction | null, seed: number): EquipmentVisual
   const black: C3 = [0.02, 0.02, 0.025], bone: C3 = [0.8 + r.float() * 0.08, 0.77 + r.float() * 0.06, 0.66 + r.float() * 0.06];
   const eyes: C3 = f?.palette.accent ?? [0.45, 1, 0.55];
   const v = (primary: C3, secondary: C3, material = 'plain') => ({ shape: 'cloth', seed: r.nextU32(), primary, secondary, accent: eyes, material, glow: 0, glowColor: eyes });
+  // Bare bones (humanoid/client/streetwear skeleton): the body hidden, no underclothes.
   return {
-    chest: { defId: 'sweater', visual: v(black, bone, 'bones') },
-    legs: { defId: 'trousers', visual: v(black, bone, 'bones') },
-    feet: { defId: 'shoes', visual: v(bone, bone) },
+    chest: { defId: 'skeleton', visual: v(bone, bone) },
+    legs: { defId: 'no-underwear', visual: v(black, black) },
     head: { defId: 'skull', visual: v(bone, bone) },
   } as unknown as EquipmentVisuals;
 }
