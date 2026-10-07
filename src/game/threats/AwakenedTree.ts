@@ -35,7 +35,7 @@ import type { Obstacle } from '../../world/Collision';
 let EVENT_ID = 9000;
 
 export const TREE = {
-  hp: 1500,
+  hp: 1000,
   /** Its legs are this share of the tree's height (m, clamped). */
   legShare: 0.3, legMin: 2.2, legMax: 4.4,
   /** Walking speed (m/s), panicking (burning), and the share left while frozen. */
@@ -56,8 +56,9 @@ export const TREE = {
   heartMul: 3,
   /** Aggro under this is forgotten (it goes back to the machines). */
   aggroMin: 25,
-  /** Karma for the hero who beats it, and for a hit on the heart. */
-  karma: { beaten: 60, weak: 3 },
+  /** Karma for the hero who beats it, and for a hit on the heart; reputation for beating it (like the strider). */
+  karma: { beaten: 120, weak: 3 },
+  rep: 12,
   /** Gnarled trees kept standing after fights (the oldest goes). */
   keep: 3,
   /** Seconds to root (beaten). */
@@ -831,6 +832,8 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     g.audio.play('grow_rumble', this.x, this.y, this.z, 0.9, 0.5, 80, cam);
     if (byPlayer && outcome === 'defeated') {
       g.progress.addKarma(TREE.karma.beaten, 'stopped the awakened tree');
+      g.crime.rep.add(TREE.rep, 'awakened tree stopped');
+      g.crime.rep.count('stopped');
       g.powerHud.toast('The tree <b>roots where it stands</b> — an old, gnarled tree again', 'info');
     }
   }
