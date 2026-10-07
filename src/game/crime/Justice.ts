@@ -14,6 +14,11 @@
  *
  * A manhunt (reputation ≤ JUSTICE.manhunt, "public menace"): officers who come near the player go
  * after them at once, offence or not.
+ *
+ * Only what the player's own blows and powers hit counts (the ledger books nothing else to them:
+ * a collapse's rubble, a body a monster flung, the monster's own damage are nobody's or the
+ * threat's). And while a big monster is about (near the damage or the hero), the collateral is
+ * not counted at all: no karma, reputation or heat (threats/ThreatDirector MONSTER_GRACE).
  */
 import type { HarmEntry } from '../Consequences';
 import type { PedAgent } from '../../sim/Pedestrians';
@@ -38,6 +43,8 @@ export interface JusticeHost {
   sound(id: string, gain: number): void;
   /** A machine gone rogue (a threat): fair game, not property. */
   hostileThing?(ref: object): boolean;
+  /** A big monster about near this point (threats/ThreatDirector MONSTER_GRACE): collateral not counted. */
+  monsterNear?(x: number, z: number): boolean;
 }
 
 export const JUSTICE = {
@@ -71,7 +78,8 @@ export class Justice {
   private propT = 0;
   private hurtT = -99;
   private huntT = -1e9;
-  stats = { offences: 0, arrests: 0, turnIns: 0, escapes: 0, collapses: 0 };
+  stats = { offences: 0, arrests: 0, turnIns: 0, escapes: 0, collapses: 0, forgiven: 0 };
+  private graceT = -99;
   private felled = new WeakSet<object>();
   /** Called when the wanted level changes (HUD). */
   onChange: ((wanted: number) => void) | null = null;
@@ -84,6 +92,14 @@ export class Justice {
     // Only the player's own doing (a rogue robot's or the police's damage is never booked to them).
     if (e.cause !== 'player') return;
     if (e.ref && H.hostileThing?.(e.ref)) return;
+    // Fighting a monster: nobody expects the hero to mind a lamp post (or a car, a facade, a
+    // bystander in the way) meanwhile.
+    if (H.monsterNear && (H.monsterNear(e.x, e.z) || H.monsterNear(H.player.x, H.player.z))) {
+      this.stats.forgiven++;
+      if (e.target === 'building' && e.effect === 'collapse') this.felled.add(e.ref ?? e);
+      if (H.time - this.graceT > 60) { this.graceT = H.time; H.toast('Fighting the monster — nobody holds the damage against you', 'info'); }
+      return;
+    }
     const now = H.time;
     const ref = e.ref as (PedAgent | Vehicle | undefined);
     if (e.target === 'building' && e.effect === 'collapse') {

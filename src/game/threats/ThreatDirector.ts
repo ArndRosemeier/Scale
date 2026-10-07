@@ -86,6 +86,14 @@ const SETTING_KEY = 'scale.threat.setting';
 /** A finished event stays (powered-down machines, the response standing down) this long (s). */
 const LINGER = 45;
 
+/**
+ * Around a big monster the city does not count the hero's collateral (crime/Justice): nobody expects
+ * them to mind a lamp post while a monster tears the city down. Big: a body at least `minHeight` m
+ * tall; around it: within `near` m + `perHeight` × its height of it, and for `linger` s after it
+ * was last there (a body coming down, the last blows).
+ */
+export const MONSTER_GRACE = { minHeight: 8, near: 80, perHeight: 2.5, linger: 20 };
+
 export class ThreatDirector {
   readonly clock: ThreatClock;
   readonly rogue: RogueMachines;
@@ -117,6 +125,9 @@ export class ThreatDirector {
   private markT = 0;
   private markKey = '';
   private devDone = false;
+  /** Big monsters lately (MONSTER_GRACE): where each was last, its radius of grace and when. */
+  private big = new Map<ThreatActor, { x: number; z: number; r: number; t: number }>();
+  private now = 0;
   readonly log: { t: number; what: string }[] = [];
   stats = { omens: 0, omensShown: 0, events: 0, msAvg: 0 };
 
@@ -150,6 +161,21 @@ export class ThreatDirector {
     if (ref instanceof Strider) return true;
     const m = (ref as { mal?: { mode: string } }).mal;
     return !!m && m.mode === 'hostile';
+  }
+
+  /** Is a big monster about (MONSTER_GRACE) near this point? The player's collateral is not counted there. */
+  bigMonsterNear(x: number, z: number): boolean {
+    for (const b of this.big.values()) if (this.now - b.t <= MONSTER_GRACE.linger && Math.hypot(x - b.x, z - b.z) < b.r) return true;
+    return false;
+  }
+
+  private trackBig(dt: number): void {
+    this.now += dt;
+    for (const a of this.actors()) {
+      if (a.height < MONSTER_GRACE.minHeight) continue;
+      this.big.set(a, { x: a.x, z: a.z, r: MONSTER_GRACE.near + MONSTER_GRACE.perHeight * a.height, t: this.now });
+    }
+    for (const [a, b] of this.big) if (this.now - b.t > MONSTER_GRACE.linger) this.big.delete(a);
   }
 
   /** The big threat bodies one can target and hurt now. */
@@ -200,6 +226,7 @@ export class ThreatDirector {
     const t0 = performance.now();
     const g = this.g;
     this.rogue.update(dt);
+    this.trackBig(dt);
     // What drives the clock: karma earned, the player's own collateral.
     const earned = g.progress.earned, chaos = g.consequences.totals.player;
     const dk = this.earned < 0 ? 0 : earned - this.earned, dc = this.chaos < 0 ? 0 : chaos - this.chaos;
