@@ -3056,7 +3056,7 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(rare.length === 0, `people: every temperament is common enough (${TEMPERAMENTS.map((t) => `${t} ${tally[t] ?? 0}`).join(', ')})`);
   check(TEMPERAMENTS.every((t) => Array.isArray(CHAT[t])), 'people: small talk for every temperament');
   // Every topic answers for everybody in every situation, with every token filled in.
-  const topics: Topic[] = ['hello', 'mood', 'job', 'news', 'way', 'me', 'bye'];
+  const topics: Topic[] = ['hello', 'mood', 'job', 'news', 'way', 'favour', 'me', 'bye'];
   let none = 0, raw = 0, n = 0;
   const seen: Record<string, Set<string>> = {};
   const rng = new MRng(99);
@@ -3080,6 +3080,10 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
       place: 'Linden Square station', dir: dirWord(rng.range(-1, 1), rng.range(-1, 1)), dist: rng.range(100, 4000),
       heard: rng.chance(0.4) ? 'Did you hear? There was a mugging in Ashville this morning.' : null, hood: rng.chance(0.8) ? 'Ashville' : null,
       safety: rng.pick(['safe', 'quiet', 'mixed', 'rough', 'dangerous'] as const),
+      // The social web (phase 4).
+      teller: rng.chance(0.3) ? 'Mara' : null, bond: rng.pick(['friend', 'neighbour', 'sister', 'colleague']), told: rng.pick(['helped', 'saved', 'hurt'] as const),
+      need: rng.pick([null, null, 'hunger', 'tired', 'lonely'] as const), favour: rng.pick(['none', 'none', 'visit', 'streets', 'open', 'done', 'lost'] as const),
+      who: 'Hana', word: rng.pick(['sister', 'friend', 'grandmother']), asker: rng.chance(0.1) ? 'Mara' : null,
     };
     if (!f.group) f.boss = null;
     for (const tp of topics) {
@@ -3097,6 +3101,10 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const base = { first: 'Ann', last: 'Lee', full: 'Ann Lee', years: 40, child: false, senior: false, traits: { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 }, job: { kind: 'office' as const, title: 'office worker' }, interest: 'chess', mood: 0, moodWord: 'fine' as const, days: 0, opinion: 0, hour: 12, weather: 'fair', trouble: 0, threat: false, street: 'Elm Street', metStreet: 'Elm Street', city: 'X', group: null, boss: null, giant: false };
   const helped = pickLine('hello', { ...base, temper: 'grumpy', met: 2, deed: 'helped' }, 1);
   check(helped.id.startsWith('h21#'), `people: someone you helped up greets you for it (${helped.id}: ${helped.text})`);
+  // Sent by a friend: they say so, even the chatty on a first meeting (GPU check of PR #56).
+  const sent = pickLine('hello', { ...base, temper: 'chatty', met: 0, deed: null, asker: 'Mara' } as TalkFacts, 1);
+  check(sent.id.startsWith('h44#') && sent.text.includes('Mara'), `people: someone you were sent to says who sent you (${sent.id}: ${sent.text})`);
+  check(fill('I love {interest}.', { ...base, temper: 'chatty', met: 0, deed: null, interest: 'their cat' } as TalkFacts) === 'I love my cat.', 'people: "their cat" becomes "my cat" in their own words');
   const used = new Set<string>();
   const said: string[] = [];
   for (let i = 0; i < 3; i++) { const p = pickLine('news', { ...base, temper: 'steady', met: 0, deed: null }, 5 + i, used); said.push(p.text); used.add(p.id); }
@@ -3189,16 +3197,23 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
         consequences: { log, time: 0 },
         barks: { say: (_a: PedAgent, l: string) => { said.push(l); return true; } },
       };
+      const person = (c: { id: number }) => { const a = agents.find((x) => x.cit.id === c.id)!; const t = { o: 0.5, c: 0.5, e: a.agree, a: a.agree, n: 0.3 }; return { traits: t, temper: temperamentOf(t), full: 'Someone', first: 'Sam' }; };
       const people = {
         partner: null,
-        person: (c: { id: number }) => { const a = agents.find((x) => x.cit.id === c.id)!; const t = { o: 0.5, c: 0.5, e: 0.5, a: a.agree, n: 0.3 }; return { traits: t, temper: temperamentOf(t), full: 'Someone' }; },
+        person,
         find: () => null,
+        opinion: (c: { id: number }) => opinionOf(null, opts.rep ?? 0, person(c).traits.a),
       };
       const M = new Manners(g as never, people as never);
       const dt = 0.05;
+      // (Seeded: the chances of a chat or a snack are the same every run.)
+      const random = Math.random, rr = new MRng(5);
+      Math.random = () => rr.float();
       for (let t = 0; t < secs; t += dt) {
         opts.each?.(t);
         for (const a of agents) {
+          // (Handed back: on their way again, as Pedestrians does.)
+          if (a.state === PState.Flee && !a.actor) a.state = PState.Walk;
           a.stateT += dt;
           a.sideT = Math.max(0, (a.sideT ?? 0) - dt);
           const act = a.actor;
@@ -3207,6 +3222,7 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
         }
         M.update(dt);
       }
+      Math.random = random;
       return { said, M };
     };
     // A fall (not the hero's everyday accident, which is theirs for a while) at 20 m from the hero.
@@ -3239,8 +3255,60 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     const near = mk(11, 2, 0, 0.95), fine = mk(12, -2, 0, 0.1);
     run([near, fine], 0.25, { rep: -100 });
     check((near.sideX ?? 0) > 0 && (near.sideT ?? 0) > 0 && !(fine.sideT), 'people: someone who dislikes you steps aside as you come near');
+    // Phase 4: two people who share a home pass each other near the hero and stop for a chat, then walk on.
+    const p1 = mk(20, 5, 0, 0.9), p2 = mk(21, 6.5, 0.5, 0.9);
+    p2.cit = { ...p2.cit, home: { ...p1.cit.home } };
+    let chatting = false;
+    const r3 = run([p1, p2], 30, { each: (t) => { if (Math.abs(t - 6) < 0.03) chatting = p1.actor?.owner === -6 && p2.actor?.owner === -6 && Math.hypot(p1.x - p2.x, p1.z - p2.z) < 1.6; } });
+    check(chatting && !r3.M['jobs'].some((j) => j.kind === 'chat') && r3.said.length >= 2, `people: family or neighbours meeting in the street stop for a chat and go on (${r3.said.join(' | ')})`);
   }
   console.log(`people, phase 2: ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// People, phase 4 (NPC_PERSONALITY_PLAN §5): bonds, word getting round, needs, favours.
+{
+  const t0 = performance.now();
+  const S = await import('../src/game/people/social');
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 7, size: 0.4 }))), 7);
+  const cits = Array.from({ length: 1500 }, (_, i) => pop.synthetic(7000 + i * 13));
+  const a0 = cits[0];
+  const housemate = { ...cits[1], home: { ...a0.home } };
+  const colleague = { ...cits[2], work: { cell: 3, b: 4, pick: 0, kind: 'work' as const } }, colleague2 = { ...cits[3], work: { cell: 3, b: 4, pick: 0, kind: 'work' as const } };
+  check(S.bondOf(a0, housemate) !== null && S.bondOf(a0, housemate) === S.bondOf(housemate, a0) && (S.bondOf(a0, housemate) === 'family' || S.bondOf(a0, housemate) === 'neighbour'), `people: under one roof, family or neighbours (${S.bondOf(a0, housemate)})`);
+  check(S.bondOf(colleague, colleague2) === 'colleague' && S.bondOf(a0, a0) === null, 'people: same workplace, colleagues');
+  let friends = 0, pairs = 0;
+  for (let i = 0; i < 300; i++) for (let j = i + 1; j < 300; j++) { pairs++; if (S.bondOf(cits[i], cits[j]) === 'friend') friends++; }
+  check(friends > 0 && friends < pairs * 0.01, `people: a few strangers are friends (${friends} of ${pairs} pairs)`);
+  const mum = { ...housemate, age: a0.age + 0.3, gender: 0.2, role: 2 };
+  check(S.bondWord('family', mum, a0) === 'mother' || S.bondWord('family', mum, a0) === 'grandmother', `people: family words by age (${S.bondWord('family', mum, a0)})`);
+  // Word gets round: helping someone up makes their housemate like you a little more, and they say so.
+  const W = { helped: PEOPLE.helped, saved: PEOPLE.saved, hurt: PEOPLE.hurt };
+  const known = [{ cit: a0, name: 'Mara Okonkwo', helped: 1, saved: 0, hurt: 0, deed: 'helped' as const }];
+  const h = S.hearsay(housemate, known, W);
+  check(h.op > 0 && h.op <= S.SOCIAL.hearsayMax && h.told?.name === 'Mara' && h.told.deed === 'helped', `people: word gets round to the people close to them (${h.op}, ${h.told?.word} ${h.told?.name})`);
+  check(S.hearsay(cits[700], known, W).op === 0 && S.hearsay(a0, known, W).op === 0, 'people: strangers (and the person themselves) hear nothing');
+  check(S.hearsay(housemate, [{ ...known[0], helped: 0, hurt: 5, deed: 'hurt' as const }], W).op === -S.SOCIAL.hearsayMax, 'people: hearsay is bounded');
+  check(opinionOf({ talks: 0, helped: 0, saved: 0, hurt: 0, favours: 1, letDown: 0 }, 0, 0.5) === S.SOCIAL.favourDone && opinionOf(null, 0, 0.5, 12) === 12, 'people: favours and hearsay count in the opinion');
+  // Needs: hungry before lunch, fed after; tired late; lonely after a day at home, extraverts sooner.
+  const tr = { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 };
+  const w0 = { ...a0, wake: 7, sleep: 23 };
+  check(S.needsOf(w0, tr, 11.9, 0).hunger > S.needsOf(w0, tr, 14.5, 0).hunger && S.needsOf(w0, tr, 22.5, 0).tired > 0.7 && S.needsOf(w0, tr, 9, 0).tired < 0.3, 'people: hunger between meals, tired in the evening');
+  check(S.needsOf(w0, { ...tr, e: 0.9 }, 15, 6).lonely > S.needsOf(w0, { ...tr, e: 0.1 }, 15, 6).lonely && S.pressing({ hunger: 0.9, tired: 0.2, lonely: 0.1 }) === 'hunger' && S.pressing({ hunger: 0.3, tired: 0.2, lonely: 0.1 }) === null, 'people: loneliness by extraversion; only pressing needs show');
+  // Favours: asked by people who like and know you; the one to look in on is the same person every time.
+  check(S.asksFavour(40, 3, false, 0.1) && !S.asksFavour(40, 1, false, 0.1) && !S.asksFavour(0, 3, false, 0.1) && !S.asksFavour(40, 3, true, 0.1), 'people: only people who know and like you ask a favour');
+  const v1 = S.visitTarget(a0, (sd) => pop.synthetic(sd), 4), v2 = S.visitTarget(a0, (sd) => pop.synthetic(sd), 4);
+  check(v1.cit.id === v2.cit.id && v1.cit.role !== 0 && v1.word.length > 0, `people: the one to look in on is a grown-up, the same every time (${v1.word})`);
+  const k = newKnown(a0, 'Mara Okonkwo', 10, 0, 0, null);
+  k.favour = { kind: 'visit', asked: 10, until: 58, who: v1.cit, whoName: 'Hana Kim', word: v1.word, wx: 5, wz: 6 };
+  const k2 = newKnown(cits[5], 'Tom Weber', 10, 0, 0, null);
+  k2.favour = { kind: 'streets', asked: 10, until: 58, x: 100, z: 200, group: 'The Harbour Kings', done: 30 };
+  k2.favours = 1;
+  const back = restorePeople(JSON.parse(JSON.stringify(savePeople([k, k2]))));
+  check(back[0].favour?.kind === 'visit' && back[0].favour.who?.id === v1.cit.id && back[0].favour.wx === 5 && back[1].favour?.done === 30 && back[1].favour.group === 'The Harbour Kings' && back[1].favours === 1,
+    'people: favours survive a save');
+  check(restorePeople({ people: [{ ...JSON.parse(JSON.stringify(k)), favour: { kind: 'visit', who: 'junk' } }] })[0]?.favour === undefined, 'people: a damaged favour is dropped, the person kept');
+  check(['family', 'friend', 'neighbour', 'colleague'].every((b) => { const m = S.meetLines(b as never, 0.3); return m.hi && m.back && m.bye; }), 'people: words for meeting people you know');
+  console.log(`people, phase 4: ${friends} friend pairs of ${pairs}, ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live

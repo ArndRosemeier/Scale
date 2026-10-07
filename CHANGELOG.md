@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.085 — 2026-10-07
+
+- **People know each other.** Friends, family, neighbours and colleagues who pass each other in the street stop for a chat: a wave, a greeting by name, a few words with their hands going, a goodbye, then they walk on.
+- **Word gets round.** What you did to someone reaches the people close to them. Help a woman up and her neighbour likes you a little more, and tells you so when you meet ("You're the one who helped my neighbour Mara up!"). Knock someone down and their family will remember that too.
+- **People have needs.** Hunger between meals, tiredness late in the day, and loneliness after a long day at home (outgoing people feel it sooner) make them feel worse, and they tell you about it when you ask how they are. A hungry or tired passer-by sometimes stops for a bite or a coffee on the way.
+- **Favours.** A new option in the talk menu: "Can I do anything for you?" Someone who knows and likes you may ask you to look in on a friend or relative. That person then shows as a golden dot on the map, and they come out to their door when you get near. Or they may ask you to deal with the gang on their street, which counts once you stop a crime nearby. You have two game days. They remember whether you did it: they thank you and like you more, or they tell you they were let down. There is no quest log; the person who asked remembers it, and their dot on the map says so.
+
 ## 0.084 — 2026-10-07
 
 - **Reputation is only lost for what you hit yourself.** Rubble flying out of a collapsing building used to count as your doing, so standing by while a monster brought a block down could wreck your reputation as the neighbours fell. Now only what your own punches, steps and powers hit counts. What collapse rubble breaks, and what your body breaks while a monster has knocked you flying, is nobody's fault.

@@ -5,7 +5,7 @@ conversation menu; optional LLM support via OpenRouter later, but the core works
 people you have met get a faint dot on the map that persists, a small number of them").
 Status (2026-10-05): Phase 1 is being built (names, personalities, the talk menu, memory, map dots, saves).
 Status (2026-10-07): Phase 1 merged (v0.051, v0.056, v0.073). Phase 2 built (behaviour from personality). Phase 3
-(OpenRouter) waits; phase 4 (social web, needs, favours) comes next.
+(OpenRouter) waits. Phase 4 built (social web, needs, favours: §3.6).
 
 This amends PLAYGROUND_PLAN §0 decision 15 ("no chat, no quests"): talking to people is now allowed, **on the
 player's initiative only** (nobody stops the hero to talk, there is still no quest log), and barks stay sparse.
@@ -119,6 +119,23 @@ Takeaways for Scale:
   - victims of a crime you stop (and people whose stolen things you bring back) remember being saved;
   - what people shout when they run, gawk, film, get up or thank you is in their temperament.
 
+### 3.6 The social web, needs and favours (phase 4, `social.ts`, pure)
+- **Bonds** from the seeds, never stored: same home → family (30 %) or neighbours; same block → neighbours who
+  know each other (12 %); same workplace → colleagues; any two of about the same age (≤ 18 years apart, both
+  children or both grown-ups) → friends (0.6 %). Family words by age and gender (mother, son, sister, husband …).
+- **Street chats** (Manners): two people with a bond who pass within 3.5 m near the hero stop and talk 5–16 s (by
+  extraversion; family always stop, others now and then only nod), taking turns with the talking gesture, at most two
+  pairs at once, the same pair once per 15 minutes.
+- **Hearsay**: what you did to someone you know reaches the people bonded to them (family ½, friends 0.4, neighbours
+  and colleagues ¼ of the deed's weight, at most ±35 opinion); hello and "what do you think of me" lines say who told them.
+- **Needs**: hunger since the last meal (breakfast after waking, lunch 12–13:30, dinner 18:30–20), tiredness from
+  waking to bed, loneliness after hours at home (extraverts sooner). Pressing needs lower the mood a little, show in
+  "How are you?" and send a passer-by now and then to stop for a bite or a coffee.
+- **Favours**: "Can I do anything for you?" Someone who has met you twice and likes you (opinion ≥ 15) asks, on some
+  days: look in on a friend or relative (a citizen made from their seed; gold dot on the map; they come out of their
+  door as you get near; talking to them does it) or clear the trouble on their street (stop a crime within 300 m).
+  Two game days; done: +15 opinion and thanks, let down: −8 and a remark. Kept on the asker's record (saved).
+
 ## 4. LLM hook (phase 3, optional)
 - Settings: an OpenRouter API key (stored only in this browser) and a model id; off by default. The game never sends
   anything without a key.
@@ -138,7 +155,7 @@ Takeaways for Scale:
    victim remembered, people who dislike you keeping away.
 3. **OpenRouter**: settings, backend, free text, memory summaries.
 4. **Social web and needs**: NPC relationships (friends, neighbours, colleagues met together), small needs driving
-   errands, favours people ask of you (no quest log: a request is remembered by them, not by a journal).
+   errands, favours people ask of you (no quest log: a request is remembered by them, not by a journal). *Built.*
 
 ## 6. Open questions (defaults taken)
 1. Names always visible on the target frame, or only once they told you? Default: **always** (Arnd: "all NPCs have a
