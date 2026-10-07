@@ -25,6 +25,7 @@ import { resolveWearable, buildItemObject, animateItem, setItemSkyVis, disposeIt
 import { disposeOwn, type Character } from './Character';
 import { BODY_REGIONS, type HumanStatic } from './staticData';
 import { createGarmentMaterial } from './garmentMaterial';
+import { maskDepth } from './faceRegions';
 import type { GripClass } from './anim/actions';
 import type { SkyVisPatch } from '../../render/skyOcclusion';
 
@@ -282,6 +283,8 @@ interface ShellTopo {
   /** Neighbour lists for cloth smoothing (CSR: start offsets + flat list, duplicates kept). */
   nbStart: Int32Array;
   nbList: Int32Array;
+  /** Head coverings: the body vertices to hide (well inside the cut; `sel` reaches past it). */
+  hard?: Uint8Array;
 }
 
 /**
@@ -334,17 +337,31 @@ const SHELL_TOPO = new Map<string, ShellTopo | null>();
 const EQ_STATS = { held: 0, rigid: 0, shells: 0, shellCount: 0, garmentMaterial: 0 };
 if (typeof window !== 'undefined') (window as unknown as { norgoEquipStats?: typeof EQ_STATS }).norgoEquipStats = EQ_STATS;
 
-function shellTopology(st: HumanStatic, regions: ShellLayer['regions'], pos: Float32Array): ShellTopo | null {
+const FACE_REGION = BODY_REGIONS.indexOf('face'), NECK_REGION = BODY_REGIONS.indexOf('neck');
+
+function shellTopology(st: HumanStatic, regions: ShellLayer['regions'], pos: Float32Array, faceCut?: ShellLayer['faceCut']): ShellTopo | null {
   const l = { regions };
   const body = st.index.body;
   const want = new Map<number, [number, number]>();
   for (const r of l.regions) want.set(BODY_REGIONS.indexOf(r.region), [r.from ?? 0, r.to ?? 1]);
   const sel = new Uint8Array(st.renderVerts);
+  const face = st.face.array as Float32Array;
+  let hard: Uint8Array | undefined;
   for (let v = 0; v < st.bodyVerts; v++) {
     const cut = want.get(st.region[v]);
     if (!cut) continue;
     const t = st.regionT[v];
-    if (t >= cut[0] - 1e-3 && t <= cut[1] + 1e-3) sel[v] = 1;
+    if (!(t >= cut[0] - 1e-3 && t <= cut[1] + 1e-3)) continue;
+    // (The neck under a mask stays: its coarse triangles reach up under the chin, into the
+    // opening, and hid skin there that the mask doesn't cover.)
+    if (!faceCut || st.region[v] !== FACE_REGION) { sel[v] = 1; if (faceCut && st.region[v] !== NECK_REGION) (hard ??= new Uint8Array(st.renderVerts))[v] = 1; continue; }
+    // A head covering: the shell reaches a little into the openings (the shader trims it), the
+    // body is hidden only well inside.
+    const d = maskDepth(faceCut, face[v * 3], face[v * 3 + 1], face[v * 3 + 2]);
+    if (d > -0.8) sel[v] = 1;
+    // (Well inside: the shader's cut is a max of several terms, and between two covered corners
+    // of a triangle it can still open, e.g. along the jaw.)
+    if (d > 1.5) (hard ??= new Uint8Array(st.renderVerts))[v] = 1;
   }
   // Triangles fully inside the selection.
   const tris: number[] = [];
@@ -410,7 +427,7 @@ function shellTopology(st: HumanStatic, regions: ShellLayer['regions'], pos: Flo
     if (gl) gl.push(i); else groups.set(k, [i]);
   }
   const twins = [...groups.values()].filter((gl) => gl.length > 1);
-  return { sel, src, idx, lodIdx: lodTris, edge, nbStart, nbList, twins };
+  return { sel, src, idx, lodIdx: lodTris, edge, nbStart, nbList, twins, hard };
 }
 
 export class EquipmentRig {
@@ -460,6 +477,7 @@ export class EquipmentRig {
     // covers all three corners; a union would cut holes at seams between garments).
     const covered = new Uint32Array(this.ch.geo.st.renderVerts);
     let hideHair = false, hideBeard = false;
+    let eyeMask: WearableSpec['eyeMask'] | null = null;
     const fit = this.ch.geo.build.body.fit;
     const layers: { layer: ShellLayer; seed: number; slot?: string }[] = [];
     for (const [slot, item] of Object.entries(eq) as [EquipSlot, NonNullable<EquipmentVisuals[EquipSlot]>][]) {
@@ -478,6 +496,7 @@ export class EquipmentRig {
       hideHair ||= !!spec.hideHair;
       hideBeard ||= !!spec.hideBeard;
       for (const r of spec.hideRegions ?? []) hiddenRegions.add(r);
+      eyeMask = spec.eyeMask ?? eyeMask;
       for (const l of spec.layers) {
         if (l.kind === 'shell') layers.push({ layer: l, seed: item.visual.seed, slot });
         else run(() => { const t0 = performance.now(); this.addRigid(l, slot, fit); EQ_STATS.rigid += performance.now() - t0; }, `rigid ${item.defId}`);
@@ -501,6 +520,7 @@ export class EquipmentRig {
     }
     run(() => {
       this.applyHidden([...hiddenRegions], hideHair, hideBeard, covered);
+      this.ch.setEyeMask(eyeMask?.color ?? null, !!eyeMask?.under);
       done?.();
     });
   }
@@ -511,20 +531,22 @@ export class EquipmentRig {
     const ch = this.ch, st = ch.geo.st;
     const pos = ch.geo.build.renderPos, nrm = ch.geo.build.renderNormal;
     const body = st.index.body;
-    const topoKey = JSON.stringify(l.regions);
+    const topoKey = JSON.stringify(l.regions) + (l.faceCut ?? '');
     let topo = SHELL_TOPO.get(topoKey);
     if (topo === undefined) {
-      topo = shellTopology(st, l.regions, pos);
+      topo = shellTopology(st, l.regions, pos, l.faceCut);
       SHELL_TOPO.set(topoKey, topo);
     }
     if (!topo && !l.skirt && !l.hood) return;
     const empty: ShellTopo = { sel: new Uint8Array(st.renderVerts), src: [], idx: [], lodIdx: [[], []], edge: new Float32Array(0), nbStart: new Int32Array(1), nbList: new Int32Array(0) };
-    const { sel, src, edge, nbStart, nbList, twins } = topo ?? empty;
+    const { sel, src, edge, nbStart, nbList, twins, hard } = topo ?? empty;
     const n = src.length;
     // Positions: push out along the normal; outer layers are smoothed (cloth drapes over detail).
     // A little more room than the nominal offset (thin shirts let skin poke through in motion,
     // where skinning bends body and shell slightly differently), and between stacked layers.
-    const off = Math.max(0.002, l.offset) * 1.25 + 0.004 + order * 0.002;
+    // (A head covering stays thin whatever lies under it elsewhere: thick, it folds over itself in
+    // the creases under the chin and at the eye corners.)
+    const off = l.faceCut ? 0.008 : Math.max(0.002, l.offset) * 1.25 + 0.004 + order * 0.002;
     const P = new Float32Array(n * 3), N = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const v = src[i];
@@ -588,7 +610,9 @@ export class EquipmentRig {
       const v = src[i];
       uv[i * 2] = suv[v * 2]; uv[i * 2 + 1] = suv[v * 2 + 1];
       for (let k = 0; k < 4; k++) { si[i * 4 + k] = ssi[v * 4 + k]; sw[i * 4 + k] = ssw[v * 4 + k]; }
-      if (sel[v]) covered[v] |= 1 << (order & 31);
+      // (The neck stays under every shell: collars stand off it, and looking down past a collar
+      // into a hidden neck showed the background through the body.)
+      if ((hard ?? sel)[v] && st.region[v] !== NECK_REGION) covered[v] |= 1 << (order & 31);
     }
     let idx = keepTri(topo?.idx ?? []);
     const parts: ShellParts = { P: [], N: [], UV: [], SI: [], SW: [], E: [], I: [] };
@@ -620,13 +644,40 @@ export class EquipmentRig {
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(fSI, 4));
     g.setAttribute('skinWeight', new THREE.Uint8BufferAttribute(fSW, 4, true));
     g.setAttribute('aEdge', new THREE.BufferAttribute(fE, 1));
+    if (l.faceCut) {
+      // Face coordinates for the shader's clean cut round the eyes (and the cowl's lower edge).
+      const fc = new Float32Array(total * 3), sf = st.face.array as Float32Array;
+      // (Only the face is cut: scalp and neck get coordinates far behind it.)
+      for (let i = 0; i < n; i++) {
+        if (st.region[src[i]] === FACE_REGION) fc.set(sf.subarray(src[i] * 3, src[i] * 3 + 3), i * 3);
+        else fc[i * 3 + 2] = -9;
+      }
+      g.setAttribute('aFace', new THREE.BufferAttribute(fc, 3));
+    }
     g.setIndex(idx);
     g.boundingSphere = ch.geo.body[0].boundingSphere!.clone();
     if (l.skirt || l.hood) g.computeVertexNormals();
+    // A mask's neck ends in a clean hem (the region's own edge is ragged): a plane sloping down
+    // to the front like the bottom of the neck, just above that edge.
+    let neckY = 0, neckSlope = 0;
+    if (l.faceCut) {
+      let k = 0, sz = 0, sy = 0, szz = 0, szy = 0;
+      for (let i = 0; i < n; i++) if (edge[i] && st.region[src[i]] === NECK_REGION) {
+        const y = pos[src[i] * 3 + 1], z = pos[src[i] * 3 + 2];
+        k++; sz += z; sy += y; szz += z * z; szy += z * y;
+      }
+      if (k > 2) {
+        neckSlope = (k * szy - sz * sy) / Math.max(1e-9, k * szz - sz * sz);
+        neckY = (sy - neckSlope * sz) / k;
+        let over = 0;
+        for (let i = 0; i < n; i++) if (edge[i] && st.region[src[i]] === NECK_REGION) over = Math.max(over, pos[src[i] * 3 + 1] - neckY - neckSlope * pos[src[i] * 3 + 2]);
+        neckY += over + 0.003;
+      }
+    }
     const tm = performance.now();
-    const mat = createGarmentMaterial(l.material, seed, l.trim?.color);
+    const mat = createGarmentMaterial(l.material, seed, l.trim?.color, { height: ch.geo.build.body.fit.height, design: l.design ?? 0, cut: l.faceCut, neckY, neckSlope });
     EQ_STATS.garmentMaterial += performance.now() - tm;
-    if (l.skirt || l.hood) mat.material.side = THREE.DoubleSide;
+    if (l.skirt || l.hood || l.faceCut) mat.material.side = THREE.DoubleSide;
     const mesh = new THREE.SkinnedMesh(g, mat.material);
     mesh.userData.slot = slot;
     mesh.userData.color = l.material.color;

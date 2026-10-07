@@ -23,6 +23,9 @@ const mat = (color: C3, pattern: ShellMaterial['pattern'] = 'plain', o: Partial<
   wear: o.wear ?? 0.15,
 });
 
+/** Hero tights designs in shader order (garmentMaterial 'hero'). */
+const SUIT_DESIGN = ['plain', 'emblem', 'bolt', 'chevron', 'stripes', 'trunks'];
+
 const TORSO = [{ region: 'chest' as const }, { region: 'belly' as const }, { region: 'back' as const }];
 const ARMS = (to: number) => [
   { region: 'upperarm.L' as const, to: Math.min(1, to * 2) }, { region: 'upperarm.R' as const, to: Math.min(1, to * 2) },
@@ -58,6 +61,14 @@ export function resolveWearable(defId: string, v: ItemVisual): WearableSpec | nu
     case 'cap': return { layers: [capPart(c)] };
     case 'helmet': return { layers: [helmetPart(c)] };
     case 'beanie': return { layers: [beaniePart(c)] };
+    // Hero tights and masks (the character creator's Hero tab).
+    case 'tights': return { layers: [{ kind: 'shell', regions: [...TORSO, { region: 'neck', to: 0.8 }, ...ARMS(1), ...LEGS(1)], offset: 0.002, layer: 0, design: Math.max(0, SUIT_DESIGN.indexOf(v.material)), material: mat(c, 'hero', { color2: c2, roughness: 0.42, sheen: 0.65, wear: 0.02 }) }] };
+    case 'gloves': return L({ kind: 'shell', regions: [{ region: 'hand.L' }, { region: 'hand.R' }, { region: 'forearm.L', from: 0.8 }, { region: 'forearm.R', from: 0.8 }], offset: 0.002, layer: 1, material: mat(c, 'leather', { roughness: 0.5, wear: 0.05 }) });
+    case 'mask_domino': return { layers: [], eyeMask: { color: c } };
+    case 'mask_cowl': case 'mask_full': return {
+      layers: [{ kind: 'shell', regions: [{ region: 'scalp' }, { region: 'face' }, { region: 'neck' }], faceCut: defId === 'mask_cowl' ? 'cowl' : 'full', offset: 0.003, layer: 5, material: mat(c, 'leather', { roughness: 0.5, sheen: 0.4, wear: 0.03 }), trim: { width: 0.004, color: [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6] } }],
+      eyeMask: { color: c, under: true }, hideHair: true, hideBeard: true,
+    };
     // Costumes of the street characters (game/street).
     default: return streetWearable(defId, v);
   }

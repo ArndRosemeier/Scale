@@ -11,9 +11,10 @@ import * as THREE from 'three';
 import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
 import type { ShellMaterial } from '../../items/wearable';
 import { GLSL_NOISE } from './glsl';
+import { GLSL_MASK_CUT } from './faceRegions';
 
 const PATTERNS: Record<ShellMaterial['pattern'], number> = {
-  plain: 0, stripes: 1, checks: 2, quilted: 3, chainmail: 4, scales: 5, leather: 6, fur: 7, embroidered: 8, patchwork: 9, silk: 10, plates: 11, runes: 12, bones: 13,
+  plain: 0, stripes: 1, checks: 2, quilted: 3, chainmail: 4, scales: 5, leather: 6, fur: 7, embroidered: 8, patchwork: 9, silk: 10, plates: 11, runes: 12, bones: 13, hero: 14,
 };
 
 export interface GarmentHandle {
@@ -28,9 +29,14 @@ uniform vec3 gTrim;
 uniform vec4 gParams; // pattern id, scale, wear, seed
 uniform vec3 gGlow;
 uniform float gMetal;
+uniform vec4 gFig; // wearer's height (m), hero tights design, a mask's neck hem (bind y = z + w * bind z)
 varying vec3 vGBind;
 varying vec3 vGNrm;
 varying float vGEdge;
+#ifdef GARMENT_CUT
+varying vec3 vGFace;
+${GLSL_MASK_CUT}
+#endif
 ${GLSL_NOISE}
 float g_h; vec3 g_c; float g_r; float g_m; vec3 g_e;
 
@@ -97,7 +103,33 @@ vec4 g_pat(vec2 q, float id) {
   return vec4(glyph * rowMask, glyph * rowMask * 0.0002, 0.0, -1.0);
 }
 
+float h_seg2(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a, ba = b - a;
+  return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
+}
+// Five-pointed star, signed distance (negative inside); r outer radius, rf inner ratio.
+float h_star5(vec2 p, float r, float rf) {
+  const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+  const vec2 k2 = vec2(-k1.x, k1.y);
+  p.x = abs(p.x);
+  p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+  p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+  p.x = abs(p.x);
+  p.y -= r;
+  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
+  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
 void garmentEval() {
+  float edge = vGEdge;
+#ifdef GARMENT_CUT
+  // A mask's openings, cut clean per pixel (the shell reaches a little past them), with a hem.
+  float md = h_maskDepth(GARMENT_CUT, vGFace);
+  float hem = (vGBind.y - gFig.z - gFig.w * vGBind.z) / 0.012;
+  if (md < 0.0 || hem < 0.0) discard;
+  edge = max(edge, 1.0 - smoothstep(0.05, 0.12, min(md, hem)));
+#endif
   float id = gParams.x;
   float sc = gParams.y;
   vec3 n = normalize(vGNrm);
@@ -105,7 +137,39 @@ void garmentEval() {
   w /= (w.x + w.y + w.z);
   vec3 p = vGBind * sc;
   vec4 a = g_pat(p.zy, id) * w.x + g_pat(p.xz, id) * w.y + g_pat(p.xy, id) * w.z;
-  if (id > 12.5) {
+  vec3 heroBelt = vec3(-1.0);
+  if (id > 13.5) {
+    // Hero tights: fine knit, and the design laid out on the body by the wearer's height (bind
+    // pose, metres, feet at 0, facing -Z): 1 an emblem disc with a star on the chest, 2 a
+    // lightning bolt, 3 a chevron across the chest and back, 4 stripes down the sides, 5 trunks
+    // and a belt over the tights.
+    vec3 b = vGBind;
+    float H = gFig.x, d = gFig.y, ax = abs(b.x);
+    float front = smoothstep(0.15, 0.45, -n.z);
+    vec2 q = vec2(b.x, b.y - 0.725 * H);
+    float m = 0.0;
+    if (d < 0.5) {
+      m = 0.0;
+    } else if (d < 1.5) {
+      float disc = 1.0 - smoothstep(0.072, 0.077, length(q));
+      float star = h_star5(q * vec2(1.0, 1.0) - vec2(0.0, -0.004), 0.056, 0.42);
+      m = disc * smoothstep(-0.002, 0.002, star) * front;
+    } else if (d < 2.5) {
+      float bolt = min(min(h_seg2(q, vec2(0.06, 0.12), vec2(-0.03, 0.006)), h_seg2(q, vec2(-0.03, 0.006), vec2(0.032, 0.006))), h_seg2(q, vec2(0.032, 0.006), vec2(-0.06, -0.12)));
+      m = (1.0 - smoothstep(0.016, 0.02, bolt)) * front;
+    } else if (d < 3.5) {
+      float v = q.y + 0.07 - 0.75 * ax;
+      m = smoothstep(-0.003, 0.003, v) * (1.0 - smoothstep(0.042, 0.048, v)) * (1.0 - smoothstep(0.19, 0.2, ax)) * step(0.45 * H, b.y);
+    } else if (d < 4.5) {
+      m = (1.0 - smoothstep(0.2, 0.28, abs(n.z))) * smoothstep(0.25, 0.45, n.x * sign(b.x));
+    } else if (d < 5.5) {
+      float waist = 0.575 * H, hem = 0.455 * H + 0.55 * max(ax - 0.04, 0.0);
+      m = smoothstep(hem - 0.003, hem + 0.003, b.y) * (1.0 - smoothstep(waist - 0.003, waist + 0.003, b.y)) * (1.0 - smoothstep(0.3, 0.32, ax));
+      float belt = smoothstep(waist - 0.003, waist + 0.003, b.y) * (1.0 - smoothstep(waist + 0.034, waist + 0.04, b.y)) * (1.0 - smoothstep(0.3, 0.32, ax));
+      if (belt > 0.01) heroBelt = vec3(belt, 0.0, 0.0);
+    }
+    a = vec4(m, sin(p.x * 320.0) * sin(p.y * 320.0) * 0.00002 + (heroBelt.x > 0.0 ? heroBelt.x * 0.0008 : 0.0), 0.0, 0.0);
+  } else if (id > 12.5) {
     // bones: a black suit with the skeleton on it, laid out in the body's own space (metres, feet
     // at 0): ribs and a breastbone, the spine, the pelvis, pale limbs with dark knees and ankles.
     vec3 b = vGBind;
@@ -118,6 +182,8 @@ void garmentEval() {
     a = vec4(bone, bone * 0.0006, 0.1, 0.0);
   }
   vec3 c = mix(gColor, gColor2, clamp(a.x, 0.0, 1.0));
+  // A golden belt buckled over the hero's trunks.
+  if (heroBelt.x > 0.0) c = mix(c, vec3(0.78, 0.6, 0.16) * (abs(vGBind.x) < 0.035 ? 1.15 : 0.9), heroBelt.x);
   float big = h_fbm3(vGBind * 6.0 + gParams.w);
   c *= 0.9 + 0.2 * big;
   // Wear: dirt toward the hem, scuffs and fading.
@@ -126,10 +192,14 @@ void garmentEval() {
   c = mix(c, c * vec3(0.55, 0.5, 0.42), dirt * 0.6 * smoothstep(0.35, 0.7, h_fbm3(vGBind * 9.0)));
   c = mix(c, c * 1.15 + 0.03, wear * 0.3 * smoothstep(0.6, 0.8, h_noise3(vGBind * 25.0)));
   // Trim along the garment edges.
-  float trim = smoothstep(0.35, 0.75, vGEdge);
+  float trim = smoothstep(0.35, 0.75, edge);
   c = mix(c, gTrim, trim);
+#ifdef GARMENT_CUT
+  // The inside of a mask, seen past its edge, is in shadow.
+  if (!gl_FrontFacing) c *= 0.3;
+#endif
   g_c = c;
-  g_h = a.y * (1.0 - trim) + trim * 0.0006;
+  g_h = a.y * (1.0 - trim) + trim * (id > 13.5 ? 0.0 : 0.0006);
   g_r = a.z;
   g_m = a.w;
   g_e = a.w < -0.5 ? gGlow * a.x * 3.0 : vec3(0.0);
@@ -139,7 +209,7 @@ void garmentEval() {
 `;
 
 /** Create a garment material for a shell. */
-export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [number, number, number]): GarmentHandle {
+export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [number, number, number], fig?: { height: number; design: number; cut?: 'cowl' | 'full'; neckY?: number; neckSlope?: number }): GarmentHandle {
   const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   const metal = m.metalness;
   const material = new THREE.MeshPhysicalMaterial({
@@ -159,12 +229,15 @@ export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [nu
     gParams: { value: new THREE.Vector4(PATTERNS[m.pattern] ?? 0, Math.max(0.5, m.patternScale), m.wear, (seed % 997) * 0.37) },
     gGlow: { value: lin(m.glowColor).multiplyScalar(m.glow) },
     gMetal: { value: metal },
+    gFig: { value: new THREE.Vector4(fig?.height ?? 1.75, fig?.design ?? 0, fig?.neckY ?? 0, fig?.neckSlope ?? 0) },
   };
+  const cut = fig?.cut ? (fig.cut === 'cowl' ? 1 : 2) : 0;
+  if (cut) material.defines = { GARMENT_CUT: `${cut}.0` };
   material.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, uniforms);
     s.vertexShader = s.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aEdge;\nvarying vec3 vGBind;\nvarying vec3 vGNrm;\nvarying float vGEdge;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGBind = position;\nvGNrm = normal;\nvGEdge = aEdge;');
+      .replace('#include <common>', '#include <common>\nattribute float aEdge;\nvarying vec3 vGBind;\nvarying vec3 vGNrm;\nvarying float vGEdge;\n#ifdef GARMENT_CUT\nattribute vec3 aFace;\nvarying vec3 vGFace;\n#endif')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGBind = position;\nvGNrm = normal;\nvGEdge = aEdge;\n#ifdef GARMENT_CUT\nvGFace = aFace;\n#endif');
     s.fragmentShader = s.fragmentShader
       .replace('#include <common>', '#include <common>\n' + FRAG)
       .replace('#include <color_fragment>', '#include <color_fragment>\ngarmentEval();\ndiffuseColor.rgb = g_c;')
@@ -179,7 +252,7 @@ export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [nu
         }`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += g_e;');
   };
-  material.customProgramCacheKey = () => 'norgo-garment';
+  material.customProgramCacheKey = () => `norgo-garment-${cut}`;
   const sky = patchSkyOcclusion(material, 'uniform');
   return { material, sky };
 }

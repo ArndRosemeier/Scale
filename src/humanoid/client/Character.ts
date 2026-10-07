@@ -364,6 +364,13 @@ export class Character {
     for (const s of [this.skin, this.skinLow]) s.uniforms.uLook.value.w = hair ? 0 : this.shavedScalp;
   }
 
+  /** Paint a hero's eye mask round the eyes (sRGB colour), or take it off (null). `under`: the
+   *  skin left in a cowl's eye holes (all of it, not the domino's shape). */
+  setEyeMask(color: [number, number, number] | null, under = false) {
+    const c = color ? new THREE.Color().setRGB(color[0], color[1], color[2], THREE.SRGBColorSpace) : null;
+    for (const s of [this.skin, this.skinLow]) s.uniforms.uMask.value.set(c ? (under ? 2 : 1) : 0, c?.r ?? 0, c?.g ?? 0, c?.b ?? 0);
+  }
+
   /** Register an extra sky patch (equipment materials) so setSkyVis reaches it. */
   addSkyPatch(p: SkyVisPatch) {
     this.skyPatches.push(p);
