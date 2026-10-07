@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.095 — 2026-10-07
+
+- **Flying no longer recharges your energy.** Flight itself is still free, but energy only comes back on the ground (or on a roof), so a hero who flies and fights has to land now and then to catch their breath. The energy bar turns grey while it is not recovering.
+- **Being a giant costs energy.** The bigger you are, the more it takes: a few metres tall costs little, at 10 m it eats all of your regeneration, and at 100 m a full pool lasts about 20 seconds. When you run dry you shrink back to 10 m on your own and catch your breath there for a few seconds; once a quarter of your energy is back you can grow again (and 10 m holds that energy steady). The energy bar turns orange while your size is draining it. Super speed and super jump are unchanged.
+
 ## 0.094 — 2026-10-07
 
 - **Arcades.** Some general stores on the shopping streets are now arcades, with a neon ARCADE sign over the door (the map shows the nearest few). Inside is one dim hall full of tall video game cabinets along the walls and in back-to-back rows, their screens running a demo and their titles lit on top.
