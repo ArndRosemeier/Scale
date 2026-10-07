@@ -12,6 +12,7 @@ import { gridPoint, type SlabGrid } from './buildingLayout';
 import type { Terrain } from '../world/terrain';
 import type { BuildingDesc } from '../plan/building';
 import { MeshBuilder } from './meshBuilder';
+import { isArcade } from '../interior/InteriorGen';
 import { buildingLayout, doorBayOf, type BuildingLayout, type FloorInfo } from './buildingLayout';
 
 /** Facade flags (bit field stored in aFacade.w). */
@@ -26,7 +27,7 @@ export const enum FF {
   Roof = 128,      // roof surface (no windows; roof material)
   Front = 256,     // main street facade (entrance door)
   // 512, 1024: door bay index (0..3) on the front facade
-  Eatery = 2048,   // café / restaurant shop front: warm light while open, no generic sign band
+  Eatery = 2048,   // café / restaurant (or arcade) shop front: warm light while open, no generic sign band
   Glow = 4096,     // stained glass (landmarks): the day shines through it
 }
 
@@ -244,7 +245,7 @@ function edgeFlags(flags: number, b: BuildingDesc, poly: Poly, i: number): numbe
   if (poly === b.poly) {
     if (b.attached && i !== front && isSideEdge(poly, i, front)) f = (f & ~(FF.Windows | FF.Shop | FF.Balcony)) | FF.Blind;
     if (b.shopfront && i === front) f |= FF.Shop;
-    if (b.eatery && i === front) f |= FF.Eatery;
+    if ((b.eatery || isArcade(b)) && i === front) f |= FF.Eatery;
     if (i === front) f |= FF.Front;
   }
   return f;
@@ -266,7 +267,7 @@ function walls(mb: MeshBuilder, poly: Poly, y0: number, y1: number, flags: numbe
       // Attached side walls of perimeter buildings are blind (party walls).
       if (b.attached && i !== front && isSideEdge(poly, i, front)) f = (f & ~(FF.Windows | FF.Shop | FF.Balcony)) | FF.Blind;
       if (b.shopfront && i === front) f |= FF.Shop;
-      if (b.eatery && i === front) f |= FF.Eatery;
+      if ((b.eatery || isArcade(b)) && i === front) f |= FF.Eatery;
       if (i === front) f |= FF.Front;
       // Back facades: no shop, simpler.
       if (i !== front && !isSideEdge(poly, i, front)) f &= ~FF.Shop;

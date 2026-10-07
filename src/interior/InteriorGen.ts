@@ -245,19 +245,27 @@ const ARCADE_GAMES = CABINET_COLORS.length;
 
 const arcadeCache = new WeakMap<BuildingDesc, boolean>();
 /**
- * Does the building have an arcade (a hall of video game cabinets) on its ground floor? One in
- * about sixty general stores with a deep enough, high enough ground floor (commercial streets).
+ * Does the building have an arcade (a hall of video game cabinets) on its ground floor? Some
+ * general stores in big, plainly rectangular buildings (an irregular or small shop leaves no
+ * proper hall: cabinets walled off behind the stairs, or just two of them).
  */
 export function isArcade(b: BuildingDesc): boolean {
   let v = arcadeCache.get(b);
   if (v === undefined) {
     v = (b.shopfront || b.use === 'retail') && !b.eatery && b.style !== 'church' && b.use !== 'industrial' && b.use !== 'parking'
-      && b.groundH >= 3.6 && shopKindOf(b) % 3 === 2 && hash32(b.seed ^ 0x3a7c11d) % 60 === 0;
-    if (v) { const r = minAreaRect(b.poly); v = Math.min(r.hu, r.hv) >= 4.6 && Math.max(r.hu, r.hv) >= 6; }
+      && b.groundH >= 3.6 && shopKindOf(b) % 3 === 2 && hash32(b.seed ^ 0x3a7c11d) % ARCADE_ONE_IN === 0 && b.poly.length <= 12;
+    if (v) {
+      const r = minAreaRect(b.poly);
+      v = Math.min(r.hu, r.hv) >= ARCADE_MIN.hv && Math.max(r.hu, r.hv) >= ARCADE_MIN.hu && Math.abs(polyArea(b.poly)) >= 4 * r.hu * r.hv * 0.93;
+    }
     arcadeCache.set(b, v);
   }
   return v;
 }
+/** One general store in this many (of those big and rectangular enough) is an arcade. */
+const ARCADE_ONE_IN = 25;
+/** Smallest half sizes of an arcade building (m): long side, short side. */
+const ARCADE_MIN = { hu: 9, hv: 5.5 };
 
 export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number, height: number, shopKind: number, lift: LiftShaft | null = null, stair: StairCore | null = null, up = false, below = false, door: { x: number; z: number } | null = null): FloorPlan {
   const r = new Rng((b.seed ^ (floor * 0x9e3779b1)) >>> 0);
@@ -371,6 +379,8 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     plan.rooms.push({ type: 'arcade', poly: hall ?? poly, floorMat: 'carpet', wallColor: [0.17, 0.14, 0.26] });
     const { w: CW, d: CD, h: CH } = CABINET;
     const stairPoly = st ? coreRect(st, 0, 0.4) : null;
+    const gaps: [number, number][] = [];
+    for (const w of plan.walls) for (const [t0, t1] of w.doors) for (const t of [t0, (t0 + t1) / 2, t1]) gaps.push([w.ax + (w.bx - w.ax) * t, w.az + (w.bz - w.az) * t]);
     const standSpot = (f: Furn): [number, number] => [f.x + Math.sin(f.yaw) * (CD / 2 + 0.8), f.z + Math.cos(f.yaw) * (CD / 2 + 0.8)];
     const inFootprint = (f: Furn, x: number, z: number, m: number): boolean => {
       const c = Math.cos(f.yaw), sn = Math.sin(f.yaw), dx = x - f.x, dz = z - f.z;
@@ -386,6 +396,8 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
       const st = standSpot(f);
       if (!pointInPoly(poly, st[0], st[1]) || (stairPoly && pointInPoly(stairPoly, st[0], st[1]))) return;
       for (const o of plan.furniture) if (inFootprint(o, st[0], st[1], 0.35) || inFootprint(f, ...standSpot(o), 0.35)) return;
+      // Never in front of a doorway (the stair hall's, the lift lobby's): the street door may lead in through them.
+      for (const [gx, gz] of gaps) if (inFootprint(f, gx, gz, 0.9)) return;
       plan.furniture.push(f);
       game = (game + 1) % ARCADE_GAMES;
     };

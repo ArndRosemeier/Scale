@@ -179,6 +179,13 @@ export class Arcade {
     inp.buttons &= ~1;
   }
 
+  /** While playing: the circle people keep out of, from the hero back towards the camera (else null). */
+  keepClear(): { x: number; z: number; r: number; h: number } | null {
+    const c = this.cur, P = this.g.player;
+    if (!c) return null;
+    return { x: P.pos.x + c.nx * 1.1, z: P.pos.z + c.nz * 1.1, r: 1.3, h: P.height };
+  }
+
   update(dt: number): void {
     this.syncT -= dt;
     if (this.syncT <= 0) { this.syncT = 0.4; this.sync(); }
@@ -341,7 +348,7 @@ export class Arcade {
     const key = shown.map((s) => `${s.x.toFixed(0)},${s.z.toFixed(0)}`).join(';');
     if (key !== this.markKey) {
       this.markKey = key;
-      this.g.map.setMarkers('arcades', shown.map((s): MapMarker => ({ x: s.x, z: s.z, color: '#3fe0ff', kind: 'faint', title: 'Arcade — classic video games inside (E at a cabinet to play)' })));
+      this.g.map.setMarkers('arcades', shown.map((s): MapMarker => ({ x: s.x, z: s.z, color: '#3fe0ff', kind: 'badge', glyph: 'A', title: 'Arcade — classic video games inside (E at a cabinet to play)' })));
     }
     // Neon signs within sight.
     const want = new Set(nearest.filter((s) => Math.hypot(s.x - p.x, s.z - p.z) < 300).map((s) => s.b));
