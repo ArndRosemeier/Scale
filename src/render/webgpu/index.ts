@@ -47,6 +47,30 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   packBeforeRender(renderer);
   watchVertexBuffers(renderer);
   countNodeBuilds(renderer);
+  shareInstancedShaders(renderer);
+}
+
+/**
+ * Instance matrices that fit a uniform buffer are put in one, with its size
+ * and a per-object name written into the vertex shader: every instanced mesh then needed its own
+ * shader and pipeline (~560 vertex shaders for ~160 fragment shaders). As vertex attributes,
+ * which three uses for the larger ones anyway, they share them. Not where the
+ * matrix (4 attribute slots, 1 vertex buffer) would not fit WebGPU's 16 attributes / 8 buffers.
+ */
+function shareInstancedShaders(renderer: THREE.WebGPURenderer): void {
+  const prev = renderer.debug.onNodeBuilderCreated;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  renderer.debug.onNodeBuilderCreated = (builder: any, renderObject: any) => {
+    prev?.(builder, renderObject);
+    const o = renderObject?.object as THREE.InstancedMesh | undefined;
+    if (!o?.isInstancedMesh || typeof builder.getUniformBufferLimit !== 'function') return;
+    const attrs = Object.values(o.geometry.attributes);
+    const buffers = new Set(attrs.map((a) => (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute).data : a));
+    const extra = o.instanceColor ? 1 : 0;
+    // (Margin: materials can read more attributes than the geometry lists, e.g. packed ones.)
+    if (attrs.length + extra + 4 > 12 || buffers.size + extra + 1 > 8) return;
+    builder.getUniformBufferLimit = () => 0;
+  };
 }
 
 /** Node shader builds so far, and pipelines built ahead (compileAsync) or on the spot while drawing. */

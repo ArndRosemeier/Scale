@@ -111,3 +111,13 @@ Ordered by how much of the screen they cover (port first what is always visible)
   shadow-map pipelines, which compileAsync cannot build). `[warm-up]` line now shows node builds
   and pipelines in advance / while drawing. `&offscreen` sends the final image to a render
   target (`window.grabFrame()` returns a PNG) for headless real-WebGPU checks.
+- 2026-10-07 (later): PC re-time after the fix: WebGPU 48–51 s (WebGL 9–20 s), ~300 of ~630
+  pipelines still built while drawing, and three pipelines failed (unresolved sampler / binding),
+  most likely from several compileAsync calls interleaving their node builds: they now run one at
+  a time (queue in Renderer.compileAsync). Why so many pipelines: an InstancedMesh whose matrices
+  fit a uniform buffer gets that buffer's size and a per-object name in its vertex shader, so
+  every batch had its own shader (557 vertex vs 162 fragment shaders). The kit now has three use
+  the vertex-attribute path for them (as it does for large batches), where the matrix fits the
+  attribute / buffer limits: 586 → 210 pipelines headless. Glass and environment reflections were
+  compared on Dawn (SwiftShader) against WebGL2 on a test page: same; the PC difference is still
+  open.
