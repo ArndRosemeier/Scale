@@ -273,7 +273,7 @@ export class Forces {
   /** The game's hooks for the battle model. */
   private ops(fighting: boolean): ForceOps {
     return {
-      slot: (u, x, z) => (this.mon?.chased ? this.sightSlot(u, x, z) : u.kind === 'rifles' ? this.street(x, z, 90, 4) : this.street(x, z, 140)),
+      slot: (u, x, z) => (this.mon?.chased || this.reslot.has(u.id) ? this.sightSlot(u, x, z) : u.kind === 'rifles' ? this.street(x, z, 90, 4) : this.street(x, z, 140)),
       move: (u, x, z, dt) => this.move(u, x, z, dt),
       fire: (u, q, d) => (fighting ? this.fire(u, q, d) : true),
       event: (q, what, u) => this.event(q, what, u),
@@ -724,15 +724,16 @@ export class Forces {
     // aside): the zone it aims at, else the high back over the roofs in front. Targeted fire
     // (combat/shot.ts): no clear line, no volley; a clear one, every round hits.
     const sight = this.g.sight, own = b.car ?? null;
-    // (A target that goes where it likes: the zone it hit last first — a tank's gun stays laid.)
-    const last = S.chased ? S.zones.find((z) => z.id === this.lastZone.get(u.id)) : undefined;
+    // (The zone it hit last first — a tank's gun stays laid.)
+    const last = S.zones.find((z) => z.id === this.lastZone.get(u.id));
     let aimZ = last ?? (pickZone(this.rng, S.zones, true, W.aimWeak) as ThreatZone);
     let ax = aimZ.x, ay = aimZ.y, az = aimZ.z;
     let blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
     this.stats.rays++;
-    // (A giant player: whatever part of it shows over the cars and round the corner — a shoulder past
-    // a corner, the top of the head over the roofs; not only the middle of each part.)
-    if (blocked && S.chased) {
+    // (Whatever part of it shows over the cars and round the corner — a shoulder or a flank past a
+    // corner, the top of the head or the back over the roofs; not only the middle of each part. Only
+    // the middle was tried against the Strider, and in town most volleys were held.)
+    if (blocked) {
       const fx = aimZ.x - o.x, fz = aimZ.z - o.z, fl = Math.hypot(fx, fz) || 1, px = -fz / fl, pz = fx / fl;
       search: for (const z of [aimZ, ...S.zones.filter((zz) => zz !== aimZ)]) {
         for (let k = z === aimZ ? 1 : 0; k < SEE.length; k++) {
@@ -742,7 +743,7 @@ export class Forces {
         }
       }
     }
-    if (S.chased) { if (blocked) this.lastZone.delete(u.id); else this.lastZone.set(u.id, aimZ.id); }
+    if (blocked) this.lastZone.delete(u.id); else this.lastZone.set(u.id, aimZ.id);
     // (The high back over the roofs in front; a giant player's head.)
     const high = S.zones.find((z) => z.id === 'back') ?? S.zones.find((z) => z.id === 'head');
     if (blocked && high && aimZ !== high) {
@@ -751,16 +752,16 @@ export class Forces {
       blocked = !sight.clear(o.x, o.y, o.z, ax, ay, az, aimZ.r, own);
       this.stats.rays++;
     }
-    // No line of sight from here, volley after volley: shift along the line to another spot.
+    // No line of sight from here, volley after volley: another spot, one with a line to it (sightSlot).
     const nb = blocked ? (this.blockedN.get(u.id) ?? 0) + 1 : 0;
     this.blockedN.set(u.id, nb);
-    if (nb >= 3) { this.blockedN.set(u.id, 0); u.slot = (u.slot + 1) % 6; if (S.chased) { this.reslot.add(u.id); this.stats.reslots++; } if (u.task === 'hold') u.task = 'inbound'; return true; }
+    if (nb >= 3) { this.blockedN.set(u.id, 0); u.slot = (u.slot + 1) % 6; this.reslot.add(u.id); this.stats.reslots++; if (u.task === 'hold') u.task = 'inbound'; return true; }
     // (A tank with a building between it and a giant player: it shoots its way through — the shell
     // blasts the facade in front, and the hole it leaves may give it its line next time.)
     if (blocked && S.chased && u.kind === 'tank' && b.car) return this.breachShot(u, b.car, mz, ax, ay, az);
-    // (Rifles and APCs against a giant player with no clear line: fire over the roofs at the head
-    // anyway — the battle model's rule for units out of sight, a hit by chance, never a weak spot.)
-    if (blocked && S.chased && (u.kind === 'rifles' || u.kind === 'apc') && high) {
+    // (Rifles and APCs with no clear line: fire over the roofs at the high back / the head anyway —
+    // the battle model's rule for units out of sight, a hit by chance, never a weak spot.)
+    if (blocked && (u.kind === 'rifles' || u.kind === 'apc') && high) {
       this.stats.suppress++;
       aimZ = high; ax = high.x; ay = high.y + high.r * 0.5; az = high.z;
       return this.volleyFx(u, q, b, o, ax, ay, az, volley(this.rng, W, dist, q.morale, [high], false).map((h) => ({ zone: h.zone, dmg: h.dmg * 0.6 })));
