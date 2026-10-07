@@ -436,12 +436,17 @@ export class Interiors {
       if (y < f.plan.y + 0.1 || y > f.plan.y + f.plan.height - 0.08) return true;
       const w = f.walls;
       for (let i = 0; i < w.length; i += 4) if (distSqPointSeg(x, z, w[i], w[i + 1], w[i + 2], w[i + 3]) < 0.12 * 0.12) return true;
+      // Arcade cabinets are as tall as a person and more: the camera stays out of them.
+      for (const fu of f.plan.furniture) {
+        if (fu.kind !== 'arcade' || y > f.plan.y + fu.h) continue;
+        const c = Math.cos(fu.yaw), sn = Math.sin(fu.yaw), dx = x - fu.x, dz = z - fu.z;
+        if (Math.abs(dx * c - dz * sn) < fu.w / 2 + 0.1 && Math.abs(dx * sn + dz * c) < fu.d / 2 + 0.1) return true;
+      }
       return false;
     }
     return true;
   }
 
-  /** Fitting mirrors of the active interiors: centre, floor height and facing (yaw; the glass faces local +z). */
   /** Video game cabinets of the open arcades (game/Arcade): a stable key, the piece and its floor height. */
   arcadeCabinets(): { key: string; f: Furn; y: number }[] {
     const out: { key: string; f: Furn; y: number }[] = [];
@@ -451,6 +456,7 @@ export class Interiors {
     return out;
   }
 
+  /** Fitting mirrors of the active interiors: centre, floor height and facing (yaw; the glass faces local +z). */
   dressMirrors(): { x: number; z: number; y: number; yaw: number }[] {
     const out: { x: number; z: number; y: number; yaw: number }[] = [];
     for (const a of this.active.values()) for (const f of a.floors.values()) for (const fu of f.plan.furniture) if (fu.use === 'dress') out.push({ x: fu.x, z: fu.z, y: f.plan.y, yaw: fu.yaw });

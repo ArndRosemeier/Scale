@@ -277,12 +277,12 @@ export class Arcade {
     this.held.clear(); this.hits.clear(); this.leave = false;
     inp.keys.clear(); inp.pressed.clear();
     inp.grab = (code, down) => this.key(code, down);
-    // Face the screen; the camera behind the shoulder, a bit closer, level with it.
+    // Face the screen; the camera behind the shoulder, a bit closer, looking over the head.
     g.player.yaw = c.yaw;
     g.camRig.yaw = c.yaw;
-    g.camRig.pitch = 0.04;
+    g.camRig.pitch = -0.2;
     this.savedZoom = g.camRig.zoom;
-    g.camRig.zoom = Math.min(g.camRig.zoom, 1.3);
+    g.camRig.zoom = Math.min(g.camRig.zoom, 0.9);
   }
 
   stop(): void {
