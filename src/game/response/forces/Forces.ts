@@ -756,9 +756,10 @@ export class Forces {
     const nb = blocked ? (this.blockedN.get(u.id) ?? 0) + 1 : 0;
     this.blockedN.set(u.id, nb);
     if (nb >= 3) { this.blockedN.set(u.id, 0); u.slot = (u.slot + 1) % 6; this.reslot.add(u.id); this.stats.reslots++; if (u.task === 'hold') u.task = 'inbound'; return true; }
-    // (A tank with a building between it and a giant player: it shoots its way through — the shell
-    // blasts the facade in front, and the hole it leaves may give it its line next time.)
-    if (blocked && S.chased && u.kind === 'tank' && b.car) return this.breachShot(u, b.car, mz, ax, ay, az);
+    // (A tank with a building between it and its target: it shoots its way through — the shell
+    // blasts the facade in front, and the hole it leaves may give it its line next time. Tanks
+    // facing the Strider used to sit behind a block for minutes without a shot.)
+    if (blocked && u.kind === 'tank' && b.car) return this.breachShot(u, b.car, mz, ax, ay, az);
     // (Rifles and APCs with no clear line: fire over the roofs at the high back / the head anyway —
     // the battle model's rule for units out of sight, a hit by chance, never a weak spot.)
     if (blocked && (u.kind === 'rifles' || u.kind === 'apc') && high) {
