@@ -1,6 +1,9 @@
 # Aliens — plan
 
-Status: **plan, nothing built** (Arnd, 2026-10-07: "In this close future, aliens have actually landed and made
+Status (2026-10-07): **phase 1 built** (the Nannies in the sky: station, discs, walkers, watching, people, news,
+sounds; see ARCHITECTURE.md, "The Wardens"). Phases 2–4 not built.
+
+Original status: **plan, nothing built** (Arnd, 2026-10-07: "In this close future, aliens have actually landed and made
 contact. They are not hostile and also not really friendly, more like upset parents watching over toddlers. They are
 also mostly robotic. UFOs in the sky are not an uncommon thing. The normal kind of aliens is no problem. But then
 there are other kinds who normally are not allowed to visit earth, but they occasionally find ways."). Decisions

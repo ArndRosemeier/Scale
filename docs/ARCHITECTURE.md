@@ -1344,6 +1344,36 @@ plaque sprayed over). The statue is a `HumanoidRig` of the hero's appearance and
 officer within 26 m makes the player wanted) and the rampage watch above. `dev.fame.status() / rep(v) / press() / tv() /
 fan() / protest() / photo() / statue('build'|'unveil'|'topple'|'remove'|'go')`.
 
+### The Wardens (`src/game/aliens`, ALIENS_PLAN phase 1)
+
+The established aliens ("the Nannies"): they watch and never meddle. `Wardens` (game.wardens, updated right after the
+sky) owns the rest. **Schedule** (`wardenRules.ts`, pure, seeded, tested in `tools/aliensTest.ts`; nothing saved): the
+number of discs is rolled per 20 game minutes (`discPlan`: 15 % none, else 1–7), a swarm starts in ~1 % of slots
+(90–150 discs for 2–9 slots, 6 % of them 8–20 game hours), followed by 3 slots of empty sky; a walker visit in ~22 % of
+game hours (`walkerVisit`, 20–55 min), a long stare over a landmark on ~35 % of days (`stareVisit`, 2–6 h); the lines
+people say (`nannyLine` by moment `swarm | walker | disc | sky`, temperament, children; the shy keep quiet).
+**Station** (`Station.ts`): a lathe lens with a spindle and an outer ring on spokes, kept 20 km from the camera in a
+seeded direction (no parallax, ~16° across with the ring), Lambert-lit by the scene's sun / moon light, no fog; opacity
+0.62 by day (the sky shows through) to 0.97 at night, hidden by cloud cover, fog, rain and underground; 30 additive points
+crawl round the rim (once in ten minutes), a red one at the spindle's tip. **Discs** (`Discs.ts`, at most 190, simulated within
+2.4 km of the camera): kinematic arrival steering (7 m/s², speed by mode), altitude over the ground kept 45 m above the
+highest top below, ahead and round it (the `top(x, z)` probe: roofs, the marvels' spires, terrain), coming down fast from high up and
+leaving by climbing past 1.4 km. Modes: `cruise` (long legs, mostly passing within 700 m of the camera), `hover` (110–200 m
+up for 25–80 s, a scan cone sweeping a 12–46 m circle), `watch` (a loose ring 95 m round an incident at response level
+≥ 1, 270 m up: 1–3 discs by level, kept to the end, no cone), `stare` (140 m over a landmark, the cone coming and going),
+`courier` (lowers and lifts a walker), `leave`. A hero high in the air (> 70 m) or giant (≥ 18 m) gets the nearest disc's
+cone for 4 s every 40–80 s. New discs fly in from the edge or come down from above (a swarm fills in within a minute);
+spare ones leave, farthest first. Drawn as instanced hull (metal), underside glow (ring + core; festive changing hues in
+a swarm), additive scan cones (vertex-faded) and a point per disc for the far ones at night. **Walkers** (`Walker.ts`): a
+4.35 m robot of primitives (pivots for hips, knees, shoulders, elbows, neck), set down by a courier disc's beam on a
+square or park 60–340 m from the hero (`cores.interiorPoint` + `groundBlocked` 3 m round), standing with the head turning
+(to the hero within 16 m), taking a few slow steps, lifted away at the end; a collision cylinder for the hero, a 2.4 m
+ring people keep clear of (`Pedestrians.extraObstacles`). **People**: glances up at a cone sweeping their street, crowds
+gawking at / filming a walker, a line about the Nannies now and then (Barks), talk lines in the news topic (`When.nannies`,
+TalkFacts `nannies` from `momentAt`). **News**: `swarm`, `walker`, `stare` items (`headlines.ts`). **Sounds**
+(`tools/synthWardens.mjs`): `ufo_hum` (one positional loop at the nearest disc within 520 m), `ufo_scan` (a cone coming on,
+a walker lowered or lifted). `dev.wardens.status() / count(n|null) / swarm(on) / walker(mins) / hover() / look()`.
+
 ### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
 * Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the
   minimap's edge when out of view; cleared on arrival); travel by clicking is a sandbox feature.
@@ -1428,4 +1458,5 @@ src/humanoid   Norgo human pipeline (bodies, animator) plus modern clothing
 src/audio      audio engine
 src/ui         HUD, menu, map
 src/game/street street characters: sites and cast (pure), performers, costumes, their lines
+src/game/aliens the Wardens: the station in the sky, discs, walkers, their schedule and what people say
 ```

@@ -152,7 +152,7 @@ export function resolveCoreSite(s: CoreSite, plan: CellPlan | null, terrain: Ter
 const CLEAR = 1;
 
 /** Whether a ground spot is taken: buildings, props (fountains, statues, kiosks, …), metro stairwells, water. */
-function groundBlocked(plan: CellPlan, terrain: Terrain, x: number, z: number): boolean {
+export function groundBlocked(plan: CellPlan, terrain: Terrain, x: number, z: number): boolean {
   if (plan.buildings.some((b) => pointInPoly(b.poly, x, z))) return true;
   const P = plan.props;
   for (let i = 0; i < P.length; i += 6) {
@@ -178,7 +178,7 @@ function onRoofItem(it: RoofItem, x: number, z: number, m: number): boolean {
 }
 
 /** A point well inside a polygon (outside its holes and off anything `blocked`). */
-function interiorPoint(poly: number[], holes: number[][], rng: Rng, blocked: (x: number, z: number) => boolean): [number, number] | null {
+export function interiorPoint(poly: number[], holes: number[][], rng: Rng, blocked: (x: number, z: number) => boolean): [number, number] | null {
   const ok = (x: number, z: number) => pointInPoly(poly, x, z) && !holes.some((h) => pointInPoly(h, x, z)) && edgeDist(poly, x, z) > 1.2 && !blocked(x, z);
   const [cx, cz] = polyCentroid(poly);
   if (ok(cx, cz)) return [cx, cz];
