@@ -1048,7 +1048,7 @@ export class Game {
         if (Math.abs(a.y - g) > 1.2) return false;
         return !this.terrain.isWater(a.x, a.z, 0) || this.world.bridgeDeck(a.x, a.z) > -Infinity;
       },
-      sound: (id, x, y, z, g) => this.audio.play(id, x, y, z, g, 1, 8, cam.position),
+      sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
       markers: (m) => this.map.setMarkers('deeds', m),
       rep: (d, reason) => this.crime?.rep.add(d, reason),
     };

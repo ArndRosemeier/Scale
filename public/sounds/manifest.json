@@ -1057,5 +1057,31 @@
     "loop": false,
     "gain": 0.6,
     "description": "a short brass fanfare: the hero's statue unveiled (procedural, tools/synthFame.mjs)"
+  },
+  "cry_fall_m": {
+    "files": [
+      "fall_oof_m.wav",
+      "fall_ow_m.wav",
+      "fall_whoa_m.wav",
+      "fall_ugh_m.wav",
+      "fall_ah_m.wav",
+      "fall_whoops_m.wav"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "a man tripping and falling: mild startled or hurt cries (oof, ow, whoa, ugh, ah, whoops) (procedural, tools/synthFalls.mjs)"
+  },
+  "cry_fall_f": {
+    "files": [
+      "fall_oof_f.wav",
+      "fall_ow_f.wav",
+      "fall_whoa_f.wav",
+      "fall_ugh_f.wav",
+      "fall_ah_f.wav",
+      "fall_whoops_f.wav"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "a woman tripping and falling: mild startled or hurt cries (oof, ow, whoa, ugh, ah, whoops) (procedural, tools/synthFalls.mjs)"
   }
 }
