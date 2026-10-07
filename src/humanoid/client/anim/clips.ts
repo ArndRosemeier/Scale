@@ -155,6 +155,8 @@ export class ClipRig {
   private scale: number;
   /** Collarbones: extra lowering about the parent's forward axis (see the constructor). */
   private depress: (THREE.Quaternion | null)[] = [];
+  /** shoulder01 gets its collarbone's correction too, so the shoulder joint moves as one. */
+  private corrFrom: number[] = [];
 
   constructor(
     private ch: Character,
@@ -180,6 +182,8 @@ export class ClipRig {
       this.bones.push(b);
       this.driven[b] = 1;
       this.parentOf[b] = ch.bones.indexOf(ch.bones[b].parent as THREE.Bone);
+      const sm = /^shoulder01\.([LR])$/.exec(name);
+      this.corrFrom[b] = sm ? map.idx(`clavicle.${sm[1]}`) : -1;
       if (src === 'follow') {
         this.srcA[b] = -1;
         continue;
@@ -200,10 +204,15 @@ export class ClipRig {
       const tip = end ? ch.rest[map.idx(`${end}.${m![2]}`)] : new THREE.Vector3(body.tails[b * 3], body.tails[b * 3 + 1], body.tails[b * 3 + 2]);
       const dt = tip.clone().sub(head).normalize();
       this.align[b] = new THREE.Quaternion().setFromUnitVectors(dt, ds);
-      // Collarbones: the source's shoulder bone points up and out more steeply than MakeHuman's
-      // collarbone, so lining the segments up lifted the shoulders into a shrug in every clip.
-      // Lower them about the body's forward axis; the arms keep the clip's world rotation.
-      if (m![1] === 'clavicle') this.depress[b] = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), m![2] === 'L' ? 0.5 : -0.5);
+      // Collarbones: the source's shoulder bone points up, out and back more steeply than
+      // MakeHuman's collarbone, so lining the segments up shrugged the shoulders and pulled them
+      // behind the chest in every clip. Bring them forward and down (shoulder01 rides along, see
+      // corrFrom); the arms keep the clip's world rotation.
+      if (m![1] === 'clavicle') {
+        const sg = m![2] === 'L' ? -1 : 1;
+        this.depress[b] = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.9)
+          .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -sg * 0.5));
+      }
     }
     for (const [first, second] of TWIST_PAIRS) {
       const f = map.idx(first), s = map.idx(second);
@@ -234,6 +243,7 @@ export class ClipRig {
     const delta = Array.from({ length: S }, () => new THREE.Quaternion());
     const world: THREE.Quaternion[] = Array.from({ length: B }, () => new THREE.Quaternion());
     const local: THREE.Quaternion[] = Array.from({ length: B }, () => new THREE.Quaternion());
+    const corr: THREE.Quaternion[] = Array.from({ length: B }, () => new THREE.Quaternion());
     const d = lib.data;
     for (let f = 0; f < F; f++) {
       const o = meta.offset + f * lib.stride;
@@ -254,7 +264,9 @@ export class ClipRig {
         if (c !== a && t > 0) w.slerp(delta[c], t);
         w.multiply(this.align[b]);
         const dep = this.depress[b];
-        if (dep) w.premultiply(_q2.copy(pw).multiply(dep).multiply(_q.copy(pw).invert()));
+        if (dep) w.premultiply(corr[b].copy(pw).multiply(dep).multiply(_q.copy(pw).invert()));
+        const cb = this.corrFrom[b];
+        if (cb >= 0) w.premultiply(corr[cb]);
         local[b].copy(pw).invert().multiply(w);
       }
       // Limb twist: split the first segment's twist about its axis with the second segment.
