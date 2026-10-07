@@ -138,6 +138,17 @@ export class PropRenderer {
         case PropType.MenuBoard: list.push(this.terrace('menuBoard', v, base, -1)); break;
         case PropType.TerraceRail: list.push(this.terrace('terraceRail', v, base, 0)); break;
         case PropType.Parklet: list.push(this.terrace('parklet', v, base, -1)); break;
+        // Cemeteries.
+        case PropType.CemWall: list.push(this.furn('cemWall', v & 1, base)); break;
+        case PropType.Gravestone: list.push(this.furn('gravestone', v & 1, base)); break;
+        case PropType.Grave: list.push(this.furn('grave', v & 1, base)); break;
+        case PropType.Tomb: list.push(this.furn('tomb', v & 1, base)); break;
+        case PropType.Yew: {
+          const variant = (Math.round(x * 7 + z * 3) & 1);
+          const m = treeModel('cypress', variant);
+          list.push({ ...base, kind: `tree:cypress:${variant}`, tree: true, breakable: 'topple', radius: m.trunkRadius * sc, height: m.height * sc });
+          break;
+        }
         case PropType.ParkedCar: {
           // Near-future kerbs: some parking bays have an EV charging post (more in dense districts).
           const share = EV_SHARE[district] ?? 0.03;
@@ -683,6 +694,10 @@ function propShape(p: Prop): Obstacle | null {
     case 'statue': return cyl(r * 0.55 * p.scale);
     case 'fountain': return cyl(r * 0.95 * p.scale);
     case 'phoneBooth': return cyl(0.55 * p.scale);
+    case 'cemWall': return p.kind.endsWith(':0') ? box(1.28 * p.scale, 0.24 * p.scale) : box(0.36 * p.scale, 0.36 * p.scale);
+    case 'gravestone': return box(0.34 * p.scale, 0.12 * p.scale);
+    case 'grave': return p.kind.endsWith(':0') ? box(0.48 * p.scale, 1.05 * p.scale) : box(0.42 * p.scale, 0.42 * p.scale);
+    case 'tomb': return p.kind.endsWith(':0') ? box(1.8 * p.scale, 2.6 * p.scale) : box(0.8 * p.scale, 0.8 * p.scale);
     default: return cyl(Math.max(0.08, r) * p.scale);
   }
 }

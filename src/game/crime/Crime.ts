@@ -129,6 +129,8 @@ export interface CrimeWorld {
   bossOpDone?(c: Crime, x: number, z: number): void;
   /** Street and park trees standing in a ring around the player, nearest first (the eco-radicals wake one). */
   trees?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; height: number }[];
+  /** Cemeteries in a ring around the player, nearest first: open ground on the path before a tomb, n towards the gate. */
+  cemeteries?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
   /** Inside a building (nobody stands or rises there). */
   blocked?(x: number, z: number): boolean;
   /** Parked cars at the kerb in a ring around the player: a point beside one, the side to stand on. */

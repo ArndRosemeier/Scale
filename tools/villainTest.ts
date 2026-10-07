@@ -252,6 +252,16 @@ function ecoNecroChecks(check: Check): void {
     check(c2.setup() && c2.target === 'car' && c2.site!.x === 650, `sabotage: no robot about, a parked car (${c2.target})`);
   }
 
+  // ---- a cemetery about: the raising and the Grave Lord's deadrise go there first
+  {
+    const M = mockWorld();
+    M.world.cemeteries = () => [{ x: 1200, z: 500, nx: 1, nz: 0 }];
+    const c = new Raising(M.world, 618);
+    check(c.setup() && c.site!.x === 1200 && c.site!.z === 500, `raising: in the cemetery first (${c.site!.x}, ${c.site!.z})`);
+    const op = new BossOperation(M.world, 4250, 'deadrise');
+    check(op.setup() && op.landmark === 'cemetery' && op.site!.x === 1200, `boss op deadrise: in the cemetery before the cathedral (${op.landmark})`);
+  }
+
   // ---- the raising: among the trees, the dead rise as the chant goes on; they only fight
   {
     const M = mockWorld();

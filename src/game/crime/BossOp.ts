@@ -203,8 +203,10 @@ export class BossOperation extends Crime {
         const t = (w.trees?.(rMin, rMax) ?? []).slice(0, 8).sort((a, b) => b.height - a.height);
         return t.length ? { x: t[0].x, z: t[0].z, nx: t[0].nx, nz: t[0].nz, kind: 'tree' } : null;
       }
-      // Before the cathedral (its crypts), else another old place, else the open ground among trees.
+      // A cemetery, else before the cathedral (its crypts), else another old place, else the open ground among trees.
       case 'deadrise': {
+        const cem = w.cemeteries?.(rMin, rMax + 140) ?? [];
+        if (cem.length) return { ...cem[0], kind: 'cemetery' };
         const lm = (w.landmarks?.(rMin, rMax + 140) ?? []).filter((l) => l.kind === 'cathedral' || l.kind === 'townhall' || l.kind === 'monument' || l.kind === 'fortress' || l.kind === 'museum');
         lm.sort((a, b) => (a.kind === 'cathedral' ? 0 : 1) - (b.kind === 'cathedral' ? 0 : 1));
         if (lm.length) return lm[0];

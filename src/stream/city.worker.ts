@@ -173,6 +173,7 @@ function packMapItems(plan: CellPlan, out: number[]): void {
   };
   for (const s of plan.streets) if (s.arterial < 0) poly(MapItem.Street, s.cls, s.width, s.pts);
   for (const p of plan.parks) poly(MapItem.Park, 0, 0, p.outer);
+  for (const p of plan.cemeteries) poly(MapItem.Park, 0, 0, p.outer);
   for (const p of plan.plazas) poly(MapItem.Plaza, 0, 0, p.outer);
   const E = plan.entrances;
   for (let i = 0; i < E.length; i += 6) poly(MapItem.Entrance, E[i + 4], E[i + 5], [E[i], E[i + 1], E[i + 2], E[i + 3]]);
