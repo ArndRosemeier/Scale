@@ -3525,10 +3525,12 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   let t = 0; while (!ab.exhausted && t < 60) { (ab as any).updateEnergy(0.05); t += 0.05; }
   check(t > 17 && t < 23, `energy: a full pool holds 100 m for about 20 s (${t.toFixed(1)} s)`);
   check(ab.exhausted, 'energy: running dry as a giant exhausts');
-  run(6);
+  run(3);
   check(Math.abs(pl.height - GIANT.fallback) < 1e-6 && pl.maxHeight <= GIANT.fallback, `energy: exhausted giant shrinks to 10 m and is capped there (${pl.height.toFixed(2)} m)`);
-  pl.height = 5; run(10);
-  check(!ab.exhausted, `energy: smaller body recovers, cap lifts (${ab.energy.toFixed(1)})`);
+  let tr = 0; while (ab.exhausted && tr < 30) { (ab as any).updateEnergy(0.05); tr += 0.05; }
+  check(!ab.exhausted && tr > 1 && tr < 10, `energy: an exhausted giant at 10 m refills and the cap lifts (${tr.toFixed(1)} s)`);
+  run(10);
+  check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 10 m holds the recovered pool (${ab.energy.toFixed(1)})`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

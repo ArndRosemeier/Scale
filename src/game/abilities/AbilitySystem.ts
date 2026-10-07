@@ -135,7 +135,9 @@ export class AbilitySystem {
       this.energy = Math.min(this.maxEnergy, this.energy + this.regen * dt);
       return;
     }
-    const gain = (p.flying ? 0 : this.regen) - sizeUpkeep(p.height);
+    // Exhausted, the body pays only part of its upkeep, so a giant back at 10 m (which otherwise
+    // just holds even) refills to GIANT.recover instead of sitting at zero.
+    const gain = (p.flying ? 0 : this.regen) - sizeUpkeep(p.height) * (this.exhausted ? GIANT.exhaustedUpkeep : 1);
     this.energyRate = gain;
     this.energy = Math.max(0, Math.min(this.maxEnergy, this.energy + gain * dt));
     if (!this.exhausted && this.energy <= 0 && p.height > GIANT.fallback && gain < 0) {

@@ -56,9 +56,10 @@ export const ENERGY = {
 
 /** Upkeep of a giant body (energy / s by height). Below 1.8 m it is free; it climbs to the base
  *  regeneration at 10 m (a 10 m giant just holds even) and on to `top` at 100 m, where a full
- *  pool lasts about 20 s. Out of energy, the body shrinks back to `fallback` and may grow again
- *  once the pool is back to `recover` of max. Flight costs nothing but stops regeneration. */
-export const GIANT = { even: 10, top: 100, drainTop: 14, fallback: 10, recover: 0.25, shrinkRate: 1.2 };
+ *  pool lasts about 20 s. Out of energy, the body shrinks back to `fallback`, pays only
+ *  `exhaustedUpkeep` of its upkeep (so it refills at 10 m) and may grow again once the pool is
+ *  back to `recover` of max. Flight costs nothing but stops regeneration. */
+export const GIANT = { even: 10, top: 100, drainTop: 14, fallback: 10, recover: 0.25, exhaustedUpkeep: 0.5, shrinkRate: 1.2 };
 
 /** Energy per second it takes to keep a body of height h (m). */
 export function sizeUpkeep(h: number): number {

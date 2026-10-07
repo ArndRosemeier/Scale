@@ -420,7 +420,7 @@ migrated — dash was folded into super speed, now only its flight burst).
   Flight boost multiplies the cruise speed by a factor that grows with the rank (`FLIGHT_BOOST_MUL`).
   Energy (`updateEnergy`): no regeneration while flying; a body above 1.8 m pays `sizeUpkeep(h)` (tuning `GIANT`:
   equal to base regen at 10 m, 14/s at 100 m ≈ 20 s on a full pool). An empty pool sets `exhausted`: the body
-  shrinks smoothly to 10 m and `maxHeight` stays capped there until the pool is back to 25 %. Sandbox and the
+  shrinks smoothly to 10 m, pays half its upkeep (so it refills there) and `maxHeight` stays capped until the pool is back to 25 %. Sandbox and the
   admin size override are exempt.
 * **Elements**: the elemental powers in the world. With a target they go for it, without one along the crosshair.
   They reuse destruction impacts (laser heat accumulates per 60 cm spot, ≤ 10 impacts/s), debris, dust, props.hit,
