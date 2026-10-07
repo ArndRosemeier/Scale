@@ -119,6 +119,7 @@ import { People } from './people/People';
 import { Fame } from './fame/Fame';
 import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
+import { Wardens } from './aliens/Wardens';
 
 /** What someone a super speed runner brushed past calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -243,6 +244,8 @@ export class Game {
   fame!: Fame;
   /** The second shard and the person who takes it: the sidekick (game/sidekick). */
   sidekick!: Sidekick;
+  /** The Wardens: the station in the sky, their discs and walkers, how people take them (game/aliens). */
+  wardens!: Wardens;
   powerHud!: PowerHud;
   powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
@@ -624,7 +627,7 @@ export class Game {
     const shadersAt = performance.now();
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
-      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), Wardens.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
@@ -641,6 +644,7 @@ export class Game {
     this.gate.precompile(this.rural.warmupObject());
     this.gate.precompile(MedFleet.warmupObject());
     this.gate.precompile(this.defeat.ward.warmupObject());
+    this.gate.precompile(Wardens.warmupObject());
     void this.intro?.play();
   }
 
@@ -816,6 +820,7 @@ export class Game {
     this.sky.indoor = clamp(this.sky.indoor + (this.indoorsAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
     this.T('weather', () => this.weather.update(dt));
     this.T('sky', () => this.sky.update(dt, focus, cam));
+    this.T('wardens', () => this.wardens?.update(dt));
     this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
     const P = this.player;
     this.T('future', () => this.future.update(dt, this.sky.hoursAbs, focus, { active: !this.freeCam, x: P.pos.x, y: P.pos.y, z: P.pos.z, vx: P.vel.x, vy: P.vel.y, vz: P.vel.z, height: P.height, radius: P.radius, mass: P.mass }, cam));
@@ -1121,6 +1126,7 @@ export class Game {
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);
     this.sidekick = new Sidekick(this);
+    this.wardens = new Wardens(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)

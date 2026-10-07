@@ -562,6 +562,7 @@ export class People {
       group: f?.name ?? null, boss: boss?.name ?? null, giant: g.player.height > 2.4,
       teller: heard.told?.name ?? null, bond: heard.told?.word, told: heard.told?.deed ?? null, need: s.foreign ? null : pressing(needs),
       favour, who: fv?.whoName?.split(' ')[0], word: fv?.word, asker: s.asker,
+      nannies: g.wardens?.momentAt(a.x, a.z) ?? null,
       ...(g.city ? g.city.talkFacts(a.x, a.z, hashCombine(p.cit.seed, Math.floor(now))) : {}),
     };
   }

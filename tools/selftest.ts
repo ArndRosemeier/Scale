@@ -30,6 +30,7 @@ import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
 import { arcadeChecks } from './arcadeTest';
 import { sidekickChecks } from './sidekickTest';
+import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
@@ -3130,6 +3131,8 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
       teller: rng.chance(0.3) ? 'Mara' : null, bond: rng.pick(['friend', 'neighbour', 'sister', 'colleague']), told: rng.pick(['helped', 'saved', 'hurt'] as const),
       need: rng.pick([null, null, 'hunger', 'tired', 'lonely'] as const), favour: rng.pick(['none', 'none', 'visit', 'streets', 'open', 'done', 'lost'] as const),
       who: 'Hana', word: rng.pick(['sister', 'friend', 'grandmother']), asker: rng.chance(0.1) ? 'Mara' : null,
+      // The Wardens (aliens phase 1).
+      nannies: rng.pick([null, null, null, 'sky', 'disc', 'walker', 'swarm'] as const),
     };
     if (!f.group) f.boss = null;
     for (const tp of topics) {
@@ -3559,6 +3562,8 @@ doorChecks(check);
 
 // The second shard (SIDEKICK_PLAN phase 1): where it turns up, who takes it (tools/sidekickTest.ts).
 sidekickChecks(check);
+// The Wardens (ALIENS_PLAN phase 1): the disc schedule, walkers, stares, what people say (tools/aliensTest.ts).
+aliensChecks(check);
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');
