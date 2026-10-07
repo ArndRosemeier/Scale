@@ -370,6 +370,7 @@ export class CrimeSystem {
       hijack: (c, x, z, n) => { if (g.threats) this.fleets.push(new HijackedFleet(g, g.threats.rogue, c, x, z, n)); },
       ritual: (c, x, z, element) => this.casts.ritualBurst(c.criminals, x, z, element),
       trees: (rMin, rMax) => this.trees(rMin, rMax),
+      cemeteries: (rMin, rMax) => this.cemeteries(rMin, rMax),
       blocked: (x, z) => !!g.world.buildingAt(x, z) || !!g.world.landmarks?.onFootprint(x, z, 1),
       parked: (rMin, rMax) => this.parked(rMin, rMax),
       sabotage: (_c, x, z) => this.sabotaged(x, z),
@@ -689,6 +690,22 @@ export class CrimeSystem {
         out.push({ x: t.x, z: t.z, nx, nz, height: t.height, d });
         return;
       }
+    });
+    return out.sort((a, b) => a.d - b.d);
+  }
+
+  /**
+   * Cemeteries near the player, nearest first: a spot on the gravel path before each mausoleum or
+   * monument (plan/cell placeCemetery), n along the path towards the gate.
+   */
+  private cemeteries(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
+    const p = this.g.player.pos, out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
+    this.g.props.query(p.x, p.z, rMax + 10, (t) => {
+      if (!t.kind.startsWith('furn:tomb:')) return;
+      // The model's front (−Z) faces the gate.
+      const nx = -Math.sin(t.yaw), nz = -Math.cos(t.yaw), back = t.kind.endsWith(':0') ? 6.5 : 4.5;
+      const x = t.x + nx * back, z = t.z + nz * back, d = Math.hypot(x - p.x, z - p.z);
+      if (d >= rMin && d <= rMax) out.push({ x, z, nx, nz, d });
     });
     return out.sort((a, b) => a.d - b.d);
   }
@@ -1280,7 +1297,7 @@ export class CrimeSystem {
     B.opAt = this.g.sky.hoursAbs;
     this.bossOps.set(c, null);
     const who = `<b style="color:${f.palette.map}">${f.emblem} ${bossLabel(this.factions, B)}</b>`;
-    const what = c.kind === 'heist' ? 'is taking a bank' : c.kind === 'takeover' ? 'is coming to take a street' : c.kind === 'uprising' ? 'is going to turn the city\'s robots' : c.landmark === 'cathedral' ? 'is gathering a great circle before the cathedral' : 'is gathering a great circle';
+    const what = c.kind === 'heist' ? 'is taking a bank' : c.kind === 'takeover' ? 'is coming to take a street' : c.kind === 'uprising' ? 'is going to turn the city\'s robots' : c.landmark === 'cemetery' ? 'is gathering a great circle in the cemetery' : c.landmark === 'cathedral' ? 'is gathering a great circle before the cathedral' : 'is gathering a great circle';
     this.g.powerHud.toast(`${who} of ${inSentence(f)} ${what} — marked on your map`, 'warn');
     return c;
   }

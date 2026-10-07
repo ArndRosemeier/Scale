@@ -160,6 +160,8 @@ export function buildGround(plan: CellPlan, terrain: Terrain, origin: [number, n
   for (const s of plan.plazas) drapeShape(mb, s, terrain, CURB_H, GroundLayer.PlazaStone);
   for (const s of plan.paved) drapeShape(mb, s, terrain, CURB_H, GroundLayer.AsphaltLight);
   for (const s of plan.parks) drapeShape(mb, s, terrain, CURB_H, GroundLayer.Grass);
+  for (const s of plan.cemeteries) drapeShape(mb, s, terrain, CURB_H, GroundLayer.Grass);
+  for (const s of plan.cemPaths) drapeShape(mb, s, terrain, CURB_H + 0.01, GroundLayer.Gravel);
   // Blocks: lots and yards. Lot surfaces of dense districts are paved, gardens are grass.
   const dense = plan.district === 'downtown' || plan.district === 'commercial' || plan.district === 'oldtown';
   const industrial = plan.district === 'industrial' || plan.district === 'port';

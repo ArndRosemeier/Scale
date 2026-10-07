@@ -72,6 +72,13 @@ export const enum PropType {
   MenuBoard = 24,
   TerraceRail = 25,
   Parklet = 26,
+  // Cemeteries (variant picks the model): wall segment / gate pillar, headstone / cross,
+  // ledger grave / obelisk, mausoleum / stone figure, and yews (cypress).
+  CemWall = 27,
+  Gravestone = 28,
+  Grave = 29,
+  Tomb = 30,
+  Yew = 31,
 }
 
 export interface CellPlan {
@@ -86,6 +93,10 @@ export interface CellPlan {
   /** The paved ways onto landmark sites (part of the plazas): kept clear of furniture and terraces. */
   approaches: Poly[];
   parks: Shape[];
+  /** Walled cemeteries (lawn ground, graves as props): where the necromancers raise the dead. */
+  cemeteries: Shape[];
+  /** Gravel paths of the cemeteries. */
+  cemPaths: Shape[];
   /** Back yards / courtyards / gardens. */
   yards: Shape[];
   /** Parking lots / industrial yards (asphalt). */
@@ -136,6 +147,8 @@ const GRAMMAR: Record<District, Grammar> = {
 };
 
 const CURB_R = 4.5;
+/** Chance per block of a cemetery (one per cell at most; a few per city). */
+const CEMETERY_P: Partial<Record<District, number>> = { oldtown: 0.014, suburban: 0.01, rowhouses: 0.008, apartments: 0.006 };
 
 export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): CellPlan {
   const p = terrain.profile;
@@ -143,7 +156,7 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
   const g = GRAMMAR[cell.district];
   const plan: CellPlan = {
     id: cell.id, district: cell.district, streets: [], carriageway: [], sidewalks: [], blocks: [], promenade: [],
-    plazas: [], approaches: [], parks: [], yards: [], paved: [], lots: [], buildings: [], props: [], junctions: [], bounds: polyBounds(cell.poly), entrances: [], eateries: [],
+    plazas: [], approaches: [], parks: [], cemeteries: [], cemPaths: [], yards: [], paved: [], lots: [], buildings: [], props: [], junctions: [], bounds: polyBounds(cell.poly), entrances: [], eateries: [],
     landmarks: [],
   };
   const sites = landmarksOfCell(macro, cell.id);
@@ -251,6 +264,12 @@ export function planCell(macro: MacroPlan, cell: CellInfo, terrain: Terrain): Ce
       continue;
     }
     if (cell.district === 'park') { plan.parks.push(blk); continue; }
+    // Now and then a walled cemetery, mostly in the old town and the quiet residential parts.
+    const cemP = CEMETERY_P[cell.district] ?? 0;
+    if (cemP > 0 && !plan.cemeteries.length && area > 1500 && area < 7000 && !blk.holes.length && b.chance(cemP)) {
+      const o = minAreaRect(blk.outer);
+      if (Math.min(o.hu, o.hv) >= 14) { plan.cemeteries.push(blk); continue; }
+    }
     // Occasional plaza / pocket park.
     const plazaP = cell.district === 'oldtown' ? 0.1 : cell.district === 'downtown' || cell.district === 'commercial' ? 0.07 : 0.05;
     if (area < 9000 && area > 600 && b.chance(plazaP)) {
@@ -821,6 +840,104 @@ function polyInside(inner: Poly, outer: Poly, margin: number): boolean {
 
 // ----------------------------------------------------------------- props
 
+/**
+ * A walled cemetery on a block: a stone wall just inside the outline with pillars at the corners
+ * and a gate in the middle of the longest side, a main path from the gate (yews along it, a
+ * mausoleum at its end), a cross path with a monument, and rows of graves facing the gate.
+ */
+function placeCemetery(cem: Shape, plan: CellPlan, r: Rng, push: (t: PropType, x: number, z: number, yaw: number, scale?: number, variant?: number) => void, free: (x: number, z: number, rad: number) => boolean): void {
+  const wallLine = offset([cem.outer], -0.9).sort((a, b) => shapeArea(b) - shapeArea(a))[0]?.outer;
+  const inner = offset([cem.outer], -2.6).sort((a, b) => shapeArea(b) - shapeArea(a))[0]?.outer;
+  if (!wallLine || !inner) return;
+  const n = wallLine.length >> 1;
+  const SEG = 2.5, GATE = 1.8;
+  // The gate goes in the longest side.
+  let gi = 0, gl = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n, l = Math.hypot(wallLine[j * 2] - wallLine[i * 2], wallLine[j * 2 + 1] - wallLine[i * 2 + 1]);
+    if (l > gl) { gl = l; gi = i; }
+  }
+  const pillar = (x: number, z: number, yaw: number) => push(PropType.CemWall, x, z, yaw, 1, 1);
+  const run = (ax: number, az: number, ux: number, uz: number, a: number, b: number, yaw: number) => {
+    const len = b - a;
+    if (len < 0.6) return;
+    const k = Math.max(1, Math.ceil(len / SEG));
+    const step = len / k;
+    for (let s = 0; s < k; s++) {
+      const t = a + (s + 0.5) * step;
+      push(PropType.CemWall, ax + ux * t, az + uz * t, yaw, 1, 0);
+    }
+  };
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = wallLine[i * 2], az = wallLine[i * 2 + 1];
+    const dx = wallLine[j * 2] - ax, dz = wallLine[j * 2 + 1] - az, l = Math.hypot(dx, dz);
+    if (l < 0.3) continue;
+    const ux = dx / l, uz = dz / l, yaw = Math.atan2(-uz, ux);
+    // A pillar where the wall turns (not at every bend of a curved side).
+    const h = (i + n - 1) % n, px = ax - wallLine[h * 2], pz = az - wallLine[h * 2 + 1], pl = Math.hypot(px, pz);
+    if (pl < 1e-6 || (px * ux + pz * uz) / pl < 0.94) pillar(ax, az, yaw);
+    if (i === gi && l > 2 * GATE + 2) {
+      run(ax, az, ux, uz, 0.3, l / 2 - GATE - 0.3, yaw);
+      run(ax, az, ux, uz, l / 2 + GATE + 0.3, l - 0.3, yaw);
+      pillar(ax + ux * (l / 2 - GATE), az + uz * (l / 2 - GATE), yaw);
+      pillar(ax + ux * (l / 2 + GATE), az + uz * (l / 2 + GATE), yaw);
+    } else run(ax, az, ux, uz, 0.3, l - 0.3, yaw);
+  }
+  // Frame: u along the gate side, v inwards from the gate.
+  const j = (gi + 1) % n;
+  const gx0 = wallLine[gi * 2], gz0 = wallLine[gi * 2 + 1];
+  const ux = (wallLine[j * 2] - gx0) / gl, uz = (wallLine[j * 2 + 1] - gz0) / gl;
+  const ox = gx0 + ux * gl / 2, oz = gz0 + uz * gl / 2;
+  let vx = -uz, vz = ux;
+  if (!pointInPoly(cem.outer, ox + vx * 2, oz + vz * 2)) { vx = -vx; vz = -vz; }
+  const at = (i: number, k: number): [number, number] => [ox + ux * i + vx * k, oz + uz * i + vz * k];
+  let D = 0, U = 0;
+  for (let i = 0; i < inner.length; i += 2) {
+    const px = inner[i] - ox, pz = inner[i + 1] - oz;
+    D = Math.max(D, px * vx + pz * vz);
+    U = Math.max(U, Math.abs(px * ux + pz * uz));
+  }
+  const inside = (x: number, z: number) => pointInPoly(inner, x, z);
+  const face = Math.atan2(vx, vz); // a model's front (−Z) towards the gate
+  const cross = D > 26 ? D / 2 : -99;
+  // The main path's end: a mausoleum; the crossing: a monument.
+  let end = D - 3.5;
+  while (end > 8 && !inside(...at(0, end))) end -= 1;
+  if (end > 8) push(PropType.Tomb, ...at(0, end), face, 1, 0);
+  if (cross > 0 && inside(...at(0, cross))) push(PropType.Tomb, ...at(0, cross), face, 1, 1);
+  // Gravel: the main path from the gate, the cross path, a ring round the monument.
+  const lines: number[][] = [[...at(0, -1), ...at(0, Math.max(4, end - 1.5))]];
+  if (cross > 0) lines.push([...at(-U - 1, cross), ...at(U + 1, cross)]);
+  const gravel = strokePolylines(lines, 1.3, 'round', 'butt');
+  plan.cemPaths.push(...intersection(gravel.map((g) => g.outer), [cem.outer]));
+  // Yews along the main path.
+  for (let k = 5; k < end - 3; k += r.range(7, 10)) {
+    for (const side of [-1, 1]) {
+      const [x, z] = at(side * 2.6, k);
+      if (Math.abs(k - cross) > 3 && inside(x, z) && r.chance(0.75)) push(PropType.Yew, x, z, r.range(0, 6.28), r.range(0.75, 1.05), 0);
+    }
+  }
+  // Graves in rows facing the gate, a few family tombs and yews in between.
+  for (let k = 4.5; k < D; k += 3.3) {
+    if (Math.abs(k - cross) < 2.2) continue;
+    for (let i = -U; i <= U; i += 2.1) {
+      if (Math.abs(i) < 2.4) continue;
+      const jx = r.range(-0.12, 0.12), jz = r.range(-0.15, 0.15);
+      const [x, z] = at(i + jx, k + jz);
+      if (!inside(x, z) || !free(x, z, 1.0)) continue;
+      const roll = r.float();
+      if (roll < 0.14) continue;
+      const yaw = face + r.range(-0.06, 0.06);
+      if (roll < 0.66) push(PropType.Gravestone, x, z, yaw, r.range(0.85, 1.15), 0);
+      else if (roll < 0.8) push(PropType.Gravestone, x, z, yaw, r.range(0.85, 1.1), 1);
+      else if (roll < 0.93) push(PropType.Grave, x, z, yaw, r.range(0.9, 1.1), 0);
+      else if (roll < 0.975) push(PropType.Grave, x, z, yaw, r.range(0.8, 1.2), 1);
+      else push(PropType.Yew, x, z, r.range(0, 6.28), r.range(0.7, 1.0), 0);
+    }
+  }
+}
+
 function placeProps(plan: CellPlan, cell: CellInfo, macro: MacroPlan, g: Grammar, r: Rng, terrain: Terrain): void {
   const P = plan.props;
   const push = (t: PropType, x: number, z: number, yaw: number, scale = 1, variant = 0) => P.push(t, x, z, yaw, scale, variant);
@@ -911,6 +1028,7 @@ function placeProps(plan: CellPlan, cell: CellInfo, macro: MacroPlan, g: Grammar
       push(PropType.TrafficLight, n.x, n.z, 0, 1, n.edges.length);
     }
   }
+  for (const cem of plan.cemeteries) placeCemetery(cem, plan, r.fork('cem', plan.cemeteries.indexOf(cem)), push, free);
   // Parks: trees, bushes, benches, paths, fountain, playground.
   for (const pk of plan.parks) {
     const area = shapeArea(pk);

@@ -34,8 +34,10 @@ export class Raising extends Channeling {
 
   protected place(): boolean {
     const rMin = this.near ? 0 : RAISING.ringMin, rMax = this.near ? 90 : RAISING.ringMax;
-    // Open ground among trees (a park, a churchyard's yews), else before a landmark, else by a wall.
-    let spots = (this.w.trees?.(rMin, rMax) ?? []).map((t) => ({ x: t.x + t.nx * 5, z: t.z + t.nz * 5, nx: t.nx, nz: t.nz }));
+    // A cemetery, else open ground among trees (a park), else before a landmark, else by a wall.
+    let spots = this.w.cemeteries?.(rMin, rMax) ?? [];
+    if (spots.length) spots = [spots[0]];
+    else spots = (this.w.trees?.(rMin, rMax) ?? []).map((t) => ({ x: t.x + t.nx * 5, z: t.z + t.nz * 5, nx: t.nx, nz: t.nz }));
     if (!spots.length) spots = this.w.landmarks?.(rMin, rMax) ?? [];
     if (!spots.length) spots = (this.w.walls?.(rMin, rMax) ?? []).map((s) => ({ x: s.x + s.nx * 5, z: s.z + s.nz * 5, nx: s.nx, nz: s.nz }));
     spots = spots.filter((s) => !this.w.blocked?.(s.x, s.z));

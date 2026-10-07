@@ -312,6 +312,37 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
   }
 }
 
+// Cemeteries (plan/cell placeCemetery): a few per city, walled, graves in rows inside the wall,
+// a mausoleum, nothing on a building.
+{
+  const t0 = performance.now();
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.35 }));
+  const macro = buildMacroPlan(terrain);
+  let n = 0;
+  for (const c of macro.cells) {
+    const p = planCell(macro, c, terrain);
+    for (const cem of p.cemeteries) {
+      n++;
+      const inside = (x: number, z: number) => pointInPoly(cem.outer, x, z);
+      let walls = 0, pillars = 0, graves = 0, tombs = 0, out = 0, onBuilding = 0;
+      for (let i = 0; i < p.props.length; i += 6) {
+        const t = p.props[i], x = p.props[i + 1], z = p.props[i + 2];
+        if (t !== PropType.CemWall && t !== PropType.Gravestone && t !== PropType.Grave && t !== PropType.Tomb && t !== PropType.Yew) continue;
+        if (!inside(x, z)) { out++; continue; }
+        if (p.buildings.some((b) => pointInPoly(b.poly, x, z))) onBuilding++;
+        if (t === PropType.CemWall) { if (p.props[i + 5] === 1) pillars++; else walls++; }
+        else if (t === PropType.Tomb) tombs++;
+        else if (t !== PropType.Yew) graves++;
+      }
+      check(walls >= 20 && pillars >= 6 && graves >= 50 && tombs >= 1, `cemetery in cell ${c.id}: ${walls} wall pieces, ${pillars} pillars, ${graves} graves, ${tombs} tombs`);
+      check(onBuilding === 0 && p.cemPaths.length > 0, `cemetery in cell ${c.id}: nothing on a building (${onBuilding}), gravel paths (${p.cemPaths.length})`);
+      check(out === 0, `cemetery in cell ${c.id}: its pieces inside its outline (${out} outside)`);
+    }
+  }
+  check(n >= 1 && n <= 8, `seed 42: ${n} cemeteries in the city`);
+  console.log(`cemeteries: ${n} in ${macro.cells.length} cells, in ${Math.round(performance.now() - t0)} ms`);
+}
+
 // Cafés, restaurants and their terraces (plan/eatery.ts, plan/terrace.ts): deterministic; outdoor
 // seating never on a footprint, in a doorway, at a crossing or in the walking corridor of a
 // sidewalk; parklets only in the parking strip of local streets; plausible counts per district;
