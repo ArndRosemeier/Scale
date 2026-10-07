@@ -13,7 +13,8 @@
  * in) clears it at a smaller cost.
  *
  * A manhunt (reputation ≤ JUSTICE.manhunt, "public menace"): officers who come near the player go
- * after them at once, offence or not.
+ * after them at once, offence or not. And for a public menace there is no fine and no night in a
+ * cell: taken down and cuffed is the end (game over, game/defeat Defeat.arrested), see `lockedAway`.
  *
  * Only what the player's own blows and powers hit counts (the ledger books nothing else to them:
  * a collapse's rubble, a body a monster flung, the monster's own damage are nobody's or the
@@ -61,11 +62,18 @@ export const JUSTICE = {
   turnInBase: 5, turnInPer: 6,
   /** Reputation at or below this: any officer within `manhuntR` m makes the player wanted (at most every `manhuntGap` s). */
   manhunt: -70, manhuntR: 26, manhuntGap: 45,
+  /** A public menace knocked out: held down this long (s) for the cuffs, then taken in anyway. */
+  heldMax: 20,
   /** Breaking a facade in front of witnesses (at most every 2 s). */
   facade: { heat: 0.45, karma: 1, rep: 0.6 },
   /** A collapse the player caused (always known): base + per storey that came down (≤ 12). */
   collapse: { heat: 2.6, heatPer: 0.35, karma: 6, karmaPer: 1.5, rep: 3, repPer: 0.7 },
 };
+
+/** Reputation this low (a public menace): an arrest is for good — game over, not a fine. */
+export function lockedAway(rep: number): boolean {
+  return rep <= JUSTICE.manhunt;
+}
 
 export class Justice {
   heat = 0;

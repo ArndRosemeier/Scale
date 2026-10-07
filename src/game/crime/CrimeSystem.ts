@@ -51,7 +51,7 @@ import { Packs } from './Packs';
 import { subdued } from '../../sim/actors/Actor';
 import { KINDS } from './kinds';
 import { Police, policeOutfit, POLICE } from './Police';
-import { Justice } from './Justice';
+import { JUSTICE, Justice, lockedAway } from './Justice';
 import { Firearms, GUNS, MUZZLE_Y, gunJ, type GunSpec } from './Firearms';
 import { Bombs } from './Bombs';
 import { VillainCasts } from './VillainCasts';
@@ -173,6 +173,8 @@ export class CrimeSystem {
   private warmT = 0;
   private devDone = false;
   private wake: { x: number; y: number; z: number } | null = null;
+  /** A public menace knocked out while wanted: held down for the officers' cuffs (s since; -1: not). */
+  private heldT = -1;
   actorCount = 0;
   stats = { started: 0, resolved: 0, failed: 0, aborted: 0, kos: 0, msAvg: 0 };
 
@@ -1132,6 +1134,7 @@ export class CrimeSystem {
     this.health.strengthRank = g.abilities.rank('strength');
     V.strength = this.playerStrength();
     this.health.update(dt);
+    this.holdMenace(dt);
     this.upkeep(dt);
     this.director.update(dt);
     this.beat.update(dt);
@@ -1451,14 +1454,14 @@ export class CrimeSystem {
       if (!act) continue;
       // (Soldiers, the aftermath's people, the street characters, fame's people and game/people's
       // have their own budgets: response/forces, game/aftermath, game/street, game/fame, game/people.)
-      const uniformed = act.role === 'police' || act.role === 'soldier';
       if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER && act.owner !== PEOPLE_OWNER) n++;
       tickActor(act, dt);
-      if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && uniformed))) {
+      // Knocked down: up again after a moment. Knocked out (no health left) is out of the fight for
+      // good, officers and soldiers too: nobody gets back up from that.
+      if (a.state === PState.Down && act.state === 'down') {
         act.upT -= dt;
-        if (act.upT <= (act.state === 'ko' ? -18 : 0)) {
+        if (act.upT <= 0) {
           a.state = PState.Idle; a.vx = a.vz = a.vy = 0; a.stateT = 0;
-          if (uniformed) act.hp = Math.max(act.hp, act.maxHp * 0.5);
           setState(act, act.role === 'criminal' ? 'run' : 'idle');
         }
       } else if (a.state !== PState.Down && (act.state === 'down')) setState(act, act.role === 'criminal' ? 'run' : 'idle');
@@ -1669,7 +1672,19 @@ export class CrimeSystem {
   private knockedOut(kind: HurtKind): void {
     const p = this.g.player.pos;
     this.wake = { x: p.x, y: p.y, z: p.z };
-    if (kind === 'police' || this.justice.wanted > 0) { this.hud.fade(true); return; } // the officers cuff them (arrest) or not
+    if (kind === 'police' || this.justice.wanted > 0) {
+      // A public menace stays down until the officers have them cuffed: no waking up and walking off.
+      if (lockedAway(this.rep.value) && this.g.defeat) {
+        this.heldT = 0;
+        this.health.koT = 1e9;
+        this.g.player.downT = Math.max(this.g.player.downT, 1e3);
+        this.g.defeat.ui.hurt(true);
+        this.g.powerHud.toast('You are down — the officers close in with the cuffs', 'warn');
+        return;
+      }
+      this.hud.fade(true); // the officers cuff them (arrest) or not
+      return;
+    }
     if (!this.g.defeat?.begin(kind)) this.hud.fade(true);
     if (kind === 'robot' || kind === 'monster' || kind === 'military') return; // a threat (or the army's stray fire) knocked them out: no karma penalty (THREATS_PLAN §5.6)
     this.g.progress.addKarma(-5, 'knocked out');
@@ -1683,8 +1698,31 @@ export class CrimeSystem {
     this.g.powerHud.toast('You come round, sore but alive', 'info');
   }
 
+  /**
+   * A public menace held down: kept out cold until cuffed; if no officer gets to them (out of reach,
+   * all beaten), the backup takes them in anyway.
+   */
+  private holdMenace(dt: number): void {
+    if (this.heldT < 0) return;
+    if (this.g.defeat?.phase === 'over') { this.heldT = -1; return; }
+    this.heldT += dt;
+    this.health.koT = 1e9;
+    this.g.player.downT = Math.max(this.g.player.downT, 1e3);
+    if (this.heldT > JUSTICE.heldMax) this.playerArrested();
+  }
+
   /** An officer cuffed the player. */
   private playerArrested(): void {
+    const g = this.g;
+    if (g.defeat?.phase === 'over') return;
+    // A public menace: taken away for good (game over), not a fine and a night in a cell.
+    if ((this.heldT >= 0 || lockedAway(this.rep.value)) && g.defeat?.arrested()) {
+      this.heldT = -1;
+      this.justice.stats.arrests++;
+      this.rep.count('busted');
+      return;
+    }
+    this.heldT = -1;
     this.justice.arrested();
     this.rep.count('busted');
     this.health.koT = 0;
