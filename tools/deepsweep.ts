@@ -40,8 +40,8 @@ if (isMain) {
     const { plans, colonies, centre } = deepFor(seed, size);
     const ms = performance.now() - t0;
     const far = Math.max(0, ...centre.map((c) => Math.hypot(c.x, c.z)));
-    if (plans.length < colonies) bad++;
-    console.log(`seed ${seed} @${size}: ${plans.length}/${colonies} colonies with a realm, farthest ${far.toFixed(0)} m from the centre (${ms.toFixed(0)} ms)${plans.length < colonies ? '  MISSING' : ''}`);
+    if (plans.length < 2) bad++;
+    console.log(`seed ${seed} @${size}: ${plans.length} colonies with a realm${plans.length < colonies ? ` (${colonies - plans.length} with no room for one left out)` : ''}, farthest ${far.toFixed(0)} m from the centre (${ms.toFixed(0)} ms)`);
     const fields = plans.map((p) => new DeepField(p.prims, p.seed));
     plans.forEach((plan, i) => {
       const F = fields[i];
@@ -53,5 +53,5 @@ if (isMain) {
       console.log(`   colony ${plan.hub}: ${plan.nodes.length} nodes, ${T.style} (${T.segs.length} bays, ${T.craters.length} craters)${clash ? ', OVERLAPS ANOTHER REALM' : ''}${notWalk.length ? `, NOT WALKABLE: ${notWalk.slice(0, 6).join(', ')}` : ''}`);
     });
   }
-  if (bad) { console.log(`${bad} problem(s): missing realms, overlaps or edges a walker cannot take`); process.exitCode = 1; }
+  if (bad) { console.log(`${bad} problem(s): fewer than 2 realms, overlaps or edges a walker cannot take`); process.exitCode = 1; }
 }

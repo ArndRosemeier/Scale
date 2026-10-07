@@ -757,10 +757,12 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     if (s > 0.6 || r.chance(0.25)) glow(x, y + s * 2, z, MURK[c], 4 + s * 4, 0.6);
     taken.push({ x, z, r: s });
   });
+  // (Not in the rock that closes in the Warrens' mouth: its length differs from realm to realm.)
+  const inMouth = (p: { x: number; z: number }) => (p.x - tC.x) * tAx + (p.z - tC.z) * tAz < mouthEnd + 6;
   const hives: DeepPlan['hives'] = [];
   for (const [u, v] of [[214, 44], [226, -10], [244, 48], [262, 4], [210, -14], [238, 16]]) {
     const p = F(u, v, L2 + 2);
-    if (!p) continue;
+    if (!p || inMouth(p)) continue;
     const r = rng.range(3, 5);
     hives.push({ ...p, r });
     decor.push({ k: 'hive', x: p.x, y: p.y, z: p.z, s: r, h: r * rng.range(1.3, 1.8), yaw: rng.range(0, 6.3), c: 0, reg: 3 });
@@ -768,9 +770,10 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     taken.push({ x: p.x, z: p.z, r: r + 1 });
   }
   const pens: DeepPlan['pens'] = [];
-  for (const [u, v] of [[206, 10], [236, -24], [250, 22]]) {
+  for (const [u, v] of [[206, 10], [236, -24], [250, 22], [258, -16], [222, 30]]) {
+    if (pens.length >= 3) break;
     const p = F(u, v, L2 + 2);
-    if (!p) continue;
+    if (!p || inMouth(p)) continue;
     pens.push({ ...p, r: 2.4 });
     decor.push({ k: 'pen', x: p.x, y: p.y, z: p.z, s: 2.4, h: 2.2, yaw: rng.range(0, 6.3), c: 0, reg: 3 });
     glow(p.x, p.y + 1, p.z, LUMEN[0], 6, 0.35);
@@ -893,7 +896,12 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     nRear = at('betweenLines', (B.rear.s + TS) / 2);
     link(g0, nRear);
   }
-  gaps.forEach((l, i) => { const p = G(TS, l); const y = floorNear(p.x, ty + 1, p.z); const n = node(`trench${i}`, y === null ? null : { x: p.x, y, z: p.z }, 1); link(nRear, n); link(n, nNM); });
+  // Each gap is gone through straight: a waypoint just behind it and one just out in front (a slant clips the bays).
+  gaps.forEach((l, i) => {
+    const at = (name: string, s: number, r: number) => { const p = G(s, l); const y = floorNear(p.x, ty + 1, p.z); return node(name, y === null ? null : { x: p.x, y, z: p.z }, r); };
+    const back = at(`gapBack${i}`, TS - 2.6, 1), n = at(`trench${i}`, TS, 1), out = at(`gapOut${i}`, TS + 2.6, 1);
+    link(nRear, back); link(back, n); link(n, out); link(out, nNM);
+  });
   const nML = node('murkLine', places.murkLine, 3);
   if (chasm) {
     // Over the chasm only by its bridge.

@@ -1335,7 +1335,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const n = (k: string) => hints.filter((h) => h.kind === k).length;
     const arrows = n('arrow'), marks = n('mark'), chev = n('chevron'), scouts = n('scout');
     const sewerColonies = rooms.colonies.filter((c) => rooms.rooms[c.room].net === 'sewer').length;
-    check(!sewerColonies || (arrows >= junctions * 0.9 && marks >= junctions * 1.8 && chev > 100 && scouts >= 1), `sewers seed ${seed}: the Lumen's signs show the way at the junctions (${arrows} arrows and ${marks} signs at ${junctions} junctions, ${chev} chevrons, ${scouts} scouts, ${sewerColonies} colonies off the sewers)`);
+    check(!sewerColonies || (arrows >= junctions * 1.6 && marks >= junctions * 1.8 && chev > 100 && scouts >= 1), `sewers seed ${seed}: the Lumen's signs show the way at the junctions (${arrows} arrows and ${marks} signs at ${junctions} junctions, ${chev} chevrons, ${scouts} scouts, ${sewerColonies} colonies off the sewers)`);
   }
 }
 

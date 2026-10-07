@@ -109,7 +109,7 @@ export function planSewerHints(macro: MacroPlan, tubes: Tube[], rooms: RoomPlan)
     const dx = fromA ? p0.dx : -p0.dx, dz = fromA ? p0.dz : -p0.dz;
     // On both walkways (the middle is the channel).
     for (const side of [1, -1]) {
-      const qa = spot(k, fromA ? Math.min(L / 2, 1.6) : Math.max(L / 2, L - 1.6), side * (hw - 0.55));
+      const qa = spot(k, fromA ? Math.min(L / 2, 3.4) : Math.max(L / 2, L - 3.4), side * (hw - 0.55));
       if (qa) out.push({ kind: 'arrow', x: qa.x, y: qa.y, z: qa.z, nx: dx, nz: dz, s: strength, sign: sg });
     }
     if (d < SCOUT_REACH && arms >= 3 && hashf(n * 7919 + k) < 0.55) {
