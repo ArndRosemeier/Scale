@@ -2,9 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.105 — 2026-10-07
+## 0.106 — 2026-10-07
 
 - **Shoulders no longer sit back.** In every animation the shoulders were pulled behind the chest, so the arms hung from the back of the body. The collarbones now come forward and the arms hang along the side of the body, as in the procedural pose.
+
 ## 0.104 — 2026-10-07
 
 - **Player's manual.** A "Manual" link next to Feedback on the start screen (and in the pause menu) opens a 25-page illustrated PDF manual: getting started, controls, powers, landmarks, places to explore, people and favours, crime and the six organisations, big threats and the army, reputation, and what happens when you go down. Spoiler-light by design.

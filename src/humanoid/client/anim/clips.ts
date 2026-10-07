@@ -210,7 +210,7 @@ export class ClipRig {
       // corrFrom); the arms keep the clip's world rotation.
       if (m![1] === 'clavicle') {
         const sg = m![2] === 'L' ? -1 : 1;
-        this.depress[b] = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.9)
+        this.depress[b] = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.45)
           .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -sg * 0.5));
       }
     }
