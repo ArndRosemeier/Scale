@@ -70,7 +70,7 @@ import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES, CITY_GROUPS } from '../factions/archetypes';
 import { siteToWorld } from '../../plan/landmarks';
 import { RState } from '../../future/Robots';
-import { factionOutfit, lieutenantOutfit, bossOutfit, skeletonOutfit } from '../factions/outfits';
+import { factionOutfit, lieutenantOutfit, bossOutfit, skeletonOutfit, GRAVE_GREEN } from '../factions/outfits';
 
 /** Rewards common to every kind (the per-kind ones are in crime/kinds). */
 export const CRIME_KARMA = {
@@ -641,10 +641,12 @@ export class CrimeSystem {
       a.actor!.title = `${by.emblem} ${by.name} · ${L.title}`;
     });
     // A procession's leader carries a lantern lit in the group's colour.
+    // (The crowd renderer draws an actor's `held` item, its look taken from the outfit's mainhand.)
     const L = c instanceof Procession ? c.leader?.actor : null;
     if (L?.outfit) {
-      const glow = (L.faction != null ? this.factions.factions[L.faction] : f)?.palette.accent ?? f.palette.accent;
+      const glow = GRAVE_GREEN;
       L.outfit = { ...L.outfit, mainhand: { defId: 'lantern', visual: { shape: 'lantern', seed: 1, primary: glow, secondary: glow, accent: glow, material: 'plain', glow: 1, glowColor: glow } } } as typeof L.outfit;
+      L.held = 'lantern';
     }
     // A group hunting the hero: its members stand and fight.
     for (const a of c.criminals) if (a.actor && heatOf(this.notoriety[a.actor.faction ?? f.id] ?? 0) === 'hunted') a.actor.memo.grudge = 1;

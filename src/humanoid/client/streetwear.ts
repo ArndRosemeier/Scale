@@ -195,7 +195,8 @@ const lit = (c: C3, k: number): THREE.MeshStandardMaterial => {
 
 /** A skull in place of the head: a domed cranium, deep dark sockets with a glow in them, a jaw. */
 function skull(fit: BodyFit, bone: C3, eyes: C3): THREE.Object3D {
-  const r = fit.headRadius * 1.04;
+  // (The head is hidden under it: a skull a little smaller than the head, not a big round one.)
+  const r = fit.headRadius * 0.9;
   const g = new THREE.Group();
   const m = std(bone, 0.75), dark = std([0.02, 0.02, 0.02], 0.9), glow = lit(eyes, 2.2);
   const cran = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), m);
@@ -212,7 +213,7 @@ function skull(fit: BodyFit, bone: C3, eyes: C3): THREE.Object3D {
     const sock = new THREE.Mesh(new THREE.SphereGeometry(r * 0.24, 12, 10), dark);
     sock.scale.set(1, 0.9, 0.45);
     sock.position.set(sx * r * 0.34, r * 0.0, r * 0.82);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.07, 8, 6), glow);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.1, 8, 6), glow);
     eye.position.set(sx * r * 0.34, r * 0.0, r * 0.88);
     g.add(sock, eye);
   }
@@ -263,7 +264,7 @@ function skeleton(bone: C3): WearableSpec {
   };
   const part = (socket: Socket, build: (f: BodyFit, g: THREE.Group, m: THREE.Material) => void): RigidPart => rigid(socket, (f) => { const g = new THREE.Group(); build(f, g, mat()); return g; });
   const layers: RigidPart[] = [
-    part('neck', (f, g, m) => column(g, m, 0, B(f).neck * 0.75, f.neckRadius * 0.4, -f.neckRadius * 0.2)),
+    part('neck', (f, g, m) => column(g, m, 0, B(f).neck * 0.95, f.neckRadius * 0.4, -f.neckRadius * 0.2)),
     // Ribcage round the chest socket, the clavicles across the top, a sternum in front.
     part('chest', (f, g, m) => {
       const w = f.shoulderWidth * 0.29, d = f.chestDepth * 0.4, top = 0.04, bottom = top - f.height * 0.15, n = 6, gap = 0.55;

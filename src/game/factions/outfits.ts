@@ -89,10 +89,14 @@ export function factionOutfit(f: Faction, seed: number): EquipmentVisuals {
  * Enforcer with lit seams on the suit, the cults' Technomancer and Invoker brightly lit.
  */
 /** One of the old dead a necromancer raised: the bones on a black body, a skull with lit eyes (the group's glow). */
+/** The grave-light of the raised dead's eyes and the procession's lantern. */
+export const GRAVE_GREEN: C3 = [0.3, 1, 0.4];
+
 export function skeletonOutfit(f: Faction | null, seed: number): EquipmentVisuals {
   const r = new Rng(seed ^ 0x5ce1);
   const black: C3 = [0.02, 0.02, 0.025], bone: C3 = [0.8 + r.float() * 0.08, 0.77 + r.float() * 0.06, 0.66 + r.float() * 0.06];
-  const eyes: C3 = f?.palette.accent ?? [0.45, 1, 0.55];
+  // (The necromancers' accent is a pale bone-green that reads as white in the dark: the eyes burn green.)
+  const eyes: C3 = GRAVE_GREEN;
   const v = (primary: C3, secondary: C3, material = 'plain') => ({ shape: 'cloth', seed: r.nextU32(), primary, secondary, accent: eyes, material, glow: 0, glowColor: eyes });
   // Bare bones (humanoid/client/streetwear skeleton): the body hidden, no underclothes.
   return {

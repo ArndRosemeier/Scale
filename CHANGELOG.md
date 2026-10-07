@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.088 — 2026-10-07
+
+- **The procession's lantern really shows now,** a green-lit lantern held up in the necromancer's hand.
+- **The skeletons' eyes burn green** instead of a pale white, and their skulls are a little smaller.
+
 ## 0.087 — 2026-10-07
 
 - **The raised dead are real skeletons now.** Instead of a person in a striped bodysuit, they are bare bones: a skull with glowing eyes, ribs round a spine, a pelvis, and arm, leg, hand and foot bones that move with them.
