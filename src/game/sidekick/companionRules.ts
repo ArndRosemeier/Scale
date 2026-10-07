@@ -49,6 +49,37 @@ export const MATE = {
   nextShardHours: 36,
 } as const;
 
+/**
+ * Their one power (besides their fists), picked by who they are with some luck in it (the same
+ * person always gets the same one in the same city): the curious and the outgoing get the flashy
+ * elements, the disagreeable the quake, the dutiful the stun flash, the nervous the gust that keeps
+ * trouble at arm's length. Shape and reach say where it is safe to use (nobody but bad guys in it).
+ */
+export type MatePower = 'fireball' | 'bolt' | 'quake' | 'stun' | 'gust';
+export const MATE_POWERS: Record<MatePower, { name: string; shape: 'area' | 'line' | 'cone'; min: number; max: number; /** Who must not be near it: the area's radius, the line's half width, the cone's length. */ R: number }> = {
+  fireball: { name: 'fireballs', shape: 'area', min: 6, max: 24, R: 4.6 },
+  bolt: { name: 'lightning', shape: 'line', min: 3, max: 19, R: 1.9 },
+  quake: { name: 'a ground quake', shape: 'line', min: 2.5, max: 12, R: 2.3 },
+  stun: { name: 'a stunning flash', shape: 'area', min: 5, max: 17, R: 6.6 },
+  gust: { name: 'a blast of wind', shape: 'cone', min: 0.8, max: 8, R: 11 },
+};
+
+export function matePower(seed: number, who: number, t: Traits): MatePower {
+  const w: [MatePower, number][] = [
+    ['fireball', 0.5 * t.o + 0.4 * t.e],
+    ['bolt', 0.4 * t.o + 0.5 * t.e],
+    ['quake', 1 - t.a],
+    ['stun', t.c],
+    ['gust', t.n],
+  ];
+  // Squared: their strongest leaning usually wins, but not always.
+  let sum = 0;
+  for (const x of w) { x[1] = x[1] * x[1] + 0.04; sum += x[1]; }
+  let u = hashToFloat(deriveSeed(seed, `power:${who}`)) * sum;
+  for (const [p, v] of w) { if ((u -= v) < 0) return p; }
+  return 'fireball';
+}
+
 export type FightStyle = 'brave' | 'careful' | 'boss';
 
 /** How they go into a fight: the proud and hard go for the boss, the nervous get people clear first, everyone else jumps in. */
@@ -113,7 +144,7 @@ const LINES: Record<MateSay, { any: Pool } & Partial<Record<Temperament, Pool>>>
     grumpy: ['Amateurs.', 'Could have been quicker.'],
     kind: ['Is anyone hurt? Let me see.'],
     proud: ['As expected.'],
-    chatty: ['Did you see my fireball? Tell me you saw my fireball.'],
+    chatty: ['Did you see that? Tell me you saw that.'],
   },
   police: {
     any: ['Not the police. I\'m out.', 'I won\'t fight the police. Sort this out yourself.'],

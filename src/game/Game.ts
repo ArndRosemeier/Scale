@@ -583,6 +583,7 @@ export class Game {
         bond: () => this.sidekick.devBond(),
         call: () => { this.sidekick.mate.call(); return this.sidekick.mate.status(); },
         mate: () => this.sidekick.mate.status(),
+        power: (p?: string) => { const m = this.sidekick.mate; if (p) m.power = p as typeof m.power; return m.power; },
         ko: () => { this.sidekick.mate.devKo(); return this.sidekick.mate.status(); },
         ward: (make?: boolean) => { this.sidekick.mate.devWard(make); return this.sidekick.status(); },
       };

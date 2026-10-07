@@ -8,7 +8,7 @@
  *    distance off-screen and fly in from the edge of view: never popping up in plain sight.
  *  - A fight near the hero (hostile gang members, villains): they go in by character (shardRules'
  *    temperament; companionRules.fightStyle): most jump in, the nervous get people clear first, the
- *    proud go for the boss. Punches, and a fireball when nobody but the bad guys is near where it
+ *    proud go for the boss. Punches, and their own power (picked by who they are) when nobody but the bad guys is near where it
  *    lands. None of it touches the hero's reputation, and they never fight the police: wanted, with
  *    officers about, they keep out of it.
  *  - K calls them: they come at full speed and stay close for a while.
@@ -26,7 +26,7 @@ import { makeActor, play, goTo, stand, lookAt, subdued, SIDEKICK_OWNER, PEOPLE_O
 import { traitsOf, temperamentOf, type Temperament, type Traits } from '../people/identity';
 import { VILLAIN_POWERS } from '../powers/Caster';
 import { MedFleet } from '../defeat/MedDrones';
-import { MATE, fightStyle, pickFoe, revives, mateLine, type FightStyle, type MateSay, type FoeInfo } from './companionRules';
+import { MATE, MATE_POWERS, fightStyle, matePower, pickFoe, revives, mateLine, type FightStyle, type MateSay, type FoeInfo, type MatePower } from './companionRules';
 
 export type MateMode = 'around' | 'fight' | 'back' | 'down' | 'ward' | 'gone';
 
@@ -53,6 +53,8 @@ export class Companion {
   private who = -1;
   name = '';
   temper: Temperament = 'steady';
+  /** Their one power (companionRules.matePower). */
+  power: MatePower = 'fireball';
   private traits: Traits = { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 };
   style: FightStyle = 'brave';
   hp: number = MATE.hp;
@@ -75,6 +77,8 @@ export class Companion {
   private barkT = 4;
   private idleT = 30;
   private powerCd = 3;
+  /** Seconds spent stepping back out of a brawl to use their power. */
+  private backT = 0;
   private cast: { t: number; tx: number; ty: number; tz: number } | null = null;
   private swing = -1;
   private counter: { a: PedAgent; t: number } | null = null;
@@ -83,7 +87,7 @@ export class Companion {
   private sayBack = false;
   private tmp: PedAgent[] = [];
   private v = new THREE.Vector3();
-  stats = { flights: 0, catchUps: 0, punches: 0, fireballs: 0, kos: 0, called: 0, taken: 0, returned: 0 };
+  stats = { flights: 0, catchUps: 0, punches: 0, powers: 0, unsafe: 0, kos: 0, called: 0, taken: 0, returned: 0 };
 
   constructor(private g: Game, private hooks: { died(): void; persist(): void }) {}
 
@@ -95,6 +99,7 @@ export class Companion {
     const k = this.g.people.find(who);
     if (k) { this.traits = traitsOf(k.cit); this.temper = temperamentOf(this.traits); }
     this.style = fightStyle(this.temper, this.traits);
+    this.power = matePower(this.g.settings.seed, who, this.traits);
     this.hp = save ? Math.max(1, Math.min(MATE.hp, save.hp)) : MATE.hp;
     this.k = save ? save.k : 0;
     this.wardT = save && save.ward > 0 ? save.ward : 0;
@@ -318,7 +323,8 @@ export class Companion {
   }
 
   /** Coming down at (x, z): over it, then down onto the ground. */
-  private land(a: PedAgent, dt: number, x: number, z: number): void {
+  private land(a: PedAgent, dt: number, x0: number, z0: number): void {
+    const [x, z] = this.groundSpot(x0, z0, Math.max(a.y, this.g.player.pos.y + 1.5));
     const gy = this.g.collision.groundAt(x, z, Math.max(a.y, this.g.player.pos.y + 1.5), 400);
     const dx = x - a.x, dz = z - a.z, dh = Math.hypot(dx, dz);
     const hs = Math.min(MATE.cruise, dh * 1.4);
@@ -335,6 +341,23 @@ export class Companion {
       this.flying = false;
       stand(this.act!);
     }
+  }
+
+  /**
+   * Somewhere to stand near (x, z) on the street itself, not on a parked car or a crate (from up
+   * there they cannot walk on, and would take off and land on it again and again).
+   */
+  private groundSpot(x: number, z: number, from: number): [number, number] {
+    const g = this.g, ok = (px: number, pz: number) => {
+      const gy = g.collision.groundAt(px, pz, from, 400);
+      return gy - g.world.groundHeight(px, pz, from) < 0.4 && !g.peds.wet(px, pz);
+    };
+    if (ok(x, z)) return [x, z];
+    for (const r of [1.5, 2.5, 3.5, 5]) for (let k = 0; k < 8; k++) {
+      const an = (k / 8) * Math.PI * 2, px = x + Math.cos(an) * r, pz = z + Math.sin(an) * r;
+      if (ok(px, pz)) return [px, pz];
+    }
+    return [x, z];
   }
 
   private integrate(a: PedAgent, dt: number): void {
@@ -459,13 +482,26 @@ export class Companion {
       if (this.swing < 0) this.strike(a, t);
       return;
     }
-    // Their power, from where they stand, when it is safe.
-    if (!this.flying && this.powerCd <= 0 && d > MATE.powerMin && d < MATE.powerMax && this.safe(a, t)) { this.beginCast(a, t); return; }
-    if (this.flying && d > MATE.landR) {
-      this.fly(a, dt, t.x - (dx / d) * 1.5, Math.max(t.y + 3, p.y + 2), t.z - (dz / d) * 1.5, true);
+    // Their power when it is ready: from a distance it needs (stepping back out of a brawl for it), when it is safe.
+    const M = MATE_POWERS[this.power], ready = this.powerCd <= 0;
+    const castD = Math.min(M.max - 2, Math.max(M.min + 2.5, 8));
+    if (ready && !this.flying && d > M.min && d < M.max) {
+      if (this.safe(a, t)) { this.backT = 0; this.beginCast(a, t); return; }
+      this.stats.unsafe++;
+      this.powerCd = 1.5;
+    } else if (ready && !this.flying && d <= M.min) {
+      this.backT += dt;
+      if (this.backT > 2.5) { this.backT = 0; this.powerCd = 2; } else {
+        this.moveTo(a, dt, t.x - (dx / d) * castD, t.z - (dz / d) * castD, true, true);
+        return;
+      }
+    }
+    const stop = ready && M.min > 2 ? castD : 1.4;
+    if (this.flying && d > Math.max(MATE.landR, stop + 2)) {
+      this.fly(a, dt, t.x - (dx / d) * stop, Math.max(t.y + 3, p.y + 2), t.z - (dz / d) * stop, true);
       return;
     }
-    if (this.flying) { this.land(a, dt, t.x - (dx / d) * 1.3, t.z - (dz / d) * 1.3); return; }
+    if (this.flying) { this.land(a, dt, t.x - (dx / d) * stop, t.z - (dz / d) * stop); return; }
     lookAt(act, t.x, t.y + 1.3, t.z);
     if (d > MATE.punchR) { this.moveTo(a, dt, t.x - (dx / d) * 1.1, t.z - (dz / d) * 1.1, true, true); return; }
     stand(act);
@@ -509,26 +545,47 @@ export class Companion {
     if (res.effect !== 'none' && res.effect !== 'ko' && this.barkT <= 0 && Math.random() < 0.35) this.say('hurt');
   }
 
-  /** Nobody but the bad guys where it would land, the hero well clear of it and of its path. */
+  /** Nobody but the bad guys where their power would land (or along its line, or in its cone), the hero well clear of it. */
   private safe(a: PedAgent, t: PedAgent): boolean {
-    const g = this.g, p = g.player.pos;
-    if (Math.hypot(p.x - t.x, p.z - t.z) < MATE.heroSafe) return false;
-    // The hero near the line from the hand to the target.
-    const ax = a.x, az = a.z, bx = t.x - ax, bz = t.z - az, l2 = bx * bx + bz * bz || 1;
-    const u = Math.max(0, Math.min(1, ((p.x - ax) * bx + (p.z - az) * bz) / l2));
-    if (Math.hypot(ax + bx * u - p.x, az + bz * u - p.z) < 2.5) return false;
-    for (const o of g.peds.neighbours(t.x, t.z, MATE.safeR, this.tmp)) {
+    const g = this.g, p = g.player.pos, M = MATE_POWERS[this.power];
+    const dx = t.x - a.x, dz = t.z - a.z, d = Math.hypot(dx, dz) || 1e-6, ux = dx / d, uz = dz / d;
+    // In the way: inside the area round the target, near the line, in the cone.
+    let cx: number, cz: number, reach: number;
+    let inIt: (x: number, z: number, slack: number) => boolean;
+    if (M.shape === 'area') {
+      cx = t.x; cz = t.z; reach = M.R;
+      inIt = (x, z, s) => {
+        if (Math.hypot(x - t.x, z - t.z) < M.R + s) return true;
+        // Thrown: nobody close to its path either.
+        const u = Math.max(0, Math.min(1, ((x - a.x) * ux + (z - a.z) * uz) / d));
+        return s > 0 && Math.hypot(a.x + dx * u - x, a.z + dz * u - z) < 2.5;
+      };
+    } else if (M.shape === 'line') {
+      const L = Math.min(d + 4, M.max + 6);
+      cx = a.x + ux * L / 2; cz = a.z + uz * L / 2; reach = L / 2 + M.R;
+      inIt = (x, z, s) => {
+        const u = Math.max(0, Math.min(L, (x - a.x) * ux + (z - a.z) * uz));
+        return Math.hypot(a.x + ux * u - x, a.z + uz * u - z) < M.R + s;
+      };
+    } else {
+      cx = a.x; cz = a.z; reach = M.R;
+      inIt = (x, z, s) => {
+        const vx = x - a.x, vz = z - a.z, l = Math.hypot(vx, vz);
+        return l < M.R + s && l > 0.2 && (vx * ux + vz * uz) / l > 0.7;
+      };
+    }
+    if (inIt(p.x, p.z, 2)) return false;
+    for (const o of g.peds.neighbours(cx, cz, reach, this.tmp)) {
       if (o === t || o === a || !o.alive || o.inside || o.state === PState.Down) continue;
-      if (Math.hypot(o.x - t.x, o.z - t.z) > MATE.safeR) continue;
-      if (!isFoe(o)) return false;
+      if (inIt(o.x, o.z, 0) && !isFoe(o)) return false;
     }
     return true;
   }
 
   private beginCast(a: PedAgent, t: PedAgent): void {
-    const g = this.g, act = this.act!, P = VILLAIN_POWERS.fireball;
+    const g = this.g, act = this.act!, P = VILLAIN_POWERS[this.power];
     const tx = t.x, ty = t.y + 1.0, tz = t.z;
-    if (!g.crime || !g.crime.casts.cast(a, 'fireball', 'begin', tx, ty, tz)) { this.powerCd = 2; return; }
+    if (!g.crime || !g.crime.casts.cast(a, this.power, 'begin', tx, ty, tz)) { this.powerCd = 2; return; }
     this.cast = { t: 0, tx, ty, tz };
     stand(act);
     lookAt(act, tx, ty, tz);
@@ -537,15 +594,15 @@ export class Companion {
   }
 
   private casting(a: PedAgent, dt: number): void {
-    const g = this.g, C = this.cast!, P = VILLAIN_POWERS.fireball, act = this.act!;
+    const g = this.g, C = this.cast!, w = this.power, P = VILLAIN_POWERS[w], act = this.act!;
     C.t += dt;
     stand(act);
     a.heading = Math.atan2(a.x - C.tx, a.z - C.tz);
-    if (act.staggerT > 0) { g.crime.casts.cast(a, 'fireball', 'end', C.tx, C.ty, C.tz); this.cast = null; this.powerCd = 3; return; }
-    if (C.t < P.windup) { g.crime.casts.cast(a, 'fireball', 'tell', C.tx, C.ty, C.tz); return; }
-    g.crime.casts.cast(a, 'fireball', 'release', C.tx, C.ty, C.tz);
-    g.crime.casts.cast(a, 'fireball', 'end', C.tx, C.ty, C.tz);
-    this.stats.fireballs++;
+    if (act.staggerT > 0) { g.crime.casts.cast(a, w, 'end', C.tx, C.ty, C.tz); this.cast = null; this.powerCd = 3; return; }
+    if (C.t < P.windup) { g.crime.casts.cast(a, w, 'tell', C.tx, C.ty, C.tz); return; }
+    g.crime.casts.cast(a, w, 'release', C.tx, C.ty, C.tz);
+    g.crime.casts.cast(a, w, 'end', C.tx, C.ty, C.tz);
+    this.stats.powers++;
     this.cast = null;
     this.powerCd = MATE.powerCd * (0.85 + 0.3 * Math.random());
   }
@@ -706,7 +763,7 @@ export class Companion {
   status(): Record<string, unknown> {
     const a = this.a, p = this.g.player.pos;
     return {
-      mode: this.mode, name: this.name, temper: this.temper, style: this.style, hp: Math.round(this.hp), k: this.k, ward: Math.round(this.wardT),
+      mode: this.mode, name: this.name, temper: this.temper, style: this.style, power: this.power, hp: Math.round(this.hp), k: this.k, ward: Math.round(this.wardT),
       flying: this.flying, called: this.calledT > 0, foes: this.foes.length, police: this.policeNear,
       body: a ? { x: +a.x.toFixed(1), y: +a.y.toFixed(1), z: +a.z.toFixed(1), d: Math.round(Math.hypot(a.x - p.x, a.z - p.z)), state: a.state, act: a.actor?.state ?? null } : null,
       stats: { ...this.stats },

@@ -9,7 +9,7 @@
  *  - Sometimes (SHARD.gangChance, where a group holds the street) the group got to it first: two or
  *    three of them stand guard round it (CrimeSystem.postGuards, like a hideout door). It can only
  *    be taken once they are dealt with.
- *  - E takes it. Carried (a badge on screen), it can be offered to anyone in a conversation (the
+ *  - E (or walking into it) takes it. Carried (a badge on screen), it can be offered to anyone in a conversation (the
  *    talk menu's "Offer them the shard"): shardRules.offerAnswer decides what they say. Someone
  *    with a matter of their own asks a favour first (People.askVisit) and says yes once it is done.
  *  - The awakening: the shard floats from the hero's hand to them, its light spirals into them, a
@@ -36,7 +36,7 @@ import { yearsOf } from '../people/identity';
 import { gameTimeLabel } from '../save/model';
 import { deriveSeed, hashToFloat } from '../../core/rng';
 import { Companion, type MateSave } from './Companion';
-import { MATE, graveSpot } from './companionRules';
+import { MATE, MATE_POWERS, graveSpot } from './companionRules';
 import { makeGrave } from './Grave';
 import {
   SHARD, shardCells, resolveShard, sceptic, hasMatter, offerAnswer, accepts, answerLine, awakeningLines,
@@ -153,7 +153,7 @@ export class Sidekick {
     document.body.appendChild(this.edge);
     this.badge = document.createElement('div');
     this.badge.id = 'shard-badge';
-    this.badge.innerHTML = '<i></i>The shard';
+    this.badge.innerHTML = '<i></i><span><b>You carry the second shard</b><br>Talk to someone (E) to offer it</span>';
     this.badge.title = 'You carry the second shard. Offer it to someone you trust: talk to them (E).';
     document.body.appendChild(this.badge);
     try { this.restore(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null'), false); } catch { /* storage unavailable */ }
@@ -238,6 +238,8 @@ export class Sidekick {
   private reported(dt: number): void {
     const g = this.g, s = this.site!, P = g.player, p = P.pos;
     const d = Math.hypot(s.x - p.x, s.z - p.z);
+    // Walking into it takes it too (like a power core), unless a gang still guards it.
+    if (d < 0.9 + P.radius && this.inReach() && !this.guarded()) { this.take(); return; }
     if (!this.refined && d < 220) {
       const y = g.collision.groundAt(s.x, s.z, s.y + 0.6, 1.2);
       if (Number.isFinite(y) && Math.abs(y - s.y) < 1.5) { s.y = y; this.refined = true; }
@@ -522,7 +524,7 @@ export class Sidekick {
       const line = S.lines[S.said++];
       if (g.people.partner === a) g.people.speak(line, true);
       else g.barks?.line(a, line);
-      if (S.said === 3) g.powerHud.toast(`<b>${S.name}</b> has the shard's power now: your sidekick. Their gold dot on the map shows where they are`, 'core', 8000);
+      if (S.said === 3) g.powerHud.toast(`<b>${S.name}</b> has the shard's power now: your sidekick. They can fly, and the shard gave them <b>${MATE_POWERS[this.mate.power].name}</b>. Their gold dot on the map shows where they are`, 'core', 8000);
     }
     if (t >= SCENE.end) this.endScene();
   }

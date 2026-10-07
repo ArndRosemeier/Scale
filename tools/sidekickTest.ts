@@ -13,7 +13,7 @@ import { Population } from '../src/sim/Population';
 import { traitsOf, TEMPERAMENTS } from '../src/game/people/identity';
 import { SHARD, shardCells, resolveShard, sceptic, hasMatter, offerAnswer, accepts, answerLine, awakeningLines, type OfferFacts, type OfferAnswer } from '../src/game/sidekick/shardRules';
 import { headline, gossip, storyKind } from '../src/game/news/headlines';
-import { MATE, fightStyle, pickFoe, revives, mateLine, graveSpot, type MateSay } from '../src/game/sidekick/companionRules';
+import { MATE, MATE_POWERS, matePower, type MatePower, fightStyle, pickFoe, revives, mateLine, graveSpot, type MateSay } from '../src/game/sidekick/companionRules';
 import { PropType } from '../src/plan/cell';
 
 type Check = (ok: boolean, msg: string) => void;
@@ -97,6 +97,16 @@ function companionChecks(check: Check): void {
   check(pickFoe('boss', foes) === 1, 'sidekick fight: the boss-minded go for the leader');
   check(pickFoe('brave', foes) === 2, 'sidekick fight: the brave help with the one on the hero');
   check(pickFoe('brave', []) === -1, 'sidekick fight: nobody to fight');
+  // Their power: by who they are, with luck in it; every power turns up; the same person, the same power.
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 7, size: 0.4 }))), 7);
+  const count: Record<string, number> = {};
+  const byTrait = (k: 'o' | 'c' | 'e' | 'a' | 'n', hi: boolean, p: MatePower) => { let n = 0, m = 0; for (let i = 0; i < 3000; i++) { const c = pop.synthetic(5000 + i * 13), t = traitsOf(c); if ((t[k] > 0.62) !== hi) continue; n++; if (matePower(7, c.id, t) === p) m++; } return m / Math.max(1, n); };
+  for (let i = 0; i < 3000; i++) { const c = pop.synthetic(5000 + i * 13); const p = matePower(7, c.id, traitsOf(c)); count[p] = (count[p] ?? 0) + 1; }
+  check((Object.keys(MATE_POWERS) as MatePower[]).every((p) => (count[p] ?? 0) > 3000 * 0.06), `sidekick power: every power turns up (${Object.entries(count).map(([k, v]) => `${k} ${(v / 30).toFixed(0)} %`).join(', ')})`);
+  check(byTrait('a', false, 'quake') > byTrait('a', true, 'quake') * 1.5 && byTrait('n', true, 'gust') > byTrait('n', false, 'gust') * 1.5 && byTrait('c', true, 'stun') > byTrait('c', false, 'stun') * 1.3, 'sidekick power: the disagreeable quake, the nervous gust, the dutiful stun more often');
+  const c0 = pop.synthetic(5013);
+  check(matePower(7, c0.id, traitsOf(c0)) === matePower(7, c0.id, traitsOf(c0)), 'sidekick power: the same person gets the same power');
+  check(new Set([1, 2, 3, 4, 5, 6, 7, 8].map((sd) => matePower(sd, c0.id, traitsOf(c0)))).size > 1, 'sidekick power: another city, maybe another power');
   // The revival: about four in five, the same answer for the same count.
   let ok = 0;
   for (let k = 0; k < 4000; k++) if (revives(42, 1000 + (k >> 2), k & 3)) ok++;
