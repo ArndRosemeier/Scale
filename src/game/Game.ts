@@ -735,7 +735,8 @@ export class Game {
     this.T('net', () => this.net.maybeRebuild(this.simT, readyCells));
     const pp = this.freeCam ? this.renderer.camera.position : this.player.pos;
     this.peds.setPlayer(pp.x, pp.z);
-    this.peds.playerObstacle = this.freeCam ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius + 0.25, h: this.player.height };
+    // (At an arcade cabinet the space behind the hero is kept clear too: nobody walks into the view of the screen.)
+    this.peds.playerObstacle = this.freeCam ? null : this.arcade?.keepClear() ?? { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius + 0.25, h: this.player.height };
     this.T('peds', () => this.peds.update(dt, this.sky.hoursAbs, pp.x, pp.z, dt * this.sky.timeScale));
     this.T('react', () => this.reactions.update(dt, this.player));
     this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));

@@ -2,9 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.098 — 2026-10-07
+## 0.099 — 2026-10-07
 
 - **Shoulders sit lower.** People no longer hold their collarbones up as in a shrug: the shoulder line now slopes down from the neck, the neck shows its full length, and the arms hang from lower, closer shoulders.
+
+## 0.098 — 2026-10-07
+
+- **Arcades only where there is room for one.** They are now only in big, plainly rectangular buildings, never in small or oddly shaped corner houses, so every arcade is a real hall with at least seven cabinets.
+- **Nothing walls an arcade off any more.** Cabinets used to stand in front of the doorway from the stairs or the lift lobby, and where the street door led in that way, the hall was shut off. They now keep doorways clear, and a self test walks from the street door to every cabinet.
+- **Arcades are easier to find on the map:** a round cyan "A" badge, with its own line in the map's legend.
+- **The ARCADE sign no longer sits on a painted shop sign** — arcade fronts have no generic sign band now, and their windows glow in the evening.
+- **People keep out of your view while you play:** passers-by in the hall no longer step between you and the screen.
 
 ## 0.097 — 2026-10-07
 

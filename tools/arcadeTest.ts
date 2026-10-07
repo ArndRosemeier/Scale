@@ -1,7 +1,8 @@
 /**
  * Self test of the arcades, run by tools/selftest.ts (or on its own: `npx tsx tools/arcadeTest.ts`):
- * the city has arcades on its shopping streets, each hall is filled with video game cabinets that
- * stand inside the storey, apart from each other, with room in front to stand and play; every
+ * cities have arcades on their shopping streets, each hall is filled with video game cabinets that
+ * stand inside the storey, apart from each other, with room in front to stand and play, and every
+ * one can be walked to from the street door (nothing walled off); every
  * game runs for a long while with random buttons (and in attract mode) without failing.
  */
 import { makeProfile } from '../src/world/settings';
@@ -9,8 +10,9 @@ import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
 import { planCell } from '../src/plan/cell';
 import { buildingLayout } from '../src/build/buildingLayout';
-import { planFloor, planLift, planStair, coreFits, isArcade, CABINET, type Furn } from '../src/interior/InteriorGen';
-import { pointInPoly } from '../src/core/geom2';
+import { planFloor, planLift, planStair, coreFits, isArcade, CABINET, type Furn, type FloorPlan } from '../src/interior/InteriorGen';
+import { wallCollisionSegments } from '../src/interior/InteriorBuilder';
+import { pointInPoly, distSqPointSeg, distPointPolyEdge, type Poly } from '../src/core/geom2';
 import { GAMES, type Btn, type Pad } from '../src/arcade/games';
 import { Rng } from '../src/core/rng';
 
@@ -27,13 +29,53 @@ function inFoot(f: Furn, x: number, z: number, m = 0): boolean {
   return Math.abs(lx) <= f.w / 2 + m && Math.abs(lz) <= f.d / 2 + m;
 }
 
+/**
+ * Walk the storey from the street door on a 0.25 m grid (a body of 0.3 m radius, kept off walls and
+ * furniture): which of the points can be reached?
+ */
+function reachable(fp: FloorPlan, poly: Poly, door: { x: number; z: number }, pts: [number, number][]): boolean[] {
+  const G = 0.25, R = 0.3;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < poly.length; i += 2) { x0 = Math.min(x0, poly[i]); z0 = Math.min(z0, poly[i + 1]); x1 = Math.max(x1, poly[i]); z1 = Math.max(z1, poly[i + 1]); }
+  const nx = Math.ceil((x1 - x0) / G) + 1, nz = Math.ceil((z1 - z0) / G) + 1;
+  const walls = wallCollisionSegments(fp);
+  const solid = fp.furniture.filter((f) => f.kind !== 'rug' && f.kind !== 'painting' && f.h >= 0.3);
+  const free = (x: number, z: number) => {
+    if (!pointInPoly(poly, x, z) || distPointPolyEdge(poly, x, z) < R) return false;
+    for (let i = 0; i < walls.length; i += 4) if (distSqPointSeg(x, z, walls[i], walls[i + 1], walls[i + 2], walls[i + 3]) < R * R) return false;
+    return !solid.some((f) => inFoot(f, x, z, R - 0.05));
+  };
+  const seen = new Uint8Array(nx * nz);
+  const queue: number[] = [];
+  // Start just inside the door: the free cells within 1.2 m of it.
+  for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) {
+    const x = x0 + i * G, z = z0 + k * G;
+    if (Math.hypot(x - door.x, z - door.z) < 1.2 && free(x, z)) { seen[i * nz + k] = 1; queue.push(i * nz + k); }
+  }
+  while (queue.length) {
+    const c = queue.pop()!, i = Math.floor(c / nz), k = c % nz;
+    for (const [di, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = i + di, b = k + dk;
+      if (a < 0 || b < 0 || a >= nx || b >= nz || seen[a * nz + b]) continue;
+      seen[a * nz + b] = 2;
+      if (free(x0 + a * G, z0 + b * G)) { seen[a * nz + b] = 1; queue.push(a * nz + b); }
+    }
+  }
+  return pts.map(([x, z]) => {
+    const i = Math.round((x - x0) / G), k = Math.round((z - z0) / G);
+    for (let a = i - 1; a <= i + 1; a++) for (let b = k - 1; b <= k + 1; b++) if (a >= 0 && b >= 0 && a < nx && b < nz && seen[a * nz + b] === 1) return true;
+    return false;
+  });
+}
+
 export function arcadeChecks(check: Check): void {
   const t0 = performance.now();
-  const seed = 42, size = 0.35;
+  let halls = 0, cabs = 0, outside = 0, overlap = 0, blocked = 0, few = 0, cut = 0, minCabs = Infinity;
+  const games = new Set<number>(), perCity: string[] = [];
+  for (const [seed, size] of [[42, 0.35], [7, 0.35], [12, 0.6]]) {
   const terrain = new Terrain(makeProfile({ seed, size }));
   const macro = buildMacroPlan(terrain);
-  let halls = 0, cabs = 0, outside = 0, overlap = 0, blocked = 0, few = 0;
-  const games = new Set<number>();
+  const before = halls;
   for (const c of macro.cells) {
     const p = planCell(macro, c, terrain);
     for (const b of p.buildings) {
@@ -48,7 +90,10 @@ export function arcadeChecks(check: Check): void {
       const fp = planFloor(b, poly, 0, fl.y0, fl.y1 - fl.y0, 0, lift, stair, up, false, L.door);
       const list = fp.furniture.filter((f) => f.kind === 'arcade');
       cabs += list.length;
-      if (list.length < 4) few++;
+      if (list.length < 7) few++;
+      minCabs = Math.min(minCabs, list.length);
+      const stand = list.map((f): [number, number] => [f.x + Math.sin(f.yaw) * (CABINET.d / 2 + 0.8), f.z + Math.cos(f.yaw) * (CABINET.d / 2 + 0.8)]);
+      cut += reachable(fp, poly, L.door, stand).filter((ok) => !ok).length;
       for (const f of list) {
         games.add(f.game ?? -1);
         if (corners(f).some(([x, z]) => !pointInPoly(poly, x, z))) outside++;
@@ -59,8 +104,11 @@ export function arcadeChecks(check: Check): void {
       }
     }
   }
-  check(halls >= 1, `seed ${seed} size ${size}: arcades in the city (${halls})`);
-  check(few === 0, `arcades: every hall has at least 4 cabinets (${cabs} in ${halls} halls, ${few} with fewer)`);
+  perCity.push(`seed ${seed}@${size}: ${halls - before}`);
+  }
+  check(halls >= 3, `arcades in the cities (${perCity.join(', ')})`);
+  check(few === 0, `arcades: every hall has at least 7 cabinets (${cabs} in ${halls} halls, fewest ${minCabs}, ${few} with fewer)`);
+  check(cut === 0, `arcades: every cabinet can be walked to from the street door (${cut} cut off)`);
   check(outside === 0 && overlap === 0, `arcades: cabinets inside the storey (${outside} outside) and apart (${overlap} overlapping)`);
   check(blocked === 0, `arcades: room to stand in front of every cabinet (${blocked} blocked)`);
   check(games.size === GAMES.length, `arcades: all ${GAMES.length} games on cabinets (${games.size})`);
