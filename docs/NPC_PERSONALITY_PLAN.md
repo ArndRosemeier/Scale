@@ -4,6 +4,8 @@ Status: **proposal** (Arnd, 2026-10-05: "give NPCs personalities with varied beh
 conversation menu; optional LLM support via OpenRouter later, but the core works without it; NPCs remember the player;
 people you have met get a faint dot on the map that persists, a small number of them").
 Status (2026-10-05): Phase 1 is being built (names, personalities, the talk menu, memory, map dots, saves).
+Status (2026-10-07): Phase 1 merged (v0.051, v0.056, v0.073). Phase 2 built (behaviour from personality). Phase 3
+(OpenRouter) waits; phase 4 (social web, needs, favours) comes next.
 
 This amends PLAYGROUND_PLAN §0 decision 15 ("no chat, no quests"): talking to people is now allowed, **on the
 player's initiative only** (nobody stops the hero to talk, there is still no quest log), and barks stay sparse.
@@ -105,6 +107,17 @@ Takeaways for Scale:
 - Pace (E, C), stopping to gawk or film (O), fleeing and how far (N), helping others up or pointing out a thief (A),
   greeting the hero (E × opinion), keeping distance from a hero who hurt them (opinion), small talk barks per
   temperament, known people greeting you when you pass.
+- Built (`behaviour.ts` rules, `Manners.ts` glue, actors of `PEOPLE_OWNER`):
+  - pace 0.8–1.22 × the usual by E and C (the crowd's average unchanged); a scare wears off 3× faster for the
+    calmest than the most nervous, so the nervous run further; the curious stand and look 3–12 s;
+  - opinion ≤ −30: they step aside as you come near, walk on instead of standing by you, now and then say so;
+    opinion ≤ −65: they won't talk to you (E gets a refusal);
+  - kind grown-ups (A ≥ 0.66, not frightened) walk over and help up someone lying within 22 m, once it is calm
+    (9 s; an everyday fall, the hero's good deed, only after 40 s);
+  - agreeable people point after a criminal running past;
+  - people who know and like you stop and wave when they greet you; people you saved greet you as their hero;
+  - victims of a crime you stop (and people whose stolen things you bring back) remember being saved;
+  - what people shout when they run, gawk, film, get up or thank you is in their temperament.
 
 ## 4. LLM hook (phase 3, optional)
 - Settings: an OpenRouter API key (stored only in this browser) and a model id; off by default. The game never sends

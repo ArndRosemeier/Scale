@@ -2,6 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.082 — 2026-10-07
+
+- **People behave like who they are.** Everyone already had a personality; now it shows in the street:
+  - Outgoing, orderly people walk briskly, dreamers dawdle. The calm get over a scare quickly; the nervous keep running longer. The curious stand and stare longer at a spectacle.
+  - People who dislike you (because you hurt them, or because of your reputation) step out of your way when you come near, don't hang about next to you, and sometimes tell you to keep away. Someone who really can't stand you won't talk to you at all.
+  - Kind passers-by walk over and help up someone lying in the street once it is calm again. An everyday fall is still yours to help with first; after a while a stranger does it.
+  - When a thief runs past, an agreeable passer-by points after them and shouts which way they went.
+  - People who know and like you stop and wave when they say hello. People you saved greet you as their hero.
+  - Victims of a crime you stop, and people whose stolen things you bring back, now remember being saved by you.
+  - What people shout when they run, gawk, film, fall or thank you is in their own temperament (grumpy, anxious, chatty and so on).
+
 ## 0.081 — 2026-10-07
 
 - **Change your look at the tailor's.** Clothes shops now have a full-length fitting mirror on a side wall. Step up to it and press E: the character creator opens on your hero's current look, and saving changes the hero on the spot (and keeps the look as your selected character for the next game). The game is paused for input while the creator is open, and Esc closes it without opening the pause menu. The four nearest clothes shops show on the map in lilac.

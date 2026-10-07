@@ -21,6 +21,7 @@ import { hashToFloat, hash32 } from '../core/rng';
 import { ACCIDENTS } from '../game/abilities/tuning';
 import { statusOf } from '../shared/status';
 import { type Actor, watchProgress } from './actors/Actor';
+import { gawkFor } from '../game/people/behaviour';
 
 export const enum PState { Walk = 0, Wait = 1, Idle = 2, Gawk = 3, Flee = 4, Down = 5, Enter = 6, Film = 7, Sit = 8, Sleep = 9 }
 
@@ -106,11 +107,11 @@ export function canGawk(a: PedAgent): boolean {
 
 /**
  * Gawking / filming bookkeeping per step: true when the agent should walk on (looked long
- * enough and calm, or gawked GAWK_MAX s in all, re-triggered or not).
+ * enough for their curiosity and calm, or gawked GAWK_MAX s in all, re-triggered or not).
  */
 export function gawkOver(a: PedAgent, dt: number): boolean {
   a.gawkT = (a.gawkT ?? 0) + dt;
-  return (a.stateT > 6 + (a.look % 7) && a.fear < 0.3) || a.gawkT > GAWK_MAX;
+  return (a.stateT > gawkFor(a.cit.curiosity, a.look) && a.fear < 0.3) || a.gawkT > GAWK_MAX;
 }
 
 /** Stopped-and-looking agents within r of a point. */
@@ -346,7 +347,8 @@ export class Pedestrians {
   /** A walker at the start of a route. */
   private walker(c: Citizen, route: Float32Array, dest: { x: number; z: number } | null): PedAgent {
     const r = hashToFloat(hash32(c.seed));
-    const pref = c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35;
+    // (Brisk or dawdling by their personality: game/people.)
+    const pref = (c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35) * (this.paceOf?.(c) ?? 1);
     return {
       id: this.nextId++, cit: c, x: route[0], z: route[1], y: 0, heading: 0, speed: pref, pref, state: PState.Walk, route, wp: 1, dest,
       fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
@@ -386,6 +388,8 @@ export class Pedestrians {
    * pace), or null: wherever the schedule says. Their schedule's body only appears near it.
    */
   placeFor?: (c: Citizen) => { x: number; z: number } | null;
+  /** A walker's pace multiplier by who they are (game/people: brisk or dawdling), 1 when unset. */
+  paceOf?: (c: Citizen) => number;
   /** A trip from a to b is not started (people stay where they are: an alert over the district). */
   shelter?: (ax: number, az: number, bx: number, bz: number) => boolean;
 

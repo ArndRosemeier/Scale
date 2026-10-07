@@ -17,6 +17,7 @@ import { PState, GAWK_CROWD, GAWK_R, canGawk, gawkersNear } from './Pedestrians'
 import type { Stimuli, Stimulus } from '../game/Stimuli';
 import type { Player } from '../player/Player';
 import { statusOf } from '../shared/status';
+import { calmRate } from '../game/people/behaviour';
 
 export class Reactions {
   private lastSeen = 0;
@@ -164,7 +165,8 @@ export class Reactions {
       }
       if (flyingFast && dp < 60 && a.state === PState.Walk && a.fear < 0.3 && a.cit.curiosity > 0.3) this.gawk(a, px, py, pz);
       // ---- fear dynamics
-      a.fear = Math.max(0, a.fear - dt * 0.06);
+      // (The calm get over it quickly, the nervous keep running: game/people.)
+      a.fear = Math.max(0, a.fear - dt * calmRate(a.cit.nerve));
       if (a.fear > 0.55 && a.state !== PState.Flee) this.flee(a, a.fearX || px, a.fearZ || pz);
       if (before < 0.6 && a.fear >= 0.6) screamers++;
     }
