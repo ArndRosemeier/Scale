@@ -2,6 +2,19 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.113 — 2026-10-07
+
+- **Aliens plan, decided points.** The Lumen slimes are the old ones who came long before the Wardens and get cryptic speech bubbles; the number of discs in the sky is random, now and then a sudden unexplained swarm of a hundred; beating a Warden first raises their interest in you, then no longer, then lowers it more with each further win. Nothing in the game changes yet.
+
+## 0.112 — 2026-10-07
+
+- **Plan: aliens.** A design plan for the aliens who already live alongside us (docs/ALIENS_PLAN.md): the Wardens, mostly robotic nannies who watch from discs and a station in the sky and never meddle, and the forbidden kinds who sneak in anyway (runaway teens of their own species, smugglers selling alien tech, old ones living underground). Nothing in the game changes yet.
+
+## 0.111 — 2026-10-07
+
+- **No more shimmering arms far out in the city.** The further you went from the centre of the map (super speed takes you far), the more arms, hands and clothes could shimmer, because the skin was computed in world coordinates with too little precision. It is now computed relative to the character, so it looks the same everywhere.
+- **Smoother stop from a run.** The arms no longer straighten and bend again while you come to a halt.
+
 ## 0.110 — 2026-10-07
 
 - **A second shard.** Once your reputation reaches +30 (or after a short while in the sandbox), the news reports a strange glowing stone in one of the city's parks or squares. The area shows up as a circle on the map; nearer in, a soft glow at the edge of the screen and a hum lead you to it, and a pale column of light rises from the stone. Sometimes a gang has got there first and guards it: deal with them before you can pick it up.

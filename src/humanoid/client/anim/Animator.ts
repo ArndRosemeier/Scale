@@ -833,8 +833,11 @@ export class Animator {
       p.spine(0, 0, shift * 0.04 * life);
       p.leg('L', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, -shift) * 0.12) * life);
       p.leg('R', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, shift) * 0.12) * life);
-      // (Not over a motion-captured idle: its arms already hang as captured.)
-      const calm = idle * (1 - this.mocapW * this.clipOn);
+      // (Not over a motion-captured idle: its arms already hang as captured. Its share without
+      // the 1 - moving that mocapW carries: idle·(1 - mocapW) peaked mid-stop and pulled the
+      // forearms straight, then let them bend again, a wobble on every stop from a run.)
+      const mocap = this.idleName.startsWith('CMU_') ? (1 - this.crouchS) * (1 - this.talkS) : 0;
+      const calm = idle * (1 - mocap * this.clipOn);
       if (inp.main === 'none' && inp.off === 'none' && !crouch && calm > 0.01) this.idleArms(p, calm);
       // The captured arms hang close to a slim actor's thighs: give the hands room past broader
       // hips, thighs and clothes.
