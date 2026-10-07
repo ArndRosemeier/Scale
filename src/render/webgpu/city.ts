@@ -10,6 +10,7 @@ import {
 } from 'three/tsl';
 import type { MaterialArrays } from '../TextureLibrary';
 import { h21, GN, elemState } from './common';
+import { sharedGraph } from './sharedGraph';
 import { setDiffuse } from './ground';
 
 function glass(): THREE.MeshPhysicalNodeMaterial {
@@ -26,10 +27,12 @@ let shared: THREE.MeshPhysicalNodeMaterial | null = null;
 export function clearGlassNodeMaterial(): THREE.MeshPhysicalNodeMaterial { return (shared ??= glass()); }
 
 export function clearGlassElemNodeMaterial(elemTex: THREE.Texture, elemW: number): THREE.MeshPhysicalNodeMaterial {
-  const m = glass();
-  const el = elemState(elemTex, elemW);
-  m.positionNode = select(el.alive.lessThan(0.5), vec3(0.0), positionLocal);
-  return m;
+  return sharedGraph('glassElem', { elemTex: { value: elemTex }, elemW: { value: elemW } }, {}, () => {
+    const m = glass();
+    const el = elemState(elemTex);
+    m.positionNode = select(el.alive.lessThan(0.5), vec3(0.0), positionLocal);
+    return m;
+  }).material;
 }
 
 const SkySurf = struct({ col: 'vec3', rough: 'float', metal: 'float', emis: 'vec3' }, 'SkylineSurf');

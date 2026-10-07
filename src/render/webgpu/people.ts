@@ -26,14 +26,17 @@ import type { PatchedMaterial, EyeUniforms, HairUniforms, HornUniforms } from '.
 import type { ShellMaterial } from '../../items/wearable';
 import { poreTexture, strandTexture, leafTexture } from '../../humanoid/client/textures';
 import { setDiffuse } from './ground';
-import { patchSkyOcclusionNode, onLightingModel, follow } from './skyOcclusion';
+import { patchSkyOcclusionNode, onLightingModel, ownSkyPatch } from './skyOcclusion';
+import type { SkyVisPatch } from '../skyOcclusion';
+import { sharedGraph as shareGraph, type Values } from './sharedGraph';
 import {
   h_hash12, h_noise2, h_noise3, h_fbm2, h_fbm3, h_voronoi2, h_voronoi3, h_beardCoverage, h_scalpCoverage, h_brow, h_bumpNormal,
 } from './peopleNoise';
 
-/** A node for one of the materials' `{ value }` uniforms (objects by reference, numbers followed). */
-function U(u: { value: unknown }) {
-  return typeof u.value === 'number' ? follow(u as { value: number }) : uniform(u.value);
+/** People of a kind share one shader (see sharedGraph); each gets its own sky value. */
+function sharedGraph<M extends THREE.NodeMaterial>(key: string, values: Values, params: Record<string, unknown>, build: (P: (name: string) => unknown) => M): { material: M; sky: SkyVisPatch } {
+  const { material, graph } = shareGraph(key, values, params, build);
+  return { material, sky: ownSkyPatch(material, graph) };
 }
 
 /** `totalEmissiveRadiance += x` (on top of the material's emissive colour). */
@@ -60,6 +63,13 @@ const h_seg = Fn(([p, a, b]) => {
 }, { p: 'vec2', a: 'vec2', b: 'vec2', return: 'float' });
 
 export function createSkinNodeMaterial(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUnits: number; lod: number }, u: SkinUniforms): SkinMaterialHandle {
+  const key = `skin ${opts.expr && opts.exprTex ? opts.exprTex.uuid : '-'} ${Math.max(1, opts.exprUnits)}`;
+  const { material, sky } = sharedGraph(key, u, {}, (P) => skinGraph(opts, P));
+  u.sheenTarget = material.sheenColor;
+  return { material, uniforms: u, sky } as unknown as SkinMaterialHandle;
+}
+
+function skinGraph(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUnits: number }, P: (name: string) => unknown) {
   const material = new THREE.MeshPhysicalNodeMaterial({
     roughness: 0.5,
     metalness: 0,
@@ -69,16 +79,15 @@ export function createSkinNodeMaterial(opts: { expr: boolean; exprTex: THREE.Tex
     sheenRoughness: 0.55,
     sheenColor: new THREE.Color(0.32, 0.26, 0.24),
   });
-  u.sheenTarget = material.sheenColor;
-  const uTone = U(u.uTone), uAccent = U(u.uAccent), uHair = U(u.uHair), uPattern = U(u.uPattern), uLook = U(u.uLook);
-  const uBrow = U(u.uBrow), uBeard = U(u.uBeard), uMarks = U(u.uMarks);
+  const uTone = P('uTone'), uAccent = P('uAccent'), uHair = P('uHair'), uPattern = P('uPattern'), uLook = P('uLook');
+  const uBrow = P('uBrow'), uBeard = P('uBeard'), uMarks = P('uMarks');
 
   // Vertex: facial expressions (expression-unit deltas from the shared texture).
   const units = Math.max(1, opts.exprUnits);
   if (opts.expr && opts.exprTex) {
     const exprTex = opts.exprTex;
-    const uExprW = uniformArray(u.uExprW.value, 'float').setName('uExprW');
-    const uFaceScale = U(u.uFaceScale);
+    const uExprW = P('uExprW');
+    const uFaceScale = P('uFaceScale');
     const aExpr = attribute('aExpr', 'float');
     displaceBeforeSkinning(material, () => Fn(() => {
       const ed = vec3(0.0).toVar();
@@ -341,8 +350,8 @@ export function createSkinNodeMaterial(opts: { expr: boolean; exprTex: THREE.Tex
     };
   });
   // Sky occlusion wraps the hook above.
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, uniforms: u, sky } as unknown as SkinMaterialHandle;
+  patchSkyOcclusionNode(material, 'uniform');
+  return material;
 }
 
 // ------------------------------------------------------------------ garments
@@ -426,17 +435,18 @@ export interface GarmentNodeUniforms {
 
 export function createGarmentNodeMaterial(m: ShellMaterial, u: GarmentNodeUniforms): GarmentHandle {
   const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
-  const material = new THREE.MeshPhysicalNodeMaterial({
+  return sharedGraph('garment', u, {
     roughness: m.roughness,
-    metalness: 0,
     sheen: m.sheen,
-    sheenRoughness: 0.6,
     sheenColor: lin(m.color).multiplyScalar(0.6),
     emissive: lin(m.glowColor),
     emissiveIntensity: m.glow * 0.6,
-    side: THREE.FrontSide,
-  });
-  const gColor = U(u.gColor), gColor2 = U(u.gColor2), gTrim = U(u.gTrim), gParams = U(u.gParams), gGlow = U(u.gGlow), gMetal = U(u.gMetal);
+  }, garmentGraph) as unknown as GarmentHandle;
+}
+
+function garmentGraph(P: (name: string) => unknown) {
+  const material = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, sheenRoughness: 0.6, side: THREE.FrontSide });
+  const gColor = P('gColor'), gColor2 = P('gColor2'), gTrim = P('gTrim'), gParams = P('gParams'), gGlow = P('gGlow'), gMetal = P('gMetal');
   const vGEdge = attribute('aEdge', 'float');
 
   const garmentEval = Fn(() => {
@@ -472,26 +482,29 @@ export function createGarmentNodeMaterial(m: ShellMaterial, u: GarmentNodeUnifor
   material.metalnessNode = select(S.get('m').greaterThan(0.5), gMetal, gMetal.mul(0.25));
   material.normalNode = h_bumpNormal(positionView, normalView, S.get('h'), faceDirection);
   material.emissiveNode = addEmissive(S.get('e'));
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, sky } as unknown as GarmentHandle;
+  patchSkyOcclusionNode(material, 'uniform');
+  return material;
 }
 
 // ------------------------------------------------------------------ fur shells
 
 export function createShellNodeMaterial(spec: ShellSpec, layer: number, color: THREE.Color): ShellLayerHandle {
   const t = (layer + 1) / spec.layers;
-  const material = new THREE.MeshPhysicalNodeMaterial({
-    roughness: 0.62, metalness: 0, specularIntensity: 0.25, envMapIntensity: 0.15,
-    sheen: 0.35, sheenRoughness: 0.4, sheenColor: color.clone().multiplyScalar(0.8),
-    transparent: true, depthWrite: false,
-  });
   const uniforms = {
     hsColor: { value: color.clone() },
     hsParams: { value: new THREE.Vector4(t, spec.density, spec.kind === 'beard' ? 1 : 0, spec.beardStyle) },
     hsLimits: { value: new THREE.Vector4(spec.recede, spec.maxAbsX ?? 99, spec.minY ?? -99, 0) },
     hsOffset: { value: spec.length * t },
   };
-  const hsColor = U(uniforms.hsColor), hsParams = U(uniforms.hsParams), hsLimits = U(uniforms.hsLimits), hsOffset = U(uniforms.hsOffset);
+  return sharedGraph('shell', uniforms, { sheenColor: color.clone().multiplyScalar(0.8) }, shellGraph) as unknown as ShellLayerHandle;
+}
+
+function shellGraph(P: (name: string) => unknown) {
+  const material = new THREE.MeshPhysicalNodeMaterial({
+    roughness: 0.62, metalness: 0, specularIntensity: 0.25, envMapIntensity: 0.15,
+    sheen: 0.35, sheenRoughness: 0.4, transparent: true, depthWrite: false,
+  });
+  const hsColor = P('hsColor'), hsParams = P('hsParams'), hsLimits = P('hsLimits'), hsOffset = P('hsOffset');
   // Strands lean downward/backward with height (combed), lifting off the surface.
   displaceBeforeSkinning(material, () => normalGeometry.mul(hsOffset).add(vec3(0.0, -1.0, 0.6).mul(hsOffset).mul(0.35)));
   const vHsFace = attribute('aFace', 'vec3');
@@ -514,8 +527,8 @@ export function createShellNodeMaterial(spec: ShellSpec, layer: number, color: T
       diffuseColor.assign(vec4(hsColor.mul(mix(0.45, 1.05, lay)).mul(add(0.82, mul(0.36, n))), diffuseColor.a.mul(alpha)));
     }
   };
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, sky } as unknown as ShellLayerHandle;
+  patchSkyOcclusionNode(material, 'uniform');
+  return material;
 }
 
 // ------------------------------------------------------------------ eyes
@@ -523,13 +536,17 @@ export function createShellNodeMaterial(spec: ShellSpec, layer: number, color: T
 const EyeSurf = struct({ albedo: 'vec3', emit: 'vec3', rough: 'float' }, 'EyeSurf');
 
 export function createEyeNodeMaterial(): PatchedMaterial<EyeUniforms> {
-  const material = new THREE.MeshPhysicalNodeMaterial({ roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.03, ior: 1.376, specularIntensity: 0.6 });
   const uniforms: EyeUniforms = {
     uIris: { value: new THREE.Color(0.2, 0.12, 0.05) },
     uPupil: { value: new THREE.Vector4(0, 0.5, 0, 0.3) },
     uScleraTint: { value: new THREE.Color(1, 1, 1) },
   };
-  const uIris = U(uniforms.uIris), uPupil = U(uniforms.uPupil), uScleraTint = U(uniforms.uScleraTint);
+  return { ...sharedGraph('eye', uniforms, {}, eyeGraph), uniforms } as unknown as PatchedMaterial<EyeUniforms>;
+}
+
+function eyeGraph(P: (name: string) => unknown) {
+  const material = new THREE.MeshPhysicalNodeMaterial({ roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.03, ior: 1.376, specularIntensity: 0.6 });
+  const uIris = P('uIris'), uPupil = P('uPupil'), uScleraTint = P('uScleraTint');
   const eyeEval = Fn(() => {
     const p = normalize(positionGeometry).toVar();
     // Forward is −Z. Parallax: the iris sits behind the cornea, shift by view direction.
@@ -568,8 +585,8 @@ export function createEyeNodeMaterial(): PatchedMaterial<EyeUniforms> {
   setDiffuse(material, () => S.get('albedo'));
   material.roughnessNode = S.get('rough');
   material.emissiveNode = addEmissive(S.get('emit'));
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, uniforms, sky } as unknown as PatchedMaterial<EyeUniforms>;
+  patchSkyOcclusionNode(material, 'uniform');
+  return material;
 }
 
 // ------------------------------------------------------------------ hair cards
@@ -582,6 +599,15 @@ const HairSurf = struct({ col: 'vec3', hairT: 'vec3', shift: 'float' }, 'HairSur
  * skinMatrix.
  */
 export function createHairNodeMaterial(leaf: boolean): PatchedMaterial<HairUniforms> {
+  const uniforms: HairUniforms = {
+    uColor: { value: new THREE.Color(0.1, 0.07, 0.05) },
+    uTip: { value: new THREE.Color(0.14, 0.1, 0.07) },
+    uSpec: { value: new THREE.Vector4(0.45, 0.6, 0, leaf ? 1 : 0) },
+  };
+  return { ...sharedGraph(`hair ${leaf}`, uniforms, {}, (P) => hairGraph(leaf, P)), uniforms } as unknown as PatchedMaterial<HairUniforms>;
+}
+
+function hairGraph(leaf: boolean, P: (name: string) => unknown) {
   const tex = leaf ? leafTexture() : strandTexture();
   // (No alphaMap: three r186 node materials read an alphaMap's red channel; the strand coverage is
   // in green, as three's WebGL alphaMap reads it. The coverage goes in through opacityNode, and
@@ -595,12 +621,7 @@ export function createHairNodeMaterial(leaf: boolean): PatchedMaterial<HairUnifo
     sheen: leaf ? 0.2 : 0,
     envMapIntensity: leaf ? 0.5 : 0.15,
   });
-  const uniforms: HairUniforms = {
-    uColor: { value: new THREE.Color(0.1, 0.07, 0.05) },
-    uTip: { value: new THREE.Color(0.14, 0.1, 0.07) },
-    uSpec: { value: new THREE.Vector4(0.45, 0.6, 0, leaf ? 1 : 0) },
-  };
-  const uColor = U(uniforms.uColor), uTip = U(uniforms.uTip), uSpec = U(uniforms.uSpec);
+  const uColor = P('uColor'), uTip = P('uTip'), uSpec = P('uSpec');
   const vHairAux = attribute('hairAux', 'vec2');
   const vUv = uv();
   // Mip-aware alpha boost: thin strands average out in lower mips and would
@@ -647,20 +668,24 @@ export function createHairNodeMaterial(leaf: boolean): PatchedMaterial<HairUnifo
       };
     });
   }
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, uniforms, sky } as unknown as PatchedMaterial<HairUniforms>;
+  patchSkyOcclusionNode(material, 'uniform');
+  return material;
 }
 
 // ------------------------------------------------------------------ horns / tusks / fins
 
 export function createHornNodeMaterial(): PatchedMaterial<HornUniforms> {
-  const material = new THREE.MeshPhysicalNodeMaterial({ roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.4 });
   const uniforms: HornUniforms = {
     uBase: { value: new THREE.Color(0.3, 0.26, 0.2) },
     uTipC: { value: new THREE.Color(0.85, 0.8, 0.7) },
     uRidge: { value: 1 },
   };
-  const uBase = U(uniforms.uBase), uTipC = U(uniforms.uTipC), uRidge = U(uniforms.uRidge);
+  return { ...sharedGraph('horn', uniforms, {}, hornGraph), uniforms } as unknown as PatchedMaterial<HornUniforms>;
+}
+
+function hornGraph(P: (name: string) => unknown) {
+  const material = new THREE.MeshPhysicalNodeMaterial({ roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.4 });
+  const uBase = P('uBase'), uTipC = P('uTipC'), uRidge = P('uRidge');
   const vHornUv = uv();
   setDiffuse(material, () => {
     const t = vHornUv.y;
@@ -670,18 +695,27 @@ export function createHornNodeMaterial(): PatchedMaterial<HornUniforms> {
   });
   const hgt = sin(vHornUv.y.mul(70.0).mul(uRidge)).mul(0.00025).mul(uRidge);
   material.normalNode = h_bumpNormal(positionView, normalView, hgt, faceDirection);
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, uniforms, sky } as unknown as PatchedMaterial<HornUniforms>;
+  patchSkyOcclusionNode(material, 'uniform');
+  return material;
 }
 
 export function simpleNodeMaterial(color: THREE.ColorRepresentation, opts: Record<string, unknown> = {}): PatchedMaterial<Record<string, never>> {
-  const material = new THREE.MeshPhysicalNodeMaterial({ color, ...opts });
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, uniforms: {}, sky } as unknown as PatchedMaterial<Record<string, never>>;
+  // (A fresh graph has three's defaults; the clone gets exactly `color` and `opts` on top.)
+  const graph = () => {
+    const material = new THREE.MeshPhysicalNodeMaterial();
+    patchSkyOcclusionNode(material, 'uniform');
+    return material;
+  };
+  return { ...sharedGraph('simple', {}, { color, ...opts }, graph), uniforms: {} } as unknown as PatchedMaterial<Record<string, never>>;
 }
 
 /** Eyelash cards: strand texture along the lid. */
 export function createLashNodeMaterial(): PatchedMaterial<{ uColor: { value: THREE.Color } }> {
+  const { material, sky } = sharedGraph('lash', {}, {}, lashGraph);
+  return { material, uniforms: { uColor: { value: material.color } }, sky } as unknown as PatchedMaterial<{ uColor: { value: THREE.Color } }>;
+}
+
+function lashGraph() {
   const tex = strandTexture();
   // (Strand coverage from the green channel through opacityNode, see createHairNodeMaterial.)
   const material = new THREE.MeshStandardNodeMaterial({ color: 0x0a0806, roughness: 0.6, side: THREE.DoubleSide, alphaTest: 0.55, envMapIntensity: 0 });
@@ -690,6 +724,6 @@ export function createLashNodeMaterial(): PatchedMaterial<{ uColor: { value: THR
   const a = materialOpacity.mul(texture(tex, vLashUv).g);
   material.opacityNode = select(vLashUv.x.lessThan(0.0), a.mul(0.55).mul(sub(1.0, smoothstep(0.5, 0.9, vLashUv.y))), a);
   material.maskShadowNode = texture(tex, vLashUv).g.greaterThanEqual(material.alphaTest);
-  const sky = patchSkyOcclusionNode(material, 'uniform');
-  return { material, uniforms: { uColor: { value: material.color } }, sky } as unknown as PatchedMaterial<{ uColor: { value: THREE.Color } }>;
+  patchSkyOcclusionNode(material, 'uniform');
+  return material;
 }

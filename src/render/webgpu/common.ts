@@ -5,9 +5,10 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, int, ivec2, vec2, vec3, fract, sin, dot, floor, mix, mul, sub, dFdx, dFdy, cross, max, inverseSqrt, select, sqrt,
-  normalize, uniform, attribute, textureLoad, textureSize, varying, Loop, texture,
+  normalize, uniform, attribute, textureLoad, textureSize, varying, Loop,
 } from 'three/tsl';
 import { G } from '../materials/globals';
+import { ownValues } from './sharedGraph';
 
 export const h11 = Fn(([n]) => fract(sin(n.mul(12.9898).add(4.1414)).mul(43758.5453)), { n: 'float', return: 'float' });
 export const h21 = Fn(([p]) => fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453)), { p: 'vec2', return: 'float' });
@@ -77,13 +78,24 @@ export const GN = {
  * Destroyed elements (GLSL_ELEM_VERTEX_*): the element's state from the state texture.
  * Returns `{ alive, open }` nodes for the vertex stage (`alive` < 0.5: collapse the vertex) and
  * `open` as a varying for the fragment stage.
+ *
+ * For a graph shared between materials (see sharedGraph): the texture and width are the drawn
+ * material's own `elemTex` / `elemW` values (`init` only stands in until the first draw). The width uniform's per-object update also
+ * points the texture node at the material's texture (a TextureNode's own update type is reset when
+ * it is built, so it cannot carry the update itself).
  */
-export function elemState(elemTex: THREE.Texture, elemW: number) {
-  const tex = texture(elemTex);
-  const W = int(elemW);
+export function elemState(init: THREE.Texture) {
+  let load;
+  const W = uniform(1).onObjectUpdate(({ material }) => {
+    const own = ownValues(material);
+    if (!own) return undefined;
+    load.value = own.elemTex.value;
+    return own.elemW.value;
+  });
   const e = int(attribute('aElem', 'float').add(0.5));
-  const c = ivec2(e.mod(W), e.div(W));
-  const size = textureSize(tex, 0);
-  const es = select(c.y.greaterThanEqual(size.y), vec2(1.0), textureLoad(elemTex, c).rg);
+  const w = int(W);
+  const c = ivec2(e.mod(w), e.div(w));
+  load = textureLoad(init, c); // one node for load and size (one binding)
+  const es = select(c.y.greaterThanEqual(textureSize(load, 0).y), vec2(1.0), load.rg);
   return { alive: es.x, open: varying(sub(1.0, es.y), 'vOpen') };
 }

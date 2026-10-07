@@ -36,6 +36,15 @@ export function follow(u: { value: number }) {
   return uniform(u.value).onObjectUpdate(() => u.value);
 }
 
+const SKY = Symbol('skyVis');
+
+/** A clone sharing a 'uniform'-mode material's graph gets its own sky value through this. */
+export function ownSkyPatch(clone, source): SkyVisPatch {
+  const patch: SkyVisPatch = { uniform: { value: source[SKY]?.uniform?.value ?? 1 } };
+  clone[SKY] = patch;
+  return patch;
+}
+
 /**
  * Node-material version of `patchSkyOcclusion`. Modes as in the GLSL version; for 'varying' the
  * material provides the node as `material.skyVisNode` (else the varying `vSkyVis` is read).
@@ -45,7 +54,9 @@ export function patchSkyOcclusionNode(material, mode: SkyVisMode, init = 1): Sky
   let vis;
   if (mode === 'uniform') {
     patch.uniform = { value: init };
-    vis = follow(patch.uniform);
+    material[SKY] = patch;
+    // The drawn material's own value, so clones sharing this graph keep theirs (`ownSkyPatch`).
+    vis = uniform(init).onObjectUpdate(({ material: m }) => (m?.[SKY] ?? patch).uniform.value);
   } else if (mode === 'attribute') {
     vis = attribute('skyVis', 'float');
   } else {

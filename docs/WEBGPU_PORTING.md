@@ -96,6 +96,17 @@ where they fit (shareInstancedShaders in `webgpu/index.ts`); a material whose no
 matrix again declares how many attribute slots that takes in `userData.instanceReads` (default 4),
 and reads only what it needs (`instanceTranslationOf` is one slot).
 
+Apart from the pipeline, every material with its own node instances gets its own node build (the
+node cache key is made of node ids), which is a stall of its own whenever a new one first draws.
+Materials that differ only in values therefore share one graph (`webgpu/sharedGraph.ts`): the graph
+is built once per kind, every caller gets a clone with the same nodes, and the uniforms read the
+drawn material's own values in `onObjectUpdate`. People (skin, garments, fur shells, eyes, hair,
+horns, lashes, simple parts) and the destroyed-element facades and glass work this way. Rules:
+material properties that vary go in `params` (set on the clone), never in the graph; own setup
+hooks are copied to the clone; a texture that varies per material is set from another uniform's
+`onObjectUpdate` (`elemState` in `webgpu/common.ts`), because a TextureNode resets its own update
+type when it is built.
+
 ## Dynamic attributes
 
 WebGPU uploads an attribute with `DynamicDrawUsage` again on every frame, whole; WebGL takes the

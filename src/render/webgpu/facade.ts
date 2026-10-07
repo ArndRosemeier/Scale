@@ -16,6 +16,7 @@ import {
 import type { MaterialArrays } from '../TextureLibrary';
 import { aliveTexture } from '../materials/globals';
 import { h11, h21, vnoise, perturbNormalUV, GN, elemState } from './common';
+import { sharedGraph } from './sharedGraph';
 
 const Surf = struct({
   albedo: 'vec3', rough: 'float', metal: 'float', tn: 'vec2', nStr: 'float', emis: 'vec3', ao: 'float', glass: 'float', door: 'float',
@@ -58,7 +59,18 @@ const interiorRoom = Fn(([local, room, id, vt, office]) => {
   return col;
 }, { local: 'vec2', room: 'vec2', id: 'float', vt: 'vec3', office: 'bool', return: 'vec3' });
 
+const arraysIds = new WeakMap<MaterialArrays, number>();
+let nextArraysId = 0;
+
+/** Facades share one graph per texture set and plastering; the destroyed-element state is per material. */
 export function createFacadeNodeMaterial(arrays: MaterialArrays, elemTex: THREE.Texture | null, elemW = 1, backPlaster = true): THREE.MeshStandardNodeMaterial {
+  if (!arraysIds.has(arrays)) arraysIds.set(arrays, nextArraysId++);
+  const id = arraysIds.get(arrays);
+  const values = { elemTex: { value: elemTex ?? aliveTexture() }, elemW: { value: elemTex ? elemW : 1 } };
+  return sharedGraph(`facade ${id} ${backPlaster}`, values, {}, () => facadeGraph(arrays, values.elemTex.value, backPlaster)).material;
+}
+
+function facadeGraph(arrays: MaterialArrays, elemInit: THREE.Texture, backPlaster: boolean): THREE.MeshStandardNodeMaterial {
   const mat = new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 1, metalness: 0, side: THREE.DoubleSide, shadowSide: THREE.DoubleSide });
   const tiles = arrays.tileMeters.slice(0, 24).concat(new Array(Math.max(0, 24 - arrays.tileMeters.length)).fill(2));
   const uTile = uniformArray(tiles, 'float').setName('uTile');
@@ -66,7 +78,7 @@ export function createFacadeNodeMaterial(arrays: MaterialArrays, elemTex: THREE.
   const { uNight, uDayLight, uLitFrac, uShopLit, uEatLit, uWet } = GN;
 
   // Vertex: destroyed elements collapse (all their vertices to one point).
-  const el = elemState(elemTex ?? aliveTexture(), elemTex ? elemW : 1);
+  const el = elemState(elemInit);
   mat.positionNode = select(el.alive.lessThan(0.5), vec3(0.0), positionLocal);
 
   const vMUv = attribute('uv', 'vec2');

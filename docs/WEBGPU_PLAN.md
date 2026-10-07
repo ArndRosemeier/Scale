@@ -152,3 +152,9 @@ Ordered by how much of the screen they cover (port first what is always visible)
   for growth, and WebGPU uploads dynamic attributes whole every frame (~8 MB). That also costs
   every other dynamic instance buffer (props, vehicles, crowd), likely part of the 42–47 fps at
   High. Dynamic usage now maps to static on WebGPU (uploads on `needsUpdate`, as on WebGL).
+- 2026-10-07 (late, 3): PC at 0099f34 (High): WebGPU 53–56 fps (WebGL 60), load 74.5 s vs
+  52.4 s, skyline and fog match. While playing, every new person (each with own materials) and
+  facade chunk built its shaders again (fps dips to ~45). People and destroyed-element facades /
+  glass now share one node graph per kind (`webgpu/sharedGraph.ts`): headless, 3 person node
+  builds instead of one set per person, 1 facade build; a test page renders three horn colours,
+  two simple parts and an alive vs. collapsed facade correctly from shared graphs.
