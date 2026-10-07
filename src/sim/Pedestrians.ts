@@ -715,6 +715,13 @@ export class Pedestrians {
       else if (ok(a.x + vx * dt, a.z)) { a.x += vx * dt; vz = 0; }
       else if (ok(a.x, a.z + vz * dt)) { a.z += vz * dt; vx = 0; }
       else { vx = vz = 0; }
+    } else if ((act || a.state === PState.Flee) && (vx !== 0 || vz !== 0) && this.wet(a.x + vx * dt, a.z + vz * dt) && !this.wet(a.x, a.z)) {
+      // Above ground, someone driven by an owner (soldiers, police, a gang) or running off in a
+      // panic heads straight for a point: never off the bank into a river, lake or the sea (slide
+      // along the shore, or stop). Route walkers stay on the sidewalks anyway.
+      if (!this.wet(a.x + vx * dt, a.z)) { a.x += vx * dt; vz = 0; }
+      else if (!this.wet(a.x, a.z + vz * dt)) { a.z += vz * dt; vx = 0; }
+      else { vx = vz = 0; }
     } else { a.x += vx * dt; a.z += vz * dt; }
     if (Math.hypot(vx, vz) > 0.1) {
       const h = Math.atan2(-vx, -vz);
@@ -740,6 +747,11 @@ export class Pedestrians {
     const bx = a.route[end * 3], bz = a.route[end * 3 + 1];
     const r = this.buildRoute(a.x, a.z, bx, bz);
     if (r) { a.route = r; a.wp = 1; } else a.alive = false;
+  }
+
+  /** Open water at (x, z): a river, lake or the sea, not under a bridge deck. */
+  wet(x: number, z: number): boolean {
+    return this.terrain.isWater(x, z, 0.5) && this.world.bridgeDeck(x, z) === -Infinity;
   }
 
   /** The player as an obstacle (only when not tiny). */

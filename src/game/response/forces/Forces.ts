@@ -243,6 +243,7 @@ export class Forces {
     const t0 = performance.now();
     this.time += dt;
     const S = this.mon, ev = this.inc?.ev;
+    if (S) this.lastAt = { x: S.x, z: S.z };
     const fighting = !!(S && ev && ev.active && S.targetable && !S.defeated) && !this.withdrawn;
     this.materialise(dt);
     const ops = this.ops(fighting);
@@ -251,6 +252,7 @@ export class Forces {
       if (S.chased && fighting) regroup(this.squads, this.view, RAMPAGE.regroupT, RAMPAGE.reach);
       stepForces(this.squads, this.view, S.route, dt, this.rng, () => {}, ops);
     } else this.leaveStep(dt, ops);
+    this.rearmStep(dt, fighting);
     this.soldierStep(dt);
     this.tankStep(dt);
     this.searchlights();
@@ -262,6 +264,7 @@ export class Forces {
     // Over: the incident closed and everyone gone → clear the field.
     if (!this.squads.length && (!this.inc || this.inc.closed)) this.finish();
     this.idle = !this.squads.length;
+    if (this.idle) { this.leaveTo.clear(); this.lastAt = null; }
     this.stats.msAvg = this.stats.msAvg * 0.95 + (performance.now() - t0) * 0.05;
   }
 
@@ -288,12 +291,32 @@ export class Forces {
       if (u.kind === 'jet' || u.kind === 'artillery') continue;
       if (u.mounted) continue;
       // Away from where it all happened, to the edge of the scene.
-      const cx = this.mon?.x ?? u.x - 1, cz = this.mon?.z ?? u.z;
-      const ax = u.x - cx, az = u.z - cz, l = Math.hypot(ax, az) || 1;
-      const tx = u.x + (ax / l) * 400, tz = u.z + (az / l) * 400;
+      const t = this.leaveTarget(u);
+      const ax = t.x - u.x, az = t.z - u.z, l = Math.hypot(ax, az) || 1;
       if (u.kind === 'heli') { u.x += (ax / l) * S.speed * dt; u.z += (az / l) * S.speed * dt; continue; }
-      const r = ops.move?.(u, tx, tz, dt);
-      if (r === undefined) { u.x += (ax / l) * (S.speed / ARMY.detour) * dt; u.z += (az / l) * (S.speed / ARMY.detour) * dt; }
+      const r = ops.move?.(u, t.x, t.z, dt);
+      if (r === undefined && l > 2) { const st = Math.min(l, (S.speed / ARMY.detour) * dt); u.x += (ax / l) * st; u.z += (az / l) * st; }
+    }
+  }
+
+  /** Helicopters away rearming: their squad, seconds until they are back. */
+  private rearm: { key: string; t: number }[] = [];
+
+  /** Rearmed helicopters come back to their squad (level 4 still on, the fight still going). */
+  private rearmStep(dt: number, fighting: boolean): void {
+    for (let i = this.rearm.length - 1; i >= 0; i--) {
+      const R = this.rearm[i];
+      R.t -= dt;
+      if (R.t > 0) continue;
+      this.rearm.splice(i, 1);
+      const q = this.squads.find((sq) => sq.key === R.key), S = this.mon;
+      if (!q || !S || !fighting || q.routed || (this.inc?.level ?? 0) < q.level) continue;
+      const a = this.rng.range(0, Math.PI * 2);
+      const u = makeUnit('heli', q.key, S.x + Math.cos(a) * 900, S.z + Math.sin(a) * 900, 1, 0);
+      u.y = ARMY.heliAlt; u.ang = a;
+      q.units.push(u);
+      this.stats.sent++;
+      this.note(`${q.key}: back, rearmed`);
     }
   }
 
@@ -306,6 +329,8 @@ export class Forces {
         const u = q.units[k];
         const gone = u.task === 'leave' && (u.taskT > ARMY.leaveT * 2 || ((u.taskT > ARMY.leaveT || Math.hypot(u.x - p.x, u.z - p.z) > ARMY.dematR + 300) && !this.visibleBody(u)));
         if (!gone) continue;
+        // (A helicopter that flew off with its pods empty comes back rearmed while the fight goes on.)
+        if (u.kind === 'heli' && u.ammo <= 0 && !q.routed && !this.withdrawn && this.inc && !this.inc.closed) this.rearm.push({ key: q.key, t: HELI_REARM });
         this.dematerialise(u, true);
         q.units.splice(k, 1);
       }
@@ -333,6 +358,7 @@ export class Forces {
     this.fx.clearEmplacements();
     this.placed.clear();
     this.lastZone.clear(); this.reslot.clear();
+    this.rearm.length = 0;
     this.air.clear();
     for (const b of this.boarding) b.a.alive = false;
     this.boarding.length = 0;
@@ -375,6 +401,8 @@ export class Forces {
       body.retryT = 2;
       if (u.kind === 'rifles') {
         if (u.mounted || soldiers + u.crew > ARMY.maxSoldiers) continue;
+        // (An abstract squad goes in straight lines — across a river, in the end: out on the bank.)
+        if (this.wet(u.x, u.z)) { const p = this.street(u.x, u.z, 120, 4); u.x = p.x; u.z = p.z; }
         body.soldiers = this.spawnSoldiers(u, u.x, u.z);
         soldiers += body.soldiers.length;
         if (body.soldiers.length) this.stats.materialised++;
@@ -442,6 +470,7 @@ export class Forces {
   // ================================================================== moving
 
   private move(u: ForceUnit, x: number, z: number, dt: number): boolean | undefined {
+    if (u.task === 'leave') { const t = this.leaveTarget(u); x = t.x; z = t.z; }
     const b = this.bodies.get(u.id);
     if (!b) return undefined;
     if (b.car) {
@@ -476,11 +505,30 @@ export class Forces {
     return undefined;
   }
 
-  /** Behind the sandbag wall at a slot: a line across the direction it faces. */
+  /** Behind the sandbag wall at a slot: a line across the direction it faces (bunched on the slot where the line would reach into water). */
   private coverSpot(x: number, z: number, fx: number, fz: number, i: number, n: number): { x: number; z: number } {
     const side = (i - (n - 1) / 2) * 0.75;
-    return { x: x - fz * side - fx * 0.2, z: z + fx * side - fz * 0.2 };
+    const p = { x: x - fz * side - fx * 0.2, z: z + fx * side - fz * 0.2 };
+    return this.wet(p.x, p.z) ? { x, z } : p;
   }
+
+  /**
+   * Where a unit that is leaving goes: away from where the battle was, a street point 400 m off —
+   * picked once (a target that moved on with it every frame led them straight off the bank into
+   * the river after the battle, and had vehicles re-planning their route all the time).
+   */
+  private leaveTarget(u: ForceUnit): { x: number; z: number } {
+    let t = this.leaveTo.get(u.id);
+    if (t) return t;
+    const c = this.mon ?? this.lastAt ?? { x: u.x - 1, z: u.z };
+    const ax = u.x - c.x, az = u.z - c.z, l = Math.hypot(ax, az) || 1;
+    t = u.kind === 'rifles' ? this.street(u.x + (ax / l) * 400, u.z + (az / l) * 400, 120, 4) : this.street(u.x + (ax / l) * 400, u.z + (az / l) * 400, 160);
+    this.leaveTo.set(u.id, t);
+    return t;
+  }
+  private leaveTo = new Map<number, { x: number; z: number }>();
+  /** Where the battle's foe was last (units leave away from it once it is gone). */
+  private lastAt: { x: number; z: number } | null = null;
 
   /**
    * A slot round a target that goes where it likes (a giant player): the street point nearest the
@@ -521,8 +569,23 @@ export class Forces {
     return snap(x, z);
   }
 
-  /** A street point near (x, z) (lane offset `off` m), or the point itself. */
+  /**
+   * A street point near (x, z) (lane offset `off` m), or the point itself — on dry ground: a spot
+   * in a river, a lake or the sea (a ring slot over the water, the far side of a line across a
+   * bank, a rally point on the shore) moves to the nearest dry street point round it.
+   */
   private street(x: number, z: number, r: number, off = 0): { x: number; z: number } {
+    const p = this.streetPt(x, z, r, off);
+    if (!this.wet(p.x, p.z)) return p;
+    for (const d of DRY_R) for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + d * 0.01;
+      const q = this.streetPt(x + Math.cos(a) * d, z + Math.sin(a) * d, Math.min(r, 60), off);
+      if (!this.wet(q.x, q.z)) return q;
+    }
+    return p;
+  }
+
+  private streetPt(x: number, z: number, r: number, off: number): { x: number; z: number } {
     const net = this.g.net;
     const ne = net.nearestEdge(x, z, r);
     if (!ne) return { x, z };
@@ -530,6 +593,11 @@ export class Forces {
     if (e.cls > 3) return { x, z };
     net.pointAt(e, ne.s, off * (ne.side >= 0 ? 1 : -1) * Math.max(1, e.width / 2 - 1.5) / Math.max(1, off || 1), _o);
     return { x: _o.x, z: _o.z };
+  }
+
+  /** Open water at (x, z) (with a metre or two of bank), not under a bridge deck. */
+  private wet(x: number, z: number): boolean {
+    return this.g.terrain.isWater(x, z, 2) && this.g.world.bridgeDeck(x, z) === -Infinity;
   }
 
   // ================================================================== soldiers and tanks, every frame
@@ -1044,7 +1112,15 @@ export class Forces {
   rally(x: number, z: number, r = 350): number {
     if (this.withdrawn) return 0;
     let n = 0;
-    for (const q of this.squads) for (const u of q.units) if (u.task !== 'dead' && u.task !== 'leave' && u.kind !== 'heli' && u.kind !== 'jet' && u.kind !== 'artillery' && Math.hypot(u.x - x, u.z - z) < r) { u.tx = x + this.rng.range(-20, 20); u.tz = z + this.rng.range(-20, 20); u.task = 'move'; n++; }
+    for (const q of this.squads) for (const u of q.units) if (u.task !== 'dead' && u.task !== 'leave' && u.kind !== 'heli' && u.kind !== 'jet' && u.kind !== 'artillery' && Math.hypot(u.x - x, u.z - z) < r) {
+      // (Round the player, on the street: never the river bank they stand on, or the water they hover over.)
+      // (Each unit its own spot round them, the same every call: re-gathered every few seconds, they
+      // only move when the player has, instead of milling about and re-planning their way each time.)
+      const a = (hash32(u.id * 7919 + 17) / 2 ** 32) * Math.PI * 2, rr = u.kind === 'rifles' ? 12 + (u.id % 3) * 5 : 24 + (u.id % 3) * 8;
+      const p = u.kind === 'rifles' ? this.street(x + Math.cos(a) * rr, z + Math.sin(a) * rr, 60, 4) : this.street(x + Math.cos(a) * rr, z + Math.sin(a) * rr, 120);
+      if (u.task === 'move' || u.task === 'hold') if (Math.hypot(p.x - u.tx, p.z - u.tz) < 10) { n++; continue; }
+      u.tx = p.x; u.tz = p.z; u.task = 'move'; u.taskT = 0; n++;
+    }
     return n;
   }
 
@@ -1138,6 +1214,10 @@ const SLOT_R = [1, 0.8, 0.62, 0.48, 0.36];
 /** Points tried on a zone of a giant player (side, up — in zone radii): the middle, its edges, its top. */
 const SEE: [number, number][] = [[0, 0], [0, 0.8], [-0.8, 0], [0.8, 0], [0, -0.6]];
 const SLOT_A = [0, 0.18, -0.18, 0.4, -0.4];
+/** Rings (m) searched round a spot in the water for a dry street point. */
+const DRY_R = [15, 30, 50, 80, 120, 170];
+/** Seconds a helicopter is away rearming. */
+const HELI_REARM = 90;
 const VEHICLE_KIND_SET = new Set<string>(['army_truck', 'apc', 'tank']);
 const NO_KINDS = {};
 const DUST = new THREE.Color(0.55, 0.52, 0.47);
