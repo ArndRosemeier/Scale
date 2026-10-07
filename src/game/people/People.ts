@@ -12,6 +12,11 @@
  * back to); people you already know also remember being knocked down by you. At most PEOPLE.cap of
  * them (memory.ts decides who is forgotten).
  *
+ * The social web (phase 4, social.ts): word of what you did gets round to the people close to
+ * someone (their opinion moves and they say so), pressing needs colour mood and small talk, and
+ * people who like you may ask a favour: look in on a friend or relative (their dot goes on the
+ * map) or clear the gang off their street. The one who asked remembers it; nothing else does.
+ *
  * Behaviour from personality (phase 2, behaviour.ts and Manners.ts): pace, how long a scare or a
  * spectacle holds someone, people who dislike you keeping away and refusing to talk, kind people
  * helping others up and pointing after thieves, people who like you waving, and what everyone
@@ -31,7 +36,8 @@ import { PEOPLE, onTheirWay, newKnown, opinionOf, applyDeed, addSaid, addNote, r
 import { TalkUi } from '../../ui/TalkUi';
 import { Manners } from './Manners';
 import { paceOf, refuses, waves, type Moment } from './behaviour';
-import { hashCombine } from '../../core/rng';
+import { hashCombine, hashToFloat, deriveSeed } from '../../core/rng';
+import { SOCIAL, hearsay, needsOf, needsMood, pressing, visitTarget, asksFavour, type Told, type Favour } from './social';
 
 /** Roles and actor states of people other systems drive who will still talk to you. */
 const TALK_ROLES = new Set<string>(['bystander', 'shopkeeper', 'owner', 'police', 'medic', 'worker', 'soldier', 'victim']);
@@ -72,6 +78,9 @@ export interface Person {
 
 export interface Destination { label: string; x: number; z: number }
 
+/** Someone whose whereabouts People keeps up with (a known person, or one you were asked to look in on). */
+interface Spot { cit: Citizen; x: number; z: number }
+
 interface Session {
   a: PedAgent;
   p: Person;
@@ -97,6 +106,10 @@ interface Session {
   n: number;
   /** Consequences.time when the talk began (new harm close by ends it). */
   since: number;
+  /** They are the one somebody asked you to look in on: the asker's first name. */
+  asker: string | null;
+  /** Asked the favour topic this conversation (the answer stays the same). */
+  askedFavour: boolean;
 }
 
 const STORE = (g: Game) => `scale.people.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
@@ -122,6 +135,8 @@ export class People {
   readonly manners: Manners;
   /** Saves already counted (per person, game seconds): stopping the crime and handing the bag back are one rescue. */
   private savedAt = new Map<number, number>();
+  /** Someone you were asked to look in on, waiting at their door (People keeps them there till you come or go). */
+  private waiting: { a: PedAgent; act: Actor } | null = null;
 
   constructor(private g: Game) {
     this.city = cityName(g.settings.seed);
@@ -141,6 +156,11 @@ export class People {
     if (g.crime) {
       g.crime.onStopped = (c) => {
         for (const v of [...c.victims, ...c.extras]) if (v.alive && (v.actor?.role === 'victim' || v.actor?.role === 'shopkeeper' || v.actor?.role === 'owner')) this.saved(v);
+        // A street you were asked to clear: any crime stopped near where they asked.
+        for (const k of this.known) {
+          const f = k.favour;
+          if (f?.kind === 'streets' && !f.done && !f.lost && Math.hypot(c.x - (f.x ?? 0), c.z - (f.z ?? 0)) < SOCIAL.streetsR) this.favourDone(k);
+        }
       };
       g.crime.onReturned = (who) => { if (who.alive && !who.actor?.hostile) this.saved(who); };
     }
@@ -172,6 +192,20 @@ export class People {
 
   find(citId: number): Known | null {
     return this.known.find((k) => k.cit.id === citId) ?? null;
+  }
+
+  /**
+   * How someone feels about the hero now: what you did to them, what they heard from the people
+   * close to them, your reputation.
+   */
+  opinion(cit: Citizen): number {
+    const p = this.person(cit), k = this.find(cit.id);
+    return opinionOf(k, this.g.crime?.rep.value ?? 0, p.traits.a, this.heard(cit).op);
+  }
+
+  /** What they heard about the hero from people close to them (social.ts hearsay). */
+  heard(cit: Citizen): { told: Told | null; op: number } {
+    return hearsay(cit, this.known, { helped: PEOPLE.helped, saved: PEOPLE.saved, hurt: PEOPLE.hurt });
   }
 
   /** The target frame's name and sub line for a person ("Mara Okonkwo", "shop assistant · knows you"). */
@@ -262,6 +296,7 @@ export class People {
     if (raw === null || raw === undefined) return;
     this.end();
     this.manners.clear();
+    if (this.waiting) { if (this.waiting.a.actor === this.waiting.act) this.waiting.a.alive = false; this.waiting = null; }
     this.known.length = 0;
     this.known.push(...restorePeople(raw));
     this.markKey = '#stale';
@@ -286,6 +321,7 @@ export class People {
 
   private willTalk(a: PedAgent): boolean {
     if (!a.alive || a.evac || a.ragdoll) return false;
+    if (this.waiting?.a === a) return true;
     if (a.actor) return a.actor.owner !== TALK_OWNER && this.friendlyActor(a.actor) && a.state !== PState.Down;
     return a.state === PState.Walk || a.state === PState.Wait || a.state === PState.Idle || a.state === PState.Gawk || a.state === PState.Film || a.state === PState.Sit;
   }
@@ -340,9 +376,11 @@ export class People {
       this.g.barks?.say(a, pick(p.temper === 'grumpy' ? ['Not now!', 'Are you serious? Now?'] : ['Not now!', 'Sorry, I have to go!', 'Not now, it\'s not safe here!']), 8);
       return;
     }
+    // The one you were asked to look in on, waiting at their door: no longer held there.
+    if (this.waiting?.a === a) { if (a.actor === this.waiting.act) release(a); this.waiting = null; }
     const before = this.find(a.cit.id);
     // Someone who can't stand you won't talk to you (only someone another system drives has to).
-    if (!a.actor && refuses(opinionOf(before, this.g.crime?.rep.value ?? 0, p.traits.a))) {
+    if (!a.actor && refuses(this.opinion(a.cit))) {
       this.g.barks?.say(a, this.manners.line(a, 'refuse') ?? 'No.', 8, 'angry');
       if (a.state !== PState.Sit) { a.state = PState.Walk; a.stateT = 0; a.heading = Math.atan2(P.pos.x - a.x, P.pos.z - a.z); }
       return;
@@ -362,7 +400,13 @@ export class People {
       a.actor = act;
     }
     if (!foreign && a.state !== PState.Sit) a.heading = Math.atan2(-(P.pos.x - a.x), -(P.pos.z - a.z));
-    this.session = { a, p, k, act, foreign, job, years, busy: 0, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time };
+    // Someone you were asked to look in on: the favour is done (and they know who sent you).
+    let asker: string | null = null;
+    for (const o of this.known) {
+      const fv = o.favour;
+      if (o !== k && fv?.kind === 'visit' && !fv.done && !fv.lost && fv.who?.id === a.cit.id) { asker = o.name.split(' ')[0]; this.favourDone(o); }
+    }
+    this.session = { a, p, k, act, foreign, job, years, busy: 0, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time, asker, askedFavour: false };
     // Opinion and mood before the menu: the header shows them.
     const f = this.facts(this.session);
     if (act) act.mood = actorMood(f);
@@ -404,11 +448,16 @@ export class People {
     const s = this.session!;
     s.idle = 0;
     s.n++;
-    const facts = { ...this.facts(s), ...extra };
+    // (Asked what they need: someone who likes you may ask a favour now, once per conversation.)
+    const asks = topic === 'favour' && !s.askedFavour && (s.askedFavour = true) && this.maybeAsk(s);
+    const facts = { ...this.facts(s), ...extra, ...(asks && s.k.favour ? { favour: s.k.favour.kind } : {}) };
     const seed = hashCombine(s.p.cit.seed, Math.floor(this.g.sky.hoursAbs * 4) * 131 + s.n);
     const req = { topic, facts, seed, used: new Set(s.k.said), memory: s.k.notes.map((n) => n.text) };
     const rule: Picked = ruleAnswer(req);
     addSaid(s.k, rule.id);
+    // A favour done (or forgotten) is talked about once, then it is over.
+    const fv = s.k.favour;
+    if (fv && (fv.done !== undefined || fv.lost) && (facts.favour === 'done' || facts.favour === 'lost') && /^(h4[5-7]|f2[12])#/.test(rule.id)) delete s.k.favour;
     if (topic !== 'hello' && topic !== 'bye' && topic !== 'way' && !s.k.notes.some((n) => n.text.endsWith(`asked about ${topic}`))) {
       addNote(s.k, this.g.sky.hoursAbs, `${gameTimeLabel(Math.floor(this.g.sky.hoursAbs / 24), this.g.sky.hoursAbs % 24)}: the hero asked about ${topic}`);
     }
@@ -435,10 +484,14 @@ export class People {
     const g = this.g, a = s.a, p = s.p, k = s.k;
     const now = g.sky.hoursAbs;
     const rep = g.crime?.rep.value ?? 0;
-    const opinion = opinionOf(k, rep, p.traits.a);
+    const heard = this.heard(p.cit);
+    const opinion = opinionOf(k, rep, p.traits.a, heard.op);
     const trouble = this.troubleAt(a.x, a.z);
     const weather = g.weather?.kind ?? 'fair';
-    const mood = moodOf(p.cit, p.traits, { day: Math.floor(now / 24), hour: g.sky.hour, weather, trouble, opinion });
+    const needs = needsOf(p.cit, p.traits, g.sky.hour, this.homeHours(p.cit, now));
+    const mood = Math.max(-1, Math.min(1, moodOf(p.cit, p.traits, { day: Math.floor(now / 24), hour: g.sky.hour, weather, trouble, opinion }) + needsMood(needs)));
+    const fv = k.favour;
+    const favour = !fv ? 'none' as const : fv.done !== undefined ? 'done' as const : fv.lost ? 'lost' as const : 'open' as const;
     const f = g.crime?.factionAt(a.x, a.z) ?? null;
     const boss = f ? g.crime.bosses.find((b) => b.faction === f.id) ?? null : null;
     const C = g.consequences;
@@ -450,6 +503,8 @@ export class People {
       threat: C.log.some((e) => e.cause === 'threat' && C.time - e.t < 900),
       street: this.streetAt(a.x, a.z), metStreet: k.deedStreet, city: this.city,
       group: f?.name ?? null, boss: boss?.name ?? null, giant: g.player.height > 2.4,
+      teller: heard.told?.name ?? null, bond: heard.told?.word, told: heard.told?.deed ?? null, need: s.foreign ? null : pressing(needs),
+      favour, who: fv?.whoName?.split(' ')[0], word: fv?.word, asker: s.asker,
       ...(g.city ? g.city.talkFacts(a.x, a.z, hashCombine(p.cit.seed, Math.floor(now))) : {}),
     };
   }
@@ -474,6 +529,100 @@ export class People {
       if (e.cause !== 'police' && Math.hypot(e.x - x, e.z - z) < 40) return true;
     }
     return false;
+  }
+
+  /** Hours they spent at home before going out (lonely if long; 0 while at home or out a while). */
+  private homeHours(c: Citizen, now: number): number {
+    const day = Math.floor(now / 24), plan = this.g.peds.pop.dayPlan(c, day);
+    let best = 0;
+    for (const st of plan.stays) {
+      if (st.place.kind !== 'home' || st.to > now || st.from < day * 24 + c.wake) continue;
+      best = Math.max(0, (st.to - st.from) - (now - st.to) * 2);
+    }
+    return Math.min(12, best);
+  }
+
+  // ------------------------------------------------------------------ favours
+
+  /** Asked "Can I do anything for you?": someone who likes you may ask a favour now. */
+  private maybeAsk(s: Session): boolean {
+    const k = s.k, g = this.g, now = g.sky.hoursAbs, day = Math.floor(now / 24);
+    if (s.foreign || k.favour) return false;
+    const u = hashToFloat(deriveSeed(k.cit.seed, 'favour', day));
+    if (!asksFavour(this.opinion(k.cit), Math.max(k.met, s.metBefore), false, u)) return false;
+    const group = g.crime?.factionAt(s.a.x, s.a.z) ?? null;
+    const f: Favour = { kind: group && u < SOCIAL.favourChance * 0.45 ? 'streets' : 'visit', asked: now, until: now + SOCIAL.favourHours };
+    if (f.kind === 'streets') { f.x = s.a.x; f.z = s.a.z; f.group = group?.name ?? null; }
+    else {
+      const t = visitTarget(k.cit, (seed) => g.peds.pop.synthetic(seed), day);
+      f.who = t.cit; f.word = t.word; f.whoName = nameOf(t.cit).full;
+      const at = this.planSpotOf(t.cit, now);
+      if (at) { f.wx = at.x; f.wz = at.z; g.map.setWaypoint({ x: at.x, z: at.z }); }
+    }
+    k.favour = f;
+    const d = gameTimeLabel(day, now % 24);
+    addNote(k, now, f.kind === 'visit' ? `${d}: asked the hero to look in on their ${f.word} ${f.whoName}` : `${d}: asked the hero to deal with the trouble on their street`);
+    this.markKey = '#stale';
+    this.persist();
+    return true;
+  }
+
+  private favourDone(k: Known): void {
+    const f = k.favour;
+    if (!f || f.done !== undefined || f.lost) return;
+    const now = this.g.sky.hoursAbs;
+    f.done = now;
+    k.favours++;
+    addNote(k, now, `${gameTimeLabel(Math.floor(now / 24), now % 24)}: the hero ${f.kind === 'visit' ? `looked in on their ${f.word} ${f.whoName}` : 'cleared the trouble on their street'}`);
+    this.g.powerHud?.toast(f.kind === 'visit' ? `You looked in on <b>${f.whoName}</b> for ${k.name}` : `You dealt with the trouble on <b>${k.name}</b>'s street`, 'info');
+    this.markKey = '#stale';
+    this.persist();
+  }
+
+  /** Open favours past their time are lost (they remember being let down). */
+  private favoursDue(now: number): void {
+    for (const k of this.known) {
+      const f = k.favour;
+      if (!f || f.done !== undefined || f.lost || now < f.until) continue;
+      f.lost = true;
+      k.letDown++;
+      addNote(k, now, `${gameTimeLabel(Math.floor(now / 24), now % 24)}: the hero never did what they asked`);
+      this.markKey = '#stale';
+    }
+  }
+
+  /** Where the one you were asked to look in on is now; near their door at home they wait outside for you. */
+  private visitSpot(k: Known, f: Favour, now: number, dt: number): { x: number; z: number; exact: boolean } | null {
+    if (!f.who) return null;
+    const rec = { cit: f.who, x: f.wx ?? k.x, z: f.wz ?? k.z };
+    const w = this.whereNow(rec, now, dt);
+    f.wx = rec.x; f.wz = rec.z;
+    this.bringBack(rec, now);
+    const P = this.g.player.pos, peds = this.g.peds;
+    // At home (or wherever they stay), indoors: they come out to the door as you get near.
+    if (!peds.agentOf(f.who.id) && !this.waiting && Math.hypot(rec.x - P.x, rec.z - P.z) < 45) {
+      const st = peds.pop.stateAt(f.who, now);
+      const door = st.stay ? peds.placeSpot(st.stay.place) : null;
+      if (door?.exact) {
+        const a = peds.spawnAt(f.who, door.x, door.z, Math.atan2(-(P.x - door.x), -(P.z - door.z)));
+        if (a) {
+          const act = makeActor('bystander', PEOPLE_OWNER, { title: this.person(f.who).full, face: { x: P.x, y: P.y + 1.6, z: P.z } });
+          a.actor = act;
+          this.waiting = { a, act };
+        }
+      }
+    }
+    return w;
+  }
+
+  /** The waiting one goes back in when you leave (or someone else takes them). */
+  private keepWaiting(): void {
+    const w = this.waiting;
+    if (!w) return;
+    const a = w.a, P = this.g.player.pos;
+    if (!a.alive || a.actor !== w.act || a.state === PState.Down) { if (a.actor === w.act) release(a); this.waiting = null; return; }
+    w.act.face = { x: P.x, y: P.y + this.g.player.height * 0.9, z: P.z };
+    if (Math.hypot(a.x - P.x, a.z - P.z) > 70) { a.alive = false; this.waiting = null; }
   }
 
   /** The named street nearest a point (arterials, as the map names them), within 120 m. */
@@ -521,6 +670,7 @@ export class People {
       else if (lost || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) > TALK.leave || s.idle > TALK.idle || !this.canTalk() || this.harmSince(a.x, a.z, s.since)) this.end();
     }
     this.greet();
+    this.keepWaiting();
     this.manners.update(dt);
     this.markT -= dt;
     if (this.markT <= 0) { this.markT = TALK.markEvery; this.markers(); }
@@ -536,7 +686,7 @@ export class People {
       if (Math.hypot(a.x - P.x, a.z - P.z) > TALK.greetR) continue;
       if (this.time - (this.greeted.get(k.cit.id) ?? -1e9) < TALK.greetEvery) continue;
       const p = this.person(a.cit);
-      const op = opinionOf(k, this.g.crime?.rep.value ?? 0, p.traits.a);
+      const op = this.opinion(k.cit);
       // (People who dislike you say nothing: they keep away, Manners.)
       if (op <= -30) continue;
       const line = k.deed === 'saved' ? pick(['It\'s you! My hero!', 'Hey! I still tell everyone how you saved me!'])
@@ -560,16 +710,25 @@ export class People {
     const dt = Math.min(10, this.time - this.driftT);
     this.driftT = this.time;
     const list: MapMarker[] = [];
+    this.favoursDue(now);
     for (const k of this.known) {
+      const f = k.favour;
+      if (f && f.done === undefined && !f.lost) {
+        if (f.kind === 'visit') {
+          const w = this.visitSpot(k, f, now, dt);
+          if (w) list.push({ x: w.x, z: w.z, color: '#ffd166', kind: 'faint', title: `${f.whoName}, ${k.name.split(' ')[0]}'s ${f.word} — ${k.name.split(' ')[0]} asked you to look in on them${w.exact ? '' : ' · somewhere around here'}` });
+        } else list.push({ x: f.x ?? k.x, z: f.z ?? k.z, color: '#ffd166', kind: 'faint', title: `${k.name} asked you to deal with ${f.group ?? 'the trouble'} around here (stop a crime nearby)` });
+      }
       const spot = this.whereNow(k, now, dt);
       if (!spot) continue;
       this.bringBack(k, now);
       const p = this.person(k.cit);
-      const op = opinionOf(k, rep, p.traits.a);
+      const op = opinionOf(k, rep, p.traits.a, this.heard(k.cit).op);
       const color = op >= 40 ? '#8ff0b4' : op <= -30 ? '#ffa894' : '#a9d6ff';
       const times = k.met === 1 ? 'met once' : `met ${k.met} times`;
       const at = spot.exact ? '' : ' · somewhere around here';
-      list.push({ x: spot.x, z: spot.z, color, kind: 'faint', title: `${p.full}, ${k.title ?? p.job.title} — ${times}, last on ${gameTimeLabel(Math.floor(k.last / 24), k.last % 24)} · ${opinionWord(op)}${at}` });
+      const asked = f && f.done === undefined && !f.lost ? ` · asked you a favour` : '';
+      list.push({ x: spot.x, z: spot.z, color, kind: 'faint', title: `${p.full}, ${k.title ?? p.job.title} — ${times}, last on ${gameTimeLabel(Math.floor(k.last / 24), k.last % 24)} · ${opinionWord(op)}${asked}${at}` });
     }
     const key = list.map((m) => `${m.x.toFixed(0)},${m.z.toFixed(0)},${m.color}`).join(';');
     if (key !== this.markKey) { this.markKey = key; g.map.setMarkers('people', list); }
@@ -579,7 +738,7 @@ export class People {
    * Where a known person is now: their live body near the player; else on their way (dt seconds of
    * it, at a plausible pace) from where they were last towards where their day plan has them.
    */
-  whereNow(k: Known, now: number, dt = 0): { x: number; z: number; exact: boolean } | null {
+  whereNow(k: Spot, now: number, dt = 0): { x: number; z: number; exact: boolean } | null {
     const a = this.g.peds.agentOf(k.cit.id);
     if (a && a.alive) { k.x = a.x; k.z = a.z; return { x: a.x, z: a.z, exact: true }; }
     const T = this.planSpot(k, now);
@@ -594,7 +753,7 @@ export class People {
    * Near you but out of range of their body (it went too far, or the schedule offered their walk
    * only once): put them back in the street at their dot, walking on to where their day is taking them.
    */
-  private bringBack(k: Known, now: number): void {
+  private bringBack(k: Spot, now: number): void {
     const peds = this.g.peds, P = this.g.player.pos;
     if (peds.agentOf(k.cit.id) || Math.hypot(k.x - P.x, k.z - P.z) > PEOPLE.backR) return;
     if ((this.backT.get(k.cit.id) ?? 0) > this.time) return;
@@ -609,9 +768,13 @@ export class People {
   }
 
   /** Where their day plan has them now (a place, or a point on the way between two). */
-  private planSpot(k: Known, now: number): { x: number; z: number; exact: boolean } | null {
+  private planSpot(k: Spot, now: number): { x: number; z: number; exact: boolean } | null {
+    return this.planSpotOf(k.cit, now);
+  }
+
+  private planSpotOf(c: Citizen, now: number): { x: number; z: number; exact: boolean } | null {
     const peds = this.g.peds;
-    const st = peds.pop.stateAt(k.cit, now);
+    const st = peds.pop.stateAt(c, now);
     if (st.stay) return peds.placeSpot(st.stay.place);
     if (st.trip) {
       const A = peds.placeSpot(st.trip.from), B = peds.placeSpot(st.trip.to);

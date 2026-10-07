@@ -10,6 +10,7 @@
  * Pure: no DOM, no three.js. Saved per city in the browser and in the save game.
  */
 import type { Citizen, PlaceRef } from '../../sim/Population';
+import { SOCIAL, type Favour } from './social';
 
 export const PEOPLE = {
   /** People remembered at most (the map's faint dots). */
@@ -73,21 +74,32 @@ export interface Known {
   /** Met last as something other than their own job (a busker, an officer …): what the map calls them. */
   title?: string;
   notes: { t: number; text: string }[];
+  /** Favours done for them, and ones you let them down on (phase 4). */
+  favours: number;
+  letDown: number;
+  /** The favour they asked of you (open, or done/lost and not yet talked about). */
+  favour?: Favour;
 }
 
 export function newKnown(cit: Citizen, name: string, now: number, x: number, z: number, street: string | null): Known {
-  return { cit, name, first: now, last: now, met: 1, talks: 0, helped: 0, saved: 0, hurt: 0, deed: null, deedStreet: null, x, z, street, said: [], notes: [] };
+  return { cit, name, first: now, last: now, met: 1, talks: 0, helped: 0, saved: 0, hurt: 0, deed: null, deedStreet: null, x, z, street, said: [], notes: [], favours: 0, letDown: 0 };
 }
 
-/** How they feel about the hero: what you did to them plus your reputation, weighted by how agreeable they are. */
-export function opinionOf(k: Pick<Known, 'talks' | 'helped' | 'saved' | 'hurt'> | null, rep: number, agree: number): number {
-  const own = k ? Math.min(PEOPLE.talkMax, k.talks * PEOPLE.talk) + k.helped * PEOPLE.helped + k.saved * PEOPLE.saved + k.hurt * PEOPLE.hurt : 0;
-  return Math.max(-100, Math.min(100, Math.round(own + rep * (PEOPLE.repBase + PEOPLE.repAgree * agree))));
+/**
+ * How they feel about the hero: what you did to them (and favours done or forgotten), what they
+ * heard about you from the people close to them (`heard`, social.ts hearsay), plus your
+ * reputation, weighted by how agreeable they are.
+ */
+export function opinionOf(k: (Pick<Known, 'talks' | 'helped' | 'saved' | 'hurt'> & { favours?: number; letDown?: number }) | null, rep: number, agree: number, heard = 0): number {
+  const own = k ? Math.min(PEOPLE.talkMax, k.talks * PEOPLE.talk) + k.helped * PEOPLE.helped + k.saved * PEOPLE.saved + k.hurt * PEOPLE.hurt
+    + (k.favours ?? 0) * SOCIAL.favourDone + (k.letDown ?? 0) * SOCIAL.favourLost : 0;
+  return Math.max(-100, Math.min(100, Math.round(own + heard + rep * (PEOPLE.repBase + PEOPLE.repAgree * agree))));
 }
 
 /** Higher: kept longer when the list is full. */
 export function keepScore(k: Known, now: number): number {
-  return k.met * 2 + k.talks + (k.helped + k.saved) * 6 + k.hurt * 4 - Math.max(0, now - k.last) / 24;
+  // (Someone waiting on a favour is not forgotten while it is open.)
+  return k.met * 2 + k.talks + (k.helped + k.saved + k.favours) * 6 + k.hurt * 4 - Math.max(0, now - k.last) / 24 + (k.favour && !k.favour.done && !k.favour.lost ? 50 : 0);
 }
 
 /** A dated note ("Day 3: helped them up on Linden Street"), bounded. */
@@ -135,7 +147,7 @@ export function remember(list: Known[], k: Known, now: number, cap: number = PEO
 export interface SavedPeople { v: 1; people: Known[] }
 
 export function savePeople(list: readonly Known[]): SavedPeople {
-  return { v: 1, people: list.map((k) => ({ ...k, said: [...k.said], notes: k.notes.map((n) => ({ ...n })) })) };
+  return { v: 1, people: list.map((k) => ({ ...k, said: [...k.said], notes: k.notes.map((n) => ({ ...n })), ...(k.favour ? { favour: { ...k.favour } } : {}) })) };
 }
 
 const num = (v: unknown, d: number, lo = -Infinity, hi = Infinity): number => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
@@ -161,6 +173,24 @@ function citizen(v: unknown): Citizen | null {
   };
 }
 
+function favour(v: unknown): Favour | undefined {
+  const o = obj(v);
+  if (o.kind !== 'visit' && o.kind !== 'streets') return undefined;
+  const f: Favour = { kind: o.kind, asked: num(o.asked, 0), until: num(o.until, 0) };
+  if (f.kind === 'visit') {
+    const who = citizen(o.who);
+    if (!who) return undefined;
+    f.who = who; f.whoName = str(o.whoName) ?? 'my friend'; f.word = str(o.word, 20) ?? 'friend';
+    if (Number.isFinite(o.wx) && Number.isFinite(o.wz)) { f.wx = o.wx as number; f.wz = o.wz as number; }
+  } else {
+    f.x = num(o.x, 0); f.z = num(o.z, 0); f.group = str(o.group);
+  }
+  if (Number.isFinite(o.done)) f.done = o.done as number;
+  if (o.lost === true) f.lost = true;
+  if (o.thanked === true) f.thanked = true;
+  return f;
+}
+
 /** Sanitise a saved list (a damaged entry is dropped, never the whole list). */
 export function restorePeople(raw: unknown): Known[] {
   const o = obj(raw);
@@ -178,6 +208,8 @@ export function restorePeople(raw: unknown): Known[] {
       ...(str(k.title, 40) ? { title: str(k.title, 40)! } : {}),
       said: (Array.isArray(k.said) ? k.said : []).filter((s): s is string => typeof s === 'string').slice(-PEOPLE.said).map((s) => s.slice(0, 24)),
       notes: (Array.isArray(k.notes) ? k.notes : []).map(obj).filter((n) => typeof n.text === 'string').slice(-PEOPLE.notes).map((n) => ({ t: num(n.t, 0), text: str(n.text, 160)! })),
+      favours: Math.floor(num(k.favours, 0, 0)), letDown: Math.floor(num(k.letDown, 0, 0)),
+      ...(favour(k.favour) ? { favour: favour(k.favour) } : {}),
     });
     if (out.length >= PEOPLE.cap) break;
   }
