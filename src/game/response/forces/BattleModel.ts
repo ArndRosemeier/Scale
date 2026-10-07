@@ -647,8 +647,12 @@ function stepUnit(u: ForceUnit, q: Squad, mon: MonsterView, path: PathView, dt: 
     }
   }
   // Too close (or the squad broke): back away from it (rifles on foot, out of its path; vehicles to the next line).
-  if (u.task === 'fallback' || (u.task === 'hold' && d < S.danger)) {
-    const p = u.kind === 'rifles' || mon.mode === 'rampage' ? away(S.danger * 2.3) : ahead();
+  // (Also on the way: to a spot it has since come on top of, or with it right there — straight away
+  // from it, not on into its feet; tanks and trucks used to drive on to their slot under it and
+  // were stepped on.)
+  const into = u.task === 'move' && !u.mounted && ((d < S.danger * 1.5 && Math.hypot(u.tx - mon.x, u.tz - mon.z) < S.danger) || (d < S.danger * 0.7 && u.taskT > 2));
+  if (u.task === 'fallback' || (u.task === 'hold' && d < S.danger) || into) {
+    const p = u.kind === 'rifles' || mon.mode === 'rampage' || d < S.danger ? away(S.danger * 2.3) : ahead();
     u.tx = p.x; u.tz = p.z; u.task = 'move'; u.taskT = 0;
   }
   if (u.task === 'inbound') { const p = ahead(); u.tx = p.x; u.tz = p.z; u.task = 'move'; u.taskT = 0; }

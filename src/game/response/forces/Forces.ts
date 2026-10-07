@@ -497,9 +497,10 @@ export class Forces {
         const d = Math.hypot(p.x - o.x, p.z - o.z);
         if (d > 1.5) { away++; this.g.crime.police.chase(o, p, 3.6); }
       });
-      // (A target that goes where it likes turns the line about as it goes: most of them there will do;
-      // and a squad that cannot get there in the end fights from where it got to.)
-      if (S?.chased && u.task === 'move') return away <= b.soldiers.length / 2 || u.taskT > 45;
+      // (Most of them there will do — one soldier held up behind a car or in a crowd kept the whole
+      // squad on its feet and silent for minutes; and a squad that cannot get there in the end fights
+      // from where it got to.)
+      if (u.task === 'move') return away <= b.soldiers.length / 2 || u.taskT > (S?.chased ? 45 : 30);
       return away === 0;
     }
     return undefined;
