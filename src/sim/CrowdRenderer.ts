@@ -95,8 +95,10 @@ vCrowdCol = sl == 0 ? iC0 : sl == 1 ? iC1 : sl == 2 ? iC2 : sl == 3 ? iC3 : sl =
 export class CrowdRenderer {
   readonly group = new THREE.Group();
   private meshes: THREE.InstancedMesh[] = [];
-  private anim: THREE.InstancedBufferAttribute[] = [];
-  private cols: THREE.InstancedBufferAttribute[][] = [];
+  private anim: (THREE.InstancedBufferAttribute | THREE.InterleavedBufferAttribute)[] = [];
+  private cols: (THREE.InstancedBufferAttribute | THREE.InterleavedBufferAttribute)[][] = [];
+  /** WebGPU: iAnim and the six colours share one buffer (WebGPU allows 8 vertex buffers). */
+  private gpuInst: THREE.InstancedInterleavedBuffer[] = [];
   /** WebGPU: the node materials' own view of each mesh's instance matrices (for the shadow pass). */
   private gpuMatrices: THREE.InstancedInterleavedBuffer[] = [];
   private looks = new Map<number, Look>();
@@ -147,14 +149,22 @@ export class CrowdRenderer {
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
     templates.forEach((t) => {
       const g = t.geometry.clone();
-      const anim = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
-      g.setAttribute('iAnim', anim);
-      const cols: THREE.InstancedBufferAttribute[] = [];
-      for (let c = 0; c < 6; c++) {
-        const a = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
-        g.setAttribute('iC' + c, a);
-        cols.push(a);
+      let anim: THREE.InstancedBufferAttribute | THREE.InterleavedBufferAttribute;
+      const cols: (THREE.InstancedBufferAttribute | THREE.InterleavedBufferAttribute)[] = [];
+      if (WEBGPU) {
+        const buf = new THREE.InstancedInterleavedBuffer(new Float32Array(CAP * 22), 22).setUsage(THREE.DynamicDrawUsage);
+        this.gpuInst.push(buf);
+        anim = new THREE.InterleavedBufferAttribute(buf, 4, 0);
+        for (let c = 0; c < 6; c++) { const a = new THREE.InterleavedBufferAttribute(buf, 3, 4 + c * 3); g.setAttribute('iC' + c, a); cols.push(a); }
+      } else {
+        anim = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4).setUsage(THREE.DynamicDrawUsage);
+        for (let c = 0; c < 6; c++) {
+          const a = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3).setUsage(THREE.DynamicDrawUsage);
+          g.setAttribute('iC' + c, a);
+          cols.push(a);
+        }
       }
+      g.setAttribute('iAnim', anim);
       const im = new THREE.InstancedMesh(g, undefined, CAP);
       if (WEBGPU) {
         // Node material; its shadow pass needs no depth material (castShadowPositionNode).
@@ -383,8 +393,12 @@ export class CrowdRenderer {
         upload(m.instanceMatrix, n);
         const gm = this.gpuMatrices[i];
         if (gm) { gm.clearUpdateRanges(); gm.addUpdateRange(0, n * 16); gm.needsUpdate = true; }
-        upload(this.anim[i], n);
-        for (const c of this.cols[i]) upload(c, n);
+        const gi = this.gpuInst[i];
+        if (gi) { gi.clearUpdateRanges(); gi.addUpdateRange(0, n * 22); gi.needsUpdate = true; }
+        else {
+          upload(this.anim[i] as THREE.InstancedBufferAttribute, n);
+          for (const c of this.cols[i]) upload(c as THREE.InstancedBufferAttribute, n);
+        }
       }
     }
     this.stats.crowd = total;

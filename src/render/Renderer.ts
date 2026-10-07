@@ -81,7 +81,7 @@ export class Renderer {
   async init(): Promise<void> {
     if (!this.webgpu) return;
     await (this.gl as unknown as { init(): Promise<unknown> }).init();
-    gpuKit().flipPolygonOffsets(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['flipPolygonOffsets']>[0]);
+    gpuKit().afterInit(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['afterInit']>[0]);
   }
 
   setPixelRatio(pr: number): void {
@@ -121,6 +121,11 @@ export class Renderer {
 
   /** compileAsync with matching program keys (see asScenePass). */
   compileAsync(obj: THREE.Object3D, target: THREE.Scene = this.scene): Promise<unknown> {
-    return this.asScenePass(() => this.gl.compileAsync(obj, this.camera, target));
+    const p = this.asScenePass(() => this.gl.compileAsync(obj, this.camera, target));
+    if (!this.webgpu) return p;
+    // A pipeline that fails to build never settles its promise: never let loading wait on it.
+    let timer = 0;
+    const late = new Promise((res) => { timer = window.setTimeout(() => { console.warn('[warm-up] compileAsync still pending after 30 s, going on'); res(null); }, 30000); });
+    return Promise.race([p, late]).finally(() => clearTimeout(timer));
   }
 }

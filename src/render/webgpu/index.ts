@@ -42,7 +42,30 @@ export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): 
  * (polygonOffsetFactor -1: "nearer") would sink behind what they should cover. Flip it the same
  * way. Call after `renderer.init()`, once the backend is chosen.
  */
-export function flipPolygonOffsets(renderer: THREE.WebGPURenderer): void {
+export function afterInit(renderer: THREE.WebGPURenderer): void {
+  flipPolygonOffsets(renderer);
+  packBeforeRender(renderer);
+  watchVertexBuffers(renderer);
+}
+
+/** Warns about pipelines over WebGPU's vertex buffer limit, also on the WebGL2 backend (where they would work). */
+function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const backend = renderer.backend as any;
+  const create = backend.createRenderPipeline?.bind(backend);
+  if (!create) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  backend.createRenderPipeline = (renderObject: any, promises: unknown) => {
+    const n = renderObject.getVertexBuffers?.().length ?? 0;
+    if (n > 8) {
+      const o = renderObject.object, g = o.geometry;
+      console.warn(`[webgpu] ${n} vertex buffers (WebGPU allows 8): ${o.type} "${o.name}" ${renderObject.material.type} attributes ${Object.keys(g.attributes).join(',')}`);
+    }
+    return create(renderObject, promises);
+  };
+}
+
+function flipPolygonOffsets(renderer: THREE.WebGPURenderer): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const backend = renderer.backend as any;
   if (backend.pipelineUtils) {
@@ -71,6 +94,52 @@ export async function readPixels(renderer: THREE.WebGPURenderer, rt: THREE.Rende
   const row = w * 4, out = new Uint16Array(row * h);
   for (let y = 0; y < h; y++) out.set(data.subarray(y * row, y * row + row), (h - 1 - y) * row);
   return out;
+}
+
+/**
+ * WebGPU allows 8 vertex buffers per pipeline (three binds every non-interleaved attribute as its
+ * own buffer, plus the instance matrix and instanced attributes). Geometries with many custom
+ * attributes (street furniture, leaves) went over it and their pipelines failed. Before a
+ * geometry is first rendered, if it has more buffers than that leaves room for, its static float
+ * attributes other than position are interleaved into one buffer (the shader reads them by name
+ * as before). Attributes that change after creation (dynamic usage, instanced) stay as they are.
+ */
+const MAX_OWN_BUFFERS = 5;
+function packGeometry(geometry: THREE.BufferGeometry | undefined): void {
+  if (!geometry || geometry.userData.vbPacked) return;
+  geometry.userData.vbPacked = true;
+  const attrs = geometry.attributes as Record<string, THREE.BufferAttribute | THREE.InterleavedBufferAttribute>;
+  const buffers = new Set<unknown>();
+  for (const a of Object.values(attrs)) buffers.add((a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute).data : a);
+  if (buffers.size <= MAX_OWN_BUFFERS) return;
+  const n = attrs.position?.count ?? 0;
+  const pack: [string, THREE.BufferAttribute][] = [];
+  for (const [name, a] of Object.entries(attrs)) {
+    const b = a as THREE.BufferAttribute;
+    if (name === 'position' || (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute || (b as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) continue;
+    if (!(b.array instanceof Float32Array) || b.normalized || b.usage !== THREE.StaticDrawUsage || b.count !== n || b.itemSize > 4) continue;
+    pack.push([name, b]);
+  }
+  if (pack.length < 2) return;
+  const stride = pack.reduce((s, [, b]) => s + b.itemSize, 0);
+  const data = new Float32Array(stride * n);
+  const ib = new THREE.InterleavedBuffer(data, stride);
+  let off = 0;
+  for (const [name, b] of pack) {
+    const k = b.itemSize, src = b.array as Float32Array;
+    for (let i = 0; i < n; i++) for (let c = 0; c < k; c++) data[i * stride + off + c] = src[i * k + c];
+    geometry.setAttribute(name, new THREE.InterleavedBufferAttribute(ib, k, off));
+    off += k;
+  }
+}
+
+/** Packs every geometry once, before its first render object (and so its first pipeline) exists. */
+function packBeforeRender(renderer: THREE.WebGPURenderer): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const objects = (renderer as any)._objects;
+  if (!objects?.get) { console.warn('[webgpu] cannot pack vertex buffers: renderer internals changed'); return; }
+  const get = objects.get.bind(objects);
+  objects.get = (object: THREE.Mesh, ...rest: unknown[]) => { packGeometry(object.geometry); return get(object, ...rest); };
 }
 
 export function createPMREM(renderer: unknown): THREE.PMREMGenerator {
