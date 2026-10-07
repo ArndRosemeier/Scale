@@ -431,7 +431,11 @@ export class Player {
     }
     // --- ground
     const step = Math.max(0.35, this.height * 0.28);
-    const ground = this.collision.groundAt(px, pz, this.pos.y, step);
+    // From the open (the street, the river) the body only goes below ground through a hole: a
+    // super-speed runner covers a quay wall in one substep and used to end up under the street,
+    // in the sewer or culvert there, or in the earth.
+    const surface = !this.collision.underground(ox, this.pos.y, oz) && !this.collision.under?.inHole(ox, oz) && !this.collision.under?.inHole(px, pz);
+    const ground = this.collision.groundAt(px, pz, this.pos.y, step, surface);
     const wasGrounded = this.grounded;
     if (ny <= ground) {
       const impactV = -this.vel.y;
@@ -468,7 +472,7 @@ export class Player {
       this.leap = 0;
     }
     // Underground ceilings (stations, tunnels) stop a jump instead of letting the head pass through.
-    const ceil = this.collision.ceilingAt(px, pz, this.pos.y);
+    const ceil = this.collision.ceilingAt(px, pz, surface ? Math.max(ny, this.pos.y) : this.pos.y);
     if (ny + this.height > ceil) { ny = Math.max(ceil - this.height, Math.min(ny, this.pos.y)); if (this.vel.y > 0) this.vel.y = 0; }
     this.pos.set(px, ny, pz);
   }
