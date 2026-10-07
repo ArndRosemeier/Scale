@@ -118,6 +118,7 @@ import { Wardrobe } from './Wardrobe';
 import { People } from './people/People';
 import { Fame } from './fame/Fame';
 import { Sidekick } from './sidekick/Sidekick';
+import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
 
 /** What someone a super speed runner brushed past calls after them: stern, not hurt. */
@@ -587,6 +588,10 @@ export class Game {
         call: () => { this.sidekick.mate.call(); return this.sidekick.mate.status(); },
         mate: () => this.sidekick.mate.status(),
         power: (p?: string) => { const m = this.sidekick.mate; if (p) m.power = p as typeof m.power; return m.power; },
+        karma: (n = 50) => { this.sidekick.mate.earn(n); return this.sidekick.mate.status(); },
+        trust: (n?: number) => { const m = this.sidekick.mate; if (n !== undefined) m.trustBy(n - m.trust); return m.trust; },
+        ask: (k: 'help' | 'back' | 'home' | 'come') => this.sidekick.mate.ask(k),
+        give: (n: number, wish?: string) => this.sidekick.mate.give(n, (wish ?? null) as Parameters<Companion['give']>[1]),
         ko: () => { this.sidekick.mate.devKo(); return this.sidekick.mate.status(); },
         ward: (make?: boolean) => { this.sidekick.mate.devWard(make); return this.sidekick.status(); },
       };

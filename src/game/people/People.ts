@@ -137,6 +137,8 @@ export class People {
   private savedAt = new Map<number, number>();
   /** Someone you were asked to look in on, waiting at their door (People keeps them there till you come or go). */
   private waiting: { a: PedAgent; act: Actor } | null = null;
+  /** Something between the hero and someone was recorded (the sidekick minds who it was). */
+  onDeed: ((a: PedAgent, d: Deed) => void) | null = null;
   /** More things to say to the person you talk to (the sidekick's shard offer), after the usual topics. */
   extraOptions: ((a: PedAgent) => { label: string; run: () => void }[]) | null = null;
 
@@ -285,6 +287,7 @@ export class People {
     else if (d === 'saved') addNote(k, now, `${day}: the hero saved them${where}`);
     this.markKey = '#stale';
     this.persist();
+    this.onDeed?.(a, d);
     return k;
   }
 
@@ -323,6 +326,11 @@ export class People {
     if (!s) return null;
     const f = this.facts(s);
     return { a: s.a, person: s.p, known: s.k, foreign: s.foreign, actor: s.act, opinion: f.opinion, child: f.child };
+  }
+
+  /** Another system's options in the open talk panel (with a "Never mind." back to the topics). */
+  choices(list: { label: string; run: () => void }[]): void {
+    if (this.session) this.ui.choices(list);
   }
 
   /** Put a line in the open talk panel (another system's: the shard offer); the topics come back unless `hush`. */

@@ -55,13 +55,15 @@ export const MATE = {
  * elements, the disagreeable the quake, the dutiful the stun flash, the nervous the gust that keeps
  * trouble at arm's length. Shape and reach say where it is safe to use (nobody but bad guys in it).
  */
-export type MatePower = 'fireball' | 'bolt' | 'quake' | 'stun' | 'gust';
+export type MatePower = 'fireball' | 'bolt' | 'quake' | 'stun' | 'gust' | 'dash';
 export const MATE_POWERS: Record<MatePower, { name: string; shape: 'area' | 'line' | 'cone'; min: number; max: number; /** Who must not be near it: the area's radius, the line's half width, the cone's length. */ R: number }> = {
   fireball: { name: 'fireballs', shape: 'area', min: 6, max: 24, R: 4.6 },
   bolt: { name: 'lightning', shape: 'line', min: 3, max: 19, R: 1.9 },
   quake: { name: 'a ground quake', shape: 'line', min: 2.5, max: 12, R: 2.3 },
   stun: { name: 'a stunning flash', shape: 'area', min: 5, max: 17, R: 6.6 },
   gust: { name: 'a blast of wind', shape: 'cone', min: 0.8, max: 8, R: 11 },
+  /** (Bought later, not a first power.) A rush through the one in front. */
+  dash: { name: 'a shoulder charge', shape: 'line', min: 3, max: 12, R: 1.9 },
 };
 
 export function matePower(seed: number, who: number, t: Traits): MatePower {
@@ -115,7 +117,7 @@ export function revives(seed: number, who: number, k: number): boolean {
   return hashToFloat(deriveSeed(seed, `revive:${who}:${k}`)) < MATE.survive;
 }
 
-export type MateSay = 'join' | 'careful' | 'boss' | 'won' | 'police' | 'called' | 'coming' | 'back' | 'idle' | 'hurt';
+export type MateSay = 'join' | 'careful' | 'boss' | 'won' | 'police' | 'called' | 'coming' | 'back' | 'idle' | 'hurt' | 'helpUp' | 'friend' | 'wary';
 type Pool = string[];
 
 const LINES: Record<MateSay, { any: Pool } & Partial<Record<Temperament, Pool>>> = {
@@ -182,6 +184,22 @@ const LINES: Record<MateSay, { any: Pool } & Partial<Record<Temperament, Pool>>>
   hurt: {
     any: ['Ugh! That hurt.', 'Okay. Ow.'],
     grumpy: ['You\'ll pay for that.'],
+  },
+  helpUp: {
+    any: ['Up you get. Easy now.', 'There we go. Anything broken?', 'Here, take my hand.'],
+    kind: ['Are you all right? Let me help you.'],
+    grumpy: ['Up. Watch where you\'re going next time.'],
+    cheerful: ['Oopsie! Up you come!'],
+  },
+  friend: {
+    any: ['You helped someone close to me. Thank you.', 'That was my {word} you helped. I won\'t forget it.'],
+    kind: ['Thank you for looking after my {word}.'],
+    grumpy: ['…That was my {word}. Thanks.'],
+  },
+  wary: {
+    any: ['Hey! Watch it! They\'re just people!', 'Was that necessary?', 'Careful with the people!'],
+    grumpy: ['And you call yourself a hero.'],
+    anxious: ['Please, don\'t hurt them…'],
   },
 };
 
