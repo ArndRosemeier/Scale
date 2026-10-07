@@ -60,6 +60,7 @@ export class TouchControls {
       <div class="tc-more">
         <button data-id="rally" data-code="KeyG">Rally army<i>G</i></button>
         <button data-id="strike" data-code="KeyT">Airstrike<i>T</i></button>
+        <button data-id="sidekick" data-code="KeyK">Call sidekick<i>K</i></button>
         <button data-id="mini" data-code="KeyN">Minimap<i>N</i></button>
         <button data-id="earlier" data-code="BracketLeft">Time −1 h<i>[</i></button>
         <button data-id="later" data-code="BracketRight">Time +1 h<i>]</i></button>

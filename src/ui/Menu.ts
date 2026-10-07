@@ -29,6 +29,7 @@ const CONTROLS: [string, string][] = [
   ['E', 'Talk to the person in front of you (or the one you targeted; 1–7 to answer) · help someone up · pick up / give back · turn yourself in (next to an officer) · change your look at the fitting mirror in a clothes shop · open a manhole / climb out of the sewer · hold to dig someone out of rubble · carry the injured to the triage tent'],
   ['G', 'Rally the soldiers near you to follow you (when the army knows you: reputation 40+)'],
   ['T', 'Call an airstrike on your target, a giant creature (reputation 70+; a few minutes between)'],
+  ['K', 'Call your sidekick for help (once you have given someone the second shard)'],
   ['M', 'City map: metro, stations · click to set a marker the compass points to (travel in sandbox)'],
   ['N', 'Minimap on / off'],
   ['B', 'Test blast where you look (sandbox)'],

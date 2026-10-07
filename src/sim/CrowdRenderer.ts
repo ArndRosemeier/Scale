@@ -14,6 +14,8 @@ import type { HumanoidAppearance } from '../humanoid/types';
 import { Role } from './Population';
 import { statusOf } from '../shared/status';
 
+const _fq = new THREE.Quaternion(), _fe = new THREE.Euler(), _fv = new THREE.Vector3();
+
 const CAP = 1400;          // instances per template
 const CROWD_RANGE = 380;
 const RIG_RANGE = 20;
@@ -97,7 +99,7 @@ export class CrowdRenderer {
   private anim: THREE.InstancedBufferAttribute[] = [];
   private cols: THREE.InstancedBufferAttribute[][] = [];
   private looks = new Map<number, Look>();
-  private rigs = new Map<number, { rig: HumanoidRig; used: number; agent: PedAgent; ready: 0 | 1 | 2; held?: string | null; shadow?: boolean; shadowT?: number }>();
+  private rigs = new Map<number, { rig: HumanoidRig; used: number; agent: PedAgent; ready: 0 | 1 | 2; held?: string | null; shadow?: boolean; shadowT?: number; flown?: boolean }>();
   /** Compile a new object's shaders off the critical path (set by the game); rigs show once ready. */
   prepare: ((o: THREE.Object3D) => Promise<unknown>) | null = null;
   private rigTime = 0;
@@ -300,7 +302,23 @@ export class CrowdRenderer {
       const mood = act ? act.mood : thanks ? 'happy' : a.fear > 0.4 ? 'afraid' : a.state === PState.Gawk ? 'surprised' : 'neutral';
       const lookAt: [number, number, number] | undefined = act ? (act.face ? [act.face.x, act.face.y, act.face.z] : undefined) : a.state === PState.Gawk || a.state === PState.Film || (a.glance ?? 0) > 0 ? [a.lookX, a.lookY, a.lookZ] : undefined;
       const talking = !act && a.state === PState.Sit && !!this.talking?.(a, time);
-      r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
+      if (a.fly) {
+        // Flying (the sidekick): the hero's flight pose, the body pitched into the flight and banked.
+        const F = a.fly;
+        r.rig.update({ pos: [a.x, a.y, a.z], vel: [a.vx, a.vy, a.vz], yaw: a.heading, anim: { move: 'fly', action, mood, lookAt, power: { charge: -1, leap: 0, leapT: 0, dash: 0, fly: F } }, flags: 0 }, dt, time, cam.position);
+        const vh = Math.hypot(a.vx, a.vz), climb = Math.atan2(a.vy, Math.max(0.1, vh));
+        const pitch = -(Math.PI / 2 - 0.12) * F.tilt + climb * F.tilt * 0.9;
+        const obj = r.rig.object, centre = 1.0;
+        _fq.setFromEuler(_fe.set(pitch, a.heading, F.bank * F.tilt, 'YXZ'));
+        obj.quaternion.copy(_fq);
+        _fv.set(0, centre, 0).applyQuaternion(_fq);
+        obj.position.set(a.x - _fv.x, a.y + centre - _fv.y, a.z - _fv.z);
+        r.flown = true;
+      } else {
+        r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
+        // Landed after flying: no pitch or bank left over (the rig only sets the yaw).
+        if (r.flown) { r.flown = false; r.rig.object.quaternion.setFromEuler(_fe.set(0, a.heading + twitch, 0, 'YXZ')); }
+      }
       // Shadows only up close (re-applied now and then: clothes and held items come and go).
       const dc = Math.hypot(a.x - cx, a.y - cy, a.z - cz);
       const sh = r.shadow === undefined ? dc < RIG_SHADOW_RANGE : r.shadow ? dc < RIG_SHADOW_RANGE + 2 : dc < RIG_SHADOW_RANGE - 2;
