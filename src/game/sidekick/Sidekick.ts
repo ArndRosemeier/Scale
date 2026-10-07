@@ -9,7 +9,7 @@
  *  - Sometimes (SHARD.gangChance, where a group holds the street) the group got to it first: two or
  *    three of them stand guard round it (CrimeSystem.postGuards, like a hideout door). It can only
  *    be taken once they are dealt with.
- *  - E takes it. Carried (a badge on screen), it can be offered to anyone in a conversation (the
+ *  - E (or walking into it) takes it. Carried (a badge on screen), it can be offered to anyone in a conversation (the
  *    talk menu's "Offer them the shard"): shardRules.offerAnswer decides what they say. Someone
  *    with a matter of their own asks a favour first (People.askVisit) and says yes once it is done.
  *  - The awakening: the shard floats from the hero's hand to them, its light spirals into them, a
@@ -32,8 +32,12 @@ import type { HideoutGuard } from '../crime/HideoutGuard';
 import { StarFx } from '../intro/StarFx';
 import { IntroSound } from '../intro/IntroSound';
 import { addNote } from '../people/memory';
+import { yearsOf } from '../people/identity';
 import { gameTimeLabel } from '../save/model';
 import { deriveSeed, hashToFloat } from '../../core/rng';
+import { Companion, type MateSave } from './Companion';
+import { MATE, MATE_POWERS, graveSpot } from './companionRules';
+import { makeGrave } from './Grave';
 import {
   SHARD, shardCells, resolveShard, sceptic, hasMatter, offerAnswer, accepts, answerLine, awakeningLines,
   type ShardSite, type OfferAnswer,
@@ -56,7 +60,17 @@ export interface SavedSidekick {
   name: string;
   /** People who asked a favour before taking it: citizen id, their favours done and let down at the time. */
   matters: [number, number, number][];
+  /** The sidekick's health, times taken to the ward, seconds still in it (phase 2; absent in older saves). */
+  mate?: MateSave | null;
+  /** Fallen sidekicks: their graves, who they were (never seen in the streets again), the next shard's game hour. */
+  graves?: SavedGrave[];
+  dead?: number[];
+  nextAt?: number;
+  /** A grave still to be placed (the name; '' none). */
+  graveFor?: string;
 }
+
+export interface SavedGrave { name: string; x: number; y: number; z: number; yaw: number }
 
 /** The awakening, in seconds: the shard floats over, its light pours in, the flash, the three lines, the end. */
 const SCENE = { float: 0.9, flash: 4.2, gone: 4.6, line1: 1.3, line2: 5.2, line3: 7.8, end: 10.5 } as const;
@@ -107,9 +121,20 @@ export class Sidekick {
   private warned = false;
   /** Seconds the effects stay drawn after the shard went (its light pouring into the hero). */
   private fxHold = 0;
-  stats = { reported: 0, taken: 0, offers: 0, refused: 0, bonded: 0, parted: 0 };
+  stats = { reported: 0, taken: 0, offers: 0, refused: 0, bonded: 0, parted: 0, died: 0 };
+  /** The sidekick around the hero (phase 2). */
+  readonly mate: Companion;
+  private graves: SavedGrave[] = [];
+  private graveMeshes: THREE.Object3D[] = [];
+  private dead: number[] = [];
+  /** No shard before this game hour (after a death). */
+  private nextAt = 0;
+  /** A grave to place (the name) and the cemetery cells still to try. */
+  private graveFor = '';
+  private graveSearch: number[] | null = null;
 
   constructor(private g: Game) {
+    this.mate = new Companion(g, { died: () => this.died(), persist: () => this.persist() });
     this.fx = new StarFx();
     this.fx.group.name = 'shard';
     this.fx.group.visible = false;
@@ -128,7 +153,7 @@ export class Sidekick {
     document.body.appendChild(this.edge);
     this.badge = document.createElement('div');
     this.badge.id = 'shard-badge';
-    this.badge.innerHTML = '<i></i>The shard';
+    this.badge.innerHTML = '<i></i><span><b>You carry the second shard</b><br>Talk to someone (E) to offer it</span>';
     this.badge.title = 'You carry the second shard. Offer it to someone you trust: talk to them (E).';
     document.body.appendChild(this.badge);
     try { this.restore(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null'), false); } catch { /* storage unavailable */ }
@@ -151,7 +176,7 @@ export class Sidekick {
     if (this.phase === 'locked' && !this.search && this.checkT <= 0) {
       this.checkT = 1;
       this.retryT -= 1;
-      const ready = g.mode === 'sandbox' ? this.time > SHARD.sandboxDelay : rep >= SHARD.unlockRep;
+      const ready = (g.mode === 'sandbox' ? this.time > SHARD.sandboxDelay : rep >= SHARD.unlockRep) && g.sky.hoursAbs >= this.nextAt;
       if (ready && this.retryT <= 0) this.startSearch();
     }
     if (this.search) this.searchStep();
@@ -159,6 +184,12 @@ export class Sidekick {
     else this.quiet();
     if (this.phase === 'bonded' && rep < 0 && !this.scene) this.part();
     if (this.scene) this.stepScene(dt);
+    else if (this.phase === 'bonded') {
+      if (g.input.hit('KeyK') && !g.powers.open && !g.map.open && !g.menu.paused) this.mate.call();
+      this.mate.update(dt);
+    }
+    if (this.graveFor && !this.graveSearch) this.startGraveSearch();
+    if (this.graveSearch) this.graveStep();
     this.fxHold -= dt;
     this.fx.group.visible = !!this.scene || (this.phase === 'reported' && this.fx.shard.visible) || this.fxHold > 0;
     if (this.fx.group.visible) this.fx.update(dt, this.time, g.renderer.camera, g.renderer.gl);
@@ -207,6 +238,8 @@ export class Sidekick {
   private reported(dt: number): void {
     const g = this.g, s = this.site!, P = g.player, p = P.pos;
     const d = Math.hypot(s.x - p.x, s.z - p.z);
+    // Walking into it takes it too (like a power core), unless a gang still guards it.
+    if (d < 0.9 + P.radius && this.inReach() && !this.guarded()) { this.take(); return; }
     if (!this.refined && d < 220) {
       const y = g.collision.groundAt(s.x, s.z, s.y + 0.6, 1.2);
       if (Number.isFinite(y) && Math.abs(y - s.y) < 1.5) { s.y = y; this.refined = true; }
@@ -410,6 +443,7 @@ export class Sidekick {
     const g = this.g;
     this.phase = 'parted';
     this.stats.parted++;
+    this.mate.dismiss();
     g.people.setSidekick(this.who, false);
     const k = g.people.find(this.who);
     if (k) addNote(k, g.sky.hoursAbs, `${gameTimeLabel(Math.floor(g.sky.hoursAbs / 24), g.sky.hoursAbs % 24)}: left the hero when the city turned against them`);
@@ -490,7 +524,7 @@ export class Sidekick {
       const line = S.lines[S.said++];
       if (g.people.partner === a) g.people.speak(line, true);
       else g.barks?.line(a, line);
-      if (S.said === 3) g.powerHud.toast(`<b>${S.name}</b> has the shard's power now: your sidekick. Their gold dot on the map shows where they are`, 'core', 8000);
+      if (S.said === 3) g.powerHud.toast(`<b>${S.name}</b> has the shard's power now: your sidekick. They can fly, and the shard gave them <b>${MATE_POWERS[this.mate.power].name}</b>. Their gold dot on the map shows where they are`, 'core', 8000);
     }
     if (t >= SCENE.end) this.endScene();
   }
@@ -503,6 +537,7 @@ export class Sidekick {
     this.name = name;
     this.stats.bonded++;
     g.people.setSidekick(a.cit.id, true);
+    this.mate.start(a.cit.id, name);
     const k = g.people.find(a.cit.id);
     if (k) addNote(k, g.sky.hoursAbs, `${gameTimeLabel(Math.floor(g.sky.hoursAbs / 24), g.sky.hoursAbs % 24)}: took the shard from the hero and gained powers`);
     this.persist();
@@ -527,6 +562,76 @@ export class Sidekick {
     }
   }
 
+  // ------------------------------------------------------------------ death and the grave
+
+  /** The revival failed: they are gone. A grave in a cemetery, the news, and in time another shard. */
+  private died(): void {
+    const g = this.g, name = this.name, who = this.who;
+    this.stats.died++;
+    this.mate.dismiss();
+    g.people.setSidekick(who, false);
+    g.people.remove(who);
+    g.peds.absent.add(who);
+    this.dead.push(who);
+    this.phase = 'locked';
+    this.who = -1;
+    this.name = '';
+    this.retryT = 0;
+    this.nextAt = g.sky.hoursAbs + MATE.nextShardHours;
+    const p = g.player.pos;
+    g.city?.report('mourn', p.x, p.z);
+    g.powerHud.toast(`<b>${name}</b> did not survive: the revival failed. They will be buried in a cemetery nearby. Somewhere, in time, another shard will turn up`, 'warn', 11000);
+    this.graveFor = name;
+    this.startGraveSearch();
+    this.persist();
+  }
+
+  /** The cells to try for a cemetery, nearest the hero first. */
+  private startGraveSearch(): void {
+    const g = this.g, p = g.player.pos;
+    this.graveSearch = g.macro.cells
+      .map((c, i) => ({ i, d: Math.hypot(c.centroid[0] - p.x, c.centroid[1] - p.z), water: c.district === 'water' }))
+      .filter((c) => !c.water && c.d < 2500)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 60)
+      .map((c) => c.i);
+  }
+
+  private graveStep(): void {
+    const g = this.g, list = this.graveSearch!;
+    const cell = list.shift();
+    if (cell === undefined) {
+      // No cemetery anywhere near: next to where they fell, then (rare: a city without one in reach).
+      this.graveSearch = null;
+      const p = g.player.pos;
+      this.placeGrave({ name: this.graveFor, x: p.x + 3, y: g.world.groundHeight(p.x + 3, p.z), z: p.z, yaw: 0 });
+      return;
+    }
+    const st = g.streamer.cells.get(cell);
+    const plan = st && st.status === 'ready' && st.plan ? st.plan : planCell(g.macro, g.macro.cells[cell], g.terrain);
+    if (!plan.cemeteries.length) return;
+    const spot = graveSpot(plan, deriveSeed(g.settings.seed, `grave:${this.dead.length}`));
+    if (!spot) return;
+    this.graveSearch = null;
+    this.placeGrave({ name: this.graveFor, x: spot.x, y: g.world.groundHeight(spot.x, spot.z), z: spot.z, yaw: spot.yaw });
+  }
+
+  private placeGrave(gr: SavedGrave): void {
+    this.graves.push(gr);
+    this.graveFor = '';
+    this.addGraveMesh(gr);
+    this.markKey = '#stale';
+    this.g.powerHud.toast(`<b>${gr.name}</b> was laid to rest. The grave is marked on your map`, 'info', 6000);
+    this.persist();
+  }
+
+  private addGraveMesh(gr: SavedGrave): void {
+    const m = makeGrave(gr.name, gr.yaw);
+    m.position.set(gr.x, gr.y, gr.z);
+    this.g.renderer.scene.add(m);
+    this.graveMeshes.push(m);
+  }
+
   // ------------------------------------------------------------------ map
 
   private markers(): void {
@@ -534,8 +639,11 @@ export class Sidekick {
     if (this.phase === 'reported' && s) {
       list.push({ x: s.zx, z: s.zz, r: s.zr, color: SHARD_COLOR, kind: 'zone', always: true, title: 'A strange glowing stone was found around here (on the news). Up close you will feel its pull' });
       const p = this.g.player.pos;
-      if (Math.hypot(s.x - p.x, s.z - p.z) < SHARD.pullR) list.push({ x: s.x, z: s.z, color: SHARD_COLOR, kind: 'core', title: 'The shard: you can feel it here' });
+      // Close enough to feel it: exactly where it lies; else the middle of the area the news gave.
+      if (Math.hypot(s.x - p.x, s.z - p.z) < SHARD.pullR) list.push({ x: s.x, z: s.z, color: SHARD_COLOR, kind: 'shard', always: true, title: 'The second shard: it lies here. Press E or walk into it to take it' });
+      else list.push({ x: s.zx, z: s.zz, color: SHARD_COLOR, kind: 'shard', always: true, title: 'The second shard (on the news): somewhere in this circle. Up close you will feel its pull' });
     }
+    for (const gr of this.graves) list.push({ x: gr.x, z: gr.z, color: '#c9c6bd', kind: 'dot', title: `The grave of ${gr.name}, who stood by you` });
     const key = list.map((m) => `${m.kind}${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(';');
     if (key === this.markKey) return;
     this.markKey = key;
@@ -552,6 +660,8 @@ export class Sidekick {
     return {
       v: 1, phase: this.phase, n: this.n, site: this.site ? { ...this.site } : null, gang: this.gang, cleared: this.cleared, who: this.who, name: this.name,
       matters: [...this.matters].map(([id, m]) => [id, m.favours, m.letDown]),
+      mate: this.phase === 'bonded' ? this.mate.save() : null,
+      graves: this.graves.map((gr) => ({ ...gr })), dead: [...this.dead], nextAt: this.nextAt, graveFor: this.graveFor,
     };
   }
 
@@ -575,6 +685,23 @@ export class Sidekick {
     if ((this.phase === 'bonded' || this.phase === 'parted') && this.who < 0) this.phase = 'locked';
     this.matters.clear();
     for (const e of Array.isArray(o.matters) ? o.matters : []) if (Array.isArray(e) && e.length === 3 && e.every((x) => Number.isFinite(x))) this.matters.set(e[0], { favours: e[1], letDown: e[2] });
+    // Phase 2: the sidekick's own state, the fallen and their graves.
+    const g = this.g;
+    for (const id of this.dead) g.peds.absent.delete(id);
+    this.dead = (Array.isArray(o.dead) ? o.dead : []).filter((x) => Number.isFinite(x)).map((x) => Math.floor(x));
+    for (const id of this.dead) g.peds.absent.add(id);
+    for (const m of this.graveMeshes) m.removeFromParent();
+    this.graveMeshes = [];
+    this.graves = (Array.isArray(o.graves) ? o.graves : []).filter((gr): gr is SavedGrave => !!gr && typeof gr === 'object' && typeof gr.name === 'string' && ['x', 'y', 'z', 'yaw'].every((k) => Number.isFinite((gr as unknown as Record<string, unknown>)[k])))
+      .map((gr) => ({ name: gr.name.slice(0, 60), x: gr.x, y: gr.y, z: gr.z, yaw: gr.yaw }));
+    for (const gr of this.graves) this.addGraveMesh(gr);
+    this.nextAt = num(o.nextAt, 0);
+    this.graveFor = typeof o.graveFor === 'string' ? o.graveFor.slice(0, 60) : '';
+    this.graveSearch = null;
+    const m = o.mate && typeof o.mate === 'object' ? o.mate as Partial<MateSave> : null;
+    const mate: MateSave | null = m ? { hp: num(m.hp, MATE.hp), k: Math.max(0, Math.floor(num(m.k, 0))), ward: Math.max(0, num(m.ward, 0)) } : null;
+    if (this.phase === 'bonded') this.mate.start(this.who, this.name, mate);
+    else this.mate.dismiss();
     this.guards = null;
     this.search = null;
     this.refined = false;
@@ -590,6 +717,7 @@ export class Sidekick {
       phase: this.phase, n: this.n, site: s ? { kind: s.kind, x: +s.x.toFixed(1), y: +s.y.toFixed(2), z: +s.z.toFixed(1), dist: Math.round(Math.hypot(s.x - p.x, s.z - p.z)) } : null,
       gang: this.gang, cleared: this.cleared, guards: this.guards ? { active: this.guards.active, committed: this.guards.committed, guarding: this.guards.guarding } : null,
       who: this.who, name: this.name, scene: this.scene ? +this.scene.t.toFixed(1) : null, stats: { ...this.stats },
+      mate: this.phase === 'bonded' ? this.mate.status() : null, graves: this.graves.map((gr) => gr.name), nextAt: this.nextAt,
     };
   }
 
@@ -626,10 +754,26 @@ export class Sidekick {
     return { x, z };
   }
 
+  /** dev: make the nearest grown-up (within 200 m) the sidekick at once (no shard, no scene). */
+  devBond(): Record<string, unknown> {
+    const g = this.g, p = g.player.pos;
+    let best: PedAgent | null = null, bd = 200;
+    for (const a of g.peds.neighbours(p.x, p.z, 200, [])) {
+      const d = Math.hypot(a.x - p.x, a.z - p.z);
+      if (a.alive && !a.actor && !a.inside && a.state !== PState.Down && yearsOf(a.cit) >= 18 && d < bd) { bd = d; best = a; }
+    }
+    if (!best) return { error: 'nobody near' };
+    if (this.phase === 'bonded') { this.mate.dismiss(); g.people.setSidekick(this.who, false); }
+    const k = g.people.note(best, 'talked');
+    this.bond(best, k.name);
+    return this.status();
+  }
+
   /** dev: back to the start (nothing reported, nobody bonded). */
   devReset(): void {
     if (this.who >= 0) this.g.people.setSidekick(this.who, false);
-    this.restore({ v: 1, phase: 'locked', n: 0, site: null, gang: -1, cleared: false, who: -1, name: '', matters: [] });
+    this.mate.dismiss();
+    this.restore({ v: 1, phase: 'locked', n: 0, site: null, gang: -1, cleared: false, who: -1, name: '', matters: [], graves: [], dead: [], nextAt: 0, graveFor: '' });
     this.fx.group.visible = false;
   }
 }

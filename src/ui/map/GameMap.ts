@@ -38,7 +38,7 @@ export interface MapMarker {
   /** CSS colour. */
   color: string;
   /** core: glowing diamond; alert: ring with "!"; dot: plain dot; faint: a small see-through dot (people you met; not on the compass); pin: the player's own marker; zone: a ring of radius `r`; landmark: a star badge (named on the full map); badge: a round badge with `glyph` (places to visit, like arcades; not on the compass). */
-  kind: 'core' | 'alert' | 'dot' | 'faint' | 'pin' | 'zone' | 'landmark' | 'badge';
+  kind: 'core' | 'alert' | 'dot' | 'faint' | 'pin' | 'zone' | 'landmark' | 'badge' | 'shard';
   /** A badge's symbol. */
   glyph?: string;
   title?: string;
@@ -201,6 +201,7 @@ export class GameMap {
         <div class="map-key"><span class="faint" style="background:#c98be0"></span> clothes shop: the fitting mirror inside changes your look</div>
         <div class="map-key"><span class="badge" style="background:#3fe0ff">A</span> arcade: video games to play inside (E at a cabinet)</div>
         ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
+        <div class="map-key"><span class="shard"></span> the second shard, for a sidekick (when the news reports it)</div>
         <div class="map-status"></div>
       </div>
       <div class="map-tools">
@@ -817,7 +818,7 @@ export class GameMap {
         if (!full) {
           const c = MINI_PX / 2, r = MINI_PX / 2 - 9;
           const dx = x - c, dy = y - c, d = Math.hypot(dx, dy);
-          if (d > r) { if (m.kind !== 'alert' && m.kind !== 'pin') continue; x = c + (dx / d) * r; y = c + (dy / d) * r; edge = true; }
+          if (d > r) { if (m.kind !== 'alert' && m.kind !== 'pin' && m.kind !== 'shard') continue; x = c + (dx / d) * r; y = c + (dy / d) * r; edge = true; }
         } else if (x < -12 || y < -12 || x > W + 12 || y > H + 12) continue;
         const r = full ? 8 : 5;
         g.save();
@@ -834,6 +835,26 @@ export class GameMap {
           g.fillStyle = m.color; g.fill();
           g.shadowBlur = 0;
           g.lineWidth = 1.6; g.strokeStyle = '#ffffff'; g.stroke();
+        } else if (m.kind === 'shard') {
+          // The second shard: a tall crystal in a glow that breathes, rings rising off it (not a power core's diamond).
+          const k = full ? 1.35 : 0.8;
+          for (let i = 0; i < 2; i++) {
+            const u = (performance.now() / 1600 + i * 0.5) % 1;
+            g.beginPath(); g.arc(0, 0, (8 + 16 * u) * k, 0, Math.PI * 2);
+            g.strokeStyle = m.color; g.globalAlpha = 0.75 * (1 - u); g.lineWidth = 2; g.stroke();
+          }
+          g.globalAlpha = 1;
+          const gl = g.createRadialGradient(0, 0, 0, 0, 0, 16 * k);
+          gl.addColorStop(0, 'rgba(190, 225, 255, 0.85)'); gl.addColorStop(1, 'rgba(120, 170, 255, 0)');
+          g.fillStyle = gl; g.beginPath(); g.arc(0, 0, 16 * k, 0, Math.PI * 2); g.fill();
+          g.shadowColor = '#bfe0ff'; g.shadowBlur = (10 + 8 * pulse) * k;
+          g.beginPath();
+          g.moveTo(0, -15 * k); g.lineTo(5 * k, -3 * k); g.lineTo(3 * k, 11 * k); g.lineTo(0, 14 * k); g.lineTo(-3 * k, 11 * k); g.lineTo(-5 * k, -3 * k); g.closePath();
+          const cg = g.createLinearGradient(0, -15 * k, 0, 14 * k);
+          cg.addColorStop(0, '#f2f8ff'); cg.addColorStop(0.55, '#7fb8ff'); cg.addColorStop(1, '#5a3fd0');
+          g.fillStyle = cg; g.fill();
+          g.shadowBlur = 0;
+          g.lineWidth = 1.4; g.strokeStyle = '#ffffff'; g.stroke();
         } else if (m.kind === 'alert') {
           g.beginPath(); g.arc(0, 0, r + 3 + pulse * 3, 0, Math.PI * 2);
           g.strokeStyle = m.color; g.globalAlpha = 0.5 + (1 - pulse) * 0.4; g.lineWidth = 2; g.stroke();

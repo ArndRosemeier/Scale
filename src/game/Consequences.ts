@@ -8,6 +8,8 @@
  * crowds has consequences. The justice layer (crime/Justice.ts) listens: hurting bystanders,
  * police or property in front of witnesses costs karma and reputation and draws the police.
  */
+import { SIDEKICK_OWNER } from '../sim/actors/Actor';
+
 export type HarmTarget = 'person' | 'car' | 'robot' | 'drone' | 'prop' | 'building' | 'ground';
 /** 'world': nobody's own doing (a collapse's rubble, a hero's body flung by a monster). */
 export type HarmCause = 'player' | 'threat' | 'police' | 'military' | 'world';
@@ -42,6 +44,9 @@ export class Consequences {
   onRecord: ((e: HarmEntry) => void) | null = null;
 
   record(power: string, target: HarmTarget, effect: HarmEffect, x: number, z: number, ref?: object, cause: HarmCause = 'player', size?: number): void {
+    // The sidekick is outside the reputation system (SIDEKICK_PLAN §1.7): the hero catching them
+    // with a power or a blow is nobody's misdeed.
+    if (cause === 'player' && target === 'person' && (ref as { actor?: { owner?: number } } | undefined)?.actor?.owner === SIDEKICK_OWNER) cause = 'world';
     const e: HarmEntry = { cause, power, target, effect, x, z, t: this.time, ref, size };
     if (this.log.length >= LOG) this.log.shift();
     this.log.push(e);

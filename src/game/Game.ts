@@ -580,6 +580,12 @@ export class Game {
         go: (back?: number) => this.sidekick.devGo(back),
         take: () => { this.sidekick.take(); return this.sidekick.status(); },
         reset: () => { this.sidekick.devReset(); return this.sidekick.status(); },
+        bond: () => this.sidekick.devBond(),
+        call: () => { this.sidekick.mate.call(); return this.sidekick.mate.status(); },
+        mate: () => this.sidekick.mate.status(),
+        power: (p?: string) => { const m = this.sidekick.mate; if (p) m.power = p as typeof m.power; return m.power; },
+        ko: () => { this.sidekick.mate.devKo(); return this.sidekick.mate.status(); },
+        ward: (make?: boolean) => { this.sidekick.mate.devWard(make); return this.sidekick.status(); },
       };
       if (dev) dev.halls = { stats: () => this.halls.stats, list: () => this.halls.report(), go: (kind: 'cathedral' | 'townhall' = 'cathedral') => {
         // Just inside the door, looking in.

@@ -110,7 +110,8 @@ export class TalkUi {
   }
 
   showTopics(): void {
-    this.setOptions([...TOPICS.map((t) => ({ label: t.label, run: () => this.hooks.choose(t.topic) })), ...this.hooks.extras()]);
+    // The extras (offering the shard) first: they are why you came.
+    this.setOptions([...this.hooks.extras(), ...TOPICS.map((t) => ({ label: t.label, run: () => this.hooks.choose(t.topic) }))]);
   }
 
   /** No options for now (a scene plays out in the panel). */
