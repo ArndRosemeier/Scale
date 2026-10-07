@@ -439,8 +439,9 @@ export class CharacterCreator {
       }
       case 'face':
         kids = [
-          section('Features', ...FACE.map(([k, label]) => slider(label, a.face[k] ?? 0, -1, 1, signed, (v) => { this.look.appearance.face[k] = v; this.changed(); }).el)),
-          h('p', 'cc-note', 'Double-click a slider to reset it to average.'),
+          section('Features', ...FACE.map(([k, label]) => slider(label, a.face[k] ?? 0, -1, 1, signed, (v) => { this.look.appearance.face[k] = v; this.changed(); }).el),
+            slider('Random tweaks', a.faceDetail ?? 0, 0, 1, pct, (v) => this.setA('faceDetail', v)).el),
+          h('p', 'cc-note', 'Double-click a slider to reset it to average. Random tweaks adds the small seeded differences city people have (nose, lips, eyes, ears).'),
         ];
         break;
       case 'hair':

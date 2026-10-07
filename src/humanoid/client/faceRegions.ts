@@ -82,11 +82,11 @@ vec2 h_brow(vec3 f, vec4 br) {
   float ax = abs(f.x);
   float u = (ax - 0.17) / 0.86;
   float uc = clamp(u, 0.0, 1.0);
-  float cy = 0.43 + br.y * 0.1 * sin(uc * 2.7) - 0.09 * uc * uc;
-  float th = br.x * mix(0.085, 0.03, uc);
+  float cy = 0.2 + br.y * 0.1 * sin(uc * 2.7) - 0.09 * uc * uc;
+  float th = br.x * mix(0.085, 0.05, uc);
   float d = abs(f.y - cy) / max(th, 1e-3);
   float m = (1.0 - smoothstep(0.55, 1.05, d)) * smoothstep(-0.12, 0.04, u) * (1.0 - smoothstep(0.88, 1.05, u));
-  m = max(m, br.z * (1.0 - smoothstep(0.12, 0.2, ax)) * (1.0 - smoothstep(0.5, 1.0, abs(f.y - 0.42) / 0.07)));
+  m = max(m, br.z * (1.0 - smoothstep(0.12, 0.2, ax)) * (1.0 - smoothstep(0.5, 1.0, abs(f.y - 0.19) / 0.07)));
   m *= smoothstep(-0.55, -0.3, f.z);
   return vec2(m, u);
 }
