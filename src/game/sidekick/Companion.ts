@@ -12,6 +12,13 @@
  *    lands. None of it touches the hero's reputation, and they never fight the police: wanted, with
  *    officers about, they keep out of it.
  *  - K calls them: they come at full speed and stay close for a while.
+ *  - Phase 3 (growthRules): they earn their own karma (knock-outs, fights won, helping people up), take
+ *    the hero's gifts (with a wish, honoured or not) and buy powers by their traits; in a fight they
+ *    use whichever of their powers fits where the foe stands, a shield when hurt, a charge.
+ *  - Phase 4: trust (time together, gifts, fights won, the hero helping people close to them; the
+ *    hero hurting bystanders near them, leaving them alone in a losing fight). The asks from the
+ *    talk menu: help me, stay back (they hang 20–40 m off and only step in when the hero is hurt),
+ *    go home for now (back to their own day until called), come with me.
  *  - Knocked out: the hospital's med drones come, lift them in a stasis field and fly off; after a
  *    while in the revival ward they come back, or (1 in 5) they do not (Sidekick: the grave, the next
  *    shard).
@@ -24,14 +31,24 @@ import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { makeActor, play, goTo, stand, lookAt, subdued, SIDEKICK_OWNER, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
 import { traitsOf, temperamentOf, type Temperament, type Traits } from '../people/identity';
-import { VILLAIN_POWERS } from '../powers/Caster';
+import { VILLAIN_POWERS, CASTERS } from '../powers/Caster';
+import { bondOf, bondWord } from '../people/social';
+import type { Deed } from '../people/memory';
+import type { DownCause } from '../../sim/Pedestrians';
+import { ROSTER, GIFTS, MATE_KARMA, TRUST, nextCost, nextWant, honoursWish, buyLine, giftLine, wishLine, trustWord, askAnswer, answersCall, leaning, type Gift, type Ranks, type Ask } from './growthRules';
 import { MedFleet } from '../defeat/MedDrones';
 import { MATE, MATE_POWERS, fightStyle, matePower, pickFoe, revives, mateLine, type FightStyle, type MateSay, type FoeInfo, type MatePower } from './companionRules';
 
-export type MateMode = 'around' | 'fight' | 'back' | 'down' | 'ward' | 'gone';
+export type MateMode = 'around' | 'fight' | 'back' | 'down' | 'ward' | 'home' | 'gone';
 
-/** What a save keeps of them (Sidekick.save). */
-export interface MateSave { hp: number; k: number; ward: number }
+/** What a save keeps of them (Sidekick.save); the growth fields are absent in older saves. */
+export interface MateSave {
+  hp: number; k: number; ward: number;
+  karma?: number; earned?: number; ranks?: Ranks; trust?: number; bought?: number; wish?: Gift | null; away?: Away;
+}
+
+/** Where an ask left them: nowhere special, hanging back, or at home (until called). */
+export type Away = 'none' | 'hold' | 'home';
 
 interface Carry {
   /** 'wait': lying; 'in': drones coming; 'lift': raised into the field; 'away': off to the hospital. */
@@ -79,7 +96,7 @@ export class Companion {
   private powerCd = 3;
   /** Seconds spent stepping back out of a brawl to use their power. */
   private backT = 0;
-  private cast: { t: number; tx: number; ty: number; tz: number } | null = null;
+  private cast: { t: number; tx: number; ty: number; tz: number; w: MatePower | 'shield' } | null = null;
   private swing = -1;
   private counter: { a: PedAgent; t: number } | null = null;
   private carry: Carry | null = null;
@@ -87,7 +104,27 @@ export class Companion {
   private sayBack = false;
   private tmp: PedAgent[] = [];
   private v = new THREE.Vector3();
-  stats = { flights: 0, catchUps: 0, punches: 0, powers: 0, unsafe: 0, kos: 0, called: 0, taken: 0, returned: 0 };
+  /** Phase 3: their karma, ranks bought, what they save for (a wish they took to heart). */
+  karma = 0;
+  earned = 0;
+  ranks: Ranks = {};
+  bought = 0;
+  wish: Gift | null = null;
+  /** Phase 4: trust in the hero (0…100), and where an ask left them. */
+  trust: number = TRUST.start;
+  away: Away = 'none';
+  /** The power in hand (chosen per cast from the ones they have). */
+  private cur: MatePower = 'fireball';
+  /** How much each power was used lately (fades with every cast). */
+  private used = new Map<MatePower, number>();
+  private shieldCd = 0;
+  private rush: { x: number; z: number; t: number; hit: boolean } | null = null;
+  /** Someone they are helping up, and how long they have been at it. */
+  private helping: { a: PedAgent; t: number; lift: number } | null = null;
+  private helpScanT = 2;
+  private hurtSeen = new Map<number, number>();
+  private time = 0;
+  stats = { flights: 0, catchUps: 0, punches: 0, powers: 0, unsafe: 0, kos: 0, called: 0, taken: 0, returned: 0, bought: 0, helped: 0, refused: 0 };
 
   constructor(private g: Game, private hooks: { died(): void; persist(): void }) {}
 
@@ -100,10 +137,25 @@ export class Companion {
     if (k) { this.traits = traitsOf(k.cit); this.temper = temperamentOf(this.traits); }
     this.style = fightStyle(this.temper, this.traits);
     this.power = matePower(this.g.settings.seed, who, this.traits);
-    this.hp = save ? Math.max(1, Math.min(MATE.hp, save.hp)) : MATE.hp;
+    if (save && save.ranks) {
+      this.ranks = {};
+      for (const g of GIFTS) { const r = Math.floor(Number(save.ranks[g]) || 0); if (r > 0) this.ranks[g] = Math.min(r, ROSTER[g].cost.length); }
+      this.karma = Math.max(0, Math.floor(save.karma ?? 0));
+      this.earned = Math.max(0, Math.floor(save.earned ?? 0));
+      this.trust = Math.max(0, Math.min(TRUST.max, save.trust ?? TRUST.start));
+      this.bought = Math.max(0, Math.floor(save.bought ?? 0));
+      this.wish = save.wish && GIFTS.includes(save.wish) ? save.wish : null;
+      this.away = save.away === 'hold' || save.away === 'home' ? save.away : 'none';
+    } else {
+      // The shard's first gift: flight and the power that suits them.
+      this.ranks = { [this.power]: 1 };
+      this.karma = 0; this.earned = 0; this.bought = 0; this.wish = null;
+      this.trust = TRUST.start; this.away = 'none';
+    }
+    this.hp = save ? Math.max(1, Math.min(this.maxHp(), save.hp)) : this.maxHp();
     this.k = save ? save.k : 0;
     this.wardT = save && save.ward > 0 ? save.ward : 0;
-    this.mode = this.wardT > 0 ? 'ward' : 'around';
+    this.mode = this.wardT > 0 ? 'ward' : this.away === 'home' ? 'home' : 'around';
     // (In the ward nobody sees them in the streets.)
     if (this.mode === 'ward') this.g.peds.absent.add(who);
     this.anchor.copy(this.g.player.pos);
@@ -126,7 +178,10 @@ export class Companion {
 
   save(): MateSave {
     const away = this.mode === 'ward' ? this.wardT : this.mode === 'down' ? MATE.wardTime : 0;
-    return { hp: Math.round(this.hp), k: this.k, ward: Math.round(away) };
+    return {
+      hp: Math.round(this.hp), k: this.k, ward: Math.round(away),
+      karma: this.karma, earned: this.earned, ranks: { ...this.ranks }, trust: Math.round(this.trust * 10) / 10, bought: this.bought, wish: this.wish, away: this.away,
+    };
   }
 
   /** K: the hero calls for help. */
@@ -139,6 +194,13 @@ export class Companion {
     g.dust.burst(p.x, p.y + g.player.height + 1.2, p.z, 14, 0.4, 3.5, 0.5, 1.2, new THREE.Color(1.6, 1.25, 0.4), 1.2, 0.5);
     if (this.mode === 'ward') { g.powerHud.toast(`<b>${this.name}</b> is in the hospital's revival ward and cannot come`, 'warn', 4000); return; }
     if (this.mode === 'down') { g.powerHud.toast(`<b>${this.name}</b> is down and cannot come`, 'warn', 3500); return; }
+    if (!answersCall(this.trust, Math.random())) {
+      this.stats.refused++;
+      g.powerHud.toast(`<b>${this.name}</b> does not come. They are ${trustWord(this.trust)}`, 'warn', 4000);
+      return;
+    }
+    if (this.mode === 'home') { this.mode = 'around'; this.sayBack = false; }
+    this.away = 'none';
     this.calledT = MATE.calledFor;
     g.powerHud.toast(`You call for <b>${this.name}</b>`, 'info', 2500);
     if (this.a) this.say('called', true);
@@ -147,8 +209,10 @@ export class Companion {
   // ------------------------------------------------------------------ per frame
 
   update(dt: number): void {
-    if (this.mode === 'gone') return;
+    if (this.mode === 'gone' || this.mode === 'home') return;
     const g = this.g, P = g.player;
+    this.time += dt;
+    this.shieldCd -= dt;
     this.barkT -= dt; this.idleT -= dt; this.powerCd -= dt; this.calledT -= dt; this.spotT -= dt; this.scanT -= dt;
     if (this.mode === 'ward') {
       this.wardT -= dt;
@@ -172,15 +236,20 @@ export class Companion {
     this.hp = act.hp;
     // Lost far behind and out of sight: make up the distance off-screen.
     const d = Math.hypot(a.x - P.pos.x, a.z - P.pos.z);
+    if (d < 60) this.trustBy(TRUST.together * dt);
+    if (act.memo.shieldT > 0) { act.memo.shieldT -= dt; g.crime?.casts.cast(a, 'shield', 'hold', a.x, a.y, a.z); }
     if (d > MATE.lostR && !this.seen(a.x, a.y + 1, a.z)) this.catchUp(a);
     if (this.sayBack && d < 30) { this.sayBack = false; this.say('back', true); }
     if (this.scanT <= 0) { this.scanT = 0.4; this.scan(a); }
     const before = this.mode;
-    this.mode = this.policeNear ? 'back' : this.foes.length ? 'fight' : 'around';
+    // Asked to stay back: into a fight only when called or when the hero is hurt.
+    const H = g.crime?.health, joins = this.away !== 'hold' || this.calledT > 0 || (!!H && H.hp < H.max * 0.4);
+    this.mode = this.policeNear ? 'back' : this.foes.length && joins ? 'fight' : 'around';
+    if (this.mode !== 'around') this.helping = null;
     if (this.mode !== before) this.changed(before);
     if (this.mode !== 'fight') { this.cast = null; this.swing = -1; }
     if (this.mode === 'around') {
-      if (this.hp < MATE.hp) { this.hp = Math.min(MATE.hp, this.hp + MATE.heal * dt); act.hp = this.hp; }
+      if (this.hp < this.maxHp()) { this.hp = Math.min(this.maxHp(), this.hp + MATE.heal * dt); act.hp = this.hp; }
       this.around(a, dt);
     } else if (this.mode === 'fight') this.fight(a, dt);
     else this.keepOff(a, dt);
@@ -212,7 +281,7 @@ export class Companion {
       this.airborneAt(a, s.x, s.y, s.z);
     } else if (a.actor && a.actor.owner === PEOPLE_OWNER) return null;
     this.a = a;
-    this.act = makeActor('bystander', SIDEKICK_OWNER, { title: this.name, hp: this.hp, maxHp: MATE.hp, strength: MATE.strength });
+    this.act = makeActor('bystander', SIDEKICK_OWNER, { title: this.name, hp: this.hp, maxHp: this.maxHp(), strength: this.strength() });
     a.actor = this.act;
     if (a.inside) { a.inside = false; a.hall = false; }
     if (!a.airborne) this.flying = false;
@@ -276,9 +345,9 @@ export class Companion {
 
   /** Go to (x, z): walking or running when close and the way is clear, else flying (landing there if `land`). */
   private moveTo(a: PedAgent, dt: number, x: number, z: number, land: boolean, hurry = false, flyY?: number): void {
-    const act = this.act!, dh = Math.hypot(x - a.x, z - a.z);
+    const act = this.act!, dh = Math.hypot(x - a.x, z - a.z), wet = this.g.peds.wet(x, z);
     if (!this.flying) {
-      const blocked = act.stuckT > 1.4 || this.g.peds.wet(x, z);
+      const blocked = act.stuckT > 1.4 || wet;
       if (dh > (hurry ? 12 : MATE.flyFrom) || blocked || !land) { this.takeOff(a); }
       else {
         if (dh < 0.6) { stand(act); return; }
@@ -286,7 +355,8 @@ export class Companion {
         return;
       }
     }
-    if (land && dh < MATE.landR) this.land(a, dt, x, z);
+    // (Over water they hover: nowhere to stand.)
+    if (land && !wet && dh < MATE.landR) this.land(a, dt, x, z);
     else this.fly(a, dt, x, flyY ?? Math.max(this.g.player.pos.y + 3, a.y - 2), z, hurry);
   }
 
@@ -394,7 +464,10 @@ export class Companion {
       return;
     }
     const base = this.anchor;
-    const r0 = called ? 2 : MATE.ringMin, r1 = called ? 5 : MATE.ringMax;
+    // A small deed of their own: someone fell near them and nobody came.
+    if (!called && this.helpUp(a, dt)) return;
+    const hold = this.away === 'hold' && !called;
+    const r0 = called ? 2 : hold ? 22 : MATE.ringMin, r1 = called ? 5 : hold ? 40 : MATE.ringMax;
     if (!this.spot || this.spotT <= 0 || Math.hypot(this.spot.x - base.x, this.spot.z - base.z) > r1 + 5) this.pickSpot(base, r0, r1);
     const s = this.spot!;
     this.moveTo(a, dt, s.x, s.z, true, called);
@@ -406,6 +479,42 @@ export class Companion {
       if (this.idleT <= 0 && Math.hypot(p.x - a.x, p.z - a.z) < 14) { this.idleT = MATE.idleGap * (0.7 + Math.random() * 0.6); this.say('idle'); }
     }
     if (!this.flying && Math.hypot(s.x - a.x, s.z - a.z) > 40 && this.barkT <= 0 && Math.random() < dt * 0.2) this.say('coming');
+  }
+
+  /** Someone down near them for a while (nobody helped): over to them and up they get. True while at it. */
+  private helpUp(a: PedAgent, dt: number): boolean {
+    const g = this.g, p = g.player.pos;
+    this.helpScanT -= dt;
+    if (!this.helping && this.helpScanT <= 0 && !this.flying) {
+      this.helpScanT = 1.5;
+      for (const o of g.peds.neighbours(a.x, a.z, 25, this.tmp)) {
+        if (o === a || !o.alive || o.inside || o.actor || o.state !== PState.Down || o.ragdoll || o.stateT < 8) continue;
+        if (Math.hypot(o.x - p.x, o.z - p.z) < 5 || Math.abs(o.y - a.y) > 1.5 || g.peds.wet(o.x, o.z)) continue;
+        this.helping = { a: o, t: 0, lift: -1 };
+        break;
+      }
+    }
+    const H = this.helping;
+    if (!H) return false;
+    const o = H.a;
+    if (!o.alive || o.state !== PState.Down || o.actor || o.ragdoll || H.t > 20) { this.helping = null; return false; }
+    H.t += dt;
+    const d = Math.hypot(o.x - a.x, o.z - a.z);
+    if (d > 1.9) { this.moveTo(a, dt, o.x + (a.x - o.x) / (d || 1) * 1.0, o.z + (a.z - o.z) / (d || 1) * 1.0, true); return true; }
+    const act = this.act!;
+    stand(act);
+    lookAt(act, o.x, o.y + 0.3, o.z);
+    if (H.lift < 0) { H.lift = 0; play(act, 'pickup', 0.9); }
+    H.lift += dt;
+    if (H.lift < 0.85) return true;
+    // Up (as the hero helps people up: Deeds.help).
+    o.state = PState.Idle; o.stateT = 0; o.fear = 0; o.vx = o.vy = o.vz = 0; o.speed = 0; o.helped = true; o.downBy = undefined;
+    o.heading = Math.atan2(-(a.x - o.x), -(a.z - o.z));
+    this.helping = null;
+    this.stats.helped++;
+    this.say('helpUp', true);
+    this.earn(MATE_KARMA.helpUp);
+    return false;
   }
 
   /** A new spot to stand: round the hero, on open ground at their level, not in water. */
@@ -458,6 +567,9 @@ export class Companion {
     } else if (before === 'fight' && this.fought) {
       this.fought = false;
       if (Math.random() < 0.6) this.say('won');
+      // Won side by side (the hero there for it).
+      const p = this.g.player.pos, a = this.a;
+      if (a && Math.hypot(a.x - p.x, a.z - p.z) < 60) { this.earn(MATE_KARMA.won); this.trustBy(TRUST.won); }
     }
   }
 
@@ -482,11 +594,22 @@ export class Companion {
       if (this.swing < 0) this.strike(a, t);
       return;
     }
-    // Their power when it is ready: from a distance it needs (stepping back out of a brawl for it), when it is safe.
-    const M = MATE_POWERS[this.power], ready = this.powerCd <= 0;
+    if (this.rush) { this.rushing(a, dt); return; }
+    // Hurt: their shield, if they have one.
+    if (this.has('shield') && !this.flying && this.shieldCd <= 0 && act.hp < act.maxHp * 0.6 && !(act.memo.shieldT > 0)) { this.beginCast(a, a, 'shield'); return; }
+    // A power when one is ready: whichever of theirs fits where the foe stands and is safe there
+    // (their favourite first); too close for the favourite, they step back out of the brawl for it.
+    const own = this.attacks();
+    const fav = own[0] ?? null;
+    const M = MATE_POWERS[fav ?? 'fireball'], ready = this.powerCd <= 0 && !!fav;
     const castD = Math.min(M.max - 2, Math.max(M.min + 2.5, 8));
-    if (ready && !this.flying && d > M.min && d < M.max) {
-      if (this.safe(a, t)) { this.backT = 0; this.beginCast(a, t); return; }
+    if (ready && !this.flying) {
+      for (const w of own) {
+        const W = MATE_POWERS[w];
+        if (d > W.min && d < W.max && this.safe(a, t, w)) { this.backT = 0; this.beginCast(a, t, w); return; }
+      }
+    }
+    if (ready && !this.flying && d > M.min) {
       this.stats.unsafe++;
       this.powerCd = 1.5;
     } else if (ready && !this.flying && d <= M.min) {
@@ -522,7 +645,7 @@ export class Companion {
     const res = g.crime.combat.hitActor(t, (dx / d) * J, 60, (dz / d) * J, 'punch', 'npc', a.x, a.z);
     g.crime.sound('punch_impact', t.x, t.y + 1.2, t.z, 0.55, 1);
     this.stats.punches++;
-    if (res.effect === 'ko') this.stats.kos++;
+    if (res.effect === 'ko') { this.stats.kos++; this.earn(t.actor?.memo.boss || t.actor?.memo.lt ? MATE_KARMA.lead : MATE_KARMA.ko); }
     if ((res.effect === 'stagger' || res.effect === 'none') && Math.random() < MATE.counterChance) this.counter = { a: t, t: 0.55 };
   }
 
@@ -546,8 +669,8 @@ export class Companion {
   }
 
   /** Nobody but the bad guys where their power would land (or along its line, or in its cone), the hero well clear of it. */
-  private safe(a: PedAgent, t: PedAgent): boolean {
-    const g = this.g, p = g.player.pos, M = MATE_POWERS[this.power];
+  private safe(a: PedAgent, t: PedAgent, w: MatePower): boolean {
+    const g = this.g, p = g.player.pos, M = MATE_POWERS[w];
     const dx = t.x - a.x, dz = t.z - a.z, d = Math.hypot(dx, dz) || 1e-6, ux = dx / d, uz = dz / d;
     // In the way: inside the area round the target, near the line, in the cone.
     let cx: number, cz: number, reach: number;
@@ -582,11 +705,15 @@ export class Companion {
     return true;
   }
 
-  private beginCast(a: PedAgent, t: PedAgent): void {
-    const g = this.g, act = this.act!, P = VILLAIN_POWERS[this.power];
+  private beginCast(a: PedAgent, t: PedAgent, w: MatePower | 'shield'): void {
+    if (w !== 'shield') {
+      for (const [k, n] of this.used) this.used.set(k, n * 0.5);
+      this.used.set(w, (this.used.get(w) ?? 0) + 1);
+    }
+    const g = this.g, act = this.act!, P = VILLAIN_POWERS[w];
     const tx = t.x, ty = t.y + 1.0, tz = t.z;
-    if (!g.crime || !g.crime.casts.cast(a, this.power, 'begin', tx, ty, tz)) { this.powerCd = 2; return; }
-    this.cast = { t: 0, tx, ty, tz };
+    if (!g.crime || !g.crime.casts.cast(a, w, 'begin', tx, ty, tz)) { if (w === 'shield') this.shieldCd = 2; else this.powerCd = 2; return; }
+    this.cast = { t: 0, tx, ty, tz, w };
     stand(act);
     lookAt(act, tx, ty, tz);
     play(act, P.pose, P.windup + 0.25);
@@ -594,17 +721,52 @@ export class Companion {
   }
 
   private casting(a: PedAgent, dt: number): void {
-    const g = this.g, C = this.cast!, w = this.power, P = VILLAIN_POWERS[w], act = this.act!;
+    const g = this.g, C = this.cast!, w = C.w, P = VILLAIN_POWERS[w], act = this.act!;
     C.t += dt;
     stand(act);
-    a.heading = Math.atan2(a.x - C.tx, a.z - C.tz);
-    if (act.staggerT > 0) { g.crime.casts.cast(a, w, 'end', C.tx, C.ty, C.tz); this.cast = null; this.powerCd = 3; return; }
+    if (w !== 'shield') a.heading = Math.atan2(a.x - C.tx, a.z - C.tz);
+    if (act.staggerT > 0) { g.crime.casts.cast(a, w, 'end', C.tx, C.ty, C.tz); this.cast = null; if (w === 'shield') this.shieldCd = 3; else this.powerCd = 3; return; }
     if (C.t < P.windup) { g.crime.casts.cast(a, w, 'tell', C.tx, C.ty, C.tz); return; }
     g.crime.casts.cast(a, w, 'release', C.tx, C.ty, C.tz);
-    g.crime.casts.cast(a, w, 'end', C.tx, C.ty, C.tz);
-    this.stats.powers++;
+    const atSelf = w === 'shield' || w === 'dash';
+    g.crime.sound(P.sound, atSelf ? a.x : C.tx, a.y + 1.2, atSelf ? a.z : C.tz, 0.8, P.pitch ?? 1);
     this.cast = null;
+    if (w === 'shield') {
+      g.crime.casts.cast(a, w, 'end', C.tx, C.ty, C.tz);
+      act.memo.shieldT = P.hold;
+      this.shieldCd = 14;
+      return;
+    }
+    if (w === 'dash') {
+      // On past where the foe stood (a charge does not stop at the spot).
+      const dx = C.tx - a.x, dz = C.tz - a.z, l = Math.hypot(dx, dz) || 1, L = Math.min(P.max, l + 2.5);
+      this.rush = { x: a.x + (dx / l) * L, z: a.z + (dz / l) * L, t: 0, hit: false };
+      play(act, 'block', P.hold);
+    } else g.crime.casts.cast(a, w, 'end', C.tx, C.ty, C.tz);
+    this.stats.powers++;
     this.powerCd = MATE.powerCd * (0.85 + 0.3 * Math.random());
+  }
+
+  /** The charge: a rush to the end point; the first foe in the way goes flying. */
+  private rushing(a: PedAgent, dt: number): void {
+    const g = this.g, R = this.rush!, act = this.act!, P = VILLAIN_POWERS.dash;
+    R.t += dt;
+    goTo(act, R.x, R.z, CASTERS.dashSpeed);
+    g.crime?.casts.cast(a, 'dash', 'hold', R.x, a.y, R.z);
+    if (!R.hit && g.crime) for (const o of g.peds.neighbours(a.x, a.z, P.radius + 0.4, this.tmp)) {
+      if (!isFoe(o) || Math.hypot(o.x - a.x, o.z - a.z) > P.radius + 0.3) continue;
+      R.hit = true;
+      const dx = R.x - a.x, dz = R.z - a.z, l = Math.hypot(dx, dz) || 1, J = 700 * Math.sqrt(act.strength);
+      const res = g.crime.combat.hitActor(o, (dx / l) * J, 150, (dz / l) * J, 'punch', 'npc', a.x, a.z);
+      g.crime.sound('punch_impact', o.x, o.y + 1.2, o.z, 0.8, 0.75);
+      if (res.effect === 'ko') { this.stats.kos++; this.earn(o.actor?.memo.boss || o.actor?.memo.lt ? MATE_KARMA.lead : MATE_KARMA.ko); }
+      break;
+    }
+    if (Math.hypot(R.x - a.x, R.z - a.z) < 0.7 || R.t > 1.4 || act.stuckT > 0.5) {
+      g.crime?.casts.cast(a, 'dash', 'end', R.x, a.y, R.z);
+      this.rush = null;
+      stand(act);
+    }
   }
 
   /** Wanted with the police about: out of it, on the hero's far side from the nearest officer. */
@@ -633,7 +795,10 @@ export class Companion {
     if (a.airborne) { a.airborne = false; a.fly = undefined; a.state = PState.Down; a.stateT = 0; a.vy = Math.min(a.vy, 0); }
     this.hp = 0;
     g.barks?.hush(a);
-    const far = Math.hypot(a.x - g.player.pos.x, a.z - g.player.pos.z) > 260;
+    const dh = Math.hypot(a.x - g.player.pos.x, a.z - g.player.pos.z), far = dh > 260;
+    // Left alone in a losing fight: the hero was nowhere near.
+    if (dh > 60) this.trustBy(TRUST.left);
+    this.rush = null; this.helping = null;
     this.carry = { stage: 'wait', t: 0, from: [], body: new THREE.Vector3(a.x, a.y, a.z), heading: a.heading, dir: new THREE.Vector3() };
     if (far) { this.toWard(); return; }
     g.powerHud.toast(`<b>${this.name}</b> is down! The hospital's med drones are on their way`, 'warn', 6000);
@@ -737,8 +902,8 @@ export class Companion {
     g.peds.absent.delete(this.who);
     if (revives(g.settings.seed, this.who, this.k)) {
       this.stats.returned++;
-      this.mode = 'around';
-      this.hp = MATE.hp;
+      this.mode = this.away === 'home' ? 'home' : 'around';
+      this.hp = this.maxHp();
       this.sayBack = true;
       g.powerHud.toast(`<b>${this.name}</b> pulled through and is on the way back to you`, 'core', 6000);
       g.audio.chime('core', 0.4);
@@ -751,19 +916,161 @@ export class Companion {
 
   // ------------------------------------------------------------------ words
 
-  private say(what: MateSay, force = false): void {
+  private say(what: MateSay, force = false, word = 'friend'): void {
     const a = this.a;
     if (!a || !this.g.barks || (!force && this.barkT > 0)) return;
     this.barkT = MATE.barkGap;
-    this.g.barks.line(a, mateLine(what, this.temper, Math.random()));
+    this.g.barks.line(a, mateLine(what, this.temper, Math.random()).replace(/\{word\}/g, word));
   }
+
+  // ------------------------------------------------------------------ growth (phase 3)
+
+  /** Health and punch strength with what they bought. */
+  maxHp(): number { return Math.round(MATE.hp * (1 + 0.3 * (this.ranks.toughness ?? 0))); }
+  private strength(): number { return MATE.strength * (1 + 0.25 * (this.ranks.strength ?? 0)); }
+
+  /** Do they have this (the sandbox gives them everything)? */
+  has(g: Gift): boolean { return this.g.progress.sandbox || (this.ranks[g] ?? 0) > 0; }
+
+  /** Their attack powers, favourite first (with a little luck each time); what they just used
+   *  falls back a little, so someone with many powers mixes them rather than repeating one. */
+  private attacks(): MatePower[] {
+    const list = (Object.keys(MATE_POWERS) as MatePower[]).filter((w) => this.has(w));
+    const sc = new Map(list.map((w) => [w, (leaning(w, this.traits) * (0.75 + 0.5 * Math.random()) + (w === this.power ? 0.15 : 0)) * Math.pow(0.45, this.used.get(w) ?? 0)]));
+    return list.sort((x, y) => sc.get(y)! - sc.get(x)!);
+  }
+
+  /** What they save for now: a wish they took to heart, else what suits them. */
+  want(): Gift | null {
+    if (this.wish && nextCost(this.wish, this.ranks) !== null) return this.wish;
+    return nextWant(this.traits, this.ranks, this.g.settings.seed, this.who, this.bought);
+  }
+
+  /** Karma of their own, for a deed; they buy what they save for once they can. */
+  earn(n: number): void {
+    if (this.g.progress.sandbox || n <= 0) return;
+    this.karma += n;
+    this.earned += n;
+    this.tryBuy();
+    this.hooks.persist();
+  }
+
+  private tryBuy(): void {
+    for (let i = 0; i < 12; i++) {
+      const w = this.want();
+      const c = w ? nextCost(w, this.ranks) : null;
+      if (!w || c === null || this.karma < c) return;
+      this.karma -= c;
+      this.ranks[w] = (this.ranks[w] ?? 0) + 1;
+      this.bought++;
+      this.stats.bought++;
+      if (this.wish === w) this.wish = null;
+      const act = this.act;
+      if (act) { act.strength = this.strength(); act.maxHp = this.maxHp(); }
+      const r = this.ranks[w]!, many = ROSTER[w].cost.length > 1;
+      this.g.powerHud.toast(`<b>${this.name}</b> spent ${c} karma on <b>${ROSTER[w].name}</b>${many ? ` (rank ${r})` : ''}: ${ROSTER[w].what}`, 'karma', 6000);
+      if (this.a) { this.barkT = MATE.barkGap; this.g.barks?.line(this.a, buyLine(w, this.temper, Math.random())); }
+    }
+  }
+
+  /** The hero gives them karma (taken from the hero's balance by the caller), maybe with a wish. What they say. */
+  give(n: number, wish: Gift | null): string {
+    const share = n / Math.max(10, this.karma + n);
+    this.karma += n;
+    this.trustBy(Math.min(TRUST.giftMax, n * TRUST.giftPer));
+    let line = giftLine(this.temper, share, Math.random());
+    if (wish && nextCost(wish, this.ranks) !== null) {
+      const yes = honoursWish(wish, this.trust, this.traits, Math.random());
+      if (yes) this.wish = wish;
+      line += ' ' + wishLine(yes, wish, this.temper, Math.random());
+    }
+    this.tryBuy();
+    this.hooks.persist();
+    return line;
+  }
+
+  /** How they are getting on (their talk line). */
+  describe(): string {
+    const have = (Object.keys(this.ranks) as Gift[]).filter((g) => (this.ranks[g] ?? 0) > 0).map((g) => ROSTER[g].name.toLowerCase());
+    const w = this.want(), c = w ? nextCost(w, this.ranks) : null;
+    const list = have.length > 1 ? `${have.slice(0, -1).join(', ')} and ${have[have.length - 1]}` : have[0] ?? 'nothing yet';
+    const save = w && c !== null ? ` I'm saving for ${ROSTER[w].name.toLowerCase()}: ${this.karma} of ${c} karma.` : this.karma ? ` I've got ${this.karma} karma put by.` : '';
+    const feel = this.trust < 20 ? 'I\'m not sure about you, to be honest.' : this.trust < 40 ? 'Still getting to know you.' : this.trust < 60 ? 'I think we make a decent team.' : this.trust < 80 ? 'I trust you.' : 'I\'d follow you anywhere.';
+    return `Flying, ${list}.${save} ${feel}`;
+  }
+
+  // ------------------------------------------------------------------ trust and asks (phase 4)
+
+  trustBy(n: number): void {
+    this.trust = Math.max(0, Math.min(TRUST.max, this.trust + n));
+  }
+
+  /** The hero asks something in the talk menu. What they say. */
+  ask(k: Ask): string {
+    const fight = this.foes.length > 0;
+    if (k === 'help') {
+      const r = askAnswer('help', this.trust, this.traits, this.temper, { fight }, Math.random());
+      if (r.ok) { this.away = 'none'; this.calledT = MATE.calledFor; if (this.mode === 'home') this.mode = 'around'; }
+      else this.stats.refused++;
+      return r.line;
+    }
+    const r = askAnswer(k, this.trust, this.traits, this.temper, { fight }, Math.random());
+    if (!r.ok) { this.stats.refused++; return r.line; }
+    if (r.against) this.trustBy(TRUST.against);
+    if (k === 'back') { this.away = 'hold'; this.calledT = 0; this.spot = null; }
+    else if (k === 'come') { this.away = 'none'; if (this.mode === 'home') this.mode = 'around'; }
+    else if (k === 'home') this.goHome();
+    this.hooks.persist();
+    return r.line;
+  }
+
+  /** Back to their own day: the body goes back to the city's people until called. */
+  private goHome(): void {
+    const a = this.a;
+    this.away = 'home';
+    this.calledT = 0;
+    if (a && a.alive && a.actor === this.act) {
+      if (a.airborne) { a.airborne = false; a.fly = undefined; a.y = this.g.collision.groundAt(a.x, a.z, a.y, 400); a.vx = a.vy = a.vz = 0; }
+      a.actor = undefined;
+      // (Moving again: their own day picks up from here.)
+      if (a.state !== PState.Down) { a.state = PState.Flee; a.fear = 0; a.fearX = a.x; a.fearZ = a.z; a.stateT = 0; }
+    }
+    this.a = null; this.act = null; this.flying = false; this.cast = null; this.rush = null; this.helping = null;
+    if (this.mode !== 'ward' && this.mode !== 'down') this.mode = 'home';
+  }
+
+  /** Someone knocked down: by the hero, near them, they mind (more so someone close to them). */
+  onKnock(o: PedAgent, cause: DownCause): void {
+    const a = this.a;
+    if (cause !== 'player' || !a || this.mode === 'gone' || this.mode === 'home' || o === a || o.actor?.hostile) return;
+    if (Math.hypot(o.x - a.x, o.z - a.z) > 50) return;
+    const last = this.hurtSeen.get(o.cit.id) ?? -1e9;
+    if (this.time - last < 30) return;
+    this.hurtSeen.set(o.cit.id, this.time);
+    const close = this.cit() ? bondOf(this.cit()!, o.cit) : null;
+    this.trustBy(close ? TRUST.hurtFriend : TRUST.hurt);
+    if (this.barkT <= 0 || close) this.say('wary', true);
+  }
+
+  /** The hero helped or saved someone: someone close to them earns the hero trust. */
+  onDeed(o: PedAgent, d: Deed): void {
+    if ((d !== 'helped' && d !== 'saved') || this.mode === 'gone') return;
+    const me = this.cit();
+    const b = me ? bondOf(me, o.cit) : null;
+    if (!b || !me) return;
+    this.trustBy(TRUST.friend);
+    if (this.a && Math.hypot(this.a.x - o.x, this.a.z - o.z) < 80) this.say('friend', true, bondWord(b, o.cit, me));
+  }
+
+  private cit() { return this.g.people.find(this.who)?.cit ?? null; }
 
   // ------------------------------------------------------------------ dev
 
   status(): Record<string, unknown> {
     const a = this.a, p = this.g.player.pos;
     return {
-      mode: this.mode, name: this.name, temper: this.temper, style: this.style, power: this.power, hp: Math.round(this.hp), k: this.k, ward: Math.round(this.wardT),
+      mode: this.mode, name: this.name, temper: this.temper, style: this.style, power: this.power, hp: Math.round(this.hp), maxHp: this.maxHp(), k: this.k, ward: Math.round(this.wardT),
+      karma: this.karma, earned: this.earned, ranks: { ...this.ranks }, want: this.want(), wish: this.wish, trust: Math.round(this.trust), away: this.away,
       flying: this.flying, called: this.calledT > 0, foes: this.foes.length, police: this.policeNear,
       body: a ? { x: +a.x.toFixed(1), y: +a.y.toFixed(1), z: +a.z.toFixed(1), d: Math.round(Math.hypot(a.x - p.x, a.z - p.z)), state: a.state, act: a.actor?.state ?? null } : null,
       stats: { ...this.stats },
@@ -783,7 +1090,7 @@ export class Companion {
     if (this.mode !== 'ward') return;
     if (make === undefined) { this.wardT = 0; return; }
     this.g.peds.absent.delete(this.who);
-    if (make) { this.mode = 'around'; this.hp = MATE.hp; this.sayBack = true; this.hooks.persist(); }
+    if (make) { this.mode = 'around'; this.hp = this.maxHp(); this.sayBack = true; this.hooks.persist(); }
     else { this.mode = 'gone'; this.hooks.died(); }
   }
 }

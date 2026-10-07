@@ -37,6 +37,7 @@ import { gameTimeLabel } from '../save/model';
 import { deriveSeed, hashToFloat } from '../../core/rng';
 import { Companion, type MateSave } from './Companion';
 import { MATE, MATE_POWERS, graveSpot } from './companionRules';
+import { ROSTER, GIFTS, TRUST, nextCost, trustWord, type Gift, type Ask } from './growthRules';
 import { makeGrave } from './Grave';
 import {
   SHARD, shardCells, resolveShard, sceptic, hasMatter, offerAnswer, accepts, answerLine, awakeningLines,
@@ -158,6 +159,11 @@ export class Sidekick {
     document.body.appendChild(this.badge);
     try { this.restore(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null'), false); } catch { /* storage unavailable */ }
     g.people.extraOptions = (a) => this.options(a);
+    // Phase 4: what the hero does to people near the sidekick, and to people close to them.
+    const prevKnock = g.reactions.onKnockDown;
+    g.reactions.onKnockDown = (a, fx, fz, power, cause) => { prevKnock?.(a, fx, fz, power, cause); if (this.phase === 'bonded') this.mate.onKnock(a, cause); };
+    const prevDeed = g.people.onDeed;
+    g.people.onDeed = (a, d) => { prevDeed?.(a, d); if (this.phase === 'bonded') this.mate.onDeed(a, d); };
   }
 
   /** One of everything the shard draws (for the start-up warm-up). */
@@ -386,7 +392,53 @@ export class Sidekick {
     if (this.scene) return [];
     if (this.phase === 'carried') return [{ label: 'Here, take this. (Offer them the shard)', run: () => this.offer() }];
     if (this.phase === 'parted' && a.cit.id === this.who && (this.g.crime?.rep.value ?? 0) >= SHARD.unlockRep) return [{ label: 'Will you stand with me again?', run: () => this.rejoin() }];
+    if (this.phase === 'bonded' && a.cit.id === this.who) return this.mateOptions();
     return [];
+  }
+
+  /** Talking to the sidekick (phases 3 and 4): one entry that opens how they are getting on, karma, the asks. */
+  private mateOptions(): { label: string; run: () => void }[] {
+    return [{ label: 'About the two of us…', run: () => this.g.people.choices(this.mateList()) }];
+  }
+
+  private mateList(): { label: string; run: () => void }[] {
+    const g = this.g, P = g.people, M = this.mate;
+    const list = [{ label: 'How are you getting on?', run: () => {
+      P.speak(M.describe());
+      const w = M.want(), c = w ? nextCost(w, M.ranks) : null;
+      g.powerHud.toast(`<b>${this.name}</b>: ${M.karma} karma${w && c !== null ? ` · saving for <b>${ROSTER[w].name}</b> (${c})` : ''} · ${trustWord(M.trust)}`, 'info', 6000);
+    } }];
+    if (!g.progress.sandbox && g.progress.karma >= 10) list.push({ label: 'I have some karma for you.', run: () => this.giveMenu() });
+    const ask = (k: Ask) => () => { P.speak(M.ask(k)); this.persist(); };
+    list.push({ label: 'I need your help.', run: ask('help') });
+    if (M.away !== 'hold') list.push({ label: 'Stay back for now.', run: ask('back') });
+    if (M.away !== 'home') list.push({ label: 'Go home for now.', run: ask('home') });
+    if (M.away !== 'none') list.push({ label: 'Come with me.', run: ask('come') });
+    return list;
+  }
+
+  /** How much (from the hero's balance), then what for. */
+  private giveMenu(): void {
+    const g = this.g, P = g.people, have = g.progress.karma;
+    const amounts = [10, 25, 50, 100, 200].filter((n) => n <= have);
+    P.choices(amounts.map((n) => ({ label: `${n} karma.`, run: () => this.wishMenu(n) })));
+  }
+
+  private wishMenu(n: number): void {
+    const P = this.g.people, M = this.mate;
+    const open = GIFTS.filter((w) => nextCost(w, M.ranks) !== null);
+    P.choices([
+      { label: 'Spend it as you like.', run: () => this.give(n, null) },
+      ...open.map((w) => ({ label: `Could you learn ${ROSTER[w].name.toLowerCase()}? (${nextCost(w, M.ranks)})`, run: () => this.give(n, w) })),
+    ]);
+  }
+
+  private give(n: number, wish: Gift | null): void {
+    const g = this.g;
+    if (g.progress.karma < n || this.phase !== 'bonded') { g.people.speak('…'); return; }
+    g.progress.addKarma(-n, `gave ${n} karma to ${this.name}`);
+    g.people.speak(this.mate.give(n, wish));
+    this.persist();
   }
 
   private offer(): void {
@@ -434,6 +486,8 @@ export class Sidekick {
     P.speak(['…All right. I missed this, if I\'m honest. I\'m back.', 'The city likes you again. So do I. I\'m in.', 'Fine. But don\'t make me regret it.'][Math.floor(Math.random() * 3)]);
     this.phase = 'bonded';
     P.setSidekick(this.who, true);
+    // As they were: their powers, their karma, a little less trust.
+    this.mate.start(this.who, this.name, this.mate.save());
     this.g.powerHud.toast(`<b>${this.name}</b> is your sidekick again`, 'core', 6000);
     this.persist();
   }
@@ -443,6 +497,8 @@ export class Sidekick {
     const g = this.g;
     this.phase = 'parted';
     this.stats.parted++;
+    this.mate.trustBy(TRUST.parted);
+    this.mate.away = 'none';
     this.mate.dismiss();
     g.people.setSidekick(this.who, false);
     const k = g.people.find(this.who);
@@ -660,7 +716,7 @@ export class Sidekick {
     return {
       v: 1, phase: this.phase, n: this.n, site: this.site ? { ...this.site } : null, gang: this.gang, cleared: this.cleared, who: this.who, name: this.name,
       matters: [...this.matters].map(([id, m]) => [id, m.favours, m.letDown]),
-      mate: this.phase === 'bonded' ? this.mate.save() : null,
+      mate: this.phase === 'bonded' || this.phase === 'parted' ? this.mate.save() : null,
       graves: this.graves.map((gr) => ({ ...gr })), dead: [...this.dead], nextAt: this.nextAt, graveFor: this.graveFor,
     };
   }
@@ -699,8 +755,9 @@ export class Sidekick {
     this.graveFor = typeof o.graveFor === 'string' ? o.graveFor.slice(0, 60) : '';
     this.graveSearch = null;
     const m = o.mate && typeof o.mate === 'object' ? o.mate as Partial<MateSave> : null;
-    const mate: MateSave | null = m ? { hp: num(m.hp, MATE.hp), k: Math.max(0, Math.floor(num(m.k, 0))), ward: Math.max(0, num(m.ward, 0)) } : null;
+    const mate: MateSave | null = m ? { ...m, hp: num(m.hp, MATE.hp), k: Math.max(0, Math.floor(num(m.k, 0))), ward: Math.max(0, num(m.ward, 0)) } : null;
     if (this.phase === 'bonded') this.mate.start(this.who, this.name, mate);
+    else if (this.phase === 'parted') { this.mate.start(this.who, this.name, mate ? { ...mate, ward: 0 } : null); this.mate.dismiss(); }
     else this.mate.dismiss();
     this.guards = null;
     this.search = null;

@@ -1,6 +1,7 @@
 # Sidekick — plan
 
-Status: **plan, nothing built** (Arnd, 2026-10-07: "an optional sidekick once reputation is high enough; the player
+Status: **phases 1–4 built** (v0.110 the shard, v0.117 a sidekick around, phases 3–4 karma, trust and asks; see
+"Built" at the end). Original brief (Arnd, 2026-10-07: "an optional sidekick once reputation is high enough; the player
 finds a second crystal and gives it to someone; the sidekick was a normal person and keeps their traits; really
 autonomous, not taking orders, but naturally inclined to help; the player can give karma, the sidekick decides what
 to spend it on and earns karma himself"). Decisions below were settled with Arnd in the project thread the same day;
@@ -121,3 +122,19 @@ Hiding it somewhere in a city of this size would be unfair. Two parts instead:
 
 Each phase is playable on its own. Phase 2 is the largest (the sidekick is closer to a second player than to a
 pedestrian) and changes what you see, so it needs a GPU check; phase 1's awakening scene does too.
+
+## Built
+
+- **Phase 3 (karma):** they earn their own karma (knock-outs 8, a boss or lieutenant 16, a fight won with the hero
+  10, helping up someone left lying 10) and spend it themselves on a sidekick roster that the villain casting core can
+  draw: fireballs, lightning, ground quake, stunning flash, blast of wind, shoulder charge, shield, and strength and
+  toughness in three ranks. What they save for follows their traits with some luck (growthRules.nextWant). The
+  hero's gift ("About the two of us…" in the talk menu) comes with an optional wish, honoured by trust and fit. In a
+  fight they use whichever of their powers fits where the foe stands and is safe there, a shield when hurt.
+  *(Deviation: every sidekick flies; super speed for a running sidekick is left for later, a ground runner at that
+  speed needs its own movement.)*
+- **Phase 4 (asks and trust):** trust 0–100, start 40 (growthRules.TRUST for the amounts). Asks: help me, stay back
+  (20–40 m off, in only when called or the hero is hurt), go home for now (back to their own day until K or "come
+  with me"), come with me. K can go unanswered when they are wary. The bond break keeps their powers, karma and
+  trust (minus 15) for winning them back.
+

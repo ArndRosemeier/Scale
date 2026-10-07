@@ -114,6 +114,11 @@ export class TalkUi {
     this.setOptions([...this.hooks.extras(), ...TOPICS.map((t) => ({ label: t.label, run: () => this.hooks.choose(t.topic) }))]);
   }
 
+  /** Options of another system's (the sidekick's: amounts, wishes); "Never mind." goes back to the topics. */
+  choices(list: { label: string; run: () => void }[]): void {
+    this.setOptions([...list, { label: 'Never mind.', run: () => this.showTopics() }]);
+  }
+
   /** No options for now (a scene plays out in the panel). */
   clearOptions(): void {
     this.setOptions([]);

@@ -15,6 +15,7 @@ import { SHARD, shardCells, resolveShard, sceptic, hasMatter, offerAnswer, accep
 import { headline, gossip, storyKind } from '../src/game/news/headlines';
 import { MATE, MATE_POWERS, matePower, type MatePower, fightStyle, pickFoe, revives, mateLine, graveSpot, type MateSay } from '../src/game/sidekick/companionRules';
 import { PropType } from '../src/plan/cell';
+import { ROSTER, GIFTS, nextCost, nextWant, honoursWish, leaning, buyLine, giftLine, wishLine, askAnswer, answersCall, trustWord, type Gift, type Ranks, type Ask } from '../src/game/sidekick/growthRules';
 
 type Check = (ok: boolean, msg: string) => void;
 
@@ -102,7 +103,7 @@ function companionChecks(check: Check): void {
   const count: Record<string, number> = {};
   const byTrait = (k: 'o' | 'c' | 'e' | 'a' | 'n', hi: boolean, p: MatePower) => { let n = 0, m = 0; for (let i = 0; i < 3000; i++) { const c = pop.synthetic(5000 + i * 13), t = traitsOf(c); if ((t[k] > 0.62) !== hi) continue; n++; if (matePower(7, c.id, t) === p) m++; } return m / Math.max(1, n); };
   for (let i = 0; i < 3000; i++) { const c = pop.synthetic(5000 + i * 13); const p = matePower(7, c.id, traitsOf(c)); count[p] = (count[p] ?? 0) + 1; }
-  check((Object.keys(MATE_POWERS) as MatePower[]).every((p) => (count[p] ?? 0) > 3000 * 0.06), `sidekick power: every power turns up (${Object.entries(count).map(([k, v]) => `${k} ${(v / 30).toFixed(0)} %`).join(', ')})`);
+  check((Object.keys(MATE_POWERS) as MatePower[]).filter((p) => p !== 'dash').every((p) => (count[p] ?? 0) > 3000 * 0.06), `sidekick power: every power turns up (${Object.entries(count).map(([k, v]) => `${k} ${(v / 30).toFixed(0)} %`).join(', ')})`);
   check(byTrait('a', false, 'quake') > byTrait('a', true, 'quake') * 1.5 && byTrait('n', true, 'gust') > byTrait('n', false, 'gust') * 1.5 && byTrait('c', true, 'stun') > byTrait('c', false, 'stun') * 1.3, 'sidekick power: the disagreeable quake, the nervous gust, the dutiful stun more often');
   const c0 = pop.synthetic(5013);
   check(matePower(7, c0.id, traitsOf(c0)) === matePower(7, c0.id, traitsOf(c0)), 'sidekick power: the same person gets the same power');
@@ -142,6 +143,44 @@ function companionChecks(check: Check): void {
   }
   check(found, 'sidekick grave: the test city has a cemetery');
   console.log(`sidekick around: ${(performance.now() - t0).toFixed(0)} ms`);
+  growthChecks(check);
+}
+
+/** Phases 3 and 4: what they buy, wishes, asks, trust. */
+function growthChecks(check: Check): void {
+  const mid = { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 };
+  check(nextCost('strength', {}) === ROSTER.strength.cost[0] && nextCost('strength', { strength: 3 }) === null && nextCost('fireball', { fireball: 1 }) === null, 'sidekick karma: prices by rank, nothing past the top');
+  // What they save for follows who they are.
+  const tally = (t: typeof mid) => { const c: Record<string, number> = {}; for (let w = 0; w < 400; w++) { const g = nextWant(t, {}, 9, 1000 + w, 0)!; c[g] = (c[g] ?? 0) + 1; } return c; };
+  const hard = tally({ ...mid, a: 0.1 }), duty = tally({ ...mid, c: 0.92, a: 0.7 }), nerv = tally({ ...mid, n: 0.92, a: 0.7 }), flash = tally({ ...mid, o: 0.9, e: 0.9, a: 0.7 });
+  const top = (c: Record<string, number>, ...gs: Gift[]) => gs.reduce((s, g) => s + (c[g] ?? 0), 0) / 400;
+  check(top(hard, 'quake', 'strength', 'dash') > 0.6, `sidekick karma: the disagreeable go for hard hitters (${(top(hard, 'quake', 'strength', 'dash') * 100).toFixed(0)} %)`);
+  check(top(duty, 'stun', 'shield', 'toughness') > 0.6, `sidekick karma: the dutiful go for stun, shield, toughness (${(top(duty, 'stun', 'shield', 'toughness') * 100).toFixed(0)} %)`);
+  check(top(nerv, 'gust', 'shield', 'toughness', 'dash') > 0.6, `sidekick karma: the nervous go for wind, shield, escape (${(top(nerv, 'gust', 'shield', 'toughness', 'dash') * 100).toFixed(0)} %)`);
+  check(top(flash, 'fireball', 'bolt') > 0.5, `sidekick karma: the curious and outgoing go for the flashy elements (${(top(flash, 'fireball', 'bolt') * 100).toFixed(0)} %)`);
+  check(nextWant(mid, {}, 9, 5, 2) === nextWant(mid, {}, 9, 5, 2), 'sidekick karma: the same choice every time');
+  const all: Ranks = {}; for (const g of GIFTS) all[g] = ROSTER[g].cost.length;
+  check(nextWant(mid, all, 9, 5, 0) === null, 'sidekick karma: nothing left to want once they have it all');
+  // Spending a whole career: every purchase is new, and passives come in ranks.
+  { const r: Ranks = {}; const seen: string[] = []; for (let i = 0; i < 40; i++) { const w = nextWant(mid, r, 3, 77, i); if (!w) break; seen.push(w); r[w] = (r[w] ?? 0) + 1; }
+    check(seen.length === GIFTS.reduce((s, g) => s + ROSTER[g].cost.length, 0), `sidekick karma: they end up with the whole roster (${seen.length} purchases)`); }
+  // Wishes: trust and fit.
+  const rate = (g: Gift, trust: number, t: typeof mid) => { let y = 0; for (let i = 0; i < 1000; i++) if (honoursWish(g, trust, t, (i + 0.5) / 1000)) y++; return y / 1000; };
+  check(rate('shield', 90, mid) > rate('shield', 10, mid) + 0.3, `sidekick wish: trust makes them listen (${rate('shield', 90, mid)} vs ${rate('shield', 10, mid)})`);
+  check(rate('quake', 50, { ...mid, a: 0.1 }) > rate('stun', 50, { ...mid, a: 0.1, c: 0.1 }), 'sidekick wish: a wish that suits them is taken more often');
+  // Asks.
+  const A = (k: Ask, trust: number, t = mid, temper: Parameters<typeof askAnswer>[3] = 'steady', fight = false) => askAnswer(k, trust, t, temper, { fight }, 0.4);
+  check(A('help', 60).ok && A('come', 60).ok && A('back', 60).ok && A('home', 60).ok, 'sidekick asks: a trusting sidekick does what is asked, out of a fight');
+  check(!A('back', 40, { ...mid, a: 0.2 }, 'proud', true).ok && A('back', 85, { ...mid, a: 0.2 }, 'proud', true).ok, 'sidekick asks: the proud will not hang back from a fight unless they trust you a lot');
+  check(!A('home', 50, mid, 'steady', true).ok && A('home', 50, mid, 'anxious', true).ok, 'sidekick asks: nobody goes home mid-fight, but the anxious gladly do');
+  check(!A('help', 2).ok, 'sidekick asks: the wary may not help');
+  check((['help', 'back', 'home', 'come'] as Ask[]).every((k) => [0, 30, 90].every((tr) => [true, false].every((f) => A(k, tr, mid, 'grumpy', f).line.length > 3))), 'sidekick asks: always a reason');
+  let calls = 0; for (let i = 0; i < 1000; i++) if (answersCall(10, (i + 0.5) / 1000)) calls++;
+  check(answersCall(30, 0.99) && calls > 300 && calls < 900, `sidekick asks: a call is nearly always answered, the wary sometimes not (${calls / 10} % at trust 10)`);
+  // Words.
+  check(GIFTS.every((g) => TEMPERAMENTS.every((t) => [0, 0.5, 0.99].every((u) => buyLine(g, t, u).length > 5 && wishLine(true, g, t, u).length > 5 && wishLine(false, g, t, u).length > 5))), 'sidekick words: a line for every purchase and wish');
+  check(TEMPERAMENTS.every((t) => giftLine(t, 0.2, 0.3).length > 3 && giftLine(t, 0.9, 0.7).length > 3) && [0, 25, 50, 70, 95].every((x) => trustWord(x).length > 3), 'sidekick words: thanks for gifts, trust in words');
+  check(GIFTS.every((g) => leaning(g, mid) >= 0 && leaning(g, mid) <= 1), 'sidekick karma: leanings in range');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
