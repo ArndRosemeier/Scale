@@ -115,6 +115,8 @@ export class Companion {
   away: Away = 'none';
   /** The power in hand (chosen per cast from the ones they have). */
   private cur: MatePower = 'fireball';
+  /** How much each power was used lately (fades with every cast). */
+  private used = new Map<MatePower, number>();
   private shieldCd = 0;
   private rush: { x: number; z: number; t: number; hit: boolean } | null = null;
   /** Someone they are helping up, and how long they have been at it. */
@@ -704,6 +706,10 @@ export class Companion {
   }
 
   private beginCast(a: PedAgent, t: PedAgent, w: MatePower | 'shield'): void {
+    if (w !== 'shield') {
+      for (const [k, n] of this.used) this.used.set(k, n * 0.5);
+      this.used.set(w, (this.used.get(w) ?? 0) + 1);
+    }
     const g = this.g, act = this.act!, P = VILLAIN_POWERS[w];
     const tx = t.x, ty = t.y + 1.0, tz = t.z;
     if (!g.crime || !g.crime.casts.cast(a, w, 'begin', tx, ty, tz)) { if (w === 'shield') this.shieldCd = 2; else this.powerCd = 2; return; }
@@ -926,10 +932,11 @@ export class Companion {
   /** Do they have this (the sandbox gives them everything)? */
   has(g: Gift): boolean { return this.g.progress.sandbox || (this.ranks[g] ?? 0) > 0; }
 
-  /** Their attack powers, favourite first (with a little luck each time). */
+  /** Their attack powers, favourite first (with a little luck each time); what they just used
+   *  falls back a little, so someone with many powers mixes them rather than repeating one. */
   private attacks(): MatePower[] {
     const list = (Object.keys(MATE_POWERS) as MatePower[]).filter((w) => this.has(w));
-    const sc = new Map(list.map((w) => [w, leaning(w, this.traits) * (0.75 + 0.5 * Math.random()) + (w === this.power ? 0.15 : 0)]));
+    const sc = new Map(list.map((w) => [w, (leaning(w, this.traits) * (0.75 + 0.5 * Math.random()) + (w === this.power ? 0.15 : 0)) * Math.pow(0.45, this.used.get(w) ?? 0)]));
     return list.sort((x, y) => sc.get(y)! - sc.get(x)!);
   }
 
