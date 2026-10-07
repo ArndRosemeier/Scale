@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.118 — 2026-10-07
+
+- **The Nannies are here.** The Wardens' station hangs high over the city like a second moon: a pale ghost against the blue by day, a dark shape with slow lights crawling round its rim at night, hidden by thick cloud and fog. Their silver discs cross the sky: usually a handful, some hours none at all, and now and then, for no reason anyone knows, a swarm of a hundred or more with festive lights, then an empty sky. Discs come down to hang over a street and sweep it with a pale scan cone, gather high over a crime or a fight and watch it to the end without ever helping, hang over a landmark for hours, and turn a cone on you when you fly high or grow giant. Now and then a disc sets a tall robot walker down on a square with its beam; it stands there for a while, looks around (at you, if you come close), takes a few slow steps and is lifted away again. People look up at the cones, crowd round the walkers and film them, grumble or joke about the Nannies, talk about them when you chat, and the news reports swarms, walkers and long stares. The discs hum as they pass and chime when a cone comes on.
+
 ## 0.117 — 2026-10-07
 
 - **Your sidekick is around.** Once you have given someone the second shard, they become a full companion: they hang about nearby (not glued to your heels), fly to keep up when you go far, land close to you, and if you leave them far behind they catch up out of sight and fly in rather than popping up.

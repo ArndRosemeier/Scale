@@ -56,6 +56,8 @@ export interface TalkFacts {
   told?: 'helped' | 'saved' | 'hurt' | null;
   /** The need pressing on them now. */
   need?: 'hunger' | 'tired' | 'lonely' | null;
+  /** The Wardens about now (game/aliens). */
+  nannies?: 'swarm' | 'walker' | 'disc' | 'sky' | null;
   /** Where the favour they asked stands, the one to look in on ({who}, their {word}), and who sent you ({asker}). */
   favour?: FavourState;
   who?: string;
@@ -100,6 +102,7 @@ export function matches(w: When, f: TalkFacts): boolean {
   if (w.need && w.need !== f.need) return false;
   if (w.favour && !w.favour.includes(f.favour ?? 'none')) return false;
   if (w.sent !== undefined && w.sent !== !!f.asker) return false;
+  if (w.nannies && (!f.nannies || f.nannies === 'sky' || !w.nannies.includes(f.nannies))) return false;
   return true;
 }
 

@@ -722,6 +722,16 @@ export class Pedestrians {
         if (d < rr) { a.x = po.x + (ox / d) * rr; a.z = po.z + (oz / d) * rr; }
       }
     }
+    // Things people give a wide berth (a Warden walker on a square).
+    for (const o of this.extraObstacles) {
+      const ox = a.x - o.x, oz = a.z - o.z;
+      const d = Math.hypot(ox, oz);
+      if (d < o.r * 2 && d > 1e-3) {
+        const w = Math.max(0, (o.r * 2 - d) / o.r);
+        sx += (ox / d) * w * 2.5; sz += (oz / d) * w * 2.5;
+        if (d < o.r) { a.x = o.x + (ox / d) * o.r; a.z = o.z + (oz / d) * o.r; }
+      }
+    }
     let vx = dx * desired + sx, vz = dz * desired + sz;
     const sp = Math.hypot(vx, vz);
     const maxSp = Math.max(desired, 0.3) * 1.3;
@@ -776,6 +786,9 @@ export class Pedestrians {
 
   /** The player as an obstacle (only when not tiny). */
   playerObstacle: { x: number; z: number; r: number; h: number } | null = null;
+
+  /** More places people keep their distance from (a radius round each): set by the game each frame. */
+  extraObstacles: { x: number; z: number; r: number }[] = [];
 
   /** Underground floor at a point (inside a tunnel, room or cave), else null: for `under` agents (set by the game). */
   underFloor: ((x: number, y: number, z: number) => number | null) | null = null;

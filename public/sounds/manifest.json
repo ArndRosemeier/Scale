@@ -1083,5 +1083,21 @@
     "loop": false,
     "gain": 0.8,
     "description": "a woman tripping and falling: mild startled or hurt cries (oof, ow, whoa, ugh, ah, whoops) (procedural, tools/synthFalls.mjs)"
+  },
+  "ufo_hum": {
+    "files": [
+      "ufo_hum.wav"
+    ],
+    "loop": true,
+    "gain": 0.55,
+    "description": "Warden disc: low chord loop (procedural, tools/synthWardens.mjs)"
+  },
+  "ufo_scan": {
+    "files": [
+      "ufo_scan.wav"
+    ],
+    "loop": false,
+    "gain": 0.5,
+    "description": "Warden disc: soft rising tone when a scan cone comes on (procedural, tools/synthWardens.mjs)"
   }
 }

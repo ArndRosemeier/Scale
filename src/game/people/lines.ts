@@ -68,6 +68,8 @@ export interface When {
   favour?: readonly FavourState[];
   /** They are the one somebody ({asker}) asked you to look in on. */
   sent?: boolean;
+  /** The Wardens about now (game/aliens): a swarm overhead, a walker close by, a disc hanging or scanning near. */
+  nannies?: readonly ('swarm' | 'walker' | 'disc')[];
 }
 
 export interface LineEntry { id: string; when: When; say: readonly string[] }
@@ -241,6 +243,14 @@ export const LINES: Record<Topic, readonly LineEntry[]> = {
     { id: 'n13', when: { senior: true }, say: S('In my day this was all little shops. Now it\'s robots carrying parcels.') },
     { id: 'n14', when: { child: true }, say: S('There\'s a cat that lives in the park! I named it Captain.', 'My friend says there are slime monsters in the sewers. That\'s not true, right?') },
     { id: 'n15', when: { group: true, child: true }, say: S('Mum says I\'m not allowed near the ones with the tags. {Group}.') },
+    // The Wardens (game/aliens): what is in the sky or on the square right now.
+    { id: 'nw0', when: { nannies: ['swarm'] }, say: S('Have you seen the sky? Hundreds of them. Nobody knows why, and they\'re not saying.', 'A festival, the news says. Or a meeting. Or a migration. They never explain anything.') },
+    { id: 'nw1', when: { nannies: ['swarm'], temper: ['anxious', 'shy'] }, say: S('So many discs… Do you think something\'s coming? They only come in numbers like this when… well, I don\'t know when.') },
+    { id: 'nw2', when: { nannies: ['walker'] }, say: S('There\'s one of their walkers on the square. Just standing. It\'s been looking at the bakery for twenty minutes.', 'See the tall one? Don\'t go near it. Not that it does anything. It just… looks.') },
+    { id: 'nw3', when: { nannies: ['walker'], child: true }, say: S('There\'s a giant robot over there! Mum says it\'s a Warden and I mustn\'t poke it.') },
+    { id: 'nw4', when: { nannies: ['disc'] }, say: S('One of the Nanny discs is hanging over us again. Scanning. For what, I\'d love to know.', 'Twenty years they\'ve watched us. Never lift a finger, never say a word. Just watch.') },
+    { id: 'nw5', when: { nannies: ['disc'], temper: ['grumpy'] }, say: S('A city could burn down and they\'d just hover there. I\'ve seen it. Nannies, my foot.') },
+    { id: 'nw6', when: { nannies: ['disc', 'walker'], interest: ['conspiracy theories'] }, say: S('They\'re not watching us. They\'re watching for something else. Mark my words.') },
     // City news (game/news): what people heard about, and how safe their neighbourhood is.
     { id: 'n20', when: { heard: true }, say: S('{Heard}', '{Heard} That\'s what people are saying, anyway.') },
     { id: 'n21', when: { heard: true, temper: ['nosy', 'chatty'] }, say: S('Oh, have I got news. {Heard} And that\'s not even the half of it!') },
