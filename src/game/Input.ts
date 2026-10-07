@@ -26,16 +26,23 @@ export class Input {
   get suspended(): boolean { return this._suspended; }
   set suspended(v: boolean) { this._suspended = v; this.keys.clear(); this.pressed.clear(); }
 
+  /**
+   * Something in the world takes the keyboard (an arcade game being played): it sees every key
+   * going down and up first, and the game never sees the ones it returns true for.
+   */
+  grab: ((code: string, down: boolean) => boolean) | null = null;
+
   constructor(el: HTMLElement) {
     this.el = el;
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement || this._suspended) return;
+      if (this.grab?.(e.code, true)) { e.preventDefault(); return; }
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
       if (['Space', 'Tab', 'NumpadAdd', 'NumpadSubtract', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.buttons = 0; this.releaseLook(); });
+    window.addEventListener('keyup', (e) => { this.grab?.(e.code, false); this.keys.delete(e.code); });
+    window.addEventListener('blur', () => { this.grab?.('Blur', false); this.keys.clear(); this.buttons = 0; this.releaseLook(); });
     el.addEventListener('mousedown', (e) => {
       this.buttons |= 1 << e.button;
       this.clicked |= 1 << e.button;
@@ -71,6 +78,7 @@ export class Input {
 
   /** Hold or release a key from the touch controls (polled keys only: no keydown event). */
   setKey(code: string, on: boolean): void {
+    if (this.grab?.(code, on) && on) return;
     if (on) { if (!this.keys.has(code)) this.pressed.add(code); this.keys.add(code); }
     else this.keys.delete(code);
   }

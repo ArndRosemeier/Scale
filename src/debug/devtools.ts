@@ -3,7 +3,7 @@
  */
 import type { Game } from '../game/Game';
 import type { BuildingRef } from '../world/WorldIndex';
-import { isClothesShop } from '../interior/InteriorGen';
+import { isClothesShop, isArcade } from '../interior/InteriorGen';
 import { statusOf } from '../shared/status';
 import type { WeatherSetting } from '../render/Weather';
 import { LandUse } from '../world/landuse';
@@ -102,6 +102,17 @@ export function installDevtools(game: Game): void {
       game.camRig.pitch = -0.15;
       game.camRig.zoom = inside ? 1.2 : 2.5;
       return b;
+    },
+    /** Arcades among the loaded buildings, nearest first; go=true: put the player just inside the nearest (or the i-th). */
+    arcade(go = true, i = 0): { x: number; z: number; d: number }[] {
+      const p = game.player.pos, R = 3000;
+      const list = game.world.buildingsIn(p.x - R, p.z - R, p.x + R, p.z + R).filter((b) => b.alive && isArcade(b.desc))
+        .map((b) => ({ b, x: (b.bounds[0] + b.bounds[2]) / 2, z: (b.bounds[1] + b.bounds[3]) / 2 }))
+        .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+      const out = list.map((a) => ({ x: Math.round(a.x), z: Math.round(a.z), d: Math.round(Math.hypot(a.x - p.x, a.z - p.z)) }));
+      const t = list[i];
+      if (go && t) { game.player.pos.set(t.x, game.world.groundHeight(t.x, t.z) + 0.1, t.z); dev.door(true, 0, (b) => b === t.b); }
+      return out;
     },
     setSize(h: number): void { game.player.height = h; },
     teleport(x: number, z: number): void { game.player.pos.set(x, game.world.groundHeight(x, z) + 0.1, z); },
