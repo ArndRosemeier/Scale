@@ -1,7 +1,7 @@
 /**
  * The talk panel (game/people, NPC_PERSONALITY_PLAN §1): who you are talking to (name, job, age,
  * temperament, mood, whether you met before and how they feel about you), what they just said,
- * and what you can say: keys 1–8 or a click. "Show me the way" lists places (the nearest metro
+ * and what you can say: keys 1–9 or a click. "Show me the way" lists places (the nearest metro
  * station and landmarks); Esc or E closes. While open it takes the number keys (no powers go
  * off) and Esc; walking keys still move the hero.
  */
@@ -13,6 +13,8 @@ export interface TalkUiHooks {
   way(d: Destination): void;
   close(): void;
   destinations(): Destination[];
+  /** More things to say while they apply (offering the shard …), after the usual topics. */
+  extras(): { label: string; run: () => void }[];
 }
 
 const TOPICS: { topic: Topic; label: string }[] = [
@@ -108,7 +110,12 @@ export class TalkUi {
   }
 
   showTopics(): void {
-    this.setOptions(TOPICS.map((t) => ({ label: t.label, run: () => this.hooks.choose(t.topic) })));
+    this.setOptions([...TOPICS.map((t) => ({ label: t.label, run: () => this.hooks.choose(t.topic) })), ...this.hooks.extras()]);
+  }
+
+  /** No options for now (a scene plays out in the panel). */
+  clearOptions(): void {
+    this.setOptions([]);
   }
 
   showDestinations(): void {
