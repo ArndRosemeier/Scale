@@ -318,6 +318,8 @@ export class Police {
     for (const o of u.officers) {
       if (!o.alive) { inside++; continue; }
       const act = o.actor;
+      // Out cold: left lying there (the city clears them away once out of sight), not waited for.
+      if (act?.state === 'ko') { act.pinned = false; inside++; continue; }
       if (!act || o.state === PState.Down) continue;
       act.face = null;
       if (!carOk || Math.hypot(o.x - car.x, o.z - car.z) < 2.2) { o.alive = false; inside++; H.sound('door_close', o.x, 1, o.z, 0.6); continue; }
@@ -327,7 +329,7 @@ export class Police {
     if (inside >= u.officers.length || u.t > 400) {
       // Everyone in: back on patrol (hand the car back to traffic).
       if (carOk) { car.task = undefined; car.siren = false; car.fear = 0; car.vmax = 13; car.route = { edges: [car.edge], fwd: [car.fwd] }; car.ri = 0; }
-      for (const o of u.officers) o.alive = false;
+      for (const o of u.officers) if (o.actor?.state !== 'ko') o.alive = false;
       return false;
     }
     return true;

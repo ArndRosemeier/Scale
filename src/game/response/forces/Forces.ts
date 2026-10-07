@@ -648,7 +648,8 @@ export class Forces {
       const I = this.injured[i];
       I.t += dt;
       const a = I.a, act = a.actor;
-      if (!a.alive || I.t > 90) { a.alive = false; this.injured.splice(i, 1); continue; }
+      // (One out cold stays down for good: cleared away once out of sight, not vanishing in view.)
+      if (!a.alive || (I.t > 90 && !(a.state === PState.Down && this.g.crime['visible'](a.x, a.y + 0.5, a.z)))) { a.alive = false; this.injured.splice(i, 1); continue; }
       if (a.state === PState.Down || !act) continue;
       act.mood = 'pain';
       const cx = S?.x ?? a.x - 1, cz = S?.z ?? a.z, ax = a.x - cx, az = a.z - cz, l = Math.hypot(ax, az) || 1;

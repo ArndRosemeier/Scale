@@ -1454,14 +1454,14 @@ export class CrimeSystem {
       if (!act) continue;
       // (Soldiers, the aftermath's people, the street characters, fame's people and game/people's
       // have their own budgets: response/forces, game/aftermath, game/street, game/fame, game/people.)
-      const uniformed = act.role === 'police' || act.role === 'soldier';
       if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER && act.owner !== PEOPLE_OWNER) n++;
       tickActor(act, dt);
-      if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && uniformed))) {
+      // Knocked down: up again after a moment. Knocked out (no health left) is out of the fight for
+      // good, officers and soldiers too: nobody gets back up from that.
+      if (a.state === PState.Down && act.state === 'down') {
         act.upT -= dt;
-        if (act.upT <= (act.state === 'ko' ? -18 : 0)) {
+        if (act.upT <= 0) {
           a.state = PState.Idle; a.vx = a.vz = a.vy = 0; a.stateT = 0;
-          if (uniformed) act.hp = Math.max(act.hp, act.maxHp * 0.5);
           setState(act, act.role === 'criminal' ? 'run' : 'idle');
         }
       } else if (a.state !== PState.Down && (act.state === 'down')) setState(act, act.role === 'criminal' ? 'run' : 'idle');
