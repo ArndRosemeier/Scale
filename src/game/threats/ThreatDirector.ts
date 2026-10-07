@@ -34,6 +34,7 @@ import { Brood, BroodGlimpse, broodOmen, type BroodOpts } from './Brood';
 import { BroodMesh } from './brood/broodMesh';
 import type { HitEffect } from './brood/BroodSim';
 import type { Obstacle } from '../../world/Collision';
+import { RunawayTeens, type TeenOpts } from '../aliens/RunawayTeens';
 
 /** How an archetype shows itself before it comes (omens) and how it starts. */
 interface ArchetypeImpl {
@@ -109,6 +110,12 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
       return t;
     },
     fallback: [],
+  },
+  // The runaway teens' stolen saucer (game/aliens, ALIENS_PLAN §5); omens through the Wardens.
+  teens: {
+    omen: (d, _site, kind, rng) => d.g.wardens?.teenOmen(kind, rng) ?? false,
+    start: (d, site, seed, opts) => new RunawayTeens(d.g, site, seed, opts as TeenOpts),
+    fallback: ['zip', 'glyph'],
   },
   // The Murk breaking out of the sewers (started by the slime realm's war, never by the clock).
   murk: {
