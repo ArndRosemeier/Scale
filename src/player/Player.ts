@@ -16,11 +16,12 @@ import type { Input } from '../game/Input';
 import type { MoveState, PowerAnim } from '../shared/types';
 import { clamp, lerp, damp } from '../core/math';
 import type { HumanoidAppearance } from '../humanoid/types';
-import type { Collision } from '../world/Collision';
+import type { Collision, ObstacleProvider } from '../world/Collision';
 import { ImportedAvatar, type LoadedModel } from '../avatar/ImportedAvatar';
 import { outfitVisuals, type CharacterLook } from '../avatar/look';
 import { stepEnergy } from '../game/GiantBody';
 import { SpeedNav } from './speedNav';
+import { planHop } from './speedHop';
 
 export const BASE_HEIGHT = 1.8;
 /** Super speed carries the runner over water above this speed (m/s at 1.8 m, × √k). */
@@ -109,6 +110,11 @@ export class Player {
   speedTop = 0;
   /** Super speed autopilot (steers around what is ahead, brakes when it is blocked). */
   private readonly nav = new SpeedNav();
+  /** People around as upright cylinders, for the super speed hop (set by the game; they are not in the collision). */
+  hopPeople: ObstacleProvider | null = null;
+  /** In a super speed hop: its pull (m/s², 0 = none), cleared on landing. */
+  private hopG = 0;
+  get hopping(): boolean { return this.hopG > 0; }
   /** Standing on ice (set every frame by the powers): almost no grip, the body slides. */
   onIce = false;
   /** Seconds of parkour climb grace left (super speed up a wall). */
@@ -318,6 +324,12 @@ export class Player {
         wish.set(st.dx, 0, st.dz);
         speed = Math.min(speed, st.max);
       }
+      // Hop over someone (a car, a bench) just ahead when the way over is clear (speedHop).
+      if (fast && this.grounded && !this.onWater && this.jumpCharge < 0 && this.collision) {
+        const hs = Math.hypot(this.vel.x, this.vel.z);
+        const plan = hs > 1 ? planHop(this.collision, this.hopPeople, this.pos.x, this.pos.y, this.pos.z, this.height, this.radius, k, this.vel.x / hs, this.vel.z / hs, hs) : null;
+        if (plan) { this.launch(plan.vy); this.hopG = plan.g; }
+      }
       wish.multiplyScalar(speed);
     }
     // Acceleration limited by friction (∝ g) — giants accelerate as fast in m/s² but feel heavy relative to size.
@@ -334,7 +346,7 @@ export class Player {
     else { this.vel.x = wish.x; this.vel.z = wish.z; }
     // Gravity + quadratic drag (terminal velocity ∝ √k).
     const vt = 55 * sk;
-    this.vel.y -= g * dt;
+    this.vel.y -= (this.hopG || g) * dt;
     const vy = this.vel.y;
     if (vy < 0) this.vel.y += g * (vy / vt) * (vy / vt) * dt;
     // Jump.
@@ -342,7 +354,8 @@ export class Player {
     this.integrate(dt);
     // Parkour at super speed: running into a wall carries on up it (up to the roof), running
     // into a car or a bench vaults over it.
-    if (fast && this.blocked && moving) {
+    // (Not out of a hop: a façade grazed in the air would carry the runner up onto a roof.)
+    if (fast && this.blocked && moving && !this.hopping) {
       const hs = Math.hypot(this.vel.x, this.vel.z);
       const into = this.blocked.speed;
       if (into > 4 * sk || hs > 6 * sk) {
@@ -400,6 +413,7 @@ export class Player {
     this.collision.skimHoles = this.speeding && Math.hypot(this.vel.x, this.vel.z) > 8 * Math.sqrt(this.k);
     for (let s = 0; s < sub; s++) this.integrateStep(h, r);
     this.collision.skimHoles = false;
+    if (this.grounded && this.vel.y <= 0) this.hopG = 0;
   }
 
   private integrateStep(dt: number, r: number): void {
@@ -425,8 +439,10 @@ export class Player {
       if (this.vel.y < 0) this.vel.y = 0;
       this.grounded = true;
       if (!wasGrounded) {
-        this.landedLeap = this.leap;
+        // (A hop lands as safely as a super jump: no fall, no hurt.)
+        this.landedLeap = this.leap || (this.hopG > 0 ? 0.01 : 0);
         this.leap = 0;
+        this.hopG = 0;
         if (impactV > 2) this.events.onLand?.(px, ny, pz, 0.5 * this.mass * impactV * impactV, this.height);
         this.landedLeap = 0;
       }

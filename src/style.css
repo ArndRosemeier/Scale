@@ -411,6 +411,8 @@ body.looking #crosshair { display: block; }
 /* Fame (src/game/fame): protesters and booing passers-by; fans. */
 .bark.angry { background: rgba(196, 38, 38, 0.94); color: #fff; }
 .bark.angry::after { border-top-color: rgba(196, 38, 38, 0.94); }
+.bark.behind { left: 50%; top: auto; bottom: 24%; transform: translateX(-50%); max-width: 320px; }
+.bark.behind::after { display: none; }
 .bark.cheer { background: rgba(255, 214, 92, 0.96); color: #2a1d00; }
 .bark.cheer::after { border-top-color: rgba(255, 214, 92, 0.96); }
 

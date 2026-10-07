@@ -57,6 +57,9 @@ export class Barks {
   private gapT = 0;
   private chatT = CHAT_MIN;
   private p = screenPoint();
+  /** A call from someone out of sight (behind a super speed runner): pinned low on the screen. */
+  private behind: HTMLDivElement | null = null;
+  private behindT = 0;
 
   constructor(private game: Game) {
     for (let i = 0; i < MAX_SHOWN; i++) {
@@ -158,7 +161,30 @@ export class Barks {
     return true;
   }
 
+  /**
+   * Someone calls after the hero (brushed past at super speed): a stern (red) bubble low on the
+   * screen with their name, since at that speed they are behind before a bubble over them could be read.
+   */
+  shout(a: PedAgent, text: string, who: string | null): void {
+    this.quiet.set(a, this.time + PERSON_PAUSE);
+    if (!this.behind) {
+      this.behind = document.createElement('div');
+      this.behind.className = 'bark angry behind';
+      document.body.appendChild(this.behind);
+    }
+    const el = this.behind;
+    el.textContent = who ? `${who}, behind you: “${text}”` : `Behind you: “${text}”`;
+    el.classList.remove('out');
+    el.style.display = 'block';
+    this.behindT = showFor(text) + 0.6;
+  }
+
   private draw(dt: number, hidden: boolean): void {
+    if (this.behind && this.behindT > 0) {
+      this.behindT -= dt;
+      if (this.behindT < 0.35) this.behind.classList.add('out');
+      this.behind.style.display = hidden || this.behindT <= 0 ? 'none' : 'block';
+    }
     const cam = this.game.renderer.camera, W = window.innerWidth, H = window.innerHeight;
     for (let i = this.shown.length - 1; i >= 0; i--) {
       const s = this.shown[i];

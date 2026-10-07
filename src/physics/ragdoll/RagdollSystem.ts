@@ -202,7 +202,7 @@ export class RagdollSystem {
       if (!ped.alive) return false;
       if (ped.state !== PState.Down) {
         ped.state = PState.Down; ped.stateT = 0; ped.fear = 2; ped.helped = false;
-        ped.downBy = (['player', 'collapse', 'accident', 'other'] as string[]).includes(o.source ?? '') ? o.source as DownCause : 'other';
+        ped.downBy = (['player', 'brush', 'collapse', 'accident', 'other'] as string[]).includes(o.source ?? '') ? o.source as DownCause : 'other';
       }
     }
     let e = this.byTarget.get(target) ?? null;

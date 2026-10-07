@@ -20,7 +20,7 @@ import type { MetroLine } from '../../plan/types';
 import type { Citizen } from '../../sim/Population';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { makeActor, attach, METRO_OWNER } from '../../sim/actors/Actor';
-import { PLATFORM_H, PLATFORM_EDGE, PLATFORM_W, CAR_W, CAR_FLOOR, DOOR_U, DOOR_CLOSE, TRAIN_SEATS, seatYaw, platformSeats } from '../../underground/layout';
+import { PLATFORM_H, PLATFORM_EDGE, PLATFORM_W, CAR_W, CAR_L, CAR_FLOOR, DOOR_U, DOOR_CLOSE, TRAIN_SEATS, seatYaw, platformSeats } from '../../underground/layout';
 
 /** A car of a train as the metro reports it (see Underground.cars). */
 export interface MetroCar {
@@ -87,6 +87,8 @@ interface Commuter {
   /** Seconds in the mode; the walk's no-progress watch. */
   t: number;
   best: number; stall: number;
+  /** Was knocked down (lying, or up again but not yet sent on). */
+  downed?: boolean;
 }
 
 const carKey = (c: MetroCar) => `${c.line}:${c.k}:${c.slot}`;
@@ -108,14 +110,15 @@ export class StationLife {
 
   get count(): number { return this.people.length; }
   /** The commuters (for tests and debugging). */
-  get list(): readonly { a: PedAgent; mode: string; hall: number; side: number }[] { return this.people; }
+  get list(): readonly { a: PedAgent; mode: string; hall: number; side: number; seated: boolean }[] { return this.people; }
 
   update(dt: number, px: number, py: number, pz: number): void {
     this.time += dt;
     const cars = new Map<string, MetroCar>();
     for (const c of this.m.cars) cars.set(carKey(c), c);
-    // Gone (despawned, knocked out by someone, taken over): forget.
-    this.people = this.people.filter((q) => q.a.alive && q.a.actor?.owner === METRO_OWNER && q.a.state !== PState.Down);
+    // Gone (despawned, taken over): forget. (Knocked down: still theirs; they get up again, and one
+    // knocked off the platform and forgotten got up on the track bed with nobody to see to them.)
+    this.people = this.people.filter((q) => q.a.alive && q.a.actor?.owner === METRO_OWNER);
     // Halls around the player.
     this.m.boxes.forEach((b, bi) => {
       if (b.kind !== 'station') return;
@@ -392,6 +395,19 @@ export class StationLife {
     const a = q.a, act = a.actor!;
     q.t += dt;
     act.move = null;
+    if (q.mode !== 'ride' || a.state === PState.Down) this.offTracks(q);
+    // Lying down (knocked over): nothing to do until they are up again (CrimeSystem's upkeep); then
+    // out of whatever they were doing (a train they were in may be long gone) and to a place to wait.
+    if (a.state === PState.Down) { act.goal = null; act.speed = 0; q.downed = true; return; }
+    if (q.downed) {
+      q.downed = false;
+      const bi = this.hallOf(q);
+      if (bi < 0) { this.drop(q); return; }
+      q.hall = bi; q.car = ''; q.seated = false;
+      q.side = Math.sign(this.boxV(this.m.boxes[bi], a.x, a.z)) || q.side || 1;
+      q.spot = this.pickSpot(bi, q.side);
+      this.walk(q, [q.spot.x, q.spot.z], 'wait');
+    }
     switch (q.mode) {
       case 'walk': {
         if (!this.follow(q, dt, a.pref)) break;
@@ -410,9 +426,10 @@ export class StationLife {
       case 'board': {
         const c = cars.get(q.car);
         if (!c) { this.drop(q); break; }
-        if (!c.open && c.dwell === false) {
-          // The doors shut on the way: inside already → ride along; else back to waiting.
-          if (q.wp >= 2) { q.mode = 'ride'; q.hall = -1; q.seated = this.isSeat(q.at); this.stats.boarded++; }
+        if (!c.open) {
+          // The doors shut on the way: in the car already → ride along; else back to waiting (never
+          // left standing on the car's floor when it pulls out: that dropped them onto the tracks).
+          if (q.wp >= 2 || this.inCar(c, a)) { q.mode = 'ride'; q.hall = -1; q.seated = this.isSeat(q.at); this.stats.boarded++; }
           else this.backToWaiting(q);
           break;
         }
@@ -435,8 +452,8 @@ export class StationLife {
       }
       case 'alight': {
         const c = cars.get(q.car);
-        if (!c || (!c.dwell && q.wp < 2)) {
-          // Left behind in the car: ride on.
+        if (!c || (!c.open && (q.wp < 2 || this.inCar(c, a)))) {
+          // The doors shut before they were out: ride on (on their place in the car).
           if (c) { q.mode = 'ride'; q.hall = -1; } else this.drop(q);
           break;
         }
@@ -449,6 +466,35 @@ export class StationLife {
         break;
       }
     }
+  }
+
+  /**
+   * Down on the tracks after all (knocked off the platform, left over a car that pulled out): back up
+   * onto the platform beside them, rather than walking the track bed with no way up.
+   */
+  /** The hall the commuter belongs to, else the one it stands in (horizontally), or -1. */
+  private hallOf(q: Commuter): number {
+    if (this.m.boxes[q.hall]) return q.hall;
+    const a = q.a;
+    return this.m.boxes.findIndex((b) => b.kind === 'station' && Math.abs((a.x - b.cx) * b.ux + (a.z - b.cz) * b.uz) < b.hu && Math.abs(this.boxV(b, a.x, a.z)) < b.hv && Math.abs(a.y - b.y0) < 3);
+  }
+
+  private offTracks(q: Commuter): void {
+    const a = q.a, b = this.m.boxes[this.hallOf(q)];
+    // (Track-bed level only: the underpass runs beneath the hall.)
+    if (!b || a.y > b.y0 + PLATFORM_H - 0.5 || a.y < b.y0 - 0.5) return;
+    const u = (a.x - b.cx) * b.ux + (a.z - b.cz) * b.uz, v = this.boxV(b, a.x, a.z);
+    if (Math.abs(u) > b.hu || Math.abs(v) > PLATFORM_EDGE) return;
+    const side = Math.sign(v) || q.side || 1;
+    [a.x, a.z] = this.boxW(b, u, side * (PLATFORM_EDGE + 0.4));
+    a.y = b.y0 + PLATFORM_H;
+    a.vx = a.vz = a.vy = 0;
+  }
+
+  /** Standing on the car's floor (not yet out over the platform). */
+  private inCar(c: MetroCar, a: { x: number; y: number; z: number }): boolean {
+    const L = this.m.carLocal(c, a.x, a.y, a.z);
+    return Math.abs(L.u) < CAR_L / 2 && Math.abs(L.v) < CAR_W / 2 + 0.1;
   }
 
   private isSeat(at: [number, number]): boolean {

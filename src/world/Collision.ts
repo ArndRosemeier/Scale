@@ -23,6 +23,8 @@ export interface Obstacle {
   hx: number; hz: number;
   ux: number; uz: number;
   y0: number; y1: number;
+  /** A floor to walk on however thin (a landmark's deck, step or gallery): ground for any walker. */
+  deck?: boolean;
 }
 
 /** Fills obstacles overlapping the box (x0,z0)-(x1,z1); `out` may reuse its argument. */
@@ -154,7 +156,7 @@ export class Collision {
     if (this.obstacleProviders.length && step > 0) {
       const minH = step * 1.4;
       for (const prov of this.obstacleProviders) prov(x - 0.01, z - 0.01, x + 0.01, z + 0.01, (o) => {
-        if (o.y1 - o.y0 < minH || o.y1 > yRef + step || o.y1 <= g) return;
+        if ((o.y1 - o.y0 < minH && !o.deck) || o.y1 > yRef + step || o.y1 <= g) return;
         if (insideObstacle(o, x, z, 0)) g = o.y1;
       });
     }
