@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.103 — 2026-10-07
+
+- **No game changes.** The plan for an optional sidekick is written down (docs/SIDEKICK_PLAN.md).
+
 ## 0.102 — 2026-10-07
 
 - **The police really stop a public menace.** With a reputation of −70 or worse, being taken down by the police is the end: the hero stays down, the officers come and cuff them, and it is game over ("Arrested — taken into custody"). No more waking up and walking off. If no officer can get to the body, backup takes the hero in after 20 seconds anyway.
