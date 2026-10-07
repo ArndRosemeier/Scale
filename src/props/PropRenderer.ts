@@ -360,7 +360,11 @@ export class PropRenderer {
     if (this.net.version !== this.netVersion) {
       this.netVersion = this.net.version;
       this.rebuildSignals();
-      this.needRebuild = true;
+      // Right away, not throttled: the drawn signal lists still hold the old net's node/edge
+      // ids, which index past the new net's arrays (TypeError in Traffic.signalGreen).
+      this.needRebuild = false;
+      this.lastRebuild = this.t;
+      this.rebuildAll();
     }
     // Cells stream in bursts: rebuild the index at most every 0.4 s.
     if (this.needRebuild && this.t - this.lastRebuild > 0.4) {
@@ -417,7 +421,7 @@ export class PropRenderer {
   }
 
   private fill(groups: Map<string, Prop[]>, owns: (k: string) => boolean): void {
-    for (const [k, b] of this.batches) if (owns(k)) { b.n = 0; for (const m of b.meshes) m.count = 0; }
+    for (const [k, b] of this.batches) if (owns(k)) { b.n = 0; (b as Batch & { list?: Prop[] }).list = undefined; for (const m of b.meshes) m.count = 0; }
     let drawn = 0;
     for (const [k, list] of groups) {
       const b = this.batch(k, Math.max(64, Math.ceil(list.length * 2)));

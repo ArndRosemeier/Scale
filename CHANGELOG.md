@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.114 — 2026-10-07
+
+- **Traffic lights no longer throw an error after the road network rebuilds.** When the city streamed new streets in or dropped far ones, the traffic lights still on screen kept the old network's junction numbers for a moment (or for good, if no light of that kind was near you any more), and reading their colour hit a junction that no longer existed. The console showed "[props] TypeError … reading 'signal'". The lights now switch to the new network in the same frame, and lights that are no longer drawn are forgotten.
+
 ## 0.113 — 2026-10-07
 
 - **Aliens plan, decided points.** The Lumen slimes are the old ones who came long before the Wardens and get cryptic speech bubbles; the number of discs in the sky is random, now and then a sudden unexplained swarm of a hundred; beating a Warden first raises their interest in you, then no longer, then lowers it more with each further win. Nothing in the game changes yet.
