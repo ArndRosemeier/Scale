@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.108 — 2026-10-07
+
+- **Shoulders no longer sit back.** In every animation the shoulders were pulled behind the chest, so the arms hung from the back of the body. The collarbones now come forward and the arms hang along the side of the body, as in the procedural pose.
+
 ## 0.107 — 2026-10-07
 
 - **Super speed no longer drops you into the sewers.** Running across a river at super speed and onto a steep quay used to carry the hero through the bank into the sewer or culvert beneath the street (or into the earth), without any manhole. Now the runner goes up onto the street; the only ways down stay the manholes and the metro stairs.
