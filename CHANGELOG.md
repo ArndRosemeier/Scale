@@ -2,11 +2,32 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.105 — 2026-10-07
+## 0.110 — 2026-10-07
 
 - **A second shard.** Once your reputation reaches +30 (or after a short while in the sandbox), the news reports a strange glowing stone in one of the city's parks or squares. The area shows up as a circle on the map; nearer in, a soft glow at the edge of the screen and a hum lead you to it, and a pale column of light rises from the stone. Sometimes a gang has got there first and guards it: deal with them before you can pick it up.
 - **Give it to someone.** Carry the shard and talk to anyone: a new option offers it to them. Most people say yes. Children, people at work, people who dislike you or are against heroes on principle say no, and some have something they need help with first (do that favour and they will take it).
 - **Your sidekick awakens.** The shard floats into them, light floods out, and they say a few words in their own manner. They are then marked gold on the map as your sidekick. For now they carry on with their own life; their powers and helping you come in the next steps. If your reputation drops below zero, they break with you, and you can ask again later. Saved with the game.
+
+## 0.109 — 2026-10-07
+
+- **Nothing blocks the front door any more.** House interiors were laid out without looking at where the street door is, so about one door in three opened onto a wall, the lift shaft or the staircase. Now the stairs and the lift are placed clear of the way in, room walls across it get an opening, and nothing solid stands right behind the door. A sweep over 16,679 buildings found 0.2% with a narrower way in (odd little triangular houses), down from 33%. A few such tiny houses now go without inner stairs rather than have them right behind the door.
+
+## 0.108 — 2026-10-07
+
+- **Shoulders no longer sit back.** In every animation the shoulders were pulled behind the chest, so the arms hung from the back of the body. The collarbones now come forward and the arms hang along the side of the body, as in the procedural pose.
+
+## 0.107 — 2026-10-07
+
+- **Super speed no longer drops you into the sewers.** Running across a river at super speed and onto a steep quay used to carry the hero through the bank into the sewer or culvert beneath the street (or into the earth), without any manhole. Now the runner goes up onto the street; the only ways down stay the manholes and the metro stairs.
+
+## 0.106 — 2026-10-07
+
+- **Smoother hero masks.** The cowl and full mask are smooth stretch fabric like the tights (no more grainy speckle), and they hug the face round the eye holes and the cowl's jaw opening, so there is no dark rim or see-through sliver at the edges. The lightning bolt design is a proper zigzag.
+
+## 0.105 — 2026-10-07
+
+- **Superhero tights and masks.** The character creator (and the fitting mirror in clothes shops) has a new **Hero** tab. **Tights**: a skin-tight, slightly shiny bodysuit in any colour with an accent colour and a design: plain, star emblem, lightning bolt, chevron, side stripes, or trunks with a golden belt; gloves in the suit or accent colour if wanted. Putting the tights on takes off the everyday clothes and pulls on boots in the accent colour; anything added back in Outfit is worn over them. **Masks**: a domino mask round the eyes, a cowl (head, nose and neck covered, mouth and chin free), or a full mask with only the eyes open. Hair and beard hide under a cowl or full mask; the eyes still blink and look around.
+- Collars no longer let you see through the neck when looking down past them (the neck stays under every garment).
 
 ## 0.104 — 2026-10-07
 

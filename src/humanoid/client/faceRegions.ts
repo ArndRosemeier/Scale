@@ -91,3 +91,38 @@ vec2 h_brow(vec3 f, vec4 br) {
   return vec2(m, u);
 }
 `;
+
+/** Hero masks: how far face coordinate (x,y,z) lies inside a head covering (negative: left
+ *  open, in about eye-hole radii). The eyes are always open (a little more than the lids; the
+ *  skin round them is painted by GLSL_EYE_MASK); a cowl also leaves the mouth, chin and jaw bare
+ *  between a line under the nose that drops along the cheeks and the jaw line, on the front of
+ *  the face (it still wraps under the chin and round the neck). The shell takes a little more than
+ *  the covered part and the shader cuts its edge clean (GLSL_MASK_CUT). */
+export function maskDepth(cut: 'cowl' | 'full', x: number, y: number, z: number): number {
+  const ax = Math.abs(x);
+  let d = z > -0.6 ? Math.hypot((ax - 0.5) / 0.33, (y + 0.01) / 0.22) - 1 : 9;
+  if (cut === 'cowl') d = Math.min(d, Math.max(y + 0.86 + 0.75 * smoothstep(0.5, 1.2, ax), -1.6 - 0.45 * (1 - smoothstep(0.3, 1.1, ax)) - y, -0.25 - z) / 0.25);
+  return d;
+}
+
+export const GLSL_MASK_CUT = /* glsl */ `
+float h_maskDepth(float cut, vec3 f) {
+  float ax = abs(f.x);
+  float d = f.z > -0.6 ? length(vec2((ax - 0.5) / 0.33, (f.y + 0.01) / 0.22)) - 1.0 : 9.0;
+  if (cut < 1.5) d = min(d, max(max(f.y + 0.86 + 0.75 * smoothstep(0.5, 1.2, ax), -1.6 - 0.45 * (1.0 - smoothstep(0.3, 1.1, ax)) - f.y), -0.25 - f.z) / 0.25);
+  return d;
+}
+`;
+
+/** The painted domino: coverage 0..1 round both eyes and across the bridge of the nose, the
+ *  outer corners swept up a little. */
+export const GLSL_EYE_MASK = /* glsl */ `
+float h_eyeMask(vec3 f) {
+  float ax = abs(f.x);
+  float lift = max(ax - 0.5, 0.0) * 0.45;
+  float lobe = length(vec2((ax - 0.52) / 0.45, (f.y - 0.03 - lift) / 0.27)) - 1.0;
+  float bridge = max(abs(f.y - 0.05) - 0.11, ax - 0.4) / 0.25;
+  float d = min(lobe, bridge);
+  return (1.0 - smoothstep(-0.04, 0.04, d)) * smoothstep(-0.75, -0.5, f.z);
+}
+`;

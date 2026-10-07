@@ -32,6 +32,8 @@ export interface IWall {
   ax: number; az: number; bx: number; bz: number;
   /** Door openings along the wall: [t0, t1] parameters 0..1. */
   doors: [number, number][];
+  /** Lift shaft and stair core walls: never opened up for the way in from the street door. */
+  solid?: boolean;
 }
 
 export interface Furn {
@@ -100,8 +102,13 @@ const LIFT_HU = 1.0, LIFT_HV = 1.1, LANDING = 1.8;
  * Where a building's elevator goes (once per building, from the ground-floor footprint):
  * at one end of the long axis, slid inwards until shaft and landing fit the footprint.
  */
-export function planLift(b: BuildingDesc, poly: Poly): LiftShaft | null {
+export function planLift(b: BuildingDesc, poly: Poly, door: Door | null = null): LiftShaft | null {
   if (b.floors < 2) return null;
+  // Never in the way in from the street door (no lift when only that spot fits: the stairs go up).
+  return liftAt(b, poly, door && doorWay(poly, door, 2.2, 0.75));
+}
+
+function liftAt(b: BuildingDesc, poly: Poly, way: Poly | null): LiftShaft | null {
   const F = new Frame(poly);
   if (F.hu < 3 || F.hv < 1.6) return null;
   // The exact shaft (with margin, corners and edge midpoints) and its landing must be inside.
@@ -119,7 +126,7 @@ export function planLift(b: BuildingDesc, poly: Poly): LiftShaft | null {
       const q = F.P(u0 + LIFT_HU * 2 + LANDING, v + dv);
       if (!pointInPoly(poly, q[0], q[1])) return false;
     }
-    return true;
+    return !way || !overlaps(r, way);
   };
   const vOff = Math.max(0, F.hv - LIFT_HV - 0.3);
   for (let inset = 0.15; inset < F.hu - 1; inset += 0.5) {
@@ -130,6 +137,40 @@ export function planLift(b: BuildingDesc, poly: Poly): LiftShaft | null {
   return null;
 }
 
+/** A street door: its centre on the facade. */
+export type Door = { x: number; z: number };
+
+/**
+ * The way in behind a street door: a quad `half` to either side of the door centre, from just
+ * outside the facade to `depth` m into the storey (along the inward normal of the outline edge
+ * nearest the door), or null when the door is not on the outline.
+ */
+export function doorWay(poly: Poly, door: Door, depth: number, half: number): Poly | null {
+  const n = poly.length >> 1;
+  let best = Infinity, ex = 0, ez = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const ax = poly[i * 2], az = poly[i * 2 + 1], dx = poly[j * 2] - ax, dz = poly[j * 2 + 1] - az;
+    const L2 = dx * dx + dz * dz;
+    if (L2 < 1e-6) continue;
+    const t = Math.max(0, Math.min(1, ((door.x - ax) * dx + (door.z - az) * dz) / L2));
+    const d = Math.hypot(ax + dx * t - door.x, az + dz * t - door.z);
+    if (d < best) { best = d; const L = Math.sqrt(L2); ex = dx / L; ez = dz / L; }
+  }
+  if (best > 1) return null;
+  // Inward: the side of the edge the storey lies on.
+  let nx = -ez, nz = ex;
+  if (!pointInPoly(poly, door.x + nx * (best + 0.3), door.z + nz * (best + 0.3))) { nx = -nx; nz = -nz; }
+  const P = (s: number, d: number): [number, number] => [door.x + ex * s + nx * d, door.z + ez * s + nz * d];
+  return [...P(-half, -0.3), ...P(half, -0.3), ...P(half, depth), ...P(-half, depth)];
+}
+
+/** Do two convex quads overlap? */
+function overlaps(a: Poly, b: Poly): boolean {
+  const s = intersection([a], [b]);
+  return s.some((q) => Math.abs(polyArea(q.outer)) > 0.01);
+}
+
 /** Steps no higher than this (m), treads this deep. */
 const RISE = 0.175, TREAD = 0.27;
 
@@ -138,8 +179,41 @@ const RISE = 0.175, TREAD = 0.27;
  * and churches): at the end of the long axis away from the lift, along a side wall, as far as
  * the footprint allows. `maxH`: the tallest storey (sizes the flights).
  */
-export function planStair(b: BuildingDesc, poly: Poly, lift: LiftShaft | null, maxH: number): StairCore | null {
+export function planStair(b: BuildingDesc, poly: Poly, lift: LiftShaft | null, maxH: number, door: Door | null = null): StairCore | null {
   if (b.floors < 2 || b.style === 'church') return null;
+  // Never in the way in from the street door; where no spot keeps it clear, the first that fits
+  // (and planFloor opens up the hall wall in front of the door).
+  const way = door && doorWay(poly, door, 2.2, 0.75);
+  return (way && stairAt(b, poly, lift, maxH, way)) || stairAt(b, poly, lift, maxH, null);
+}
+
+/**
+ * Lift and stairs of a building together, both clear of the way in from the street door: when the
+ * stairs only keep it clear without the lift, the building goes without the lift.
+ */
+export function planCores(b: BuildingDesc, poly: Poly, maxH: number, door: Door | null): { lift: LiftShaft | null; stair: StairCore | null } {
+  const stairs = b.floors >= 2 && b.style !== 'church';
+  // A roomy way in first, then (small and oddly cut houses) narrower ones that still let one walk
+  // in. Where even a step inside the door would run into the stairs, the house goes without them
+  // (the lift alone takes people up when it fits).
+  let liftOnly: LiftShaft | null = null;
+  for (const [depth, half] of [[2.2, 0.75], [1.6, 0.5], [1.0, 0.4]]) {
+    const way = door && doorWay(poly, door, depth, half);
+    if (!way) break;
+    const lift = liftAt(b, poly, way);
+    if (!stairs) return { lift, stair: null };
+    const st = stairAt(b, poly, lift, maxH, way);
+    if (st) return { lift, stair: st };
+    const alone = lift && stairAt(b, poly, null, maxH, way);
+    if (alone) return { lift: null, stair: alone };
+    liftOnly ??= lift;
+    if (depth === 1) return { lift: liftOnly, stair: null };
+  }
+  const lift = planLift(b, poly);
+  return { lift, stair: planStair(b, poly, lift, maxH) };
+}
+
+function stairAt(b: BuildingDesc, poly: Poly, lift: LiftShaft | null, maxH: number, way: Poly | null): StairCore | null {
   const F = new Frame(poly);
   // The end away from the lift (the lift sits at the -u end when there is one).
   const liftEnd = lift ? Math.sign((lift.cx - F.cx) * F.ux + (lift.cz - F.cz) * F.uz) || -1 : 0;
@@ -166,6 +240,7 @@ export function planStair(b: BuildingDesc, poly: Poly, lift: LiftShaft | null, m
           const h = coreP(c, -hall, 0);
           if (!pointInPoly(poly, h[0], h[1])) ok = false;
           if (ok && lr) for (let k = 0; k < 8; k += 2) if (pointInPoly(lr, r[k], r[k + 1]) || pointInPoly(r, lr[k], lr[k + 1])) ok = false;
+          if (ok && way && overlaps(r, way)) ok = false;
           if (ok) return c;
         }
       }
@@ -288,7 +363,7 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     // Shaft walls in the lift's own frame (doors on the +u face).
     const vx = -lift.uz, vz = lift.ux;
     const L = (u: number, v: number): [number, number] => [lift.cx + lift.ux * u + vx * v, lift.cz + lift.uz * u + vz * v];
-    const wall = (a: [number, number], b: [number, number], doors: [number, number][]) => plan.walls.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], doors });
+    const wall = (a: [number, number], b: [number, number], doors: [number, number][]) => plan.walls.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], doors, solid: true });
     const { hu: lu, hv: lv } = lift;
     wall(L(-lu, -lv), L(lu, -lv), []);
     wall(L(-lu, lv), L(lu, lv), []);
@@ -300,7 +375,8 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     const front = lu + LANDING;
     const lobby = clipRoom([...L(-lu - 0.6, -lob), ...L(front, -lob), ...L(front, lob), ...L(-lu - 0.6, lob)]);
     if (lobby) plan.rooms.push({ type: 'hall', poly: lobby, floorMat: floor === 0 ? 'marble' : 'tile', wallColor: [0.86, 0.85, 0.82] });
-    wall(L(front, -lob), L(front, lob), [[0.55, 0.85]]);
+    const [la, lb] = [L(front, -lob), L(front, lob)];
+    plan.walls.push({ ax: la[0], az: la[1], bx: lb[0], bz: lb[1], doors: [[0.55, 0.85]] });
     // Rooms start beyond the lobby (in this floor's frame).
     const e = L(front, 0);
     coreU1 = (e[0] - F.cx) * F.ux + (e[1] - F.cz) * F.uz;
@@ -607,6 +683,13 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
   plan.walls = plan.walls.flatMap((w) => clipWall(w, poly));
   // Keep only furniture that fits the storey (see fitsStorey).
   plan.furniture = plan.furniture.filter(fitsStorey);
+  // A clear way in behind the street door: room walls across it get an opening, solid pieces go.
+  const way = door && doorWay(poly, door, 2.2, 0.75);
+  if (way) {
+    for (const w of plan.walls) if (!w.solid) openWall(w, way);
+    plan.walls = plan.walls.filter((w) => !(w.doors.length === 1 && w.doors[0][0] <= 0 && w.doors[0][1] >= 1));
+    plan.furniture = plan.furniture.filter((f) => f.kind === 'rug' || f.kind === 'painting' || f.use === 'dress' || f.h < 0.3 || !overlaps(furnRect(f), way));
+  }
   // Ceiling lights per room: one in the middle of a small room, a grid in big ones; homes and
   // cafés get pendant lamps (over the table where there is one), offices and shops panels.
   for (const room of plan.rooms) {
@@ -666,8 +749,50 @@ function clipWall(w: IWall, poly: Poly): IWall[] {
       const a = Math.max(d0, t0), b = Math.min(d1, t1);
       if (b - a > 0.6 / L) doors.push([(a - t0) / span, (b - t0) / span]);
     }
-    out.push({ ax: w.ax + dx * t0, az: w.az + dz * t0, bx: w.ax + dx * t1, bz: w.az + dz * t1, doors });
+    out.push({ ax: w.ax + dx * t0, az: w.az + dz * t0, bx: w.ax + dx * t1, bz: w.az + dz * t1, doors, solid: w.solid });
   }
+  return out;
+}
+
+/** A wall's opening where it crosses a convex quad (grown by a walker's width), merged with its doors. */
+function openWall(w: IWall, quad: Poly): void {
+  const dx = w.bx - w.ax, dz = w.bz - w.az, L = Math.hypot(dx, dz);
+  if (L < 1e-3) return;
+  // Cyrus–Beck: clip the wall line to the quad.
+  let cx = 0, cz = 0;
+  for (let i = 0; i < 8; i += 2) { cx += quad[i] / 4; cz += quad[i + 1] / 4; }
+  let t0 = 0, t1 = 1;
+  for (let i = 0; i < 8 && t0 <= t1; i += 2) {
+    const j = (i + 2) % 8;
+    let nx = quad[j + 1] - quad[i + 1], nz = quad[i] - quad[j];
+    // Outward normal of this edge.
+    if ((cx - quad[i]) * nx + (cz - quad[i + 1]) * nz > 0) { nx = -nx; nz = -nz; }
+    const num = (w.ax - quad[i]) * nx + (w.az - quad[i + 1]) * nz, den = dx * nx + dz * nz;
+    if (Math.abs(den) < 1e-12) { if (num > 0) return; continue; }
+    const t = -num / den;
+    if (den < 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+  }
+  if (t1 - t0 < 0.05 / L) return;
+  // At least a doorway's width (0.9 m), and no sliver of wall left at either end.
+  const need = 0.9 / L;
+  if (t1 - t0 < need) { const m = (t0 + t1) / 2; t0 = Math.max(0, m - need / 2); t1 = Math.min(1, t0 + need); t0 = Math.max(0, t1 - need); }
+  if (t0 < 0.3 / L) t0 = 0;
+  if (t1 > 1 - 0.3 / L) t1 = 1;
+  const all = [...w.doors, [t0, t1] as [number, number]].sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const d of all) {
+    const last = merged[merged.length - 1];
+    if (last && d[0] <= last[1] + 0.3 / L) last[1] = Math.max(last[1], d[1]);
+    else merged.push([d[0], d[1]]);
+  }
+  w.doors = merged;
+}
+
+/** A piece's footprint (world quad). */
+function furnRect(f: Furn): Poly {
+  const c = Math.cos(f.yaw), s = Math.sin(f.yaw), w = f.w / 2, d = f.d / 2;
+  const out: number[] = [];
+  for (const [lx, lz] of [[-w, -d], [w, -d], [w, d], [-w, d]]) out.push(f.x + lx * c + lz * s, f.z - lx * s + lz * c);
   return out;
 }
 
@@ -754,7 +879,7 @@ function stairsOf(plan: FloorPlan, c: StairCore, y: number, h: number, up: boole
   const band = 2 * c.w + c.g, vb = band / 2, mid = -vb + c.w + c.g / 2;
   const wall = (u0: number, v0: number, u1: number, v1: number) => {
     const a = coreP(c, u0, v0), b = coreP(c, u1, v1);
-    plan.walls.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], doors: [] });
+    plan.walls.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], doors: [], solid: true });
   };
   // Enclosure along the hall side past the near landing, along the outer side and across the far end
   // (the facade may stand a little further off: nobody walks off the landing).

@@ -9,7 +9,7 @@ import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer, CellState } from '../stream/CityStreamer';
 import type { Collision } from '../world/Collision';
-import { planFloor, shopKindOf, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore, type Furn } from './InteriorGen';
+import { planFloor, shopKindOf, planCores, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore, type Furn } from './InteriorGen';
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
 import { buildFloorMeshes, wallCollisionSegments, furnitureCollision } from './InteriorBuilder';
@@ -130,9 +130,10 @@ export class Interiors {
         if (!a) {
           a = { ref, L, floors: new Map(), hidden: new Set(), opened: new Set(), lastNear: this.t, peopleFloors: new Set(), door: null, lift: null, elevator: null, stair: null };
           this.active.set(ref, a);
+          const cores = planCores(ref.desc, this.floorPoly(a, 0), Math.max(...L.floors.map((q) => q.y1 - q.y0)), L.door);
+          a.lift = cores.lift;
           this.makeElevator(a);
-          const maxH = Math.max(...L.floors.map((q) => q.y1 - q.y0));
-          a.stair = planStair(ref.desc, this.floorPoly(a, 0), a.lift, maxH);
+          a.stair = cores.stair;
         }
         a.lastNear = this.t;
         // Storeys around the player.
@@ -187,7 +188,6 @@ export class Interiors {
 
   /** Lift for a newly active building (planned on the ground floor, levels per storey). */
   private makeElevator(a: ActiveBuilding): void {
-    a.lift = planLift(a.ref.desc, this.floorPoly(a, 0));
     if (!a.lift) return;
     const levels: (number | null)[] = [];
     for (let f = 0; f < a.ref.desc.floors; f++) {

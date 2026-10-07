@@ -10,7 +10,7 @@ import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
 import { planCell } from '../src/plan/cell';
 import { buildingLayout } from '../src/build/buildingLayout';
-import { planFloor, planLift, planStair, coreFits, isArcade, CABINET, type Furn, type FloorPlan } from '../src/interior/InteriorGen';
+import { planFloor, planCores, coreFits, isArcade, CABINET, type Furn, type FloorPlan } from '../src/interior/InteriorGen';
 import { wallCollisionSegments } from '../src/interior/InteriorBuilder';
 import { pointInPoly, distSqPointSeg, distPointPolyEdge, type Poly } from '../src/core/geom2';
 import { GAMES, type Btn, type Pad } from '../src/arcade/games';
@@ -83,8 +83,7 @@ export function arcadeChecks(check: Check): void {
       halls++;
       const L = buildingLayout(b, terrain, 0);
       const fl = L.floors[0], poly = L.tiers[fl.tier].poly;
-      const lift = planLift(b, poly);
-      const stair = planStair(b, poly, lift, Math.max(...L.floors.map((q) => q.y1 - q.y0)));
+      const { lift, stair } = planCores(b, poly, Math.max(...L.floors.map((q) => q.y1 - q.y0)), L.door);
       const next = L.floors.find((q) => q.f === 1);
       const up = !!stair && !!next && coreFits(stair, poly) && coreFits(stair, L.tiers[next.tier].poly);
       const fp = planFloor(b, poly, 0, fl.y0, fl.y1 - fl.y0, 0, lift, stair, up, false, L.door);
