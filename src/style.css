@@ -379,6 +379,7 @@ body.looking #crosshair { display: block; }
 #map .map-key .alert.crime { background: #ff3b30; color: #fff; }
 #map .map-key .crimescale { display: inline-block; width: 28px; height: 10px; border-radius: 2px; background: linear-gradient(90deg, rgba(47,175,100,0.55), rgba(230,194,41,0.45), rgba(214,52,40,0.6)); vertical-align: -1px; }
 #map .map-key .faint { display: inline-block; width: 7px; height: 7px; margin: 0 3px; border-radius: 50%; background: #a9d6ff; opacity: 0.7; box-shadow: 0 0 0 1px rgba(20,28,36,0.55); }
+#map .map-key .badge { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin: 0 1px; border-radius: 50%; border: 1.5px solid #fff; color: #10202a; font: 800 8px system-ui, sans-serif; }
 .pw-rep { display: block; margin-top: 4px; color: #a9b4bf; }
 
 /* Compass strip (src/ui/Compass.ts): heading ticks, nearby points of interest, the player's marker. */

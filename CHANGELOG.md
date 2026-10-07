@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.096 — 2026-10-07
+
+- **Arcades only where there is room for one.** They are now only in big, plainly rectangular buildings, never in small or oddly shaped corner houses, so every arcade is a real hall with at least seven cabinets.
+- **Nothing walls an arcade off any more.** Cabinets used to stand in front of the doorway from the stairs or the lift lobby, and where the street door led in that way, the hall was shut off. They now keep doorways clear, and a self test walks from the street door to every cabinet.
+- **Arcades are easier to find on the map:** a round cyan "A" badge, with its own line in the map's legend.
+- **The ARCADE sign no longer sits on a painted shop sign** — arcade fronts have no generic sign band now, and their windows glow in the evening.
+- **People keep out of your view while you play:** passers-by in the hall no longer step between you and the screen.
+
 ## 0.095 — 2026-10-07
 
 - **Flying no longer recharges your energy.** Flight itself is still free, but energy only comes back on the ground (or on a roof), so a hero who flies and fights has to land now and then to catch their breath. The energy bar turns grey while it is not recovering.
