@@ -2,9 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.094 — 2026-10-07
+## 0.095 — 2026-10-07
 
 - **People who trip no longer scream as if dying.** When someone falls in the street they now let out a short, mild cry instead: an "oof", "ow", "whoa", "ugh", "ah" or "whoops", picked at random each time. Men and women have their own voices, every person keeps a slightly different pitch, children sound higher and older people a little lower. It is also a touch quieter than before.
+
+## 0.094 — 2026-10-07
+
+- **Arcades.** Some general stores on the shopping streets are now arcades, with a neon ARCADE sign over the door (the map shows the nearest few). Inside is one dim hall full of tall video game cabinets along the walls and in back-to-back rows, their screens running a demo and their titles lit on top.
+- **The games really play.** Walk up to a cabinet and press **E**: the arrows or WASD and Space now drive the game instead of your hero, right there on the big screen in the hall, and **E** steps back. Six classics: Rock Storm (shoot the asteroids), Block Drop (falling blocks), Space Raiders (invaders), Snake, Brick Breaker and Paddle Ball (against the machine). Each keeps a high score.
 
 ## 0.093 — 2026-10-07
 
