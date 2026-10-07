@@ -18,6 +18,11 @@ export const BOTTOMS = ['jeans', 'trousers', 'shorts', 'skirt', 'none'] as const
 export const SHOES = ['sneakers', 'shoes', 'boots', 'none'] as const;
 export const HATS = ['none', 'cap', 'beanie'] as const;
 export const PATTERNS = ['plain', 'stripes', 'checks'] as const;
+/** Hero tights (a skin-tight bodysuit under everything else) and its designs. */
+export const SUITS = ['none', 'tights'] as const;
+export const SUIT_DESIGNS = ['plain', 'emblem', 'bolt', 'chevron', 'stripes', 'trunks'] as const;
+export const GLOVES = ['none', 'suit', 'accent'] as const;
+export const MASKS = ['none', 'domino', 'cowl', 'full'] as const;
 
 export interface OutfitSpec {
   top: (typeof TOPS)[number];
@@ -39,6 +44,16 @@ export interface OutfitSpec {
   seed: number;
   /** false: no default underwear where nothing else covers (missing = worn). */
   underwear?: boolean;
+  /** Hero tights (missing = none) with their main and accent colours and design. */
+  suit?: (typeof SUITS)[number];
+  suitColor?: RGB;
+  suitColor2?: RGB;
+  suitDesign?: (typeof SUIT_DESIGNS)[number];
+  /** Gloves with the tights: none, in the suit colour or in the accent colour. */
+  gloves?: (typeof GLOVES)[number];
+  /** A hero mask (missing = none). */
+  mask?: (typeof MASKS)[number];
+  maskColor?: RGB;
 }
 
 export interface CharacterLook {
@@ -50,10 +65,13 @@ function vis(seed: number, primary: RGB, secondary: RGB, pattern = 'plain'): Ite
   return { shape: 'cloth', seed, primary, secondary, accent: secondary, material: pattern, glow: 0, glowColor: [0, 0, 0], wear: 0.15, style: 'human' };
 }
 
-/** Outfit spec → what the wardrobe renders. */
+/** Classic blue and red until the player picks colours. */
+const SUIT_DEFAULT: [RGB, RGB] = [[0.12, 0.24, 0.62], [0.75, 0.1, 0.1]];
+
 /** Marker item (waist slot): leave off the default underwear (see Equipment.set). */
 export const NO_UNDERWEAR = 'no-underwear';
 
+/** Outfit spec → what the wardrobe renders. */
 export function outfitVisuals(o: OutfitSpec): EquipmentVisuals {
   const s = o.seed >>> 0;
   const eq: EquipmentVisuals = {};
@@ -62,6 +80,12 @@ export function outfitVisuals(o: OutfitSpec): EquipmentVisuals {
   if (o.outer !== 'none') eq.back = { defId: o.outer, visual: vis(s + 2, o.outerColor, o.outerColor.map((c) => c * 0.8) as RGB, o.outerLeather && o.outer === 'jacket' ? 'leather' : 'plain') };
   if (o.shoes !== 'none') eq.feet = { defId: o.shoes, visual: vis(s + 3, o.shoesColor, [1, 1, 1]) };
   if (o.hat !== 'none') eq.head = { defId: o.hat, visual: vis(s + 4, o.hatColor, o.hatColor) };
+  if (o.suit === 'tights') {
+    const c = o.suitColor ?? SUIT_DEFAULT[0], c2 = o.suitColor2 ?? SUIT_DEFAULT[1];
+    eq.shoulders = { defId: 'tights', visual: vis(s + 6, c, c2, o.suitDesign ?? 'plain') };
+    if (o.gloves && o.gloves !== 'none') eq.hands = { defId: 'gloves', visual: vis(s + 7, o.gloves === 'accent' ? c2 : c, c2) };
+  }
+  if (o.mask && o.mask !== 'none') eq.face = { defId: `mask_${o.mask}`, visual: vis(s + 8, o.maskColor ?? [0.05, 0.05, 0.06], o.maskColor ?? [0.05, 0.05, 0.06]) };
   if (o.underwear === false) eq.waist = { defId: NO_UNDERWEAR, visual: vis(s + 5, [0, 0, 0], [0, 0, 0]) };
   return eq;
 }
@@ -87,6 +111,12 @@ export function outfitFromVisuals(eq: EquipmentVisuals, seed: number): OutfitSpe
     hatColor: head?.visual.primary ?? [0.12, 0.13, 0.16],
     seed: seed >>> 0,
     underwear: eq.waist?.defId === NO_UNDERWEAR ? false : undefined,
+    ...(eq.shoulders?.defId === 'tights' ? {
+      suit: 'tights' as const, suitColor: eq.shoulders.visual.primary, suitColor2: eq.shoulders.visual.secondary,
+      suitDesign: pick(SUIT_DESIGNS, eq.shoulders.visual.material, 'plain'),
+      gloves: eq.hands?.defId === 'gloves' ? (eq.hands.visual.primary.join() === eq.shoulders.visual.primary.join() ? 'suit' as const : 'accent' as const) : 'none' as const,
+    } : {}),
+    ...(eq.face?.defId.startsWith('mask_') ? { mask: pick(MASKS, eq.face.defId.slice(5), 'none'), maskColor: eq.face.visual.primary } : {}),
   };
 }
 

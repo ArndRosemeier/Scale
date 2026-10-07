@@ -24,7 +24,7 @@ import * as THREE from 'three';
 import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
 import type { HumanoidAppearance } from '../types';
 import { GLSL_NOISE } from './glsl';
-import { GLSL_FACE, BEARD_IDS } from './faceRegions';
+import { GLSL_FACE, GLSL_EYE_MASK, BEARD_IDS } from './faceRegions';
 import { poreTexture } from './textures';
 import { MARK_IDS } from '../appearance';
 
@@ -50,6 +50,8 @@ export interface SkinUniforms {
   uFaceScale: { value: number };
   uPores: { value: THREE.Texture };
   uHide: { value: number };
+  /** A worn eye mask: x off (0) / domino (1) / round a cowl's eye holes (2), yzw its colour (linear). Set by the equipment. */
+  uMask: { value: THREE.Vector4 };
   /** The material's sheenColor, tinted from the skin tone by applySkinLook. */
   sheenTarget?: THREE.Color;
 }
@@ -103,6 +105,7 @@ uniform vec4 uLook;      // x age, y male, z blush, w scalp shade
 uniform vec4 uBrow;      // thickness, arch, unibrow, density
 uniform vec4 uBeard;     // x style id, y density, z scalp recede, w lip tint
 uniform float uMarks;
+uniform vec4 uMask;
 uniform sampler2D uPores;
 varying vec4 vMaskA;
 varying vec4 vMaskB;
@@ -112,6 +115,7 @@ varying vec2 vSkinUv;
 float sk_thin = 0.0;
 ${GLSL_NOISE}
 ${GLSL_FACE}
+${GLSL_EYE_MASK}
 float h_bit(float bits, float i) { return mod(floor(bits / exp2(i)), 2.0); }
 float h_seg(vec2 p, vec2 a, vec2 b) {
   vec2 pa = p - a, ba = b - a;
@@ -342,6 +346,16 @@ void skinEval() {
     }
   }
 
+  // ---- a hero's eye mask (worn, not a mark: the equipment sets it): matte cloth over brows and
+  // lids, a raised edge.
+  if (uMask.x > 0.5) {
+    float em = h_eyeMask(f);
+    if (uMask.x > 1.5) em = max(em, (1.0 - smoothstep(1.25, 1.35, length(vec2((abs(f.x) - 0.5) / 0.33, (f.y + 0.01) / 0.22)))) * smoothstep(-0.75, -0.5, f.z));
+    c = mix(c, uMask.yzw * (0.92 + 0.16 * midN), em);
+    rough = mix(rough, 0.5, em);
+    height += em * 0.0007;
+  }
+
   sk_thin = ears * 0.9 + nose * 0.25 + lips * 0.2;
   sk_albedo = c;
   sk_rough = clamp(rough, 0.18, 0.9);
@@ -401,6 +415,7 @@ export function createSkinMaterial(opts: { expr: boolean; exprTex: THREE.Texture
     uFaceScale: { value: 1 },
     uPores: { value: poreTexture() },
     uHide: { value: 0 },
+    uMask: { value: new THREE.Vector4() },
   };
   uniforms.sheenTarget = material.sheenColor;
   material.defines = { EXPR_UNITS: Math.max(1, opts.exprUnits) };

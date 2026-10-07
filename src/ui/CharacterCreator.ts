@@ -12,12 +12,13 @@ import { HAIR_STYLES, BEARD_STYLES, BROW_STYLES } from '../humanoid/appearance';
 import { HumanoidPreview } from '../humanoid/client/preview';
 import {
   randomLook, plainLook, plainAppearance, normalizeLook, outfitVisuals, TOPS, OUTERS, BOTTOMS, SHOES, HATS, PATTERNS,
+  SUITS, SUIT_DESIGNS, GLOVES, MASKS,
   type CharacterLook, type OutfitSpec, type RGB,
 } from '../avatar/look';
 
 type FaceKey = keyof HumanoidAppearance['face'];
 type BodyKey = keyof HumanoidAppearance['body'];
-type Tab = 'body' | 'face' | 'hair' | 'skin' | 'outfit';
+type Tab = 'body' | 'face' | 'hair' | 'skin' | 'outfit' | 'hero';
 
 const FACE: [FaceKey, string][] = [
   ['headRound', 'Head shape'], ['foreheadSlope', 'Forehead'], ['browRidge', 'Brow ridge'], ['eyeSize', 'Eye size'], ['eyeSpacing', 'Eye spacing'],
@@ -40,7 +41,9 @@ const MARKS: [string, string][] = [
 const LABEL: Record<string, string> = {
   tshirt: 'T-shirt', shirt: 'Shirt', sweater: 'Sweater', dress: 'Dress', none: 'None', jacket: 'Jacket', suitjacket: 'Blazer', coat: 'Coat',
   jeans: 'Jeans', trousers: 'Trousers', shorts: 'Shorts', skirt: 'Skirt', sneakers: 'Sneakers', shoes: 'Shoes', boots: 'Boots', cap: 'Cap', beanie: 'Beanie',
-  plain: 'Plain', stripes: 'Stripes', checks: 'Checks', mustache: 'Moustache', mutton: 'Mutton chops', chinstrap: 'Chinstrap', unibrow: 'Unibrow',
+  plain: 'Plain', stripes: 'Stripes', checks: 'Checks',
+  tights: 'Tights', emblem: 'Star emblem', bolt: 'Lightning bolt', chevron: 'Chevron', trunks: 'Trunks & belt', suit: 'Suit colour', accent: 'Accent colour',
+  domino: 'Domino', cowl: 'Cowl', full: 'Full mask', mustache: 'Moustache', mutton: 'Mutton chops', chinstrap: 'Chinstrap', unibrow: 'Unibrow',
 };
 
 const SKIN = ['#f6dcc8', '#efcdb4', '#eac2a1', '#ddae8a', '#d9a47c', '#c99068', '#bf8560', '#a8734f', '#9c6644', '#865637', '#7a4b2f', '#5a3522', '#4a2c1c', '#3f2519'];
@@ -49,6 +52,11 @@ const HAIR_COL = ['#0a0908', '#1c120c', '#341f12', '#5c3f26', '#85663f', '#bc9e6
 const FABRIC = [
   '#1f2128', '#33384d', '#4c4c52', '#8a8a8e', '#d9d9d1', '#f2ebd9', '#8c1f1f', '#c0392b', '#e5949b', '#d9a43a', '#b3992e',
   '#265a33', '#5a7a3a', '#33598c', '#4d8cc9', '#4d334d', '#8c6a4d', '#594d40',
+];
+/** Bold costume colours first, then the everyday fabrics. */
+const HERO_COL = [
+  '#1f3d9e', '#2e6be6', '#c41a1a', '#e63b2e', '#f2c21b', '#ffe066', '#1a8c3a', '#5ec95e', '#6a2c9e', '#b04ad9',
+  '#e8711c', '#14b8c4', '#e8e8e8', '#9aa0a8', '#0d0d10', ...FABRIC.slice(0, 4),
 ];
 const DENIM = ['#2e406b', '#1f2947', '#4d618c', '#141419', '#6b7d99', ...FABRIC.slice(0, 6)];
 const SHOE_COL = ['#141414', '#40261a', '#e5e5e5', '#664d33', '#262e4d', '#8c1f1f', '#b3a07a'];
@@ -254,7 +262,7 @@ export class CharacterCreator {
     this.name.setAttribute('aria-label', 'Character name');
     head.appendChild(this.name);
     this.tabsEl = h('div', 'cc-tabs');
-    for (const [id, label] of [['body', 'Body'], ['face', 'Face'], ['hair', 'Hair'], ['skin', 'Skin & eyes'], ['outfit', 'Outfit']] as [Tab, string][]) {
+    for (const [id, label] of [['body', 'Body'], ['face', 'Face'], ['hair', 'Hair'], ['skin', 'Skin & eyes'], ['outfit', 'Outfit'], ['hero', 'Hero']] as [Tab, string][]) {
       const b = h('button', id === this.tab ? 'on' : '', label);
       b.type = 'button';
       b.dataset.tab = id;
@@ -506,6 +514,26 @@ export class CharacterCreator {
           })()),
         ];
         break;
+      case 'hero': {
+        const suit = o.suit ?? 'none', mask = o.mask ?? 'none';
+        kids = [
+          section('Tights', h('p', 'cc-note', 'A skin-tight suit. Putting it on takes off the everyday clothes and pulls on boots; anything added back in Outfit goes over it.'),
+            chips(SUITS, suit, (v) => {
+              if (v === 'tights' && suit === 'none') Object.assign(o, { top: 'none', outer: 'none', bottom: 'none', hat: 'none', shoes: 'boots', shoesColor: o.suitColor2 ?? [0.75, 0.1, 0.1] });
+              this.setO('suit', v, true);
+            }),
+            suit === 'none' ? null : field('Colour', swatches(HERO_COL, o.suitColor ?? [0.12, 0.24, 0.62], (c) => this.setO('suitColor', c))),
+            suit === 'none' ? null : field('Accent colour', swatches(HERO_COL, o.suitColor2 ?? [0.75, 0.1, 0.1], (c) => this.setO('suitColor2', c))),
+            suit === 'none' ? null : field('Design', chips(SUIT_DESIGNS, o.suitDesign ?? 'plain', (v) => this.setO('suitDesign', v))),
+            suit === 'none' ? null : field('Gloves', chips(GLOVES, o.gloves ?? 'none', (v) => this.setO('gloves', v))),
+          ),
+          section('Mask',
+            chips(MASKS, mask, (v) => this.setO('mask', v, true)),
+            mask === 'none' ? null : field('Colour', swatches(HERO_COL, o.maskColor ?? [0.05, 0.05, 0.06], (c) => this.setO('maskColor', c))),
+          ),
+        ];
+        break;
+      }
     }
     this.editor.replaceChildren(...kids);
   }
