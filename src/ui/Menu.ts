@@ -4,6 +4,7 @@
 import type { Game } from '../game/Game';
 import { versionLink } from './Changelog';
 import { feedbackLink } from './Feedback';
+import { manualLink } from './Manual';
 import { SOUND_CATEGORIES, defaultMix, type SoundCategory } from '../audio/Audio';
 import { saveTimeScale } from '../render/SkySystem';
 import type { WeatherSetting } from '../render/Weather';
@@ -93,7 +94,9 @@ export class Menu {
       </div>`;
     const ver = versionLink();
     this.el.querySelector('h2')?.after(ver);
-    ver.after(feedbackLink());
+    const fb = feedbackLink();
+    ver.after(fb);
+    fb.after(manualLink());
     document.body.appendChild(this.el);
     this.help = document.createElement('div');
     this.help.id = 'help';
