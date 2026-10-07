@@ -64,7 +64,7 @@ const root = new THREE.Group();
 scene.add(root);
 const built: Landmark[] = [];
 let wrecks: LandmarkWrecks | null = null;
-const D = { onImpact: undefined, impact: () => 0, restoreMound: () => undefined } as unknown as Destruction;
+const D = { onImpact: undefined, as: <T>(_c: string, fn: () => T) => fn(), impact: () => 0, restoreMound: () => undefined } as unknown as Destruction;
 const noop = new Proxy({}, { get: () => () => undefined }) as never;
 
 function build(): void {

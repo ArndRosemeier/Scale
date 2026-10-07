@@ -65,6 +65,7 @@ let wrecks: LandmarkWrecks | null = null;
 const moundGeo = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), moundMat = new THREE.MeshStandardMaterial({ color: 0x8a8279, roughness: 1 });
 const D = {
   onImpact: undefined,
+  as: <T>(_c: string, fn: () => T) => fn(),
   impact: (x: number, y: number, z: number, r: number, j: number, dx: number, dy: number, dz: number) => wrecks?.impact(x, y, z, r, j, dx, dy, dz) ?? 0,
   restoreMound: (x: number, z: number, r: number, h: number) => { const m = new THREE.Mesh(moundGeo, moundMat); m.position.set(x, 0, z); m.scale.set(r, h, r); m.receiveShadow = m.castShadow = true; root.add(m); },
 } as unknown as Destruction;

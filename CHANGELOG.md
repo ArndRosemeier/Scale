@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.084 — 2026-10-07
+
+- **Reputation is only lost for what you hit yourself.** Rubble flying out of a collapsing building used to count as your doing, so standing by while a monster brought a block down could wreck your reputation as the neighbours fell. Now only what your own punches, steps and powers hit counts. What collapse rubble breaks, and what your body breaks while a monster has knocked you flying, is nobody's fault.
+- **No reputation lost while fighting a big monster.** Near a monster like the Strider (and for a short while after it leaves or falls), damage you cause costs no reputation or karma and draws no police. A short note on screen says so. Away from monsters, collateral counts as before.
+- **The city no longer blames you when the last resort strikes.** The strike still costs karma, but no reputation any more, and being knocked out by criminals no longer costs reputation either.
+
 ## 0.083 — 2026-10-07
 
 - **Soldiers stay out of the water.** Every spot the army picks (where a unit digs in, where it gathers when you rally it with G, where it drives or walks off to when the battle is over, where a squad on foot gets out) is now on dry ground. A spot over a river, lake or the sea moves to the nearest dry street. As a backstop, soldiers, police and anyone else heading straight for a point, and people running off in a panic, now stop at the bank or walk along it instead of stepping into the water.

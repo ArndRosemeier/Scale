@@ -2444,6 +2444,20 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const m = new Justice({ ...host, witnesses: () => 5 });
   m.record({ ...e('collapse', {}, 6), cause: 'threat' });
   check(m.stats.collapses === 0 && m.heat === 0, "justice: a monster's collapse is not booked to the player");
+  // Fighting a monster: collateral near it (or while the hero is near it) costs nothing.
+  let near = true, toasts = 0, rep2 = 0;
+  const grace = new Justice({ ...host, witnesses: () => 5, officersNear: () => 1, rep: (d: number) => { rep2 += d; }, toast: () => { toasts++; }, monsterNear: () => near });
+  const person = {} as object;
+  grace.record({ ...e('collapse', {}, 6) });
+  grace.record({ cause: 'player', power: 'fireball', target: 'person', effect: 'burn', x: 0, z: 0, t: 0, ref: person });
+  grace.record({ cause: 'player', power: 'stomp', target: 'prop', effect: 'topple', x: 0, z: 0, t: 0 });
+  const forgiven = rep2 === 0 && grace.heat === 0 && grace.stats.forgiven === 3 && toasts === 1;
+  near = false;
+  grace.record({ cause: 'player', power: 'stomp', target: 'car', effect: 'wreck', x: 0, z: 0, t: 0, ref: {} });
+  check(forgiven && rep2 < 0 && grace.heat > 0, `justice: no reputation or heat lost near a big monster (${grace.stats.forgiven} forgiven, one note), counted again away from it (${rep2})`);
+  const w = new Justice({ ...host, witnesses: () => 5 });
+  w.record({ ...e('facade', {}), cause: 'world' });
+  check(w.stats.offences === 0 && w.heat === 0, "justice: rubble and a flung hero's body ('world') are not booked to the player");
   // A manhunt for a public menace: an officer close by is enough (no offence), not for a merely disliked hero.
   let hunted = 0;
   const hunt = (repV: number) => { const H = new Justice({ ...host, time: 100, officersNear: () => 1, repValue: () => repV, pursue: () => { hunted++; } }); H.update(0.5); return H.wanted; };
@@ -2688,7 +2702,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     };
     const mounds: number[][] = [];
     const D = {
-      onImpact: undefined, impact: (...a: number[]) => wr.impact(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
+      onImpact: undefined, as: <T>(_c: string, fn: () => T) => fn(), impact: (...a: number[]) => wr.impact(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
       restoreMound: (x: number, z: number, rr: number, h: number) => { mounds.push([x, z, rr, h]); },
     } as unknown as Destruction;
     const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
@@ -2811,7 +2825,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       near.position.set(...meshes[0].origin);
       return { index: 0, lm, grid: b.grid!, pieces: b.pieces!, elemData: ed, elemTex: new THREE.DataTexture(ed, Wd, Hd), elemW: Wd, near, nearGlass: null, facadeMat: null as never, glassMat: null };
     };
-    const D = { onImpact: undefined, impact: () => 0, restoreMound: () => undefined } as unknown as Destruction;
+    const D = { onImpact: undefined, as: <T>(_c: string, fn: () => T) => fn(), impact: () => 0, restoreMound: () => undefined } as unknown as Destruction;
     const wr = new LandmarkWrecks([data()], D, noop, noop, flat, solids, facade);
     const w = wr.wrecks[0], T = w.T;
     let panes = 0;

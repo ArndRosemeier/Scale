@@ -31,8 +31,11 @@ import { MinHeap } from '../core/heap';
 import type { LandmarkWrecks } from './LandmarkWreck';
 import { extractElements } from './extract';
 
-/** Who broke a building: the player, a threat (monster, rogue machines), the army, a fire. */
-export type DamageCause = 'player' | 'threat' | 'military' | 'fire';
+/**
+ * Who broke a building: the player, a threat (monster, rogue machines), the army, a fire, or nobody
+ * in particular ('world': material flying out of a collapse, a hero's body flung by a monster).
+ */
+export type DamageCause = 'player' | 'threat' | 'military' | 'fire' | 'world';
 /** Seconds a building remembers who broke it (a later collapse is theirs). */
 const BLAME_S = 120;
 import { WallMat } from '../plan/building';
@@ -438,7 +441,9 @@ export class Destruction {
   }
 
   private runJob(j: Job): void {
-    if (j.kind === 'fn') { j.fn!(); return; }
+    // Queued work (a collapse's debris hitting the neighbours) is nobody's own blow: the collapse
+    // itself was booked to whoever broke the building; what its rubble breaks is not theirs.
+    if (j.kind === 'fn') { this.as('world', j.fn!); return; }
     const ref = j.ref!;
     this.doomed.delete(j.key);
     const left = (this.pendingByRef.get(ref) ?? 1) - 1;
