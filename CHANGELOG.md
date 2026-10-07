@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.094 — 2026-10-07
+
+- **Arcades.** Some general stores on the shopping streets are now arcades, with a neon ARCADE sign over the door (the map shows the nearest few). Inside is one dim hall full of tall video game cabinets along the walls and in back-to-back rows, their screens running a demo and their titles lit on top.
+- **The games really play.** Walk up to a cabinet and press **E**: the arrows or WASD and Space now drive the game instead of your hero, right there on the big screen in the hall, and **E** steps back. Six classics: Rock Storm (shoot the asteroids), Block Drop (falling blocks), Space Raiders (invaders), Snake, Brick Breaker and Paddle Ball (against the machine). Each keeps a high score.
+
 ## 0.093 — 2026-10-07
 
 - **New characters start from the plain face and body:** every shape slider in the middle, age 25, evenly mixed ancestry and no random tweaks. Only hair, colours and outfit are picked at random. A new **Plain** button next to Randomize brings any character back to that base (it keeps the sex, hair, skin and outfit). Playing without a created character also gives you the plain body.

@@ -723,6 +723,24 @@ function buildFurniture(G: Geos, f: Furn, y: number): void {
     case 'column':
       B(0, h / 2, 0, w / 2, h / 2, d / 2, c);
       break;
+    case 'arcade': {
+      // Video game cabinet: base with a coin door, a control deck sticking out, the upper body
+      // set back with a black screen bezel and a lit marquee (game/Arcade draws screen and title).
+      const black: C3 = [0.025, 0.025, 0.03], trim = sc(1.6), back = d - 0.3;
+      B(0, 0.6, 0, w, 0.6, d);
+      B(0, 0.5, d + 0.004, 0.22, 0.24, 0.004, [0.2, 0.2, 0.22], G.gloss);
+      for (const s of [-0.08, 0.08]) B(s, 0.62, d + 0.01, 0.025, 0.012, 0.006, [0.95, 0.5, 0.1], G.lights);
+      B(0, 1.24, d * 0.15, w * 0.98, 0.04, d * 0.85, black);
+      B(0, (1.28 + h) / 2, -0.15, w, (h - 1.28) / 2, back + 0.15);
+      B(0, 1.95, back + 0.004, 0.8, 0.62, 0.004, black, G.gloss);
+      B(0, h - 0.22, back + 0.004, 0.8, 0.17, 0.004, [1, 1, 1], G.lights);
+      for (const s of [-1, 1]) B(s * (w + 0.004), 1.9, (back - d) / 2, 0.004, 0.06, (back + d) / 2 - 0.04, trim, G.gloss);
+      // Stick and buttons.
+      Cy(-0.4, 1.28, d * 0.55, 1.42, 0.014, 0.014, black, 6);
+      Cy(-0.4, 1.42, d * 0.55, 1.49, 0.042, 0.042, [0.85, 0.08, 0.08], 10, G.gloss);
+      for (let k = 0; k < 3; k++) Cy(0.08 + k * 0.16, 1.28, d * 0.5 + (k === 1 ? 0.05 : 0), 1.305, 0.04, 0.04, ([[0.9, 0.85, 0.1], [0.15, 0.4, 0.95], [0.15, 0.8, 0.3]] as C3[])[k], 10, G.gloss);
+      break;
+    }
     default:
       B(0, h / 2, 0, w, h / 2, d, c);
   }
