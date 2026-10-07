@@ -256,7 +256,7 @@ export interface OffCrime {
 }
 
 /** Crime kinds that make the news off-screen (hideouts and sewer dens are places, not events). */
-const NEWS_KINDS = new Set<CrimeKind>(['snatch', 'mugging', 'robbery', 'racket', 'tagging', 'brawl', 'hijack', 'ritual', 'bomber']);
+const NEWS_KINDS = new Set<CrimeKind>(['snatch', 'mugging', 'robbery', 'racket', 'tagging', 'brawl', 'hijack', 'ritual', 'bomber', 'sabotage', 'raising', 'procession']);
 
 /**
  * One tick's crimes away from the player (seeded by `tick`, the play tick counter). `holder(i)`:

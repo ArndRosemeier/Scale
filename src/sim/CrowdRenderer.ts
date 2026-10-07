@@ -190,7 +190,7 @@ export class CrowdRenderer {
     const eq = a.actor?.outfit ?? (work ? { ...work } : cityOutfit(c.seed, c.gender, c.age, formal, 0.3));
     // (Nothing in the hand at work.)
     const held = work ? undefined : heldItem(c.seed);
-    if (held) eq.mainhand = held;
+    if (held && !eq.mainhand) eq.mainhand = held;
     const kind = eq.back?.defId === 'suitjacket' ? 'suit' : eq.back?.defId === 'coat' ? 'coat' : eq.chest?.defId === 'dress' ? 'dress' : eq.legs?.defId === 'skirt' ? 'skirt' : eq.back?.defId === 'jacket' ? 'jacket' : 'casual';
     let ti = this.templates.findIndex((t) => t.female === female && t.outfit === kind);
     if (ti < 0) ti = this.templates.findIndex((t) => t.female === female && t.outfit === 'casual');

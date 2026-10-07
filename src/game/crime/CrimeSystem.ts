@@ -32,7 +32,7 @@ import { SETTING_MAX, type CrimeSetting } from './CrimeIndex';
 import { Beat } from './Beat';
 import { responseFactor } from '../news/pulse';
 import { CrimeDirector, type CrimeRoll } from './CrimeDirector';
-import { Crime, CRIME_DEV, GROUP_KINDS, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
+import { Crime, CRIME_DEV, GROUP_KINDS, SKELETON, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
 import { Robbery } from './Robbery';
 import { Tagging, TAGGING } from './Tagging';
 import { TurfBrawl } from './TurfBrawl';
@@ -40,8 +40,15 @@ import { HideoutGuard } from './HideoutGuard';
 import { SewerDen, type DenSite } from './SewerDen';
 import { denLayout, roomW } from '../../underground/rooms';
 import { Ritual, type RitualElement } from './Ritual';
+import { BossOperation, BOSS_OP_TITLE } from './BossOp';
+import { BossEvent } from '../threats/BossEvent';
 import { Channeling } from './Channeling';
 import { HijackedFleet } from './HijackedFleet';
+import { Sabotage } from './Sabotage';
+import { Raising } from './Raising';
+import { Procession } from './Procession';
+import { Packs } from './Packs';
+import { subdued } from '../../sim/actors/Actor';
 import { KINDS } from './kinds';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
@@ -57,13 +64,13 @@ import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
 import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, relation, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
-import { planBosses, bossLabel, bossPowers, heatOf, raise, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, NOTORIETY, BOSS, type Boss, type Heat } from '../factions/Bosses';
+import { planBosses, bossLabel, bossPowers, heatOf, raise, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, bossOpChance, NOTORIETY, BOSS, BOSS_OP, BOSS_KINDS, type Boss, type Heat } from '../factions/Bosses';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES, CITY_GROUPS } from '../factions/archetypes';
 import { siteToWorld } from '../../plan/landmarks';
 import { RState } from '../../future/Robots';
-import { factionOutfit, lieutenantOutfit, bossOutfit } from '../factions/outfits';
+import { factionOutfit, lieutenantOutfit, bossOutfit, skeletonOutfit, GRAVE_GREEN } from '../factions/outfits';
 
 /** Rewards common to every kind (the per-kind ones are in crime/kinds). */
 export const CRIME_KARMA = {
@@ -96,6 +103,8 @@ export class CrimeSystem {
   readonly casts: VillainCasts;
   /** Machines turned by a techno-cult hack (crime/Hijack), until they reboot. */
   readonly fleets: HijackedFleet[] = [];
+  /** The eco-radicals' Beast-masters' dog packs (crime/Packs). */
+  readonly packs: Packs;
   private fleetKey = '';
   /** Dev: the next crime's group sends its lieutenant (dev.crime(kind, dist, group, 'lt')). */
   private devLieutenant = false;
@@ -136,6 +145,9 @@ export class CrimeSystem {
   /** Groups told as collapsed (not again until they are back). */
   private collapsedTold = new Set<number>();
   private devBoss = false;
+  /** Boss operations under way (crime/BossOp) and their threat events. */
+  private bossOps = new Map<BossOperation, BossEvent | null>();
+  private bossOpT = 0;
   private hideT = 0;
   private hideKey = '';
   /** Sewer dens (underground hideout rooms) with their crew posted now, by room id. */
@@ -190,6 +202,9 @@ export class CrimeSystem {
     this.bombs.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
     this.casts = new VillainCasts(g);
     this.casts.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
+    this.packs = new Packs(g, this.view, (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz));
+    this.casts.whistle = (by, x, z) => this.packs.sic(by, x, z);
+    this.casts.hasPack = (by) => (this.packs.of(by)?.active.length ?? 0) > 0;
     this.health = new PlayerHealth(g.player, g.mode === 'sandbox');
     this.rep = new Reputation(seed, g.settings.size, g.mode);
     this.world = this.makeWorld();
@@ -349,9 +364,15 @@ export class CrimeSystem {
       clearLine: (ax, ay, az, bx, by, bz, skip) => g.sight.clear(ax, ay, az, bx, by, bz, 0.25, skip),
       machines: (rMin, rMax) => this.machines(rMin, rMax),
       landmarks: (rMin, rMax) => this.landmarkSpots(rMin, rMax),
+      banks: (rMin, rMax) => this.banks(rMin, rMax),
+      bossOpDone: (c, x, z) => { if (c instanceof BossOperation) this.bossOpDone(c, x, z); },
       opFx: (look, x, z, share, workers) => this.casts.opFx(look, x, z, share, workers),
       hijack: (c, x, z, n) => { if (g.threats) this.fleets.push(new HijackedFleet(g, g.threats.rogue, c, x, z, n)); },
       ritual: (c, x, z, element) => this.casts.ritualBurst(c.criminals, x, z, element),
+      trees: (rMin, rMax) => this.trees(rMin, rMax),
+      blocked: (x, z) => !!g.world.buildingAt(x, z) || !!g.world.landmarks?.onFootprint(x, z, 1),
+      parked: (rMin, rMax) => this.parked(rMin, rMax),
+      sabotage: (_c, x, z) => this.sabotaged(x, z),
       cars: (x, z, r) => {
         const out: { x: number; z: number }[] = [];
         for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) if (v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < r) out.push(v);
@@ -605,13 +626,13 @@ export class CrimeSystem {
       if (!a) return;
       // The boss leads it now and then (the hideout's door, when they are hunting the hero).
       const B = this.bosses[by.id], heat = this.notoriety[by.id] ?? 0;
-      const bossHere = !(c instanceof SewerDen) && (this.devBoss || (c instanceof HideoutGuard ? heatOf(heat) === 'hunted' && bossChance(B, heat, this.g.sky.hoursAbs) > 0 : roll.chance(bossChance(B, heat, this.g.sky.hoursAbs))));
+      const bossHere = !(c instanceof SewerDen) && (this.devBoss || c instanceof BossOperation || (c instanceof HideoutGuard ? heatOf(heat) === 'hunted' && bossChance(B, heat, this.g.sky.hoursAbs) > 0 : roll.chance(bossChance(B, heat, this.g.sky.hoursAbs))));
       if (bossHere && B && B.jailedUntil <= this.g.sky.hoursAbs && ![...this.bossOf.values()].some((x) => x.actor?.faction === by.id && x.alive)) {
         c.promote(a, bossPowers(L.powers, by.archetype), BOSS);
         a.actor!.outfit = bossOutfit(by, a.cit.seed);
         a.actor!.title = `${by.emblem} ${bossLabel(this.factions, B)} · ${by.name}`;
         this.bossOf.set(c, a);
-        if (Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.g.powerHud.toast(`<b style="color:${by.palette.map}">${by.emblem} ${bossLabel(this.factions, B)}</b> of ${inSentence(by)} is out on the street`, 'warn');
+        if (!(c instanceof BossOperation) && Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.g.powerHud.toast(`<b style="color:${by.palette.map}">${by.emblem} ${bossLabel(this.factions, B)}</b> of ${inSentence(by)} is out on the street`, 'warn');
         return;
       }
       if (!this.devLieutenant && !roll.chance(ltChance(L.chance[c.kind] ?? 0, heat))) return;
@@ -619,6 +640,14 @@ export class CrimeSystem {
       a.actor!.outfit = lieutenantOutfit(by, a.cit.seed);
       a.actor!.title = `${by.emblem} ${by.name} · ${L.title}`;
     });
+    // A procession's leader carries a lantern lit in the group's colour.
+    // (The crowd renderer draws an actor's `held` item, its look taken from the outfit's mainhand.)
+    const L = c instanceof Procession ? c.leader?.actor : null;
+    if (L?.outfit) {
+      const glow = GRAVE_GREEN;
+      L.outfit = { ...L.outfit, mainhand: { defId: 'lantern', visual: { shape: 'lantern', seed: 1, primary: glow, secondary: glow, accent: glow, material: 'plain', glow: 1, glowColor: glow } } } as typeof L.outfit;
+      L.held = 'lantern';
+    }
     // A group hunting the hero: its members stand and fight.
     for (const a of c.criminals) if (a.actor && heatOf(this.notoriety[a.actor.faction ?? f.id] ?? 0) === 'hunted') a.actor.memo.grudge = 1;
   }
@@ -642,9 +671,76 @@ export class CrimeSystem {
     return out.sort((a, b) => a.d - b.d);
   }
 
-  /** Open ground in front of the city's landmarks near the player: the circle's centre, the way out. */
-  private landmarkSpots(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
+  /**
+   * Trees near the player (street and park trees standing), nearest first, each with a way out to
+   * open ground (n: away from the buildings).
+   */
+  private trees(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; height: number }[] {
+    const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; height: number; d: number }[] = [];
+    this.g.props.query(p.x, p.z, rMax, (t) => {
+      if (!t.tree || t.broken) return;
+      const d = Math.hypot(t.x - p.x, t.z - p.z);
+      if (d < rMin || d > rMax) return;
+      // The first of eight ways round it that is clear of buildings for a good stretch.
+      const a0 = ((t.x * 0.37 + t.z * 0.11) % 1) * Math.PI * 2;
+      for (let k = 0; k < 8; k++) {
+        const a = a0 + (k / 8) * Math.PI * 2, nx = Math.sin(a), nz = Math.cos(a);
+        if (W.buildingAt(t.x + nx * 4, t.z + nz * 4) || W.buildingAt(t.x + nx * 9, t.z + nz * 9)) continue;
+        out.push({ x: t.x, z: t.z, nx, nz, height: t.height, d });
+        return;
+      }
+    });
+    return out.sort((a, b) => a.d - b.d);
+  }
+
+  /** Parked cars near the player (not wrecked): a point at the kerb side, n away from the buildings. */
+  private parked(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
     const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
+    for (const v of this.g.parkedCars) {
+      if (v.state === VState.Wreck || v.state === VState.Crushed) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d < rMin || d > rMax) continue;
+      let nx = Math.cos(v.yaw), nz = -Math.sin(v.yaw);
+      if (W.buildingAt(v.x + nx * 5, v.z + nz * 5)) { nx = -nx; nz = -nz; }
+      if (W.buildingAt(v.x + nx * 5, v.z + nz * 5)) continue;
+      out.push({ x: v.x, z: v.z, nx, nz, d });
+    }
+    return out.sort((a, b) => a.d - b.d);
+  }
+
+  /**
+   * A sabotage went through: the machines round about are wrecked (robots knocked over, parked
+   * cars smashed where they stand), the lamps put out, and the pavement grown over with moss.
+   */
+  private sabotaged(x: number, z: number): void {
+    const g = this.g, R = 10;
+    for (const r of g.future.robots.list) if (r.alive && r.state < RState.Down && Math.hypot(r.x - x, r.z - z) < R) g.future.robots.knock(r, (r.x - x) * 60, 300, (r.z - z) * 60);
+    for (const v of [...g.parkedCars]) {
+      if (v.state === VState.Wreck || v.state === VState.Crushed || Math.hypot(v.x - x, v.z - z) > R * 0.7) continue;
+      g.traffic.wreckIt(v);
+      g.vehicles.makeWreck(v, v.x, v.y + 0.5, v.z, 0, -800, 0);
+      v.damage = Math.max(v.damage, 0.6);
+    }
+    g.props.query(x, z, R * 1.4, (p) => { if (!p.broken && p.kind.includes('lamp') && Math.hypot(p.x - x, p.z - z) < R * 1.4) g.props.darken(p); });
+    this.casts.rewild(x, z, R);
+  }
+
+  /** Shop doors of the tallest buildings near the player, tallest first (a bank to take: the Syndicate's heist). */
+  private banks(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
+    const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; f: number }[] = [];
+    for (const r of W.buildingsIn(p.x - rMax, p.z - rMax, p.x + rMax, p.z + rMax)) {
+      const d = r.desc;
+      if (!r.alive || !(d.shopfront || d.use === 'retail') || d.floors < 3) continue;
+      const door = doorOf(d), dist = Math.hypot(door.x - p.x, door.z - p.z);
+      if (dist < rMin || dist > rMax || W.buildingAt(door.x + door.nx * 3, door.z + door.nz * 3)) continue;
+      out.push({ ...door, f: d.floors + (d.shopfront ? 0.5 : 0) });
+    }
+    return out.sort((a, b) => b.f - a.f);
+  }
+
+  /** Open ground in front of the city's landmarks near the player: the circle's centre, the way out, which landmark. */
+  private landmarkSpots(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; kind: string }[] {
+    const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; kind: string; d: number }[] = [];
     for (const lm of this.g.macro.landmarks ?? []) {
       if (lm.kind === 'airport' || lm.cell < 0) continue;
       const nx = Math.sin(lm.angle), nz = -Math.cos(lm.angle);
@@ -654,7 +750,7 @@ export class CrimeSystem {
         const d = Math.hypot(x - p.x, z - p.z);
         if (d < rMin || d > rMax) break;
         if (W.landmarks?.onFootprint(x, z, 3.5) || W.buildingAt(x, z)) continue;
-        out.push({ x, z, nx, nz, d });
+        out.push({ x, z, nx, nz, kind: lm.kind, d });
         break;
       }
     }
@@ -962,6 +1058,14 @@ export class CrimeSystem {
     }
     if (f) this.enlist(c, f);
     if (c instanceof Ritual && f) c.element = RITUAL_ELEMENT[f.palette.name] ?? c.element;
+    if (c instanceof BossOperation && f) {
+      c.element = RITUAL_ELEMENT[f.palette.name] ?? c.element;
+      // Its lieutenants among the guards (the boss is already promoted in enlist).
+      const L = ARCHETYPES[f.archetype].lieutenant;
+      for (const a of c.criminals) if (a.actor?.memo.ltSlot && !c.casters.has(a)) { c.promote(a, L.powers); a.actor.outfit = lieutenantOutfit(f, a.cit.seed); a.actor.title = `${f.emblem} ${f.name} · ${L.title}`; }
+    }
+    // An eco-radical with the whistle (the Beast-master) brings their dogs.
+    for (const [a, cs] of c.casters) if (cs.powers.includes('whistle')) this.packs.give(c, a);
     this.crimes.push(c);
     this.stats.started++;
     return true;
@@ -1022,7 +1126,10 @@ export class CrimeSystem {
         if (f && c.phase === 'commit') this.graffiti.paint(c.id, this.tagOf(c, f), c.progress / TAGGING.paintFor);
         else if (c.phase !== 'approach') this.graffiti.drop(c.id);
       }
+      this.undead(c, dt);
       if (!c.active) {
+        // The risen fall back into the ground with the crime.
+        for (const a of c.criminals) if (a.alive && a.actor?.memo.skel) this.crumbleNow(a);
         this.bossGone(c);
         // The victim waits a while for the stolen things (lying in the street or with the player).
         const l = c.loot;
@@ -1040,11 +1147,13 @@ export class CrimeSystem {
     this.linger(dt);
     this.driftTurf();
     this.bossHours();
+    this.updateBossOps(dt);
     this.updateHideouts(dt);
     this.updateDens(dt);
     this.bombs.update(dt);
     this.casts.update(dt);
     this.updateFleets(dt);
+    this.packs.update(dt);
     this.police.update(dt);
     this.guns.update(dt);
     this.justice.update(dt);
@@ -1133,6 +1242,148 @@ export class CrimeSystem {
     }
   }
 
+  // ------------------------------------------------------------------ boss operations
+
+  /**
+   * Now and then (BOSS_OP.every s) a group whose turf the hero is in or next to may send its boss
+   * out with a big crew (factions/Bosses bossOpChance): room for a threat event, actors to spare,
+   * the hero out in the street at human size.
+   */
+  private updateBossOps(dt: number): void {
+    for (const [c, ev] of this.bossOps) if (!c.active && (!ev || !ev.active)) this.bossOps.delete(c);
+    this.bossOpT -= dt;
+    if (this.bossOpT > 0) return;
+    this.bossOpT = BOSS_OP.every;
+    const g = this.g, p = g.player.pos;
+    if (this.director.setting === 'off' || this.bossOps.size || !g.threats?.canHost() || this.actorCount > ACTOR_BUDGET - BOSS_OP.room) return;
+    if (g.player.height > 6 || g.underground.isUnder(p.x, p.y + 0.5, p.z) || g.indoorsAt(p.x, p.y + 0.5, p.z) || g.intro) return;
+    const here = this.cellAt(p.x, p.z);
+    if (here < 0) return;
+    const F = this.factions, now = g.sky.hoursAbs;
+    const near = new Set<number>();
+    for (const i of [here, ...F.near[here]]) if (F.holder[i] >= 0) near.add(F.holder[i]);
+    for (const f of near) {
+      if ([...this.bossOf.values()].some((a) => a.alive && a.actor?.faction === f)) continue;
+      const ch = bossOpChance(this.bosses[f], this.notoriety[f] ?? 0, now, this.collapsed(f));
+      if (ch > 0 && Math.random() < ch && this.startBossOp(f)) return;
+    }
+  }
+
+  /** A group's boss comes out for its set piece (near a point, or in a ring round the player). */
+  startBossOp(fid: number, near: { x: number; z: number } | null = null): BossOperation | null {
+    const f = this.factions.factions[fid], B = this.bosses[fid];
+    if (!f || !B) return null;
+    const c = new BossOperation(this.world, (Math.random() * 2 ** 32) >>> 0, BOSS_KINDS[f.archetype].op, near);
+    if (!this.begin(c, f)) return null;
+    // (Not with a stand-in: enlist made the boss lead it, or it is called off.)
+    if (this.bossOf.get(c) !== c.boss) { c.abort(); c.dispose(); this.crimes.splice(this.crimes.indexOf(c), 1); return null; }
+    B.opAt = this.g.sky.hoursAbs;
+    this.bossOps.set(c, null);
+    const who = `<b style="color:${f.palette.map}">${f.emblem} ${bossLabel(this.factions, B)}</b>`;
+    const what = c.kind === 'heist' ? 'is taking a bank' : c.kind === 'takeover' ? 'is coming to take a street' : c.kind === 'uprising' ? 'is going to turn the city\'s robots' : c.landmark === 'cathedral' ? 'is gathering a great circle before the cathedral' : 'is gathering a great circle';
+    this.g.powerHud.toast(`${who} of ${inSentence(f)} ${what} — marked on your map`, 'warn');
+    return c;
+  }
+
+  /** The operation has begun: a threat event the city answers (perimeter, evacuation, SWAT). */
+  private bossOpEvent(c: BossOperation): void {
+    const g = this.g, f = this.factionOf(c), B = f ? this.bosses[f.id] : null;
+    if (!g.threats || !f || !B) return;
+    const title = `${f.emblem} ${B.name}: ${BOSS_OP_TITLE[c.kind]}`;
+    const ev = new BossEvent(c, this.combat, title);
+    const started = g.threats.start('boss', (Math.random() * 2 ** 32) >>> 0, { ev }, { x: c.x, z: c.z });
+    this.bossOps.set(c, started ? ev : null);
+  }
+
+  /** A boss operation's work is done: what it leaves behind (the turf and the news: onEvent 'done'). */
+  private bossOpDone(c: BossOperation, x: number, z: number): void {
+    const g = this.g, f = this.factionOf(c), near = Math.hypot(x - g.player.pos.x, z - g.player.pos.z) < 300;
+    const who = f ? `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>` : 'The crew';
+    switch (c.kind) {
+      case 'heist':
+        if (near) g.powerHud.toast(`${who} cracked the vault — their boss is making off with the money`, 'warn');
+        break;
+      case 'takeover': {
+        // Cars round the street set alight.
+        const cars = [...g.traffic.vehicles, ...g.parkedCars].filter((v) => v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < 22).slice(0, 3);
+        for (const v of cars) g.elements.ignite({ kind: 'car', obj: v }, 30);
+        g.stimuli.emit('gunfire', x, g.world.groundHeight(x, z) + 1, z, 4, 80);
+        if (near) g.powerHud.toast(`${who} have taken the street — cars are burning`, 'warn');
+        break;
+      }
+      case 'uprising':
+        if (g.threats) this.fleets.push(new HijackedFleet(g, g.threats.rogue, c, x, z, 12));
+        if (near) g.powerHud.toast(`${who} have turned the robots — machines are attacking people`, 'warn');
+        break;
+      case 'awakening': {
+        // The great burst (three rings of it) and something stirs: the city's next event comes sooner.
+        this.casts.ritualBurst(c.criminals, x, z, c.element);
+        setTimeout(() => this.casts.ritualBurst(c.criminals, x, z, c.element), 600);
+        if (g.threats) g.threats.clock.state.pressure += 600;
+        g.camRig.addShake(0.35);
+        if (near) g.powerHud.toast(`${who} completed their great ritual — something stirs beneath the city`, 'warn');
+        break;
+      }
+      case 'treewake': {
+        // The tree they sang to tears itself out of the ground and walks (threats/AwakenedTree).
+        let tree: StreetProp | null = null, bd = 14;
+        g.props.query(x, z, 14, (p) => { const d = Math.hypot(p.x - x, p.z - z); if (p.tree && !p.broken && d < bd) { bd = d; tree = p; } });
+        const ev = tree && g.threats ? g.threats.start('tree', (Math.random() * 2 ** 32) >>> 0, { prop: tree }, { x, z }) : null;
+        if (near) g.powerHud.toast(ev ? `${who} sang a tree awake — it is tearing itself out of the ground` : `${who} finished their song — the trees round about stir`, 'warn');
+        if (!ev) this.casts.rewild(x, z, 14);
+        break;
+      }
+      case 'deadrise': {
+        // A last burst of bones: two more of the dead stand up, and the band roams the streets.
+        this.casts.boneBurst(c.criminals, x, z);
+        if (near) g.powerHud.toast(`${who} raised the dead — skeletons are walking the streets`, 'warn');
+        break;
+      }
+    }
+  }
+
+  /**
+   * Skeletons (VILLAINS_PLAN §3.9): knocked apart, they pull themselves together after a while —
+   * as long as a necromancer of theirs is still on their feet; with none left standing they
+   * crumble for good and sink into the ground. Crumbled ones are gone after the clatter.
+   */
+  private undead(c: Crime, dt: number): void {
+    let masters = -1;
+    for (const a of c.criminals) {
+      const act = a.actor;
+      if (!a.alive || !act?.memo.skel) continue;
+      if (act.memo.crumbled) {
+        act.memo.goneT = (act.memo.goneT ?? 0) + dt;
+        if (act.memo.goneT > 1.2) a.alive = false;
+        continue;
+      }
+      if (act.state !== 'ko' && a.state !== PState.Down) { act.memo.reformT = 0; continue; }
+      if (masters < 0) masters = c.criminals.filter((m) => m.alive && m.actor && !m.actor.memo.skel && !subdued(m.actor) && m.state !== PState.Down).length;
+      if (!masters) { this.crumbleNow(a); continue; }
+      if (act.state !== 'ko') continue;
+      act.memo.reformT = (act.memo.reformT ?? 0) + dt;
+      if (act.memo.reformT < SKELETON.reform) continue;
+      // The bones drag themselves back together.
+      act.memo.reformT = 0;
+      act.hp = Math.round(act.maxHp * SKELETON.reformHp);
+      a.state = PState.Idle; a.vx = a.vz = a.vy = 0; a.stateT = 0;
+      act.koByPlayer = false;
+      setState(act, 'fight');
+      act.hostile = true;
+      this.casts.bonesFx(a.x, a.y, a.z, false);
+    }
+  }
+
+  /** A skeleton falls apart for good: a clatter of bones, gone into the ground. */
+  private crumbleNow(a: PedAgent): void {
+    const act = a.actor;
+    if (!act || act.memo.crumbled) return;
+    act.memo.crumbled = 1;
+    act.memo.goneT = 0;
+    if (a.state !== PState.Down) { a.state = PState.Down; a.stateT = 0; }
+    this.casts.bonesFx(a.x, a.y, a.z, true);
+  }
+
   /** Hijacked machines: run their course; the link cut when the hackers are stopped; red dots on the map. */
   private updateFleets(dt: number): void {
     const g = this.g, p = g.player.pos, list: MapMarker[] = [];
@@ -1207,6 +1458,11 @@ export class CrimeSystem {
     const near = (a: PedAgent) => Math.hypot(a.x - g.player.pos.x, a.z - g.player.pos.z);
     switch (type) {
       case 'ko':
+        // A skeleton knocked apart counts once (it pulls itself together again).
+        if (who?.actor?.memo.skel) {
+          if (who.actor.koByPlayer && !who.actor.memo.koPaid) { who.actor.memo.koPaid = 1; c.playerInvolved = true; this.stats.kos++; g.progress.addKarma(3, 'knocked a skeleton apart'); }
+          break;
+        }
         if (who?.actor?.koByPlayer) {
           c.playerInvolved = true;
           this.stats.kos++;
@@ -1247,14 +1503,52 @@ export class CrimeSystem {
         }
         break;
       }
+      case 'risen': {
+        // One of the old dead claws out of the ground: dressed as bones, in the group's eye colour.
+        const act = who?.actor;
+        if (!who || !act) break;
+        const f = this.factionOf(c);
+        act.faction = f?.id;
+        act.outfit = skeletonOutfit(f, who.cit.seed);
+        act.title = `${f ? `${f.emblem} ${f.name} · ` : ''}Skeleton`;
+        act.mood = 'angry';
+        // Coming up: lying in the churned earth a moment, then up (upkeep).
+        who.state = PState.Down; who.stateT = 0;
+        setState(act, 'down');
+        act.upT = 1.4;
+        this.casts.riseFx(who.x, who.z);
+        break;
+      }
+      case 'crumble':
+        if (who) this.crumbleNow(who);
+        break;
+      case 'woken':
+        // A thrall brought out of the trance by the hero.
+        if (who && c instanceof Procession && near(who) < 6) {
+          c.playerInvolved = true;
+          g.progress.addKarma(4, 'woke someone from a trance');
+          this.rep.add(1, 'woken');
+        }
+        break;
+      case 'commit':
+        // A boss operation begins: the city answers it as a threat event (perimeter, evacuation, SWAT).
+        if (c instanceof BossOperation && !this.bossOps.get(c)) this.bossOpEvent(c);
+        break;
+      case 'broken': {
+        const f = this.factionOf(c);
+        if (f && Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 260) g.powerHud.toast(`With their boss down, the crew of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> breaks and runs`, 'info');
+        break;
+      }
       case 'done': {
         // A hack went through, a ritual was completed: the group's hold on the street grows.
         const f = this.factionOf(c);
         if (!f) break;
+        // (A boss operation's own result: bossOpDone.)
+        if (c instanceof BossOperation) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.bossOp); break; }
         this.factionStats.succeeded++;
         this.turf(c, f, SHIFT.ritual);
         if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 220) {
-          const what = c instanceof Ritual ? 'completed a ritual' : 'hijacked the robots';
+          const what = c instanceof Ritual ? 'completed a ritual' : c instanceof Sabotage ? 'wrecked the machines' : c instanceof Raising ? 'raised the dead' : c instanceof Procession ? `led ${c.taken} people away into the dark` : 'hijacked the robots';
           g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> ${what} here`, 'warn');
         }
         break;
@@ -1263,7 +1557,7 @@ export class CrimeSystem {
         // An operation came off: the group's hold on the street grows (a brawl's result is 'won', a
         // hack's or a ritual's is 'done').
         const f = this.factionOf(c);
-        if (f && c.outcome === 'escaped' && !(c instanceof TurfBrawl) && !(c instanceof HideoutGuard) && !(c instanceof Channeling)) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
+        if (f && c.outcome === 'escaped' && !(c instanceof TurfBrawl) && !(c instanceof HideoutGuard) && !(c instanceof Channeling) && !(c instanceof BossOperation)) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
         break;
       }
       case 'won': {
@@ -1315,7 +1609,7 @@ export class CrimeSystem {
     this.justice.atone(1.5);
     this.cheer();
     this.onStopped?.(c);
-    if (by) { this.factionStats.stopped++; this.turf(c, by, SHIFT.stopped); this.heat(by.id, NOTORIETY.stopped); }
+    if (by) { this.factionStats.stopped++; this.turf(c, by, c instanceof BossOperation ? -SHIFT.bossOp : SHIFT.stopped); this.heat(by.id, NOTORIETY.stopped * (c instanceof BossOperation ? 2 : 1)); }
     // Breaking up a brawl: both groups lose face on that street.
     if (rival) this.turf(c, rival, SHIFT.stopped * 0.7);
   }
@@ -1502,6 +1796,13 @@ export class CrimeSystem {
     return { x: L.crime.x, z: L.crime.z, who: null, kind: 'site' };
   }
 
+  /** An entranced thrall within the hero's reach (E wakes them). */
+  private thrallNear(): { c: Procession; a: PedAgent } | null {
+    const p = this.g.player.pos;
+    for (const c of this.crimes) if (c instanceof Procession) { const a = c.thrallNear(p.x, p.z); if (a) return { c, a }; }
+    return null;
+  }
+
   /** Text for E, or null. */
   hint(): string | null {
     const p = this.g.player.pos;
@@ -1521,6 +1822,7 @@ export class CrimeSystem {
       }
     }
     if (this.justice.hot && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4))) return 'Press <b>E</b> to turn yourself in';
+    if (this.thrallNear()) return 'Press <b>E</b> to wake them from the trance';
     const h = this.bustable();
     if (h) return `Press <b>E</b> to bust the stash of ${inSentence(this.factions.factions[h.faction])}`;
     if (this.denBustable()) return 'Press <b>E</b> to bust the stash';
@@ -1564,6 +1866,8 @@ export class CrimeSystem {
       P.action = { id: 'pickup', t0: P.animClock, dur: 0.8 };
       return true;
     }
+    const th = this.thrallNear();
+    if (th) { th.c.wake(th.a); P.action = { id: 'pickup', t0: P.animClock, dur: 0.6 }; return true; }
     const h = this.bustable();
     if (h) { this.bust(h); return true; }
     const dn = this.denBustable();
@@ -1665,9 +1969,28 @@ export class CrimeSystem {
       /** Hacks and rituals under way: nearly done (the next second finishes them). */
       rushOps: () => {
         let n = 0;
-        for (const c of this.crimes) if (c instanceof Channeling && c.phase === 'commit') { c.progress = Math.max(c.progress, c.spec.workFor - 1); n++; }
+        for (const c of this.crimes) if ((c instanceof Channeling || c instanceof BossOperation) && c.phase === 'commit') { c.progress = Math.max(c.progress, c.spec.workFor - 1); n++; }
         return n;
       },
+      /**
+       * A group's boss operation now (VILLAINS_PLAN Phase 4): dev.bossOp('syndicate') — the heist
+       * (gang: takeover, techno: uprising, cult: the great ritual, eco: a tree sung awake, necro:
+       * the dead rising), `dist` m ahead along the view
+       * (0: in a ring round the player, as the game picks it). Returns its snapshot or why not.
+       */
+      bossOp: (faction: number | string = 'syndicate', dist = 60) => {
+        const F = this.factions.factions, fid = typeof faction === 'string' ? F.find((f) => f.archetype === faction)?.id ?? -1 : faction;
+        if (!F[fid]) return 'no such group';
+        if (this.bosses[fid].jailedUntil > g.sky.hoursAbs) return 'their boss is behind bars (dev.jailBoss(group, 0) lets them out)';
+        if (!g.threats?.canHost()) return 'another threat event is running (dev.threat.stop())';
+        const p = g.player.pos, fy = g.camRig.forwardYaw;
+        const c = this.startBossOp(fid, dist > 0 ? { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist } : null);
+        return c ? c.snapshot() : 'no site or no room for the crew here';
+      },
+      /** The Beast-masters' dog packs: handler, dogs, bites. */
+      packs: () => this.packs.snapshot(),
+      /** Boss operations under way: their state and threat events. */
+      bossOps: () => [...this.bossOps].map(([c, ev]) => ({ ...c.snapshot(), event: ev?.snapshot() ?? null })),
       /** Hijacked machines: per hack, how many are still at it and how it ended. */
       fleets: () => this.fleets.map((F) => ({ crime: F.crime.id, t: Math.round(F.t), active: F.active, end: F.end, units: F.units.length, live: F.live().length, byPlayer: F.byPlayer })),
       /** The city's villain groups: name, kind, home cell, cells held; the one whose turf the player stands in. */

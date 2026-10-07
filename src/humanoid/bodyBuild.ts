@@ -463,6 +463,15 @@ export function buildBody(as: HumanAssets, app: HumanoidAppearance): BodyData {
     hasHorns: app.horns.style !== 'none' && app.horns.size > 0.05,
   };
 
+  const dist = (a: V3, b: V3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const hipMid = mulS(add(H('upperleg01.L'), H('upperleg01.R')), 0.5);
+  fit.bones = {
+    upperArm: dist(H('upperarm01.L'), H('lowerarm01.L')), forearm: dist(H('lowerarm01.L'), H('wrist.L')),
+    thigh: dist(H('upperleg01.L'), H('lowerleg01.L')), shin: dist(H('lowerleg01.L'), H('foot.L')),
+    // neck: head socket (ears) above the neck's root; chest: chest socket above the spine socket; spine: that above the hips.
+    neck: earMid[1] - H('neck01')[1], chest: H('spine01')[1] - H('spine03')[1], spine: H('spine03')[1] - hipMid[1],
+  };
+
   // ---- sockets (rest pose)
   const sockets: Record<string, SocketFrame> = {};
   const put = (name: string, bone: string, p: V3, b: SocketFrame['basis']) => { sockets[name] = { bone: bi(bone), pos: p, basis: b }; };

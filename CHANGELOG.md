@@ -2,6 +2,31 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.090 — 2026-10-07
+
+- **The procession's lantern really shows now,** a green-lit lantern held up in the necromancer's hand.
+- **The skeletons' eyes burn green** instead of a pale white, and their skulls are a little smaller.
+
+## 0.089 — 2026-10-07
+
+- **The raised dead are real skeletons now.** Instead of a person in a striped bodysuit, they are bare bones: a skull with glowing eyes, ribs round a spine, a pelvis, and arm, leg, hand and foot bones that move with them.
+- **The procession's necromancer carries a lantern,** lit in the group's colour and held up high as they lead the entranced along.
+
+## 0.088 — 2026-10-07
+
+- **The awakened tree is drawn properly.** Its crown and trunk now show on top of its root legs, and the legs and branch arms stay with its body.
+- **The Beast-master's dogs bite a little less hard,** so a pack is a nuisance to deal with rather than a quick knockout.
+
+## 0.087 — 2026-10-07
+
+- **Bosses come out for their big set piece.** Now and then a group's boss leads a whole crew to one big job near its turf, marked on your map. The city answers it like a monster attack (police lines, SWAT, people cleared away). Leave it alone and it succeeds; knock the boss out and the crew breaks and runs. The more you anger a group, the sooner it comes.
+  - The Syndicate cracks a bank vault and the boss runs off with the money.
+  - The street gang takes over a street and sets the cars on fire.
+  - The techno-cult turns the city's robots on the people.
+  - The elemental cult holds a great ritual before a landmark.
+- **The eco-radicals are here.** They live in parks and the leafy suburbs and dress in patchwork greens and browns with leaf wreaths. They sabotage delivery robots and parked cars and leave the pavement grown over with moss. Their Beast-master brings three or four trained dogs that run you down and bite, and a whistle sends them lunging at you. Punch a dog and it goes down and slinks off; fire scares them away. Their boss, the Elder, gathers a circle round a big tree and sings it awake.
+- **The awakened tree.** The tree tears itself out of the ground and walks on its roots. It goes for anything with a motor or a plug: cars, robots, street lamps, traffic lights. Hurt it and it comes for you instead. It is weak to fire and slowed by frost, and lightning barely bothers it. When it rears up for a slam, its glowing heart shows; hits there count triple. Beaten, it takes root where it stands and stays there as a gnarled old tree.
+- **The necromancers are here.** They haunt the old town and the parks, mostly at night, in black robes and bone-white masks. In a park they kneel in a ring and chant, and skeletons claw their way out of the ground. Knocked apart, a skeleton pulls itself back together while a necromancer still stands; beat the necromancers and the bones sink back into the earth. They also lead processions: a few people in a trance shuffling after a necromancer with a lantern. Walk up and press E to wake them one by one, or beat the necromancer to wake them all at once. Their Bone-caller drains your strength with a beam and wails you back. Their boss, the Grave Lord, curses you and raises the dead before the cathedral.
 ## 0.086 — 2026-10-07
 
 - **Men are back to the earlier body** with the fixed upper legs: the broader, higher shoulders from 0.081 are undone (they gave men a hunched look). Walkers still carry their arms a little away from the body.

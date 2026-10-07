@@ -15,6 +15,11 @@
  *   shield    a shimmering bubble while it holds (Combat lets blows barely through)
  *   stun      a grenade lobbed to the aim, a short fuse, a white flash: the target goes down
  *   smoke     a thick grey cloud at the caster's feet to slip away in
+ *   whistle   a shrill whistle: the caster's dog pack lunges (crime/DogPack, the world's `whistle`)
+ *   drain     a green beam that locks on while it holds: hurts and heals the caster; get out of
+ *             reach or behind something and it lets go
+ *   wail      a ring of pale light from the caster: the street flees, the hero close by is shaken
+ *   curse     a slow green hex drifts to where the target stood: slowed for a while, a sting
  *
  * At most CASTERS.maxCasting casts in their wind-up or flight city-wide; nothing here is booked
  * to the player (no collateral), and nothing costs anything when no villain casts.
@@ -27,9 +32,9 @@ import type { HurtKind } from '../PlayerHealth';
 import { BeamStyle, DecalKind } from '../powers/ElementFx';
 import { fireBurst } from '../powers/blastFx';
 import { VILLAIN_POWERS, CASTERS, segDist, type VillainPower } from '../powers/Caster';
-import type { CastStage } from './Crime';
+import type { CastStage, OpLook } from './Crime';
 
-interface Orb { kind: 'fire' | 'stun'; x: number; y: number; z: number; ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; T: number; arc: number; fuse: number; by_: PedAgent }
+interface Orb { kind: 'fire' | 'stun' | 'hex'; x: number; y: number; z: number; ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; T: number; arc: number; fuse: number; by_: PedAgent }
 interface Crack { ax: number; az: number; dx: number; dz: number; L: number; s: number; y: number; hitPlayer: boolean; hit: Set<PedAgent>; by_: PedAgent }
 interface Ray { power: 'bolt' | 'frost'; ax: number; ay: number; az: number; bx: number; by: number; bz: number; life: number; t: number; seed: number }
 interface Cloud { x: number; y: number; z: number; t: number }
@@ -44,6 +49,11 @@ const WIND = C(1.2, 1.25, 1.3), WIND_END = C(0.3, 0.32, 0.35);
 const EMP = C(1.2, 2.2, 4.5), EMP_END = C(0.2, 0.4, 1.2);
 const HACK = C(0.4, 2.4, 3.2), HACK_END = C(0.05, 0.5, 0.8);
 const STORM = C(1.7, 1.5, 3.8), STORM_END = C(0.35, 0.25, 0.9);
+const MOSS = C(0.55, 1.7, 0.35), MOSS_END = C(0.1, 0.35, 0.05);
+const LEAF = C(0.22, 0.42, 0.1), LEAF_END = C(0.3, 0.32, 0.12);
+const GRAVE = C(0.55, 2.4, 0.85), GRAVE_END = C(0.08, 0.45, 0.15);
+const EARTH = C(0.2, 0.15, 0.1), EARTH_END = C(0.3, 0.26, 0.22);
+const BONE = C(0.86, 0.83, 0.74);
 /** A ritual's colours by element. */
 const RITE = { fire: [FIRE, FIRE_END], frost: [ICE, ICE_END], storm: [STORM, STORM_END] } as const;
 /** A completed ritual's burst: reach (m), damage to the player, the knock on people. */
@@ -61,6 +71,14 @@ export class VillainCasts {
   private time = 0;
   /** The player is hurt through here (CrimeSystem: PlayerHealth and its sound). */
   hurtPlayer: ((dmg: number, kind: HurtKind, fromX: number, fromZ: number) => void) | null = null;
+  /** A whistle went off: the caster's dog pack lunges at the aim (CrimeSystem); false: no pack. */
+  whistle: ((by: PedAgent, x: number, z: number) => boolean) | null = null;
+  /** The caster has a dog pack (a whistle is worth it). */
+  hasPack: ((by: PedAgent) => boolean) | null = null;
+  /** Drain beams holding: last frame, damage owed (paid in ticks), whether locked on. */
+  private drains = new Map<PedAgent, { t: number; owed: number; tick: number; on: boolean; seeT: number }>();
+  /** The hero's curse (seconds left): green motes round them while it lasts. */
+  private cursedT = 0;
   stats = { casts: 0, released: 0, atPlayer: 0, knocked: 0, refused: 0 };
 
   constructor(private g: Game) {}
@@ -73,6 +91,7 @@ export class VillainCasts {
     switch (stage) {
       case 'begin': {
         this.prune();
+        if (power === 'whistle' && !(this.hasPack?.(by) ?? false)) { this.stats.refused++; return false; }
         if (!this.casting.has(by) && this.casting.size >= CASTERS.maxCasting) { this.stats.refused++; return false; }
         this.casting.set(by, this.time);
         this.stats.casts++;
@@ -81,7 +100,7 @@ export class VillainCasts {
       case 'tell': this.casting.set(by, this.time); this.tell(by, power, tx, tz); return true;
       case 'release': this.casting.delete(by); this.stats.released++; this.release(by, power, tx, ty, tz); return true;
       case 'hold': this.hold(by, power); return true;
-      case 'end': this.casting.delete(by); return true;
+      case 'end': this.casting.delete(by); this.drains.delete(by); return true;
     }
   }
 
@@ -142,6 +161,40 @@ export class VillainCasts {
       }
     } else if (power === 'dash') {
       fx.soft(by.x, by.y + 0.2, by.z, (Math.random() - 0.5) * 2, 1, (Math.random() - 0.5) * 2, 0.6, 0.4, 1.1, DUST, DUST_END, 0.45, 1.5, 0);
+    } else if (power === 'drain') this.drainHold(by);
+  }
+
+  /**
+   * A drain beam's frame: locked on the hero while they stay within reach and in the open (looked
+   * at four times a second); damage is paid in half-second ticks, the caster healed by it.
+   */
+  private drainHold(by: PedAgent): void {
+    const g = this.g, P = VILLAIN_POWERS.drain, p = g.player;
+    let D = this.drains.get(by);
+    if (!D) { D = { t: this.time, owed: 0, tick: 0.5, on: true, seeT: 0 }; this.drains.set(by, D); }
+    const dt = Math.min(0.1, this.time - D.t);
+    D.t = this.time;
+    const H = this.hand(by), ty = p.pos.y + Math.min(p.height * 0.55, 1.2);
+    const d = Math.hypot(p.pos.x - by.x, p.pos.z - by.z);
+    D.seeT -= dt;
+    if (D.seeT <= 0) { D.seeT = 0.25; D.on = d < P.max * CASTERS.drainSlack && Math.abs(p.pos.y - by.y) < 6 && p.downT <= 0 && g.sight.clear(H.x, H.y, H.z, p.pos.x, ty, p.pos.z, 0.25, by); }
+    if (!D.on) return;
+    if (this.near(by.x, by.z)) {
+      const fx = g.elements.fx, wob = Math.sin(this.time * 23) * 0.04;
+      fx.seg(H.x, H.y, H.z, p.pos.x, ty + wob, p.pos.z, 0.16, 0.25, 1.4, 0.45, 1.7, BeamStyle.Laser);
+      // Motes of life drawn along it to the caster.
+      if (Math.random() < 0.7) { const u = Math.random(); fx.glow(p.pos.x + (H.x - p.pos.x) * u, ty + (H.y - ty) * u, p.pos.z + (H.z - p.pos.z) * u, (H.x - p.pos.x) * 1.2, (H.y - ty) * 1.2, (H.z - p.pos.z) * 1.2, 0.45, 0.14, 0.05, GRAVE, GRAVE_END, 1, 1, 0); }
+      if (Math.random() < 0.3) fx.glow(by.x, by.y + 1.2, by.z, 0, 0.6, 0, 0.6, 0.5, 0.2, GRAVE, GRAVE_END, 0.5, 1, 0);
+    }
+    D.owed += P.dmg * dt;
+    D.tick -= dt;
+    if (D.tick <= 0) {
+      D.tick = 0.5;
+      const dmg = D.owed; D.owed = 0;
+      this.stats.atPlayer++;
+      this.hurtPlayer?.(dmg, 'power', by.x, by.z);
+      const act = by.actor;
+      if (act) act.hp = Math.min(act.maxHp, act.hp + dmg * CASTERS.drainHeal);
     }
   }
 
@@ -180,6 +233,15 @@ export class VillainCasts {
         break;
       }
       case 'emp': this.emp(by, tx, ty, tz); break;
+      case 'whistle': this.whistle?.(by, tx, tz); break;
+      case 'drain': this.drains.set(by, { t: this.time, owed: 0, tick: 0.5, on: true, seeT: 0 }); break;
+      case 'wail': this.wail(by); break;
+      case 'curse': {
+        const T = Math.max(0.4, l / CASTERS.hexSpeed);
+        this.orbs.push({ kind: 'hex', x: H.x, y: H.y, z: H.z, ax: H.x, ay: H.y, az: H.z, bx: tx, by: ty, bz: tz, t: 0, T, arc: 0.6, fuse: 0, by_: by });
+        this.casting.set(by, this.time);
+        break;
+      }
       case 'shield': break;
       case 'smoke': this.clouds.push({ x: by.x, y: by.y, z: by.z, t: 0 }); g.stimuli.emit('gunfire', by.x, by.y, by.z, 2, 25); break;
     }
@@ -237,6 +299,113 @@ export class VillainCasts {
     g.stimuli.emit('gunfire', x, y, z, 3, 60);
   }
 
+  /** A wail: a ring of pale light from the caster; the street flees, the hero close by is shaken. */
+  private wail(by: PedAgent): void {
+    const g = this.g, P = VILLAIN_POWERS.wail, R = P.radius, p = g.player;
+    if (this.near(by.x, by.z, 500)) {
+      const fx = g.elements.fx, y = by.y + 1.4;
+      for (let i = 0; i < 28; i++) {
+        const a = (i / 28) * Math.PI * 2;
+        fx.glow(by.x, y, by.z, Math.cos(a) * R * 2.2, 0.2, Math.sin(a) * R * 2.2, 0.45, 0.35, 0.6, GRAVE, GRAVE_END, 0.8, 1, 0);
+        if (i % 2) fx.soft(by.x, by.y + 0.3, by.z, Math.cos(a) * R * 1.4, 0.4, Math.sin(a) * R * 1.4, 0.8, 0.5, 1.4, SMOKE, SMOKE_END, 0.35, 1, 0);
+      }
+      fx.glow(by.x, y, by.z, 0, 0, 0, 0.25, 1, 3, GRAVE, GRAVE_END, 0.7, 1, 0);
+    }
+    const pd = Math.hypot(p.pos.x - by.x, p.pos.z - by.z);
+    if (pd < R && Math.abs(p.pos.y - by.y) < 4) {
+      this.stats.atPlayer++;
+      this.hurtPlayer?.(P.dmg * (1 - 0.5 * pd / R), 'power', by.x, by.z);
+      p.chillT = Math.max(p.chillT, CASTERS.wailShaken); p.chillSpeed = Math.min(p.chillSpeed || 1, CASTERS.chillSpeed);
+      g.camRig.addShake(0.3);
+    }
+    for (const a of g.peds.neighbours(by.x, by.z, R * 1.6, this.nb)) {
+      if (a === by || !a.alive || a.inside || a.state === PState.Down || a.actor?.role === 'criminal') continue;
+      a.fear = 2; a.fearX = by.x; a.fearZ = by.z; a.state = PState.Flee; a.stateT = 0;
+    }
+    g.stimuli.emit('cry', by.x, by.y + 1.5, by.z, 3, 70);
+  }
+
+  /** A curse's hex lands: a puff of green; the hero in it is slowed and stung. */
+  private hexBurst(o: Orb): void {
+    const g = this.g, P = VILLAIN_POWERS.curse, p = g.player;
+    if (this.near(o.x, o.z)) {
+      const fx = g.elements.fx;
+      for (let i = 0; i < 14; i++) { const a = Math.random() * Math.PI * 2; fx.glow(o.x, o.y, o.z, Math.cos(a) * 3, (Math.random() - 0.3) * 2, Math.sin(a) * 3, 0.6, 0.25, 0.05, GRAVE, GRAVE_END, 0.9, 1.5, 0); }
+      fx.soft(o.x, o.y, o.z, 0, 0.3, 0, 1.4, 0.8, 2, SMOKE, SMOKE_END, 0.3, 1, 0);
+    }
+    const pd = Math.hypot(p.pos.x - o.x, p.pos.z - o.z);
+    if (pd < P.radius + p.height * 0.1 && o.y > p.pos.y - 1 && o.y < p.pos.y + p.height + 1) {
+      this.stats.atPlayer++;
+      this.hurtPlayer?.(P.dmg, 'power', o.x, o.z);
+      p.chillT = Math.max(p.chillT, CASTERS.curse); p.chillSpeed = CASTERS.curseSpeed;
+      this.cursedT = CASTERS.curse;
+    }
+  }
+
+  // ------------------------------------------------------------------ eco-radicals and necromancers
+
+  /** Sabotage done: leaves and moss bursting over the spot, creepers spreading over the pavement. */
+  rewild(x: number, z: number, r: number): void {
+    const g = this.g, y = g.world.groundHeight(x, z);
+    if (!this.near(x, z, 400)) return;
+    const fx = g.elements.fx;
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.random() * r * 0.8;
+      fx.decal(DecalKind.Moss, x + Math.sin(a) * d, g.world.groundHeight(x + Math.sin(a) * d, z + Math.cos(a) * d) + 0.03, z + Math.cos(a) * d, 0, 1, 0, 3 + Math.random() * 4, 3 + Math.random() * 4, Math.random() * 6, 600);
+    }
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 5;
+      fx.soft(x, y + 0.5, z, Math.cos(a) * sp, 2 + Math.random() * 4, Math.sin(a) * sp, 2.2, 0.12, 0.08, LEAF, LEAF_END, 0.9, 1.2, 2);
+      if (i % 3 === 0) fx.glow(x, y + 0.5, z, Math.cos(a) * sp * 0.6, 1 + Math.random() * 2, Math.sin(a) * sp * 0.6, 0.9, 0.15, 0.05, MOSS, MOSS_END, 0.8, 1, 0);
+    }
+  }
+
+  /** Something clawing out of the ground: churned earth, a grave patch, a puff of pale light. */
+  riseFx(x: number, z: number): void {
+    const g = this.g, y = g.world.groundHeight(x, z);
+    if (!this.near(x, z)) return;
+    const fx = g.elements.fx;
+    fx.decal(DecalKind.Grave, x, y + 0.03, z, 0, 1, 0, 2.2, 1.4, Math.random() * 6, 240);
+    for (let i = 0; i < 16; i++) { const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 2; fx.soft(x, y + 0.15, z, Math.cos(a) * sp, 1.5 + Math.random() * 2, Math.sin(a) * sp, 1.1, 0.3, 0.7, EARTH, EARTH_END, 0.8, 1.2, -4); }
+    g.debris.chipBurst(x, y + 0.1, z, 6, 3, 0, 1, 0, EARTH, 0.05, 1.4);
+    fx.glow(x, y + 0.6, z, 0, 0.8, 0, 1.2, 0.6, 1.4, GRAVE, GRAVE_END, 0.6, 1, 0);
+  }
+
+  /** A skeleton falls apart (or crumbles for good): a clatter of bones and grave dust. */
+  bonesFx(x: number, y: number, z: number, sink: boolean): void {
+    const g = this.g;
+    if (!this.near(x, z)) return;
+    const fx = g.elements.fx;
+    g.debris.chipBurst(x, y + 0.6, z, 10, 2.5, 0, 1, 0, BONE, 0.06, sink ? 1.2 : 5);
+    for (let i = 0; i < 8; i++) fx.soft(x + (Math.random() - 0.5), y + 0.3, z + (Math.random() - 0.5), (Math.random() - 0.5) * 1.5, 0.6, (Math.random() - 0.5) * 1.5, 1.2, 0.4, 1, EARTH, EARTH_END, 0.5, 1, 0);
+    if (sink) { fx.decal(DecalKind.Grave, x, g.world.groundHeight(x, z) + 0.03, z, 0, 1, 0, 1.8, 1.2, Math.random() * 6, 120); fx.glow(x, y + 0.4, z, 0, -0.5, 0, 0.8, 0.5, 0.1, GRAVE, GRAVE_END, 0.6, 1, 0); }
+  }
+
+  /** The Grave Lord's rite complete: a burst of bones and pale fire; the street knocked back. */
+  boneBurst(circle: readonly PedAgent[], x: number, z: number): void {
+    const g = this.g, p = g.player, B = RITE_BURST, y = g.world.groundHeight(x, z);
+    if (this.near(x, z, 700)) {
+      const fx = g.elements.fx;
+      for (let i = 0; i < 36; i++) { const a = (i / 36) * Math.PI * 2; fx.glow(x, y + 0.4, z, Math.cos(a) * B.radius * 2.4, 0.4, Math.sin(a) * B.radius * 2.4, 0.5, 0.45, 0.2, GRAVE, GRAVE_END, 1, 1, 0); }
+      for (let i = 0; i < 14; i++) fx.glow(x, y + 0.5, z, (Math.random() - 0.5) * 2, 8 + Math.random() * 10, (Math.random() - 0.5) * 2, 1.2, 0.5, 0.2, GRAVE, GRAVE_END, 1, 1.5, 2);
+      g.debris.chipBurst(x, y + 0.5, z, 30, 7, 0, 1, 0, BONE, 0.07, 6);
+      fx.decal(DecalKind.Grave, x, y + 0.03, z, 0, 1, 0, B.radius * 1.2, B.radius * 1.2, 0, 300);
+    }
+    g.audio.play('maw_roar', x, y + 1, z, 0.8, 0.7, 40, g.renderer.camera.position);
+    const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
+    if (pd < B.radius && Math.abs(p.pos.y - y) < 5) {
+      this.stats.atPlayer++;
+      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius), 'power', x, z);
+      p.chillT = Math.max(p.chillT, CASTERS.wailShaken * 2); p.chillSpeed = CASTERS.chillSpeed;
+      g.camRig.addShake(0.35);
+    }
+    for (const a of g.peds.neighbours(x, z, B.radius * 2, this.nb)) {
+      if (circle.includes(a) || !a.alive || a.inside || a.state === PState.Down) continue;
+      a.fear = 2; a.fearX = x; a.fearZ = z; a.state = PState.Flee; a.stateT = 0;
+    }
+    g.stimuli.emit('cry', x, y + 1, z, 4, 120);
+  }
+
   /** A cone of wind from the caster: shoves the player and the people in it. */
   private gust(by: PedAgent, ux: number, uz: number): void {
     const g = this.g, P = VILLAIN_POWERS.gust, p = g.player, fx = g.elements.fx;
@@ -268,9 +437,34 @@ export class VillainCasts {
   // ------------------------------------------------------------------ channelled operations
 
   /** A frame of a hack or a ritual (CrimeWorld.opFx): `share` of the work done, the ones at it. */
-  opFx(look: 'hack' | 'fire' | 'frost' | 'storm', x: number, z: number, share: number, workers: readonly PedAgent[]): void {
+  opFx(look: OpLook, x: number, z: number, share: number, workers: readonly PedAgent[]): void {
     if (!this.near(x, z, 300)) return;
     const g = this.g, fx = g.elements.fx, y = g.world.groundHeight(x, z), t = this.time;
+    if (look === 'drill') {
+      // A thermal lance at the vault door: a white-hot point, a shower of orange sparks, smoke.
+      for (const w of workers) {
+        const hx = w.x - Math.sin(w.heading) * 0.55, hz = w.z - Math.cos(w.heading) * 0.55, hy = w.y + 0.95;
+        fx.glow(hx, hy, hz, 0, 0, 0, 0.06, 0.12 + share * 0.08, 0.08, WHITE, FIRE, 1, 1, 0);
+        for (let i = 0; i < 3; i++) fx.glow(hx, hy, hz, (Math.random() - 0.5) * 4, 1 + Math.random() * 3, (Math.random() - 0.5) * 4, 0.5, 0.04, 0.01, FIRE, FIRE_END, 1, 1, -9);
+        if (Math.random() < 0.15) fx.soft(hx, hy + 0.3, hz, 0, 0.6, 0, 1.4, 0.3, 1.2, SMOKE, SMOKE_END, 0.35, 0.5, -0.1);
+      }
+      // The door glowing as the cut goes round.
+      const a = t * 0.8;
+      fx.glow(x + Math.cos(a) * 0.5, y + 1 + Math.sin(a) * 0.5, z, 0, 0, 0, 0.3, 0.1, 0.05, FIRE, FIRE_END, 0.4 + share * 0.6, 1, 0);
+      return;
+    }
+    if (look === 'riot') {
+      // A burning barrel in the middle of the street, sparks and dust where the wreckers hammer.
+      for (let i = 0; i < 2; i++) fx.glow(x + (Math.random() - 0.5) * 0.4, y + 0.9, z + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, 1.6 + Math.random() * 1.5, (Math.random() - 0.5) * 0.4, 0.55, 0.35, 0.12, FIRE, FIRE_END, 0.9, 1.5, 1);
+      if (Math.random() < 0.3) fx.soft(x, y + 1.6, z, 0, 1.2, 0, 3, 0.6, 2, SMOKE, SMOKE_END, 0.45, 0.4, -0.05);
+      for (const w of workers) {
+        if (Math.random() > 0.08) continue;
+        const hx = w.x - Math.sin(w.heading) * 0.7, hz = w.z - Math.cos(w.heading) * 0.7;
+        g.debris.chipBurst(hx, w.y + 0.6, hz, 4, 2.5, 0, 1, 0, DUST, 0.03, 0.8);
+        fx.glow(hx, w.y + 0.6, hz, 0, 1.5, 0, 0.25, 0.05, 0.01, FIRE, FIRE_END, 1, 1, -9);
+      }
+      return;
+    }
     if (look === 'hack') {
       // Sparks and a crackle from the hackers' hands to the robot's port; a cyan glow on it.
       for (const w of workers) {
@@ -282,6 +476,48 @@ export class VillainCasts {
       // A holo glyph turning above it, rising as the hack goes on.
       const a = t * 3, r = 0.5;
       fx.glow(x + Math.cos(a) * r, y + 1.2 + share * 1.2, z + Math.sin(a) * r, 0, 0.2, 0, 0.4, 0.12, 0.05, HACK, HACK_END, 0.8, 1, 0);
+      return;
+    }
+    if (look === 'wreck') {
+      // Crowbars on metal and glass: sparks and chips where they hit, leaves blowing about.
+      for (const w of workers) {
+        if (Math.random() > 0.12) continue;
+        const hx = w.x - Math.sin(w.heading) * 0.6, hz = w.z - Math.cos(w.heading) * 0.6;
+        for (let i = 0; i < 4; i++) fx.glow(hx, w.y + 0.7, hz, (Math.random() - 0.5) * 4, 1 + Math.random() * 2, (Math.random() - 0.5) * 4, 0.35, 0.04, 0.01, FIRE, FIRE_END, 1, 1, -9);
+        g.debris.chipBurst(hx, w.y + 0.7, hz, 3, 2.5, 0, 1, 0, DUST, 0.03, 0.8);
+      }
+      if (Math.random() < 0.25) fx.soft(x + (Math.random() - 0.5) * 3, y + 0.2, z + (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, 0.8 + Math.random(), (Math.random() - 0.5) * 3, 1.8, 0.1, 0.07, LEAF, LEAF_END, 0.9, 1.2, 0.5);
+      fx.glow(x, y + 0.5, z, 0, 0.2, 0, 0.3, 0.2 + share * 0.3, 0.1, MOSS, MOSS_END, 0.4 + share * 0.4, 1, 0);
+      return;
+    }
+    if (look === 'grove') {
+      // Leaves swirling up round the trunk into the crown, the ground trembling, roots splitting the pavement.
+      const n = 2 + Math.round(share * 4);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, r = 1 + Math.random() * 2.5, h = Math.random() * (2 + share * 8);
+        const k = fx.soft(x + Math.cos(a) * r, y + h, z + Math.sin(a) * r, -Math.sin(a) * 4, 1.2 + share * 2, Math.cos(a) * 4, 2.2, 0.12, 0.08, LEAF, LEAF_END, 0.9, 0.8, -0.3);
+        fx.swirlSoft(k, x, z, 2.5 + share * 3, 0.4);
+      }
+      if (Math.random() < 0.4 + share * 0.4) { const a = Math.random() * Math.PI * 2; fx.glow(x + Math.cos(a) * 3.4, y + 0.1, z + Math.sin(a) * 3.4, 0, 0.6 + share, 0, 0.8, 0.25, 0.1, MOSS, MOSS_END, 0.8, 1, 0); }
+      // The crown glows from inside as it wakes.
+      if (Math.random() < 0.15 + share * 0.3) fx.glow(x + (Math.random() - 0.5) * 3, y + 5 + Math.random() * 4, z + (Math.random() - 0.5) * 3, 0, 0.3, 0, 0.9, 0.3, 0.6, MOSS, MOSS_END, 0.4 + share * 0.5, 1, 0);
+      if (Math.random() < 0.02 + share * 0.05) {
+        const a = Math.random() * Math.PI * 2;
+        fx.decal(DecalKind.Crack, x + Math.cos(a) * 2.2, y + 0.03, z + Math.sin(a) * 2.2, 0, 1, 0, 2.5 + share * 3, 0.8, Math.atan2(Math.cos(a), Math.sin(a)), 300);
+        g.debris.chipBurst(x + Math.cos(a) * 1.5, y + 0.1, z + Math.sin(a) * 1.5, 3, 2, 0, 1, 0, DUST, 0.04, 1);
+        if (share > 0.5) g.camRig.addShake(0.04 * share);
+      }
+      for (const w of workers) if (Math.random() < 0.3) fx.glow(w.x, w.y + 2.05, w.z, (x - w.x) * 0.3, 0.4, (z - w.z) * 0.3, 0.5, 0.15, 0.05, MOSS, MOSS_END, 0.9, 1, 0);
+      return;
+    }
+    if (look === 'grave') {
+      // A pale green ring, mist creeping over the ground, the earth heaving here and there.
+      const R = 2.6;
+      for (let i = 0; i < 8; i++) { const a = Math.random() * Math.PI * 2; fx.glow(x + Math.cos(a) * R, y + 0.06, z + Math.sin(a) * R, 0, 0.05, 0, 0.7, 0.22, 0.14, GRAVE, GRAVE_END, 0.55 + share * 0.35, 1, 0); }
+      if (Math.random() < 0.5) { const a = Math.random() * Math.PI * 2, r = Math.random() * 9; fx.soft(x + Math.cos(a) * r, y + 0.15, z + Math.sin(a) * r, (Math.random() - 0.5) * 0.5, 0.05, (Math.random() - 0.5) * 0.5, 4, 1.5, 3, C(0.5, 0.6, 0.55), C(0.45, 0.5, 0.48), 0.25, 0.4, 0); }
+      if (Math.random() < 0.03 + share * 0.04) { const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * 6; this.riseFx(x + Math.cos(a) * r, z + Math.sin(a) * r); }
+      fx.glow(x, y + 0.3 + share, z, 0, 0.3, 0, 0.6, 0.3 + share * 0.5, 0.2, GRAVE, GRAVE_END, 0.5 + share * 0.4, 1, 0);
+      for (const w of workers) if (Math.random() < 0.3) fx.glow(w.x, w.y + 1.1, w.z, (x - w.x) * 0.4, 0, (z - w.z) * 0.4, 0.5, 0.15, 0.05, GRAVE, GRAVE_END, 0.9, 1, 0);
       return;
     }
     const [c0, c1] = RITE[look], R = 2.3 * 0.8;
@@ -356,6 +592,11 @@ export class VillainCasts {
 
   update(dt: number): void {
     this.time += dt;
+    if (this.cursedT > 0) {
+      this.cursedT -= dt;
+      const p = this.g.player;
+      if (Math.random() < 0.5) { const a = Math.random() * Math.PI * 2; this.g.elements.fx.glow(p.pos.x + Math.sin(a) * 0.45, p.pos.y + Math.random() * p.height, p.pos.z + Math.cos(a) * 0.45, 0, 0.4, 0, 0.7, 0.1, 0.02, GRAVE, GRAVE_END, 0.7, 1, 0); }
+    }
     if (!this.orbs.length && !this.cracks.length && !this.rays.length && !this.clouds.length) return;
     this.updateRays(dt);
     this.updateOrbs(dt);
@@ -411,6 +652,13 @@ export class VillainCasts {
           // Straight into the hero on the way: it bursts there.
           const hit = Math.hypot(p.pos.x - o.x, p.pos.z - o.z) < 1.1 && o.y > p.pos.y - 0.2 && o.y < p.pos.y + p.height + 0.2;
           if (u >= 1 || hit) { this.orbs.splice(i, 1); this.fireBurst(o); }
+        } else if (o.kind === 'hex') {
+          if (this.near(o.x, o.z)) {
+            fx.glow(o.x, o.y, o.z, 0, 0, 0, 0.08, 0.45, 0.35, GRAVE, GRAVE_END, 1, 1, 0);
+            if (Math.random() < 0.6) fx.glow(o.x, o.y, o.z, (Math.random() - 0.5), (Math.random() - 0.5) + 0.3, (Math.random() - 0.5), 0.5, 0.2, 0.04, GRAVE, GRAVE_END, 0.8, 1, 0);
+          }
+          const hit = Math.hypot(p.pos.x - o.x, p.pos.z - o.z) < 1 && o.y > p.pos.y - 0.2 && o.y < p.pos.y + p.height + 0.2;
+          if (u >= 1 || hit) { this.orbs.splice(i, 1); this.hexBurst(o); }
         } else {
           if (this.near(o.x, o.z)) fx.glow(o.x, o.y + 0.08, o.z, (Math.random() - 0.5), 1, (Math.random() - 0.5), 0.15, 0.08, 0.02, WHITE, WHITE_END, 1, 1, -4);
         }

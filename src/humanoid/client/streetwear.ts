@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import type { ItemVisual } from '../../items/types';
-import type { RigidPart, WearableSpec, BodyFit } from '../../items/wearable';
+import type { RigidPart, WearableSpec, BodyFit, BodyRegion, Socket } from '../../items/wearable';
 import { PLACARDS, FAN_SIGNS, FAN_SIGNS_FROM } from './placards';
 
 type C3 = [number, number, number];
@@ -31,6 +31,12 @@ export function streetWearable(defId: string, v: ItemVisual): WearableSpec | nul
     case 'sandwichboard': return { layers: [rigid('chest', (f) => sandwichBoard(f, v.style || 'THE END IS NIGH', c))] };
     case 'guitar': return { layers: [rigid('chest', (f) => guitar(f, c))] };
     case 'citymap': return { layers: [rigid('chest', cityMap)] };
+    // Villain groups' heads (game/factions/outfits): the raised dead, the necromancers, the eco-radicals.
+    case 'skull': return { layers: [rigid('head', (f) => skull(f, c, v.glowColor ?? v.accent))], hideHair: true, hideBeard: true, hideRegions: ['scalp', 'face'] };
+    // The raised dead's bones in place of the body (with 'skull' on the head).
+    case 'skeleton': return skeleton(c);
+    case 'bonemask': return { layers: [rigid('head', (f) => boneMask(f, c, c2, v.glowColor ?? v.accent))], hideHair: true };
+    case 'leafwreath': return { layers: [rigid('head', (f) => leafWreath(f, c, c2))] };
     default: return null;
   }
 }
@@ -177,6 +183,226 @@ function chickenHead(fit: BodyFit, c: C3): THREE.Object3D {
     g.add(eye, pupil);
   }
   g.add(head, beak, comb, wattle);
+  return g;
+}
+
+const lit = (c: C3, k: number): THREE.MeshStandardMaterial => {
+  const m = std([c[0] * 0.3, c[1] * 0.3, c[2] * 0.3], 0.4);
+  m.emissive = new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+  m.emissiveIntensity = k;
+  return m;
+};
+
+/** A skull in place of the head: a domed cranium, deep dark sockets with a glow in them, a jaw. */
+function skull(fit: BodyFit, bone: C3, eyes: C3): THREE.Object3D {
+  // (The head is hidden under it: a skull a little smaller than the head, not a big round one.)
+  const r = fit.headRadius * 0.9;
+  const g = new THREE.Group();
+  const m = std(bone, 0.75), dark = std([0.02, 0.02, 0.02], 0.9), glow = lit(eyes, 2.2);
+  const cran = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), m);
+  cran.scale.set(0.92, 1.02, 1.08);
+  cran.position.set(0, r * 0.18, -r * 0.05);
+  // The face narrows to the cheekbones and the upper jaw.
+  const face = new THREE.Mesh(new THREE.SphereGeometry(r * 0.7, 14, 10), m);
+  face.scale.set(1, 0.9, 0.9);
+  face.position.set(0, -r * 0.3, r * 0.3);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 1.0, r * 0.32, r * 0.75), m);
+  jaw.position.set(0, -r * 0.82, r * 0.38);
+  g.add(cran, face, jaw);
+  for (const sx of [-1, 1]) {
+    const sock = new THREE.Mesh(new THREE.SphereGeometry(r * 0.24, 12, 10), dark);
+    sock.scale.set(1, 0.9, 0.45);
+    sock.position.set(sx * r * 0.34, r * 0.0, r * 0.82);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.1, 8, 6), glow);
+    eye.position.set(sx * r * 0.34, r * 0.0, r * 0.88);
+    g.add(sock, eye);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(r * 0.1, r * 0.2, 3), dark);
+  nose.rotation.x = Math.PI;
+  nose.position.set(0, -r * 0.3, r * 0.93);
+  // A row of teeth.
+  for (let k = -3; k <= 3; k++) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(r * 0.1, r * 0.16, r * 0.06), m);
+    t.position.set(k * r * 0.12, -r * 0.62, r * 0.74 - Math.abs(k) * r * 0.035);
+    g.add(t);
+  }
+  g.add(nose);
+  return g;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The raised dead: the whole body hidden, bones on every socket (they follow the animation).
+// Limb sockets: origin at the joint, +Y along the limb to the next joint, +Z forward. Trunk
+// sockets: +Y up, +Z forward. Foot: +Y towards the toes, +Z up. Hand: +Y to the fingers, +X thumb.
+// ---------------------------------------------------------------------------------------------
+
+const ALL_REGIONS: BodyRegion[] = ['scalp', 'face', 'neck', 'chest', 'belly', 'back', 'pelvis', 'buttocks', 'upperarm.L', 'upperarm.R', 'forearm.L', 'forearm.R', 'hand.L', 'hand.R', 'thigh.L', 'thigh.R', 'shin.L', 'shin.R', 'foot.L', 'foot.R'];
+
+function skeleton(bone: C3): WearableSpec {
+  const mat = () => std(bone, 0.7);
+  const B = (f: BodyFit) => f.bones ?? { upperArm: f.height * 0.17, forearm: f.height * 0.15, thigh: f.height * 0.245, shin: f.height * 0.25, neck: f.height * 0.07, chest: f.height * 0.12, spine: f.height * 0.1 };
+  /** A long bone from the origin up +Y: shaft with knobbly ends. */
+  const longBone = (g: THREE.Object3D, m: THREE.Material, len: number, r: number, x = 0, z = 0) => {
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.62, r * 0.7, len * 0.86, 8), m);
+    shaft.position.set(x, len / 2, z);
+    const a = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), m);
+    a.scale.set(1.25, 0.8, 1); a.position.set(x, len * 0.05, z);
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), m);
+    b.scale.set(1.25, 0.8, 1); b.position.set(x, len * 0.95, z);
+    g.add(shaft, a, b);
+  };
+  /** Vertebrae stacked up +Y from y0 to y1, set back by z. */
+  const column = (g: THREE.Object3D, m: THREE.Material, y0: number, y1: number, r: number, z: number) => {
+    const n = Math.max(2, Math.round((y1 - y0) / 0.032));
+    for (let k = 0; k < n; k++) {
+      const d = new THREE.Mesh(new THREE.CylinderGeometry(r, r, ((y1 - y0) / n) * 0.62, 8), m);
+      d.position.set(0, y0 + ((k + 0.5) / n) * (y1 - y0), z);
+      const spur = new THREE.Mesh(new THREE.BoxGeometry(r * 0.45, r * 0.6, r * 1.3), m);
+      spur.position.set(0, d.position.y, z - r * 1.2);
+      g.add(d, spur);
+    }
+  };
+  const part = (socket: Socket, build: (f: BodyFit, g: THREE.Group, m: THREE.Material) => void): RigidPart => rigid(socket, (f) => { const g = new THREE.Group(); build(f, g, mat()); return g; });
+  const layers: RigidPart[] = [
+    part('neck', (f, g, m) => column(g, m, 0, B(f).neck * 0.95, f.neckRadius * 0.4, -f.neckRadius * 0.2)),
+    // Ribcage round the chest socket, the clavicles across the top, a sternum in front.
+    part('chest', (f, g, m) => {
+      const w = f.shoulderWidth * 0.29, d = f.chestDepth * 0.4, top = 0.04, bottom = top - f.height * 0.15, n = 6, gap = 0.55;
+      // (The socket sits on the spine at the back: the ribs curve round forward of it.)
+      column(g, m, bottom - 0.1, top + 0.03, 0.02, 0);
+      for (let k = 0; k < n; k++) {
+        const t = k / (n - 1), y = top - t * (top - bottom);
+        const sc = 0.7 + 0.32 * Math.sin(Math.PI * (0.3 + t * 0.6));
+        const ring = new THREE.Group();
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(1, 0.0085 / (w * sc), 5, 24, Math.PI * 2 - gap * 2), m);
+        rib.rotation.z = Math.PI / 2 + gap;
+        ring.add(rib);
+        ring.rotation.x = Math.PI / 2 - 0.3;
+        ring.scale.set(w * sc, d * (0.8 + 0.2 * sc), w * sc);
+        ring.position.set(0, y, d * 0.82);
+        g.add(ring);
+      }
+      const sternum = new THREE.Mesh(new THREE.BoxGeometry(0.03, (top - bottom) * 0.6, 0.014), m);
+      sternum.position.set(0, top - (top - bottom) * 0.35, d * 1.62);
+      sternum.rotation.x = 0.15;
+      g.add(sternum);
+      for (const sx of [-1, 1]) {
+        const cl = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, f.shoulderWidth * 0.4, 6), m);
+        cl.rotation.z = Math.PI / 2 + sx * 0.12;
+        cl.position.set(sx * f.shoulderWidth * 0.22, top + 0.03, d * 1.3);
+        g.add(cl);
+      }
+    }),
+    // The lumbar column from the hips up to the ribs; the pelvis round the hip joints.
+    part('pelvis', (f, g, m) => {
+      column(g, m, 0.04, B(f).spine + 0.02, 0.026, -f.waistRadius * 0.45);
+      const hw = f.waistRadius * 0.95;
+      for (const sx of [-1, 1]) {
+        const wing = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8, 0, Math.PI), m);
+        wing.scale.set(hw * 0.5, hw * 0.55, 0.02);
+        wing.rotation.y = sx * 0.9;
+        wing.position.set(sx * hw * 0.55, hw * 0.25, -hw * 0.15);
+        g.add(wing);
+      }
+      const sacrum = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 6), m);
+      sacrum.rotation.x = Math.PI;
+      sacrum.position.set(0, -0.02, -hw * 0.45);
+      const pubis = new THREE.Mesh(new THREE.TorusGeometry(hw * 0.4, 0.013, 5, 14, Math.PI), m);
+      pubis.rotation.set(Math.PI / 2 + 0.3, 0, 0);
+      pubis.position.set(0, -0.06, 0.02);
+      g.add(sacrum, pubis);
+    }),
+  ];
+  for (const s of ['L', 'R'] as const) {
+    layers.push(
+      part(`upperarm.${s}`, (f, g, m) => longBone(g, m, B(f).upperArm, f.upperArmRadius * 0.38)),
+      part(`forearm.${s}`, (f, g, m) => { const r = f.forearmRadius * 0.24; longBone(g, m, B(f).forearm, r, r * 1.2); longBone(g, m, B(f).forearm, r * 0.8, -r * 1.2); }),
+      part(`hand.${s}`, (f, g, m) => {
+        const L = f.handLength, r = 0.007;
+        for (let k = 0; k < 4; k++) {
+          const x = (k - 1.5) * 0.017;
+          const finger = new THREE.Group();
+          longBone(finger, m, L * (k === 1 ? 0.95 : k === 3 ? 0.78 : 0.9), r);
+          finger.position.x = x;
+          finger.rotation.z = -x * 2.2;
+          g.add(finger);
+        }
+        const thumb = new THREE.Group();
+        longBone(thumb, m, L * 0.55, r * 1.1);
+        thumb.position.set(0.02, 0.0, 0.0);
+        thumb.rotation.z = -0.7;
+        g.add(thumb);
+      }),
+      part(`thigh.${s}`, (f, g, m) => longBone(g, m, B(f).thigh, f.thighRadius * 0.3)),
+      part(`shin.${s}`, (f, g, m) => { const r = f.shinRadius * 0.32; longBone(g, m, B(f).shin, r, 0, r * 0.4); longBone(g, m, B(f).shin, r * 0.5, r * 1.6, -r * 0.6); }),
+      part(`foot.${s}`, (f, g, m) => {
+        const L = f.footLength, r = 0.008;
+        const heel = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), m);
+        heel.scale.set(0.9, 1.4, 1);
+        heel.position.set(0, -0.02, -0.04);
+        g.add(heel);
+        for (let k = 0; k < 5; k++) {
+          const toe = new THREE.Group();
+          longBone(toe, m, L * (0.78 - Math.abs(k - 1) * 0.06), r * (k === 0 ? 1.5 : 1));
+          toe.position.set((k - 2) * 0.016, 0, -0.035);
+          toe.rotation.z = -(k - 2) * 0.06;
+          g.add(toe);
+        }
+      }),
+    );
+  }
+  return { layers, hideHair: true, hideBeard: true, hideRegions: ALL_REGIONS };
+}
+
+/** A necromancer's bone-white mask under a deep hood; the eyes lit behind it. */
+function boneMask(fit: BodyFit, hood: C3, bone: C3, eyes: C3): THREE.Object3D {
+  const r = fit.headRadius;
+  const g = new THREE.Group();
+  const hm = std(hood, 0.95);
+  hm.side = THREE.DoubleSide;
+  const cowl = new THREE.Mesh(new THREE.SphereGeometry(r * 1.32, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), hm);
+  cowl.scale.set(1, 1.15, 1.1);
+  cowl.position.set(0, r * 0.15, -r * 0.12);
+  // The point of the hood falling down the back.
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(r * 0.75, r * 1.5, 10), hm);
+  tip.rotation.x = -2.3;
+  tip.position.set(0, r * 0.35, -r * 1.05);
+  const mm = std(bone, 0.6);
+  const mask = new THREE.Mesh(new THREE.SphereGeometry(r * 0.95, 16, 12, -Math.PI * 0.42, Math.PI * 0.84, Math.PI * 0.2, Math.PI * 0.62), mm);
+  mask.scale.set(1, 1.08, 1.06);
+  mask.position.set(0, -r * 0.05, r * 0.1);
+  const glow = lit(eyes, 1.8), dark = std([0.02, 0.02, 0.02], 0.9);
+  g.add(cowl, tip, mask);
+  for (const sx of [-1, 1]) {
+    const sock = new THREE.Mesh(new THREE.SphereGeometry(r * 0.17, 10, 8), dark);
+    sock.scale.set(1.2, 0.7, 0.4);
+    sock.position.set(sx * r * 0.33, r * 0.12, r * 0.98);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.06, 8, 6), glow);
+    eye.position.set(sx * r * 0.33, r * 0.12, r * 1.02);
+    g.add(sock, eye);
+  }
+  return g;
+}
+
+/** A wreath of leaves and twigs round the head (the eco-radicals). */
+function leafWreath(fit: BodyFit, leaf: C3, twig: C3): THREE.Object3D {
+  const r = fit.headRadius * 1.08;
+  const g = new THREE.Group();
+  const tm = std(twig, 0.9), lm = std(leaf, 0.8);
+  lm.side = THREE.DoubleSide;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.07, 6, 24), tm);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, r * 0.3, -r * 0.05);
+  g.add(ring);
+  const leafG = new THREE.CircleGeometry(r * 0.24, 6);
+  for (let k = 0; k < 14; k++) {
+    const a = (k / 14) * Math.PI * 2;
+    const l = new THREE.Mesh(leafG, lm);
+    l.scale.set(0.55, 1, 1);
+    l.position.set(Math.sin(a) * r * 1.02, r * 0.38 + (k % 2) * r * 0.08, Math.cos(a) * r * 1.02 - r * 0.05);
+    l.rotation.set(-0.5 + (k % 3) * 0.3, a, (k % 2 ? 0.6 : -0.6));
+    g.add(l);
+  }
   return g;
 }
 

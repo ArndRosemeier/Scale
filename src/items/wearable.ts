@@ -31,7 +31,7 @@ export interface ShellMaterial {
   color: [number, number, number];
   color2: [number, number, number];
   /** Pattern drawn procedurally in the shell shader. */
-  pattern: 'plain' | 'stripes' | 'checks' | 'quilted' | 'chainmail' | 'scales' | 'leather' | 'fur' | 'embroidered' | 'patchwork' | 'silk' | 'plates' | 'runes';
+  pattern: 'plain' | 'stripes' | 'checks' | 'quilted' | 'chainmail' | 'scales' | 'leather' | 'fur' | 'embroidered' | 'patchwork' | 'silk' | 'plates' | 'runes' | 'bones';
   patternScale: number;
   roughness: number;
   metalness: number;
@@ -83,6 +83,8 @@ export interface BodyFit {
   /** Horns/ears that helmets must leave room for. */
   earPoint: number;
   hasHorns: boolean;
+  /** Joint-to-joint lengths (rest pose) for parts that follow the skeleton (the raised dead's bones). */
+  bones?: { upperArm: number; forearm: number; thigh: number; shin: number; neck: number; chest: number; spine: number };
 }
 
 export interface WearableSpec {

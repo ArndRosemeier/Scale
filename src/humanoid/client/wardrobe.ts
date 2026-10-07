@@ -196,6 +196,16 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(env);
       break;
     }
+    case 'cash': {
+      // A heist's take: a dark duffel bag with a band of notes showing, hanging from the hand.
+      const bag = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.7 }));
+      bag.rotation.x = Math.PI / 2;
+      bag.position.y = -0.12;
+      const notes = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.08), new THREE.MeshStandardMaterial({ color: 0x3b8f4a, roughness: 0.6 }));
+      notes.position.set(0, -0.01, 0);
+      g.add(bag, notes);
+      break;
+    }
     case 'bomb': {
       // A round black bomb with a short fuse (the mad bomber's): held in the palm.
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 9), new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.45, metalness: 0.35 }));
@@ -203,6 +213,29 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.06, 5), new THREE.MeshStandardMaterial({ color: 0xc8a060, emissive: 0xff7a20, emissiveIntensity: 0.6 }));
       fuse.position.set(0, 0.155, 0.03);
       g.add(m, fuse);
+      break;
+    }
+    case 'lantern': {
+      // A procession's lantern (the necromancers'): a bail in the fist, the lit glass hanging below.
+      const iron = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.5, metalness: 0.6 });
+      const glow = new THREE.Color().setRGB(...(v.glowColor ?? v.accent ?? v.primary), THREE.SRGBColorSpace);
+      const glass = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 2.4, roughness: 0.3 });
+      const bail = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.005, 5, 12, Math.PI), iron);
+      bail.rotation.z = Math.PI;
+      bail.position.y = 0.0;
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.05, 6), iron);
+      cap.position.y = -0.065;
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.13, 6), glass);
+      body.position.y = -0.155;
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.056, 0.02, 6), iron);
+      base.position.y = -0.23;
+      g.add(bail, cap, body, base);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.14, 0.006), iron);
+        bar.position.set(Math.cos(a) * 0.05, -0.155, Math.sin(a) * 0.05);
+        g.add(bar);
+      }
       break;
     }
     case 'umbrella': {
