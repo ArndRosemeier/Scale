@@ -2,6 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.081 — 2026-10-07
+
+- **Soldiers stay out of the water.** Every spot the army picks (where a unit digs in, where it gathers when you rally it with G, where it drives or walks off to when the battle is over, where a squad on foot gets out) is now on dry ground. A spot over a river, lake or the sea moves to the nearest dry street. As a backstop, soldiers, police and anyone else heading straight for a point, and people running off in a panic, now stop at the bank or walk along it instead of stepping into the water.
+- **After the battle the army leaves sensibly.** Units used to head off eastwards once the monster was gone, whatever lay there, and their target moved with them. Each one now gets one fixed street point away from where the fight was.
+- **Rally (G) is calmer.** Each unit has its own spot around you and only moves when you do. Before, all of them got a new random spot every four seconds and kept milling about.
+- **The army fights instead of standing around.**
+  - Units no longer drive or walk on into the monster's feet on the way to their position. They fall back as soon as it is on top of them. Tanks and trucks used to keep going and were stepped on.
+  - A squad digs in once most of its soldiers are there. One soldier held up behind a car kept the whole squad running about without firing for minutes.
+  - Guns look for any part of the Strider that shows over the roofs or past a corner, not only the middle of each body part. Rifles and APCs without a clear line fire over the roofs at its back. A unit that keeps having no line moves to a spot that has one. A tank with a building in the way shoots through it.
+  - Helicopters keep closing in until they have a clear line before firing, instead of giving up the run at 300 m. One that has used up its rockets comes back rearmed after a while instead of leaving for good.
+
 ## 0.080 — 2026-10-06
 
 - **The starship has an inside.** Doors between its fins open into a lobby at its foot. Beyond it a great hall rises dozens of metres through the middle of the ship around a glowing core. Every storey has a gallery with glass rails running around the hall, with cabins, labs, mess rooms, lounges, control rooms and stores behind it. Stairs climb from level to level, and bridges cross the hall every few storeys. The rooms are furnished from a sci-fi prop set (bunks, lockers, consoles, holo tables, screens, crates and more).
