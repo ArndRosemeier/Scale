@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.110 — 2026-10-07
+
+- **No more shimmering arms far out in the city.** The further you went from the centre of the map (super speed takes you far), the more arms, hands and clothes jittered, because the skin was computed in world coordinates with too little precision. It is now computed relative to the character, so it looks the same everywhere.
+- **Smoother stop from a run.** The arms no longer straighten and bend again while you come to a halt.
 ## 0.109 — 2026-10-07
 
 - **Nothing blocks the front door any more.** House interiors were laid out without looking at where the street door is, so about one door in three opened onto a wall, the lift shaft or the staircase. Now the stairs and the lift are placed clear of the way in, room walls across it get an opening, and nothing solid stands right behind the door. A sweep over 16,679 buildings found 0.2% with a narrower way in (odd little triangular houses), down from 33%. A few such tiny houses now go without inner stairs rather than have them right behind the door.

@@ -22,7 +22,7 @@ import type { EquipmentVisuals, EquipSlot } from '../../items/types';
 import type { BodyRegion, ShellLayer, ShellMaterial, RigidPart, WearableSpec, BodyFit } from '../../items/wearable';
 import type { ItemVisual } from '../../items/types';
 import { resolveWearable, buildItemObject, animateItem, setItemSkyVis, disposeItemObject, itemDef } from './wardrobe';
-import { disposeOwn, type Character } from './Character';
+import { bindSkin, disposeOwn, type Character } from './Character';
 import { BODY_REGIONS, type HumanStatic } from './staticData';
 import { createGarmentMaterial } from './garmentMaterial';
 import { maskDepth } from './faceRegions';
@@ -697,7 +697,7 @@ export class EquipmentRig {
     // baker paints covered body vertices in the garment's colour (CrowdBaker).
     mesh.userData.covers = src;
     mesh.userData.order = order;
-    mesh.bind(ch.skeleton, new THREE.Matrix4());
+    bindSkin(mesh, ch);
     mesh.boundingSphere = g.boundingSphere.clone();
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -715,7 +715,7 @@ export class EquipmentRig {
       far.userData.color = mesh.userData.color;
       far.userData.covers = src;
       far.userData.order = order;
-      far.bind(ch.skeleton, new THREE.Matrix4());
+      bindSkin(far, ch);
       far.boundingSphere = mesh.boundingSphere.clone();
       far.castShadow = l === 1;
       ch.lods[l].add(far);
