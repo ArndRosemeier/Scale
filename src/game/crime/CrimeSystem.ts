@@ -23,7 +23,7 @@ import { cityOutfit } from '../../humanoid/client/wardrobe';
 import { hash32 } from '../../core/rng';
 import { pointInPoly } from '../../core/geom2';
 import { statusOf } from '../../shared/status';
-import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, PEOPLE_OWNER, type ActorRole } from '../../sim/actors/Actor';
+import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, type ActorRole } from '../../sim/actors/Actor';
 import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
 import { Reputation } from '../Reputation';
@@ -904,6 +904,18 @@ export class CrimeSystem {
     this.hideoutMarkers();
   }
 
+  /**
+   * A group's members standing guard over something at a spot (the glowing stone they found,
+   * game/sidekick): two or three of them round it, defending it like a hideout door. Null: none
+   * could be posted (too many actors about, nobody to spawn).
+   */
+  postGuards(at: { x: number; z: number; nx: number; nz: number }, faction: number): HideoutGuard | null {
+    const f = this.factions.factions[faction];
+    if (!f || this.collapsed(f.id) || this.actorCount >= ACTOR_BUDGET - 6) return null;
+    const c = new HideoutGuard(this.world, hash32(this.g.settings.seed ^ (faction * 104729) ^ Math.floor(this.g.sky.hoursAbs * 4)), at);
+    return this.begin(c, f) ? c : null;
+  }
+
   /** Doors of ordinary buildings (no shops) in a macro cell. */
   private doorsIn(cell: number): { x: number; z: number; nx: number; nz: number }[] {
     // (Only once the cell is loaded, all of it: the pick is the same whichever way the player came.)
@@ -1453,8 +1465,8 @@ export class CrimeSystem {
       const act = a.actor;
       if (!act) continue;
       // (Soldiers, the aftermath's people, the street characters, fame's people and game/people's
-      // have their own budgets: response/forces, game/aftermath, game/street, game/fame, game/people.)
-      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER && act.owner !== PEOPLE_OWNER) n++;
+      // have their own budgets: response/forces, game/aftermath, game/street, game/fame, game/people, game/sidekick.)
+      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER && act.owner !== PEOPLE_OWNER && act.owner !== SIDEKICK_OWNER) n++;
       tickActor(act, dt);
       // Knocked down: up again after a moment. Knocked out (no health left) is out of the fight for
       // good, officers and soldiers too: nobody gets back up from that.

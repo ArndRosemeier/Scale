@@ -2,10 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.111 — 2026-10-07
+
+- **No more shimmering arms far out in the city.** The further you went from the centre of the map (super speed takes you far), the more arms, hands and clothes could shimmer, because the skin was computed in world coordinates with too little precision. It is now computed relative to the character, so it looks the same everywhere.
+- **Smoother stop from a run.** The arms no longer straighten and bend again while you come to a halt.
+
 ## 0.110 — 2026-10-07
 
-- **No more shimmering arms far out in the city.** The further you went from the centre of the map (super speed takes you far), the more arms, hands and clothes jittered, because the skin was computed in world coordinates with too little precision. It is now computed relative to the character, so it looks the same everywhere.
-- **Smoother stop from a run.** The arms no longer straighten and bend again while you come to a halt.
+- **A second shard.** Once your reputation reaches +30 (or after a short while in the sandbox), the news reports a strange glowing stone in one of the city's parks or squares. The area shows up as a circle on the map; nearer in, a soft glow at the edge of the screen and a hum lead you to it, and a pale column of light rises from the stone. Sometimes a gang has got there first and guards it: deal with them before you can pick it up.
+- **Give it to someone.** Carry the shard and talk to anyone: a new option offers it to them. Most people say yes. Children, people at work, people who dislike you or are against heroes on principle say no, and some have something they need help with first (do that favour and they will take it).
+- **Your sidekick awakens.** The shard floats into them, light floods out, and they say a few words in their own manner. They are then marked gold on the map as your sidekick. For now they carry on with their own life; their powers and helping you come in the next steps. If your reputation drops below zero, they break with you, and you can ask again later. Saved with the game.
+
 ## 0.109 — 2026-10-07
 
 - **Nothing blocks the front door any more.** House interiors were laid out without looking at where the street door is, so about one door in three opened onto a wall, the lift shaft or the staircase. Now the stairs and the lift are placed clear of the way in, room walls across it get an opening, and nothing solid stands right behind the door. A sweep over 16,679 buildings found 0.2% with a narrower way in (odd little triangular houses), down from 33%. A few such tiny houses now go without inner stairs rather than have them right behind the door.

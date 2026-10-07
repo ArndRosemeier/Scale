@@ -167,6 +167,11 @@ export interface SaveData {
    * `CityNews.restore`); older saves have none (the seeded index, no news).
    */
   cityLife?: unknown;
+  /**
+   * The second shard and the sidekick (game/sidekick Sidekick SavedSidekick, sanitised by
+   * `Sidekick.restore`); older saves have none (the browser's own record for the city stays).
+   */
+  sidekick?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -306,6 +311,7 @@ export function parseSave(input: string | unknown): SaveData {
     ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
     ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
     ...(o.cityLife && typeof o.cityLife === 'object' ? { cityLife: o.cityLife } : {}),
+    ...(o.sidekick && typeof o.sidekick === 'object' ? { sidekick: o.sidekick } : {}),
   };
 }
 

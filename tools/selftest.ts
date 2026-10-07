@@ -29,6 +29,7 @@ import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
 import { arcadeChecks } from './arcadeTest';
+import { sidekickChecks } from './sidekickTest';
 import { doorChecks } from './doorsweep';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
@@ -3545,6 +3546,9 @@ await villainChecks(check);
 // Arcades: halls of video game cabinets on shopping streets, and their games (tools/arcadeTest.ts).
 arcadeChecks(check);
 doorChecks(check);
+
+// The second shard (SIDEKICK_PLAN phase 1): where it turns up, who takes it (tools/sidekickTest.ts).
+sidekickChecks(check);
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

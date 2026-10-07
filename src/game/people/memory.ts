@@ -79,6 +79,8 @@ export interface Known {
   letDown: number;
   /** The favour they asked of you (open, or done/lost and not yet talked about). */
   favour?: Favour;
+  /** They took the shard from the hero (game/sidekick): never forgotten, a gold dot on the map. */
+  sidekick?: true;
 }
 
 export function newKnown(cit: Citizen, name: string, now: number, x: number, z: number, street: string | null): Known {
@@ -98,7 +100,8 @@ export function opinionOf(k: (Pick<Known, 'talks' | 'helped' | 'saved' | 'hurt'>
 
 /** Higher: kept longer when the list is full. */
 export function keepScore(k: Known, now: number): number {
-  // (Someone waiting on a favour is not forgotten while it is open.)
+  // (Someone waiting on a favour is not forgotten while it is open; the sidekick never is.)
+  if (k.sidekick) return 1e6;
   return k.met * 2 + k.talks + (k.helped + k.saved + k.favours) * 6 + k.hurt * 4 - Math.max(0, now - k.last) / 24 + (k.favour && !k.favour.done && !k.favour.lost ? 50 : 0);
 }
 
@@ -210,6 +213,7 @@ export function restorePeople(raw: unknown): Known[] {
       notes: (Array.isArray(k.notes) ? k.notes : []).map(obj).filter((n) => typeof n.text === 'string').slice(-PEOPLE.notes).map((n) => ({ t: num(n.t, 0), text: str(n.text, 160)! })),
       favours: Math.floor(num(k.favours, 0, 0)), letDown: Math.floor(num(k.letDown, 0, 0)),
       ...(favour(k.favour) ? { favour: favour(k.favour) } : {}),
+      ...(k.sidekick === true ? { sidekick: true as const } : {}),
     });
     if (out.length >= PEOPLE.cap) break;
   }

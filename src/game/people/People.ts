@@ -137,6 +137,8 @@ export class People {
   private savedAt = new Map<number, number>();
   /** Someone you were asked to look in on, waiting at their door (People keeps them there till you come or go). */
   private waiting: { a: PedAgent; act: Actor } | null = null;
+  /** More things to say to the person you talk to (the sidekick's shard offer), after the usual topics. */
+  extraOptions: ((a: PedAgent) => { label: string; run: () => void }[]) | null = null;
 
   constructor(private g: Game) {
     this.city = cityName(g.settings.seed);
@@ -146,6 +148,7 @@ export class People {
       way: (d) => this.showWay(d),
       close: () => this.end(),
       destinations: () => this.destinations(),
+      extras: () => (this.session && this.extraOptions ? this.extraOptions(this.session.a) : []),
     });
     try { this.known.push(...restorePeople(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null'))); } catch { /* storage unavailable */ }
     // People you know appear where they plausibly are, not where their schedule ran ahead to.
@@ -313,6 +316,43 @@ export class People {
   get partner(): PedAgent | null { return this.session?.a ?? null; }
   /** The talk panel has the keyboard (or just let go of it): Esc must not open the pause menu. */
   get holdsPointer(): boolean { return this.ui.holdsPointer; }
+
+  /** The conversation now, for other systems (the shard offer): who, their record, how they feel; null: none. */
+  talkInfo(): { a: PedAgent; person: Person; known: Known; foreign: Actor | null; actor: Actor | null; opinion: number; child: boolean } | null {
+    const s = this.session;
+    if (!s) return null;
+    const f = this.facts(s);
+    return { a: s.a, person: s.p, known: s.k, foreign: s.foreign, actor: s.act, opinion: f.opinion, child: f.child };
+  }
+
+  /** Put a line in the open talk panel (another system's: the shard offer); the topics come back unless `hush`. */
+  speak(text: string, hush = false): void {
+    const s = this.session;
+    if (!s) return;
+    s.idle = 0;
+    this.ui.line(text);
+    if (hush) this.ui.clearOptions();
+    else this.ui.showTopics();
+  }
+
+  /** The person you talk to asks you to look in on someone close to them now (null: no talk, or a favour already open). */
+  askVisit(): Favour | null {
+    const s = this.session;
+    if (!s || s.foreign || (s.k.favour && s.k.favour.done === undefined && !s.k.favour.lost)) return null;
+    delete s.k.favour;
+    this.makeFavour(s, 'visit');
+    return s.k.favour ?? null;
+  }
+
+  /** Mark someone you know as your sidekick (or no longer): kept for good, a gold dot on the map. */
+  setSidekick(citId: number, on: boolean): void {
+    const k = this.find(citId);
+    if (!k) return;
+    if (on) k.sidekick = true;
+    else delete k.sidekick;
+    this.markKey = '#stale';
+    this.persist();
+  }
 
   private canTalk(): boolean {
     const P = this.g.player;
@@ -551,7 +591,15 @@ export class People {
     const u = hashToFloat(deriveSeed(k.cit.seed, 'favour', day));
     if (!asksFavour(this.opinion(k.cit), Math.max(k.met, s.metBefore), false, u)) return false;
     const group = g.crime?.factionAt(s.a.x, s.a.z) ?? null;
-    const f: Favour = { kind: group && u < SOCIAL.favourChance * 0.45 ? 'streets' : 'visit', asked: now, until: now + SOCIAL.favourHours };
+    this.makeFavour(s, group && u < SOCIAL.favourChance * 0.45 ? 'streets' : 'visit');
+    return true;
+  }
+
+  /** The person you talk to asks a favour of this kind (look in on someone close, clear the gang off their street). */
+  private makeFavour(s: Session, kind: Favour['kind']): void {
+    const k = s.k, g = this.g, now = g.sky.hoursAbs, day = Math.floor(now / 24);
+    const group = g.crime?.factionAt(s.a.x, s.a.z) ?? null;
+    const f: Favour = { kind, asked: now, until: now + SOCIAL.favourHours };
     if (f.kind === 'streets') { f.x = s.a.x; f.z = s.a.z; f.group = group?.name ?? null; }
     else {
       const t = visitTarget(k.cit, (seed) => g.peds.pop.synthetic(seed), day);
@@ -564,7 +612,6 @@ export class People {
     addNote(k, now, f.kind === 'visit' ? `${d}: asked the hero to look in on their ${f.word} ${f.whoName}` : `${d}: asked the hero to deal with the trouble on their street`);
     this.markKey = '#stale';
     this.persist();
-    return true;
   }
 
   private favourDone(k: Known): void {
@@ -724,10 +771,11 @@ export class People {
       this.bringBack(k, now);
       const p = this.person(k.cit);
       const op = opinionOf(k, rep, p.traits.a, this.heard(k.cit).op);
-      const color = op >= 40 ? '#8ff0b4' : op <= -30 ? '#ffa894' : '#a9d6ff';
+      const color = k.sidekick ? '#ffc94d' : op >= 40 ? '#8ff0b4' : op <= -30 ? '#ffa894' : '#a9d6ff';
       const times = k.met === 1 ? 'met once' : `met ${k.met} times`;
       const at = spot.exact ? '' : ' · somewhere around here';
       const asked = f && f.done === undefined && !f.lost ? ` · asked you a favour` : '';
+      if (k.sidekick) { list.push({ x: spot.x, z: spot.z, color, kind: 'dot', title: `${p.full} — your sidekick${at}` }); continue; }
       list.push({ x: spot.x, z: spot.z, color, kind: 'faint', title: `${p.full}, ${k.title ?? p.job.title} — ${times}, last on ${gameTimeLabel(Math.floor(k.last / 24), k.last % 24)} · ${opinionWord(op)}${asked}${at}` });
     }
     const key = list.map((m) => `${m.x.toFixed(0)},${m.z.toFixed(0)},${m.color}`).join(';');

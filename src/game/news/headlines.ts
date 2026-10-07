@@ -8,7 +8,8 @@
 import type { CrimeKind } from '../crime/Crime';
 import type { Safety } from './pulse';
 
-export type NewsWhat = CrimeKind | 'rising' | 'falling' | 'turf';
+/** shard: the glowing stone found in the city (game/sidekick). */
+export type NewsWhat = CrimeKind | 'rising' | 'falling' | 'turf' | 'shard';
 export type NewsEnd = 'stopped' | 'escaped' | 'hero' | 'none';
 
 export interface NewsItem {
@@ -72,6 +73,7 @@ export function headline(it: NewsItem): string {
   if (it.what === 'rising') return `Crime on the rise in ${it.hood}`;
   if (it.what === 'falling') return `${it.hood} getting safer`;
   if (it.what === 'turf') return `${it.group ?? 'A gang'} moves into ${it.hood}`;
+  if (it.what === 'shard') return `Strange glowing stone found in ${it.hood}`;
   if (it.end === 'hero') return fillNews(HERO[it.what] ?? 'Hero steps in in {hood}', it);
   const p = HEAD[it.what];
   return p ? fillNews(it.end === 'stopped' ? p[1] : p[0], it) : `Trouble in ${it.hood}`;
@@ -79,7 +81,7 @@ export function headline(it: NewsItem): string {
 
 /** The kind of story (the card's colour band): crime, police, hero, city. */
 export function storyKind(it: NewsItem): 'crime' | 'police' | 'hero' | 'city' {
-  if (it.what === 'rising' || it.what === 'falling' || it.what === 'turf') return 'city';
+  if (it.what === 'rising' || it.what === 'falling' || it.what === 'turf' || it.what === 'shard') return 'city';
   return it.end === 'hero' ? 'hero' : it.end === 'stopped' ? 'police' : 'crime';
 }
 
@@ -102,6 +104,7 @@ export function gossip(it: NewsItem, now: number, u: number): string {
   if (it.what === 'rising') return pick(['They say {hood} is getting rougher by the day.', 'I don\'t go to {hood} after dark any more.']);
   if (it.what === 'falling') return pick(['{hood} has really calmed down lately.', 'My sister says {hood} is safe again. Finally.']);
   if (it.what === 'turf') return pick(['{Group} are moving into {hood}, I heard.', 'Word is {group} took over part of {hood}.']);
+  if (it.what === 'shard') return pick(['Did you see the news? Somebody found a glowing stone in {hood}. Glowing!', 'They say a stone in {hood} hums at night. Like the one from that falling star.', 'A glowing rock in {hood}, apparently. I wouldn\'t touch it.']);
   const noun = NOUN[it.what] ?? 'some trouble';
   if (it.end === 'hero') return pick([`Did you hear? A hero stopped ${noun} in {hood} {when}!`, `Someone said a hero broke up ${noun} in {hood}. Was that you?`]);
   if (it.end === 'stopped') return pick([`The police caught someone after ${noun} in {hood} {when}.`, `There was ${noun} in {hood} {when}, but the cops got them.`]);
