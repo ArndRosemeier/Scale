@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.097 — 2026-10-07
+
+- **Metro entrance stairs no longer run into the station's underpass.** At every station one entrance's stairs used to end right where the passage under the tracks starts down, so its side wall stood across the stairs (a wall you could walk through) and the steps dipped below the hall and climbed back up. Seen at Spring Market and Highland Park. Those stairs now take a different way down and end level with the hall.
+
 ## 0.096 — 2026-10-07
 
 - **People who trip no longer scream as if dying.** When someone falls in the street they now let out a short, mild cry instead: an "oof", "ow", "whoa", "ugh", "ah" or "whoops", picked at random each time. Men and women have their own voices, every person keeps a slightly different pitch, children sound higher and older people a little lower. It is also a touch quieter than before.
