@@ -150,7 +150,8 @@ export class Graphics {
     if (!this.auto || !this.targets) return;
     const g = this.timer?.poll();
     if (g !== undefined && g !== null) this.gpus.push(g);
-    // Hidden tabs, hitches (streaming, compiles) and the pause menu are no measure of the GPU.
+    // Hidden tabs, hitches (streaming, compiles), the pause menu and background shader compiles
+    // (`paused`) are no measure of the GPU.
     if (document.hidden || paused || frameMs > 250) return;
     if (this.settle > 0) { this.settle -= frameMs / 1000; this.gpus.length = 0; return; }
     this.frames.push(frameMs);

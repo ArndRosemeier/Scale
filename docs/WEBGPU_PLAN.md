@@ -129,3 +129,9 @@ Ordered by how much of the screen they cover (port first what is always visible)
   and props read just the translation, so they fit the attribute path. 141 → 93 pipelines in
   advance, warm-up 100 → 71 s headless. The gate's calm wait (16–20 s on the PC) is the next
   target; `[gate] background compiles done at …` now logs when it goes idle.
+- 2026-10-07 (night): PC at faeecc2 (another check ran alongside): WebGPU shader preparation
+  39–50 s, calm still at its 20 s cap, fps 50 → 20 → 8 over three loads in one profile and a
+  blurrier picture. Cause found: WebGPU has no GPU timer, so auto quality took the slow frames
+  during the gate's background compiles for a slow GPU, stepped down (each step re-applies
+  shadows / LOD and so rebuilds materials, more compiles) and remembered the low step for the next
+  load. Auto quality now ignores frames while the gate is busy.

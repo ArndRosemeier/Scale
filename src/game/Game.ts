@@ -635,7 +635,9 @@ export class Game {
       while (left > 0.1) { this.tick(0.05, false); left -= 0.05; }
       this.tick(left, true);
     } else this.tick(Math.min(0.1, raw), true);
-    this.graphics.frame(raw * 1000, performance.now() - t0 - this.renderMs, this.menu?.paused ?? false);
+    // (While the shader gate still compiles in the background the frames are no measure of the
+    // GPU: on WebGPU that runs for many seconds after loading, and auto quality stepped down then.)
+    this.graphics.frame(raw * 1000, performance.now() - t0 - this.renderMs, (this.menu?.paused ?? false) || (this.gate?.busy ?? 0) > 0);
     hitch.endFrame();
     if (this.frameWaiters.length) { const w = this.frameWaiters; this.frameWaiters = []; for (const r of w) r(); }
   };
