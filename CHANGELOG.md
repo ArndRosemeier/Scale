@@ -2,13 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.097 — 2026-10-07
+## 0.098 — 2026-10-07
 
 - **Arcades only where there is room for one.** They are now only in big, plainly rectangular buildings, never in small or oddly shaped corner houses, so every arcade is a real hall with at least seven cabinets.
 - **Nothing walls an arcade off any more.** Cabinets used to stand in front of the doorway from the stairs or the lift lobby, and where the street door led in that way, the hall was shut off. They now keep doorways clear, and a self test walks from the street door to every cabinet.
 - **Arcades are easier to find on the map:** a round cyan "A" badge, with its own line in the map's legend.
 - **The ARCADE sign no longer sits on a painted shop sign** — arcade fronts have no generic sign band now, and their windows glow in the evening.
 - **People keep out of your view while you play:** passers-by in the hall no longer step between you and the screen.
+
+## 0.097 — 2026-10-07
+
+- **Metro entrance stairs no longer run into the station's underpass.** At every station one entrance's stairs used to end right where the passage under the tracks starts down, so its side wall stood across the stairs (a wall you could walk through) and the steps dipped below the hall and climbed back up. Seen at Spring Market and Highland Park. Those stairs now take a different way down and end level with the hall.
 
 ## 0.096 — 2026-10-07
 
