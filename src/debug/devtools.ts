@@ -161,14 +161,20 @@ export function installDevtools(game: Game): void {
     },
     /** Rats and the wandering slime around the player (calm: they stay put). */
     sewerLife: (calm?: boolean) => { if (calm !== undefined) game.underground.life.calm = calm; return game.underground.life.stats; },
-    /** The deep realm: go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'trench' | 'noMans' | 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …), places, status. */
+    /**
+     * The deep realms (one below each colony): go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'trench' | 'noMans' |
+     * 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …, realm?) — in the realm you are near, or realm n;
+     * realms() lists them (colony, battleground style), places, status.
+     */
     deep: {
+      realms: () => game.underground.deeps.map((d, i) => ({ realm: i, colony: d.plan.hub, style: d.plan.trench.style, live: d === game.underground.deep })),
       places: () => Object.keys(game.underground.deep?.plan.places ?? {}),
-      go(name = 'hall'): { x: number; y: number; z: number } | null {
-        const D = game.underground.deep;
+      go(name = 'hall', realm?: number): { x: number; y: number; z: number } | null {
+        const U = game.underground;
+        const g = /^gate(\d+)$/.exec(name);
+        const D = realm !== undefined ? U.deeps[realm] : g ? U.deeps.find((d) => d.plan.roads.some((q) => q.colony === Number(g[1]))) ?? U.deep : U.deep;
         if (!D) return null;
         let p: { x: number; y: number; z: number } | null = D.plan.places[name] ?? null;
-        const g = /^gate(\d+)$/.exec(name);
         if (g) { const r = D.plan.roads.find((q) => q.colony === Number(g[1])) ?? D.plan.roads[0]; p = r ? { x: r.pts[3], y: r.pts[4], z: r.pts[5] } : null; }
         if (!p) return null;
         (game as unknown as { freeCam: boolean }).freeCam = false;

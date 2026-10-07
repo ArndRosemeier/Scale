@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.116 — 2026-10-07
+## 0.117 — 2026-10-07
 
 - **Your sidekick is around.** Once you have given someone the second shard, they become a full companion: they hang about nearby (not glued to your heels), fly to keep up when you go far, land close to you, and if you leave them far behind they catch up out of sight and fly in rather than popping up.
 - **They fight in their own way.** When a fight breaks out near you they join in with punches and now and then their own power, which the shard picks by who they are: fireballs or lightning for the curious and outgoing, a ground quake for the hard-headed, a stunning flash for the dutiful, a blast of wind for the nervous. The awakening tells you which one they got. The proud and hard go for the leader, the nervous first shout people clear, everyone else jumps straight in, and they say so in short bubbles.
@@ -11,6 +11,11 @@ Every push raises the version by 0.001. Newest first.
 - **When they go down,** the hospital's med drones lift them away to be revived. Most come back after a while, but one time in five the revival fails. Then the city mourns them, they get a grave with their name in a cemetery (shown on the map), and about a day and a half later news of another glowing stone comes in.
 - **The second shard is easier to find and take.** On the map it now has its own glowing crystal mark (also in the legend) instead of looking like a power core, walking into it takes it just like a core, a clear "You carry the second shard" label shows while you have it, and offering it is the first choice when you talk to someone.
 - **Your sidekick no longer gets stuck on parked cars.** In a fight they could land on a car roof and freeze there; they now always come down on the street.
+
+## 0.116 — 2026-10-07
+
+- **Every slime colony leads down into its own realm.** A city now has 2–3 hidden colonies, all near the centre, and none is a dead end any more: each opens into a deep realm of its own with its own Lumen home, its own Murk lair and its own war. Each realm's battleground is different, chosen per city: a single trench line, a double line, a chasm with one rock bridge across no-man's land, flooded craters, or a Murk siege wall with a crystal forest and hive towers. Width, depth and the Murk's lane vary too. Wars in the other realms go on while you are away. Murk that cannot walk straight at you (over their berm, across the chasm) now go round to reach you.
+- **The Lumen's sewer signs are much easier to see.** Big glowing arrows on both walkways at each junction, wider chevrons along the way that never fade below 60%, and bigger, brighter colony signs on the walls at eye height.
 
 ## 0.115 — 2026-10-07
 
