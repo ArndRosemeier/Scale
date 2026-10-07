@@ -185,6 +185,26 @@ export class CityStreamer {
       const nearMesh = add([near, far], mat, false);
       const g = r.glass[i];
       const nearGlass = g ? add(g, glassMat, true) : null;
+      // The inside (a starship's great hall): drawn only close by, where one can see into it.
+      const ins = r.inner?.[i];
+      if (ins) {
+        const reach = Math.hypot(lm.hu, lm.hv) * 0.6 + 120;
+        ins.forEach((md, gi) => {
+          if (!md) return;
+          const lod = new THREE.LOD();
+          lod.name = `landmark:${lm.kind}:inside${gi ? ':glass' : ''}`;
+          lod.position.set(...md.origin);
+          const mesh = new THREE.Mesh(toGeometry(md), gi ? glassMat : mat);
+          mesh.castShadow = !gi;
+          mesh.receiveShadow = true;
+          if (gi) mesh.renderOrder = 2;
+          else if (depth) mesh.customDepthMaterial = depth;
+          releaseAfterUpload(mesh.geometry);
+          lod.addLevel(mesh, 0);
+          lod.addLevel(new THREE.Object3D(), reach);
+          this.root.add(lod);
+        });
+      }
       if (wr && elem) {
         this.wrecks.push({
           index: i, lm, grid: wr.grid, pieces: wr.pieces, elemData: elem.data, elemTex: elem.tex, elemW: elem.w,
