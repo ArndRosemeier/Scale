@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.113 — 2026-10-07
+
+- **Aliens plan, decided points.** The Lumen slimes are the old ones who came long before the Wardens and get cryptic speech bubbles; the number of discs in the sky is random, now and then a sudden unexplained swarm of a hundred; beating a Warden first raises their interest in you, then no longer, then lowers it more with each further win. Nothing in the game changes yet.
+
 ## 0.112 — 2026-10-07
 
 - **Plan: aliens.** A design plan for the aliens who already live alongside us (docs/ALIENS_PLAN.md): the Wardens, mostly robotic nannies who watch from discs and a station in the sky and never meddle, and the forbidden kinds who sneak in anyway (runaway teens of their own species, smugglers selling alien tech, old ones living underground). Nothing in the game changes yet.
