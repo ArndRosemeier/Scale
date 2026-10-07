@@ -144,10 +144,12 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       const built = macro.landmarks.map((lm) => buildLandmarkMeshes(lm, terrain!));
       const meshes = built.map((b) => [b.near.build(), b.far.build()] as [MeshData, MeshData]);
       const glass = built.map((b) => (b.glass ? [b.glass[0].build(), b.glass[1].build()] as [MeshData, MeshData] : null));
+      const inner = built.map((b) => (b.inner ? b.inner.map((x) => (x.empty ? null : x.build())) as [MeshData | null, MeshData | null] : null));
       const wreck = built.map((b) => (b.pieces && b.grid ? { pieces: b.pieces, grid: b.grid } : null));
       const all = [...meshes, ...glass.filter((g): g is [MeshData, MeshData] => !!g)];
-      post({ type: 'landmarks', job: m.job, meshes, glass, wreck }, [
+      post({ type: 'landmarks', job: m.job, meshes, glass, inner, wreck }, [
         ...all.flatMap(([a, b]) => [...meshTransferables(a), ...meshTransferables(b)]),
+        ...inner.flatMap((p) => (p ? p.flatMap((x) => (x ? meshTransferables(x) : [])) : [])),
         ...wreck.flatMap((w) => (w ? [w.pieces.buffer as ArrayBuffer] : [])),
       ]);
       return;

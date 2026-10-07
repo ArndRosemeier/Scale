@@ -52,12 +52,15 @@ import type { Destruction } from '../src/destruction/Destruction';
 import type { MeshData } from '../src/build/meshBuilder';
 import type { MaterialArrays } from '../src/render/TextureLibrary';
 import { LandmarkSolids } from '../src/world/LandmarkSolids';
+import { insideObstacle } from '../src/world/Collision';
+import { marvelHall, marvelDoors } from '../src/plan/marvelParts';
 import { auditWays } from './landmarkWays';
 import { landmarkInterior } from '../src/plan/landmarkParts';
 import { Rng as MRng } from '../src/core/rng';
 import type { MacroPlan } from '../src/plan/types';
 import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
 import * as THREE from 'three';
+import { planHop } from '../src/player/speedHop';
 import { onScreen, screenPoint, toScreen } from '../src/render/screen';
 import { makeSight } from '../src/game/sightline';
 import type { WorldIndex as SightWorld } from '../src/world/WorldIndex';
@@ -2574,7 +2577,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
     return lm;
   };
-  let missing = 0, nan = 0, out = 0, empty = 0, maxTris = 0, farBig = 0;
+  let missing = 0, nan = 0, out = 0, empty = 0, maxTris = 0, farBig = 0, maxInner = 0;
   const looks = new Map<number, Set<string>>();
   for (let style = 0; style < MARVEL_STYLES; style++) for (let seed = 1; seed <= 6; seed++) for (const R of [1300, 3500, 9000]) {
     const lm = make(style as MS, seed, R);
@@ -2590,12 +2593,14 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     if (!m0.index.length || !m1.index.length) empty++;
     if (m1.index.length > m0.index.length) farBig++;
     maxTris = Math.max(maxTris, m0.index.length / 3);
+    if (parts.some((p) => p.inner)) maxInner = Math.max(maxInner, buildLandmarkMesh(lm, flat, 0, false, undefined, true).build().index.length / 3);
     if (!looks.has(style)) looks.set(style, new Set());
     looks.get(style)!.add(Object.values(lm.p).map((v) => v.toFixed(1)).join('/'));
   }
   check(missing === 0 && nan === 0, `marvels: every family designs and builds (${missing} missing, ${nan} non-finite parts)`);
   check(out === 0, `marvels: structures inside their sites (${out} points out)`);
   check(empty === 0 && farBig === 0 && maxTris < 60000, `marvels: near and far meshes (${empty} empty, ${farBig} far bigger), at most ${(maxTris / 1000).toFixed(1)}k triangles`);
+  check(maxInner < 150000, `marvels: insides (drawn close by only) at most ${(maxInner / 1000).toFixed(1)}k triangles`);
   check([...looks.values()].every((v) => v.size >= 6), `marvels: each family differs from seed to seed (${[...looks.values()].map((v) => v.size).join(', ')} looks from 6 seeds × 3 sizes)`);
   // The helix: up the walkway from its foot to the roof, on its floor all the way, never inside a wall.
   {
@@ -2833,6 +2838,96 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     results.push(`${style}: ${w.n} pieces, ${panes} panes`);
   }
   console.log(`cathedrals: ${results.join('; ')} in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// The starship's great hall (interior/design, plan/marvelParts): in from the square through a lobby
+// door and the hull to the hall floor; up every flight to its level; from every gallery through a
+// room's door; all without a wall in the way or a step a walker can't take.
+{
+  const t0 = performance.now();
+  const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
+  const results: string[] = [];
+  for (const seed of [1, 3, 4]) {
+    const r = new MRng(seed * 101);
+    const d = marvelDesign(0, 7000)(r.fork('design'), 1)!;
+    // (Its site on a slope: foundations reach 1.5 m down, as on real ground.)
+    const lm: Landmark = { id: 0, kind: 'marvel', name: 'test', cell: 0, x: 40, z: -20, angle: 0.4, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: -1.5, seed: r.nextU32(), style: 0, p: d.p };
+    lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
+    landmarkParts(lm, flat);
+    const hall = marvelHall(lm);
+    check(!!hall && hall.levels.length >= 6, `starship ${seed}: a great hall with galleries (${hall?.levels.length ?? 0} levels)`);
+    if (!hall) continue;
+    const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    // The player's rules (world/Collision, player/Player): a 1.8 m walker of radius 0.3 stands on tops at
+    // least 0.7 m deep (or decks) up to 0.5 m above its feet; taller tops within its radius stop it.
+    const STEP = 0.5, MINH = 0.7, R = 0.3, HGT = 1.8;
+    const groundAt = (x: number, z: number, y: number) => {
+      let g = 0;
+      solids.provider(x - 0.01, z - 0.01, x + 0.01, z + 0.01, (o) => {
+        if ((o.y1 - o.y0 < MINH && !o.deck) || o.y1 > y + STEP || o.y1 <= g) return;
+        if (insideObstacle(o, x, z, 0)) g = o.y1;
+      });
+      return g;
+    };
+    const stopped = (x: number, z: number, y: number) => {
+      let hit = false;
+      solids.provider(x - R - 6, z - R - 6, x + R + 6, z + R + 6, (o) => {
+        if (hit || o.y1 - o.y0 < HGT * 0.4 || y >= o.y1 - STEP || y + HGT <= o.y0) return;
+        if (insideObstacle(o, x, z, R)) hit = true;
+      });
+      return hit;
+    };
+    // Walk a polyline of local points from height y: blocked samples and the biggest step up.
+    const walk = (pts: [number, number][], y: number) => {
+      let blocked = 0, maxStep = 0;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        for (let s = 0; s <= L; s += 0.2) {
+          const [x, z] = siteToWorld(lm, pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / L, pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / L);
+          const ny = groundAt(x, z, y);
+          maxStep = Math.max(maxStep, ny - y);
+          y = ny;
+          if (stopped(x, z, y)) blocked++;
+        }
+      }
+      return { blocked, maxStep, y };
+    };
+    const doors = marvelDoors(lm);
+    let inBlocked = 0, inStep = 0, inFloor = 0, inside = true;
+    for (const a of doors) {
+      const e = Math.min(lm.hu / Math.max(1e-6, Math.abs(Math.cos(a))), lm.hv / Math.max(1e-6, Math.abs(Math.sin(a)))) - 0.5, i = hall.voidR * 0.6;
+      const inn = walk([[Math.cos(a) * e, Math.sin(a) * e], [Math.cos(a) * i, Math.sin(a) * i]], 0);
+      const [ix, iz] = siteToWorld(lm, Math.cos(a) * i, Math.sin(a) * i);
+      inBlocked += inn.blocked; inStep = Math.max(inStep, inn.maxStep); inFloor = Math.max(inFloor, Math.abs(inn.y - lm.base));
+      inside &&= !!solids.insideAt(ix, inn.y + 1, iz);
+    }
+    check(doors.length >= 3 && inBlocked === 0 && inStep < 0.45 && inFloor < 0.05 && inside, `starship ${seed}: walk in from the square through each of the ${doors.length} doors to the hall floor (${inBlocked} blocked, steps up to ${inStep.toFixed(2)} m, inside ${inside})`);
+    let badFlights = 0, badRooms = 0;
+    for (const st of hall.design.stairs) {
+      const run = st.n * st.tread;
+      const w = walk([[st.from[0] - st.dir[0] * 0.6, st.from[1] - st.dir[1] * 0.6], [st.from[0] + st.dir[0] * (run + 0.8), st.from[1] + st.dir[1] * (run + 0.8)]], st.y0);
+      if (w.blocked || w.maxStep > 0.45 || Math.abs(w.y - st.y1) > 0.05) { badFlights++; if (badFlights < 3) results.push(`flight ${st.y0.toFixed(0)}→${st.y1.toFixed(0)}: ${w.blocked} blocked, step ${w.maxStep.toFixed(2)}, ends ${w.y.toFixed(2)}`); }
+    }
+    for (const room of hall.design.rooms) {
+      const out: [number, number] = [room.door[0] - room.facing[0] * -1.6, room.door[1] - room.facing[1] * -1.6];
+      const inDoor: [number, number] = [room.door[0] - room.facing[0] * 1.2, room.door[1] - room.facing[1] * 1.2];
+      const w = walk([out, room.door, inDoor], room.y);
+      if (w.blocked || Math.abs(w.y - room.y) > 0.05) { badRooms++; if (badRooms < 3) results.push(`room at ${room.y.toFixed(0)}: ${w.blocked} blocked, floor ${w.y.toFixed(2)}`); }
+    }
+    // Round each gallery: no wall or rail across the walkway.
+    let badRing = 0;
+    for (const y of hall.levels) {
+      const pts: [number, number][] = [];
+      const rm = hall.voidR + 1.8, sz = lm.p.ell;
+      for (let i = 0; i <= 96; i++) { const t = (i / 96) * Math.PI * 2; pts.push([Math.cos(t) * rm, Math.sin(t) * rm * sz]); }
+      const w = walk(pts, y);
+      if (w.blocked || Math.abs(w.y - y) > 0.05) badRing++;
+    }
+    check(badRing === 0, `starship ${seed}: round every gallery unhindered (${badRing} of ${hall.levels.length} blocked)`);
+    check(badFlights === 0, `starship ${seed}: every one of the ${hall.design.stairs.length} flights climbs clear to its level (${badFlights} bad)`);
+    check(badRooms === 0, `starship ${seed}: every one of the ${hall.design.rooms.length} rooms is walkable in through its door (${badRooms} bad)`);
+  }
+  console.log(`starship halls in ${(performance.now() - t0).toFixed(0)} ms ${results.join('; ')}`);
 }
 
 // Front doors in real cities: from the square up the steps (however far below the floor it lies)
@@ -3156,6 +3251,50 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const s = runLife(macro, terrain, 1, 9, 60, 1, true);
   check(s.onTracks === 0 && s.offFloor === 0, `metro life: shoved commuters stop at the platform edge, knocked-off ones climb back (${s.onTracks} on the tracks)`);
   console.log(`metro life: ${r.spawned} commuters, ${r.boarded} boarded, ${r.alighted} got off, ${r.left} walked out, in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Super speed hops (src/player/speedHop.ts): over a person or a car ahead when the arc and the
+// landing are clear; never into a wall, never onto someone, never when too late.
+{
+  type O = import('../src/world/Collision').Obstacle;
+  let obs: O[] = [], walls: { x0: number; x1: number }[] = [];
+  const person = (x: number): O => ({ cyl: true, x, z: 0, r: 0.4, hx: 0, hz: 0, ux: 1, uz: 0, y0: 0, y1: 1.85 });
+  const car = (x: number): O => ({ cyl: false, x, z: 0, r: 0, hx: 2.2, hz: 0.9, ux: 1, uz: 0, y0: -0.2, y1: 1.5 });
+  const fake = {
+    obstacleProviders: [(x0: number, z0: number, x1: number, z1: number, out: (o: O) => void) => { for (const o of obs) if (o.x > x0 - 3 && o.x < x1 + 3) out(o); }],
+    under: null,
+    underground: () => false,
+    ceilingAt: () => Infinity,
+    groundAt: () => 0,
+    collide: (x: number, z: number, y: number) => ({ x, z, hit: walls.some((w) => x > w.x0 - 0.4 && x < w.x1 + 0.4) || obs.some((o) => !o.cyl && y < o.y1 - 0.5 && Math.abs(x - o.x) < o.hx + 0.4) }),
+  } as unknown as import('../src/world/Collision').Collision;
+  const plan = (v: number, d: number) => { for (let x = 0; x < d + 40; x += v / 60) { const p = planHop(fake, null, x, 0, 0, 1.8, 0.35, 1, 1, 0, v); if (p) return { at: x, ...p }; } return null; };
+  // The arc's feet height at distance s from take-off.
+  const feet = (p: { vy: number; g: number }, v: number, s: number) => { const t = s / v; return p.vy * t - 0.5 * p.g * t * t; };
+  obs = [person(40)];
+  const a = plan(50, 40);
+  const overHead = a ? feet(a, 50, 40 - a.at) : -1;
+  check(!!a && overHead > 1.85 && feet(a, 50, 40 - 0.75 - a.at) > 1.85 && feet(a, 50, 40 + 0.75 - a.at) > 1.85, `speed hop: over a person at 50 m/s (take-off ${a ? (40 - a.at).toFixed(1) : '-'} m before, feet ${overHead.toFixed(2)} m over them, range ${a?.range.toFixed(1) ?? '-'} m)`);
+  obs = [car(40)];
+  const b = plan(40, 40);
+  check(!!b && feet(b, 40, 40 - 2.6 - b.at) > 1.5 && feet(b, 40, 40 + 2.6 - b.at) > 1.5, `speed hop: over a parked car at 40 m/s (range ${b?.range.toFixed(1) ?? '-'} m)`);
+  // A second person right where the feet would come down: no hop (brush past instead).
+  obs = [person(40)];
+  const r0 = a ? a.range : 30;
+  obs = [person(40), person((a ? a.at : 30) + r0)];
+  const c = plan(50, 40);
+  check(!c || Math.abs(c.at + c.range - (a!.at + r0)) > 1, `speed hop: never lands on someone (${c ? 'landed ' + (c.at + c.range - a!.at - r0).toFixed(1) + ' m off' : 'no hop'})`);
+  // A wall within the arc: no hop.
+  obs = [person(40)]; walls = [{ x0: 50, x1: 52 }];
+  const d = plan(50, 40);
+  check(!d, `speed hop: not into a wall behind the person (${d ? 'hopped' : 'no hop'})`);
+  walls = [];
+  // Too slow, or nothing there: no hop.
+  check(!plan(5, 40) && (obs = [], !plan(50, 40)), 'speed hop: not when walking or when nothing is ahead');
+  // Two people a few metres apart: one hop over both.
+  obs = [person(40), person(43)];
+  const e = plan(50, 40);
+  check(!!e && feet(e, 50, 43 + 0.75 - e.at) > 1.85, `speed hop: one hop over two people in a row (feet ${e ? feet(e, 50, 43 + 0.75 - e.at).toFixed(2) : '-'} m over the second)`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).

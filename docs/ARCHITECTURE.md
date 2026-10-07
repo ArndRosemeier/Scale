@@ -1116,6 +1116,24 @@ as distance LOD).
   the HUD, the admin console's Weather section, `dev.weather.set(kind) / next() / auto() / status() / forecast(n) /
   strike(m)`.
 
+### Interior designer (`src/interior/design`)
+* One designer for any body shape, not only four-sided boxes (proposal: project files
+  `interiors/interior-designer-proposal.md`). A design is plain geometry in a landmark Kit's local (u, v) frame.
+  It is made in steps that know nothing about the building:
+  * **Volume** (`types.ts`): the inside outline at every height, as a star round a centre (`ellipseStar`), so round,
+    oval and tapering bodies work.
+  * **Section / layout** (`hall.ts`, `designHall`): a void up the middle, ringed on every level by a gallery with a
+    glass rail and wedge rooms out to the outer wall. Two stair columns alternate wedge by wedge. Bridges cross the
+    void every few levels, and the hall ends where the rooms get too shallow.
+  * **Theme** (`theme.ts`, `props.ts`): room function → prop recipes, and materials. A theme is a prop set, so
+    the same layout can be furnished differently (`scifiTheme` first).
+  * **Emit** (`emit.ts`): floors, walls with doors, rails (glass plus a hidden solid), step boxes, props, walkable
+    room polygons and lights as landmark parts.
+* First user: the starship (`marvelParts.starship`). Lobby doors between the fins lead into a ground-floor lobby and
+  the great hall with a glowing core. Parts added inside `Kit.inner(...)` go into a separate inner mesh
+  (`LandmarkMeshes.inner`, diced with the rest) that `CityStreamer` draws only close by. The far and near meshes
+  stay in their budgets. Self test: walk in through every door, every flight, every room door, round every gallery.
+
 ### Interiors (`src/interior`)
 * Generated on demand when the player approaches an entrance or a breach: floor plan by
   building use (apartments, offices, shops, restaurants, lobby, stair or elevator core),
