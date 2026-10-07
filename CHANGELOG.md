@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.114 — 2026-10-07
+
+- **Your sidekick is around.** Once you have given someone the second shard, they become a full companion: they hang about nearby (not glued to your heels), fly to keep up when you go far, land close to you, and if you leave them far behind they catch up out of sight and fly in rather than popping up.
+- **They fight in their own way.** When a fight breaks out near you they join in with punches and now and then a fireball. The proud and hard go for the leader, the nervous first shout people clear, everyone else jumps straight in, and they say so in short bubbles.
+- **Press K to call them** (touch: "Call sidekick" under More). They come at full speed and stay close for a while.
+- **They stay out of trouble with the police.** If the police are after you, your sidekick keeps their distance and tells you so; they never fight officers and their actions never cost you reputation.
+- **When they go down,** the hospital's med drones lift them away to be revived. Most come back after a while, but one time in five the revival fails. Then the city mourns them, they get a grave with their name in a cemetery (shown on the map), and about a day and a half later news of another glowing stone comes in.
+
 ## 0.113 — 2026-10-07
 
 - **Aliens plan, decided points.** The Lumen slimes are the old ones who came long before the Wardens and get cryptic speech bubbles; the number of discs in the sky is random, now and then a sudden unexplained swarm of a hundred; beating a Warden first raises their interest in you, then no longer, then lowers it more with each further win. Nothing in the game changes yet.
