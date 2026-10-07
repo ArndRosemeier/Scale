@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.093 — 2026-10-07
+
+- **New characters start from the plain face and body:** every shape slider in the middle, age 25, evenly mixed ancestry and no random tweaks. Only hair, colours and outfit are picked at random. A new **Plain** button next to Randomize brings any character back to that base (it keeps the sex, hair, skin and outfit). Playing without a created character also gives you the plain body.
+
 ## 0.092 — 2026-10-07
 
 - **Cemeteries.** Every city now has a few walled cemeteries, mostly in the old town and the quiet residential streets (on the map they show green, like parks). A stone wall with corner pillars runs round each one, with a gate in the middle of its longest side. A gravel path leads from the gate past tall dark yews to a mausoleum at the far end, and a cross path meets it at a mourning figure on a pedestal. Rows of headstones, stone crosses, ledger graves and obelisks face the gate, in pale limestone, dark granite and sandstone. Headstones can be knocked over; the wall breaks.
