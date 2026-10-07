@@ -269,7 +269,9 @@ export class CharacterCreator {
     const save = h('button', 'cc-btn primary', 'Save character');
     save.type = 'button';
     save.onclick = () => void this.save(save);
-    foot.append(reset, h('div', 'cc-spacer'), cancel, save);
+    // Attribution the body's licence asks for (CC BY 3.0, see public/assets/human/LICENSE.txt).
+    const credit = h('div', 'cc-credit', 'Body based on "Woman_model" by Bananaboy (Blend Swap), CC BY 3.0');
+    foot.append(reset, credit, h('div', 'cc-spacer'), cancel, save);
     side.append(head, this.tabsEl, this.editor, foot);
 
     this.el.append(stage, side);
@@ -485,6 +487,8 @@ export class CharacterCreator {
             o.bottom === 'none' ? null : field('Colour', swatches(o.bottom === 'jeans' ? DENIM : FABRIC, o.bottomColor, (c) => this.setO('bottomColor', c))),
           ),
           section('Shoes', chips(SHOES, o.shoes, (v) => this.setO('shoes', v, true)), o.shoes === 'none' ? null : field('Colour', swatches(SHOE_COL, o.shoesColor, (c) => this.setO('shoesColor', c)))),
+          section('Underwear', h('p', 'cc-note', 'Worn wherever nothing else covers'),
+            chips(['shown', 'removed'] as const, o.underwear === false ? 'removed' : 'shown', (v) => this.setO('underwear', v === 'shown', true))),
           section('Hat',
             chips(HATS, o.hat, (v) => this.setO('hat', v, true)),
             o.hat !== 'none' ? field('Colour', swatches(FABRIC, o.hatColor, (c) => this.setO('hatColor', c))) : null,

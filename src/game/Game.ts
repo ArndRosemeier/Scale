@@ -113,6 +113,7 @@ import { Defeat } from './defeat/Defeat';
 import { ManholeClimb } from './ManholeClimb';
 import { shaftPoint, LADDER_LAT } from '../underground/layout';
 import { MedFleet } from './defeat/MedDrones';
+import { Wardrobe } from './Wardrobe';
 import { People } from './people/People';
 import { Fame } from './fame/Fame';
 
@@ -232,6 +233,8 @@ export class Game {
   deeds!: Deeds;
   /** The city's people as individuals: names, personalities, talking (E), who remembers you (game/people). */
   people!: People;
+  /** Fitting mirrors of clothes shops (E: character creator). */
+  wardrobe!: Wardrobe;
   /** Reputation made visible: the press, fans, protesters, the hero's statue (game/fame). */
   fame!: Fame;
   powerHud!: PowerHud;
@@ -741,6 +744,7 @@ export class Game {
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
+    this.wardrobe?.update(dt);
     this.T('street', () => this.street?.update(dt));
     this.T('people', () => this.people?.update(dt));
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
@@ -1086,6 +1090,7 @@ export class Game {
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
+    this.wardrobe = new Wardrobe(this);
     this.fame = new Fame(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
@@ -1202,6 +1207,8 @@ export class Game {
     const slime = this.slimeRealm?.hint();
     if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';
+    const dress = this.wardrobe?.hint();
+    if (dress) return dress;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1251,6 +1258,8 @@ export class Game {
       return;
     }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
+    // At a clothes shop's fitting mirror: change your look.
+    if (this.wardrobe?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();

@@ -23,7 +23,7 @@ import { cityOutfit } from '../../humanoid/client/wardrobe';
 import { hash32 } from '../../core/rng';
 import { pointInPoly } from '../../core/geom2';
 import { statusOf } from '../../shared/status';
-import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, type ActorRole } from '../../sim/actors/Actor';
+import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, PEOPLE_OWNER, type ActorRole } from '../../sim/actors/Actor';
 import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
 import { Reputation } from '../Reputation';
@@ -123,6 +123,10 @@ export class CrimeSystem {
   /** Gang tags on the walls (factions/Graffiti). */
   readonly graffiti: Graffiti;
   /** Villain group results (saved with the turf): operations stopped, come off, tags finished, cells lost, brawls, busts. */
+  /** The hero stopped a crime (game/people: its victims remember being saved). */
+  onStopped: ((c: Crime) => void) | null = null;
+  /** The hero gave stolen things back to their owner (or the shopkeeper). */
+  onReturned: ((who: PedAgent, c: Crime) => void) | null = null;
   factionStats: Record<string, number> = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0, brawls: 0, busts: 0, drifted: 0 };
   /** Each group's hideout (factions/Hideouts; saved with the turf). */
   hideouts: Hideout[];
@@ -1416,10 +1420,10 @@ export class CrimeSystem {
     for (const a of this.g.peds.agents) {
       const act = a.actor;
       if (!act) continue;
-      // (Soldiers, the aftermath's people, the street characters and fame's people have their own
-      // budgets: response/forces, game/aftermath, game/street, game/fame.)
+      // (Soldiers, the aftermath's people, the street characters, fame's people and game/people's
+      // have their own budgets: response/forces, game/aftermath, game/street, game/fame, game/people.)
       const uniformed = act.role === 'police' || act.role === 'soldier';
-      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER) n++;
+      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER && act.owner !== PEOPLE_OWNER) n++;
       tickActor(act, dt);
       if (a.state === PState.Down && (act.state === 'down' || (act.state === 'ko' && uniformed))) {
         act.upT -= dt;
@@ -1595,6 +1599,7 @@ export class CrimeSystem {
     this.rep.count('stopped');
     this.justice.atone(1.5);
     this.cheer();
+    this.onStopped?.(c);
     if (by) { this.factionStats.stopped++; this.turf(c, by, c instanceof BossOperation ? -SHIFT.bossOp : SHIFT.stopped); this.heat(by.id, NOTORIETY.stopped * (c instanceof BossOperation ? 2 : 1)); }
     // Breaking up a brawl: both groups lose face on that street.
     if (rival) this.turf(c, rival, SHIFT.stopped * 0.7);
@@ -1840,6 +1845,7 @@ export class CrimeSystem {
           g.progress.addKarma(k, officer ? 'handed in stolen property' : `returned the stolen ${l.kind === 'cash' || l.kind === 'envelope' ? 'money' : l.kind}`);
           this.rep.add(officer ? 1 : 2, 'returned');
           this.rep.count('returned');
+          if (who) this.onReturned?.(who, L.crime);
           if (who?.actor) { who.actor.held = l.kind === 'bag' ? 'bag' : null; who.actor.mood = 'happy'; }
           else if (who) { who.helped = true; who.state = PState.Idle; who.stateT = 0; }
           this.sound('crowd_cheer', p.x, p.y + 2, p.z, 0.25);

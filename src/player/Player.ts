@@ -50,7 +50,7 @@ export class Player {
   autoMove = false;
   grounded = false;
   readonly rig: HumanoidRig;
-  readonly app: HumanoidAppearance;
+  app: HumanoidAppearance;
   /** Animation clock (runs at 1/√k). */
   private animTime = 0;
   private rigBaseHeight = 1.75;
@@ -150,6 +150,16 @@ export class Player {
     // its own height relative to it (size mechanics still run on `height`, k = height / 1.8).
     if (look) this.rigBaseHeight = BASE_HEIGHT;
     else this.rig.ready.then(() => { this.rigBaseHeight = this.rig.height; });
+  }
+
+  /** Change the hero's look on the spot (the clothes shop mirror): body, face, hair and outfit. */
+  async applyLook(look: CharacterLook): Promise<void> {
+    Player.look = look;
+    this.app = structuredClone(look.appearance);
+    this.rigBaseHeight = BASE_HEIGHT;
+    if (this.avatar) await this.setAvatar(null);
+    this.rig.setEquipment(outfitVisuals(look.outfit));
+    await this.rig.setAppearance(this.app);
   }
 
   get k(): number { return this.height / BASE_HEIGHT; }

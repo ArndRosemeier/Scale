@@ -3,6 +3,7 @@
  */
 import type { Game } from '../game/Game';
 import type { BuildingRef } from '../world/WorldIndex';
+import { isClothesShop } from '../interior/InteriorGen';
 import { statusOf } from '../shared/status';
 import type { WeatherSetting } from '../render/Weather';
 import { LandUse } from '../world/landuse';
@@ -19,6 +20,26 @@ export function installDevtools(game: Game): void {
       const c = (b: BuildingRef) => Math.hypot((b.bounds[0] + b.bounds[2]) / 2 - x, (b.bounds[1] + b.bounds[3]) / 2 - z);
       bs.sort((a, b) => c(a) - c(b));
       return bs[skip] ?? null;
+    },
+    /** Walk-in test: put the hero in front of the fitting mirror of the nearest clothes shop (E there opens the creator). */
+    async mirror(): Promise<string> {
+      const p = game.player.pos;
+      const d = (b: BuildingRef) => Math.hypot((b.bounds[0] + b.bounds[2]) / 2 - p.x, (b.bounds[1] + b.bounds[3]) / 2 - p.z);
+      const b = game.world.buildingsIn(p.x - 800, p.z - 800, p.x + 800, p.z + 800).filter((r) => r.alive && isClothesShop(r.desc)).sort((a, c) => d(a) - d(c))[0];
+      if (!b) return 'no clothes shop within 800 m';
+      const door = game.destruction.layoutOf(b).door;
+      p.set(door.x, game.world.groundHeight(door.x, door.z) + 0.2, door.z);
+      game.player.vel.set(0, 0, 0);
+      for (let i = 0; i < 60; i++) {
+        await dev.wait(250);
+        const m = game.interiors.dressMirrors()[0];
+        if (m) {
+          p.set(m.x + Math.sin(m.yaw) * 1.0, m.y + 0.05, m.z + Math.cos(m.yaw) * 1.0);
+          game.player.vel.set(0, 0, 0);
+          return `at the mirror (${m.x.toFixed(1)}, ${m.z.toFixed(1)})`;
+        }
+      }
+      return 'the shop interior did not open';
     },
     /** Free camera at position looking at a target. */
     look(px: number, py: number, pz: number, tx: number, ty: number, tz: number): void {

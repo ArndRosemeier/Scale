@@ -3133,6 +3133,103 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   console.log(`people: ${TEMPERAMENTS.length} temperaments, ${topics.reduce((s, t) => s + LINES[t].length, 0)} line rules, ${n} answers in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
+// People, phase 2 (NPC_PERSONALITY_PLAN §3.5): behaviour from personality.
+{
+  const t0 = performance.now();
+  const B = await import('../src/game/people/behaviour');
+  const { Manners } = await import('../src/game/people/Manners');
+  const { PState } = await import('../src/sim/Pedestrians');
+  type PState = import('../src/sim/Pedestrians').PState;
+  type PedAgent = import('../src/sim/Pedestrians').PedAgent;
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 7, size: 0.4 }))), 7);
+  const T = (o: number, c: number, e: number, a: number, n: number) => ({ o, c, e, a, n });
+  check(B.paceOf(T(0.5, 0.9, 0.9, 0.5, 0.5)) > 1.1 && B.paceOf(T(0.9, 0.1, 0.1, 0.5, 0.5)) < 0.9 && Math.abs(B.paceOf(T(0.5, 0.5, 0.5, 0.5, 0.5)) - 1) < 1e-9, 'people: outgoing, dutiful people walk briskly, dreamers dawdle');
+  const paces = Array.from({ length: 2000 }, (_, i) => B.paceOf(traitsOf(pop.synthetic(500 + i * 31))));
+  const mean = paces.reduce((s2, v) => s2 + v, 0) / paces.length;
+  check(Math.abs(mean - 1) < 0.02 && Math.min(...paces) >= B.MANNERS.paceMin && Math.max(...paces) <= B.MANNERS.paceMax, `people: the crowd keeps its usual pace on average (${mean.toFixed(3)}, ${Math.min(...paces).toFixed(2)}…${Math.max(...paces).toFixed(2)})`);
+  check(B.calmRate(0) > 2.5 * B.calmRate(1) && Math.abs(B.calmRate(0.5) - 0.06) < 1e-9, 'people: the calm get over a scare faster than the nervous');
+  check(B.gawkFor(0.9, 0) > B.gawkFor(0.1, 0) + 5, 'people: the curious look longer');
+  const avg = T(0.5, 0.5, 0.5, 0.5, 0.5);
+  check(B.berthOf(0, avg) === 0 && B.berthOf(-29, avg) === 0 && B.berthOf(-40, avg) > 0 && B.berthOf(-100, avg) > B.berthOf(-40, avg) && B.refuses(-70) && !B.refuses(-50), 'people: who dislikes you keeps away, who can\'t stand you won\'t talk');
+  check(B.helps(T(0.5, 0.5, 0.5, 0.9, 0.3), 0, false) && !B.helps(T(0.5, 0.5, 0.5, 0.3, 0.3), 0, false) && !B.helps(T(0.5, 0.5, 0.5, 0.9, 0.3), 0, true) && !B.helps(T(0.5, 0.5, 0.5, 0.9, 0.3), 0.8, false), 'people: kind grown-ups who are not frightened help others up');
+  check(B.waves(50, T(0.5, 0.5, 0.9, 0.5, 0.5)) && !B.waves(30, T(0.5, 0.5, 0.2, 0.5, 0.5)) && !B.waves(-10, T(0.5, 0.5, 1, 0.5, 0.5)), 'people: those who like you wave, extraverts sooner');
+  const only: import('../src/game/people/behaviour').Moment[] = ['away', 'refuse', 'point', 'helper'];
+  const gaps = only.flatMap((m) => TEMPERAMENTS.filter((t) => !B.reactLine(m, t, 0.95)).map((t) => `${m}/${t}`));
+  check(gaps.length === 0, `people: everyone has words for keeping away, refusing, pointing and helping (missing ${gaps.join(', ')})`);
+  check(B.reactLine('flee', 'anxious', 0.1) !== null && B.reactLine('flee', 'anxious', 0.9) === null && B.reactLine('flee', 'dreamy', 0.1) === null, 'people: own words in the moment, the common ones now and then');
+  // Manners in a small street: a fake world with real rules. Someone falls; a kind passer-by comes and
+  // helps them up; an unkind crowd leaves them; a thief running past is pointed at; someone who
+  // dislikes the hero steps aside.
+  {
+    const mk = (i: number, x: number, z: number, a: number) => {
+      const cit = { ...pop.synthetic(9000 + i), role: 1 };
+      return { id: i, cit, x, z, y: 0, heading: 0, speed: 0, pref: 1.3, state: 0, route: new Float32Array(0), wp: 0, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: i, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, agree: a } as unknown as PedAgent & { agree: number };
+    };
+    const run = (agents: (PedAgent & { agree: number })[], secs: number, opts: { rep?: number; each?: (t: number) => void } = {}) => {
+      const said: string[] = [];
+      const log: { t: number; x: number; z: number; cause: string; effect: string }[] = [];
+      const g = {
+        player: { pos: { x: 0, y: 0, z: 0 }, height: 1.8, radius: 0.35, flying: false },
+        freeCam: false,
+        peds: { neighbours: (x: number, z: number, r: number, out: PedAgent[]) => { out.length = 0; for (const a of agents) if (Math.abs(a.x - x) <= r && Math.abs(a.z - z) <= r) out.push(a); return out; } },
+        crime: { rep: { value: opts.rep ?? 0 } },
+        consequences: { log, time: 0 },
+        barks: { say: (_a: PedAgent, l: string) => { said.push(l); return true; } },
+      };
+      const people = {
+        partner: null,
+        person: (c: { id: number }) => { const a = agents.find((x) => x.cit.id === c.id)!; const t = { o: 0.5, c: 0.5, e: 0.5, a: a.agree, n: 0.3 }; return { traits: t, temper: temperamentOf(t), full: 'Someone' }; },
+        find: () => null,
+      };
+      const M = new Manners(g as never, people as never);
+      const dt = 0.05;
+      for (let t = 0; t < secs; t += dt) {
+        opts.each?.(t);
+        for (const a of agents) {
+          a.stateT += dt;
+          a.sideT = Math.max(0, (a.sideT ?? 0) - dt);
+          const act = a.actor;
+          if (act?.goal && act.speed > 0) { const dx = act.goal.x - a.x, dz = act.goal.z - a.z, d = Math.hypot(dx, dz), st = Math.min(d, act.speed * dt); if (d > 1e-6) { a.x += (dx / d) * st; a.z += (dz / d) * st; } }
+          if (act?.action) { act.action.age += dt; if (act.action.age > act.action.dur) act.action = null; }
+        }
+        M.update(dt);
+      }
+      return { said, M };
+    };
+    // A fall (not the hero's everyday accident, which is theirs for a while) at 20 m from the hero.
+    const down = mk(1, 20, 0, 0.5);
+    down.state = PState.Down; down.downBy = 'collapse';
+    const kind = mk(2, 30, 4, 0.9), mean2 = mk(3, 24, 1, 0.2);
+    const r1 = run([down, kind, mean2], 25);
+    check((down.state as PState) === PState.Idle && down.helped === true && !kind.actor && Math.hypot(kind.x - down.x, kind.z - down.z) < 1.5 && Math.hypot(mean2.x - 24, mean2.z - 1) < 1e-6,
+      `people: a kind passer-by walks over and helps someone up, the unkind one walks on (${r1.said.join(' | ')})`);
+    const down2 = mk(4, 20, 0, 0.5);
+    down2.state = PState.Down; down2.downBy = 'collapse';
+    run([down2, mk(5, 24, 0, 0.2), mk(6, 26, 0, 0.3)], 25);
+    check(down2.state === PState.Down, 'people: nobody kind about, nobody helps');
+    const acc = mk(7, 20, 0, 0.5);
+    acc.state = PState.Down; acc.downBy = 'accident';
+    const k2 = mk(8, 25, 0, 0.9);
+    run([acc, k2], 30);
+    const early = acc.state === PState.Down;
+    run([acc, k2], 20);
+    check(early && (acc.state as PState) === PState.Idle, 'people: an everyday fall is left to the hero first, then a stranger helps');
+    // A thief running past.
+    const thief = mk(9, 10, 0, 0.5);
+    thief.actor = { role: 'criminal', state: 'run', owner: 3 } as never;
+    const w = mk(10, 14, 3, 0.9);
+    let pointing = false;
+    const r2 = run([thief, w], 5, { each: (t) => { thief.x += 0.2; if (Math.abs(t - 1.2) < 0.03) pointing = w.actor?.action?.id === 'gesture_point'; } });
+    check(pointing && r2.said.length === 1, `people: an agreeable passer-by points after a thief (${r2.said.join(' | ')})`);
+    check(!w.actor, 'people: … and goes on afterwards');
+    // Someone who dislikes the hero (a terrible reputation, an agreeable person) steps out of their way.
+    const near = mk(11, 2, 0, 0.95), fine = mk(12, -2, 0, 0.1);
+    run([near, fine], 0.25, { rep: -100 });
+    check((near.sideX ?? 0) > 0 && (near.sideT ?? 0) > 0 && !(fine.sideT), 'people: someone who dislikes you steps aside as you come near');
+  }
+  console.log(`people, phase 2: ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
 // ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live
 // crime index, police presence, the fresh start, off-screen crime and the news in words
 {

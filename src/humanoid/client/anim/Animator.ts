@@ -811,6 +811,10 @@ export class Animator {
       this.armClipW = 0.25 + 0.75 * full;
       this.torsoClipW = 0.3 + 0.7 * full;
       this.applyClipGait(p, gait.w);
+      // The walk clip swings the forward hand in towards the midline (in front of the crotch
+      // seen head-on): carry the arms a little out from the body while moving.
+      const room = moving * (1 - run) * (0.1 + 0.06 * this.ch.app.weight);
+      if (room > 0.002) for (const s of ['L', 'R'] as const) p.arm(s, 0, room * this.armClip[s]);
       this.landing(p, gait.w);
     }
     // Hips toward movement direction, torso keeps facing forward.
