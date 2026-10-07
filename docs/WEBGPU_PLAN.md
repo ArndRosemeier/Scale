@@ -147,3 +147,8 @@ Ordered by how much of the screen they cover (port first what is always visible)
   buildings), then cars (~240 incl. shadow), trees and props (~200, one per kind), people (each
   person's own materials), facades (a few every 10 s while streaming). The skyline is now one
   instanced mesh for the whole city, grown in ×4 steps (WebGL screenshot identical).
+- 2026-10-07 (late, 2): PC at 68806c3: node builds after loading 1900 → ~800, but WebGPU ran at
+  11 fps at every quality level: the new single skyline mesh had DynamicDrawUsage buffers sized
+  for growth, and WebGPU uploads dynamic attributes whole every frame (~8 MB). That also costs
+  every other dynamic instance buffer (props, vehicles, crowd), likely part of the 42–47 fps at
+  High. Dynamic usage now maps to static on WebGPU (uploads on `needsUpdate`, as on WebGL).

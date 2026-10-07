@@ -48,6 +48,23 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   watchVertexBuffers(renderer);
   countNodeBuilds(renderer);
   shareInstancedShaders(renderer);
+  noPerFrameUploads();
+}
+
+/**
+ * WebGPU uploads a DynamicDrawUsage attribute again on EVERY frame, whole (WebGL only treats it as
+ * a hint and uploads on `needsUpdate`, like any other). The game marks its changes with
+ * `needsUpdate` everywhere, as WebGL needs, so on WebGPU dynamic attributes are plain ones: they
+ * are uploaded when their version changes (three's instancing nodes sync versions the same way).
+ * With hundreds of instance buffers, several of them sized for growth, the per-frame copies were
+ * megabytes a frame.
+ */
+function noPerFrameUploads(): void {
+  for (const C of [THREE.BufferAttribute, THREE.InterleavedBuffer]) {
+    const P = C.prototype as unknown as { setUsage(u: number): unknown };
+    const set = P.setUsage;
+    P.setUsage = function (this: unknown, u: number) { return set.call(this, u === THREE.DynamicDrawUsage ? THREE.StaticDrawUsage : u); };
+  }
 }
 
 /**

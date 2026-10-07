@@ -95,3 +95,10 @@ code as `NodeBuffer_<node id>`, a new name per material: give each one a fixed n
 where they fit (shareInstancedShaders in `webgpu/index.ts`); a material whose nodes read the
 matrix again declares how many attribute slots that takes in `userData.instanceReads` (default 4),
 and reads only what it needs (`instanceTranslationOf` is one slot).
+
+## Dynamic attributes
+
+WebGPU uploads an attribute with `DynamicDrawUsage` again on every frame, whole; WebGL takes the
+usage as a hint and uploads on `needsUpdate`. The game sets `needsUpdate` everywhere, so the kit
+maps DynamicDrawUsage to StaticDrawUsage on WebGPU (`noPerFrameUploads`). Mark changes with
+`needsUpdate` (or `addUpdateRange` + `needsUpdate`), never rely on per-frame uploads.

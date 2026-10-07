@@ -93,11 +93,12 @@ export class Skyline {
   /**
    * All far buildings are one instanced mesh, grown in big steps. (It was one per 1.5 km tile,
    * rebuilt whenever a tile got more buildings: on WebGPU every new instanced mesh builds its
-   * shaders again, about a thousand times while the city streamed in.)
+   * shaders again, about a thousand times while the city streamed in.) Static buffers: on WebGPU a
+   * dynamic one is uploaded whole every frame.
    */
   private grow(need: number): void {
     let cap = Math.max(this.cap, 4096);
-    while (cap < need * 1.25) cap *= 4;
+    while (cap < need * 1.25) cap *= 2;
     const old = this.mesh;
     const box = new THREE.BoxGeometry(1, 1, 1);
     box.translate(0, 0.5, 0);
@@ -107,13 +108,12 @@ export class Skyline {
     // The node material reads scale and centre from attributes rather than the instance matrix.
     const names = WEBGPU ? ['iA', 'iB', 'iS', 'iP'] : ['iA', 'iB'];
     for (const k of names) {
-      const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);
       const prev = old?.geometry.getAttribute(k);
       if (prev) a.array.set(prev.array as Float32Array);
       g.setAttribute(k, a);
     }
     const mesh = new THREE.InstancedMesh(g, this.mat, cap);
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     if (old) mesh.instanceMatrix.array.set(old.instanceMatrix.array);
     mesh.count = this.n;
     g.instanceCount = this.n; // (InstancedBufferGeometry defaults to Infinity: WebGPU draws that count)
