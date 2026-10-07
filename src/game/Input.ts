@@ -21,11 +21,15 @@ export class Input {
   /** A tap set the cursor for one frame (picking): it is dropped again at the end of the frame. */
   private tapped = false;
   private el: HTMLElement;
+  private _suspended = false;
+  /** A dialog over the game (the character creator) has the keyboard: game keys are ignored. */
+  get suspended(): boolean { return this._suspended; }
+  set suspended(v: boolean) { this._suspended = v; this.keys.clear(); this.pressed.clear(); }
 
   constructor(el: HTMLElement) {
     this.el = el;
     window.addEventListener('keydown', (e) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLInputElement || this._suspended) return;
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
       if (['Space', 'Tab', 'NumpadAdd', 'NumpadSubtract', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();

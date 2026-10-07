@@ -1,7 +1,6 @@
 /**
- * Start-screen character picker: the default (random) human, the built-in base bodies
- * (a woman and a man, public/assets/bodies/), characters made in the creator, or an
- * imported model. Imports (GLB / glTF / VRM / FBX) are analysed immediately
+ * Start-screen character picker: the default (random) human, characters made in the
+ * creator, or an imported model. Imports (GLB / glTF / VRM / FBX) are analysed immediately
  * (rig mapping, clips), get a thumbnail and are stored in the browser; created characters
  * store their look (appearance + outfit). The selection is remembered.
  */
@@ -14,18 +13,6 @@ import { mapHumanoid } from '../avatar/HumanoidMap';
 import type { LoadedModel } from '../avatar/ImportedAvatar';
 
 const MAX_BYTES = 200e6;
-
-const BASE = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
-
-/** Built-in characters: rigged GLBs shipped with the game (tools/avatar/base-bodies/).
- *  Both are "Woman_model" by Bananaboy (CC BY 3.0), see public/assets/bodies/LICENSE.txt. */
-const BUILTIN_CREDIT = 'Based on "Woman_model" by Bananaboy (Blend Swap), CC BY 3.0';
-const BUILTIN = [
-  { id: 'builtin:woman', name: 'Woman', file: 'woman.glb' },
-  { id: 'builtin:man', name: 'Man', file: 'man.glb' },
-];
-
-export const isBuiltinAvatar = (id: string | null): boolean => !!id && BUILTIN.some((b) => b.id === id);
 
 export class AvatarMenu {
   readonly el: HTMLDivElement;
@@ -76,15 +63,14 @@ export class AvatarMenu {
     let items: StoredAvatar[] = [];
     try { items = await avatarStore.list(); } catch { this.say('Browser storage is not available: imported characters cannot be kept.', 'warn'); }
     const stored = avatarStore.selected();
-    const active = stored && (isBuiltinAvatar(stored) || items.some((i) => i.id === stored)) ? stored : null;
+    const active = stored && items.some((i) => i.id === stored) ? stored : null;
     this.list.innerHTML = '';
-    const card = (id: string | null, name: string, sub: string, thumb: string | null, edit?: () => void, builtin = false) => {
+    const card = (id: string | null, name: string, sub: string, thumb: string | null, edit?: () => void) => {
       const c = document.createElement('div');
       c.className = 'avatar-card' + (id === active ? ' sel' : '');
-      c.innerHTML = `<div class="thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span>👤</span>'}</div><div class="name"></div><div class="sub"></div>${id && !builtin ? '<button type="button" class="del" title="Delete">×</button>' : ''}${edit ? '<button type="button" class="edit" title="Edit">✎</button>' : ''}`;
+      c.innerHTML = `<div class="thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span>👤</span>'}</div><div class="name"></div><div class="sub"></div>${id ? '<button type="button" class="del" title="Delete">×</button>' : ''}${edit ? '<button type="button" class="edit" title="Edit">✎</button>' : ''}`;
       (c.querySelector('.name') as HTMLElement).textContent = name;
       (c.querySelector('.sub') as HTMLElement).textContent = sub;
-      if (builtin) c.title = BUILTIN_CREDIT;
       c.onclick = (e) => {
         const t = e.target as HTMLElement;
         if (t.classList.contains('del') || t.classList.contains('edit')) return;
@@ -102,7 +88,6 @@ export class AvatarMenu {
       this.list.appendChild(c);
     };
     card(null, 'Default human', 'Random, matches the city', null);
-    for (const b of BUILTIN) card(b.id, b.name, 'Built-in, full animation', `${BASE}assets/bodies/${b.file.replace('.glb', '.png')}`, undefined, true);
     for (const a of items) card(a.id, a.name, describe(a), a.thumb ?? null, isGenerated(a) ? () => this.openCreator(a) : undefined);
   }
 
@@ -173,14 +158,6 @@ function describe(a: StoredAvatar): string {
 export async function loadSelectedAvatar(): Promise<{ model: LoadedModel; stored: StoredImport } | null> {
   const id = avatarStore.selected();
   if (!id) return null;
-  const b = BUILTIN.find((x) => x.id === id);
-  if (b) {
-    const res = await fetch(`${BASE}assets/bodies/${b.file}`);
-    if (!res.ok) throw new Error(`${b.file}: HTTP ${res.status}`);
-    const data = await res.arrayBuffer();
-    const stored: StoredImport = { id: b.id, name: b.name, file: b.file, data, size: data.byteLength, created: 0 };
-    return { model: await loadModel(data.slice(0), b.file), stored };
-  }
   const a = await avatarStore.get(id);
   if (!a || isGenerated(a)) return null;
   return { model: await loadModel(a.data.slice(0), a.file), stored: a };

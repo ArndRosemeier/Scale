@@ -126,13 +126,15 @@ export class Barks {
         default: return null;
       }
     }
-    if (now.helped && !was.helped && now.st !== PState.Down) return pick(L.thanks);
+    // (In their own temperament where they have a line of their own: game/people.)
+    const own = (m: 'thanks' | 'flee' | 'gawk' | 'film' | 'ouch') => this.game.people?.reactLine(a, m) ?? pick(L[m]);
+    if (now.helped && !was.helped && now.st !== PState.Down) return own('thanks');
     if (now.st === was.st) return null;
     switch (now.st) {
-      case PState.Flee: return chance(0.25) ? pick(L.flee) : null;
-      case PState.Gawk: return chance(0.3) ? pick(L.gawk) : null;
-      case PState.Film: return chance(0.3) ? pick(L.film) : null;
-      case PState.Down: return a.downBy === 'accident' && chance(0.6) ? pick(L.ouch) : null;
+      case PState.Flee: return chance(0.25) ? own('flee') : null;
+      case PState.Gawk: return chance(0.3) ? own('gawk') : null;
+      case PState.Film: return chance(0.3) ? own('film') : null;
+      case PState.Down: return a.downBy === 'accident' && chance(0.6) ? own('ouch') : null;
       default: return null;
     }
   }

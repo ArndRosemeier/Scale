@@ -9,7 +9,7 @@ import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer, CellState } from '../stream/CityStreamer';
 import type { Collision } from '../world/Collision';
-import { planFloor, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore } from './InteriorGen';
+import { planFloor, shopKindOf, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore } from './InteriorGen';
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
 import { buildFloorMeshes, wallCollisionSegments, furnitureCollision } from './InteriorBuilder';
@@ -238,14 +238,13 @@ export class Interiors {
     if (!fl) return;
     const poly = this.floorPoly(a, f);
     // Cafés and restaurants (plan/eatery.ts) get the café layout (shopKind % 3 == 0), other shops never do.
-    const sk = (a.ref.desc.seed >>> 7) % 9;
-    const shopKind = a.ref.desc.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
+    const shopKind = shopKindOf(a.ref.desc);
     // Stairs up from this storey, and arriving from the one below.
     const up = this.stairs(a, f) && this.stairs(a, f + 1);
     const below = f > 0 && this.stairs(a, f) && this.stairs(a, f - 1);
-    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift, a.stair, up, below);
+    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift, a.stair, up, below, f === 0 ? L.door : null);
     // Nothing standing in the way just inside the entrance (furniture is solid).
-    if (f === 0) plan.furniture = plan.furniture.filter((q) => q.kind === 'rug' || q.kind === 'painting' || Math.hypot(q.x - L.door.x, q.z - L.door.z) > 2.4 + Math.max(q.w, q.d) / 2);
+    if (f === 0) plan.furniture = plan.furniture.filter((q) => q.kind === 'rug' || q.kind === 'painting' || q.use === 'dress' || Math.hypot(q.x - L.door.x, q.z - L.door.z) > 2.4 + Math.max(q.w, q.d) / 2);
     // The elevator shaft runs through the slabs between floors it serves; the stairs cut their well.
     const shaft = a.lift ? liftRect(a.lift) : null;
     const floorHoles: number[][] = [], ceilHoles: number[][] = [];
@@ -284,7 +283,7 @@ export class Interiors {
     const mine = here.filter((c) => (c.seed >>> 3) % floors === plan.floor).slice(0, 24);
     const hour = hours % 24;
     const night = hour < 6.5 || hour > 23;
-    const spots: { x: number; z: number; yaw: number; use?: string }[] = plan.furniture.filter((f) => f.use);
+    const spots: { x: number; z: number; yaw: number; use?: string }[] = plan.furniture.filter((f) => f.use && f.use !== 'dress'); // (the fitting mirror is the hero's)
     // Fallback standing spots: random free points in the rooms (not on the stairs).
     if (spots.length < mine.length) {
       let seed = ref.desc.seed ^ (plan.floor * 7919);
@@ -440,6 +439,25 @@ export class Interiors {
       return false;
     }
     return true;
+  }
+
+  /** Fitting mirrors of the active interiors: centre, floor height and facing (yaw; the glass faces local +z). */
+  dressMirrors(): { x: number; z: number; y: number; yaw: number }[] {
+    const out: { x: number; z: number; y: number; yaw: number }[] = [];
+    for (const a of this.active.values()) for (const f of a.floors.values()) for (const fu of f.plan.furniture) if (fu.use === 'dress') out.push({ x: fu.x, z: fu.z, y: f.plan.y, yaw: fu.yaw });
+    return out;
+  }
+
+  /** The fitting mirror of a clothes shop within reach of (x, y, z), or null. */
+  dressMirrorNear(x: number, y: number, z: number, r = 1.5): { x: number; z: number } | null {
+    for (const a of this.active.values()) {
+      if (!pointInPoly(a.ref.poly, x, z)) continue;
+      for (const f of a.floors.values()) {
+        if (Math.abs(f.plan.y - y) > 0.6) continue;
+        for (const fu of f.plan.furniture) if (fu.use === 'dress' && Math.hypot(fu.x - x, fu.z - z) < r) return { x: fu.x, z: fu.z };
+      }
+    }
+    return null;
   }
 
   /**

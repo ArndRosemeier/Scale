@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.081 — 2026-10-07
+## 0.083 — 2026-10-07
 
 - **Soldiers stay out of the water.** Every spot the army picks (where a unit digs in, where it gathers when you rally it with G, where it drives or walks off to when the battle is over, where a squad on foot gets out) is now on dry ground. A spot over a river, lake or the sea moves to the nearest dry street. As a backstop, soldiers, police and anyone else heading straight for a point, and people running off in a panic, now stop at the bank or walk along it instead of stepping into the water.
 - **After the battle the army leaves sensibly.** Units used to head off eastwards once the monster was gone, whatever lay there, and their target moved with them. Each one now gets one fixed street point away from where the fight was.
@@ -12,6 +12,24 @@ Every push raises the version by 0.001. Newest first.
   - A squad digs in once most of its soldiers are there. One soldier held up behind a car kept the whole squad running about without firing for minutes.
   - Guns look for any part of the Strider that shows over the roofs or past a corner, not only the middle of each body part. Rifles and APCs without a clear line fire over the roofs at its back. A unit that keeps having no line moves to a spot that has one. A tank with a building in the way shoots through it.
   - Helicopters keep closing in until they have a clear line before firing, instead of giving up the run at 300 m. One that has used up its rockets comes back rearmed after a while instead of leaving for good.
+
+## 0.082 — 2026-10-07
+
+- **People behave like who they are.** Everyone already had a personality; now it shows in the street:
+  - Outgoing, orderly people walk briskly, dreamers dawdle. The calm get over a scare quickly; the nervous keep running longer. The curious stand and stare longer at a spectacle.
+  - People who dislike you (because you hurt them, or because of your reputation) step out of your way when you come near, don't hang about next to you, and sometimes tell you to keep away. Someone who really can't stand you won't talk to you at all.
+  - Kind passers-by walk over and help up someone lying in the street once it is calm again. An everyday fall is still yours to help with first; after a while a stranger does it.
+  - When a thief runs past, an agreeable passer-by points after them and shouts which way they went.
+  - People who know and like you stop and wave when they say hello. People you saved greet you as their hero.
+  - Victims of a crime you stop, and people whose stolen things you bring back, now remember being saved by you.
+  - What people shout when they run, gawk, film, fall or thank you is in their own temperament (grumpy, anxious, chatty and so on).
+
+## 0.081 — 2026-10-07
+
+- **Change your look at the tailor's.** Clothes shops now have a full-length fitting mirror on a side wall. Step up to it and press E: the character creator opens on your hero's current look, and saving changes the hero on the spot (and keeps the look as your selected character for the next game). The game is paused for input while the creator is open, and Esc closes it without opening the pause menu. The four nearest clothes shops show on the map in lilac.
+- **Underwear can be switched off in the character creator** (Outfit tab, "Underwear: shown / removed"). With top, trousers and shoes on "none" and underwear removed, the character is fully nude, in the creator and in the city. It stays on by default.
+- **The separate Woman and Man characters are gone from the start screen's character picker.** Every human is built on those bodies now, and the creator does everything they did. A save or a selection that still points to one of them starts with the default human. The body credit (Bananaboy, CC BY 3.0) is shown at the bottom of the creator, and the clothes shops are in the map legend.
+- **Men have broader shoulders.** The male base body was too narrow at the shoulders, so walking men swung their hands in front of the crotch. Walkers also carry their arms a little away from the body now, so the forward hand no longer swings in front of the hips.
 
 ## 0.080 — 2026-10-06
 

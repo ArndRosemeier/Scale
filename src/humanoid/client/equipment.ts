@@ -463,7 +463,7 @@ export class EquipmentRig {
     const fit = this.ch.geo.build.body.fit;
     const layers: { layer: ShellLayer; seed: number; slot?: string }[] = [];
     for (const [slot, item] of Object.entries(eq) as [EquipSlot, NonNullable<EquipmentVisuals[EquipSlot]>][]) {
-      if (!item) continue;
+      if (!item || item.defId === 'no-underwear') continue;
       if (slot === 'mainhand' || slot === 'offhand') {
         run(() => { const t0 = performance.now(); this.addHeld(slot, item.defId, item.visual); EQ_STATS.held += performance.now() - t0; }, `held ${item.defId}`);
         continue;
@@ -489,8 +489,10 @@ export class EquipmentRig {
     const dyes: [number, number, number][] = [[0.2, 0.14, 0.1], [0.16, 0.2, 0.3], [0.34, 0.11, 0.09], [0.86, 0.83, 0.75], [0.17, 0.23, 0.14], [0.1, 0.1, 0.11]];
     const dye = dyes[(this.ch.app.seed >>> 4) % dyes.length];
     const under: ShellMaterial = { color: dye, color2: [dye[0] * 0.6, dye[1] * 0.6, dye[2] * 0.6], pattern: 'quilted', patternScale: 9, roughness: 0.9, metalness: 0, sheen: 0.45, glow: 0, glowColor: [0, 0, 0], wear: 0.25 };
-    if (!covers('pelvis')) layers.push({ seed: 7, layer: { kind: 'shell', regions: [{ region: 'pelvis', to: 0.75 }, { region: 'buttocks' }, { region: 'thigh.L', to: 0.12 }, { region: 'thigh.R', to: 0.12 }], offset: 0.004, layer: 0, material: under, trim: { width: 0.008, color: [dye[0] * 0.45, dye[1] * 0.45, dye[2] * 0.45] } } });
-    if (this.ch.app.gender < 0.5 && !covers('chest')) layers.push({ seed: 8, layer: { kind: 'shell', regions: [{ region: 'chest', from: 0.42, to: 0.78 }, { region: 'back', from: 0.5, to: 0.72 }], offset: 0.004, layer: 0, material: under, trim: { width: 0.008, color: [dye[0] * 0.45, dye[1] * 0.45, dye[2] * 0.45] } } });
+    // (Not when the outfit asks for none: the character creator's underwear switch.)
+    const bare = Object.values(eq).some((it) => it?.defId === 'no-underwear');
+    if (!bare && !covers('pelvis')) layers.push({ seed: 7, layer: { kind: 'shell', regions: [{ region: 'pelvis', to: 0.75 }, { region: 'buttocks' }, { region: 'thigh.L', to: 0.12 }, { region: 'thigh.R', to: 0.12 }], offset: 0.004, layer: 0, material: under, trim: { width: 0.008, color: [dye[0] * 0.45, dye[1] * 0.45, dye[2] * 0.45] } } });
+    if (!bare && this.ch.app.gender < 0.5 && !covers('chest')) layers.push({ seed: 8, layer: { kind: 'shell', regions: [{ region: 'chest', from: 0.42, to: 0.78 }, { region: 'back', from: 0.5, to: 0.72 }], offset: 0.004, layer: 0, material: under, trim: { width: 0.008, color: [dye[0] * 0.45, dye[1] * 0.45, dye[2] * 0.45] } } });
     layers.sort((a, b) => a.layer.layer - b.layer.layer);
     let order = 0;
     for (const { layer, seed, slot } of layers) {
