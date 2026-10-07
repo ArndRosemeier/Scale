@@ -13,8 +13,9 @@
  *  'gunfire': the army firing (bursts, a tank's gun, rockets) — people near it run, the farther ones duck and look. */
 export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power' | 'cry' | 'alarm' | 'siren' | 'threat' | 'roar' | 'tremor' | 'thunder' | 'gunfire';
 
-/** Who caused something (THREATS_PLAN §4: stimuli and the collateral ledger carry it; 'military': the army). */
-export type Cause = 'player' | 'threat' | 'police' | 'military';
+/** Who caused something (THREATS_PLAN §4: stimuli and the collateral ledger carry it; 'military': the army;
+ * 'world': nobody's own doing, such as the landing of a hero a monster flung). */
+export type Cause = 'player' | 'threat' | 'police' | 'military' | 'world';
 
 export interface Stimulus {
   kind: StimulusKind;

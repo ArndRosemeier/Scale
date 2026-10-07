@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.082 — 2026-10-07
+
+- **Reputation is only lost for what you hit yourself.** Rubble flying out of a collapsing building used to count as your doing, so standing by while a monster brought a block down could wreck your reputation as the neighbours fell. Now only what your own punches, steps and powers hit counts. What collapse rubble breaks, and what your body breaks while a monster has knocked you flying, is nobody's fault.
+- **No reputation lost while fighting a big monster.** Near a monster like the Strider (and for a short while after it leaves or falls), damage you cause costs no reputation or karma and draws no police. A short note on screen says so. Away from monsters, collateral counts as before.
+- **The city no longer blames you when the last resort strikes.** The strike still costs karma, but no reputation any more, and being knocked out by criminals no longer costs reputation either.
+
 ## 0.081 — 2026-10-07
 
 - **Change your look at the tailor's.** Clothes shops now have a full-length fitting mirror on a side wall. Step up to it and press E: the character creator opens on your hero's current look, and saving changes the hero on the spot (and keeps the look as your selected character for the next game). The game is paused for input while the creator is open, and Esc closes it without opening the pause menu. The four nearest clothes shops show on the map in lilac.
