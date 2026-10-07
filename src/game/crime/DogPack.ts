@@ -22,7 +22,7 @@ export const DOGS = {
   /** At heel: within this of the handler (m). */
   heelR: 3.2,
   /** Bite reach (m), seconds between bites, damage (a lunge's hit is harder). */
-  biteR: 1.15, biteEvery: 0.95, bite: 3.2, lungeHit: 7,
+  biteR: 1.15, biteEvery: 1.25, bite: 2.2, lungeHit: 6,
   /** Run the hero down within this of the handler; back to heel beyond the leash. */
   chaseR: 26, leash: 38,
   /** The lunge lasts at most this long (s), and lands within this of the hero (m). */

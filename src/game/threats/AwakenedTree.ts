@@ -123,6 +123,8 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   readonly stats = { cars: 0, robots: 0, props: 0, knocked: 0, sweeps: 0, slams: 0, playerHits: 0, damage: 0, fire: 0, weakHits: 0 };
   /** The body in the scene (kept after the fight as a gnarled tree). */
   readonly group = new THREE.Group();
+  /** At the tree's foot, turned with it (the limbs are placed in world space, beside it in `group`). */
+  private readonly body = new THREE.Group();
   private readonly pelvis = new THREE.Group();
   private readonly trunk = new THREE.Group();
   private readonly heart: THREE.Mesh;
@@ -136,6 +138,8 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   private readonly legLen: number;
   private readonly armLen: number;
   private readonly bark: THREE.MeshStandardMaterial;
+  /** The legs' and arms' bark (plain: the vegetation shader wants instanced meshes). */
+  private readonly limbMat: THREE.MeshStandardMaterial;
   private readonly leafMat: THREE.MeshStandardMaterial;
   private riseK = 0;
   private actT = 0;
@@ -166,9 +170,17 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     const m = treeModel(sp as TreeSpecies, Number(variant) || 0);
     this.bark = createBarkMaterial();
     this.leafMat = createLeafMaterial(sp as TreeSpecies);
-    const wood = new THREE.Mesh(m.wood, this.bark), leaves = new THREE.Mesh(m.leaves, this.leafMat);
-    for (const o of [wood, leaves]) { o.scale.setScalar(prop.scale); o.rotation.y = prop.yaw - this.yaw; applyVegetationShadow(o); o.frustumCulled = false; }
-    this.trunk.add(wood, leaves);
+    this.limbMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 0.95 });
+    // (The vegetation shaders read the instance matrix: single-instance meshes, as a toppled tree's.)
+    const inst = new THREE.Matrix4().compose(new THREE.Vector3(), _q.setFromAxisAngle(_up, prop.yaw - this.yaw), new THREE.Vector3().setScalar(prop.scale));
+    for (const [geo, mat] of [[m.wood, this.bark], [m.leaves, this.leafMat]] as const) {
+      const o = new THREE.InstancedMesh(geo, mat, 1);
+      o.setMatrixAt(0, inst);
+      o.castShadow = true;
+      applyVegetationShadow(o);
+      o.frustumCulled = false;
+      this.trunk.add(o);
+    }
     // A glowing knot in the trunk (the heart) and two eyes under the crown.
     this.heartMat = new THREE.MeshStandardMaterial({ color: 0x2a3a10, emissive: new THREE.Color(0.9, 1.4, 0.3), emissiveIntensity: 0.4, roughness: 0.5 });
     this.heart = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.35, this.trunkR * 1.1), 12, 10), this.heartMat);
@@ -181,11 +193,12 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     }
     this.trunk.add(this.heart);
     this.pelvis.add(this.trunk);
-    this.group.add(this.pelvis);
+    this.body.add(this.pelvis);
+    this.group.add(this.body);
     // Root legs and branch arms (bark-skinned tapered cylinders).
     LIMB ??= (() => { const c = new THREE.CylinderGeometry(0.62, 1, 1, 8, 1); c.translate(0, 0.5, 0); return c; })();
     CLAW ??= new THREE.ConeGeometry(1, 1, 5);
-    const mesh = (geo: THREE.BufferGeometry) => { const o = new THREE.Mesh(geo, this.bark); o.castShadow = true; o.frustumCulled = false; this.group.add(o); return o; };
+    const mesh = (geo: THREE.BufferGeometry) => { const o = new THREE.Mesh(geo, this.limbMat); o.castShadow = true; o.frustumCulled = false; this.group.add(o); return o; };
     const angs = [-Math.PI * 0.72, Math.PI * 0.72, 0];
     for (const ang of angs) {
       const L: Leg = { ang, hip: v3(), knee: v3(), foot: v3(), plant: v3(), from: v3(), to: v3(), sw: -1, upper: mesh(LIMB), lower: mesh(LIMB), claw: mesh(CLAW) };
@@ -194,7 +207,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     for (const side of [-1, 1] as const) {
       const twigs = new THREE.Group();
       for (let k = 0; k < 4; k++) {
-        const c = new THREE.Mesh(CLAW, this.bark);
+        const c = new THREE.Mesh(CLAW, this.limbMat);
         c.scale.set(0.09 * this.armLen, 0.32 * this.armLen, 0.09 * this.armLen);
         c.rotation.set(Math.PI + (k - 1.5) * 0.35, 0, (k % 2 ? 0.3 : -0.3));
         twigs.add(c);
@@ -240,8 +253,8 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     const sink = this.rootK * 0.8;
     const bob = Math.abs(Math.sin(this.walkPhase * Math.PI)) * 0.25;
     const pelvisY = this.legLen * (0.25 + 0.6 * up) - sink + (this.mode === 'roam' || this.mode === 'panic' ? bob : 0);
-    this.group.position.set(this.x, gy, this.z);
-    this.group.rotation.y = this.yaw;
+    this.body.position.set(this.x, gy, this.z);
+    this.body.rotation.y = this.yaw;
     this.pelvis.position.set(0, pelvisY, 0);
     this.trunk.rotation.set(this.lean, 0, this.sway);
     this.group.updateMatrixWorld(true);
@@ -461,7 +474,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   remove(): void {
     this.g.renderer.scene.remove(this.group);
     this.heart.geometry.dispose();
-    this.heartMat.dispose(); this.eyeMat.dispose();
+    this.heartMat.dispose(); this.eyeMat.dispose(); this.limbMat.dispose(); this.bark.dispose(); this.leafMat.dispose();
     const i = GROVE.indexOf(this);
     if (i >= 0) GROVE.splice(i, 1);
   }
@@ -837,6 +850,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
       // Gnarled and old: the leaves darken.
       this.leafMat.color.multiplyScalar(0.55);
       this.bark.color.multiplyScalar(0.7);
+      this.limbMat.color.multiplyScalar(0.7);
       const g = this.g;
       for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; g.elements.fx.decal(DecalKind.Moss, this.x + Math.cos(a) * 2.5, this.y + 0.03, this.z + Math.sin(a) * 2.5, 0, 1, 0, 4, 3, a, 3600); }
     }
@@ -880,4 +894,3 @@ function angDiff(a: number, b: number): number {
   return d;
 }
 
-void _q;

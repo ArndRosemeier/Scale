@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.082 — 2026-10-07
+
+- **The awakened tree is drawn properly.** Its crown and trunk now show on top of its root legs, and the legs and branch arms stay with its body.
+- **The Beast-master's dogs bite a little less hard,** so a pack is a nuisance to deal with rather than a quick knockout.
+
 ## 0.081 — 2026-10-07
 
 - **Bosses come out for their big set piece.** Now and then a group's boss leads a whole crew to one big job near its turf, marked on your map. The city answers it like a monster attack (police lines, SWAT, people cleared away). Leave it alone and it succeeds; knock the boss out and the crew breaks and runs. The more you anger a group, the sooner it comes.
