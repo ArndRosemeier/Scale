@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.112 — 2026-10-07
+
+- **Every slime colony leads down into its own realm.** A city now has 2–3 hidden colonies, all near the centre, and none is a dead end any more: each opens into a deep realm of its own with its own Lumen home, its own Murk lair and its own war. Each realm's battleground is different, chosen per city: a single trench line, a double line, a chasm with one rock bridge across no-man's land, flooded craters, or a Murk siege wall with a crystal forest and hive towers. Width, depth and the Murk's lane vary too. Wars in the other realms go on while you are away.
+- **The Lumen's sewer signs are much easier to see.** Big glowing arrows on both walkways at each junction, larger chevrons along the way that never fade below 60%, and bigger, brighter colony signs on the walls at eye height.
+
 ## 0.111 — 2026-10-07
 
 - **No more shimmering arms far out in the city.** The further you went from the centre of the map (super speed takes you far), the more arms, hands and clothes could shimmer, because the skin was computed in world coordinates with too little precision. It is now computed relative to the character, so it looks the same everywhere.

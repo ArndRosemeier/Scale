@@ -6,7 +6,7 @@
  *    box (overlapping the tube so the walker passes) and the main room behind it. Rooms keep
  *    clear of every other tube, station hall and room, stay under the ground (sewer rooms under
  *    their street: basements are not modelled) and away from the stations and their entrances.
- *  - Colonies: 2–5 per city, far down. A gap in the back wall of a side room leads into a rough
+ *  - Colonies: 2–3 per city, near the centre (each leads down into a deep realm of its own), far down. A gap in the back wall of a side room leads into a rough
  *    crawl passage that sinks to a chamber at depth.
  *  - Traces: a few rooms near a colony (and the room with the gap) get a faint glowing trail.
  */
@@ -428,22 +428,27 @@ function shrunk(b: Box, cut: number): Box {
 
 const COLONY_HU = 7, COLONY_HV = 5.5, COLONY_H = 3.4;
 export const CRAWL_HW = 0.6, CRAWL_H = 2.1;
+/** Least distance between two colonies (m): their realms need the room. */
+export const COLONY_APART = 800;
 
 /** Hidden chambers: through a gap in the back wall of a quiet side room, down a crawl passage. */
 function placeColonies(env: Env, macro: MacroPlan, rooms: Room[], colonies: Colony[]): void {
   const rng = new Rng(deriveSeed(macro.seed, 'colonies'));
-  const want = Math.min(5, 2 + rng.int(0, 2) + (rooms.length > 260 ? 1 : 0));
-  // Farther out first (with a random spread), never two colonies close together.
-  const cand = rooms.filter((r) => GAP_KINDS.includes(r.kind)).map((r) => ({ r, k: rng.range(0.4, 1) * (200 + Math.hypot(r.ox, r.oz)) }));
-  cand.sort((a, b) => b.k - a.k);
-  for (const { r } of cand) {
-    if (colonies.length >= want) break;
-    if (colonies.some((c) => Math.hypot(c.chamber.cx - r.ox, c.chamber.cz - r.oz) < 500)) continue;
-    const c = tryColony(env, r, colonies.length, rng.nextU32());
-    if (!c) continue;
-    colonies.push(c);
-    env.grid.tube(c.crawl);
-    env.grid.box(c.chamber);
+  // Two or three, each with its own realm below (deep/plan.ts): near the centre (with a random
+  // spread), far enough apart for their realms.
+  const want = 2 + (rooms.length > 260 ? 1 : 0);
+  const cand = rooms.filter((r) => GAP_KINDS.includes(r.kind)).map((r) => ({ r, k: rng.range(0.6, 1) * (150 + Math.hypot(r.ox, r.oz)) }));
+  cand.sort((a, b) => a.k - b.k);
+  for (const apart of [COLONY_APART, COLONY_APART * 0.75]) {
+    for (const { r } of cand) {
+      if (colonies.length >= want) break;
+      if (colonies.some((c) => Math.hypot(c.chamber.cx - r.ox, c.chamber.cz - r.oz) < apart)) continue;
+      const c = tryColony(env, r, colonies.length, rng.nextU32());
+      if (!c) continue;
+      colonies.push(c);
+      env.grid.tube(c.crawl);
+      env.grid.box(c.chamber);
+    }
   }
   // Traces: the nearest few rooms around each colony, and now and then one anywhere.
   for (const c of colonies) {

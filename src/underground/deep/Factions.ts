@@ -170,9 +170,18 @@ export class Factions {
       this.group.add(m);
     }
     this.lCore.renderOrder = 4; this.lShell.renderOrder = 5; this.mCore.renderOrder = 5;
-    const P = host.plan;
-    this.adj = P.nodes.map(() => []);
-    for (const [a, b] of P.edges) { this.adj[a].push(b); this.adj[b].push(a); }
+    this.rebind(host.plan, host.field);
+  }
+
+  /** Another realm (each colony has its own): its nav graph; everyone below ground goes (those up in the streets stay). */
+  rebind(plan: DeepPlan, field: DeepField): void {
+    this.host.plan = plan;
+    this.host.field = field;
+    this.adj = plan.nodes.map(() => []);
+    for (const [a, b] of plan.edges) { this.adj[a].push(b); this.adj[b].push(a); }
+    for (let i = this.blobs.length - 1; i >= 0; i--) if (!this.blobs[i].surface) this.blobs.splice(i, 1);
+    this.areas.clear();
+    this.drops.length = 0; this.spits.length = 0; this.bolts.length = 0;
   }
 
   // ------------------------------------------------------------------ spawning
