@@ -11,7 +11,7 @@ the villain power set with tells, the gang's Brute and the Syndicate's Enforcer 
 (v0.038): the techno-cult (robot hijacks, its Technomancer with an EMP) and the elemental cult (rituals before
 landmarks, its Invoker). Moving the hero's own powers onto the caster core is left open. Phase 4 part 1 is built
 (v0.041): named bosses with a saved record, jail and breakout, notoriety per group (wary, hunted), a group that collapses
-when its boss is jailed and its stash busted. Phase 4 part 2 is built (v0.084): boss operations as threat events (the
+when its boss is jailed and its stash busted. Phase 4 part 2 is built (v0.085): boss operations as threat events (the
 Syndicate's bank heist, the gang's street takeover, the techno-cult's machine uprising, the cult's great ritual, the
 eco-radicals' tree waking, the necromancers' raising of the dead), and the last two groups: the eco-radicals (sabotage
 of robots and cars, the Beast-master with a dog pack and the whistle, the Elder whose sung-awake tree walks the

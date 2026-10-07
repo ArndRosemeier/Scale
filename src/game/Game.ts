@@ -397,7 +397,8 @@ export class Game {
       } else if (e.kind === 'glass') this.audio.play('glass_shatter', e.x, e.y, e.z, 0.8, 1, 6, cam.position);
     };
     // Buildings: every panel the player breaks and every collapse go into the ledger, booked to
-    // whoever broke the building last (crime/Justice prices the player's share).
+    // whoever broke the building last (crime/Justice prices the player's share). Rubble flying out
+    // of a collapse and a flung hero's body are nobody's blow ('world'): never the player's.
     this.destruction.onDamage = (e) => { if (e.cause === 'player') this.consequences.record('impact', 'building', 'facade', e.x, e.z, e.ref); };
     this.destruction.onCollapse = (e) => {
       if (e.cause) this.consequences.record('impact', 'building', 'collapse', e.x, e.z, e.ref, e.cause === 'fire' ? 'threat' : e.cause, e.floors);
@@ -512,7 +513,7 @@ export class Game {
       if (s.kind === 'stomp') {
         const h = s.size ?? this.player.height, threat = s.cause === 'threat';
         const r = Math.max(0.6, h * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : 'player');
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : s.cause === 'world' ? 'other' : 'player');
         if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);

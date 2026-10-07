@@ -253,6 +253,7 @@ export class CrimeSystem {
       get noKarma() { return g.progress.sandbox; },
       sound: (id, gain) => g.audio.play2d(id, gain),
       hostileThing: (ref) => g.threats?.isHostile(ref) ?? false,
+      monsterNear: (x, z) => g.threats?.bigMonsterNear(x, z) ?? false,
     });
     g.consequences.onRecord = (e) => {
       this.justice.record(e);
@@ -1647,11 +1648,9 @@ export class CrimeSystem {
     const p = this.g.player.pos;
     this.wake = { x: p.x, y: p.y, z: p.z };
     if (kind === 'police' || this.justice.wanted > 0) { this.hud.fade(true); return; } // the officers cuff them (arrest) or not
-    // (The rescue is decided on the reputation before the knockout's own cost.)
     if (!this.g.defeat?.begin(kind)) this.hud.fade(true);
     if (kind === 'robot' || kind === 'monster' || kind === 'military') return; // a threat (or the army's stray fire) knocked them out: no karma penalty (THREATS_PLAN §5.6)
     this.g.progress.addKarma(-5, 'knocked out');
-    this.rep.add(-1, 'knocked out');
   }
 
   private wakeUp(): void {

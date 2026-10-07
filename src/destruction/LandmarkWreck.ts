@@ -277,7 +277,7 @@ export class LandmarkWrecks {
       const id = this.heap.pop();
       const j = this.jobs[id];
       this.free.push(id);
-      if (j.fn) j.fn();
+      if (j.fn) this.D.as('world', j.fn); // a collapse's rubble: nobody's own blow (Destruction.runJob)
       else if (j.w) {
         j.w.pending--;
         if (j.w.doomed[j.p]) this.kill(j.w, j.p, true, j.dx, j.dy, j.dz, j.power);

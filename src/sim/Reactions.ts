@@ -91,7 +91,7 @@ export class Reactions {
           case 'stomp':
             // By the size of whoever stepped (the player, a monster), booked to it.
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
-            if (d < Math.max(1.5, (s.size ?? H) * 0.12)) this.knockDown(a, s.x, s.z, 4, s.cause === 'threat' ? 'threat' : 'player');
+            if (d < Math.max(1.5, (s.size ?? H) * 0.12)) this.knockDown(a, s.x, s.z, 4, s.cause === 'threat' ? 'threat' : s.cause === 'world' ? 'other' : 'player');
             break;
           case 'roar':
             // A monster's roar: run (far off, the bold stop, turn and film it).

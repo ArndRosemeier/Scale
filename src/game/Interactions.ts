@@ -49,9 +49,14 @@ export class Interactions {
   ) {
     this.steps = new GiantSteps({ camera: cam, camRig, dust, destruction, stimuli, playerPos: player.pos });
     this.steps.sound = (id, x, y, z, gain, pitch, ref) => this.onSound?.(id, x, y, z, gain, pitch, ref);
-    player.events.onFootstep = (x, y, z, e, h) => this.steps.footstep(x, y, z, e, h, { own: true });
-    player.events.onLand = (x, y, z, e, h) => this.steps.land(x, y, z, e, h, { own: true });
+    // A hero knocked flying (by a monster's blow) does not steer where they come down: what that
+    // breaks is nobody's doing ('world'), not booked to the player.
+    player.events.onFootstep = (x, y, z, e, h) => this.steps.footstep(x, y, z, e, h, { own: true, cause: this.flung ? 'world' : 'player' });
+    player.events.onLand = (x, y, z, e, h) => this.steps.land(x, y, z, e, h, { own: true, cause: this.flung ? 'world' : 'player' });
   }
+
+  /** Out of control (knocked down, a ragdoll tumbling): the body's impacts are not the player's own blows. */
+  get flung(): boolean { return this.player.downT > 0 || this.player.ragdoll !== ''; }
 
   /** Throw a punch on the next update (the Punch power); false while the last one is still out. */
   punch(): boolean {
@@ -102,7 +107,7 @@ export class Interactions {
       if (momentum > 2000) {
         const b = p.blocked;
         const y = p.pos.y + p.height * 0.5;
-        const n = this.destruction.impact(b.x, y, b.z, p.height * 0.55, momentum, -b.nx, 0, -b.nz, 'wall');
+        const n = this.destruction.as(this.flung ? 'world' : 'player', () => this.destruction.impact(b.x, y, b.z, p.height * 0.55, momentum, -b.nx, 0, -b.nz, 'wall'));
         if (n > 0) {
           this.smashCooldown = 0.08;
           this.camRig.addShake(Math.min(0.6, n * 0.05));
