@@ -2,9 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.105 — 2026-10-07
+## 0.107 — 2026-10-07
 
 - **Super speed no longer drops you into the sewers.** Running across a river at super speed and onto a steep quay used to carry the hero through the bank into the sewer or culvert beneath the street (or into the earth), without any manhole. Now the runner goes up onto the street; the only ways down stay the manholes and the metro stairs.
+
+## 0.106 — 2026-10-07
+
+- **Smoother hero masks.** The cowl and full mask are smooth stretch fabric like the tights (no more grainy speckle), and they hug the face round the eye holes and the cowl's jaw opening, so there is no dark rim or see-through sliver at the edges. The lightning bolt design is a proper zigzag.
+
+## 0.105 — 2026-10-07
+
+- **Superhero tights and masks.** The character creator (and the fitting mirror in clothes shops) has a new **Hero** tab. **Tights**: a skin-tight, slightly shiny bodysuit in any colour with an accent colour and a design: plain, star emblem, lightning bolt, chevron, side stripes, or trunks with a golden belt; gloves in the suit or accent colour if wanted. Putting the tights on takes off the everyday clothes and pulls on boots in the accent colour; anything added back in Outfit is worn over them. **Masks**: a domino mask round the eyes, a cowl (head, nose and neck covered, mouth and chin free), or a full mask with only the eyes open. Hair and beard hide under a cowl or full mask; the eyes still blink and look around.
+- Collars no longer let you see through the neck when looking down past them (the neck stays under every garment).
 
 ## 0.104 — 2026-10-07
 
