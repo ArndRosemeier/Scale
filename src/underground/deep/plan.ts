@@ -23,7 +23,7 @@
  * walk. Frame: origin O at the Hall's centre, u along the realm's axis, v across.
  */
 import { Rng, deriveSeed } from '../../core/rng';
-import type { Colony } from '../rooms';
+import type { Colony, RoomPlan } from '../rooms';
 import { DeepField, primBounds, type Prim } from './field';
 
 export type DecorKind =
@@ -174,6 +174,28 @@ export function planRealm(inp: PlanInput, hub: Colony, style: BattleStyle = 'lin
     }
   }
   return null;
+}
+
+/**
+ * A colony nothing fits below (rare: crowded by stations) would be a dead end: its room loses the gap
+ * and it is dropped; the others are numbered anew (colony ids are indices), their realms and roads with them.
+ * Returns the dropped ones (the caller takes their chamber and crawl out of its volumes).
+ */
+export function dropOutposts(rooms: RoomPlan, plans: DeepPlan[]): Colony[] {
+  const keep = rooms.colonies.filter((c) => plans.some((p) => p.hub === c.id));
+  const gone = rooms.colonies.filter((c) => !keep.includes(c));
+  if (!gone.length) return gone;
+  for (const c of gone) { const r = rooms.rooms[c.room]; r.gap = null; r.colony = -1; c.chamber.colony = undefined; }
+  const id = new Map(keep.map((c, i) => [c.id, i]));
+  for (const p of plans) {
+    p.hub = id.get(p.hub)!;
+    for (const r of p.roads) r.colony = id.get(r.colony)!;
+    for (const n of p.nodes) { const m = /^gate(\d+)$/.exec(n.name); if (m) n.name = `gate${id.get(Number(m[1]))}`; }
+  }
+  keep.forEach((c, i) => { c.id = i; c.chamber.colony = i; rooms.rooms[c.room].colony = i; });
+  rooms.colonies.length = 0;
+  rooms.colonies.push(...keep);
+  return gone;
 }
 
 /** The first realm (tests, tools). */
@@ -863,7 +885,14 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
   const nNM = node('noMans', places.noMans, 4);
   // A second line behind: through its one gap first.
   let nRear = nBot;
-  if (B.rear) { const p = G(B.rear.s, 0); const y = floorNear(p.x, ty + 1, p.z); nRear = node('rearGap', y === null ? null : { x: p.x, y, z: p.z }, 1); link(nBot, nRear); }
+  if (B.rear) {
+    const at = (name: string, s: number) => { const p = G(s, 0); const y = floorNear(p.x, ty + 1, p.z); return node(name, y === null ? null : { x: p.x, y, z: p.z }, 1); };
+    const g0 = at('rearGap', B.rear.s);
+    link(nBot, g0);
+    // Out in the open between the lines before turning to a gap of the front line.
+    nRear = at('betweenLines', (B.rear.s + TS) / 2);
+    link(g0, nRear);
+  }
   gaps.forEach((l, i) => { const p = G(TS, l); const y = floorNear(p.x, ty + 1, p.z); const n = node(`trench${i}`, y === null ? null : { x: p.x, y, z: p.z }, 1); link(nRear, n); link(n, nNM); });
   const nML = node('murkLine', places.murkLine, 3);
   if (chasm) {

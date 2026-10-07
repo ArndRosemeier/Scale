@@ -1357,7 +1357,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const { planRooms } = await import('../src/underground/rooms');
   const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
   const { tubeAt, boxAt } = await import('../src/underground/Volumes');
-  const { planDeeps } = await import('../src/underground/deep/plan');
+  const { planDeeps, dropOutposts } = await import('../src/underground/deep/plan');
   const { DeepField, primBounds } = await import('../src/underground/deep/field');
   const { runTrench } = await import('./trenchsim');
   for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
@@ -1375,10 +1375,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const inp = { seed: macro.seed, colonies: rooms.colonies, ground: (x: number, z: number) => terrain.height(x, z), blocked };
     const plans = planDeeps(inp);
     const ms = performance.now() - t0;
-    // Every colony leads down into a realm of its own (Arnd: no dead ends), near the centre.
-    const far = Math.max(...rooms.colonies.map((c) => Math.hypot(c.chamber.cx, c.chamber.cz)));
-    check(rooms.colonies.length >= 2 && plans.length === rooms.colonies.length && far < 1600, `deep seed ${seed}: every colony has a realm (${plans.length} of ${rooms.colonies.length}, farthest ${far.toFixed(0)} m from the centre)`);
     check(plans.map(hashPlan).join() === planDeeps(inp).map(hashPlan).join(), `deep seed ${seed}: plans deterministic`);
+    // Every colony leads down into a realm of its own (Arnd: no dead ends), near the centre; one nothing fits below is dropped.
+    const planned = rooms.colonies.length;
+    dropOutposts(rooms, plans);
+    const far = Math.max(...rooms.colonies.map((c) => Math.hypot(c.chamber.cx, c.chamber.cz)));
+    check(rooms.colonies.length >= 2 && plans.length === rooms.colonies.length && plans.every((p, i) => p.hub === i || plans.some((q) => q.hub === i)) && far < 1600, `deep seed ${seed}: every colony has a realm (${plans.length} of ${planned}, farthest ${far.toFixed(0)} m from the centre)`);
     const fields = plans.map((p) => new DeepField(p.prims, p.seed));
     const clash = plans.filter((p, i) => fields.some((o, j) => j !== i && p.nodes.some((n) => o.near(n.x, n.y, n.z) && o.air(n.x, n.y + 0.5, n.z)))).length;
     check(clash === 0, `deep seed ${seed}: the realms keep apart (${clash} run into another)`);

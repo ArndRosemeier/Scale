@@ -34,7 +34,7 @@ import { Slimes } from './Slimes';
 import { SewerLife } from './SewerLife';
 import type { Room } from './rooms';
 import { planSewerHints } from './sewerHints';
-import { planDeeps, type DeepPlan } from './deep/plan';
+import { planDeeps, dropOutposts, type DeepPlan } from './deep/plan';
 import { DeepField } from './deep/field';
 import { DeepMeshes } from './deep/DeepMeshes';
 
@@ -143,6 +143,14 @@ export class Underground {
         seed: macro.seed, colonies: this.rooms.colonies, ground: (x, z) => terrain.height(x, z),
         blocked: (x, y, z) => this.occupied(x, y, z, 1.0) || halls.some((h) => Math.hypot(h.cx - x, h.cz - z) < h.hu + 80 && y > h.y0 - 4),
       });
+      for (const c of dropOutposts(this.rooms, plans)) {
+        this.tubes.splice(this.tubes.indexOf(c.crawl), 1);
+        this.boxes.splice(this.boxes.indexOf(c.chamber), 1);
+        for (const cell of this.grid.values()) {
+          const i = cell.tubes.indexOf(c.crawl); if (i >= 0) cell.tubes.splice(i, 1);
+          const j = cell.boxes.indexOf(c.chamber); if (j >= 0) cell.boxes.splice(j, 1);
+        }
+      }
       for (const plan of plans) {
         const field = new DeepField(plan.prims, plan.seed);
         const skip = plan.roads.map((r) => this.rooms.colonies[r.colony].chamber).map((b) => ({ cx: b.cx, cz: b.cz, y0: b.y0, y1: b.y1, ux: b.ux, uz: b.uz, hu: b.hu, hv: b.hv }));

@@ -10,7 +10,7 @@ import { buildMacroPlan } from '../src/plan/macro';
 import { planRooms } from '../src/underground/rooms';
 import { metroTube, sewerTube, stationHalls } from '../src/underground/layout';
 import { tubeAt, boxAt } from '../src/underground/Volumes';
-import { planDeeps, walkable, type DeepPlan } from '../src/underground/deep/plan';
+import { planDeeps, dropOutposts, walkable, type DeepPlan } from '../src/underground/deep/plan';
 import { DeepField } from '../src/underground/deep/field';
 
 /** Plan one city's realms the way the game does (same blocked test); plan is the first. */
@@ -25,7 +25,9 @@ export function deepFor(seed: number, size: number): { plan: DeepPlan | null; pl
   const occupied = (x: number, y: number, z: number) => allT.some((t) => { const h = tubeAt(t, x, y, z, 1.0); return !!h && y > h.floor - 2 && y < h.floor + t.height + 1; }) || allB.some((b) => !!boxAt(b, x, y, z, 1.0) && y > b.y0 - 2 && y < b.y1 + 1);
   const blocked = (x: number, y: number, z: number) => occupied(x, y, z) || halls.some((h) => Math.hypot(h.cx - x, h.cz - z) < h.hu + 80 && y > h.y0 - 4);
   const plans = planDeeps({ seed: macro.seed, colonies: rooms.colonies, ground: (x, z) => terrain.height(x, z), blocked });
-  return { plan: plans[0] ?? null, plans, colonies: rooms.colonies.length, centre: rooms.colonies.map((c) => ({ x: c.chamber.cx, z: c.chamber.cz })) };
+  const planned = rooms.colonies.length;
+  dropOutposts(rooms, plans);
+  return { plan: plans[0] ?? null, plans, colonies: planned, centre: rooms.colonies.map((c) => ({ x: c.chamber.cx, z: c.chamber.cz })) };
 }
 
 const isMain = process.argv[1]?.endsWith('deepsweep.ts');
