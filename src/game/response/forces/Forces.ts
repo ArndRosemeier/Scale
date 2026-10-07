@@ -895,6 +895,9 @@ export class Forces {
     for (const v of this.g.traffic.near(x, z, 3 + size * 2)) if (v.state < VState.Wreck && !VEHICLE_KIND_SET.has(v.kind)) { this.g.traffic.wreckIt(v); this.g.vehicles.makeWreck(v, v.x, v.y + 0.5, v.z, 0, 4000 * size, 0); this.g.consequences.record('army', 'car', 'wreck', v.x, v.z, v, 'military'); }
   }
 
+  /** When each helicopter last looked for a line to fire along (s). */
+  private heliLook = new Map<number, number>();
+
   /** A helicopter's rocket run: a salvo of eight from the pods. */
   private rockets(u: ForceUnit, q: Squad, dist: number): boolean {
     const S = this.mon!, from = this.air.heliPos(u);
@@ -903,8 +906,17 @@ export class Forces {
     const hits = aimedVolley(this.rng, W, dist, q.morale, S.zones);
     // Targeted: a clear line from the helicopter to the part it goes for, or the run is held (the rockets kept).
     const z0 = (hits[0]?.zone ?? S.zones[0]) as ThreatZone;
+    // (No line yet — towers in between: it keeps closing in and looks again, a few times a second,
+    // until it is at its pass distance; only then is the run given up. It used to fire at 300 m or
+    // not at all, and most runs over downtown ended without a rocket.)
+    const again = () => { if (dist > u.tx + 10) u.run = 1; u.ammo++; return true; };
+    if (this.time - (this.heliLook.get(u.id) ?? -9) < 0.3) return again();
+    this.heliLook.set(u.id, this.time);
     this.stats.rays++;
-    if (!this.g.sight.clear(from.x, from.y - 0.4, from.z, z0.x, z0.y, z0.z, z0.r)) { this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.ammo++; return true; }
+    if (!this.g.sight.clear(from.x, from.y - 0.4, from.z, z0.x, z0.y, z0.z, z0.r)) {
+      if (dist > u.tx + 10) return again();
+      this.stats.held++; this.stats.heldBy[u.kind] = (this.stats.heldBy[u.kind] ?? 0) + 1; u.ammo++; return true;
+    }
     q.fired++;
     this.stats.volleys++;
     const cam = this.g.renderer.camera.position;
