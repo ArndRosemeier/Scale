@@ -8,13 +8,19 @@
  * panel is open (an actor of TALK_OWNER: Pedestrians keeps the physics, perception leaves them
  * be); walking away, a scare or their being knocked down ends it. The world keeps running.
  *
- * Remembered: everyone you talk to or help up; people you already know also remember being
- * knocked down by you. At most PEOPLE.cap of them (memory.ts decides who is forgotten).
+ * Remembered: everyone you talk to, help up or save from a crime (or give their stolen things
+ * back to); people you already know also remember being knocked down by you. At most PEOPLE.cap of
+ * them (memory.ts decides who is forgotten).
+ *
+ * Behaviour from personality (phase 2, behaviour.ts and Manners.ts): pace, how long a scare or a
+ * spectacle holds someone, people who dislike you keeping away and refusing to talk, kind people
+ * helping others up and pointing after thieves, people who like you waving, and what everyone
+ * shouts in the moment in their own temperament (ui/Barks asks reactLine).
  */
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role, type Citizen } from '../../sim/Population';
-import { makeActor, release, STREET_OWNER, type Actor, type Mood } from '../../sim/actors/Actor';
+import { makeActor, release, STREET_OWNER, PEOPLE_OWNER, type Actor, type Mood } from '../../sim/actors/Actor';
 import { cityName, streetName } from '../../plan/names';
 import { gameTimeLabel } from '../save/model';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -23,6 +29,8 @@ import { RuleBackend, ruleAnswer, dirWord, type TalkBackend, type TalkFacts, typ
 import { CHAT, type Topic } from './lines';
 import { PEOPLE, onTheirWay, newKnown, opinionOf, applyDeed, addSaid, addNote, remember, savePeople, restorePeople, type Known, type Deed } from './memory';
 import { TalkUi } from '../../ui/TalkUi';
+import { Manners } from './Manners';
+import { paceOf, refuses, waves, type Moment } from './behaviour';
 import { hashCombine } from '../../core/rng';
 
 /** Roles and actor states of people other systems drive who will still talk to you. */
@@ -31,8 +39,8 @@ const TALK_STATES = new Set<string>(['idle', 'walk', 'point', 'cheer']);
 /** Titles for roles without one of their own. */
 export const ROLE_JOB: Record<string, string> = { police: 'police officer', medic: 'paramedic', soldier: 'soldier', shopkeeper: 'shopkeeper', worker: 'cleanup worker' };
 
-/** Owner id of the people you are talking to (sim/actors/Actor owners). */
-export const TALK_OWNER = -4;
+/** Owner id of the people you are talking to (sim/actors/Actor owners: game/people's own). */
+export const TALK_OWNER = PEOPLE_OWNER;
 
 export const TALK = {
   /** Talking range to the person in front of you, and to the targeted one (m, from the body's edge). */
@@ -110,9 +118,14 @@ export class People {
   /** Knock-downs already counted (per person, game seconds): a tumble is one deed, not every bounce. */
   private hurtAt = new Map<number, number>();
   readonly city: string;
+  /** Behaviour from personality around the hero (phase 2). */
+  readonly manners: Manners;
+  /** Saves already counted (per person, game seconds): stopping the crime and handing the bag back are one rescue. */
+  private savedAt = new Map<number, number>();
 
   constructor(private g: Game) {
     this.city = cityName(g.settings.seed);
+    this.manners = new Manners(g, this);
     this.ui = new TalkUi({
       choose: (topic) => this.ask(topic),
       way: (d) => this.showWay(d),
@@ -122,6 +135,15 @@ export class People {
     try { this.known.push(...restorePeople(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null'))); } catch { /* storage unavailable */ }
     // People you know appear where they plausibly are, not where their schedule ran ahead to.
     g.peds.placeFor = (c) => { const k = this.find(c.id); return k ? { x: k.x, z: k.z } : null; };
+    // Brisk or dawdling, by who they are.
+    g.peds.paceOf = (c) => paceOf(traitsOf(c));
+    // Saved from a crime (or their stolen things brought back): remembered, once per rescue.
+    if (g.crime) {
+      g.crime.onStopped = (c) => {
+        for (const v of [...c.victims, ...c.extras]) if (v.alive && (v.actor?.role === 'victim' || v.actor?.role === 'shopkeeper' || v.actor?.role === 'owner')) this.saved(v);
+      };
+      g.crime.onReturned = (who) => { if (who.alive && !who.actor?.hostile) this.saved(who); };
+    }
     // Helping someone up: they remember it (and you, if they did not know you yet).
     const prevHelp = g.deeds.onHelped;
     g.deeds.onHelped = (a) => { prevHelp?.(a); this.note(a, 'helped'); };
@@ -187,7 +209,20 @@ export class People {
     return pick(l);
   }
 
+  /** What someone shouts in a moment, in their temperament (null: the common line). */
+  reactLine(a: PedAgent, m: Moment): string | null {
+    return this.manners.line(a, m);
+  }
+
   // ------------------------------------------------------------------ memory
+
+  /** Saved by the hero (a crime stopped, their things returned): one deed per rescue. */
+  private saved(a: PedAgent): void {
+    const last = this.savedAt.get(a.cit.id) ?? -1e9;
+    this.savedAt.set(a.cit.id, this.time);
+    if (this.time - last < 180) return;
+    this.note(a, 'saved');
+  }
 
   /** Record something between the hero and this person (meeting them if they are new). */
   note(a: PedAgent, d: Deed): Known {
@@ -226,6 +261,7 @@ export class People {
   restore(raw: unknown): void {
     if (raw === null || raw === undefined) return;
     this.end();
+    this.manners.clear();
     this.known.length = 0;
     this.known.push(...restorePeople(raw));
     this.markKey = '#stale';
@@ -283,6 +319,8 @@ export class People {
     const a = this.talkable();
     if (!a) return null;
     const p = this.person(a.cit);
+    // (Someone who won't talk to you gets no prompt; E still gets you their refusal.)
+    if (!a.actor && refuses(opinionOf(this.find(a.cit.id), this.g.crime?.rep.value ?? 0, p.traits.a))) return null;
     return `Press <b>E</b> to talk to ${this.find(a.cit.id) ? p.full : p.first}`;
   }
 
@@ -303,6 +341,12 @@ export class People {
       return;
     }
     const before = this.find(a.cit.id);
+    // Someone who can't stand you won't talk to you (only someone another system drives has to).
+    if (!a.actor && refuses(opinionOf(before, this.g.crime?.rep.value ?? 0, p.traits.a))) {
+      this.g.barks?.say(a, this.manners.line(a, 'refuse') ?? 'No.', 8, 'angry');
+      if (a.state !== PState.Sit) { a.state = PState.Walk; a.stateT = 0; a.heading = Math.atan2(P.pos.x - a.x, P.pos.z - a.z); }
+      return;
+    }
     const metBefore = before ? before.met : 0, lastBefore = before ? before.last : this.g.sky.hoursAbs;
     const k = this.note(a, 'talked');
     // Their own owner keeps someone it drives (a busker plays on); seated people stay in their seat,
@@ -477,6 +521,7 @@ export class People {
       else if (lost || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) > TALK.leave || s.idle > TALK.idle || !this.canTalk() || this.harmSince(a.x, a.z, s.since)) this.end();
     }
     this.greet();
+    this.manners.update(dt);
     this.markT -= dt;
     if (this.markT <= 0) { this.markT = TALK.markEvery; this.markers(); }
   }
@@ -492,11 +537,19 @@ export class People {
       if (this.time - (this.greeted.get(k.cit.id) ?? -1e9) < TALK.greetEvery) continue;
       const p = this.person(a.cit);
       const op = opinionOf(k, this.g.crime?.rep.value ?? 0, p.traits.a);
-      const line = op < -30 ? pick(['Hmph.', 'Oh. You.', 'Watch it, you.'])
+      // (People who dislike you say nothing: they keep away, Manners.)
+      if (op <= -30) continue;
+      const line = k.deed === 'saved' ? pick(['It\'s you! My hero!', 'Hey! I still tell everyone how you saved me!'])
         : k.deed === 'helped' ? pick(['Hey, my rescuer!', 'Hi again! Still in one piece, thanks to you.'])
-          : p.traits.e > 0.55 || op > 40 ? pick(['Hey! Hello again!', 'Oh, hi! Good to see you!', `Hi! It's me, ${p.first}!`])
-            : pick(['Oh, hello.', 'Hi again.']);
-      if (this.g.barks.say(a, line, 30)) this.greeted.set(k.cit.id, this.time);
+          : p.temper === 'shy' ? pick(['…hi.', 'Oh. H-hello.'])
+            : p.temper === 'grumpy' && op < 25 ? pick(['Oh. You again.', 'Hm. Hello.'])
+              : p.traits.e > 0.55 || op > 40 ? pick(['Hey! Hello again!', 'Oh, hi! Good to see you!', `Hi! It's me, ${p.first}!`])
+                : pick(['Oh, hello.', 'Hi again.']);
+      if (this.g.barks.say(a, line, 30)) {
+        this.greeted.set(k.cit.id, this.time);
+        // Those who like you stop for a moment and wave.
+        if (waves(op, p.traits)) this.manners.wave(a);
+      }
       return;
     }
   }

@@ -2,11 +2,33 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.082 — 2026-10-07
+## 0.084 — 2026-10-07
 
 - **Reputation is only lost for what you hit yourself.** Rubble flying out of a collapsing building used to count as your doing, so standing by while a monster brought a block down could wreck your reputation as the neighbours fell. Now only what your own punches, steps and powers hit counts. What collapse rubble breaks, and what your body breaks while a monster has knocked you flying, is nobody's fault.
 - **No reputation lost while fighting a big monster.** Near a monster like the Strider (and for a short while after it leaves or falls), damage you cause costs no reputation or karma and draws no police. A short note on screen says so. Away from monsters, collateral counts as before.
 - **The city no longer blames you when the last resort strikes.** The strike still costs karma, but no reputation any more, and being knocked out by criminals no longer costs reputation either.
+
+## 0.083 — 2026-10-07
+
+- **Soldiers stay out of the water.** Every spot the army picks (where a unit digs in, where it gathers when you rally it with G, where it drives or walks off to when the battle is over, where a squad on foot gets out) is now on dry ground. A spot over a river, lake or the sea moves to the nearest dry street. As a backstop, soldiers, police and anyone else heading straight for a point, and people running off in a panic, now stop at the bank or walk along it instead of stepping into the water.
+- **After the battle the army leaves sensibly.** Units used to head off eastwards once the monster was gone, whatever lay there, and their target moved with them. Each one now gets one fixed street point away from where the fight was.
+- **Rally (G) is calmer.** Each unit has its own spot around you and only moves when you do. Before, all of them got a new random spot every four seconds and kept milling about.
+- **The army fights instead of standing around.**
+  - Units no longer drive or walk on into the monster's feet on the way to their position. They fall back as soon as it is on top of them. Tanks and trucks used to keep going and were stepped on.
+  - A squad digs in once most of its soldiers are there. One soldier held up behind a car kept the whole squad running about without firing for minutes.
+  - Guns look for any part of the Strider that shows over the roofs or past a corner, not only the middle of each body part. Rifles and APCs without a clear line fire over the roofs at its back. A unit that keeps having no line moves to a spot that has one. A tank with a building in the way shoots through it.
+  - Helicopters keep closing in until they have a clear line before firing, instead of giving up the run at 300 m. One that has used up its rockets comes back rearmed after a while instead of leaving for good.
+
+## 0.082 — 2026-10-07
+
+- **People behave like who they are.** Everyone already had a personality; now it shows in the street:
+  - Outgoing, orderly people walk briskly, dreamers dawdle. The calm get over a scare quickly; the nervous keep running longer. The curious stand and stare longer at a spectacle.
+  - People who dislike you (because you hurt them, or because of your reputation) step out of your way when you come near, don't hang about next to you, and sometimes tell you to keep away. Someone who really can't stand you won't talk to you at all.
+  - Kind passers-by walk over and help up someone lying in the street once it is calm again. An everyday fall is still yours to help with first; after a while a stranger does it.
+  - When a thief runs past, an agreeable passer-by points after them and shouts which way they went.
+  - People who know and like you stop and wave when they say hello. People you saved greet you as their hero.
+  - Victims of a crime you stop, and people whose stolen things you bring back, now remember being saved by you.
+  - What people shout when they run, gawk, film, fall or thank you is in their own temperament (grumpy, anxious, chatty and so on).
 
 ## 0.081 — 2026-10-07
 
