@@ -5,7 +5,7 @@
  "note": "MakeHuman mesh reshaped onto the Woman/Man base bodies (tools/avatar/base-bodies/conform.py)",
  "morphVerts": 14274,
  "realVerts": 14136,
- "offsetScale": 3.7919099400778696e-06,
+ "offsetScale": 2.6352528504826854e-06,
  "sections": {
   "female": {
    "offset": 0,

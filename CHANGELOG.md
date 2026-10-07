@@ -2,22 +2,22 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.088 — 2026-10-07
+## 0.090 — 2026-10-07
 
 - **The procession's lantern really shows now,** a green-lit lantern held up in the necromancer's hand.
 - **The skeletons' eyes burn green** instead of a pale white, and their skulls are a little smaller.
 
-## 0.087 — 2026-10-07
+## 0.089 — 2026-10-07
 
 - **The raised dead are real skeletons now.** Instead of a person in a striped bodysuit, they are bare bones: a skull with glowing eyes, ribs round a spine, a pelvis, and arm, leg, hand and foot bones that move with them.
 - **The procession's necromancer carries a lantern,** lit in the group's colour and held up high as they lead the entranced along.
 
-## 0.086 — 2026-10-07
+## 0.088 — 2026-10-07
 
 - **The awakened tree is drawn properly.** Its crown and trunk now show on top of its root legs, and the legs and branch arms stay with its body.
 - **The Beast-master's dogs bite a little less hard,** so a pack is a nuisance to deal with rather than a quick knockout.
 
-## 0.085 — 2026-10-07
+## 0.087 — 2026-10-07
 
 - **Bosses come out for their big set piece.** Now and then a group's boss leads a whole crew to one big job near its turf, marked on your map. The city answers it like a monster attack (police lines, SWAT, people cleared away). Leave it alone and it succeeds; knock the boss out and the crew breaks and runs. The more you anger a group, the sooner it comes.
   - The Syndicate cracks a bank vault and the boss runs off with the money.
@@ -27,6 +27,17 @@ Every push raises the version by 0.001. Newest first.
 - **The eco-radicals are here.** They live in parks and the leafy suburbs and dress in patchwork greens and browns with leaf wreaths. They sabotage delivery robots and parked cars and leave the pavement grown over with moss. Their Beast-master brings three or four trained dogs that run you down and bite, and a whistle sends them lunging at you. Punch a dog and it goes down and slinks off; fire scares them away. Their boss, the Elder, gathers a circle round a big tree and sings it awake.
 - **The awakened tree.** The tree tears itself out of the ground and walks on its roots. It goes for anything with a motor or a plug: cars, robots, street lamps, traffic lights. Hurt it and it comes for you instead. It is weak to fire and slowed by frost, and lightning barely bothers it. When it rears up for a slam, its glowing heart shows; hits there count triple. Beaten, it takes root where it stands and stays there as a gnarled old tree.
 - **The necromancers are here.** They haunt the old town and the parks, mostly at night, in black robes and bone-white masks. In a park they kneel in a ring and chant, and skeletons claw their way out of the ground. Knocked apart, a skeleton pulls itself back together while a necromancer still stands; beat the necromancers and the bones sink back into the earth. They also lead processions: a few people in a trance shuffling after a necromancer with a lantern. Walk up and press E to wake them one by one, or beat the necromancer to wake them all at once. Their Bone-caller drains your strength with a beam and wails you back. Their boss, the Grave Lord, curses you and raises the dead before the cathedral.
+## 0.086 — 2026-10-07
+
+- **Men are back to the earlier body** with the fixed upper legs: the broader, higher shoulders from 0.081 are undone (they gave men a hunched look). Walkers still carry their arms a little away from the body.
+
+## 0.085 — 2026-10-07
+
+- **People know each other.** Friends, family, neighbours and colleagues who pass each other in the street stop for a chat: a wave, a greeting by name, a few words with their hands going, a goodbye, then they walk on.
+- **Word gets round.** What you did to someone reaches the people close to them. Help a woman up and her neighbour likes you a little more, and tells you so when you meet ("You're the one who helped my neighbour Mara up!"). Knock someone down and their family will remember that too.
+- **People have needs.** Hunger between meals, tiredness late in the day, and loneliness after a long day at home (outgoing people feel it sooner) make them feel worse, and they tell you about it when you ask how they are. A hungry or tired passer-by sometimes stops for a bite or a coffee on the way.
+- **Favours.** A new option in the talk menu: "Can I do anything for you?" Someone who knows and likes you may ask you to look in on a friend or relative. That person then shows as a golden dot on the map, and they come out to their door when you get near. Or they may ask you to deal with the gang on their street, which counts once you stop a crime nearby. You have two game days. They remember whether you did it: they thank you and like you more, or they tell you they were let down. There is no quest log; the person who asked remembers it, and their dot on the map says so.
+
 ## 0.084 — 2026-10-07
 
 - **Reputation is only lost for what you hit yourself.** Rubble flying out of a collapsing building used to count as your doing, so standing by while a monster brought a block down could wreck your reputation as the neighbours fell. Now only what your own punches, steps and powers hit counts. What collapse rubble breaks, and what your body breaks while a monster has knocked you flying, is nobody's fault.
