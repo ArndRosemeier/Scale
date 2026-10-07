@@ -79,8 +79,30 @@ function shareInstancedShaders(renderer: THREE.WebGPURenderer): void {
 export const nodeBuilds = { count: 0, syncPipes: 0, asyncPipes: 0 };
 
 function countNodeBuilds(renderer: THREE.WebGPURenderer): void {
-  renderer.debug.onNodeBuilderCreated = () => { nodeBuilds.count++; };
+  // `&buildlog`: every 10 s, what had its node shaders built (material, extra geometry attributes,
+  // instanced or not) and the frame rate, to find what keeps building after loading.
+  const url = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.name ?? location.href;
+  const log = /[?&]buildlog\b/.test(url) ? new Map<string, number>() : null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  renderer.debug.onNodeBuilderCreated = (_builder: any, renderObject: any) => {
+    nodeBuilds.count++;
+    if (!log) return;
+    const m = renderObject?.material as THREE.Material | undefined, o = renderObject?.object as THREE.Mesh | undefined;
+    const attrs = Object.keys(o?.geometry?.attributes ?? {}).filter((k) => k !== 'position' && k !== 'normal' && k !== 'uv').join(',');
+    const k = `${m?.name || m?.type}${(o as THREE.InstancedMesh | undefined)?.isInstancedMesh ? ' inst' : ''} [${attrs}]`;
+    log.set(k, (log.get(k) ?? 0) + 1);
+  };
   (window as unknown as { nodeBuilds: typeof nodeBuilds }).nodeBuilds = nodeBuilds;
+  if (!log) return;
+  let frames = 0;
+  const tick = (): void => { frames++; requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  setInterval(() => {
+    const top = [...log].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${n} ${k}`).join('; ');
+    console.log(`[buildlog] ${(performance.now() / 1000).toFixed(0)} s, ${(frames / 10).toFixed(1)} fps, ${nodeBuilds.count} builds; last 10 s: ${top || 'none'}`);
+    log.clear();
+    frames = 0;
+  }, 10000);
 }
 
 /** Warns about pipelines over WebGPU's vertex buffer limit, also on the WebGL2 backend (where they would work). */

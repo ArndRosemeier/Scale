@@ -1916,3 +1916,13 @@ export function createFarTreeMaterial(): THREE.Material {
   m.userData.depthMaterial = makeDepthMaterial(false, 'far');
   return m;
 }
+
+/**
+ * Room for `n` instances with headroom, in few big steps: a batch that grows is a new InstancedMesh,
+ * and on WebGPU every new instanced mesh builds its shaders again (main and shadow pass).
+ */
+export function batchCap(n: number): number {
+  let c = 512;
+  while (c < n * 1.25) c *= 4;
+  return c;
+}

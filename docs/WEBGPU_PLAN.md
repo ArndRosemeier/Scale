@@ -135,3 +135,10 @@ Ordered by how much of the screen they cover (port first what is always visible)
   during the gate's background compiles for a slow GPU, stepped down (each step re-applies
   shadows / LOD and so rebuilds materials, more compiles) and remembered the low step for the next
   load. Auto quality now ignores frames while the gate is busy.
+- 2026-10-07 (night, later): PC at 8db07d9: auto quality no longer drops during loading; brick
+  windows match. But ~30 s at 8–10 fps after loading, in waves until ~150 s (`[gate]` 1500–1900
+  meshes): three keys an InstancedMesh's node build by its uuid, so every new instanced batch
+  builds its shaders again (main and shadow pass), and the tree / prop batches were rebuilt each
+  time their count outgrew the capacity (×2 steps). Capacities now start at 512 and grow ×4
+  (`batchCap`). After that WebGPU holds 42–47 fps at High (WebGL 60 at Ultra), open.
+  `&buildlog` prints every 10 s what had node shaders built and the fps.

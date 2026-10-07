@@ -4,7 +4,7 @@
  * lights at night; props can be toppled / crushed and fall as rigid bodies.
  */
 import * as THREE from 'three';
-import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, vegetationUniforms, TREE_SPECIES, type TreeSpecies } from './vegetation';
+import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, batchCap, vegetationUniforms, TREE_SPECIES, type TreeSpecies } from './vegetation';
 import { furnitureModel, createFurnitureMaterial, furnitureUniforms, type FurnitureKind } from './furniture';
 import { PropType } from '../plan/cell';
 import type { CellState } from '../stream/CityStreamer';
@@ -409,7 +409,7 @@ export class PropRenderer {
     for (const [k, b] of this.batches) if (owns(k)) { b.n = 0; for (const m of b.meshes) m.count = 0; }
     let drawn = 0;
     for (const [k, list] of groups) {
-      const b = this.batch(k, Math.max(64, Math.ceil(list.length * 2)));
+      const b = this.batch(k, batchCap(list.length));
       list.forEach((p, i) => {
         this.q.setFromAxisAngle(_up, p.yaw);
         this.m4.compose(this.v.set(p.x, p.y, p.z), this.q, this.s.setScalar(p.scale));
