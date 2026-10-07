@@ -11,7 +11,7 @@ import type { HumanoidAppearance } from '../humanoid/types';
 import { HAIR_STYLES, BEARD_STYLES, BROW_STYLES } from '../humanoid/appearance';
 import { HumanoidPreview } from '../humanoid/client/preview';
 import {
-  randomLook, normalizeLook, outfitVisuals, TOPS, OUTERS, BOTTOMS, SHOES, HATS, PATTERNS,
+  randomLook, plainLook, plainAppearance, normalizeLook, outfitVisuals, TOPS, OUTERS, BOTTOMS, SHOES, HATS, PATTERNS,
   type CharacterLook, type OutfitSpec, type RGB,
 } from '../avatar/look';
 
@@ -206,7 +206,7 @@ export class CharacterCreator {
   };
 
   constructor(private opts: CreatorOptions) {
-    this.look = structuredClone(opts.look ? normalizeLook(opts.look) : randomLook((Math.random() * 2 ** 32) >>> 0));
+    this.look = structuredClone(opts.look ? normalizeLook(opts.look) : plainLook((Math.random() * 2 ** 32) >>> 0));
     this.initial = structuredClone(this.look);
     this.el = h('div', 'cc');
     this.el.setAttribute('role', 'dialog');
@@ -233,7 +233,11 @@ export class CharacterCreator {
     rnd.type = 'button';
     rnd.title = 'Random body, face, hair and outfit (keeps the sex)';
     rnd.onclick = () => this.randomize();
-    bar.append(this.focusBtns, poseBtns, rnd);
+    const plain = h('button', 'cc-btn', 'Plain');
+    plain.type = 'button';
+    plain.title = 'Plain base body and face: every shape slider in the middle, age 25, no random tweaks (keeps sex, hair, skin and outfit)';
+    plain.onclick = () => { this.look.appearance = plainAppearance(this.look.appearance); this.changed(true); this.renderEditor(); };
+    bar.append(this.focusBtns, poseBtns, plain, rnd);
     stage.append(h('div', 'cc-halo'), canvas, this.stageMsg, bar, h('div', 'cc-hint', 'Drag to rotate · scroll to zoom to the face'));
     this.bindRotate(canvas);
 

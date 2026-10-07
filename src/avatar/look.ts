@@ -100,6 +100,24 @@ export function randomLook(seed: number, gender?: number): CharacterLook {
   return { appearance, outfit };
 }
 
+/** The plain base body and face (every shape slider in the middle, age 25, evenly mixed
+ *  ancestry, no random tweaks), fully female or male, keeping hair, colours and outfit. */
+export function plainAppearance(a: HumanoidAppearance): HumanoidAppearance {
+  const face = { ...a.face }, body = { ...a.body };
+  for (const k of Object.keys(face) as (keyof typeof face)[]) face[k] = 0;
+  for (const k of Object.keys(body) as (keyof typeof body)[]) body[k] = 0;
+  return {
+    ...a, face, body, gender: a.gender < 0.5 ? 0 : 1, age: 0.5, muscle: 0.5, weight: 0.5, height: 0.5, proportions: 0.5,
+    african: 1 / 3, asian: 1 / 3, caucasian: 1 / 3, faceDetail: 0, marks: [],
+  };
+}
+
+/** A new hero: the plain base body and face with a random hairdo, colours and outfit. */
+export function plainLook(seed: number, gender?: number): CharacterLook {
+  const l = randomLook(seed, gender);
+  return { appearance: plainAppearance(l.appearance), outfit: l.outfit };
+}
+
 /** Fill fields that may be missing in a record saved by an older version. */
 export function normalizeLook(l: CharacterLook): CharacterLook {
   const base = randomLook(l.appearance?.seed ?? 1, l.appearance?.gender);
