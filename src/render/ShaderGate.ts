@@ -176,7 +176,7 @@ export class ShaderGate {
    */
   precompile(o: THREE.Object3D): void {
     if (WEBGPU) {
-      void this.asScenePass(() => (this.renderer as unknown as { compileAsync(o: THREE.Object3D, c: THREE.Camera, s: THREE.Scene): Promise<void> }).compileAsync(o, this.camera, this.scene)).catch((e) => console.warn('[gate] precompile', e));
+      void this.gpuCompile?.(o).catch((e) => console.warn('[gate] precompile', e));
       return;
     }
     this.refreshLights();
