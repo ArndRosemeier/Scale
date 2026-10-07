@@ -202,10 +202,10 @@ export class Underground {
             stroke(x + bx * size * 0.5, y, z + bz * size * 0.5, bx, bz, size * 0.55, hwid);
           }
         };
-        /** A big filled arrow (head and shaft, ~1.7 m long, 0.8 m wide) with its tip at (x, z). */
+        /** A big filled arrow (head and shaft, ~2.6 m long, 1 m wide) with its tip at (x, z). */
         const arrow = (x: number, y: number, z: number, dx: number, dz: number) => {
-          for (let k = 0; k < 4; k++) vee(x - dx * k * 0.1, y, z - dz * k * 0.1, dx, dz, 0.62 - k * 0.13, 0.08);
-          stroke(x - dx * 1.05, y, z - dz * 1.05, dx, dz, 0.62, 0.11);
+          for (let k = 0; k < 5; k++) vee(x - dx * k * 0.1, y, z - dz * k * 0.1, dx, dz, 0.8 - k * 0.14, 0.09);
+          stroke(x - dx * 1.55, y, z - dz * 1.55, dx, dz, 1.0, 0.14);
         };
         let scouts = 0;
         for (const h of hints) {
@@ -217,10 +217,10 @@ export class Underground {
           } else if (h.kind === 'arrow') {
             // A big arrow on the junction's walkway, into the branch.
             mb.set('color', 0.3 * s, 1.0 * s, 0.85 * s);
-            arrow(h.x + h.nx * 1.8, h.y, h.z + h.nz * 1.8, h.nx, h.nz);
+            arrow(h.x + h.nx * 2.6, h.y, h.z + h.nz * 2.6, h.nx, h.nz);
           } else if (h.kind === 'chevron') {
             mb.set('color', 0.25 * s, 0.95 * s, 0.8 * s);
-            vee(h.x, h.y, h.z, h.nx, h.nz, 0.6, 0.075);
+            vee(h.x, h.y, h.z, h.nx, h.nz, 0.8, 0.1);
           } else if (h.kind === 'scout') {
             // A lone Lumen waiting at the junction: it slips off down the right branch when someone comes.
             this.slimes.setScout(`sewer${scouts++}`, { x: h.x, y: h.y, z: h.z, hx: h.x + h.nx * 9, hz: h.z + h.nz * 9 }, (h.x * 13.7 + h.z * 7.1) | 0, true);
