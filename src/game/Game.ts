@@ -41,7 +41,7 @@ import { warmUp } from '../render/WarmUp';
 import { OriginIntro } from './intro/OriginIntro';
 import { RoadNet } from '../sim/RoadNet';
 import { Population } from '../sim/Population';
-import { Pedestrians, PState } from '../sim/Pedestrians';
+import { Pedestrians, PState, type PedAgent } from '../sim/Pedestrians';
 import { Reactions } from '../sim/Reactions';
 import { CrowdRenderer } from '../sim/CrowdRenderer';
 import { bakeCrowdTemplates } from '../sim/CrowdBaker';
@@ -113,8 +113,12 @@ import { Defeat } from './defeat/Defeat';
 import { ManholeClimb } from './ManholeClimb';
 import { shaftPoint, LADDER_LAT } from '../underground/layout';
 import { MedFleet } from './defeat/MedDrones';
+import { Wardrobe } from './Wardrobe';
 import { People } from './people/People';
 import { Fame } from './fame/Fame';
+
+/** What someone a super speed runner brushed past calls after them: stern, not hurt. */
+const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
 
 export class Game {
   readonly renderer: Renderer;
@@ -229,6 +233,8 @@ export class Game {
   deeds!: Deeds;
   /** The city's people as individuals: names, personalities, talking (E), who remembers you (game/people). */
   people!: People;
+  /** Fitting mirrors of clothes shops (E: character creator). */
+  wardrobe!: Wardrobe;
   /** Reputation made visible: the press, fans, protesters, the hero's statue (game/fame). */
   fame!: Fame;
   powerHud!: PowerHud;
@@ -365,6 +371,16 @@ export class Game {
     // Player at street level near the centre, on a sidewalk or road (not inside a building).
     this.player = new Player(this.settings.seed, this.world);
     this.player.collision = this.collision;
+    // People to hop over at super speed: upright, about head high (lying, seated and indoor ones not).
+    this.player.hopPeople = (x0, z0, x1, z1, out) => {
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, r = Math.hypot(x1 - x0, z1 - z0) / 2;
+      for (const a of this.peds.neighbours(cx, cz, r, this.hopTmp)) {
+        if (!a.alive || a.state === PState.Down || a.state === PState.Sit || (a.inside && !a.hall) || a.ragdoll) continue;
+        const o = this.hopObs;
+        o.x = a.x; o.z = a.z; o.y0 = a.y; o.y1 = a.y + 1.85;
+        out(o);
+      }
+    };
     let sx = c.x, sz = c.z;
     for (let k = 0; k < 200 && (this.world.buildingAt(sx, sz) || landmarks.onFootprint(sx, sz, 1)); k++) { sx += (k % 7) * 3 - 9; sz += Math.floor(k / 7) * 3 - 9; }
     this.player.pos.set(sx, this.world.groundHeight(sx, sz) + 0.05, sz);
@@ -728,6 +744,7 @@ export class Game {
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
+    this.wardrobe?.update(dt);
     this.T('street', () => this.street?.update(dt));
     this.T('people', () => this.people?.update(dt));
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
@@ -822,6 +839,10 @@ export class Game {
   private readonly dashFrom = new THREE.Vector3();
   private readonly dashHit = new Set<object>();
   private speedHitT = 0;
+  private readonly hopTmp: PedAgent[] = [];
+  private readonly hopObs = { cyl: true, x: 0, z: 0, r: 0.4, hx: 0, hz: 0, ux: 1, uz: 0, y0: 0, y1: 0 };
+  /** Last stern word from someone a super speed runner brushed past (game time, s). */
+  private brushT = -99;
 
   /**
    * A dash shoves what lies along its path, once per dash: people are knocked down (unless
@@ -853,7 +874,8 @@ export class Game {
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
     this.props.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
     this.future.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
-    if (k > 0.45) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
+    // (In a super speed hop the arc was planned over everyone under it.)
+    if (k > 0.45 && !(running && p.hopping)) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
       if (this.dashHit.has(a) || a.state === 5 || (a.inside && !a.hall) || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
       if (segDist(a.x, a.z) > r + 0.3) continue;
       this.dashHit.add(a);
@@ -861,8 +883,13 @@ export class Game {
       // spins them off to the side they stood on).
       const side = Math.sign((a.x - x0) * -dz + (a.z - z0) * dx) || 1;
       const fx = running ? a.x - (dx * 0.6 - dz * side) * 1.5 : a.x - dx * 1.5, fz = running ? a.z - (dz * 0.6 + dx * side) * 1.5 : a.z - dz * 1.5;
-      this.reactions.knockDown(a, fx, fz, Math.min(12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), 'player');
+      // A runner of about human size who could not hop over them only brushes past: they
+      // stumble, are cross with the speedster and get up again (no harm on the ledger, no
+      // reputation lost: one cannot run at super speed through a city and never touch anyone).
+      const brush = running && p.height < 3;
+      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : 12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
+      if (brush) { this.brushedBy(a); continue; }
       this.consequences.record('speed', 'person', 'knockdown', a.x, a.z);
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
       this.stimuli.emit('impact', a.x, a.y + 1, a.z, 3, 30);
@@ -874,6 +901,16 @@ export class Game {
       if (J > 2500) { this.traffic.wreckIt(v); this.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, dx * J, J * 0.3, dz * J); this.audio.play('car_crash', v.x, v.y, v.z, 0.8, 1, 10, this.renderer.camera.position); }
       else v.damage = Math.min(1, v.damage + J / 5000);
     }
+  }
+
+  /** Someone a super speed runner brushed past calls after them (now and then, see BRUSH_LINES). */
+  private brushedBy(a: PedAgent): void {
+    this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.3, 1.1, 4, this.renderer.camera.position);
+    const now = this.consequences.time;
+    if (now - this.brushT < 4) return;
+    this.brushT = now;
+    const who = this.people ? this.people.person(a.cit).first : null;
+    this.barks.shout(a, BRUSH_LINES[Math.floor(Math.random() * BRUSH_LINES.length)], who);
   }
 
   /** Mass-weighted contacts between the player and pedestrians / vehicles. */
@@ -1053,6 +1090,7 @@ export class Game {
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
+    this.wardrobe = new Wardrobe(this);
     this.fame = new Fame(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
@@ -1167,6 +1205,8 @@ export class Game {
     const slime = this.slimeRealm?.hint();
     if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';
+    const dress = this.wardrobe?.hint();
+    if (dress) return dress;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1216,6 +1256,8 @@ export class Game {
       return;
     }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
+    // At a clothes shop's fitting mirror: change your look.
+    if (this.wardrobe?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();

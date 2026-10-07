@@ -196,6 +196,7 @@ export class GameMap {
         <div class="map-key"><span class="alert back">!</span> where stolen goods go back</div>
         <div class="map-key"><span class="crimescale"></span> crime: low (many police) to high (crime layer)</div>
         <div class="map-key"><span class="faint"></span> someone you met (green: likes you, red: wary of you)</div>
+        <div class="map-key"><span class="faint" style="background:#c98be0"></span> clothes shop: the fitting mirror inside changes your look</div>
         ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
         <div class="map-status"></div>
       </div>

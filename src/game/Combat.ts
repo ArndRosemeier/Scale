@@ -164,7 +164,7 @@ export class Combat {
     const dx = a.x - fx, dz = a.z - fz, d = Math.hypot(dx, dz) || 1;
     const J = power * 70;
     this.fireKnockdown(a, (dx / d) * J, J * 0.4, (dz / d) * J);
-    if (cause === 'accident') return;
+    if (cause === 'accident' || cause === 'brush') return;
     const dmg = COMBAT.knockBase + COMBAT.knockPerSpeed * power;
     const hp = Math.max(0, this.hpOf(a) - dmg);
     this.setHp(a, hp);

@@ -355,6 +355,8 @@ export class People {
     const a = this.talkable();
     if (!a) return null;
     const p = this.person(a.cit);
+    // (Someone who won't talk to you gets no prompt; E still gets you their refusal.)
+    if (!a.actor && refuses(opinionOf(this.find(a.cit.id), this.g.crime?.rep.value ?? 0, p.traits.a))) return null;
     return `Press <b>E</b> to talk to ${this.find(a.cit.id) ? p.full : p.first}`;
   }
 
