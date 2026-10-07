@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.094 — 2026-10-07
+
+- **People who trip no longer scream as if dying.** When someone falls in the street they now let out a short, mild cry instead: an "oof", "ow", "whoa", "ugh", "ah" or "whoops", picked at random each time. Men and women have their own voices, every person keeps a slightly different pitch, children sound higher and older people a little lower. It is also a touch quieter than before.
+
 ## 0.093 — 2026-10-07
 
 - **New characters start from the plain face and body:** every shape slider in the middle, age 25, evenly mixed ancestry and no random tweaks. Only hair, colours and outfit are picked at random. A new **Plain** button next to Randomize brings any character back to that base (it keeps the sex, hair, skin and outfit). Playing without a created character also gives you the plain body.
