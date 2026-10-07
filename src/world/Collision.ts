@@ -133,8 +133,12 @@ export class Collision {
     return this.under.ceilingAt(x, y + 0.3, z);
   }
 
-  /** Highest walkable surface under (x,z) not above yRef + step. */
-  groundAt(x: number, z: number, yRef: number, step: number): number {
+  /**
+   * Highest walkable surface under (x,z) not above yRef + step. surface: the body comes from the
+   * open (not from below the street), so outside a hole it stays on top: a steep bank (a quay)
+   * that rises more than a metre in one step must lift it, not count as being underground.
+   */
+  groundAt(x: number, z: number, yRef: number, step: number, surface = false): number {
     if (this.room) { const f = this.room.floorAt(x, yRef, z); if (f !== null) return f; }
     let g = this.world.terrain.height(x, z) + this.world.surfaceOffset(x, z);
     if (this.under) {
@@ -143,7 +147,7 @@ export class Collision {
       // Below the street only underground floors count; over none (track pit, gap, or a jump that
       // left the hall's volume) keep falling - never pop up to the street (a jump in a station
       // used to land the player on the street above).
-      if (yRef < g - 1.0) return uf ?? yRef - 3;
+      if (yRef < g - 1.0 && !surface) return uf ?? yRef - 3;
     }
     const deck = this.world.bridgeDeck(x, z);
     if (deck > -Infinity && deck <= yRef + step) g = Math.max(g, deck);
