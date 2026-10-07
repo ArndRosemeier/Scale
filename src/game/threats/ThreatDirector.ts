@@ -25,6 +25,7 @@ import type { DamageResult, DamageSource, ThreatActor, ThreatEvent } from './Thr
 import { Strider, STRIDER, STRIDER_RIG, type StriderOpts } from './Strider';
 import { AwakenedTree } from './AwakenedTree';
 import type { StreetProp } from '../../props/PropRenderer';
+import { treeModel } from '../../props/vegetation';
 import { planStriderRoute, type StriderRoute } from './StriderRoute';
 import { CreatureMesh } from './rig/CreatureMesh';
 import { FacadeFires } from './FacadeFires';
@@ -82,12 +83,28 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
     omen: () => false,
     start: (d, site, seed, opts) => {
       let prop = (opts.prop as StreetProp | undefined) ?? null;
-      if (!prop) {
-        let bd = 80;
-        d.g.props.query(site.x, site.z, 80, (p) => { const dd = Math.hypot(p.x - site.x, p.z - site.z); if (p.tree && !p.broken && dd < bd) { bd = dd; prop = p; } });
-      }
+      // A real tree standing (no shrub): the nearest to the site, else the nearest to the hero.
+      const near = (x: number, z: number, r: number) => {
+        let bd = r, best: StreetProp | null = null;
+        d.g.props.query(x, z, r, (p) => { const dd = Math.hypot(p.x - x, p.z - z); if (p.kind.startsWith('tree:') && !p.broken && dd < bd) { bd = dd; best = p; } });
+        return best as StreetProp | null;
+      };
+      // Out in the country (forests, field edges): a countryside tree, taken off its tile.
+      let wild = null as { x: number; z: number } | null;
+      const wildNear = (x: number, z: number, r: number): StreetProp | null => {
+        const w = d.g.countryside.nearestTree(x, z, r);
+        if (!w) return null;
+        const m = treeModel(w.species, w.variant);
+        wild = w;
+        return { kind: `tree:${w.species}:${w.variant}`, tree: true, x: w.x, y: w.y, z: w.z, yaw: w.yaw, scale: w.scale, color: [0, 0, 0], broken: false, breakable: 'topple', radius: m.trunkRadius * w.scale, height: m.height * w.scale };
+      };
+      // Closest first, city or country: the hero's own surroundings, then the site, then farther round the hero.
+      const P = d.g.player.pos;
+      prop ??= near(P.x, P.z, 25) ?? wildNear(P.x, P.z, 25) ?? near(site.x, site.z, 80) ?? wildNear(site.x, site.z, 80) ?? near(P.x, P.z, 400) ?? wildNear(P.x, P.z, 300);
       if (!prop) return null;
       const t = new AwakenedTree(d.g, prop, seed);
+      const uprooted = wild as { x: number; z: number } | null;
+      if (uprooted) d.g.countryside.uproot(uprooted.x, uprooted.z);
       if (opts.ready) t.devReady();
       return t;
     },
@@ -598,9 +615,10 @@ export class ThreatDirector {
       spawn: (kind = 'robots', o: Record<string, unknown> = {}) => {
         let at = (o.at as { x: number; z: number } | undefined) ?? null;
         if (!at && typeof o.dist === 'number') { const fy = g.camRig.forwardYaw; at = { x: g.player.pos.x - Math.sin(fy) * o.dist, z: g.player.pos.z - Math.cos(fy) * o.dist }; }
+        if (!ARCHETYPE_IMPL[kind]) return `unknown archetype '${kind}'`;
         const ev = this.start(kind, (Math.random() * 2 ** 32) >>> 0, o, at);
         if (ev) this.clock.ran(kind);
-        return ev ? ev.snapshot() : 'unknown archetype';
+        return ev ? ev.snapshot() : kind === 'tree' ? 'no tree standing nearby' : `${kind} could not start here`;
       },
       /**
        * The clock: no argument → status; a number → play that many seconds (1 s steps, omens and

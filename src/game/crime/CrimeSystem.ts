@@ -93,6 +93,9 @@ const _v = new THREE.Vector3();
 /** Sewer dens: post the crew within postR (m), stand them down beyond leaveR; cleared / busted for game hours; E reach; share of a hideout bust's turf loss. */
 export const DENS = { postR: 45, leaveR: 80, clearedFor: 24, bustedFor: 48, useR: 1.9, turf: 0.4 };
 
+/** Dev console placement: [distance factor, turn from the view] — ahead, nearer, farther, the sides, behind. */
+const DEV_TRIES: [number, number][] = [[1, 0], [0.5, 0], [2, 0], [1, Math.PI / 2], [1, -Math.PI / 2], [1, Math.PI], [2, Math.PI / 2], [2, -Math.PI / 2]];
+
 export class CrimeSystem {
   readonly combat: Combat;
   /** Small arms (police, SWAT, armed robbers): rules, effects (crime/Firearms). */
@@ -1963,8 +1966,12 @@ export class CrimeSystem {
         const p = g.player.pos, fy = g.camRig.forwardYaw;
         // A group by id, or by kind ('techno': the city's techno-cult).
         const fid = typeof faction === 'string' ? this.factions.factions.find((f) => f.archetype === faction)?.id ?? -1 : faction;
-        const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist }, fid, lt);
-        return c ? c.snapshot() : 'no site';
+        // Ahead first, then nearer, farther and to the sides (a procession needs walkers, a raising open ground).
+        for (const [k, a] of DEV_TRIES) {
+          const c = this.spawnCrime(kind, { x: p.x - Math.sin(fy + a) * dist * k, z: p.z - Math.cos(fy + a) * dist * k }, fid, lt);
+          if (c) return c.snapshot();
+        }
+        return kind === 'procession' ? 'no site: nobody walking about here (try a busier street)' : 'no site';
       },
       /** Each group's boss and notoriety; with a group ('gang' or an id) and a value, set its notoriety. */
       bosses: (faction?: number | string, notoriety?: number) => {
@@ -2001,8 +2008,11 @@ export class CrimeSystem {
         if (this.bosses[fid].jailedUntil > g.sky.hoursAbs) return 'their boss is behind bars (dev.jailBoss(group, 0) lets them out)';
         if (!g.threats?.canHost()) return 'another threat event is running (dev.threat.stop())';
         const p = g.player.pos, fy = g.camRig.forwardYaw;
-        const c = this.startBossOp(fid, dist > 0 ? { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist } : null);
-        return c ? c.snapshot() : 'no site or no room for the crew here';
+        for (const [k, a] of dist > 0 ? DEV_TRIES : [[0, 0]]) {
+          const c = this.startBossOp(fid, dist > 0 ? { x: p.x - Math.sin(fy + a) * dist * k, z: p.z - Math.cos(fy + a) * dist * k } : null);
+          if (c) return c.snapshot();
+        }
+        return 'no site or no room for the crew here';
       },
       /** The Beast-masters' dog packs: handler, dogs, bites. */
       packs: () => this.packs.snapshot(),
