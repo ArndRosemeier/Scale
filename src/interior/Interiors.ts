@@ -9,7 +9,7 @@ import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer, CellState } from '../stream/CityStreamer';
 import type { Collision } from '../world/Collision';
-import { planFloor, shopKindOf, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore } from './InteriorGen';
+import { planFloor, shopKindOf, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore, type Furn } from './InteriorGen';
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
 import { buildFloorMeshes, wallCollisionSegments, furnitureCollision } from './InteriorBuilder';
@@ -442,6 +442,15 @@ export class Interiors {
   }
 
   /** Fitting mirrors of the active interiors: centre, floor height and facing (yaw; the glass faces local +z). */
+  /** Video game cabinets of the open arcades (game/Arcade): a stable key, the piece and its floor height. */
+  arcadeCabinets(): { key: string; f: Furn; y: number }[] {
+    const out: { key: string; f: Furn; y: number }[] = [];
+    for (const a of this.active.values()) for (const fl of a.floors.values()) {
+      fl.plan.furniture.forEach((fu, i) => { if (fu.kind === 'arcade') out.push({ key: `${a.ref.cell.id}:${a.ref.index}:${fl.plan.floor}:${i}`, f: fu, y: fl.plan.y }); });
+    }
+    return out;
+  }
+
   dressMirrors(): { x: number; z: number; y: number; yaw: number }[] {
     const out: { x: number; z: number; y: number; yaw: number }[] = [];
     for (const a of this.active.values()) for (const f of a.floors.values()) for (const fu of f.plan.furniture) if (fu.use === 'dress') out.push({ x: fu.x, z: fu.z, y: f.plan.y, yaw: fu.yaw });
