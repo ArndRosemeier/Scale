@@ -153,6 +153,8 @@ export class ClipRig {
   private twist = new Map<number, { second: number; axis: THREE.Vector3 }>();
   private baked = new Map<string, BakedClip>();
   private scale: number;
+  /** Collarbones: extra lowering about the parent's forward axis (see the constructor). */
+  private depress: (THREE.Quaternion | null)[] = [];
 
   constructor(
     private ch: Character,
@@ -198,6 +200,10 @@ export class ClipRig {
       const tip = end ? ch.rest[map.idx(`${end}.${m![2]}`)] : new THREE.Vector3(body.tails[b * 3], body.tails[b * 3 + 1], body.tails[b * 3 + 2]);
       const dt = tip.clone().sub(head).normalize();
       this.align[b] = new THREE.Quaternion().setFromUnitVectors(dt, ds);
+      // Collarbones: the source's shoulder bone points up and out more steeply than MakeHuman's
+      // collarbone, so lining the segments up lifted the shoulders into a shrug in every clip.
+      // Lower them about the body's forward axis; the arms keep the clip's world rotation.
+      if (m![1] === 'clavicle') this.depress[b] = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), m![2] === 'L' ? 0.5 : -0.5);
     }
     for (const [first, second] of TWIST_PAIRS) {
       const f = map.idx(first), s = map.idx(second);
@@ -247,6 +253,8 @@ export class ClipRig {
         const w = world[b].copy(delta[a]);
         if (c !== a && t > 0) w.slerp(delta[c], t);
         w.multiply(this.align[b]);
+        const dep = this.depress[b];
+        if (dep) w.premultiply(_q2.copy(pw).multiply(dep).multiply(_q.copy(pw).invert()));
         local[b].copy(pw).invert().multiply(w);
       }
       // Limb twist: split the first segment's twist about its axis with the second segment.
