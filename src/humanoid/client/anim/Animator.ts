@@ -1298,8 +1298,10 @@ export class Animator {
       const sg = s === 'L' ? -1 : 1;
       const sh = R(`shoulder01.${s}`), el = R(`lowerarm01.${s}`), wr = R(`wrist.${s}`);
       // Collarbones slightly forward (relaxed shoulders sit a little in front of the spine line;
-      // the rest pose had them pulled back, so the arms hung from behind the chest).
-      const C = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.4);
+      // the rest pose had them pulled back, so the arms hung from behind the chest) and lowered:
+      // the A-pose rest lifts them, and kept there the shoulders rose from the neck as if shrugged.
+      const C = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.4)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -sg * 0.25));
       const Ci = C.clone().invert();
       this.neutral[this.map.idx(`clavicle.${s}`)] = C;
       const u = el.clone().sub(sh).applyQuaternion(C).normalize();

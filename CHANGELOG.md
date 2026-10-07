@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.098 — 2026-10-07
+
+- **Shoulders sit lower.** People no longer hold their collarbones up as in a shrug: the shoulder line now slopes down from the neck, the neck shows its full length, and the arms hang from lower, closer shoulders.
+
 ## 0.097 — 2026-10-07
 
 - **Metro entrance stairs no longer run into the station's underpass.** At every station one entrance's stairs used to end right where the passage under the tracks starts down, so its side wall stood across the stairs (a wall you could walk through) and the steps dipped below the hall and climbed back up. Seen at Spring Market and Highland Park. Those stairs now take a different way down and end level with the hall.
