@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.115 — 2026-10-07
+
+- **Every sewer ladder leads out.** About one manhole shaft in twelve lay outside every city block, so standing at its ladder never showed the E prompt. Every shaft now has its E prompt from the start, and its lid lies on the street of the nearest block. The decorative maintenance ladders on the metro tunnel walls, which led nowhere, are gone.
+
 ## 0.114 — 2026-10-07
 
 - **Traffic lights no longer throw an error after the road network rebuilds.** When the city streamed new streets in or dropped far ones, the traffic lights still on screen kept the old network's junction numbers for a moment (or for good, if no light of that kind was near you any more), and reading their colour hit a junction that no longer existed. The console showed "[props] TypeError … reading 'signal'". The lights now switch to the new network in the same frame, and lights that are no longer drawn are forgotten.

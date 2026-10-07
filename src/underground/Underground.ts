@@ -23,7 +23,7 @@ import type { TextureLibrary } from '../render/TextureLibrary';
 import { toGeometry } from '../stream/CityStreamer';
 import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Volumes';
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
-import { pointInPoly } from '../core/geom2';
+import { pointInPoly, polyBounds, distPointPolyEdge } from '../core/geom2';
 import { G } from '../render/materials/globals';
 import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, underpassRoute, routeEnv, TRAIN_SEATS, seatYaw, platformSeats, trainsOn, nextTrainAt, carPose, DWELL, SEWER_HW, MANHOLE_EVERY, SHAFT_IN, SHAFT_HS, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SHAFT_VAULT, HOLE_R, COLLAR, shaftPoint, type ManholeSpot, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
@@ -463,13 +463,15 @@ export class Underground {
     return y < this.ground(x, z) - 1.2 && this.floorAt(x, y, z) !== null;
   }
 
-  /** Manhole lids above the sewers (placed per loaded cell, every ~45 m along each trunk). */
+  /** Manhole shafts by 32 m grid square (every ~45 m along each trunk), for E and hints. */
   private manholes = new Map<number, ManholeSpot[]>();
   /** Lids per cell (generated once; re-announced whenever the cell's props are rebuilt). */
   private manholeCells = new Map<number, { x: number; z: number; yaw: number }[]>();
   /** Every manhole of the city, per trunk (planned once, see planManholes). */
   private shafts = new Map<Tube, ManholeSpot[]>();
   private allShafts: ManholeSpot[] = [];
+  /** The shafts whose lids each cell places (see planManholes). */
+  private cellShafts = new Map<number, ManholeSpot[]>();
   /** A manhole lid was placed (the game adds the visible lid prop). */
   onManhole?: (cell: number, x: number, z: number, yaw: number) => void;
 
@@ -506,6 +508,42 @@ export class Underground {
       }
       this.shafts.set(t, list);
     });
+    // Every shaft is climbable (E) from the start; its lid lies in the cell it is in, else in the
+    // nearest one (about one shaft in twelve lies in no cell: its ladder used to lead nowhere).
+    const B = 128, grid = new Map<number, number[]>();
+    for (const c of this.macro.cells) {
+      if (!c.poly) continue;
+      const b = polyBounds(c.poly);
+      for (let i = Math.floor(b[0] / B); i <= Math.floor(b[2] / B); i++) for (let j = Math.floor(b[1] / B); j <= Math.floor(b[3] / B); j++) {
+        const k = i * 65536 + j;
+        let l = grid.get(k);
+        if (!l) grid.set(k, (l = []));
+        l.push(c.id);
+      }
+    }
+    const near = (x: number, z: number, r: number) => {
+      const ids = new Set<number>();
+      for (let i = Math.floor(x / B) - r; i <= Math.floor(x / B) + r; i++) for (let j = Math.floor(z / B) - r; j <= Math.floor(z / B) + r; j++) for (const id of grid.get(i * 65536 + j) ?? []) ids.add(id);
+      return ids;
+    };
+    for (const m of this.allShafts) {
+      const key = Math.floor(m.x / 32) * 65536 + Math.floor(m.z / 32);
+      let l = this.manholes.get(key);
+      if (!l) this.manholes.set(key, (l = []));
+      l.push(m);
+      let owner = -1;
+      for (const id of near(m.x, m.z, 0)) if (pointInPoly(this.macro.cells[id].poly, m.x, m.z)) { owner = id; break; }
+      for (let r = 1, bd = Infinity; owner < 0 && r < 64; r *= 2) {
+        for (const id of near(m.x, m.z, r)) {
+          const d = distPointPolyEdge(this.macro.cells[id].poly, m.x, m.z);
+          if (d < bd) { bd = d; owner = id; }
+        }
+      }
+      if (owner < 0) continue;
+      let o = this.cellShafts.get(owner);
+      if (!o) this.cellShafts.set(owner, (o = []));
+      o.push(m);
+    }
   }
 
   /**
@@ -543,16 +581,7 @@ export class Underground {
 
   private generateManholes(cellId: number): { x: number; z: number; yaw: number }[] {
     const out: { x: number; z: number; yaw: number }[] = [];
-    const poly = this.macro.cells[cellId]?.poly;
-    if (!poly) return out;
-    for (const m of this.allShafts) {
-      if (!pointInPoly(poly, m.x, m.z)) continue;
-      const key = Math.floor(m.x / 32) * 65536 + Math.floor(m.z / 32);
-      let l = this.manholes.get(key);
-      if (!l) this.manholes.set(key, (l = []));
-      if (!l.includes(m)) l.push(m);
-      out.push({ x: m.x, z: m.z, yaw: Math.atan2(m.dx, m.dz) });
-    }
+    for (const m of this.cellShafts.get(cellId) ?? []) out.push({ x: m.x, z: m.z, yaw: Math.atan2(m.dx, m.dz) });
     return out;
   }
 
@@ -583,7 +612,7 @@ export class Underground {
     this.lastBuildPos.set(1e9, 0, 0);
   }
 
-  /** Every placed manhole lid (cells loaded so far), e.g. for the map. */
+  /** Every manhole of the city, e.g. for the map. */
   forEachManhole(fn: (x: number, z: number) => void): void {
     for (const l of this.manholes.values()) for (const m of l) fn(m.x, m.z);
   }
@@ -901,7 +930,7 @@ export class Underground {
             mb.set('aTint', 0.32, 0.32, 0.33);
           }
         }
-        // Every 60 m an emergency exit sign (running figure) and, now and then, a maintenance ladder.
+        // Every 60 m an emergency exit sign (running figure). (No ladders: a ladder here led nowhere.)
         const sA = t.cum[i], sB = t.cum[i + 1];
         for (let s = Math.ceil(sA / 60) * 60; s < sB; s += 60) {
           const f = (s - sA) / Math.max(1e-6, sB - sA), sd = (s / 60) % 2 ? 1 : -1;
@@ -910,12 +939,6 @@ export class Underground {
           if (halls.some((bb) => boxAt(bb, cx, cy + 0.5, cz, 2))) continue;
           const o = sd * (hw - 0.03);
           signs.push(cx - d0[1] * o, cy + 2.3, cz + d0[0] * o, -sd * -d0[1], -sd * d0[0]);
-          if ((s / 60) % 3 === 0) {
-            mb.set('aLayer', 11).set('aTint', 0.5, 0.42, 0.12);
-            const o2 = sd * (hw - 0.18);
-            for (const e of [-0.22, 0.22]) mb.beam(cx - d0[1] * o2 + d0[0] * e, cy, cz + d0[0] * o2 + d0[1] * e, cx - d0[1] * o2 + d0[0] * e, cy + 4.6, cz + d0[0] * o2 + d0[1] * e, 0.025, 0.025);
-            for (let r = 0.3; r < 4.6; r += 0.3) mb.beam(cx - d0[1] * o2 - d0[0] * 0.22, cy + r, cz + d0[0] * o2 - d0[1] * 0.22, cx - d0[1] * o2 + d0[0] * 0.22, cy + r, cz + d0[0] * o2 + d0[1] * 0.22, 0.015, 0.015);
-          }
         }
         mb.set('aLayer', 8).set('aTint', 0.8, 0.8, 0.78);
       }
