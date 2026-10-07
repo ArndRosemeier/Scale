@@ -519,7 +519,8 @@ export class Factions {
     const dp = Math.hypot(b.x - P.x, b.z - P.z), dy = Math.abs(b.y + b.r - (P.y + P.h * 0.4));
     const S = ROLE[b.role];
     b.glow += ((b.mode === 'fight' ? 1.3 : 0.75) - b.glow) * Math.min(1, dt * 2);
-    if (b.detour) b.detour = Math.max(0, b.detour - dt);
+    // A detour lasts till its path is walked (or 20 s).
+    if (b.detour) b.detour = b.mode === 'go' ? Math.max(0, b.detour - dt) : 0;
     // Pick a fight: the player first, whenever in reach and in sight (dropping a Lumen for them when
     // they come close), else the nearest Lumen.
     if (!b.detour && (b.mode !== 'fight' || (b.foe && dp < SWITCH)) && (b.t * 4 + b.id * 0.37) % 1 < dt * 4) {
@@ -557,7 +558,7 @@ export class Factions {
       if (dp < b.best - 0.3) { b.best = dp; b.bestT = 0; } else if ((b.bestT += dt) > 2 && dp > reach + 1) {
         const r = this.route(this.nodeNear(b.x, b.y, b.z), this.nodeNear(P.x, P.y, P.z));
         b.best = Infinity; b.bestT = 0;
-        if (r.length) { b.path = r; b.mode = 'go'; b.detour = 6; this.nextWaypoint(b); return; }
+        if (r.length) { b.path = r; b.mode = 'go'; b.detour = 20; this.nextWaypoint(b); return; }
       }
       if (dp > reach) { this.walk(b, dt, S.speed * (b.lunge > 0 ? 2.5 : 1)); if (dp < reach + 2.2 && b.cd <= 0 && b.lunge <= 0) { b.lunge = 0.35; } return; }
       if (b.cd <= 0) {

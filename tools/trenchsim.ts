@@ -28,7 +28,8 @@ function run(plan: DeepPlan, secs: number, player: 'away' | 'trench' | 'noMans')
   const field = new DeepField(plan.prims, plan.seed);
   const T = plan.trench;
   const at = (s: number, l: number) => { const x = T.x + T.ax * s + T.cx * l, z = T.z + T.az * s + T.cz * l; return { x, y: field.floorAt(x, T.y + 1.5, z, 5) ?? T.y, z }; };
-  const pp = player === 'trench' ? T.posts[0] : player === 'noMans' ? at((T.noMans[0] + T.noMans[1]) / 2, -4) : { x: 1e6, y: 0, z: 1e6 };
+  // No-man's land: its middle, a little off the Murk's lane (with a chasm, over the bridge on their side of it).
+  const pp = player === 'trench' ? T.posts[0] : player === 'noMans' ? (T.chasm ? at((T.chasm.s + T.chasm.r + T.murkS) / 2, T.chasm.l - 2) : at((T.noMans[0] + T.noMans[1]) / 2, -4)) : { x: 1e6, y: 0, z: 1e6 };
   const out: TrenchRun = { spawned: 0, killed: 0, past: 0, reachedLine: 0, sentriesLost: 0, playerHits: 0, bolts: 0, hits: 0, sAtDeath: [], alive: [] };
   const sOf = (x: number, z: number) => (x - T.x) * T.ax + (z - T.z) * T.az;
   const host: FactionHost = {
