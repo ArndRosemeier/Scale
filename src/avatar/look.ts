@@ -37,6 +37,8 @@ export interface OutfitSpec {
   hatColor: RGB;
   /** Fine detail (skirt / dress length, sleeves). */
   seed: number;
+  /** false: no default underwear where nothing else covers (missing = worn). */
+  underwear?: boolean;
 }
 
 export interface CharacterLook {
@@ -49,6 +51,9 @@ function vis(seed: number, primary: RGB, secondary: RGB, pattern = 'plain'): Ite
 }
 
 /** Outfit spec → what the wardrobe renders. */
+/** Marker item (waist slot): leave off the default underwear (see Equipment.set). */
+export const NO_UNDERWEAR = 'no-underwear';
+
 export function outfitVisuals(o: OutfitSpec): EquipmentVisuals {
   const s = o.seed >>> 0;
   const eq: EquipmentVisuals = {};
@@ -57,6 +62,7 @@ export function outfitVisuals(o: OutfitSpec): EquipmentVisuals {
   if (o.outer !== 'none') eq.back = { defId: o.outer, visual: vis(s + 2, o.outerColor, o.outerColor.map((c) => c * 0.8) as RGB, o.outerLeather && o.outer === 'jacket' ? 'leather' : 'plain') };
   if (o.shoes !== 'none') eq.feet = { defId: o.shoes, visual: vis(s + 3, o.shoesColor, [1, 1, 1]) };
   if (o.hat !== 'none') eq.head = { defId: o.hat, visual: vis(s + 4, o.hatColor, o.hatColor) };
+  if (o.underwear === false) eq.waist = { defId: NO_UNDERWEAR, visual: vis(s + 5, [0, 0, 0], [0, 0, 0]) };
   return eq;
 }
 
@@ -80,6 +86,7 @@ export function outfitFromVisuals(eq: EquipmentVisuals, seed: number): OutfitSpe
     hat: pick(HATS, head?.defId, 'none'),
     hatColor: head?.visual.primary ?? [0.12, 0.13, 0.16],
     seed: seed >>> 0,
+    underwear: eq.waist?.defId === NO_UNDERWEAR ? false : undefined,
   };
 }
 

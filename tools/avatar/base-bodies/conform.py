@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from glb import Glb, world_matrices  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
-BODIES = os.path.join(ROOT, 'public/assets/bodies')
+BODIES = os.path.join(ROOT, 'tools/avatar/base-bodies/bodies')
 OUT = os.path.join(ROOT, 'public/assets/human')
 
 
