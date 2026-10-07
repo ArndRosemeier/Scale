@@ -322,6 +322,7 @@ body.looking #crosshair { display: block; }
 .pw-reset:hover { color: #e8ecf0; border-color: #6b7a8a; }
 .pw-reset.danger { color: #ff8a7a; border-color: #8a3a32; }
 #map .map-key .core { display: inline-block; width: 10px; height: 10px; margin: 0 2px; background: #58d6ff; transform: rotate(45deg); box-shadow: 0 0 0 1.5px #fff, 0 0 6px #58d6ff; }
+#map .map-key .shard { display: inline-block; flex: none; width: 9px; height: 18px; margin: 0 3px; background: linear-gradient(180deg, #f2f8ff, #7fb8ff 55%, #5a3fd0); clip-path: polygon(50% 0, 100% 40%, 80% 85%, 50% 100%, 20% 85%, 0 40%); filter: drop-shadow(0 0 4px #9fd0ff); }
 #map .map-key .alert { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 7px; background: #ff9f43; color: #1a1408; font-weight: 800; font-size: 10px; box-shadow: 0 0 0 1.5px #fff; }
 @media (max-width: 760px) { .pw-list { grid-template-columns: 1fr; } .pw-slots { grid-template-columns: repeat(5, 1fr); } .pw-hot-label span { display: none; } }
 

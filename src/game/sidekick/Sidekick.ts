@@ -639,7 +639,9 @@ export class Sidekick {
     if (this.phase === 'reported' && s) {
       list.push({ x: s.zx, z: s.zz, r: s.zr, color: SHARD_COLOR, kind: 'zone', always: true, title: 'A strange glowing stone was found around here (on the news). Up close you will feel its pull' });
       const p = this.g.player.pos;
-      if (Math.hypot(s.x - p.x, s.z - p.z) < SHARD.pullR) list.push({ x: s.x, z: s.z, color: SHARD_COLOR, kind: 'core', title: 'The shard: you can feel it here' });
+      // Close enough to feel it: exactly where it lies; else the middle of the area the news gave.
+      if (Math.hypot(s.x - p.x, s.z - p.z) < SHARD.pullR) list.push({ x: s.x, z: s.z, color: SHARD_COLOR, kind: 'shard', always: true, title: 'The second shard: it lies here. Press E or walk into it to take it' });
+      else list.push({ x: s.zx, z: s.zz, color: SHARD_COLOR, kind: 'shard', always: true, title: 'The second shard (on the news): somewhere in this circle. Up close you will feel its pull' });
     }
     for (const gr of this.graves) list.push({ x: gr.x, z: gr.z, color: '#c9c6bd', kind: 'dot', title: `The grave of ${gr.name}, who stood by you` });
     const key = list.map((m) => `${m.kind}${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(';');
