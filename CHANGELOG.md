@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.103 — 2026-10-07
+## 0.104 — 2026-10-07
 
 - **Player's manual.** A "Manual" link next to Feedback on the start screen (and in the pause menu) opens a 25-page illustrated PDF manual: getting started, controls, powers, landmarks, places to explore, people and favours, crime and the six organisations, big threats and the army, reputation, and what happens when you go down. Spoiler-light by design.
+
+## 0.103 — 2026-10-07
+
+- **No game changes.** The plan for an optional sidekick is written down (docs/SIDEKICK_PLAN.md).
 
 ## 0.102 — 2026-10-07
 
