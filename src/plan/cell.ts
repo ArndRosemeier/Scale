@@ -874,7 +874,9 @@ function placeCemetery(cem: Shape, plan: CellPlan, r: Rng, push: (t: PropType, x
     const dx = wallLine[j * 2] - ax, dz = wallLine[j * 2 + 1] - az, l = Math.hypot(dx, dz);
     if (l < 0.3) continue;
     const ux = dx / l, uz = dz / l, yaw = Math.atan2(-uz, ux);
-    pillar(ax, az, yaw);
+    // A pillar where the wall turns (not at every bend of a curved side).
+    const h = (i + n - 1) % n, px = ax - wallLine[h * 2], pz = az - wallLine[h * 2 + 1], pl = Math.hypot(px, pz);
+    if (pl < 1e-6 || (px * ux + pz * uz) / pl < 0.94) pillar(ax, az, yaw);
     if (i === gi && l > 2 * GATE + 2) {
       run(ax, az, ux, uz, 0.3, l / 2 - GATE - 0.3, yaw);
       run(ax, az, ux, uz, l / 2 + GATE + 0.3, l - 0.3, yaw);

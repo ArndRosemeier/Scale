@@ -15,7 +15,7 @@ when its boss is jailed and its stash busted. Phase 4 part 2 is built (v0.087): 
 Syndicate's bank heist, the gang's street takeover, the techno-cult's machine uprising, the cult's great ritual, the
 eco-radicals' tree waking, the necromancers' raising of the dead), and the last two groups: the eco-radicals (sabotage
 of robots and cars, the Beast-master with a dog pack and the whistle, the Elder whose sung-awake tree walks the
-streets as a major threat) and the necromancers (raisings among the trees, processions of entranced citizens woken
+streets as a major threat) and the necromancers (raisings in a walled cemetery or among the trees, processions of entranced citizens woken
 with E, the Bone-caller's drain and wail, the Grave Lord's curse, skeletons that pull themselves together while a
 necromancer stands). Builds on the street-crime layer (`src/game/crime`),
 the threat/response layer (`src/game/threats`, `src/game/response`) and the powers

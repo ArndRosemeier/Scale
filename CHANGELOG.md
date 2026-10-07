@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.091 — 2026-10-07
+
+- **Cemeteries.** Every city now has a few walled cemeteries, mostly in the old town and the quiet residential streets (on the map they show green, like parks). A stone wall with corner pillars runs round each one, with a gate in the middle of its longest side. A gravel path leads from the gate past tall dark yews to a mausoleum at the far end, and a cross path meets it at a mourning figure on a pedestal. Rows of headstones, stone crosses, ledger graves and obelisks face the gate, in pale limestone, dark granite and sandstone. Headstones can be knocked over; the wall breaks.
+- **The necromancers go to the cemetery.** If there is one nearby, their raisings happen there, and the Grave Lord's great circle gathers there rather than before the cathedral.
+
 ## 0.090 — 2026-10-07
 
 - **The procession's lantern really shows now,** a green-lit lantern held up in the necromancer's hand.
