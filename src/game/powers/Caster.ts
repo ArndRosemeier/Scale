@@ -14,7 +14,7 @@
  */
 import type { Rng } from '../../core/rng';
 
-export type VillainPower = 'bolt' | 'fireball' | 'frost' | 'gust' | 'quake' | 'dash' | 'shield' | 'stun' | 'smoke' | 'emp';
+export type VillainPower = 'bolt' | 'fireball' | 'frost' | 'gust' | 'quake' | 'dash' | 'shield' | 'stun' | 'smoke' | 'emp' | 'whistle' | 'drain' | 'wail' | 'curse';
 
 export interface PowerDef {
   /** Wind-up (s): the tell. */
@@ -58,6 +58,14 @@ export const VILLAIN_POWERS: Record<VillainPower, PowerDef> = {
   emp: { windup: 0.85, cooldown: 11, min: 4, max: 20, dmg: 7, radius: 6, hold: 0, pose: 'cast_up', tell: [0.9, 1.5, 3], tellSound: 'deep_glow', sound: 'thunder_far', pitch: 1.4 },
   /** A smoke bomb at their own feet: a cloud to slip away in. */
   smoke: { windup: 0.3, cooldown: 40, min: 0, max: 60, dmg: 0, radius: 6, hold: 0, pose: 'throw', tell: [1, 1, 1], tellSound: 'cuffs', sound: 'spray_hiss', pitch: 0.55 },
+  /** Two fingers to the mouth, a shrill whistle: the caster's dog pack lunges at where the target stood. */
+  whistle: { windup: 0.7, cooldown: 9, min: 3, max: 30, dmg: 0, radius: 2.5, hold: 0, pose: 'cast_self', tell: [0.6, 1.4, 0.4], tellSound: 'dog_bark', sound: 'army_whistle', pitch: 1.5 },
+  /** A green beam that locks on and drains life into the caster while it holds (break the line or get out of reach). */
+  drain: { windup: 0.85, cooldown: 10, min: 3, max: 16, dmg: 7, radius: 1, hold: 2.2, pose: 'cast_forward', tell: [0.5, 2.6, 0.9], tellSound: 'deep_glow', sound: 'heart_pulse', pitch: 0.7 },
+  /** A wail: the street flees, whoever stands close is shaken (a jolt, slowed for a moment). */
+  wail: { windup: 0.9, cooldown: 13, min: 0, max: 9, dmg: 5, radius: 10, hold: 0, pose: 'cast_up', tell: [0.8, 1.8, 0.9], tellSound: 'deep_murk', sound: 'brood_screech', pitch: 0.55 },
+  /** A slow green hex that drifts to where the target stood: slows for a while and stings. */
+  curse: { windup: 0.7, cooldown: 11, min: 3, max: 20, dmg: 6, radius: 1.6, hold: 0, pose: 'cast_forward', tell: [0.6, 2.2, 0.8], tellSound: 'deep_glow', sound: 'membrane', pitch: 0.6 },
 };
 
 export const CASTERS = {
@@ -73,8 +81,14 @@ export const CASTERS = {
   dashSpeed: 11,
   /** Stun: seconds down. */
   stunDown: 1.4,
-  /** Fireball flight speed (m/s); quake crack speed (m/s). */
-  orbSpeed: 20, crackSpeed: 15,
+  /** Fireball flight speed (m/s); quake crack speed (m/s); a curse's drift (m/s). */
+  orbSpeed: 20, crackSpeed: 15, hexSpeed: 9,
+  /** Cursed: seconds of slow and the speed share left. */
+  curse: 5, curseSpeed: 0.6,
+  /** Wail: seconds the player is shaken (slowed) close to it. */
+  wailShaken: 1.6,
+  /** Drain: share of the damage the caster heals by; the beam lets go beyond this reach (× the power's max). */
+  drainHeal: 2, drainSlack: 1.25,
 };
 
 /** What a caster knows when it picks a power. */
@@ -101,7 +115,7 @@ export interface Cast {
 }
 
 /** Powers that need a clear line to the target. */
-const LINE: readonly VillainPower[] = ['bolt', 'fireball', 'frost', 'gust', 'dash'];
+const LINE: readonly VillainPower[] = ['bolt', 'fireball', 'frost', 'gust', 'dash', 'drain', 'curse'];
 
 export class Caster {
   /** Seconds until each power can be used again. */

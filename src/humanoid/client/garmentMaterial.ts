@@ -13,7 +13,7 @@ import type { ShellMaterial } from '../../items/wearable';
 import { GLSL_NOISE } from './glsl';
 
 const PATTERNS: Record<ShellMaterial['pattern'], number> = {
-  plain: 0, stripes: 1, checks: 2, quilted: 3, chainmail: 4, scales: 5, leather: 6, fur: 7, embroidered: 8, patchwork: 9, silk: 10, plates: 11, runes: 12,
+  plain: 0, stripes: 1, checks: 2, quilted: 3, chainmail: 4, scales: 5, leather: 6, fur: 7, embroidered: 8, patchwork: 9, silk: 10, plates: 11, runes: 12, bones: 13,
 };
 
 export interface GarmentHandle {
@@ -105,6 +105,18 @@ void garmentEval() {
   w /= (w.x + w.y + w.z);
   vec3 p = vGBind * sc;
   vec4 a = g_pat(p.zy, id) * w.x + g_pat(p.xz, id) * w.y + g_pat(p.xy, id) * w.z;
+  if (id > 12.5) {
+    // bones: a black suit with the skeleton on it, laid out in the body's own space (metres, feet
+    // at 0): ribs and a breastbone, the spine, the pelvis, pale limbs with dark knees and ankles.
+    vec3 b = vGBind;
+    float ax = abs(b.x), bone = 0.0;
+    if (b.y > 1.0 && b.y < 1.42) bone = max(step(0.45, fract((b.y - 1.0) * 12.0)) * step(ax, 0.17), step(ax, 0.022));
+    else if (b.y > 0.9 && b.y <= 1.0) bone = step(ax, 0.03) * step(0.45, fract(b.y * 25.0));
+    else if (b.y > 0.8 && b.y <= 0.9) bone = step(ax, 0.16) * (1.0 - step(abs(ax - 0.085), 0.03));
+    else if (b.y <= 0.8) bone = step(0.025, abs(b.y - 0.5)) * step(0.018, abs(b.y - 0.09));
+    if (ax > 0.21 && b.y > 0.9) bone = step(0.02, abs(fract(ax * 3.3) - 0.5));
+    a = vec4(bone, bone * 0.0006, 0.1, 0.0);
+  }
   vec3 c = mix(gColor, gColor2, clamp(a.x, 0.0, 1.0));
   float big = h_fbm3(vGBind * 6.0 + gParams.w);
   c *= 0.9 + 0.2 * big;

@@ -431,6 +431,8 @@ export class Police {
         const ca = c.actor;
         if (!c.alive || !ca || ca.state === 'arrested' || ca.state === 'gone' || claimed.has(c)) continue;
         if (act.memo.skipT > 0 && act.memo.skipId === c.id) continue;
+        // (A skeleton in pieces is not cuffed: it pulls itself together, or crumbles with its master.)
+        if (ca.memo.skel && (ca.state === 'ko' || c.state === PState.Down)) continue;
         const d = Math.hypot(c.x - o.x, c.z - o.z);
         if (d < bd) { bd = d; tgt = c; }
       }

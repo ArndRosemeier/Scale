@@ -3,8 +3,11 @@
  * recognised before they act. The gang: a cap in the group colour, a top or jacket in it, jeans and
  * sneakers. The Syndicate: dark suits, a shirt in the accent colour. The techno-cult: grey work
  * clothes, boots and a helmet or beanie, a faintly lit seam in its colour. The elemental cult: long
- * dark coats like robes with glowing trim, a dark beanie for a hood. Seeded per person (small shade
- * variations), the same person always dressed the same.
+ * dark coats like robes with glowing trim, a dark beanie for a hood. The eco-radicals: patchwork
+ * greens and browns like bark and leaves, boots, a wreath of leaves. The necromancers: black robes,
+ * a bone-white mask under a hood, the eyes lit pale. The dead they raise: a black body with the
+ * bones on it and a skull for a head. Seeded per person (small shade variations), the same person
+ * always dressed the same.
  */
 import { Rng } from '../../core/rng';
 import type { EquipmentVisuals } from '../../items/types';
@@ -39,6 +42,26 @@ export function factionOutfit(f: Faction, seed: number): EquipmentVisuals {
       head: { defId: 'beanie', visual: v(shade(robe, 0.8), A) },
     } as unknown as EquipmentVisuals;
   }
+  if (f.archetype === 'eco') {
+    const bark: C3 = [0.22 + r.float() * 0.08, 0.15 + r.float() * 0.05, 0.08], moss = shade(P, 0.8 + r.float() * 0.5);
+    return {
+      chest: { defId: r.chance(0.6) ? 'sweater' : 'tshirt', visual: v(moss, shade(moss, 0.6), 'patchwork') },
+      back: { defId: 'jacket', visual: v(r.chance(0.5) ? bark : shade(P, 0.7), shade(A, 0.5), 'patchwork', 0.25) },
+      legs: { defId: 'trousers', visual: v(r.chance(0.5) ? shade(bark, 0.8) : shade(moss, 0.6), bark) },
+      feet: { defId: 'boots', visual: v(shade(bark, 0.6), dark) },
+      head: r.chance(0.7) ? { defId: 'leafwreath', visual: v(shade(A, 0.6), bark) } : { defId: 'beanie', visual: v(shade(moss, 0.7), A) },
+    } as unknown as EquipmentVisuals;
+  }
+  if (f.archetype === 'necro') {
+    const robe = shade(P, 0.8 + r.float() * 0.4), bone: C3 = [0.86, 0.84, 0.76];
+    return {
+      chest: { defId: 'sweater', visual: v(robe, robe) },
+      back: { defId: 'coat', visual: v(robe, shade(A, 0.4), 'plain', 0.35) },
+      legs: { defId: 'trousers', visual: v(robe, robe) },
+      feet: { defId: 'boots', visual: v(dark, dark) },
+      head: { defId: 'bonemask', visual: { ...v(robe, bone), glowColor: A } },
+    } as unknown as EquipmentVisuals;
+  }
   if (f.archetype === 'syndicate') {
     const suit = shade(P, 0.85 + r.float() * 0.3);
     return {
@@ -65,10 +88,24 @@ export function factionOutfit(f: Faction, seed: number): EquipmentVisuals {
  * out of the crowd before they cast — the gang's Brute in a leather jacket, the Syndicate's
  * Enforcer with lit seams on the suit, the cults' Technomancer and Invoker brightly lit.
  */
+/** One of the old dead a necromancer raised: the bones on a black body, a skull with lit eyes (the group's glow). */
+export function skeletonOutfit(f: Faction | null, seed: number): EquipmentVisuals {
+  const r = new Rng(seed ^ 0x5ce1);
+  const black: C3 = [0.02, 0.02, 0.025], bone: C3 = [0.8 + r.float() * 0.08, 0.77 + r.float() * 0.06, 0.66 + r.float() * 0.06];
+  const eyes: C3 = f?.palette.accent ?? [0.45, 1, 0.55];
+  const v = (primary: C3, secondary: C3, material = 'plain') => ({ shape: 'cloth', seed: r.nextU32(), primary, secondary, accent: eyes, material, glow: 0, glowColor: eyes });
+  return {
+    chest: { defId: 'sweater', visual: v(black, bone, 'bones') },
+    legs: { defId: 'trousers', visual: v(black, bone, 'bones') },
+    feet: { defId: 'shoes', visual: v(bone, bone) },
+    head: { defId: 'skull', visual: v(bone, bone) },
+  } as unknown as EquipmentVisuals;
+}
+
 export function lieutenantOutfit(f: Faction, seed: number): EquipmentVisuals {
   const o = factionOutfit(f, seed) as unknown as Record<string, { defId: string; visual: { primary: C3; secondary: C3; accent: C3; material: string; glow: number; glowColor?: C3 } }>;
   const A = f.palette.accent;
-  if (f.archetype === 'techno' || f.archetype === 'cult') {
+  if (f.archetype === 'techno' || f.archetype === 'cult' || f.archetype === 'eco' || f.archetype === 'necro') {
     o.back.visual = { ...o.back.visual, glow: 0.7, glowColor: A };
   } else if (f.archetype !== 'syndicate') {
     o.back = { defId: 'jacket', visual: { ...(o.chest.visual), primary: shade(f.palette.primary, 0.7), secondary: A, accent: A, material: 'leather', glow: 0.6, glowColor: A } };

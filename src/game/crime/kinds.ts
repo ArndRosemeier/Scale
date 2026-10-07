@@ -16,6 +16,9 @@ import { Hijack } from './Hijack';
 import { Ritual } from './Ritual';
 import { SewerDen } from './SewerDen';
 import { BossOperation, BOSS_OP_TITLE } from './BossOp';
+import { Sabotage } from './Sabotage';
+import { Raising } from './Raising';
+import { Procession } from './Procession';
 
 export interface KindSpec {
   make(w: CrimeWorld, seed: number, near: { x: number; z: number } | null): Crime;
@@ -43,6 +46,9 @@ export const KINDS: Record<CrimeKind, KindSpec> = {
   hideout: { make: (w, s, n) => new HideoutGuard(w, s, { x: n?.x ?? w.player.x, z: n?.z ?? w.player.z, nx: 0, nz: 1 }), ko: 9, resolved: 10, rep: 3, title: 'A hideout, guarded', criminal: 'Guard', stopped: 'the guards of a hideout' },
   hijack: { make: (w, s, n) => new Hijack(w, s, n), ko: 12, resolved: 22, rep: 6, title: 'Techno-cultists hacking the robots', criminal: 'Hacker', stopped: 'a robot hijack' },
   ritual: { make: (w, s, n) => new Ritual(w, s, n), ko: 10, resolved: 20, rep: 5, title: 'A ritual — robed figures chanting in a circle', criminal: 'Cultist', stopped: 'a ritual' },
+  sabotage: { make: (w, s, n) => new Sabotage(w, s, n), ko: 10, resolved: 20, rep: 5, title: 'Sabotage — eco-radicals wrecking the machines', criminal: 'Saboteur', stopped: 'a sabotage' },
+  raising: { make: (w, s, n) => new Raising(w, s, n), ko: 10, resolved: 22, rep: 6, title: 'A raising — skeletons clawing out of the ground', criminal: 'Necromancer', stopped: 'a raising of the dead' },
+  procession: { make: (w, s, n) => new Procession(w, s, n), ko: 12, resolved: 24, rep: 6, title: 'A procession — people led away in a trance', criminal: 'Necromancer', stopped: 'a procession of thralls' },
   // (A den's crew is posted in a sewer hideout by CrimeSystem; `make` without a site puts them at the point.)
   den: { make: (w, s, n) => { const x = n?.x ?? w.player.x, z = n?.z ?? w.player.z, y = w.player.y; return new SewerDen(w, s, { room: -1, spots: [0, 1, 2].map((i) => ({ x: x + i, y, z, fx: x, fz: z + 3, sit: false })), stash: { x, y, z }, cx: x, cy: y, cz: z }); }, ko: 9, resolved: 14, rep: 4, title: 'A den in the sewers', criminal: 'Crook', stopped: 'a sewer den' },
   bomber: { make: (w, s, n) => new Bomber(w, s, n), ko: 18, resolved: 32, rep: 8, title: 'A mad bomber — explosions in the street', criminal: 'Mad bomber', stopped: 'a mad bomber' },
@@ -51,4 +57,6 @@ export const KINDS: Record<CrimeKind, KindSpec> = {
   takeover: { make: (w, s, n) => new BossOperation(w, s, 'takeover', n), ko: 12, resolved: 50, rep: 10, title: BOSS_OP_TITLE.takeover, criminal: 'Wrecker', stopped: 'a gang takeover' },
   uprising: { make: (w, s, n) => new BossOperation(w, s, 'uprising', n), ko: 12, resolved: 55, rep: 10, title: BOSS_OP_TITLE.uprising, criminal: 'Hacker', stopped: 'a machine uprising' },
   awakening: { make: (w, s, n) => new BossOperation(w, s, 'awakening', n), ko: 12, resolved: 55, rep: 10, title: BOSS_OP_TITLE.awakening, criminal: 'Chanter', stopped: 'a great ritual' },
+  treewake: { make: (w, s, n) => new BossOperation(w, s, 'treewake', n), ko: 12, resolved: 55, rep: 10, title: BOSS_OP_TITLE.treewake, criminal: 'Singer', stopped: 'a tree waking' },
+  deadrise: { make: (w, s, n) => new BossOperation(w, s, 'deadrise', n), ko: 12, resolved: 60, rep: 12, title: BOSS_OP_TITLE.deadrise, criminal: 'Necromancer', stopped: 'the dead rising' },
 };

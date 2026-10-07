@@ -31,6 +31,10 @@ export function streetWearable(defId: string, v: ItemVisual): WearableSpec | nul
     case 'sandwichboard': return { layers: [rigid('chest', (f) => sandwichBoard(f, v.style || 'THE END IS NIGH', c))] };
     case 'guitar': return { layers: [rigid('chest', (f) => guitar(f, c))] };
     case 'citymap': return { layers: [rigid('chest', cityMap)] };
+    // Villain groups' heads (game/factions/outfits): the raised dead, the necromancers, the eco-radicals.
+    case 'skull': return { layers: [rigid('head', (f) => skull(f, c, v.glowColor ?? v.accent))], hideHair: true, hideBeard: true };
+    case 'bonemask': return { layers: [rigid('head', (f) => boneMask(f, c, c2, v.glowColor ?? v.accent))], hideHair: true };
+    case 'leafwreath': return { layers: [rigid('head', (f) => leafWreath(f, c, c2))] };
     default: return null;
   }
 }
@@ -177,6 +181,101 @@ function chickenHead(fit: BodyFit, c: C3): THREE.Object3D {
     g.add(eye, pupil);
   }
   g.add(head, beak, comb, wattle);
+  return g;
+}
+
+const lit = (c: C3, k: number): THREE.MeshStandardMaterial => {
+  const m = std([c[0] * 0.3, c[1] * 0.3, c[2] * 0.3], 0.4);
+  m.emissive = new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+  m.emissiveIntensity = k;
+  return m;
+};
+
+/** A skull in place of the head: a domed cranium, deep dark sockets with a glow in them, a jaw. */
+function skull(fit: BodyFit, bone: C3, eyes: C3): THREE.Object3D {
+  const r = fit.headRadius * 1.04;
+  const g = new THREE.Group();
+  const m = std(bone, 0.75), dark = std([0.02, 0.02, 0.02], 0.9), glow = lit(eyes, 2.2);
+  const cran = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), m);
+  cran.scale.set(0.92, 1.02, 1.08);
+  cran.position.set(0, r * 0.18, -r * 0.05);
+  // The face narrows to the cheekbones and the upper jaw.
+  const face = new THREE.Mesh(new THREE.SphereGeometry(r * 0.7, 14, 10), m);
+  face.scale.set(1, 0.9, 0.9);
+  face.position.set(0, -r * 0.3, r * 0.3);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(r * 1.0, r * 0.32, r * 0.75), m);
+  jaw.position.set(0, -r * 0.82, r * 0.38);
+  g.add(cran, face, jaw);
+  for (const sx of [-1, 1]) {
+    const sock = new THREE.Mesh(new THREE.SphereGeometry(r * 0.24, 12, 10), dark);
+    sock.scale.set(1, 0.9, 0.45);
+    sock.position.set(sx * r * 0.34, r * 0.0, r * 0.82);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.07, 8, 6), glow);
+    eye.position.set(sx * r * 0.34, r * 0.0, r * 0.88);
+    g.add(sock, eye);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(r * 0.1, r * 0.2, 3), dark);
+  nose.rotation.x = Math.PI;
+  nose.position.set(0, -r * 0.3, r * 0.93);
+  // A row of teeth.
+  for (let k = -3; k <= 3; k++) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(r * 0.1, r * 0.16, r * 0.06), m);
+    t.position.set(k * r * 0.12, -r * 0.62, r * 0.74 - Math.abs(k) * r * 0.035);
+    g.add(t);
+  }
+  g.add(nose);
+  return g;
+}
+
+/** A necromancer's bone-white mask under a deep hood; the eyes lit behind it. */
+function boneMask(fit: BodyFit, hood: C3, bone: C3, eyes: C3): THREE.Object3D {
+  const r = fit.headRadius;
+  const g = new THREE.Group();
+  const hm = std(hood, 0.95);
+  hm.side = THREE.DoubleSide;
+  const cowl = new THREE.Mesh(new THREE.SphereGeometry(r * 1.32, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), hm);
+  cowl.scale.set(1, 1.15, 1.1);
+  cowl.position.set(0, r * 0.15, -r * 0.12);
+  // The point of the hood falling down the back.
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(r * 0.75, r * 1.5, 10), hm);
+  tip.rotation.x = -2.3;
+  tip.position.set(0, r * 0.35, -r * 1.05);
+  const mm = std(bone, 0.6);
+  const mask = new THREE.Mesh(new THREE.SphereGeometry(r * 0.95, 16, 12, -Math.PI * 0.42, Math.PI * 0.84, Math.PI * 0.2, Math.PI * 0.62), mm);
+  mask.scale.set(1, 1.08, 1.06);
+  mask.position.set(0, -r * 0.05, r * 0.1);
+  const glow = lit(eyes, 1.8), dark = std([0.02, 0.02, 0.02], 0.9);
+  g.add(cowl, tip, mask);
+  for (const sx of [-1, 1]) {
+    const sock = new THREE.Mesh(new THREE.SphereGeometry(r * 0.17, 10, 8), dark);
+    sock.scale.set(1.2, 0.7, 0.4);
+    sock.position.set(sx * r * 0.33, r * 0.12, r * 0.98);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r * 0.06, 8, 6), glow);
+    eye.position.set(sx * r * 0.33, r * 0.12, r * 1.02);
+    g.add(sock, eye);
+  }
+  return g;
+}
+
+/** A wreath of leaves and twigs round the head (the eco-radicals). */
+function leafWreath(fit: BodyFit, leaf: C3, twig: C3): THREE.Object3D {
+  const r = fit.headRadius * 1.08;
+  const g = new THREE.Group();
+  const tm = std(twig, 0.9), lm = std(leaf, 0.8);
+  lm.side = THREE.DoubleSide;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r, r * 0.07, 6, 24), tm);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.set(0, r * 0.3, -r * 0.05);
+  g.add(ring);
+  const leafG = new THREE.CircleGeometry(r * 0.24, 6);
+  for (let k = 0; k < 14; k++) {
+    const a = (k / 14) * Math.PI * 2;
+    const l = new THREE.Mesh(leafG, lm);
+    l.scale.set(0.55, 1, 1);
+    l.position.set(Math.sin(a) * r * 1.02, r * 0.38 + (k % 2) * r * 0.08, Math.cos(a) * r * 1.02 - r * 0.05);
+    l.rotation.set(-0.5 + (k % 3) * 0.3, a, (k % 2 ? 0.6 : -0.6));
+    g.add(l);
+  }
   return g;
 }
 

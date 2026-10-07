@@ -38,6 +38,11 @@ const HEAD: Partial<Record<NewsWhat, Pair>> = {
   takeover: ['{Group} take over streets in {hood}', 'Police end gang takeover in {hood}'],
   uprising: ['{Group} turn the robots in {hood}', 'Machine uprising put down in {hood}'],
   awakening: ['{Group} hold a great ritual in {hood}', 'Police break up great ritual in {hood}'],
+  sabotage: ['{Group} wreck machines in {hood}', 'Saboteurs caught in {hood}'],
+  raising: ['Skeletons seen in {hood}', 'Police break up grave rite in {hood}'],
+  procession: ['People vanish in a trance in {hood}', 'Police end eerie procession in {hood}'],
+  treewake: ['A tree walks in {hood}', 'Police stop tree singers in {hood}'],
+  deadrise: ['The dead walk in {hood}', 'Police stop grave raising in {hood}'],
 };
 const HERO: Partial<Record<NewsWhat, string>> = {
   snatch: 'Hero stops bag snatcher in {hood}', mugging: 'Hero saves mugging victim in {hood}', robbery: 'Hero foils robbery in {hood}',
@@ -45,6 +50,8 @@ const HERO: Partial<Record<NewsWhat, string>> = {
   hijack: 'Hero stops robot hijack in {hood}', ritual: 'Hero breaks up ritual in {hood}', bomber: 'Hero stops mad bomber in {hood}',
   heist: 'Hero foils bank heist in {hood}', takeover: 'Hero beats back gang takeover in {hood}', uprising: 'Hero stops machine uprising in {hood}',
   awakening: 'Hero breaks up great ritual in {hood}',
+  sabotage: 'Hero stops saboteurs in {hood}', raising: 'Hero lays the dead to rest in {hood}', procession: 'Hero wakes the entranced in {hood}',
+  treewake: 'Hero stops tree singers in {hood}', deadrise: 'Hero ends grave raising in {hood}',
 };
 
 /** What it is called in a sentence ("a mugging"). */
@@ -52,6 +59,7 @@ const NOUN: Partial<Record<NewsWhat, string>> = {
   snatch: 'a bag snatching', mugging: 'a mugging', robbery: 'a robbery', racket: 'a shakedown', tagging: 'some tagging', brawl: 'a gang fight',
   hijack: 'a robot hijack', ritual: 'some weird ritual', bomber: 'a bomb scare',
   heist: 'a bank heist', takeover: 'a gang takeover', uprising: 'robots running riot', awakening: 'a huge ritual',
+  sabotage: 'machines wrecked', raising: 'skeletons in the park', procession: 'people led away in a trance', treewake: 'a walking tree', deadrise: 'the dead walking',
 };
 
 export function fillNews(s: string, it: NewsItem): string {

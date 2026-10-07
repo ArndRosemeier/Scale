@@ -32,7 +32,7 @@ import { SETTING_MAX, type CrimeSetting } from './CrimeIndex';
 import { Beat } from './Beat';
 import { responseFactor } from '../news/pulse';
 import { CrimeDirector, type CrimeRoll } from './CrimeDirector';
-import { Crime, CRIME_DEV, GROUP_KINDS, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
+import { Crime, CRIME_DEV, GROUP_KINDS, SKELETON, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
 import { Robbery } from './Robbery';
 import { Tagging, TAGGING } from './Tagging';
 import { TurfBrawl } from './TurfBrawl';
@@ -44,6 +44,11 @@ import { BossOperation, BOSS_OP_TITLE } from './BossOp';
 import { BossEvent } from '../threats/BossEvent';
 import { Channeling } from './Channeling';
 import { HijackedFleet } from './HijackedFleet';
+import { Sabotage } from './Sabotage';
+import { Raising } from './Raising';
+import { Procession } from './Procession';
+import { Packs } from './Packs';
+import { subdued } from '../../sim/actors/Actor';
 import { KINDS } from './kinds';
 import { Police, policeOutfit, POLICE } from './Police';
 import { Justice } from './Justice';
@@ -65,7 +70,7 @@ import { Graffiti, type Tag } from '../factions/Graffiti';
 import { ARCHETYPES, CITY_GROUPS } from '../factions/archetypes';
 import { siteToWorld } from '../../plan/landmarks';
 import { RState } from '../../future/Robots';
-import { factionOutfit, lieutenantOutfit, bossOutfit } from '../factions/outfits';
+import { factionOutfit, lieutenantOutfit, bossOutfit, skeletonOutfit } from '../factions/outfits';
 
 /** Rewards common to every kind (the per-kind ones are in crime/kinds). */
 export const CRIME_KARMA = {
@@ -98,6 +103,8 @@ export class CrimeSystem {
   readonly casts: VillainCasts;
   /** Machines turned by a techno-cult hack (crime/Hijack), until they reboot. */
   readonly fleets: HijackedFleet[] = [];
+  /** The eco-radicals' Beast-masters' dog packs (crime/Packs). */
+  readonly packs: Packs;
   private fleetKey = '';
   /** Dev: the next crime's group sends its lieutenant (dev.crime(kind, dist, group, 'lt')). */
   private devLieutenant = false;
@@ -191,6 +198,9 @@ export class CrimeSystem {
     this.bombs.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
     this.casts = new VillainCasts(g);
     this.casts.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
+    this.packs = new Packs(g, this.view, (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz));
+    this.casts.whistle = (by, x, z) => this.packs.sic(by, x, z);
+    this.casts.hasPack = (by) => (this.packs.of(by)?.active.length ?? 0) > 0;
     this.health = new PlayerHealth(g.player, g.mode === 'sandbox');
     this.rep = new Reputation(seed, g.settings.size, g.mode);
     this.world = this.makeWorld();
@@ -354,6 +364,10 @@ export class CrimeSystem {
       opFx: (look, x, z, share, workers) => this.casts.opFx(look, x, z, share, workers),
       hijack: (c, x, z, n) => { if (g.threats) this.fleets.push(new HijackedFleet(g, g.threats.rogue, c, x, z, n)); },
       ritual: (c, x, z, element) => this.casts.ritualBurst(c.criminals, x, z, element),
+      trees: (rMin, rMax) => this.trees(rMin, rMax),
+      blocked: (x, z) => !!g.world.buildingAt(x, z) || !!g.world.landmarks?.onFootprint(x, z, 1),
+      parked: (rMin, rMax) => this.parked(rMin, rMax),
+      sabotage: (_c, x, z) => this.sabotaged(x, z),
       cars: (x, z, r) => {
         const out: { x: number; z: number }[] = [];
         for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) if (v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < r) out.push(v);
@@ -642,6 +656,60 @@ export class CrimeSystem {
       out.push({ x: r.x, z: r.z, nx, nz, d });
     }
     return out.sort((a, b) => a.d - b.d);
+  }
+
+  /**
+   * Trees near the player (street and park trees standing), nearest first, each with a way out to
+   * open ground (n: away from the buildings).
+   */
+  private trees(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; height: number }[] {
+    const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; height: number; d: number }[] = [];
+    this.g.props.query(p.x, p.z, rMax, (t) => {
+      if (!t.tree || t.broken) return;
+      const d = Math.hypot(t.x - p.x, t.z - p.z);
+      if (d < rMin || d > rMax) return;
+      // The first of eight ways round it that is clear of buildings for a good stretch.
+      const a0 = ((t.x * 0.37 + t.z * 0.11) % 1) * Math.PI * 2;
+      for (let k = 0; k < 8; k++) {
+        const a = a0 + (k / 8) * Math.PI * 2, nx = Math.sin(a), nz = Math.cos(a);
+        if (W.buildingAt(t.x + nx * 4, t.z + nz * 4) || W.buildingAt(t.x + nx * 9, t.z + nz * 9)) continue;
+        out.push({ x: t.x, z: t.z, nx, nz, height: t.height, d });
+        return;
+      }
+    });
+    return out.sort((a, b) => a.d - b.d);
+  }
+
+  /** Parked cars near the player (not wrecked): a point at the kerb side, n away from the buildings. */
+  private parked(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
+    const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
+    for (const v of this.g.parkedCars) {
+      if (v.state === VState.Wreck || v.state === VState.Crushed) continue;
+      const d = Math.hypot(v.x - p.x, v.z - p.z);
+      if (d < rMin || d > rMax) continue;
+      let nx = Math.cos(v.yaw), nz = -Math.sin(v.yaw);
+      if (W.buildingAt(v.x + nx * 5, v.z + nz * 5)) { nx = -nx; nz = -nz; }
+      if (W.buildingAt(v.x + nx * 5, v.z + nz * 5)) continue;
+      out.push({ x: v.x, z: v.z, nx, nz, d });
+    }
+    return out.sort((a, b) => a.d - b.d);
+  }
+
+  /**
+   * A sabotage went through: the machines round about are wrecked (robots knocked over, parked
+   * cars smashed where they stand), the lamps put out, and the pavement grown over with moss.
+   */
+  private sabotaged(x: number, z: number): void {
+    const g = this.g, R = 10;
+    for (const r of g.future.robots.list) if (r.alive && r.state < RState.Down && Math.hypot(r.x - x, r.z - z) < R) g.future.robots.knock(r, (r.x - x) * 60, 300, (r.z - z) * 60);
+    for (const v of [...g.parkedCars]) {
+      if (v.state === VState.Wreck || v.state === VState.Crushed || Math.hypot(v.x - x, v.z - z) > R * 0.7) continue;
+      g.traffic.wreckIt(v);
+      g.vehicles.makeWreck(v, v.x, v.y + 0.5, v.z, 0, -800, 0);
+      v.damage = Math.max(v.damage, 0.6);
+    }
+    g.props.query(x, z, R * 1.4, (p) => { if (!p.broken && p.kind.includes('lamp') && Math.hypot(p.x - x, p.z - z) < R * 1.4) g.props.darken(p); });
+    this.casts.rewild(x, z, R);
   }
 
   /** Shop doors of the tallest buildings near the player, tallest first (a bank to take: the Syndicate's heist). */
@@ -983,6 +1051,8 @@ export class CrimeSystem {
       const L = ARCHETYPES[f.archetype].lieutenant;
       for (const a of c.criminals) if (a.actor?.memo.ltSlot && !c.casters.has(a)) { c.promote(a, L.powers); a.actor.outfit = lieutenantOutfit(f, a.cit.seed); a.actor.title = `${f.emblem} ${f.name} · ${L.title}`; }
     }
+    // An eco-radical with the whistle (the Beast-master) brings their dogs.
+    for (const [a, cs] of c.casters) if (cs.powers.includes('whistle')) this.packs.give(c, a);
     this.crimes.push(c);
     this.stats.started++;
     return true;
@@ -1043,7 +1113,10 @@ export class CrimeSystem {
         if (f && c.phase === 'commit') this.graffiti.paint(c.id, this.tagOf(c, f), c.progress / TAGGING.paintFor);
         else if (c.phase !== 'approach') this.graffiti.drop(c.id);
       }
+      this.undead(c, dt);
       if (!c.active) {
+        // The risen fall back into the ground with the crime.
+        for (const a of c.criminals) if (a.alive && a.actor?.memo.skel) this.crumbleNow(a);
         this.bossGone(c);
         // The victim waits a while for the stolen things (lying in the street or with the player).
         const l = c.loot;
@@ -1067,6 +1140,7 @@ export class CrimeSystem {
     this.bombs.update(dt);
     this.casts.update(dt);
     this.updateFleets(dt);
+    this.packs.update(dt);
     this.police.update(dt);
     this.guns.update(dt);
     this.justice.update(dt);
@@ -1237,7 +1311,64 @@ export class CrimeSystem {
         if (near) g.powerHud.toast(`${who} completed their great ritual — something stirs beneath the city`, 'warn');
         break;
       }
+      case 'treewake': {
+        // The tree they sang to tears itself out of the ground and walks (threats/AwakenedTree).
+        let tree: StreetProp | null = null, bd = 14;
+        g.props.query(x, z, 14, (p) => { const d = Math.hypot(p.x - x, p.z - z); if (p.tree && !p.broken && d < bd) { bd = d; tree = p; } });
+        const ev = tree && g.threats ? g.threats.start('tree', (Math.random() * 2 ** 32) >>> 0, { prop: tree }, { x, z }) : null;
+        if (near) g.powerHud.toast(ev ? `${who} sang a tree awake — it is tearing itself out of the ground` : `${who} finished their song — the trees round about stir`, 'warn');
+        if (!ev) this.casts.rewild(x, z, 14);
+        break;
+      }
+      case 'deadrise': {
+        // A last burst of bones: two more of the dead stand up, and the band roams the streets.
+        this.casts.boneBurst(c.criminals, x, z);
+        if (near) g.powerHud.toast(`${who} raised the dead — skeletons are walking the streets`, 'warn');
+        break;
+      }
     }
+  }
+
+  /**
+   * Skeletons (VILLAINS_PLAN §3.9): knocked apart, they pull themselves together after a while —
+   * as long as a necromancer of theirs is still on their feet; with none left standing they
+   * crumble for good and sink into the ground. Crumbled ones are gone after the clatter.
+   */
+  private undead(c: Crime, dt: number): void {
+    let masters = -1;
+    for (const a of c.criminals) {
+      const act = a.actor;
+      if (!a.alive || !act?.memo.skel) continue;
+      if (act.memo.crumbled) {
+        act.memo.goneT = (act.memo.goneT ?? 0) + dt;
+        if (act.memo.goneT > 1.2) a.alive = false;
+        continue;
+      }
+      if (act.state !== 'ko' && a.state !== PState.Down) { act.memo.reformT = 0; continue; }
+      if (masters < 0) masters = c.criminals.filter((m) => m.alive && m.actor && !m.actor.memo.skel && !subdued(m.actor) && m.state !== PState.Down).length;
+      if (!masters) { this.crumbleNow(a); continue; }
+      if (act.state !== 'ko') continue;
+      act.memo.reformT = (act.memo.reformT ?? 0) + dt;
+      if (act.memo.reformT < SKELETON.reform) continue;
+      // The bones drag themselves back together.
+      act.memo.reformT = 0;
+      act.hp = Math.round(act.maxHp * SKELETON.reformHp);
+      a.state = PState.Idle; a.vx = a.vz = a.vy = 0; a.stateT = 0;
+      act.koByPlayer = false;
+      setState(act, 'fight');
+      act.hostile = true;
+      this.casts.bonesFx(a.x, a.y, a.z, false);
+    }
+  }
+
+  /** A skeleton falls apart for good: a clatter of bones, gone into the ground. */
+  private crumbleNow(a: PedAgent): void {
+    const act = a.actor;
+    if (!act || act.memo.crumbled) return;
+    act.memo.crumbled = 1;
+    act.memo.goneT = 0;
+    if (a.state !== PState.Down) { a.state = PState.Down; a.stateT = 0; }
+    this.casts.bonesFx(a.x, a.y, a.z, true);
   }
 
   /** Hijacked machines: run their course; the link cut when the hackers are stopped; red dots on the map. */
@@ -1314,6 +1445,11 @@ export class CrimeSystem {
     const near = (a: PedAgent) => Math.hypot(a.x - g.player.pos.x, a.z - g.player.pos.z);
     switch (type) {
       case 'ko':
+        // A skeleton knocked apart counts once (it pulls itself together again).
+        if (who?.actor?.memo.skel) {
+          if (who.actor.koByPlayer && !who.actor.memo.koPaid) { who.actor.memo.koPaid = 1; c.playerInvolved = true; this.stats.kos++; g.progress.addKarma(3, 'knocked a skeleton apart'); }
+          break;
+        }
         if (who?.actor?.koByPlayer) {
           c.playerInvolved = true;
           this.stats.kos++;
@@ -1354,6 +1490,33 @@ export class CrimeSystem {
         }
         break;
       }
+      case 'risen': {
+        // One of the old dead claws out of the ground: dressed as bones, in the group's eye colour.
+        const act = who?.actor;
+        if (!who || !act) break;
+        const f = this.factionOf(c);
+        act.faction = f?.id;
+        act.outfit = skeletonOutfit(f, who.cit.seed);
+        act.title = `${f ? `${f.emblem} ${f.name} · ` : ''}Skeleton`;
+        act.mood = 'angry';
+        // Coming up: lying in the churned earth a moment, then up (upkeep).
+        who.state = PState.Down; who.stateT = 0;
+        setState(act, 'down');
+        act.upT = 1.4;
+        this.casts.riseFx(who.x, who.z);
+        break;
+      }
+      case 'crumble':
+        if (who) this.crumbleNow(who);
+        break;
+      case 'woken':
+        // A thrall brought out of the trance by the hero.
+        if (who && c instanceof Procession && near(who) < 6) {
+          c.playerInvolved = true;
+          g.progress.addKarma(4, 'woke someone from a trance');
+          this.rep.add(1, 'woken');
+        }
+        break;
       case 'commit':
         // A boss operation begins: the city answers it as a threat event (perimeter, evacuation, SWAT).
         if (c instanceof BossOperation && !this.bossOps.get(c)) this.bossOpEvent(c);
@@ -1372,7 +1535,7 @@ export class CrimeSystem {
         this.factionStats.succeeded++;
         this.turf(c, f, SHIFT.ritual);
         if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 220) {
-          const what = c instanceof Ritual ? 'completed a ritual' : 'hijacked the robots';
+          const what = c instanceof Ritual ? 'completed a ritual' : c instanceof Sabotage ? 'wrecked the machines' : c instanceof Raising ? 'raised the dead' : c instanceof Procession ? `led ${c.taken} people away into the dark` : 'hijacked the robots';
           g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> ${what} here`, 'warn');
         }
         break;
@@ -1621,6 +1784,13 @@ export class CrimeSystem {
     return { x: L.crime.x, z: L.crime.z, who: null, kind: 'site' };
   }
 
+  /** An entranced thrall within the hero's reach (E wakes them). */
+  private thrallNear(): { c: Procession; a: PedAgent } | null {
+    const p = this.g.player.pos;
+    for (const c of this.crimes) if (c instanceof Procession) { const a = c.thrallNear(p.x, p.z); if (a) return { c, a }; }
+    return null;
+  }
+
   /** Text for E, or null. */
   hint(): string | null {
     const p = this.g.player.pos;
@@ -1640,6 +1810,7 @@ export class CrimeSystem {
       }
     }
     if (this.justice.hot && (this.police.nearestOfficer(p.x, p.z, 2.6) || this.police.nearestCar(p.x, p.z, 4))) return 'Press <b>E</b> to turn yourself in';
+    if (this.thrallNear()) return 'Press <b>E</b> to wake them from the trance';
     const h = this.bustable();
     if (h) return `Press <b>E</b> to bust the stash of ${inSentence(this.factions.factions[h.faction])}`;
     if (this.denBustable()) return 'Press <b>E</b> to bust the stash';
@@ -1682,6 +1853,8 @@ export class CrimeSystem {
       P.action = { id: 'pickup', t0: P.animClock, dur: 0.8 };
       return true;
     }
+    const th = this.thrallNear();
+    if (th) { th.c.wake(th.a); P.action = { id: 'pickup', t0: P.animClock, dur: 0.6 }; return true; }
     const h = this.bustable();
     if (h) { this.bust(h); return true; }
     const dn = this.denBustable();
@@ -1788,7 +1961,8 @@ export class CrimeSystem {
       },
       /**
        * A group's boss operation now (VILLAINS_PLAN Phase 4): dev.bossOp('syndicate') — the heist
-       * (gang: takeover, techno: uprising, cult: the great ritual), `dist` m ahead along the view
+       * (gang: takeover, techno: uprising, cult: the great ritual, eco: a tree sung awake, necro:
+       * the dead rising), `dist` m ahead along the view
        * (0: in a ring round the player, as the game picks it). Returns its snapshot or why not.
        */
       bossOp: (faction: number | string = 'syndicate', dist = 60) => {
@@ -1800,6 +1974,8 @@ export class CrimeSystem {
         const c = this.startBossOp(fid, dist > 0 ? { x: p.x - Math.sin(fy) * dist, z: p.z - Math.cos(fy) * dist } : null);
         return c ? c.snapshot() : 'no site or no room for the crew here';
       },
+      /** The Beast-masters' dog packs: handler, dogs, bites. */
+      packs: () => this.packs.snapshot(),
       /** Boss operations under way: their state and threat events. */
       bossOps: () => [...this.bossOps].map(([c, ev]) => ({ ...c.snapshot(), event: ev?.snapshot() ?? null })),
       /** Hijacked machines: per hack, how many are still at it and how it ended. */

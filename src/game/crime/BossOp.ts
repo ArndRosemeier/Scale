@@ -12,6 +12,12 @@
  *              guards round them; done, a whole fleet of machines turns on the street
  *   awakening  the elemental cult chants in a great circle before a landmark (the cathedral
  *              first): done, its element bursts and something stirs (the threat clock moves)
+ *   treewake   the eco-radicals' Elder sings a street or park tree awake, a circle round it, the
+ *              Beast-master's dogs at the guard: done, the tree tears itself out of the ground and
+ *              walks (threats/AwakenedTree, a major threat event of its own)
+ *   deadrise   the necromancers' Grave Lord raises the old dead before the cathedral (or in a
+ *              park): skeletons claw out of the ground while the circle chants and guard it;
+ *              done, a last burst of bones and the risen band roams the street
  *
  * Unlike a small channelled operation, the work does not stop when the hero walks up: the crew
  * fights to hold the site while the workers carry on. To stop it, take the workers out (every
@@ -48,6 +54,8 @@ export interface BossOpSpec {
   /** A sound every few seconds of the work, its pitch. */
   sound: string;
   pitch: number;
+  /** Skeletons that claw out of the ground during the work (the necromancers), on top of the guards. */
+  rise?: number;
 }
 
 export const BOSS_OP_SPECS: Record<BossOpKind, BossOpSpec> = {
@@ -55,6 +63,8 @@ export const BOSS_OP_SPECS: Record<BossOpKind, BossOpSpec> = {
   takeover: { workFor: 80, workers: 3, guards: [4, 6], guns: 0.15, look: 'riot', high: false, layout: 'street', hp: 62, strength: 1.1, lieutenants: 1, sound: 'punch_impact', pitch: 0.7 },
   uprising: { workFor: 85, workers: 2, guards: [4, 5], guns: 0, look: 'hack', high: false, layout: 'door', hp: 58, strength: 1, lieutenants: 1, sound: 'robot_glitch', pitch: 1.2 },
   awakening: { workFor: 90, workers: 6, guards: [2, 3], guns: 0, look: 'fire', high: true, layout: 'circle', hp: 55, strength: 0.95, lieutenants: 1, sound: 'deep_glow', pitch: 0.6 },
+  treewake: { workFor: 85, workers: 4, guards: [3, 4], guns: 0, look: 'grove', high: true, layout: 'circle', hp: 56, strength: 1, lieutenants: 1, sound: 'grow_rumble', pitch: 0.8 },
+  deadrise: { workFor: 90, workers: 4, guards: [1, 2], guns: 0, look: 'grave', high: true, layout: 'circle', hp: 52, strength: 0.95, lieutenants: 1, sound: 'deep_murk', pitch: 0.7, rise: 6 },
 };
 
 export const BOSS_OP = {
@@ -70,6 +80,8 @@ export const BOSS_OP = {
   leash: 45,
   /** The circle's radius (awakening) and the drill / hack line's half width (m). */
   circle: 3.4,
+  /** Where the dead rise: a ring round the site (m). */
+  riseR: [6, 11] as [number, number],
   /** Seconds between two sounds of the work. */
   soundEvery: 3.2,
 };
@@ -80,6 +92,8 @@ export const BOSS_OP_TITLE: Record<BossOpKind, string> = {
   takeover: 'Gang takeover — a crew is smashing up the street',
   uprising: 'Machine uprising — hackers are taking over the robots',
   awakening: 'Great ritual — a circle chanting before a landmark',
+  treewake: 'Tree waking — a circle singing a tree awake',
+  deadrise: 'The dead rise — skeletons clawing out of the ground',
 };
 
 export class BossOperation extends Crime {
@@ -100,6 +114,8 @@ export class BossOperation extends Crime {
   /** The cult's element (CrimeSystem sets it from the group's colours). */
   element: 'fire' | 'frost' | 'storm' = 'fire';
   private soundT = 0;
+  /** Skeletons raised so far (deadrise). */
+  risen = 0;
 
   constructor(w: CrimeWorld, seed: number, readonly kind: BossOpKind, private near: { x: number; z: number } | null = null) {
     super(w, seed);
@@ -123,6 +139,9 @@ export class BossOperation extends Crime {
 
   get look(): OpLook { return this.kind === 'awakening' ? this.element : this.spec.look; }
 
+  /** Members raised from the dead (deadrise). */
+  get skeletons(): PedAgent[] { return this.criminals.filter((c) => c.actor?.memo.skel); }
+
   setup(): boolean {
     const s = this.pickSite();
     if (!s) return false;
@@ -134,8 +153,8 @@ export class BossOperation extends Crime {
     const from = Math.atan2(S.nx, S.nz) + (this.rng.float() - 0.5) * 1.2;
     const P = this.spec;
     // The boss first (CrimeSystem promotes the first member): out front, overseeing the work.
-    // (A circle's leader stands in its middle, in the column.)
-    const bossAt = P.layout === 'circle' ? { x: S.x, z: S.z } : { x: S.x + S.nx * 3.2, z: S.z + S.nz * 3.2 };
+    // (A circle's leader stands in its middle, in the column; before the trunk of a tree.)
+    const bossAt = this.kind === 'treewake' ? { x: S.x + S.nx * 1.8, z: S.z + S.nz * 1.8 } : P.layout === 'circle' ? { x: S.x, z: S.z } : { x: S.x + S.nx * 3.2, z: S.z + S.nz * 3.2 };
     if (!this.member(bossAt.x, bossAt.z, from, 'boss', 0)) return false;
     // The workers.
     for (let i = 0; i < P.workers; i++) {
@@ -179,6 +198,18 @@ export class BossOperation extends Crime {
         return pick((w.walls?.(rMin, rMax) ?? []).map((s) => ({ x: s.x + s.nx * 5, z: s.z + s.nz * 5, nx: s.nx, nz: s.nz })));
       }
       case 'takeover': return pick((w.walls?.(rMin, rMax) ?? []).map((s) => ({ x: s.x + s.nx * 0.8, z: s.z + s.nz * 0.8, nx: s.nx, nz: s.nz }))) ?? pick(shops());
+      // A real tree of the street or the park (the bigger the better).
+      case 'treewake': {
+        const t = (w.trees?.(rMin, rMax) ?? []).slice(0, 8).sort((a, b) => b.height - a.height);
+        return t.length ? { x: t[0].x, z: t[0].z, nx: t[0].nx, nz: t[0].nz, kind: 'tree' } : null;
+      }
+      // Before the cathedral (its crypts), else another old place, else the open ground among trees.
+      case 'deadrise': {
+        const lm = (w.landmarks?.(rMin, rMax + 140) ?? []).filter((l) => l.kind === 'cathedral' || l.kind === 'townhall' || l.kind === 'monument' || l.kind === 'fortress' || l.kind === 'museum');
+        lm.sort((a, b) => (a.kind === 'cathedral' ? 0 : 1) - (b.kind === 'cathedral' ? 0 : 1));
+        if (lm.length) return lm[0];
+        return pick((w.trees?.(rMin, rMax) ?? []).map((t) => ({ x: t.x + t.nx * 7, z: t.z + t.nz * 7, nx: t.nx, nz: t.nz })));
+      }
     }
   }
 
@@ -277,9 +308,29 @@ export class BossOperation extends Crime {
       if (working) { this.progress += dt * Math.min(1, 0.4 + 0.6 * working / Math.max(1, this.spec.workers)); this.sound(dt); }
     }
     this.w.opFx?.(this.look, S.x, S.z, this.share, workers);
+    // The dead rise as the work goes on (one by one, the last before it is done).
+    const rise = this.spec.rise ?? 0;
+    if (rise && workers.length && (this.risen < Math.min(rise, Math.floor(this.share * (rise + 1))) || (this.risen < rise && this.share > 0.92))) this.raiseOne();
     if (this.progress >= this.spec.workFor) { this.complete(); return; }
     // Every worker out of it: the work cannot be finished; the rest fight on or run.
     if (!workers.length) { this.go('escape'); }
+  }
+
+  /** A skeleton claws its way out of the ground somewhere round the site, and guards it. */
+  private raiseOne(): void {
+    const S = this.site!, k = this.risen++;
+    for (let tries = 0; tries < 6; tries++) {
+      const a = this.rng.float() * Math.PI * 2, r = BOSS_OP.riseR[0] + this.rng.float() * (BOSS_OP.riseR[1] - BOSS_OP.riseR[0]);
+      const x = S.x + Math.sin(a) * r, z = S.z + Math.cos(a) * r;
+      if (this.w.blocked?.(x, z)) continue;
+      const c = this.raiseDead(x, z, Math.atan2(x - S.x, z - S.z));
+      if (!c) return;
+      const act = c.actor!;
+      act.memo.postX = x; act.memo.postZ = z; act.memo.guard = 1; act.memo.role = 100 + k;
+      // They come for the hero at once if they are about.
+      act.hostile = true;
+      return;
+    }
   }
 
   /** A worker at it: at their post, facing the work, hands busy. */
@@ -331,6 +382,8 @@ export class BossOperation extends Crime {
       this.loot = { kind: 'cash', x: b.x, y: b.y, z: b.z, owner: null, carrier: b, returned: false, crime: this.id };
       b.actor.held = 'cash';
     }
+    // The last of the dead stand up with the final burst.
+    if (this.kind === 'deadrise') for (let i = 0; i < 2; i++) this.raiseOne();
     this.w.bossOpDone?.(this, S.x, S.z);
     this.emit('done');
     this.go('escape');
@@ -346,6 +399,8 @@ export class BossOperation extends Crime {
       if (act.action?.id === 'channel') act.action = null;
       act.memo.quit = 1; act.memo.decided = 0; act.memo.brave = 0; act.memo.grudge = 0; act.memo.panic = 3;
     }
+    // Their master beaten, the raised dead fall apart and sink back into the ground.
+    for (const c of this.skeletons) this.crumble(c);
     this.emit('broken');
     this.go('escape');
   }

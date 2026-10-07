@@ -516,6 +516,21 @@ every frame) owns the parts and draws what belongs to them.
   operations, its cells count as nobody's in `playerCell` / `begin`) until one of the two is over. Saved in
   `SaveData.factions.bosses` (by archetype). Dev: `dev.bosses(group?, notoriety?)`, `dev.jailBoss(group, hours)`,
   `dev.crime(kind, dist, group, 'boss')`.
+  Phase 4 part 2, boss operations: `crime/BossOperation` (one class, `BOSS_OP_SPECS` per kind: heist, takeover,
+  uprising, awakening, treewake, deadrise) — the boss out front, workers at the site (door, street or circle), guards
+  and lieutenants; the work runs while workers stand, the boss beaten breaks the crew (`broken`), done calls
+  `CrimeWorld.bossOpDone`. On `commit` CrimeSystem wraps it in a `threats/BossEvent` (archetype `boss`) so the city
+  response treats it as a threat event. `bossOpChance` schedules them per group (gap and chance by notoriety). Eco-radicals
+  and necromancers: `crime/Sabotage` (robot, else parked car, else shop; done: `CrimeWorld.sabotage` wrecks and rewilds),
+  `crime/Raising` and `crime/Procession` (thralls adopted as victims with `memo.thrall`, led along a route; E or the
+  leader beaten wakes them, `woken`). Skeletons are criminals made by `Crime.raiseDead` (`memo.skel`, always fight);
+  CrimeSystem dresses them on `risen` (`skeletonOutfit`, the `bones` garment pattern, a skull), lets KO'd ones reform
+  while a non-skeleton member stands (`undead`) and crumbles them otherwise or when the crime ends. `crime/DogPack` (pure)
+  is a Beast-master's pack; `crime/Packs` draws them (`deeds/critters` dog), routes hits (Game.strike, the powers'
+  `swarm` hook) and the `whistle` cast. The Elder's `treewake` starts `threats/AwakenedTree` (archetype `tree`, a major
+  threat: the street tree's own model on three IK root legs, sweeps and slams at cars, robots and lamps, aggro on
+  whoever hurts it, `ThreatActor.onElement` makes fire hurt it 2.5×; beaten it roots as a gnarled tree kept for the
+  session). Dev: `dev.bossOp(group, dist)`, `dev.packs()`, `dev.threat.spawn('tree', { dist })`.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a

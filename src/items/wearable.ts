@@ -31,7 +31,7 @@ export interface ShellMaterial {
   color: [number, number, number];
   color2: [number, number, number];
   /** Pattern drawn procedurally in the shell shader. */
-  pattern: 'plain' | 'stripes' | 'checks' | 'quilted' | 'chainmail' | 'scales' | 'leather' | 'fur' | 'embroidered' | 'patchwork' | 'silk' | 'plates' | 'runes';
+  pattern: 'plain' | 'stripes' | 'checks' | 'quilted' | 'chainmail' | 'scales' | 'leather' | 'fur' | 'embroidered' | 'patchwork' | 'silk' | 'plates' | 'runes' | 'bones';
   patternScale: number;
   roughness: number;
   metalness: number;

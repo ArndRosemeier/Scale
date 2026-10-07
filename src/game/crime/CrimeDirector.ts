@@ -45,10 +45,15 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     hijack: (busy || d === 'industrial' ? 0.55 : 0.3) * (night ? 0.4 : 1),
     // The elemental cult's rituals: mostly after dark.
     ritual: night ? 0.75 : evening ? 0.5 : 0.15,
+    // The eco-radicals wrecking the street's machines and cars (by day, where they are).
+    sabotage: (busy || d === 'suburban' || d === 'park' ? 0.55 : 0.35) * (night ? 0.5 : 1),
+    // The necromancers: bones raised from the ground, the living led away in a trance — after dark.
+    raising: night ? 0.8 : evening ? 0.45 : 0.08,
+    procession: night ? 0.6 : evening ? 0.5 : 0.06,
     // Rare: a madman with a bag of bombs where the crowds are.
     bomber: busy ? 0.09 : 0.05,
     // Never rolled: a boss operation is started by CrimeSystem when a group's boss comes out.
-    heist: 0, takeover: 0, uprising: 0, awakening: 0,
+    heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0,
   };
 }
 

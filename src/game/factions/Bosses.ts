@@ -55,6 +55,8 @@ export const BOSS_KINDS: Record<ArchetypeId, BossKind> = {
   syndicate: { title: 'Chairman', power: 'bolt', op: 'heist', first: ['Victor', 'Helena', 'Augustin', 'Marguerite', 'Silas', 'Ines', 'Conrad'], last: ['Gilt', 'Ashworth', 'Castellane', 'Morrow', 'Vance', 'Sterling', 'Holloway'] },
   techno: { title: 'Architect', power: 'stun', op: 'uprising', first: ['Nyx', 'Ada', 'Kade', 'Iris', 'Zero', 'Tamsin', 'Orrin'], last: ['Halden', 'Voss', 'Kerrigan', 'Lindqvist', 'Mercer', 'Ishikawa'] },
   cult: { title: 'High Invoker', power: 'quake', op: 'awakening', first: ['Mordecai', 'Sable', 'Ezra', 'Lilith', 'Caspian', 'Wren', 'Thaddeus'], last: ['Vale', 'Ashgrove', 'Thorne', 'Blackwood', 'Crane', 'Mourne'] },
+  eco: { title: 'Elder', power: 'quake', op: 'treewake', first: ['Rowan', 'Briar', 'Linden', 'Hazel', 'Sorrel', 'Ash', 'Fen'], last: ['Greaves', 'Hawthorn', 'Oakes', 'Marsh', 'Fernley', 'Wilde'] },
+  necro: { title: 'Grave Lord', power: 'curse', op: 'deadrise', first: ['Morwen', 'Silvanus', 'Corvin', 'Isolde', 'Lazarus', 'Ysolt', 'Ambrose'], last: ['Blight', 'Gravesend', 'Harrow', 'Mortlake', 'Kell', 'Sepulveda'] },
 };
 
 export interface Boss {
