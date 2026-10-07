@@ -106,8 +106,10 @@ export function matches(w: When, f: TalkFacts): boolean {
 /** How specific an entry is: the number of criteria it names. */
 export function specificity(w: When): number {
   let n = 0;
-  // (A line for a special character — the mime, the officer — beats any temperament or memory line.)
-  for (const k in w) if ((w as Record<string, unknown>)[k] !== undefined) n += k === 'title' ? 6 : 1;
+  // (A line for a special character — the mime, the officer — beats any temperament or memory line;
+  // being sent by a friend, or having heard of the hero from one, beats a temperament's usual hello.)
+  const weight: Record<string, number> = { title: 6, sent: 4, told: 2 };
+  for (const k in w) if ((w as Record<string, unknown>)[k] !== undefined) n += weight[k] ?? 1;
   return n;
 }
 
@@ -155,7 +157,7 @@ export function dirWord(dx: number, dz: number): string {
 /** Fill a line's tokens; a capital first letter in the token capitalises the value. */
 export function fill(s: string, f: TalkFacts): string {
   const v: Record<string, string> = {
-    first: f.first, last: f.last, full: f.full, title: f.job.title, atitle: withArticle(f.job.title), interest: f.interest,
+    first: f.first, last: f.last, full: f.full, title: f.job.title, atitle: withArticle(f.job.title), interest: f.interest.replace(/^their /, 'my '),
     street: f.street ?? 'here', metstreet: f.metStreet ?? f.street ?? 'the street', group: f.group ?? 'some gang', boss: f.boss ?? 'their boss',
     city: f.city, place: f.place ?? 'there', dir: f.dir ?? 'that way', dist: distLabel(f.dist ?? 0), days: String(Math.max(1, Math.round(f.days))),
     years: String(f.years + 1), heard: f.heard ?? '', hood: f.hood ?? 'this part of town',

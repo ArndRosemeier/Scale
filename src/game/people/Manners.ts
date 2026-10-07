@@ -40,6 +40,8 @@ interface Job {
   lead?: boolean;
   lines?: { hi: string; back: string; bye: string };
   said?: number;
+  /** Pushed off the chat spot, walking back to it. */
+  drift?: boolean;
   /** A snack: what for. */
   need?: 'hunger' | 'tired';
 }
@@ -190,9 +192,11 @@ export class Manners {
     const g = this.g, P = g.player.pos;
     if (this.jobs.filter((j) => j.kind === 'chat').length >= MANNERS.maxChats * 2) return;
     for (const a of g.peds.neighbours(P.x, P.z, 45, [])) {
-      if (!free(a) || a.state !== PState.Walk || this.people.partner === a) continue;
+      if (!free(a) || a.state !== PState.Walk || this.people.partner === a || a.onRoad) continue;
       for (const b of g.peds.neighbours(a.x, a.z, SOCIAL.meetR, [])) {
         if (b === a || !free(b) || b.state !== PState.Walk || this.people.partner === b || Math.abs(a.y - b.y) > 0.8) continue;
+        // Not in the middle of a crossing.
+        if (a.onRoad || b.onRoad) continue;
         const bond = bondOf(a.cit, b.cit);
         if (!bond) continue;
         const key = a.cit.id < b.cit.id ? `${a.cit.id}:${b.cit.id}` : `${b.cit.id}:${a.cit.id}`;
@@ -310,16 +314,23 @@ export class Manners {
           j.step = 'show'; j.stepT = 0;
           if (j.lead) play(act, 'gesture_wave', 1.5);
         }
+        // Pushed off their spot by the crowd: step back, don't drift apart.
+        const off = Math.hypot(a.x - sp.x, a.z - sp.z);
+        if (off > 0.5 || (j.drift && off > 0.15)) { j.drift = true; goTo(act, sp.x, sp.z, 0.8); return j.stepT < j.dur!; }
+        if (j.drift) { j.drift = false; stand(act); }
         lookAt(act, v.x, v.y + 1.55, v.z);
         act.mood = 'happy';
         // Taking turns: one talks with their hands while the other listens.
         const turn = Math.floor(j.stepT / 3) % 2 === (j.lead ? 0 : 1);
         if (turn && j.stepT > 1) hold(act, 'talk', 0.6);
         const L = j.lines!;
-        const say = (text: string) => { if (this.g.barks?.say(a, text, 2) !== false) j.said = (j.said ?? 0) + 1; };
-        if (j.lead && j.said === 0 && j.stepT > 0.2) say(L.hi);
-        else if (!j.lead && j.said === 0 && other.said && j.stepT > 1.8) say(L.back);
-        else if (j.lead && j.said === 1 && j.stepT > j.dur! - 1.6) say(L.bye);
+        // A line nobody could see (off screen, too many bubbles) is skipped after a moment, so the talk goes on.
+        const say = (text: string, due: number) => {
+          if (this.g.barks?.say(a, text, 2) !== false || j.stepT > due + 1.5) j.said = (j.said ?? 0) + 1;
+        };
+        if (j.lead && j.said === 0 && j.stepT > 0.2) say(L.hi, 0.2);
+        else if (!j.lead && j.said === 0 && other.said && j.stepT > 1.8) say(L.back, 1.8);
+        else if (j.lead && j.said === 1 && j.stepT > j.dur! - 1.6) say(L.bye, j.dur! - 1.6);
         return j.stepT < j.dur!;
       }
       case 'help': {

@@ -3087,6 +3087,10 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const base = { first: 'Ann', last: 'Lee', full: 'Ann Lee', years: 40, child: false, senior: false, traits: { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 }, job: { kind: 'office' as const, title: 'office worker' }, interest: 'chess', mood: 0, moodWord: 'fine' as const, days: 0, opinion: 0, hour: 12, weather: 'fair', trouble: 0, threat: false, street: 'Elm Street', metStreet: 'Elm Street', city: 'X', group: null, boss: null, giant: false };
   const helped = pickLine('hello', { ...base, temper: 'grumpy', met: 2, deed: 'helped' }, 1);
   check(helped.id.startsWith('h21#'), `people: someone you helped up greets you for it (${helped.id}: ${helped.text})`);
+  // Sent by a friend: they say so, even the chatty on a first meeting (GPU check of PR #56).
+  const sent = pickLine('hello', { ...base, temper: 'chatty', met: 0, deed: null, asker: 'Mara' } as TalkFacts, 1);
+  check(sent.id.startsWith('h44#') && sent.text.includes('Mara'), `people: someone you were sent to says who sent you (${sent.id}: ${sent.text})`);
+  check(fill('I love {interest}.', { ...base, temper: 'chatty', met: 0, deed: null, interest: 'their cat' } as TalkFacts) === 'I love my cat.', 'people: "their cat" becomes "my cat" in their own words');
   const used = new Set<string>();
   const said: string[] = [];
   for (let i = 0; i < 3; i++) { const p = pickLine('news', { ...base, temper: 'steady', met: 0, deed: null }, 5 + i, used); said.push(p.text); used.add(p.id); }

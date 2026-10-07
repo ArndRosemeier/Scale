@@ -233,7 +233,7 @@ export function chatFor(eA: number, eB: number, u: number): number {
 // ------------------------------------------------------------------ a snack on the way
 
 const SNACK: Record<'hunger' | 'tired', readonly string[]> = {
-  hunger: ['Mmh. Finally.', 'Starving…', 'Lunch on the go again.', 'Just a quick bite.'],
+  hunger: ['Mmh. Finally.', 'Starving…', 'Eating on the go again.', 'Just a quick bite.'],
   tired: ['Coffee. I need coffee.', 'Ahh, that\'s better.', 'Long day…', 'Need to wake up.'],
 };
 
