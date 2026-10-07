@@ -345,6 +345,15 @@ export class People {
   }
 
   /** Mark someone you know as your sidekick (or no longer): kept for good, a gold dot on the map. */
+  /** Someone gone for good (a sidekick who died): out of memory and off the map. */
+  remove(citId: number): void {
+    const i = this.known.findIndex((k) => k.cit.id === citId);
+    if (i < 0) return;
+    this.known.splice(i, 1);
+    this.markKey = '#stale';
+    this.persist();
+  }
+
   setSidekick(citId: number, on: boolean): void {
     const k = this.find(citId);
     if (!k) return;

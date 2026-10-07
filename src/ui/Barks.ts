@@ -176,6 +176,12 @@ export class Barks {
     this.say(a, text, PERSON_PAUSE);
   }
 
+  /** Take down whatever bubble this person has up (they were knocked out mid-sentence). */
+  hush(a: PedAgent): void {
+    const mine = this.shown.findIndex((s) => s.a === a);
+    if (mine >= 0) { this.shown[mine].el.style.display = 'none'; this.shown.splice(mine, 1); }
+  }
+
   /**
    * Someone calls after the hero (brushed past at super speed): a stern (red) bubble low on the
    * screen with their name, since at that speed they are behind before a bubble over them could be read.

@@ -13,6 +13,8 @@ import { Population } from '../src/sim/Population';
 import { traitsOf, TEMPERAMENTS } from '../src/game/people/identity';
 import { SHARD, shardCells, resolveShard, sceptic, hasMatter, offerAnswer, accepts, answerLine, awakeningLines, type OfferFacts, type OfferAnswer } from '../src/game/sidekick/shardRules';
 import { headline, gossip, storyKind } from '../src/game/news/headlines';
+import { MATE, MATE_POWERS, matePower, type MatePower, fightStyle, pickFoe, revives, mateLine, graveSpot, type MateSay } from '../src/game/sidekick/companionRules';
+import { PropType } from '../src/plan/cell';
 
 type Check = (ok: boolean, msg: string) => void;
 
@@ -81,6 +83,65 @@ export function sidekickChecks(check: Check): void {
   check(headline(it).includes('glowing stone') && headline(it).includes('Mill Quarter') && storyKind(it) === 'city', `shard news: a headline (${headline(it)})`);
   check([0, 0.4, 0.8].every((u) => { const l = gossip(it, 12, u); return l.includes('Mill Quarter') && !/[{}]/.test(l); }), 'shard news: people talk about it');
   console.log(`sidekick shard: ${(performance.now() - t0).toFixed(0)} ms`);
+  companionChecks(check);
+}
+
+/** Phase 2: the sidekick around (how they fight, what they say, the revival, the grave). */
+function companionChecks(check: Check): void {
+  const t0 = performance.now();
+  const mid = { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 };
+  check(fightStyle('proud', mid) === 'boss' && fightStyle('steady', { ...mid, c: 0.7, a: 0.3 }) === 'boss', 'sidekick fight: the proud and the hard go for the boss');
+  check(fightStyle('anxious', mid) === 'careful' && fightStyle('shy', mid) === 'careful' && fightStyle('cheerful', { ...mid, n: 0.8 }) === 'careful', 'sidekick fight: the nervous get people clear first');
+  check(fightStyle('cheerful', mid) === 'brave' && fightStyle('kind', mid) === 'brave', 'sidekick fight: everyone else jumps in');
+  const foes = [{ d: 5, maxHp: 40, lead: false, onHero: false }, { d: 14, maxHp: 220, lead: true, onHero: false }, { d: 8, maxHp: 40, lead: false, onHero: true }];
+  check(pickFoe('boss', foes) === 1, 'sidekick fight: the boss-minded go for the leader');
+  check(pickFoe('brave', foes) === 2, 'sidekick fight: the brave help with the one on the hero');
+  check(pickFoe('brave', []) === -1, 'sidekick fight: nobody to fight');
+  // Their power: by who they are, with luck in it; every power turns up; the same person, the same power.
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 7, size: 0.4 }))), 7);
+  const count: Record<string, number> = {};
+  const byTrait = (k: 'o' | 'c' | 'e' | 'a' | 'n', hi: boolean, p: MatePower) => { let n = 0, m = 0; for (let i = 0; i < 3000; i++) { const c = pop.synthetic(5000 + i * 13), t = traitsOf(c); if ((t[k] > 0.62) !== hi) continue; n++; if (matePower(7, c.id, t) === p) m++; } return m / Math.max(1, n); };
+  for (let i = 0; i < 3000; i++) { const c = pop.synthetic(5000 + i * 13); const p = matePower(7, c.id, traitsOf(c)); count[p] = (count[p] ?? 0) + 1; }
+  check((Object.keys(MATE_POWERS) as MatePower[]).every((p) => (count[p] ?? 0) > 3000 * 0.06), `sidekick power: every power turns up (${Object.entries(count).map(([k, v]) => `${k} ${(v / 30).toFixed(0)} %`).join(', ')})`);
+  check(byTrait('a', false, 'quake') > byTrait('a', true, 'quake') * 1.5 && byTrait('n', true, 'gust') > byTrait('n', false, 'gust') * 1.5 && byTrait('c', true, 'stun') > byTrait('c', false, 'stun') * 1.3, 'sidekick power: the disagreeable quake, the nervous gust, the dutiful stun more often');
+  const c0 = pop.synthetic(5013);
+  check(matePower(7, c0.id, traitsOf(c0)) === matePower(7, c0.id, traitsOf(c0)), 'sidekick power: the same person gets the same power');
+  check(new Set([1, 2, 3, 4, 5, 6, 7, 8].map((sd) => matePower(sd, c0.id, traitsOf(c0)))).size > 1, 'sidekick power: another city, maybe another power');
+  // The revival: about four in five, the same answer for the same count.
+  let ok = 0;
+  for (let k = 0; k < 4000; k++) if (revives(42, 1000 + (k >> 2), k & 3)) ok++;
+  check(Math.abs(ok / 4000 - MATE.survive) < 0.03, `sidekick revival: about four in five come back (${(ok / 40).toFixed(1)} %)`);
+  check(revives(42, 77, 1) === revives(42, 77, 1), 'sidekick revival: the same answer every time');
+  // Words: every kind, every temperament.
+  const kinds: MateSay[] = ['join', 'careful', 'boss', 'won', 'police', 'called', 'coming', 'back', 'idle', 'hurt'];
+  check(kinds.every((w) => TEMPERAMENTS.every((t) => [0, 0.21, 0.5, 0.77, 0.999].every((u) => { const l = mateLine(w, t, u); return typeof l === 'string' && l.length > 2; }))), 'sidekick words: a line for every kind and temperament');
+  check(new Set([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9].map((u) => mateLine('idle', 'dreamy', u))).size > 2, 'sidekick words: more than one idle line');
+  // The grave: in a cemetery, off its paths, clear of the stones, the same every time.
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.35 }));
+  const macro = buildMacroPlan(terrain);
+  let found = false;
+  for (const cell of macro.cells) {
+    if (cell.district === 'water') continue;
+    const plan = planCell(macro, cell, terrain);
+    if (!plan.cemeteries.length) continue;
+    const g = graveSpot(plan, 42);
+    check(!!g, `sidekick grave: a spot in the cemetery of cell ${cell.id}`);
+    if (!g) break;
+    found = true;
+    const again = graveSpot(plan, 42);
+    check(!!again && again.x === g.x && again.z === g.z && again.yaw === g.yaw, 'sidekick grave: the same spot every time');
+    check(plan.cemeteries.some((c) => pointInPoly(c.outer, g.x, g.z)), 'sidekick grave: inside the cemetery');
+    check(!plan.cemPaths.some((s) => pointInPoly(s.outer, g.x, g.z)), 'sidekick grave: not on a path');
+    let clear = true;
+    for (let i = 0; i < plan.props.length; i += 6) if (Math.hypot(plan.props[i + 1] - g.x, plan.props[i + 2] - g.z) < 1.6) clear = false;
+    check(clear, 'sidekick grave: clear of the other graves');
+    let tomb = false;
+    for (let i = 0; i < plan.props.length; i += 6) if (plan.props[i] === PropType.Tomb && Math.hypot(plan.props[i + 1] - g.x, plan.props[i + 2] - g.z) < 23) tomb = true;
+    check(tomb, 'sidekick grave: near the cemetery\'s tomb');
+    break;
+  }
+  check(found, 'sidekick grave: the test city has a cemetery');
+  console.log(`sidekick around: ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

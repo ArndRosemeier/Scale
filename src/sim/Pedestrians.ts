@@ -90,6 +90,13 @@ export interface PedAgent {
   evac?: number;
   /** Terrain height under the agent (`gh`) and where it was sampled (see Pedestrians.groundOf). */
   gx?: number; gz?: number; gh?: number;
+  /**
+   * In the air under its own power (the sidekick flying, game/sidekick/Companion; or carried off by
+   * med drones): its owner moves it, no walking and no ground here. `fly` poses the body for flight
+   * (the hero's flight pose: tilt 0…1 into the horizontal, bank into turns, boost).
+   */
+  airborne?: boolean;
+  fly?: { tilt: number; bank: number; boost: number };
 }
 
 /** Gawkers per incident (people already standing and looking within GAWK_R m count). */
@@ -225,6 +232,8 @@ export class Pedestrians {
 
   private citQueue: { c: Citizen; ref: BuildingRef }[] = [];
   private spawnQueue: { cit: Citizen; trip: Trip; progress: number }[] = [];
+  /** Citizens never seen in the streets again (a sidekick who died: game/sidekick). */
+  readonly absent = new Set<number>();
 
   private queueBuilding(ref: BuildingRef, day: number): void {
     this.scanned.set(ref, day);
@@ -246,7 +255,7 @@ export class Pedestrians {
           if (tr.mode !== Mode.Walk && tr.mode !== Mode.Metro && tr.mode !== Mode.Car) continue;
           const end = plan.stays[i + 1]?.from ?? tr.depart + 0.3;
           if (h >= tr.depart && h < end) {
-            if (this.agents.length < MAX_AGENTS && !this.byId.has(c.id)) this.spawnQueue.push({ cit: c, trip: tr, progress: (h - tr.depart) / Math.max(1e-6, end - tr.depart) });
+            if (this.agents.length < MAX_AGENTS && !this.taken(c.id)) this.spawnQueue.push({ cit: c, trip: tr, progress: (h - tr.depart) / Math.max(1e-6, end - tr.depart) });
           } else if (tr.depart > h && tr.depart < h + 6) {
             const idx = this.freePending.length ? this.freePending.pop()! : this.pending.length;
             this.pending[idx] = { cit: c, trip: tr };
@@ -264,6 +273,11 @@ export class Pedestrians {
   /** The agent of a citizen, while they are out and about near the player (or null). */
   agentOf(citId: number): PedAgent | null {
     return this.byId.get(citId) ?? null;
+  }
+
+  /** Has a body already, or never comes out again (`absent`). */
+  private taken(citId: number): boolean {
+    return this.byId.has(citId) || this.absent.has(citId);
   }
 
   /** Where a place is: its building's door while the cell is loaded, else the cell's centre (null: unknown cell). */
@@ -292,7 +306,7 @@ export class Pedestrians {
   }
 
   private materialise(c: Citizen, trip: Trip, progress: number, px: number, pz: number): void {
-    if (this.byId.has(c.id)) return;
+    if (this.taken(c.id)) return;
     const from = this.resolve(trip.from);
     const to = this.resolve(trip.to);
     // Walking legs: door to door. Metro: door ↔ nearest station. Car: door ↔ kerb (short walk).
@@ -362,7 +376,7 @@ export class Pedestrians {
    * (no walkway near there, already there, the street is full).
    */
   bringBack(c: Citizen, x: number, z: number, to: PlaceRef): PedAgent | null {
-    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS) return null;
+    if (this.taken(c.id) || this.agents.length >= MAX_AGENTS) return null;
     const ref = this.resolve(to);
     let bx: number, bz: number, dest: { x: number; z: number } | null = null;
     if (ref) { const d = doorOf(ref.desc); bx = d.x; bz = d.z; dest = { x: bx, z: bz }; }
@@ -581,6 +595,7 @@ export class Pedestrians {
   private step(a: PedAgent, dt: number, _gameDt: number): void {
     a.stateT += dt;
     if (a.ragdoll) return;
+    if (a.airborne) { a.phase += a.speed * dt; return; }
     if (a.inside) {
       // Indoors: stay put; frightened people stand up and look towards the danger.
       if (a.fear > 0.5 && (a.state === PState.Sit || a.state === PState.Sleep)) { a.state = PState.Idle; a.stateT = -1e9; }
@@ -792,7 +807,7 @@ export class Pedestrians {
 
   /** A citizen placed inside a building (sitting, sleeping or standing). */
   spawnInside(c: Citizen, x: number, y: number, z: number, yaw: number, pose: 'sit' | 'sleep' | 'stand'): PedAgent | null {
-    if (this.byId.has(c.id)) return null;
+    if (this.taken(c.id)) return null;
     const pin = this.placeFor?.(c);
     if (pin && Math.hypot(pin.x - x, pin.z - z) > PIN_R * 2) return null;
     const a: PedAgent = {
@@ -816,7 +831,7 @@ export class Pedestrians {
   /** A citizen standing at a point (actor layer: criminals, police officers, owners). Null when full. */
   spawnAt(c: Citizen, x: number, z: number, heading: number, onRoad = false): PedAgent | null {
     // Actors have a reserve above the population cap (a full street still gets its police).
-    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS + ACTOR_RESERVE) return null;
+    if (this.taken(c.id) || this.agents.length >= MAX_AGENTS + ACTOR_RESERVE) return null;
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, onRoad, heading), heading, speed: 0, pref: 1.4, state: PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: x, fearZ: z,
@@ -829,7 +844,7 @@ export class Pedestrians {
 
   /** Spawn a pedestrian at a point fleeing (e.g. a driver abandoning a car). */
   spawnFleeing(c: Citizen, x: number, z: number, fromX: number, fromZ: number): void {
-    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS) return;
+    if (this.taken(c.id) || this.agents.length >= MAX_AGENTS) return;
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, true), heading: 0, speed: 0, pref: 1.4, state: PState.Flee,
       route: Float32Array.from([x, z, 0, x + 1, z, 0]), wp: 1, dest: null, fear: 1, fearX: fromX, fearZ: fromZ,

@@ -9,7 +9,7 @@ import type { CrimeKind } from '../crime/Crime';
 import type { Safety } from './pulse';
 
 /** shard: the glowing stone found in the city (game/sidekick); swarm / walker / stare: the Wardens (game/aliens). */
-export type NewsWhat = CrimeKind | 'rising' | 'falling' | 'turf' | 'shard' | WardenNews;
+export type NewsWhat = CrimeKind | 'rising' | 'falling' | 'turf' | 'shard' | 'mourn' | WardenNews;
 export type WardenNews = 'swarm' | 'walker' | 'stare';
 const WARDEN_NEWS: readonly NewsWhat[] = ['swarm', 'walker', 'stare'];
 export type NewsEnd = 'stopped' | 'escaped' | 'hero' | 'none';
@@ -79,6 +79,7 @@ export function headline(it: NewsItem): string {
   if (it.what === 'swarm') return 'Hundreds of discs over the city. The Wardens won\'t say why';
   if (it.what === 'walker') return `Warden walker stands in ${it.hood}, staring`;
   if (it.what === 'stare') return `Disc hangs over ${it.hood} for hours. No comment`;
+  if (it.what === 'mourn') return `The hero's companion did not survive: mourning in ${it.hood}`;
   if (it.end === 'hero') return fillNews(HERO[it.what] ?? 'Hero steps in in {hood}', it);
   const p = HEAD[it.what];
   return p ? fillNews(it.end === 'stopped' ? p[1] : p[0], it) : `Trouble in ${it.hood}`;
@@ -86,7 +87,7 @@ export function headline(it: NewsItem): string {
 
 /** The kind of story (the card's colour band): crime, police, hero, city. */
 export function storyKind(it: NewsItem): 'crime' | 'police' | 'hero' | 'city' {
-  if (it.what === 'rising' || it.what === 'falling' || it.what === 'turf' || it.what === 'shard' || WARDEN_NEWS.includes(it.what)) return 'city';
+  if (it.what === 'rising' || it.what === 'falling' || it.what === 'turf' || it.what === 'shard' || it.what === 'mourn' || WARDEN_NEWS.includes(it.what)) return 'city';
   return it.end === 'hero' ? 'hero' : it.end === 'stopped' ? 'police' : 'crime';
 }
 
@@ -109,6 +110,7 @@ export function gossip(it: NewsItem, now: number, u: number): string {
   if (it.what === 'rising') return pick(['They say {hood} is getting rougher by the day.', 'I don\'t go to {hood} after dark any more.']);
   if (it.what === 'falling') return pick(['{hood} has really calmed down lately.', 'My sister says {hood} is safe again. Finally.']);
   if (it.what === 'turf') return pick(['{Group} are moving into {hood}, I heard.', 'Word is {group} took over part of {hood}.']);
+  if (it.what === 'mourn') return pick(['The one who flew with the hero… they didn\'t make it. From {hood}, I heard.', 'They\'re burying the hero\'s companion. People in {hood} are leaving flowers.', 'Even with powers you can die. That poor soul from {hood}.']);
   if (it.what === 'shard') return pick(['Did you see the news? Somebody found a glowing stone in {hood}. Glowing!', 'They say a stone in {hood} hums at night. Like the one from that falling star.', 'A glowing rock in {hood}, apparently. I wouldn\'t touch it.']);
   if (it.what === 'swarm') return pick(['Did you see the sky {when}? Hundreds of discs. Nobody knows why.', 'All those saucers {when}! The news called it a festival. The Wardens didn\'t call it anything.', 'My kid counted the discs {when}. Got to ninety and gave up.']);
   if (it.what === 'walker') return pick(['A Warden walker stood in {hood} {when}. Just stood there, looking.', 'They put one of their tall ones down in {hood} {when}. Gave me the creeps.', 'Did you hear? A walker in {hood}. Nobody dared go near it.']);
