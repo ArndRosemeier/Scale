@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.086 — 2026-10-07
+
+- **Men are back to the earlier body** with the fixed upper legs: the broader, higher shoulders from 0.081 are undone (they gave men a hunched look). Walkers still carry their arms a little away from the body.
+
 ## 0.085 — 2026-10-07
 
 - **People know each other.** Friends, family, neighbours and colleagues who pass each other in the street stop for a chat: a wave, a greeting by name, a few words with their hands going, a goodbye, then they walk on.
