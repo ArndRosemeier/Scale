@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.125 — 2026-10-08
+
+- **The help dialog (H) is new, with three tabs.** **Keys** shows the controls in tidy groups (moving, powers, doing things, screens) instead of one long list, and every key can be changed: click a key, press the new one. Each action can have two keys; a key you take from another action is freed there and the dialog tells you. Your keys are kept in this browser, and **Reset to defaults** brings the old ones back. The hotbar, the powers screen and the hints show your keys. The iPad's on-screen controls are not affected. **Powers** lists every power with its exact numbers for each rank (effect, energy, karma price), taken straight from the game's own values, plus the energy, flight, giant-body and karma rules; your current rank is highlighted. **Manual** is the player's manual, readable right in the game (with a link to the PDF).
+
 ## 0.124 — 2026-10-08
 
 - **Nothing hurts through the pavement any more, by one rule.** Every blow in the game now says where it came from, and your health ignores any that come from the other side of the street. That covers fists, knives, bats, guns, bombs, villain powers, dogs, robots, monsters, the army, cars and collapses, including any added later. Fighting in the sewers, the metro or the caves works as before; nothing up on the street can hurt you down there, and nothing down there can hurt you up top.
