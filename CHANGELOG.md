@@ -2,6 +2,20 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.161 — 2026-10-08
+
+- **Fix: the hero no longer gets stuck at turns in tunnels.** Walking from a platform into the underpass, the hero could stand stuck at the right-angle turn just inside its mouth until facing exactly down the next stretch. Underground, a body pressed against a wall only slid along the map's north-south or east-west axis; against a wall at an angle to them (most tunnels) both ways led into the wall and the hero stopped dead. Bodies now slide along walls at any angle, in the metro, its stairs and underpasses, the sewers and the caves. The metro audit and the self-test now walk every stair and underpass both ways like a player who cuts the corners: before the fix 38 of 50 passages in one city stopped such a walker, now none.
+
+## 0.160 — 2026-10-08
+
+- **Far fewer fall cries.** Someone tripping in the street now happens every three to six minutes instead of every one to two, the first one not before a minute and a half, and only within about 35 m of you (it was up to 60 m), so you can see who fell.
+- **Screams come from whoever got frightened.** When people take fright, the scream used to be played at the first frightened person in the whole city, often someone already lying knocked down somewhere else. That made screams seem to come from people on the ground with nothing happening. Now it comes from one of the people who just got scared.
+
+## 0.159 — 2026-10-08
+
+- **Behind the scenes: the self test runs in under 3 minutes instead of about 17.** It is now split into 69 independent sections that run side by side, one worker per processor core, the slowest first. `npm run test:quick` runs only the sections that touch what you changed, for quick checks while working; the full `npm test` is still required before every merge (docs/CONVENTIONS.md, "Tests: which command when"). No check was dropped or shortened.
+- **Cities are planned about twice as fast.** Laying out the metro sampled the ground along every sewer again for each metro line; it now does that once. The cities come out exactly the same, so loading a new city is a bit quicker too.
+
 ## 0.158 — 2026-10-08
 
 - **Fights in the sewers stay in the sewers.** When a villain cast frost, an orb, an EMP or a fireball, when a mad bomber threw a bomb, or when a gunman missed someone underground, the scorch marks, frost, chips and the bomb itself landed on the street above. They now land on the sewer, metro or cave floor where the fight is. People knocked down underground also no longer quietly vanish: you can find them and help them up like anyone on the street.
