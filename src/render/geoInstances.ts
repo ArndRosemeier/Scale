@@ -20,8 +20,10 @@ export class GeoInstances {
 
   constructor(base: THREE.BufferGeometry, material: THREE.Material, count: number) {
     const g = new THREE.InstancedBufferGeometry();
-    g.index = base.index;
-    for (const n of Object.keys(base.attributes)) g.setAttribute(n, base.attributes[n]);
+    // (Own copies of the small base mesh: disposing this geometry frees all its GPU buffers, and
+    // shared ones would vanish from under every other mesh made from the same base.)
+    g.index = base.index ? base.index.clone() : null;
+    for (const n of Object.keys(base.attributes)) g.setAttribute(n, base.attributes[n].clone());
     this.m = new Float32Array(count * 16);
     this.c = new Float32Array(count * 3);
     const ib = new THREE.InstancedInterleavedBuffer(this.m, 16, 1);

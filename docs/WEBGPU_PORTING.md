@@ -154,6 +154,10 @@ meshes per terrain tile, were most of the ~400 builds right after loading on the
   InstancedBufferGeometry (`render/geoInstances.ts`, attributes iM0..iM3 + iColor); the material
   reads them with `geometryInstancing` (webgpu/fx.ts). One build for all of them. Shadow passes only
   take the material's `positionNode`, so casting shadows this way needs the transform there too
-  (the clumps cast none).
+  (the clumps cast none). Each such mesh needs its own copy of the base geometry's buffers:
+  disposing a geometry frees every GPU buffer it references, shared ones included (the PC lost
+  all rendering a minute in when the first tile unloaded).
+- Never replace a texture every lit shader reads at runtime: a new shadow map (auto quality
+  changing its size) rebuilt every shader, ~10 s frozen. On WebGPU the size stays as first set.
 - A fixed set of instanced batches made on first use (a car model's batch): create them all at
   start-up on WebGPU so the warm-up draws and builds them (VehicleRenderer).
