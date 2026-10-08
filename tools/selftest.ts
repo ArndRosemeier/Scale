@@ -34,6 +34,8 @@ import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
 import { PlayerHealth } from '../src/game/PlayerHealth';
+import { readCostumes } from '../src/game/costumes';
+import type { CharacterLook } from '../src/avatar/look';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
@@ -2136,6 +2138,16 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }] },
   };
   const back = parseSave(serializeSave(full));
+  {
+    // The three costumes (F1–F3): kept through a save, junk sanitised.
+    const look = { appearance: { gender: 1, seed: 5 }, outfit: { top: 'sweater' } } as unknown as CharacterLook;
+    const c = parseSave(serializeSave({ ...full, costumes: { active: 2, looks: [null, look, look] } })).costumes;
+    const r = readCostumes(c);
+    check(!!r && r.active === 2 && r.looks[0] === null && !!r.looks[1] && r.looks[2]?.outfit.top === 'sweater', 'costumes: the three looks and the worn one survive a save');
+    const bad = readCostumes({ active: 7, looks: ['x', { appearance: 1 }] });
+    check(!!bad && bad.active === 0 && bad.looks.length === 3 && bad.looks.every((l) => l === null), 'costumes: a broken costume set loads as the starting look');
+    check(readCostumes(null) === null && parseSave(serializeSave(full)).costumes === undefined, 'costumes: older saves have none');
+  }
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
