@@ -32,6 +32,12 @@ Its open items are consolidated here one PR at a time.
 | Where on screen is a world point? | `render/screen.ts` `toScreen` / `screenPoint` | `.project(cam…)` (**guarded**: the selftest fails on it anywhere else) |
 | Can someone shoot or see from A to B? | `game.sight.clear` (`game/combat/sight.ts`: caves, tunnels, buildings, landmarks, cars, facade holes). For a `Target`: `targeting.sees(from, t, centre)` (pads by `targeting.padOf(t)`, the target car never blocks). | `world.raycast` with your own tolerances (**guarded**) |
 
+## Interiors
+
+| Need | Use | Not |
+|---|---|---|
+| Put furniture into a room (any outline) | a theme's `Item` list given to `new Filler(roomArea(…), rng).fill(items)` (`interior/fill/`, see `docs/INTERIORS_PLAN.md`): it keeps doorways, stairs and walkways free and checks the outline | Fixed offsets in the room's box (`add('sofa', um, ext + …)`): pieces end up in doorways, facing walls, in front of windows |
+
 ## The ledger and blame
 
 | Question | Use | Not |

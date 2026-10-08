@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.167 — 2026-10-08
+
+- **Flats are furnished so they make sense.** Furniture no longer sits at fixed spots in each room's box. The sofa stands against a wall with room in front of it, away from the door, with the coffee table, rug, a lamp and an armchair round it, and the TV goes on the wall across from it, facing it. The bed's head is against a plain wall with a nightstand on each side and a picture above it, the wardrobe has room to open, and the desk stands under the window. The kitchen counter runs along a wall without windows with the fridge at one end, and the table with its chairs stands in the free floor. Nothing stands in a doorway any more, tall pieces keep clear of windows, and every door and every piece you need to reach can still be walked to.
+- **Every room opens onto the corridor.** In flats with a corridor each room now has its own door onto it (doors used to be spaced evenly, so some rooms had two and others none), and a sliver left at the end of a row joins the room next to it instead of becoming a tiny room of its own.
+- **Interior core, step 1.** The furnishing goes through a new shared filler (`src/interior/fill/`) that every interior will use in the end: it works in rooms of any shape, and themes say what belongs together. Plan: `docs/INTERIORS_PLAN.md`. A storey is now built one per frame as you walk in, so entering a building doesn't stall.
+
 ## 0.166 — 2026-10-08
 
 - **No more screams at every landing.** Travelling by super jump, each touchdown made the people round about take fright and scream (the long scream, several times a minute), with nobody hurt and nothing on the map. Now someone of human size landing hard only startles people: they flinch and turn to look. A giant or a monster coming down still makes them scream and run.

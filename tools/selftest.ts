@@ -37,6 +37,7 @@ import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
 import { arcadeChecks } from './arcadeTest';
+import { homeChecks } from './homeTest';
 import { sidekickChecks } from './sidekickTest';
 import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
@@ -3696,6 +3697,7 @@ section('villains phase 4', async () => { await villainChecks(check); });
 
 // Arcades: halls of video game cabinets on shopping streets, and their games (tools/arcadeTest.ts).
 section('arcades', async () => { arcadeChecks(check); });
+section('furnished homes', async () => { homeChecks(check); });
 section('doors', async () => { doorChecks(check); });
 
 // The second shard (SIDEKICK_PLAN phase 1): where it turns up, who takes it (tools/sidekickTest.ts).

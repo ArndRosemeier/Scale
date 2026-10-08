@@ -65,6 +65,8 @@ export class Interiors {
   /** Clickable world panels (elevators); the game routes the crosshair through it. */
   readonly panels = new PanelManager();
   private active = new Map<BuildingRef, ActiveBuilding>();
+  /** Storeys waiting to be built (nearest first). */
+  private queue: { a: ActiveBuilding; f: number; d: number }[] = [];
   private lights: THREE.PointLight[] = [];
   private t = 0;
   private lastCheck = -1;
@@ -136,14 +138,20 @@ export class Interiors {
           a.stair = cores.stair;
         }
         a.lastNear = this.t;
-        // Storeys around the player.
-        const want: number[] = [];
-        for (const fl of L.floors) if (fl.y1 > py - 3.5 && fl.y0 < py + ph + 3.5) want.push(fl.f);
-        for (const f of want) if (!a.floors.has(f)) this.buildFloor(a, f, hours);
+        // Storeys around the player: queued, the one at the player's feet first, one built per frame
+        // (furnishing a storey takes a few milliseconds; several at once would hitch).
+        for (const fl of L.floors) {
+          if (fl.y1 > py - 3.5 && fl.y0 < py + ph + 3.5 && !a.floors.has(fl.f) && !this.queue.some((q) => q.a === a && q.f === fl.f)) {
+            this.queue.push({ a, f: fl.f, d: Math.abs((fl.y0 + fl.y1) / 2 - py) + (inside ? 0 : 10) });
+          }
+        }
       }
+      this.queue.sort((p, q) => p.d - q.d);
       // Drop interiors the player left.
       for (const [ref, a] of this.active) if (this.t - a.lastNear > 6 || !ref.alive) this.drop(a);
     }
+    const next = this.queue.shift();
+    if (next && this.active.get(next.a.ref) === next.a && !next.a.floors.has(next.f)) this.buildFloor(next.a, next.f, hours);
     this.updateLights(px, py, pz);
     this.updateDoors(dt, px, py, pz);
     for (const a of this.active.values()) a.elevator?.update(dt);
@@ -310,6 +318,7 @@ export class Interiors {
   }
 
   private drop(a: ActiveBuilding): void {
+    this.queue = this.queue.filter((q) => q.a !== a);
     if (a.elevator) {
       this.group.remove(a.elevator.group);
       a.elevator.dispose();

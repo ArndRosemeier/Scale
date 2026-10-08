@@ -8,6 +8,10 @@ import { minAreaRect, polyArea, pointInPoly, type Poly, polyBounds } from '../co
 import { hash32 } from '../core/rng';
 import { intersection } from '../core/clip';
 import type { BuildingDesc } from '../plan/building';
+import { WALLS, FABRIC, WOOD } from './fill/palette';
+import { roomArea, type EdgeKind } from './fill/area';
+import { Filler } from './fill/place';
+import { homeItems, type HomeRoom } from './fill/home';
 
 export type RoomType =
   | 'living' | 'bedroom' | 'kitchen' | 'bath' | 'hall' | 'office' | 'meeting' | 'shop' | 'cafe' | 'storage'
@@ -275,10 +279,6 @@ export interface FloorPlan {
   fixtures: number[];
 }
 
-const WALLS: [number, number, number][] = [[0.92, 0.9, 0.85], [0.88, 0.86, 0.8], [0.85, 0.88, 0.9], [0.9, 0.85, 0.8], [0.8, 0.86, 0.8], [0.95, 0.93, 0.9], [0.86, 0.8, 0.75]];
-const FABRIC: [number, number, number][] = [[0.3, 0.32, 0.38], [0.55, 0.45, 0.35], [0.2, 0.3, 0.25], [0.6, 0.6, 0.58], [0.45, 0.2, 0.18], [0.25, 0.25, 0.28], [0.7, 0.65, 0.55]];
-const WOOD: [number, number, number][] = [[0.45, 0.32, 0.2], [0.6, 0.45, 0.3], [0.3, 0.2, 0.13], [0.75, 0.65, 0.5]];
-
 /** Local frame (OBB) helper. */
 class Frame {
   readonly cx: number; readonly cz: number; readonly ux: number; readonly uz: number; readonly hu: number; readonly hv: number;
@@ -428,6 +428,8 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     }
     stairsOf(plan, st, y, height, up, below);
   }
+  // Home rooms, furnished once the walls and doors are final (fill/home).
+  const homes: Room[] = [];
   // --- choose layout
   if (style === 'church') {
     plan.rooms.push({ type: 'nave', poly, floorMat: 'stone', wallColor: [0.9, 0.87, 0.8] });
@@ -653,28 +655,29 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     for (const [v0, v1] of sides) {
       let u = u0;
       let k = r.int(0, 3);
+      const doors: [number, number][] = [];
       while (u < uE - 1.5) {
         const type = cycle[k % cycle.length];
         const len = type === 'bath' ? r.range(2.2, 3) : type === 'kitchen' ? r.range(3, 4) : type === 'living' ? r.range(4.5, 6.5) : r.range(3.4, 4.5);
-        const u1 = Math.min(uE, u + len);
+        // A sliver too narrow for a room of its own goes to this one.
+        let u1 = Math.min(uE, u + len);
+        if (uE - u1 < 2.4) u1 = uE;
         const q = clipRoom(F.rect(u, v0, u1, v1));
         if (q) {
           const room: Room = { type, poly: q, floorMat: type === 'bath' || type === 'kitchen' ? 'tile' : r.chance(0.7) ? 'wood' : 'carpet', wallColor: type === 'bath' ? [0.9, 0.92, 0.93] : r.pick(WALLS) };
           plan.rooms.push(room);
-          furnishRoom(plan, F, r, type, u, v0, u1, v1, corridor ? (v0 < 0 ? 1 : -1) : 0);
+          homes.push(room);
         }
-        // Wall between rooms with a door near the corridor side.
-        if (u1 < uE - 0.5) wallLine(plan, F, u1, v0, u1, v1, corridor ? [[v0 < 0 ? 0.62 : 0.08, v0 < 0 ? 0.9 : 0.36]] : [[0.4, 0.62]]);
+        // Each room opens onto the corridor near one end; without a corridor the rooms open into each other.
+        if (corridor) { const d0 = u1 - u > 2.6 ? u + 0.35 : (u + u1) / 2 - 0.45; doors.push([d0, d0 + 0.9]); }
+        if (u1 < uE - 0.5) wallLine(plan, F, u1, v0, u1, v1, corridor ? [] : [[0.4, 0.62]]);
         u = u1;
         k++;
       }
-      // Wall between rooms and corridor with doors per room.
+      // Wall between rooms and corridor with a door per room.
       if (corridor) {
-        const vv = v0 < 0 ? -cw : cw;
-        const doors: [number, number][] = [];
-        const span = uE - u0;
-        for (let uu = u0 + 1; uu < uE - 1; uu += 4.2) doors.push([(uu - u0) / span, (uu + 0.9 - u0) / span]);
-        wallLine(plan, F, u0, vv, uE, vv, doors);
+        const vv = v0 < 0 ? -cw : cw, span = uE - u0;
+        wallLine(plan, F, u0, vv, uE, vv, doors.map(([a, b2]) => [(a - u0) / span, (b2 - u0) / span]));
       }
     }
   }
@@ -690,6 +693,7 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     plan.walls = plan.walls.filter((w) => !(w.doors.length === 1 && w.doors[0][0] <= 0 && w.doors[0][1] >= 1));
     plan.furniture = plan.furniture.filter((f) => f.kind === 'rug' || f.kind === 'painting' || f.use === 'dress' || f.h < 0.3 || !overlaps(furnRect(f), way));
   }
+  if (homes.length) furnishHomes(plan, homes, poly, b, r, [...(way ? [way] : []), ...(st ? [coreRect(st, 0, 0.3)] : [])]);
   // Ceiling lights per room: one in the middle of a small room, a grid in big ones; homes and
   // cafés get pendant lamps (over the table where there is one), offices and shops panels.
   for (const room of plan.rooms) {
@@ -801,66 +805,22 @@ function wallLine(plan: FloorPlan, F: Frame, u0: number, v0: number, u1: number,
   plan.walls.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], doors });
 }
 
-/** Furniture along the walls of a rectangular room (OBB frame coordinates). `doorSide`: +1 door at v1? */
-function furnishRoom(plan: FloorPlan, F: Frame, r: Rng, type: RoomType, u0: number, v0: number, u1: number, v1: number, corridorSide: number): void {
-  const add = (kind: FurnKind, u: number, v: number, yawOff: number, w: number, d: number, h: number, color: [number, number, number], use?: Furn['use']) => {
-    const p = F.P(u, v);
-    plan.furniture.push({ kind, x: p[0], z: p[1], yaw: F.yaw + yawOff, w, d, h, color, use });
+/**
+ * Furnishes the rooms of a home storey (fill/home theme, placed by fill/place), once the storey's
+ * walls and doors are final. Side walls of attached houses are blind party walls, every other
+ * stretch of the outline has windows.
+ */
+function furnishHomes(plan: FloorPlan, rooms: Room[], poly: Poly, b: BuildingDesc, r: Rng, keepOut: Poly[]): void {
+  const n = b.poly.length >> 1, fi = b.front % n, fj = (fi + 1) % n;
+  const fdx = b.poly[fj * 2] - b.poly[fi * 2], fdz = b.poly[fj * 2 + 1] - b.poly[fi * 2 + 1], fl = Math.hypot(fdx, fdz) || 1;
+  const facade = (ax: number, az: number, bx: number, bz: number): EdgeKind => {
+    if (!b.attached) return 'window';
+    const l = Math.hypot(bx - ax, bz - az) || 1;
+    return Math.abs(((bx - ax) * fdx + (bz - az) * fdz) / (l * fl)) < 0.5 ? 'blind' : 'window';
   };
-  const um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
-  const W = u1 - u0, D = v1 - v0;
-  // The exterior wall is opposite the corridor side.
-  const ext = corridorSide > 0 ? v0 : corridorSide < 0 ? v1 : v0;
-  const inner = corridorSide > 0 ? v1 : corridorSide < 0 ? v0 : v1;
-  const towardInner = Math.sign(inner - ext) || 1;
-  const fabric = r.pick(FABRIC), wood = r.pick(WOOD);
-  switch (type) {
-    case 'living':
-      add('sofa', um, ext + towardInner * 0.55, towardInner > 0 ? 0 : Math.PI, Math.min(2.2, W * 0.5), 0.9, 0.85, fabric, 'sit');
-      add('coffeeTable', um, ext + towardInner * 1.6, 0, 1.1, 0.6, 0.42, wood);
-      add('rug', um, ext + towardInner * 1.5, 0, Math.min(2.6, W * 0.6), 1.8, 0.01, r.pick(FABRIC));
-      add('tvStand', um, inner - towardInner * 0.35, towardInner > 0 ? Math.PI : 0, 1.6, 0.45, 0.5, wood);
-      add('tv', um, inner - towardInner * 0.35, towardInner > 0 ? Math.PI : 0, 1.2, 0.08, 0.7, [0.05, 0.05, 0.06]);
-      if (W > 4.5) add('armchair', u0 + 0.7, vm, Math.PI / 2, 0.85, 0.85, 0.9, r.pick(FABRIC), 'sit');
-      if (W > 5.2) add('armchair', um + 1.6, ext + towardInner * 1.6, -Math.PI / 2, 0.85, 0.85, 0.9, r.pick(FABRIC), 'sit');
-      add('plant', u1 - 0.5, ext + towardInner * 0.45, 0, 0.5, 0.5, 1.3, [0.2, 0.45, 0.2]);
-      add('bookshelf', u1 - 0.2, vm, -Math.PI / 2, Math.min(1.8, D * 0.5), 0.35, 2.0, wood);
-      add('floorLamp', u0 + 0.4, ext + towardInner * 0.4, 0, 0.35, 0.35, 1.6, [0.9, 0.85, 0.7]);
-      if (r.chance(0.7)) add('painting', um, inner - towardInner * 0.06, towardInner > 0 ? Math.PI : 0, 0.9, 0.04, 0.6, r.pick(FABRIC));
-      break;
-    case 'bedroom': {
-      const dbl = W > 3.4 && r.chance(0.7);
-      add(dbl ? 'bedDouble' : 'bed', um, inner - towardInner * 1.1, towardInner > 0 ? Math.PI : 0, dbl ? 1.6 : 0.95, 2.05, 0.55, r.pick(FABRIC), 'sleep');
-      add('nightstand', um + (dbl ? 1.1 : 0.75), inner - towardInner * 0.3, towardInner > 0 ? Math.PI : 0, 0.45, 0.4, 0.55, wood);
-      if (dbl) add('nightstand', um - 1.1, inner - towardInner * 0.3, towardInner > 0 ? Math.PI : 0, 0.45, 0.4, 0.55, wood);
-      if (r.chance(0.6)) add('painting', um, inner - towardInner * 0.06, towardInner > 0 ? Math.PI : 0, 0.8, 0.04, 0.55, r.pick(FABRIC));
-      add('wardrobe', u0 + 0.35, vm, Math.PI / 2, Math.min(2, D * 0.5), 0.6, 2.1, wood);
-      add('rug', um, vm, 0, 1.6, 1.2, 0.01, r.pick(FABRIC));
-      if (r.chance(0.5)) {
-        add('desk', u1 - 0.45, ext + towardInner * 0.8, -Math.PI / 2, 1.1, 0.6, 0.74, wood);
-        add('chair', u1 - 1.05, ext + towardInner * 0.8, Math.PI / 2, 0.45, 0.45, 0.9, wood, 'sit');
-      }
-      break;
-    }
-    case 'kitchen':
-      add('kitchenRow', um, inner - towardInner * 0.32, towardInner > 0 ? Math.PI : 0, W - 0.4, 0.62, 0.92, [0.92, 0.92, 0.9]);
-      add('fridge', u1 - 0.45, inner - towardInner * 0.35, towardInner > 0 ? Math.PI : 0, 0.7, 0.68, 1.85, [0.9, 0.9, 0.9]);
-      add('diningTable', um, vm, 0, 1.4, 0.85, 0.75, wood);
-      for (const s of [-1, 1]) add('chair', um + s * 0.45, vm + 0.6, Math.PI, 0.45, 0.45, 0.9, wood, 'sit');
-      for (const s of [-1, 1]) add('chair', um + s * 0.45, vm - 0.6, 0, 0.45, 0.45, 0.9, wood, 'sit');
-      break;
-    case 'bath':
-      add('bathtub', um, inner - towardInner * 0.4, 0, Math.min(1.7, W - 0.3), 0.75, 0.55, [0.95, 0.95, 0.95]);
-      add('toilet', u0 + 0.4, ext + towardInner * 0.4, Math.PI / 2, 0.4, 0.65, 0.75, [0.95, 0.95, 0.95]);
-      add('sink', u1 - 0.3, ext + towardInner * 0.45, -Math.PI / 2, 0.55, 0.45, 0.85, [0.95, 0.95, 0.95]);
-      add('mirror', u1 - 0.03, ext + towardInner * 0.45, -Math.PI / 2, 0.6, 0.03, 0.8, [0.7, 0.78, 0.82]);
-      break;
-    case 'hall':
-    case 'corridor':
-      if (W > 3) add('coatRack', u0 + 0.35, inner - towardInner * 0.3, 0, 0.4, 0.4, 1.8, [0.25, 0.2, 0.16]);
-      break;
-    default:
-      break;
+  for (const room of rooms) {
+    const A = roomArea(room.poly, plan.walls, poly, facade, keepOut);
+    plan.furniture.push(...new Filler(A, r).fill(homeItems(room.type as HomeRoom, A, r)));
   }
 }
 
