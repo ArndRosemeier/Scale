@@ -1099,5 +1099,45 @@
     "loop": false,
     "gain": 0.5,
     "description": "Warden disc: soft rising tone when a scan cone comes on (procedural, tools/synthWardens.mjs)"
+  },
+  "teen_whine": {
+    "files": [
+      "teen_whine.wav"
+    ],
+    "loop": true,
+    "gain": 0.5,
+    "description": "Runaway teens' saucer: reedy warbling whine loop (procedural, tools/synthWardens.mjs)"
+  },
+  "teen_zap": {
+    "files": [
+      "teen_zap.wav"
+    ],
+    "loop": false,
+    "gain": 0.55,
+    "description": "Runaway teens' saucer: buzzy beam coming on (procedural, tools/synthWardens.mjs)"
+  },
+  "teen_giggle": {
+    "files": [
+      "teen_giggle.wav"
+    ],
+    "loop": false,
+    "gain": 0.55,
+    "description": "Runaway teens: glitchy robotic giggle after a prank (procedural, tools/synthWardens.mjs)"
+  },
+  "teen_pod": {
+    "files": [
+      "teen_pod.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "Runaway teens' saucer: a hover pod knocked out, pop and fizz (procedural, tools/synthWardens.mjs)"
+  },
+  "ufo_stern": {
+    "files": [
+      "ufo_stern.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "Parent Warden disc: deep stern two-note tone over the block (procedural, tools/synthWardens.mjs)"
   }
 }

@@ -1380,6 +1380,29 @@ TalkFacts `nannies` from `momentAt`). **News**: `swarm`, `walker`, `stare` items
 (`tools/synthWardens.mjs`): `ufo_hum` (one positional loop at the nearest disc within 520 m), `ufo_scan` (a cone coming on,
 a walker lowered or lifted). `dev.wardens.status() / count(n|null) / swarm(on) / walker(mins) / hover() / look()`.
 
+**Runaway teens** (ALIENS_PLAN phase 2; `RunawayTeens.ts` an archetype `teens` on the threat clock, minor,
+omens `zip` / `glyph` through `Wardens.teenOmen`; `teenRules.ts` pure; `TeenSaucer.ts` the mesh; `Glyphs.ts`):
+a stolen 4.2 m saucer (the discs' hull, dented; two small Warden heads in a glass dome; 14 chasing gaudy rim lights;
+three glowing hover pods underneath) joyrides along the road net (A* routes, points every 10 m, legs round the hero),
+at a height of half the **cover** round it (the highest roof within 34 m over the ground, `teenHeight`, 6–19 m), so the
+roofs hide it. Pranks: a parked car made a Rapier wreck (`VehicleRenderer.makeWreck`, impulse 0) held on a spring
+under the saucer and dropped on a roof 5–16 m high within 80 m; a pedestrian taken over (`airborne`, as the med drones
+do), tumbled up and lowered into a fountain (`furn:fountain` props within 170 m; else a street spot); a canvas glyph
+quad on a facade beside a door, drawn in over 3.5 s, glowing for 10 min (`Glyphs`, at most 14). It flees the hero
+within 38 m (a route away), pops up 16 m when the hero is right under it, never into a wall (over a roof it clips).
+**Seen** (`seeStep`): out in the open (higher than the cover + 3 m) fills a meter in 2.4 s, a Warden scan cone
+(`Discs.inCone`) three times faster, it drains slower; the first 8 s don't count. The hero's lever: each **pod**
+(1.5 points; a normal punch ~0.26, a power at once; the hull passes half a hit to the nearest pod) knocked out lifts it
+8 m and makes it let go; all three out, it bobs up over the roofs (cover + 22 m); open ground has no cover; hovering
+discs come more often round it (`Wardens.hovers`). Watching discs never come (the Nannies don't know). Seen: a stasis
+bubble, a **parent disc** (`task 'parent'`, `low`, dropping from 260 m) hangs 16 m over it, beams, `ufo_stern` rolls
+over the block, the saucer is drawn up into it. Credit (`teenReward`): a pod down by the hero 25 karma + 3 rep, the
+hero within 90 m 15 + 2; then cheers, news `teens` (end `hero` / `stopped` / `none` when they get away), and the
+**regard** (`Wardens.regard`, saved per city and in saves: `handed`, `regard`). Left alone 7 min they zoom off home.
+Police: response ceiling 2, never on foot. The saucer is a `ThreatActor` (zones hull + 3 pods) for targeting, punches
+and powers. Sounds `teen_whine` (loop), `teen_zap`, `teen_giggle`, `teen_pod`, `ufo_stern`. `dev.threat.spawn('teens', { dist })`,
+`dev.wardens.teens.status() / pod(i) / prank(kind) / catch() / omen(kind)`.
+
 ### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
 * Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the
   minimap's edge when out of view; cleared on arrival); travel by clicking is a sandbox feature.

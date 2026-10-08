@@ -172,6 +172,11 @@ export interface SaveData {
    * `Sidekick.restore`); older saves have none (the browser's own record for the city stays).
    */
   sidekick?: unknown;
+  /**
+   * The Wardens' regard (game/aliens teenRules Regard, sanitised by `readRegard`); older saves have
+   * none (the browser's own record for the city stays).
+   */
+  wardens?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -312,6 +317,7 @@ export function parseSave(input: string | unknown): SaveData {
     ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
     ...(o.cityLife && typeof o.cityLife === 'object' ? { cityLife: o.cityLife } : {}),
     ...(o.sidekick && typeof o.sidekick === 'object' ? { sidekick: o.sidekick } : {}),
+    ...(o.wardens && typeof o.wardens === 'object' ? { wardens: o.wardens } : {}),
   };
 }
 
