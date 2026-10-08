@@ -33,7 +33,8 @@ export { makeStarsNode };
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 
 export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): THREE.WebGPURenderer {
-  return new THREE.WebGPURenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true, forceWebGL });
+  // (trackTimestamp: GPU time per frame for the auto quality, where the adapter has timestamp queries.)
+  return new THREE.WebGPURenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true, forceWebGL, trackTimestamp: true });
 }
 
 /**

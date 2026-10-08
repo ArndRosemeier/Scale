@@ -169,4 +169,7 @@ Ordered by how much of the screen they cover (port first what is always visible)
   created blocking while drawing (shadow passes, first frames), now async. The warm-up's tree and
   furniture stand-ins (boxes without the trees' attributes) built useless shader variants on WebGPU
   (and all ~250 "attribute not found" warnings); they now use the real models.
+- 2026-10-08 (3): auto quality gets the GPU time per frame on WebGPU too (three's timestamp
+  queries, `trackTimestamp`; WebGpuTimer in Graphics.ts). SwiftShader reports 0 (ignored, the
+  frame-time heuristic stays), so the values still need a look on the PC.
 
