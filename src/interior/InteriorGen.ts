@@ -4,7 +4,7 @@
  * deterministic per (building seed, floor). Coordinates are world x/z.
  */
 import { Rng } from '../core/rng';
-import { minAreaRect, polyArea, pointInPoly, type Poly } from '../core/geom2';
+import { minAreaRect, polyArea, pointInPoly, type Poly, polyBounds } from '../core/geom2';
 import { hash32 } from '../core/rng';
 import { intersection } from '../core/clip';
 import type { BuildingDesc } from '../plan/building';
@@ -695,7 +695,7 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
   for (const room of plan.rooms) {
     const fx = room.type === 'living' || room.type === 'bedroom' || room.type === 'kitchen' || room.type === 'cafe' ? 1
       : room.type === 'bath' || room.type === 'corridor' || room.type === 'hall' || room.type === 'stairs' || room.type === 'storage' || room.type === 'arcade' ? 2 : 0;
-    const bb = polyBox(room.poly);
+    const bb = polyBounds(room.poly);
     const cu = (bb[0] + bb[2]) / 2, cz = (bb[1] + bb[3]) / 2;
     const big = Math.max(bb[2] - bb[0], bb[3] - bb[1]) > 7;
     const pts: [number, number][] = [];
@@ -794,12 +794,6 @@ function furnRect(f: Furn): Poly {
   const out: number[] = [];
   for (const [lx, lz] of [[-w, -d], [w, -d], [w, d], [-w, d]]) out.push(f.x + lx * c + lz * s, f.z - lx * s + lz * c);
   return out;
-}
-
-function polyBox(p: number[]): [number, number, number, number] {
-  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-  for (let i = 0; i < p.length; i += 2) { x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); z0 = Math.min(z0, p[i + 1]); z1 = Math.max(z1, p[i + 1]); }
-  return [x0, z0, x1, z1];
 }
 
 function wallLine(plan: FloorPlan, F: Frame, u0: number, v0: number, u1: number, v1: number, doors: [number, number][]): void {

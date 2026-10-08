@@ -25,6 +25,7 @@
 import { Rng, deriveSeed } from '../../core/rng';
 import type { Colony, RoomPlan } from '../rooms';
 import { DeepField, primBounds, type Prim } from './field';
+import { angleDiff } from '../../core/math';
 
 export type DecorKind =
   | 'dwelling' | 'mushroom' | 'fungus' | 'stalag' | 'stalac' | 'crystal' | 'murkCrystal' | 'shelf' | 'stone'
@@ -505,7 +506,7 @@ function tryPlan(inp: PlanInput, hub: Colony, ang: number, dist: number, seed: n
     const u = Math.cos(a) * hallRx * q, v = Math.sin(a) * hallRz * q;
     // Keep the ways to the galleries and roads clear.
     const am = Math.atan2(v / hallRz, u / hallRx);
-    if (mouths.some((m) => Math.abs(angDiff(am, m)) < 0.2)) continue;
+    if (mouths.some((m) => Math.abs(angleDiff(am, m)) < 0.2)) continue;
     const r = rng.range(0.9, 2.3);
     const [x, z] = W(u, v);
     if (!free(x, z, r + 1.2, taken)) continue;
@@ -1091,17 +1092,6 @@ function roadClear(inp: PlanInput, pts: number[], wide: number, b: Colony['chamb
     }
   }
   return true;
-}
-
-function angDiff(a: number, b: number): number {
-  return angleDiff(a, b);
-}
-
-function angleDiff(a: number, b: number): number {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return d;
 }
 
 /** Distance from (x, y) to the segment (ax, ay)–(bx, by). */

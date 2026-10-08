@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { buildArmyTruck, buildApc, buildTank } from './military';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
-import { clamp, lerp } from '../core/math';
+import { clamp, lerp, v3sub as sub } from '../core/math';
 
 // ---------------------------------------------------------------- public API
 
@@ -115,7 +115,6 @@ function mono(pts: [number, number][]): (x: number) => number {
   };
 }
 
-function sub(a: V3, b: V3): V3 { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function cross(a: V3, b: V3): V3 { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
 function dot(a: V3, b: V3) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 function norm(a: V3): V3 { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }

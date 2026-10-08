@@ -241,9 +241,10 @@ export function chaikin(pts: number[], iterations: number): number[] {
   return cur;
 }
 
-export function polylineLength(pts: number[]): number {
+/** Length of an open polyline. `stride` 3 reads (x, z, extra) triples, like the agents' routes. */
+export function polylineLength(pts: ArrayLike<number>, stride = 2): number {
   let s = 0;
-  for (let i = 2; i < pts.length; i += 2) s += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);
+  for (let i = stride; i < pts.length; i += stride) s += Math.hypot(pts[i] - pts[i - stride], pts[i + 1] - pts[i - stride + 1]);
   return s;
 }
 

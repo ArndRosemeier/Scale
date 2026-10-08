@@ -3701,5 +3701,28 @@ aliensChecks(check);
   check(copies.length === 0, `helpers: no local copies of core/math or ui/esc (${copies.join(', ') || 'none'})`);
 }
 
+// Geometry has one home too: src/core/geom2.ts (polygons, polylines) and src/core/math.ts (angles, vectors).
+// Name checks can't catch a copy under a new name, so this asks the repeated-code finder (npm run repeated)
+// for function bodies elsewhere that are near-identical (>= 0.9) to one in those two files.
+{
+  const t0 = Date.now();
+  const dupPath = './duplicate-candidates/find-duplicate-candidates.mjs', repPath = './repeated-code/find-repeated-code.mjs';
+  const { listSourceFiles, extractFunctions } = await import(dupPath);
+  const { findBodyClones } = await import(repPath);
+  const { files, display } = listSourceFiles('src', { displayBase: '.' });
+  const fns: unknown[] = [];
+  for (const f of files as string[]) {
+    for (const fn of extractFunctions(readFileSync(f, 'utf8'))) {
+      fns.push({ name: fn.name, file: display(f), line: fn.line, endLine: fn.tokens.at(-1)?.line ?? fn.line, size: fn.tokens.length, tokens: fn.tokens });
+    }
+  }
+  const HOME = /src\/core\/(geom2|math)\.ts$/;
+  type Fn = { name: string; file: string; line: number };
+  const { clusters } = findBodyClones(fns, { minBody: 20, floor: 0.9 }) as { clusters: { fns: Fn[] }[] };
+  const copies = clusters.filter((c) => c.fns.some((f) => HOME.test(f.file)))
+    .flatMap((c) => c.fns.filter((f) => !HOME.test(f.file)).map((f) => `${f.file}:${f.line} ${f.name} (copy of ${c.fns.find((h) => HOME.test(h.file))!.name})`));
+  check(copies.length === 0, `helpers: no copies of core/geom2 or core/math functions under other names (${copies.join(', ') || 'none'}) in ${Date.now() - t0} ms`);
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

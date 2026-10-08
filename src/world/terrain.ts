@@ -8,7 +8,7 @@
  */
 import { Noise } from '../core/noise';
 import { Rng, deriveSeed } from '../core/rng';
-import { chaikin, resample } from '../core/geom2';
+import { chaikin, resample, polylineLength, reversePoly } from '../core/geom2';
 import { smoothstep, clamp, lerp } from '../core/math';
 import type { WorldProfile } from './settings';
 import { makeBoundary, terrainExtent } from './boundary';
@@ -271,7 +271,7 @@ export class Terrain {
       [Math.cos(exitAng) * R, Math.sin(exitAng) * R],
       p.coastal ? this.coastClip.bind(this) : null,
     );
-    const len0 = this.lengthOf(main);
+    const len0 = polylineLength(main);
     const drop = Math.max(2, Math.min(18, len0 * 0.00035));
     const endLevel = p.coastal ? 0.2 : Math.max(2, p.baseElevation - drop * 0.5);
     this.rivers.push(this.makeRiver(main, endLevel + drop, endLevel, p.riverWidth * 0.8, p.riverWidth * 1.2, -1));
@@ -331,12 +331,6 @@ export class Terrain {
     return pts;
   }
 
-  private lengthOf(pts: number[]): number {
-    let s = 0;
-    for (let i = 2; i < pts.length; i += 2) s += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);
-    return s;
-  }
-
   private makeRiver(pts: number[], level0: number, level1: number, width0: number, width1: number, joins: number, wobR = this.rivers.length, wobS = 0): River {
     const n = pts.length >> 1;
     const s = new Float64Array(n);
@@ -360,14 +354,14 @@ export class Terrain {
       // Upstream: from the edge of the world down to the river's source end.
       const up = this.continuation(rng.fork('up', r), R, true, reach);
       if (up) {
-        const L = this.lengthOf(up);
-        this.rivers.push(this.makeRiver(reversed(up), R.level0 + g * L, R.level0, R.width0 * 0.55, R.width0, r, R.wobR, R.wobS - L));
+        const L = polylineLength(up);
+        this.rivers.push(this.makeRiver(reversePoly(up), R.level0 + g * L, R.level0, R.width0 * 0.55, R.width0, r, R.wobR, R.wobS - L));
       }
       // Downstream (a river ending in the sea or in another river stops there).
       if (r === 0 && !p.coastal) {
         const dn = this.continuation(rng.fork('down', r), R, false, reach);
         if (dn) {
-          const L = this.lengthOf(dn);
+          const L = polylineLength(dn);
           this.rivers.push(this.makeRiver(dn, R.level1, Math.max(1, R.level1 - g * L), R.width1, R.width1 * 1.2, -1, R.wobR, R.wobS + R.length));
         }
       }
@@ -409,11 +403,11 @@ export class Terrain {
         if (Math.hypot(x, z) < keepOut || Math.max(Math.abs(x), Math.abs(z)) > reach || (p.coastal && this.coastDistance(x, z) < 250)
           || this.nearRiver(x, z, q < 100 ? hi : -1, 500)) { pts = pts.slice(0, q); break; }
       }
-      if (pts.length < 8 || this.lengthOf(pts) < 1500) continue;
-      const rev = reversed(pts);
+      if (pts.length < 8 || polylineLength(pts) < 1500) continue;
+      const rev = reversePoly(pts);
       const lvl = this.riverLevelAt(hi, H.s[i]) + 0.2;
       const w1 = sr.range(9, 16);
-      this.rivers.push(this.makeRiver(rev, lvl + this.lengthOf(rev) * 0.0018, lvl, w1 * 0.45, w1, hi));
+      this.rivers.push(this.makeRiver(rev, lvl + polylineLength(rev) * 0.0018, lvl, w1 * 0.45, w1, hi));
       mouths.push(cx, cz);
       k++;
     }
@@ -819,9 +813,3 @@ export class Terrain {
   }
 }
 
-/** Polyline (x,z,...) in reverse order. */
-function reversed(pts: number[]): number[] {
-  const out: number[] = [];
-  for (let i = pts.length - 2; i >= 0; i -= 2) out.push(pts[i], pts[i + 1]);
-  return out;
-}

@@ -11,8 +11,8 @@
  * villages, yards and roads, so it must be built from the land use before it is attached to it.
  */
 import { Rng, deriveSeed } from '../core/rng';
-import { chaikin, ensureCCW, resample, closestOnPolyline, pointInPoly, type Poly } from '../core/geom2';
-import { clamp, smoothstep } from '../core/math';
+import { chaikin, ensureCCW, resample, closestOnPolyline, pointInPoly, type Poly, reversePoly, polyBounds, polylineLength } from '../core/geom2';
+import { clamp, smoothstep, angleDiff } from '../core/math';
 import { STYLES, WallMat, RoofMat, type BuildingDesc, type StyleId, type RoofKind } from '../plan/building';
 import { cityName } from '../plan/names';
 import type { MacroPlan } from '../plan/types';
@@ -235,7 +235,7 @@ export class RuralPlan {
 
   /** Outermost arterial nodes, spread round the ring: where country roads leave the city. */
   private gates(macro: MacroPlan): Node[] {
-    for (const c of macro.cells) this.cells.push({ poly: c.poly, box: polyBox(c.poly) });
+    for (const c of macro.cells) this.cells.push({ poly: c.poly, box: polyBounds(c.poly) });
     // On the outer ring: nothing of the city lies just beyond the node, radially outward.
     const cands = macro.nodes.map((n, i) => ({ n, i, e: this.land.edge(n.x, n.z) })).filter((c) => {
       if (c.n.edges.length < 2 || this.terrain.isWater(c.n.x, c.n.z, 25) || this.terrain.coastDistance(c.n.x, c.n.z) < 400) return false;
@@ -249,7 +249,7 @@ export class RuralPlan {
     for (const c of cands) {
       if (out.length >= want) break;
       const a = Math.atan2(c.n.z, c.n.x);
-      if (out.some((g) => Math.abs(angDiff(Math.atan2(g.z, g.x), a)) < (Math.PI * 2) / want * 0.6)) continue;
+      if (out.some((g) => Math.abs(angleDiff(Math.atan2(g.z, g.x), a)) < (Math.PI * 2) / want * 0.6)) continue;
       let trim = 0;
       for (const e of c.n.edges) trim = Math.max(trim, macro.edges[e].width / 2 + macro.edges[e].sidewalk + 2);
       out.push({ x: c.n.x, z: c.n.z, settle: -1, junction: trim + 25, dirs: [], gate: true, trim });
@@ -418,7 +418,7 @@ export class RuralPlan {
       const db = Math.atan2(sz - B.z, sx - B.x);
       if (A.gate && (B.x - sx) * gx + (B.z - sz) * gz < -0.35 * Math.hypot(B.x - sx, B.z - sz)) continue;
       const minSep = 0.62;
-      if (A.dirs.some((d) => Math.abs(angDiff(d, da)) < minSep) || B.dirs.some((d) => Math.abs(angDiff(d, db)) < minSep)) continue;
+      if (A.dirs.some((d) => Math.abs(angleDiff(d, da)) < minSep) || B.dirs.some((d) => Math.abs(angleDiff(d, db)) < minSep)) continue;
       if (A.dirs.length >= 5 || B.dirs.length >= 5) continue;
       // Not straight through another village: the network goes via it instead.
       let through = false;
@@ -462,7 +462,7 @@ export class RuralPlan {
     const hw = ROAD_HW[RoadKind.Lane];
     for (let k = 0, tries = 0; k < want && tries < 14; tries++) {
       const a = r.range(-Math.PI, Math.PI);
-      if (dirs.some((d) => Math.abs(angDiff(d, a)) < 0.75)) continue;
+      if (dirs.some((d) => Math.abs(angleDiff(d, a)) < 0.75)) continue;
       const L = v.r * r.range(0.65, 1.0);
       const sx = v.x + Math.cos(a) * (v.square * 0.5), sz = v.z + Math.sin(a) * (v.square * 0.5);
       const bend = r.range(-0.18, 0.18) * L;
@@ -488,7 +488,7 @@ export class RuralPlan {
     const parents = v.roads.slice();
     for (let k = 0, tries = 0; k < branches && tries < 20 && parents.length; tries++) {
       const P0 = this.roads[r.pick(parents)];
-      const P = P0.b === v.id ? reversedPts(P0.pts) : P0.pts;
+      const P = P0.b === v.id ? reversePoly(P0.pts) : P0.pts;
       const n = P.length >> 1;
       let i = 0, sAcc = 0;
       const want = v.r * r.range(0.3, 0.75);
@@ -537,7 +537,7 @@ export class RuralPlan {
       let best: { d: number; px: number; pz: number } | null = null;
       for (const R of this.roads) {
         if (R.kind === RoadKind.Track) continue;
-        const b = bounds[R.id] ??= polyBox(R.pts);
+        const b = bounds[R.id] ??= polyBounds(R.pts);
         if (x < b[0] - 1300 || x > b[2] + 1300 || z < b[1] - 1300 || z > b[3] + 1300) continue;
         const c = closestOnPolyline(R.pts, x, z);
         if (c.s < R.trim + 30) continue;
@@ -547,7 +547,7 @@ export class RuralPlan {
       // Frame: along the parcel grid, the gate (-u side) facing the road.
       const ta = Math.atan2(best.pz - z, best.px - x);
       let angle = base;
-      for (let q = 0; q < 4; q++) { const a = base + (q * Math.PI) / 2; if (Math.cos(angDiff(a + Math.PI, ta)) > Math.cos(angDiff(angle + Math.PI, ta))) angle = a; }
+      for (let q = 0; q < 4; q++) { const a = base + (q * Math.PI) / 2; if (Math.cos(angleDiff(a + Math.PI, ta)) > Math.cos(angleDiff(angle + Math.PI, ta))) angle = a; }
       const s: Settlement = { id: this.settlements.length, kind: SettleKind.Farm, name: '', x, z, r: Math.hypot(hu, hv), seed: r.nextU32(), square: 0, angle, hu, hv, orchard: null, roads: [] };
       // The yard and its surroundings: dry, level enough, off the roads, the lakes and other farms.
       let ok = true;
@@ -717,9 +717,9 @@ export class RuralPlan {
     for (const id of v.roads) {
       const R = this.roads[id];
       let P = R.pts;
-      if (R.b === v.id) P = reversedPts(P);
+      if (R.b === v.id) P = reversePoly(P);
       const fromSquare = Math.hypot(P[0] - v.x, P[1] - v.z) < v.square + 2;
-      streets.push({ pts: P, hw: R.hw, len: R.kind === RoadKind.Lane ? polyLen(P) : v.r * 1.05, s0: fromSquare ? v.square + 4 : 9 });
+      streets.push({ pts: P, hw: R.hw, len: R.kind === RoadKind.Lane ? polylineLength(P) : v.r * 1.05, s0: fromSquare ? v.square + 4 : 9 });
     }
     const coreR = v.r * (town ? 0.55 : 0.32);
     for (const st of streets) {
@@ -830,31 +830,6 @@ const EMPTY: readonly number[] = [];
 
 /** Wall material id as a WallMat (identity; keeps the church tower in the nave's stone). */
 function WALL(w: number): WallMat { return w as WallMat; }
-
-function angDiff(a: number, b: number): number {
-  let d = (b - a) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-}
-
-function reversedPts(P: number[]): number[] {
-  const out: number[] = [];
-  for (let i = P.length - 2; i >= 0; i -= 2) out.push(P[i], P[i + 1]);
-  return out;
-}
-
-function polyBox(P: number[]): [number, number, number, number] {
-  const b: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < P.length; i += 2) { b[0] = Math.min(b[0], P[i]); b[1] = Math.min(b[1], P[i + 1]); b[2] = Math.max(b[2], P[i]); b[3] = Math.max(b[3], P[i + 1]); }
-  return b;
-}
-
-function polyLen(P: number[]): number {
-  let s = 0;
-  for (let i = 2; i < P.length; i += 2) s += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]);
-  return s;
-}
 
 /** Do two oriented boxes overlap (separating axis test)? */
 function obbOverlap(ax: number, az: number, aux: number, auz: number, ahu: number, ahv: number, bx: number, bz: number, bux: number, buz: number, bhu: number, bhv: number): boolean {

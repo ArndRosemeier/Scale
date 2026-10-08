@@ -23,6 +23,7 @@ import { shaftPoint, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SEWER_HW, SHAFT_IN, H
 import { kf, smooth, clamp, type Pose } from '../humanoid/client/anim/pose';
 import type { LimbGoal, LimbGoals } from '../humanoid/client/anim/Animator';
 import { manholeCoverMap } from '../props/furniture';
+import { lerpAngle } from '../core/math';
 
 export interface ManholeHost {
   player: Player;
@@ -265,10 +266,10 @@ export class ManholeClimb {
         if (f < 1) {
           P.puppet = 'walk';
           P.puppetVel.set(to.x - from.x, 0, to.z - from.z).normalize().multiplyScalar(v);
-          P.yaw = turn(fromYaw, heading, smooth(0, 0.25, t));
+          P.yaw = lerpAngle(fromYaw, heading, smooth(0, 0.25, t));
         } else {
           P.puppet = 'idle';
-          P.yaw = turn(d > 0.05 ? heading : fromYaw, yaw, smooth(walkT, dur, t));
+          P.yaw = lerpAngle(d > 0.05 ? heading : fromYaw, yaw, smooth(walkT, dur, t));
         }
         this.poseFn = null;
         this.overW = 0;
@@ -692,13 +693,5 @@ export class ManholeClimb {
       }
     }
   }
-}
-
-/** Angle from a toward b by f, the short way round. */
-function turn(a: number, b: number, f: number): number {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return a + d * f;
 }
 

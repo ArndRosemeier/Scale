@@ -31,6 +31,7 @@ import { VState, type Vehicle } from '../../sim/Traffic';
 import { RState } from '../../future/Robots';
 import { DecalKind } from '../powers/ElementFx';
 import type { Obstacle } from '../../world/Collision';
+import { angleDiff } from '../../core/math';
 
 let EVENT_ID = 9000;
 
@@ -577,7 +578,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     if (T.kind !== 'point' && d < reach) {
       // Facing it: a slam when it is hurt, or on a clump of cars; else a sweep.
       this.face(T.x, T.z, dt);
-      const ahead = Math.abs(angDiff(Math.atan2(this.x - T.x, this.z - T.z), this.yaw)) < 0.6;
+      const ahead = Math.abs(angleDiff(this.yaw, Math.atan2(this.x - T.x, this.z - T.z))) < 0.6;
       if (!ahead) return;
       const cluster = this.carsNear(T.x, T.z, 6) >= 2;
       if (this.cool.slam <= 0 && (T.kind === 'player' || cluster || Math.random() < 0.35)) this.begin('slam');
@@ -649,7 +650,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
 
   private face(x: number, z: number, dt: number): void {
     const want = Math.atan2(this.x - x, this.z - z);
-    this.yaw += Math.max(-dt * 1.2, Math.min(dt * 1.2, angDiff(want, this.yaw)));
+    this.yaw += Math.max(-dt * 1.2, Math.min(dt * 1.2, angleDiff(this.yaw, want)));
   }
 
   /** Walk towards the target (turning first), round buildings. */
@@ -657,7 +658,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     const T = this.target;
     if (!T) return;
     this.face(T.x, T.z, dt);
-    if (Math.abs(angDiff(Math.atan2(this.x - T.x, this.z - T.z), this.yaw)) > 1.0 && this.mode !== 'panic') return;
+    if (Math.abs(angleDiff(this.yaw, Math.atan2(this.x - T.x, this.z - T.z))) > 1.0 && this.mode !== 'panic') return;
     const k = this.slowT > 0 ? TREE.slowK : 1;
     let fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
     const W = this.g.world, look = this.trunkR + 3;
@@ -888,12 +889,5 @@ function rayCapsule(ox: number, oy: number, oz: number, dx: number, dy: number, 
   const dist = Math.hypot(px, py, pz);
   if (dist > c.r) return -1;
   return Math.max(0, s - Math.sqrt(Math.max(0, c.r * c.r - dist * dist)) / Math.sqrt(a || 1));
-}
-
-function angDiff(a: number, b: number): number {
-  let d = a - b;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return d;
 }
 

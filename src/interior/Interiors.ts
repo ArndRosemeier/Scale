@@ -13,7 +13,7 @@ import { planFloor, shopKindOf, planCores, liftRect, coreFits, coreRect, type Fl
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
 import { buildFloorMeshes, wallCollisionSegments, furnitureCollision } from './InteriorBuilder';
-import { pointInPoly, distSqPointSeg, distPointPolyEdge } from '../core/geom2';
+import { pointInPoly, distSqPointSeg, distPointPolyEdge, polyBounds } from '../core/geom2';
 import { offset } from '../core/clip';
 import { gridCell, type BuildingLayout } from '../build/buildingLayout';
 import type { Population } from '../sim/Population';
@@ -290,7 +290,7 @@ export class Interiors {
       const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
       for (const room of plan.rooms) {
         if (room.type === 'stairs') continue;
-        const bb = bboxOf(room.poly);
+        const bb = polyBounds(room.poly);
         for (let k = 0; k < 6 && spots.length < mine.length + 4; k++) {
           const x = bb[0] + rnd() * (bb[2] - bb[0]), z = bb[1] + rnd() * (bb[3] - bb[1]);
           const inLift = plan.lift && pointInPoly(liftRect(plan.lift, 0.6), x, z);
@@ -509,12 +509,6 @@ export class Interiors {
 
 /** Thickness of a building's outer wall for the indoor camera (m). */
 const OUTER_WALL = 0.25;
-
-function bboxOf(p: number[]): [number, number, number, number] {
-  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-  for (let i = 0; i < p.length; i += 2) { x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); z0 = Math.min(z0, p[i + 1]); z1 = Math.max(z1, p[i + 1]); }
-  return [x0, z0, x1, z1];
-}
 
 let doorMats: { leaf: (c: number) => THREE.Material; glass: THREE.Material; brass: THREE.Material } | null = null;
 const leafCache = new Map<number, THREE.Material>();

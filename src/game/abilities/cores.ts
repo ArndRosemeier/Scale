@@ -12,7 +12,7 @@
  * some cores need powers (super jump, flight) to reach.
  */
 import { Rng, deriveSeed } from '../../core/rng';
-import { pointInPoly, polyCentroid, polyBounds } from '../../core/geom2';
+import { pointInPoly, polyCentroid, polyBounds, distPointPolyEdge } from '../../core/geom2';
 import type { MacroPlan, District } from '../../plan/types';
 import type { CellPlan } from '../../plan/cell';
 import type { Shape } from '../../core/clip';
@@ -179,7 +179,7 @@ function onRoofItem(it: RoofItem, x: number, z: number, m: number): boolean {
 
 /** A point well inside a polygon (outside its holes and off anything `blocked`). */
 export function interiorPoint(poly: number[], holes: number[][], rng: Rng, blocked: (x: number, z: number) => boolean): [number, number] | null {
-  const ok = (x: number, z: number) => pointInPoly(poly, x, z) && !holes.some((h) => pointInPoly(h, x, z)) && edgeDist(poly, x, z) > 1.2 && !blocked(x, z);
+  const ok = (x: number, z: number) => pointInPoly(poly, x, z) && !holes.some((h) => pointInPoly(h, x, z)) && distPointPolyEdge(poly, x, z) > 1.2 && !blocked(x, z);
   const [cx, cz] = polyCentroid(poly);
   if (ok(cx, cz)) return [cx, cz];
   const [x0, z0, x1, z1] = polyBounds(poly);
@@ -190,14 +190,3 @@ export function interiorPoint(poly: number[], holes: number[][], rng: Rng, block
   return null;
 }
 
-function edgeDist(p: number[], x: number, z: number): number {
-  let best = Infinity;
-  const n = p.length >> 1;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const ax = p[j * 2], az = p[j * 2 + 1], bx = p[i * 2], bz = p[i * 2 + 1];
-    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
-    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
-    best = Math.min(best, Math.hypot(ax + dx * t - x, az + dz * t - z));
-  }
-  return best;
-}

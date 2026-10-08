@@ -9,7 +9,7 @@ import type { Terrain } from '../world/terrain';
 import type { CellPlan } from '../plan/cell';
 import { RoadClass } from '../plan/types';
 import { MeshBuilder } from './meshBuilder';
-import { resample, polylineLength } from '../core/geom2';
+import { resample, polylineLength, reversePoly } from '../core/geom2';
 
 export const enum GroundLayer {
   Asphalt = 0,
@@ -247,7 +247,7 @@ function buildMarkings(mb: MeshBuilder, plan: CellPlan, terrain: Terrain): void 
     // Crosswalks (zebra) near junction ends.
     for (const end of [0, 1]) {
       if (!(end === 0 ? j0 : j1)) continue;
-      const pts = end === 0 ? st.pts : reverse(st.pts);
+      const pts = end === 0 ? st.pts : reversePoly(st.pts);
       const L = polylineLength(pts);
       const d = st.width * 0.75 + 1.2;
       if (L < d + 3) continue;
@@ -284,12 +284,6 @@ function buildMarkings(mb: MeshBuilder, plan: CellPlan, terrain: Terrain): void 
       strip([sx - nx * 0.05, sz - nz * 0.05, sx + nx * half, sz + nz * half], 0, 0.2, 0, 0, GroundLayer.PaintWhite, 0, 0);
     }
   }
-}
-
-function reverse(p: number[]): number[] {
-  const o: number[] = [];
-  for (let i = p.length - 2; i >= 0; i -= 2) o.push(p[i], p[i + 1]);
-  return o;
 }
 
 /** A cell owns an arterial's markings when the cell lies to the left of the polyline direction. */

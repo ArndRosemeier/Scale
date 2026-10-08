@@ -34,6 +34,7 @@ import { statusOf } from '../shared/status';
 const _sm = new THREE.Matrix4();
 import type { LocalGround } from './ground';
 import { malLed, MAL_KEEP_R, ROGUE_RED, type Malfunction, type MalfunctionCtl } from './malfunction';
+import { polylineLength } from '../core/geom2';
 
 export const enum RState { Drive = 0, Wait = 1, Deliver = 2, Down = 3, Broken = 4 }
 export const enum RKind { Delivery = 0, Cleaner = 1 }
@@ -204,7 +205,7 @@ export class Robots {
     };
     if (midway) {
       // Fill an empty neighbourhood: robots already on their way (not popping up next to the player).
-      advance(r, routeLength(route) * this.rng.range(0.1, 0.9));
+      advance(r, polylineLength(route, 3) * this.rng.range(0.1, 0.9));
       if (Math.hypot(r.x - px, r.z - pz) < 35) return;
     }
     const nx = r.route[r.wp * 3] ?? r.x, nz = r.route[r.wp * 3 + 1] ?? r.z;
@@ -225,7 +226,7 @@ export class Robots {
       state: RState.Drive, stateT: 0, blocked: 0, swerve: 0, home: { x: da.x, z: da.z }, returning: false,
       phase: this.crng.float(), body: null, pose: null, crushed: false, alive: true, legs: this.crng.int(2, 5), inLane: false, carWait: 0,
     };
-    advance(r, Math.min(3, routeLength(route) * 0.2));
+    advance(r, Math.min(3, polylineLength(route, 3) * 0.2));
     const nx = r.route[r.wp * 3] ?? r.x, nz = r.route[r.wp * 3 + 1] ?? r.z;
     r.yaw = Math.atan2(-(nx - r.x), -(nz - r.z));
     r.y = this.groundY(r.x, r.z, r.onRoad);
@@ -601,12 +602,6 @@ export class Robots {
 }
 
 function clampAbs(v: number, m: number): number { return v > m ? m : v < -m ? -m : v; }
-
-function routeLength(r: Float32Array): number {
-  let s = 0;
-  for (let i = 3; i < r.length; i += 3) s += Math.hypot(r[i] - r[i - 3], r[i + 1] - r[i - 2]);
-  return s;
-}
 
 function advance(r: Robot, dist: number): void {
   const R = r.route;

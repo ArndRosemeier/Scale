@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.135 — 2026-10-08
+
+- **Behind the scenes: geometry has one home.** Polygon area, bounds, point-in-polygon, edge distance, polyline length and reversal, the angle difference and two vector helpers had been written again in 22 files under other names; they now all use the shared versions. Nothing changes in play. A self-test now compares function bodies, not names, and fails if a new copy of a shared geometry helper appears.
+
 ## 0.134 — 2026-10-08
 
 - **Behind the scenes: small helpers have one home.** Text shown in menus and panels is escaped by one shared function, and the small maths helpers (clamp, lerp, smoothstep) come from one module instead of a dozen local copies. Nothing changes in play; a self-test now fails if a new copy appears.
