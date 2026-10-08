@@ -506,10 +506,10 @@ export class Drones {
   }
 
   /** A strike near a point (punch, swat, thrown object). */
-  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number): number {
+  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number, skip?: (d: Drone) => boolean): number {
     let n = 0;
     for (const d of this.list) {
-      if (d.state === DState.Down) continue;
+      if (d.state === DState.Down || skip?.(d)) continue;
       const dd = Math.hypot(d.x - x, d.y - y, d.z - z);
       if (dd > rad + DRONE.arm + 0.3) continue;
       this.knock(d, jx, jy, jz);

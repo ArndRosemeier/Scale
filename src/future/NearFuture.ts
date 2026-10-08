@@ -16,6 +16,7 @@ import { ServiceBots } from './ServiceBots';
 import { LocalGround } from './ground';
 import type { FutureCtx, PlayerProbe } from './ctx';
 import type { MalfunctionCtl } from './malfunction';
+import type { Target } from '../game/Targeting';
 
 export type { FutureCtx, PlayerProbe } from './ctx';
 
@@ -121,10 +122,11 @@ export class NearFuture {
   }
 
   /** A physical strike (punch, swat, thrown thing): robots, drones, signs and kiosks near it. */
-  hit(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): void {
-    this.robots.hit(x, y, z, r, jx, jy, jz);
-    this.service.hit(x, y, z, r, jx, jy, jz);
-    this.drones.hit(x, y, z, r, jx, jy, jz);
+  /** A blow at a point on every machine near it; `spare` leaves some out (the friend/foe sense). */
+  hit(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, spare?: (t: Target) => boolean): void {
+    this.robots.hit(x, y, z, r, jx, jy, jz, spare && ((o) => spare({ kind: 'robot', obj: o })));
+    this.service.hit(x, y, z, r, jx, jy, jz, spare && ((o) => spare({ kind: 'bot', obj: o })));
+    this.drones.hit(x, y, z, r, jx, jy, jz, spare && ((o) => spare({ kind: 'drone', obj: o })));
     const J = Math.hypot(jx, jy, jz);
     if (J > 1200) this.signs.impact(x, y, z, r + 0.8, J > 3500);
   }

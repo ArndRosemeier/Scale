@@ -352,10 +352,10 @@ export class Targeting {
   // ------------------------------------------------------------------ ray queries
 
   /**
-   * First thing along the ray from o (unit d) within maxT. Targets in `skip` are ignored.
-   * Returns a shared object (copy what you keep).
+   * First thing along the ray from o (unit d) within maxT. Targets in `skip`, and those `pass`
+   * lets through (a power's friend/foe sense), are ignored. Returns a shared object (copy what you keep).
    */
-  probe(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, skip: Target | null = null, kinds: KindMask = ALL_KINDS): ProbeHit {
+  probe(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, skip: Target | null = null, kinds: KindMask = ALL_KINDS, pass?: (t: Target) => boolean): ProbeHit {
     const h = _hit;
     h.what = 'none'; h.target = null; h.building = null; h.t = maxT; h.nx = 0; h.ny = 1; h.nz = 0;
     // World: terrain, roofs and standing facade panels.
@@ -367,6 +367,7 @@ export class Targeting {
     let best = h.t, bt: Target | null = null;
     this.each(cx, cz, rr, (t) => {
       if (skip && t.obj === skip.obj) return;
+      if (pass?.(t)) return;
       const tt = this.rayTarget(t, ox, oy, oz, dx, dy, dz, best);
       if (tt < best) { best = tt; bt = t; }
     }, kinds);

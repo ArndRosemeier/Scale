@@ -10,7 +10,7 @@ import type { Game } from '../game/Game';
 import {
   KEY_ACTION, KEY_ACTIONS, KEY_GROUPS, bindingOf, gameCodeOf, bind, canBind, isDefaultBinding, keyName, keyLabel, powerKeyText, resetKeys, type KeyAction,
 } from '../game/keybinds';
-import { ABILITIES, GROUP_NAMES, type AbilityGroup } from '../game/abilities/defs';
+import { ABILITIES, GROUP_NAMES, hasSenseOption, senseCost, type AbilityGroup } from '../game/abilities/defs';
 import { ENERGY, GIANT, KARMA, KARMA_COST, sizeUpkeep } from '../game/abilities/tuning';
 import { isTouch } from './touch';
 import { esc } from './esc';
@@ -199,6 +199,7 @@ export class HelpDialog {
             <div class="hp-head"><span class="hp-ic">${d.icon}</span><span class="hp-name">${d.name}</span><span class="hp-tag">${tag}${key ? ` · ${esc(key)}` : ''}</span>${r > 0 && d.maxRank > 1 ? `<span class="hp-you">your rank ${r}</span>` : ''}</div>
             <div class="hp-desc">${d.desc}${d.granted ? ` <i>${d.granted}.</i>` : ''}</div>
             <table class="hp-t"><thead><tr><th>Rank</th><th>Karma</th><th>Effect</th><th>Energy</th></tr></thead><tbody>${rows}</tbody></table>
+            ${hasSenseOption(d.id) ? `<div class="hp-desc"><b>Friend/foe sense</b> (${senseCost(d.id)} karma, once the power is unlocked): it then hurts only foes (criminals still fighting, monsters, rogue machines) and leaves people, police, cars, props and buildings alone. A giant body loses it: above normal size the power hits everything again.${pr?.hasSense(d.id) ? ' <i>You have it.</i>' : ''}</div>` : ''}
           </div>`;
       }).join('');
       return `<h3 class="hp-group">${GROUP_NAMES[g]}</h3>${cards}`;

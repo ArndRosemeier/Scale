@@ -29,7 +29,7 @@
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
-import { makeActor, play, goTo, stand, lookAt, subdued, SIDEKICK_OWNER, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
+import { makeActor, play, goTo, stand, lookAt, SIDEKICK_OWNER, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
 import { traitsOf, temperamentOf, type Temperament, type Traits } from '../people/identity';
 import { VILLAIN_POWERS, CASTERS } from '../powers/Caster';
 import { bondOf, bondWord } from '../people/social';
@@ -39,6 +39,7 @@ import { ROSTER, GIFTS, MATE_KARMA, TRUST, nextCost, nextWant, honoursWish, buyL
 import { MedFleet } from '../defeat/MedDrones';
 import { MATE, MATE_POWERS, fightStyle, matePower, pickFoe, revives, mateLine, type FightStyle, type MateSay, type FoeInfo, type MatePower } from './companionRules';
 import { smoothstep as smooth } from '../../core/math';
+import { fightingCrook } from '../friendFoe';
 
 /** Companion.panel: what the info panel shows. */
 export interface MatePanel {
@@ -1125,5 +1126,5 @@ export class Companion {
 /** Fighting the hero's side right now: a hostile criminal still on their feet. */
 function isFoe(o: PedAgent): boolean {
   const act = o.actor;
-  return !!act && !!o.alive && act.role === 'criminal' && act.hostile && !subdued(act) && act.state !== 'down' && o.state !== PState.Down;
+  return !!o.alive && fightingCrook(act) && act!.state !== 'down' && o.state !== PState.Down;
 }

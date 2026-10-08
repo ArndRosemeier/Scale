@@ -86,7 +86,8 @@ import { PowerHud } from '../ui/PowerHud';
 import { PowersScreen } from '../ui/PowersScreen';
 import { TouchControls } from '../ui/TouchControls';
 import { isTouch } from '../ui/touch';
-import { Targeting } from './Targeting';
+import { Targeting, type Target } from './Targeting';
+import { spared } from './friendFoe';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { Sight } from './combat/sight';
@@ -510,7 +511,7 @@ export class Game {
     // (Nothing in hand inside a landmark: no coffee in the pews, no umbrella indoors.)
     this.crowd.heldFor = (a) => { if (a.hall) return null; const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
     this.crowd.talking = (a, t) => this.terraces.talking(a, t);
-    this.interactions.onStrike = (x, y, z, r, jx, jy, jz) => this.strike(x, y, z, r, jx, jy, jz);
+    this.interactions.onStrike = (x, y, z, r, jx, jy, jz, spare) => this.strike(x, y, z, r, jx, jy, jz, spare);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
     this.crowd.rigGround = (x, y, z) => this.collision.groundAt(x, z, y + 0.4, 0.3);
     this.ragdolls = new RagdollSystem({
@@ -1043,7 +1044,12 @@ export class Game {
       sound: (id, x, y, z, g, pitch = 1, ref = 6) => this.audio.play(id, x, y, z, g, pitch, ref, cam.position),
       douse: (x, y, z, r, amount) => { this.threats?.fires.douse(x, y, z, r, amount); },
       swarm: (effect, x, y, z, r, dmg, fling) => [...(this.threats?.broodHit(x, y, z, r, effect, dmg, fling) ?? []), ...(this.crime?.packs.hit(x, y, z, r, effect, dmg, fling) ?? [])],
+      hitPerson: (a, jx, jy, jz, fx, fz) => { this.crime.combat.hitActor(a, jx, jy, jz, 'power', 'player', fx, fz); },
+      sameSide: (ax, ay, az, bx, by, bz) => this.underground.sameSide(ax, ay, az, bx, by, bz),
+      sense: (id) => this.abilities.senseOn(id),
+      spared: (t) => this.spares(t),
     });
+    this.abilities.spared = (t) => this.spares(t);
     this.renderer.scene.add(this.elements.fx.group);
     this.abilities.effects = this.elements;
     this.targetHud = new TargetHud(this.targeting, cam);
@@ -1075,6 +1081,10 @@ export class Game {
     });
     this.powers.onBuy = (id, r) => {
       toast(r === 1 ? `<b>${ABILITY[id].name}</b> unlocked!${ABILITY[id].kind === 'active' ? ` It's on your hotbar.` : ''}` : `<b>${ABILITY[id].name}</b> is now rank ${r}`, 'core');
+      this.audio.chime('buy');
+    };
+    this.powers.onSense = (id) => {
+      toast(`<b>${ABILITY[id].name}</b> now hurts only foes`, 'core');
       this.audio.chime('buy');
     };
     this.deeds = new Deeds(this.peds, this.reactions, this.player, this.progress);
@@ -1199,8 +1209,15 @@ export class Game {
     if (intact) this.consequences.record(power, 'car', wreck ? 'wreck' : 'damage', v.x, v.z, v);
   }
 
-  /** A physical strike at a point hits cars, people and props. */
-  strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): void {
+  /** The friend/foe sense's test: would hurting this cost the player reputation (friendFoe.spared)? */
+  spares(t: Target): boolean {
+    return spared(t, this.foeWorld);
+  }
+  private readonly foeWorld = { hostileThing: (ref: object) => this.threats?.isHostile(ref) ?? false };
+
+  /** A physical strike at a point hits cars, people and props. `spare` (a power's friend/foe sense):
+   *  only foes are hit, no car or prop. */
+  strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, spare?: (t: Target) => boolean): void {
     const J = Math.hypot(jx, jy, jz);
     // A monster in reach takes the blow (armour, weak spots).
     this.threats?.blow(x, y, z, r, jx, jy, jz, { cause: 'player', x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z });
@@ -1211,17 +1228,17 @@ export class Game {
     if (J > 0) this.crime?.packs.hit(x, y, z, r + 0.3, 'blow', J / 150, Math.min(10, J / 60));
     // The army's helicopters, when they are after the player.
     this.forces?.struck(x, y, z, r, jx, jy, jz);
-    this.props.hit(x, y, z, r, jx, jy, jz);
-    this.future.hit(x, y, z, r, jx, jy, jz);
+    if (!spare) this.props.hit(x, y, z, r, jx, jy, jz);
+    this.future.hit(x, y, z, r, jx, jy, jz, spare);
     this.birds.hit(x, y, z, r, jx, jy, jz);
-    for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
+    if (!spare) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
       const d = Math.hypot(v.x - x, v.z - z);
       if (d > r + v.length / 2 || y > v.y + 3 + r) continue;
       this.hitCar(v, J, x, y, z, jx, jy, jz, 'strike');
     }
     // People: through the combat model (stagger, knock-down, KO by impulse and health). A punch
     // (small radius) lands on one body — the nearest, the soft-locked target first; a blast hits all.
-    const hit = this.peds.neighbours(x, z, r + 0.5, []).filter((a) => Math.hypot(a.x - x, a.z - z) < r + 0.4 && Math.abs(a.y + 0.9 - y) < r + 1.5 && this.underground.sameSide(x, y, z, a.x, a.y, a.z));
+    const hit = this.peds.neighbours(x, z, r + 0.5, []).filter((a) => Math.hypot(a.x - x, a.z - z) < r + 0.4 && Math.abs(a.y + 0.9 - y) < r + 1.5 && this.underground.sameSide(x, y, z, a.x, a.y, a.z) && !spare?.({ kind: 'person', obj: a }));
     if (r <= this.player.height * 0.5 && hit.length > 1) {
       const cur = this.targeting.current?.kind === 'person' ? this.targeting.current.obj : null;
       hit.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : 0) || (b.actor?.hostile ? 1 : 0) - (a.actor?.hostile ? 1 : 0) || Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));

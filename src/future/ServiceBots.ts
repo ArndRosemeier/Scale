@@ -328,10 +328,10 @@ export class ServiceBots {
     }
   }
 
-  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number): void {
+  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number, skip?: (b: ServiceBots['list'][number]) => boolean): void {
     if (Math.hypot(jx, jy, jz) < J_TOPPLE) return;
     for (const b of this.list) {
-      if (b.crushed || Math.hypot(b.x - x, b.z - z) > rad + 0.35 || y > b.y + HUMANOID.height + rad || y < b.y - rad) continue;
+      if (b.crushed || skip?.(b) || Math.hypot(b.x - x, b.z - z) > rad + 0.35 || y > b.y + HUMANOID.height + rad || y < b.y - rad) continue;
       this.knock(b, jx, jy, jz);
     }
   }

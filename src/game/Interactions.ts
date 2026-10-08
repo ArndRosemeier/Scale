@@ -15,6 +15,7 @@ import type { Collision } from '../world/Collision';
 import { Stimuli, noticeRadius } from './Stimuli';
 import { GiantSteps } from './GiantBody';
 import { pointInPoly, polyArea } from '../core/geom2';
+import type { Target } from './Targeting';
 
 export class Interactions {
   private punchT = -10;
@@ -34,7 +35,8 @@ export class Interactions {
   /** Footsteps and landings of any heavy body (the player's own, a monster's): GiantBody. */
   readonly steps: GiantSteps;
   /** Physical strike on movable things (cars, props, people): point, radius, impulse vector (N*s). */
-  onStrike?: (x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number) => void;
+  /** A physical strike (punch, blast); `spare`: the friend/foe sense leaves these out. */
+  onStrike?: (x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, spare?: (t: Target) => boolean) => void;
 
   constructor(
     private player: Player,
@@ -144,25 +146,26 @@ export class Interactions {
     return Math.hypot(d.x, d.z) > 0.05 ? Math.atan2(-d.x, -d.z) : this.camRig.forwardYaw;
   }
 
-  /** Blast where the cursor points, up to `range` m (anywhere=true: also mid-air at the range). */
-  blastAtView(range: number, impulse: number, anywhere: boolean): boolean {
+  /** Blast where the cursor points, up to `range` m (anywhere=true: also mid-air at the range).
+   *  `spare` (the friend/foe sense): it hurts only foes and breaks nothing. */
+  blastAtView(range: number, impulse: number, anywhere: boolean, spare?: (t: Target) => boolean): boolean {
     const dir = aimDir(this.cam, new THREE.Vector3());
     const o = this.cam.position;
     const hit = this.world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, range, 1);
     const t = hit.t < Infinity ? hit.t : anywhere ? range : -1;
     if (t < 0) return false;
-    this.blast(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t, impulse);
+    this.blast(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t, impulse, spare);
     return true;
   }
 
-  blast(x: number, y: number, z: number, impulse: number): void {
+  blast(x: number, y: number, z: number, impulse: number, spare?: (t: Target) => boolean): void {
     const r = 3 + Math.cbrt(impulse) * 0.08;
-    this.destruction.impact(x, y, z, r, impulse, 0, 0.2, 0, 'blast');
-    this.onStrike?.(x, y, z, r * 1.5, 0, impulse * 0.5, 0);
+    if (!spare) this.destruction.impact(x, y, z, r, impulse, 0, 0.2, 0, 'blast');
+    this.onStrike?.(x, y, z, r * 1.5, 0, impulse * 0.5, 0, spare);
     this.dust.burst(x, y, z, 50, r * 0.6, 12, r * 0.8, 10, new THREE.Color(0.35, 0.33, 0.32), 0.9, 0.7);
     this.dust.burst(x, y, z, 20, r * 0.3, 16, r * 0.5, 2.5, new THREE.Color(1.0, 0.55, 0.2).multiplyScalar(3), 1.5, 0.9);
     this.debris.chipBurst(x, y, z, 120, 18, 0, 0.5, 0, new THREE.Color(0.4, 0.38, 0.35), 0.12, 4);
-    this.stimuli.emit('blast', x, y, z, 7, noticeRadius(impulse * 200));
+    this.stimuli.emit('blast', x, y, z, 7, noticeRadius(impulse * 200), spare && { spare: (a) => spare({ kind: 'person', obj: a }) });
     this.camRig.addShake(Math.min(1.2, 30 / Math.max(5, Math.hypot(x - this.player.pos.x, z - this.player.pos.z))));
     this.onSound?.('explosion', x, y, z, 1);
   }

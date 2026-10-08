@@ -50,7 +50,9 @@ import {
   FIREBALL_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE, ICE, ICE_WIDTH, ICE_LIFE,
   BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE, GUST, GUST_RADIUS, GUST_TIME, GUST_LIFT,
   HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
+  PHASE, PHASE_DMG, PHASE_RANGE, FOCUS, FOCUS_DMG, FOCUS_RANGE, SEEKER, SEEKER_DMG, SEEKER_RANGE,
 } from '../abilities/tuning';
+import { COMBAT } from '../Combat';
 
 export interface PowerWorld {
   player: Player;
@@ -85,6 +87,14 @@ export interface PowerWorld {
    * points (frost: seconds frozen), flung at `fling` m/s. Returns where the ones hit are.
    */
   swarm?: (effect: 'blow' | 'fire' | 'shock' | 'frost' | 'wind' | 'water' | 'heat', x: number, y: number, z: number, r: number, dmg: number, fling: number) => { x: number; y: number; z: number }[];
+  /** A blow on a person through the combat model (Combat.hitActor: damage, stagger, knock-down, KO). */
+  hitPerson?: (a: PedAgent, jx: number, jy: number, jz: number, fromX: number, fromZ: number) => void;
+  /** Underground.sameSide with feet heights: a single-target power never crosses the street / sewer boundary. */
+  sameSide?: (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => boolean;
+  /** Has the player bought this power's friend/foe sense (Progress.hasSense)? */
+  sense?: (id: AbilityId) => boolean;
+  /** Would the sense spare this target (friendFoe.spared: not fighting the player)? */
+  spared?: (t: Target) => boolean;
 }
 
 /** The power being held this frame (from the AbilitySystem). */
@@ -105,8 +115,10 @@ interface Orb { ox: number; oy: number; oz: number; dx: number; dy: number; dz: 
 interface Quake { x0: number; z0: number; dx: number; dz: number; len: number; t: number; done: number; rank: number; k: number; hit: Set<object> }
 interface Vortex { air: boolean; x: number; y: number; z: number; dx: number; dz: number; r: number; t: number; life: number; rank: number; k: number; tick: number; hitT: Map<object, number>; loop: SynthHandle | null }
 interface Nova { x: number; y: number; z: number; r: number; t: number }
-interface Beam { ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; life: number; w: number }
-interface IcePatch { x: number; y: number; z: number; r: number; until: number }
+interface Beam { ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; life: number; w: number; c: THREE.Color; style: BeamStyle; I: number }
+/** A seeker orb on its way: position, velocity, the one target it hunts, and whether the line to it is clear. */
+interface Seeker { x: number; y: number; z: number; vx: number; vy: number; vz: number; tgt: Target; rank: number; k: number; age: number; trailT: number; checkT: number; clear: boolean; loop: SynthHandle | null }
+interface IcePatch { x: number; y: number; z: number; r: number; until: number; sense?: boolean }
 interface IceTile { x: number; y: number; z: number; yaw: number; pitch: number; len: number; wid: number; born: number; life: number }
 
 const C = (r: number, g: number, b: number) => new THREE.Color(r, g, b);
@@ -119,6 +131,9 @@ const ICE_C = C(1.6, 2.0, 2.4), ICE_END = C(0.5, 0.7, 0.9), SNOW = C(0.92, 0.96,
 const WATER = C(0.72, 0.84, 0.95), WATER_END = C(0.55, 0.7, 0.85), STEAM = C(0.9, 0.92, 0.94);
 const DUST_C = C(0.55, 0.5, 0.44), DUST_END = C(0.45, 0.42, 0.38), LEAF = C(0.32, 0.38, 0.16), LEAF_END = C(0.4, 0.33, 0.15);
 const SHRINK_C = C(2.4, 0.9, 3.0), SHRINK_END = C(0.6, 0.3, 1.2);
+const PHASE_C = C(1.1, 2.2, 3.2), PHASE_END = C(0.25, 0.5, 1.1);
+const FOCUS_C = C(3.2, 2.6, 1.4), FOCUS_END = C(1.4, 0.7, 0.2);
+const SEEK_C = C(1.6, 1.4, 3.4), SEEK_END = C(0.5, 0.25, 1.4);
 const CHARRED: [number, number, number] = [0.05, 0.045, 0.04];
 const ICE_PAINT: [number, number, number] = [0.8, 0.9, 0.98];
 
@@ -157,6 +172,8 @@ export class Elements {
   private beams: Beam[] = [];
   private patches: IcePatch[] = [];
   private tiles: IceTile[] = [];
+  private seekers: Seeker[] = [];
+  private chargeLoop: SynthHandle | null = null;
   private tileBox = { x0: 0, z0: 0, x1: 0, z1: 0 };
   private slipT = 0;
   private squeakT = 0;
@@ -178,7 +195,7 @@ export class Elements {
     this.time += dt;
     this.idle = false;
     this.w.consequences.update(dt);
-    const busy = channel || this.lastChannel || this.bolts.length || this.fires.length || this.orbs.length || this.quakes.length || this.vortices.length
+    const busy = channel || this.lastChannel || this.bolts.length || this.fires.length || this.orbs.length || this.seekers.length || this.quakes.length || this.vortices.length
       || this.novas.length || this.beams.length || this.patches.length || this.tiles.length || statusCount() || this.fx.active;
     if (!busy) { this.w.player.onIce = false; this.fx.update(dt); return; }
     // ---- held power
@@ -189,6 +206,7 @@ export class Elements {
         case 'laser': this.laser(dt, channel.rank, channel.t); break;
         case 'icePath': this.icePath(dt, channel.rank, channel.t); break;
         case 'hydro': this.hydro(dt, channel.rank, channel.t); break;
+        case 'focus': this.gather(dt, channel.rank, channel.t); break;
         default: break;
       }
     }
@@ -196,6 +214,7 @@ export class Elements {
     if (this.bolts.length) this.updateBolts(dt);
     if (this.fires.length) this.updateFires(dt);
     if (this.orbs.length) this.updateOrbs(dt);
+    if (this.seekers.length) this.updateSeekers(dt);
     if (this.quakes.length) this.updateQuakes(dt);
     if (this.vortices.length) this.updateVortices(dt);
     if (this.novas.length) this.updateNovas(dt);
@@ -230,6 +249,7 @@ export class Elements {
     if (id === 'laser') { this.laserLoop?.stop(); this.laserLoop = null; this.laserSpots.clear(); this.dose.clear(); }
     if (id === 'hydro') { this.waterLoop?.stop(); this.waterLoop = null; this.hydroAcc.clear(); }
     if (id === 'icePath') this.iceEnd = null;
+    if (id === 'focus') { this.chargeLoop?.stop(); this.chargeLoop = null; }
   }
 
   // ================================================================== tap powers
@@ -244,6 +264,8 @@ export class Elements {
       case 'stomp': return this.stomp(rank);
       case 'gust': return this.gust(rank);
       case 'shrink': return this.shrinkRay(rank);
+      case 'phase': return this.phase(rank);
+      case 'seeker': return this.seeker(rank);
       default: return false;
     }
   }
@@ -270,7 +292,7 @@ export class Elements {
    * cursor to whatever is there. The probe then runs from the origin, so something in the
    * way is what gets hit.
    */
-  private aim(where: 'eyes' | 'hands', range: number, lead: number, out: Aim): Aim | null {
+  private aim(where: 'eyes' | 'hands', range: number, lead: number, out: Aim, pass?: (t: Target) => boolean): Aim | null {
     const T = this.w.targeting, p = this.w.player;
     const o = this.origin(where, _v);
     out.ox = o.x; out.oy = o.y; out.oz = o.z;
@@ -305,7 +327,7 @@ export class Elements {
       const c = cam.position;
       const t0 = Math.max(0, (p.pos.x - c.x) * _d.x + (p.pos.y + p.height * 0.6 - c.y) * _d.y + (p.pos.z - c.z) * _d.z);
       const sx = c.x + _d.x * t0, sy = c.y + _d.y * t0, sz = c.z + _d.z * t0;
-      const h = T.probe(sx, sy, sz, _d.x, _d.y, _d.z, range);
+      const h = T.probe(sx, sy, sz, _d.x, _d.y, _d.z, range, null, undefined, pass);
       const ex = h.what === 'none' ? sx + _d.x * range : h.x, ey = h.what === 'none' ? sy + _d.y * range : h.y, ez = h.what === 'none' ? sz + _d.z * range : h.z;
       dx = ex - o.x; dy = ey - o.y; dz = ez - o.z;
     }
@@ -313,7 +335,7 @@ export class Elements {
     out.dx = dx / L; out.dy = dy / L; out.dz = dz / L;
     // Untargeted: along the ray from the origin to whatever is there first (a bystander, a car, a
     // drone, a facade, the ground) — what it meets is what it hits.
-    const h = T.probe(o.x, o.y, o.z, out.dx, out.dy, out.dz, range);
+    const h = T.probe(o.x, o.y, o.z, out.dx, out.dy, out.dz, range, null, undefined, pass);
     out.hit = copyHit(h, out.hit);
     out.t = h.what === 'none' ? range : h.t;
     // Face it.
@@ -353,6 +375,29 @@ export class Elements {
   private aimA: Aim = { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0, t: 0, hit: newHit() };
 
   // ================================================================== effects on targets
+
+  // ================================================================== friend/foe sense
+
+  /** Does this power's friend/foe sense spare the target (bought, and the target is not a foe)? */
+  private spares(power: AbilityId, t: Target): boolean {
+    return !!this.w.sense?.(power) && !!this.w.spared?.(t);
+  }
+
+  /** May this power damage buildings (walls, windows, signs)? Not with the sense: it harms nothing
+   *  that would cost the player reputation. */
+  private wrecks(power: AbilityId): boolean {
+    return !this.w.sense?.(power);
+  }
+
+  /** The sense as a probe filter for a power's aim (undefined without it: the probe sees all). */
+  private passFor(power: AbilityId): ((t: Target) => boolean) | undefined {
+    return this.w.sense?.(power) && this.w.spared ? this.w.spared : undefined;
+  }
+
+  /** Targeting.inSphere for an area power: friends are left out when it has the sense. */
+  private area(power: AbilityId, x: number, y: number, z: number, r: number, fn: (t: Target, d: number) => void, kinds?: Parameters<Targeting['inSphere']>[5]): void {
+    this.w.targeting.inSphere(x, y, z, r, (t, d) => { if (!this.spares(power, t)) fn(t, d); }, kinds);
+  }
 
   private harmKind(t: Target): HarmTarget {
     return t.kind === 'bot' ? 'robot' : t.kind === 'threat' ? 'robot' : t.kind;
@@ -546,7 +591,7 @@ export class Elements {
 
   private laser(dt: number, r: number, held: number): void {
     const range = LASER_RANGE[r] * this.reachK;
-    const A = this.aim('eyes', range, Infinity, this.aimA);
+    const A = this.aim('eyes', range, Infinity, this.aimA, this.passFor('laser'));
     if (!A) { this.idle = true; this.laserLoop?.stop(); this.laserLoop = null; return; }
     const p = this.w.player, h = p.height, k = p.k;
     const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
@@ -597,7 +642,7 @@ export class Elements {
     if (Math.random() < 0.4) this.w.synth.play('sizzle', ex, ey, ez, 0.5, 5);
     if (Math.random() < 0.2) this.w.stimuli.emit('power', ex, ey, ez, 4, 40);
     this.w.swarm?.('heat', ex, ey, ez, 0.8 * this.reachK, 1.2, 1.5);
-    if (H.what === 'building' || H.what === 'roof') {
+    if ((H.what === 'building' || H.what === 'roof') && this.wrecks('laser')) {
       // Cumulative heat on the spot (60 cm cells): the panel gives way once the dose beats it.
       const key = (Math.round(ex / 0.6) * 73856093) ^ (Math.round(ey / 0.6) * 19349663) ^ (Math.round(ez / 0.6) * 83492791);
       let s = this.laserSpots.get(key);
@@ -654,12 +699,12 @@ export class Elements {
   private fireWave(r: number): boolean {
     const k = this.w.player.k;
     const range = FIRE_RANGE[r] * this.reachK;
-    const A = this.aim('hands', range, 25, this.aimA);
+    const A = this.aim('hands', range, 25, this.aimA, this.passFor('fireWave'));
     if (!A) return false;
     const b: FireBurst = { ox: A.ox, oy: A.oy, oz: A.oz, dx: A.dx, dy: A.dy, dz: A.dz, range, rank: r, t: 0, cand: [], walls: [], k, swarmD: 0 };
     // Who and what is in the cone (with a line of sight from the hands).
     const cosA = Math.cos(FIRE.halfAngle);
-    this.w.targeting.inSphere(A.ox + A.dx * range * 0.5, A.oy + A.dy * range * 0.5, A.oz + A.dz * range * 0.5, range * 0.62, (t) => {
+    this.area('fireWave', A.ox + A.dx * range * 0.5, A.oy + A.dy * range * 0.5, A.oz + A.dz * range * 0.5, range * 0.62, (t) => {
       const c = this.w.targeting.centre(t, _w);
       const vx = c.x - A.ox, vy = c.y - A.oy, vz = c.z - A.oz, d = Math.hypot(vx, vy, vz);
       if (d > range || d < 1e-3) return;
@@ -734,7 +779,7 @@ export class Elements {
         if (wl.d > front) continue;
         b.walls.splice(j, 1);
         this.fx.decal(DecalKind.Scorch, wl.x, wl.y, wl.z, wl.nx, wl.ny, wl.nz, 1.6 * sk, 1.6 * sk, Math.random() * 6, 45);
-        if (wl.building) {
+        if (wl.building && this.wrecks('fireWave')) {
           const n = this.w.destruction.impact(wl.x - wl.nx * 0.05, wl.y, wl.z - wl.nz * 0.05, 1.1 * sk, FIRE_HEAT[b.rank] * b.k * b.k, b.dx, b.dy, b.dz, 'wall');
           this.stats.impacts++;
           if (n) this.stats.broken += n;
@@ -785,7 +830,7 @@ export class Elements {
     const k = this.w.player.k;
     const range = FIREBALL_RANGE[r] * this.reachK;
     const v = FIREBALL.speed * this.reachK;
-    const A = this.aim('hands', range, v, this.aimA);
+    const A = this.aim('hands', range, v, this.aimA, this.passFor('fireball'));
     if (!A) return false;
     this.orbs.push({ ox: A.ox, oy: A.oy, oz: A.oz, dx: A.dx, dy: A.dy, dz: A.dz, L: Math.max(0.5, A.t), s: 0, v, rank: r, k, trailT: 0 });
     const p = this.w.player;
@@ -823,11 +868,13 @@ export class Elements {
     const r = o.rank, k = o.k, sk = Math.max(0.5, Math.sqrt(k));
     const R = FIREBALL_RADIUS[r] * sk;
     const burnT = FIREBALL_BURN[r];
-    const n = this.w.destruction.impact(x, y, z, R * 0.6, FIREBALL_BLAST[r] * k * k, 0, 0.2, 0, 'blast');
-    this.stats.impacts++;
-    if (n) this.stats.broken += n;
+    if (this.wrecks('fireball')) {
+      const n = this.w.destruction.impact(x, y, z, R * 0.6, FIREBALL_BLAST[r] * k * k, 0, 0.2, 0, 'blast');
+      this.stats.impacts++;
+      if (n) this.stats.broken += n;
+    }
     this.w.swarm?.('fire', x, y, z, R, 3, 4);
-    this.w.targeting.inSphere(x, y, z, R, (t, d) => {
+    this.area('fireball', x, y, z, R, (t, d) => {
       const f = 1 - d / R;
       const c = this.w.targeting.centre(t, _w);
       let hx = c.x - x, hz = c.z - z;
@@ -880,7 +927,7 @@ export class Elements {
     const cx = p.pos.x, cy = p.pos.y + p.height * 0.4, cz = p.pos.z;
     const dur = NOVA_FREEZE[r];
     // Everything within the radius freezes — bystanders and cars included.
-    this.w.targeting.inSphere(cx, cy, cz, R, (t) => {
+    this.area('frostNova', cx, cy, cz, R, (t) => {
       this.freeze(t, dur);
       const c = this.w.targeting.centre(t, _w);
       this.record('frostNova', t, 'freeze', c.x, c.z);
@@ -888,10 +935,10 @@ export class Elements {
     // The brood round about freezes solid (the next blow shatters them).
     this.w.swarm?.('frost', cx, p.pos.y + 0.3, cz, R, dur, 0);
     // Windows shatter in the cold snap (walls hold).
-    this.w.destruction.impact(cx, cy, cz, R, NOVA.glass * p.k * p.k, 0, 0.1, 0, 'blast');
+    if (this.wrecks('frostNova')) this.w.destruction.impact(cx, cy, cz, R, NOVA.glass * p.k * p.k, 0, 0.1, 0, 'blast');
     // Icy ground.
     const g = this.w.collision.groundAt(cx, cz, p.pos.y + 0.3, 0.5);
-    this.patches.push({ x: cx, y: g, z: cz, r: R * 0.92, until: this.time + dur * NOVA.iceLinger });
+    this.patches.push({ x: cx, y: g, z: cz, r: R * 0.92, until: this.time + dur * NOVA.iceLinger, sense: !!this.w.sense?.('frostNova') });
     this.fx.decal(DecalKind.Ice, cx, g, cz, 0, 1, 0, R * 2, R * 2, Math.random() * 6, dur * NOVA.iceLinger);
     this.novas.push({ x: cx, y: g + 0.15, z: cz, r: R, t: 0 });
     // Burst of ice motes and frosty mist.
@@ -1046,9 +1093,11 @@ export class Elements {
     this.slipT -= dt;
     if (this.slipT > 0) return;
     this.slipT = 0.25;
-    const check = (x: number, z: number, r: number) => {
+    const check = (x: number, z: number, r: number, sense = false) => {
       for (const a of this.w.peds.neighbours(x, z, r, _nb)) {
         if (a.state === PState.Down || a.inside || a.speed < 0.6) continue;
+        // Frost nova ice with the sense: only foes slip on it.
+        if (sense && this.w.spared?.({ kind: 'person', obj: a })) continue;
         const s = statusOf(a);
         if (s && s.frozen > 0) continue;
         if (!this.onIceAt(a.x, a.y, a.z) || Math.random() > 0.35) continue;
@@ -1058,7 +1107,7 @@ export class Elements {
         this.w.sound('land_thud', a.x, a.y, a.z, 0.4, 1.2, 4);
       }
     };
-    for (const pt of this.patches) check(pt.x, pt.z, pt.r);
+    for (const pt of this.patches) check(pt.x, pt.z, pt.r, pt.sense);
     if (this.tiles.length) {
       const b = this.tileBox;
       const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
@@ -1071,7 +1120,7 @@ export class Elements {
   private lightning(r: number): boolean {
     const T = this.w.targeting;
     const reach = BOLT_REACH[r] * this.reachK;
-    const A = this.aim('hands', reach, Infinity, this.aimA);
+    const A = this.aim('hands', reach, Infinity, this.aimA, this.passFor('lightning'));
     if (!A) return false;
     const pts: number[] = [A.ox, A.oy, A.oz];
     const struck = new Set<object>();
@@ -1084,7 +1133,7 @@ export class Elements {
       struck.add(H.target.obj);
     } else {
       x = A.ox + A.dx * A.t; y = A.oy + A.dy * A.t; z = A.oz + A.dz * A.t;
-      if (H.what === 'building' || H.what === 'roof') {
+      if ((H.what === 'building' || H.what === 'roof') && this.wrecks('lightning')) {
         this.w.destruction.impact(x, y, z, 1.2 * this.reachK, 2500 * this.w.player.k ** 2, A.dx, A.dy, A.dz, 'wall');
         this.w.future.signs.impact(x, y, z, 3, true);
       }
@@ -1098,7 +1147,7 @@ export class Elements {
     const jr = BOLT_JUMP_RANGE[r] * this.reachK;
     for (let j = 0; j < BOLT_JUMPS[r]; j++) {
       const pick: { t: Target | null; d: number } = { t: null, d: Infinity };
-      T.inSphere(x, y, z, jr, (t, d) => {
+      this.area('lightning', x, y, z, jr, (t, d) => {
         if (struck.has(t.obj)) return;
         // Conductors attract the arc a little more than people.
         const dd = d * (t.kind === 'prop' && !t.obj.tree ? 0.8 : 1);
@@ -1272,7 +1321,7 @@ export class Elements {
         const J = QUAKE_IMPULSE[q.rank] * q.k * q.k;
         const R = 3.5 * sk;
         this.w.swarm?.('blow', mx, g + 0.3, mz, R, 4, 6);
-        T.inSphere(mx, g + 0.5, mz, R, (t) => {
+        this.area('stomp', mx, g + 0.5, mz, R, (t) => {
           if (q.hit.has(t.obj)) return;
           q.hit.add(t.obj);
           const c = T.centre(t, _w);
@@ -1294,7 +1343,7 @@ export class Elements {
           }
         });
         // Walls along the crack (only where there are buildings).
-        if (this.w.world.buildingsIn(mx - R, mz - R, mx + R, mz + R).length) {
+        if (this.wrecks('stomp') && this.w.world.buildingsIn(mx - R, mz - R, mx + R, mz + R).length) {
           const n = this.w.destruction.impact(mx, g + 1.4 * sk, mz, 2.6 * sk, J, 0, 1, 0, 'stomp');
           this.stats.impacts++;
           if (n) this.stats.broken += n;
@@ -1326,7 +1375,7 @@ export class Elements {
       if (c.distanceTo(p.pos) > reach * 1.5) { this.refuse('range'); return false; }
       if (this.w.sight && !this.w.sight.clear(o.x, o.y, o.z, x, ty, z, this.padOf(tgt), tgt.kind === 'car' ? tgt.obj : null)) { this.refuse('sight'); return false; }
     } else {
-      const A = this.aim('hands', reach, Infinity, this.aimA);
+      const A = this.aim('hands', reach, Infinity, this.aimA, this.passFor('gust'));
       if (!A) return false;
       // Not inside a wall: back off from a facade a little.
       const back = A.hit.what === 'building' ? GUST_RADIUS[r] * sk * 0.6 : 0;
@@ -1392,6 +1441,7 @@ export class Elements {
       this.w.dust.clearNear(v.x, v.y + v.r, v.z, v.r * 1.6);
       const r = v.rank;
       T.each(v.x, v.z, v.r + 3, (t) => {
+        if (this.spares('gust', t)) return;
         const c = T.centre(t, _w);
         const dx = c.x - v.x, dz = c.z - v.z, d = Math.hypot(dx, dz);
         if (d > v.r + (t.kind === 'car' ? t.obj.length * 0.4 : 0.3) || c.y < v.y - 1 || c.y > v.y + v.r * 3) return;
@@ -1440,7 +1490,7 @@ export class Elements {
   private hydro(dt: number, r: number, held: number): void {
     const range = HYDRO_RANGE[r] * this.reachK;
     const jet = 32 * this.reachK;
-    const A = this.aim('hands', range, jet, this.aimA);
+    const A = this.aim('hands', range, jet, this.aimA, this.passFor('hydro'));
     if (!A) { this.idle = true; this.waterLoop?.stop(); this.waterLoop = null; return; }
     const sk = this.reachK;
     const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
@@ -1518,8 +1568,8 @@ export class Elements {
       }
     };
     if (H.what === 'target' && H.target) hitOne(H.target);
-    T.inSphere(ex, ey, ez, 0.9 * sk, (t) => { if (!H.target || t.obj !== H.target.obj) hitOne(t); }, { person: true, car: false, robot: true, drone: false, prop: true });
-    if (H.what === 'building') {
+    this.area('hydro', ex, ey, ez, 0.9 * sk, (t) => { if (!H.target || t.obj !== H.target.obj) hitOne(t); }, { person: true, car: false, robot: true, drone: false, prop: true });
+    if (H.what === 'building' && this.wrecks('hydro')) {
       // Sustained pressure bursts windows.
       const key = { obj: H.building! };
       const e = this.hydroAcc.get(key.obj) ?? { acc: 0, t: this.time };
@@ -1536,7 +1586,7 @@ export class Elements {
     const A = this.aim('hands', reach, Infinity, this.aimA);
     if (!A) return false;
     const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
-    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: 0.4, w: 0.12 * this.reachK });
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: 0.4, w: 0.12 * this.reachK, c: SHRINK_C, style: BeamStyle.Shrink, I: 1.2 });
     const p = this.w.player;
     p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.5 };
     this.w.synth.play('shrink', A.ox, A.oy, A.oz, 0.8, 5);
@@ -1556,8 +1606,252 @@ export class Elements {
       b.t += dt;
       if (b.t > b.life) { this.beams.splice(i, 1); continue; }
       const f = 1 - b.t / b.life;
-      this.fx.seg(b.ax, b.ay, b.az, b.bx, b.by, b.bz, b.w * (0.5 + f), SHRINK_C.r * 0.4, SHRINK_C.g * 0.4, SHRINK_C.b * 0.4, 1.2 * f, BeamStyle.Shrink);
+      this.fx.seg(b.ax, b.ay, b.az, b.bx, b.by, b.bz, b.w * (0.5 + f), b.c.r * 0.4, b.c.g * 0.4, b.c.b * 0.4, b.I * f, b.style);
     }
+  }
+
+  // ================================================================== single-target energy powers
+
+  /**
+   * The target a single-target power goes for: the Tab target, else what the crosshair is on.
+   * null (with a toast) when there is none.
+   */
+  private soleTarget(name: string, range: number): Target | null {
+    const T = this.w.targeting;
+    if (T.current && T.alive(T.current)) return T.current;
+    const A = this.aim('hands', range, Infinity, this.aimB);
+    if (A && A.hit.what === 'target' && A.hit.target) return A.hit.target;
+    if (this.time - this.refuseToastT > 1.6) { this.refuseToastT = this.time; this.w.deny?.(`${name} needs a target: press Tab or aim at someone`); }
+    return null;
+  }
+  private aimB: Aim = { ox: 0, oy: 0, oz: 0, dx: 0, dy: 0, dz: 0, t: 0, hit: newHit() };
+
+  /** Feet height of a target (the street / sewer side test is made with feet). */
+  private feetOf(t: Target, c: THREE.Vector3): number {
+    return t.kind === 'person' ? t.obj.y : c.y - this.w.targeting.height(t) * 0.5;
+  }
+
+  /**
+   * An energy blow on one target (phase pulse, focus beam, seeker orb): `hp` damage to a person
+   * (through the combat model), `laserS` laser seconds of this rank to a monster, a knock to a
+   * machine, a dent to a car (`wreck`: it is thrown), a shove to a prop. Along (dx, dy, dz).
+   */
+  private energyHit(power: AbilityId, t: Target, r: number, hp: number, laserS: number, x: number, y: number, z: number, dx: number, dy: number, dz: number, wreck = false): void {
+    const k = this.w.player.k, k2 = k * k;
+    const J = (hp / COMBAT.dmgPerNs) * k2;
+    const hl = Math.hypot(dx, dz) || 1, hx = dx / hl, hz = dz / hl;
+    switch (t.kind) {
+      case 'person': {
+        const a = t.obj;
+        // (A slight lift; the blow's whole impulse is still J.)
+        if (this.w.hitPerson) this.w.hitPerson(a, hx * J * 0.97, J * 0.24, hz * J * 0.97, a.x - hx, a.z - hz);
+        else if (a.state !== PState.Down) { this.knock(a, a.x - hx, a.z - hz, Math.min(8, J / 350)); this.record(power, t, 'knockdown', a.x, a.z); }
+        break;
+      }
+      case 'threat': this.hurtThreat(t, laserS * LASER_DOSE[r] * k2 * DAMAGE_PER_IMPULSE, x, y, z); break;
+      case 'car': {
+        const v = t.obj;
+        if (wreck && v.state !== VState.Wreck && v.state !== VState.Crushed) { this.wreck(v, x, y, z, hx * 6000 * k2, 3000 * k2, hz * 6000 * k2); this.record(power, t, 'wreck', v.x, v.z); }
+        else { dentCar(v, Math.min(0.5, hp / 200)); v.speed *= 0.5; v.fear = Math.max(v.fear, 1.2); this.record(power, t, 'damage', v.x, v.z); }
+        break;
+      }
+      case 'robot': case 'bot': this.shove(t, hx * J * 0.15, J * 0.08, hz * J * 0.15, power); break;
+      case 'drone': this.shove(t, hx * J * 0.02, -J * 0.01, hz * J * 0.02, power); break;
+      case 'prop': this.shove(t, hx * J * 0.1, 0, hz * J * 0.1, power); break;
+    }
+    this.sparkBurst(x, y, z, 10, power === 'focus' ? FOCUS_C : power === 'seeker' ? SEEK_C : PHASE_C, power === 'focus' ? FOCUS_END : power === 'seeker' ? SEEK_END : PHASE_END);
+  }
+
+  /** A puff of coloured sparks (energy impacts). */
+  private sparkBurst(x: number, y: number, z: number, n: number, c0: THREE.Color, c1: THREE.Color): void {
+    const sk = this.reachK;
+    for (let i = 0; i < n; i++) {
+      const sp = 2 + Math.random() * 5;
+      this.fx.glow(x, y, z, (Math.random() - 0.5) * sp, (Math.random() - 0.3) * sp, (Math.random() - 0.5) * sp, 0.25 + Math.random() * 0.3, 0.09 * sk, 0.02 * sk, c0, c1, 1, 1.5, 2);
+    }
+    this.fx.glow(x, y, z, 0, 0, 0, 0.18, 0.9 * sk, 1.6 * sk, c0, c1, 0.8, 1, 0);
+  }
+
+  // ================================================================== phase pulse
+
+  /** A pulse through walls, cars and people to the one target (Tab, or under the crosshair). */
+  private phase(r: number): boolean {
+    const T = this.w.targeting, p = this.w.player;
+    const range = PHASE_RANGE[r] * this.reachK;
+    const tgt = this.soleTarget('Phase pulse', range);
+    if (!tgt) return false;
+    const o = this.origin('hands', _v);
+    const c = T.aimPoint(tgt, o.x, o.y, o.z, Infinity, _w);
+    const d = c.distanceTo(o);
+    if (d - this.padOf(tgt) > range * 1.15) { this.refuse('range'); return false; }
+    // Through walls, never through the pavement: the street and the sewers below stay apart.
+    if (tgt.kind !== 'threat' && this.w.sameSide && !this.w.sameSide(p.pos.x, p.pos.y, p.pos.z, c.x, this.feetOf(tgt, c), c.z)) { this.refuse('sight'); return false; }
+    const ox = o.x, oy = o.y, oz = o.z, cx = c.x, cy = c.y, cz = c.z;
+    const dx = (cx - ox) / (d || 1), dy = (cy - oy) / (d || 1), dz = (cz - oz) / (d || 1);
+    this.energyHit('phase', tgt, r, PHASE_DMG[r], PHASE.laserS, cx, cy, cz, dx, dy, dz);
+    // A pale ripple along the line, rings where it slips through a wall, a flash on the target.
+    const sk = this.reachK;
+    this.beams.push({ ax: ox, ay: oy, az: oz, bx: cx, by: cy, bz: cz, t: 0, life: 0.3, w: 0.07 * sk, c: PHASE_C, style: BeamStyle.Shrink, I: 1.4 });
+    const n = Math.min(40, Math.ceil(d / 0.8));
+    for (let i = 0; i < n; i++) {
+      const u = i / n, sp = d / 0.25;
+      this.fx.glow(ox + (cx - ox) * u * 0.2, oy + (cy - oy) * u * 0.2, oz + (cz - oz) * u * 0.2, dx * sp * (0.8 + u * 0.2), dy * sp * (0.8 + u * 0.2), dz * sp * (0.8 + u * 0.2), 0.22, 0.14 * sk, 0.05 * sk, PHASE_C, PHASE_END, 0.8, 1, 0);
+    }
+    const wall = T.probe(ox, oy, oz, dx, dy, dz, d, null, NO_TARGETS);
+    if (wall.what === 'building') {
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2, ux = -wall.nz, uz = wall.nx;
+        this.fx.glow(wall.x, wall.y, wall.z, (ux * Math.cos(a)) * 2.5, Math.sin(a) * 2.5, (uz * Math.cos(a)) * 2.5, 0.35, 0.12 * sk, 0.04 * sk, PHASE_C, PHASE_END, 0.7, 2, 0);
+      }
+    }
+    if (!p.flying && Math.hypot(dx, dz) > 0.1) p.yaw = Math.atan2(-dx, -dz);
+    p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.45 };
+    this.w.synth.play('phase', ox, oy, oz, 0.8, 5 * sk);
+    this.w.synth.play('phase', cx, cy, cz, 0.5, 4 * sk, 0.7);
+    this.w.stimuli.emit('power', cx, cy, cz, 3, 25);
+    return true;
+  }
+
+  // ================================================================== focus beam
+
+  /** While the focus beam gathers: light grows behind the eyes, motes stream in, a rising hum. */
+  private gather(dt: number, _r: number, held: number): void {
+    const p = this.w.player, sk = this.reachK;
+    const f = Math.min(1, held / FOCUS.charge);
+    const o = this.origin('eyes', _v);
+    const pulse = f >= 1 ? 1 + 0.2 * Math.sin(this.time * 24) : 1;
+    this.fx.glow(o.x, o.y, o.z, 0, 0, 0, 0.05, (0.04 + 0.16 * f) * sk * pulse, (0.05 + 0.12 * f) * sk, FOCUS_C, FOCUS_END, 0.9, 1, 0);
+    if (Math.random() < dt * (20 + 60 * f)) {
+      const a = Math.random() * Math.PI * 2, b = (Math.random() - 0.5) * 2, rr = (0.6 + Math.random() * 0.6) * p.height * 0.4;
+      const ex = Math.cos(a) * rr, ey = b * rr * 0.6, ez = Math.sin(a) * rr;
+      this.fx.glow(o.x + ex, o.y + ey, o.z + ez, -ex / 0.3, -ey / 0.3, -ez / 0.3, 0.3, 0.03 * sk, 0.06 * sk, FOCUS_C, FOCUS_END, 1, 1, 0);
+    }
+    if (!this.chargeLoop) this.chargeLoop = this.w.synth.loop('charge', 4 * sk);
+    this.chargeLoop?.set(o.x, o.y, o.z, 0.25 + 0.35 * f, f);
+    if (held < 0.05) p.action = { id: 'cast_forward', t0: p.animClock, dur: FOCUS.charge + 0.5 };
+  }
+
+  /**
+   * A charged power is let go (AbilitySystem): the focus beam fires with `charge` 0..1. False when
+   * it cannot go off (no line of sight, out of reach): the energy is given back.
+   */
+  release(id: AbilityId, r: number, charge: number): boolean {
+    if (id !== 'focus') return false;
+    this.chargeLoop?.stop(); this.chargeLoop = null;
+    const range = FOCUS_RANGE[r] * this.reachK;
+    const A = this.aim('eyes', range, Infinity, this.aimA);
+    if (!A) return false;
+    const f = FOCUS.min + (1 - FOCUS.min) * Math.max(0, Math.min(1, charge));
+    const k = this.w.player.k, sk = this.reachK;
+    const ex = A.ox + A.dx * A.t, ey = A.oy + A.dy * A.t, ez = A.oz + A.dz * A.t;
+    const H = A.hit;
+    if (H.what === 'target' && H.target) {
+      this.energyHit('focus', H.target, r, FOCUS_DMG[r] * f, FOCUS.laserS * f, ex, ey, ez, A.dx, A.dy, A.dz, r >= 3 && f > 0.9);
+    } else if (H.what === 'building') {
+      // One panel: a full charge holes it like a second and a half of the laser on it.
+      const n = this.w.destruction.impact(ex - H.nx * 0.05, ey, ez - H.nz * 0.05, 0.6 * sk, LASER_DOSE[r] * k * k * FOCUS.wallS * f, A.dx, A.dy, A.dz, 'wall');
+      this.stats.impacts++;
+      if (n) { this.stats.broken += n; this.record('focus', 'building', 'facade', ex, ez); }
+    }
+    if (H.what !== 'none') {
+      this.fx.decal(DecalKind.Scorch, ex, ey, ez, H.nx, H.ny, H.nz, 0.9 * sk * f, 0.9 * sk * f, Math.random() * 6, 35);
+      if (H.what !== 'target') this.sparkBurst(ex, ey, ez, 14, FOCUS_C, FOCUS_END);
+    }
+    // The shot: a thick white-gold beam from the eyes that fades fast.
+    const w = (0.08 + 0.1 * f) * sk;
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash, w: w * 3, c: FOCUS_C, style: BeamStyle.Laser, I: 1.2 });
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 0.8, w, c: C(3.5, 3.4, 3), style: BeamStyle.Laser, I: 3 });
+    const p = this.w.player;
+    p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.4 };
+    this.w.camRig.addShake(0.06 + 0.12 * f);
+    this.w.synth.play('beam', A.ox, A.oy, A.oz, 0.6 + 0.4 * f, 6 * sk, 1.15 - 0.3 * f);
+    this.w.stimuli.emit('power', ex, ey, ez, 4 + 2 * f, 40 + 40 * f);
+    return true;
+  }
+
+  // ================================================================== seeker orb
+
+  /** Throw a seeker orb at the one target (it needs one). */
+  private seeker(r: number): boolean {
+    const T = this.w.targeting, p = this.w.player;
+    const range = SEEKER_RANGE[r] * this.reachK;
+    const tgt = this.soleTarget('Seeker orb', range);
+    if (!tgt) return false;
+    const o = this.origin('hands', _v);
+    const c = T.aimPoint(tgt, o.x, o.y, o.z, Infinity, _w);
+    if (c.distanceTo(o) - this.padOf(tgt) > range * 1.15) { this.refuse('range'); return false; }
+    if (tgt.kind !== 'threat' && this.w.sameSide && !this.w.sameSide(p.pos.x, p.pos.y, p.pos.z, c.x, this.feetOf(tgt, c), c.z)) { this.refuse('sight'); return false; }
+    const sp = SEEKER.speed * this.reachK;
+    let dx = c.x - o.x, dz = c.z - o.z;
+    const hl = Math.hypot(dx, dz) || 1;
+    dx /= hl; dz /= hl;
+    // Off the hands forward and a little up; it finds its way from there.
+    this.seekers.push({ x: o.x, y: o.y, z: o.z, vx: dx * sp * 0.7, vy: sp * 0.35, vz: dz * sp * 0.7, tgt, rank: r, k: p.k, age: 0, trailT: 0, checkT: 0, clear: true, loop: this.w.synth.loop('charge', 3 * this.reachK) });
+    if (!p.flying) p.yaw = Math.atan2(-dx, -dz);
+    p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.5 };
+    this.w.synth.play('orb', o.x, o.y, o.z, 0.7, 5 * this.reachK);
+    return true;
+  }
+
+  private updateSeekers(dt: number): void {
+    const T = this.w.targeting, W = this.w.world;
+    for (let i = this.seekers.length - 1; i >= 0; i--) {
+      const s = this.seekers[i];
+      s.age += dt;
+      const sk = Math.max(0.5, Math.sqrt(s.k)), sp = SEEKER.speed * sk;
+      const gone = !T.alive(s.tgt);
+      if (gone || s.age > SEEKER.life) { this.fizzle(s); this.seekers.splice(i, 1); continue; }
+      const c = T.aimPoint(s.tgt, s.x, s.y, s.z, Infinity, _w);
+      const pad = this.padOf(s.tgt);
+      let tx = c.x - s.x, ty = c.y - s.y, tz = c.z - s.z;
+      const td = Math.hypot(tx, ty, tz) || 1;
+      if (td < pad + 0.35 * sk) {
+        const vl = Math.hypot(s.vx, s.vy, s.vz) || 1;
+        this.energyHit('seeker', s.tgt, s.rank, SEEKER_DMG[s.rank], SEEKER.laserS, s.x, s.y, s.z, s.vx / vl, s.vy / vl, s.vz / vl);
+        this.w.synth.play('orb', s.x, s.y, s.z, 0.6, 5 * sk, 0.6);
+        s.loop?.stop();
+        this.seekers.splice(i, 1);
+        continue;
+      }
+      tx /= td; ty /= td; tz /= td;
+      // Is the way to the target open? (A few times a second; the shared line of sight.)
+      s.checkT -= dt;
+      if (s.checkT <= 0) {
+        s.checkT = 0.12;
+        s.clear = !this.w.sight || this.w.sight.clear(s.x, s.y, s.z, c.x, c.y, c.z, pad, s.tgt.kind === 'car' ? s.tgt.obj : null);
+      }
+      // Open: straight for it. Blocked: up and over (a building, a wall), still edging towards it.
+      let wx = tx, wy = ty, wz = tz;
+      if (!s.clear) { wx = tx * 0.35; wy = 1; wz = tz * 0.35; }
+      const wl = Math.hypot(wx, wy, wz) || 1;
+      const turn = Math.min(1, SEEKER.turn * dt);
+      s.vx += (wx / wl * sp - s.vx) * turn; s.vy += (wy / wl * sp - s.vy) * turn; s.vz += (wz / wl * sp - s.vz) * turn;
+      let nx = s.x + s.vx * dt, ny = s.y + s.vy * dt, nz = s.z + s.vz * dt;
+      // Never into a building: against a facade it only climbs.
+      const b = W.buildingAt(nx, nz);
+      if (b && b.alive && ny < b.top + 0.4 && ny > b.low && !(W.buildingAt(s.x, s.z) === b)) { nx = s.x; nz = s.z; ny = s.y + Math.max(s.vy, sp * 0.6) * dt; s.clear = false; }
+      // Nor into the ground.
+      const g = this.w.collision.groundAt(nx, nz, ny + 1, 2);
+      if (ny < g + 0.4 * sk) { ny = g + 0.4 * sk; s.vy = Math.max(0, s.vy); }
+      s.x = nx; s.y = ny; s.z = nz;
+      s.loop?.set(s.x, s.y, s.z, 0.35, 0.6);
+      // The orb: a white heart in a violet glow, motes trailing behind.
+      const size = (0.22 + s.rank * 0.03) * sk;
+      const pulse = 1 + 0.15 * Math.sin(this.time * 18 + i);
+      this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.05, size * 1.3 * pulse, size, C(3, 3, 3.4), SEEK_C, 1, 1, 0);
+      this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.08, size * 2.6 * pulse, size * 2, SEEK_C, SEEK_END, 0.5, 1, 0);
+      s.trailT -= dt;
+      if (s.trailT <= 0) {
+        s.trailT = 0.025;
+        this.fx.glow(s.x, s.y, s.z, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, 0.4 + Math.random() * 0.2, size * 0.6, size * 0.1, SEEK_C, SEEK_END, 0.7, 1, 0);
+      }
+    }
+  }
+
+  /** A seeker orb that lost its target or ran out: it fades in a soft puff. */
+  private fizzle(s: Seeker): void {
+    s.loop?.stop();
+    this.sparkBurst(s.x, s.y, s.z, 8, SEEK_C, SEEK_END);
   }
 
   // ================================================================== states

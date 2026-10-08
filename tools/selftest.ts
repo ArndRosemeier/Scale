@@ -557,6 +557,34 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   console.log(`powers: ${ABILITIES.length} abilities checked`);
 }
 
+// ---- friend/foe sense: offered on the powers that hit more than their target, at the first-rank
+// price, bought per power once unlocked, kept in saves; it spares everything that costs reputation.
+{
+  const { ABILITY, SENSE_IDS, senseCost } = await import('../src/game/abilities/defs');
+  const T = await import('../src/game/abilities/tuning');
+  for (const id of SENSE_IDS) check(!!ABILITY[id] && senseCost(id) === T.KARMA_COST[id as keyof typeof T.KARMA_COST][0] && senseCost(id) > 0, `${id}: friend/foe sense costs its first rank`);
+  check(!SENSE_IDS.includes('phase') && !SENSE_IDS.includes('focus') && !SENSE_IDS.includes('seeker'), 'single-target powers need no sense');
+  const store = new Map<string, string>();
+  (globalThis as unknown as { localStorage: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) };
+  store.set('scale.progress.v1.6.0.30', JSON.stringify({ v: 1, karma: 200, earned: 200, deeds: 3, ranks: { fireball: 1 }, slots: [], cores: [], seen: [], bonusMax: 0, bonusRegen: 0 }));
+  const { Progress } = await import('../src/game/abilities/Progress');
+  const pg = new Progress(6, 0.3, 'normal');
+  check(!pg.hasSense('fireball') && pg.senseCost('fireball') === 60 && pg.senseCost('stomp') === null && pg.senseCost('phase') === null, 'sense: offered for an unlocked area power only');
+  check(pg.buySense('fireball') && pg.karma === 140 && pg.hasSense('fireball') && pg.senseCost('fireball') === null && !pg.buySense('fireball'), `sense: bought once for 60 karma (left ${pg.karma})`);
+  const again = new Progress(6, 0.3, 'normal');
+  check(again.hasSense('fireball') && !again.hasSense('frostNova'), 'sense: kept in the saved progress');
+  const { isFoe, spared } = await import('../src/game/friendFoe');
+  const W = { hostileThing: (o: object) => (o as { rogue?: boolean }).rogue === true };
+  const person = (role: string | null, state = 'idle', hostile = false) => ({ kind: 'person', obj: { actor: role ? { role, state, hostile } : null } }) as never;
+  check(isFoe(person('criminal', 'fight', true), W) && isFoe(person('criminal'), W), 'foe: a criminal still in the fight');
+  check(!isFoe(person('criminal', 'surrender'), W) && !isFoe(person('criminal', 'arrested'), W), 'friend: a criminal who gave up or was cuffed');
+  check(!isFoe(person(null), W) && !isFoe(person('police', 'fight', true), W) && !isFoe(person('soldier', 'fight', true), W), 'friend: bystanders, police and soldiers (hurting them costs reputation)');
+  check(spared({ kind: 'car', obj: {} } as never, W) && spared({ kind: 'prop', obj: {} } as never, W), 'spared: every car and prop');
+  check(isFoe({ kind: 'robot', obj: { rogue: true } } as never, W) && !isFoe({ kind: 'drone', obj: {} } as never, W), 'foe: only rogue machines');
+  check(isFoe({ kind: 'threat', obj: {} } as never, W) && !isFoe({ kind: 'threat', obj: { self: true } } as never, W), 'foe: monsters (not the rampaging hero body)');
+  console.log('friend/foe sense checked');
+}
+
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
 {
   const { nextTrainAt, trainsOn } = await import('../src/underground/layout');
