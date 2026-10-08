@@ -45,6 +45,13 @@ export class PlayerHealth {
   /** Recent hurt flash 0..1 (HUD vignette). */
   flash = 0;
   onHurt: ((dmg: number, kind: HurtKind, fromX: number, fromZ: number) => void) | null = null;
+  /**
+   * Is a point on the player's side of the street (both underground or both up top)? Set by the
+   * game. Every blow names where it came from, and nothing reaches through the pavement: a
+   * footfall, a bite or a baton on the street does not hurt a hero in the sewer below, nor the
+   * other way round.
+   */
+  sameSide: ((x: number, y: number, z: number) => boolean) | null = null;
   /** Health reached zero (the game fades and wakes the player). */
   onKnockout: ((kind: HurtKind) => void) | null = null;
   onWake: (() => void) | null = null;
@@ -61,8 +68,10 @@ export class PlayerHealth {
   get inCombat(): boolean { return this.sinceHurt < HEALTH.regenDelay; }
 
   /** Damage before size: a body k times taller has k³ the mass and shrugs off proportionally more. */
-  damage(dmg: number, kind: HurtKind, fromX = this.player.pos.x, fromZ = this.player.pos.z): number {
+  /** `from`: where the blow came from (an attacker's feet or body, a blast's centre). */
+  damage(dmg: number, kind: HurtKind, fromX: number, fromZ: number, fromY: number): number {
     if (this.invulnerable || this.koT > 0 || dmg <= 0) return 0;
+    if (this.sameSide && !this.sameSide(fromX, fromY, fromZ)) return 0;
     const k = this.player.k;
     const d = dmg / Math.max(0.05, k ** 3);
     if (d < 0.5) return 0;
@@ -90,7 +99,7 @@ export class PlayerHealth {
     if (leap || this.player.flying) return;
     const v = Math.sqrt((2 * energy) / Math.max(1, this.player.mass));
     const safe = HEALTH.fallSafe * Math.sqrt(this.player.k);
-    if (v > safe) this.damage((v - safe) * HEALTH.fallPerMs * this.player.k ** 3, 'fall');
+    if (v > safe) this.damage((v - safe) * HEALTH.fallPerMs * this.player.k ** 3, 'fall', this.player.pos.x, this.player.pos.z, this.player.pos.y);
   }
 
   update(dt: number): void {

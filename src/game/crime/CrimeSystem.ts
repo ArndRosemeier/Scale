@@ -204,13 +204,15 @@ export class CrimeSystem {
     };
     this.guns = new Firearms(g);
     this.bombs = new Bombs(g);
-    this.bombs.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
+    this.bombs.hurtPlayer = (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy);
     this.casts = new VillainCasts(g);
-    this.casts.hurtPlayer = (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz);
-    this.packs = new Packs(g, this.view, (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz));
+    this.casts.hurtPlayer = (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy);
+    this.packs = new Packs(g, this.view, (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy));
     this.casts.whistle = (by, x, z) => this.packs.sic(by, x, z);
     this.casts.hasPack = (by) => (this.packs.of(by)?.active.length ?? 0) > 0;
     this.health = new PlayerHealth(g.player, g.mode === 'sandbox');
+    // Nothing hurts through the pavement (the street and the sewers, metro and caves below it).
+    this.health.sameSide = (x, y, z) => this.playerSide(x, y, z);
     this.rep = new Reputation(seed, g.settings.size, g.mode);
     this.world = this.makeWorld();
     const self = this;
@@ -225,7 +227,7 @@ export class CrimeSystem {
       sound: (id, x, y, z, gain, pitch) => this.sound(id, x, y, z, gain, pitch),
       sirenLoop: () => g.audio.loop('siren_loop', 14),
       emit: (k, x, y, z, i, r) => g.stimuli.emit(k, x, y, z, i, r),
-      hurtPlayer: (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz),
+      hurtPlayer: (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy),
       playerDown: () => g.player.downT > 0 || this.health.down,
       arrestPlayer: () => this.playerArrested(),
       wanted: () => this.justice.wanted,
@@ -307,7 +309,7 @@ export class CrimeSystem {
       if (s.kind !== 'collapse') return;
       const d = Math.hypot(s.x - g.player.pos.x, s.z - g.player.pos.z);
       const r = Math.min(40, Math.max(8, s.radius * 0.04));
-      if (d < r && Math.abs(s.y - g.player.pos.y) < 30 && !g.collision.underground(g.player.pos.x, g.player.pos.y, g.player.pos.z)) this.health.damage(35 * (1 - d / r) + 10, 'collapse', s.x, s.z);
+      if (d < r && Math.abs(s.y - g.player.pos.y) < 30) this.health.damage(35 * (1 - d / r) + 10, 'collapse', s.x, s.z, s.y);
     });
     this.health.onHurt = (d, kind, fx, fz) => {
       g.camRig.addShake(Math.min(0.5, 0.1 + d / 60));
@@ -356,7 +358,7 @@ export class CrimeSystem {
       sound: (id, x, y, z, gain, pitch) => this.sound(id, x, y, z, gain, pitch),
       loop: (id, x, y, z, gain) => { const h = g.audio.loop(id, 12); if (!h) return null; h.set(x, g.world.groundHeight(x, z) + y, z, gain); return h; },
       combat: this.combat,
-      hurtPlayer: (d, k, fx, fz) => this.hurtPlayer(d, k, fx, fz),
+      hurtPlayer: (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy),
       callPolice: (c, delay) => this.police.call(c, delay * responseFactor(g.city.presenceAt(c.x, c.z))),
       random: Math.random,
       shops: (rMin, rMax) => this.shops(rMin, rMax),
@@ -419,7 +421,7 @@ export class CrimeSystem {
     if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5)) return 'held';
     if (!this.guns.clear(c, mx, my, mz, tx, ty, tz, at === 'player' ? null : at, false, at === 'player')) return 'held';
     this.guns.fire(c, S, mx, my, mz, tx, ty, tz, 1, false, false, undefined);
-    if (at === 'player') this.hurtPlayer(S.player * (0.8 + Math.random() * 0.4), 'gun', c.x, c.z);
+    if (at === 'player') this.hurtPlayer(S.player * (0.8 + Math.random() * 0.4), 'gun', c.x, c.z, c.y);
     else this.combat.hitActor(at, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'npc', c.x, c.z);
     return 'hit';
   }
@@ -455,7 +457,7 @@ export class CrimeSystem {
     if (!this.guns.clear(o, mx, my, mz, tx, ty, tz, null, false, true)) return 'held';
     this.guns.fire(o, S, mx, my, mz, tx, ty, tz, S.burst, false, false, 'police');
     this.guns.stats.atPlayer += S.burst;
-    this.hurtPlayer(S.player * S.burst, 'police', o.x, o.z);
+    this.hurtPlayer(S.player * S.burst, 'police', o.x, o.z, o.y);
     return 'hit';
   }
 
@@ -554,7 +556,7 @@ export class CrimeSystem {
   /** Is someone on the player's side of the street (both underground or both up top)? Nobody sees through the pavement. */
   private playerSide(x: number, y: number, z: number): boolean {
     const U = this.g.underground, P = this.g.player.pos;
-    return !U || U.isUnder(x, y + 0.5, z) === U.isUnder(P.x, P.y + 0.5, P.z);
+    return !U || U.sameSide(x, y, z, P.x, P.y, P.z);
   }
 
   private witnesses(x: number, z: number, r: number, except?: object): number {
@@ -1678,8 +1680,8 @@ export class CrimeSystem {
     return playerStrength(g.abilities.rank('strength'), g.player.k, this.health.frac, powers);
   }
 
-  private hurtPlayer(dmg: number, kind: HurtKind, fx: number, fz: number): void {
-    const d = this.health.damage(dmg, kind, fx, fz);
+  private hurtPlayer(dmg: number, kind: HurtKind, fx: number, fz: number, fy: number): void {
+    const d = this.health.damage(dmg, kind, fx, fz, fy);
     if (d > 0) this.g.audio.play2d('punch_impact', 0.5, 0.8);
   }
 

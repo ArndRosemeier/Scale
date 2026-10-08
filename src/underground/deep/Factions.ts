@@ -88,7 +88,7 @@ export interface FactionHost {
   plan: DeepPlan;
   /** The player (feet), body height, horizontal speed (m/s), whether it can be seen (not hidden by size, flying fast …). */
   player(): { x: number; y: number; z: number; h: number; speed: number };
-  hurtPlayer(dmg: number, fromX: number, fromZ: number): void;
+  hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number): void;
   /** Knock the player back (impulse as a velocity change). */
   shovePlayer(vx: number, vy: number, vz: number): void;
   sound(id: string, x: number, y: number, z: number, gain: number, pitch?: number): void;
@@ -564,7 +564,7 @@ export class Factions {
       if (b.cd <= 0) {
         b.cd = b.role === 'maw' ? 2.2 : 1.1 + Math.random() * 0.6;
         b.lunge = 0.3;
-        this.host.hurtPlayer(S.dmg, b.x, b.z);
+        this.host.hurtPlayer(S.dmg, b.x, b.z, b.y);
         const k = b.role === 'maw' ? 9 : b.role === 'brute' ? 5 : 1.5;
         this.host.shovePlayer(((P.x - b.x) / (dp || 1)) * k, k * 0.4, ((P.z - b.z) / (dp || 1)) * k);
         this.host.sound(b.role === 'maw' || b.role === 'brute' ? 'murk_slam' : 'slime_squish', b.x, b.y, b.z, 0.7, b.role === 'drone' ? 0.8 : 0.6);
@@ -659,7 +659,7 @@ export class Factions {
       const hitP = Math.hypot(s.x - P.x, s.z - P.z) < 0.7 && s.y > P.y - 0.2 && s.y < P.y + P.h + 0.2;
       const rock = F.near(s.x, s.y, s.z) ? F.sdf(s.x, s.y, s.z) > 0 : s.y < this.host.ground(s.x, s.z, s.y);
       if (hitP || rock || s.life <= 0) {
-        if (hitP) { this.host.hurtPlayer(s.dmg, s.from.x, s.from.z); this.host.shovePlayer(s.vx * 0.2, 1.5, s.vz * 0.2); }
+        if (hitP) { this.host.hurtPlayer(s.dmg, s.from.x, s.from.z, s.from.y); this.host.shovePlayer(s.vx * 0.2, 1.5, s.vz * 0.2); }
         for (let k = 0; k < 5; k++) this.drops.push({ x: s.x, y: s.y, z: s.z, vx: (Math.random() - 0.5) * 3, vy: Math.random() * 2, vz: (Math.random() - 0.5) * 3, r: 0.06, col: MURK_COL[0], life: 0, murk: true });
         this.host.sound('slime_squish', s.x, s.y, s.z, 0.5, 0.8);
         this.spits.splice(i, 1);

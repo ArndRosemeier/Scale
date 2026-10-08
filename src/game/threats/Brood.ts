@@ -186,7 +186,7 @@ export class Brood implements ThreatEvent {
       case 'player': {
         if (this.t - this.playerHitT < BROOD_EVENT.playerGap) return;
         this.playerHitT = this.t;
-        const dealt = g.crime.health.damage(BROOD_EVENT.playerBite * (big ? 2.5 : 1), 'monster', c.x, c.z);
+        const dealt = g.crime.health.damage(BROOD_EVENT.playerBite * (big ? 2.5 : 1), 'monster', c.x, c.z, c.y);
         if (dealt <= 0) g.camRig.addShake(0.08);
         this.stats.playerBites++;
         break;

@@ -108,7 +108,8 @@ export class PlayerBody implements ThreatActor {
     if (this.owed >= 0.6) {
       // (Health divides a blow by the body's mass — a giant shrugs off a mugger's knife; the army's numbers are meant for a giant already.)
       const k3 = this.g.player.k ** 3;
-      const d = H.damage(this.owed * k3, 'military', src.x ?? this.x, src.z ?? this.z);
+      // (The army only ever fires at a rampaging giant up on the street: it is booked as coming from their side.)
+      const d = H.damage(this.owed * k3, 'military', src.x ?? this.x, src.z ?? this.z, this.g.player.pos.y);
       this.stats.health += d;
       this.owed = 0;
     }

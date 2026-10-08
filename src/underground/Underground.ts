@@ -516,6 +516,14 @@ export class Underground {
     return y < this.ground(x, z) - 1.2 && this.floorAt(x, y, z) !== null;
   }
 
+  /**
+   * Are two bodies (feet heights) on the same side of the street: both underground or both up
+   * top? The one rule for everything that must not reach through the pavement (blows, witnesses).
+   */
+  sameSide(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    return this.isUnder(ax, ay + 0.5, az) === this.isUnder(bx, by + 0.5, bz);
+  }
+
   /** Manhole shafts by 32 m grid square (every ~45 m along each trunk), for E and hints. */
   private manholes = new Map<number, ManholeSpot[]>();
   /** Lids per cell (generated once; re-announced whenever the cell's props are rebuilt). */
