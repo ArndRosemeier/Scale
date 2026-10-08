@@ -504,7 +504,7 @@ export class Targeting {
   update(dt: number, input: Input | null): void {
     this.time += dt;
     if (input) {
-      if (input.hit('Tab')) this.tab(input.down('ShiftLeft') || input.down('ShiftRight') ? -1 : 1);
+      if (input.hit('Tab')) this.tab(input.shift || input.down('ShiftLeft') ? -1 : 1);
       if (input.hit('Escape')) this.set(null);
       // Left click on someone / something under the cursor targets it.
       const c = input.clicked & 1 ? input.cursorNdc() : null;
