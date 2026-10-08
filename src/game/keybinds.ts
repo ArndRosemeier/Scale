@@ -5,7 +5,7 @@
  * walking forward). Input translates the key the player actually pressed into that game code:
  *  - a key bound to an action becomes the action's game code;
  *  - a default key that was moved away from its action is swallowed (it no longer does that);
- *  - every other key passes through unchanged (Esc, F3, keys only dialogs use …).
+ *  - every other key passes through unchanged (Esc, F4, keys only dialogs use …).
  * Synthetic key events (the touch controls send them) already carry game codes and are not
  * translated, so the iPad controls work whatever the keyboard bindings are.
  *
@@ -56,6 +56,11 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'rally', group: 'act', label: 'Rally soldiers', info: 'The soldiers near you follow you (reputation 40+ with the army)', defaults: ['KeyG'] },
   { id: 'strike', group: 'act', label: 'Airstrike', info: 'On your target, a giant creature (reputation 70+)', defaults: ['KeyT'] },
   { id: 'sidekick', group: 'act', label: 'Call your sidekick', info: 'Once you have given someone the second shard', defaults: ['KeyK'] },
+  ...[1, 2, 3].map((n): KeyAction => ({
+    id: `costume${n}`, group: 'act', label: `Costume ${n}`,
+    info: n === 1 ? 'Put on this costume. All three start the same; the fitting mirror changes the one you wear' : undefined,
+    defaults: [`F${n}`],
+  })),
   { id: 'blast', group: 'act', label: 'Test blast', info: 'Sandbox only', defaults: ['KeyB'] },
   { id: 'map', group: 'view', label: 'City map', info: 'Click to set a marker the compass points to', defaults: ['KeyM'] },
   { id: 'minimap', group: 'view', label: 'Minimap on / off', defaults: ['KeyN'] },
@@ -68,7 +73,7 @@ export const KEY_ACTIONS: KeyAction[] = [
 export const KEY_ACTION: Record<string, KeyAction> = Object.fromEntries(KEY_ACTIONS.map((a) => [a.id, a]));
 
 /** Keys that cannot be bound (they keep their fixed meaning). */
-const RESERVED = new Set(['Escape', 'F3', 'F5', 'F11', 'F12', 'MetaLeft', 'MetaRight', 'ContextMenu']);
+const RESERVED = new Set(['Escape', 'F4', 'F5', 'F11', 'F12', 'MetaLeft', 'MetaRight', 'ContextMenu']);
 
 const STORE = 'scale.keys.v1';
 

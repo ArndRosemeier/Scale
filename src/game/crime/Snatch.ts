@@ -10,6 +10,7 @@
 import { Crime, type CrimeWorld, play, setState, stand, lookAt } from './Crime';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
+import { dealtBy } from '../../shared/status';
 
 export const SNATCH = { ringMin: 120, ringMax: 280, approachTimeout: 45, thiefHp: 30, thiefStrength: 0.7 };
 
@@ -111,7 +112,7 @@ export class Snatch extends Crime {
     // The victim becomes part of the scene: staggers (an older victim falls), screams, points.
     const va = this.adopt(v, 'victim', { hp: 30, maxHp: 30, strength: 0.4, held: null, mood: 'afraid' });
     const old = v.cit.role === 2;
-    if (old && this.rng.chance(0.55)) this.w.combat.hitActor(v, Math.sin(v.heading) * -300, 60, Math.cos(v.heading) * -300, 'shove', 'npc', th.x, th.z);
+    if (old && this.rng.chance(0.55)) this.w.combat.hitActor(v, Math.sin(v.heading) * -300 * dealtBy(th), 60, Math.cos(v.heading) * -300 * dealtBy(th), 'shove', 'npc', th.x, th.z);
     else { play(va, 'stagger', 0.8); va.staggerT = 0.8; }
     act.held = 'bag';
     act.hostile = true;

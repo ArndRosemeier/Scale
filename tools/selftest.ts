@@ -36,6 +36,8 @@ import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
 import { PlayerHealth } from '../src/game/PlayerHealth';
+import { readCostumes } from '../src/game/costumes';
+import type { CharacterLook } from '../src/avatar/look';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
@@ -2154,6 +2156,16 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }] },
   };
   const back = parseSave(serializeSave(full));
+  {
+    // The three costumes (F1–F3): kept through a save, junk sanitised.
+    const look = { appearance: { gender: 1, seed: 5 }, outfit: { top: 'sweater' } } as unknown as CharacterLook;
+    const c = parseSave(serializeSave({ ...full, costumes: { active: 2, looks: [null, look, look] } })).costumes;
+    const r = readCostumes(c);
+    check(!!r && r.active === 2 && r.looks[0] === null && !!r.looks[1] && r.looks[2]?.outfit.top === 'sweater', 'costumes: the three looks and the worn one survive a save');
+    const bad = readCostumes({ active: 7, looks: ['x', { appearance: 1 }] });
+    check(!!bad && bad.active === 0 && bad.looks.length === 3 && bad.looks.every((l) => l === null), 'costumes: a broken costume set loads as the starting look');
+    check(readCostumes(null) === null && parseSave(serializeSave(full)).costumes === undefined, 'costumes: older saves have none');
+  }
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
@@ -2393,6 +2405,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(losH.clear(0, 5, 0, 30, 5, 0), 'los: a line through a holed facade is clear');
   holes = false;
   check(!losH.clear(0, 5, 0, 30, 5, 0), 'los: an intact facade blocks it');
+  // A landmark's solid parts (here a pillar at x 10..12, z 8..12, up to 8 m) block it too; over it the line is clear.
+  const losL = new LineOfSight({ ...world, solid: (x, y, z) => x > 10 && x < 12 && z > 8 && z < 12 && y < 8 }, () => 0);
+  check(losL.clear(0, 2, 10, 0, 2, 25), 'los: a line past a landmark is clear');
+  check(!losL.clear(0, 2, 10, 25, 2, 10) && losL.last === 'building', `los: a landmark's solid part blocks the line (${losL.last})`);
+  check(losL.clear(0, 12, 10, 25, 12, 10), 'los: a line over a landmark is clear');
   // Cars block at chest height (parked or moving: the same boxes); a line up to a drone passes over.
   cars.push(car('sedan', 0, 10));
   check(!los.clear(0, 1.42, 0, 0, 1.25, 20) && los.last === 'car', `los: a car in between blocks the line (${los.last})`);
@@ -3599,6 +3616,43 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 10 m holds the recovered pool (${ab.energy.toFixed(1)})`);
 }
 
+// Shrink ray: the rank's factor, capped by metres off the biggest dimension (a person halves, a car
+// loses a metre, a 40 m monster 5 m at rank 5); a shrunk attacker deals 10 % less per rank, and
+// nothing takes more damage for being small.
+{
+  const { shrinkFactor, SHRINK_DEALT } = await import('../src/game/abilities/tuning');
+  const { statusFor, dealtBy, clearStatus } = await import('../src/shared/status');
+  check(Math.abs(shrinkFactor(1.8, 1) - 0.5) < 1e-9, `shrink: rank 1 halves a person (${shrinkFactor(1.8, 1).toFixed(3)})`);
+  check(Math.abs(shrinkFactor(4.5, 1) * 4.5 - 3.5) < 1e-9, `shrink: rank 1 takes a 4.5 m car down 1 m (${(shrinkFactor(4.5, 1) * 4.5).toFixed(2)} m)`);
+  check(Math.abs(shrinkFactor(40, 5) * 40 - 35) < 1e-9, `shrink: rank 5 takes a 40 m monster down 5 m (${(shrinkFactor(40, 5) * 40).toFixed(1)} m)`);
+  check(Math.abs(shrinkFactor(1.2, 5) - 0.12) < 1e-9, `shrink: rank 5 takes a drone to 12 % (${shrinkFactor(1.2, 5).toFixed(3)})`);
+  check(SHRINK_DEALT[1] === 0.9 && SHRINK_DEALT[5] === 0.5, 'shrink: deals 90 % at rank 1, 50 % at rank 5');
+  const mob = {};
+  check(dealtBy(mob) === 1 && dealtBy(null) === 1, 'shrink: an unshrunk attacker deals full damage');
+  const st = statusFor(mob);
+  st.shrink = 10; st.dealt = SHRINK_DEALT[3];
+  check(Math.abs(dealtBy(mob) - 0.7) < 1e-9, `shrink: a rank 3 shrunk attacker deals 70 % (${dealtBy(mob)})`);
+  st.shrink = 0;
+  check(dealtBy(mob) === 1, 'shrink: back to full once the ray wears off');
+  clearStatus(mob);
+  const combatSrc = readFileSync('src/game/Combat.ts', 'utf8');
+  check(!/statusOf\(a\)\?\.scale/.test(combatSrc), 'shrink: a shrunk person takes normal damage (Combat does not scale damage taken by size)');
+  // The Strider's rig re-proportions live: a 0.875 body walks on with a 0.875 length.
+  const { CreatureRig } = await import('../src/game/threats/rig/CreatureRig');
+  const { STRIDER_RIG } = await import('../src/game/threats/Strider');
+  const rig = new CreatureRig(STRIDER_RIG, 1);
+  rig.ground = () => 0;
+  rig.place();
+  const L0 = rig.length;
+  rig.scale = 0.875;
+  for (let i = 0; i < 120; i++) rig.update(1 / 60, 0);
+  const sp = rig.spine, n = STRIDER_RIG.spine.length;
+  let len = 0;
+  for (let i = 0; i < n; i++) len += Math.hypot(sp[i * 3 + 3] - sp[i * 3], sp[i * 3 + 4] - sp[i * 3 + 1], sp[i * 3 + 5] - sp[i * 3 + 2]);
+  const want = STRIDER_RIG.spine.reduce((a: number, b: number) => a + b, 0) * 0.875;
+  check(Math.abs(rig.length / L0 - 0.875) < 1e-9 && Math.abs(len - want) < want * 0.08, `shrink: the Strider's body follows a live scale (spine ${len.toFixed(1)} m, want ${want.toFixed(1)} m)`);
+}
+
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
 cmuBvhChecks(check);
 
@@ -3821,6 +3875,21 @@ aliensChecks(check);
   };
   walkA('src');
   check(hand.length === 0, `threats: aggro and armour through threats/aggro.ts (${hand.join(', ') || 'none'})`);
+}
+
+// "Can I see / hit that target" goes through game.sight.clear (Targeting.sees): the Tab list, the click pick and the
+// fire wave used their own world.raycast with other tolerances (no cars, no wall holes) and disagreed with the powers.
+{
+  const hand: string[] = [];
+  const walkS = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkS(full); continue; }
+      if (f.endsWith('.ts') && /\.t < \w+ - [0-9.]+\)? *(return|continue)/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkS('src');
+  check(hand.length === 0, `sight: targets through game.sight / Targeting.sees (${hand.join(', ') || 'none'})`);
 }
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).

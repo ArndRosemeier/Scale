@@ -130,6 +130,7 @@ export class SaveSystem {
       sidekick: g.sidekick ? g.sidekick.save() : null,
       wardens: g.wardens ? g.wardens.save() : null,
       cityLife: g.city ? g.city.save() : null,
+      costumes: g.wardrobe ? g.wardrobe.save() : null,
     };
   }
 
@@ -278,6 +279,7 @@ export class SaveSystem {
     step('the shard and your sidekick', () => g.sidekick?.restore(d.sidekick ?? null));
     step('the Wardens\' regard', () => { if (d.wardens) g.wardens?.restore(d.wardens); });
     step('the neighbourhoods', () => { g.city?.restore(d.cityLife ?? null); g.crime.beat.clear(); });
+    step('your costumes', () => g.wardrobe?.restore(d.costumes ?? null));
     step('the player', () => this.placePlayer(d.player));
     step('the camera', () => { g.camRig.yaw = d.camera.yaw; g.camRig.pitch = d.camera.pitch; g.camRig.zoom = d.camera.zoom; });
     step('health', () => {
