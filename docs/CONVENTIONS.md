@@ -24,6 +24,7 @@ Its open items are consolidated here one PR at a time.
 | Are two bodies on the same side of the street (both underground or both up top)? | `Underground.sameSide(ax, ay, az, bx, by, bz)` with **feet** heights. A blow, blast or footfall point counts as feet. | `Math.abs(dy) < r`, `s.y > a.y - 2`, or a 2D `hypot` alone |
 | Does a blow, blast, stomp or shove reach a person? | 2D/3D range **and** `sameSide`. `Reactions.sameSide` is wired to it. | Range alone. A street stomp must not floor the sewer crew below. |
 | Does a blow reach the player? | `PlayerHealth.damage(…, x, z, y)` with the source's real height (the type requires it). It refuses blows from the other side. | Writing `hp`. Passing the player's own `y` as the source height. |
+| How high is the ground someone stands on? | `world.groundHeight` (roofs, decks, landmarks too) or the player's `collision.groundAt`; street level alone: `terrain.height + world.surfaceOffset`. It follows what is drawn: road 0, kerb `CURB_H`, open countryside `-TERRAIN_DROP` (the terrain mesh sits lower), country roads and yards 0. | Bare `terrain.height` for feet: out of town that floats 0.35 m above the grass |
 | Can the camera see a person (markers, tags)? | `makeSight` (`game/sightline.ts`) via `render/screen.ts` `setSight` | A raycast of your own |
 | Where on screen is a world point? | `render/screen.ts` `toScreen` / `screenPoint` | `.project(cam…)` (**guarded**: the selftest fails on it anywhere else) |
 | Can someone shoot or see from A to B? | `game.sight.clear` (`game/combat/sight.ts`: caves, tunnels, buildings, cars, facade holes) | `world.raycast` with your own tolerances |
@@ -35,7 +36,9 @@ Its open items are consolidated here one PR at a time.
 | The player knocked someone down | `reactions.knockDown(a, …, 'player')`. It books the `body` entry **with the victim** through `CrimeSystem`. | An extra `consequences.record(…, 'person', 'knockdown', x, z)` without a ref. Justice can't tell a mugger from a bystander, and the threat clock counts it twice. |
 | The player's blow hits a car (punch, shockwave, dash) | `Game.hitCar`: a wreck or a dent, booked on the ledger with the car | `wreckIt` + `makeWreck` or a dent with no ledger entry (wrecking a police car with a punch used to cost nothing) |
 | Add damage to a car | `dentCar(v, amount, cap?)` (`sim/Traffic.ts`; never lowers it) | `v.damage = Math.min(…)` by hand (**guarded**) |
-| Karma | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
+| Reward a good deed (karma, reputation, a stat, cheers) | `g.crime.reward({ karma, why, rep, news, stopped?, count?, atone? })`. `stopped: true` for anything that ends a crime, den, monster or event: counted as stopped, police cool off, people cheer. | `rep.add` + `rep.count` + `cheer()` by hand (**guarded**; the old copies each forgot a different part) |
+| Karma only (a weak-spot hit, a power core) | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
+| Who did it (cause) | One vocabulary, `Cause` in `game/Stimuli.ts` (`HarmCause` is the same type; `DamageCause` adds `'fire'`). Cross into a knock-down's `DownCause` with `downCauseOf(cause)` and from a broken building to the ledger with `harmCauseOf(cause)` (`shared/cause.ts`). | An inline `cause === 'threat' ? 'threat' : … 'player'` (**guarded**: police and army stomps used to land on the hero) |
 
 ## Time
 

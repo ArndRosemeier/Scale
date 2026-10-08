@@ -16,6 +16,35 @@ import { TERRAIN_DROP } from './terrainMesh';
 /** Per building box for collision: cx, cz, hu, hv, ux, uz, y0, y1. */
 export const RURAL_OBST_STRIDE = 8;
 
+/**
+ * Outlines of the draped road and paved surfaces of a tile, for the ground height (the natural
+ * ground around them is drawn TERRAIN_DROP lower): per outline n, min x, min z, max x, max z,
+ * then n x/z pairs.
+ */
+export function ruralSurfaceAt(S: Float32Array, x: number, z: number): boolean {
+  for (let o = 0; o < S.length; o += 5 + S[o] * 2) {
+    if (x < S[o + 1] || z < S[o + 2] || x > S[o + 3] || z > S[o + 4]) continue;
+    const n = S[o], b = o + 5;
+    let inside = false;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const xi = S[b + i * 2], zi = S[b + i * 2 + 1], xj = S[b + j * 2], zj = S[b + j * 2 + 1];
+      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    }
+    if (inside) return true;
+  }
+  return false;
+}
+
+function pushOutline(out: number[], poly: ArrayLike<number>): void {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < poly.length; i += 2) {
+    x0 = Math.min(x0, poly[i]); x1 = Math.max(x1, poly[i]);
+    z0 = Math.min(z0, poly[i + 1]); z1 = Math.max(z1, poly[i + 1]);
+  }
+  out.push(poly.length >> 1, x0, z0, x1, z1);
+  for (let i = 0; i < poly.length; i++) out.push(poly[i]);
+}
+
 /** Height of the road surfaces above the natural ground (the terrain mesh sits TERRAIN_DROP lower). */
 const DY = [0.06, 0.05, 0.04];
 const DASH_ON = 3, DASH_OFF = 6;
@@ -25,6 +54,8 @@ export interface RuralTile {
   facade: MeshBuilder | null;
   facadeLod: MeshBuilder | null;
   obstacles: Float32Array;
+  /** Road and paved outlines (see ruralSurfaceAt). */
+  surfaces: Float32Array;
 }
 
 export function buildRuralTile(plan: RuralPlan, terrain: Terrain, x0: number, z0: number, size: number): RuralTile {
@@ -32,6 +63,7 @@ export function buildRuralTile(plan: RuralPlan, terrain: Terrain, x0: number, z0
   const in_ = (x: number, z: number) => x >= x0 && x < x0 + size && z >= z0 && z < z0 + size;
   const gb = new MeshBuilder(groundSpecs());
   gb.setOrigin(cx, 0, cz);
+  const surf: number[] = [];
   const villages = plan.settlements.filter((s) => s.kind !== SettleKind.Farm && Math.abs(s.x - cx) < size / 2 + s.r + 400 && Math.abs(s.z - cz) < size / 2 + s.r + 400);
   const inVillage = (x: number, z: number) => villages.some((v) => Math.hypot(x - v.x, z - v.z) < v.r + 25);
   for (const R of plan.roads) {
@@ -63,6 +95,8 @@ export function buildRuralTile(plan: RuralPlan, terrain: Terrain, x0: number, z0
         const t0 = s < R.trim ? (R.trim - s) / L : 0;
         const px = ax + (bx - ax) * t0, pz = az + (bz - az) * t0;
         ribbon(gb, terrain, px, pz, bx, bz, nx[i], nz[i], nx[i + 1], nz[i + 1], R.hw, dy, layer);
+        const h = R.hw;
+        pushOutline(surf, [px - nx[i] * h, pz - nz[i] * h, bx - nx[i + 1] * h, bz - nz[i + 1] * h, bx + nx[i + 1] * h, bz + nz[i + 1] * h, px + nx[i] * h, pz + nz[i] * h]);
         if (R.kind === RoadKind.Main && !inVillage(mx, mz)) {
           // Dashed centre line.
           for (let d = Math.ceil(Math.max(s, R.trim + 20) / (DASH_ON + DASH_OFF)) * (DASH_ON + DASH_OFF); d < s1; d += DASH_ON + DASH_OFF) {
@@ -88,6 +122,7 @@ export function buildRuralTile(plan: RuralPlan, terrain: Terrain, x0: number, z0
       const dy = st.kind === SettleKind.Farm ? 0.045 : 0.075;
       drapeShape(gb, { outer: p.poly, holes: [] }, terrain, dy, p.layer, undefined, 6);
       skirt(gb, terrain, p.poly, dy, p.layer);
+      pushOutline(surf, p.poly);
     }
     for (const b of L.buildings) {
       const info = buildBuildingShell(fb, b, e0, terrain, 0, 'shell');
@@ -102,6 +137,7 @@ export function buildRuralTile(plan: RuralPlan, terrain: Terrain, x0: number, z0
     facade: fb.empty ? null : fb,
     facadeLod: fl.empty ? null : fl,
     obstacles: Float32Array.from(obst),
+    surfaces: Float32Array.from(surf),
   };
 }
 

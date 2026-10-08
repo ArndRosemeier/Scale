@@ -9,6 +9,7 @@ import type { BuildingDesc } from '../plan/building';
 import type { Shape } from '../core/clip';
 import { pointInPoly, polyBounds } from '../core/geom2';
 import { CURB_H } from '../build/ground';
+import { TERRAIN_DROP } from '../build/terrainMesh';
 import type { BridgeProfile } from '../build/bridges';
 import { BINFO_STRIDE } from '../stream/protocol';
 import type { LandmarkSolids } from './LandmarkSolids';
@@ -46,6 +47,8 @@ export class WorldIndex {
    * rooms or caves (null: the point is not underground). There the street overhead is not the ground.
    */
   underRay: ((ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number) => number | null) | null = null;
+  /** Countryside roads and paved yards (draped at about the natural height): set by the game. */
+  rural: { onSurface(x: number, z: number): boolean } | null = null;
 
   constructor(readonly terrain: Terrain, private cellPolys: (id: number) => number[]) {}
 
@@ -128,7 +131,11 @@ export class WorldIndex {
     return null;
   }
 
-  /** Urban surface offset above natural terrain: 0 on roads, curb height elsewhere in the city. */
+  /**
+   * Drawn ground surface relative to the natural terrain height: 0 on roads, curb height
+   * elsewhere in the city; outside the loaded city cells the bare terrain mesh, drawn
+   * TERRAIN_DROP lower (0 on the countryside roads and paved yards draped on it).
+   */
   surfaceOffset(x: number, z: number): number {
     for (const s of this.cellShapes.values()) {
       const b = s.bounds;
@@ -149,7 +156,7 @@ export class WorldIndex {
       }
       return CURB_H;
     }
-    return 0;
+    return this.rural?.onSurface(x, z) ? 0 : -TERRAIN_DROP;
   }
 
   /**

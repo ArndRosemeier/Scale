@@ -24,7 +24,9 @@ import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
 import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
-import { buildRuralTile } from '../src/build/rural';
+import { buildRuralTile, ruralSurfaceAt } from '../src/build/rural';
+import { WorldIndex } from '../src/world/WorldIndex';
+import { TERRAIN_DROP } from '../src/build/terrainMesh';
 import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
@@ -532,6 +534,22 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   }
   const tile = buildRuralTile(plan, T, Math.floor(town.x / 1024) * 1024, Math.floor(town.z / 1024) * 1024, 1024);
   check(!!tile.ground && !!tile.facade && tile.obstacles.length > 0, `rural seed ${seed}: the town's tile has roads, buildings and collision boxes`);
+  // Ground height out here follows what is drawn: the roads and the square at the natural height,
+  // the open land beside them on the terrain mesh, TERRAIN_DROP lower.
+  {
+    const W = new WorldIndex(T, () => []);
+    W.rural = { onSurface: (x, z) => ruralSurfaceAt(tile.surfaces, x, z) };
+    const tx = Math.floor(town.x / 1024) * 1024, tz = Math.floor(town.z / 1024) * 1024;
+    let road = 0, roadOk = 0, open = 0, openOk = 0;
+    for (let i = 0; i < 4000 && (road < 50 || open < 50); i++) {
+      const x = tx + 20 + ((i * 7919) % 984), z = tz + 20 + ((i * 104729) % 984);
+      const e = plan.roadEdge(x, z);
+      if (e < -0.5) { road++; if (W.groundHeight(x, z) === T.height(x, z)) roadOk++; }
+      else if (e > 3 && !plan.onPaved(x, z, 3) && !plan.onBuilding(x, z, 3)) { open++; if (Math.abs(W.groundHeight(x, z) - (T.height(x, z) - TERRAIN_DROP)) < 1e-9) openOk++; }
+    }
+    check(road >= 10 && roadOk === road, `rural seed ${seed}: walkers stand on the country roads (${roadOk}/${road})`);
+    check(open >= 10 && openOk === open, `rural seed ${seed}: walkers stand on the drawn open land, not ${TERRAIN_DROP} m above it (${openOk}/${open})`);
+  }
   console.log(`seed ${seed} rural: ${villages.length} villages, ${plan.settlements.length - villages.length} farms, ${plan.roads.length} roads, ${nb} buildings, ${T.lakes.length} lakes in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
@@ -3778,6 +3796,38 @@ aliensChecks(check);
   check(hand.length === 0, `underground: bodies use feetUnder (${hand.join(', ') || 'none'})`);
 }
 
+// Causes cross vocabularies (Stimuli Cause, DownCause, DamageCause) only in shared/cause.ts: inline
+// conversions used to book police and army stomps as the player's knock-downs.
+{
+  const hand: string[] = [];
+  const walkC = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkC(full); continue; }
+      if (f.endsWith('.ts') && !full.endsWith('shared/cause.ts') && /cause\s*===\s*'(world|threat|fire)'\s*\?\s*'(other|threat|player)'/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkC('src');
+  check(hand.length === 0, `causes: conversions go through shared/cause.ts (${hand.join(', ') || 'none'})`);
+}
+
+// Rewards (reputation, stats, cheers) go through CrimeSystem.reward, so every "stopped" deed counts,
+// cools the police and gets its cheer the same way.
+{
+  const hand: string[] = [];
+  const walkR = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkR(full); continue; }
+      if (!f.endsWith('.ts') || full.endsWith('crime/CrimeSystem.ts')) continue;
+      const src = readFileSync(full, 'utf8').replace(/rep\.add\([^;]*'dev'\)/g, '');
+      if (/\.rep\.count\(|crime\??\.cheer\(\)|crime\??\.rep\.add\(/.test(src)) hand.push(full);
+    }
+  };
+  walkR('src');
+  check(hand.length === 0, `rewards: through crime.reward (${hand.join(', ') || 'none'})`);
+}
+
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
 {
@@ -3814,6 +3864,15 @@ aliensChecks(check);
   const CROSS = /(\w+)\[1\] \* (\w+)\[2\] - \1\[2\] \* \2\[1\]/;
   const crosses = (files as string[]).filter((f) => !f.endsWith('core/math.ts') && CROSS.test(readFileSync(f, 'utf8')));
   check(crosses.length === 0, `helpers: cross products use v3cross from core/math (${crosses.join(', ') || 'none'})`);
+}
+
+// A hero of about human size bumping into people (super speed, a super jump landing) only makes
+// them stumble: 'brush', no reputation; a giant's landing still counts. One rule: shared/cause.ts.
+{
+  const { stompDownCause, BRUSH_MAX_H } = await import('../src/shared/cause');
+  check(stompDownCause('player', 1.8) === 'brush' && stompDownCause(undefined, 1.8) === 'brush', 'brush: a human-size hero landing beside someone is a brush');
+  check(stompDownCause('player', BRUSH_MAX_H + 1) === 'player', 'brush: a giant hero landing on someone is the hero\'s');
+  check(stompDownCause('threat', 1.8) === 'threat' && stompDownCause('world', 1.8) === 'other', 'brush: other stompers keep their cause');
 }
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }

@@ -2,9 +2,25 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.151 — 2026-10-08
+
+- **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, the 99 m long Strider loses 5 m of length (about 5 %). Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.
+
+## 0.150 — 2026-10-08
+
+- **Fix: landing a super jump next to someone no longer costs reputation.** At about human size, coming down beside a pedestrian now only makes them stumble and call a stern word after you, just like brushing past them at super speed: no harm, no reputation, no wanted level. A giant hero's landing still counts as before.
+
+## 0.149 — 2026-10-08
+
+- **Every good deed is rewarded the same way.** Each kind of rescue and win used to hand out its own mix of karma, reputation, cheers and stats, and each one forgot something different. Now they all go through one reward step. Anything that ends a crime, a den, a monster or a whole event counts as "stopped" in your stats, makes people nearby cheer, and calms the police a little. This now also applies to bringing down the Strider, stopping the awakened tree, beating back the brood or the rogue robots, catching the runaway saucer, calling off the last-resort strike and bringing down the Maw. Rescues count as good deeds, and surface slime brutes earn a little reputation like brood beasts. A self-test keeps rewards in one place.
+
+## 0.148 — 2026-10-08
+
+- **No more floating outside the city.** Out in the countryside the hero (and everyone else standing on the ground) stood 35 cm above the grass: the terrain is drawn a little lower than its height so it never shows through the city's streets, but walking used the undropped height. The ground height now follows what is drawn: open land at the drawn terrain, country roads, village squares and farmyards at their surface. Inside the city nothing changes.
+
 ## 0.147 — 2026-10-08
 
-- **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, a 40 m Strider ends up 35 m. Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.
+- **Fix: police and army stomps no longer count against the hero.** When a soldier's or officer's footstep knocked someone down, the game booked it as the hero's doing, which could cost reputation and raise the wanted level while the hero only stood by. A giant police or army step also no longer hurts the slime brood or a monster as if the hero had stamped. When the police shoot a rampaging giant hero, the hit now counts as theirs instead of the army's. Behind the scenes, "who did it" now uses one vocabulary everywhere, and a self-test keeps it that way.
 
 ## 0.146 — 2026-10-08
 

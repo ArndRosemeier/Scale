@@ -112,8 +112,7 @@ export class HijackedFleet implements RogueOwner {
       m.out = true;
       if (m.lastBy !== 'player' || this.ctl.time - m.lastT > 6) continue;
       this.byPlayer++;
-      this.g.progress.addKarma(HIJACKED.karma, m.kind === 'drone' ? 'brought down a hijacked drone' : 'stopped a hijacked robot');
-      this.g.crime.rep.add(HIJACKED.rep, 'hijacked robot');
+      this.g.crime.reward({ karma: HIJACKED.karma, why: m.kind === 'drone' ? 'brought down a hijacked drone' : 'stopped a hijacked robot', rep: HIJACKED.rep, news: 'hijacked robot' });
     }
     if (left === 0 && this.t > 4) this.finish('stopped');
   }

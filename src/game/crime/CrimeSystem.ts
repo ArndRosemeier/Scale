@@ -295,7 +295,7 @@ export class CrimeSystem {
       inBuilding: (x, z) => !!g.world.buildingAt(x, z),
       visible: (x, y, z) => this.visible(x, y, z),
       sound: (id, x, y, z, gain, pitch) => this.sound(id, x, y, z, gain, pitch),
-      reward: (k, r, reason) => { g.progress.addKarma(k, reason); this.rep.add(r, reason); this.rep.count('deeds'); this.justice.atone(0.8); },
+      reward: (k, r, reason) => this.reward({ karma: k, rep: r, why: reason, count: 'deeds', atone: 0.8 }),
       markers: (m) => g.map.setMarkers('smalldeeds', m),
       busy: () => this.crimes.some((c) => c.active && c.committed),
     });
@@ -1009,9 +1009,7 @@ export class CrimeSystem {
     this.factionStats.busts++;
     g.player.action = { id: 'kick', t0: g.player.animClock, dur: 0.7 };
     this.sound('punch_impact', d.site.stash.x, d.site.stash.y + 0.5, d.site.stash.z, 1, 0.6);
-    g.progress.addKarma(12, f ? `busted a sewer den of ${inSentence(f)}` : 'busted a sewer den');
-    this.rep.add(3, 'den busted');
-    this.rep.count('stopped');
+    this.reward({ karma: 12, why: f ? `busted a sewer den of ${inSentence(f)}` : 'busted a sewer den', rep: 3, news: 'den busted', stopped: true });
     if (f) {
       const changed = shift(this.factions, this.cellAt(d.site.cx, d.site.cz), f.id, SHIFT.bust * DENS.turf, 0.6);
       this.factionStats.lost += changed.filter((x) => x.from === f.id).length;
@@ -1043,10 +1041,7 @@ export class CrimeSystem {
     this.factionStats.busts++;
     g.player.action = { id: 'kick', t0: g.player.animClock, dur: 0.7 };
     this.sound('punch_impact', h.door!.x, g.player.pos.y + 1, h.door!.z, 1, 0.6);
-    g.progress.addKarma(20, `busted the stash of ${inSentence(f)}`);
-    this.rep.add(5, 'hideout busted');
-    this.rep.count('stopped');
-    this.cheer();
+    this.reward({ karma: 20, why: `busted the stash of ${inSentence(f)}`, rep: 5, news: 'hideout busted', stopped: true });
     const changed = shift(this.factions, h.cell, f.id, SHIFT.bust, 0.6);
     // Its stash block is lost outright (no longer held: the turf map shows it); its home ground comes back with drift.
     const left = this.factions.influence[f.id][h.cell] - (HOLD - SHIFT.bustBelow);
@@ -1647,15 +1642,28 @@ export class CrimeSystem {
     const by = this.factionOf(c);
     const rival = c instanceof TurfBrawl && c.rival >= 0 ? this.factions.factions[c.rival] : null;
     const who = by ? ` by ${inSentence(by)}${rival ? ` and ${inSentence(rival)}` : ''}` : '';
-    g.progress.addKarma(k, `stopped ${KINDS[c.kind].stopped}${who}${clean ? ' — nobody else hurt' : ''}`);
-    this.rep.add(KINDS[c.kind].rep, 'crime stopped');
-    this.rep.count('stopped');
-    this.justice.atone(1.5);
-    this.cheer();
+    this.reward({ karma: k, why: `stopped ${KINDS[c.kind].stopped}${who}${clean ? ' — nobody else hurt' : ''}`, rep: KINDS[c.kind].rep, news: 'crime stopped', stopped: true });
     this.onStopped?.(c);
     if (by) { this.factionStats.stopped++; this.turf(c, by, c instanceof BossOperation ? -SHIFT.bossOp : SHIFT.stopped); this.heat(by.id, NOTORIETY.stopped * (c instanceof BossOperation ? 2 : 1)); }
     // Breaking up a brawl: both groups lose face on that street.
     if (rival) this.turf(c, rival, SHIFT.stopped * 0.7);
+  }
+
+  /**
+   * Every reward for a good deed goes through here (docs/CONVENTIONS.md "Rewards"). `why` is the karma line;
+   * `news` the short reputation reason others listen to (the press waits for 'crime stopped'), default `why`.
+   * `stopped`: a crime, a den, a monster or a whole event is over: it counts as stopped, the police cool off
+   * (`atone`, default 1.5) and people near the hero cheer. Otherwise only karma, reputation and `count`.
+   */
+  reward(d: { karma?: number; rep?: number; why: string; news?: string; stopped?: boolean; count?: keyof Reputation['stats']; atone?: number }): void {
+    if (d.karma) this.g.progress.addKarma(d.karma, d.why);
+    if (d.rep) this.rep.add(d.rep, d.news ?? d.why);
+    if (d.count) this.rep.count(d.count);
+    if (d.stopped) {
+      this.rep.count('stopped');
+      this.justice.atone(d.atone ?? 1.5);
+      this.cheer();
+    } else if (d.atone) this.justice.atone(d.atone);
   }
 
   /** People nearby cheer (wave) when the player stopped a crime; a cheer goes up. */
@@ -1928,9 +1936,7 @@ export class CrimeSystem {
           L.crime.playerInvolved = true;
           P.action = { id: 'pickup', t0: P.animClock, dur: 0.8 };
           const k = officer ? Math.round(CRIME_KARMA.returned / 2) : CRIME_KARMA.returned;
-          g.progress.addKarma(k, officer ? 'handed in stolen property' : `returned the stolen ${l.kind === 'cash' || l.kind === 'envelope' ? 'money' : l.kind}`);
-          this.rep.add(officer ? 1 : 2, 'returned');
-          this.rep.count('returned');
+          this.reward({ karma: k, why: officer ? 'handed in stolen property' : `returned the stolen ${l.kind === 'cash' || l.kind === 'envelope' ? 'money' : l.kind}`, rep: officer ? 1 : 2, news: 'returned', count: 'returned' });
           if (who) this.onReturned?.(who, L.crime);
           if (who?.actor) { who.actor.held = l.kind === 'bag' ? 'bag' : null; who.actor.mood = 'happy'; }
           else if (who) { who.helped = true; who.state = PState.Idle; who.stateT = 0; }
