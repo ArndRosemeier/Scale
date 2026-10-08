@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.126 — 2026-10-08
+
+- **The Strider no longer stands frozen in town for minutes.** When it got held up on the way in (the army fighting it hard), it started its rampage wherever it was, and with no high-rise near enough it simply stood still for over four minutes. If it got stuck again on the way home it finally sank into the ground on the spot, which looked like it vanished. Now it always finds something to do: it looks further for a tower, takes lower blocks when there are no high-rises around, goes after the army or you when there are no buildings to attack, and otherwise walks on into downtown and roams there. A tower it has already leaned on, or can't bring down after a while, no longer keeps it waiting either: it moves on to the next one.
+- **Long console output is copied to the clipboard.** When the admin console cuts a result off (like the Strider's status), the full text is now on your clipboard, ready to paste into a bug report. The Strider's status also shows its rampage state near the start.
+
 ## 0.125 — 2026-10-08
 
 - **The help dialog (H) is new, with three tabs.** **Keys** shows the controls in tidy groups (moving, powers, doing things, screens) instead of one long list, and every key can be changed: click a key, press the new one. Each action can have two keys; a key you take from another action is freed there and the dialog tells you. Your keys are kept in this browser, and **Reset to defaults** brings the old ones back. The hotbar, the powers screen and the hints show your keys. The iPad's on-screen controls are not affected. **Powers** lists every power with its exact numbers for each rank (effect, energy, karma price), taken straight from the game's own values, plus the energy, flight, giant-body and karma rules; your current rank is highlighted. **Manual** is the player's manual, readable right in the game (with a link to the PDF).
