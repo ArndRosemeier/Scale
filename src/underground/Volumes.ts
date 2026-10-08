@@ -112,3 +112,28 @@ export function boxAt(b: Box, x: number, y: number, z: number, margin = 0): { u:
   for (const p of b.platforms) if (v >= p[0] && v <= p[1] && (p.length === 3 || (u >= p[3] && u <= p[4]))) floor = b.y0 + p[2];
   return { u, v, floor };
 }
+
+/** Turns tried (rad) when a move runs into a wall, nearest first. */
+const SLIDE_TURNS = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4];
+
+/**
+ * A move from (ox, oz) to (nx, nz) kept inside the walkable space (inside(x, z)): straight on if
+ * free, else turned toward the wall's tangent (shortened by the turn's cosine, a projection onto
+ * the wall), else along one map axis, else none. Sliding only along the map axes jammed a body
+ * against any wall at an angle to them: walking into a tunnel turn, both axis moves led into
+ * the wall and the hero stood stuck at the corner until facing exactly along the next leg.
+ */
+export function slideMove(inside: (x: number, z: number) => boolean, ox: number, oz: number, nx: number, nz: number): [number, number, boolean] {
+  if (inside(nx, nz)) return [nx, nz, false];
+  const dx = nx - ox, dz = nz - oz;
+  for (const a of SLIDE_TURNS) {
+    const c = Math.cos(a), s = Math.sin(a);
+    for (const sg of [1, -1]) {
+      const tx = ox + (dx * c - dz * s * sg) * c, tz = oz + (dx * s * sg + dz * c) * c;
+      if (inside(tx, tz)) return [tx, tz, true];
+    }
+  }
+  if (inside(nx, oz)) return [nx, oz, true];
+  if (inside(ox, nz)) return [ox, nz, true];
+  return [ox, oz, true];
+}

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.161 — 2026-10-08
+
+- **Fix: the hero no longer gets stuck at turns in tunnels.** Walking from a platform into the underpass, the hero could stand stuck at the right-angle turn just inside its mouth until facing exactly down the next stretch. Underground, a body pressed against a wall only slid along the map's north-south or east-west axis; against a wall at an angle to them (most tunnels) both ways led into the wall and the hero stopped dead. Bodies now slide along walls at any angle, in the metro, its stairs and underpasses, the sewers and the caves. The metro audit and the self-test now walk every stair and underpass both ways like a player who cuts the corners: before the fix 38 of 50 passages in one city stopped such a walker, now none.
+
 ## 0.160 — 2026-10-08
 
 - **Far fewer fall cries.** Someone tripping in the street now happens every three to six minutes instead of every one to two, the first one not before a minute and a half, and only within about 35 m of you (it was up to 60 m), so you can see who fell.
