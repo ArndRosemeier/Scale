@@ -92,6 +92,7 @@ import { Sight } from './combat/sight';
 import { PowerSynth } from '../audio/PowerSynth';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
+import { SidekickPanel } from '../ui/SidekickPanel';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { CityNews } from './news/CityNews';
 import { crimeIndex } from './crime/CrimeIndex';
@@ -196,6 +197,7 @@ export class Game {
   /** Line of sight for everybody who shoots (combat/sight). */
   readonly sight = new Sight(this);
   targetHud!: TargetHud;
+  matePanel!: SidekickPanel;
   synth!: PowerSynth;
   /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
   crime!: CrimeSystem;
@@ -838,6 +840,7 @@ export class Game {
       this.hud.update(dt);
       this.powerHud.update();
       this.targetHud.update();
+      this.matePanel?.update();
       this.touch.update();
       this.T('map', () => { this.map.update(dt); this.compass.update(); this.barks.update(dt); });
       this.input.endFrame();
@@ -1128,6 +1131,7 @@ export class Game {
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);
     this.sidekick = new Sidekick(this);
+    this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
     this.wardens = new Wardens(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)

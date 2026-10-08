@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.127 — 2026-10-08
+
+- **Click your sidekick to see how they are doing.** Clicking (or tapping) your sidekick opens a small see-through panel above the target frame. It shows their name, their mood, what they are doing right now (around you, fighting, keeping back, flying, in hospital…), their health and trust, the karma they have put by and what they are saving for, and every power they have learned with its level. The power the shard gave them is marked. The panel closes with the target (Esc or another click).
+
 ## 0.126 — 2026-10-08
 
 - **The Strider no longer stands frozen in town for minutes.** When it got held up on the way in (the army fighting it hard), it started its rampage wherever it was, and with no high-rise near enough it simply stood still for over four minutes. If it got stuck again on the way home it finally sank into the ground on the spot, which looked like it vanished. Now it always finds something to do: it looks further for a tower, takes lower blocks when there are no high-rises around, goes after the army or you when there are no buildings to attack, and otherwise walks on into downtown and roams there. A tower it has already leaned on, or can't bring down after a while, no longer keeps it waiting either: it moves on to the next one.
