@@ -22,6 +22,7 @@ import { outfitVisuals, plainAppearance, type CharacterLook } from '../avatar/lo
 import { stepEnergy } from '../game/GiantBody';
 import { SpeedNav } from './speedNav';
 import { planHop } from './speedHop';
+import { LEAP_RAMP } from '../game/abilities/tuning';
 
 export const BASE_HEIGHT = 1.8;
 /** Super speed carries the runner over water above this speed (m/s at 1.8 m, × √k). */
@@ -314,9 +315,10 @@ export class Player {
     let speed = (fast ? this.speedTop * sk : (slow ? 0.8 : run ? 5.2 : 1.45) * sk) * (this.chillT > 0 ? this.chillSpeed : 1);
     const moving = wish.lengthSq() > 0;
     // A super jump is steered all the way through the air, at a good clip: the higher the leap,
-    // the faster it carries (up to leapSpeed for the full height), so leaping covers ground.
+    // the faster it carries (up to leapSpeed for the full height), building up as it flies
+    // (the acceleration below), so leaping covers ground.
     const leaping = !this.grounded && this.leap > 0;
-    const carry = Math.max(12, this.leapSpeed * Math.sqrt(Math.max(0, this.leap - 0.05) / 0.95)) * sk;
+    const carry = Math.max(12, this.leapSpeed * Math.max(0, this.leap - 0.05) / 0.95) * sk;
     if (leaping) speed = Math.max(carry, fast ? Math.min(speed, Math.hypot(this.vel.x, this.vel.z)) : speed);
     if (moving) {
       wish.normalize();
@@ -341,7 +343,7 @@ export class Player {
     // on ice there is hardly any grip at all.
     let accel = this.grounded ? 9 * (run ? 1.2 : 1) * Math.min(1, sk) + 3 : 2;
     if (fast && (this.grounded || this.onWater)) accel = Math.max(accel, (moving ? 0.65 : 1.2) * this.speedTop);
-    else if (leaping && moving) accel = Math.max(accel, 14 * Math.min(1, sk) + 4, carry / sk / 0.5);
+    else if (leaping && moving) accel = Math.max(accel, 14 * Math.min(1, sk) + 4, this.leapSpeed / LEAP_RAMP);
     if (this.onIce && this.grounded && !this.onWater) accel = fast ? accel * 0.35 : 1.1;
     const dvx = wish.x - this.vel.x, dvz = wish.z - this.vel.z;
     const dv = Math.hypot(dvx, dvz);

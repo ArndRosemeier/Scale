@@ -8,6 +8,7 @@
  * cities, its own state), so sections can run in any order and in any process.
  */
 import { section, check, runSections } from './testHarness';
+import { buildSkyline, BOX_FLOATS, ORBIT_R } from '../src/ui/backdrop/layout';
 import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
@@ -3607,8 +3608,9 @@ section('super speed hops', async () => {
 });
 
 // Super jump as travel (tools/travelsim.ts): leaping on from landing to landing with W held covers
-// ground at least as fast as a boosted flight at every rank, even pressing Space a little late on
-// each landing; without W it is still a straight climb to the rank's height.
+// ground nearly as fast as a boosted flight at every rank (the forward speed builds up through each
+// leap, so it ends up a little slower: 75 % to 110 % of flight, pressing Space a little late on each
+// landing); without W it is still a straight climb to the rank's height.
 section('super jump travel', async () => {
   const { simTravel } = await import('./travelsim');
   const { MAX_RANK, JUMP_HEIGHT } = await import('../src/game/abilities/tuning');
@@ -3617,9 +3619,9 @@ section('super jump travel', async () => {
   for (let r = 1; r <= MAX_RANK; r++) {
     const f = simTravel('flight', r, 30), j = simTravel('jump', r, 30, 0.3);
     rows.push(`${r}: ${j.avg.toFixed(0)} vs ${f.avg.toFixed(0)}`);
-    if (!(j.avg >= f.avg)) ok = false;
+    if (!(j.avg >= 0.75 * f.avg && j.avg <= 1.1 * f.avg)) ok = false;
   }
-  check(ok, `super jump: travels at least as fast as flight per rank (m/s jump vs flight ${rows.join(', ')})`);
+  check(ok, `super jump: travels nearly as fast as flight per rank (m/s jump vs flight ${rows.join(', ')})`);
   const up = simTravel('jump', 5, 4, 0, false);
   check(up.avg < 0.01 && Math.abs(up.peak - JUMP_HEIGHT[5]) < 1, `super jump: straight up without W, to the full height (drift ${(up.avg * 4).toFixed(2)} m, peak ${up.peak.toFixed(1)} m)`);
 });
@@ -3733,6 +3735,37 @@ section('player\'s blows and the street', async () => {
     result.push(`${kind}: street ${agents[0].state === P.PState.Down ? 'down' : 'up'}, sewer ${agents[1].state === P.PState.Down ? 'down' : 'up'}`);
     check(agents[0].state === P.PState.Down && agents[1].state !== P.PState.Down, `pavement: a ${kind} on the street floors the street, not the sewer below (${result.at(-1)})`);
   }
+});
+
+// Travelling by leaps: the hero (human size) landing hard among people every second and a half
+// startles them, it does not make the street scream at each touchdown; a giant's landing still does.
+section('landings and screams', async () => {
+  const { Reactions } = await import('../src/sim/Reactions');
+  const P = await import('../src/sim/Pedestrians');
+  const { Stimuli, noticeRadius } = await import('../src/game/Stimuli');
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.2 }))), 42);
+  const run = (size: number): number => {
+    const agents = Array.from({ length: 300 }, (_, k) => ({ id: k + 1, cit: { ...pop.synthetic(1500 + k) }, x: (k % 30) * 10, z: Math.floor(k / 30) * 6 - 30, y: 0, heading: 0, speed: 1.3, pref: 1.3, state: P.PState.Walk, route: Float32Array.from([0, 0, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: k, vy: 0, vx: 0, vz: 0, alive: true, slot: -1 } as unknown as import('../src/sim/Pedestrians').PedAgent));
+    const gp = { agents, neighbours: (x: number, z: number, r: number, out: typeof agents) => { out.length = 0; for (const a of agents) if (Math.abs(a.x - x) <= r && Math.abs(a.z - z) <= r) out.push(a); return out; } };
+    const st = new Stimuli();
+    const re = new Reactions(gp as never, st);
+    let screams = 0;
+    re.onScream = () => { screams++; };
+    // A leap's touchdown at ~25 m/s down (an 80 kg hero), 20 m further along every 1.5 s.
+    const E = 0.5 * 80 * 25 * 25;
+    for (let i = 0; i < 30 * 20; i++) {
+      const dt = 1 / 30;
+      if (i % 45 === 0) st.emit('stomp', (i / 45) * 20, 0.1, 0, Math.log10(E), noticeRadius(E), { cause: 'player', size });
+      st.update(dt);
+      re.update(dt, { height: size, pos: { x: (i / 45) * 20, y: 0, z: 0 }, flying: false, vel: { length: () => 0 }, k: 1 } as never);
+      for (const a of agents) a.stateT += dt;
+    }
+    return screams;
+  };
+  const hero = run(1.8), giant = run(30);
+  check(hero === 0, `landings: the hero leaping through a crowd for 20 s raises no screams (${hero})`);
+  check(giant > 0, `landings: a giant coming down among people still does (${giant})`);
+  console.log(`landings: screams in 20 s of leaps through a crowd: hero ${hero}, giant ${giant}`);
 });
 
 // One test for "can someone stand here" and one for open water (world/WorldIndex standable / wet):
@@ -3987,6 +4020,27 @@ section('brush vs stomp', async () => {
   check(stompDownCause('player', 1.8) === 'brush' && stompDownCause(undefined, 1.8) === 'brush', 'brush: a human-size hero landing beside someone is a brush');
   check(stompDownCause('player', BRUSH_MAX_H + 1) === 'player', 'brush: a giant hero landing on someone is the hero\'s');
   check(stompDownCause('threat', 1.8) === 'threat' && stompDownCause('world', 1.8) === 'other', 'brush: other stompers keep their cause');
+});
+
+// The start screen's skyline: same seed, same city; nothing on the camera's ring reaches its flight
+// height (the camera circles at ORBIT_R ± 40 m, never lower than 110 m); built in a few milliseconds.
+section('start screen skyline', async () => {
+  for (const seed of [1, 42, 777, 123456]) {
+    const t0 = performance.now();
+    const a = buildSkyline(seed);
+    const ms = performance.now() - t0;
+    const b = buildSkyline(seed);
+    check(a.boxes.length === b.boxes.length && a.boxes.every((v, i) => v === b.boxes[i]) && a.lights.every((v, i) => v === b.lights[i]), `skyline ${seed} deterministic`);
+    let worst = 0;
+    for (let i = 0; i < a.boxCount; i++) {
+      const o = i * BOX_FLOATS;
+      const r = Math.hypot(a.boxes[o], a.boxes[o + 1]);
+      if (Math.abs(r - ORBIT_R) < 60) worst = Math.max(worst, a.boxes[o + 4] + a.boxes[o + 5]);
+    }
+    check(worst < 100, `skyline ${seed}: roofs on the camera ring stay under 100 m (${worst.toFixed(0)} m)`);
+    check(a.boxCount > 1500 && a.boxCount < 12000 && a.top > 150, `skyline ${seed}: ${a.boxCount} boxes, tallest ${a.top.toFixed(0)} m`);
+    check(ms < 200, `skyline ${seed} built in ${ms.toFixed(1)} ms`);
+  }
 });
 
 await runSections(import.meta.url);

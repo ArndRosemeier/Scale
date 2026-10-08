@@ -2,9 +2,27 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.169 — 2026-10-08
+
+- **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts and contrast trims showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, at an even depth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line. Cloth smoothing now only lifts the fabric off the body and no longer slides it sideways, which had bent the cut line.
+
+## 0.168 — 2026-10-08
+
+- **The player's manual is up to date (0.167).** It now covers everything since 0.098: the Hero tab (tights and masks) and the three costumes on F1–F3, the new help (H) with changeable keys and the Powers tab, energy costs instead of cooldowns, the three Energy powers and the friend/foe sense, super jump as a travel power, the reworked shrink ray, open-ended reputation and the Living legend, arrest as a public menace, the street and the tunnels as separate worlds, and two new chapters: *Lights in the sky* (the Nannies, their walkers and the joyriders) and *Your sidekick* (the second shard, trust, talking, the info panel). Ten new screenshots, including the living start screen. 32 pages as PDF (Help › Manual, or Manual on the start screen).
+
+## 0.167 — 2026-10-08
+
+- **A living start screen.** The old still picture behind the menu is gone: you now look over a city at dusk, gliding slowly round its downtown. Windows light up and go dark, cars stream through the streets, red beacons pulse on the tallest roofs, aircraft circle high up, and now and then a hero streaks past the skyline. The camera leans a little with the mouse. Every seed has its own skyline: type a new seed and the city fades over to it.
+- It is up within a moment of opening the page, before the game itself has finished loading: a small separate scene with four little shaders, made in a few milliseconds. It stops and frees the graphics card as soon as you enter the city, and pauses while the character creator is open. Without WebGL 2 the old picture is shown instead; with reduced motion switched on in the system the city stands still.
+
+## 0.166 — 2026-10-08
+
+- **No more screams at every landing.** Travelling by super jump, each touchdown made the people round about take fright and scream (the long scream, several times a minute), with nobody hurt and nothing on the map. Now someone of human size landing hard only startles people: they flinch and turn to look. A giant or a monster coming down still makes them scream and run.
+- **Being knocked over is not a scream.** Someone knocked down just now no longer counts as a screamer (a fall is a fall).
+
 ## 0.165 — 2026-10-08
 
-- **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line.
+- **Super jump builds up speed in the air.** A forward leap no longer shoots off at full speed. It starts as a jump and picks up speed as it flies, reaching its top speed (18 / 40 / 80 / 120 / 200 m/s at ranks 1 to 5) about three seconds in, near the top of a high leap. As a travel power it is now a little slower than a boosted flight: bounding on from landing to landing averages 14 / 25 / 46 / 77 / 138 m/s, against flight's 14 / 28 / 54 / 90 / 159 m/s.
 
 ## 0.164 — 2026-10-08
 

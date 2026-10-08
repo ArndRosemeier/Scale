@@ -10,6 +10,7 @@
 import type { HumanoidAppearance } from '../humanoid/types';
 import { HAIR_STYLES, BEARD_STYLES, BROW_STYLES } from '../humanoid/appearance';
 import { HumanoidPreview } from '../humanoid/client/preview';
+import { holdBackdrop } from './backdrop/Backdrop';
 import { saturate as clamp01 } from '../core/math';
 import {
   randomLook, plainLook, plainAppearance, normalizeLook, outfitVisuals, TOPS, OUTERS, BOTTOMS, SHOES, HATS, PATTERNS,
@@ -288,6 +289,7 @@ export class CharacterCreator {
 
     this.el.append(stage, side);
     document.body.appendChild(this.el);
+    holdBackdrop(true);
     window.addEventListener('keydown', this.onKey);
     this.renderFocus();
     this.renderEditor();
@@ -609,6 +611,7 @@ export class CharacterCreator {
     window.removeEventListener('keydown', this.onKey);
     shared?.preview.stop();
     this.el.remove();
+    holdBackdrop(false);
     this.opts.onClose?.();
   }
 }
