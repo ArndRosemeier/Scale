@@ -4,23 +4,26 @@
  */
 import {
   MAX_RANK, PUNCH_IMPULSE, JUMP_HEIGHT, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE, SHOCK_COST,
-  FLIGHT_SPEED, FLIGHT_CRUISE, flightBoost, SIZE_RANGE, JUMP, DASH, SPEED_TOP,
+  FLIGHT_SPEED, FLIGHT_CRUISE, flightBoost, SIZE_RANGE, JUMP, LEAP_SPEED, DASH, SPEED_TOP,
   LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN,
   FIREBALL, FIREBALL_RANGE, FIREBALL_RADIUS, FIREBALL_BLAST, FIREBALL_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE,
   ICE, ICE_WIDTH, ICE_LIFE, BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE,
-  GUST, GUST_RADIUS, GUST_TIME, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
+  GUST, GUST_RADIUS, GUST_TIME, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME, SHRINK_CAP, SHRINK_DEALT,
   SLIME_COST, SLIME_COUNT, SLIME_TIME, SLIME_REACH, SLIME_HOLD,
+  PHASE, PHASE_DMG, PHASE_RANGE, FOCUS, FOCUS_DMG, FOCUS_RANGE, SEEKER, SEEKER_DMG, SEEKER_RANGE, SENSE_POWERS, KARMA_COST,
 } from './tuning';
 import { wallBreakShare, windowShatterShare, WALL_CLASSES, type WallClass } from '../../destruction/wallStrength';
 
 export type AbilityId = 'punch' | 'strength' | 'superJump' | 'speed' | 'shockwave' | 'flight' | 'size'
-  | 'laser' | 'fireWave' | 'fireball' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink' | 'slimeCall';
+  | 'laser' | 'fireWave' | 'fireball' | 'frostNova' | 'icePath' | 'lightning' | 'stomp' | 'gust' | 'hydro' | 'shrink' | 'slimeCall'
+  | 'phase' | 'focus' | 'seeker';
 
 /** Ids of earlier versions (saved progress, hotbars) -> their current power. */
 export const LEGACY_IDS: Record<string, AbilityId> = { dash: 'speed' };
 
-export type AbilityGroup = 'body' | 'movement' | 'elemental' | 'support';
-export const GROUP_NAMES: Record<AbilityGroup, string> = { body: 'Body', movement: 'Movement', elemental: 'Elemental', support: 'Support' };
+export type AbilityGroup = 'body' | 'movement' | 'elemental' | 'energy' | 'support';
+/** Group headings, in the order the powers screen and the help list show them. */
+export const GROUP_NAMES: Record<AbilityGroup, string> = { body: 'Body', movement: 'Movement', elemental: 'Elemental', energy: 'Energy (single target)', support: 'Support' };
 
 export interface AbilityDef {
   id: AbilityId;
@@ -131,9 +134,9 @@ export const ABILITIES: AbilityDef[] = [
   },
   {
     id: 'superJump', name: 'Super jump', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK, key: 'Hold Space',
-    desc: 'Press Space to leap and keep holding it to climb higher; steer all the way. Heavy landings shake the ground.',
+    desc: 'Press Space to leap and keep holding it to climb higher; steer all the way. Hold W to bound forward: the higher the leap, the farther it carries, as fast as flying. Heavy landings shake the ground.',
     icon: svg('<path d="M6 11l6-6 6 6"/><path d="M6 17l6-6 6 6"/><path d="M4 21h16"/>'),
-    rankText: (r) => `Climb up to ${JUMP_HEIGHT[r]} m high`,
+    rankText: (r) => `Climb up to ${JUMP_HEIGHT[r]} m high · leap forward at up to ${LEAP_SPEED[r]} m/s`,
     costText: () => `${JUMP.cost} energy for the full height`,
   },
   {
@@ -226,12 +229,34 @@ export const ABILITIES: AbilityDef[] = [
     rankText: (r) => `Jet ${HYDRO_RANGE[r]} m · ${fmtJ(HYDRO_FORCE[r])} N·s/s · ${r >= 3 ? 'shoves cars' : 'stops cars'}`,
     costText: () => `${HYDRO.drain} energy / s`,
   },
+  // ---------------------------------------------------------------- energy (single target)
+  {
+    id: 'phase', name: 'Phase pulse', kind: 'active', group: 'energy', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'A pulse of energy that passes through walls, cars and people and lands only on your target, even one that ducked out of sight a moment ago. Weaker than the laser and short-ranged; it breaks nothing on the way.',
+    icon: svg('<path d="M10 3v18" stroke-dasharray="2 2.2" opacity="0.6"/><path d="M2.5 12h17"/><path d="M16.5 8.5L20 12l-3.5 3.5"/><path d="M6 8.5a5 5 0 0 0 0 7M13.5 8a5.5 5.5 0 0 1 0 8" opacity="0.55"/>'),
+    rankText: (r) => `${PHASE_DMG[r]} damage · reach ${PHASE_RANGE[r]} m · through walls`,
+    costText: () => `${PHASE.cost} energy`,
+  },
+  {
+    id: 'focus', name: 'Focus beam', kind: 'active', group: 'energy', trigger: 'hold', maxRank: MAX_RANK,
+    desc: 'Hold to gather a beam of energy behind your eyes, let go to fire one heavy shot at your target. The longer you gather, the harder it hits. Best against monsters: aim at a weak spot.',
+    icon: svg('<path d="M3 4l4.5 4.5M3 12h5M3 20l4.5-4.5" opacity="0.6"/><circle cx="10" cy="12" r="2.6" fill="currentColor"/><path d="M12.6 12H22" stroke-width="3.2"/>'),
+    rankText: (r) => `Full charge ${FOCUS_DMG[r]} damage · reach ${FOCUS_RANGE[r]} m · gathers in ${FOCUS.charge} s`,
+    costText: () => `${FOCUS.base} energy + up to ${FOCUS.cost - FOCUS.base} while gathering`,
+  },
+  {
+    id: 'seeker', name: 'Seeker orb', kind: 'active', group: 'energy', trigger: 'tap', maxRank: MAX_RANK,
+    desc: 'Throw a ball of energy that hunts your target: it curves round corners and over buildings and only bursts on the one it was sent after. Needs a target.',
+    icon: svg('<path d="M3 21h18"/><rect x="9" y="12" width="6" height="9" opacity="0.6"/><path d="M4 18C5 6 17 4 18.5 15" stroke-dasharray="1.6 1.8"/><circle cx="19" cy="17.5" r="2.2" fill="currentColor"/><circle cx="5" cy="15" r="1.6"/>'),
+    rankText: (r) => `${SEEKER_DMG[r]} damage · target within ${SEEKER_RANGE[r]} m · flies ${SEEKER.life} s`,
+    costText: () => `${SEEKER.cost} energy`,
+  },
   // ---------------------------------------------------------------- support
   {
     id: 'shrink', name: 'Shrink ray', kind: 'active', group: 'support', trigger: 'tap', maxRank: MAX_RANK,
-    desc: 'Zap a person, car, robot, drone or prop down to a fraction of its size for a while. It keeps working: tiny cars keep driving.',
+    desc: 'Zap anything — a person, a car, a robot, a monster — down in size for a while. Small things shrink to a fraction, big ones lose a few metres. Whatever is shrunk hits softer.',
     icon: svg('<path d="M3.5 3.5l5 5M20.5 3.5l-5 5M3.5 20.5l5-5M20.5 20.5l-5-5"/><path d="M8.5 5v3.5H5M15.5 5v3.5H19M8.5 19v-3.5H5M15.5 19v-3.5H19"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'),
-    rankText: (r) => `Shrinks to ${Math.round(SHRINK_FACTOR[r] * 100)} % for ${SHRINK_TIME[r]} s · reach ${SHRINK.reach} m`,
+    rankText: (r) => `Shrinks to ${Math.round(SHRINK_FACTOR[r] * 100)} %, at most ${SHRINK_CAP[r]} m off, for ${SHRINK_TIME[r]} s · deals ${Math.round(SHRINK_DEALT[r] * 100)} % damage · reach ${SHRINK.reach} m`,
     costText: () => `${SHRINK.cost} energy`,
   },
   {
@@ -243,6 +268,12 @@ export const ABILITIES: AbilityDef[] = [
     costText: (r) => `${SLIME_COST[Math.max(1, r)]} energy`,
   },
 ];
+
+/** Powers that can hit more than what they are aimed at: they offer the friend/foe sense. */
+export const SENSE_IDS: readonly AbilityId[] = SENSE_POWERS;
+export const hasSenseOption = (id: AbilityId): boolean => SENSE_IDS.includes(id);
+/** Karma price of a power's friend/foe sense: the price of its first rank. */
+export const senseCost = (id: AbilityId): number => (KARMA_COST as Record<string, readonly number[]>)[id]?.[0] ?? 0;
 
 export const ABILITY: Record<AbilityId, AbilityDef> = Object.fromEntries(ABILITIES.map((a) => [a.id, a])) as Record<AbilityId, AbilityDef>;
 

@@ -28,8 +28,8 @@
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
-import { PState, type PedAgent } from '../../sim/Pedestrians';
-import { makeActor, play, goTo, stand, lookAt, subdued, SIDEKICK_OWNER, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
+import { PState, type PedAgent, hasRole } from '../../sim/Pedestrians';
+import { makeActor, play, goTo, stand, lookAt, SIDEKICK_OWNER, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
 import { traitsOf, temperamentOf, type Temperament, type Traits } from '../people/identity';
 import { VILLAIN_POWERS, CASTERS } from '../powers/Caster';
 import { bondOf, bondWord } from '../people/social';
@@ -39,6 +39,8 @@ import { ROSTER, GIFTS, MATE_KARMA, TRUST, nextCost, nextWant, honoursWish, buyL
 import { MedFleet } from '../defeat/MedDrones';
 import { MATE, MATE_POWERS, fightStyle, matePower, pickFoe, revives, mateLine, type FightStyle, type MateSay, type FoeInfo, type MatePower } from './companionRules';
 import { smoothstep as smooth } from '../../core/math';
+import { fightingCrook } from '../friendFoe';
+import { dealtBy } from '../../shared/status';
 
 /** Companion.panel: what the info panel shows. */
 export interface MatePanel {
@@ -651,7 +653,7 @@ export class Companion {
     const g = this.g, act = this.act!;
     const dx = t.x - a.x, dz = t.z - a.z, d = Math.hypot(dx, dz) || 1;
     if (d > MATE.hitR || act.staggerT > 0 || !g.crime) return;
-    const J = 360 * Math.sqrt(act.strength) * (0.8 + 0.4 * Math.random());
+    const J = 360 * Math.sqrt(act.strength) * (0.8 + 0.4 * Math.random()) * dealtBy(a);
     const res = g.crime.combat.hitActor(t, (dx / d) * J, 60, (dz / d) * J, 'punch', 'npc', a.x, a.z);
     g.crime.sound('punch_impact', t.x, t.y + 1.2, t.z, 0.55, 1);
     this.stats.punches++;
@@ -672,7 +674,7 @@ export class Companion {
     if (d > 1.9) return;
     play(oa, 'punch', 0.6);
     lookAt(oa, a.x, a.y + 1.3, a.z);
-    const J = MATE.counterJ * Math.sqrt(oa.strength) * (0.8 + 0.4 * Math.random());
+    const J = MATE.counterJ * Math.sqrt(oa.strength) * (0.8 + 0.4 * Math.random()) * dealtBy(o);
     const res = g.crime.combat.hitActor(a, (dx / d) * J, 50, (dz / d) * J, 'punch', 'npc', o.x, o.z);
     g.crime.sound('punch_impact', a.x, a.y + 1.2, a.z, 0.5, 0.9);
     if (res.effect !== 'none' && res.effect !== 'ko' && this.barkT <= 0 && Math.random() < 0.35) this.say('hurt');
@@ -766,7 +768,7 @@ export class Companion {
     if (!R.hit && g.crime) for (const o of g.peds.neighbours(a.x, a.z, P.radius + 0.4, this.tmp)) {
       if (!isFoe(o) || Math.hypot(o.x - a.x, o.z - a.z) > P.radius + 0.3) continue;
       R.hit = true;
-      const dx = R.x - a.x, dz = R.z - a.z, l = Math.hypot(dx, dz) || 1, J = 700 * Math.sqrt(act.strength);
+      const dx = R.x - a.x, dz = R.z - a.z, l = Math.hypot(dx, dz) || 1, J = 700 * Math.sqrt(act.strength) * dealtBy(a);
       const res = g.crime.combat.hitActor(o, (dx / l) * J, 150, (dz / l) * J, 'punch', 'npc', a.x, a.z);
       g.crime.sound('punch_impact', o.x, o.y + 1.2, o.z, 0.8, 0.75);
       if (res.effect === 'ko') { this.stats.kos++; this.earn(o.actor?.memo.boss || o.actor?.memo.lt ? MATE_KARMA.lead : MATE_KARMA.ko); }
@@ -782,12 +784,8 @@ export class Companion {
   /** Wanted with the police about: out of it, on the hero's far side from the nearest officer. */
   private keepOff(a: PedAgent, dt: number): void {
     const g = this.g, p = g.player.pos;
-    let ox = p.x + 1, oz = p.z, best = Infinity;
-    for (const o of g.peds.neighbours(p.x, p.z, MATE.policeR, this.tmp)) {
-      if (o.actor?.role !== 'police') continue;
-      const d = Math.hypot(o.x - p.x, o.z - p.z);
-      if (d < best) { best = d; ox = o.x; oz = o.z; }
-    }
+    const cop = g.peds.nearest(p.x, p.z, MATE.policeR, (o) => hasRole(o, 'police'));
+    const ox = cop ? cop.x : p.x + 1, oz = cop ? cop.z : p.z;
     const dx = p.x - ox, dz = p.z - oz, l = Math.hypot(dx, dz) || 1;
     const x = p.x + (dx / l) * MATE.keepOff, z = p.z + (dz / l) * MATE.keepOff;
     if (!this.spot || Math.hypot(this.spot.x - x, this.spot.z - z) > 12) this.spot = { x, z };
@@ -1125,5 +1123,5 @@ export class Companion {
 /** Fighting the hero's side right now: a hostile criminal still on their feet. */
 function isFoe(o: PedAgent): boolean {
   const act = o.actor;
-  return !!act && !!o.alive && act.role === 'criminal' && act.hostile && !subdued(act) && act.state !== 'down' && o.state !== PState.Down;
+  return !!o.alive && fightingCrook(act) && act!.state !== 'down' && o.state !== PState.Down;
 }

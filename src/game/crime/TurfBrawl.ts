@@ -9,6 +9,7 @@ import { Crime, type CrimeWorld, setState, stand, lookAt, goTo, play, subdued } 
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 import type { Armed } from '../../sim/actors/Actor';
+import { dealtBy } from '../../shared/status';
 
 export const BRAWL = { ringMin: 70, ringMax: 260, hp: 50, strength: 1, meetR: 8, approachTimeout: 70, noticeR: 12, fleeHp: 0.3, reach: 1.15, hitR: 1.75, windup: 0.32 };
 
@@ -164,7 +165,7 @@ export class TurfBrawl extends Crime {
         act.memo.windup = 0;
         const dd = Math.hypot(t.x - c.x, t.z - c.z);
         if (dd < BRAWL.hitR && act.staggerT <= 0 && c.state !== PState.Down && t.alive) {
-          const J = BLOW[act.armed] * Math.sqrt(act.strength) * (0.8 + 0.4 * this.w.random());
+          const J = BLOW[act.armed] * Math.sqrt(act.strength) * (0.8 + 0.4 * this.w.random()) * dealtBy(c);
           const ux = (t.x - c.x) / (dd || 1), uz = (t.z - c.z) / (dd || 1);
           this.w.combat.hitActor(t, ux * J, 60, uz * J, act.armed === 'bat' ? 'bat' : act.armed === 'knife' ? 'knife' : 'punch', 'npc', c.x, c.z);
           this.w.sound('punch_impact', t.x, t.y + 1.2, t.z, 0.55, act.armed === 'bat' ? 0.8 : 1);

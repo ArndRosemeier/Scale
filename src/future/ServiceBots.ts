@@ -17,7 +17,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { hash32 } from '../core/rng';
 import { CURB_H } from '../build/ground';
 import { doorOf } from '../sim/Population';
-import type { PedAgent } from '../sim/Pedestrians';
+import { type PedAgent, isUp } from '../sim/Pedestrians';
 import type { Obstacle, ObstacleProvider } from '../world/Collision';
 import { GROUPS } from '../physics/Physics';
 import { FurnBatch } from './batch';
@@ -197,7 +197,7 @@ export class ServiceBots {
     // People make room (it stands in the sidewalk flow); the player bumps into it.
     if (dist < 110) {
       for (const a of this.ctx.peds.neighbours(b.x, b.z, 1.6, this.nb)) {
-        if (a.state === 5 || a.inside) continue;
+        if (!isUp(a)) continue;
         const ox = a.x - b.x, oz = a.z - b.z, d = Math.hypot(ox, oz);
         if (d < 1e-3 || d > 1.6) continue;
         if (d < 0.5) { a.x = b.x + (ox / d) * 0.5; a.z = b.z + (oz / d) * 0.5; }
@@ -220,7 +220,7 @@ export class ServiceBots {
       b.lookT = 0.6;
       let best: PedAgent | null = null, bd = b.post.role === Role.Greeter ? 7 : 5;
       for (const a of this.ctx.peds.neighbours(b.x, b.z, bd, this.nb)) {
-        if (a.state === 5 || a.inside) continue;
+        if (!isUp(a)) continue;
         const d = Math.hypot(a.x - b.x, a.z - b.z);
         // Only in front (a head turns ±70°).
         if (d < bd && (a.x - b.x) * -Math.sin(b.yaw) + (a.z - b.z) * -Math.cos(b.yaw) > -d * 0.3) { bd = d; best = a; }
@@ -328,10 +328,10 @@ export class ServiceBots {
     }
   }
 
-  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number): void {
+  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number, skip?: (b: ServiceBots['list'][number]) => boolean): void {
     if (Math.hypot(jx, jy, jz) < J_TOPPLE) return;
     for (const b of this.list) {
-      if (b.crushed || Math.hypot(b.x - x, b.z - z) > rad + 0.35 || y > b.y + HUMANOID.height + rad || y < b.y - rad) continue;
+      if (b.crushed || skip?.(b) || Math.hypot(b.x - x, b.z - z) > rad + 0.35 || y > b.y + HUMANOID.height + rad || y < b.y - rad) continue;
       this.knock(b, jx, jy, jz);
     }
   }

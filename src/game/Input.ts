@@ -46,7 +46,7 @@ export class Input {
       if (e.target instanceof HTMLInputElement || this._suspended) return;
       const code = gameCode(e);
       if (this.grab?.(e.code, true, code)) { e.preventDefault(); return; }
-      if (['Space', 'Tab', 'NumpadAdd', 'NumpadSubtract', 'ArrowUp', 'ArrowDown'].includes(code || e.code)) e.preventDefault();
+      if (['Space', 'Tab', 'NumpadAdd', 'NumpadSubtract', 'ArrowUp', 'ArrowDown', 'F1', 'F2', 'F3'].includes(code || e.code)) e.preventDefault();
       if (!code) return;
       const was = this.held.get(e.code);
       if (was && was !== code) this.keys.delete(was);

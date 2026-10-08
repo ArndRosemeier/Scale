@@ -6,7 +6,7 @@
  * Deeds report through `addKarma(amount, reason)` (negative amounts are the hook for
  * misdeeds later; they never take the balance below zero).
  */
-import { ABILITIES, ABILITY, HOTBAR_SLOTS, LEGACY_IDS, type AbilityId } from './defs';
+import { ABILITIES, ABILITY, HOTBAR_SLOTS, LEGACY_IDS, SENSE_IDS, senseCost, type AbilityId } from './defs';
 import { KARMA, KARMA_COST } from './tuning';
 import type { GameMode } from '../mode';
 
@@ -23,6 +23,8 @@ export interface ProgressData {
   seen: number[];
   bonusMax: number;
   bonusRegen: number;
+  /** Powers with the friend/foe sense bought (absent in older saves). */
+  sense?: AbilityId[];
 }
 
 export type KarmaListener = (amount: number, reason: string, balance: number) => void;
@@ -35,7 +37,7 @@ const DEFAULT_SANDBOX_SLOTS: (AbilityId | null)[] = ['punch', 'speed', 'laser', 
 function fresh(): ProgressData {
   const slots: (AbilityId | null)[] = new Array(HOTBAR_SLOTS).fill(null);
   slots[0] = 'punch';
-  return { v: 1, karma: KARMA.start, earned: 0, deeds: 0, ranks: {}, slots, cores: [], seen: [], bonusMax: 0, bonusRegen: 0 };
+  return { v: 1, karma: KARMA.start, earned: 0, deeds: 0, ranks: {}, slots, cores: [], seen: [], bonusMax: 0, bonusRegen: 0, sense: [] };
 }
 
 /** Punch used to be the left mouse button: hotbars saved before get it in the first free slot. */
@@ -122,6 +124,31 @@ export class Progress {
     this.save();
     this.changed();
     return true;
+  }
+
+  // ---- friend/foe sense (per power, at its first-rank price; in the sandbox a free switch)
+  hasSense(id: AbilityId): boolean {
+    return SENSE_IDS.includes(id) && !!this.d.sense?.includes(id);
+  }
+  /** Karma price of a power's sense (null: not offered, already bought, or the power is locked). */
+  senseCost(id: AbilityId): number | null {
+    if (!SENSE_IDS.includes(id) || this.hasSense(id) || this.rank(id) <= 0) return null;
+    return senseCost(id);
+  }
+  buySense(id: AbilityId): boolean {
+    const c = this.senseCost(id);
+    if (c === null || (!this.sandbox && this.d.karma < c)) return false;
+    if (!this.sandbox) this.d.karma -= c;
+    (this.d.sense ??= []).push(id);
+    this.save();
+    this.changed();
+    return true;
+  }
+  /** Sandbox: switch a power's sense off again. */
+  dropSense(id: AbilityId): void {
+    if (!this.sandbox || !this.d.sense) return;
+    this.d.sense = this.d.sense.filter((s) => s !== id);
+    this.changed();
   }
 
   /** Sandbox: try any rank (0 … max). */
@@ -243,6 +270,7 @@ function parseProgress(raw: unknown): ProgressData | null {
     v: 1, karma: Math.max(0, Number(o.karma) || 0), earned: Number(o.earned) || 0, deeds: Number(o.deeds) || 0, ranks,
     slots: withPunch(sanitizeSlots(Array.isArray(o.slots) ? o.slots : [])), cores: nums(o.cores), seen: nums(o.seen),
     bonusMax: Number(o.bonusMax) || 0, bonusRegen: Number(o.bonusRegen) || 0,
+    sense: Array.isArray(o.sense) ? SENSE_IDS.filter((id) => (o.sense as unknown[]).includes(id)) : [],
   };
 }
 

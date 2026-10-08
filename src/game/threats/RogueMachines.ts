@@ -27,7 +27,7 @@ import type { Malfunction, MalfunctionCtl, MalKind } from '../../future/malfunct
 import type { PlayerProbe } from '../../future/ctx';
 import type { Cause } from '../Stimuli';
 import { CURB_H } from '../../build/ground';
-import { statusOf } from '../../shared/status';
+import { statusOf, dealtBy } from '../../shared/status';
 import { DRONE_PLATING } from '../crime/Firearms';
 
 export type RogueRole = 'hunter' | 'blocker' | 'rammer';
@@ -542,12 +542,7 @@ export class RogueMachines implements MalfunctionCtl {
       }
       if (best) { m.tgt = { kind: 'car', v: best }; return; }
     }
-    let best: PedAgent | null = null, bd = see;
-    for (const a of g.peds.neighbours(x, z, see, this.nb)) {
-      if (!this.validPed(a, y, m.kind === 'drone') || !inLeash(a.x, a.z) || o?.spares?.(a)) continue;
-      const d = Math.hypot(a.x - x, a.z - z);
-      if (d < bd) { bd = d; best = a; }
-    }
+    const best = g.peds.nearest(x, z, see, (a) => this.validPed(a, y, m.kind === 'drone') && inLeash(a.x, a.z) && !o?.spares?.(a));
     if (best) m.tgt = { kind: 'ped', a: best };
     else if (playerOk) m.tgt = { kind: 'player' };
   }
@@ -581,7 +576,7 @@ export class RogueMachines implements MalfunctionCtl {
 
   private knockPerson(m: Rogue, a: PedAgent, fx: number, fz: number, power: number): void {
     const g = this.g;
-    g.reactions.knockDown(a, fx, fz, power, 'threat');
+    g.reactions.knockDown(a, fx, fz, power * dealtBy(m.obj), 'threat');
     g.consequences.record(m.kind, 'person', 'knockdown', a.x, a.z, a, 'threat');
     g.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.7, 0.85, 5, g.renderer.camera.position);
     g.stimuli.emit('threat', a.x, a.y + 1, a.z, 3, 30, { cause: 'threat' });
@@ -599,7 +594,7 @@ export class RogueMachines implements MalfunctionCtl {
     m.attackT = cd;
     if (this.time - this.playerHitT < ROGUE.playerGap) return;
     this.playerHitT = this.time;
-    const dealt = g.crime.health.damage(dmg, 'robot', x, z, y);
+    const dealt = g.crime.health.damage(dmg * dealtBy(m.obj), 'robot', x, z, y);
     g.audio.play('punch_impact', g.player.pos.x, g.player.pos.y + 1, g.player.pos.z, 0.75, 0.8, 4, g.renderer.camera.position);
     if (dealt <= 0) g.camRig.addShake(0.12);
     g.stimuli.emit('threat', x, g.player.pos.y + 1, z, 3, 25, { cause: 'threat' });

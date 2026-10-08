@@ -10,7 +10,7 @@ import type { Game } from '../game/Game';
 import {
   KEY_ACTION, KEY_ACTIONS, KEY_GROUPS, bindingOf, gameCodeOf, bind, canBind, isDefaultBinding, keyName, keyLabel, powerKeyText, resetKeys, type KeyAction,
 } from '../game/keybinds';
-import { ABILITIES, GROUP_NAMES, type AbilityGroup, type AbilityId } from '../game/abilities/defs';
+import { ABILITIES, GROUP_NAMES, hasSenseOption, senseCost, type AbilityGroup, type AbilityId } from '../game/abilities/defs';
 import { powerDamage } from '../game/abilities/damage';
 import { COMBAT } from '../game/Combat';
 import { MUGGING } from '../game/crime/Mugging';
@@ -47,6 +47,7 @@ const FIXED: [string, string][] = [
   ['Left click', 'On someone or something: target it (punch is a hotbar power, slot 1 by default)'],
   ['Esc', 'Clear the target · close a screen · pause & settings'],
   ['1 … 7 in a talk', 'Pick an answer'],
+  ['F4', 'Detailed info line (frame rate, position, streaming)'],
 ];
 
 /** While a key button waits for a key: this sees every keydown first. Registered when the module
@@ -211,6 +212,7 @@ export class HelpDialog {
             <div class="hp-head"><span class="hp-ic">${d.icon}</span><span class="hp-name">${d.name}</span><span class="hp-tag">${tag}${key ? ` · ${esc(key)}` : ''}</span>${r > 0 && d.maxRank > 1 ? `<span class="hp-you">your rank ${r}</span>` : ''}</div>
             <div class="hp-desc">${d.desc}${d.granted ? ` <i>${d.granted}.</i>` : ''}</div>
             <table class="hp-t"><thead><tr><th>Rank</th><th>Karma</th><th>Effect</th><th>Damage</th><th>Energy</th></tr></thead><tbody>${rows}</tbody></table>
+            ${hasSenseOption(d.id) ? `<div class="hp-desc"><b>Friend/foe sense</b> (${senseCost(d.id)} karma, once the power is unlocked): it then hurts only foes (criminals still fighting, monsters, rogue machines) and leaves people, police, cars, props and buildings alone. A giant body loses it: above normal size the power hits everything again.${pr?.hasSense(d.id) ? ' <i>You have it.</i>' : ''}</div>` : ''}
           </div>`;
       }).join('');
       return `<h3 class="hp-group">${GROUP_NAMES[g]}</h3>${cards}`;

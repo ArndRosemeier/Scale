@@ -2,9 +2,54 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.155 — 2026-10-08
+## 0.165 — 2026-10-08
 
 - **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line.
+
+## 0.164 — 2026-10-08
+
+- **Three new single-target powers (new "Energy" group).** They hit only the one they are aimed at: no fire, no bystanders, nothing broken on the way.
+  - **Phase pulse** (tap, 20 energy): passes through walls, cars and people to your target, even one that ducked out of sight a moment ago. Weaker than the laser and short-ranged (25–60 m). Never between the street and the sewers.
+  - **Focus beam** (hold, then let go): gathers a beam behind your eyes for up to 1.5 s (the charge bar fills), then one heavy shot. 15 energy on the press, up to 45 at a full charge; a shot that cannot go off gives the energy back. Best against monsters' weak spots.
+  - **Seeker orb** (tap, 30 energy): a ball of energy that flies round corners and over buildings to its target and bursts only on it. Needs a target. When it can't see its target, it climbs over the roofs, flies across and drops onto it. It grows a little with distance so you can follow it.
+- **Friend/foe sense, bought per power.** Laser eyes, shockwave, fire wave, fireball, frost nova, chain lightning, seismic stomp, whirlwind and hydrokinesis each offer it on the powers screen, for the price of that power's first rank. With it, the power harms nothing that would cost you reputation: only criminals still in the fight, monsters and rogue machines are hit; bystanders, police, cars, props and buildings are left alone (the laser beam passes through people in the way, chain lightning only jumps to foes). A giant loses the sense: above normal size every power hits everything again. In the sandbox it is a free switch.
+
+## 0.163 — 2026-10-08
+
+- **One way to find the nearest person.** About a dozen places searched for the nearest passer-by, officer or soldier with their own loop and their own idea of who counts, and some forgot something. Small fixes come with it: the sidekick no longer keeps away from an officer who is lying knocked out, and a mad bomber and the rescue scenes no longer pick someone who is no longer there. A self-test keeps new copies out.
+
+## 0.162 — 2026-10-08
+
+- **Super jump is a real travel power.** Hold W while you leap and the jump now carries you forward: the higher you climb, the faster it goes, up to 18, 39, 72, 120 and 200 m/s at ranks 1 to 5 (it was 12 m/s at every rank). Bounding on from landing to landing now covers ground at least as fast as a boosted flight at the same rank (flight 14 / 28 / 54 / 91 / 159 m/s, super jump 14 / 29 / 55 / 94 / 161 m/s even pressing Space a little late on each landing). A top-rank leap clears about a kilometre. A long leap stops on landing instead of skidding down the street, a quick hop still only moves you a little, and without W the jump is the same straight climb as before. The energy cost is unchanged, and landing beside someone at human size still costs no reputation. The Powers table shows the leap speed per rank (`npx tsx tools/travelsim.ts` measures it).
+
+## 0.161 — 2026-10-08
+
+- **Fix: the hero no longer gets stuck at turns in tunnels.** Walking from a platform into the underpass, the hero could stand stuck at the right-angle turn just inside its mouth until facing exactly down the next stretch. Underground, a body pressed against a wall only slid along the map's north-south or east-west axis; against a wall at an angle to them (most tunnels) both ways led into the wall and the hero stopped dead. Bodies now slide along walls at any angle, in the metro, its stairs and underpasses, the sewers and the caves. The metro audit and the self-test now walk every stair and underpass both ways like a player who cuts the corners: before the fix 38 of 50 passages in one city stopped such a walker, now none.
+
+## 0.160 — 2026-10-08
+
+- **Far fewer fall cries.** Someone tripping in the street now happens every three to six minutes instead of every one to two, the first one not before a minute and a half, and only within about 35 m of you (it was up to 60 m), so you can see who fell.
+- **Screams come from whoever got frightened.** When people take fright, the scream used to be played at the first frightened person in the whole city, often someone already lying knocked down somewhere else. That made screams seem to come from people on the ground with nothing happening. Now it comes from one of the people who just got scared.
+
+## 0.159 — 2026-10-08
+
+- **Behind the scenes: the self test runs in under 3 minutes instead of about 17.** It is now split into 69 independent sections that run side by side, one worker per processor core, the slowest first. `npm run test:quick` runs only the sections that touch what you changed, for quick checks while working; the full `npm test` is still required before every merge (docs/CONVENTIONS.md, "Tests: which command when"). No check was dropped or shortened.
+- **Cities are planned about twice as fast.** Laying out the metro sampled the ground along every sewer again for each metro line; it now does that once. The cities come out exactly the same, so loading a new city is a bit quicker too.
+
+## 0.158 — 2026-10-08
+
+- **Fights in the sewers stay in the sewers.** When a villain cast frost, an orb, an EMP or a fireball, when a mad bomber threw a bomb, or when a gunman missed someone underground, the scorch marks, frost, chips and the bomb itself landed on the street above. They now land on the sewer, metro or cave floor where the fight is. People knocked down underground also no longer quietly vanish: you can find them and help them up like anyone on the street.
+## 0.157 — 2026-10-08
+
+- **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, the 99 m long Strider loses 5 m of length (about 5 %). Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.
+
+## 0.156 — 2026-10-08
+
+- **Thinner lips, and a lip thickness slider.** Everyone's lips were too thick: the average mouth is now noticeably thinner, for city people and new heroes alike, and the coloured lip area is tighter. The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and goes from thin lips to full ones, on women and men alike. Saved with the character like every face slider.
+
+## 0.155 — 2026-10-08
+
+- **Three costumes, on F1, F2 and F3.** At the start all three are your hero's look. The fitting mirror in a clothes shop now changes only the costume you are wearing, so you can keep, say, street clothes on F1 and your hero suit on F2 and switch anywhere in the city. The three costumes are kept in your saves. The keys can be moved in the help (H, Keys). The detailed info line (frame rate, position) moved from F3 to F4.
 
 ## 0.154 — 2026-10-08
 
@@ -17,6 +62,7 @@ Every push raises the version by 0.001. Newest first.
 ## 0.152 — 2026-10-08
 
 - **Fair credit against monsters.** The Strider and the last-resort strike judged differently whether the hero had earned the win. Now both use one rule: the monster was angriest with the hero, or the hero did at least a quarter of the fighting it remembers. Rogue and hijacked machines also count the hero's last blow the same way, with the same 6-second window. The Maw only rewards the hero (and raises the Lumen's trust) when the hero brought it down. Behind the scenes, every monster books its anger and armour through one place, and a self-test keeps it that way.
+
 ## 0.151 — 2026-10-08
 
 - **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, a screen shake never pushes it through a wall, it no longer sinks into a raised platform or slips behind the walls at the underpass mouth, and near the top of a stair it keeps clear of the street overhead. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).

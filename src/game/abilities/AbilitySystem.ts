@@ -17,11 +17,12 @@ import type { Player } from '../../player/Player';
 import type { Interactions } from '../Interactions';
 import type { Input } from '../Input';
 import type { Progress } from './Progress';
+import type { Target } from '../Targeting';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
-  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE,
+  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, LEAP_SPEED, DASH, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE,
   SHOCK_COST, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIREBALL, NOVA,
-  BOLT, QUAKE, GUST, SHRINK, GIANT, sizeUpkeep, TAP_DEBOUNCE,
+  BOLT, QUAKE, GUST, SHRINK, GIANT, sizeUpkeep, TAP_DEBOUNCE, PHASE, SEEKER, FOCUS, SENSE,
 } from './tuning';
 
 export interface AbilityHooks {
@@ -37,6 +38,8 @@ export interface AbilityHooks {
 /** The elemental layer: tap powers go off through it (true: it went off). */
 export interface PowerEffects {
   fire(id: AbilityId, rank: number): boolean;
+  /** A charged power is let go with `charge` 0..1 (true: it went off; false gives the energy back). */
+  release?(id: AbilityId, rank: number, charge: number): boolean;
   /** The held power did nothing last frame (a target out of sight / reach): no energy for it. */
   readonly idle?: boolean;
 }
@@ -47,7 +50,13 @@ const NUMPAD = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6'
 /** Tap powers of the elemental layer: their energy (they are balanced by cost, not cooldowns). */
 const TAP: Partial<Record<AbilityId, number>> = {
   fireWave: FIRE.cost, fireball: FIREBALL.cost, frostNova: NOVA.cost, lightning: BOLT.cost,
-  stomp: QUAKE.cost, gust: GUST.cost, shrink: SHRINK.cost,
+  stomp: QUAKE.cost, gust: GUST.cost, shrink: SHRINK.cost, phase: PHASE.cost, seeker: SEEKER.cost,
+};
+
+/** Charged powers (held to gather, fired on release): `base` energy on the press, up to `cost` in
+ *  all while it gathers for `time` s. */
+const CHARGED: Partial<Record<AbilityId, { base: number; cost: number; time: number }>> = {
+  focus: { base: FOCUS.base, cost: FOCUS.cost, time: FOCUS.charge },
 };
 
 /** Held powers: energy per second (super speed runs for free, like flight). */
@@ -69,9 +78,13 @@ export class AbilitySystem {
   /** The held power this frame (laser, ice path, hydrokinesis): id, rank, seconds held. */
   channel: { id: AbilityId; rank: number; t: number } | null = null;
   private channelSrc: string | null = null;
+  /** A charged power gathering (focus beam): share 0..1 and the energy paid for it so far. */
+  private gathered = { share: 0, paid: 0 };
   hooks: AbilityHooks = {};
   /** The elemental layer (set by the game). */
   effects: PowerEffects | null = null;
+  /** The friend/foe sense's test (friendFoe.spared), set by the game: the shockwave uses it here. */
+  spared: ((t: Target) => boolean) | null = null;
   /** Tap powers the game runs itself (the slime call): energy by rank and a handler (true: it went off). */
   special: Partial<Record<AbilityId, { cost: number[]; run: (rank: number) => boolean }>> = {};
   /** Input disabled (UI open, free camera). */
@@ -93,12 +106,22 @@ export class AbilitySystem {
   /** Energy one use of a tap power costs at its current rank (0: not a paid tap power). */
   cost(id: AbilityId): number {
     const r = Math.max(1, this.rank(id));
+    const ch = CHARGED[id];
+    if (ch) return ch.base;
     if (id === 'shockwave') return SHOCK_COST[r];
     if (id === 'speed') return this.player.flying ? DASH.cost : 0;
     const sp = this.special[id];
     if (sp) return sp.cost[r] ?? sp.cost[sp.cost.length - 1];
     return TAP[id] ?? 0;
   }
+
+  /** Does this power's friend/foe sense work right now? Bought, and the body is not a giant's. */
+  senseOn(id: AbilityId): boolean {
+    return this.progress.hasSense(id) && this.player.height <= SENSE.maxHeight;
+  }
+
+  /** A charged power gathering: how far 0..1 (-1: none). The HUD shows it in the charge bar. */
+  get gathering(): number { return this.channel && CHARGED[this.channel.id] ? this.gathered.share : -1; }
 
   /** Is this power in use right now (held, running, flying, charging)? For the HUD. */
   active(id: AbilityId): boolean {
@@ -116,6 +139,7 @@ export class AbilitySystem {
     p.flightAllowed = rf > 0;
     p.flightSpeed = FLIGHT_SPEED[rf] || 1;
     p.flightBoost = FLIGHT_BOOST_MUL[rf] || FLIGHT_BOOST_MUL[FLIGHT_BOOST_MUL.length - 1];
+    p.leapSpeed = LEAP_SPEED[this.rank('superJump')] || 12;
     [p.minHeight, p.maxHeight] = SIZE_RANGE[rz];
     for (const [id, c] of this.cooldown) { c.left -= dt; if (c.left <= 0) this.cooldown.delete(id); }
     this.updateEnergy(dt);
@@ -125,7 +149,7 @@ export class AbilitySystem {
     const sj = this.rank('superJump') > 0;
     p.jumpOnSpace = !sj;
     if (this.rank('speed') <= 0) this.speedOn = false;
-    if (!this.enabled) { this.cancelCharge(); this.endChannel(); p.speedTop = 0; return; }
+    if (!this.enabled) { this.cancelCharge(); this.endChannel(false); p.speedTop = 0; return; }
     if (sj && !p.flying && input.hit('Space') && p.grounded && this.charge < 0) this.beginCharge('Space');
     this.updateCharge(dt, input);
     this.updateChannel(dt, input);
@@ -220,7 +244,8 @@ export class AbilitySystem {
         return this.dash(r);
       case 'shockwave': {
         if (this.energy < SHOCK_COST[r]) { this.hooks.deny?.('Not enough energy'); return false; }
-        if (!this.interactions.blastAtView(SHOCK_RANGE[r] * Math.max(1, Math.sqrt(p.k)), SHOCK_IMPULSE[r], true)) return false;
+        const spare = this.senseOn('shockwave') ? this.spared ?? undefined : undefined;
+        if (!this.interactions.blastAtView(SHOCK_RANGE[r] * Math.max(1, Math.sqrt(p.k)), SHOCK_IMPULSE[r], true, spare)) return false;
         this.energy -= SHOCK_COST[r];
         this.debounce(id, TAP_DEBOUNCE);
         p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.6 };
@@ -277,24 +302,49 @@ export class AbilitySystem {
 
   // ---- held powers
   private beginChannel(id: AbilityId, src: string): void {
-    if (this.channel) this.endChannel();
+    if (this.channel) this.endChannel(false);
     const drain = DRAIN[id] ?? 0;
     if (drain > 0 && this.energy < drain * 0.25) { this.hooks.deny?.('Not enough energy'); return; }
+    const ch = CHARGED[id];
+    if (ch) {
+      if (this.cooldown.get(id)) return;
+      if (!this.spend(ch.base)) return;
+      this.gathered.share = 0;
+      this.gathered.paid = ch.base;
+    }
     this.channel = { id, rank: this.rank(id), t: 0 };
     this.channelSrc = src;
   }
 
-  private endChannel(): void {
+  /** The held power ends. A charged one fires on release (`fire`) or gives its energy back. */
+  private endChannel(fire = true): void {
+    const c = this.channel;
     this.channel = null;
     this.channelSrc = null;
+    if (!c || !CHARGED[c.id]) return;
+    const g = this.gathered;
+    const went = fire && !!this.effects?.release?.(c.id, c.rank, g.share);
+    if (went) this.debounce(c.id, TAP_DEBOUNCE);
+    else this.energy = Math.min(this.maxEnergy, this.energy + g.paid);
+    g.share = 0; g.paid = 0;
   }
 
   private updateChannel(dt: number, input: Input): void {
     const c = this.channel;
     if (!c || !this.channelSrc) return;
-    if (!this.isHeld(this.channelSrc, input) || this.rank(c.id) <= 0) { this.endChannel(); return; }
+    if (!this.isHeld(this.channelSrc, input) || this.rank(c.id) <= 0) { this.endChannel(this.rank(c.id) > 0); return; }
     c.t += dt;
     c.rank = this.rank(c.id);
+    const ch = CHARGED[c.id];
+    if (ch) {
+      // Gathering: pay for the share gained; with too little energy it stops growing (and holds).
+      const g = this.gathered;
+      const want = Math.min(1, g.share + dt / ch.time);
+      const owe = ch.base + (ch.cost - ch.base) * want - g.paid;
+      if (owe > 0 && this.energy >= owe) { this.energy -= owe; g.paid += owe; g.share = want; }
+      else if (owe <= 0) g.share = want;
+      return;
+    }
     const drain = DRAIN[c.id] ?? 0;
     if (drain > 0 && !this.effects?.idle) {
       if (this.energy < drain * dt) { this.hooks.deny?.('Out of energy'); this.channel = null; this.channelSrc = null; return; }

@@ -177,6 +177,11 @@ export interface SaveData {
    * none (the browser's own record for the city stays).
    */
   wardens?: unknown;
+  /**
+   * The hero's three costumes (game/costumes SavedCostumes, sanitised by `readCostumes`); older
+   * saves have none (all three are the saved character's look).
+   */
+  costumes?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -318,6 +323,7 @@ export function parseSave(input: string | unknown): SaveData {
     ...(o.cityLife && typeof o.cityLife === 'object' ? { cityLife: o.cityLife } : {}),
     ...(o.sidekick && typeof o.sidekick === 'object' ? { sidekick: o.sidekick } : {}),
     ...(o.wardens && typeof o.wardens === 'object' ? { wardens: o.wardens } : {}),
+    ...(o.costumes && typeof o.costumes === 'object' ? { costumes: o.costumes } : {}),
   };
 }
 
