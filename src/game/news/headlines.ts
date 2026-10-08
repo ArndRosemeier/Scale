@@ -10,8 +10,9 @@ import type { Safety } from './pulse';
 
 /** shard: the glowing stone found in the city (game/sidekick); swarm / walker / stare: the Wardens (game/aliens). */
 export type NewsWhat = CrimeKind | 'rising' | 'falling' | 'turf' | 'shard' | 'mourn' | WardenNews;
-export type WardenNews = 'swarm' | 'walker' | 'stare';
-const WARDEN_NEWS: readonly NewsWhat[] = ['swarm', 'walker', 'stare'];
+/** teens: the runaway saucer (end 'hero': the hero handed it over; 'stopped': the Nannies caught it; 'none': it got away). */
+export type WardenNews = 'swarm' | 'walker' | 'stare' | 'teens';
+const WARDEN_NEWS: readonly NewsWhat[] = ['swarm', 'walker', 'stare', 'teens'];
 export type NewsEnd = 'stopped' | 'escaped' | 'hero' | 'none';
 
 export interface NewsItem {
@@ -79,6 +80,7 @@ export function headline(it: NewsItem): string {
   if (it.what === 'swarm') return 'Hundreds of discs over the city. The Wardens won\'t say why';
   if (it.what === 'walker') return `Warden walker stands in ${it.hood}, staring`;
   if (it.what === 'stare') return `Disc hangs over ${it.hood} for hours. No comment`;
+  if (it.what === 'teens') return it.end === 'hero' ? `Hero hands runaway saucer back to the Nannies over ${it.hood}` : it.end === 'stopped' ? 'Nannies lose their kids again' : `Joyriding saucer drops cars on roofs in ${it.hood}`;
   if (it.what === 'mourn') return `The hero's companion did not survive: mourning in ${it.hood}`;
   if (it.end === 'hero') return fillNews(HERO[it.what] ?? 'Hero steps in in {hood}', it);
   const p = HEAD[it.what];
@@ -87,6 +89,7 @@ export function headline(it: NewsItem): string {
 
 /** The kind of story (the card's colour band): crime, police, hero, city. */
 export function storyKind(it: NewsItem): 'crime' | 'police' | 'hero' | 'city' {
+  if (it.what === 'teens' && it.end === 'hero') return 'hero';
   if (it.what === 'rising' || it.what === 'falling' || it.what === 'turf' || it.what === 'shard' || it.what === 'mourn' || WARDEN_NEWS.includes(it.what)) return 'city';
   return it.end === 'hero' ? 'hero' : it.end === 'stopped' ? 'police' : 'crime';
 }
@@ -114,6 +117,10 @@ export function gossip(it: NewsItem, now: number, u: number): string {
   if (it.what === 'shard') return pick(['Did you see the news? Somebody found a glowing stone in {hood}. Glowing!', 'They say a stone in {hood} hums at night. Like the one from that falling star.', 'A glowing rock in {hood}, apparently. I wouldn\'t touch it.']);
   if (it.what === 'swarm') return pick(['Did you see the sky {when}? Hundreds of discs. Nobody knows why.', 'All those saucers {when}! The news called it a festival. The Wardens didn\'t call it anything.', 'My kid counted the discs {when}. Got to ninety and gave up.']);
   if (it.what === 'walker') return pick(['A Warden walker stood in {hood} {when}. Just stood there, looking.', 'They put one of their tall ones down in {hood} {when}. Gave me the creeps.', 'Did you hear? A walker in {hood}. Nobody dared go near it.']);
+  if (it.what === 'teens') return it.end === 'hero'
+    ? pick(['Did you see the hero chase that little saucer {when}? Right into the Nannies\' arms.', 'Somebody handed those alien kids back to their parents {when}. In {hood}, I heard.'])
+    : it.end === 'stopped' ? pick(['The Nannies came for their runaway kids {when}. You could hear the telling-off for miles.', 'Those little saucer joyriders got caught over {hood} {when}.'])
+    : pick(['Some saucer kids dropped a car on a roof in {hood} {when}!', 'My cousin in {hood} found a glowing squiggle on her building {when}. Alien kids, they say.', 'They lifted a man up and dropped him in a fountain in {hood} {when}. Alien kids!']);
   if (it.what === 'stare') return pick(['A disc hung over {hood} for hours {when}. Hours! Then it just left.', 'The Nannies were staring at {hood} {when}. What did we do now?']);
   const noun = NOUN[it.what] ?? 'some trouble';
   if (it.end === 'hero') return pick([`Did you hear? A hero stopped ${noun} in {hood} {when}!`, `Someone said a hero broke up ${noun} in {hood}. Was that you?`]);

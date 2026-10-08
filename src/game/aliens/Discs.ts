@@ -51,6 +51,8 @@ export interface Disc {
   probeT: number;
   spin: number;
   gone: boolean;
+  /** May come down close over the roofs (a parent disc dropping on its runaway saucer). */
+  low?: boolean;
 }
 
 export interface DiscWorld {
@@ -167,6 +169,21 @@ export class Discs {
     if (!d.coneOn) { d.coneOn = true; this.onScan?.(d); }
   }
 
+  /** Is a point inside a disc's scan cone (lit at least halfway)? */
+  inCone(d: Disc, x: number, y: number, z: number): boolean {
+    if (d.cone < 0.5) return false;
+    const ay = d.y - d.r * 0.15;
+    _d.set(d.aimX - d.x, d.aimY - ay, d.aimZ - d.z);
+    const L = _d.length();
+    if (L < 1) return false;
+    _d.divideScalar(L);
+    const px = x - d.x, py = y - ay, pz = z - d.z;
+    const t = px * _d.x + py * _d.y + pz * _d.z;
+    if (t < 0 || t > L) return false;
+    const perp = Math.hypot(px - _d.x * t, py - _d.y * t, pz - _d.z * t);
+    return perp < Math.max(d.r * 0.5, L * 0.16) * (t / L) + 1.5;
+  }
+
   update(dt: number, fx: number, fz: number, rnd: () => number): void {
     this.time += dt;
     for (const d of this.list) this.step(d, dt, fx, fz, rnd);
@@ -221,7 +238,7 @@ export class Discs {
         if (d.y - d.ground > 1400) { d.gone = true; return; }
         break;
     }
-    if (d.mode !== 'leave') wantY = Math.max(wantY, d.top + CLEAR);
+    if (d.mode !== 'leave') wantY = Math.max(wantY, d.top + (d.low ? d.r * 0.4 + 8 : CLEAR));
     // Steering: arrive at (tx, tz).
     let ax = 0, az = 0;
     if (d.mode !== 'leave') {
@@ -306,7 +323,7 @@ export class Discs {
 }
 
 /** The hull (radius 1): a smooth lens with a low dome, flat underneath. */
-function hullGeometry(): THREE.BufferGeometry {
+export function hullGeometry(): THREE.BufferGeometry {
   const pts = [
     [0, -0.13], [0.3, -0.13], [0.62, -0.12], [0.86, -0.09], [0.97, -0.05], [1, 0], [0.96, 0.05], [0.8, 0.1],
     [0.55, 0.15], [0.38, 0.2], [0.3, 0.29], [0.2, 0.34], [0.1, 0.36], [0, 0.365],

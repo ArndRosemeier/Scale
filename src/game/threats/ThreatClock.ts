@@ -58,6 +58,8 @@ export interface ArchetypeDef {
 export const ARCHETYPES: readonly ArchetypeDef[] = [
   { id: 'robots', tier: 'minor', weight: 1, omens: ['glitch', 'drone', 'billboard'] },
   { id: 'brood', tier: 'minor', weight: 1, omens: ['chitter', 'glimpse', 'chitter'] },
+  // The runaway teens (ALIENS_PLAN §5, game/aliens): a saucer zipping past low, a fresh glyph on a facade.
+  { id: 'teens', tier: 'minor', weight: 1, omens: ['zip', 'glyph', 'zip'] },
   { id: 'strider', tier: 'major', weight: 1, omens: ['tremor', 'wake', 'tremor'] },
 ];
 

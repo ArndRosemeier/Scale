@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.120 — 2026-10-07
+
+- **Runaway saucer.** Now and then two Warden kids steal a small, battered saucer and go joyriding low between the houses, where the roofs hide them from their parents' station. Before it happens you may see one zip down a street or find a glowing glyph on a wall. While they are out they play pranks: they beam up a parked car and drop it on a low roof, lift someone off the pavement and set them down in a fountain, or draw big glowing glyphs on a facade that stay lit for a long time. The saucer whines as it flies, giggles after a prank, and people point, laugh or grumble about it.
+- **Get them caught.** The Nannies never chase their kids under the roofs, but if the saucer is out in the open sky for a couple of seconds, or crosses a disc's scan cone, they have it. Chase it and punch out its three glowing hover pods: each one lost makes it fly higher, and with all three out it bobs up over the roofs like a cork. Getting close also makes them flee, sometimes into the open. Then a big parent disc comes down, holds the saucer in a bubble with a stern tone and lifts it away.
+- **Handing them over pays.** If you knocked out a pod or were close when they were seen, you get karma, a little reputation and cheers, and the news reports that you handed the saucer back. The Wardens quietly remember every problem you hand them. If nobody catches the kids, they fly home on their own after a while and the news writes about cars on roofs instead.
+
 ## 0.119 — 2026-10-07
 
 - **Your sidekick earns karma and learns new powers.** They earn karma of their own by knocking out bad guys, winning fights at your side and helping people up who were left lying. They spend it themselves on powers that suit who they are: fireballs and lightning for the curious and outgoing, a ground quake, a shoulder charge and more strength for the hard-headed, a stunning flash and a shield for the dutiful, a blast of wind and toughness for the nervous. A message tells you what they learned. In a fight they mix their powers, using whichever fits and switching between them rather than repeating one, and raise a shield when they get hurt.

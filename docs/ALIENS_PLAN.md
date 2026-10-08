@@ -1,7 +1,9 @@
 # Aliens — plan
 
-Status (2026-10-07): **phase 1 built** (the Nannies in the sky: station, discs, walkers, watching, people, news,
-sounds; see ARCHITECTURE.md, "The Wardens"). Phases 2–4 not built.
+Status (2026-10-07): **phases 1 and 2 built** (1: the Nannies in the sky: station, discs, walkers, watching,
+people, news, sounds; 2: the runaway teens on the threat clock, their pranks, hover pods, getting them seen, the parent
+disc, regard; see ARCHITECTURE.md, "The Wardens"). Phases 3–4 not built. Phase 2 left out the cow in the countryside
+(there are no cows yet) and stacking cars (parked cars are not physical bodies to land on).
 
 Original status: **plan, nothing built** (Arnd, 2026-10-07: "In this close future, aliens have actually landed and made
 contact. They are not hostile and also not really friendly, more like upset parents watching over toddlers. They are

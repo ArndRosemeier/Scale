@@ -14,14 +14,19 @@
  *    think of the Nannies; the news has the swarms, the walkers and the long stares; the talk menu
  *    has lines about them.
  *  - Sounds: a low chord at the nearest disc, a soft rising tone when a cone comes on.
+ *  - Phase 2: the runaway teens (RunawayTeens, an event on the threat clock) draw glowing glyphs on
+ *    facades (Glyphs, kept here); their omens are a saucer zipping past low and a fresh glyph. A
+ *    disc never watches their incident from above (the Nannies do not know), but the discs hang
+ *    and scan more often round it. Handing the saucer over adds to the Wardens' quiet regard.
  *
- * Nothing is saved: the schedule follows from the seed and the game clock.
+ * The schedule follows from the seed and the game clock; only the regard is saved (per city).
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role } from '../../sim/Population';
 import { Rng, deriveSeed } from '../../core/rng';
+import { doorOf } from '../../sim/Population';
 import { smoothstep } from '../../core/math';
 import { glanceAt, gawkAt } from '../../future/attention';
 import { groundBlocked, interiorPoint } from '../abilities/cores';
@@ -30,6 +35,10 @@ import { Station } from './Station';
 import { Discs, SKY_R, type Disc } from './Discs';
 import { Walker, WALKER_H, DROP_H } from './Walker';
 import { WARDENS, discPlan, walkerVisit, stareVisit, nannyLine, type DiscPlan, type NannyMoment } from './wardenRules';
+import { Glyphs, TEEN_COLOURS } from './Glyphs';
+import { TeenSaucer } from './TeenSaucer';
+import { RunawayTeens } from './RunawayTeens';
+import { freshRegard, handOver, readRegard, type Regard } from './teenRules';
 
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 const rnd = () => Math.random();
@@ -51,6 +60,12 @@ export class Wardens {
   readonly station: Station;
   readonly discs: Discs;
   readonly group = new THREE.Group();
+  /** The runaway teens' glyphs on the facades. */
+  readonly glyphs = new Glyphs();
+  /** The Wardens' quiet count of the problems the hero handed them (saved per city). */
+  regard: Regard = freshRegard();
+  /** A saucer zipping past (an omen of the runaway teens). */
+  private flybys: { s: TeenSaucer; pts: { x: number; y: number; z: number }[]; t: number; dur: number }[] = [];
   private plan: DiscPlan = { count: 0, swarm: null, slot: -1 };
   private filled = false;
   private spawnT = 0;
@@ -81,15 +96,18 @@ export class Wardens {
       top: (x, z) => g.world.groundHeight(x, z),
     });
     this.discs.onScan = (d) => this.scanned(d);
-    this.group.add(this.station.group, this.discs.group);
+    this.group.add(this.station.group, this.discs.group, this.glyphs.group);
     g.renderer.scene.add(this.group);
+    try { this.regard = readRegard(JSON.parse(localStorage.getItem(this.key()) ?? 'null')); } catch { /* storage unavailable */ }
     // The walkers: solid for the hero, a ring people keep clear of.
     g.collision.obstacleProviders.push((x0, z0, x1, z1, out) => this.obstacles(x0, z0, x1, z1, out));
   }
 
   /** A walker (staged by the warm-up so its materials are compiled before it first comes down). */
   static warmupObject(): THREE.Object3D {
-    return new Walker(0, 0, 0, 1, 0).root;
+    const o = new THREE.Group();
+    o.add(new Walker(0, 0, 0, 1, 0).root, new TeenSaucer().root);
+    return o;
   }
 
   update(dt: number): void {
@@ -110,7 +128,9 @@ export class Wardens {
     this.walkers(dt, now);
     this.people(dt);
     this.sound(dt);
+    this.updateFlybys(dt);
     const day = smoothstep(-0.12, 0.15, g.sky.sunDir.y);
+    this.glyphs.update(dt, 1 - day);
     // Underground nothing of the sky shows (the station hides itself).
     this.discs.group.visible = g.sky.underground < 0.5;
     this.discs.draw(day, cam.position);
@@ -173,7 +193,8 @@ export class Wardens {
     const g = this.g;
     const want = new Map<string, { x: number; z: number; n: number }>();
     for (const inc of g.response?.incidents ?? []) {
-      if (inc.closed || inc.level < 1) continue;
+      // (The runaway teens: the Nannies do not know about them.)
+      if (inc.closed || inc.level < 1 || inc.ev.archetype === 'teens') continue;
       const n = WARDENS.watchers[Math.min(inc.level, WARDENS.watchers.length - 1)];
       if (n > 0 && Math.hypot(inc.ev.x - fx, inc.ev.z - fz) < SKY_R * 0.85) want.set(`i${inc.ev.id}`, { x: inc.ev.x, z: inc.ev.z, n });
     }
@@ -191,7 +212,7 @@ export class Wardens {
     }
     // Release discs whose task is over.
     for (const d of this.discs.list) {
-      if (!d.task || d.task.startsWith('courier')) continue;
+      if (!d.task || d.task.startsWith('courier') || d.task === 'parent') continue;
       const key = d.task.split('#')[0];
       const w = want.get(key);
       if (!w || Number(d.task.split('#')[1]) >= w.n) { d.task = null; d.mode = 'cruise'; d.coneOn = false; d.alt = 260 + rnd() * 170; }
@@ -233,14 +254,19 @@ export class Wardens {
     this.hoverT -= dt;
     if (this.hoverT > 0) return;
     const swarm = !!this.plan.swarm;
-    this.hoverT = swarm ? rand(2, 6) : rand(12, 35);
+    // Runaway teens about: the discs sense something and hang and scan round there more often.
+    const teens = this.teens();
+    this.hoverT = swarm ? rand(2, 6) : teens ? rand(5, 12) : rand(12, 35);
     const busy = this.discs.list.filter((d) => d.mode === 'hover').length;
-    if (busy >= (swarm ? 12 : 2)) return;
-    const cands = this.discs.free().filter((d) => d.mode === 'cruise' && Math.hypot(d.x - fx, d.z - fz) < 1300);
+    if (busy >= (swarm ? 12 : teens ? 3 : 2)) return;
+    let cands = this.discs.free().filter((d) => d.mode === 'cruise' && Math.hypot(d.x - fx, d.z - fz) < 1300);
+    // (None near the teens: one comes down from above.)
+    if (teens && !cands.length) { const n = this.add(teens.x, teens.z, 'above', false); if (n) cands = [n]; }
     if (!cands.length) return;
     const d = cands[Math.floor(rnd() * cands.length)];
     // Where it is heading, a little ahead; over the street rather than on the hero's head.
     let x = d.x + d.vx * 10, z = d.z + d.vz * 10;
+    if (teens) { const a = rnd() * Math.PI * 2, r = rand(60, 220); x = teens.x + Math.cos(a) * r; z = teens.z + Math.sin(a) * r; }
     if (Math.hypot(x - fx, z - fz) < 60) { x += 120; z += 60; }
     this.discs.hover(d, x, z, rand(25, 80), rand(110, 200), rnd);
     this.stats.hovers++;
@@ -370,6 +396,90 @@ export class Wardens {
     }
   }
 
+  // ================================================================== the runaway teens
+
+  /** The runaway saucer out on its joyride now, if any. */
+  teens(): RunawayTeens | null {
+    for (const e of this.g.threats?.events ?? []) if (e instanceof RunawayTeens && e.active && e.mode !== 'held' && e.mode !== 'lifted') return e;
+    return null;
+  }
+
+  /** The running (or latest) runaway saucer (dev). */
+  private latestTeens(): RunawayTeens | null {
+    const ev = this.g.threats?.events ?? [];
+    for (let i = ev.length - 1; i >= 0; i--) if (ev[i] instanceof RunawayTeens) return ev[i] as RunawayTeens;
+    return null;
+  }
+
+  private key(): string { return `scale.wardens.v1.${this.g.mode}.${this.g.settings.seed}.${this.g.settings.size.toFixed(2)}`; }
+
+  /** The hero handed the Wardens one of their problems. */
+  handOver(): void {
+    this.regard = handOver(this.regard);
+    try { localStorage.setItem(this.key(), JSON.stringify(this.regard)); } catch { /* storage unavailable */ }
+  }
+
+  save(): Regard { return { ...this.regard }; }
+
+  restore(raw: unknown): void {
+    this.regard = raw ? readRegard(raw) : freshRegard();
+    try { localStorage.setItem(this.key(), JSON.stringify(this.regard)); } catch { /* storage unavailable */ }
+  }
+
+  /**
+   * An omen of the runaway teens near the hero: 'zip' — a scuffed little saucer streaks past low
+   * along the street and is gone; 'glyph' — a fresh glowing glyph on a facade nearby. False when
+   * there is nothing to show it on.
+   */
+  teenOmen(kind: string, rng: Rng): boolean {
+    const g = this.g, P = g.player.pos;
+    if (kind === 'glyph') {
+      const cands: { x: number; y: number; z: number; nx: number; nz: number }[] = [];
+      for (const b of g.world.buildingsIn(P.x - 110, P.z - 110, P.x + 110, P.z + 110)) {
+        if (!b.alive || b.top - b.base < 10) continue;
+        const d = doorOf(b.desc), dist = Math.hypot(d.x - P.x, d.z - P.z);
+        if (dist < 25 || dist > 110 || g.world.buildingAt(d.x + d.nx * 8, d.z + d.nz * 8)) continue;
+        // Facing the hero, roughly.
+        if ((P.x - d.x) * d.nx + (P.z - d.z) * d.nz < 0) continue;
+        cands.push({ x: d.x - d.nx * 0.8, y: b.base + Math.min(b.top - b.base - 3, 7), z: d.z - d.nz * 0.8, nx: d.nx, nz: d.nz });
+      }
+      if (!cands.length) return false;
+      const c = cands[rng.int(0, cands.length - 1)];
+      this.glyphs.add(c.x, c.y, c.z, c.nx, c.nz, rng.range(5, 7), rng.int(0, 1 << 20), TEEN_COLOURS[rng.int(0, TEEN_COLOURS.length - 1)], 0.6, 900);
+      return true;
+    }
+    // A low streak along the nearest street, past the hero.
+    const ne = g.net.nearestEdge(P.x, P.z, 60);
+    if (!ne || g.underground.isUnder(P.x, P.y + 0.5, P.z)) return false;
+    const e = g.net.edges[ne.e], o = { x: 0, z: 0, dx: 0, dz: 0 };
+    g.net.pointAt(e, ne.s, 0, o);
+    const dir = rng.chance(0.5) ? 1 : -1, pts: { x: number; y: number; z: number }[] = [];
+    for (let k = -6; k <= 6; k++) {
+      const x = o.x + o.dx * k * 20 * dir, z = o.z + o.dz * k * 20 * dir;
+      pts.push({ x, y: g.terrain.height(x, z) + 9 + Math.sin(k * 0.7) * 2, z });
+    }
+    const s = new TeenSaucer();
+    this.group.add(s.root);
+    this.flybys.push({ s, pts, t: 0, dur: 4.5 });
+    g.audio.play('teen_giggle', o.x, pts[6].y, o.z, 0.7, 1.1, 20, g.renderer.camera.position);
+    g.audio.play('teen_zap', o.x, pts[6].y, o.z, 0.5, 1.3, 20, g.renderer.camera.position);
+    glanceAt(g.peds, o.x, pts[6].y, o.z, 50, 0.8, 77);
+    return true;
+  }
+
+  private updateFlybys(dt: number): void {
+    for (let i = this.flybys.length - 1; i >= 0; i--) {
+      const f = this.flybys[i];
+      f.t += dt;
+      const u = Math.min(1, f.t / f.dur) * (f.pts.length - 1), k = Math.min(f.pts.length - 2, Math.floor(u)), w = u - k;
+      const a = f.pts[k], b = f.pts[k + 1];
+      const x = a.x + (b.x - a.x) * w, y = a.y + (b.y - a.y) * w, z = a.z + (b.z - a.z) * w;
+      const v = (f.pts.length - 1) / f.dur * 20;
+      f.s.update(dt, x, y, z, ((b.x - a.x) / 20) * v, ((b.z - a.z) / 20) * v, 0.2, true, null);
+      if (f.t >= f.dur) { f.s.dispose(); this.flybys.splice(i, 1); }
+    }
+  }
+
   // ================================================================== people
 
   /** What there is to talk about near a point: a swarm, a walker, a disc hanging or scanning, or null. */
@@ -465,7 +575,7 @@ export class Wardens {
     return {
       plan: { count: this.plan.count, swarm: this.plan.swarm }, discs: this.discs.list.length, modes, moment: this.momentNow,
       walkers: this.visits.map((v) => ({ x: Math.round(v.w.x), z: Math.round(v.w.z), phase: v.w.phase, until: +v.w.until.toFixed(2), courier: !!v.courier })),
-      station: { dir: this.station.dir.toArray().map((v) => +v.toFixed(3)) }, stats: this.stats,
+      station: { dir: this.station.dir.toArray().map((v) => +v.toFixed(3)) }, stats: this.stats, regard: this.regard, glyphs: this.glyphs.count,
     };
   }
 
@@ -489,6 +599,18 @@ export class Wardens {
         return { id: d.id, x: Math.round(d.x), z: Math.round(d.z) };
       },
       look: () => { this.lookCd = 0; return 'next spectacular moment (high in the air or giant) gets a look'; },
+      /**
+       * The runaway teens (start them with dev.threat.spawn('teens', { dist: 80 })): .status() · .pod(i)
+       * (knock pod i out as the hero) · .prank(kind?) ('car' | 'person' | 'glyph') · .catch() (seen now) ·
+       * .omen(kind) ('zip' | 'glyph').
+       */
+      teens: {
+        status: () => this.latestTeens()?.snapshot() ?? 'no runaway saucer',
+        pod: (i = 0) => { const t = this.latestTeens(); if (!t) return 'no runaway saucer'; t.devPod(i); return t.snapshot(); },
+        prank: (kind?: 'car' | 'person' | 'glyph') => this.latestTeens()?.devPrank(kind) ?? 'no runaway saucer',
+        catch: () => { const t = this.latestTeens(); if (!t) return 'no runaway saucer'; t.devCatch(); return t.snapshot(); },
+        omen: (kind = 'zip') => this.teenOmen(kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
+      },
     };
   }
 }

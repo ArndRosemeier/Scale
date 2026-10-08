@@ -5,6 +5,8 @@
 //    the noise tail is crossfaded into its head.
 //  - ufo_scan.wav: the soft rising tone when a scan cone comes on (1.5 s): a glassy, slightly
 //    inharmonic tone sweeping up an octave and a half, a slow vibrato, a soft attack and tail.
+//  - phase 2: teen_whine (loop), teen_zap, teen_giggle, teen_pod (the runaway teens' saucer) and
+//    ufo_stern (the parent disc's tone when it catches them); see their blocks below.
 // 22.05 kHz mono 16-bit, deterministic (seeded noise).
 // Run: node tools/synthWardens.mjs   (adds / refreshes their entries in public/sounds/manifest.json)
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -71,10 +73,120 @@ function wav(name, out, rmsTarget) {
   wav('ufo_scan', out, 0.16);
 }
 
+// ---------------------------------------------------------------- the runaway teens' saucer (phase 2)
+// teen_whine: a 3 s loop, a reedy warbling whine (two detuned square-ish tones 4 Hz vibrato, a
+// chirpy arpeggio blip every half second) — a hot-rodded little disc. All rates whole cycles in 3 s.
+{
+  const DUR = 3, N = SR * DUR;
+  const out = new Float32Array(N);
+  for (const [f, a] of [[220, 0.32], [221 + 1 / 3, 0.22], [330, 0.14], [440, 0.08]]) {
+    for (let i = 0; i < N; i++) {
+      const t = i / SR;
+      const ph = 2 * Math.PI * f * t + 0.012 * f / 4 * Math.sin(2 * Math.PI * 4 * t);
+      // Soft square: a few odd harmonics.
+      out[i] += a * (Math.sin(ph) + Math.sin(3 * ph) / 3 * 0.6 + Math.sin(5 * ph) / 5 * 0.3);
+    }
+  }
+  // Blips: a little rising three-note arpeggio every 0.5 s.
+  const notes = [880, 1108.73, 1318.51];
+  for (let b = 0; b < 6; b++) for (let k = 0; k < 3; k++) {
+    const t0 = b * 0.5 + k * 0.05, f = notes[(k + b) % 3];
+    for (let j = 0; j < SR * 0.045; j++) {
+      const i = Math.floor(t0 * SR) + j;
+      if (i >= N) break;
+      const e = Math.sin(Math.PI * j / (SR * 0.045));
+      out[i] += 0.05 * e * Math.sign(Math.sin(2 * Math.PI * f * j / SR));
+    }
+  }
+  wav('teen_whine', out, 0.17);
+}
+
+// teen_zap: the beam coming on (0.9 s): a buzzy sweep up with a crackle.
+{
+  const DUR = 0.9, N = Math.floor(SR * DUR);
+  const out = new Float32Array(N);
+  let ph = 0;
+  for (let i = 0; i < N; i++) {
+    const t = i / SR, u = t / DUR;
+    const f = 160 * Math.pow(2, 2.5 * u) * (1 + 0.04 * Math.sin(2 * Math.PI * 30 * t));
+    ph += 2 * Math.PI * f / SR;
+    const saw = 2 * ((ph / (2 * Math.PI)) % 1) - 1;
+    const env = Math.min(1, t / 0.02) * Math.pow(1 - u, 1.5);
+    out[i] = env * (saw * 0.5 + Math.sin(ph * 2) * 0.3 + rnd() * 0.12 * (rnd() > 0.92 ? 3 : 1));
+  }
+  wav('teen_zap', out, 0.15);
+}
+
+// teen_giggle: a glitchy robotic giggle (1.0 s): quick falling chirps, bit-crushed.
+{
+  const DUR = 1.0, N = Math.floor(SR * DUR);
+  const out = new Float32Array(N);
+  const chirps = [[0, 1400], [0.11, 1250], [0.2, 1500], [0.3, 1200], [0.41, 1350], [0.5, 1100], [0.62, 1250], [0.72, 1000]];
+  for (const [t0, f0] of chirps) {
+    let ph = 0;
+    const L = Math.floor(SR * 0.075);
+    for (let j = 0; j < L; j++) {
+      const i = Math.floor(t0 * SR) + j;
+      if (i >= N) break;
+      const u = j / L, f = f0 * (1.25 - 0.45 * u);
+      ph += 2 * Math.PI * f / SR;
+      const e = Math.sin(Math.PI * u) * (1 - t0 * 0.6);
+      out[i] += e * (Math.sin(ph) + 0.35 * Math.sin(2 * ph));
+    }
+  }
+  // Crush to 5 bits, every other sample held: a cheap toy voice.
+  for (let i = 0; i < N; i++) out[i] = Math.round(out[i] * 16) / 16;
+  for (let i = 1; i < N; i += 2) out[i] = out[i - 1];
+  wav('teen_giggle', out, 0.16);
+}
+
+// teen_pod: a hover pod knocked out (0.6 s): a pop, a fizzing crackle, a falling whir.
+{
+  const DUR = 0.6, N = Math.floor(SR * DUR);
+  const out = new Float32Array(N);
+  let ph = 0, lp = 0;
+  for (let i = 0; i < N; i++) {
+    const t = i / SR, u = t / DUR;
+    const f = 600 * Math.pow(0.25, u);
+    ph += 2 * Math.PI * f / SR;
+    lp += (rnd() - lp) * 0.35;
+    const pop = Math.exp(-t * 60);
+    out[i] = pop * rnd() * 1.4 + Math.exp(-t * 6) * (Math.sin(ph) * 0.4 + lp * (rnd() > 0.85 ? 1.2 : 0.3));
+  }
+  wav('teen_pod', out, 0.2);
+}
+
+// ufo_stern: the parent disc's stern tone (2.6 s): a deep, slightly brassy two-note fall (A2 → E2,
+// "tut-tut"), an octave below for weight, a slow swell and a long tail — rolls over the block.
+{
+  const DUR = 2.6, N = Math.floor(SR * DUR);
+  const out = new Float32Array(N);
+  const notes = [[0, 1.0, 110], [1.05, 1.5, 82.41]];
+  for (const [t0, len, f] of notes) {
+    let ph = 0;
+    for (let j = 0; j < SR * (len + 0.4); j++) {
+      const i = Math.floor(t0 * SR) + j;
+      if (i >= N) break;
+      const t = j / SR;
+      ph += 2 * Math.PI * f * (1 + 0.003 * Math.sin(2 * Math.PI * 5 * t)) / SR;
+      const env = Math.min(1, t / 0.12) * (t < len ? 1 : Math.exp(-(t - len) * 9)) * (0.85 + 0.15 * Math.sin(Math.PI * Math.min(1, t / len)));
+      let v = 0;
+      for (let h = 1; h <= 7; h++) v += Math.sin(ph * h) / Math.pow(h, 1.25);
+      out[i] += env * (v * 0.5 + Math.sin(ph * 0.5) * 0.45);
+    }
+  }
+  wav('ufo_stern', out, 0.22);
+}
+
 // ---------------------------------------------------------------- manifest
 const mf = new URL('../public/sounds/manifest.json', import.meta.url);
 const m = JSON.parse(readFileSync(mf, 'utf8'));
 m.ufo_hum = { files: ['ufo_hum.wav'], loop: true, gain: 0.55, description: 'Warden disc: low chord loop (procedural, tools/synthWardens.mjs)' };
 m.ufo_scan = { files: ['ufo_scan.wav'], loop: false, gain: 0.5, description: 'Warden disc: soft rising tone when a scan cone comes on (procedural, tools/synthWardens.mjs)' };
+m.teen_whine = { files: ['teen_whine.wav'], loop: true, gain: 0.5, description: 'Runaway teens\' saucer: reedy warbling whine loop (procedural, tools/synthWardens.mjs)' };
+m.teen_zap = { files: ['teen_zap.wav'], loop: false, gain: 0.55, description: 'Runaway teens\' saucer: buzzy beam coming on (procedural, tools/synthWardens.mjs)' };
+m.teen_giggle = { files: ['teen_giggle.wav'], loop: false, gain: 0.55, description: 'Runaway teens: glitchy robotic giggle after a prank (procedural, tools/synthWardens.mjs)' };
+m.teen_pod = { files: ['teen_pod.wav'], loop: false, gain: 0.6, description: 'Runaway teens\' saucer: a hover pod knocked out, pop and fizz (procedural, tools/synthWardens.mjs)' };
+m.ufo_stern = { files: ['ufo_stern.wav'], loop: false, gain: 0.7, description: 'Parent Warden disc: deep stern two-note tone over the block (procedural, tools/synthWardens.mjs)' };
 writeFileSync(mf, JSON.stringify(m, null, 2) + '\n');
 console.log('manifest updated');
