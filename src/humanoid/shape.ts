@@ -113,8 +113,14 @@ export function computeShape(a: HumanoidAppearance): ShapeParams {
   t.signed('%-eye-scale', f.eyeSize);
   t.signed('%-eye-trans', f.eyeSpacing, 2);
   t.signed('mouth-scale-horiz', f.mouthWidth);
-  t.signed('mouth-upperlip-volume', f.lipFullness);
-  t.signed('mouth-lowerlip-volume', f.lipFullness);
+  // Lip thickness: gentle around 0 (city faces vary a little), strong at the slider's ends
+  // (thin line ↔ very full), volume plus the lips' own height. MakeHuman's thinning targets are
+  // weaker than its fuller ones, so the thin side gets more gain.
+  const lv = f.lipFullness, lips = lv + (lv < 0 ? 1.2 : 0.5) * lv * Math.abs(lv);
+  t.signed('mouth-upperlip-volume', lips);
+  t.signed('mouth-lowerlip-volume', lips);
+  t.signed('mouth-upperlip-height', lips, 0, 0.3);
+  t.signed('mouth-lowerlip-height', lips, 0, 0.3);
   t.signed('%-ear-scale', f.earSize);
   if (f.earPoint > 0) t.add('%-ear-shape-pointed', Math.min(1, f.earPoint));
   else t.add('%-ear-shape-round', -f.earPoint);

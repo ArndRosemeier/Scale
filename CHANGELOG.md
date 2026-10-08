@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.147 — 2026-10-08
+
+- **Lip thickness slider.** The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and finally does something you can see: from a thin line to very full lips, on women and men alike. Around the middle it changes little, so city people's faces stay much as they were. Saved with the character like every face slider.
+
 ## 0.146 — 2026-10-08
 
 - **Behind the scenes: one "is this person underground?" question.** Two dozen places asked it by hand (crimes, threats, wardens, saves, markers, the manhole prompt); they now ask the underground system the same way. Nothing changes in play; a self-test keeps it that way.
