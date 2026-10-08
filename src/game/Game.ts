@@ -1103,7 +1103,7 @@ export class Game {
         return markerOnScreen(x, feet + 1.2, z, feet, cam, deedView, 0.85);
       },
       markers: (m) => this.map.setMarkers('deeds', m),
-      rep: (d, reason) => this.crime?.rep.add(d, reason),
+      rep: (d, reason) => this.crime?.reward({ rep: d, why: reason }),
     };
     if (normal) {
       const cores = new PowerCores(

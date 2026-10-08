@@ -3756,6 +3756,23 @@ aliensChecks(check);
   check(hand.length === 0, `causes: conversions go through shared/cause.ts (${hand.join(', ') || 'none'})`);
 }
 
+// Rewards (reputation, stats, cheers) go through CrimeSystem.reward, so every "stopped" deed counts,
+// cools the police and gets its cheer the same way.
+{
+  const hand: string[] = [];
+  const walkR = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkR(full); continue; }
+      if (!f.endsWith('.ts') || full.endsWith('crime/CrimeSystem.ts')) continue;
+      const src = readFileSync(full, 'utf8').replace(/rep\.add\([^;]*'dev'\)/g, '');
+      if (/\.rep\.count\(|crime\??\.cheer\(\)|crime\??\.rep\.add\(/.test(src)) hand.push(full);
+    }
+  };
+  walkR('src');
+  check(hand.length === 0, `rewards: through crime.reward (${hand.join(', ') || 'none'})`);
+}
+
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
 {

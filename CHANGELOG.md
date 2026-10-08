@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.148 — 2026-10-08
+
+- **Every good deed is rewarded the same way.** Each kind of rescue and win used to hand out its own mix of karma, reputation, cheers and stats, and each one forgot something different. Now they all go through one reward step. Anything that ends a crime, a den, a monster or a whole event counts as "stopped" in your stats, makes people nearby cheer, and calms the police a little. This now also applies to bringing down the Strider, stopping the awakened tree, beating back the brood or the rogue robots, catching the runaway saucer, calling off the last-resort strike and bringing down the Maw. Rescues count as good deeds, and surface slime brutes earn a little reputation like brood beasts. A self-test keeps rewards in one place.
 ## 0.147 — 2026-10-08
 
 - **Fix: police and army stomps no longer count against the hero.** When a soldier's or officer's footstep knocked someone down, the game booked it as the hero's doing, which could cost reputation and raise the wanted level while the hero only stood by. A giant police or army step also no longer hurts the slime brood or a monster as if the hero had stamped. When the police shoot a rampaging giant hero, the hit now counts as theirs instead of the army's. Behind the scenes, "who did it" now uses one vocabulary everywhere, and a self-test keeps it that way.
