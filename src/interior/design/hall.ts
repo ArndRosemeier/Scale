@@ -8,6 +8,7 @@
  */
 import { Rng } from '../../core/rng';
 import { emptyDesign, type Design, type DFloor, type P2, type RoomFn, type Volume } from './types';
+import { lerp2 } from '../../core/geom2';
 
 export interface HallProgram {
   /** Ground floor level (the hall's floor; the host builds that plate). */
@@ -104,8 +105,7 @@ export function designHall(vol: Volume, P: HallProgram): HallPlan | null {
       // The room behind: its floor (with the stair hole where a flight comes up).
       if (isHole) {
         const f = 0.5 - (STAIR_W / 2 + 0.15) / chord(P0(rw), P1(rw)), g = 1 - f;
-        const L = (q: P2, p: P2, s: number): P2 => [q[0] + (p[0] - q[0]) * s, q[1] + (p[1] - q[1]) * s];
-        const at = (s: number, rr: number) => L(P0(rr), P1(rr), s);
+        const at = (s: number, rr: number) => lerp2(P0(rr), P1(rr), s);
         const rh = rw + isHole.run;
         D.floors.push(plate(P0(rw), at(f, rw), at(f, e0 + (e1 - e0) * f), P0(e0), y, P.slab, 'stairs'));
         D.floors.push(plate(at(g, rw), P1(rw), P1(e1), at(g, e0 + (e1 - e0) * g), y, P.slab, 'stairs'));

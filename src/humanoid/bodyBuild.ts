@@ -20,6 +20,7 @@ import type { HumanoidAppearance } from './types';
 import { computeShape, type ShapeParams } from './shape';
 import type { BoneGroup } from './races';
 import type { BodyFit, Socket } from '../items/wearable';
+import { v3sub as sub, v3add as add, v3scale as mulS, v3dot as dot3, v3cross as cross, v3norm as norm } from '../core/math';
 
 export interface SocketFrame {
   bone: number;
@@ -311,12 +312,6 @@ export function computeNormals(as: HumanAssets, pos: Float32Array, out?: Float32
 // ------------------------------------------------------------------ measurements
 
 type V3 = [number, number, number];
-const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-const mulS = (a: V3, s: number): V3 => [a[0] * s, a[1] * s, a[2] * s];
-const dot3 = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm = (a: V3): V3 => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
 /** Mean radial distance of the vertices dominated by `bones` from the axis head→tail (mid section only). */
 function limbRadius(as: HumanAssets, pos: Float32Array, bones: number[], head: V3, tail: V3): number {

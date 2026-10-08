@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { HumanAssets } from '../assets';
 import { targetMask } from '../bodyBuild';
 import type { BodyRegion } from '../../items/wearable';
-import { smoothstep as smooth } from '../../core/math';
+import { smoothstep as smooth, v3cross, v3scale, type Vec3 } from '../../core/math';
 
 export const BODY_REGIONS: BodyRegion[] = [
   'scalp', 'face', 'neck', 'chest', 'belly', 'back', 'pelvis', 'buttocks',
@@ -106,10 +106,10 @@ export function getHumanStatic(as: HumanAssets): HumanStatic {
       const w = m.bones[bone(`wrist.${s}`)];
       const wh = [base[w.head * 3], base[w.head * 3 + 1], base[w.head * 3 + 2]];
       const f3 = m.bones[bone(`finger3-1.${s}`)], i2 = m.bones[bone(`finger2-1.${s}`)], p5 = m.bones[bone(`finger5-1.${s}`)];
-      const fd = [base[f3.head * 3] - wh[0], base[f3.head * 3 + 1] - wh[1], base[f3.head * 3 + 2] - wh[2]];
-      const ac = [base[i2.head * 3] - base[p5.head * 3], base[i2.head * 3 + 1] - base[p5.head * 3 + 1], base[i2.head * 3 + 2] - base[p5.head * 3 + 2]];
+      const fd: Vec3 = [base[f3.head * 3] - wh[0], base[f3.head * 3 + 1] - wh[1], base[f3.head * 3 + 2] - wh[2]];
+      const ac: Vec3 = [base[i2.head * 3] - base[p5.head * 3], base[i2.head * 3 + 1] - base[p5.head * 3 + 1], base[i2.head * 3 + 2] - base[p5.head * 3 + 2]];
       const sg = s === 'L' ? -1 : 1;
-      const dz = [sg * (fd[1] * ac[2] - fd[2] * ac[1]), sg * (fd[2] * ac[0] - fd[0] * ac[2]), sg * (fd[0] * ac[1] - fd[1] * ac[0])];
+      const dz = v3scale(v3cross(fd, ac), sg);
       const dl = Math.hypot(dz[0], dz[1], dz[2]) || 1;
       for (let v = 0; v < BODY; v++) {
         let wgt = 0;

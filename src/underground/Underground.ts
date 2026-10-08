@@ -38,6 +38,7 @@ import { planSewerHints } from './sewerHints';
 import { planDeeps, dropOutposts, type DeepPlan } from './deep/plan';
 import { DeepField } from './deep/field';
 import { DeepMeshes } from './deep/DeepMeshes';
+import { v3lerp, type Vec3 } from '../core/math';
 
 const BUILD_R = 380;
 /** Side rooms and hidden chambers are built within these distances (m). */
@@ -912,8 +913,8 @@ export class Underground {
       for (let k = 0; k < profile.length; k++) {
         const [l0, h0] = profile[k], [l1, h1] = profile[(k + 1) % profile.length];
         if (!sewer && k === 0 && !passage) continue; // tunnel floor is the track bed (drawn below)
-        const A = [ax - d0[1] * l0, ay + h0, az + d0[0] * l0], B = [ax - d0[1] * l1, ay + h1, az + d0[0] * l1];
-        const C = [bx - d1[1] * l1, by + h1, bz + d1[0] * l1], D = [bx - d1[1] * l0, by + h0, bz + d1[0] * l0];
+        const A: Vec3 = [ax - d0[1] * l0, ay + h0, az + d0[0] * l0], B: Vec3 = [ax - d0[1] * l1, ay + h1, az + d0[0] * l1];
+        const C: Vec3 = [bx - d1[1] * l1, by + h1, bz + d1[0] * l1], D: Vec3 = [bx - d1[1] * l0, by + h0, bz + d1[0] * l0];
         if (passage) {
           // In the street opening the passage is open to the sky; elsewhere walls and ceiling
           // stay just under the street surface. The stub inside the station hall draws nothing.
@@ -955,8 +956,7 @@ export class Underground {
             PA = [ax - d0[1] * L0, ay + H0, az + d0[0] * L0]; PB = [ax - d0[1] * L1, ay + H1, az + d0[0] * L1];
             PC = [bx - d1[1] * L1, by + H1, bz + d1[0] * L1]; PD = [bx - d1[1] * L0, by + H0, bz + d1[0] * L0];
           }
-          const lerp3 = (X: number[], Y: number[], f: number) => [X[0] + (Y[0] - X[0]) * f, X[1] + (Y[1] - X[1]) * f, X[2] + (Y[2] - X[2]) * f];
-          const A2 = lerp3(PA, PD, ta), B2 = lerp3(PB, PC, ta), C2 = lerp3(PB, PC, tb), D2 = lerp3(PA, PD, tb);
+          const A2 = v3lerp(PA, PD, ta), B2 = v3lerp(PB, PC, ta), C2 = v3lerp(PB, PC, tb), D2 = v3lerp(PA, PD, tb);
           const sa = s0 + (s1 - s0) * ta, sb = s0 + (s1 - s0) * tb;
           const i0v = mb.v(A2[0], A2[1], A2[2], nx, nh, nz, sa, V0);
           mb.v(B2[0], B2[1], B2[2], nx, nh, nz, sa, V1);
@@ -2228,8 +2228,6 @@ function signTexture(name: string, colors: number[]): THREE.CanvasTexture {
   t.anisotropy = 8;
   return t;
 }
-
-
 
 /** Height of the grime band at the foot of the sewer walls (m over the walkway). */
 const GRIME = 0.45;

@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { buildArmyTruck, buildApc, buildTank } from './military';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
-import { clamp, lerp, v3sub as sub } from '../core/math';
+import { clamp, lerp, v3sub as sub, v3cross as cross, v3dot as dot, v3norm as norm, v3madd as addS } from '../core/math';
 
 // ---------------------------------------------------------------- public API
 
@@ -115,10 +115,6 @@ function mono(pts: [number, number][]): (x: number) => number {
   };
 }
 
-function cross(a: V3, b: V3): V3 { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
-function dot(a: V3, b: V3) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
-function norm(a: V3): V3 { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
-function addS(a: V3, b: V3, s: number): V3 { return [a[0] + b[0] * s, a[1] + b[1] * s, a[2] + b[2] * s]; }
 function mx(p: V3, side: number): V3 { return side > 0 ? p : [-p[0], p[1], p[2]]; }
 
 // ---------------------------------------------------------------- triangle soup builder

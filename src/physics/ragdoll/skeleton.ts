@@ -12,6 +12,8 @@
  * Bones inside a part (`sub`) are held at their rest rotation while the ragdoll drives the rig.
  */
 
+import { v3sub as sub, v3len as len, v3lerp as lerp3, v3cross } from '../../core/math';
+
 export const enum Part { Pelvis, Abdomen, Chest, Head, UArmL, LArmL, UArmR, LArmR, ThighL, ShinL, FootL, ThighR, ShinR, FootR }
 export const PART_COUNT = 14;
 
@@ -109,10 +111,6 @@ export interface RagDims {
   height: number;
 }
 
-const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const len = (a: Vec3) => Math.hypot(a[0], a[1], a[2]);
-const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-
 /** Body plan from rest bone heads (a rig's `Character.rest`, or the defaults scaled). */
 export function makeDims(rest: (name: string) => Vec3 | null): RagDims {
   const R = (n: string): Vec3 => rest(n) ?? defaultRest(n)!;
@@ -161,7 +159,7 @@ export function makeDims(rest: (name: string) => Vec3 | null): RagDims {
         shape.push(cap(o, o, hand, 0.04 * f, 0.4, -0.2));
         // Elbow hinge: perpendicular to the plane of the rest upper arm and forearm.
         const u = sub(o, R('upperarm01.' + side)), w = sub(hand, o);
-        const c: Vec3 = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+        const c = v3cross(u, w);
         const cl = len(c);
         hinge[i] = cl > 1e-4 ? [c[0] / cl, c[1] / cl, c[2] / cl] : [1, 0, 0];
         break;

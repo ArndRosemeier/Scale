@@ -7,6 +7,10 @@
 export type Poly = number[];
 export type P2 = [number, number];
 
+export function lerp2(a: P2, b: P2, t: number): P2 {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
 export function polyArea(p: Poly): number {
   let a = 0;
   const n = p.length >> 1;
