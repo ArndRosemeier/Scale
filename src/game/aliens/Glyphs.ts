@@ -48,10 +48,20 @@ function drawGlyph(seed: number): THREE.CanvasTexture {
   return t;
 }
 
-/** The gaudy colours the teens' beam draws in. */
-export const TEEN_COLOURS = [new THREE.Color(1.6, 0.25, 1.3), new THREE.Color(0.3, 1.7, 0.6), new THREE.Color(1.7, 1.4, 0.2), new THREE.Color(0.2, 1.3, 1.8)];
+/**
+ * The gaudy colours the teens' beam draws in, linear and pure (no secondary channel to wash them
+ * out). Scaled by `teenGlow.gain` when drawn.
+ */
+export const TEEN_COLOURS = [new THREE.Color(1, 0, 0.55), new THREE.Color(0, 1, 0.06), new THREE.Color(1, 0.5, 0), new THREE.Color(0, 0.45, 1)];
 
-interface Glyph { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; t: number; drawT: number; until: number; flick: number }
+/**
+ * How bright the teens' lights and glyphs are drawn: the AgX tone mapping bleaches anything far
+ * over 1 towards white, and the night exposure (about three times the midday one) pushes the same
+ * colours there, so the gain follows the inverse exposure (set each frame by the Wardens).
+ */
+export const teenGlow = { gain: 1 };
+
+interface Glyph { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; base: THREE.Color; t: number; drawT: number; until: number; flick: number }
 
 export class Glyphs {
   readonly group = new THREE.Group();
@@ -76,7 +86,7 @@ export class Glyphs {
     mesh.scale.set(size, size, 1);
     mesh.renderOrder = 5;
     this.group.add(mesh);
-    this.list.push({ mesh, mat, t: 0, drawT, until: drawT + secs, flick: seed % 13 });
+    this.list.push({ mesh, mat, base: colour.clone(), t: 0, drawT, until: drawT + secs, flick: seed % 13 });
   }
 
   /** How many are glowing now. */
@@ -92,7 +102,8 @@ export class Glyphs {
       const draw = Math.min(1, g.t / g.drawT);
       const fade = 1 - Math.min(1, Math.max(0, (g.t - g.until) / 20));
       const pulse = 0.8 + 0.2 * Math.sin(this.time * 2.3 + g.flick);
-      g.mat.opacity = draw * fade * pulse * (0.55 + 0.45 * night);
+      g.mat.opacity = draw * fade * pulse * (0.85 + 0.15 * night);
+      g.mat.color.copy(g.base).multiplyScalar(teenGlow.gain * 1.4);
       const s = g.mesh.scale.x;
       g.mesh.scale.y = s * (0.6 + 0.4 * draw);
     }

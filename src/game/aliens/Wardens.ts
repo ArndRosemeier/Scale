@@ -35,7 +35,7 @@ import { Station } from './Station';
 import { Discs, SKY_R, type Disc } from './Discs';
 import { Walker, WALKER_H, DROP_H } from './Walker';
 import { WARDENS, discPlan, walkerVisit, stareVisit, nannyLine, type DiscPlan, type NannyMoment } from './wardenRules';
-import { Glyphs, TEEN_COLOURS } from './Glyphs';
+import { Glyphs, TEEN_COLOURS, teenGlow } from './Glyphs';
 import { TeenSaucer } from './TeenSaucer';
 import { RunawayTeens } from './RunawayTeens';
 import { freshRegard, handOver, readRegard, type Regard } from './teenRules';
@@ -130,6 +130,7 @@ export class Wardens {
     this.sound(dt);
     this.updateFlybys(dt);
     const day = smoothstep(-0.12, 0.15, g.sky.sunDir.y);
+    teenGlow.gain = 0.6 / Math.max(0.2, g.renderer.gl.toneMappingExposure);
     this.glyphs.update(dt, 1 - day);
     // Underground nothing of the sky shows (the station hides itself).
     this.discs.group.visible = g.sky.underground < 0.5;

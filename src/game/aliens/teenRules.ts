@@ -9,6 +9,8 @@ import type { Temperament } from '../people/identity';
 export const TEENS = {
   /** The first seconds out (finding cover after they come down the street): not seen yet. */
   graceT: 8,
+  /** Where they come down: a street with at least this much cover (m), within this far of the clock's site. */
+  startCover: 12, startR: 400,
   /** Seconds of being seen (open sky, the station's view) before a disc has it; in a cone, this much faster. */
   seeT: 2.4, coneK: 3,
   /** The meter drains this much slower than it fills (a moment in the open is forgiven). */
@@ -18,7 +20,7 @@ export const TEENS = {
   /** Cover counted round the saucer (m) and the least cover a route point should have (m above the ground). */
   coverR: 34, routeCover: 9,
   /** Height over the street (m): a share of the cover, clamped; each pod out lifts it this much more. */
-  hShare: 0.5, hMin: 6, hMax: 19, perPod: 8,
+  hShare: 0.5, hMin: 6, hMax: 19, perPod: 4,
   /** All three pods out: it bobs up like a cork, this far over the roofs round it (m). */
   cork: 22,
   /** The hero right under it within this (m, horizontally): it pops up out of reach for a moment. */
