@@ -9,10 +9,11 @@
  * police or property in front of witnesses costs karma and reputation and draws the police.
  */
 import { SIDEKICK_OWNER } from '../sim/actors/Actor';
+import type { Cause } from './Stimuli';
 
 export type HarmTarget = 'person' | 'car' | 'robot' | 'drone' | 'prop' | 'building' | 'ground';
-/** 'world': nobody's own doing (a collapse's rubble, a hero's body flung by a monster). */
-export type HarmCause = 'player' | 'threat' | 'police' | 'military' | 'world';
+/** Same vocabulary as the stimuli's `Cause` ('world': nobody's own doing). */
+export type HarmCause = Cause;
 export type HarmEffect = 'knockdown' | 'burn' | 'freeze' | 'shrink' | 'stun' | 'wet' | 'wreck' | 'damage' | 'break' | 'topple' | 'stall' | 'lift' | 'facade' | 'collapse';
 
 export interface HarmEntry {

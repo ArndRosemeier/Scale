@@ -15,7 +15,7 @@ import { createFacadeMaterial } from '../render/materials/facade';
 import { createGroundMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
 import type { Obstacle } from '../world/Collision';
-import { RURAL_OBST_STRIDE } from '../build/rural';
+import { RURAL_OBST_STRIDE, ruralSurfaceAt } from '../build/rural';
 
 const TILE = 1024;
 /** Tiles nearer than this (3D distance to the tile, m) are loaded. */
@@ -35,6 +35,7 @@ interface RTile {
   near: THREE.Mesh | null;
   far: THREE.Mesh | null;
   obst: Float32Array | null;
+  surf: Float32Array | null;
   used: number;
 }
 
@@ -81,7 +82,7 @@ export class RuralStreamer {
       want.add(key);
       let t = this.tiles.get(key);
       if (!t) {
-        t = { key, x0, z0, status: 'loading', ground: null, near: null, far: null, obst: null, used: this.t };
+        t = { key, x0, z0, status: 'loading', ground: null, near: null, far: null, obst: null, surf: null, used: this.t };
         this.tiles.set(key, t);
         this.request(t, 130 + d * 0.5);
       }
@@ -118,6 +119,7 @@ export class RuralStreamer {
         t.near = this.mesh(r.facade, this.facadeMat, 'ruralNear', true);
         t.far = this.mesh(r.facadeLod, this.facadeMat, 'ruralFar', false);
         t.obst = r.obstacles;
+        t.surf = r.surfaces;
         t.status = 'ready';
       }),
       () => { if (this.tiles.get(t.key) === t) this.tiles.delete(t.key); },
@@ -155,6 +157,15 @@ export class RuralStreamer {
         out({ cyl: false, x: B[o], z: B[o + 1], r: 0, hx: B[o + 2], hz: B[o + 3], ux: B[o + 4], uz: B[o + 5], y0: B[o + 6], y1: B[o + 7] });
       }
     }
+  }
+
+  /** Is (x, z) on a road, village square or farmyard of a loaded tile? */
+  onSurface(x: number, z: number): boolean {
+    for (const t of this.tiles.values()) {
+      if (!t.surf?.length || x < t.x0 - SPILL || x > t.x0 + TILE + SPILL || z < t.z0 - SPILL || z > t.z0 + TILE + SPILL) continue;
+      if (ruralSurfaceAt(t.surf, x, z)) return true;
+    }
+    return false;
   }
 
   /** One tiny mesh per material for background shader compilation (not added to the scene). */

@@ -125,9 +125,10 @@ import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
 import { POWER_HIT } from './abilities/tuning';
+import { BRUSH_MAX_H, downCauseOf, harmCauseOf, stompDownCause } from '../shared/cause';
 
-/** What someone a super speed runner brushed past calls after them: stern, not hurt. */
-const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
+/** What someone the hero brushed past or landed beside calls after them: stern, not hurt. */
+const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re going!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
 
 export class Game {
   readonly renderer: Renderer;
@@ -334,6 +335,7 @@ export class Game {
     this.renderer.scene.add(this.countryside.group);
     this.rural = new RuralStreamer(this.pool, terrainExtent(macro.boundary), tex);
     this.rural.prepare = (o) => this.renderer.compileAsync(o);
+    this.world.rural = this.rural;
     this.renderer.scene.add(this.rural.group);
     const syncSky = () => this.skyline.setLoaded([...this.streamer.cells.values()].filter((c) => c.status === 'ready').map((c) => c.id));
     this.streamer.onCellReady = (c) => {
@@ -421,7 +423,7 @@ export class Game {
     // of a collapse and a flung hero's body are nobody's blow ('world'): never the player's.
     this.destruction.onDamage = (e) => { if (e.cause === 'player') this.consequences.record('impact', 'building', 'facade', e.x, e.z, e.ref); };
     this.destruction.onCollapse = (e) => {
-      if (e.cause) this.consequences.record('impact', 'building', 'collapse', e.x, e.z, e.ref, e.cause === 'fire' ? 'threat' : e.cause, e.floors);
+      if (e.cause) this.consequences.record('impact', 'building', 'collapse', e.x, e.z, e.ref, harmCauseOf(e.cause), e.floors);
     };
     this.player.events.onSizeChange = (_h, dir) => { if (Math.random() < 0.05) this.audio.play2d(dir > 0 ? 'grow_rumble' : 'shrink_whoosh', 0.5); };
     this.player.events.onFlightToggle = (f) => { if (f) this.audio.play2d('whoosh_takeoff', 0.7); };
@@ -442,7 +444,9 @@ export class Game {
       if (this.camRig.underground) return !this.underground.cameraFree(x, y, z, 0.12);
       const inside = this.interiors.insideAt(p.pos.x, p.pos.y + p.height * 0.5, p.pos.z);
       if (inside) return this.interiors.solidIndoors(inside, x, y, z);
-      if (y < this.terrain.height(x, z) + 0.05) return true;
+      // Under the street only the tunnels are open (the camera follows the hero down a stairwell
+      // before the hero counts as underground).
+      if (y < this.terrain.height(x, z) + 0.05) return !this.underground.cameraFree(x, y, z, 0.12);
       // Landmark walls and floors (the town hall can be walked into: the camera stays inside).
       if (landmarks.hit(x, y, z)) return true;
       const b = this.world.buildingAt(x, z);
@@ -533,9 +537,9 @@ export class Game {
     // monster, booked to it); collapses crush what is around them.
     this.stimuli.on((s) => {
       if (s.kind === 'stomp') {
-        const h = s.size ?? this.player.height, threat = s.cause === 'threat';
+        const h = s.size ?? this.player.height, hero = downCauseOf(s.cause) === 'player';
         const r = Math.max(0.6, h * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : s.cause === 'world' ? 'other' : 'player');
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, stompDownCause(s.cause, h));
         if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
@@ -543,9 +547,9 @@ export class Game {
         }
         if (h > 4) this.props.crush(s.x, s.z, r);
         // A giant hero's foot comes down on the brood.
-        if (!threat && h > 3) this.threats?.broodHit(s.x, s.y + 0.3, s.z, r + 0.4, 'blow', 20, 3);
+        if (hero && h > 3) this.threats?.broodHit(s.x, s.y + 0.3, s.z, r + 0.4, 'blow', 20, 3);
         // A giant hero stamping on a monster's foot or tail.
-        if (!threat && h > 8) this.threats?.blow(s.x, s.y + h * 0.05, s.z, r, 0, -Math.pow(10, s.intensity / 2) * 80, 0, { cause: 'player', x: s.x, y: s.y, z: s.z });
+        if (hero && h > 8) this.threats?.blow(s.x, s.y + h * 0.05, s.z, r, 0, -Math.pow(10, s.intensity / 2) * 80, 0, { cause: 'player', x: s.x, y: s.y, z: s.z });
       } else if (s.kind === 'collapse') {
         const r = Math.min(40, Math.max(8, s.radius * 0.04));
         this.props.crush(s.x, s.z, r);
@@ -936,10 +940,10 @@ export class Game {
       // A runner of about human size who could not hop over them only brushes past: they
       // stumble, are cross with the speedster and get up again (no harm on the ledger, no
       // reputation lost: one cannot run at super speed through a city and never touch anyone).
-      const brush = running && p.height < 3;
+      const brush = running && p.height < BRUSH_MAX_H;
       this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : POWER_HIT.dashKnockMax, (POWER_HIT.dashKnock + POWER_HIT.dashKnockPerRank * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
-      if (brush) { this.brushedBy(a); continue; }
+      if (brush) continue; // (the stern word: brushedBy, on every 'brush' knock-down)
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
       this.stimuli.emit('impact', a.x, a.y + 1, a.z, 3, 30);
     }
@@ -951,7 +955,7 @@ export class Game {
     }
   }
 
-  /** Someone a super speed runner brushed past calls after them (now and then, see BRUSH_LINES). */
+  /** Someone the hero brushed past or landed beside calls after them (now and then, see BRUSH_LINES). */
   private brushedBy(a: PedAgent): void {
     this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.3, 1.1, 4, this.renderer.camera.position);
     const now = this.consequences.time;
@@ -1112,7 +1116,7 @@ export class Game {
         return markerOnScreen(x, feet + 1.2, z, feet, cam, deedView, 0.85);
       },
       markers: (m) => this.map.setMarkers('deeds', m),
-      rep: (d, reason) => this.crime?.rep.add(d, reason),
+      rep: (d, reason) => this.crime?.reward({ rep: d, why: reason }),
     };
     if (normal) {
       const cores = new PowerCores(
@@ -1143,6 +1147,10 @@ export class Game {
     this.city = new CityNews(this);
     if (this.startCell >= 0) this.city.freshStart(this.startCell);
     this.crime = new CrimeSystem(this);
+    // Anyone the hero only made stumble (a super speed runner brushing past, a super jump coming
+    // down beside them) calls after them: no harm, no reputation, a stern word.
+    const knocked = this.reactions.onKnockDown;
+    this.reactions.onKnockDown = (a, fx, fz, power, cause) => { knocked?.(a, fx, fz, power, cause); if (cause === 'brush') this.brushedBy(a); };
     // Sewer hideouts wear the colours and tags of the group holding the street above.
     this.underground.hideoutLook = (x, z, seed) => {
       const f = this.crime.factionAt(x, z);
