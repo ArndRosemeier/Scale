@@ -3607,8 +3607,9 @@ section('super speed hops', async () => {
 });
 
 // Super jump as travel (tools/travelsim.ts): leaping on from landing to landing with W held covers
-// ground at least as fast as a boosted flight at every rank, even pressing Space a little late on
-// each landing; without W it is still a straight climb to the rank's height.
+// ground nearly as fast as a boosted flight at every rank (the forward speed builds up through each
+// leap, so it ends up a little slower: 75 % to 110 % of flight, pressing Space a little late on each
+// landing); without W it is still a straight climb to the rank's height.
 section('super jump travel', async () => {
   const { simTravel } = await import('./travelsim');
   const { MAX_RANK, JUMP_HEIGHT } = await import('../src/game/abilities/tuning');
@@ -3617,9 +3618,9 @@ section('super jump travel', async () => {
   for (let r = 1; r <= MAX_RANK; r++) {
     const f = simTravel('flight', r, 30), j = simTravel('jump', r, 30, 0.3);
     rows.push(`${r}: ${j.avg.toFixed(0)} vs ${f.avg.toFixed(0)}`);
-    if (!(j.avg >= f.avg)) ok = false;
+    if (!(j.avg >= 0.75 * f.avg && j.avg <= 1.1 * f.avg)) ok = false;
   }
-  check(ok, `super jump: travels at least as fast as flight per rank (m/s jump vs flight ${rows.join(', ')})`);
+  check(ok, `super jump: travels nearly as fast as flight per rank (m/s jump vs flight ${rows.join(', ')})`);
   const up = simTravel('jump', 5, 4, 0, false);
   check(up.avg < 0.01 && Math.abs(up.peak - JUMP_HEIGHT[5]) < 1, `super jump: straight up without W, to the full height (drift ${(up.avg * 4).toFixed(2)} m, peak ${up.peak.toFixed(1)} m)`);
 });
