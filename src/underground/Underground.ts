@@ -904,6 +904,8 @@ export class Underground {
     for (let i = i0; i < i1; i++) {
       const ax = P[i * 3], ay = P[i * 3 + 1], az = P[i * 3 + 2], bx = P[i * 3 + 3], by = P[i * 3 + 4], bz = P[i * 3 + 5];
       const d0 = dirAt(P, i), d1 = dirAt(P, i + 1);
+      // The section's across-vector at either end: mitered at turns, so the walls stay as far out as the volume's.
+      const w0 = sideAt(P, i), w1 = sideAt(P, i + 1);
       const mx = (ax + bx) / 2, mz = (az + bz) / 2;
       const segCuts = cuts.filter((c) => c.s1 > t.cum[i] && c.s0 < t.cum[i + 1]);
       const inStation = !sewer && halls.some((bb) => boxAt(bb, mx, (ay + by) / 2 + 0.5, mz, -0.05));
@@ -913,8 +915,8 @@ export class Underground {
       for (let k = 0; k < profile.length; k++) {
         const [l0, h0] = profile[k], [l1, h1] = profile[(k + 1) % profile.length];
         if (!sewer && k === 0 && !passage) continue; // tunnel floor is the track bed (drawn below)
-        const A: Vec3 = [ax - d0[1] * l0, ay + h0, az + d0[0] * l0], B: Vec3 = [ax - d0[1] * l1, ay + h1, az + d0[0] * l1];
-        const C: Vec3 = [bx - d1[1] * l1, by + h1, bz + d1[0] * l1], D: Vec3 = [bx - d1[1] * l0, by + h0, bz + d1[0] * l0];
+        const A: Vec3 = [ax + w0[0] * l0, ay + h0, az + w0[1] * l0], B: Vec3 = [ax + w0[0] * l1, ay + h1, az + w0[1] * l1];
+        const C: Vec3 = [bx + w1[0] * l1, by + h1, bz + w1[1] * l1], D: Vec3 = [bx + w1[0] * l0, by + h0, bz + w1[1] * l0];
         if (passage) {
           // In the street opening the passage is open to the sky; elsewhere walls and ceiling
           // stay just under the street surface. The stub inside the station hall draws nothing.
@@ -953,8 +955,8 @@ export class Underground {
             let L0 = l0, H0 = h0, L1 = l1, H1 = h1;
             if (h0 < clip) { const q = (clip - h0) / (h1 - h0); L0 = l0 + (l1 - l0) * q; H0 = clip; V0 = v0 + (v1 - v0) * q; }
             else if (h1 < clip) { const q = (clip - h1) / (h0 - h1); L1 = l1 + (l0 - l1) * q; H1 = clip; V1 = v1 + (v0 - v1) * q; }
-            PA = [ax - d0[1] * L0, ay + H0, az + d0[0] * L0]; PB = [ax - d0[1] * L1, ay + H1, az + d0[0] * L1];
-            PC = [bx - d1[1] * L1, by + H1, bz + d1[0] * L1]; PD = [bx - d1[1] * L0, by + H0, bz + d1[0] * L0];
+            PA = [ax + w0[0] * L0, ay + H0, az + w0[1] * L0]; PB = [ax + w0[0] * L1, ay + H1, az + w0[1] * L1];
+            PC = [bx + w1[0] * L1, by + H1, bz + w1[1] * L1]; PD = [bx + w1[0] * L0, by + H0, bz + w1[1] * L0];
           }
           const A2 = v3lerp(PA, PD, ta), B2 = v3lerp(PB, PC, ta), C2 = v3lerp(PB, PC, tb), D2 = v3lerp(PA, PD, tb);
           const sa = s0 + (s1 - s0) * ta, sb = s0 + (s1 - s0) * tb;
@@ -2021,6 +2023,26 @@ function dirAt(P: number[], i: number): [number, number] {
   const dx = P[b * 3] - P[a * 3], dz = P[b * 3 + 2] - P[a * 3 + 2];
   const l = Math.hypot(dx, dz) || 1;
   return [dx / l, dz / l];
+}
+
+/**
+ * Across-vector of a tube's section at vertex i (left of travel = +): perpendicular to the bisector
+ * of the two legs and lengthened by 1/cos(half the turn), so a wall offset by l stays l from both
+ * legs (the volume, tubeAt, is that wide right into the corner). Turns sharper than 120° are capped.
+ */
+function sideAt(P: number[], i: number): [number, number] {
+  const n = P.length / 3;
+  const leg = (a: number, b: number): [number, number] => {
+    const dx = P[b * 3] - P[a * 3], dz = P[b * 3 + 2] - P[a * 3 + 2], l = Math.hypot(dx, dz);
+    return l > 1e-6 ? [dx / l, dz / l] : [0, 0];
+  };
+  const a = i > 0 ? leg(i - 1, i) : leg(0, 1), b = i < n - 1 ? leg(i, i + 1) : a;
+  let bx = a[0] + b[0], bz = a[1] + b[1];
+  const bl = Math.hypot(bx, bz);
+  if (bl < 1e-6) { const d = dirAt(P, i); bx = d[0]; bz = d[1]; } else { bx /= bl; bz /= bl; }
+  // cos of half the turn: how much shorter the plain perpendicular falls than the legs' width.
+  const c = Math.max(0.5, a[0] * bx + a[1] * bz || 1);
+  return [-bz / c, bx / c];
 }
 
 function arch(hw: number, y0: number, h: number, n: number): [number, number][] {

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.138 — 2026-10-08
+
+- **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, and a screen shake never pushes it through a wall. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).
+
 ## 0.137 — 2026-10-08
 
 - **Behind the scenes: 3D vector maths has one home.** Eight files had their own add, subtract, dot, cross, length, normalise and blend helpers for 3D points, and four more typed out cross products by hand; they all use the shared versions now. Nothing changes in play; a self-test fails if a typed-out cross product or a copied helper comes back.
