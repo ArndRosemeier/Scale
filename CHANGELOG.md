@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.138 — 2026-10-08
+
+- **Shift+F11: shader counter.** A small box at the top (off by default) shows how many shaders were compiled in the last 10 seconds, the shader cap, and the longest frame, in WebGL and WebGPU.
+- **Hard cap on new shaders.** Once loading is done, at most 5 new shaders start per second, and at most one mesh's worth per frame. Anything new that would need more stays hidden until there is room, so things can pop in a little later instead of the game freezing. URL `&shadercap=N` changes the limit (0 turns it off); in the console `shaderCap.maxPerSecond = N`.
+
 ## 0.137 — 2026-10-08
 
 - **Behind the scenes: 3D vector maths has one home.** Eight files had their own add, subtract, dot, cross, length, normalise and blend helpers for 3D points, and four more typed out cross products by hand; they all use the shared versions now. Nothing changes in play; a self-test fails if a typed-out cross product or a copied helper comes back.
