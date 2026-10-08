@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.145 — 2026-10-08
+
+- **Behind the scenes: one "is this person underground?" question.** Two dozen places asked it by hand (crimes, threats, wardens, saves, markers, the manhole prompt); they now ask the underground system the same way. Nothing changes in play; a self-test keeps it that way.
+
 ## 0.144 — 2026-10-08
 
 - **Fairer dice for the police and the slime war.** Patrol officers and the officers stepping out of a car used a home-made random generator whose numbers slowly got worse; they now use the game's own. The deep slime war rolled with the browser's dice, so a loaded game could go differently each time; it now rolls from the city's seed. A self-test catches the broken generator if it comes back.
