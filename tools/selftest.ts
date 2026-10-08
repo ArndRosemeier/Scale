@@ -3611,5 +3611,51 @@ aliensChecks(check);
   }
 }
 
+// One test for "can someone stand here" and one for open water (world/WorldIndex standable / wet):
+// no building, no landmark, no river, but a bridge is fine. No system keeps its own copy.
+{
+  const { WorldIndex } = await import('../src/world/WorldIndex');
+  const fake = {
+    terrain: { isWater: (x: number, _z: number, bank: number) => x > 10 - bank },
+    bridgeDeck: (_x: number, z: number) => (z > 50 ? 4 : -Infinity),
+    buildingAt: (x: number) => (x < -10 ? {} : null),
+    landmarks: { onFootprint: (_x: number, z: number, m: number) => z < -50 + m },
+    wet: WorldIndex.prototype.wet,
+  };
+  const st = (x: number, z: number, bank?: number) => WorldIndex.prototype.standable.call(fake as never, x, z, bank);
+  check(st(0, 0) && !st(-20, 0) && !st(0, -60) && !st(20, 0) && st(20, 60) && !st(9.7, 0) && st(9.7, 0, 0), 'standable: not in buildings, landmarks or open water; bridges and the bank (bank 0) are fine');
+  // Raw water tests outside the world layer: open water is `world.wet` (bridge-aware), spots `world.standable`.
+  const raw: string[] = [];
+  const plain = new Set(['src/game/threats/StriderRoute.ts', 'src/game/abilities/cores.ts']); // plan-level, terrain only
+  const walkW = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkW(full); continue; }
+      if (!/\.ts$/.test(f) || plain.has(full)) continue;
+      const txt = readFileSync(full, 'utf8');
+      if (/\bisWater\(/.test(txt) || /bridgeDeck\([^)]*\)\s*[=!]==\s*-Infinity/.test(txt)) raw.push(full);
+    }
+  };
+  for (const d of ['src/game', 'src/sim', 'src/ui']) walkW(d);
+  check(raw.length === 0, `water: every gameplay water test goes through world.wet / world.standable (${raw.join(', ') || 'no copies'})`);
+}
+
+// Every GLSL shader has a WebGPU (TSL) twin in src/render/webgpu that names its file: change one, change both.
+{
+  const twins = readdirSync('src/render/webgpu').filter((f) => f.endsWith('.ts')).map((f) => readFileSync(`src/render/webgpu/${f}`, 'utf8')).join('\n');
+  const orphans: string[] = [];
+  const walkG = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { if (!full.endsWith('render/webgpu')) walkG(full); continue; }
+      if (!/\.ts$/.test(f) || full.endsWith('render/ShaderGate.ts')) continue;
+      if (!/onBeforeCompile|ShaderMaterial\(/.test(readFileSync(full, 'utf8'))) continue;
+      if (!new RegExp(`\\b${f.replace(/\.ts$/, '')}\\b`).test(twins)) orphans.push(full);
+    }
+  };
+  walkG('src');
+  check(orphans.length === 0, `webgpu: every GLSL shader file is named by its TSL twin (${orphans.join(', ') || 'all twinned'})`);
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

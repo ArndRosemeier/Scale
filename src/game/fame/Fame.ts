@@ -204,12 +204,12 @@ export class Fame {
       const a = cy + Math.PI + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.55;
       const d = rand(r0, r1);
       let x = p.x - Math.sin(a) * d, z = p.z - Math.cos(a) * d;
-      if (g.world.buildingAt(x, z)) continue;
+      if (!g.world.standable(x, z)) continue;
       const r = g.peds.buildRoute(x, z, p.x, p.z);
       if (!r || r.length < 6) continue;
       x = r[3]; z = r[4];
       const dd = Math.hypot(x - p.x, z - p.z);
-      if (g.world.buildingAt(x, z) || dd < r0 * 0.6 || dd > r1 * 1.2) continue;
+      if (!g.world.standable(x, z) || dd < r0 * 0.6 || dd > r1 * 1.2) continue;
       const route = g.peds.buildRoute(x, z, p.x, p.z);
       const o = { x, z, route };
       if (!g.crime.visible(x, g.world.groundHeight(x, z) + 1.2, z)) return o;
@@ -224,7 +224,7 @@ export class Fame {
     if (!c) return null;
     // (A little apart from each other.)
     const jx = x + rand(-1.2, 1.2), jz = z + rand(-1.2, 1.2);
-    const a = g.peds.spawnAt(c, g.world.buildingAt(jx, jz) ? x : jx, g.world.buildingAt(jx, jz) ? z : jz, Math.atan2(-(g.player.pos.x - x), -(g.player.pos.z - z)));
+    const a = g.peds.spawnAt(c, g.world.standable(jx, jz) ? jx : x, g.world.standable(jx, jz) ? jz : z, Math.atan2(-(g.player.pos.x - x), -(g.player.pos.z - z)));
     if (!a) return null;
     const act = attach(a, makeActor('bystander', FAME_OWNER, { title, held, hp: 40, maxHp: 40 }));
     if (route) { act.route = Float32Array.from(route); act.wp = 1; }
@@ -485,7 +485,7 @@ export class Fame {
     if (dq > f1 + 6 || dq < f0 - 3 || q.t < dt * 1.5) {
       const c = g.renderer.camera.position, base = Math.atan2(c.x - p.x, c.z - p.z) + rand(-0.5, 0.5), d = (f0 + f1) / 2;
       let x = p.x + Math.sin(base) * d, z = p.z + Math.cos(base) * d;
-      for (let k = 0; k < 4 && g.world.buildingAt(x, z); k++) { x = (x + p.x) / 2; z = (z + p.z) / 2; }
+      for (let k = 0; k < 4 && !g.world.standable(x, z); k++) { x = (x + p.x) / 2; z = (z + p.z) / 2; }
       q.x = x; q.z = z;
     }
     const n = q.members.length;

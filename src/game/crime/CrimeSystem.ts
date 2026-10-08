@@ -378,7 +378,7 @@ export class CrimeSystem {
       ritual: (c, x, z, element) => this.casts.ritualBurst(c.criminals, x, z, element),
       trees: (rMin, rMax) => this.trees(rMin, rMax),
       cemeteries: (rMin, rMax) => this.cemeteries(rMin, rMax),
-      blocked: (x, z) => !!g.world.buildingAt(x, z) || !!g.world.landmarks?.onFootprint(x, z, 1),
+      blocked: (x, z) => !g.world.standable(x, z),
       parked: (rMin, rMax) => this.parked(rMin, rMax),
       sabotage: (_c, x, z) => this.sabotaged(x, z),
       cars: (x, z, r) => {
@@ -518,7 +518,7 @@ export class CrimeSystem {
       if (dist < rMin || dist > rMax) continue;
       // The pavement in front must be free (not inside another building).
       const fx = door.x + door.nx * 3, fz = door.z + door.nz * 3;
-      if (W.buildingAt(fx, fz)) continue;
+      if (!W.standable(fx, fz)) continue;
       out.push({ ...door, bay: d.bay, d: dist });
     }
     out.sort((a, b) => a.d - b.d);
@@ -678,8 +678,8 @@ export class CrimeSystem {
       if (d < rMin || d > rMax) continue;
       // The guards stand out on the side away from the buildings (square to its heading).
       let nx = Math.cos(r.yaw), nz = -Math.sin(r.yaw);
-      if (W.buildingAt(r.x + nx * 4.5, r.z + nz * 4.5)) { nx = -nx; nz = -nz; }
-      if (W.buildingAt(r.x + nx * 4.5, r.z + nz * 4.5)) continue;
+      if (!W.standable(r.x + nx * 4.5, r.z + nz * 4.5)) { nx = -nx; nz = -nz; }
+      if (!W.standable(r.x + nx * 4.5, r.z + nz * 4.5)) continue;
       out.push({ x: r.x, z: r.z, nx, nz, d });
     }
     return out.sort((a, b) => a.d - b.d);
@@ -731,8 +731,8 @@ export class CrimeSystem {
       const d = Math.hypot(v.x - p.x, v.z - p.z);
       if (d < rMin || d > rMax) continue;
       let nx = Math.cos(v.yaw), nz = -Math.sin(v.yaw);
-      if (W.buildingAt(v.x + nx * 5, v.z + nz * 5)) { nx = -nx; nz = -nz; }
-      if (W.buildingAt(v.x + nx * 5, v.z + nz * 5)) continue;
+      if (!W.standable(v.x + nx * 5, v.z + nz * 5)) { nx = -nx; nz = -nz; }
+      if (!W.standable(v.x + nx * 5, v.z + nz * 5)) continue;
       out.push({ x: v.x, z: v.z, nx, nz, d });
     }
     return out.sort((a, b) => a.d - b.d);
@@ -762,7 +762,7 @@ export class CrimeSystem {
       const d = r.desc;
       if (!r.alive || !(d.shopfront || d.use === 'retail') || d.floors < 3) continue;
       const door = doorOf(d), dist = Math.hypot(door.x - p.x, door.z - p.z);
-      if (dist < rMin || dist > rMax || W.buildingAt(door.x + door.nx * 3, door.z + door.nz * 3)) continue;
+      if (dist < rMin || dist > rMax || !W.standable(door.x + door.nx * 3, door.z + door.nz * 3)) continue;
       out.push({ ...door, f: d.floors + (d.shopfront ? 0.5 : 0) });
     }
     return out.sort((a, b) => b.f - a.f);
@@ -933,7 +933,7 @@ export class CrimeSystem {
       const d = r.desc;
       if (!r.alive || d.shopfront || d.use === 'retail' || d.floors <= 0) continue;
       const door = doorOf(d);
-      if (!pointInPoly(c.poly, door.x, door.z) || W.buildingAt(door.x + door.nx * 3, door.z + door.nz * 3)) continue;
+      if (!pointInPoly(c.poly, door.x, door.z) || !W.standable(door.x + door.nx * 3, door.z + door.nz * 3)) continue;
       out.push(door);
     }
     return out;

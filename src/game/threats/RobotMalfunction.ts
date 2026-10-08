@@ -148,7 +148,7 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
       if (!r.alive || !(r.desc.shopfront || r.desc.use === 'retail' || r.desc.use === 'office')) continue;
       const d = doorOf(r.desc);
       const x = d.x + d.nx * 0.9, z = d.z + d.nz * 0.9;
-      if (W.buildingAt(x, z)) continue;
+      if (!W.standable(x, z)) continue;
       out.push({ x, z, yaw: Math.atan2(-d.nx, -d.nz), d: Math.hypot(x - this.x, z - this.z) });
     }
     out.sort((a, b) => a.d - b.d);
@@ -162,7 +162,7 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
     if (!ne) return null;
     const e = net.edges[ne.e], o = { x: 0, z: 0, dx: 0, dz: 0 };
     net.pointAt(e, ne.s, ne.side * (e.width / 2 + e.sidewalk * 0.5), o);
-    return this.g.world.buildingAt(o.x, o.z) ? null : { x: o.x, z: o.z, yaw: Math.atan2(-o.dx, -o.dz) };
+    return !this.g.world.standable(o.x, o.z) ? null : { x: o.x, z: o.z, yaw: Math.atan2(-o.dx, -o.dz) };
   }
 
   /** Posts across the nearest street: a line of robots from kerb to kerb, two when there are many. */

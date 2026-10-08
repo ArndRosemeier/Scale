@@ -458,7 +458,7 @@ export class GameMap {
       html = `<div class="t">${esc(s.name)}</div><div class="d">${chips} Metro station · ${far}</div>${this.buttons(`Travel to ${esc(s.name)} <small>(street entrance)</small>`)}`;
     } else {
       const c = this.world.cellAt(x, z);
-      const wet = this.game.terrain.isWater(x, z, 0) && this.game.world.bridgeDeck(x, z) === -Infinity;
+      const wet = this.game.world.wet(x, z, 0);
       const road = this.nearestArterial(x, z);
       const what = wet ? (this.game.terrain.coastDistance(x, z) < 0 ? 'The sea' : 'The river') : c >= 0 ? DISTRICT_LABEL[m.cells[c].district] : 'Outskirts';
       const near = road && road.d < 250 ? ` · near ${esc(streetName(this.game.settings.seed, road.edge, m.edges[road.edge].cls))}` : '';
@@ -494,7 +494,7 @@ export class GameMap {
   }
 
   private wet(x: number, z: number): boolean {
-    return this.game.terrain.isWater(x, z, 1.5) && this.game.world.bridgeDeck(x, z) === -Infinity;
+    return this.game.world.wet(x, z, 1.5);
   }
 
   private blocked(x: number, z: number): boolean {

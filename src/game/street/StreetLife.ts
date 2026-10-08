@@ -364,7 +364,7 @@ export class StreetLife {
     for (let k = 1; k <= 2; k++) {
       const ang = a.heading + Math.PI + (k === 1 ? 2.1 : -2.1);
       const x = cx - Math.sin(ang) * 1.6, z = cz - Math.cos(ang) * 1.6;
-      if (g.world.buildingAt(x, z)) continue;
+      if (!g.world.standable(x, z)) continue;
       const cit = this.citizen('dancer', hash32(c.id * 31 + k * 977 + 5));
       if (!cit) continue;
       const o = g.peds.spawnAt(cit, x, z, Math.atan2(-(cx - x), -(cz - z)));
@@ -913,7 +913,7 @@ export class StreetLife {
   spawnNear(kind: StreetKind, dist = 7): string {
     const g = this.g, p = g.player.pos, fy = g.camRig.forwardYaw;
     let x = p.x - Math.sin(fy) * dist, z = p.z - Math.cos(fy) * dist;
-    for (let k = 0; k < 8 && g.world.buildingAt(x, z); k++) { const a = fy + (k + 1) * 0.7; x = p.x - Math.sin(a) * dist; z = p.z - Math.cos(a) * dist; }
+    for (let k = 0; k < 8 && !g.world.standable(x, z); k++) { const a = fy + (k + 1) * 0.7; x = p.x - Math.sin(a) * dist; z = p.z - Math.cos(a) * dist; }
     // Onto the nearest sidewalk (not the carriageway).
     const r = g.peds.buildRoute(x, z, x + 1, z + 1);
     // (A route starts at the point itself, then joins its sidewalk.)

@@ -598,7 +598,7 @@ export class Forces {
 
   /** Open water at (x, z) (with a metre or two of bank), not under a bridge deck. */
   private wet(x: number, z: number): boolean {
-    return this.g.terrain.isWater(x, z, 2) && this.g.world.bridgeDeck(x, z) === -Infinity;
+    return this.g.world.wet(x, z, 2);
   }
 
   // ================================================================== soldiers and tanks, every frame

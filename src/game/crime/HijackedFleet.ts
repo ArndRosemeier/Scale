@@ -65,7 +65,7 @@ export class HijackedFleet implements RogueOwner {
       if (!r.alive || !(r.desc.shopfront || r.desc.use === 'retail')) continue;
       const dr = doorOf(r.desc);
       const x = dr.x + dr.nx * 0.9, z = dr.z + dr.nz * 0.9;
-      if (W.buildingAt(x, z)) continue;
+      if (!W.standable(x, z)) continue;
       out.push({ x, z, yaw: Math.atan2(-dr.nx, -dr.nz), d: Math.hypot(x - this.x, z - this.z) });
     }
     return out.sort((a, b) => a.d - b.d).slice(0, 6);

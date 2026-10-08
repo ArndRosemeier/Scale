@@ -1083,7 +1083,7 @@ export class Game {
         if (a.inside) return false;
         const g = this.world.groundHeight(a.x, a.z, a.y + 0.5);
         if (Math.abs(a.y - g) > 1.2) return false;
-        return !this.terrain.isWater(a.x, a.z, 0) || this.world.bridgeDeck(a.x, a.z) > -Infinity;
+        return !this.world.wet(a.x, a.z, 0);
       },
       sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
       markers: (m) => this.map.setMarkers('deeds', m),

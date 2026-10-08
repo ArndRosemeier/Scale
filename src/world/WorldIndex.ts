@@ -170,6 +170,22 @@ export class WorldIndex {
   }
 
   /**
+   * Open water at (x, z): a river, lake or the sea (with `bank` m of shore), not under a bridge
+   * deck. The one water test for people, spawns and walk targets (docs/CONVENTIONS.md).
+   */
+  wet(x: number, z: number, bank = 0.5): boolean {
+    return this.terrain.isWater(x, z, bank) && this.bridgeDeck(x, z) === -Infinity;
+  }
+
+  /**
+   * Can someone stand at (x, z) at street level: not inside a building or a landmark's footprint,
+   * not in open water (bridges are fine). The one test for spawn spots and walk targets.
+   */
+  standable(x: number, z: number, bank = 0.5): boolean {
+    return !this.buildingAt(x, z) && !this.landmarks?.onFootprint(x, z, 1) && !this.wet(x, z, bank);
+  }
+
+  /**
    * Walkable ground height below `yRef` (+ step tolerance): terrain/streets, bridge decks
    * and flat building roofs.
    */
