@@ -3563,6 +3563,43 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 10 m holds the recovered pool (${ab.energy.toFixed(1)})`);
 }
 
+// Shrink ray: the rank's factor, capped by metres off the biggest dimension (a person halves, a car
+// loses a metre, a 40 m monster 5 m at rank 5); a shrunk attacker deals 10 % less per rank, and
+// nothing takes more damage for being small.
+{
+  const { shrinkFactor, SHRINK_DEALT } = await import('../src/game/abilities/tuning');
+  const { statusFor, dealtBy, clearStatus } = await import('../src/shared/status');
+  check(Math.abs(shrinkFactor(1.8, 1) - 0.5) < 1e-9, `shrink: rank 1 halves a person (${shrinkFactor(1.8, 1).toFixed(3)})`);
+  check(Math.abs(shrinkFactor(4.5, 1) * 4.5 - 3.5) < 1e-9, `shrink: rank 1 takes a 4.5 m car down 1 m (${(shrinkFactor(4.5, 1) * 4.5).toFixed(2)} m)`);
+  check(Math.abs(shrinkFactor(40, 5) * 40 - 35) < 1e-9, `shrink: rank 5 takes a 40 m monster down 5 m (${(shrinkFactor(40, 5) * 40).toFixed(1)} m)`);
+  check(Math.abs(shrinkFactor(1.2, 5) - 0.12) < 1e-9, `shrink: rank 5 takes a drone to 12 % (${shrinkFactor(1.2, 5).toFixed(3)})`);
+  check(SHRINK_DEALT[1] === 0.9 && SHRINK_DEALT[5] === 0.5, 'shrink: deals 90 % at rank 1, 50 % at rank 5');
+  const mob = {};
+  check(dealtBy(mob) === 1 && dealtBy(null) === 1, 'shrink: an unshrunk attacker deals full damage');
+  const st = statusFor(mob);
+  st.shrink = 10; st.dealt = SHRINK_DEALT[3];
+  check(Math.abs(dealtBy(mob) - 0.7) < 1e-9, `shrink: a rank 3 shrunk attacker deals 70 % (${dealtBy(mob)})`);
+  st.shrink = 0;
+  check(dealtBy(mob) === 1, 'shrink: back to full once the ray wears off');
+  clearStatus(mob);
+  const combatSrc = readFileSync('src/game/Combat.ts', 'utf8');
+  check(!/statusOf\(a\)\?\.scale/.test(combatSrc), 'shrink: a shrunk person takes normal damage (Combat does not scale damage taken by size)');
+  // The Strider's rig re-proportions live: a 0.875 body walks on with a 0.875 length.
+  const { CreatureRig } = await import('../src/game/threats/rig/CreatureRig');
+  const { STRIDER_RIG } = await import('../src/game/threats/Strider');
+  const rig = new CreatureRig(STRIDER_RIG, 1);
+  rig.ground = () => 0;
+  rig.place();
+  const L0 = rig.length;
+  rig.scale = 0.875;
+  for (let i = 0; i < 120; i++) rig.update(1 / 60, 0);
+  const sp = rig.spine, n = STRIDER_RIG.spine.length;
+  let len = 0;
+  for (let i = 0; i < n; i++) len += Math.hypot(sp[i * 3 + 3] - sp[i * 3], sp[i * 3 + 4] - sp[i * 3 + 1], sp[i * 3 + 5] - sp[i * 3 + 2]);
+  const want = STRIDER_RIG.spine.reduce((a: number, b: number) => a + b, 0) * 0.875;
+  check(Math.abs(rig.length / L0 - 0.875) < 1e-9 && Math.abs(len - want) < want * 0.08, `shrink: the Strider's body follows a live scale (spine ${len.toFixed(1)} m, want ${want.toFixed(1)} m)`);
+}
+
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
 cmuBvhChecks(check);
 

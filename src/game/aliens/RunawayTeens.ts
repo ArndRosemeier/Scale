@@ -782,6 +782,10 @@ class SaucerActor implements ThreatActor {
   readonly zones: ThreatZone[];
   readonly aggro = new Map<string, number>();
   readonly height = 2.4;
+  /** Biggest dimension at full size: across the rim (shrink ray). */
+  readonly size = SAUCER_R * 2;
+  /** Shrink ray: size factor (1 = full). */
+  private sc = 1;
 
   constructor(private ev: RunawayTeens) {
     const z = (id: string, name: string, armour: number, r: number): ThreatZone => ({ id, name, armour, weak: false, exposed: false, x: 0, y: 0, z: 0, r, recent: 0 });
@@ -796,13 +800,21 @@ class SaucerActor implements ThreatActor {
   get y(): number { return this.ev.y - 1; }
   get z(): number { return this.ev.z; }
 
+  /** Shrink ray: the body (hull, dome, pods) scales; the hit zones follow. */
+  setScale(s: number): void {
+    this.sc = s;
+    this.ev.mesh.body.scale.setScalar(s);
+  }
+
   /** Zones where they are now. */
   private place(): void {
     const e = this.ev, h = this.zones[0];
     h.x = e.x; h.y = e.y; h.z = e.z;
+    h.r = SAUCER_R * 0.75 * this.sc;
     for (let i = 0; i < 3; i++) {
       const p = e.mesh.podPos(i, _v), zn = this.zones[i + 1];
       zn.x = p.x; zn.y = p.y; zn.z = p.z;
+      zn.r = (POD_R + 0.35) * this.sc;
       zn.exposed = e.podHp[i] > 0;
     }
   }

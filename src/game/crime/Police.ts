@@ -30,6 +30,7 @@ import type { Crime, PlayerView } from './Crime';
 import { setState, play, goTo, stand, lookAt, followRoute, pursue, endPursuit, hold, type Actor } from '../../sim/actors/Actor';
 import { GUNS, type Firearms, type GunSpec } from './Firearms';
 import type { EquipmentVisuals } from '../../items/types';
+import { dealtBy } from '../../shared/status';
 
 export interface PoliceHost {
   time: number;
@@ -498,7 +499,8 @@ export class Police {
           endPursuit(act);
           act.attackT = 1.2;
           const dx = tgt.x - o.x, dz = tgt.z - o.z, l = Math.hypot(dx, dz) || 1;
-          H.combat.hitActor(tgt, (dx / l) * 700, 120, (dz / l) * 700, 'tackle', 'police', o.x, o.z);
+          const k = dealtBy(o);
+          H.combat.hitActor(tgt, (dx / l) * 700 * k, 120 * k, (dz / l) * 700 * k, 'tackle', 'police', o.x, o.z);
           play(act, 'kick', 0.6);
           this.stats.tackles++;
           H.sound('punch_impact', tgt.x, tgt.y + 1, tgt.z, 0.8, 0.85);
@@ -616,7 +618,7 @@ export class Police {
       // Take-down: a wind-up, then a hard shove / baton if still in reach.
       if ((act.memo.windup ?? 0) > 0) {
         act.memo.windup -= dt;
-        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && reach && !H.playerDown()) { H.hurtPlayer(24, 'police', o.x, o.z, o.y); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
+        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && reach && !H.playerDown()) { H.hurtPlayer(24 * dealtBy(o), 'police', o.x, o.z, o.y); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
       } else if (d < 1.6 && reach && act.attackT <= 0 && !H.playerDown()) {
         act.attackT = 1.6;
         act.memo.windup = 0.35;

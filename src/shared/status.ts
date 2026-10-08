@@ -7,6 +7,7 @@
  *   const st = statusOf(agent);           // undefined for almost everything, almost always
  *   if (st && st.frozen > 0) …            // hold still, no animation, ice tint
  *   scale *= st?.scale ?? 1;              // shrunk
+ *   dmg *= dealtBy(attacker);             // a shrunk attacker hits softer
  *
  * `statusOf` is a counter check while nothing is affected, so the idle cost is nil.
  * Timers count down in `tickStatus` (the power layer calls it once per frame).
@@ -20,6 +21,8 @@ export interface TargetStatus {
   /** Current size factor (1 = normal) and the factor it eases to while shrunk. */
   scale: number;
   scaleTo: number;
+  /** While shrunk: the share of its damage it still deals out (1 = full). Read through `dealtBy`. */
+  dealt: number;
   /** Seconds left on fire (flames / smoke on it). */
   burning: number;
   /** Seconds left stunned (electrocuted: stalls cars, twitches people). */
@@ -41,11 +44,21 @@ export function statusOf(o: object): TargetStatus | undefined {
   return count === 0 ? undefined : map.get(o);
 }
 
+/**
+ * Share of its damage an attacker still deals (shrink ray: 10 % less per rank; 1 otherwise).
+ * Every place where a mob — person, robot, drone, car, monster — hurts someone multiplies by this.
+ */
+export function dealtBy(o: object | null | undefined): number {
+  if (count === 0 || !o) return 1;
+  const s = map.get(o);
+  return s && s.shrink > 0 ? s.dealt : 1;
+}
+
 /** State of an object, created (all clear) if needed. */
 export function statusFor(o: object): TargetStatus {
   let s = map.get(o);
   if (!s) {
-    s = { frozen: 0, shrink: 0, scale: 1, scaleTo: 1, burning: 0, stunned: 0, wet: 0, hx: 0, hy: 0, hz: 0, hyaw: 0, hphase: 0, saved: null };
+    s = { frozen: 0, shrink: 0, scale: 1, scaleTo: 1, dealt: 1, burning: 0, stunned: 0, wet: 0, hx: 0, hy: 0, hz: 0, hyaw: 0, hphase: 0, saved: null };
     map.set(o, s);
     live.push(o);
     count = live.length;

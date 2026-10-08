@@ -31,7 +31,7 @@ import { Rng } from '../../core/rng';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { VState, type Vehicle } from '../../sim/Traffic';
 import { DKind } from '../../future/Drones';
-import { statusFor } from '../../shared/status';
+import { statusFor, dealtBy } from '../../shared/status';
 import { BeamStyle, DecalKind } from '../powers/ElementFx';
 import { bodyMass, stepEnergy, walkSpeed } from '../GiantBody';
 import { CreatureRig, capsuleDist, type RigDef, type Capsule } from './rig/CreatureRig';
@@ -162,7 +162,11 @@ export class Strider implements ThreatEvent, ThreatActor {
   readonly actors: ThreatActor[] = [this];
   readonly name = 'Giant creature';
   readonly radius = STRIDER.radius;
-  readonly height = STRIDER.height;
+  /** Biggest dimension at full size (nose to tail; for the shrink ray). */
+  readonly size: number;
+  /** Shrink ray: body size factor (1 = full). */
+  private sc = 1;
+  get height(): number { return STRIDER.height * this.sc; }
   readonly maxHp = STRIDER.hp;
   hp = STRIDER.hp;
   x = 0; y = 0; z = 0;
@@ -247,6 +251,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.yaw = rig.yaw = Math.atan2(-_r.dx, -_r.dz);
     rig.lift = -STRIDER.sunk;
     rig.place();
+    this.size = Math.max(STRIDER.height, rig.length);
     rig.onStep = (leg, x, y, z) => this.footstep(leg, x, y, z);
     this.rig = rig;
     this.x = route.start.x; this.z = route.start.z;
@@ -314,6 +319,12 @@ export class Strider implements ThreatEvent, ThreatActor {
     const J = Math.hypot(jx, jy, jz);
     const Z = this.zoneOfHit(n.cap, x, y, z);
     return this.damage(Z, J * DAMAGE_PER_IMPULSE, { ...src, x: src.x ?? x, y: src.y ?? y, z: src.z ?? z });
+  }
+
+  /** Shrink ray: the rig (skeleton, skin, hit capsules, reach) follows the size; blows soften via `dealtBy`. */
+  setScale(s: number): void {
+    this.sc = s;
+    this.rig.scale = (STRIDER.height / 40) * s;
   }
 
   /** Fighting strength for the con: far beyond any person; a giant hero comes closer. */
@@ -548,7 +559,7 @@ export class Strider implements ThreatEvent, ThreatActor {
         this.rearing = false;
         // Forefeet come down.
         for (const L of rig.legs) if (L.def.at === 'front') {
-          const E = stepEnergy(this.mass, this.height) * 3;
+          const E = this.stepE * 3;
           this.stats.broken += this.g.interactions.steps.land(L.foot.x, L.foot.y, L.foot.z, E, this.height, { cause: 'threat', own: false, sound: 'strider_step', ref: 90, maxR: 500, foot: 5 });
           this.hurtPlayerNear(L.foot.x, L.foot.z, 9, 40, 9);
           this.onBlow?.('slam', L.foot.x, L.foot.y, L.foot.z, 9);
@@ -565,7 +576,9 @@ export class Strider implements ThreatEvent, ThreatActor {
     }
   }
 
-  private get mass(): number { return bodyMass(this.height, STRIDER.build); }
+  private get mass(): number { return bodyMass(STRIDER.height, STRIDER.build); }
+  /** What a footfall carries: the full-size body's, softened while shrunk (`dealtBy`). */
+  private get stepE(): number { return stepEnergy(this.mass, STRIDER.height) * dealtBy(this); }
 
   private startRoar(rear: boolean): void {
     const g = this.g;
@@ -995,7 +1008,8 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.tokens < cost) return -1;
     this.tokens -= cost;
     const soft = this.recentBroken > STRIDER.panelsSoft ? 0.35 : 1;
-    const n = this.g.destruction.as('threat', () => this.g.destruction.impact(x, y, z, r * (soft < 1 ? 0.7 : 1), J * soft, dx, dy, dz, kind));
+    const k = this.sc, J2 = J * soft * dealtBy(this);
+    const n = this.g.destruction.as('threat', () => this.g.destruction.impact(x, y, z, r * k * (soft < 1 ? 0.7 : 1), J2, dx, dy, dz, kind));
     this.stats.impacts++;
     this.stats.broken += n;
     this.recentBroken += n;
@@ -1008,7 +1022,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.mode === 'emerge' && this.rig.lift < -20) return;
     this.stats.steps++;
     this.stepN++;
-    const E = stepEnergy(this.mass, this.height);
+    const E = this.stepE;
     // Who is under the foot (the stomp handlers knock them down; count them as hurt).
     const r = this.height * 0.09;
     for (const a of g.peds.neighbours(x, z, r + 1, [])) if (a.state !== PState.Down && !a.inside && Math.hypot(a.x - x, a.z - z) < r) this.hurt++;
@@ -1109,7 +1123,7 @@ export class Strider implements ThreatEvent, ThreatActor {
 
   private knock(a: PedAgent, fx: number, fz: number, power: number): void {
     if (a.inside || a.state === PState.Down) return;
-    this.g.reactions.knockDown(a, fx, fz, power, 'threat');
+    this.g.reactions.knockDown(a, fx, fz, power * dealtBy(this), 'threat');
     this.g.consequences.record('strider', 'person', 'knockdown', a.x, a.z, a, 'threat');
     this.hurt++;
     this.stats.knocked++;
@@ -1118,7 +1132,8 @@ export class Strider implements ThreatEvent, ThreatActor {
   private wreckCar(v: Vehicle, jx: number, jy: number, jz: number): void {
     const g = this.g;
     g.traffic.wreckIt(v);
-    g.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, jx, jy, jz);
+    const k = dealtBy(this);
+    g.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, jx * k, jy * k, jz * k);
     g.consequences.record('strider', 'car', 'wreck', v.x, v.z, v, 'threat');
     this.stats.wrecked++;
   }
@@ -1128,6 +1143,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     const p = this.g.player;
     const d = Math.hypot(p.pos.x - x, p.pos.z - z);
     const gy = this.g.terrain.height(x, z);
+    r *= this.sc;
     if (d > r + p.radius || p.pos.y > gy + 6) return;
     this.hurtPlayer(dmg * (1 - d / (r + p.radius + 1) * 0.5), x, z, gy, fling);
   }
@@ -1136,7 +1152,7 @@ export class Strider implements ThreatEvent, ThreatActor {
   private hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number, fling: number): void {
     const g = this.g, p = g.player;
     const k3 = p.k ** 3, rel = Math.min(1, Math.pow(this.height / Math.max(1, p.height), 0.8));
-    const d = g.crime.health.damage(dmg * k3 * Math.max(0.15, rel), 'monster', fromX, fromZ, fromY);
+    const d = g.crime.health.damage(dmg * k3 * Math.max(0.15, rel) * dealtBy(this), 'monster', fromX, fromZ, fromY);
     this.stats.playerHits++;
     if (d <= 0 && !g.crime.health.invulnerable) return;
     // Thrown (small bodies fly; a giant only staggers).
@@ -1218,7 +1234,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       const sp = rig.spine;
       for (let i = 0; i < 4; i++) {
         const x = sp[i * 3], z = sp[i * 3 + 2], y = rig.ground(x, z);
-        this.stats.broken += g.interactions.steps.land(x, y, z, stepEnergy(this.mass, this.height) * 4, this.height, { cause: 'threat', own: false, sound: 'strider_step', ref: 120, maxR: 600, foot: 8 });
+        this.stats.broken += g.interactions.steps.land(x, y, z, this.stepE * 4, this.height, { cause: 'threat', own: false, sound: 'strider_step', ref: 120, maxR: 600, foot: 8 });
         this.onBlow?.('fall', x, y, z, 14);
       }
       g.stimuli.emit('collapse', this.x, this.y, this.z, 9, 900, { cause: 'threat', size: this.height });

@@ -208,6 +208,19 @@ export class Targeting {
     }
   }
 
+  /** Biggest dimension at full size (m): what the shrink ray caps its cut against. */
+  size(t: Target): number {
+    switch (t.kind) {
+      case 'person': return 1.8;
+      case 'car': { const v = t.obj, sv = statusOf(v)?.saved; return Math.max((sv?.len as number | undefined) ?? v.length, (sv?.wid as number | undefined) ?? v.width, vehicleHeight(v)); }
+      case 'robot': return Math.max(ROBOT_H, ROBOT_R * 2);
+      case 'bot': return HUMANOID.height;
+      case 'drone': return DRONE_R * 2;
+      case 'prop': { const p = t.obj, b = p.base ?? p; return Math.max(b.height, b.radius * 2); }
+      case 'threat': return t.obj.size ?? t.obj.height;
+    }
+  }
+
   /** Velocity (m/s) for leading the aim. */
   velocity(t: Target, out: THREE.Vector3): THREE.Vector3 {
     switch (t.kind) {
@@ -389,7 +402,8 @@ export class Targeting {
       }
       case 'car': {
         const v = t.obj;
-        return rayBox(ox, oy, oz, dx, dy, dz, v.x, v.z, v.yaw, v.length / 2 * s, v.width / 2 * s, v.y - 0.1, v.y + vehicleHeight(v) * s, maxT);
+        // (Length and width are already shrunk on the vehicle itself; only the height scales here.)
+        return rayBox(ox, oy, oz, dx, dy, dz, v.x, v.z, v.yaw, v.length / 2, v.width / 2, v.y - 0.1, v.y + vehicleHeight(v) * s, maxT);
       }
       case 'robot': return rayCylinder(ox, oy, oz, dx, dy, dz, t.obj.x, t.obj.z, t.obj.y, t.obj.y + ROBOT_H * s, ROBOT_R * s, maxT);
       case 'bot': return rayCylinder(ox, oy, oz, dx, dy, dz, t.obj.x, t.obj.z, t.obj.y, t.obj.y + HUMANOID.height * s, 0.32 * s, maxT);

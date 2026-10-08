@@ -10,6 +10,7 @@ import { Crime, CRIME_DEV, type CrimeWorld, play, setState, stand, lookAt, goTo,
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 import { release, hold } from '../../sim/actors/Actor';
+import { dealtBy } from '../../shared/status';
 
 export const MUGGING = { ringMin: 120, ringMax: 320, quietR: 22, quietMax: 3, approachTimeout: 50, hp: 55, strength: 1.05, threatenFor: 7, robFor: 13, gunShare: 0.3 };
 
@@ -115,7 +116,7 @@ export class Mugging extends Crime {
         }
         if (this.phaseT > MUGGING.robFor) {
           // A shove, and off they go (walking: nobody chases).
-          if (this.stage.shove && v.actor && this.rng.chance(0.6)) this.w.combat.hitActor(v, (v.x - crooks[0].x) * 260, 80, (v.z - crooks[0].z) * 260, 'shove', 'npc', crooks[0].x, crooks[0].z);
+          if (this.stage.shove && v.actor && this.rng.chance(0.6)) this.w.combat.hitActor(v, (v.x - crooks[0].x) * 260 * dealtBy(crooks[0]), 80, (v.z - crooks[0].z) * 260 * dealtBy(crooks[0]), 'shove', 'npc', crooks[0].x, crooks[0].z);
           for (const c of crooks) { setState(c.actor!, 'run'); c.actor!.face = null; c.actor!.memo.calm = 1; if (c.actor!.action?.id === 'aim_pistol') c.actor!.action = null; }
           this.go('escape');
         }
