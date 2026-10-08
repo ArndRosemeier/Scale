@@ -581,7 +581,7 @@ section('powers and old saves', async () => {
 
 // ---- friend/foe sense: offered on the powers that hit more than their target, at the first-rank
 // price, bought per power once unlocked, kept in saves; it spares everything that costs reputation.
-{
+section('friend/foe sense', async () => {
   const { ABILITY, SENSE_IDS, senseCost } = await import('../src/game/abilities/defs');
   const T = await import('../src/game/abilities/tuning');
   for (const id of SENSE_IDS) check(!!ABILITY[id] && senseCost(id) === T.KARMA_COST[id as keyof typeof T.KARMA_COST][0] && senseCost(id) > 0, `${id}: friend/foe sense costs its first rank`);
@@ -604,8 +604,7 @@ section('powers and old saves', async () => {
   check(spared({ kind: 'car', obj: {} } as never, W) && spared({ kind: 'prop', obj: {} } as never, W), 'spared: every car and prop');
   check(isFoe({ kind: 'robot', obj: { rogue: true } } as never, W) && !isFoe({ kind: 'drone', obj: {} } as never, W), 'foe: only rogue machines');
   check(isFoe({ kind: 'threat', obj: {} } as never, W) && !isFoe({ kind: 'threat', obj: { self: true } } as never, W), 'foe: monsters (not the rampaging hero body)');
-  console.log('friend/foe sense checked');
-}
+});
 
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
 section('departure boards', async () => {
@@ -3925,6 +3924,22 @@ section('target sight: one test', async () => {
   };
   walkS('src');
   check(hand.length === 0, `sight: targets through game.sight / Targeting.sees (${hand.join(', ') || 'none'})`);
+});
+
+// The nearest person goes through peds.nearest (with isUp / isBystander / hasRole). The loops left by hand
+// score by more than distance or walk another list (officers, a brawl's fighters, the entranced).
+section('nearest person: one search', async () => {
+  const keep = ['sim/Pedestrians.ts', 'game/Deeds.ts', 'crime/Procession.ts', 'crime/TurfBrawl.ts', 'crime/Police.ts', 'people/Manners.ts', 'future/ServiceBots.ts'];
+  const hand: string[] = [];
+  const walkN = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkN(full); continue; }
+      if (f.endsWith('.ts') && !keep.some((k) => full.endsWith(k)) && /let best: PedAgent \| null = null, bd\b/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkN('src');
+  check(hand.length === 0, `people: nearest through peds.nearest (${hand.join(', ') || 'none'})`);
 });
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).

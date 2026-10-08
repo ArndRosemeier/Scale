@@ -7,7 +7,7 @@
  * give up); out of bombs, he runs. Stop him before the street is in ruins.
  */
 import { Crime, type CrimeWorld, play, setState, stand, lookAt, goTo, subdued } from './Crime';
-import type { PedAgent } from '../../sim/Pedestrians';
+import { type PedAgent, isBystander } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 
 export const BOMBER = {
@@ -204,7 +204,7 @@ export class Bomber extends Crime {
       if (cars.length) return cars[this.rng.int(0, cars.length - 1)];
     }
     if (r < 0.75) {
-      const crowd = this.w.neighbours(c.x, c.z, B.throwMax).filter((o) => !o.actor && !o.inside && o.state !== PState.Down && ok(o.x, o.z));
+      const crowd = this.w.neighbours(c.x, c.z, B.throwMax).filter((o) => isBystander(o) && ok(o.x, o.z));
       if (crowd.length) { const o = crowd[this.rng.int(0, crowd.length - 1)]; return { x: o.x, z: o.z }; }
     }
     const ang = this.rng.float() * Math.PI * 2, e = B.throwMin + this.rng.float() * (B.throwMax - B.throwMin) * 0.7;

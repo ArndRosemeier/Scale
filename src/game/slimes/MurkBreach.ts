@@ -9,7 +9,7 @@ import type { Game } from '../Game';
 import type { Cause } from '../Stimuli';
 import type { ThreatEvent, ThreatOutcome, ThreatTarget } from '../threats/ThreatEvent';
 import type { Blob, Factions } from '../../underground/deep/Factions';
-import type { PedAgent } from '../../sim/Pedestrians';
+import { type PedAgent, isUp } from '../../sim/Pedestrians';
 
 /** How long they stay up (s) before going back under. */
 const STAY = 300;
@@ -108,7 +108,7 @@ export class MurkBreach implements ThreatEvent {
       if (b.mode === 'fight' || b.mode === 'go') continue;
       const c = (this.cool.get(b) ?? 0) - dt;
       this.cool.set(b, c);
-      const ps = this.g.peds.neighbours(b.x, b.z, 14, _nb).filter((a: PedAgent) => a.alive && !a.inside && a.state !== 5);
+      const ps = this.g.peds.neighbours(b.x, b.z, 14, _nb).filter(isUp);
       if (!ps.length) { if (b.mode === 'idle' && Math.random() < dt) { const a = Math.random() * 6.28; b.tx = b.x + Math.cos(a) * 12; b.tz = b.z + Math.sin(a) * 12; b.mode = 'move'; } continue; }
       ps.sort((p, q) => Math.hypot(p.x - b.x, p.z - b.z) - Math.hypot(q.x - b.x, q.z - b.z));
       const a = ps[0];

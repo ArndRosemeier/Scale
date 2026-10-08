@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import type { Game } from '../Game';
 import type { Aftermath } from './Aftermath';
 import { Rng, deriveSeed, hash32 } from '../../core/rng';
-import { PState, type PedAgent } from '../../sim/Pedestrians';
+import { PState, type PedAgent, isBystander } from '../../sim/Pedestrians';
 import { Role } from '../../sim/Population';
 import { VState, type Vehicle } from '../../sim/Traffic';
 import { attach, makeActor, play, goTo, stand, lookAt, setState, release, AFTERMATH_OWNER } from '../../sim/actors/Actor';
@@ -719,7 +719,7 @@ export class Rescues {
   devInjure(n = 1): number {
     const g = this.g, p = g.player.pos;
     let k = 0;
-    const people = g.peds.neighbours(p.x, p.z, 40, []).filter((a) => !a.actor && !a.inside && a.state !== PState.Down);
+    const people = g.peds.neighbours(p.x, p.z, 40, []).filter(isBystander);
     for (let i = people.length; i < n; i++) {
       const ang = Math.random() * Math.PI * 2, x = p.x + Math.cos(ang) * 6, z = p.z + Math.sin(ang) * 6;
       if (g.world.buildingAt(x, z)) continue;
