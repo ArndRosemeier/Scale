@@ -133,17 +133,11 @@ export class SewerDen extends Crime {
     for (const c of crooks) {
       const act = c.actor!;
       if (subdued(act) || act.state === 'down') continue;
-      if (act.memo.decHp !== act.hp) {
-        act.memo.decHp = act.hp;
-        const d = this.decide(c);
-        act.memo.choice = d === 'surrender' ? 2 : d === 'flee' && act.hp < act.maxHp * 0.5 ? 0 : 1;
-        if (act.memo.choice === 1) this.emit('fight', c);
-        if (act.memo.choice === 0) {
-          // The spot farthest from the hero.
-          let best = S.spots[0], bd = -1;
-          for (const sp of S.spots) { const dd = Math.hypot(sp.x - p.x, sp.z - p.z); if (dd > bd) { bd = dd; best = sp; } }
-          act.memo.postX = best.x; act.memo.postZ = best.z; act.memo.cornerT = 0;
-        }
+      if (this.rethink(c, (d) => (d === 'surrender' ? 2 : d === 'flee' && act.hp < act.maxHp * 0.5 ? 0 : 1)) && act.memo.choice === 0) {
+        // The spot farthest from the hero.
+        let best = S.spots[0], bd = -1;
+        for (const sp of S.spots) { const dd = Math.hypot(sp.x - p.x, sp.z - p.z); if (dd > bd) { bd = dd; best = sp; } }
+        act.memo.postX = best.x; act.memo.postZ = best.z; act.memo.cornerT = 0;
       }
       if (act.memo.choice === 2) { if (act.state !== 'surrender') this.surrender(c); continue; }
       if (act.memo.choice === 0) {

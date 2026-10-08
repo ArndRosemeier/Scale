@@ -144,17 +144,9 @@ export class Tagging extends Crime {
     for (const c of crooks) {
       const act = c.actor!;
       if (subdued(act) || act.state === 'down') continue;
-      if (act.memo.decHp !== act.hp) {
-        act.memo.decHp = act.hp;
-        const d = this.decide(c);
-        act.memo.choice = d === 'surrender' ? 2 : d === 'fight' ? 1 : 0;
-        // The tagger runs; only a brave lookout covers him.
-        if (d === 'fight' && c === this.tagger && crooks.length > 1) act.memo.choice = 0;
-        if (act.memo.choice === 1) this.emit('fight', c);
-      }
-      if (act.memo.choice === 2) { if (act.state !== 'surrender') this.surrender(c); continue; }
-      if (act.memo.choice === 1 && this.distToPlayer(c) < 25) this.fight(c, dt);
-      else { act.memo.panic = 4; this.flee(c, dt); }
+      // The tagger runs; only a brave lookout covers him.
+      this.rethink(c, (d) => (d === 'surrender' ? 2 : d === 'fight' && !(c === this.tagger && crooks.length > 1) ? 1 : 0));
+      this.actOnChoice(c, dt);
     }
     return true;
   }

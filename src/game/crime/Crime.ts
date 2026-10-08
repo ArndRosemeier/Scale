@@ -181,6 +181,11 @@ export interface GetawayCar {
 
 let NEXT_ID = 1;
 
+export type Decision = 'fight' | 'flee' | 'surrender';
+/** `memo.choice` after a decision: 0 flee, 1 fight, 2 surrender. */
+export type Choice = 0 | 1 | 2;
+const plainChoice = (d: Decision): Choice => (d === 'surrender' ? 2 : d === 'fight' ? 1 : 0);
+
 export abstract class Crime {
   readonly id = NEXT_ID++;
   abstract readonly kind: CrimeKind;
@@ -724,7 +729,7 @@ export abstract class Crime {
    * Fight or flight when the player confronts a criminal: outmatched → flee (or surrender if
    * cornered and unarmed), the player is weaker and they are armed / in a group → fight.
    */
-  protected decide(c: PedAgent): 'fight' | 'flee' | 'surrender' {
+  protected decide(c: PedAgent): Decision {
     const act = c.actor!;
     // The raised dead know no fear: they fight until they fall apart.
     if (act.memo.skel) return 'fight';
@@ -739,6 +744,28 @@ export abstract class Crime {
     if (ratio > 1.25 && act.armed !== 'none') return 'fight';
     if (ratio > 1.6) return 'fight';
     return 'flee';
+  }
+
+  /**
+   * Decide again after every blow taken: `memo.choice` becomes 0 flee, 1 fight or 2 surrender
+   * (`pick` turns the decision into a choice; by default as it reads), and a fight is announced.
+   * Returns true when it decided this frame, so a crime can add its own follow-up.
+   */
+  protected rethink(c: PedAgent, pick: (d: Decision) => Choice = plainChoice): boolean {
+    const act = c.actor!;
+    if (act.memo.decHp === act.hp) return false;
+    act.memo.decHp = act.hp;
+    act.memo.choice = pick(this.decide(c));
+    if (act.memo.choice === 1) this.emit('fight', c);
+    return true;
+  }
+
+  /** The usual follow-through on `memo.choice`: give up, fight within `reach` of the hero, or run in a panic. */
+  protected actOnChoice(c: PedAgent, dt: number, reach = 25): void {
+    const act = c.actor!;
+    if (act.memo.choice === 2) { if (act.state !== 'surrender') this.surrender(c); return; }
+    if (act.memo.choice === 1 && this.distToPlayer(c) < reach) this.fight(c, dt);
+    else { act.memo.panic = 4; this.flee(c, dt); }
   }
 
   /** The loot falls where the criminal stands (bag on the pavement). */

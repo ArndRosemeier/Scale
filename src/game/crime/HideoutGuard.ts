@@ -107,13 +107,8 @@ export class HideoutGuard extends Crime {
     for (const c of crooks) {
       const act = c.actor!;
       if (subdued(act) || act.state === 'down') continue;
-      if (act.memo.decHp !== act.hp) {
-        act.memo.decHp = act.hp;
-        const d = this.decide(c);
-        // They defend their own door: they fight unless clearly outmatched.
-        act.memo.choice = d === 'surrender' ? 2 : d === 'flee' && act.hp < act.maxHp * 0.5 ? 0 : 1;
-        if (act.memo.choice === 1) this.emit('fight', c);
-      }
+      // They defend their own door: they fight unless clearly outmatched.
+      this.rethink(c, (d) => (d === 'surrender' ? 2 : d === 'flee' && act.hp < act.maxHp * 0.5 ? 0 : 1));
       if (act.memo.choice === 2) { if (act.state !== 'surrender') this.surrender(c); continue; }
       const nearDoor = Math.hypot(this.w.player.x - this.door.x, this.w.player.z - this.door.z) < HIDEOUT.leash;
       if (act.memo.choice === 1 && nearDoor) this.fight(c, dt);

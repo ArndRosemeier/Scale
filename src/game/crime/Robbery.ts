@@ -186,12 +186,7 @@ export class Robbery extends Crime {
     for (const c of crooks) {
       const act = c.actor!;
       if (subdued(act) || act.state === 'down' || act.memo.inCar) continue;
-      if (act.memo.decHp !== act.hp) {
-        act.memo.decHp = act.hp;
-        const dd = this.decide(c);
-        act.memo.choice = dd === 'surrender' ? 2 : dd === 'fight' ? 1 : 0;
-        if (act.memo.choice === 1) this.emit('fight', c);
-      }
+      this.rethink(c);
       if (act.memo.choice === 2) { if (act.state !== 'surrender') this.surrender(c); continue; }
       if (act.memo.choice === 1 && this.distToPlayer(c) < 25) this.fight(c, dt);
       else if (this.car && this.car.alive && !this.car.disabled && !act.memo.bailed && Math.hypot(this.car.x - c.x, this.car.z - c.z) < 40) {

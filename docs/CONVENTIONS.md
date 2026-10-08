@@ -36,6 +36,13 @@ Its open items are consolidated here one PR at a time.
 | Add damage to a car | `dentCar(v, amount, cap?)` (`sim/Traffic.ts`; never lowers it) | `v.damage = Math.min(…)` by hand (**guarded**) |
 | Karma | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
 
+## Crimes
+
+| Need | Use | Not |
+|---|---|---|
+| A crook decides again after a blow: fight, flee or surrender | `this.rethink(c, pick?)` in `game/crime/Crime.ts` (sets `memo.choice` 0/1/2, announces a fight; `pick` holds the crime's own rule) | A local `if (act.memo.decHp !== act.hp) { … }` block (**guarded**) |
+| Then the usual follow-through | `this.actOnChoice(c, dt, reach?)`: give up, fight within `reach`, or run | Copying the three lines |
+
 ## Small helpers
 
 | Need | Use | Not |
