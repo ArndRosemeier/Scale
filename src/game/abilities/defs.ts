@@ -134,7 +134,7 @@ export const ABILITIES: AbilityDef[] = [
   },
   {
     id: 'superJump', name: 'Super jump', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK, key: 'Hold Space',
-    desc: 'Press Space to leap and keep holding it to climb higher; steer all the way. Hold W to bound forward: the higher the leap, the farther it carries, as fast as flying. Heavy landings shake the ground.',
+    desc: 'Press Space to leap and keep holding it to climb higher; steer all the way. Hold W to bound forward: the leap picks up speed as it flies, and the higher it goes, the faster and farther it carries. Heavy landings shake the ground.',
     icon: svg('<path d="M6 11l6-6 6 6"/><path d="M6 17l6-6 6 6"/><path d="M4 21h16"/>'),
     rankText: (r) => `Climb up to ${JUMP_HEIGHT[r]} m high · leap forward at up to ${LEAP_SPEED[r]} m/s`,
     costText: () => `${JUMP.cost} energy for the full height`,

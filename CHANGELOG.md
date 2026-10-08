@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.165 — 2026-10-08
+
+- **Super jump builds up speed in the air.** A forward leap no longer shoots off at full speed. It starts as a jump and picks up speed as it flies, reaching its top speed (18 / 40 / 80 / 120 / 200 m/s at ranks 1 to 5) about three seconds in, near the top of a high leap. As a travel power it is now a little slower than a boosted flight: bounding on from landing to landing averages 14 / 25 / 46 / 77 / 138 m/s, against flight's 14 / 28 / 54 / 90 / 159 m/s.
+
 ## 0.164 — 2026-10-08
 
 - **Three new single-target powers (new "Energy" group).** They hit only the one they are aimed at: no fire, no bystanders, nothing broken on the way.
