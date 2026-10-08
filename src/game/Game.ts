@@ -68,6 +68,7 @@ import { Barks } from '../ui/Barks';
 import { setSight, markerOnScreen, screenPoint } from '../render/screen';
 import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
+import { ShaderCounter } from '../debug/ShaderCounter';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -556,6 +557,7 @@ export class Game {
     this.compass = new Compass(this);
     this.barks = new Barks(this);
     this.admin = new AdminConsole(this);
+    new ShaderCounter(this.renderer.gl as unknown as THREE.WebGLRenderer, this.renderer.webgpu);
     this.skyline.start(this.player.pos.x, this.player.pos.z);
     this.flightFx = new FlightFX(this.dust);
     this.renderer.scene.add(this.flightFx.group);

@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.140 — 2026-10-08
+
+- **Shift+F11: shader counter.** A small box at the top (off by default) shows how many shaders were compiled in the last 10 seconds, the shader cap, and the longest frame, in WebGL and WebGPU.
+- **Hard cap on new shaders.** Once loading is done, at most 5 new shaders start per second, and at most one mesh's worth per frame. Anything new that would need more stays hidden until there is room, so things can pop in a little later instead of the game freezing. URL `&shadercap=N` changes the limit (0 turns it off); in the console `shaderCap.maxPerSecond = N`.
+
 ## 0.139 — 2026-10-08
 
 - **No more fall cries out of nowhere.** The everyday accidents (someone trips and needs a hand up) now only happen to people you can actually see: on screen, not behind a building, and never while you are indoors or underground. So when you hear an "oof", you see who fell. Before, they picked anyone 15 to 60 m away, often behind you or round a corner.

@@ -6,6 +6,7 @@ import * as THREE from 'three/webgpu';
 import { renderOutput, texture } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
+import { shaderCap } from '../shaderCap';
 import { makeSkyNode, makeStarsNode } from './sky';
 import { createFacadeNodeMaterial } from './facade';
 import { createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial } from './ground';
@@ -107,7 +108,8 @@ export function oneNodeBuildAtATime(renderer: THREE.WebGPURenderer): boolean {
   if (nodes.oneAtATime) return true;
   let last: Promise<unknown> = Promise.resolve();
   nodes.getForRenderAsync = function (this: unknown, renderObject: unknown) {
-    const run = last.then(() => build.call(this, renderObject));
+    // (Each one also waits for room under the shader cap, see shaderCap.ts.)
+    const run = last.then(() => shaderCap.slot()).then(() => build.call(this, renderObject));
     last = run.catch(() => undefined);
     return run;
   };

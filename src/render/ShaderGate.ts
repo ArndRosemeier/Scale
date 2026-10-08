@@ -15,6 +15,7 @@
  */
 import * as THREE from 'three';
 import { WEBGPU } from './gpuMode';
+import { shaderCap } from './shaderCap';
 
 type Policy = 'pass' | 'standin' | 'hide';
 
@@ -55,6 +56,11 @@ export class ShaderGate {
   private props: { get(o: object): { currentProgram?: { isReady(): boolean } } };
   private warm: { o: THREE.Object3D; t0: number }[] = [];
   enabled = true;
+
+  private shadersBefore = -1;
+  /** New meshes waiting for room under the shader cap (hidden meanwhile). */
+  private backlog: THREE.Object3D[] = [];
+  private parked = new WeakSet<THREE.Object3D>();
 
   constructor(private renderer: THREE.WebGLRenderer, private scene: THREE.Scene, private camera: THREE.Camera, private asScenePass: <T>(fn: () => T) => T = (fn) => fn()) {
     this.props = (renderer as unknown as { properties: ShaderGate['props'] }).properties;
@@ -131,15 +137,71 @@ export class ShaderGate {
     }
   }
 
+  // ---- the cap ------------------------------------------------------
+
+  /** New shaders so far: three's program ids count up (WebGL); node builds (WebGPU). */
+  private shadersSoFar(): number {
+    if (WEBGPU) return (window as unknown as { nodeBuilds?: { count: number } }).nodeBuilds?.count ?? 0;
+    const progs = (this.renderer.info as unknown as { programs?: { id: number }[] }).programs ?? [];
+    return progs.length ? progs[progs.length - 1].id : 0;
+  }
+
+  /** Book the new shaders since the last look (whoever started them). True if there were any. */
+  private account(): boolean {
+    const n = this.shadersSoFar();
+    const d = this.shadersBefore < 0 ? 0 : n - this.shadersBefore;
+    this.shadersBefore = n;
+    shaderCap.book(d);
+    return d > 0;
+  }
+
+  /** Meshes to look at this frame: those waiting for room first, then the newly added ones. */
+  private newMeshes(): THREE.Object3D[] {
+    const out = this.backlog;
+    this.backlog = [];
+    const q = this.queue;
+    this.queue = [];
+    for (const root of q) root.traverse((o) => {
+      if (!(o as THREE.Mesh).material || this.parked.has(o)) return;
+      if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints || (o as THREE.Line).isLine) out.push(o);
+    });
+    return out;
+  }
+
+  private park(o: THREE.Object3D): void {
+    this.backlog.push(o);
+    if (this.parked.has(o) || !o.layers.isEnabled(0)) return;
+    this.parked.add(o);
+    o.layers.disable(0); o.layers.enable(HIDDEN_LAYER);
+  }
+
+  private unpark(o: THREE.Object3D): void {
+    if (!this.parked.has(o)) return;
+    this.parked.delete(o);
+    o.layers.enable(0); o.layers.disable(HIDDEN_LAYER);
+  }
+
   /** Per frame, before rendering. */
   update(): void {
+    // (Shaders built while drawing the last frame count too.)
+    this.account();
+    shaderCap.newFrame();
+    // The cap starts once the start-up compiles (warm-up and the background precompiles) are done.
+    if (!shaderCap.active && this.enabled && this.busy === 0) shaderCap.active = true;
     if (WEBGPU) { this.updateWebGPU(); return; }
     if (this.queue.length && performance.now() - this.lightsAt > 2000) this.refreshLights();
-    // New objects.
-    if (this.queue.length) {
-      const q = this.queue;
-      this.queue = [];
-      for (const root of q) if (this.inScene(root)) root.traverse((o) => this.check(o));
+    // New objects, one by one while there is room under the cap.
+    if (this.queue.length || this.backlog.length) {
+      for (const o of this.newMeshes()) {
+        if (!this.inScene(o)) { this.unpark(o); continue; }
+        const m = (o as THREE.Mesh).material;
+        if (!m || this.seen.get(o) === m) { this.unpark(o); continue; }
+        if (!shaderCap.room()) { this.park(o); continue; }
+        this.unpark(o);
+        this.check(o);
+        if (this.account()) shaderCap.take();
+      }
+      shaderCap.waiting = this.backlog.length;
     }
     // Waiting meshes: swap back when their real program is ready.
     if (this.pending.length) {
