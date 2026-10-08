@@ -9,8 +9,9 @@ and line-of-sight checks.
 the helper and don't re-derive it. If the helper doesn't fit, extend the helper. Where a
 selftest guard exists (`npm test`), it fails on a stray copy.
 
-To look for new copies, run `npm run dup`. It is the name-based duplicate finder from Arnd's Toolbox and writes
-`reports/duplicate-candidates.md`, a reading list rather than a verdict.
+To look for new copies, use the two finders from Arnd's Toolbox. Both write reading lists, not verdicts.
+`npm run dup` lists functions that share a name (`reports/duplicate-candidates.md`). `npm run repeated` lists
+the same body under different names and inline snippets pasted into several files (`reports/repeated-code.md`).
 
 The audit that started this list (v0.130) is in the project files, `code-audit/findings.md`.
 Its open items are consolidated here one PR at a time.
@@ -34,6 +35,14 @@ Its open items are consolidated here one PR at a time.
 | The player's blow hits a car (punch, shockwave, dash) | `Game.hitCar`: a wreck or a dent, booked on the ledger with the car | `wreckIt` + `makeWreck` or a dent with no ledger entry (wrecking a police car with a punch used to cost nothing) |
 | Add damage to a car | `dentCar(v, amount, cap?)` (`sim/Traffic.ts`; never lowers it) | `v.damage = Math.min(…)` by hand (**guarded**) |
 | Karma | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
+
+## Small helpers
+
+| Need | Use | Not |
+|---|---|---|
+| clamp, 0..1 clamp, lerp, smoothstep | `core/math.ts`: `clamp`, `saturate`, `lerp`, `smoothstep` (import with an alias such as `saturate as clamp01` or `smoothstep as smooth` if the short name reads better) | A local `const clamp = …` (**guarded**) |
+| Text into HTML | `esc` from `ui/esc.ts` (escapes `& < > " '`) | A local `esc` (the six old copies escaped different sets; **guarded**) |
+| Find more copies | `npm run dup`, `npm run repeated` | |
 
 ## Shaders
 

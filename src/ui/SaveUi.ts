@@ -12,8 +12,8 @@ import { manualId, type SaveStatus } from '../game/save/SaveSystem';
 import { cityClass } from '../world/settings';
 import { MODE_INFO } from '../game/mode';
 import { hasSaveDialog, loadFromFile, writeSaveFile, writeStored } from './saveFiles';
+import { esc } from './esc';
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const thumbHtml = (m: SaveMeta) => (m.thumb ? `<img src="${esc(m.thumb)}" alt="">` : '<div class="sv-noimg"></div>');
 
 /** "Lindenford · Normal · Day 3, 18:45" (HTML) */

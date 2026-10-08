@@ -28,6 +28,7 @@ import { createGarmentMaterial } from './garmentMaterial';
 import { maskDepth } from './faceRegions';
 import type { GripClass } from './anim/actions';
 import type { SkyVisPatch } from '../../render/skyOcclusion';
+import { smoothstep } from '../../core/math';
 
 /** Classify a held item for animation and carry poses. */
 export function gripClassOf(defId: string | undefined, shape: string | undefined): GripClass {
@@ -58,8 +59,6 @@ interface ShellBuild {
 }
 
 const _v = new THREE.Vector3();
-
-const smoothstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 type ShellParts = { P: number[]; N: number[]; UV: number[]; SI: number[]; SW: number[]; E: number[]; I: number[] };
 

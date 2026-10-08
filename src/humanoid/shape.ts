@@ -11,6 +11,7 @@ import { Rng, deriveSeed } from '../core/rng';
 import type { MacroParams } from './macro';
 import type { HumanoidAppearance } from './types';
 import { RACE_STYLES, type BoneGroup, type BoneScale } from './races';
+import { lerp, clamp } from '../core/math';
 
 export interface ShapeParams {
   macro: MacroParams;
@@ -23,9 +24,6 @@ export interface ShapeParams {
   /** Final uniform scale (appearance.scale). */
   scale: number;
 }
-
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 /** Opposing target names for a signed modifier. */
 const SIGNED: [string, string][] = [['decr', 'incr'], ['down', 'up'], ['in', 'out'], ['backward', 'forward'], ['concave', 'convex']];

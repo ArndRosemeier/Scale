@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { buildArmyTruck, buildApc, buildTank } from './military';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
+import { clamp, lerp } from '../core/math';
 
 // ---------------------------------------------------------------- public API
 
@@ -84,8 +85,6 @@ type V2 = [number, number];
 type V3 = [number, number, number];
 
 const PI = Math.PI;
-const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const sq = (v: number) => v * v;
 
 /** Monotone cubic (Fritsch–Carlson) interpolation through keypoints (sorted by x). */

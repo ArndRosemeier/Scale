@@ -15,6 +15,7 @@
  *  - The Maw: brought down, it is gone for days, the Heart dims and the Murk's strength stops
  *    growing; then it grows again.
  */
+import { saturate as clamp01 } from '../../core/math';
 export interface WarState {
   v: 1;
   murk: number;
@@ -186,4 +187,3 @@ export function parseWar(o: unknown, pens: number, at: number): WarState | null 
   };
 }
 
-function clamp01(v: number): number { return Math.max(0, Math.min(1, v)); }
