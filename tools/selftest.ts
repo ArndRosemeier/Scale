@@ -3569,7 +3569,7 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     if (!(j.avg >= f.avg)) ok = false;
   }
   check(ok, `super jump: travels at least as fast as flight per rank (m/s jump vs flight ${rows.join(', ')})`);
-  const up = simTravel('jump', 5, 4, 9, false);
+  const up = simTravel('jump', 5, 4, 0, false);
   check(up.avg < 0.01 && Math.abs(up.peak - JUMP_HEIGHT[5]) < 1, `super jump: straight up without W, to the full height (drift ${(up.avg * 4).toFixed(2)} m, peak ${up.peak.toFixed(1)} m)`);
 }
 
