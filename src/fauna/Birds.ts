@@ -25,7 +25,7 @@ import type { Stimuli, Stimulus } from '../game/Stimuli';
 import type { Dust } from '../destruction/Dust';
 import type { Debris } from '../destruction/Debris';
 import { G } from '../render/materials/globals';
-import { clamp, smoothstep } from '../core/math';
+import { clamp, smoothstep, angleDiff } from '../core/math';
 import { createBirdGeometry, createBirdMaterial } from './birdMesh';
 
 /** What the birds need from the game. */
@@ -719,7 +719,7 @@ export class Birds {
       b.peck -= dt;
       b.pitch = 0.75 * Math.max(0, Math.sin(b.peck * 16));
     } else b.pitch *= 0.85;
-    b.yaw += angleDiff(b.tyaw, b.yaw) * Math.min(1, dt * 8);
+    b.yaw += angleDiff(b.yaw, b.tyaw) * Math.min(1, dt * 8);
     b.act -= dt;
     if (b.act > 0 || b.hop >= 0 || !g) return;
     const r = Math.random();
@@ -945,7 +945,7 @@ export class Birds {
       if (d < f.ax * 1.5 + 6 + H) {
         f.scat = Math.max(f.scat, 0.8);
         f.sx = player.pos.x; f.sy = py; f.sz = player.pos.z;
-        f.hd += angleDiff(Math.atan2(ux, uz), f.hd) * Math.min(1, dt * 1.5);
+        f.hd += angleDiff(f.hd, Math.atan2(ux, uz)) * Math.min(1, dt * 1.5);
       }
     }
     const T = this.ctx.terrain;
@@ -953,7 +953,7 @@ export class Birds {
     if (f.leave) {
       // Off and away (night falling, too many): straight out, then gone.
       const want = Math.atan2(-dx, -dz);
-      f.hd += angleDiff(want, f.hd) * Math.min(1, dt * 0.5);
+      f.hd += angleDiff(f.hd, want) * Math.min(1, dt * 0.5);
       f.alt += dt * 2;
       f.speed = Math.min(16, f.speed + dt);
       if (d > 650) { for (const i of f.members) this.release(i); f.members.length = 0; f.on = false; return; }
@@ -963,7 +963,7 @@ export class Birds {
       f.vh += (Math.sin(f.t * 0.21) * 0.25 + Math.sin(f.t * 0.067 + 1) * 0.2 - f.vh) * Math.min(1, dt);
       let turn = f.vh * (star ? 1 : 2.2);
       const R = star ? 330 : 140;
-      if (d > R) turn += angleDiff(Math.atan2(dx, dz), f.hd) * 0.6;
+      if (d > R) turn += angleDiff(f.hd, Math.atan2(dx, dz)) * 0.6;
       f.hd += turn * dt;
     }
     f.checkT -= dt;
@@ -1202,9 +1202,3 @@ export class Birds {
   }
 }
 
-function angleDiff(a: number, b: number): number {
-  let d = (a - b) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  else if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-}

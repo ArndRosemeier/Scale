@@ -9,7 +9,7 @@
  */
 import { Rng, deriveSeed } from '../core/rng';
 import { MinHeap } from '../core/heap';
-import { chaikin, resample, closestOnPolyline, polylineLength } from '../core/geom2';
+import { chaikin, resample, closestOnPolyline, polylineLength, reversePoly } from '../core/geom2';
 import { clamp } from '../core/math';
 import type { Terrain } from '../world/terrain';
 import type { MacroPlan, MetroLine, MetroStation } from './types';
@@ -321,7 +321,7 @@ function alignStations(L: MetroLine, stations: MetroStation[]): void {
     pts = easeFrom(out, bx, bz, ux, uz);
     // (Backwards only as far as the previous station's straight.)
     const back = prevEnd ? closestOnPolyline(pts, ax, az).s - closestOnPolyline(pts, prevEnd[0], prevEnd[1]).s - 5 : Infinity;
-    pts = reversePolyline(easeFrom(reversePolyline(pts), ax, az, -ux, -uz, back));
+    pts = reversePoly(easeFrom(reversePoly(pts), ax, az, -ux, -uz, back));
     prevEnd = [bx, bz];
     const angle = Math.atan2(bz - az, bx - ax);
     const hall = { line: L.id, x: (ax + bx) / 2, z: (az + bz) / 2, angle, y: 0 };
@@ -337,12 +337,6 @@ function alignStations(L: MetroLine, stations: MetroStation[]): void {
 
 /** Length of the transition curve from a station's straight back into the route. */
 const EASE = 160;
-
-function reversePolyline(p: number[]): number[] {
-  const out: number[] = [];
-  for (let i = p.length - 2; i >= 0; i -= 2) out.push(p[i], p[i + 1]);
-  return out;
-}
 
 /**
  * Replace the EASE metres of track after (x0, z0) (where the track leaves a straight in

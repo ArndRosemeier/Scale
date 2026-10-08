@@ -12,7 +12,7 @@
 import { Rng, hash32, hashCombine } from '../core/rng';
 import type { MacroPlan } from '../plan/types';
 import type { BuildingDesc } from '../plan/building';
-import { polyCentroid } from '../core/geom2';
+import { polyCentroid, polyArea } from '../core/geom2';
 import { doorBayOf } from '../build/buildingLayout';
 
 export const enum Role { Child = 0, Adult = 1, Senior = 2, Worker = 3 }
@@ -90,7 +90,7 @@ export class Population {
   /** Workers anchored at a workplace building (only those who work there). */
   workersOf(cell: number, b: number, desc: BuildingDesc): Citizen[] {
     const out: Citizen[] = [];
-    const area = Math.abs(polyAreaFast(desc.poly));
+    const area = Math.abs(polyArea(desc.poly));
     let jobs = 0;
     if (desc.use === 'office') jobs = (area * desc.floors) / 22;
     else if (desc.use === 'retail') jobs = (area * desc.floors) / 45;
@@ -254,13 +254,6 @@ export class Population {
     }
     return { stay: { place: c.home, from: h - 1, to: h + 1 }, trip: null, tripEnd: 0 };
   }
-}
-
-function polyAreaFast(p: number[]): number {
-  let a = 0;
-  const n = p.length >> 1;
-  for (let i = 0, j = n - 1; i < n; j = i++) a += p[j * 2] * p[i * 2 + 1] - p[i * 2] * p[j * 2 + 1];
-  return a / 2;
 }
 
 /** Entrance point of a building (front facade, door bay) — slightly outside the wall. */

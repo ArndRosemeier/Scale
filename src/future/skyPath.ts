@@ -5,7 +5,7 @@
  * routes keep to the open air over street canyons. The cell path is string-pulled into a few
  * straight legs. Built per leg (a delivery spawn), not per frame: well under a millisecond.
  */
-import { pointInPoly } from '../core/geom2';
+import { pointInPoly, distPointPolyEdge } from '../core/geom2';
 import { MinHeap } from '../core/heap';
 import type { WorldIndex } from '../world/WorldIndex';
 
@@ -55,7 +55,7 @@ export function planAround(world: WorldIndex, ax: number, az: number, bx: number
       const cx = x0 + (i + 0.5) * cs, cz = z0 + (j + 0.5) * cs;
       const inside = pointInPoly(r.poly, cx, cz);
       if (hard && inside) solid[k] = 1;
-      if (hard && (inside || distToPoly(r.poly, cx, cz) < pad)) cost[k] = 0;
+      if (hard && (inside || distPointPolyEdge(r.poly, cx, cz) < pad)) cost[k] = 0;
       else if (!hard && inside) cost[k] = Math.max(cost[k], 1.6);
     }
   }
@@ -140,14 +140,3 @@ function octile(i: number, j: number, gi: number, gj: number): number {
   return Math.max(dx, dz) + (Math.SQRT2 - 1) * Math.min(dx, dz);
 }
 
-function distToPoly(P: number[], x: number, z: number): number {
-  let best = Infinity;
-  const n = P.length / 2;
-  for (let i = 0; i < n; i++) {
-    const ax = P[i * 2], az = P[i * 2 + 1], bx = P[((i + 1) % n) * 2], bz = P[((i + 1) % n) * 2 + 1];
-    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
-    best = Math.min(best, Math.hypot(ax + dx * t - x, az + dz * t - z));
-  }
-  return best;
-}

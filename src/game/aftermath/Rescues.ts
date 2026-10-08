@@ -30,6 +30,7 @@ import type { EquipmentVisuals } from '../../items/types';
 import type { MapMarker } from '../../ui/map/GameMap';
 import { AFTERMATH } from './rules';
 import { parked } from './park';
+import { pointInPoly, distPointPolyEdge } from '../../core/geom2';
 
 export const RESCUE = {
   /** Trapped / injured people drawn at once (near the player), entries kept, medics, ambulances. */
@@ -497,14 +498,14 @@ export class Rescues {
     for (let k = 0; k < 90; k++) {
       const ang = rng.range(0, Math.PI * 2), r = avoid + 40 + rng.range(0, 220);
       const x = cx + Math.cos(ang) * r, z = cz + Math.sin(ang) * r;
-      if (W.wet(x, z, 2) || W.buildingsIn(x - 8, z - 8, x + 8, z + 8).some((b) => b.alive && polyNear(b.poly, x, z, 7))) continue;
+      if (W.wet(x, z, 2) || W.buildingsIn(x - 8, z - 8, x + 8, z + 8).some((b) => b.alive && (pointInPoly(b.poly, x, z) || distPointPolyEdge(b.poly, x, z) < 7))) continue;
       const ne = net.nearestEdge(x, z, 40);
       if (!ne) continue;
       const e = net.edges[ne.e];
       net.pointAt(e, ne.s, 0, o);
       const ds = Math.hypot(o.x - x, o.z - z);
       if (ds < e.width / 2 + 3) continue;
-      const cell = g.macro.cells.find((c) => Math.abs(c.centroid[0] - x) < c.radius && Math.abs(c.centroid[1] - z) < c.radius && pip(c.poly, x, z));
+      const cell = g.macro.cells.find((c) => Math.abs(c.centroid[0] - x) < c.radius && Math.abs(c.centroid[1] - z) < c.radius && pointInPoly(c.poly, x, z));
       const park = cell?.district === 'park' ? 60 : 0;
       const slope = Math.abs(g.terrain.height(x + 4, z) - g.terrain.height(x - 4, z)) + Math.abs(g.terrain.height(x, z + 4) - g.terrain.height(x, z - 4));
       if (slope > 1.6) continue;
@@ -792,24 +793,3 @@ function taggedOutfit(seed: number, tag: RGB): EquipmentVisuals {
 
 export { dustyOutfit, medicOutfit };
 
-function pip(poly: number[], x: number, z: number): boolean {
-  let inside = false;
-  for (let i = 0, j = poly.length - 2; i < poly.length; j = i, i += 2) {
-    const xi = poly[i], zi = poly[i + 1], xj = poly[j], zj = poly[j + 1];
-    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-/** Is a polygon within d of a point (inside, or an edge near)? */
-function polyNear(poly: number[], x: number, z: number, d: number): boolean {
-  if (pip(poly, x, z)) return true;
-  const n = poly.length >> 1;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const ax = poly[j * 2], az = poly[j * 2 + 1], bx = poly[i * 2], bz = poly[i * 2 + 1];
-    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
-    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
-    if (Math.hypot(ax + dx * t - x, az + dz * t - z) < d) return true;
-  }
-  return false;
-}

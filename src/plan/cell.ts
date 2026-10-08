@@ -12,7 +12,7 @@ import { Rng, deriveSeed } from '../core/rng';
 import { clamp, lerp } from '../core/math';
 import {
   type Poly, polyArea, polyCentroid, minAreaRect, splitPolyByLine, ensureCCW, cleanPoly, pointInPoly,
-  distSqPointSeg, polyBounds, resample, polylineLength, simplifyClosed, segIntersect,
+  distSqPointSeg, polyBounds, resample, polylineLength, simplifyClosed, segIntersect, rectangularity,
 } from '../core/geom2';
 import { difference, intersection, offset, strokePolylines, union, shapesToPolys, type Shape, shapeArea } from '../core/clip';
 import type { Terrain } from '../world/terrain';
@@ -115,7 +115,6 @@ export interface CellPlan {
   /** Landmarks standing in this cell (their sites are kept clear of streets and lots). */
   landmarks: number[];
 }
-
 
 interface Grammar {
   /** Target block dimensions (short, long) in m. */
@@ -619,7 +618,7 @@ function splitFree(poly: Poly, target: number, r: Rng, maxDepth: number): Poly[]
     const shift = r.range(-0.12, 0.12) * Math.max(o.hu, o.hv);
     const res = splitPolyByLine(q, c[0] + lx * shift, c[1] + lz * shift, -lz, lx);
     if (res.pieces.length < 2) { out.push(q); continue; }
-    if (res.pieces.some((pc) => rectangularityOf(pc) < 0.45 && Math.abs(polyArea(pc)) > 80)) { out.push(q); continue; }
+    if (res.pieces.some((pc) => rectangularity(pc) < 0.45 && Math.abs(polyArea(pc)) > 80)) { out.push(q); continue; }
     for (const pc of res.pieces) stack.push([pc, d + 1]);
   }
   return out;
@@ -785,7 +784,7 @@ function makeBuilding(lot: Lot, index: number, cell: CellInfo, r: Rng, terrain: 
   const groundH = r.range(rule.groundH[0], rule.groundH[1]);
   const roofs = rule.roofs;
   let roof = r.pick(roofs);
-  const rect = rectangularityOf(poly);
+  const rect = rectangularity(poly);
   if ((roof === 'gable' || roof === 'hip') && rect < 0.85) roof = lot.kind === 'perimeter' ? 'gable' : 'flat';
   const setbacks: [number, number][] = [];
   if (style === 'artdeco' && floors > 14) {
@@ -823,11 +822,6 @@ function makeBuilding(lot: Lot, index: number, cell: CellInfo, r: Rng, terrain: 
     units,
     landmark: style === 'church' || floors > 45,
   };
-}
-
-function rectangularityOf(p: Poly): number {
-  const o = minAreaRect(p);
-  return Math.abs(polyArea(p)) / Math.max(1e-6, 4 * o.hu * o.hv);
 }
 
 function polyInside(inner: Poly, outer: Poly, margin: number): boolean {
@@ -1092,7 +1086,6 @@ function placeProps(plan: CellPlan, cell: CellInfo, macro: MacroPlan, g: Grammar
   }
   void clamp; void lerp;
 }
-
 
 /** Entrance rectangles on this cell's sidewalks near the ends of nearby metro stations. */
 function placeEntrances(plan: CellPlan, cell: CellInfo, macro: MacroPlan): void {

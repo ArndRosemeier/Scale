@@ -6,7 +6,7 @@
 import type { Temperament, Traits } from '../people/identity';
 import type { CellPlan } from '../../plan/cell';
 import { PropType } from '../../plan/cell';
-import { pointInPoly } from '../../core/geom2';
+import { pointInPoly, distPointPolyEdge } from '../../core/geom2';
 import { deriveSeed, hashToFloat } from '../../core/rng';
 
 export const MATE = {
@@ -232,7 +232,7 @@ export function graveSpot(plan: CellPlan, seed: number): { x: number; z: number;
       for (let k = 0; k < n; k++) {
         const a = r0 + (k / n) * Math.PI * 2;
         const x = tx + Math.cos(a) * ring, z = tz + Math.sin(a) * ring;
-        if (!pointInPoly(poly, x, z) || nearEdge(poly, x, z, 2.2)) continue;
+        if (!pointInPoly(poly, x, z) || distPointPolyEdge(poly, x, z) < 2.2) continue;
         if (plan.cemPaths.some((s) => pointInPoly(s.outer, x, z))) continue;
         let free = true;
         for (let i = 0; i < P.length && free; i += 6) if (Math.hypot(P[i + 1] - x, P[i + 2] - z) < 1.6) free = false;
@@ -243,14 +243,3 @@ export function graveSpot(plan: CellPlan, seed: number): { x: number; z: number;
   return null;
 }
 
-/** Within m of the polygon's outline. */
-function nearEdge(poly: number[], x: number, z: number, m: number): boolean {
-  const n = poly.length / 2;
-  for (let i = 0; i < n; i++) {
-    const ax = poly[i * 2], az = poly[i * 2 + 1], bx = poly[((i + 1) % n) * 2], bz = poly[((i + 1) % n) * 2 + 1];
-    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
-    if (Math.hypot(ax + dx * t - x, az + dz * t - z) < m) return true;
-  }
-  return false;
-}

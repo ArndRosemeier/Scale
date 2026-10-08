@@ -8,7 +8,7 @@
  * side, crossings at junctions), avoid each other, enter buildings at the
  * door and despawn when far away — the abstract schedule continues unseen.
  */
-import { pointInPoly } from '../core/geom2';
+import { pointInPoly, polylineLength } from '../core/geom2';
 import type { RoadNet } from './RoadNet';
 import { Population, type Citizen, type PlaceRef, type Trip, Mode, Role, doorOf } from './Population';
 import type { CityStreamer } from '../stream/CityStreamer';
@@ -130,7 +130,6 @@ export function gawkersNear(peds: { neighbours(x: number, z: number, r: number, 
 
 /** ('brush': a super speed runner brushed past, a stumble that is nobody's misdeed.) */
 export type DownCause = 'player' | 'brush' | 'collapse' | 'accident' | 'threat' | 'police' | 'military' | 'other';
-
 
 const MAX_AGENTS = 2600;
 /** An agent's cached terrain height is reused within this distance (m) of where it was sampled. */
@@ -349,7 +348,7 @@ export class Pedestrians {
       const at = routeNearest(route, pin.x, pin.z);
       if (at.d > PIN_R) return;
       this.advanceAlong(a, at.along);
-    } else if (progress > 0) this.advanceAlong(a, progress * routeLength(route));
+    } else if (progress > 0) this.advanceAlong(a, progress * polylineLength(route, 3));
     // (Already under way: not where an alert keeps people indoors either.)
     if (progress > 0 && this.shelter?.(a.x, a.z, a.x, a.z)) return;
     a.y = this.groundY(a.x, a.z, a.onRoad, a.heading);
@@ -824,7 +823,7 @@ export class Pedestrians {
   removeInside(poly: number[]): void {
     for (let i = this.agents.length - 1; i >= 0; i--) {
       const a = this.agents[i];
-      if (a.inside && !a.hall && pointInPolyFast(poly, a.x, a.z)) this.remove(i);
+      if (a.inside && !a.hall && pointInPoly(poly, a.x, a.z)) this.remove(i);
     }
   }
 
@@ -875,11 +874,6 @@ export function routeNearest(r: Float32Array, x: number, z: number): { d: number
   }
   return { d: best, along };
 }
-function routeLength(r: Float32Array): number {
-  let s = 0;
-  for (let i = 3; i < r.length; i += 3) s += Math.hypot(r[i] - r[i - 3], r[i + 1] - r[i - 2]);
-  return s;
-}
 function distSegPoint(ax: number, az: number, bx: number, bz: number, px: number, pz: number): number {
   const dx = bx - ax, dz = bz - az;
   const l2 = dx * dx + dz * dz;
@@ -902,16 +896,6 @@ function crossesStreet(px: number, pz: number, qx: number, qz: number, net: Road
     }
   }
   return false;
-}
-
-function pointInPolyFast(p: number[], x: number, z: number): boolean {
-  let inside = false;
-  const n = p.length >> 1;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = p[i * 2], zi = p[i * 2 + 1], xj = p[j * 2], zj = p[j * 2 + 1];
-    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
 }
 
 function segsCross(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number): boolean {

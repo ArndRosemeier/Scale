@@ -14,7 +14,7 @@ import type { WorldIndex } from '../world/WorldIndex';
 import type { Collision } from '../world/Collision';
 import { Stimuli, noticeRadius } from './Stimuli';
 import { GiantSteps } from './GiantBody';
-import { pointInPoly } from '../core/geom2';
+import { pointInPoly, polyArea } from '../core/geom2';
 
 export class Interactions {
   private punchT = -10;
@@ -123,7 +123,7 @@ export class Interactions {
       const b = this.world.buildingAt(p.pos.x, p.pos.z);
       if (b) {
         const L = this.destruction.layoutOf(b);
-        const area = Math.abs(polyAreaFast(L.tiers[L.tiers.length - 1].poly));
+        const area = Math.abs(polyArea(L.tiers[L.tiers.length - 1].poly));
         // Distributed capacity of a roof/floor slab ≈ 1500 kg/m² at failure; the load concentrates under the feet.
         const footArea = Math.max(0.05, (p.height * 0.15) * (p.height * 0.06) * 2);
         const pressureLoad = p.mass / Math.min(area, footArea * 6);
@@ -168,10 +168,4 @@ export class Interactions {
   }
 }
 
-function polyAreaFast(p: number[]): number {
-  let a = 0;
-  const n = p.length >> 1;
-  for (let i = 0, j = n - 1; i < n; j = i++) a += p[j * 2] * p[i * 2 + 1] - p[i * 2] * p[j * 2 + 1];
-  return a / 2;
-}
 void pointInPoly;
