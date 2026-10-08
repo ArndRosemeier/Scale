@@ -471,24 +471,27 @@ function shellCutField(tris: number[], remap: Map<number, number>, n: number, po
     segs.push({ a: vid.get(a)!, b: vid.get(b)!, w: [wx / wl, wy / wl, wz / wl] });
   }
   if (!segs.length) return cut;
-  // Smooth the boundary polyline (λ/μ steps keep loops from shrinking).
+  // Smooth the boundary polyline: many λ/μ steps with a low pass band, so wiggles a few
+  // centimetres long go too (they showed as a notch at the front of necklines) while whole loops
+  // keep their size.
   const m = cpos.length / 3;
   const nb: number[][] = Array.from({ length: m }, () => []);
   for (const s of segs) { nb[s.a].push(s.b); nb[s.b].push(s.a); }
+  const ring0 = [...new Set(segs.flatMap((s) => [s.a, s.b]))];
   let P = Float32Array.from(cpos);
-  const tmp = new Float32Array(P.length);
-  for (let it = 0; it < 60; it++) {
-    const f = it % 2 ? -0.53 : 0.5;
-    for (let i = 0; i < m; i++) {
+  let tmp = new Float32Array(P.length);
+  for (let it = 0; it < 400; it++) {
+    const f = it % 2 ? -0.51 : 0.5;
+    tmp.set(P);
+    for (const i of ring0) {
       const l = nb[i];
       for (let k = 0; k < 3; k++) {
-        if (!l.length) { tmp[i * 3 + k] = P[i * 3 + k]; continue; }
         let x = 0;
         for (const j of l) x += P[j * 3 + k];
         tmp[i * 3 + k] = P[i * 3 + k] + f * (x / l.length - P[i * 3 + k]);
       }
     }
-    P = Float32Array.from(tmp);
+    [P, tmp] = [tmp, P];
   }
   // Inward direction at each boundary vertex (its segments' mean), for points nearest a corner.
   const wv = new Float32Array(m * 3);
@@ -515,11 +518,34 @@ function shellCutField(tris: number[], remap: Map<number, number>, n: number, po
   const bd = new Float32Array(m);
   const hem: number[] = [];
   for (let i = 0; i < m; i++) if (nb[i].length) { hem.push(i); bd[i] = near(cpos[i * 3], cpos[i * 3 + 1], cpos[i * 3 + 2])[0]; }
-  const depth = new Float32Array(m);
-  for (const c of hem) {
-    let d = 0;
-    for (const i of hem) d = Math.max(d, bd[i] - 0.25 * Math.hypot(cpos[i * 3] - P[c * 3], cpos[i * 3 + 1] - P[c * 3 + 1], cpos[i * 3 + 2] - P[c * 3 + 2]));
-    depth[c] = d + 0.002;
+  // The depth is a taut line along the hem over what each point needs (no dips where the teeth
+  // are small next to big ones: those showed as an "M" at the front of a neckline).
+  const need = new Float32Array(m), depth = new Float32Array(m);
+  for (const c of hem) need[c] = Math.max(0, bd[c]) + 0.003;
+  const taut = () => {
+    depth.set(need);
+    const d1 = new Float32Array(m);
+    for (let it = 0; it < 600; it++) {
+      for (const c of hem) {
+        let x = 0;
+        for (const j of nb[c]) x += depth[j];
+        d1[c] = Math.max(need[c], x / nb[c].length);
+      }
+      for (const c of hem) depth[c] = d1[c];
+    }
+  };
+  taut();
+  // Every boundary vertex must end up clearly beyond the cut, or the kept part reaches it and
+  // shows a tooth: deepen the cut where one doesn't.
+  for (let it = 0; it < 8; it++) {
+    let short = 0;
+    for (const c of hem) {
+      const [sd, j, t] = near(cpos[c * 3], cpos[c * 3 + 1], cpos[c * 3 + 2]);
+      const s = segs[j], over = sd - depth[s.a] * (1 - t) - depth[s.b] * t + 0.003;
+      if (over > 1e-5) { short++; need[s.a] = Math.max(need[s.a], depth[s.a] + over); need[s.b] = Math.max(need[s.b], depth[s.b] + over); }
+    }
+    if (!short) break;
+    taut();
   }
   // Only vertices a few rings from the hem are measured (farther ones are well inside, whatever
   // a straight-line distance across the body says).
@@ -696,9 +722,12 @@ export class EquipmentRig {
           let x = 0, y = 0, z = 0;
           for (let q = s0; q < s1; q++) { const j = nbList[q]; x += P[j * 3]; y += P[j * 3 + 1]; z += P[j * 3 + 2]; }
           const c = 1 / (s1 - s0);
-          tmp[i * 3] = P[i * 3] * 0.4 + x * c * 0.6;
-          tmp[i * 3 + 1] = P[i * 3 + 1] * 0.4 + y * c * 0.6;
-          tmp[i * 3 + 2] = P[i * 3 + 2] * 0.4 + z * c * 0.6;
+          // (Only along the normal: sliding sideways dragged the hem's cut line with the vertices.)
+          const v = src[i], nx = nrm[v * 3], ny = nrm[v * 3 + 1], nz = nrm[v * 3 + 2];
+          const k = ((x * c - P[i * 3]) * nx + (y * c - P[i * 3 + 1]) * ny + (z * c - P[i * 3 + 2]) * nz) * 0.6;
+          tmp[i * 3] = P[i * 3] + nx * k;
+          tmp[i * 3 + 1] = P[i * 3 + 1] + ny * k;
+          tmp[i * 3 + 2] = P[i * 3 + 2] + nz * k;
         }
         P.set(tmp);
         // Never sink below the minimum clearance.
