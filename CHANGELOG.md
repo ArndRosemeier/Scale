@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.157 — 2026-10-08
+
+- **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, the 99 m long Strider loses 5 m of length (about 5 %). Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.
+
 ## 0.156 — 2026-10-08
 
 - **Thinner lips, and a lip thickness slider.** Everyone's lips were too thick: the average mouth is now noticeably thinner, for city people and new heroes alike, and the coloured lip area is tighter. The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and goes from thin lips to full ones, on women and men alike. Saved with the character like every face slider.

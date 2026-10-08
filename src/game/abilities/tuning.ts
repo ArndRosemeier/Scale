@@ -180,6 +180,16 @@ export const HYDRO_FORCE = [0, 900, 1500, 2600, 4200, 6500];
 export const SHRINK = { cost: 30, reach: 60 };
 export const SHRINK_FACTOR = [0, 0.5, 0.4, 0.3, 0.2, 0.12];
 export const SHRINK_TIME = [0, 10, 15, 22, 32, 45];
+/** The most the ray takes off a target's biggest dimension (m): a person shrinks by the factor, a car
+ *  or a monster only this much (big things stay big, but visibly smaller). */
+export const SHRINK_CAP = [0, 1, 2, 3, 4, 5];
+/** What a shrunk target still deals out (any damage, any blow): 10 % less per rank. */
+export const SHRINK_DEALT = [1, 0.9, 0.8, 0.7, 0.6, 0.5];
+
+/** Size factor the ray shrinks a target of `size` m (its biggest dimension) to at rank `r`. */
+export function shrinkFactor(size: number, r: number): number {
+  return Math.min(1, Math.max(SHRINK_FACTOR[r], (size - SHRINK_CAP[r]) / Math.max(1e-3, size)));
+}
 
 /** Tab targeting: how far targets are picked (m at 1.8 m, × √k). */
 export const TARGET = { range: 160, propRange: 45, lostAfter: 5 };
@@ -223,8 +233,6 @@ export const POWER_HIT = {
   boltKnock: 1.4, boltCreature: 40,
   /** Frost nova on a creature: points per second of freeze, at a leg. */
   frostCreature: 18,
-  /** Shrink ray on a creature: points per second of shrink × the share it loses. */
-  shrinkCreature: 4,
   /** Seismic stomp: fling 3 + impulse / 30 000 (at most 9); machines and props are shoved with at
    *  most `quakeShoveMax` per axis; giant creatures take this share of the full impulse at the legs. */
   quakeKnock: 3, quakeKnockPerNs: 1 / 30000, quakeKnockMax: 9, quakeShoveMax: 3000, quakeCreatureMul: 1,
