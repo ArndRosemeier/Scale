@@ -158,6 +158,10 @@ export class Animator {
   private blinkT = 2;
   private blink = 0;
   private talkPhase = 0;
+  /** Breathing and tail sway phases, integrated (a phase of time × a speed-dependent rate swept
+   *  ever faster as the clock grew: the chest shook on every stop late in a session). */
+  private breathPh = 0;
+  private tailPh = 0;
   private jaw = 0;
   // Reactions
   private hit = new THREE.Vector2();
@@ -1219,7 +1223,8 @@ export class Animator {
     const alive = fam !== 'dead' && fam !== 'sleep';
     // Breathing (faster after running).
     const br = 1.4 + Math.min(1.5, this.speed * 0.2);
-    const b = Math.sin(t * br * 1.6);
+    this.breathPh = (this.breathPh + dt * br * 1.6) % (Math.PI * 2);
+    const b = Math.sin(this.breathPh);
     p.add('spine02', 0.012 * b);
     p.add('spine01', 0.018 * b);
     p.addS('clavicle', 'L', 0, 0, -0.012 * b);
@@ -1234,8 +1239,9 @@ export class Animator {
     // Tail: travelling sway wave, livelier when moving; droops when dead or asleep.
     if (this.tailBones > 0) {
       const sp = Math.min(1, this.speed / 4);
+      this.tailPh = (this.tailPh + dt * (1.6 + sp * 3)) % (Math.PI * 4);
       for (let k = 0; k < this.tailBones; k++) {
-        const ph = t * (1.6 + sp * 3) - k * 0.7;
+        const ph = this.tailPh - k * 0.7;
         const amp = (0.06 + 0.05 * k) * (0.6 + sp) * (alive ? 1 : 0.15);
         p.add(`tail${k}`, (alive ? -0.04 + 0.06 * Math.sin(ph * 0.5) : 0.12) - this.lean.x * 0.5, Math.sin(ph) * amp - this.hipYaw * 0.15, 0);
       }
