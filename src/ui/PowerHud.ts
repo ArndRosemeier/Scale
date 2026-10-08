@@ -1,5 +1,5 @@
 /**
- * Power HUD: hotbar (8 slots with icon, key, cooldown sweep, selection), energy bar,
+ * Power HUD: hotbar (8 slots with icon, key, a sweep while the energy for a power is short, selection), energy bar,
  * super-jump charge, karma balance, a small mode chip, and toasts for awards and events.
  */
 import type { AbilitySystem } from '../game/abilities/AbilitySystem';
@@ -98,12 +98,12 @@ export class PowerHud {
       });
       this.karmaEl.innerHTML = `<b>${pr.karma}</b> karma`;
     }
-    // Cooldown sweeps and the active flight state.
+    // Sweeps (energy still missing for a tap power, or its short debounce) and the active state.
     this.slots.forEach((el, i) => {
       const id = pr.slots[i];
       if (!id) return;
-      const c = a.cooldown.get(id);
-      const f = c ? Math.max(0, c.left / c.full) : 0;
+      const c = a.cooldown.get(id), need = pr.unlocked(id) ? a.cost(id) : 0;
+      const f = Math.max(c ? c.left / c.full : 0, need > a.energy ? 1 - a.energy / need : 0);
       const cd = el.querySelector<HTMLSpanElement>('.cd');
       if (cd) cd.style.setProperty('--f', String(f));
       el.classList.toggle('cooling', f > 0);

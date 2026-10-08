@@ -414,7 +414,7 @@ migrated — dash was folded into super speed, now only its flight burst).
   Esc clears. `probe()` is the "first thing ahead" ray (targets, standing facade panels — holes let it through —,
   roofs, ground); `inSphere()` lists everything an area effect hits. `TargetHud` draws the corner brackets and the
   target frame (slots for the later con colour and health).
-* **AbilitySystem**: energy, cooldowns, input; tap powers fire through `Elements.fire`, held powers (laser, ice
+* **AbilitySystem**: energy, input (powers are balanced by energy cost; only a 0.25 s debounce against double presses); tap powers fire through `Elements.fire`, held powers (laser, ice
   path, hydrokinesis) run as a `channel` while the key / right mouse is held. **Punch** is a hotbar power
   like the others (always rank 1 and free, slot 1 by default; super strength sets its force): left click only targets.
   Flight boost multiplies the cruise speed by a factor that grows with the rank (`FLIGHT_BOOST_MUL`).
