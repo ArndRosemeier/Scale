@@ -7,7 +7,8 @@
  *   npm run test:quick               only the sections that (transitively) import a file changed
  *                                    against origin/main (committed or not), plus the guards that
  *                                    scan the source tree and any section whose own lines changed
- *   npm test -- --list               the sections with their last run times
+ *   npm test -- --list               the sections with their last run times (with --only or
+ *                                    --changed: the ones that would run)
  *
  * Sections are independent: each builds its own cities and state, so they run in any order and in
  * any process. Times of the last full run go to .cache/selftest-times.json (the slow ones start
@@ -91,11 +92,6 @@ export async function runSections(selfUrl: string): Promise<void> {
   }
 
   const times = readTimes();
-  if (argv.includes('--list')) {
-    for (const s of sections) console.log(`${(s.name in times ? times[s.name].toFixed(1) + " s" : "-").padStart(9)}  ${s.name}`);
-    return;
-  }
-
   let pick = sections;
   const only = arg('--only');
   if (only) {
@@ -112,6 +108,11 @@ export async function runSections(selfUrl: string): Promise<void> {
       for (const s of pick) console.log(`  ${s.name} — ${want.get(s.name)}`);
     }
   }
+  if (argv.includes('--list')) {
+    for (const s of pick) console.log(`${(s.name in times ? times[s.name].toFixed(1) + " s" : "-").padStart(9)}  ${s.name}`);
+    return;
+  }
+
   if (!pick.length) { console.log('no section to run'); return; }
 
   const full = pick.length === sections.length;
