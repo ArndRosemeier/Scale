@@ -3741,6 +3741,21 @@ aliensChecks(check);
   check(hand.length === 0, `underground: bodies use feetUnder (${hand.join(', ') || 'none'})`);
 }
 
+// Causes cross vocabularies (Stimuli Cause, DownCause, DamageCause) only in shared/cause.ts: inline
+// conversions used to book police and army stomps as the player's knock-downs.
+{
+  const hand: string[] = [];
+  const walkC = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkC(full); continue; }
+      if (f.endsWith('.ts') && !full.endsWith('shared/cause.ts') && /cause\s*===\s*'(world|threat|fire)'\s*\?\s*'(other|threat|player)'/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkC('src');
+  check(hand.length === 0, `causes: conversions go through shared/cause.ts (${hand.join(', ') || 'none'})`);
+}
+
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
 {

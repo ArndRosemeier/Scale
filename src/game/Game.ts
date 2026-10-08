@@ -124,6 +124,7 @@ import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
 import { POWER_HIT } from './abilities/tuning';
+import { downCauseOf, harmCauseOf } from '../shared/cause';
 
 /** What someone a super speed runner brushed past calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -420,7 +421,7 @@ export class Game {
     // of a collapse and a flung hero's body are nobody's blow ('world'): never the player's.
     this.destruction.onDamage = (e) => { if (e.cause === 'player') this.consequences.record('impact', 'building', 'facade', e.x, e.z, e.ref); };
     this.destruction.onCollapse = (e) => {
-      if (e.cause) this.consequences.record('impact', 'building', 'collapse', e.x, e.z, e.ref, e.cause === 'fire' ? 'threat' : e.cause, e.floors);
+      if (e.cause) this.consequences.record('impact', 'building', 'collapse', e.x, e.z, e.ref, harmCauseOf(e.cause), e.floors);
     };
     this.player.events.onSizeChange = (_h, dir) => { if (Math.random() < 0.05) this.audio.play2d(dir > 0 ? 'grow_rumble' : 'shrink_whoosh', 0.5); };
     this.player.events.onFlightToggle = (f) => { if (f) this.audio.play2d('whoosh_takeoff', 0.7); };
@@ -532,9 +533,9 @@ export class Game {
     // monster, booked to it); collapses crush what is around them.
     this.stimuli.on((s) => {
       if (s.kind === 'stomp') {
-        const h = s.size ?? this.player.height, threat = s.cause === 'threat';
+        const h = s.size ?? this.player.height, hero = downCauseOf(s.cause) === 'player';
         const r = Math.max(0.6, h * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : s.cause === 'world' ? 'other' : 'player');
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, downCauseOf(s.cause));
         if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
@@ -542,9 +543,9 @@ export class Game {
         }
         if (h > 4) this.props.crush(s.x, s.z, r);
         // A giant hero's foot comes down on the brood.
-        if (!threat && h > 3) this.threats?.broodHit(s.x, s.y + 0.3, s.z, r + 0.4, 'blow', 20, 3);
+        if (hero && h > 3) this.threats?.broodHit(s.x, s.y + 0.3, s.z, r + 0.4, 'blow', 20, 3);
         // A giant hero stamping on a monster's foot or tail.
-        if (!threat && h > 8) this.threats?.blow(s.x, s.y + h * 0.05, s.z, r, 0, -Math.pow(10, s.intensity / 2) * 80, 0, { cause: 'player', x: s.x, y: s.y, z: s.z });
+        if (hero && h > 8) this.threats?.blow(s.x, s.y + h * 0.05, s.z, r, 0, -Math.pow(10, s.intensity / 2) * 80, 0, { cause: 'player', x: s.x, y: s.y, z: s.z });
       } else if (s.kind === 'collapse') {
         const r = Math.min(40, Math.max(8, s.radius * 0.04));
         this.props.crush(s.x, s.z, r);
