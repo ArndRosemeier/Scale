@@ -3698,10 +3698,12 @@ aliensChecks(check);
       // sRGB to linear: srgbToLinear (core/math) or srgbColor (render/color). Shaders keep their own (GLSL/TSL strings).
       if (!/core\/math\.ts$|props\/vehicles\.ts$|webgpu\/vehicles\.ts$/.test(full) && /0\.04045/.test(txt)) copies.push(`${full} (sRGB curve)`);
       if (!full.endsWith('render/color.ts') && /=>\s*new THREE\.Color\(\)\.setRGB\([^;]*SRGBColorSpace/.test(txt)) copies.push(`${full} (sRGB colour helper)`);
+      // A float `seed * 1103515245` loses its low bits past 2^53, so the sequence decays; use core/rng's Rng.
+      if (/\w\s*\*\s*1103515245/.test(txt)) copies.push(`${full} (float LCG)`);
     }
   };
   walkM('src');
-  check(copies.length === 0, `helpers: no local copies of core/math, ui/esc or render/color (${copies.join(', ') || 'none'})`);
+  check(copies.length === 0, `helpers: no local copies of core/math, ui/esc, render/color or core/rng (${copies.join(', ') || 'none'})`);
 }
 
 // Gameplay waits in game time (core/later): Game.later.after(s, fn), not setTimeout.
