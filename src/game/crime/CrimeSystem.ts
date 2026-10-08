@@ -79,7 +79,6 @@ export const CRIME_KARMA = {
   returned: 8,
 };
 
-
 export const ACTOR_BUDGET = 40;
 const SETTING_KEY = 'scale.crime.setting';
 
@@ -1361,7 +1360,7 @@ export class CrimeSystem {
       case 'awakening': {
         // The great burst (three rings of it) and something stirs: the city's next event comes sooner.
         this.casts.ritualBurst(c.criminals, x, z, c.element);
-        setTimeout(() => this.casts.ritualBurst(c.criminals, x, z, c.element), 600);
+        g.later.after(0.6, () => this.casts.ritualBurst(c.criminals, x, z, c.element));
         if (g.threats) g.threats.clock.state.pressure += 600;
         g.camRig.addShake(0.35);
         if (near) g.powerHud.toast(`${who} completed their great ritual — something stirs beneath the city`, 'warn');
@@ -1748,7 +1747,7 @@ export class CrimeSystem {
     this.health.koT = 0;
     this.health.hp = this.health.max * 0.6;
     this.hud.fade(true);
-    setTimeout(() => this.hud.fade(false), 2200);
+    this.g.later.after(2.2, () => this.hud.fade(false));
     this.g.player.downT = 2.2;
     for (const u of this.police.units) if (u.job.kind === 'player') u.state = 'leaving';
   }

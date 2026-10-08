@@ -224,7 +224,7 @@ export class LastResort {
     g.weather.glare(1.6);
     // The boom arrives later (343 m/s, at most ~12 s), the ground shakes with the wave.
     const delay = Math.min(12, d / 343);
-    setTimeout(() => g.audio.play2d('blast_rumble', Math.max(0.35, 1 - d / 6000), 0.95), delay * 1000);
+    g.later.after(delay, () => g.audio.play2d('blast_rumble', Math.max(0.35, 1 - d / 6000), 0.95));
     g.camRig.addShake(Math.min(1.2, 900 / Math.max(200, d)));
     // The fireball, then the mushroom cloud.
     const y0 = g.terrain.height(this.x, this.z);
@@ -370,7 +370,7 @@ export class LastResort {
       g.crime.health.hp = Math.max(1, g.crime.health.max * 0.35);
       this.wake = null;
       this.koT = -1;
-      setTimeout(() => { g.crime.hud.fade(false); P.downT = 1.2; }, 3500);
+      g.later.after(3.5, () => { g.crime.hud.fade(false); P.downT = 1.2; });
     }
   }
 

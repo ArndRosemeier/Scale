@@ -981,7 +981,7 @@ export class Forces {
     for (let k = 0; k < W.shots; k++) {
       const h = hits[k];
       const delay = 8 + k * 0.7;
-      setTimeout(() => { if (S.targetable) this.g.audio.play('army_whistle', S.x, S.y + 30, S.z, 0.8, 0.95 + k * 0.05, 120, cam); }, (delay - 0.6) * 1000);
+      this.g.later.after(delay - 0.6, () => { if (S.targetable) this.g.audio.play('army_whistle', S.x, S.y + 30, S.z, 0.8, 0.95 + k * 0.05, 120, cam); });
       // Coming in steeply from above, its target where the monster will be.
       const tx = S.x + this.rng.range(-35, 35), tz = S.z + this.rng.range(-35, 35);
       this.fx.projectile('arty', tx - 60, S.y + 500, tz - 60, tx, this.g.world.groundHeight(tx, tz) + 0.4, tz, 1.4, () => {

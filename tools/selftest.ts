@@ -3704,6 +3704,27 @@ aliensChecks(check);
   check(copies.length === 0, `helpers: no local copies of core/math, ui/esc or render/color (${copies.join(', ') || 'none'})`);
 }
 
+// Gameplay waits in game time (core/later): Game.later.after(s, fn), not setTimeout.
+{
+  const { Later } = await import('../src/core/later');
+  const L = new Later(), got: string[] = [];
+  L.after(0.5, () => got.push('b')); L.after(0.2, () => got.push('a')); L.after(2, () => got.push('c'));
+  L.update(0.1); L.update(0.5);
+  check(got.join('') === 'ab' && L.pending === 1, `later: due callbacks run in order (${got.join('')}, ${L.pending} left)`);
+  // UI, loading, the hidden-tab ticker and the autosave may use wall-clock timers.
+  const OK = /^src\/game\/(Game\.ts|intro\/|save\/)/;
+  const timers: string[] = [];
+  const walkT = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkT(full); continue; }
+      if (f.endsWith('.ts') && !OK.test(full) && /\bset(Timeout|Interval)\(/.test(readFileSync(full, 'utf8'))) timers.push(full);
+    }
+  };
+  walkT('src/game');
+  check(timers.length === 0, `later: no wall-clock timers in gameplay (${timers.join(', ') || 'none'})`);
+}
+
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
 {

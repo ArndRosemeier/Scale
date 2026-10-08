@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.142 — 2026-10-08
+
+- **Delayed effects keep game time.** The distant boom after a last-resort blast, the army's artillery and whistles, the ritual's second burst, the car alarms after a tremor, the hospital fade and a startled passer-by's cry were timed by the browser's clock; on slow frames they ran ahead of the game. They now wait in game time, and a self-test keeps wall-clock timers out of gameplay.
+
 ## 0.141 — 2026-10-08
 
 - **Behind the scenes: crooks make up their minds in one place.** Every crime (muggers, taggers, robbers, gangs, cults, the den, the bomber, the procession, the snatcher) had its own copy of "after each blow: fight, run or give up"; they now share one, each keeping its own rule (the tagger runs first, a guard defends the door, …). Nothing changes in play; a self-test fails if a crime grows its own copy again.
