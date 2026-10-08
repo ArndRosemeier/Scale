@@ -151,7 +151,7 @@ export function getHumanStatic(as: HumanAssets): HumanStatic {
   const q = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
   for (let r = 0; r < RV; r++) {
     const v = src[r];
-    maskA[r * 4] = q(smooth(0.22, 0.55, lips[v]));
+    maskA[r * 4] = q(smooth(0.32, 0.65, lips[v]));
     maskA[r * 4 + 1] = q(smooth(0.1, 0.7, cheeks[v]));
     maskA[r * 4 + 2] = q(smooth(0.15, 0.7, socket[v]));
     maskA[r * 4 + 3] = q(smooth(0.2, 0.8, nose[v]));

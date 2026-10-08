@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.156 — 2026-10-08
+
+- **Thinner lips, and a lip thickness slider.** Everyone's lips were too thick: the average mouth is now noticeably thinner, for city people and new heroes alike, and the coloured lip area is tighter. The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and goes from thin lips to full ones, on women and men alike. Saved with the character like every face slider.
+
 ## 0.155 — 2026-10-08
 
 - **Three costumes, on F1, F2 and F3.** At the start all three are your hero's look. The fitting mirror in a clothes shop now changes only the costume you are wearing, so you can keep, say, street clothes on F1 and your hero suit on F2 and switch anywhere in the city. The three costumes are kept in your saves. The keys can be moved in the help (H, Keys). The detailed info line (frame rate, position) moved from F3 to F4.
