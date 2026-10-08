@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.158 — 2026-10-08
+
+- **Fights in the sewers stay in the sewers.** When a villain cast frost, an orb, an EMP or a fireball, when a mad bomber threw a bomb, or when a gunman missed someone underground, the scorch marks, frost, chips and the bomb itself landed on the street above. They now land on the sewer, metro or cave floor where the fight is. People knocked down underground also no longer quietly vanish: you can find them and help them up like anyone on the street.
 ## 0.157 — 2026-10-08
 
 - **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, the 99 m long Strider loses 5 m of length (about 5 %). Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.
