@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.122 — 2026-10-08
+
+- **The runaway saucer is fairer and easier to read.** It now always comes down over a street lined with houses instead of over a park, where the Nannies used to spot it before it had played a single prank. Joyriding on its own it slips across open stretches unnoticed; it gets spotted in the open only once you have knocked out a pod or have it on the run. Each lost pod lifts it a little less, so a rowhouse street still hides it with two pods out and the third one is what pops it up over the roofs.
+- **Brighter and clearer up close.** The rim lights are now strong magenta, green, orange and blue, by day and at night, and the glowing pods no longer turn white after dark. The two kids in the dome have bigger heads with glowing eyes, the hull shows dents and scorch marks, glyphs are easier to see by day and take a little longer to draw, and a column of light now joins the parent disc to the bubble it lifts the saucer in.
+
 ## 0.121 — 2026-10-08
 
 - **No more shaking arms when you stop running late in a session.** The breathing motion of the chest sped up and slowed down with your speed, and after a few minutes of play every stop made the chest, and with it the arms, shake for a second or two. Breathing now changes pace smoothly, however long you have been playing. Tails swaying on other creatures had the same problem and are fixed too.
