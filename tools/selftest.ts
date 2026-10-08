@@ -3843,5 +3843,14 @@ aliensChecks(check);
   check(crosses.length === 0, `helpers: cross products use v3cross from core/math (${crosses.join(', ') || 'none'})`);
 }
 
+// A hero of about human size bumping into people (super speed, a super jump landing) only makes
+// them stumble: 'brush', no reputation; a giant's landing still counts. One rule: shared/cause.ts.
+{
+  const { stompDownCause, BRUSH_MAX_H } = await import('../src/shared/cause');
+  check(stompDownCause('player', 1.8) === 'brush' && stompDownCause(undefined, 1.8) === 'brush', 'brush: a human-size hero landing beside someone is a brush');
+  check(stompDownCause('player', BRUSH_MAX_H + 1) === 'player', 'brush: a giant hero landing on someone is the hero\'s');
+  check(stompDownCause('threat', 1.8) === 'threat' && stompDownCause('world', 1.8) === 'other', 'brush: other stompers keep their cause');
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

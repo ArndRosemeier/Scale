@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.151 — 2026-10-08
+
+- **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, a screen shake never pushes it through a wall, it no longer sinks into a raised platform or slips behind the walls at the underpass mouth, and near the top of a stair it keeps clear of the street overhead. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).
+
+## 0.150 — 2026-10-08
+
+- **Fix: landing a super jump next to someone no longer costs reputation.** At about human size, coming down beside a pedestrian now only makes them stumble and call a stern word after you, just like brushing past them at super speed: no harm, no reputation, no wanted level. A giant hero's landing still counts as before.
+
 ## 0.149 — 2026-10-08
 
 - **Every good deed is rewarded the same way.** Each kind of rescue and win used to hand out its own mix of karma, reputation, cheers and stats, and each one forgot something different. Now they all go through one reward step. Anything that ends a crime, a den, a monster or a whole event counts as "stopped" in your stats, makes people nearby cheer, and calms the police a little. This now also applies to bringing down the Strider, stopping the awakened tree, beating back the brood or the rogue robots, catching the runaway saucer, calling off the last-resort strike and bringing down the Maw. Rescues count as good deeds, and surface slime brutes earn a little reputation like brood beasts. A self-test keeps rewards in one place.
