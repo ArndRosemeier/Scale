@@ -1789,14 +1789,9 @@ export class CrimeSystem {
     const cur = g.targeting.current;
     if (cur?.kind === 'person' && Math.hypot(cur.obj.x - p.x, cur.obj.z - p.z) < 2.8) tgt = cur.obj;
     if (!tgt) {
-      let bd = 2.2;
       const d = aimDir(g.renderer.camera, new THREE.Vector3());
       const fy = Math.hypot(d.x, d.z) > 0.05 ? Math.atan2(-d.x, -d.z) : g.camRig.forwardYaw, fx = -Math.sin(fy), fz = -Math.cos(fy);
-      for (const a of g.peds.neighbours(p.x, p.z, 2.4, [])) {
-        if (!a.actor?.hostile || a.state === PState.Down) continue;
-        const dx = a.x - p.x, dz = a.z - p.z, d = Math.hypot(dx, dz);
-        if (d < bd && (dx * fx + dz * fz) / (d || 1) > 0.3) { bd = d; tgt = a; }
-      }
+      tgt = g.peds.nearest(p.x, p.z, 2.2, (a, dd) => !!a.actor?.hostile && a.state !== PState.Down && ((a.x - p.x) * fx + (a.z - p.z) * fz) / (dd || 1) > 0.3);
     }
     return tgt ? Math.atan2(-(tgt.x - p.x), -(tgt.z - p.z)) : null;
   }

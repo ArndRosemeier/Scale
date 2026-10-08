@@ -23,7 +23,7 @@
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
-import type { PedAgent } from '../../sim/Pedestrians';
+import { type PedAgent, isBystander } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 import { makeActor, release, play, SIDEKICK_OWNER, PEOPLE_OWNER, STREET_OWNER, type Actor } from '../../sim/actors/Actor';
 import { planCell } from '../../plan/cell';
@@ -814,11 +814,7 @@ export class Sidekick {
   /** dev: make the nearest grown-up (within 200 m) the sidekick at once (no shard, no scene). */
   devBond(): Record<string, unknown> {
     const g = this.g, p = g.player.pos;
-    let best: PedAgent | null = null, bd = 200;
-    for (const a of g.peds.neighbours(p.x, p.z, 200, [])) {
-      const d = Math.hypot(a.x - p.x, a.z - p.z);
-      if (a.alive && !a.actor && !a.inside && a.state !== PState.Down && yearsOf(a.cit) >= 18 && d < bd) { bd = d; best = a; }
-    }
+    const best = g.peds.nearest(p.x, p.z, 200, (a) => isBystander(a) && yearsOf(a.cit) >= 18);
     if (!best) return { error: 'nobody near' };
     if (this.phase === 'bonded') { this.mate.dismiss(); g.people.setSidekick(this.who, false); }
     const k = g.people.note(best, 'talked');
