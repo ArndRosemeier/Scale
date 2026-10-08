@@ -244,8 +244,7 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
       this.credit[by]++;
       if (by !== 'player') continue;
       const k = m.kind === 'bot' ? K.bot : m.kind === 'drone' ? K.drone : K.robot;
-      g.progress.addKarma(k, m.kind === 'drone' ? 'brought down a rogue drone' : 'stopped a rogue robot');
-      g.crime.rep.add(ROBOT_EVENT.rep.unit, 'rogue robot');
+      g.crime.reward({ karma: k, why: m.kind === 'drone' ? 'brought down a rogue drone' : 'stopped a rogue robot', rep: ROBOT_EVENT.rep.unit, news: 'rogue robot' });
       // It was going for someone: they owe the player.
       const t = m.tgt;
       if (t?.kind === 'ped' && t.a.alive && Math.hypot(t.a.x - m.obj.x, t.a.z - m.obj.z) < 5) g.progress.addKarma(K.saved, 'saved someone from a rogue robot');
@@ -260,10 +259,7 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
     for (const m of this.units) if (!m.out && !this.ctl.disabled(m)) this.ctl.shutdown(m);
     const g = this.g;
     if (outcome === 'stopped' && this.credit.player >= 2) {
-      g.progress.addKarma(ROBOT_EVENT.karma.stopped, 'the rogue robots are stopped');
-      g.crime.rep.add(ROBOT_EVENT.rep.stopped, 'rogue robots stopped');
-      g.crime.rep.count('stopped');
-      g.crime.cheer();
+      g.crime.reward({ karma: ROBOT_EVENT.karma.stopped, why: 'the rogue robots are stopped', rep: ROBOT_EVENT.rep.stopped, news: 'rogue robots stopped', stopped: true });
     }
   }
 

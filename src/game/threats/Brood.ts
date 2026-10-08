@@ -257,7 +257,7 @@ export class Brood implements ThreatEvent {
     if (this.t - this.screechT > 0.12) { this.screechT = this.t; g.audio.play('brood_screech', c.x, c.y + 0.3, c.z, c.kind ? 0.9 : 0.45, (c.kind ? 0.7 : 1.1) + Math.random() * 0.3, 6, cam); }
     if (cause !== 'player') return;
     this.stats.playerKills++;
-    if (c.kind === 1) { g.progress.addKarma(K.brute, 'killed a brood beast'); g.crime.rep.add(BROOD_EVENT.rep.brute, 'brood beast'); }
+    if (c.kind === 1) g.crime.reward({ karma: K.brute, why: 'killed a brood beast', rep: BROOD_EVENT.rep.brute, news: 'brood beast' });
     else g.progress.addKarma(K.skitter, 'killed a brood creature');
     // It was on someone: they owe the player.
     const p = c.prey;
@@ -347,10 +347,7 @@ export class Brood implements ThreatEvent {
     this.sim.leave();
     const g = this.g;
     if (outcome === 'stopped' && this.stats.playerKills >= BROOD_EVENT.minKills) {
-      g.progress.addKarma(BROOD_EVENT.karma.stopped, 'the brood is beaten back');
-      g.crime.rep.add(BROOD_EVENT.rep.stopped, 'brood beaten back');
-      g.crime.rep.count('stopped');
-      g.crime.cheer();
+      g.crime.reward({ karma: BROOD_EVENT.karma.stopped, why: 'the brood is beaten back', rep: BROOD_EVENT.rep.stopped, news: 'brood beaten back', stopped: true });
     }
   }
 

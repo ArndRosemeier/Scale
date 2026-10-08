@@ -196,9 +196,7 @@ export class LastResort {
       for (const v of S.aggro.values()) tot += v;
       const mine = S.aggro.get('player') ?? 0;
       if (tot > 0 && (mine >= tot * 0.25 || S.topAggro()?.key === 'player')) {
-        g.progress.addKarma(LAST_RESORT.karma.saved, 'stopped it in time — the strike is called off');
-        g.crime.rep.add(LAST_RESORT.rep.saved, 'saved the city');
-        g.crime.cheer();
+        g.crime.reward({ karma: LAST_RESORT.karma.saved, why: 'stopped it in time — the strike is called off', rep: LAST_RESORT.rep.saved, news: 'saved the city', stopped: true });
       }
       this.A.news(2);
     }
