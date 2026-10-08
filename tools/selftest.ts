@@ -2140,7 +2140,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
   check(keys(back) === keys(full) && keys(back.player) === keys(full.player) && keys(back.threats) === keys(full.threats) && keys(back.aftermath!) === keys(full.aftermath!) && keys(back.threats.remains[0]) === keys(full.threats.remains[0]), 'saves: all fields survive parsing');
-  // Reputation is open-ended upwards (v0.126): a save above +100 keeps it, the floor stays −100.
+  // Reputation is open-ended upwards (v0.128): a save above +100 keeps it, the floor stays −100.
   {
     const hi = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: 250.5, stats: {} } }), lo = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: -400, stats: {} } });
     const R = new Reputation(1, 0.5, 'normal');

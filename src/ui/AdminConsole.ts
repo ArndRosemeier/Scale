@@ -116,7 +116,11 @@ function show(v: unknown): string {
   if (typeof v === 'string') return v;
   try {
     const s = JSON.stringify(v, (_k, x) => (typeof x === 'number' ? Math.round(x * 100) / 100 : x));
-    return s === undefined ? String(v) : s.length > 400 ? `${s.slice(0, 400)}…` : s;
+    if (s === undefined) return String(v);
+    if (s.length <= 400) return s;
+    // Too long for the log: the whole of it goes to the clipboard (to paste into a bug report).
+    navigator.clipboard?.writeText(s).catch(() => { /* no clipboard access */ });
+    return `${s.slice(0, 400)}… (full output copied to the clipboard)`;
   } catch { return String(v); }
 }
 
