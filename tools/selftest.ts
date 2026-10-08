@@ -24,7 +24,9 @@ import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
 import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
-import { buildRuralTile } from '../src/build/rural';
+import { buildRuralTile, ruralSurfaceAt } from '../src/build/rural';
+import { WorldIndex } from '../src/world/WorldIndex';
+import { TERRAIN_DROP } from '../src/build/terrainMesh';
 import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
@@ -532,6 +534,22 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   }
   const tile = buildRuralTile(plan, T, Math.floor(town.x / 1024) * 1024, Math.floor(town.z / 1024) * 1024, 1024);
   check(!!tile.ground && !!tile.facade && tile.obstacles.length > 0, `rural seed ${seed}: the town's tile has roads, buildings and collision boxes`);
+  // Ground height out here follows what is drawn: the roads and the square at the natural height,
+  // the open land beside them on the terrain mesh, TERRAIN_DROP lower.
+  {
+    const W = new WorldIndex(T, () => []);
+    W.rural = { onSurface: (x, z) => ruralSurfaceAt(tile.surfaces, x, z) };
+    const tx = Math.floor(town.x / 1024) * 1024, tz = Math.floor(town.z / 1024) * 1024;
+    let road = 0, roadOk = 0, open = 0, openOk = 0;
+    for (let i = 0; i < 4000 && (road < 50 || open < 50); i++) {
+      const x = tx + 20 + ((i * 7919) % 984), z = tz + 20 + ((i * 104729) % 984);
+      const e = plan.roadEdge(x, z);
+      if (e < -0.5) { road++; if (W.groundHeight(x, z) === T.height(x, z)) roadOk++; }
+      else if (e > 3 && !plan.onPaved(x, z, 3) && !plan.onBuilding(x, z, 3)) { open++; if (Math.abs(W.groundHeight(x, z) - (T.height(x, z) - TERRAIN_DROP)) < 1e-9) openOk++; }
+    }
+    check(road >= 10 && roadOk === road, `rural seed ${seed}: walkers stand on the country roads (${roadOk}/${road})`);
+    check(open >= 10 && openOk === open, `rural seed ${seed}: walkers stand on the drawn open land, not ${TERRAIN_DROP} m above it (${openOk}/${open})`);
+  }
   console.log(`seed ${seed} rural: ${villages.length} villages, ${plan.settlements.length - villages.length} farms, ${plan.roads.length} roads, ${nb} buildings, ${T.lakes.length} lakes in ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
@@ -3754,6 +3772,23 @@ aliensChecks(check);
   };
   walkC('src');
   check(hand.length === 0, `causes: conversions go through shared/cause.ts (${hand.join(', ') || 'none'})`);
+}
+
+// Rewards (reputation, stats, cheers) go through CrimeSystem.reward, so every "stopped" deed counts,
+// cools the police and gets its cheer the same way.
+{
+  const hand: string[] = [];
+  const walkR = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkR(full); continue; }
+      if (!f.endsWith('.ts') || full.endsWith('crime/CrimeSystem.ts')) continue;
+      const src = readFileSync(full, 'utf8').replace(/rep\.add\([^;]*'dev'\)/g, '');
+      if (/\.rep\.count\(|crime\??\.cheer\(\)|crime\??\.rep\.add\(/.test(src)) hand.push(full);
+    }
+  };
+  walkR('src');
+  check(hand.length === 0, `rewards: through crime.reward (${hand.join(', ') || 'none'})`);
 }
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).

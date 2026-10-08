@@ -325,7 +325,7 @@ export class SlimeRealm {
       if (b.role === 'maw') {
         mawDown(this.war);
         this.trust.add(25, 'brought down the Maw');
-        g.progress.addKarma(60, 'The Maw is down');
+        g.crime.reward({ karma: 60, why: 'The Maw is down', stopped: true });
         g.powerHud.toast('The Maw collapses — the Heart dims, and the Murk scatter', 'core', 9000);
         g.audio.play('maw_roar', b.x, b.y, b.z, 1, 0.5, 30, g.renderer.camera.position);
         g.saves?.notable();
@@ -336,7 +336,7 @@ export class SlimeRealm {
         // The Lumen see it: a little trust when it happens in their sight.
         const near = this.F!.nearest(b, 'lumen', 25);
         if (near || b.surface) this.trust.add(b.role === 'brute' ? 2 : 0.6, 'fought the Murk');
-        if (b.surface) g.progress.addKarma(b.role === 'brute' ? 8 : 3, 'Stopped a creature from below');
+        if (b.surface) g.crime.reward({ karma: b.role === 'brute' ? 8 : 3, why: 'Stopped a creature from below', rep: b.role === 'brute' ? 0.5 : 0, news: 'creature from below' });
       }
     } else if (byPlayer) {
       this.trust.add(-8, 'killed one of them');
