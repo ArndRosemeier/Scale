@@ -79,9 +79,9 @@ if (process.argv[1]?.replace(/\\/g, '/').endsWith('tools/metroaudit.ts')) {
     console.log(`seed ${seed} size ${size}: ${macro.metroLines.length} lines, ${macro.metroStations.length} stations, ${input.halls.length} halls, ${input.passages?.length} entrances (${(performance.now() - t0).toFixed(0)} ms)`);
     for (const r of auditLines(input)) console.log('  line', fmt(r));
     const P = auditPassages(input, inHole);
-    const bad = P.filter((p) => p.ledge > 0.4 || p.maxSlope > 0.65 || p.floorErr > 0.05 || p.ceilingOut > 0 || p.hits > 0 || !p.endsOnPlatform);
+    const bad = P.filter((p) => p.ledge > 0.4 || p.maxSlope > 0.65 || p.floorErr > 0.05 || p.ceilingOut > 0 || p.hits > 0 || !p.endsOnPlatform || p.stuck > 0);
     const worst = (k: keyof (typeof P)[0]) => Math.max(...P.map((p) => Number(p[k])));
-    console.log(`  entrances: ${P.length}, worst slope ${worst('maxSlope').toFixed(2)}, floor err ${worst('floorErr').toFixed(2)}, ceiling over street ${worst('ceilingOut').toFixed(2)}, cutting other volumes ${P.filter((p) => p.hits).length}, not ending on the platform ${P.filter((p) => !p.endsOnPlatform).length}`);
+    console.log(`  entrances: ${P.length}, worst slope ${worst('maxSlope').toFixed(2)}, floor err ${worst('floorErr').toFixed(2)}, ceiling over street ${worst('ceilingOut').toFixed(2)}, cutting other volumes ${P.filter((p) => p.hits).length}, not ending on the platform ${P.filter((p) => !p.endsOnPlatform).length}, walker stuck in ${P.filter((p) => p.stuck).length}`);
     for (const p of bad.slice(0, 8)) console.log('   ', fmt(p));
   }
 }
