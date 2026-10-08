@@ -102,6 +102,23 @@ export function v3scale(a: Vec3, s: number): Vec3 {
   return [a[0] * s, a[1] * s, a[2] * s];
 }
 
+/** a + b * k. */
+export function v3madd(a: Vec3, b: Vec3, k: number): Vec3 {
+  return [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
+}
+
+export function v3dot(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+export function v3cross(a: Vec3, b: Vec3): Vec3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+export function v3lerp(a: Vec3, b: Vec3, t: number): Vec3 {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
 /** HSL (0..1) → RGB (0..1). */
 export function hsl2rgb(h: number, s: number, l: number): [number, number, number] {
   h = ((h % 1) + 1) % 1;

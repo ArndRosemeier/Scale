@@ -9,6 +9,7 @@ import { Rng } from '../../core/rng';
 import type { Design, DRoom, P2 } from './types';
 import type { PropAt, Theme } from './theme';
 import { buildProp } from './props';
+import { lerp2 as lerp } from '../../core/geom2';
 
 const DS: Opt = { detail: true, solid: true, map: 0 };
 const DOOR_H = 2.3;
@@ -64,8 +65,6 @@ function rail(k: Kit, a: P2, b: P2, y0: number, y1: number, T: Theme): void {
   const s = k.box(cu, cv, L / 2, 0.08, y0, y1, mat(CONC), { solid: true, map: 0, rot });
   s.hidden = true;
 }
-
-const lerp = (a: P2, b: P2, t: number): P2 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
 /** The room's props from its theme recipe, placed in the room's quad (door side first). */
 function furnish(k: Kit, room: DRoom, T: Theme): void {

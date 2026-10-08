@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.137 — 2026-10-08
+
+- **Behind the scenes: 3D vector maths has one home.** Eight files had their own add, subtract, dot, cross, length, normalise and blend helpers for 3D points, and four more typed out cross products by hand; they all use the shared versions now. Nothing changes in play; a self-test fails if a typed-out cross product or a copied helper comes back.
+
 ## 0.136 — 2026-10-08
 
 - **Behind the scenes: geometry has one home.** Polygon area, bounds, point-in-polygon, edge distance, polyline length and reversal, the angle difference and two vector helpers had been written again in 22 files under other names; they now all use the shared versions. Nothing changes in play. A self-test now compares function bodies, not names, and fails if a new copy of a shared geometry helper appears.

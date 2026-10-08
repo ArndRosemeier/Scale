@@ -15,6 +15,7 @@ import { MeshBuilder } from './meshBuilder';
 import earcut from 'earcut';
 import { Dicer, isWreckable, wreckGrid, type WreckGrid } from './landmarkDice';
 import { facadeSpecs } from './buildingShell';
+import { v3norm as norm, v3cross } from '../core/math';
 
 type V3 = [number, number, number];
 
@@ -176,8 +177,8 @@ class Emitter {
     const d = norm([b[0] - a[0], b[1] - a[1], b[2] - a[2]]), L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     // Two axes across the strut.
     const h: V3 = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
-    const e1 = norm([d[1] * h[2] - d[2] * h[1], d[2] * h[0] - d[0] * h[2], d[0] * h[1] - d[1] * h[0]]);
-    const e2: V3 = [d[1] * e1[2] - d[2] * e1[1], d[2] * e1[0] - d[0] * e1[2], d[0] * e1[1] - d[1] * e1[0]];
+    const e1 = norm(v3cross(d, h));
+    const e2 = v3cross(d, e1);
     const dir = (t: number): V3 => [e1[0] * Math.cos(t) + e2[0] * Math.sin(t), e1[1] * Math.cos(t) + e2[1] * Math.sin(t), e1[2] * Math.cos(t) + e2[2] * Math.sin(t)];
     this.use(p.m);
     for (let i = 0; i < n; i++) {
@@ -654,7 +655,3 @@ class Emitter {
   }
 }
 
-function norm(v: V3): V3 {
-  const l = Math.hypot(v[0], v[1], v[2]) || 1;
-  return [v[0] / l, v[1] / l, v[2] / l];
-}

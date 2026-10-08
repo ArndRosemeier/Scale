@@ -3722,6 +3722,10 @@ aliensChecks(check);
   const copies = clusters.filter((c) => c.fns.some((f) => HOME.test(f.file)))
     .flatMap((c) => c.fns.filter((f) => !HOME.test(f.file)).map((f) => `${f.file}:${f.line} ${f.name} (copy of ${c.fns.find((h) => HOME.test(h.file))!.name})`));
   check(copies.length === 0, `helpers: no copies of core/geom2 or core/math functions under other names (${copies.join(', ') || 'none'}) in ${Date.now() - t0} ms`);
+  // One-liners are below the finder's size floor; the cross product is the one that kept being typed out.
+  const CROSS = /(\w+)\[1\] \* (\w+)\[2\] - \1\[2\] \* \2\[1\]/;
+  const crosses = (files as string[]).filter((f) => !f.endsWith('core/math.ts') && CROSS.test(readFileSync(f, 'utf8')));
+  check(crosses.length === 0, `helpers: cross products use v3cross from core/math (${crosses.join(', ') || 'none'})`);
 }
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
