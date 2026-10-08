@@ -90,7 +90,7 @@ New stimuli: `cry`, `alarm`, `siren`, `fire` (`gunshot` only if violence allows)
 
 - Collateral ledger (`src/game/Consequences.ts`) attributes every player-caused strike, stomp, wall smash, blast, crush and wreck.
 - No gore, no deaths by default: peds downed by the player are injured (paramedics revive), giant crushes become "trapped" (rescuable).
-- Reputation (−100…+100): + resolved crimes, rescues, villains; − hurt bystanders, wrecked civilian cars, collapsed occupied buildings. High rep: crowds cheer and film closer; low rep: they flee even from a normal-size player.
+- Reputation (−100 and up; open-ended since v0.128): + resolved crimes, rescues, villains; − hurt bystanders, wrecked civilian cars, collapsed occupied buildings. High rep: crowds cheer and film closer; low rep: they flee even from a normal-size player.
 - Police stance: allies by default; "wanted" mode (comedic, low stakes) after attacking cops or at very low reputation.
 - City chaos meter (destroyed elements, wrecks, collapses; slow decay) drives the director (looters during collapses) and the ticker.
 

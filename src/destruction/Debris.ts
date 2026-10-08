@@ -166,7 +166,8 @@ export class Debris {
   /** Ballistic chip/shard particles (glass, plaster bits). */
   chipBurst(x: number, y: number, z: number, n: number, speed: number, dirX: number, dirY: number, dirZ: number, color: THREE.Color, size = 0.06, life = 3): void {
     // One ground query per burst (it is not cheap: buildings, rubble, bridges).
-    const ground = this.groundFn(x, z);
+    // (From just above the burst: underground the street overhead is not the floor.)
+    const ground = this.groundFn(x, z, y + 1);
     for (let k = 0; k < n; k++) {
       const i = this.chipNext;
       this.chipNext = (i + 1) % CHIP_CAP;

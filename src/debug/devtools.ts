@@ -3,6 +3,7 @@
  */
 import type { Game } from '../game/Game';
 import type { BuildingRef } from '../world/WorldIndex';
+import { isClothesShop, isArcade } from '../interior/InteriorGen';
 import { statusOf } from '../shared/status';
 import type { WeatherSetting } from '../render/Weather';
 import { LandUse } from '../world/landuse';
@@ -19,6 +20,26 @@ export function installDevtools(game: Game): void {
       const c = (b: BuildingRef) => Math.hypot((b.bounds[0] + b.bounds[2]) / 2 - x, (b.bounds[1] + b.bounds[3]) / 2 - z);
       bs.sort((a, b) => c(a) - c(b));
       return bs[skip] ?? null;
+    },
+    /** Walk-in test: put the hero in front of the fitting mirror of the nearest clothes shop (E there opens the creator). */
+    async mirror(): Promise<string> {
+      const p = game.player.pos;
+      const d = (b: BuildingRef) => Math.hypot((b.bounds[0] + b.bounds[2]) / 2 - p.x, (b.bounds[1] + b.bounds[3]) / 2 - p.z);
+      const b = game.world.buildingsIn(p.x - 800, p.z - 800, p.x + 800, p.z + 800).filter((r) => r.alive && isClothesShop(r.desc)).sort((a, c) => d(a) - d(c))[0];
+      if (!b) return 'no clothes shop within 800 m';
+      const door = game.destruction.layoutOf(b).door;
+      p.set(door.x, game.world.groundHeight(door.x, door.z) + 0.2, door.z);
+      game.player.vel.set(0, 0, 0);
+      for (let i = 0; i < 60; i++) {
+        await dev.wait(250);
+        const m = game.interiors.dressMirrors()[0];
+        if (m) {
+          p.set(m.x + Math.sin(m.yaw) * 1.0, m.y + 0.05, m.z + Math.cos(m.yaw) * 1.0);
+          game.player.vel.set(0, 0, 0);
+          return `at the mirror (${m.x.toFixed(1)}, ${m.z.toFixed(1)})`;
+        }
+      }
+      return 'the shop interior did not open';
     },
     /** Free camera at position looking at a target. */
     look(px: number, py: number, pz: number, tx: number, ty: number, tz: number): void {
@@ -82,6 +103,17 @@ export function installDevtools(game: Game): void {
       game.camRig.zoom = inside ? 1.2 : 2.5;
       return b;
     },
+    /** Arcades among the loaded buildings, nearest first; go=true: put the player just inside the nearest (or the i-th). */
+    arcade(go = true, i = 0): { x: number; z: number; d: number }[] {
+      const p = game.player.pos, R = 3000;
+      const list = game.world.buildingsIn(p.x - R, p.z - R, p.x + R, p.z + R).filter((b) => b.alive && isArcade(b.desc))
+        .map((b) => ({ b, x: (b.bounds[0] + b.bounds[2]) / 2, z: (b.bounds[1] + b.bounds[3]) / 2 }))
+        .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z));
+      const out = list.map((a) => ({ x: Math.round(a.x), z: Math.round(a.z), d: Math.round(Math.hypot(a.x - p.x, a.z - p.z)) }));
+      const t = list[i];
+      if (go && t) { game.player.pos.set(t.x, game.world.groundHeight(t.x, t.z) + 0.1, t.z); dev.door(true, 0, (b) => b === t.b); }
+      return out;
+    },
     setSize(h: number): void { game.player.height = h; },
     teleport(x: number, z: number): void { game.player.pos.set(x, game.world.groundHeight(x, z) + 0.1, z); },
     /** Put the player in the side room with the gap to hidden colony i (no hint in the game itself). */
@@ -129,14 +161,20 @@ export function installDevtools(game: Game): void {
     },
     /** Rats and the wandering slime around the player (calm: they stay put). */
     sewerLife: (calm?: boolean) => { if (calm !== undefined) game.underground.life.calm = calm; return game.underground.life.stats; },
-    /** The deep realm: go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'trench' | 'noMans' | 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …), places, status. */
+    /**
+     * The deep realms (one below each colony): go('hall' | 'gardens' | 'lake' | 'archive' | 'front' | 'trench' | 'noMans' |
+     * 'lip' | 'bottom' | 'warrens' | 'heart' | 'lookout' | 'gate0' …, realm?) — in the realm you are near, or realm n;
+     * realms() lists them (colony, battleground style), places, status.
+     */
     deep: {
+      realms: () => game.underground.deeps.map((d, i) => ({ realm: i, colony: d.plan.hub, style: d.plan.trench.style, live: d === game.underground.deep })),
       places: () => Object.keys(game.underground.deep?.plan.places ?? {}),
-      go(name = 'hall'): { x: number; y: number; z: number } | null {
-        const D = game.underground.deep;
+      go(name = 'hall', realm?: number): { x: number; y: number; z: number } | null {
+        const U = game.underground;
+        const g = /^gate(\d+)$/.exec(name);
+        const D = realm !== undefined ? U.deeps[realm] : g ? U.deeps.find((d) => d.plan.roads.some((q) => q.colony === Number(g[1]))) ?? U.deep : U.deep;
         if (!D) return null;
         let p: { x: number; y: number; z: number } | null = D.plan.places[name] ?? null;
-        const g = /^gate(\d+)$/.exec(name);
         if (g) { const r = D.plan.roads.find((q) => q.colony === Number(g[1])) ?? D.plan.roads[0]; p = r ? { x: r.pts[3], y: r.pts[4], z: r.pts[5] } : null; }
         if (!p) return null;
         (game as unknown as { freeCam: boolean }).freeCam = false;

@@ -8,7 +8,11 @@
 import type { CrimeKind } from '../crime/Crime';
 import type { Safety } from './pulse';
 
-export type NewsWhat = CrimeKind | 'rising' | 'falling' | 'turf';
+/** shard: the glowing stone found in the city (game/sidekick); swarm / walker / stare: the Wardens (game/aliens). */
+export type NewsWhat = CrimeKind | 'rising' | 'falling' | 'turf' | 'shard' | 'mourn' | WardenNews;
+/** teens: the runaway saucer (end 'hero': the hero handed it over; 'stopped': the Nannies caught it; 'none': it got away). */
+export type WardenNews = 'swarm' | 'walker' | 'stare' | 'teens';
+const WARDEN_NEWS: readonly NewsWhat[] = ['swarm', 'walker', 'stare', 'teens'];
 export type NewsEnd = 'stopped' | 'escaped' | 'hero' | 'none';
 
 export interface NewsItem {
@@ -34,17 +38,32 @@ const HEAD: Partial<Record<NewsWhat, Pair>> = {
   hijack: ['Robots hijacked in {hood}', 'Robot hijack stopped in {hood}'],
   ritual: ['Strange ritual in {hood}', 'Police end ritual in {hood}'],
   bomber: ['Bomb scare in {hood}', 'Bomber arrested in {hood}'],
+  heist: ['{Group} rob a bank in {hood}', 'Police foil bank heist in {hood}'],
+  takeover: ['{Group} take over streets in {hood}', 'Police end gang takeover in {hood}'],
+  uprising: ['{Group} turn the robots in {hood}', 'Machine uprising put down in {hood}'],
+  awakening: ['{Group} hold a great ritual in {hood}', 'Police break up great ritual in {hood}'],
+  sabotage: ['{Group} wreck machines in {hood}', 'Saboteurs caught in {hood}'],
+  raising: ['Skeletons seen in {hood}', 'Police break up grave rite in {hood}'],
+  procession: ['People vanish in a trance in {hood}', 'Police end eerie procession in {hood}'],
+  treewake: ['A tree walks in {hood}', 'Police stop tree singers in {hood}'],
+  deadrise: ['The dead walk in {hood}', 'Police stop grave raising in {hood}'],
 };
 const HERO: Partial<Record<NewsWhat, string>> = {
   snatch: 'Hero stops bag snatcher in {hood}', mugging: 'Hero saves mugging victim in {hood}', robbery: 'Hero foils robbery in {hood}',
   racket: 'Hero breaks up racket in {hood}', tagging: 'Hero stops taggers in {hood}', brawl: 'Hero ends street fight in {hood}',
   hijack: 'Hero stops robot hijack in {hood}', ritual: 'Hero breaks up ritual in {hood}', bomber: 'Hero stops mad bomber in {hood}',
+  heist: 'Hero foils bank heist in {hood}', takeover: 'Hero beats back gang takeover in {hood}', uprising: 'Hero stops machine uprising in {hood}',
+  awakening: 'Hero breaks up great ritual in {hood}',
+  sabotage: 'Hero stops saboteurs in {hood}', raising: 'Hero lays the dead to rest in {hood}', procession: 'Hero wakes the entranced in {hood}',
+  treewake: 'Hero stops tree singers in {hood}', deadrise: 'Hero ends grave raising in {hood}',
 };
 
 /** What it is called in a sentence ("a mugging"). */
 const NOUN: Partial<Record<NewsWhat, string>> = {
   snatch: 'a bag snatching', mugging: 'a mugging', robbery: 'a robbery', racket: 'a shakedown', tagging: 'some tagging', brawl: 'a gang fight',
   hijack: 'a robot hijack', ritual: 'some weird ritual', bomber: 'a bomb scare',
+  heist: 'a bank heist', takeover: 'a gang takeover', uprising: 'robots running riot', awakening: 'a huge ritual',
+  sabotage: 'machines wrecked', raising: 'skeletons in the park', procession: 'people led away in a trance', treewake: 'a walking tree', deadrise: 'the dead walking',
 };
 
 export function fillNews(s: string, it: NewsItem): string {
@@ -57,6 +76,12 @@ export function headline(it: NewsItem): string {
   if (it.what === 'rising') return `Crime on the rise in ${it.hood}`;
   if (it.what === 'falling') return `${it.hood} getting safer`;
   if (it.what === 'turf') return `${it.group ?? 'A gang'} moves into ${it.hood}`;
+  if (it.what === 'shard') return `Strange glowing stone found in ${it.hood}`;
+  if (it.what === 'swarm') return 'Hundreds of discs over the city. The Wardens won\'t say why';
+  if (it.what === 'walker') return `Warden walker stands in ${it.hood}, staring`;
+  if (it.what === 'stare') return `Disc hangs over ${it.hood} for hours. No comment`;
+  if (it.what === 'teens') return it.end === 'hero' ? `Hero hands runaway saucer back to the Nannies over ${it.hood}` : it.end === 'stopped' ? 'Nannies lose their kids again' : `Joyriding saucer drops cars on roofs in ${it.hood}`;
+  if (it.what === 'mourn') return `The hero's companion did not survive: mourning in ${it.hood}`;
   if (it.end === 'hero') return fillNews(HERO[it.what] ?? 'Hero steps in in {hood}', it);
   const p = HEAD[it.what];
   return p ? fillNews(it.end === 'stopped' ? p[1] : p[0], it) : `Trouble in ${it.hood}`;
@@ -64,7 +89,8 @@ export function headline(it: NewsItem): string {
 
 /** The kind of story (the card's colour band): crime, police, hero, city. */
 export function storyKind(it: NewsItem): 'crime' | 'police' | 'hero' | 'city' {
-  if (it.what === 'rising' || it.what === 'falling' || it.what === 'turf') return 'city';
+  if (it.what === 'teens' && it.end === 'hero') return 'hero';
+  if (it.what === 'rising' || it.what === 'falling' || it.what === 'turf' || it.what === 'shard' || it.what === 'mourn' || WARDEN_NEWS.includes(it.what)) return 'city';
   return it.end === 'hero' ? 'hero' : it.end === 'stopped' ? 'police' : 'crime';
 }
 
@@ -87,6 +113,15 @@ export function gossip(it: NewsItem, now: number, u: number): string {
   if (it.what === 'rising') return pick(['They say {hood} is getting rougher by the day.', 'I don\'t go to {hood} after dark any more.']);
   if (it.what === 'falling') return pick(['{hood} has really calmed down lately.', 'My sister says {hood} is safe again. Finally.']);
   if (it.what === 'turf') return pick(['{Group} are moving into {hood}, I heard.', 'Word is {group} took over part of {hood}.']);
+  if (it.what === 'mourn') return pick(['The one who flew with the hero… they didn\'t make it. From {hood}, I heard.', 'They\'re burying the hero\'s companion. People in {hood} are leaving flowers.', 'Even with powers you can die. That poor soul from {hood}.']);
+  if (it.what === 'shard') return pick(['Did you see the news? Somebody found a glowing stone in {hood}. Glowing!', 'They say a stone in {hood} hums at night. Like the one from that falling star.', 'A glowing rock in {hood}, apparently. I wouldn\'t touch it.']);
+  if (it.what === 'swarm') return pick(['Did you see the sky {when}? Hundreds of discs. Nobody knows why.', 'All those saucers {when}! The news called it a festival. The Wardens didn\'t call it anything.', 'My kid counted the discs {when}. Got to ninety and gave up.']);
+  if (it.what === 'walker') return pick(['A Warden walker stood in {hood} {when}. Just stood there, looking.', 'They put one of their tall ones down in {hood} {when}. Gave me the creeps.', 'Did you hear? A walker in {hood}. Nobody dared go near it.']);
+  if (it.what === 'teens') return it.end === 'hero'
+    ? pick(['Did you see the hero chase that little saucer {when}? Right into the Nannies\' arms.', 'Somebody handed those alien kids back to their parents {when}. In {hood}, I heard.'])
+    : it.end === 'stopped' ? pick(['The Nannies came for their runaway kids {when}. You could hear the telling-off for miles.', 'Those little saucer joyriders got caught over {hood} {when}.'])
+    : pick(['Some saucer kids dropped a car on a roof in {hood} {when}!', 'My cousin in {hood} found a glowing squiggle on her building {when}. Alien kids, they say.', 'They lifted a man up and dropped him in a fountain in {hood} {when}. Alien kids!']);
+  if (it.what === 'stare') return pick(['A disc hung over {hood} for hours {when}. Hours! Then it just left.', 'The Nannies were staring at {hood} {when}. What did we do now?']);
   const noun = NOUN[it.what] ?? 'some trouble';
   if (it.end === 'hero') return pick([`Did you hear? A hero stopped ${noun} in {hood} {when}!`, `Someone said a hero broke up ${noun} in {hood}. Was that you?`]);
   if (it.end === 'stopped') return pick([`The police caught someone after ${noun} in {hood} {when}.`, `There was ${noun} in {hood} {when}, but the cops got them.`]);

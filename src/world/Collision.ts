@@ -23,6 +23,8 @@ export interface Obstacle {
   hx: number; hz: number;
   ux: number; uz: number;
   y0: number; y1: number;
+  /** A floor to walk on however thin (a landmark's deck, step or gallery): ground for any walker. */
+  deck?: boolean;
 }
 
 /** Fills obstacles overlapping the box (x0,z0)-(x1,z1); `out` may reuse its argument. */
@@ -131,8 +133,12 @@ export class Collision {
     return this.under.ceilingAt(x, y + 0.3, z);
   }
 
-  /** Highest walkable surface under (x,z) not above yRef + step. */
-  groundAt(x: number, z: number, yRef: number, step: number): number {
+  /**
+   * Highest walkable surface under (x,z) not above yRef + step. surface: the body comes from the
+   * open (not from below the street), so outside a hole it stays on top: a steep bank (a quay)
+   * that rises more than a metre in one step must lift it, not count as being underground.
+   */
+  groundAt(x: number, z: number, yRef: number, step: number, surface = false): number {
     if (this.room) { const f = this.room.floorAt(x, yRef, z); if (f !== null) return f; }
     let g = this.world.terrain.height(x, z) + this.world.surfaceOffset(x, z);
     if (this.under) {
@@ -141,7 +147,7 @@ export class Collision {
       // Below the street only underground floors count; over none (track pit, gap, or a jump that
       // left the hall's volume) keep falling - never pop up to the street (a jump in a station
       // used to land the player on the street above).
-      if (yRef < g - 1.0) return uf ?? yRef - 3;
+      if (yRef < g - 1.0 && !surface) return uf ?? yRef - 3;
     }
     const deck = this.world.bridgeDeck(x, z);
     if (deck > -Infinity && deck <= yRef + step) g = Math.max(g, deck);
@@ -154,7 +160,7 @@ export class Collision {
     if (this.obstacleProviders.length && step > 0) {
       const minH = step * 1.4;
       for (const prov of this.obstacleProviders) prov(x - 0.01, z - 0.01, x + 0.01, z + 0.01, (o) => {
-        if (o.y1 - o.y0 < minH || o.y1 > yRef + step || o.y1 <= g) return;
+        if ((o.y1 - o.y0 < minH && !o.deck) || o.y1 > yRef + step || o.y1 <= g) return;
         if (insideObstacle(o, x, z, 0)) g = o.y1;
       });
     }

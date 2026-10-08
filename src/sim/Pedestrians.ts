@@ -21,6 +21,7 @@ import { hashToFloat, hash32 } from '../core/rng';
 import { ACCIDENTS } from '../game/abilities/tuning';
 import { statusOf } from '../shared/status';
 import { type Actor, watchProgress } from './actors/Actor';
+import { gawkFor } from '../game/people/behaviour';
 
 export const enum PState { Walk = 0, Wait = 1, Idle = 2, Gawk = 3, Flee = 4, Down = 5, Enter = 6, Film = 7, Sit = 8, Sleep = 9 }
 
@@ -89,6 +90,13 @@ export interface PedAgent {
   evac?: number;
   /** Terrain height under the agent (`gh`) and where it was sampled (see Pedestrians.groundOf). */
   gx?: number; gz?: number; gh?: number;
+  /**
+   * In the air under its own power (the sidekick flying, game/sidekick/Companion; or carried off by
+   * med drones): its owner moves it, no walking and no ground here. `fly` poses the body for flight
+   * (the hero's flight pose: tilt 0…1 into the horizontal, bank into turns, boost).
+   */
+  airborne?: boolean;
+  fly?: { tilt: number; bank: number; boost: number };
 }
 
 /** Gawkers per incident (people already standing and looking within GAWK_R m count). */
@@ -106,11 +114,11 @@ export function canGawk(a: PedAgent): boolean {
 
 /**
  * Gawking / filming bookkeeping per step: true when the agent should walk on (looked long
- * enough and calm, or gawked GAWK_MAX s in all, re-triggered or not).
+ * enough for their curiosity and calm, or gawked GAWK_MAX s in all, re-triggered or not).
  */
 export function gawkOver(a: PedAgent, dt: number): boolean {
   a.gawkT = (a.gawkT ?? 0) + dt;
-  return (a.stateT > 6 + (a.look % 7) && a.fear < 0.3) || a.gawkT > GAWK_MAX;
+  return (a.stateT > gawkFor(a.cit.curiosity, a.look) && a.fear < 0.3) || a.gawkT > GAWK_MAX;
 }
 
 /** Stopped-and-looking agents within r of a point. */
@@ -120,7 +128,8 @@ export function gawkersNear(peds: { neighbours(x: number, z: number, r: number, 
   return n;
 }
 
-export type DownCause = 'player' | 'collapse' | 'accident' | 'threat' | 'police' | 'military' | 'other';
+/** ('brush': a super speed runner brushed past, a stumble that is nobody's misdeed.) */
+export type DownCause = 'player' | 'brush' | 'collapse' | 'accident' | 'threat' | 'police' | 'military' | 'other';
 
 
 const MAX_AGENTS = 2600;
@@ -132,6 +141,8 @@ const SCAN_R = 480;
 const DESPAWN_R = 620;
 /** A remembered person's body appears at most this far from where they plausibly are (m). */
 const PIN_R = 40;
+/** Underground walkers never step down further than this (off a platform onto the tracks). */
+const UNDER_DROP = 0.6;
 const HASH = 1 << 14;
 
 interface Pending { cit: Citizen; trip: Trip }
@@ -221,6 +232,8 @@ export class Pedestrians {
 
   private citQueue: { c: Citizen; ref: BuildingRef }[] = [];
   private spawnQueue: { cit: Citizen; trip: Trip; progress: number }[] = [];
+  /** Citizens never seen in the streets again (a sidekick who died: game/sidekick). */
+  readonly absent = new Set<number>();
 
   private queueBuilding(ref: BuildingRef, day: number): void {
     this.scanned.set(ref, day);
@@ -242,7 +255,7 @@ export class Pedestrians {
           if (tr.mode !== Mode.Walk && tr.mode !== Mode.Metro && tr.mode !== Mode.Car) continue;
           const end = plan.stays[i + 1]?.from ?? tr.depart + 0.3;
           if (h >= tr.depart && h < end) {
-            if (this.agents.length < MAX_AGENTS && !this.byId.has(c.id)) this.spawnQueue.push({ cit: c, trip: tr, progress: (h - tr.depart) / Math.max(1e-6, end - tr.depart) });
+            if (this.agents.length < MAX_AGENTS && !this.taken(c.id)) this.spawnQueue.push({ cit: c, trip: tr, progress: (h - tr.depart) / Math.max(1e-6, end - tr.depart) });
           } else if (tr.depart > h && tr.depart < h + 6) {
             const idx = this.freePending.length ? this.freePending.pop()! : this.pending.length;
             this.pending[idx] = { cit: c, trip: tr };
@@ -260,6 +273,11 @@ export class Pedestrians {
   /** The agent of a citizen, while they are out and about near the player (or null). */
   agentOf(citId: number): PedAgent | null {
     return this.byId.get(citId) ?? null;
+  }
+
+  /** Has a body already, or never comes out again (`absent`). */
+  private taken(citId: number): boolean {
+    return this.byId.has(citId) || this.absent.has(citId);
   }
 
   /** Where a place is: its building's door while the cell is loaded, else the cell's centre (null: unknown cell). */
@@ -288,7 +306,7 @@ export class Pedestrians {
   }
 
   private materialise(c: Citizen, trip: Trip, progress: number, px: number, pz: number): void {
-    if (this.byId.has(c.id)) return;
+    if (this.taken(c.id)) return;
     const from = this.resolve(trip.from);
     const to = this.resolve(trip.to);
     // Walking legs: door to door. Metro: door ↔ nearest station. Car: door ↔ kerb (short walk).
@@ -343,7 +361,8 @@ export class Pedestrians {
   /** A walker at the start of a route. */
   private walker(c: Citizen, route: Float32Array, dest: { x: number; z: number } | null): PedAgent {
     const r = hashToFloat(hash32(c.seed));
-    const pref = c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35;
+    // (Brisk or dawdling by their personality: game/people.)
+    const pref = (c.role === Role.Child ? 1.25 + r * 0.3 : c.role === Role.Senior ? 0.9 + r * 0.3 : 1.25 + r * 0.35) * (this.paceOf?.(c) ?? 1);
     return {
       id: this.nextId++, cit: c, x: route[0], z: route[1], y: 0, heading: 0, speed: pref, pref, state: PState.Walk, route, wp: 1, dest,
       fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: r * 10, look: c.seed, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, gx: 1e9, gz: 1e9, gh: 0,
@@ -357,7 +376,7 @@ export class Pedestrians {
    * (no walkway near there, already there, the street is full).
    */
   bringBack(c: Citizen, x: number, z: number, to: PlaceRef): PedAgent | null {
-    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS) return null;
+    if (this.taken(c.id) || this.agents.length >= MAX_AGENTS) return null;
     const ref = this.resolve(to);
     let bx: number, bz: number, dest: { x: number; z: number } | null = null;
     if (ref) { const d = doorOf(ref.desc); bx = d.x; bz = d.z; dest = { x: bx, z: bz }; }
@@ -383,6 +402,8 @@ export class Pedestrians {
    * pace), or null: wherever the schedule says. Their schedule's body only appears near it.
    */
   placeFor?: (c: Citizen) => { x: number; z: number } | null;
+  /** A walker's pace multiplier by who they are (game/people: brisk or dawdling), 1 when unset. */
+  paceOf?: (c: Citizen) => number;
   /** A trip from a to b is not started (people stay where they are: an alert over the district). */
   shelter?: (ax: number, az: number, bx: number, bz: number) => boolean;
 
@@ -574,6 +595,7 @@ export class Pedestrians {
   private step(a: PedAgent, dt: number, _gameDt: number): void {
     a.stateT += dt;
     if (a.ragdoll) return;
+    if (a.airborne) { a.phase += a.speed * dt; return; }
     if (a.inside) {
       // Indoors: stay put; frightened people stand up and look towards the danger.
       if (a.fear > 0.5 && (a.state === PState.Sit || a.state === PState.Sleep)) { a.state = PState.Idle; a.stateT = -1e9; }
@@ -590,7 +612,8 @@ export class Pedestrians {
       if (a.under) {
         // (Not through the walls: only onto floor there is.)
         const f = this.underFloor?.(a.x + a.vx * dt, a.y + 0.5, a.z + a.vz * dt) ?? null;
-        if (f !== null && f <= a.y + 0.5) { a.x += a.vx * dt; a.z += a.vz * dt; } else { a.vx = a.vz = 0; }
+        const f0 = this.underFloor?.(a.x, a.y + 0.5, a.z) ?? f;
+        if (f !== null && f <= a.y + 0.5 && (f0 ?? f) - f < UNDER_DROP) { a.x += a.vx * dt; a.z += a.vz * dt; } else { a.vx = a.vz = 0; }
       } else { a.x += a.vx * dt; a.z += a.vz * dt; }
       a.y += a.vy * dt;
       const g = a.under ? this.underFloor?.(a.x, a.y + 0.6, a.z) ?? a.y : this.groundOf(a, NaN, a.y);
@@ -699,17 +722,35 @@ export class Pedestrians {
         if (d < rr) { a.x = po.x + (ox / d) * rr; a.z = po.z + (oz / d) * rr; }
       }
     }
+    // Things people give a wide berth (a Warden walker on a square).
+    for (const o of this.extraObstacles) {
+      const ox = a.x - o.x, oz = a.z - o.z;
+      const d = Math.hypot(ox, oz);
+      if (d < o.r * 2 && d > 1e-3) {
+        const w = Math.max(0, (o.r * 2 - d) / o.r);
+        sx += (ox / d) * w * 2.5; sz += (oz / d) * w * 2.5;
+        if (d < o.r) { a.x = o.x + (ox / d) * o.r; a.z = o.z + (oz / d) * o.r; }
+      }
+    }
     let vx = dx * desired + sx, vz = dz * desired + sz;
     const sp = Math.hypot(vx, vz);
     const maxSp = Math.max(desired, 0.3) * 1.3;
     if (sp > maxSp) { vx *= maxSp / sp; vz *= maxSp / sp; }
     a.speed += (Math.hypot(vx, vz) - a.speed) * Math.min(1, dt * 4);
     if (a.under) {
-      // Underground: only where there is floor within a step (else slide along the wall, or stop).
-      const ok = (x: number, z: number) => { const f = this.underFloor?.(x, a.y + 0.5, z) ?? null; return f !== null && f - a.y < 0.45; };
+      // Underground: only where there is floor within a step up or down (else slide along the wall,
+      // or stop): never off a ledge (a platform's edge onto the tracks).
+      const ok = (x: number, z: number) => { const f = this.underFloor?.(x, a.y + 0.5, z) ?? null; return f !== null && f - a.y < 0.45 && a.y - f < UNDER_DROP; };
       if (ok(a.x + vx * dt, a.z + vz * dt)) { a.x += vx * dt; a.z += vz * dt; }
       else if (ok(a.x + vx * dt, a.z)) { a.x += vx * dt; vz = 0; }
       else if (ok(a.x, a.z + vz * dt)) { a.z += vz * dt; vx = 0; }
+      else { vx = vz = 0; }
+    } else if ((act || a.state === PState.Flee) && (vx !== 0 || vz !== 0) && this.wet(a.x + vx * dt, a.z + vz * dt) && !this.wet(a.x, a.z)) {
+      // Above ground, someone driven by an owner (soldiers, police, a gang) or running off in a
+      // panic heads straight for a point: never off the bank into a river, lake or the sea (slide
+      // along the shore, or stop). Route walkers stay on the sidewalks anyway.
+      if (!this.wet(a.x + vx * dt, a.z)) { a.x += vx * dt; vz = 0; }
+      else if (!this.wet(a.x, a.z + vz * dt)) { a.z += vz * dt; vx = 0; }
       else { vx = vz = 0; }
     } else { a.x += vx * dt; a.z += vz * dt; }
     if (Math.hypot(vx, vz) > 0.1) {
@@ -738,8 +779,16 @@ export class Pedestrians {
     if (r) { a.route = r; a.wp = 1; } else a.alive = false;
   }
 
+  /** Open water at (x, z): a river, lake or the sea, not under a bridge deck. */
+  wet(x: number, z: number): boolean {
+    return this.terrain.isWater(x, z, 0.5) && this.world.bridgeDeck(x, z) === -Infinity;
+  }
+
   /** The player as an obstacle (only when not tiny). */
   playerObstacle: { x: number; z: number; r: number; h: number } | null = null;
+
+  /** More places people keep their distance from (a radius round each): set by the game each frame. */
+  extraObstacles: { x: number; z: number; r: number }[] = [];
 
   /** Underground floor at a point (inside a tunnel, room or cave), else null: for `under` agents (set by the game). */
   underFloor: ((x: number, y: number, z: number) => number | null) | null = null;
@@ -758,7 +807,7 @@ export class Pedestrians {
 
   /** A citizen placed inside a building (sitting, sleeping or standing). */
   spawnInside(c: Citizen, x: number, y: number, z: number, yaw: number, pose: 'sit' | 'sleep' | 'stand'): PedAgent | null {
-    if (this.byId.has(c.id)) return null;
+    if (this.taken(c.id)) return null;
     const pin = this.placeFor?.(c);
     if (pin && Math.hypot(pin.x - x, pin.z - z) > PIN_R * 2) return null;
     const a: PedAgent = {
@@ -782,7 +831,7 @@ export class Pedestrians {
   /** A citizen standing at a point (actor layer: criminals, police officers, owners). Null when full. */
   spawnAt(c: Citizen, x: number, z: number, heading: number, onRoad = false): PedAgent | null {
     // Actors have a reserve above the population cap (a full street still gets its police).
-    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS + ACTOR_RESERVE) return null;
+    if (this.taken(c.id) || this.agents.length >= MAX_AGENTS + ACTOR_RESERVE) return null;
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, onRoad, heading), heading, speed: 0, pref: 1.4, state: PState.Idle,
       route: Float32Array.from([x, z, 0]), wp: 1, dest: null, fear: 0, fearX: x, fearZ: z,
@@ -795,7 +844,7 @@ export class Pedestrians {
 
   /** Spawn a pedestrian at a point fleeing (e.g. a driver abandoning a car). */
   spawnFleeing(c: Citizen, x: number, z: number, fromX: number, fromZ: number): void {
-    if (this.byId.has(c.id) || this.agents.length >= MAX_AGENTS) return;
+    if (this.taken(c.id) || this.agents.length >= MAX_AGENTS) return;
     const a: PedAgent = {
       id: this.nextId++, cit: c, x, z, y: this.groundY(x, z, true), heading: 0, speed: 0, pref: 1.4, state: PState.Flee,
       route: Float32Array.from([x, z, 0, x + 1, z, 0]), wp: 1, dest: null, fear: 1, fearX: fromX, fearZ: fromZ,

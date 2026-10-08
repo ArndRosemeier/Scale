@@ -11,6 +11,7 @@
  *    health. The way out is through the doors at the end of the ward, onto the street in front of
  *    the hospital.
  *  - Reputation below 0: nobody comes. Game over: load a save (the latest first) or a new game.
+ *  - Arrested as a public menace (crime/Justice lockedAway): taken away for good, game over too.
  *
  * The hospital: one of the city's flat-roofed office or civic blocks, the nearest of those the
  * seed made hospitals (rules.pickHospital). Space skips ahead (the flight, the scan).
@@ -68,10 +69,12 @@ export class Defeat {
   private beat = 0;
   private fired = new Set<string>();
   private rep = 0;
+  /** The game over is an arrest (the police took the hero down for good), not a defeat. */
+  private cuffed = false;
   /** The roof pad's size (smaller on a cramped roof). */
   private padScale = 1;
   private lights: THREE.PointLight[] = [];
-  stats = { defeats: 0, rescues: 0, gameOvers: 0, skips: 0, last: '' };
+  stats = { defeats: 0, rescues: 0, gameOvers: 0, arrests: 0, skips: 0, last: '' };
 
   constructor(private g: Game) {
     this.name = hospitalName(g.settings.seed);
@@ -109,6 +112,7 @@ export class Defeat {
     const g = this.g, P = g.player, H = g.crime.health;
     if (this.phase === 'ward' || this.phase === 'leaving') { this.again(kind); return true; }
     if (this.phase !== 'idle') { H.koT = 1e9; return true; }
+    this.cuffed = false;
     H.koT = 1e9; // held down (untouchable) until the revival
     P.downT = Math.max(P.downT, 1e3);
     this.rep = g.crime.rep.value;
@@ -128,6 +132,29 @@ export class Defeat {
     this.stats.rescues++;
     this.hosp = this.findHospital(P.pos.x, P.pos.z);
     this.set('down');
+    return true;
+  }
+
+  /**
+   * Cuffed as a public menace (crime/Justice lockedAway): no fine, no night in a cell, no rescue —
+   * the hero is held where they lie and it is game over. False: a defeat is already under way.
+   */
+  arrested(): boolean {
+    const g = this.g, P = g.player, H = g.crime.health;
+    if (this.phase !== 'idle') return false;
+    H.koT = 1e9;
+    P.downT = Math.max(P.downT, 1e3);
+    this.rep = g.crime.rep.value;
+    this.cuffed = true;
+    this.fired.clear();
+    this.skipping = 0;
+    this.stats.defeats++;
+    this.stats.arrests++;
+    this.stats.gameOvers++;
+    this.stats.last = 'arrest';
+    this.ui.hurt(true);
+    g.audio.play2d('heart_pulse', 0.7, 0.75);
+    this.set('over');
     return true;
   }
 
@@ -253,11 +280,13 @@ export class Defeat {
       case 'over': {
         P.downT = Math.max(P.downT, 1e3);
         H.koT = 1e9;
-        if (once('cap', 0.6)) this.ui.titleCard('DEFEATED<small>No one is coming</small>', true);
+        if (once('cap', 0.6)) this.ui.titleCard(this.cuffed ? 'ARRESTED<small>Taken into custody</small>' : 'DEFEATED<small>No one is coming</small>', true);
         if (once('screen', DEFEAT.overDelay)) {
           this.ui.titleCard('');
           const r = Math.round(this.rep);
-          this.ui.gameOver(`Your reputation is <b>${r}</b>. With the city against you, the hospital sent no drones to bring you in.`);
+          this.ui.gameOver(this.cuffed
+            ? `Your reputation is <b>${r}</b>. The city had seen enough: the police took you down and locked you away for good.`
+            : `Your reputation is <b>${r}</b>. With the city against you, the hospital sent no drones to bring you in.`);
         }
         break;
       }
@@ -704,7 +733,7 @@ export class Defeat {
     const H = this.g.crime.health;
     const was = H.invulnerable;
     H.invulnerable = false;
-    H.damage(H.hp + 1000, kind);
+    H.damage(H.hp + 1000, kind, this.g.player.pos.x, this.g.player.pos.z, this.g.player.pos.y);
     H.invulnerable = was;
     return this.phase;
   }

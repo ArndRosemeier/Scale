@@ -9,7 +9,7 @@ import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer, CellState } from '../stream/CityStreamer';
 import type { Collision } from '../world/Collision';
-import { planFloor, planLift, planStair, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore } from './InteriorGen';
+import { planFloor, shopKindOf, planCores, liftRect, coreFits, coreRect, type FloorPlan, type LiftShaft, type StairCore, type Furn } from './InteriorGen';
 import { Elevator } from './Elevator';
 import { PanelManager } from '../ui3d/PanelManager';
 import { buildFloorMeshes, wallCollisionSegments, furnitureCollision } from './InteriorBuilder';
@@ -130,9 +130,10 @@ export class Interiors {
         if (!a) {
           a = { ref, L, floors: new Map(), hidden: new Set(), opened: new Set(), lastNear: this.t, peopleFloors: new Set(), door: null, lift: null, elevator: null, stair: null };
           this.active.set(ref, a);
+          const cores = planCores(ref.desc, this.floorPoly(a, 0), Math.max(...L.floors.map((q) => q.y1 - q.y0)), L.door);
+          a.lift = cores.lift;
           this.makeElevator(a);
-          const maxH = Math.max(...L.floors.map((q) => q.y1 - q.y0));
-          a.stair = planStair(ref.desc, this.floorPoly(a, 0), a.lift, maxH);
+          a.stair = cores.stair;
         }
         a.lastNear = this.t;
         // Storeys around the player.
@@ -187,7 +188,6 @@ export class Interiors {
 
   /** Lift for a newly active building (planned on the ground floor, levels per storey). */
   private makeElevator(a: ActiveBuilding): void {
-    a.lift = planLift(a.ref.desc, this.floorPoly(a, 0));
     if (!a.lift) return;
     const levels: (number | null)[] = [];
     for (let f = 0; f < a.ref.desc.floors; f++) {
@@ -238,14 +238,13 @@ export class Interiors {
     if (!fl) return;
     const poly = this.floorPoly(a, f);
     // Cafés and restaurants (plan/eatery.ts) get the café layout (shopKind % 3 == 0), other shops never do.
-    const sk = (a.ref.desc.seed >>> 7) % 9;
-    const shopKind = a.ref.desc.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
+    const shopKind = shopKindOf(a.ref.desc);
     // Stairs up from this storey, and arriving from the one below.
     const up = this.stairs(a, f) && this.stairs(a, f + 1);
     const below = f > 0 && this.stairs(a, f) && this.stairs(a, f - 1);
-    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift, a.stair, up, below);
+    const plan = planFloor(a.ref.desc, poly, f, fl.y0, fl.y1 - fl.y0, shopKind, a.lift, a.stair, up, below, f === 0 ? L.door : null);
     // Nothing standing in the way just inside the entrance (furniture is solid).
-    if (f === 0) plan.furniture = plan.furniture.filter((q) => q.kind === 'rug' || q.kind === 'painting' || Math.hypot(q.x - L.door.x, q.z - L.door.z) > 2.4 + Math.max(q.w, q.d) / 2);
+    if (f === 0) plan.furniture = plan.furniture.filter((q) => q.kind === 'rug' || q.kind === 'painting' || q.use === 'dress' || Math.hypot(q.x - L.door.x, q.z - L.door.z) > 2.4 + Math.max(q.w, q.d) / 2);
     // The elevator shaft runs through the slabs between floors it serves; the stairs cut their well.
     const shaft = a.lift ? liftRect(a.lift) : null;
     const floorHoles: number[][] = [], ceilHoles: number[][] = [];
@@ -284,7 +283,7 @@ export class Interiors {
     const mine = here.filter((c) => (c.seed >>> 3) % floors === plan.floor).slice(0, 24);
     const hour = hours % 24;
     const night = hour < 6.5 || hour > 23;
-    const spots: { x: number; z: number; yaw: number; use?: string }[] = plan.furniture.filter((f) => f.use);
+    const spots: { x: number; z: number; yaw: number; use?: string }[] = plan.furniture.filter((f) => f.use && f.use !== 'dress'); // (the fitting mirror is the hero's)
     // Fallback standing spots: random free points in the rooms (not on the stairs).
     if (spots.length < mine.length) {
       let seed = ref.desc.seed ^ (plan.floor * 7919);
@@ -437,9 +436,43 @@ export class Interiors {
       if (y < f.plan.y + 0.1 || y > f.plan.y + f.plan.height - 0.08) return true;
       const w = f.walls;
       for (let i = 0; i < w.length; i += 4) if (distSqPointSeg(x, z, w[i], w[i + 1], w[i + 2], w[i + 3]) < 0.12 * 0.12) return true;
+      // Arcade cabinets are as tall as a person and more: the camera stays out of them.
+      for (const fu of f.plan.furniture) {
+        if (fu.kind !== 'arcade' || y > f.plan.y + fu.h) continue;
+        const c = Math.cos(fu.yaw), sn = Math.sin(fu.yaw), dx = x - fu.x, dz = z - fu.z;
+        if (Math.abs(dx * c - dz * sn) < fu.w / 2 + 0.1 && Math.abs(dx * sn + dz * c) < fu.d / 2 + 0.1) return true;
+      }
       return false;
     }
     return true;
+  }
+
+  /** Video game cabinets of the open arcades (game/Arcade): a stable key, the piece and its floor height. */
+  arcadeCabinets(): { key: string; f: Furn; y: number }[] {
+    const out: { key: string; f: Furn; y: number }[] = [];
+    for (const a of this.active.values()) for (const fl of a.floors.values()) {
+      fl.plan.furniture.forEach((fu, i) => { if (fu.kind === 'arcade') out.push({ key: `${a.ref.cell.id}:${a.ref.index}:${fl.plan.floor}:${i}`, f: fu, y: fl.plan.y }); });
+    }
+    return out;
+  }
+
+  /** Fitting mirrors of the active interiors: centre, floor height and facing (yaw; the glass faces local +z). */
+  dressMirrors(): { x: number; z: number; y: number; yaw: number }[] {
+    const out: { x: number; z: number; y: number; yaw: number }[] = [];
+    for (const a of this.active.values()) for (const f of a.floors.values()) for (const fu of f.plan.furniture) if (fu.use === 'dress') out.push({ x: fu.x, z: fu.z, y: f.plan.y, yaw: fu.yaw });
+    return out;
+  }
+
+  /** The fitting mirror of a clothes shop within reach of (x, y, z), or null. */
+  dressMirrorNear(x: number, y: number, z: number, r = 1.5): { x: number; z: number } | null {
+    for (const a of this.active.values()) {
+      if (!pointInPoly(a.ref.poly, x, z)) continue;
+      for (const f of a.floors.values()) {
+        if (Math.abs(f.plan.y - y) > 0.6) continue;
+        for (const fu of f.plan.furniture) if (fu.use === 'dress' && Math.hypot(fu.x - x, fu.z - z) < r) return { x: fu.x, z: fu.z };
+      }
+    }
+    return null;
   }
 
   /**

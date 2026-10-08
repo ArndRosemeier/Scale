@@ -127,6 +127,29 @@ export function getHumanStatic(as: HumanAssets): HumanStatic {
     }
   }
 
+  // Lid line: around each eye, the innermost skin seen from the front in every direction (the
+  // lid rim where the lashes grow), strong on the upper lid, faint below. Kept in the nails channel: the
+  // two never meet (the shader tells them apart by face height).
+  const lid = new Float32Array(N);
+  for (const g of [m.groups.eyeL, m.groups.eyeR]) {
+    const ec = eyeC(g);
+    const BINS = 32;
+    const near: [number, number, number][] = []; // vertex, bin, distance from the eye's centre (front view)
+    const binMin = new Float32Array(BINS).fill(Infinity);
+    for (let v = 0; v < BODY; v++) {
+      const x = base[v * 3], y = base[v * 3 + 1], z = base[v * 3 + 2];
+      if (z > ec[2] || Math.hypot(x - ec[0], y - ec[1], z - ec[2]) > 0.03) continue;
+      const best = Math.hypot(x - ec[0], y - ec[1]);
+      const bin = Math.floor(((Math.atan2(y - ec[1], x - ec[0]) / Math.PI + 1) / 2) * BINS) % BINS;
+      near.push([v, bin, best]);
+      binMin[bin] = Math.min(binMin[bin], best);
+    }
+    for (const [v, bin, d] of near) {
+      const w = 1 - smooth(0.001, 0.0035, d - binMin[bin]);
+      lid[v] = Math.max(lid[v], w * (base[v * 3 + 1] > ec[1] - 0.002 ? 1 : 0.25));
+    }
+  }
+
   const maskA = new Uint8Array(RV * 4), maskB = new Uint8Array(RV * 4);
   const face = new Float32Array(RV * 3);
   const q = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
@@ -139,7 +162,7 @@ export function getHumanStatic(as: HumanAssets): HumanStatic {
     maskB[r * 4] = q(smooth(0.05, 0.5, ears[v]));
     maskB[r * 4 + 1] = q(smooth(0.1, 0.8, age[v]));
     maskB[r * 4 + 2] = q(smooth(0.15, 0.7, laugh[v]));
-    maskB[r * 4 + 3] = q(nails[v]);
+    maskB[r * 4 + 3] = q(Math.max(nails[v], lid[v]));
     // Face coordinates in inter-pupil units: x lateral (character's right = +), y up, z forward.
     face[r * 3] = (base[v * 3] - c[0]) / ipd;
     face[r * 3 + 1] = (base[v * 3 + 1] - c[1]) / ipd;
@@ -204,8 +227,9 @@ export function getHumanStatic(as: HumanAssets): HumanStatic {
     const v = src[r];
     const p = [base[v * 3], base[v * 3 + 1], base[v * 3 + 2]];
     // Dominant bone (largest weight).
-    let bb = as.skinIdx[v * 4], bw = as.skinW[v * 4];
-    for (let k = 1; k < 4; k++) if (as.skinW[v * 4 + k] > bw) { bw = as.skinW[v * 4 + k]; bb = as.skinIdx[v * 4 + k]; }
+    const rsi = as.regionSkinIdx, rsw = as.regionSkinW;
+    let bb = rsi[v * 4], bw = rsw[v * 4];
+    for (let k = 1; k < 4; k++) if (rsw[v * 4 + k] > bw) { bw = rsw[v * 4 + k]; bb = rsi[v * 4 + k]; }
     const name = m.bones[bb].name;
     const side = name.endsWith('.L') ? 'L' : name.endsWith('.R') ? 'R' : '';
     let reg: BodyRegion, t = 0;

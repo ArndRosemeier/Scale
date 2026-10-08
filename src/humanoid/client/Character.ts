@@ -123,7 +123,22 @@ export class CharacterGeometry {
 
 // ------------------------------------------------------------------ character
 
-const _m = new THREE.Matrix4();
+const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
+
+/**
+ * Bind a skinned mesh to the character's skeleton. three.js uploads bone matrices in world space
+ * as 32-bit floats and lets the shader take the mesh's world transform back out; kilometres from
+ * the origin (a large city spans ±24 km) that rounding made arms and hands shimmer, the more the
+ * further out. Character's skeleton keeps them relative to its model instead (small numbers),
+ * and the bind inverse here goes from the model into the mesh, both computed in double precision.
+ */
+export function bindSkin(mesh: THREE.SkinnedMesh, ch: Character): void {
+  mesh.bind(ch.skeleton, new THREE.Matrix4());
+  mesh.updateMatrixWorld = function (force?: boolean) {
+    THREE.Mesh.prototype.updateMatrixWorld.call(this, force);
+    this.bindMatrixInverse.copy(this.matrixWorld).invert().multiply(ch.model.matrixWorld);
+  };
+}
 
 export interface CharacterOptions {
   /** Enable facial expressions (near LOD). */
@@ -182,6 +197,16 @@ export class Character {
     });
     this.model.updateMatrixWorld(true);
     this.skeleton = new THREE.Skeleton(this.bones);
+    // Bone matrices relative to the model, not the world (see bindSkin).
+    const skel = this.skeleton, model = this.model;
+    skel.update = () => {
+      _inv.copy(model.matrixWorld).invert();
+      for (let i = 0; i < skel.bones.length; i++) {
+        _m.multiplyMatrices(_inv, skel.bones[i].matrixWorld).multiply(skel.boneInverses[i]);
+        _m.toArray(skel.boneMatrices!, i * 16);
+      }
+      if (skel.boneTexture) skel.boneTexture.needsUpdate = true;
+    };
 
     // ---- materials
     const exprUnits = st.exprNames.length;
@@ -214,7 +239,7 @@ export class Character {
     const castShadow = opts.castShadow !== false;
     const skinned = (g: THREE.BufferGeometry, m: THREE.Material, lod: number, shadow = castShadow) => {
       const mesh = new THREE.SkinnedMesh(g, m);
-      mesh.bind(this.skeleton, _m.identity());
+      bindSkin(mesh, this);
       mesh.boundingSphere = g.boundingSphere!.clone();
       mesh.castShadow = shadow;
       mesh.receiveShadow = true;
@@ -370,6 +395,13 @@ export class Character {
     for (const m of this.hairMeshes) m.visible = !hair;
     for (const m of this.beardMeshes) m.visible = !beard;
     for (const s of [this.skin, this.skinLow]) s.uniforms.uLook.value.w = hair ? 0 : this.shavedScalp;
+  }
+
+  /** Paint a hero's eye mask round the eyes (sRGB colour), or take it off (null). `under`: the
+   *  skin left in a cowl's eye holes (all of it, not the domino's shape). */
+  setEyeMask(color: [number, number, number] | null, under = false) {
+    const c = color ? new THREE.Color().setRGB(color[0], color[1], color[2], THREE.SRGBColorSpace) : null;
+    for (const s of [this.skin, this.skinLow]) s.uniforms.uMask.value.set(c ? (under ? 2 : 1) : 0, c?.r ?? 0, c?.g ?? 0, c?.b ?? 0);
   }
 
   /** Register an extra sky patch (equipment materials) so setSkyVis reaches it. */

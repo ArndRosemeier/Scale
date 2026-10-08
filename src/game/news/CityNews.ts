@@ -17,7 +17,7 @@ import {
   planHoods, LiveIndex, LIVE, PULSE, rollOffScreen, policePresence, policeCarWeight, safetyOf, SAFETY_LABEL, presenceLabel,
   type Hoods, type Safety,
 } from './pulse';
-import { headline, gossip, localRemark, storyKind, whenWord, type NewsItem } from './headlines';
+import { headline, gossip, localRemark, storyKind, whenWord, type NewsEnd, type NewsItem, type NewsWhat } from './headlines';
 
 /** Recent news kept (and saved). */
 const KEEP = 32;
@@ -132,6 +132,18 @@ export class CityNews {
     // Once per neighbourhood and group in a while.
     if (this.news.some((n) => n.what === 'turf' && n.hood === hood && n.group === f.name && this.g.sky.hoursAbs - n.t < 12)) return;
     this.push({ what: 'turf', hood, end: 'none', t: this.g.sky.hoursAbs, group: f.name });
+  }
+
+  /**
+   * Something another system made news of at a point (the glowing stone found …): on the
+   * billboards and in what people say. Returns the neighbourhood's name.
+   */
+  report(what: NewsWhat, x: number, z: number, end: NewsEnd = 'none'): string {
+    const h = this.hoodAt(x, z);
+    const hood = h >= 0 ? this.hoods.list[h].name : 'the city';
+    this.push({ what, hood, end, t: this.g.sky.hoursAbs });
+    this.cardsT = 0;
+    return hood;
   }
 
   private hoodName(cell: number): string {

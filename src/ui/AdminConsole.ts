@@ -116,7 +116,11 @@ function show(v: unknown): string {
   if (typeof v === 'string') return v;
   try {
     const s = JSON.stringify(v, (_k, x) => (typeof x === 'number' ? Math.round(x * 100) / 100 : x));
-    return s === undefined ? String(v) : s.length > 400 ? `${s.slice(0, 400)}…` : s;
+    if (s === undefined) return String(v);
+    if (s.length <= 400) return s;
+    // Too long for the log: the whole of it goes to the clipboard (to paste into a bug report).
+    navigator.clipboard?.writeText(s).catch(() => { /* no clipboard access */ });
+    return `${s.slice(0, 400)}… (full output copied to the clipboard)`;
   } catch { return String(v); }
 }
 
@@ -147,6 +151,7 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Robot malfunction', run: (_g, d) => call(d, 'threat.spawn', 'robots') },
     { label: 'Swarm (scout pack)', run: (_g, d) => call(d, 'threat.spawn', 'brood', { dist: 50 }) },
     { label: 'Swarm (150)', run: (_g, d) => call(d, 'threat.spawn', 'brood', { dist: 60, count: 150 }) },
+    { label: 'Awakened tree (the tree nearest you)', run: (_g, d) => call(d, 'threat.spawn', 'tree', { dist: 30 }) },
     { label: 'Swarm status', run: (_g, d) => call(d, 'threat.brood.status') },
     { label: 'Omen: chitter', run: (_g, d) => call(d, 'threat.omen', 'chitter') },
     { label: 'Omen: glimpse', run: (_g, d) => call(d, 'threat.omen', 'glimpse') },
@@ -179,6 +184,13 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Ritual (elemental cult)', run: (_g, d) => call(d, 'crime', 'ritual', 40, 'cult') },
     { label: 'Technomancer (hijack)', run: (_g, d) => call(d, 'crime', 'hijack', 40, 'techno', 'lt') },
     { label: 'Invoker (ritual)', run: (_g, d) => call(d, 'crime', 'ritual', 40, 'cult', 'lt') },
+    { label: 'Sabotage (eco-radicals)', run: (_g, d) => call(d, 'crime', 'sabotage', 40, 'eco') },
+    { label: 'Beast-master + dogs (sabotage)', run: (_g, d) => call(d, 'crime', 'sabotage', 40, 'eco', 'lt') },
+    { label: 'Raising (necromancers)', run: (_g, d) => call(d, 'crime', 'raising', 40, 'necro') },
+    { label: 'Procession of thralls', run: (_g, d) => call(d, 'crime', 'procession', 40, 'necro') },
+    { label: 'Bone-caller (raising)', run: (_g, d) => call(d, 'crime', 'raising', 40, 'necro', 'lt') },
+    { label: 'Boss op: tree waking (eco)', run: (_g, d) => call(d, 'bossOp', 'eco', 60) },
+    { label: 'Boss op: the dead rise (necro)', run: (_g, d) => call(d, 'bossOp', 'necro', 60) },
     { label: 'Rush hacks and rituals', run: (_g, d) => call(d, 'rushOps') },
     { label: 'Gang boss (mugging)', run: (_g, d) => call(d, 'crime', 'mugging', 25, 'gang', 'boss') },
     { label: 'Syndicate boss (robbery)', run: (_g, d) => call(d, 'crime', 'robbery', 30, 'syndicate', 'boss') },

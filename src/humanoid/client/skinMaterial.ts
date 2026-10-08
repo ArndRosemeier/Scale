@@ -25,7 +25,7 @@ import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
 import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import type { HumanoidAppearance } from '../types';
 import { GLSL_NOISE } from './glsl';
-import { GLSL_FACE, BEARD_IDS } from './faceRegions';
+import { GLSL_FACE, GLSL_EYE_MASK, BEARD_IDS } from './faceRegions';
 import { poreTexture } from './textures';
 import { MARK_IDS } from '../appearance';
 
@@ -51,6 +51,8 @@ export interface SkinUniforms {
   uFaceScale: { value: number };
   uPores: { value: THREE.Texture };
   uHide: { value: number };
+  /** A worn eye mask: x off (0) / domino (1) / round a cowl's eye holes (2), yzw its colour (linear). Set by the equipment. */
+  uMask: { value: THREE.Vector4 };
   /** The material's sheenColor, tinted from the skin tone by applySkinLook. */
   sheenTarget?: THREE.Color;
 }
@@ -104,6 +106,7 @@ uniform vec4 uLook;      // x age, y male, z blush, w scalp shade
 uniform vec4 uBrow;      // thickness, arch, unibrow, density
 uniform vec4 uBeard;     // x style id, y density, z scalp recede, w lip tint
 uniform float uMarks;
+uniform vec4 uMask;
 uniform sampler2D uPores;
 varying vec4 vMaskA;
 varying vec4 vMaskB;
@@ -113,6 +116,7 @@ varying vec2 vSkinUv;
 float sk_thin = 0.0;
 ${GLSL_NOISE}
 ${GLSL_FACE}
+${GLSL_EYE_MASK}
 float h_bit(float bits, float i) { return mod(floor(bits / exp2(i)), 2.0); }
 float h_seg(vec2 p, vec2 a, vec2 b) {
   vec2 pa = p - a, ba = b - a;
@@ -139,7 +143,10 @@ void skinEval() {
   vec3 f = vFace;
   float age = uLook.x, male = uLook.y;
   float lips = vMaskA.x, cheeks = vMaskA.y, socket = vMaskA.z, nose = vMaskA.w;
-  float ears = vMaskB.x, ageZ = vMaskB.y, laugh = vMaskB.z, nails = vMaskB.w;
+  float ears = vMaskB.x, ageZ = vMaskB.y, laugh = vMaskB.z;
+  // One channel holds the nails and the lid line (they never meet): face height tells them apart.
+  float onFace = step(-3.0, vFace.y);
+  float nails = vMaskB.w * (1.0 - onFace), lidLine = vMaskB.w * onFace;
   float lumT = dot(tone, vec3(0.2126, 0.7152, 0.0722));
   float fair = smoothstep(0.03, 0.4, lumT); // how visible redness is
 
@@ -158,9 +165,9 @@ void skinEval() {
   vec3 blood = vec3(1.08, 0.86, 0.84);
   c = mix(c, c * blood, 0.5 * fair * (cheeks * (0.55 + uLook.z) + nose * 0.6 + ears * 0.5));
   // Lips: darker, redder; tint toward hair/accent for fantasy tones.
-  vec3 lipCol = c * mix(vec3(0.82, 0.55, 0.56), vec3(0.75, 0.62, 0.7), 1.0 - fair) * (0.9 + 0.1 * male);
+  vec3 lipCol = c * mix(vec3(0.86, 0.5, 0.48), vec3(0.75, 0.62, 0.7), 1.0 - fair) * (0.9 + 0.1 * male);
   lipCol = mix(lipCol, uAccent * 0.8, uBeard.w);
-  c = mix(c, lipCol, lips * 0.85);
+  c = mix(c, lipCol, smoothstep(0.0, 0.6, lips) * 0.9);
   // Eye sockets: thinner, slightly violet skin.
   c = mix(c, c * vec3(0.84, 0.8, 0.86), socket * (0.45 + age * 0.4));
   // Nails: pinkish-white, glossy.
@@ -206,11 +213,13 @@ void skinEval() {
   rough += stub * 0.15;
   float scalp = h_scalpCoverage(f, uBeard.z) * uLook.w;
   c = mix(c, mix(c, hairC * 0.8, 0.8), scalp * (0.35 + 0.5 * hairDot));
+  // Lash line along the lids (darker, softer on men).
+  c = mix(c, mix(hairC * 0.5, vec3(0.06, 0.04, 0.035), 0.6), lidLine * (0.9 - 0.25 * male));
   vec2 brow = h_brow(f, uBrow);
   if (brow.x > 0.001) {
-    float strokes = h_noise2(vec2(brow.y * 140.0 + f.y * 60.0 * sign(f.x), (f.y - 0.43) * 420.0 + seed * 9.0));
+    float strokes = h_noise2(vec2(brow.y * 140.0 + f.y * 60.0 * sign(f.x), (f.y - 0.2) * 420.0 + seed * 9.0));
     float bm = brow.x * (0.5 + 0.5 * smoothstep(0.3, 0.7, strokes + 0.2 * uBrow.w)) * uBrow.w * 0.92;
-    c = mix(c, hairC * 0.55, clamp(bm, 0.0, 1.0));
+    c = mix(c, mix(hairC * 0.5, vec3(0.08, 0.055, 0.04), 0.4), clamp(bm, 0.0, 1.0));
     height += bm * 0.00012;
     rough += bm * 0.1;
   }
@@ -338,6 +347,16 @@ void skinEval() {
     }
   }
 
+  // ---- a hero's eye mask (worn, not a mark: the equipment sets it): matte cloth over brows and
+  // lids, a raised edge.
+  if (uMask.x > 0.5) {
+    float em = h_eyeMask(f);
+    if (uMask.x > 1.5) em = max(em, (1.0 - smoothstep(1.25, 1.35, length(vec2((abs(f.x) - 0.5) / 0.33, (f.y + 0.01) / 0.22)))) * smoothstep(-0.75, -0.5, f.z));
+    c = mix(c, uMask.yzw * (0.92 + 0.16 * midN), em);
+    rough = mix(rough, 0.5, em);
+    height += em * 0.0007;
+  }
+
   sk_thin = ears * 0.9 + nose * 0.25 + lips * 0.2;
   sk_albedo = c;
   sk_rough = clamp(rough, 0.18, 0.9);
@@ -388,6 +407,7 @@ function skinUniforms(opts: { exprTex: THREE.Texture | null; exprUnits: number }
     uFaceScale: { value: 1 },
     uPores: { value: poreTexture() },
     uHide: { value: 0 },
+    uMask: { value: new THREE.Vector4() },
   };
 }
 

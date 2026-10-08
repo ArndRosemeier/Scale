@@ -22,6 +22,7 @@ import { MapItem } from '../../stream/protocol';
 import { LANDMARK_KIND_NAME } from '../../plan/landmarks';
 import { isTouch } from '../touch';
 import { clamp } from '../../core/math';
+import { isAction } from '../../game/keybinds';
 
 const LAYERS_KEY = 'scale.map.layers';
 const MINI_KEY = 'scale.map.minimap';
@@ -37,8 +38,10 @@ export interface MapMarker {
   z: number;
   /** CSS colour. */
   color: string;
-  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; faint: a small see-through dot (people you met; not on the compass); pin: the player's own marker; zone: a ring of radius `r`; landmark: a star badge (named on the full map). */
-  kind: 'core' | 'alert' | 'dot' | 'faint' | 'pin' | 'zone' | 'landmark';
+  /** core: glowing diamond; alert: ring with "!"; dot: plain dot; faint: a small see-through dot (people you met; not on the compass); pin: the player's own marker; zone: a ring of radius `r`; landmark: a star badge (named on the full map); badge: a round badge with `glyph` (places to visit, like arcades; not on the compass). */
+  kind: 'core' | 'alert' | 'dot' | 'faint' | 'pin' | 'zone' | 'landmark' | 'badge' | 'shard';
+  /** A badge's symbol. */
+  glyph?: string;
   title?: string;
   /** The compass shows it at any distance (pinned to its edge when behind), with the distance (a zone: to its edge — the way out from inside). */
   always?: boolean;
@@ -196,7 +199,10 @@ export class GameMap {
         <div class="map-key"><span class="alert back">!</span> where stolen goods go back</div>
         <div class="map-key"><span class="crimescale"></span> crime: low (many police) to high (crime layer)</div>
         <div class="map-key"><span class="faint"></span> someone you met (green: likes you, red: wary of you)</div>
+        <div class="map-key"><span class="faint" style="background:#c98be0"></span> clothes shop: the fitting mirror inside changes your look</div>
+        <div class="map-key"><span class="badge" style="background:#3fe0ff">A</span> arcade: video games to play inside (E at a cabinet)</div>
         ${game.mode === 'normal' ? '<div class="map-key"><span class="core"></span> power core (found nearby)</div>' : ''}
+        <div class="map-key"><span class="shard"></span> the second shard, for a sidekick (when the news reports it)</div>
         <div class="map-status"></div>
       </div>
       <div class="map-tools">
@@ -304,20 +310,21 @@ export class GameMap {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement && e.target.type === 'text') return;
       if (!this.open) {
-        if (e.code === 'KeyM' && !e.repeat && this.game.player) { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(true); }
-        else if (e.code === 'KeyN' && !e.repeat) this.setMinimap(!this.miniOn);
+        if (isAction(e, 'map') && !e.repeat && this.game.player) { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(true); }
+        else if (isAction(e, 'minimap') && !e.repeat) this.setMinimap(!this.miniOn);
         return;
       }
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (e.repeat && (e.code === 'KeyM' || e.code === 'Escape')) return;
+      if (e.repeat && (isAction(e, 'map') || e.code === 'Escape')) return;
+      if (isAction(e, 'map')) { this.toggle(false); return; }
+      if (isAction(e, 'minimap')) { this.setMinimap(!this.miniOn); return; }
       switch (e.code) {
-        case 'KeyM': case 'Escape': this.toggle(false); break;
+        case 'Escape': this.toggle(false); break;
         case 'Equal': case 'NumpadAdd': this.action('in'); break;
         case 'Minus': case 'NumpadSubtract': this.action('out'); break;
         case 'KeyC': this.action('me'); break;
         case 'Digit0': case 'Numpad0': this.action('all'); break;
-        case 'KeyN': this.setMinimap(!this.miniOn); break;
         case 'ArrowLeft': case 'KeyA': this.cx -= 120 / this.s; this.clampView(); break;
         case 'ArrowRight': case 'KeyD': this.cx += 120 / this.s; this.clampView(); break;
         case 'ArrowUp': case 'KeyW': this.cz -= 120 / this.s; this.clampView(); break;
@@ -813,7 +820,7 @@ export class GameMap {
         if (!full) {
           const c = MINI_PX / 2, r = MINI_PX / 2 - 9;
           const dx = x - c, dy = y - c, d = Math.hypot(dx, dy);
-          if (d > r) { if (m.kind !== 'alert' && m.kind !== 'pin') continue; x = c + (dx / d) * r; y = c + (dy / d) * r; edge = true; }
+          if (d > r) { if (m.kind !== 'alert' && m.kind !== 'pin' && m.kind !== 'shard') continue; x = c + (dx / d) * r; y = c + (dy / d) * r; edge = true; }
         } else if (x < -12 || y < -12 || x > W + 12 || y > H + 12) continue;
         const r = full ? 8 : 5;
         g.save();
@@ -830,6 +837,26 @@ export class GameMap {
           g.fillStyle = m.color; g.fill();
           g.shadowBlur = 0;
           g.lineWidth = 1.6; g.strokeStyle = '#ffffff'; g.stroke();
+        } else if (m.kind === 'shard') {
+          // The second shard: a tall crystal in a glow that breathes, rings rising off it (not a power core's diamond).
+          const k = full ? 1.35 : 0.8;
+          for (let i = 0; i < 2; i++) {
+            const u = (performance.now() / 1600 + i * 0.5) % 1;
+            g.beginPath(); g.arc(0, 0, (8 + 16 * u) * k, 0, Math.PI * 2);
+            g.strokeStyle = m.color; g.globalAlpha = 0.75 * (1 - u); g.lineWidth = 2; g.stroke();
+          }
+          g.globalAlpha = 1;
+          const gl = g.createRadialGradient(0, 0, 0, 0, 0, 16 * k);
+          gl.addColorStop(0, 'rgba(190, 225, 255, 0.85)'); gl.addColorStop(1, 'rgba(120, 170, 255, 0)');
+          g.fillStyle = gl; g.beginPath(); g.arc(0, 0, 16 * k, 0, Math.PI * 2); g.fill();
+          g.shadowColor = '#bfe0ff'; g.shadowBlur = (10 + 8 * pulse) * k;
+          g.beginPath();
+          g.moveTo(0, -15 * k); g.lineTo(5 * k, -3 * k); g.lineTo(3 * k, 11 * k); g.lineTo(0, 14 * k); g.lineTo(-3 * k, 11 * k); g.lineTo(-5 * k, -3 * k); g.closePath();
+          const cg = g.createLinearGradient(0, -15 * k, 0, 14 * k);
+          cg.addColorStop(0, '#f2f8ff'); cg.addColorStop(0.55, '#7fb8ff'); cg.addColorStop(1, '#5a3fd0');
+          g.fillStyle = cg; g.fill();
+          g.shadowBlur = 0;
+          g.lineWidth = 1.4; g.strokeStyle = '#ffffff'; g.stroke();
         } else if (m.kind === 'alert') {
           g.beginPath(); g.arc(0, 0, r + 3 + pulse * 3, 0, Math.PI * 2);
           g.strokeStyle = m.color; g.globalAlpha = 0.5 + (1 - pulse) * 0.4; g.lineWidth = 2; g.stroke();
@@ -850,6 +877,11 @@ export class GameMap {
             g.lineWidth = 3.5; g.strokeStyle = 'rgba(255,255,255,0.92)'; g.strokeText(name, r + 4, 0);
             g.fillStyle = '#5b2a10'; g.fillText(name, r + 4, 0);
           }
+        } else if (m.kind === 'badge') {
+          g.beginPath(); g.arc(0, 0, r * 0.85, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();
+          g.lineWidth = 1.5; g.strokeStyle = '#ffffff'; g.stroke();
+          g.fillStyle = '#10202a'; g.font = `800 ${full ? 10 : 7}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillText(m.glyph ?? '', 0, 0.5);
         } else if (m.kind === 'faint') {
           g.globalAlpha = 0.6;
           g.beginPath(); g.arc(0, 0, full ? 3.6 : 2.6, 0, Math.PI * 2); g.fillStyle = m.color; g.fill();

@@ -17,6 +17,7 @@ import { PState, GAWK_CROWD, GAWK_R, canGawk, gawkersNear } from './Pedestrians'
 import type { Stimuli, Stimulus } from '../game/Stimuli';
 import type { Player } from '../player/Player';
 import { statusOf } from '../shared/status';
+import { calmRate } from '../game/people/behaviour';
 
 export class Reactions {
   private lastSeen = 0;
@@ -78,7 +79,8 @@ export class Reactions {
             a.fear = Math.min(2, a.fear + prox * nerve * (s.kind === 'crash' ? 0.6 : 1.4));
             // Blast wave / falling debris knocks people down close by.
             const knock = s.kind === 'blast' ? s.radius * 0.12 : s.kind === 'collapse' ? Math.min(40, s.radius * 0.05) : 0;
-            if (d < knock) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? 'player' : 'collapse');
+            // (Not from under their feet: a blast in a sewer shakes the pavement, it does not throw people off it.)
+            if (d < knock && s.y > a.y - 2) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? 'player' : 'collapse');
             else this.flee(a, s.x, s.z);
             break;
           }
@@ -90,7 +92,7 @@ export class Reactions {
           case 'stomp':
             // By the size of whoever stepped (the player, a monster), booked to it.
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
-            if (d < Math.max(1.5, (s.size ?? H) * 0.12)) this.knockDown(a, s.x, s.z, 4, s.cause === 'threat' ? 'threat' : 'player');
+            if (d < Math.max(1.5, (s.size ?? H) * 0.12)) this.knockDown(a, s.x, s.z, 4, s.cause === 'threat' ? 'threat' : s.cause === 'world' ? 'other' : 'player');
             break;
           case 'roar':
             // A monster's roar: run (far off, the bold stop, turn and film it).
@@ -164,7 +166,8 @@ export class Reactions {
       }
       if (flyingFast && dp < 60 && a.state === PState.Walk && a.fear < 0.3 && a.cit.curiosity > 0.3) this.gawk(a, px, py, pz);
       // ---- fear dynamics
-      a.fear = Math.max(0, a.fear - dt * 0.06);
+      // (The calm get over it quickly, the nervous keep running: game/people.)
+      a.fear = Math.max(0, a.fear - dt * calmRate(a.cit.nerve));
       if (a.fear > 0.55 && a.state !== PState.Flee) this.flee(a, a.fearX || px, a.fearZ || pz);
       if (before < 0.6 && a.fear >= 0.6) screamers++;
     }

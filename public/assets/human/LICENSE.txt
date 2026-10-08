@@ -13,3 +13,10 @@ https://www.makehumancommunity.org — https://creativecommons.org/publicdomain/
 
 We gratefully acknowledge the MakeHuman team. The derived data is likewise
 offered under CC0.
+
+conform.json / conform.bin (tools/avatar/base-bodies/conform.py) reshape this mesh
+onto our built-in Woman and Man bodies and carry the Woman rig's skin weights.
+Those bodies are based on "Woman_model" by Bananaboy (Blend Swap,
+http://www.blendswap.com/blends/view/73627), CC BY 3.0, modified; see
+tools/avatar/base-bodies/bodies/LICENSE.txt. The conform data is offered under CC BY 3.0
+with that attribution.

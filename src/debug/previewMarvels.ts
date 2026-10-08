@@ -3,7 +3,8 @@
  * for a seed. URL: ?seed=<n>&radius=<city radius m>&view=<family 0–7, or -1 for the row>&night=1.
  * &still=1 draws one frame (screenshots); &blast=<s> with it: cut through each one a third of the
  * way up and show it <s> seconds later. Keys: 1–8 frame a family, 0 the row, Space the next seed,
- * N day / night, B blast (the framed one, or all).
+ * N day / night, B blast (the framed one, or all). &at=dx,y,dz,tx,ty,tz puts the camera at offsets from
+ * the framed marvel's centre (and its target), lit by a lamp at the camera: a look inside.
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -64,6 +65,7 @@ let wrecks: LandmarkWrecks | null = null;
 const moundGeo = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), moundMat = new THREE.MeshStandardMaterial({ color: 0x8a8279, roughness: 1 });
 const D = {
   onImpact: undefined,
+  as: <T>(_c: string, fn: () => T) => fn(),
   impact: (x: number, y: number, z: number, r: number, j: number, dx: number, dy: number, dz: number) => wrecks?.impact(x, y, z, r, j, dx, dy, dz) ?? 0,
   restoreMound: (x: number, z: number, r: number, h: number) => { const m = new THREE.Mesh(moundGeo, moundMat); m.position.set(x, 0, z); m.scale.set(r, h, r); m.receiveShadow = m.castShadow = true; root.add(m); },
 } as unknown as Destruction;
@@ -76,6 +78,7 @@ function build(): void {
   let x = 0;
   for (let s = 0; s < MARVEL_STYLES; s++) {
     const r = new Rng(seed * 101 + s);
+    if (q.get('at') && view >= 0 && s !== view) { frames.push({ x: 0, h: 0, r: 0 }); continue; }
     const d = marvelDesign(s as MS, radius)(r.fork('design'), 1)!;
     const lm: Landmark = { id: s, kind: 'marvel', name: FAMILY[s], cell: 0, x: x + d.hu, z: 0, angle: 0.4, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: 0, seed: r.nextU32(), style: s, p: d.p };
     lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
@@ -97,6 +100,14 @@ function build(): void {
       g.renderOrder = 1;
       root.add(g);
     }
+    // The inside (a starship's hall), with the same pieces.
+    if (b.inner) b.inner.forEach((mb, gi) => {
+      if (mb.empty) return;
+      const md = mb.build(), m = new THREE.Mesh(toGeometry(md), gi ? glass : facade);
+      m.position.set(...md.origin);
+      if (gi) m.renderOrder = 1; else { m.customDepthMaterial = createElemDepthMaterial(et, W); m.castShadow = m.receiveShadow = true; }
+      root.add(m);
+    });
     data.push({ index: s, lm, grid: b.grid!, pieces: b.pieces!, elemData: ed, elemTex: et, elemW: W, near: mesh, nearGlass: g, facadeMat: facade, glassMat: g ? glass : null });
     const h = near.bounds[4];
     frames.push({ x: lm.x, h, r: Math.max(d.hu, d.hv) });
@@ -125,6 +136,18 @@ function frame(): void {
   controls.update();
   sun.position.set(cx + 800, 1400, 900);
   sun.target.position.set(cx, 0, 0);
+  const at = (q.get('at') ?? '').split(',').map(Number);
+  if (f && at.length === 6) {
+    camera.position.set(f.x + at[0], at[1], at[2]);
+    controls.target.set(f.x + at[3], at[4], at[5]);
+    camera.near = 0.2;
+    camera.updateProjectionMatrix();
+    controls.update();
+    const lamp = new THREE.PointLight(0xffffff, 900, 0, 1.6);
+    lamp.position.copy(camera.position);
+    scene.add(lamp);
+    hemi.intensity = 1.1;
+  }
   hud.textContent = `seed ${seed}, radius ${radius} m — ${f ? FAMILY[view] + `, ${f.h.toFixed(0)} m` : 'all families'}\n1–8 family, 0 row, Space next seed, N night, B blast`;
 }
 

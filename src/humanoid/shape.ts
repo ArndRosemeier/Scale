@@ -155,9 +155,11 @@ export function computeShape(a: HumanoidAppearance): ShapeParams {
   if (a.race2) for (const [name, w] of Object.entries(B.targets)) t.add(name, w * mix);
 
   // ---- per-individual micro variation (seeded): makes every face unique
+  // (faceDetail scales it: 0 gives the plain, unvaried face; the random draws stay in sequence.)
+  const fd = clamp(a.faceDetail ?? 1, 0, 1);
   const r = new Rng(deriveSeed(a.seed >>> 0, 'face-detail'));
-  const g = (s: number) => clamp(r.gaussian(0, s), -1, 1);
-  const asym = () => r.gaussian(0, 0.08);
+  const g = (s: number) => clamp(r.gaussian(0, s), -1, 1) * fd;
+  const asym = () => r.gaussian(0, 0.08) * fd;
   t.signed('nose-point', g(0.35), 1);
   t.signed('nose-curve', g(0.3), 4);
   t.signed('nose-flaring', g(0.35));
@@ -190,7 +192,7 @@ export function computeShape(a: HumanoidAppearance): ShapeParams {
   t.signedLR('%-cheek-inner', g(0.3), 0, asym());
   t.signed('chin-jaw-drop', g(0.25));
   t.signed('chin-prognathism', g(0.2));
-  if (r.chance(0.15)) t.add('chin-cleft-incr', r.range(0.3, 0.9));
+  if (r.chance(0.15)) t.add('chin-cleft-incr', r.range(0.3, 0.9) * fd);
   t.signed('forehead-scale-vert', g(0.35));
   t.signed('forehead-temple', g(0.3));
   t.signed('eyebrows-angle', g(0.35), 1);
@@ -200,7 +202,7 @@ export function computeShape(a: HumanoidAppearance): ShapeParams {
   t.signed('head-scale-vert', g(0.2));
   t.signed('head-fat', g(0.25) + (a.weight - 0.5) * 0.6);
   const shapes = ['head-oval', 'head-triangular', 'head-invertedtriangular', 'head-diamond', 'head-square'];
-  t.add(r.pick(shapes), r.range(0, 0.45));
+  t.add(r.pick(shapes), r.range(0, 0.45) * fd);
   t.signed('neck-scale-vert', g(0.25));
   t.signed('measure-neck-height', g(0.25));
   t.signed('torso-vshape', g(0.25) + (male - 0.5) * 0.3 + (a.muscle - 0.5) * 0.4);
@@ -210,7 +212,7 @@ export function computeShape(a: HumanoidAppearance): ShapeParams {
   t.signed('%-hand-fingers-diameter', g(0.25) + (a.weight - 0.5) * 0.4);
   // A body-shape archetype adds overall silhouette variety.
   const shapeSet = male > 0.5 ? ['man-trapezoid', 'man-invert-triangle', 'man-apple', 'man-lean-column'] : ['fem-full-hourglass', 'fem-triangle', 'fem-lean-column', 'fem-apple'];
-  t.add(`bodyshapes-elvs-${r.pick(shapeSet)}`, r.range(0.1, 0.55));
+  t.add(`bodyshapes-elvs-${r.pick(shapeSet)}`, r.range(0.1, 0.55) * fd);
 
   netPairs(t.map);
 

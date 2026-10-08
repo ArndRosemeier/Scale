@@ -28,7 +28,8 @@ function run(plan: DeepPlan, secs: number, player: 'away' | 'trench' | 'noMans')
   const field = new DeepField(plan.prims, plan.seed);
   const T = plan.trench;
   const at = (s: number, l: number) => { const x = T.x + T.ax * s + T.cx * l, z = T.z + T.az * s + T.cz * l; return { x, y: field.floorAt(x, T.y + 1.5, z, 5) ?? T.y, z }; };
-  const pp = player === 'trench' ? T.posts[0] : player === 'noMans' ? at((T.noMans[0] + T.noMans[1]) / 2, -4) : { x: 1e6, y: 0, z: 1e6 };
+  // No-man's land: its middle, a little off the Murk's lane (with a chasm, over the bridge on their side of it).
+  const pp = player === 'trench' ? T.posts[0] : player === 'noMans' ? (T.chasm ? at((T.chasm.s + T.chasm.r + T.murkS) / 2, T.chasm.l - 2) : at((T.noMans[0] + T.noMans[1]) / 2, -4)) : { x: 1e6, y: 0, z: 1e6 };
   const out: TrenchRun = { spawned: 0, killed: 0, past: 0, reachedLine: 0, sentriesLost: 0, playerHits: 0, bolts: 0, hits: 0, sAtDeath: [], alive: [] };
   const sOf = (x: number, z: number) => (x - T.x) * T.ax + (z - T.z) * T.az;
   const host: FactionHost = {
@@ -62,7 +63,7 @@ function run(plan: DeepPlan, secs: number, player: 'away' | 'trench' | 'noMans')
   for (let t = 0; t < secs; t += dt) {
     war.update(dt, true, raid > 0, 0.45, 0.7, 0.08);
     F.update(dt, cam);
-    if (process.env.TRACE && Math.round(t * 30) % 300 === 0) console.log(t.toFixed(0), 'murk', F.blobs.filter((b) => b.fac === 'murk' && b.mode !== 'dead').map((b) => `${b.mode[0]}${sOf(b.x, b.z).toFixed(0)}`).join(' '), '| sentries', F.blobs.filter((b) => b.role === 'sentry' && b.mode !== 'dead').map((b) => `${b.mode[0]}${sOf(b.x, b.z).toFixed(0)}/${b.hp.toFixed(1)}`).join(' '));
+    if (process.env.TRACE && Math.round(t * 30) % 300 === 0) console.log(t.toFixed(0), 'murk', F.blobs.filter((b) => b.fac === 'murk' && b.mode !== 'dead').map((b) => `${b.mode[0]}${sOf(b.x, b.z).toFixed(0)}~${Math.hypot(b.x - pp.x, b.z - pp.z).toFixed(0)}`).join(' '), '| sentries', F.blobs.filter((b) => b.role === 'sentry' && b.mode !== 'dead').map((b) => `${b.mode[0]}${sOf(b.x, b.z).toFixed(0)}/${b.hp.toFixed(1)}`).join(' '));
     for (const b of F.blobs) {
       if (b.fac !== 'murk') continue;
       if (!seen.has(b.id)) { seen.add(b.id); out.spawned++; }
@@ -80,8 +81,10 @@ const isMain = process.argv[1]?.endsWith('trenchsim.ts');
 if (isMain) {
   const seed = Number(process.argv[2] ?? 42), size = Number(process.argv[3] ?? 0.6), secs = Number(process.argv[4] ?? 300);
   const player = (process.argv[5] ?? 'away') as 'away' | 'trench' | 'noMans';
-  const { plan } = deepFor(seed, size);
+  // REALM=n: the realm below the n-th colony with one (default the first).
+  const plan = deepFor(seed, size).plans[Number(process.env.REALM ?? 0)];
   if (!plan) { console.log('no realm'); process.exit(1); }
+  console.log(`colony ${plan.hub}, ${plan.trench.style}`);
   const r = runTrench(plan, secs, player, process.env.DICE ? Number(process.env.DICE) : plan.seed);
   const T = plan.trench;
   const hist = new Map<string, number>();

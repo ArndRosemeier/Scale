@@ -1,60 +1,22 @@
 /**
- * Pause menu (Esc / pointer released), help overlay (H) and settings.
+ * Pause menu (Esc / pointer released), help dialog (H: keys, powers, manual — HelpDialog) and settings.
  */
 import type { Game } from '../game/Game';
 import { versionLink } from './Changelog';
 import { feedbackLink } from './Feedback';
+import { manualLink } from './Manual';
 import { SOUND_CATEGORIES, defaultMix, type SoundCategory } from '../audio/Audio';
 import { saveTimeScale } from '../render/SkySystem';
 import type { WeatherSetting } from '../render/Weather';
 import type { QualitySetting } from '../render/Graphics';
 import { probeGpu, maybeShowGpuHint } from './GpuHint';
 import { isTouch } from './touch';
-
-const CONTROLS: [string, string][] = [
-  ['W A S D', 'Walk (in flight: fly)'],
-  ['Shift', 'Run / boost'],
-  ['R', 'Autorun (in flight: autoflight) on / off · W or S stops it'],
-  ['Space', 'Jump · with super jump: hold to keep climbing (in flight: up)'],
-  ['Ctrl / C', 'Down (in flight)'],
-  ['F', 'Toggle flight (when unlocked)'],
-  ['Numpad + / −  (or = / −)', 'Grow / shrink (size shift; range grows with rank)'],
-  ['1 … 9, 0', 'Use a hotbar power (and select its slot); hold for beams, jets, ice path; super speed switches on / off'],
-  ['Tab / Shift+Tab', 'Pick a target near the crosshair / cycle; on a giant creature: cycle its body parts (weak spots first). Esc clears. Powers go for the target, or straight ahead'],
-  ['P', 'Powers: buy, upgrade, assign to the hotbar'],
-  ['Right mouse (hold)', 'Look around'],
-  ['Mouse wheel', 'Camera distance'],
-  ['Left click', 'On someone or something: target it (punch is a hotbar power, slot 1 by default)'],
-  ['E', 'Talk to the person in front of you (or the one you targeted; 1–7 to answer) · help someone up · pick up / give back · turn yourself in (next to an officer) · open a manhole / climb out of the sewer · hold to dig someone out of rubble · carry the injured to the triage tent'],
-  ['G', 'Rally the soldiers near you to follow you (when the army knows you: reputation 40+)'],
-  ['T', 'Call an airstrike on your target, a giant creature (reputation 70+; a few minutes between)'],
-  ['M', 'City map: metro, stations · click to set a marker the compass points to (travel in sandbox)'],
-  ['N', 'Minimap on / off'],
-  ['B', 'Test blast where you look (sandbox)'],
-  ['[  ]', 'Time of day −1 h / +1 h'],
-  ['F8', 'Free camera'],
-  ['H', 'This help'],
-  ['Esc', 'Pause & settings'],
-];
-
-/** On a touch screen (iPad): the on-screen controls (TouchControls). */
-const TOUCH_CONTROLS: [string, string][] = [
-  ['Left thumb', 'Walk where the thumb lands · push to the rim to run (in flight: boost), barely push to walk slowly'],
-  ['Drag on the right', 'Look around · pinch: camera distance'],
-  ['Tap', 'On someone or something: target it · on an elevator button: press it'],
-  ['Jump', 'Jump · with super jump: hold to keep climbing (in flight: Up, hold)'],
-  ['Fly / Land · Down', 'Toggle flight (when unlocked) · sink while flying'],
-  ['Use', 'Lights up when there is something to do: help someone up, pick up, open a manhole … (hold to dig)'],
-  ['Target · ✕', 'Pick a target near the centre / cycle · clear it'],
-  ['Auto', 'Autorun / autoflight on / off · moving the stick forward or back stops it'],
-  ['+  −', 'Grow / shrink (with size shift)'],
-  ['Hotbar', 'Tap a power; hold for beams, jets, ice path; super speed switches on / off'],
-  ['Powers · Map · ⋯ · ☰', 'Buy powers · city map (pinch to zoom) · more (rally, airstrike, time of day …) · pause & settings'],
-];
+import { HelpDialog, type HelpTab } from './HelpDialog';
+import { isAction, keyLabel } from '../game/keybinds';
 
 export class Menu {
   private el: HTMLDivElement;
-  private help: HTMLDivElement;
+  readonly help: HelpDialog;
   private open = false;
 
   constructor(private game: Game) {
@@ -89,17 +51,15 @@ export class Menu {
           <option value="off">Off</option><option value="rare">Rare</option><option value="normal">Normal</option><option value="frequent">Frequent</option>
         </select></div>
         <div class="row" id="pInvRow"><label>Invulnerable</label><input id="pInv" type="checkbox"></div>
-        <div class="buttons"><button id="pResume">Resume</button><button id="pHelp">Controls</button><button id="pNew">New city…</button></div>
+        <div class="buttons"><button id="pResume">Resume</button><button id="pHelp">Help</button><button id="pNew">New city…</button></div>
       </div>`;
     const ver = versionLink();
     this.el.querySelector('h2')?.after(ver);
-    ver.after(feedbackLink());
+    const fb = feedbackLink();
+    ver.after(fb);
+    fb.after(manualLink());
     document.body.appendChild(this.el);
-    this.help = document.createElement('div');
-    this.help.id = 'help';
-    const rows = (list: [string, string][]) => `<table>${list.map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join('')}</table>`;
-    this.help.innerHTML = `<div class="panel"><h2>Controls</h2><div class="touch-only">${rows(TOUCH_CONTROLS)}<h3>With a keyboard</h3></div>${rows(CONTROLS)}<p class="sub">Normal mode: help people to earn karma and buy powers with P. Everything can be destroyed. People live their own days — and they notice what you do.</p></div>`;
-    document.body.appendChild(this.help);
+    this.help = new HelpDialog(game);
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
     $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); saveTimeScale(game.sky.timeScale); };
     $<HTMLInputElement>('pHour').oninput = (e) => { game.sky.hour = Number((e.target as HTMLInputElement).value) % 24; this.sync(); };
@@ -135,21 +95,22 @@ export class Menu {
     $<HTMLButtonElement>('pResume').onclick = () => this.close();
     $<HTMLButtonElement>('pHelp').onclick = () => this.toggleHelp(true);
     $<HTMLButtonElement>('pNew').onclick = () => { location.href = location.pathname; };
-    this.help.onclick = () => this.toggleHelp(false);
     // Looking around (right mouse) closes the menu.
     document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement) this.close(); });
     window.addEventListener('keydown', (e) => {
       // (Esc that just closed the map or the powers screen does not open the pause menu.)
       // (With a target, Esc first clears the target — Targeting — and opens the menu next time.)
-      if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer && !this.game.people?.holdsPointer) { if (this.open) this.close(); else if (!this.game.targeting?.current) this.show(); }
-      if (e.code === 'KeyH') this.toggleHelp();
+      // Esc closes the help dialog first.
+      if (e.code === 'Escape' && this.help.isOpen) { e.preventDefault(); this.toggleHelp(false); return; }
+      if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer && !this.game.people?.holdsPointer && !this.game.wardrobe?.holdsPointer) { if (this.open) this.close(); else if (!this.game.targeting?.current) this.show(); }
+      if (isAction(e, 'help') && !e.repeat) this.toggleHelp();
     });
     // First-time hint.
     const hint = document.createElement('div');
     hint.id = 'hint';
     hint.textContent = isTouch()
       ? 'Left thumb walks · drag on the right to look · tap someone to target them · ☰ for settings and controls'
-      : 'Hold right mouse to look around · click someone to target them · M for the map · H for controls · Esc for settings';
+      : `Hold right mouse to look around · click someone to target them · ${keyLabel('map')} for the map · ${keyLabel('help')} for help and keys · Esc for settings`;
     document.body.appendChild(hint);
     setTimeout(() => hint.classList.add('fade'), 9000);
   }
@@ -193,8 +154,12 @@ export class Menu {
   }
 
   toggleHelp(v?: boolean): void {
-    const on = v ?? !this.help.classList.contains('open');
-    this.help.classList.toggle('open', on);
+    this.help.toggle(v);
+  }
+
+  /** Open the help dialog on a tab. */
+  showHelp(tab: HelpTab): void {
+    this.help.show(tab);
   }
 
   get paused(): boolean { return this.open; }

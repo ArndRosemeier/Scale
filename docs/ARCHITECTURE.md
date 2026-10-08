@@ -414,10 +414,14 @@ migrated — dash was folded into super speed, now only its flight burst).
   Esc clears. `probe()` is the "first thing ahead" ray (targets, standing facade panels — holes let it through —,
   roofs, ground); `inSphere()` lists everything an area effect hits. `TargetHud` draws the corner brackets and the
   target frame (slots for the later con colour and health).
-* **AbilitySystem**: energy, cooldowns, input; tap powers fire through `Elements.fire`, held powers (laser, ice
+* **AbilitySystem**: energy, input (powers are balanced by energy cost; only a 0.25 s debounce against double presses); tap powers fire through `Elements.fire`, held powers (laser, ice
   path, hydrokinesis) run as a `channel` while the key / right mouse is held. **Punch** is a hotbar power
   like the others (always rank 1 and free, slot 1 by default; super strength sets its force): left click only targets.
   Flight boost multiplies the cruise speed by a factor that grows with the rank (`FLIGHT_BOOST_MUL`).
+  Energy (`updateEnergy`): no regeneration while flying; a body above 1.8 m pays `sizeUpkeep(h)` (tuning `GIANT`:
+  equal to base regen at 10 m, 14/s at 100 m ≈ 20 s on a full pool). An empty pool sets `exhausted`: the body
+  shrinks smoothly to 10 m, pays half its upkeep (so it refills there) and `maxHeight` stays capped until the pool is back to 25 %. Sandbox and the
+  admin size override are exempt.
 * **Elements**: the elemental powers in the world. With a target they go for it, without one along the crosshair.
   They reuse destruction impacts (laser heat accumulates per 60 cm spot, ≤ 10 impacts/s), debris, dust, props.hit,
   traffic wrecks, reactions.knockDown and the near-future knock. Ice-path sheets are walkable through
@@ -516,6 +520,21 @@ every frame) owns the parts and draws what belongs to them.
   operations, its cells count as nobody's in `playerCell` / `begin`) until one of the two is over. Saved in
   `SaveData.factions.bosses` (by archetype). Dev: `dev.bosses(group?, notoriety?)`, `dev.jailBoss(group, hours)`,
   `dev.crime(kind, dist, group, 'boss')`.
+  Phase 4 part 2, boss operations: `crime/BossOperation` (one class, `BOSS_OP_SPECS` per kind: heist, takeover,
+  uprising, awakening, treewake, deadrise) — the boss out front, workers at the site (door, street or circle), guards
+  and lieutenants; the work runs while workers stand, the boss beaten breaks the crew (`broken`), done calls
+  `CrimeWorld.bossOpDone`. On `commit` CrimeSystem wraps it in a `threats/BossEvent` (archetype `boss`) so the city
+  response treats it as a threat event. `bossOpChance` schedules them per group (gap and chance by notoriety). Eco-radicals
+  and necromancers: `crime/Sabotage` (robot, else parked car, else shop; done: `CrimeWorld.sabotage` wrecks and rewilds),
+  `crime/Raising` and `crime/Procession` (thralls adopted as victims with `memo.thrall`, led along a route; E or the
+  leader beaten wakes them, `woken`). Skeletons are criminals made by `Crime.raiseDead` (`memo.skel`, always fight);
+  CrimeSystem dresses them on `risen` (`skeletonOutfit`, the `bones` garment pattern, a skull), lets KO'd ones reform
+  while a non-skeleton member stands (`undead`) and crumbles them otherwise or when the crime ends. `crime/DogPack` (pure)
+  is a Beast-master's pack; `crime/Packs` draws them (`deeds/critters` dog), routes hits (Game.strike, the powers'
+  `swarm` hook) and the `whistle` cast. The Elder's `treewake` starts `threats/AwakenedTree` (archetype `tree`, a major
+  threat: the street tree's own model on three IK root legs, sweeps and slams at cars, robots and lamps, aggro on
+  whoever hurts it, `ThreatActor.onElement` makes fire hurt it 2.5×; beaten it roots as a gnarled tree kept for the
+  session). Dev: `dev.bossOp(group, dist)`, `dev.packs()`, `dev.threat.spawn('tree', { dist })`.
 * **Crimes** (`Crime` base, `Snatch`, `Mugging`, `Robbery`): small FSMs (approach → commit → escape / fight /
   surrender → subdued → resolved, or failed / aborted) over real people: victims are passers-by, criminals spawn out of
   view or are converted walkers. Staging only (decision 15): screams and "help!", pointing, cowering with hands up, a
@@ -550,7 +569,7 @@ every frame) owns the parts and draws what belongs to them.
   player's into the ledger (`building:facade`, `building:collapse` with the storeys as `size`). Facade damage before
   witnesses costs a little (`JUSTICE.facade`, every 2 s at most); a collapse the player caused is always known and
   costs heat, karma and reputation by storeys (`JUSTICE.collapse`), once per building.
-* **Reputation** (`Reputation`, −100…+100 per city and mode): crowds cheer / wave or step away, police suspicion; HUD
+* **Reputation** (`Reputation`, −100 and up (no ceiling) per city and mode): crowds cheer / wave or step away, police suspicion; HUD
   chip and P screen. **Con** (`Consider.ts`): target vs player strength → grey … purple on the target frame and brackets.
 * **Small deeds** (`deeds/SmallDeeds`): seeded every few minutes — a cat up a tree (owner pointing up, meowing; climb with
   E, jump or fly), a runaway dog trailing its leash (catch it, it follows you back), a dropped wallet (the owner pats
@@ -1101,6 +1120,24 @@ as distance LOD).
   the HUD, the admin console's Weather section, `dev.weather.set(kind) / next() / auto() / status() / forecast(n) /
   strike(m)`.
 
+### Interior designer (`src/interior/design`)
+* One designer for any body shape, not only four-sided boxes (proposal: project files
+  `interiors/interior-designer-proposal.md`). A design is plain geometry in a landmark Kit's local (u, v) frame.
+  It is made in steps that know nothing about the building:
+  * **Volume** (`types.ts`): the inside outline at every height, as a star round a centre (`ellipseStar`), so round,
+    oval and tapering bodies work.
+  * **Section / layout** (`hall.ts`, `designHall`): a void up the middle, ringed on every level by a gallery with a
+    glass rail and wedge rooms out to the outer wall. Two stair columns alternate wedge by wedge. Bridges cross the
+    void every few levels, and the hall ends where the rooms get too shallow.
+  * **Theme** (`theme.ts`, `props.ts`): room function → prop recipes, and materials. A theme is a prop set, so
+    the same layout can be furnished differently (`scifiTheme` first).
+  * **Emit** (`emit.ts`): floors, walls with doors, rails (glass plus a hidden solid), step boxes, props, walkable
+    room polygons and lights as landmark parts.
+* First user: the starship (`marvelParts.starship`). Lobby doors between the fins lead into a ground-floor lobby and
+  the great hall with a glowing core. Parts added inside `Kit.inner(...)` go into a separate inner mesh
+  (`LandmarkMeshes.inner`, diced with the rest) that `CityStreamer` draws only close by. The far and near meshes
+  stay in their budgets. Self test: walk in through every door, every flight, every room door, round every gallery.
+
 ### Interiors (`src/interior`)
 * Generated on demand when the player approaches an entrance or a breach: floor plan by
   building use (apartments, offices, shops, restaurants, lobby, stair or elevator core),
@@ -1193,7 +1230,7 @@ as distance LOD).
   instanced mesh (`ratGeometry`) plus their eyes. Every few minutes a lone slime oozing along a walkway (drawn with
   the colonies' blobs: `Slimes.blob`): freezes, flees and squeezes into the wall; a hit splatters it.
   `dev.sewerLife(calm)`.
-* Hidden colonies (2–5 per city, far out): a gap in the back wall of a quiet side room opens into a
+* Hidden colonies (2–3 per city, nearest the centre first, ≥ 800 m apart; each leads into a deep realm of its own): a gap in the back wall of a quiet side room opens into a
   rough crawl passage (`Tube` kind `crawl`) sinking to a chamber at depth (under the lowest ground
   within 32 m, so hillside foundations never reach it). Slimes live there (`Slimes.ts`, one
   colony active at a time, two instanced meshes, one unlit material): moss gardens, domes and
@@ -1204,18 +1241,23 @@ as distance LOD).
   them into drops that flow away; the colony then hides for ten minutes. A few rooms near colonies
   have a faint glowing trail, sometimes with a lone one that slips into a crack. No markers, no
   text. `dev.colony(i)` puts a tester in the room with the gap.
-* The deep realm (`underground/deep`): the slime civilisation below the colonies.
-  * Plan (`plan.ts`, pure, deterministic per seed, ~0.1 s): a hub colony (nearest the centre) hosts the Glow
+* The deep realms (`underground/deep`): the slime civilisation below the colonies, one realm below each
+  (`planDeeps`, nearest the centre first; a realm keeps 14 m of rock from the ones before it). Underground keeps them in
+  `deeps`; `deep` is the one whose Hall is nearest the camera (the live one: its agents, trench and war).
+  * Plan (`plan.ts`, pure, deterministic per seed, ~0.1 s per realm): its colony hosts the Glow
     `GLOW_DEPTH` (64 m) under the lowest ground over the realm, the Deep `DEEP_DROP` (52 m) lower. Shapes in a frame
     (origin at the Great Hall, u along the realm's axis): the Hall (ellipsoid, flat-cut, terraced `bowl` floor, pool,
     the Spire rock column, hanging masses), Gardens, Lake (falls), Archive (mosaics), the Front gallery, the Throat (shaft cylinder + dome, a `helix` rock ramp, a rock bridge to a lookout niche), the Warrens
     (pillars; their mouth by the Throat's floor walled in by rock boxes to a passage `MOUTH` 9.6 m wide, the shaft
-    re-opened after them: the trench war, `Trench`, framed from the shaft's axis towards the Warrens: three dug bays a
-    metre deep behind rock parapets with sandbags and duckboards, two gaps between them, a belt of thorn wire, craters
-    in no-man's land, the Murk's berm where the Warrens open), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
+    re-opened after them: the trench war, `Trench`, framed from the shaft's axis towards the Warrens: 2–4 dug bays a
+    metre deep behind rock parapets with sandbags and duckboards, gaps between them, a belt of thorn wire, craters
+    in no-man's land, the Murk's berm where the Warrens open; each realm its own `BattleStyle`, shuffled per city:
+    `line`, `double` (a second line behind), `chasm` (a rift across no-man's land, one rock bridge), `flooded`
+    (deeper water-filled craters), `siege` (a high Murk wall, a crystal forest, hive towers); width, depth and
+    the Murk's lane vary), the Heart chamber (mound, the shard). Roads: from a chamber wall (u+ / v± — `Road.hole`, cut by
     `buildChamber`) a neck (r 2.3 m, roomy for the camera; no gate since 0.056), descending steeply until the wide gallery fits under the ground, then
     a gallery (r 5.2 m, grade ≤ 0.16) to the Hall's rim, a spiral first where the way is too short for the drop.
-    Colonies within 950 m get roads. Tried over hub colonies / axes / distances until clear of every tube, box and
+    Each realm has the one road from its own colony. Tried over axes / distances until clear of every tube, box and
     the station surroundings and ≥ 14 m under the ground. Decor (dwellings, mushrooms, fungus, crystals, shelves,
     strands, stones, stalactites, hives, pens, salvaged things), ~500 baked light sources, water, falls, veins, the
     lift column, and a waypoint graph whose edges are walked on the field (detour nodes round obstacles).
@@ -1252,9 +1294,10 @@ as distance LOD).
   * Trust (`Trust.ts`, per city, saved): tiers Shunned / Stranger / Noticed (they stop hiding) / Welcome (greetings, lift,
     pebbles) / Ally / Kin; grants the Slime call (`Progress.granted`, `AbilitySystem.special`).
   * The game side (`game/slimes/SlimeRealm.ts`): areas, raids, the trench war, pens (E), the lift, the Heart's resonance,
-    pebbles, ambience, the Slime call, breakouts, toasts, saves (`SaveData.slimes`, version 3), a safety net for
-    bodies below the realm. Sounds: `tools/synthDeep.mjs`. Admin console section "Slimes"; `dev.deep.go(place)`,
-    `dev.deep.status()`, `dev.slimes.status() | trust(v) | raid() | breach() | war(patch)`.
+    pebbles, ambience, the Slime call, breakouts, toasts, saves (`SaveData.slimes`, version 3: `wars` by colony,
+    `war` the first realm's for older saves), a safety net for bodies below the realm. Every realm has its own war
+    (the others step unseen); going down another colony rebinds `Factions` (`rebind`) and a new `TrenchWar`. Sounds: `tools/synthDeep.mjs`. Admin console section "Slimes"; `dev.deep.go(place, realm?)`,
+    `dev.deep.realms()`, `dev.deep.status()`, `dev.slimes.status() | trust(v) | raid() | breach() | war(patch)`.
 * Volume queries (`floorAt`, `contains`, `cameraFree`, …) go through a 32 m grid of tubes and boxes.
 * Terrain holes: shader discard plus a collision query.
 
@@ -1306,6 +1349,59 @@ plaque sprayed over). The statue is a `HumanoidRig` of the hero's appearance and
 (`scale.statue.v1.*`) and in saves (`SaveData.fame`). The low end is the justice layer's **manhunt** (rep ≤ −70: an
 officer within 26 m makes the player wanted) and the rampage watch above. `dev.fame.status() / rep(v) / press() / tv() /
 fan() / protest() / photo() / statue('build'|'unveil'|'topple'|'remove'|'go')`.
+
+### The Wardens (`src/game/aliens`, ALIENS_PLAN phase 1)
+
+The established aliens ("the Nannies"): they watch and never meddle. `Wardens` (game.wardens, updated right after the
+sky) owns the rest. **Schedule** (`wardenRules.ts`, pure, seeded, tested in `tools/aliensTest.ts`; nothing saved): the
+number of discs is rolled per 20 game minutes (`discPlan`: 15 % none, else 1–7), a swarm starts in ~1 % of slots
+(90–150 discs for 2–9 slots, 6 % of them 8–20 game hours), followed by 3 slots of empty sky; a walker visit in ~22 % of
+game hours (`walkerVisit`, 20–55 min), a long stare over a landmark on ~35 % of days (`stareVisit`, 2–6 h); the lines
+people say (`nannyLine` by moment `swarm | walker | disc | sky`, temperament, children; the shy keep quiet).
+**Station** (`Station.ts`): a lathe lens with a spindle and an outer ring on spokes, kept 20 km from the camera in a
+seeded direction (no parallax, ~16° across with the ring), Lambert-lit by the scene's sun / moon light, no fog; opacity
+0.62 by day (the sky shows through) to 0.97 at night, hidden by cloud cover, fog, rain and underground; 30 additive points
+crawl round the rim (once in ten minutes), a red one at the spindle's tip. **Discs** (`Discs.ts`, at most 190, simulated within
+2.4 km of the camera): kinematic arrival steering (7 m/s², speed by mode), altitude over the ground kept 45 m above the
+highest top below, ahead and round it (the `top(x, z)` probe: roofs, the marvels' spires, terrain), coming down fast from high up and
+leaving by climbing past 1.4 km. Modes: `cruise` (long legs, mostly passing within 700 m of the camera), `hover` (110–200 m
+up for 25–80 s, a scan cone sweeping a 12–46 m circle), `watch` (a loose ring 95 m round an incident at response level
+≥ 1, 270 m up: 1–3 discs by level, kept to the end, no cone), `stare` (140 m over a landmark, the cone coming and going),
+`courier` (lowers and lifts a walker), `leave`. A hero high in the air (> 70 m) or giant (≥ 18 m) gets the nearest disc's
+cone for 4 s every 40–80 s. New discs fly in from the edge or come down from above (a swarm fills in within a minute);
+spare ones leave, farthest first. Drawn as instanced hull (metal), underside glow (ring + core; festive changing hues in
+a swarm), additive scan cones (vertex-faded) and a point per disc for the far ones at night. **Walkers** (`Walker.ts`): a
+4.35 m robot of primitives (pivots for hips, knees, shoulders, elbows, neck), set down by a courier disc's beam on a
+square or park 60–340 m from the hero (`cores.interiorPoint` + `groundBlocked` 3 m round), standing with the head turning
+(to the hero within 16 m), taking a few slow steps, lifted away at the end; a collision cylinder for the hero, a 2.4 m
+ring people keep clear of (`Pedestrians.extraObstacles`). **People**: glances up at a cone sweeping their street, crowds
+gawking at / filming a walker, a line about the Nannies now and then (Barks), talk lines in the news topic (`When.nannies`,
+TalkFacts `nannies` from `momentAt`). **News**: `swarm`, `walker`, `stare` items (`headlines.ts`). **Sounds**
+(`tools/synthWardens.mjs`): `ufo_hum` (one positional loop at the nearest disc within 520 m), `ufo_scan` (a cone coming on,
+a walker lowered or lifted). `dev.wardens.status() / count(n|null) / swarm(on) / walker(mins) / hover() / look()`.
+
+**Runaway teens** (ALIENS_PLAN phase 2; `RunawayTeens.ts` an archetype `teens` on the threat clock, minor,
+omens `zip` / `glyph` through `Wardens.teenOmen`; `teenRules.ts` pure; `TeenSaucer.ts` the mesh; `Glyphs.ts`):
+a stolen 4.2 m saucer (the discs' hull, dented; two small Warden heads in a glass dome; 14 chasing gaudy rim lights;
+three glowing hover pods underneath) joyrides along the road net (A* routes, points every 10 m, legs round the hero),
+at a height of half the **cover** round it (the highest roof within 34 m over the ground, `teenHeight`, 6–19 m), so the
+roofs hide it. Pranks: a parked car made a Rapier wreck (`VehicleRenderer.makeWreck`, impulse 0) held on a spring
+under the saucer and dropped on a roof 5–16 m high within 80 m; a pedestrian taken over (`airborne`, as the med drones
+do), tumbled up and lowered into a fountain (`furn:fountain` props within 170 m; else a street spot); a canvas glyph
+quad on a facade beside a door, drawn in over 3.5 s, glowing for 10 min (`Glyphs`, at most 14). It flees the hero
+within 38 m (a route away), pops up 16 m when the hero is right under it, never into a wall (over a roof it clips).
+**Seen** (`seeStep`): out in the open (higher than the cover + 3 m) fills a meter in 2.4 s, a Warden scan cone
+(`Discs.inCone`) three times faster, it drains slower; the first 8 s don't count. The hero's lever: each **pod**
+(1.5 points; a normal punch ~0.26, a power at once; the hull passes half a hit to the nearest pod) knocked out lifts it
+8 m and makes it let go; all three out, it bobs up over the roofs (cover + 22 m); open ground has no cover; hovering
+discs come more often round it (`Wardens.hovers`). Watching discs never come (the Nannies don't know). Seen: a stasis
+bubble, a **parent disc** (`task 'parent'`, `low`, dropping from 260 m) hangs 16 m over it, beams, `ufo_stern` rolls
+over the block, the saucer is drawn up into it. Credit (`teenReward`): a pod down by the hero 25 karma + 3 rep, the
+hero within 90 m 15 + 2; then cheers, news `teens` (end `hero` / `stopped` / `none` when they get away), and the
+**regard** (`Wardens.regard`, saved per city and in saves: `handed`, `regard`). Left alone 7 min they zoom off home.
+Police: response ceiling 2, never on foot. The saucer is a `ThreatActor` (zones hull + 3 pods) for targeting, punches
+and powers. Sounds `teen_whine` (loop), `teen_zap`, `teen_giggle`, `teen_pod`, `ufo_stern`. `dev.threat.spawn('teens', { dist })`,
+`dev.wardens.teens.status() / pod(i) / prank(kind) / catch() / omen(kind)`.
 
 ### Map, minimap and compass (`src/ui/map`, `src/ui/Compass.ts`)
 * Full map (M) and minimap (N). Clicking the map sets the player's marker (a red pin, also on the
@@ -1391,4 +1487,5 @@ src/humanoid   Norgo human pipeline (bodies, animator) plus modern clothing
 src/audio      audio engine
 src/ui         HUD, menu, map
 src/game/street street characters: sites and cast (pure), performers, costumes, their lines
+src/game/aliens the Wardens: the station in the sky, discs, walkers, their schedule and what people say
 ```

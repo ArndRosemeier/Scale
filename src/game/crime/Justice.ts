@@ -13,7 +13,13 @@
  * in) clears it at a smaller cost.
  *
  * A manhunt (reputation ≤ JUSTICE.manhunt, "public menace"): officers who come near the player go
- * after them at once, offence or not.
+ * after them at once, offence or not. And for a public menace there is no fine and no night in a
+ * cell: taken down and cuffed is the end (game over, game/defeat Defeat.arrested), see `lockedAway`.
+ *
+ * Only what the player's own blows and powers hit counts (the ledger books nothing else to them:
+ * a collapse's rubble, a body a monster flung, the monster's own damage are nobody's or the
+ * threat's). And while a big monster is about (near the damage or the hero), the collateral is
+ * not counted at all: no karma, reputation or heat (threats/ThreatDirector MONSTER_GRACE).
  */
 import type { HarmEntry } from '../Consequences';
 import type { PedAgent } from '../../sim/Pedestrians';
@@ -38,6 +44,8 @@ export interface JusticeHost {
   sound(id: string, gain: number): void;
   /** A machine gone rogue (a threat): fair game, not property. */
   hostileThing?(ref: object): boolean;
+  /** A big monster about near this point (threats/ThreatDirector MONSTER_GRACE): collateral not counted. */
+  monsterNear?(x: number, z: number): boolean;
 }
 
 export const JUSTICE = {
@@ -54,11 +62,18 @@ export const JUSTICE = {
   turnInBase: 5, turnInPer: 6,
   /** Reputation at or below this: any officer within `manhuntR` m makes the player wanted (at most every `manhuntGap` s). */
   manhunt: -70, manhuntR: 26, manhuntGap: 45,
+  /** A public menace knocked out: held down this long (s) for the cuffs, then taken in anyway. */
+  heldMax: 20,
   /** Breaking a facade in front of witnesses (at most every 2 s). */
   facade: { heat: 0.45, karma: 1, rep: 0.6 },
   /** A collapse the player caused (always known): base + per storey that came down (≤ 12). */
   collapse: { heat: 2.6, heatPer: 0.35, karma: 6, karmaPer: 1.5, rep: 3, repPer: 0.7 },
 };
+
+/** Reputation this low (a public menace): an arrest is for good — game over, not a fine. */
+export function lockedAway(rep: number): boolean {
+  return rep <= JUSTICE.manhunt;
+}
 
 export class Justice {
   heat = 0;
@@ -71,7 +86,8 @@ export class Justice {
   private propT = 0;
   private hurtT = -99;
   private huntT = -1e9;
-  stats = { offences: 0, arrests: 0, turnIns: 0, escapes: 0, collapses: 0 };
+  stats = { offences: 0, arrests: 0, turnIns: 0, escapes: 0, collapses: 0, forgiven: 0 };
+  private graceT = -99;
   private felled = new WeakSet<object>();
   /** Called when the wanted level changes (HUD). */
   onChange: ((wanted: number) => void) | null = null;
@@ -84,6 +100,14 @@ export class Justice {
     // Only the player's own doing (a rogue robot's or the police's damage is never booked to them).
     if (e.cause !== 'player') return;
     if (e.ref && H.hostileThing?.(e.ref)) return;
+    // Fighting a monster: nobody expects the hero to mind a lamp post (or a car, a facade, a
+    // bystander in the way) meanwhile.
+    if (H.monsterNear && (H.monsterNear(e.x, e.z) || H.monsterNear(H.player.x, H.player.z))) {
+      this.stats.forgiven++;
+      if (e.target === 'building' && e.effect === 'collapse') this.felled.add(e.ref ?? e);
+      if (H.time - this.graceT > 60) { this.graceT = H.time; H.toast('Fighting the monster — nobody holds the damage against you', 'info'); }
+      return;
+    }
     const now = H.time;
     const ref = e.ref as (PedAgent | Vehicle | undefined);
     if (e.target === 'building' && e.effect === 'collapse') {

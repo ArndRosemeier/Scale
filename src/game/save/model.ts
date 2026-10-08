@@ -167,6 +167,16 @@ export interface SaveData {
    * `CityNews.restore`); older saves have none (the seeded index, no news).
    */
   cityLife?: unknown;
+  /**
+   * The second shard and the sidekick (game/sidekick Sidekick SavedSidekick, sanitised by
+   * `Sidekick.restore`); older saves have none (the browser's own record for the city stays).
+   */
+  sidekick?: unknown;
+  /**
+   * The Wardens' regard (game/aliens teenRules Regard, sanitised by `readRegard`); older saves have
+   * none (the browser's own record for the city stays).
+   */
+  wardens?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -266,7 +276,7 @@ export function parseSave(input: string | unknown): SaveData {
     sky: { day: Math.floor(num(sky.day, 0, 0)), hour: num(sky.hour, 10.5, 0, 23.999), timeScale: num(sky.timeScale, 1, 0, 10000) },
     weather: w ? { setting: str(w.setting, 'auto', 20), wet: num(w.wet, 0, 0, 1), skipH: num(w.skipH, 0) } : null,
     progress: o.progress && typeof o.progress === 'object' ? (o.progress as Record<string, unknown>) : null,
-    reputation: { v: num(rep.v, 0, -100, 100), stats: numRecord(rep.stats) },
+    reputation: { v: num(rep.v, 0, -100), stats: numRecord(rep.stats) },
     justice: { heat: num(jus.heat, 0, 0), wanted: Math.floor(num(jus.wanted, 0, 0, 3)), stats: numRecord(jus.stats) },
     threats: {
       clock: thr.clock && typeof thr.clock === 'object' ? (thr.clock as Record<string, unknown>) : null,
@@ -306,6 +316,8 @@ export function parseSave(input: string | unknown): SaveData {
     ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
     ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
     ...(o.cityLife && typeof o.cityLife === 'object' ? { cityLife: o.cityLife } : {}),
+    ...(o.sidekick && typeof o.sidekick === 'object' ? { sidekick: o.sidekick } : {}),
+    ...(o.wardens && typeof o.wardens === 'object' ? { wardens: o.wardens } : {}),
   };
 }
 

@@ -31,7 +31,7 @@ export interface ShellMaterial {
   color: [number, number, number];
   color2: [number, number, number];
   /** Pattern drawn procedurally in the shell shader. */
-  pattern: 'plain' | 'stripes' | 'checks' | 'quilted' | 'chainmail' | 'scales' | 'leather' | 'fur' | 'embroidered' | 'patchwork' | 'silk' | 'plates' | 'runes';
+  pattern: 'plain' | 'stripes' | 'checks' | 'quilted' | 'chainmail' | 'scales' | 'leather' | 'fur' | 'embroidered' | 'patchwork' | 'silk' | 'plates' | 'runes' | 'bones' | 'hero';
   patternScale: number;
   roughness: number;
   metalness: number;
@@ -56,6 +56,10 @@ export interface ShellLayer {
   hood?: boolean;
   /** Small collar/trim. */
   trim?: { width: number; color: [number, number, number] };
+  /** Head coverings: leave the eyes open ('full': only the eyes) and, for a cowl, the mouth and jaw. */
+  faceCut?: 'cowl' | 'full';
+  /** Design of hero tights (pattern 'hero'): 0 plain, 1 emblem, 2 bolt, 3 chevron, 4 stripes, 5 trunks. */
+  design?: number;
 }
 
 export interface RigidPart {
@@ -83,6 +87,8 @@ export interface BodyFit {
   /** Horns/ears that helmets must leave room for. */
   earPoint: number;
   hasHorns: boolean;
+  /** Joint-to-joint lengths (rest pose) for parts that follow the skeleton (the raised dead's bones). */
+  bones?: { upperArm: number; forearm: number; thigh: number; shin: number; neck: number; chest: number; spine: number };
 }
 
 export interface WearableSpec {
@@ -93,6 +99,9 @@ export interface WearableSpec {
   hideBeard?: boolean;
   /** Hide body regions entirely under rigid armor to avoid poke-through. */
   hideRegions?: BodyRegion[];
+  /** A mask painted round the eyes: a hero's domino mask, or (under) the skin left bare in a
+   *  cowl's eye holes. */
+  eyeMask?: { color: [number, number, number]; under?: boolean };
 }
 
 /** Implemented by the items module. */

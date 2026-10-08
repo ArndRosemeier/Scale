@@ -1,18 +1,21 @@
 /**
  * The talk panel (game/people, NPC_PERSONALITY_PLAN §1): who you are talking to (name, job, age,
  * temperament, mood, whether you met before and how they feel about you), what they just said,
- * and what you can say: keys 1–7 or a click. "Show me the way" lists places (the nearest metro
+ * and what you can say: keys 1–9 or a click. "Show me the way" lists places (the nearest metro
  * station and landmarks); Esc or E closes. While open it takes the number keys (no powers go
  * off) and Esc; walking keys still move the hero.
  */
 import type { Topic } from '../game/people/lines';
 import type { Destination } from '../game/people/People';
+import { isAction } from '../game/keybinds';
 
 export interface TalkUiHooks {
   choose(topic: Topic): void;
   way(d: Destination): void;
   close(): void;
   destinations(): Destination[];
+  /** More things to say while they apply (offering the shard …), after the usual topics. */
+  extras(): { label: string; run: () => void }[];
 }
 
 const TOPICS: { topic: Topic; label: string }[] = [
@@ -21,6 +24,7 @@ const TOPICS: { topic: Topic; label: string }[] = [
   { topic: 'job', label: 'What do you do?' },
   { topic: 'news', label: 'What\'s going on around here?' },
   { topic: 'way', label: 'Can you show me the way to …' },
+  { topic: 'favour', label: 'Can I do anything for you?' },
   { topic: 'me', label: 'What do you think of me?' },
   { topic: 'bye', label: 'Goodbye.' },
 ];
@@ -61,7 +65,7 @@ export class TalkUi {
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
       if (e.target instanceof HTMLInputElement && e.target.type === 'text') return;
-      if (e.code === 'Escape' || e.code === 'KeyE') {
+      if (e.code === 'Escape' || isAction(e, 'use')) {
         e.preventDefault(); e.stopImmediatePropagation();
         if (!e.repeat) this.hooks.close();
         return;
@@ -107,7 +111,18 @@ export class TalkUi {
   }
 
   showTopics(): void {
-    this.setOptions(TOPICS.map((t) => ({ label: t.label, run: () => this.hooks.choose(t.topic) })));
+    // The extras (offering the shard) first: they are why you came.
+    this.setOptions([...this.hooks.extras(), ...TOPICS.map((t) => ({ label: t.label, run: () => this.hooks.choose(t.topic) }))]);
+  }
+
+  /** Options of another system's (the sidekick's: amounts, wishes); "Never mind." goes back to the topics. */
+  choices(list: { label: string; run: () => void }[]): void {
+    this.setOptions([...list, { label: 'Never mind.', run: () => this.showTopics() }]);
+  }
+
+  /** No options for now (a scene plays out in the panel). */
+  clearOptions(): void {
+    this.setOptions([]);
   }
 
   showDestinations(): void {

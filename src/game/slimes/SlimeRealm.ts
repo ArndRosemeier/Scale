@@ -29,7 +29,7 @@ import type { DeepField } from '../../underground/deep/field';
 import { MurkBreach } from './MurkBreach';
 import { TrenchWar } from './TrenchWar';
 import { statusFor } from '../../shared/status';
-import { SLIME, SLIME_COOLDOWN, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
+import { SLIME_COST, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
 import { G } from '../../render/materials/globals';
 import type { ThreatActor } from '../threats/ThreatEvent';
 import type { Stimulus } from '../Stimuli';
@@ -37,11 +37,16 @@ import type { Stimulus } from '../Stimuli';
 /** Areas: where they are, reach (m) — agents live while the player is within reach + SPAWN. */
 const SPAWN = 110, DROP = 170;
 
-export interface SaveSlimes { trust: TrustData; war: WarState | null }
+/** `war` is the first realm's (older saves have only that); `wars` every realm's, by its colony. */
+export interface SaveSlimes { trust: TrustData; war: WarState | null; wars?: Record<string, WarState> }
 
 export class SlimeRealm {
   readonly trust: Trust;
-  war: WarState;
+  /** Each realm's war (one realm below each colony; game.underground.deeps' order). */
+  private wars: WarState[] = [];
+  /** The realm the player is near (game.underground.deep): its war is the live one, its agents are about. */
+  private realm = 0;
+  get war(): WarState { return this.wars[this.realm]; }
   readonly F: Factions | null = null;
   private plan: DeepPlan | null;
   private field: DeepField | null;
@@ -74,21 +79,27 @@ export class SlimeRealm {
     this.field = D?.field ?? null;
     const now = g.sky.hoursAbs;
     this.storeKey = `scale.slimewar.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
-    let w: WarState | null = null;
-    try { w = parseWar(JSON.parse(localStorage.getItem(this.storeKey) ?? 'null'), this.plan?.pens.length ?? 0, now); } catch { /* storage unavailable */ }
-    this.war = w ?? freshWar(now, this.plan?.pens.length ?? 0);
-    // A save from another session's clock: never step from the far past or future.
-    if (Math.abs(this.war.at - now) > 24 * 10) this.war.at = now;
+    const realms = g.underground.deeps;
+    for (let i = 0; i < Math.max(1, realms.length); i++) {
+      const pens = realms[i]?.plan.pens.length ?? 0;
+      let w: WarState | null = null;
+      try { w = parseWar(JSON.parse(localStorage.getItem(this.keyOf(i)) ?? 'null'), pens, now); } catch { /* storage unavailable */ }
+      w ??= freshWar(now, pens);
+      // A save from another session's clock: never step from the far past or future.
+      if (Math.abs(w.at - now) > 24 * 10) w.at = now;
+      this.wars.push(w);
+    }
+    this.realm = D ? Math.max(0, realms.indexOf(D)) : 0;
     if (D) {
       const host: FactionHost = {
         field: D.field, plan: D.plan,
         player: () => { const P = g.player; return { x: P.pos.x, y: P.pos.y, z: P.pos.z, h: P.height, speed: Math.hypot(P.vel.x, P.vel.z) }; },
-        hurtPlayer: (dmg, fx, fz) => { g.crime?.health.damage(dmg, 'monster', fx, fz); g.camRig.addShake(Math.min(0.5, dmg / 40)); },
+        hurtPlayer: (dmg, fx, fz, fy) => { g.crime?.health.damage(dmg, 'monster', fx, fz, fy); g.camRig.addShake(Math.min(0.5, dmg / 40)); },
         shovePlayer: (vx, vy, vz) => { const P = g.player; if (P.flying) return; P.vel.x += vx; P.vel.y += vy; P.vel.z += vz; P.grounded = false; },
         sound: (id, x, y, z, gain, pitch = 1) => g.audio.play(id, x, y, z, gain, pitch, 5, g.renderer.camera.position),
         ground: (x, z, y) => g.collision.groundAt(x, z, y, 0.6),
         trust: () => this.trust.value,
-        clear: (ax, ay, az, bx, by, bz) => (D.field.near(ax, ay, az) && D.field.air(ax, ay, az) ? D.field.lineClear(ax, ay, az, bx, by, bz, 0.3) : g.sight.clear(ax, ay, az, bx, by, bz, 0.3)),
+        clear: (ax, ay, az, bx, by, bz) => { const f = this.field!; return f.near(ax, ay, az) && f.air(ax, ay, az) ? f.lineClear(ax, ay, az, bx, by, bz, 0.3) : g.sight.clear(ax, ay, az, bx, by, bz, 0.3); },
         onKill: (b, byPlayer) => this.killed(b, byPlayer),
         onLumenHurt: (b, byPlayer) => this.lumenHurt(b, byPlayer),
         onSplat: (x, y, z, murk) => g.dust.burst(x, y + 0.2, z, 10, 0.4, 1.5, 0.3, 0.8, murk ? new THREE.Color(0.5, 0.05, 0.08) : new THREE.Color(0.2, 1.4, 1.0), 0, 0.5),
@@ -108,8 +119,8 @@ export class SlimeRealm {
     S.onHurt = () => this.lumenHurt(null, true);
     this.trust.on((d, v, reason, up) => this.trustChanged(d, v, reason, up));
     // The power.
-    g.progress.granted.slimeCall = () => callRank(this.trust.value, this.war.stats.maw > 0);
-    g.abilities.special.slimeCall = { cost: SLIME.cost, cd: SLIME_COOLDOWN, run: (r) => this.call(r) };
+    g.progress.granted.slimeCall = () => callRank(this.trust.value, this.wars.some((w) => w.stats.maw > 0));
+    g.abilities.special.slimeCall = { cost: SLIME_COST, run: (r) => this.call(r) };
     this.lastRank = g.progress.rank('slimeCall');
     g.powers.grantInfo = (id) => (id === 'slimeCall' ? this.trustLine() : null);
     g.stimuli.on((s) => this.stimulus(s));
@@ -134,6 +145,7 @@ export class SlimeRealm {
   update(dt: number): void {
     const g = this.g, p = g.player.pos;
     const D = g.underground.deep;
+    if (D && D.plan !== this.plan) this.rebind(g.underground.deeps.indexOf(D));
     // The colony slimes' manners follow the trust.
     g.underground.slimes.friendly = this.trust.value >= TRUST.welcome;
     // Where the player is.
@@ -213,7 +225,35 @@ export class SlimeRealm {
       breach: () => this.startBreach(),
       mawBack: () => { this.F?.despawn('heart'); },
     });
+    // The other realms' wars go on unseen (decided by strength; their breakouts still come up).
+    this.wars.forEach((o, i) => {
+      if (i === this.realm) return;
+      if (o.at > now) o.at = now;
+      stepWar(o, now, false, night, { raid: () => {}, resolved: () => {}, breach: () => this.startBreach(i), mawBack: () => {} });
+    });
     this.saveLocal();
+  }
+
+  /** The player went down below another colony: that realm's agents, trench and war. */
+  private rebind(i: number): void {
+    const D = this.g.underground.deeps[i];
+    if (!D || !this.F) return;
+    this.saveLocal();
+    this.realm = i;
+    this.plan = D.plan; this.field = D.field;
+    this.F.rebind(D.plan, D.field);
+    if (this.war.raid) this.war.raid = null;
+    this.trenches?.dispose(); this.trenches?.group.removeFromParent();
+    (this as { trenches: TrenchWar | null }).trenches = new TrenchWar(this.g, this.F, D.plan, D.field);
+    this.g.underground.group.add(this.trenches!.group);
+    this.safe.set(1e9, 0, 0);
+    this.live = false; this.trenchOn = false;
+  }
+
+  private keyOf(i: number): string {
+    // The first realm keeps the key from before there were several.
+    const D = this.g.underground.deeps[i];
+    return i === 0 || !D ? this.storeKey : `${this.storeKey}.c${D.plan.hub}`;
   }
 
   private raidStart(): void {
@@ -653,9 +693,9 @@ export class SlimeRealm {
   // ------------------------------------------------------------------ breaking out
 
   /** The war's breakout: a threat event at a manhole near the hub colony (or near the player). */
-  private startBreach(): void {
+  private startBreach(realm = this.realm): void {
     if (this.breach || !this.g.threats) return;
-    const P = this.plan!, c = this.g.underground.rooms.colonies[P.hub];
+    const P = this.g.underground.deeps[realm]?.plan ?? this.plan!, c = this.g.underground.rooms.colonies[P.hub];
     const p = this.g.player.pos;
     const near = c ? { x: c.chamber.cx, z: c.chamber.cz } : { x: p.x, z: p.z };
     const at = Math.hypot(p.x - near.x, p.z - near.z) < 600 ? p : near;
@@ -700,19 +740,28 @@ export class SlimeRealm {
 
   // ------------------------------------------------------------------ saves
 
-  saveState(): SaveSlimes { return { trust: this.trust.serialize(), war: JSON.parse(JSON.stringify({ ...this.war, raid: null })) as WarState }; }
+  saveState(): SaveSlimes {
+    const copy = (w: WarState) => JSON.parse(JSON.stringify({ ...w, raid: null })) as WarState;
+    const wars: Record<string, WarState> = {};
+    this.g.underground.deeps.forEach((d, i) => { if (this.wars[i]) wars[d.plan.hub] = copy(this.wars[i]); });
+    return { trust: this.trust.serialize(), war: copy(this.wars[0]), wars };
+  }
 
   restore(o: SaveSlimes | null): void {
     if (!o) return;
     this.trust.restore(o.trust);
-    const w = parseWar(o.war, this.plan?.pens.length ?? 0, this.g.sky.hoursAbs);
-    if (w) { this.war = w; if (Math.abs(this.war.at - this.g.sky.hoursAbs) > 24 * 10) this.war.at = this.g.sky.hoursAbs; }
+    const now = this.g.sky.hoursAbs, realms = this.g.underground.deeps;
+    for (let i = 0; i < this.wars.length; i++) {
+      const D = realms[i];
+      const w = parseWar(o.wars && D ? o.wars[D.plan.hub] ?? (i === 0 ? o.war : null) : i === 0 ? o.war : null, D?.plan.pens.length ?? 0, now);
+      if (w) { if (Math.abs(w.at - now) > 24 * 10) w.at = now; this.wars[i] = w; }
+    }
     if (this.F) for (const a of [...this.F.areas.keys()]) this.F.despawn(a);
     this.saveLocal();
   }
 
   private saveLocal(): void {
-    try { localStorage.setItem(this.storeKey, JSON.stringify({ ...this.war, raid: null })); } catch { /* storage unavailable */ }
+    try { this.wars.forEach((w, i) => localStorage.setItem(this.keyOf(i), JSON.stringify({ ...w, raid: null }))); } catch { /* storage unavailable */ }
   }
 
   /** For the dev console and tests. */

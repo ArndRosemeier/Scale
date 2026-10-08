@@ -138,6 +138,17 @@ export class PropRenderer {
         case PropType.MenuBoard: list.push(this.terrace('menuBoard', v, base, -1)); break;
         case PropType.TerraceRail: list.push(this.terrace('terraceRail', v, base, 0)); break;
         case PropType.Parklet: list.push(this.terrace('parklet', v, base, -1)); break;
+        // Cemeteries.
+        case PropType.CemWall: list.push(this.furn('cemWall', v & 1, base)); break;
+        case PropType.Gravestone: list.push(this.furn('gravestone', v & 1, base)); break;
+        case PropType.Grave: list.push(this.furn('grave', v & 1, base)); break;
+        case PropType.Tomb: list.push(this.furn('tomb', v & 1, base)); break;
+        case PropType.Yew: {
+          const variant = (Math.round(x * 7 + z * 3) & 1);
+          const m = treeModel('cypress', variant);
+          list.push({ ...base, kind: `tree:cypress:${variant}`, tree: true, breakable: 'topple', radius: m.trunkRadius * sc, height: m.height * sc });
+          break;
+        }
         case PropType.ParkedCar: {
           // Near-future kerbs: some parking bays have an EV charging post (more in dense districts).
           const share = EV_SHARE[district] ?? 0.03;
@@ -337,7 +348,11 @@ export class PropRenderer {
     if (this.net.version !== this.netVersion) {
       this.netVersion = this.net.version;
       this.rebuildSignals();
-      this.needRebuild = true;
+      // Right away, not throttled: the drawn signal lists still hold the old net's node/edge
+      // ids, which index past the new net's arrays (TypeError in Traffic.signalGreen).
+      this.needRebuild = false;
+      this.lastRebuild = this.t;
+      this.rebuildAll();
     }
     // Cells stream in bursts: rebuild the index at most every 0.4 s.
     if (this.needRebuild && this.t - this.lastRebuild > 0.4) {
@@ -394,7 +409,7 @@ export class PropRenderer {
   }
 
   private fill(groups: Map<string, Prop[]>, owns: (k: string) => boolean): void {
-    for (const [k, b] of this.batches) if (owns(k)) { b.n = 0; for (const m of b.meshes) m.count = 0; }
+    for (const [k, b] of this.batches) if (owns(k)) { b.n = 0; (b as Batch & { list?: Prop[] }).list = undefined; for (const m of b.meshes) m.count = 0; }
     let drawn = 0;
     for (const [k, list] of groups) {
       const b = this.batch(k, batchCap(list.length));
@@ -561,6 +576,14 @@ export class PropRenderer {
     return n;
   }
 
+  /** Gone from its spot without a fall (a tree sung awake walks off as a threat, src/game/threats/AwakenedTree). */
+  uproot(p: Prop): void {
+    if (p.broken) return;
+    p.broken = true;
+    this.dirty = true;
+    this.farDirty = true;
+  }
+
   onBreak?: (p: { x: number; y: number; z: number; tree: boolean }) => void;
 
   private topple(p: Prop, jx: number, jy: number, jz: number): void {
@@ -663,6 +686,10 @@ function propShape(p: Prop): Obstacle | null {
     case 'statue': return cyl(r * 0.55 * p.scale);
     case 'fountain': return cyl(r * 0.95 * p.scale);
     case 'phoneBooth': return cyl(0.55 * p.scale);
+    case 'cemWall': return p.kind.endsWith(':0') ? box(1.28 * p.scale, 0.24 * p.scale) : box(0.36 * p.scale, 0.36 * p.scale);
+    case 'gravestone': return box(0.34 * p.scale, 0.12 * p.scale);
+    case 'grave': return p.kind.endsWith(':0') ? box(0.48 * p.scale, 1.05 * p.scale) : box(0.42 * p.scale, 0.42 * p.scale);
+    case 'tomb': return p.kind.endsWith(':0') ? box(1.8 * p.scale, 2.6 * p.scale) : box(0.8 * p.scale, 0.8 * p.scale);
     default: return cyl(Math.max(0.08, r) * p.scale);
   }
 }

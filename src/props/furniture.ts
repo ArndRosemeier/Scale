@@ -30,9 +30,10 @@ import { Noise } from '../core/noise';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth' | 'evCharger'
-  | 'cafeTable' | 'cafeChair' | 'parasol' | 'awning' | 'menuBoard' | 'terraceRail' | 'parklet';
+  | 'cafeTable' | 'cafeChair' | 'parasol' | 'awning' | 'menuBoard' | 'terraceRail' | 'parklet'
+  | 'cemWall' | 'gravestone' | 'grave' | 'tomb';
 
-export const FURNITURE_KINDS: FurnitureKind[] = ['lampModern', 'lampClassic', 'lampDouble', 'trafficLight', 'bench', 'bin', 'hydrant', 'mailbox', 'bollard', 'planter', 'busStop', 'fountain', 'statue', 'kiosk', 'stopSign', 'playground', 'manhole', 'metroEntrance', 'newsStand', 'bikeRack', 'phoneBooth', 'evCharger', 'cafeTable', 'cafeChair', 'parasol', 'awning', 'menuBoard', 'terraceRail', 'parklet'];
+export const FURNITURE_KINDS: FurnitureKind[] = ['lampModern', 'lampClassic', 'lampDouble', 'trafficLight', 'bench', 'bin', 'hydrant', 'mailbox', 'bollard', 'planter', 'busStop', 'fountain', 'statue', 'kiosk', 'stopSign', 'playground', 'manhole', 'metroEntrance', 'newsStand', 'bikeRack', 'phoneBooth', 'evCharger', 'cafeTable', 'cafeChair', 'parasol', 'awning', 'menuBoard', 'terraceRail', 'parklet', 'cemWall', 'gravestone', 'grave', 'tomb'];
 
 export interface FurnitureModel {
   kind: FurnitureKind;
@@ -1267,6 +1268,121 @@ function parklet(fb: FB, v: number): number {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Cemetery: wall and gate pillars, headstones and crosses, ledger graves and obelisks, a
+// mausoleum and a stone figure on a pedestal. Fronts face −Z, walls run along x.
+// ---------------------------------------------------------------------------------------------
+
+const WALLSTONE: PO = { m: FMat.Stone, c: [0.56, 0.52, 0.45] };
+// pale limestone, dark granite, sandstone
+const GRAVE_STONES: V[] = [[0.6, 0.59, 0.56], [0.3, 0.3, 0.33], [0.6, 0.5, 0.38]];
+const IRON: PO = paint([0.08, 0.08, 0.08], true);
+
+function cemWall(fb: FB, v: number): number {
+  if (v === 0) {
+    // A 2.5 m stretch of old stone wall with a sloped coping.
+    fb.box(WALLSTONE, 2.55, 0.25, 0.55, 0, 0.125, 0);
+    fb.box(WALLSTONE, 2.55, 1.35, 0.42, 0, 0.8, 0);
+    fb.box({ m: FMat.Stone, c: [0.48, 0.45, 0.4] }, 2.6, 0.12, 0.56, 0, 1.53, 0);
+    fb.box({ m: FMat.Stone, c: [0.48, 0.45, 0.4] }, 2.6, 0.08, 0.3, 0, 1.62, 0);
+    return 1.66;
+  }
+  // Pillar: plinth, shaft, cornice, a stone ball on top.
+  fb.box(WALLSTONE, 0.78, 0.3, 0.78, 0, 0.15, 0);
+  fb.box(WALLSTONE, 0.64, 1.9, 0.64, 0, 1.25, 0);
+  fb.box({ m: FMat.Stone, c: [0.48, 0.45, 0.4] }, 0.8, 0.14, 0.8, 0, 2.27, 0);
+  fb.box({ m: FMat.Stone, c: [0.48, 0.45, 0.4] }, 0.5, 0.12, 0.5, 0, 2.4, 0);
+  fb.sphere(WALLSTONE, 0.2, 0, 2.62, 0, 1, 1, 1, 12, 8);
+  return 2.82;
+}
+
+function gravestone(fb: FB, v: number): number {
+  const st: PO = { m: FMat.Stone, c: GRAVE_STONES[v === 0 ? 1 : 0] };
+  // the mound in front (−Z) of the stone
+  fb.box({ m: FMat.Wood, c: [0.24, 0.19, 0.13] }, 0.75, 0.1, 1.7, 0, 0.03, -0.95);
+  if (v === 0) {
+    // Headstone with a rounded top on a low base.
+    fb.box(st, 0.8, 0.14, 0.32, 0, 0.07, 0);
+    fb.box(st, 0.62, 0.72, 0.13, 0, 0.5, 0);
+    fb.cyl(st, 0.31, 0.31, 0.13, 0, 0.86, 0, 16, false, Math.PI / 2);
+    fb.box({ m: FMat.Bronze }, 0.36, 0.05, 0.01, 0, 0.75, -0.07);
+    fb.box({ m: FMat.Bronze }, 0.28, 0.04, 0.01, 0, 0.62, -0.07);
+    return 1.17;
+  }
+  // Stone cross on a stepped base.
+  fb.box(st, 0.62, 0.16, 0.42, 0, 0.08, 0);
+  fb.box(st, 0.44, 0.16, 0.3, 0, 0.24, 0);
+  fb.box(st, 0.14, 1.05, 0.12, 0, 0.84, 0);
+  fb.box(st, 0.62, 0.13, 0.12, 0, 1.06, 0);
+  return 1.36;
+}
+
+function grave(fb: FB, v: number): number {
+  const st: PO = { m: FMat.Stone, c: GRAVE_STONES[v === 0 ? 2 : 0] };
+  if (v === 0) {
+    // Ledger grave: a stone kerb round a flat slab, a small upright at the head.
+    const W = 0.95, L = 2.0;
+    fb.box(st, W, 0.18, 0.12, 0, 0.09, -L / 2);
+    fb.box(st, W, 0.18, 0.12, 0, 0.09, L / 2);
+    fb.box(st, 0.12, 0.18, L, -W / 2 + 0.06, 0.09, 0);
+    fb.box(st, 0.12, 0.18, L, W / 2 - 0.06, 0.09, 0);
+    fb.box({ m: FMat.Stone, c: [0.32, 0.32, 0.35] }, W - 0.24, 0.1, L - 0.26, 0, 0.12, 0);
+    fb.box(st, W, 0.55, 0.16, 0, 0.36, L / 2 + 0.08);
+    return 0.64;
+  }
+  // Obelisk: base, die, a tapering four-sided needle with a point.
+  fb.box(st, 0.95, 0.22, 0.95, 0, 0.11, 0);
+  fb.box(st, 0.7, 0.2, 0.7, 0, 0.32, 0);
+  fb.box(st, 0.56, 0.8, 0.56, 0, 0.82, 0);
+  fb.box(st, 0.64, 0.08, 0.64, 0, 1.26, 0);
+  fb.cyl(st, 0.17, 0.27, 2.1, 0, 2.35, 0, 4, false, 0, Math.PI / 4);
+  fb.cyl(st, 0.0, 0.17, 0.32, 0, 3.56, 0, 4, false, 0, Math.PI / 4);
+  return 3.72;
+}
+
+function tomb(fb: FB, v: number): number {
+  const st: PO = { m: FMat.Stone, c: [0.6, 0.58, 0.54] };
+  const dark: PO = { m: FMat.Stone, c: [0.45, 0.43, 0.4] };
+  if (v === 0) {
+    // Mausoleum: steps, a block with corner pilasters, two columns either side of a bronze door,
+    // a cornice and a stepped roof with a cross.
+    const W = 3.2, L = 4.0, H = 3.0;
+    fb.box(dark, W + 1.0, 0.18, L + 1.2, 0, 0.09, 0.1);
+    fb.box(dark, W + 0.6, 0.18, L + 0.8, 0, 0.27, 0.1);
+    fb.box(st, W, H, L, 0, 0.36 + H / 2, 0.3);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) fb.box(dark, 0.3, H, 0.3, sx * (W / 2 - 0.05), 0.36 + H / 2, 0.3 + sz * (L / 2 - 0.05));
+    // portico in front
+    fb.box(dark, W + 0.2, 0.15, 1.1, 0, 0.43, -L / 2 - 0.25);
+    for (const sx of [-1, 1]) {
+      fb.cyl(st, 0.15, 0.17, H - 0.25, sx * 1.05, 0.5 + (H - 0.25) / 2, -L / 2 - 0.5, 14);
+      fb.box(dark, 0.42, 0.14, 0.42, sx * 1.05, 0.52 + H - 0.25, -L / 2 - 0.5);
+    }
+    fb.box(st, W + 0.3, 0.4, 1.3, 0, 0.36 + H + 0.05, -L / 2 - 0.3);
+    fb.box(BRONZE, 1.1, 2.1, 0.06, 0, 1.45, -L / 2 + 0.28);
+    fb.box({ m: FMat.Bronze, c: [0.25, 0.2, 0.12] }, 0.03, 2.0, 0.07, 0, 1.45, -L / 2 + 0.26);
+    // cornice and stepped roof
+    fb.box(dark, W + 0.5, 0.22, L + 0.5, 0, 0.36 + H + 0.11, 0.3);
+    fb.box(st, W + 0.1, 0.3, L + 0.1, 0, 0.36 + H + 0.37, 0.3);
+    fb.box(dark, W - 0.5, 0.3, L - 0.5, 0, 0.36 + H + 0.67, 0.3);
+    fb.box(st, W - 1.3, 0.3, L - 1.3, 0, 0.36 + H + 0.97, 0.3);
+    const top = 0.36 + H + 1.12;
+    fb.box(dark, 0.16, 1.0, 0.16, 0, top + 0.5, 0.3);
+    fb.box(dark, 0.62, 0.16, 0.16, 0, top + 0.7, 0.3);
+    return top + 1.0;
+  }
+  // A mourning figure on a tall pedestal.
+  fb.box(dark, 1.6, 0.25, 1.6, 0, 0.125, 0);
+  fb.box(st, 1.2, 0.25, 1.2, 0, 0.375, 0);
+  fb.box(st, 0.95, 1.4, 0.95, 0, 1.2, 0);
+  fb.box(dark, 1.15, 0.15, 1.15, 0, 1.97, 0);
+  human(fb, 0, 2.05, 0, 1.25, 1, st);
+  // folded wings
+  for (const sx of [-1, 1]) {
+    fb.box(st, 0.08, 1.35, 0.5, sx * 0.24, 2.05 + 1.3, 0.24, 0, -0.25, sx * 0.18);
+  }
+  return 2.05 + 2.3;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------------------------
 
@@ -1312,6 +1428,10 @@ export function furnitureModel(kind: FurnitureKind, variant = 0): FurnitureModel
     case 'menuBoard': height = menuBoard(fb, v); radius = 0.25; breakable = 'topple'; break;
     case 'terraceRail': height = terraceRail(fb, v); radius = 0.1; breakable = 'topple'; break;
     case 'parklet': height = parklet(fb, v); radius = v === 0 ? 1.0 : 0.5; breakable = 'solid'; break;
+    case 'cemWall': height = cemWall(fb, v); radius = v === 0 ? 1.25 : 0.35; breakable = v === 0 ? 'shatter' : 'solid'; break;
+    case 'gravestone': height = gravestone(fb, v); radius = 0.35; breakable = 'topple'; break;
+    case 'grave': height = grave(fb, v); radius = v === 0 ? 0.6 : 0.4; breakable = v === 0 ? 'solid' : 'topple'; break;
+    case 'tomb': height = tomb(fb, v); radius = v === 0 ? 2.0 : 1.0; breakable = 'solid'; break;
   }
   const model: FurnitureModel = { kind, geometry: fb.build(), height, radius, lights, breakable };
   furnCache.set(key, model);
@@ -1609,7 +1729,7 @@ export function createFurnitureMaterial(): THREE.MeshStandardMaterial {
             rough = 0.9;
           } else if (mid == 4) { // stone (granite / limestone)
             float speck = step(0.82, fn(vOPos * 90.0));
-            base = vec3(0.25, 0.235, 0.215) * (0.82 + 0.25 * n0 + 0.12 * n1 + 0.06 * n2) * (1.0 - speck * 0.3);
+            base = vPaint * vec3(1.168, 1.098, 1.005) * (0.82 + 0.25 * n0 + 0.12 * n1 + 0.06 * n2) * (1.0 - speck * 0.3);
             rough = 0.72 + 0.1 * n2;
           } else if (mid == 5) { // glass (screen-door transparency)
             ivec2 fc = ivec2(gl_FragCoord.xy) % 2;

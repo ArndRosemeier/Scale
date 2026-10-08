@@ -23,6 +23,9 @@ const mat = (color: C3, pattern: ShellMaterial['pattern'] = 'plain', o: Partial<
   wear: o.wear ?? 0.15,
 });
 
+/** Hero tights designs in shader order (garmentMaterial 'hero'). */
+const SUIT_DESIGN = ['plain', 'emblem', 'bolt', 'chevron', 'stripes', 'trunks'];
+
 const TORSO = [{ region: 'chest' as const }, { region: 'belly' as const }, { region: 'back' as const }];
 const ARMS = (to: number) => [
   { region: 'upperarm.L' as const, to: Math.min(1, to * 2) }, { region: 'upperarm.R' as const, to: Math.min(1, to * 2) },
@@ -58,6 +61,14 @@ export function resolveWearable(defId: string, v: ItemVisual): WearableSpec | nu
     case 'cap': return { layers: [capPart(c)] };
     case 'helmet': return { layers: [helmetPart(c)] };
     case 'beanie': return { layers: [beaniePart(c)] };
+    // Hero tights and masks (the character creator's Hero tab).
+    case 'tights': return { layers: [{ kind: 'shell', regions: [...TORSO, { region: 'neck', to: 0.8 }, ...ARMS(1), ...LEGS(1)], offset: 0.002, layer: 0, design: Math.max(0, SUIT_DESIGN.indexOf(v.material)), material: mat(c, 'hero', { color2: c2, roughness: 0.42, sheen: 0.65, wear: 0.02 }) }] };
+    case 'gloves': return L({ kind: 'shell', regions: [{ region: 'hand.L' }, { region: 'hand.R' }, { region: 'forearm.L', from: 0.8 }, { region: 'forearm.R', from: 0.8 }], offset: 0.002, layer: 1, material: mat(c, 'leather', { roughness: 0.5, wear: 0.05 }) });
+    case 'mask_domino': return { layers: [], eyeMask: { color: c } };
+    case 'mask_cowl': case 'mask_full': return {
+      layers: [{ kind: 'shell', regions: [{ region: 'scalp' }, { region: 'face' }, { region: 'neck' }], faceCut: defId === 'mask_cowl' ? 'cowl' : 'full', offset: 0.003, layer: 5, material: mat(c, 'hero', { roughness: 0.45, sheen: 0.55, wear: 0.02 }), trim: { width: 0.004, color: [c[0] * 0.75, c[1] * 0.75, c[2] * 0.75] } }],
+      eyeMask: { color: c, under: true }, hideHair: true, hideBeard: true,
+    };
     // Costumes of the street characters (game/street).
     default: return streetWearable(defId, v);
   }
@@ -196,6 +207,16 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       g.add(env);
       break;
     }
+    case 'cash': {
+      // A heist's take: a dark duffel bag with a band of notes showing, hanging from the hand.
+      const bag = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.7 }));
+      bag.rotation.x = Math.PI / 2;
+      bag.position.y = -0.12;
+      const notes = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.03, 0.08), new THREE.MeshStandardMaterial({ color: 0x3b8f4a, roughness: 0.6 }));
+      notes.position.set(0, -0.01, 0);
+      g.add(bag, notes);
+      break;
+    }
     case 'bomb': {
       // A round black bomb with a short fuse (the mad bomber's): held in the palm.
       const m = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 9), new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.45, metalness: 0.35 }));
@@ -203,6 +224,29 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
       const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.06, 5), new THREE.MeshStandardMaterial({ color: 0xc8a060, emissive: 0xff7a20, emissiveIntensity: 0.6 }));
       fuse.position.set(0, 0.155, 0.03);
       g.add(m, fuse);
+      break;
+    }
+    case 'lantern': {
+      // A procession's lantern (the necromancers'): a bail in the fist, the lit glass hanging below.
+      const iron = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.5, metalness: 0.6 });
+      const glow = new THREE.Color().setRGB(...(v.glowColor ?? v.accent ?? v.primary), THREE.SRGBColorSpace);
+      const glass = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 2.4, roughness: 0.3 });
+      const bail = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.005, 5, 12, Math.PI), iron);
+      bail.rotation.z = Math.PI;
+      bail.position.y = 0.0;
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.05, 6), iron);
+      cap.position.y = -0.065;
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.13, 6), glass);
+      body.position.y = -0.155;
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.056, 0.02, 6), iron);
+      base.position.y = -0.23;
+      g.add(bail, cap, body, base);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.14, 0.006), iron);
+        bar.position.set(Math.cos(a) * 0.05, -0.155, Math.sin(a) * 0.05);
+        g.add(bar);
+      }
       break;
     }
     case 'umbrella': {

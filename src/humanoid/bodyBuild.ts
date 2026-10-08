@@ -4,7 +4,8 @@
  *
  * Pipeline (all on typed arrays, no three.js — runs in the body worker):
  *  1. MakeHuman macro morph via the PCA basis (coefficients from the exact
- *     MakeHuman macro weights through the per-target projection matrix).
+ *     MakeHuman macro weights through the per-target projection matrix), then
+ *     the offsets onto the Woman / Man base bodies (conform.bin).
  *  2. Local targets (face/body modifiers, race shaping, seeded micro detail).
  *  3. Procedural ear-tip elongation (elves, goblins).
  *  4. Bone proportion pass: per-bone length/girth scaling applied by linear
@@ -77,6 +78,15 @@ export function morphPositions(as: HumanAssets, shape: ShapeParams, out?: Float3
       const B = as.pcaBasis8, o = (k - K16) * L;
       for (let i = 0; i < L; i++) pos[i] += s * B[o + i];
     }
+  }
+  // ---- Woman / Man base bodies (by gender; children keep MakeHuman's shape)
+  const cf = as.conform;
+  if (cf) {
+    const a = shape.macro.age;
+    const k = cf.scale * Math.min(1, Math.max(0, (a - 0.1875) / 0.1875));
+    const g = Math.min(1, Math.max(0, shape.macro.gender));
+    const kf = k * (1 - g), km = k * g;
+    if (k > 0) for (let i = 0; i < L; i++) pos[i] += kf * cf.female[i] + km * cf.male[i];
   }
   // ---- local targets
   for (const [name, wt] of shape.targets) {
@@ -451,6 +461,15 @@ export function buildBody(as: HumanAssets, app: HumanoidAppearance): BodyData {
     handLength, thighRadius, shinRadius, footLength,
     earPoint: Math.max(0, app.face.earPoint) + shape.earTip * 0.5,
     hasHorns: app.horns.style !== 'none' && app.horns.size > 0.05,
+  };
+
+  const dist = (a: V3, b: V3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const hipMid = mulS(add(H('upperleg01.L'), H('upperleg01.R')), 0.5);
+  fit.bones = {
+    upperArm: dist(H('upperarm01.L'), H('lowerarm01.L')), forearm: dist(H('lowerarm01.L'), H('wrist.L')),
+    thigh: dist(H('upperleg01.L'), H('lowerleg01.L')), shin: dist(H('lowerleg01.L'), H('foot.L')),
+    // neck: head socket (ears) above the neck's root; chest: chest socket above the spine socket; spine: that above the hips.
+    neck: earMid[1] - H('neck01')[1], chest: H('spine01')[1] - H('spine03')[1], spine: H('spine03')[1] - hipMid[1],
   };
 
   // ---- sockets (rest pose)

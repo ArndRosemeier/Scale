@@ -271,7 +271,6 @@ export class LastResort {
     }
     // The city lost.
     g.progress.addKarma(LAST_RESORT.karma.lost, 'the city was struck');
-    g.crime.rep.add(LAST_RESORT.rep.lost, 'the city lost');
     this.A.news(1);
     this.A.note(`last resort: STRIKE — ${this.refs.length} buildings, ${this.cars.length} cars, ${left} people in the zone`);
   }

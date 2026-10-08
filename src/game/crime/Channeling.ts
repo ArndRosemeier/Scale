@@ -8,7 +8,7 @@
  *
  * Subclasses place the people (`place`) and say what happens when it is done (`finished`).
  */
-import { Crime, type CrimeWorld, setState, stand, lookAt, goTo, subdued } from './Crime';
+import { Crime, type CrimeWorld, type OpLook, setState, stand, lookAt, goTo, subdued } from './Crime';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { hold } from '../../sim/actors/Actor';
 
@@ -24,8 +24,7 @@ export interface ChannelSpec {
   high: boolean;
 }
 
-/** The look of the work (CrimeWorld.opFx): a hack, or a ritual of an element. */
-export type OpLook = 'hack' | 'fire' | 'frost' | 'storm';
+export type { OpLook };
 
 export abstract class Channeling extends Crime {
   /** Where the work happens (the circle's centre, the robot being hacked). */

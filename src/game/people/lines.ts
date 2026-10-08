@@ -6,7 +6,8 @@
  * has a line.
  *
  * Tokens: {first} {last} {full} {title} {aTitle} {interest} {street} {metStreet} {group} {boss}
- * {city} {place} {dir} {dist} {days} {heard} {hood}; a capital first letter ({ATitle}, {Group}, {Dir}) capitalises
+ * {city} {place} {dir} {dist} {days} {heard} {hood}, and the social web's {teller} {bond} {who} {word} {asker};
+ * a capital first letter ({ATitle}, {Group}, {Dir}) capitalises
  * the value. An entry that uses {street}, {metStreet}, {group}, {boss} or {heard} must require it in `when`
  * ({hood}: require a `safety`).
  *
@@ -15,7 +16,10 @@
 import type { JobKind, Temperament } from './identity';
 import type { Safety } from '../news/pulse';
 
-export type Topic = 'hello' | 'mood' | 'job' | 'hobby' | 'news' | 'way' | 'me' | 'bye';
+export type Topic = 'hello' | 'mood' | 'job' | 'hobby' | 'news' | 'way' | 'favour' | 'me' | 'bye';
+
+/** Where a favour stands (phase 4): asking now (visit / streets), open, done, let down, nothing. */
+export type FavourState = 'visit' | 'streets' | 'open' | 'done' | 'lost' | 'none';
 
 export interface When {
   temper?: readonly Temperament[];
@@ -56,6 +60,16 @@ export interface When {
   heard?: boolean;
   /** How safe these streets are (game/news: the neighbourhood's live crime index). */
   safety?: readonly Safety[];
+  /** What someone close to them ({teller}, their {bond}) told them the hero did to them (social.ts hearsay). */
+  told?: 'helped' | 'saved' | 'hurt';
+  /** The need that presses now (social.ts needs). */
+  need?: 'hunger' | 'tired' | 'lonely';
+  /** Where the favour they asked stands ({who}, their {word}; streets: {group} or the street). */
+  favour?: readonly FavourState[];
+  /** They are the one somebody ({asker}) asked you to look in on. */
+  sent?: boolean;
+  /** The Wardens about now (game/aliens): a swarm overhead, a walker close by, a disc hanging or scanning near. */
+  nannies?: readonly ('swarm' | 'walker' | 'disc')[];
 }
 
 export interface LineEntry { id: string; when: When; say: readonly string[] }
@@ -108,6 +122,16 @@ export const LINES: Record<Topic, readonly LineEntry[]> = {
     { id: 'h28', when: { met: true, child: true }, say: S('Hi again! Did you fight any monsters today?', 'It\'s you! I told my whole class about you!') },
     { id: 'h29', when: { met: true, op: [-100, -30] }, say: S('You. What do you want this time?') },
     { id: 'h30', when: { met: true, temper: ['shy'] }, say: S('Oh — hi again. You remembered me?') },
+    // The social web (phase 4): word gets round; favours.
+    { id: 'h40', when: { met: false, told: 'helped' }, say: S('Wait, you\'re the one who helped my {bond} {teller} up! {Teller} told me all about it. I\'m {first}.') },
+    { id: 'h41', when: { met: false, told: 'saved' }, say: S('You saved my {bond} {teller}! I\'m {first}. Thank you, from all of us.', 'Oh! {Teller} is my {bond}. You saved them! I\'m {first}.') },
+    { id: 'h42', when: { met: false, told: 'hurt' }, say: S('I know who you are. You knocked my {bond} {teller} down. {first}. Keep your distance.') },
+    { id: 'h43', when: { met: false, told: 'hurt', temper: ['kind', 'cheerful'] }, say: S('{first}. My {bond} {teller} says you knocked them over. I\'m sure it was an accident… was it?') },
+    { id: 'h44', when: { sent: true }, say: S('{Asker} sent you? Oh, that\'s sweet. Tell them I\'m fine. I\'m {first}, by the way.', 'You\'re checking on me for {asker}? Ha! I\'m alright, really. Thank you. I\'m {first}.') },
+    { id: 'h45', when: { met: true, favour: ['done'] }, say: S('There you are! {Who} called me. Thank you for looking in on them, really.', 'Thank you! It meant the world to me.') },
+    { id: 'h46', when: { met: true, favour: ['done'], temper: ['grumpy'] }, say: S('Hm. You did it. Thanks. Didn\'t think you would.') },
+    { id: 'h47', when: { met: true, favour: ['lost'] }, say: S('Oh. It\'s you. I asked you for one thing…', 'I waited, you know. Never mind.') },
+    { id: 'h48', when: { met: true, favour: ['open'] }, say: S('Hello again! Did you manage to do what I asked?', 'Oh, hi! Any news?') },
   ],
   mood: [
     { id: 'ms0', when: { title: ['mime'] }, say: S('(The mime draws a big smile on its face with one finger.)') },
@@ -133,6 +157,11 @@ export const LINES: Record<Topic, readonly LineEntry[]> = {
     { id: 'm16', when: { met: true, deed: 'helped', mood: [0, 1] }, say: S('Better than the last time we met, thanks to you!') },
     { id: 'm17', when: { op: [50, 100], mood: [0, 1] }, say: S('Better now that you\'re here!') },
     { id: 'm18', when: { threat: true, temper: ['anxious', 'shy'] }, say: S('I can\'t sleep since that… thing was in the city.') },
+    { id: 'm20', when: { need: 'hunger' }, say: S('Starving, to be honest. I haven\'t eaten since this morning.', 'Hungry! I\'m on my way to get something to eat.') },
+    { id: 'm21', when: { need: 'tired' }, say: S('Tired. So tired. It\'s been a long day.', 'I could sleep standing up.') },
+    { id: 'm22', when: { need: 'lonely' }, say: S('Better now. I\'ve been on my own all day, it\'s nice to talk to someone.', 'Honestly? A bit lonely. Thanks for stopping.') },
+    { id: 'm23', when: { need: 'hunger', temper: ['grumpy'] }, say: S('Hungry. And when I\'m hungry I\'m grumpy. Well, grumpier.') },
+    { id: 'm24', when: { need: 'lonely', temper: ['chatty'] }, say: S('Oh, so much better now that someone\'s listening! Where do I start…') },
   ],
   job: [
     { id: 'js0', when: { title: ['busker'] }, say: S('I play for whoever stops. Some days that\'s nobody, some days it\'s a crowd.') },
@@ -214,6 +243,14 @@ export const LINES: Record<Topic, readonly LineEntry[]> = {
     { id: 'n13', when: { senior: true }, say: S('In my day this was all little shops. Now it\'s robots carrying parcels.') },
     { id: 'n14', when: { child: true }, say: S('There\'s a cat that lives in the park! I named it Captain.', 'My friend says there are slime monsters in the sewers. That\'s not true, right?') },
     { id: 'n15', when: { group: true, child: true }, say: S('Mum says I\'m not allowed near the ones with the tags. {Group}.') },
+    // The Wardens (game/aliens): what is in the sky or on the square right now.
+    { id: 'nw0', when: { nannies: ['swarm'] }, say: S('Have you seen the sky? Hundreds of them. Nobody knows why, and they\'re not saying.', 'A festival, the news says. Or a meeting. Or a migration. They never explain anything.') },
+    { id: 'nw1', when: { nannies: ['swarm'], temper: ['anxious', 'shy'] }, say: S('So many discs… Do you think something\'s coming? They only come in numbers like this when… well, I don\'t know when.') },
+    { id: 'nw2', when: { nannies: ['walker'] }, say: S('There\'s one of their walkers on the square. Just standing. It\'s been looking at the bakery for twenty minutes.', 'See the tall one? Don\'t go near it. Not that it does anything. It just… looks.') },
+    { id: 'nw3', when: { nannies: ['walker'], child: true }, say: S('There\'s a giant robot over there! Mum says it\'s a Warden and I mustn\'t poke it.') },
+    { id: 'nw4', when: { nannies: ['disc'] }, say: S('One of the Nanny discs is hanging over us again. Scanning. For what, I\'d love to know.', 'Twenty years they\'ve watched us. Never lift a finger, never say a word. Just watch.') },
+    { id: 'nw5', when: { nannies: ['disc'], temper: ['grumpy'] }, say: S('A city could burn down and they\'d just hover there. I\'ve seen it. Nannies, my foot.') },
+    { id: 'nw6', when: { nannies: ['disc', 'walker'], interest: ['conspiracy theories'] }, say: S('They\'re not watching us. They\'re watching for something else. Mark my words.') },
     // City news (game/news): what people heard about, and how safe their neighbourhood is.
     { id: 'n20', when: { heard: true }, say: S('{Heard}', '{Heard} That\'s what people are saying, anyway.') },
     { id: 'n21', when: { heard: true, temper: ['nosy', 'chatty'] }, say: S('Oh, have I got news. {Heard} And that\'s not even the half of it!') },
@@ -231,7 +268,25 @@ export const LINES: Record<Topic, readonly LineEntry[]> = {
     { id: 'w4', when: { child: true }, say: S('That way! {Dir}! I\'ll show you on your map!') },
     { id: 'w5', when: { temper: ['shy', 'anxious'] }, say: S('I think… {dir}? About {dist}. I put it on your map, I hope that\'s right.') },
   ],
+  favour: [
+    { id: 'f0', when: { favour: ['none'] }, say: S('That\'s kind of you, but no, I\'m fine. Thanks for asking!', 'No, nothing. But thank you.') },
+    { id: 'f1', when: { favour: ['none'], temper: ['grumpy'] }, say: S('You could stop wrecking the street. Otherwise, no.') },
+    { id: 'f2', when: { favour: ['none'], temper: ['cheerful', 'kind'] }, say: S('Oh, you sweetheart! No, I\'m fine. Just keep doing what you do.') },
+    { id: 'f3', when: { favour: ['none'], child: true }, say: S('Can you fly me to school? …No? Okay.') },
+    { id: 'f4', when: { favour: ['none'], op: [-100, 0] }, say: S('From you? No thanks.') },
+    { id: 'f10', when: { favour: ['visit'] }, say: S('Actually… could you look in on my {word} {who}? I haven\'t heard from them in days. I\'ve put them on your map.', 'Would you check on my {word}, {who}? They don\'t answer the phone. I\'ll mark where they usually are.') },
+    { id: 'f11', when: { favour: ['visit'], temper: ['anxious'] }, say: S('Yes! Please — my {word} {who}. Nobody\'s heard from them since yesterday, I\'m worried sick. Could you find them? I\'ve marked them on your map.') },
+    { id: 'f12', when: { favour: ['streets'], group: true }, say: S('There is something. {Group} have been leaning on everyone on {street}. If you could teach them a lesson around here…', 'Clear {group} off our street. Stop one of their jobs around here and they\'ll think twice.') },
+    { id: 'f13', when: { favour: ['streets'] }, say: S('There\'s trouble on {street} lately. Robberies, muggings. If you could catch one of them around here…') },
+    { id: 'f20', when: { favour: ['open'] }, say: S('You already said you\'d help, remember? I\'m still waiting.', 'Just what I asked before. No rush. Well, a bit of a rush.') },
+    { id: 'f21', when: { favour: ['done'] }, say: S('You\'ve done more than enough already. Thank you!') },
+    { id: 'f22', when: { favour: ['lost'] }, say: S('I asked you once. Forget it.') },
+  ],
   me: [
+    { id: 'o20', when: { told: 'helped', met: false }, say: S('My {bond} {teller} says you\'re one of the good ones. I believe them.') },
+    { id: 'o21', when: { told: 'saved' }, say: S('You saved my {bond} {teller}. That\'s all I need to know.') },
+    { id: 'o22', when: { told: 'hurt' }, say: S('My {bond} {teller} told me what you did to them. So, not much.') },
+    { id: 'o23', when: { favour: ['done'], op: [0, 100] }, say: S('You kept your word. Not many people do.') },
     { id: 'os0', when: { title: ['mime'] }, say: S('(The mime points at you, puts a hand on its heart, and flexes.)') },
     { id: 'os1', when: { title: ['police officer'] }, say: S('You help, mostly. Just let us do the paperwork, alright?') },
     { id: 'os2', when: { title: ['sleepwalker'] }, say: S('(Mumbling:) …nice cape…') },

@@ -144,10 +144,12 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       const built = macro.landmarks.map((lm) => buildLandmarkMeshes(lm, terrain!));
       const meshes = built.map((b) => [b.near.build(), b.far.build()] as [MeshData, MeshData]);
       const glass = built.map((b) => (b.glass ? [b.glass[0].build(), b.glass[1].build()] as [MeshData, MeshData] : null));
+      const inner = built.map((b) => (b.inner ? b.inner.map((x) => (x.empty ? null : x.build())) as [MeshData | null, MeshData | null] : null));
       const wreck = built.map((b) => (b.pieces && b.grid ? { pieces: b.pieces, grid: b.grid } : null));
       const all = [...meshes, ...glass.filter((g): g is [MeshData, MeshData] => !!g)];
-      post({ type: 'landmarks', job: m.job, meshes, glass, wreck }, [
+      post({ type: 'landmarks', job: m.job, meshes, glass, inner, wreck }, [
         ...all.flatMap(([a, b]) => [...meshTransferables(a), ...meshTransferables(b)]),
+        ...inner.flatMap((p) => (p ? p.flatMap((x) => (x ? meshTransferables(x) : [])) : [])),
         ...wreck.flatMap((w) => (w ? [w.pieces.buffer as ArrayBuffer] : [])),
       ]);
       return;
@@ -171,6 +173,7 @@ function packMapItems(plan: CellPlan, out: number[]): void {
   };
   for (const s of plan.streets) if (s.arterial < 0) poly(MapItem.Street, s.cls, s.width, s.pts);
   for (const p of plan.parks) poly(MapItem.Park, 0, 0, p.outer);
+  for (const p of plan.cemeteries) poly(MapItem.Park, 0, 0, p.outer);
   for (const p of plan.plazas) poly(MapItem.Plaza, 0, 0, p.outer);
   const E = plan.entrances;
   for (let i = 0; i < E.length; i += 6) poly(MapItem.Entrance, E[i + 4], E[i + 5], [E[i], E[i + 1], E[i + 2], E[i + 3]]);

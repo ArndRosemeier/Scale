@@ -41,7 +41,7 @@ import { warmUp } from '../render/WarmUp';
 import { OriginIntro } from './intro/OriginIntro';
 import { RoadNet } from '../sim/RoadNet';
 import { Population } from '../sim/Population';
-import { Pedestrians, PState } from '../sim/Pedestrians';
+import { Pedestrians, PState, type PedAgent } from '../sim/Pedestrians';
 import { Reactions } from '../sim/Reactions';
 import { CrowdRenderer } from '../sim/CrowdRenderer';
 import { bakeCrowdTemplates } from '../sim/CrowdBaker';
@@ -92,6 +92,7 @@ import { Sight } from './combat/sight';
 import { PowerSynth } from '../audio/PowerSynth';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
+import { SidekickPanel } from '../ui/SidekickPanel';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { CityNews } from './news/CityNews';
 import { crimeIndex } from './crime/CrimeIndex';
@@ -113,8 +114,16 @@ import { Defeat } from './defeat/Defeat';
 import { ManholeClimb } from './ManholeClimb';
 import { shaftPoint, LADDER_LAT } from '../underground/layout';
 import { MedFleet } from './defeat/MedDrones';
+import { Arcade } from './Arcade';
+import { Wardrobe } from './Wardrobe';
 import { People } from './people/People';
 import { Fame } from './fame/Fame';
+import { Sidekick } from './sidekick/Sidekick';
+import type { Companion } from './sidekick/Companion';
+import { Wardens } from './aliens/Wardens';
+
+/** What someone a super speed runner brushed past calls after them: stern, not hurt. */
+const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
 
 export class Game {
   readonly renderer: Renderer;
@@ -188,6 +197,7 @@ export class Game {
   /** Line of sight for everybody who shoots (combat/sight). */
   readonly sight = new Sight(this);
   targetHud!: TargetHud;
+  matePanel!: SidekickPanel;
   synth!: PowerSynth;
   /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
   crime!: CrimeSystem;
@@ -229,8 +239,15 @@ export class Game {
   deeds!: Deeds;
   /** The city's people as individuals: names, personalities, talking (E), who remembers you (game/people). */
   people!: People;
+  /** Fitting mirrors of clothes shops (E: character creator). */
+  wardrobe!: Wardrobe;
+  arcade!: Arcade;
   /** Reputation made visible: the press, fans, protesters, the hero's statue (game/fame). */
   fame!: Fame;
+  /** The second shard and the person who takes it: the sidekick (game/sidekick). */
+  sidekick!: Sidekick;
+  /** The Wardens: the station in the sky, their discs and walkers, how people take them (game/aliens). */
+  wardens!: Wardens;
   powerHud!: PowerHud;
   powers!: PowersScreen;
   parked = new Map<number, Vehicle[]>();
@@ -296,6 +313,7 @@ export class Game {
     this.collision.obstacleProviders.push(landmarks.provider);
     this.underground = new Underground(macro, this.terrain, tex, (x, z) => this.terrain.height(x, z) + this.world.surfaceOffset(x, z));
     this.collision.under = this.underground;
+    this.world.underRay = (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT) ?? this.underground.tunnelRay(ox, oy, oz, dx, dy, dz, maxT);
     this.underground.onTrainSound = (id, x, y, z, gain) => this.audio.play(id, x, y, z, gain, 1, 10, this.renderer.camera.position);
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
@@ -367,6 +385,16 @@ export class Game {
     // Player at street level near the centre, on a sidewalk or road (not inside a building).
     this.player = new Player(this.settings.seed, this.world);
     this.player.collision = this.collision;
+    // People to hop over at super speed: upright, about head high (lying, seated and indoor ones not).
+    this.player.hopPeople = (x0, z0, x1, z1, out) => {
+      const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, r = Math.hypot(x1 - x0, z1 - z0) / 2;
+      for (const a of this.peds.neighbours(cx, cz, r, this.hopTmp)) {
+        if (!a.alive || a.state === PState.Down || a.state === PState.Sit || (a.inside && !a.hall) || a.ragdoll) continue;
+        const o = this.hopObs;
+        o.x = a.x; o.z = a.z; o.y0 = a.y; o.y1 = a.y + 1.85;
+        out(o);
+      }
+    };
     let sx = c.x, sz = c.z;
     for (let k = 0; k < 200 && (this.world.buildingAt(sx, sz) || landmarks.onFootprint(sx, sz, 1)); k++) { sx += (k % 7) * 3 - 9; sz += Math.floor(k / 7) * 3 - 9; }
     this.player.pos.set(sx, this.world.groundHeight(sx, sz) + 0.05, sz);
@@ -383,7 +411,8 @@ export class Game {
       } else if (e.kind === 'glass') this.audio.play('glass_shatter', e.x, e.y, e.z, 0.8, 1, 6, cam.position);
     };
     // Buildings: every panel the player breaks and every collapse go into the ledger, booked to
-    // whoever broke the building last (crime/Justice prices the player's share).
+    // whoever broke the building last (crime/Justice prices the player's share). Rubble flying out
+    // of a collapse and a flung hero's body are nobody's blow ('world'): never the player's.
     this.destruction.onDamage = (e) => { if (e.cause === 'player') this.consequences.record('impact', 'building', 'facade', e.x, e.z, e.ref); };
     this.destruction.onCollapse = (e) => {
       if (e.cause) this.consequences.record('impact', 'building', 'collapse', e.x, e.z, e.ref, e.cause === 'fire' ? 'threat' : e.cause, e.floors);
@@ -498,7 +527,7 @@ export class Game {
       if (s.kind === 'stomp') {
         const h = s.size ?? this.player.height, threat = s.cause === 'threat';
         const r = Math.max(0.6, h * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : 'player');
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : s.cause === 'world' ? 'other' : 'player');
         if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
@@ -554,6 +583,23 @@ export class Game {
         return { x: m.x, z: m.z, floor: m.floor, side: m.side };
       };
       if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
+      if (dev) dev.sidekick = {
+        status: () => this.sidekick.status(),
+        report: (gang?: boolean) => this.sidekick.devReport(gang),
+        go: (back?: number) => this.sidekick.devGo(back),
+        take: () => { this.sidekick.take(); return this.sidekick.status(); },
+        reset: () => { this.sidekick.devReset(); return this.sidekick.status(); },
+        bond: () => this.sidekick.devBond(),
+        call: () => { this.sidekick.mate.call(); return this.sidekick.mate.status(); },
+        mate: () => this.sidekick.mate.status(),
+        power: (p?: string) => { const m = this.sidekick.mate; if (p) m.power = p as typeof m.power; return m.power; },
+        karma: (n = 50) => { this.sidekick.mate.earn(n); return this.sidekick.mate.status(); },
+        trust: (n?: number) => { const m = this.sidekick.mate; if (n !== undefined) m.trustBy(n - m.trust); return m.trust; },
+        ask: (k: 'help' | 'back' | 'home' | 'come') => this.sidekick.mate.ask(k),
+        give: (n: number, wish?: string) => this.sidekick.mate.give(n, (wish ?? null) as Parameters<Companion['give']>[1]),
+        ko: () => { this.sidekick.mate.devKo(); return this.sidekick.mate.status(); },
+        ward: (make?: boolean) => { this.sidekick.mate.devWard(make); return this.sidekick.status(); },
+      };
       if (dev) dev.halls = { stats: () => this.halls.stats, list: () => this.halls.report(), go: (kind: 'cathedral' | 'townhall' = 'cathedral') => {
         // Just inside the door, looking in.
         const d = this.halls.door(kind);
@@ -586,7 +632,7 @@ export class Game {
     const shadersAt = performance.now();
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
-      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), ...(this.intro?.stagingObjects() ?? [])],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), Wardens.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
@@ -603,6 +649,7 @@ export class Game {
     this.gate.precompile(this.rural.warmupObject());
     this.gate.precompile(MedFleet.warmupObject());
     this.gate.precompile(this.defeat.ward.warmupObject());
+    this.gate.precompile(Wardens.warmupObject());
     void this.intro?.play();
   }
 
@@ -694,6 +741,7 @@ export class Game {
         else this.manhole.update(dt);
         this.interiors.panels.hidePrompt();
       } else {
+        this.arcade?.takeInput();
         this.abilities.enabled = !this.powers.open && !this.map.open && !this.people.talking;
         this.abilities.preUpdate(dt, this.input);
         this.defeat.gate();
@@ -719,7 +767,8 @@ export class Game {
     this.T('net', () => this.net.maybeRebuild(this.simT, readyCells));
     const pp = this.freeCam ? this.renderer.camera.position : this.player.pos;
     this.peds.setPlayer(pp.x, pp.z);
-    this.peds.playerObstacle = this.freeCam ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius + 0.25, h: this.player.height };
+    // (At an arcade cabinet the space behind the hero is kept clear too: nobody walks into the view of the screen.)
+    this.peds.playerObstacle = this.freeCam ? null : this.arcade?.keepClear() ?? { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius + 0.25, h: this.player.height };
     this.T('peds', () => this.peds.update(dt, this.sky.hoursAbs, pp.x, pp.z, dt * this.sky.timeScale));
     this.T('react', () => this.reactions.update(dt, this.player));
     this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));
@@ -732,8 +781,10 @@ export class Game {
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
     if (!this.freeCam && !this.intro?.active) this.T('powers', () => { this.deeds.quiet = this.defeat.active; this.deeds.update(dt); this.cores?.update(dt, this.player); });
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
+    this.wardrobe?.update(dt);
+    this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => this.street?.update(dt));
-    this.T('people', () => this.people?.update(dt));
+    this.T('people', () => { this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
@@ -776,6 +827,7 @@ export class Game {
     this.sky.indoor = clamp(this.sky.indoor + (this.indoorsAt(cp.x, cp.y, cp.z) ? dt : -dt) * 2, 0, 1);
     this.T('weather', () => this.weather.update(dt));
     this.T('sky', () => this.sky.update(dt, focus, cam));
+    this.T('wardens', () => this.wardens?.update(dt));
     this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
     const P = this.player;
     this.T('future', () => this.future.update(dt, this.sky.hoursAbs, focus, { active: !this.freeCam, x: P.pos.x, y: P.pos.y, z: P.pos.z, vx: P.vel.x, vy: P.vel.y, vz: P.vel.z, height: P.height, radius: P.radius, mass: P.mass }, cam));
@@ -792,6 +844,7 @@ export class Game {
       this.hud.update(dt);
       this.powerHud.update();
       this.targetHud.update();
+      this.matePanel?.update();
       this.touch.update();
       this.T('map', () => { this.map.update(dt); this.compass.update(); this.barks.update(dt); });
       this.input.endFrame();
@@ -826,6 +879,10 @@ export class Game {
   private readonly dashFrom = new THREE.Vector3();
   private readonly dashHit = new Set<object>();
   private speedHitT = 0;
+  private readonly hopTmp: PedAgent[] = [];
+  private readonly hopObs = { cyl: true, x: 0, z: 0, r: 0.4, hx: 0, hz: 0, ux: 1, uz: 0, y0: 0, y1: 0 };
+  /** Last stern word from someone a super speed runner brushed past (game time, s). */
+  private brushT = -99;
 
   /**
    * A dash shoves what lies along its path, once per dash: people are knocked down (unless
@@ -857,7 +914,8 @@ export class Game {
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
     this.props.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
     this.future.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
-    if (k > 0.45) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
+    // (In a super speed hop the arc was planned over everyone under it.)
+    if (k > 0.45 && !(running && p.hopping)) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
       if (this.dashHit.has(a) || a.state === 5 || (a.inside && !a.hall) || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
       if (segDist(a.x, a.z) > r + 0.3) continue;
       this.dashHit.add(a);
@@ -865,8 +923,13 @@ export class Game {
       // spins them off to the side they stood on).
       const side = Math.sign((a.x - x0) * -dz + (a.z - z0) * dx) || 1;
       const fx = running ? a.x - (dx * 0.6 - dz * side) * 1.5 : a.x - dx * 1.5, fz = running ? a.z - (dz * 0.6 + dx * side) * 1.5 : a.z - dz * 1.5;
-      this.reactions.knockDown(a, fx, fz, Math.min(12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), 'player');
+      // A runner of about human size who could not hop over them only brushes past: they
+      // stumble, are cross with the speedster and get up again (no harm on the ledger, no
+      // reputation lost: one cannot run at super speed through a city and never touch anyone).
+      const brush = running && p.height < 3;
+      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : 12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
+      if (brush) { this.brushedBy(a); continue; }
       this.consequences.record('speed', 'person', 'knockdown', a.x, a.z);
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
       this.stimuli.emit('impact', a.x, a.y + 1, a.z, 3, 30);
@@ -878,6 +941,16 @@ export class Game {
       if (J > 2500) { this.traffic.wreckIt(v); this.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, dx * J, J * 0.3, dz * J); this.audio.play('car_crash', v.x, v.y, v.z, 0.8, 1, 10, this.renderer.camera.position); }
       else v.damage = Math.min(1, v.damage + J / 5000);
     }
+  }
+
+  /** Someone a super speed runner brushed past calls after them (now and then, see BRUSH_LINES). */
+  private brushedBy(a: PedAgent): void {
+    this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.3, 1.1, 4, this.renderer.camera.position);
+    const now = this.consequences.time;
+    if (now - this.brushT < 4) return;
+    this.brushT = now;
+    const who = this.people ? this.people.person(a.cit).first : null;
+    this.barks.shout(a, BRUSH_LINES[Math.floor(Math.random() * BRUSH_LINES.length)], who);
   }
 
   /** Mass-weighted contacts between the player and pedestrians / vehicles. */
@@ -929,7 +1002,7 @@ export class Game {
         p.vel.x = fx * v.speed * 1.2; p.vel.z = fz * v.speed * 1.2; p.vel.y = 2 + v.speed * 0.3;
         p.grounded = false;
         p.pos.x += fx * 0.3; p.pos.z += fz * 0.3;
-        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); this.crime?.health.damage(6 + v.speed * 3.2, 'car', v.x, v.z); }
+        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); this.crime?.health.damage(6 + v.speed * 3.2, 'car', v.x, v.z, v.y); }
       } else {
         const pushLat = (v.width / 2 + pr - Math.abs(lat)) * Math.sign(lat || 1);
         p.pos.x += -fz * pushLat; p.pos.z += fx * pushLat;
@@ -954,9 +1027,10 @@ export class Game {
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
       threats: () => { const a = this.threats?.actors() ?? []; const b = this.slimeRealm?.actors() ?? []; return b.length ? [...a, ...b] : a; },
-      cave: {
-        ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT),
-        line: (ax, ay, az, bx, by, bz) => this.underground.caveLine(ax, ay, az, bx, by, bz, 1.0),
+      under: {
+        ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT) ?? this.underground.tunnelRay(ox, oy, oz, dx, dy, dz, maxT),
+        line: (ax, ay, az, bx, by, bz) => this.underground.caveLine(ax, ay, az, bx, by, bz, 1.0) ?? this.underground.tunnelLine(ax, ay, az, bx, by, bz, 1.0),
+        isUnder: (x, y, z) => this.underground.isUnder(x, y, z),
       },
     });
     this.elements = new Elements({
@@ -966,7 +1040,7 @@ export class Game {
       stimuli: this.stimuli, consequences: this.consequences, sight: this.sight, deny: (msg) => this.abilities.hooks.deny?.(msg),
       sound: (id, x, y, z, g, pitch = 1, ref = 6) => this.audio.play(id, x, y, z, g, pitch, ref, cam.position),
       douse: (x, y, z, r, amount) => { this.threats?.fires.douse(x, y, z, r, amount); },
-      swarm: (effect, x, y, z, r, dmg, fling) => this.threats?.broodHit(x, y, z, r, effect, dmg, fling) ?? [],
+      swarm: (effect, x, y, z, r, dmg, fling) => [...(this.threats?.broodHit(x, y, z, r, effect, dmg, fling) ?? []), ...(this.crime?.packs.hit(x, y, z, r, effect, dmg, fling) ?? [])],
     });
     this.renderer.scene.add(this.elements.fx.group);
     this.abilities.effects = this.elements;
@@ -1010,7 +1084,7 @@ export class Game {
         if (Math.abs(a.y - g) > 1.2) return false;
         return !this.terrain.isWater(a.x, a.z, 0) || this.world.bridgeDeck(a.x, a.z) > -Infinity;
       },
-      sound: (id, x, y, z, g) => this.audio.play(id, x, y, z, g, 1, 8, cam.position),
+      sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
       markers: (m) => this.map.setMarkers('deeds', m),
       rep: (d, reason) => this.crime?.rep.add(d, reason),
     };
@@ -1057,7 +1131,12 @@ export class Game {
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
+    this.wardrobe = new Wardrobe(this);
+    this.arcade = new Arcade(this);
     this.fame = new Fame(this);
+    this.sidekick = new Sidekick(this);
+    this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
+    this.wardens = new Wardens(this);
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)
@@ -1101,6 +1180,8 @@ export class Game {
     this.slimeRealm?.blow(x, y, z, r, jx, jy, jz);
     // The brood's creatures (a punch kills a small one; a blast a clump).
     if (J > 0) this.threats?.broodHit(x, y, z, r + 0.3, 'blow', J / 150, Math.min(10, J / 60));
+    // A Beast-master's dogs.
+    if (J > 0) this.crime?.packs.hit(x, y, z, r + 0.3, 'blow', J / 150, Math.min(10, J / 60));
     // The army's helicopters, when they are after the player.
     this.forces?.struck(x, y, z, r, jx, jy, jz);
     this.props.hit(x, y, z, r, jx, jy, jz);
@@ -1140,7 +1221,12 @@ export class Game {
       n++;
     }
     terrainHoles.uHoleN.value = n;
-    terrainHoles.uUnder.value = c.y < this.terrain.height(c.x, c.z) - 0.5 ? 1 : 0;
+    // Also while the player is in an entrance's stairwell or a passage with the camera still up at
+    // street level: the skirts along the tiles' edges hang through the passages there, walls one
+    // walked through on the way down.
+    const p = this.player.pos;
+    const under = c.y < this.terrain.height(c.x, c.z) - 0.5 || this.underground.inHole(c.x, c.z) || (!this.freeCam && this.underground.floorAt(p.x, p.y + 0.5, p.z) !== null);
+    terrainHoles.uUnder.value = under ? 1 : 0;
   }
 
   /** Inside a building (an active interior) or a landmark's rooms (the town hall)? */
@@ -1152,6 +1238,7 @@ export class Game {
   private usableHint(): string | null {
     if (this.manhole.active) return null;
     if (this.freeCam) return null;
+    if (this.arcade?.playing) return this.arcade.hint();
     const metro = this.underground.metroHint(!!this.underground.ride && !this.player.seat && !!this.seatNear());
     // On a platform bench the getting-up hint beats the platform's own.
     if (metro && this.player.seat && !this.underground.ride) return 'Move or press <b>E</b> to get up';
@@ -1166,6 +1253,12 @@ export class Game {
     const slime = this.slimeRealm?.hint();
     if (slime) return slime;
     if (this.player.seat) return 'Move or press <b>E</b> to get up';
+    const arcade = this.arcade?.hint();
+    if (arcade) return arcade;
+    const dress = this.wardrobe?.hint();
+    if (dress) return dress;
+    const shard = this.sidekick?.hint();
+    if (shard) return shard;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1215,6 +1308,12 @@ export class Game {
       return;
     }
     if (this.underground.metroKey()) { this.input.pressed.delete('KeyE'); return; }
+    // At a clothes shop's fitting mirror: change your look.
+    if (this.wardrobe?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // At an arcade cabinet: play.
+    if (this.arcade?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // Take the glowing stone (the second shard).
+    if (this.sidekick?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();

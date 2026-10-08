@@ -32,8 +32,11 @@ export const LAST_RESORT = {
   countdown: 180, radius: 380, koK: 1.1,
   /** The shock wave: its speed (m/s, shown slower than a real one), buildings levelled per frame at most. */
   shockSpeed: 140, perFrame: 6,
-  /** Karma and reputation: the player drove it off / brought it down in time; the city lost. */
-  karma: { saved: 150, lost: -40 }, rep: { saved: 15, lost: -20 },
+  /**
+   * Karma and reputation: the player drove it off / brought it down in time; the city lost (karma
+   * only: the city does not blame a hero for what the monster did).
+   */
+  karma: { saved: 150, lost: -40 }, rep: { saved: 15 },
   /** People who sheltered in the struck district's buildings instead of leaving (per m²). */
   stayedPerM2: 0.00012,
 };

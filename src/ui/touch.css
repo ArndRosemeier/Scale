@@ -58,7 +58,7 @@ body.touch #powerbar { bottom: max(14px, env(safe-area-inset-bottom)); }
 body.touch #tframe { top: calc(max(10px, env(safe-area-inset-top)) + 46px); bottom: auto; left: max(12px, env(safe-area-inset-left)); }
 body.touch #minimap { top: calc(max(10px, env(safe-area-inset-top)) + 50px); bottom: auto; right: max(12px, env(safe-area-inset-right)); width: 150px; height: 150px; }
 body.touch #compass { width: min(560px, 46vw); }
-body.touch #help .panel, body.touch #pause .panel { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+body.touch #pause .panel { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 body.touch #pause select, body.touch #pause button { min-height: 36px; }
 body.touch #hint { bottom: 170px; }
 /* Upright tablets and narrow screens: the hotbar above the thumbs. */
@@ -72,8 +72,6 @@ body.touch #hint { bottom: 170px; }
   body.touch #panel-prompt { bottom: 360px; }
   body.touch #hint { bottom: 400px; }
 }
-#help .touch-only { display: none; }
-body.touch #help .touch-only { display: block; }
 #help h3 { margin: 16px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8fa3b5; }
 /* Smaller landscape tablets (iPad 10.2", mini): the hotbar beside the stick, clear of the buttons. */
 @media (min-width: 901px) and (max-width: 1150px) {

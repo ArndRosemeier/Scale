@@ -26,6 +26,10 @@ export const STREET_OWNER = -3;
 export const FAME_OWNER = -4;
 /** Owner id of the metro's commuters (src/game/metro: on the stairs, the platforms and in the trains): their own budget. */
 export const METRO_OWNER = -5;
+/** Owner id of game/people's actors (someone talking to you, a passer-by helping someone up, pointing, waving): their own budget. */
+export const PEOPLE_OWNER = -6;
+/** Owner id of game/sidekick's actors (the person taking the shard, the sidekick): their own budget. */
+export const SIDEKICK_OWNER = -7;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';

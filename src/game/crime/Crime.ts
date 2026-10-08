@@ -23,9 +23,12 @@ import { type Actor, type ActorRole, makeActor, attach, release, setState, play,
 import { personStrength } from '../Consider';
 import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den';
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den' | 'sabotage' | 'raising' | 'procession' | BossOpKind;
+/** A boss operation (crime/BossOp): the group's boss and a big crew, a threat event with the city response. */
+export type BossOpKind = 'heist' | 'takeover' | 'uprising' | 'awakening' | 'treewake' | 'deadrise';
+export const BOSS_OP_KINDS: readonly BossOpKind[] = ['heist', 'takeover', 'uprising', 'awakening', 'treewake', 'deadrise'];
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
-export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual'];
+export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual', 'sabotage', 'raising', 'procession', ...BOSS_OP_KINDS];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
 export type CrimeOutcome = 'arrested' | 'stopped' | 'escaped' | 'aborted';
 
@@ -41,7 +44,7 @@ export interface Loot {
 }
 
 export interface CrimeEvent {
-  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast' | 'done';
+  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast' | 'done' | 'broken' | 'risen' | 'crumble' | 'woken';
   crime: Crime;
   who?: PedAgent;
 }
@@ -76,7 +79,7 @@ export interface CrimeWorld {
   /** A positioned looping sound (alarm bell); null when audio is not running. */
   loop?(id: string, x: number, y: number, z: number, gain: number): { stop(): void } | null;
   combat: Combat;
-  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number): void;
+  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number, fromY: number): void;
   /** The police get a call (dispatch the nearest patrol car). */
   callPolice(c: Crime, delay: number): void;
   /** Live randomness for outcomes (not generation). */
@@ -112,17 +115,37 @@ export interface CrimeWorld {
   clearLine?(ax: number, ay: number, az: number, bx: number, by: number, bz: number, skip: PedAgent): boolean;
   /** Robots standing free at the kerb in a ring around the player (a point beside one, the side to stand on). */
   machines?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
-  /** Open ground before a landmark in a ring around the player (the centre, the way the front faces). */
-  landmarks?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
-  /** A frame of a channelled operation's look (crime/Channeling): `share` of the work done, the ones at it. */
-  opFx?(look: 'hack' | 'fire' | 'frost' | 'storm', x: number, z: number, share: number, workers: readonly PedAgent[]): void;
+  /** Open ground before a landmark in a ring around the player (the centre, the way the front faces, which landmark). */
+  landmarks?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; kind?: string }[];
+  /** Shop doors of the tallest buildings in a ring around the player, tallest first (a bank to take). */
+  banks?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /** A frame of a channelled operation's look (crime/Channeling, crime/BossOp): `share` of the work done, the ones at it. */
+  opFx?(look: OpLook, x: number, z: number, share: number, workers: readonly PedAgent[]): void;
   /** A hack went through: `n` machines round about turn on the street for the crime's group. */
   hijack?(c: Crime, x: number, z: number, n: number): void;
   /** A ritual is complete: a burst of the element at the circle. */
   ritual?(c: Crime, x: number, z: number, element: 'fire' | 'frost' | 'storm'): void;
+  /** A boss operation's work is done (crime/BossOp): the heist's take, the street on fire, the fleet turned, the great burst. */
+  bossOpDone?(c: Crime, x: number, z: number): void;
+  /** Street and park trees standing in a ring around the player, nearest first (the eco-radicals wake one). */
+  trees?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; height: number }[];
+  /** Cemeteries in a ring around the player, nearest first: open ground on the path before a tomb, n towards the gate. */
+  cemeteries?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /** Inside a building (nobody stands or rises there). */
+  blocked?(x: number, z: number): boolean;
+  /** Parked cars at the kerb in a ring around the player: a point beside one, the side to stand on. */
+  parked?(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[];
+  /** Sabotage done (crime/Sabotage): the machines round a point wrecked, tyres slashed, the street rewilded. */
+  sabotage?(c: Crime, x: number, z: number): void;
 }
 
 export type CastStage = 'begin' | 'tell' | 'release' | 'hold' | 'end';
+
+/** The look of a channelled operation's work: a hack, a ritual of an element, a vault being drilled, a street being smashed up. */
+export type OpLook = 'hack' | 'fire' | 'frost' | 'storm' | 'drill' | 'riot' | 'wreck' | 'grove' | 'grave';
+
+/** The raised dead: health, strength, seconds lying in pieces before they pull themselves together. */
+export const SKELETON = { hp: 42, strength: 1.05, reform: 6, reformHp: 0.6 };
 
 /** A lieutenant (VILLAINS_PLAN §3.3/§3.4): tougher, stronger, brave, with a few powers. */
 export const LIEUTENANT = { hp: 1.8, strength: 1.35 };
@@ -347,6 +370,30 @@ export abstract class Crime {
     return a;
   }
 
+  /**
+   * One of the city's old dead clawing out of the ground at (x, z) (the necromancers, VILLAINS_PLAN
+   * §3.9): a member of the crime like any other, dressed as a skeleton by the world ('risen'). Hit
+   * hard enough they fall apart and pull themselves together again while a necromancer of theirs
+   * still stands (CrimeSystem); with their master beaten they crumble for good (`crumble`).
+   */
+  protected raiseDead(x: number, z: number, heading: number): PedAgent | null {
+    const c = this.spawnCriminal(x, z, heading, { hp: SKELETON.hp, maxHp: SKELETON.hp, strength: SKELETON.strength, armed: 'none' });
+    if (!c) return null;
+    const act = c.actor!;
+    act.memo.skel = 1; act.memo.brave = 1;
+    act.mood = 'angry';
+    this.emit('risen', c);
+    return c;
+  }
+
+  /** A raised skeleton falls apart for good and sinks back into the ground. */
+  protected crumble(c: PedAgent): void {
+    const act = c.actor;
+    if (!act || act.memo.crumbled) return;
+    act.memo.crumbled = 1;
+    this.emit('crumble', c);
+  }
+
   /** Walkers that fit (alive, outside, walking on the sidewalk, not already taken). */
   protected walkers(x: number, z: number, r: number, adultsOnly = false): PedAgent[] {
     return this.w.neighbours(x, z, r).filter((a) => a.alive && !a.inside && !a.actor && a.state === PState.Walk && !a.onRoad && (!adultsOnly || a.cit.role !== 0));
@@ -465,7 +512,7 @@ export abstract class Crime {
         if (this.distToPlayer(c) < 1.75 && act.staggerT <= 0 && c.state !== PState.Down && Math.abs(p.y - c.y) < 1.6) {
           const kind = act.armed === 'knife' ? 'knife' : act.armed === 'bat' ? 'bat' : 'punch';
           const dmg = Math.min(MELEE_MAX, (kind === 'knife' ? 15 : kind === 'bat' ? 13 : 7) * (0.8 + 0.4 * this.w.random()) * Math.sqrt(act.strength));
-          this.w.hurtPlayer(dmg, kind, c.x, c.z);
+          this.w.hurtPlayer(dmg, kind, c.x, c.z, c.y);
           this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 0.7, kind === 'knife' ? 1.4 : 1);
         }
       }
@@ -514,6 +561,8 @@ export abstract class Crime {
       else this.w.cast?.(c, C.power, C.stage, C.tx, C.ty, C.tz);
       if (ev !== 'release' && C.stage === 'tell') { stand(act); lookAt(act, C.tx, C.ty, C.tz); c.heading = Math.atan2(c.x - C.tx, c.z - C.tz); return true; }
       if (K.holding('dash')) { this.dashing(c, C); return true; }
+      // A drain beam holds the caster to the spot, turned to the one it feeds on.
+      if (K.holding('drain')) { stand(act); lookAt(act, p.x, p.y + Math.min(p.height * 0.55, 1.2), p.z); c.heading = Math.atan2(c.x - p.x, c.z - p.z); return true; }
       return false;
     }
     // Pick a power (the line of sight is looked at twice a second).
@@ -552,7 +601,8 @@ export abstract class Crime {
   private release(c: PedAgent, C: Cast): void {
     const act = c.actor!, P = VILLAIN_POWERS[C.power];
     this.w.cast?.(c, C.power, 'release', C.tx, C.ty, C.tz);
-    this.w.sound(P.sound, C.power === 'shield' || C.power === 'dash' || C.power === 'smoke' ? c.x : C.tx, c.y + 1.2, C.power === 'shield' || C.power === 'dash' || C.power === 'smoke' ? c.z : C.tz, 0.85, P.pitch ?? 1);
+    const atSelf = C.power === 'shield' || C.power === 'dash' || C.power === 'smoke' || C.power === 'wail' || C.power === 'whistle';
+    this.w.sound(P.sound, atSelf ? c.x : C.tx, c.y + 1.2, atSelf ? c.z : C.tz, 0.85, P.pitch ?? 1);
     if (C.power === 'shield') act.memo.shieldT = P.hold;
     if (C.power === 'smoke') { act.memo.panic = 5; act.memo.stamina = 14; }
     if (C.power === 'dash') {
@@ -570,7 +620,7 @@ export abstract class Crime {
     goTo(act, act.memo.dashX, act.memo.dashZ, CASTERS.dashSpeed);
     if (!act.memo.dashHit && this.distToPlayer(c) < P.radius && Math.abs(p.y - c.y) < 1.6 && !p.down) {
       act.memo.dashHit = 1;
-      this.w.hurtPlayer(P.dmg * (0.85 + 0.3 * this.w.random()) * Math.sqrt(act.strength), 'punch', c.x, c.z);
+      this.w.hurtPlayer(P.dmg * (0.85 + 0.3 * this.w.random()) * Math.sqrt(act.strength), 'punch', c.x, c.z, c.y);
       this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 1, 0.75);
     }
     if (Math.hypot(act.memo.dashX - c.x, act.memo.dashZ - c.z) < 0.6) { this.casters.get(c)?.interrupt(); this.w.cast?.(c, 'dash', 'end', C.tx, C.ty, C.tz); stand(act); }
@@ -676,6 +726,8 @@ export abstract class Crime {
    */
   protected decide(c: PedAgent): 'fight' | 'flee' | 'surrender' {
     const act = c.actor!;
+    // The raised dead know no fear: they fight until they fall apart.
+    if (act.memo.skel) return 'fight';
     const ratio = this.strengthOf(c) / Math.max(0.1, this.w.player.strength);
     const hurt = act.hp < act.maxHp * 0.45;
     // A lieutenant stands and fights with its powers until badly hurt.

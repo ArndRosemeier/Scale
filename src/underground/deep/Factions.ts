@@ -70,6 +70,8 @@ export interface Blob {
   vx: number; vz: number;
   /** Following a path: nearest it has come to the waypoint, seconds since it got any nearer. */
   best: number; bestT: number;
+  /** Murk: seconds left going round by the waypoints to a player they could not walk straight at (a berm, a crater). */
+  detour?: number;
 }
 
 /** A Lumen called to the surface: what it does (the game resolves the target by kind and object). */
@@ -86,7 +88,7 @@ export interface FactionHost {
   plan: DeepPlan;
   /** The player (feet), body height, horizontal speed (m/s), whether it can be seen (not hidden by size, flying fast …). */
   player(): { x: number; y: number; z: number; h: number; speed: number };
-  hurtPlayer(dmg: number, fromX: number, fromZ: number): void;
+  hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number): void;
   /** Knock the player back (impulse as a velocity change). */
   shovePlayer(vx: number, vy: number, vz: number): void;
   sound(id: string, x: number, y: number, z: number, gain: number, pitch?: number): void;
@@ -170,9 +172,18 @@ export class Factions {
       this.group.add(m);
     }
     this.lCore.renderOrder = 4; this.lShell.renderOrder = 5; this.mCore.renderOrder = 5;
-    const P = host.plan;
-    this.adj = P.nodes.map(() => []);
-    for (const [a, b] of P.edges) { this.adj[a].push(b); this.adj[b].push(a); }
+    this.rebind(host.plan, host.field);
+  }
+
+  /** Another realm (each colony has its own): its nav graph; everyone below ground goes (those up in the streets stay). */
+  rebind(plan: DeepPlan, field: DeepField): void {
+    this.host.plan = plan;
+    this.host.field = field;
+    this.adj = plan.nodes.map(() => []);
+    for (const [a, b] of plan.edges) { this.adj[a].push(b); this.adj[b].push(a); }
+    for (let i = this.blobs.length - 1; i >= 0; i--) if (!this.blobs[i].surface) this.blobs.splice(i, 1);
+    this.areas.clear();
+    this.drops.length = 0; this.spits.length = 0; this.bolts.length = 0;
   }
 
   // ------------------------------------------------------------------ spawning
@@ -508,11 +519,13 @@ export class Factions {
     const dp = Math.hypot(b.x - P.x, b.z - P.z), dy = Math.abs(b.y + b.r - (P.y + P.h * 0.4));
     const S = ROLE[b.role];
     b.glow += ((b.mode === 'fight' ? 1.3 : 0.75) - b.glow) * Math.min(1, dt * 2);
+    // A detour lasts till its path is walked (or 20 s).
+    if (b.detour) b.detour = b.mode === 'go' ? Math.max(0, b.detour - dt) : 0;
     // Pick a fight: the player first, whenever in reach and in sight (dropping a Lumen for them when
     // they come close), else the nearest Lumen.
-    if ((b.mode !== 'fight' || (b.foe && dp < SWITCH)) && (b.t * 4 + b.id * 0.37) % 1 < dt * 4) {
+    if (!b.detour && (b.mode !== 'fight' || (b.foe && dp < SWITCH)) && (b.t * 4 + b.id * 0.37) % 1 < dt * 4) {
       const sees = dp < (b.mode === 'fight' ? SWITCH : AGGRO * (b.role === 'maw' ? 1.6 : 1)) && dy < 8 && this.host.clear(b.x, b.y + b.r, b.z, P.x, P.y + P.h * 0.6, P.z);
-      if (sees) { b.foe = null; b.mode = 'fight'; if (b.cd < 0.3) this.host.sound(b.role === 'maw' ? 'maw_roar' : 'murk_growl', b.x, b.y, b.z, b.role === 'maw' ? 1 : 0.55, b.role === 'brute' ? 0.7 : 1 + Math.random() * 0.3); b.cd = 0.6; }
+      if (sees) { b.foe = null; if (b.mode !== 'fight') { b.best = Infinity; b.bestT = 0; } b.mode = 'fight'; if (b.cd < 0.3) this.host.sound(b.role === 'maw' ? 'maw_roar' : 'murk_growl', b.x, b.y, b.z, b.role === 'maw' ? 1 : 0.55, b.role === 'brute' ? 0.7 : 1 + Math.random() * 0.3); b.cd = 0.6; }
       else if (b.mode !== 'fight') {
         const l = this.nearest(b, 'lumen', b.role === 'raider' || b.role === 'breacher' ? 16 : 9);
         if (l && l.role !== 'captive' && l.mode !== 'hidden') { b.foe = l; b.mode = 'fight'; }
@@ -541,11 +554,17 @@ export class Factions {
           return;
         }
       }
+      // No nearer for a while (a wall in the way): round by the waypoints, then at them again.
+      if (dp < b.best - 0.3) { b.best = dp; b.bestT = 0; } else if ((b.bestT += dt) > 2 && dp > reach + 1) {
+        const r = this.route(this.nodeNear(b.x, b.y, b.z), this.nodeNear(P.x, P.y, P.z));
+        b.best = Infinity; b.bestT = 0;
+        if (r.length) { b.path = r; b.mode = 'go'; b.detour = 20; this.nextWaypoint(b); return; }
+      }
       if (dp > reach) { this.walk(b, dt, S.speed * (b.lunge > 0 ? 2.5 : 1)); if (dp < reach + 2.2 && b.cd <= 0 && b.lunge <= 0) { b.lunge = 0.35; } return; }
       if (b.cd <= 0) {
         b.cd = b.role === 'maw' ? 2.2 : 1.1 + Math.random() * 0.6;
         b.lunge = 0.3;
-        this.host.hurtPlayer(S.dmg, b.x, b.z);
+        this.host.hurtPlayer(S.dmg, b.x, b.z, b.y);
         const k = b.role === 'maw' ? 9 : b.role === 'brute' ? 5 : 1.5;
         this.host.shovePlayer(((P.x - b.x) / (dp || 1)) * k, k * 0.4, ((P.z - b.z) / (dp || 1)) * k);
         this.host.sound(b.role === 'maw' || b.role === 'brute' ? 'murk_slam' : 'slime_squish', b.x, b.y, b.z, 0.7, b.role === 'drone' ? 0.8 : 0.6);
@@ -640,7 +659,7 @@ export class Factions {
       const hitP = Math.hypot(s.x - P.x, s.z - P.z) < 0.7 && s.y > P.y - 0.2 && s.y < P.y + P.h + 0.2;
       const rock = F.near(s.x, s.y, s.z) ? F.sdf(s.x, s.y, s.z) > 0 : s.y < this.host.ground(s.x, s.z, s.y);
       if (hitP || rock || s.life <= 0) {
-        if (hitP) { this.host.hurtPlayer(s.dmg, s.from.x, s.from.z); this.host.shovePlayer(s.vx * 0.2, 1.5, s.vz * 0.2); }
+        if (hitP) { this.host.hurtPlayer(s.dmg, s.from.x, s.from.z, s.from.y); this.host.shovePlayer(s.vx * 0.2, 1.5, s.vz * 0.2); }
         for (let k = 0; k < 5; k++) this.drops.push({ x: s.x, y: s.y, z: s.z, vx: (Math.random() - 0.5) * 3, vy: Math.random() * 2, vz: (Math.random() - 0.5) * 3, r: 0.06, col: MURK_COL[0], life: 0, murk: true });
         this.host.sound('slime_squish', s.x, s.y, s.z, 0.5, 0.8);
         this.spits.splice(i, 1);

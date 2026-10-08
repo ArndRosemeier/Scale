@@ -57,6 +57,9 @@ export class Barks {
   private gapT = 0;
   private chatT = CHAT_MIN;
   private p = screenPoint();
+  /** A call from someone out of sight (behind a super speed runner): pinned low on the screen. */
+  private behind: HTMLDivElement | null = null;
+  private behindT = 0;
 
   constructor(private game: Game) {
     for (let i = 0; i < MAX_SHOWN; i++) {
@@ -123,13 +126,15 @@ export class Barks {
         default: return null;
       }
     }
-    if (now.helped && !was.helped && now.st !== PState.Down) return pick(L.thanks);
+    // (In their own temperament where they have a line of their own: game/people.)
+    const own = (m: 'thanks' | 'flee' | 'gawk' | 'film' | 'ouch') => this.game.people?.reactLine(a, m) ?? pick(L[m]);
+    if (now.helped && !was.helped && now.st !== PState.Down) return own('thanks');
     if (now.st === was.st) return null;
     switch (now.st) {
-      case PState.Flee: return chance(0.25) ? pick(L.flee) : null;
-      case PState.Gawk: return chance(0.3) ? pick(L.gawk) : null;
-      case PState.Film: return chance(0.3) ? pick(L.film) : null;
-      case PState.Down: return a.downBy === 'accident' && chance(0.6) ? pick(L.ouch) : null;
+      case PState.Flee: return chance(0.25) ? own('flee') : null;
+      case PState.Gawk: return chance(0.3) ? own('gawk') : null;
+      case PState.Film: return chance(0.3) ? own('film') : null;
+      case PState.Down: return a.downBy === 'accident' && chance(0.6) ? own('ouch') : null;
       default: return null;
     }
   }
@@ -158,7 +163,49 @@ export class Barks {
     return true;
   }
 
+  /**
+   * A line in a scene (the shard's awakening): shown now, past the gap between bubbles and the
+   * person's pause (their earlier bubble gives way; with every bubble taken, the oldest does).
+   */
+  line(a: PedAgent, text: string): void {
+    const mine = this.shown.findIndex((s) => s.a === a);
+    if (mine >= 0) { this.shown[mine].el.style.display = 'none'; this.shown.splice(mine, 1); }
+    if (this.shown.length >= MAX_SHOWN) { this.shown[0].el.style.display = 'none'; this.shown.shift(); }
+    this.gapT = 0;
+    this.quiet.delete(a);
+    this.say(a, text, PERSON_PAUSE);
+  }
+
+  /** Take down whatever bubble this person has up (they were knocked out mid-sentence). */
+  hush(a: PedAgent): void {
+    const mine = this.shown.findIndex((s) => s.a === a);
+    if (mine >= 0) { this.shown[mine].el.style.display = 'none'; this.shown.splice(mine, 1); }
+  }
+
+  /**
+   * Someone calls after the hero (brushed past at super speed): a stern (red) bubble low on the
+   * screen with their name, since at that speed they are behind before a bubble over them could be read.
+   */
+  shout(a: PedAgent, text: string, who: string | null): void {
+    this.quiet.set(a, this.time + PERSON_PAUSE);
+    if (!this.behind) {
+      this.behind = document.createElement('div');
+      this.behind.className = 'bark angry behind';
+      document.body.appendChild(this.behind);
+    }
+    const el = this.behind;
+    el.textContent = who ? `${who}, behind you: “${text}”` : `Behind you: “${text}”`;
+    el.classList.remove('out');
+    el.style.display = 'block';
+    this.behindT = showFor(text) + 0.6;
+  }
+
   private draw(dt: number, hidden: boolean): void {
+    if (this.behind && this.behindT > 0) {
+      this.behindT -= dt;
+      if (this.behindT < 0.35) this.behind.classList.add('out');
+      this.behind.style.display = hidden || this.behindT <= 0 ? 'none' : 'block';
+    }
     const cam = this.game.renderer.camera, W = window.innerWidth, H = window.innerHeight;
     for (let i = this.shown.length - 1; i >= 0; i--) {
       const s = this.shown[i];

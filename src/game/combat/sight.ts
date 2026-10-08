@@ -71,6 +71,9 @@ export class Sight {
     // In the deep realm's caves the rock is the only thing in the way (the ground is far above).
     const cave = this.g.underground?.caveLine(ax, ay, az, bx, by, bz, pad ?? 0);
     if (cave !== null && cave !== undefined) return cave;
+    // In the sewers, the metro and the rooms: the tunnel walls (the street overhead is not in the way).
+    const tunnel = this.g.underground?.tunnelLine(ax, ay, az, bx, by, bz, pad ?? 0);
+    if (tunnel !== null && tunnel !== undefined) return tunnel;
     return this.los.clear(ax, ay, az, bx, by, bz, pad, skip, skip2);
   }
 

@@ -1,9 +1,10 @@
 /**
- * Power HUD: hotbar (8 slots with icon, key, cooldown sweep, selection), energy bar,
+ * Power HUD: hotbar (8 slots with icon, key, a sweep while the energy for a power is short, selection), energy bar,
  * super-jump charge, karma balance, a small mode chip, and toasts for awards and events.
  */
 import type { AbilitySystem } from '../game/abilities/AbilitySystem';
 import { ABILITY, ABILITIES, HOTBAR_SLOTS } from '../game/abilities/defs';
+import { keyLabel, keysVersion } from '../game/keybinds';
 
 export type ToastKind = 'karma' | 'info' | 'warn' | 'core' | 'deny';
 
@@ -18,6 +19,7 @@ export class PowerHud {
   private chip: HTMLDivElement;
   private shown = '';
   private lastE = '';
+  private lastTrend = '';
   private lastDeny = '';
   private lastDenyT = 0;
 
@@ -83,7 +85,7 @@ export class PowerHud {
   update(): void {
     const a = this.abilities, pr = a.progress;
     // Slots: rebuild the content only on change.
-    const key = `${pr.slots.join(',')}|${a.selected}|${pr.karma}|${ABILITIES.map((d) => pr.rank(d.id)).join('')}`;
+    const key = `${keysVersion()}|${pr.slots.join(',')}|${a.selected}|${pr.karma}|${ABILITIES.map((d) => pr.rank(d.id)).join('')}`;
     if (key !== this.shown) {
       this.shown = key;
       this.slots.forEach((el, i) => {
@@ -92,22 +94,29 @@ export class PowerHud {
         el.classList.toggle('sel', i === a.selected);
         el.classList.toggle('empty', !def);
         el.classList.toggle('locked', !!def && !pr.unlocked(def.id));
-        el.innerHTML = `<span class="k">${(i + 1) % 10}</span>${def ? `<span class="ic">${def.icon}</span><span class="cd"></span>` : ''}`;
+        el.innerHTML = `<span class="k">${keyLabel(`slot${i + 1}`)}</span>${def ? `<span class="ic">${def.icon}</span><span class="cd"></span>` : ''}`;
         el.title = def ? `${def.name}${pr.unlocked(def.id) ? ` (rank ${pr.rank(def.id)})` : ' (locked)'}` : 'Empty slot — assign a power with P';
       });
       this.karmaEl.innerHTML = `<b>${pr.karma}</b> karma`;
     }
-    // Cooldown sweeps and the active flight state.
+    // Sweeps (energy still missing for a tap power, or its short debounce) and the active state.
     this.slots.forEach((el, i) => {
       const id = pr.slots[i];
       if (!id) return;
-      const c = a.cooldown.get(id);
-      const f = c ? Math.max(0, c.left / c.full) : 0;
+      const c = a.cooldown.get(id), need = pr.unlocked(id) ? a.cost(id) : 0;
+      const f = Math.max(c ? c.left / c.full : 0, need > a.energy ? 1 - a.energy / need : 0);
       const cd = el.querySelector<HTMLSpanElement>('.cd');
       if (cd) cd.style.setProperty('--f', String(f));
       el.classList.toggle('cooling', f > 0);
       el.classList.toggle('on', a.active(id));
     });
+    const trend = a.energyRate < -0.05 ? 'drain' : a.energyRate < 0.05 && a.energy < a.maxEnergy ? 'hold' : '';
+    if (trend !== this.lastTrend) {
+      this.lastTrend = trend;
+      this.energyFill.classList.toggle('drain', trend === 'drain');
+      this.energyFill.classList.toggle('hold', trend === 'hold');
+      this.energyFill.parentElement!.title = trend === 'drain' ? 'Energy — your giant size is draining it' : trend === 'hold' ? 'Energy — not recovering (flying, or your size eats the regeneration)' : 'Energy';
+    }
     const e = `${Math.floor(a.energy)}/${Math.round(a.maxEnergy)}|${a.charge.toFixed(2)}`;
     if (e !== this.lastE) {
       this.lastE = e;

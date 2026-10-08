@@ -19,9 +19,9 @@ import type { Input } from '../Input';
 import type { Progress } from './Progress';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
-  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, DASH_COOLDOWN, SHOCK_IMPULSE, SHOCK_RANGE,
-  SHOCK_COST, SHOCK_COOLDOWN, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIRE_COOLDOWN, FIREBALL, FIREBALL_COOLDOWN, NOVA, NOVA_COOLDOWN,
-  BOLT, BOLT_COOLDOWN, QUAKE, QUAKE_COOLDOWN, GUST, GUST_COOLDOWN, SHRINK, SHRINK_COOLDOWN,
+  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE,
+  SHOCK_COST, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIREBALL, NOVA,
+  BOLT, QUAKE, GUST, SHRINK, GIANT, sizeUpkeep, TAP_DEBOUNCE,
 } from './tuning';
 
 export interface AbilityHooks {
@@ -44,15 +44,10 @@ export interface PowerEffects {
 const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
 const NUMPAD = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5', 'Numpad6', 'Numpad7', 'Numpad8', 'Numpad9', 'Numpad0'];
 
-/** Tap powers of the elemental layer: energy and cooldown by rank. */
-const TAP: Partial<Record<AbilityId, { cost: number; cd: number[] }>> = {
-  fireWave: { cost: FIRE.cost, cd: FIRE_COOLDOWN },
-  fireball: { cost: FIREBALL.cost, cd: FIREBALL_COOLDOWN },
-  frostNova: { cost: NOVA.cost, cd: NOVA_COOLDOWN },
-  lightning: { cost: BOLT.cost, cd: BOLT_COOLDOWN },
-  stomp: { cost: QUAKE.cost, cd: QUAKE_COOLDOWN },
-  gust: { cost: GUST.cost, cd: GUST_COOLDOWN },
-  shrink: { cost: SHRINK.cost, cd: SHRINK_COOLDOWN },
+/** Tap powers of the elemental layer: their energy (they are balanced by cost, not cooldowns). */
+const TAP: Partial<Record<AbilityId, number>> = {
+  fireWave: FIRE.cost, fireball: FIREBALL.cost, frostNova: NOVA.cost, lightning: BOLT.cost,
+  stomp: QUAKE.cost, gust: GUST.cost, shrink: SHRINK.cost,
 };
 
 /** Held powers: energy per second (super speed runs for free, like flight). */
@@ -61,7 +56,8 @@ const DRAIN: Partial<Record<AbilityId, number>> = { laser: LASER.drain, icePath:
 export class AbilitySystem {
   energy = 0;
   selected = 0;
-  /** Cooldown left per ability (s) and its full length (for the HUD sweep). */
+  /** Debounce left per ability (s) and its full length: the short technical wait after a tap
+   *  power or a jump goes off (TAP_DEBOUNCE, JUMP.debounce); there are no gameplay cooldowns. */
   readonly cooldown = new Map<AbilityId, { left: number; full: number }>();
   /** Super jump climb 0..1 (share of the rank's height gained) while Space is held (-1: not climbing). */
   charge = -1;
@@ -76,10 +72,15 @@ export class AbilitySystem {
   hooks: AbilityHooks = {};
   /** The elemental layer (set by the game). */
   effects: PowerEffects | null = null;
-  /** Tap powers the game runs itself (the slime call): energy, cooldowns and a handler (true: it went off). */
-  special: Partial<Record<AbilityId, { cost: number; cd: number[]; run: (rank: number) => boolean }>> = {};
+  /** Tap powers the game runs itself (the slime call): energy by rank and a handler (true: it went off). */
+  special: Partial<Record<AbilityId, { cost: number[]; run: (rank: number) => boolean }>> = {};
   /** Input disabled (UI open, free camera). */
   enabled = true;
+  /** Out of energy as a giant: the body shrinks back to GIANT.fallback and stays capped there until
+   *  the pool is back to GIANT.recover of max. */
+  exhausted = false;
+  /** Net energy change per second from regeneration and size upkeep last frame (for the HUD). */
+  energyRate = 0;
 
   constructor(readonly progress: Progress, readonly player: Player, private interactions: Interactions, private cam: THREE.Camera) {
     this.energy = this.maxEnergy;
@@ -88,6 +89,16 @@ export class AbilitySystem {
   get maxEnergy(): number { return this.progress.sandbox ? ENERGY.sandboxMax : ENERGY.max + this.progress.bonusMax; }
   get regen(): number { return this.progress.sandbox ? ENERGY.sandboxRegen : ENERGY.regen + this.progress.bonusRegen; }
   rank(id: AbilityId): number { return this.progress.rank(id); }
+
+  /** Energy one use of a tap power costs at its current rank (0: not a paid tap power). */
+  cost(id: AbilityId): number {
+    const r = Math.max(1, this.rank(id));
+    if (id === 'shockwave') return SHOCK_COST[r];
+    if (id === 'speed') return this.player.flying ? DASH.cost : 0;
+    const sp = this.special[id];
+    if (sp) return sp.cost[r] ?? sp.cost[sp.cost.length - 1];
+    return TAP[id] ?? 0;
+  }
 
   /** Is this power in use right now (held, running, flying, charging)? For the HUD. */
   active(id: AbilityId): boolean {
@@ -107,7 +118,7 @@ export class AbilitySystem {
     p.flightBoost = FLIGHT_BOOST_MUL[rf] || FLIGHT_BOOST_MUL[FLIGHT_BOOST_MUL.length - 1];
     [p.minHeight, p.maxHeight] = SIZE_RANGE[rz];
     for (const [id, c] of this.cooldown) { c.left -= dt; if (c.left <= 0) this.cooldown.delete(id); }
-    this.energy = Math.min(this.maxEnergy, this.energy + this.regen * dt);
+    this.updateEnergy(dt);
     // F without flight: a hint instead of nothing.
     if (input.hit('KeyF') && rf === 0 && this.enabled) this.hooks.deny?.('Flight is locked — press P to see your powers');
     // Super jump on Space: takes off on the press, climbs while held.
@@ -119,6 +130,35 @@ export class AbilitySystem {
     this.updateCharge(dt, input);
     this.updateChannel(dt, input);
     p.speedTop = this.speedOn && !p.flying ? SPEED_TOP[this.rank('speed')] : 0;
+  }
+
+  /** Regeneration (none in flight) minus the upkeep of a giant body; an empty pool shrinks a giant. */
+  private updateEnergy(dt: number): void {
+    const p = this.player;
+    if (this.progress.sandbox || p.sizeOverride) {
+      this.exhausted = false;
+      this.energyRate = this.regen;
+      this.energy = Math.min(this.maxEnergy, this.energy + this.regen * dt);
+      return;
+    }
+    // Exhausted, the body pays only part of its upkeep, so a giant back at 10 m (which otherwise
+    // just holds even) refills to GIANT.recover instead of sitting at zero.
+    const gain = (p.flying ? 0 : this.regen) - sizeUpkeep(p.height) * (this.exhausted ? GIANT.exhaustedUpkeep : 1);
+    this.energyRate = gain;
+    this.energy = Math.max(0, Math.min(this.maxEnergy, this.energy + gain * dt));
+    if (!this.exhausted && this.energy <= 0 && p.height > GIANT.fallback && gain < 0) {
+      this.exhausted = true;
+      this.hooks.deny?.('Out of energy — you shrink back');
+    }
+    if (this.exhausted && this.energy >= this.maxEnergy * GIANT.recover) this.exhausted = false;
+    if (this.exhausted) {
+      // Shrink smoothly (not a snap) and keep the size cap at the current height on the way down.
+      if (p.height > GIANT.fallback) {
+        p.height = Math.max(GIANT.fallback, p.height * Math.exp(-GIANT.shrinkRate * dt));
+        p.events.onSizeChange?.(p.height, -1);
+      }
+      p.maxHeight = Math.min(p.maxHeight, Math.max(GIANT.fallback, p.height));
+    }
   }
 
   /** After the panels consumed their digits: hotbar keys. */
@@ -167,8 +207,8 @@ export class AbilitySystem {
   use(id: AbilityId): boolean {
     const r = this.rank(id);
     if (r <= 0) return false;
-    const cd = this.cooldown.get(id);
-    if (cd) { this.hooks.deny?.(`${ABILITY[id].name} is recharging`); return false; }
+    // The debounce only swallows a double press; it says nothing.
+    if (this.cooldown.get(id)) return false;
     const p = this.player;
     switch (id) {
       case 'flight':
@@ -182,25 +222,26 @@ export class AbilitySystem {
         if (this.energy < SHOCK_COST[r]) { this.hooks.deny?.('Not enough energy'); return false; }
         if (!this.interactions.blastAtView(SHOCK_RANGE[r] * Math.max(1, Math.sqrt(p.k)), SHOCK_IMPULSE[r], true)) return false;
         this.energy -= SHOCK_COST[r];
-        this.startCooldown(id, SHOCK_COOLDOWN[r]);
+        this.debounce(id, TAP_DEBOUNCE);
         p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.6 };
         return true;
       }
       default: {
         const sp = this.special[id];
         if (sp) {
-          if (this.energy < sp.cost) { this.hooks.deny?.('Not enough energy'); return false; }
+          const cost = this.cost(id);
+          if (this.energy < cost) { this.hooks.deny?.('Not enough energy'); return false; }
           if (!sp.run(r)) return false;
-          this.energy -= sp.cost;
-          this.startCooldown(id, sp.cd[r] ?? sp.cd[sp.cd.length - 1]);
+          this.energy -= cost;
+          this.debounce(id, TAP_DEBOUNCE);
           return true;
         }
-        const tap = TAP[id];
-        if (!tap || !this.effects) return false;
-        if (this.energy < tap.cost) { this.hooks.deny?.('Not enough energy'); return false; }
+        const cost = TAP[id];
+        if (cost === undefined || !this.effects) return false;
+        if (this.energy < cost) { this.hooks.deny?.('Not enough energy'); return false; }
         if (!this.effects.fire(id, r)) return false;
-        this.energy -= tap.cost;
-        this.startCooldown(id, tap.cd[r]);
+        this.energy -= cost;
+        this.debounce(id, TAP_DEBOUNCE);
         return true;
       }
     }
@@ -208,7 +249,7 @@ export class AbilitySystem {
 
   /** Super speed pressed in flight: a dash burst where you look. */
   private dash(r: number): boolean {
-    if (this.cooldown.get('speed')) { this.hooks.deny?.('Dash is recharging'); return false; }
+    if (this.cooldown.get('speed')) return false;
     if (!this.spend(DASH.cost)) return false;
     const p = this.player;
     const dir = new THREE.Vector3();
@@ -219,7 +260,7 @@ export class AbilitySystem {
     // covers as many body lengths, in its own slow motion, instead of teleporting.
     const k = p.k, dur = DASH.time * Math.max(0.6, Math.sqrt(k));
     p.dash(dir.x, dir.y, dir.z, (DASH_DIST[r] * k) / dur, dur);
-    this.startCooldown('speed', DASH_COOLDOWN[r]);
+    this.debounce('speed', TAP_DEBOUNCE);
     this.hooks.dashFx?.(dir.x, p.flying ? dir.y : 0, dir.z, dur, r);
     return true;
   }
@@ -230,8 +271,7 @@ export class AbilitySystem {
     return true;
   }
 
-  private startCooldown(id: AbilityId, s: number): void {
-    if (this.progress.sandbox) s *= 0.25;
+  private debounce(id: AbilityId, s: number): void {
     if (s > 0) this.cooldown.set(id, { left: s, full: s });
   }
 
@@ -275,7 +315,7 @@ export class AbilitySystem {
     this.charge = 0;
     this.chargeSrc = src;
     p.superLaunch(p.jumpSpeed, 0.05);
-    this.startCooldown('superJump', JUMP.cooldown);
+    this.debounce('superJump', JUMP.debounce);
     this.hooks.sound?.('whoosh_takeoff', 0.4, 1.15);
     this.hooks.leapFx?.(0.35);
   }

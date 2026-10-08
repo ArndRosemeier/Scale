@@ -27,6 +27,13 @@ import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
 import { buildRuralTile } from '../src/build/rural';
 import { terrainExtent } from '../src/world/boundary';
 import { cmuBvhChecks } from './cmuBvhTest';
+import { villainChecks } from './villainTest';
+import { arcadeChecks } from './arcadeTest';
+import { sidekickChecks } from './sidekickTest';
+import { aliensChecks } from './aliensTest';
+import { doorChecks } from './doorsweep';
+import { Reputation } from '../src/game/Reputation';
+import { PlayerHealth } from '../src/game/PlayerHealth';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
@@ -37,7 +44,7 @@ import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } fro
 import { parseStemManifest } from '../src/audio/music/StemPlayer';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
-import { Justice, JUSTICE } from '../src/game/crime/Justice';
+import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
 import { ATTRACTION_KINDS, inSite, siteToWorld, siteRect, marvelDesign, marvelCount, type Landmark } from '../src/plan/landmarks';
 import { landmarkParts, partOutline, solidFootprints, partObstacles, helixFloorAt, PK } from '../src/plan/landmarkParts';
@@ -51,12 +58,15 @@ import type { Destruction } from '../src/destruction/Destruction';
 import type { MeshData } from '../src/build/meshBuilder';
 import type { MaterialArrays } from '../src/render/TextureLibrary';
 import { LandmarkSolids } from '../src/world/LandmarkSolids';
+import { insideObstacle } from '../src/world/Collision';
+import { marvelHall, marvelDoors } from '../src/plan/marvelParts';
 import { auditWays } from './landmarkWays';
 import { landmarkInterior } from '../src/plan/landmarkParts';
 import { Rng as MRng } from '../src/core/rng';
 import type { MacroPlan } from '../src/plan/types';
 import { buildLandmarkMesh, buildLandmarkMeshes } from '../src/build/landmarks';
 import * as THREE from 'three';
+import { planHop } from '../src/player/speedHop';
 import { onScreen, screenPoint, toScreen } from '../src/render/screen';
 import { makeSight } from '../src/game/sightline';
 import type { WorldIndex as SightWorld } from '../src/world/WorldIndex';
@@ -275,6 +285,68 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     }
   }
   console.log(`seed ${seed} size ${size}: ${macro.cells.length} cells, ${macro.metroStations.length} stations, ${buildings} buildings checked in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Landmark sites are never walled in by buildings: from the middle of each side, walking straight
+// out reaches a sidewalk or street before any building (seed 873738 at full size had its starship,
+// town hall, cathedral and stadium ringed by houses).
+{
+  const terrain = new Terrain(makeProfile({ seed: 873738, size: 1 }));
+  const macro = buildMacroPlan(terrain);
+  for (const lm of macro.landmarks.filter((l) => l.cell >= 0)) {
+    const plan = planCell(macro, macro.cells.find((c) => c.id === lm.cell)!, terrain);
+    const walk = [...plan.sidewalks, ...plan.carriageway];
+    const onWalk = (x: number, z: number) => walk.some((s) => pointInPoly(s.outer, x, z) && !s.holes.some((h) => pointInPoly(h, x, z)));
+    let open = 0;
+    for (const [du, dv] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      for (let d = 0; d < 300; d++) {
+        const pts = [-2.5, 0, 2.5].map((s) => siteToWorld(lm, du * (lm.hu + d) + (du ? 0 : s), dv * (lm.hv + d) + (dv ? 0 : s)));
+        if (pts.some(([x, z]) => plan.buildings.some((b) => pointInPoly(b.poly, x, z)))) break;
+        if (pts.every(([x, z]) => onWalk(x, z))) { open++; break; }
+      }
+    }
+    check(open === 4, `seed 873738 ${lm.name}: a way in from the street on every side (${open} of 4)`);
+    let cluttered = 0;
+    // (Awnings hang overhead on the fronts beside the way, so they don't count.)
+    for (let i = 0; i < plan.props.length; i += 6) if (plan.props[i] !== PropType.Awning && plan.approaches.some((w) => pointInPoly(w, plan.props[i + 1], plan.props[i + 2]))) cluttered++;
+    const onWay = (x: number, z: number) => plan.approaches.some((w) => pointInPoly(w, x, z));
+    for (const e of plan.eateries) {
+      for (let i = 0; i < e.tables.length; i += 3) if (onWay(e.tables[i], e.tables[i + 1])) cluttered++;
+      for (let i = 0; i < e.seats.length; i += 4) if (onWay(e.seats[i], e.seats[i + 1])) cluttered++;
+    }
+    check(cluttered === 0, `seed 873738 ${lm.name}: its approaches kept clear of furniture and terraces (${cluttered} in the way)`);
+  }
+}
+
+// Cemeteries (plan/cell placeCemetery): a few per city, walled, graves in rows inside the wall,
+// a mausoleum, nothing on a building.
+{
+  const t0 = performance.now();
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.35 }));
+  const macro = buildMacroPlan(terrain);
+  let n = 0;
+  for (const c of macro.cells) {
+    const p = planCell(macro, c, terrain);
+    for (const cem of p.cemeteries) {
+      n++;
+      const inside = (x: number, z: number) => pointInPoly(cem.outer, x, z);
+      let walls = 0, pillars = 0, graves = 0, tombs = 0, out = 0, onBuilding = 0;
+      for (let i = 0; i < p.props.length; i += 6) {
+        const t = p.props[i], x = p.props[i + 1], z = p.props[i + 2];
+        if (t !== PropType.CemWall && t !== PropType.Gravestone && t !== PropType.Grave && t !== PropType.Tomb && t !== PropType.Yew) continue;
+        if (!inside(x, z)) { out++; continue; }
+        if (p.buildings.some((b) => pointInPoly(b.poly, x, z))) onBuilding++;
+        if (t === PropType.CemWall) { if (p.props[i + 5] === 1) pillars++; else walls++; }
+        else if (t === PropType.Tomb) tombs++;
+        else if (t !== PropType.Yew) graves++;
+      }
+      check(walls >= 20 && pillars >= 6 && graves >= 50 && tombs >= 1, `cemetery in cell ${c.id}: ${walls} wall pieces, ${pillars} pillars, ${graves} graves, ${tombs} tombs`);
+      check(onBuilding === 0 && p.cemPaths.length > 0, `cemetery in cell ${c.id}: nothing on a building (${onBuilding}), gravel paths (${p.cemPaths.length})`);
+      check(out === 0, `cemetery in cell ${c.id}: its pieces inside its outline (${out} outside)`);
+    }
+  }
+  check(n >= 1 && n <= 8, `seed 42: ${n} cemeteries in the city`);
+  console.log(`cemeteries: ${n} in ${macro.cells.length} cells, in ${Math.round(performance.now() - t0)} ms`);
 }
 
 // Cafés, restaurants and their terraces (plan/eatery.ts, plan/terrace.ts): deterministic; outdoor
@@ -1266,7 +1338,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const n = (k: string) => hints.filter((h) => h.kind === k).length;
     const arrows = n('arrow'), marks = n('mark'), chev = n('chevron'), scouts = n('scout');
     const sewerColonies = rooms.colonies.filter((c) => rooms.rooms[c.room].net === 'sewer').length;
-    check(!sewerColonies || (arrows >= junctions * 0.9 && marks >= junctions * 1.8 && chev > 100 && scouts >= 1), `sewers seed ${seed}: the Lumen's signs show the way at the junctions (${arrows} arrows and ${marks} signs at ${junctions} junctions, ${chev} chevrons, ${scouts} scouts, ${sewerColonies} colonies off the sewers)`);
+    check(!sewerColonies || (arrows >= junctions * 1.6 && marks >= junctions * 1.8 && chev > 100 && scouts >= 1), `sewers seed ${seed}: the Lumen's signs show the way at the junctions (${arrows} arrows and ${marks} signs at ${junctions} junctions, ${chev} chevrons, ${scouts} scouts, ${sewerColonies} colonies off the sewers)`);
   }
 }
 
@@ -1288,7 +1360,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const { planRooms } = await import('../src/underground/rooms');
   const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
   const { tubeAt, boxAt } = await import('../src/underground/Volumes');
-  const { planDeep } = await import('../src/underground/deep/plan');
+  const { planDeeps, dropOutposts } = await import('../src/underground/deep/plan');
   const { DeepField, primBounds } = await import('../src/underground/deep/field');
   const { runTrench } = await import('./trenchsim');
   for (const [seed, size] of [[42, 0.6], [7, 0.4]] as const) {
@@ -1304,13 +1376,21 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const blocked = (x: number, y: number, z: number) => occupied(x, y, z) || halls.some((h) => Math.hypot(h.cx - x, h.cz - z) < h.hu + 80 && y > h.y0 - 4);
     const t0 = performance.now();
     const inp = { seed: macro.seed, colonies: rooms.colonies, ground: (x: number, z: number) => terrain.height(x, z), blocked };
-    const plan = planDeep(inp);
+    const plans = planDeeps(inp);
     const ms = performance.now() - t0;
-    check(!!plan, `deep seed ${seed}: a realm is planned (${rooms.colonies.length} colonies)`);
-    if (!plan) continue;
-    check(hashPlan(plan) === hashPlan(planDeep(inp)), `deep seed ${seed}: plan deterministic`);
-    const F = new DeepField(plan.prims, plan.seed);
-    const own = new Set(plan.roads.map((r) => rooms.colonies[r.colony].chamber));
+    check(plans.map(hashPlan).join() === planDeeps(inp).map(hashPlan).join(), `deep seed ${seed}: plans deterministic`);
+    // Every colony leads down into a realm of its own (Arnd: no dead ends), near the centre; one nothing fits below is dropped.
+    const planned = rooms.colonies.length;
+    dropOutposts(rooms, plans);
+    const far = Math.max(...rooms.colonies.map((c) => Math.hypot(c.chamber.cx, c.chamber.cz)));
+    check(rooms.colonies.length >= 2 && plans.length === rooms.colonies.length && plans.every((p, i) => p.hub === i || plans.some((q) => q.hub === i)) && far < 1600, `deep seed ${seed}: every colony has a realm (${plans.length} of ${planned}, farthest ${far.toFixed(0)} m from the centre)`);
+    const fields = plans.map((p) => new DeepField(p.prims, p.seed));
+    const clash = plans.filter((p, i) => fields.some((o, j) => j !== i && p.nodes.some((n) => o.near(n.x, n.y, n.z) && o.air(n.x, n.y + 0.5, n.z)))).length;
+    check(clash === 0, `deep seed ${seed}: the realms keep apart (${clash} run into another)`);
+    check(new Set(plans.map((p) => p.trench.style)).size === plans.length, `deep seed ${seed}: each battleground different (${plans.map((p) => p.trench.style).join(', ')})`);
+    for (const [ri, plan] of plans.entries()) {
+    const F = fields[ri];
+    const own = new Set(plans.flatMap((p) => p.roads.map((r) => rooms.colonies[r.colony].chamber)));
     // Air of the realm vs everything else (the roads' own chambers excepted), and its cover.
     let cuts = 0, shallow = 0, samples = 0;
     for (const p of plan.prims) {
@@ -1354,13 +1434,15 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     // (most Murk fall in no-man's land, hardly any get past, the fallen are replaced; dice seeded per realm),
     // and the Murk go for a player in their way.
     const T = plan.trench;
-    check(T.segs.length === 3 && T.posts.length >= 5 && T.gapPosts.length === 2 && T.craters.length >= 3 && ['trench', 'noMans', 'murkLine'].every((k) => !!plan.places[k]) && ['trench0', 'trench1', 'noMans', 'murkLine'].every((k) => plan.nodes.some((q2) => q2.name === k)),
-      `deep seed ${seed}: the Warrens' mouth is a trench line (${T.segs.length} bays, ${T.posts.length} spots, ${T.gapPosts.length} gaps, ${T.craters.length} craters)`);
+    const bays = T.segs.length;
+    check(bays >= 2 && T.posts.length >= 5 && T.gapPosts.length >= bays - 1 && T.craters.length >= 3 && ['trench', 'noMans', 'murkLine'].every((k) => !!plan.places[k]) && ['trench0', 'noMans', 'murkLine'].every((k) => plan.nodes.some((q2) => q2.name === k)) && (!T.chasm || plan.nodes.some((q2) => q2.name === 'bridge1')),
+      `deep seed ${seed}: the Warrens' mouth is a trench line, ${T.style} (${T.segs.length} bays, ${T.posts.length} spots, ${T.gapPosts.length} gaps, ${T.craters.length} craters)`);
     const tw = runTrench(plan, 150, 'away');
     check(tw.spawned >= 20 && tw.killed >= tw.spawned * 0.6 && tw.past <= 2 && tw.sentriesLost <= 12, `deep seed ${seed}: the Lumen hold the trench (${tw.spawned} Murk came, ${tw.killed} fell, ${tw.reachedLine} reached the line, ${tw.past} got past; ${tw.sentriesLost} sentries lost; ${tw.hits}/${tw.bolts} bolts hit)`);
     const tp = runTrench(plan, 60, 'noMans');
     check(tp.playerHits >= 3, `deep seed ${seed}: the Murk go for a player in no-man's land (${tp.playerHits} hits in 60 s)`);
-    console.log(`deep seed ${seed}: ${plan.roads.length} roads, ${plan.prims.length} shapes, ${plan.decor.length} decor, ${plan.glows.length / 7} lights, ${plan.nodes.length} waypoints, Glow at ${plan.yGlow.toFixed(0)} m, Deep at ${plan.yDeep.toFixed(0)} m, in ${ms.toFixed(0)} ms`);
+    console.log(`deep seed ${seed} colony ${plan.hub} (${T.style}): ${plan.roads.length} roads, ${plan.prims.length} shapes, ${plan.decor.length} decor, ${plan.glows.length / 7} lights, ${plan.nodes.length} waypoints, Glow at ${plan.yGlow.toFixed(0)} m, Deep at ${plan.yDeep.toFixed(0)} m, in ${ms.toFixed(0)} ms for all`);
+    }
   }
   // The war: deterministic; left alone with strong Murk the line falls back; the Maw brought down stops them growing.
   const { freshWar, stepWar, mawDown, parseWar, WAR } = await import('../src/underground/deep/War');
@@ -2058,6 +2140,17 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
   check(keys(back) === keys(full) && keys(back.player) === keys(full.player) && keys(back.threats) === keys(full.threats) && keys(back.aftermath!) === keys(full.aftermath!) && keys(back.threats.remains[0]) === keys(full.threats.remains[0]), 'saves: all fields survive parsing');
+  // Reputation is open-ended upwards (v0.128): a save above +100 keeps it, the floor stays −100.
+  {
+    const hi = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: 250.5, stats: {} } }), lo = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: -400, stats: {} } });
+    const R = new Reputation(1, 0.5, 'normal');
+    R.add(180, 'test'); R.add(45.5, 'test'); R.add(-500, 'test');
+    const floor = R.value;
+    R.restore({ v: 320 });
+    check(hi.reputation.v === 250.5 && lo.reputation.v === -100 && floor === -100 && R.value === 320 && R.label() === 'Living legend' && R.attitude === 1 && R.cheers,
+      `reputation: no ceiling (save 250.5 → ${hi.reputation.v}, restore 320 → ${R.value}), floor −100 (${lo.reputation.v}, ${floor}), attitude tops out at 1`);
+    check(opinionOf(null, 400, 0.5) === opinionOf(null, 100, 0.5), 'reputation: strangers\' opinion of a hero stops growing at +100');
+  }
   // A version-1 save (before the aftermath): migrates with no aftermath; its bodies count from the load, nothing cleared.
   const v1 = JSON.parse(serializeSave(full)) as Record<string, unknown>;
   v1.v = 1; delete v1.aftermath;
@@ -2410,10 +2503,25 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const m = new Justice({ ...host, witnesses: () => 5 });
   m.record({ ...e('collapse', {}, 6), cause: 'threat' });
   check(m.stats.collapses === 0 && m.heat === 0, "justice: a monster's collapse is not booked to the player");
+  // Fighting a monster: collateral near it (or while the hero is near it) costs nothing.
+  let near = true, toasts = 0, rep2 = 0;
+  const grace = new Justice({ ...host, witnesses: () => 5, officersNear: () => 1, rep: (d: number) => { rep2 += d; }, toast: () => { toasts++; }, monsterNear: () => near });
+  const person = {} as object;
+  grace.record({ ...e('collapse', {}, 6) });
+  grace.record({ cause: 'player', power: 'fireball', target: 'person', effect: 'burn', x: 0, z: 0, t: 0, ref: person });
+  grace.record({ cause: 'player', power: 'stomp', target: 'prop', effect: 'topple', x: 0, z: 0, t: 0 });
+  const forgiven = rep2 === 0 && grace.heat === 0 && grace.stats.forgiven === 3 && toasts === 1;
+  near = false;
+  grace.record({ cause: 'player', power: 'stomp', target: 'car', effect: 'wreck', x: 0, z: 0, t: 0, ref: {} });
+  check(forgiven && rep2 < 0 && grace.heat > 0, `justice: no reputation or heat lost near a big monster (${grace.stats.forgiven} forgiven, one note), counted again away from it (${rep2})`);
+  const w = new Justice({ ...host, witnesses: () => 5 });
+  w.record({ ...e('facade', {}), cause: 'world' });
+  check(w.stats.offences === 0 && w.heat === 0, "justice: rubble and a flung hero's body ('world') are not booked to the player");
   // A manhunt for a public menace: an officer close by is enough (no offence), not for a merely disliked hero.
   let hunted = 0;
   const hunt = (repV: number) => { const H = new Justice({ ...host, time: 100, officersNear: () => 1, repValue: () => repV, pursue: () => { hunted++; } }); H.update(0.5); return H.wanted; };
   check(hunt(JUSTICE.manhunt - 5) === 1 && hunt(JUSTICE.manhunt + 15) === 0 && hunted > 0, 'justice: a public menace is hunted by the first officer who sees them; a disliked hero is not');
+  check(lockedAway(JUSTICE.manhunt) && lockedAway(-100) && !lockedAway(JUSTICE.manhunt + 1) && !lockedAway(0), 'justice: a public menace arrested is locked away for good (game over); a merely disliked hero gets a fine');
 }
 
 // Landmarks (plan/landmarks.ts, plan/landmarkParts.ts): deterministic; a town hall and a stadium in
@@ -2542,7 +2650,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
     return lm;
   };
-  let missing = 0, nan = 0, out = 0, empty = 0, maxTris = 0, farBig = 0;
+  let missing = 0, nan = 0, out = 0, empty = 0, maxTris = 0, farBig = 0, maxInner = 0;
   const looks = new Map<number, Set<string>>();
   for (let style = 0; style < MARVEL_STYLES; style++) for (let seed = 1; seed <= 6; seed++) for (const R of [1300, 3500, 9000]) {
     const lm = make(style as MS, seed, R);
@@ -2558,12 +2666,14 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     if (!m0.index.length || !m1.index.length) empty++;
     if (m1.index.length > m0.index.length) farBig++;
     maxTris = Math.max(maxTris, m0.index.length / 3);
+    if (parts.some((p) => p.inner)) maxInner = Math.max(maxInner, buildLandmarkMesh(lm, flat, 0, false, undefined, true).build().index.length / 3);
     if (!looks.has(style)) looks.set(style, new Set());
     looks.get(style)!.add(Object.values(lm.p).map((v) => v.toFixed(1)).join('/'));
   }
   check(missing === 0 && nan === 0, `marvels: every family designs and builds (${missing} missing, ${nan} non-finite parts)`);
   check(out === 0, `marvels: structures inside their sites (${out} points out)`);
   check(empty === 0 && farBig === 0 && maxTris < 60000, `marvels: near and far meshes (${empty} empty, ${farBig} far bigger), at most ${(maxTris / 1000).toFixed(1)}k triangles`);
+  check(maxInner < 150000, `marvels: insides (drawn close by only) at most ${(maxInner / 1000).toFixed(1)}k triangles`);
   check([...looks.values()].every((v) => v.size >= 6), `marvels: each family differs from seed to seed (${[...looks.values()].map((v) => v.size).join(', ')} looks from 6 seeds × 3 sizes)`);
   // The helix: up the walkway from its foot to the roof, on its floor all the way, never inside a wall.
   {
@@ -2652,7 +2762,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     };
     const mounds: number[][] = [];
     const D = {
-      onImpact: undefined, impact: (...a: number[]) => wr.impact(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
+      onImpact: undefined, as: <T>(_c: string, fn: () => T) => fn(), impact: (...a: number[]) => wr.impact(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
       restoreMound: (x: number, z: number, rr: number, h: number) => { mounds.push([x, z, rr, h]); },
     } as unknown as Destruction;
     const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
@@ -2775,7 +2885,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       near.position.set(...meshes[0].origin);
       return { index: 0, lm, grid: b.grid!, pieces: b.pieces!, elemData: ed, elemTex: new THREE.DataTexture(ed, Wd, Hd), elemW: Wd, near, nearGlass: null, facadeMat: null as never, glassMat: null };
     };
-    const D = { onImpact: undefined, impact: () => 0, restoreMound: () => undefined } as unknown as Destruction;
+    const D = { onImpact: undefined, as: <T>(_c: string, fn: () => T) => fn(), impact: () => 0, restoreMound: () => undefined } as unknown as Destruction;
     const wr = new LandmarkWrecks([data()], D, noop, noop, flat, solids, facade);
     const w = wr.wrecks[0], T = w.T;
     let panes = 0;
@@ -2801,6 +2911,96 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     results.push(`${style}: ${w.n} pieces, ${panes} panes`);
   }
   console.log(`cathedrals: ${results.join('; ')} in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// The starship's great hall (interior/design, plan/marvelParts): in from the square through a lobby
+// door and the hull to the hall floor; up every flight to its level; from every gallery through a
+// room's door; all without a wall in the way or a step a walker can't take.
+{
+  const t0 = performance.now();
+  const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
+  const results: string[] = [];
+  for (const seed of [1, 3, 4]) {
+    const r = new MRng(seed * 101);
+    const d = marvelDesign(0, 7000)(r.fork('design'), 1)!;
+    // (Its site on a slope: foundations reach 1.5 m down, as on real ground.)
+    const lm: Landmark = { id: 0, kind: 'marvel', name: 'test', cell: 0, x: 40, z: -20, angle: 0.4, hu: d.hu, hv: d.hv, site: [], base: 0.15, low: -1.5, seed: r.nextU32(), style: 0, p: d.p };
+    lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);
+    landmarkParts(lm, flat);
+    const hall = marvelHall(lm);
+    check(!!hall && hall.levels.length >= 6, `starship ${seed}: a great hall with galleries (${hall?.levels.length ?? 0} levels)`);
+    if (!hall) continue;
+    const solids = new LandmarkSolids({ landmarks: [lm] } as unknown as MacroPlan, flat);
+    // The player's rules (world/Collision, player/Player): a 1.8 m walker of radius 0.3 stands on tops at
+    // least 0.7 m deep (or decks) up to 0.5 m above its feet; taller tops within its radius stop it.
+    const STEP = 0.5, MINH = 0.7, R = 0.3, HGT = 1.8;
+    const groundAt = (x: number, z: number, y: number) => {
+      let g = 0;
+      solids.provider(x - 0.01, z - 0.01, x + 0.01, z + 0.01, (o) => {
+        if ((o.y1 - o.y0 < MINH && !o.deck) || o.y1 > y + STEP || o.y1 <= g) return;
+        if (insideObstacle(o, x, z, 0)) g = o.y1;
+      });
+      return g;
+    };
+    const stopped = (x: number, z: number, y: number) => {
+      let hit = false;
+      solids.provider(x - R - 6, z - R - 6, x + R + 6, z + R + 6, (o) => {
+        if (hit || o.y1 - o.y0 < HGT * 0.4 || y >= o.y1 - STEP || y + HGT <= o.y0) return;
+        if (insideObstacle(o, x, z, R)) hit = true;
+      });
+      return hit;
+    };
+    // Walk a polyline of local points from height y: blocked samples and the biggest step up.
+    const walk = (pts: [number, number][], y: number) => {
+      let blocked = 0, maxStep = 0;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        for (let s = 0; s <= L; s += 0.2) {
+          const [x, z] = siteToWorld(lm, pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / L, pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / L);
+          const ny = groundAt(x, z, y);
+          maxStep = Math.max(maxStep, ny - y);
+          y = ny;
+          if (stopped(x, z, y)) blocked++;
+        }
+      }
+      return { blocked, maxStep, y };
+    };
+    const doors = marvelDoors(lm);
+    let inBlocked = 0, inStep = 0, inFloor = 0, inside = true;
+    for (const a of doors) {
+      const e = Math.min(lm.hu / Math.max(1e-6, Math.abs(Math.cos(a))), lm.hv / Math.max(1e-6, Math.abs(Math.sin(a)))) - 0.5, i = hall.voidR * 0.6;
+      const inn = walk([[Math.cos(a) * e, Math.sin(a) * e], [Math.cos(a) * i, Math.sin(a) * i]], 0);
+      const [ix, iz] = siteToWorld(lm, Math.cos(a) * i, Math.sin(a) * i);
+      inBlocked += inn.blocked; inStep = Math.max(inStep, inn.maxStep); inFloor = Math.max(inFloor, Math.abs(inn.y - lm.base));
+      inside &&= !!solids.insideAt(ix, inn.y + 1, iz);
+    }
+    check(doors.length >= 3 && inBlocked === 0 && inStep < 0.45 && inFloor < 0.05 && inside, `starship ${seed}: walk in from the square through each of the ${doors.length} doors to the hall floor (${inBlocked} blocked, steps up to ${inStep.toFixed(2)} m, inside ${inside})`);
+    let badFlights = 0, badRooms = 0;
+    for (const st of hall.design.stairs) {
+      const run = st.n * st.tread;
+      const w = walk([[st.from[0] - st.dir[0] * 0.6, st.from[1] - st.dir[1] * 0.6], [st.from[0] + st.dir[0] * (run + 0.8), st.from[1] + st.dir[1] * (run + 0.8)]], st.y0);
+      if (w.blocked || w.maxStep > 0.45 || Math.abs(w.y - st.y1) > 0.05) { badFlights++; if (badFlights < 3) results.push(`flight ${st.y0.toFixed(0)}→${st.y1.toFixed(0)}: ${w.blocked} blocked, step ${w.maxStep.toFixed(2)}, ends ${w.y.toFixed(2)}`); }
+    }
+    for (const room of hall.design.rooms) {
+      const out: [number, number] = [room.door[0] - room.facing[0] * -1.6, room.door[1] - room.facing[1] * -1.6];
+      const inDoor: [number, number] = [room.door[0] - room.facing[0] * 1.2, room.door[1] - room.facing[1] * 1.2];
+      const w = walk([out, room.door, inDoor], room.y);
+      if (w.blocked || Math.abs(w.y - room.y) > 0.05) { badRooms++; if (badRooms < 3) results.push(`room at ${room.y.toFixed(0)}: ${w.blocked} blocked, floor ${w.y.toFixed(2)}`); }
+    }
+    // Round each gallery: no wall or rail across the walkway.
+    let badRing = 0;
+    for (const y of hall.levels) {
+      const pts: [number, number][] = [];
+      const rm = hall.voidR + 1.8, sz = lm.p.ell;
+      for (let i = 0; i <= 96; i++) { const t = (i / 96) * Math.PI * 2; pts.push([Math.cos(t) * rm, Math.sin(t) * rm * sz]); }
+      const w = walk(pts, y);
+      if (w.blocked || Math.abs(w.y - y) > 0.05) badRing++;
+    }
+    check(badRing === 0, `starship ${seed}: round every gallery unhindered (${badRing} of ${hall.levels.length} blocked)`);
+    check(badFlights === 0, `starship ${seed}: every one of the ${hall.design.stairs.length} flights climbs clear to its level (${badFlights} bad)`);
+    check(badRooms === 0, `starship ${seed}: every one of the ${hall.design.rooms.length} rooms is walkable in through its door (${badRooms} bad)`);
+  }
+  console.log(`starship halls in ${(performance.now() - t0).toFixed(0)} ms ${results.join('; ')}`);
 }
 
 // Front doors in real cities: from the square up the steps (however far below the floor it lies)
@@ -2916,7 +3116,7 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(rare.length === 0, `people: every temperament is common enough (${TEMPERAMENTS.map((t) => `${t} ${tally[t] ?? 0}`).join(', ')})`);
   check(TEMPERAMENTS.every((t) => Array.isArray(CHAT[t])), 'people: small talk for every temperament');
   // Every topic answers for everybody in every situation, with every token filled in.
-  const topics: Topic[] = ['hello', 'mood', 'job', 'news', 'way', 'me', 'bye'];
+  const topics: Topic[] = ['hello', 'mood', 'job', 'news', 'way', 'favour', 'me', 'bye'];
   let none = 0, raw = 0, n = 0;
   const seen: Record<string, Set<string>> = {};
   const rng = new MRng(99);
@@ -2940,6 +3140,12 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
       place: 'Linden Square station', dir: dirWord(rng.range(-1, 1), rng.range(-1, 1)), dist: rng.range(100, 4000),
       heard: rng.chance(0.4) ? 'Did you hear? There was a mugging in Ashville this morning.' : null, hood: rng.chance(0.8) ? 'Ashville' : null,
       safety: rng.pick(['safe', 'quiet', 'mixed', 'rough', 'dangerous'] as const),
+      // The social web (phase 4).
+      teller: rng.chance(0.3) ? 'Mara' : null, bond: rng.pick(['friend', 'neighbour', 'sister', 'colleague']), told: rng.pick(['helped', 'saved', 'hurt'] as const),
+      need: rng.pick([null, null, 'hunger', 'tired', 'lonely'] as const), favour: rng.pick(['none', 'none', 'visit', 'streets', 'open', 'done', 'lost'] as const),
+      who: 'Hana', word: rng.pick(['sister', 'friend', 'grandmother']), asker: rng.chance(0.1) ? 'Mara' : null,
+      // The Wardens (aliens phase 1).
+      nannies: rng.pick([null, null, null, 'sky', 'disc', 'walker', 'swarm'] as const),
     };
     if (!f.group) f.boss = null;
     for (const tp of topics) {
@@ -2957,6 +3163,10 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const base = { first: 'Ann', last: 'Lee', full: 'Ann Lee', years: 40, child: false, senior: false, traits: { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 }, job: { kind: 'office' as const, title: 'office worker' }, interest: 'chess', mood: 0, moodWord: 'fine' as const, days: 0, opinion: 0, hour: 12, weather: 'fair', trouble: 0, threat: false, street: 'Elm Street', metStreet: 'Elm Street', city: 'X', group: null, boss: null, giant: false };
   const helped = pickLine('hello', { ...base, temper: 'grumpy', met: 2, deed: 'helped' }, 1);
   check(helped.id.startsWith('h21#'), `people: someone you helped up greets you for it (${helped.id}: ${helped.text})`);
+  // Sent by a friend: they say so, even the chatty on a first meeting (GPU check of PR #56).
+  const sent = pickLine('hello', { ...base, temper: 'chatty', met: 0, deed: null, asker: 'Mara' } as TalkFacts, 1);
+  check(sent.id.startsWith('h44#') && sent.text.includes('Mara'), `people: someone you were sent to says who sent you (${sent.id}: ${sent.text})`);
+  check(fill('I love {interest}.', { ...base, temper: 'chatty', met: 0, deed: null, interest: 'their cat' } as TalkFacts) === 'I love my cat.', 'people: "their cat" becomes "my cat" in their own words');
   const used = new Set<string>();
   const said: string[] = [];
   for (let i = 0; i < 3; i++) { const p = pickLine('news', { ...base, temper: 'steady', met: 0, deed: null }, 5 + i, used); said.push(p.text); used.add(p.id); }
@@ -3004,6 +3214,163 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const mime = ruleAnswer({ topic: 'job', facts: { ...base, temper: 'chatty', met: 0, deed: null, job: { kind: 'street', title: 'mime' } }, seed: 4, used: new Set() });
   check(mime.id.startsWith('js2#') && !mime.id.includes(' '), `people: the mime only mimes (${mime.text})`);
   console.log(`people: ${TEMPERAMENTS.length} temperaments, ${topics.reduce((s, t) => s + LINES[t].length, 0)} line rules, ${n} answers in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// People, phase 2 (NPC_PERSONALITY_PLAN §3.5): behaviour from personality.
+{
+  const t0 = performance.now();
+  const B = await import('../src/game/people/behaviour');
+  const { Manners } = await import('../src/game/people/Manners');
+  const { PState } = await import('../src/sim/Pedestrians');
+  type PState = import('../src/sim/Pedestrians').PState;
+  type PedAgent = import('../src/sim/Pedestrians').PedAgent;
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 7, size: 0.4 }))), 7);
+  const T = (o: number, c: number, e: number, a: number, n: number) => ({ o, c, e, a, n });
+  check(B.paceOf(T(0.5, 0.9, 0.9, 0.5, 0.5)) > 1.1 && B.paceOf(T(0.9, 0.1, 0.1, 0.5, 0.5)) < 0.9 && Math.abs(B.paceOf(T(0.5, 0.5, 0.5, 0.5, 0.5)) - 1) < 1e-9, 'people: outgoing, dutiful people walk briskly, dreamers dawdle');
+  const paces = Array.from({ length: 2000 }, (_, i) => B.paceOf(traitsOf(pop.synthetic(500 + i * 31))));
+  const mean = paces.reduce((s2, v) => s2 + v, 0) / paces.length;
+  check(Math.abs(mean - 1) < 0.02 && Math.min(...paces) >= B.MANNERS.paceMin && Math.max(...paces) <= B.MANNERS.paceMax, `people: the crowd keeps its usual pace on average (${mean.toFixed(3)}, ${Math.min(...paces).toFixed(2)}…${Math.max(...paces).toFixed(2)})`);
+  check(B.calmRate(0) > 2.5 * B.calmRate(1) && Math.abs(B.calmRate(0.5) - 0.06) < 1e-9, 'people: the calm get over a scare faster than the nervous');
+  check(B.gawkFor(0.9, 0) > B.gawkFor(0.1, 0) + 5, 'people: the curious look longer');
+  const avg = T(0.5, 0.5, 0.5, 0.5, 0.5);
+  check(B.berthOf(0, avg) === 0 && B.berthOf(-29, avg) === 0 && B.berthOf(-40, avg) > 0 && B.berthOf(-100, avg) > B.berthOf(-40, avg) && B.refuses(-70) && !B.refuses(-50), 'people: who dislikes you keeps away, who can\'t stand you won\'t talk');
+  check(B.helps(T(0.5, 0.5, 0.5, 0.9, 0.3), 0, false) && !B.helps(T(0.5, 0.5, 0.5, 0.3, 0.3), 0, false) && !B.helps(T(0.5, 0.5, 0.5, 0.9, 0.3), 0, true) && !B.helps(T(0.5, 0.5, 0.5, 0.9, 0.3), 0.8, false), 'people: kind grown-ups who are not frightened help others up');
+  check(B.waves(50, T(0.5, 0.5, 0.9, 0.5, 0.5)) && !B.waves(30, T(0.5, 0.5, 0.2, 0.5, 0.5)) && !B.waves(-10, T(0.5, 0.5, 1, 0.5, 0.5)), 'people: those who like you wave, extraverts sooner');
+  const only: import('../src/game/people/behaviour').Moment[] = ['away', 'refuse', 'point', 'helper'];
+  const gaps = only.flatMap((m) => TEMPERAMENTS.filter((t) => !B.reactLine(m, t, 0.95)).map((t) => `${m}/${t}`));
+  check(gaps.length === 0, `people: everyone has words for keeping away, refusing, pointing and helping (missing ${gaps.join(', ')})`);
+  check(B.reactLine('flee', 'anxious', 0.1) !== null && B.reactLine('flee', 'anxious', 0.9) === null && B.reactLine('flee', 'dreamy', 0.1) === null, 'people: own words in the moment, the common ones now and then');
+  // Manners in a small street: a fake world with real rules. Someone falls; a kind passer-by comes and
+  // helps them up; an unkind crowd leaves them; a thief running past is pointed at; someone who
+  // dislikes the hero steps aside.
+  {
+    const mk = (i: number, x: number, z: number, a: number) => {
+      const cit = { ...pop.synthetic(9000 + i), role: 1 };
+      return { id: i, cit, x, z, y: 0, heading: 0, speed: 0, pref: 1.3, state: 0, route: new Float32Array(0), wp: 0, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: i, vy: 0, vx: 0, vz: 0, alive: true, slot: -1, agree: a } as unknown as PedAgent & { agree: number };
+    };
+    const run = (agents: (PedAgent & { agree: number })[], secs: number, opts: { rep?: number; each?: (t: number) => void } = {}) => {
+      const said: string[] = [];
+      const log: { t: number; x: number; z: number; cause: string; effect: string }[] = [];
+      const g = {
+        player: { pos: { x: 0, y: 0, z: 0 }, height: 1.8, radius: 0.35, flying: false },
+        freeCam: false,
+        peds: { neighbours: (x: number, z: number, r: number, out: PedAgent[]) => { out.length = 0; for (const a of agents) if (Math.abs(a.x - x) <= r && Math.abs(a.z - z) <= r) out.push(a); return out; } },
+        crime: { rep: { value: opts.rep ?? 0 } },
+        consequences: { log, time: 0 },
+        barks: { say: (_a: PedAgent, l: string) => { said.push(l); return true; } },
+      };
+      const person = (c: { id: number }) => { const a = agents.find((x) => x.cit.id === c.id)!; const t = { o: 0.5, c: 0.5, e: a.agree, a: a.agree, n: 0.3 }; return { traits: t, temper: temperamentOf(t), full: 'Someone', first: 'Sam' }; };
+      const people = {
+        partner: null,
+        person,
+        find: () => null,
+        opinion: (c: { id: number }) => opinionOf(null, opts.rep ?? 0, person(c).traits.a),
+      };
+      const M = new Manners(g as never, people as never);
+      const dt = 0.05;
+      // (Seeded: the chances of a chat or a snack are the same every run.)
+      const random = Math.random, rr = new MRng(5);
+      Math.random = () => rr.float();
+      for (let t = 0; t < secs; t += dt) {
+        opts.each?.(t);
+        for (const a of agents) {
+          // (Handed back: on their way again, as Pedestrians does.)
+          if (a.state === PState.Flee && !a.actor) a.state = PState.Walk;
+          a.stateT += dt;
+          a.sideT = Math.max(0, (a.sideT ?? 0) - dt);
+          const act = a.actor;
+          if (act?.goal && act.speed > 0) { const dx = act.goal.x - a.x, dz = act.goal.z - a.z, d = Math.hypot(dx, dz), st = Math.min(d, act.speed * dt); if (d > 1e-6) { a.x += (dx / d) * st; a.z += (dz / d) * st; } }
+          if (act?.action) { act.action.age += dt; if (act.action.age > act.action.dur) act.action = null; }
+        }
+        M.update(dt);
+      }
+      Math.random = random;
+      return { said, M };
+    };
+    // A fall (not the hero's everyday accident, which is theirs for a while) at 20 m from the hero.
+    const down = mk(1, 20, 0, 0.5);
+    down.state = PState.Down; down.downBy = 'collapse';
+    const kind = mk(2, 30, 4, 0.9), mean2 = mk(3, 24, 1, 0.2);
+    const r1 = run([down, kind, mean2], 25);
+    check((down.state as PState) === PState.Idle && down.helped === true && !kind.actor && Math.hypot(kind.x - down.x, kind.z - down.z) < 1.5 && Math.hypot(mean2.x - 24, mean2.z - 1) < 1e-6,
+      `people: a kind passer-by walks over and helps someone up, the unkind one walks on (${r1.said.join(' | ')})`);
+    const down2 = mk(4, 20, 0, 0.5);
+    down2.state = PState.Down; down2.downBy = 'collapse';
+    run([down2, mk(5, 24, 0, 0.2), mk(6, 26, 0, 0.3)], 25);
+    check(down2.state === PState.Down, 'people: nobody kind about, nobody helps');
+    const acc = mk(7, 20, 0, 0.5);
+    acc.state = PState.Down; acc.downBy = 'accident';
+    const k2 = mk(8, 25, 0, 0.9);
+    run([acc, k2], 30);
+    const early = acc.state === PState.Down;
+    run([acc, k2], 20);
+    check(early && (acc.state as PState) === PState.Idle, 'people: an everyday fall is left to the hero first, then a stranger helps');
+    // A thief running past.
+    const thief = mk(9, 10, 0, 0.5);
+    thief.actor = { role: 'criminal', state: 'run', owner: 3 } as never;
+    const w = mk(10, 14, 3, 0.9);
+    let pointing = false;
+    const r2 = run([thief, w], 5, { each: (t) => { thief.x += 0.2; if (Math.abs(t - 1.2) < 0.03) pointing = w.actor?.action?.id === 'gesture_point'; } });
+    check(pointing && r2.said.length === 1, `people: an agreeable passer-by points after a thief (${r2.said.join(' | ')})`);
+    check(!w.actor, 'people: … and goes on afterwards');
+    // Someone who dislikes the hero (a terrible reputation, an agreeable person) steps out of their way.
+    const near = mk(11, 2, 0, 0.95), fine = mk(12, -2, 0, 0.1);
+    run([near, fine], 0.25, { rep: -100 });
+    check((near.sideX ?? 0) > 0 && (near.sideT ?? 0) > 0 && !(fine.sideT), 'people: someone who dislikes you steps aside as you come near');
+    // Phase 4: two people who share a home pass each other near the hero and stop for a chat, then walk on.
+    const p1 = mk(20, 5, 0, 0.9), p2 = mk(21, 6.5, 0.5, 0.9);
+    p2.cit = { ...p2.cit, home: { ...p1.cit.home } };
+    let chatting = false;
+    const r3 = run([p1, p2], 30, { each: (t) => { if (Math.abs(t - 6) < 0.03) chatting = p1.actor?.owner === -6 && p2.actor?.owner === -6 && Math.hypot(p1.x - p2.x, p1.z - p2.z) < 1.6; } });
+    check(chatting && !r3.M['jobs'].some((j) => j.kind === 'chat') && r3.said.length >= 2, `people: family or neighbours meeting in the street stop for a chat and go on (${r3.said.join(' | ')})`);
+  }
+  console.log(`people, phase 2: ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// People, phase 4 (NPC_PERSONALITY_PLAN §5): bonds, word getting round, needs, favours.
+{
+  const t0 = performance.now();
+  const S = await import('../src/game/people/social');
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 7, size: 0.4 }))), 7);
+  const cits = Array.from({ length: 1500 }, (_, i) => pop.synthetic(7000 + i * 13));
+  const a0 = cits[0];
+  const housemate = { ...cits[1], home: { ...a0.home } };
+  const colleague = { ...cits[2], work: { cell: 3, b: 4, pick: 0, kind: 'work' as const } }, colleague2 = { ...cits[3], work: { cell: 3, b: 4, pick: 0, kind: 'work' as const } };
+  check(S.bondOf(a0, housemate) !== null && S.bondOf(a0, housemate) === S.bondOf(housemate, a0) && (S.bondOf(a0, housemate) === 'family' || S.bondOf(a0, housemate) === 'neighbour'), `people: under one roof, family or neighbours (${S.bondOf(a0, housemate)})`);
+  check(S.bondOf(colleague, colleague2) === 'colleague' && S.bondOf(a0, a0) === null, 'people: same workplace, colleagues');
+  let friends = 0, pairs = 0;
+  for (let i = 0; i < 300; i++) for (let j = i + 1; j < 300; j++) { pairs++; if (S.bondOf(cits[i], cits[j]) === 'friend') friends++; }
+  check(friends > 0 && friends < pairs * 0.01, `people: a few strangers are friends (${friends} of ${pairs} pairs)`);
+  const mum = { ...housemate, age: a0.age + 0.3, gender: 0.2, role: 2 };
+  check(S.bondWord('family', mum, a0) === 'mother' || S.bondWord('family', mum, a0) === 'grandmother', `people: family words by age (${S.bondWord('family', mum, a0)})`);
+  // Word gets round: helping someone up makes their housemate like you a little more, and they say so.
+  const W = { helped: PEOPLE.helped, saved: PEOPLE.saved, hurt: PEOPLE.hurt };
+  const known = [{ cit: a0, name: 'Mara Okonkwo', helped: 1, saved: 0, hurt: 0, deed: 'helped' as const }];
+  const h = S.hearsay(housemate, known, W);
+  check(h.op > 0 && h.op <= S.SOCIAL.hearsayMax && h.told?.name === 'Mara' && h.told.deed === 'helped', `people: word gets round to the people close to them (${h.op}, ${h.told?.word} ${h.told?.name})`);
+  check(S.hearsay(cits[700], known, W).op === 0 && S.hearsay(a0, known, W).op === 0, 'people: strangers (and the person themselves) hear nothing');
+  check(S.hearsay(housemate, [{ ...known[0], helped: 0, hurt: 5, deed: 'hurt' as const }], W).op === -S.SOCIAL.hearsayMax, 'people: hearsay is bounded');
+  check(opinionOf({ talks: 0, helped: 0, saved: 0, hurt: 0, favours: 1, letDown: 0 }, 0, 0.5) === S.SOCIAL.favourDone && opinionOf(null, 0, 0.5, 12) === 12, 'people: favours and hearsay count in the opinion');
+  // Needs: hungry before lunch, fed after; tired late; lonely after a day at home, extraverts sooner.
+  const tr = { o: 0.5, c: 0.5, e: 0.5, a: 0.5, n: 0.5 };
+  const w0 = { ...a0, wake: 7, sleep: 23 };
+  check(S.needsOf(w0, tr, 11.9, 0).hunger > S.needsOf(w0, tr, 14.5, 0).hunger && S.needsOf(w0, tr, 22.5, 0).tired > 0.7 && S.needsOf(w0, tr, 9, 0).tired < 0.3, 'people: hunger between meals, tired in the evening');
+  check(S.needsOf(w0, { ...tr, e: 0.9 }, 15, 6).lonely > S.needsOf(w0, { ...tr, e: 0.1 }, 15, 6).lonely && S.pressing({ hunger: 0.9, tired: 0.2, lonely: 0.1 }) === 'hunger' && S.pressing({ hunger: 0.3, tired: 0.2, lonely: 0.1 }) === null, 'people: loneliness by extraversion; only pressing needs show');
+  // Favours: asked by people who like and know you; the one to look in on is the same person every time.
+  check(S.asksFavour(40, 3, false, 0.1) && !S.asksFavour(40, 1, false, 0.1) && !S.asksFavour(0, 3, false, 0.1) && !S.asksFavour(40, 3, true, 0.1), 'people: only people who know and like you ask a favour');
+  const v1 = S.visitTarget(a0, (sd) => pop.synthetic(sd), 4), v2 = S.visitTarget(a0, (sd) => pop.synthetic(sd), 4);
+  check(v1.cit.id === v2.cit.id && v1.cit.role !== 0 && v1.word.length > 0, `people: the one to look in on is a grown-up, the same every time (${v1.word})`);
+  const k = newKnown(a0, 'Mara Okonkwo', 10, 0, 0, null);
+  k.favour = { kind: 'visit', asked: 10, until: 58, who: v1.cit, whoName: 'Hana Kim', word: v1.word, wx: 5, wz: 6 };
+  const k2 = newKnown(cits[5], 'Tom Weber', 10, 0, 0, null);
+  k2.favour = { kind: 'streets', asked: 10, until: 58, x: 100, z: 200, group: 'The Harbour Kings', done: 30 };
+  k2.favours = 1;
+  const back = restorePeople(JSON.parse(JSON.stringify(savePeople([k, k2]))));
+  check(back[0].favour?.kind === 'visit' && back[0].favour.who?.id === v1.cit.id && back[0].favour.wx === 5 && back[1].favour?.done === 30 && back[1].favour.group === 'The Harbour Kings' && back[1].favours === 1,
+    'people: favours survive a save');
+  check(restorePeople({ people: [{ ...JSON.parse(JSON.stringify(k)), favour: { kind: 'visit', who: 'junk' } }] })[0]?.favour === undefined, 'people: a damaged favour is dropped, the person kept');
+  check(['family', 'friend', 'neighbour', 'colleague'].every((b) => { const m = S.meetLines(b as never, 0.3); return m.hi && m.back && m.bye; }), 'people: words for meeting people you know');
+  console.log(`people, phase 4: ${friends} friend pairs of ${pairs}, ${(performance.now() - t0).toFixed(0)} ms`);
 }
 
 // ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live
@@ -3120,11 +3487,106 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const r = runLife(macro, terrain, 1, 9, 150);
   check(r.stuck === 0 && r.offFloor === 0 && r.onTracks === 0 && r.floorGap < 0.3, `metro life: every commuter keeps to the floors (${r.stuck} stalled, ${r.offFloor} off the floor, ${r.onTracks} on the tracks, worst gap ${r.floorGap.toFixed(2)} m)`);
   check(r.boarded > 0 && r.alighted > 0 && r.left > 0 && r.crossed > 0, `metro life: people board, get off, cross and leave (${r.boarded} / ${r.alighted} / ${r.crossed} / ${r.left})`);
+  // Pushed at the tracks, or knocked down onto them: nobody stays down there.
+  const s = runLife(macro, terrain, 1, 9, 60, 1, true);
+  check(s.onTracks === 0 && s.offFloor === 0, `metro life: shoved commuters stop at the platform edge, knocked-off ones climb back (${s.onTracks} on the tracks)`);
   console.log(`metro life: ${r.spawned} commuters, ${r.boarded} boarded, ${r.alighted} got off, ${r.left} walked out, in ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+// Super speed hops (src/player/speedHop.ts): over a person or a car ahead when the arc and the
+// landing are clear; never into a wall, never onto someone, never when too late.
+{
+  type O = import('../src/world/Collision').Obstacle;
+  let obs: O[] = [], walls: { x0: number; x1: number }[] = [];
+  const person = (x: number): O => ({ cyl: true, x, z: 0, r: 0.4, hx: 0, hz: 0, ux: 1, uz: 0, y0: 0, y1: 1.85 });
+  const car = (x: number): O => ({ cyl: false, x, z: 0, r: 0, hx: 2.2, hz: 0.9, ux: 1, uz: 0, y0: -0.2, y1: 1.5 });
+  const fake = {
+    obstacleProviders: [(x0: number, z0: number, x1: number, z1: number, out: (o: O) => void) => { for (const o of obs) if (o.x > x0 - 3 && o.x < x1 + 3) out(o); }],
+    under: null,
+    underground: () => false,
+    ceilingAt: () => Infinity,
+    groundAt: () => 0,
+    collide: (x: number, z: number, y: number) => ({ x, z, hit: walls.some((w) => x > w.x0 - 0.4 && x < w.x1 + 0.4) || obs.some((o) => !o.cyl && y < o.y1 - 0.5 && Math.abs(x - o.x) < o.hx + 0.4) }),
+  } as unknown as import('../src/world/Collision').Collision;
+  const plan = (v: number, d: number) => { for (let x = 0; x < d + 40; x += v / 60) { const p = planHop(fake, null, x, 0, 0, 1.8, 0.35, 1, 1, 0, v); if (p) return { at: x, ...p }; } return null; };
+  // The arc's feet height at distance s from take-off.
+  const feet = (p: { vy: number; g: number }, v: number, s: number) => { const t = s / v; return p.vy * t - 0.5 * p.g * t * t; };
+  obs = [person(40)];
+  const a = plan(50, 40);
+  const overHead = a ? feet(a, 50, 40 - a.at) : -1;
+  check(!!a && overHead > 1.85 && feet(a, 50, 40 - 0.75 - a.at) > 1.85 && feet(a, 50, 40 + 0.75 - a.at) > 1.85, `speed hop: over a person at 50 m/s (take-off ${a ? (40 - a.at).toFixed(1) : '-'} m before, feet ${overHead.toFixed(2)} m over them, range ${a?.range.toFixed(1) ?? '-'} m)`);
+  obs = [car(40)];
+  const b = plan(40, 40);
+  check(!!b && feet(b, 40, 40 - 2.6 - b.at) > 1.5 && feet(b, 40, 40 + 2.6 - b.at) > 1.5, `speed hop: over a parked car at 40 m/s (range ${b?.range.toFixed(1) ?? '-'} m)`);
+  // A second person right where the feet would come down: no hop (brush past instead).
+  obs = [person(40)];
+  const r0 = a ? a.range : 30;
+  obs = [person(40), person((a ? a.at : 30) + r0)];
+  const c = plan(50, 40);
+  check(!c || Math.abs(c.at + c.range - (a!.at + r0)) > 1, `speed hop: never lands on someone (${c ? 'landed ' + (c.at + c.range - a!.at - r0).toFixed(1) + ' m off' : 'no hop'})`);
+  // A wall within the arc: no hop.
+  obs = [person(40)]; walls = [{ x0: 50, x1: 52 }];
+  const d = plan(50, 40);
+  check(!d, `speed hop: not into a wall behind the person (${d ? 'hopped' : 'no hop'})`);
+  walls = [];
+  // Too slow, or nothing there: no hop.
+  check(!plan(5, 40) && (obs = [], !plan(50, 40)), 'speed hop: not when walking or when nothing is ahead');
+  // Two people a few metres apart: one hop over both.
+  obs = [person(40), person(43)];
+  const e = plan(50, 40);
+  check(!!e && feet(e, 50, 43 + 0.75 - e.at) > 1.85, `speed hop: one hop over two people in a row (feet ${e ? feet(e, 50, 43 + 0.75 - e.at).toFixed(2) : '-'} m over the second)`);
+}
+
+// Energy: no regeneration in flight; a giant body costs upkeep (even at 10 m, ~20 s at 100 m) and an
+// empty pool shrinks it back to 10 m.
+{
+  const { AbilitySystem } = await import('../src/game/abilities/AbilitySystem');
+  const { ENERGY, GIANT, sizeUpkeep } = await import('../src/game/abilities/tuning');
+  const prog = { sandbox: false, bonusMax: 0, bonusRegen: 0, rank: () => 0 } as any;
+  const pl = { flying: false, height: 1.8, maxHeight: 100, sizeOverride: false, events: {} } as any;
+  const ab = new AbilitySystem(prog, pl, {} as any, {} as any);
+  const run = (sec: number) => { for (let t = 0; t < sec; t += 0.05) { pl.maxHeight = 100; (ab as any).updateEnergy(0.05); } };
+  ab.energy = 50; pl.flying = true; run(5);
+  check(Math.abs(ab.energy - 50) < 1e-6, `energy: no regeneration in flight (${ab.energy.toFixed(1)})`);
+  pl.flying = false; run(2);
+  check(ab.energy > 60, `energy: regenerates on the ground (${ab.energy.toFixed(1)})`);
+  check(Math.abs(sizeUpkeep(GIANT.even) - ENERGY.regen) < 1e-6 && sizeUpkeep(1.8) === 0 && sizeUpkeep(4) < ENERGY.regen / 2, 'energy: size upkeep free at 1.8 m, eats regen at 10 m');
+  ab.energy = ab.maxEnergy; pl.height = 100;
+  let t = 0; while (!ab.exhausted && t < 60) { (ab as any).updateEnergy(0.05); t += 0.05; }
+  check(t > 17 && t < 23, `energy: a full pool holds 100 m for about 20 s (${t.toFixed(1)} s)`);
+  check(ab.exhausted, 'energy: running dry as a giant exhausts');
+  run(3);
+  check(Math.abs(pl.height - GIANT.fallback) < 1e-6 && pl.maxHeight <= GIANT.fallback, `energy: exhausted giant shrinks to 10 m and is capped there (${pl.height.toFixed(2)} m)`);
+  let tr = 0; while (ab.exhausted && tr < 30) { (ab as any).updateEnergy(0.05); tr += 0.05; }
+  check(!ab.exhausted && tr > 1 && tr < 10, `energy: an exhausted giant at 10 m refills and the cap lifts (${tr.toFixed(1)} s)`);
+  run(10);
+  check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 10 m holds the recovered pool (${ab.energy.toFixed(1)})`);
 }
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
 cmuBvhChecks(check);
+
+// Villain groups, Phase 4: boss operations as threat events, the eco-radicals, the necromancers (tools/villainTest.ts).
+await villainChecks(check);
+
+// Arcades: halls of video game cabinets on shopping streets, and their games (tools/arcadeTest.ts).
+arcadeChecks(check);
+doorChecks(check);
+
+// The second shard (SIDEKICK_PLAN phase 1): where it turns up, who takes it (tools/sidekickTest.ts).
+sidekickChecks(check);
+// The Wardens (ALIENS_PLAN phase 1): the disc schedule, walkers, stares, what people say (tools/aliensTest.ts).
+aliensChecks(check);
+
+// Nothing hurts through the pavement: every blow names where it came from (the type makes the
+// height a required argument), and the health refuses one from the other side of the street.
+{
+  const pl = { pos: new THREE.Vector3(0, -4, 0), vel: new THREE.Vector3(), k: 1, flying: false, downT: 0 } as unknown as ConstructorParameters<typeof PlayerHealth>[0];
+  const H = new PlayerHealth(pl, false);
+  H.sameSide = (_x, y) => (y < -1.5) === (pl.pos.y < -1.5);
+  const fromStreet = H.damage(10, 'monster', 2, 0, 0), fromSewer = H.damage(10, 'punch', 1, 0, -4);
+  check(fromStreet === 0 && fromSewer > 0, `health: a blow from the street does not reach the sewer below (street ${fromStreet}, sewer ${fromSewer.toFixed(1)})`);
+}
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

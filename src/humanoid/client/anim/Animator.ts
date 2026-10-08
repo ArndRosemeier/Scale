@@ -158,6 +158,10 @@ export class Animator {
   private blinkT = 2;
   private blink = 0;
   private talkPhase = 0;
+  /** Breathing and tail sway phases, integrated (a phase of time × a speed-dependent rate swept
+   *  ever faster as the clock grew: the chest shook on every stop late in a session). */
+  private breathPh = 0;
+  private tailPh = 0;
   private jaw = 0;
   // Reactions
   private hit = new THREE.Vector2();
@@ -811,6 +815,10 @@ export class Animator {
       this.armClipW = 0.25 + 0.75 * full;
       this.torsoClipW = 0.3 + 0.7 * full;
       this.applyClipGait(p, gait.w);
+      // The walk clip swings the forward hand in towards the midline (in front of the crotch
+      // seen head-on): carry the arms a little out from the body while moving.
+      const room = moving * (1 - run) * (0.1 + 0.06 * this.ch.app.weight);
+      if (room > 0.002) for (const s of ['L', 'R'] as const) p.arm(s, 0, room * this.armClip[s]);
       this.landing(p, gait.w);
     }
     // Hips toward movement direction, torso keeps facing forward.
@@ -829,8 +837,11 @@ export class Animator {
       p.spine(0, 0, shift * 0.04 * life);
       p.leg('L', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, -shift) * 0.12) * life);
       p.leg('R', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, shift) * 0.12) * life);
-      // (Not over a motion-captured idle: its arms already hang as captured.)
-      const calm = idle * (1 - this.mocapW * this.clipOn);
+      // (Not over a motion-captured idle: its arms already hang as captured. Its share without
+      // the 1 - moving that mocapW carries: idle·(1 - mocapW) peaked mid-stop and pulled the
+      // forearms straight, then let them bend again, a wobble on every stop from a run.)
+      const mocap = this.idleName.startsWith('CMU_') ? (1 - this.crouchS) * (1 - this.talkS) : 0;
+      const calm = idle * (1 - mocap * this.clipOn);
       if (inp.main === 'none' && inp.off === 'none' && !crouch && calm > 0.01) this.idleArms(p, calm);
       // The captured arms hang close to a slim actor's thighs: give the hands room past broader
       // hips, thighs and clothes.
@@ -1076,7 +1087,8 @@ export class Animator {
    *  - hover: upright, arms relaxed a little out from the sides, legs together with one knee
    *    bent, toes pointed, a slow drift in the limbs;
    *  - slow flight: arms along the body, legs trailing straight, head up to see ahead;
-   *  - cruise: one fist stretched ahead (the right), the other arm along the body;
+   *  - cruise (Superman): the right fist stretched ahead, the left arm straight back along the
+   *    body with the hand flat against the thigh, legs together;
    *  - boost: both fists ahead, the head tucked between the arms;
    *  - banking: head turned and torso curled into the turn, legs trailing out of it.
    * Fists close on the stretched arms, the other hands stay relaxed (see fingerPose).
@@ -1112,17 +1124,16 @@ export class Animator {
     }
     if (fast > 0.001) {
       const q = tmp.clear();
-      // Right fist ahead; the left arm along the body, or also ahead when boosting. Raised arms
-      // angle outward and the collarbones stay back (straight up front, the arm drifted across the
-      // body and the fists crossed in front of the head).
-      q.arm('R', 2.7, 0.42, 0, 0.08, 0.15, 0);
-      q.arm('L', -0.22 + 2.92 * boost, 0.1 + 0.32 * boost, 0, 0.14 - 0.08 * boost, 0.3 - 0.15 * boost, 0.06 * (1 - boost));
-      q.add('clavicle.R', -0.3, 0, 0);
-      q.add('clavicle.L', -0.3 * boost, 0, 0);
-      q.leg('L', -0.04, 0, 0, 0.05, 0.65, 0.2);
-      q.leg('R', -0.06, 0, 0, 0.22 * (1 - boost) + 0.05, 0.65, 0.2);
-      q.spine(0.1 + 0.04 * boost);
-      q.neck(0.85 - 0.15 * boost);
+      // Superman: the right fist stretched straight ahead past the head, the left arm straight
+      // back along the body with the hand flat against the thigh (both fists ahead when
+      // boosting), legs together and straight, toes pointed, back arched, head up.
+      q.arm('R', 3.25, 0.2, 0, 0.02, 0.15, 0);
+      q.arm('L', -0.1 + 3.05 * boost, 0.04 + 0.24 * boost, 0, 0.02, 0.15 * boost, 0);
+      q.add('clavicle.R', -0.25, 0, 0);
+      q.add('clavicle.L', -0.25 * boost, 0, 0);
+      for (const s of ['L', 'R'] as const) q.leg(s, -0.06, -0.07, 0, 0.03, 0.8, 0.25);
+      q.spine(0.12 + 0.04 * boost);
+      q.neck(1.0 - 0.3 * boost);
       p.addScaled(q, fast);
     }
     // Banking into a turn (the player rolls the body by `bank`): look and curl into it.
@@ -1133,7 +1144,7 @@ export class Animator {
     p.leg('R', 0, -b * 0.08, 0);
     // Fists on the stretched arms.
     this.flyCurl.R = 0.35 + 1.15 * fast;
-    this.flyCurl.L = 0.35 + 0.2 * slow + 1.15 * boost + 0.15 * fast * (1 - boost);
+    this.flyCurl.L = 0.35 + 0.2 * slow + 1.15 * boost - 0.33 * fast * (1 - boost);
   }
 
   private glide(p: Pose, fly: boolean) {
@@ -1212,7 +1223,8 @@ export class Animator {
     const alive = fam !== 'dead' && fam !== 'sleep';
     // Breathing (faster after running).
     const br = 1.4 + Math.min(1.5, this.speed * 0.2);
-    const b = Math.sin(t * br * 1.6);
+    this.breathPh = (this.breathPh + dt * br * 1.6) % (Math.PI * 2);
+    const b = Math.sin(this.breathPh);
     p.add('spine02', 0.012 * b);
     p.add('spine01', 0.018 * b);
     p.addS('clavicle', 'L', 0, 0, -0.012 * b);
@@ -1227,8 +1239,9 @@ export class Animator {
     // Tail: travelling sway wave, livelier when moving; droops when dead or asleep.
     if (this.tailBones > 0) {
       const sp = Math.min(1, this.speed / 4);
+      this.tailPh = (this.tailPh + dt * (1.6 + sp * 3)) % (Math.PI * 4);
       for (let k = 0; k < this.tailBones; k++) {
-        const ph = t * (1.6 + sp * 3) - k * 0.7;
+        const ph = this.tailPh - k * 0.7;
         const amp = (0.06 + 0.05 * k) * (0.6 + sp) * (alive ? 1 : 0.15);
         p.add(`tail${k}`, (alive ? -0.04 + 0.06 * Math.sin(ph * 0.5) : 0.12) - this.lean.x * 0.5, Math.sin(ph) * amp - this.hipYaw * 0.15, 0);
       }
@@ -1294,8 +1307,10 @@ export class Animator {
       const sg = s === 'L' ? -1 : 1;
       const sh = R(`shoulder01.${s}`), el = R(`lowerarm01.${s}`), wr = R(`wrist.${s}`);
       // Collarbones slightly forward (relaxed shoulders sit a little in front of the spine line;
-      // the rest pose had them pulled back, so the arms hung from behind the chest).
-      const C = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.4);
+      // the rest pose had them pulled back, so the arms hung from behind the chest) and lowered:
+      // the A-pose rest lifts them, and kept there the shoulders rose from the neck as if shrugged.
+      const C = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), sg * 0.4)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -sg * 0.25));
       const Ci = C.clone().invert();
       this.neutral[this.map.idx(`clavicle.${s}`)] = C;
       const u = el.clone().sub(sh).applyQuaternion(C).normalize();

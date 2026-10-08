@@ -286,7 +286,8 @@ class Particles {
 
 // ---------------------------------------------------------------- decals
 
-export const enum DecalKind { Scorch = 0, Ice = 1, Puddle = 2, Crack = 3, Frost = 4 }
+/** Moss: creepers and moss on a rewilded street (the eco-radicals); Grave: churned earth with bone splinters (the necromancers). */
+export const enum DecalKind { Scorch = 0, Ice = 1, Puddle = 2, Crack = 3, Frost = 4, Moss = 5, Grave = 6 }
 
 const DECAL_CAP = 240;
 
@@ -364,6 +365,18 @@ class Decals {
               float lines = smoothstep(0.03, 0.0, cr);
               col = mix(vec3(0.72, 0.86, 0.96), vec3(1.0), lines * 0.8) * (0.85 + 0.25 * fbm(w * 4.0)) * lightK + vec3(0.04, 0.07, 0.1) * uNight;
               a = body * (kind == 4 ? 0.5 : 0.82) * fade;
+            } else if (kind == 5) {              // moss and creepers: patchy green, vines across it
+              float m = fbm(w * 1.3 + seed);
+              float leaf = step(0.5, fbm(w * 7.0 + seed * 1.7));
+              float vine = smoothstep(0.05, 0.0, abs(fbm(w * 0.8 + seed + 7.0) - 0.5));
+              col = mix(vec3(0.07, 0.17, 0.04), vec3(0.2, 0.36, 0.08), leaf) * (0.7 + 0.5 * m) * lightK;
+              col = mix(col, vec3(0.05, 0.09, 0.03) * lightK, vine * 0.8);
+              a = max(body * smoothstep(0.3, 0.55, m + 0.2) * 0.9, vine * body) * fade;
+            } else if (kind == 6) {              // grave earth: churned, dark, pale splinters of bone
+              col = vec3(0.11, 0.075, 0.05) * (0.6 + 0.6 * fbm(w * 3.0 + seed)) * lightK;
+              float bone = step(0.8, fbm(w * 9.0 + seed * 2.3));
+              col = mix(col, vec3(0.75, 0.72, 0.62) * lightK, bone);
+              a = body * 0.88 * fade;
             } else {                             // puddle: dark, glossy
               col = vec3(0.05, 0.065, 0.08) * lightK + vec3(0.25, 0.3, 0.35) * pow(fbm(w * 0.7 + seed * 0.3), 3.0) * lightK;
               a = body * 0.62 * fade;

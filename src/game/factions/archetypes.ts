@@ -9,7 +9,7 @@ import type { District } from '../../plan/types';
 import type { CrimeKind } from '../crime/Crime';
 import type { VillainPower } from '../powers/Caster';
 
-export type ArchetypeId = 'gang' | 'syndicate' | 'techno' | 'cult';
+export type ArchetypeId = 'gang' | 'syndicate' | 'techno' | 'cult' | 'eco' | 'necro';
 
 type C3 = [number, number, number];
 
@@ -59,7 +59,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: 1,
     dense: 0,
     reach: 0.42,
-    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5, bomber: 1.5, brawl: 1.5, hideout: 0, den: 0, hijack: 0, ritual: 0 },
+    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5, bomber: 1.5, brawl: 1.5, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
     rivals: ['syndicate', 'techno'],
     // The Brute: a shoulder charge and a stomp that splits the pavement.
     lieutenant: { title: 'Brute', powers: ['dash', 'quake'], chance: { brawl: 0.4, hideout: 0.6, racket: 0.25, mugging: 0.12, robbery: 0.2 } },
@@ -82,7 +82,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: -0.6,
     dense: 1.5,
     reach: 0.34,
-    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0, bomber: 0, brawl: 0.6, hideout: 0, den: 0, hijack: 0, ritual: 0 },
+    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0, bomber: 0, brawl: 0.6, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
     rivals: ['gang', 'cult'],
     // The Enforcer: gadgets — a stun grenade, a frost gun, a shield projector, smoke to get away in.
     lieutenant: { title: 'Enforcer', powers: ['stun', 'frost', 'shield', 'smoke'], chance: { robbery: 0.35, hideout: 0.6, brawl: 0.4, snatch: 0.05 } },
@@ -104,8 +104,8 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     dense: 0.4,
     reach: 0.3,
     // Free the machines: they hijack the city's robots and drones and turn them on the street.
-    kinds: { snatch: 0.5, mugging: 0.3, robbery: 0.6, racket: 0, tagging: 0, bomber: 0, brawl: 1, hideout: 0, den: 0, hijack: 2.4, ritual: 0 },
-    rivals: ['cult', 'gang'],
+    kinds: { snatch: 0.5, mugging: 0.3, robbery: 0.6, racket: 0, tagging: 0, bomber: 0, brawl: 1, hideout: 0, den: 0, hijack: 2.4, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    rivals: ['cult', 'gang', 'eco'],
     // The Technomancer: lightning from the hands, an EMP that stalls cars and drops drones, a shield.
     lieutenant: { title: 'Technomancer', powers: ['bolt', 'emp', 'shield'], chance: { hijack: 0.7, hideout: 0.6, brawl: 0.4, robbery: 0.2 } },
     palettes: [
@@ -127,8 +127,8 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     dense: 0.2,
     reach: 0.28,
     // Rituals at the city's old places (landmarks, squares): something is being woken.
-    kinds: { snatch: 0.4, mugging: 0.5, robbery: 0.2, racket: 0, tagging: 0, bomber: 0, brawl: 0.8, hideout: 0, den: 0, hijack: 0, ritual: 2.4 },
-    rivals: ['techno', 'syndicate'],
+    kinds: { snatch: 0.4, mugging: 0.5, robbery: 0.2, racket: 0, tagging: 0, bomber: 0, brawl: 0.8, hideout: 0, den: 0, hijack: 0, ritual: 2.4, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    rivals: ['techno', 'syndicate', 'necro'],
     // The Invoker: fire and frost, and a blast of wind.
     lieutenant: { title: 'Invoker', powers: ['fireball', 'frost', 'gust'], chance: { ritual: 0.7, hideout: 0.6, brawl: 0.4, mugging: 0.1 } },
     palettes: [
@@ -142,9 +142,55 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     b: ['Order', 'Circle', 'Covenant', 'Choir', 'Vigil'],
     byPalette: { ember: ['Ashen', 'Ember', 'Cinder', 'Burning'], frost: ['Pale', 'Hoarfrost', 'Winter', 'Frozen'], violet: ['Hollow', 'Seventh', 'Storm', 'Thunder'] },
   },
+  eco: {
+    id: 'eco',
+    noun: 'Eco-radical',
+    affinity: { ...none, park: 1, suburban: 0.75, rowhouses: 0.35, oldtown: 0.15, apartments: 0.1 },
+    rough: 0,
+    dense: -0.4,
+    reach: 0.3,
+    // Drive the machines out: they wreck robots and cars and plant the street over.
+    kinds: { snatch: 0.15, mugging: 0.25, robbery: 0, racket: 0, tagging: 0.5, bomber: 0, brawl: 1, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 2.4, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    rivals: ['techno', 'necro'],
+    // The Beast-master: a whistle that sets the dog pack on you, a rush, a blast of wind.
+    lieutenant: { title: 'Beast-master', powers: ['whistle', 'dash', 'gust'], chance: { sabotage: 0.6, hideout: 0.6, brawl: 0.45, mugging: 0.12 } },
+    palettes: [
+      { name: 'moss', map: '#65a30d', primary: [0.2, 0.26, 0.1], accent: [0.45, 0.85, 0.2] },
+      { name: 'bark', map: '#a16207', primary: [0.28, 0.18, 0.09], accent: [0.62, 0.8, 0.25] },
+      { name: 'fern', map: '#15803d', primary: [0.1, 0.24, 0.14], accent: [0.3, 0.9, 0.5] },
+    ],
+    emblems: ['❦', '✿', '♣'],
+    names: ['the {a} {b}'],
+    a: ['Greenwood', 'Wildroot', 'Thornfield', 'Bramble', 'Verdant'],
+    b: ['Front', 'Kin', 'Wardens', 'Pack', 'Circle'],
+    byPalette: { moss: ['Moss', 'Verdant', 'Wildroot', 'Lichen'], bark: ['Oak', 'Thorn', 'Root', 'Bramble'], fern: ['Fern', 'Greenwood', 'Wildwood', 'Ivy'] },
+  },
+  necro: {
+    id: 'necro',
+    noun: 'Necromancer',
+    affinity: { ...none, oldtown: 1, park: 0.55, rowhouses: 0.3, suburban: 0.2 },
+    rough: 0.2,
+    dense: 0.1,
+    reach: 0.26,
+    // Power from the city's old dead: bones raised from the ground, the living led off in a trance.
+    kinds: { snatch: 0.2, mugging: 0.4, robbery: 0, racket: 0, tagging: 0, bomber: 0, brawl: 0.7, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 1.8, procession: 1.2, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    rivals: ['cult', 'eco'],
+    // The Bone-caller: a beam that drains life into them, a wail that scatters the street, a bone shield.
+    lieutenant: { title: 'Bone-caller', powers: ['drain', 'wail', 'shield'], chance: { raising: 0.6, procession: 0.5, hideout: 0.6, brawl: 0.4 } },
+    palettes: [
+      { name: 'grave', map: '#4ade80', primary: [0.05, 0.05, 0.06], accent: [0.45, 1.0, 0.55] },
+      { name: 'ash', map: '#a3a3a3', primary: [0.07, 0.07, 0.07], accent: [0.85, 0.95, 0.75] },
+      { name: 'violet', map: '#c084fc', primary: [0.06, 0.04, 0.08], accent: [0.7, 0.45, 1.0] },
+    ],
+    emblems: ['☠', '⚰', '☥'],
+    names: ['the {a} {b}'],
+    a: ['Last', 'Silent', 'Ninth', 'Barrow', 'Lych'],
+    b: ['Court', 'Wake', 'Lodge', 'Brethren'],
+    byPalette: { grave: ['Gravelight', 'Barrow', 'Lantern', 'Lych'], ash: ['Bone', 'Silent', 'Sepulchre', 'Lych'], violet: ['Dusk', 'Mourning', 'Last', 'Night'] },
+  },
 };
 
 /** The archetypes a city gets in Phase 1, in seeding order. */
 export const PHASE1: ArchetypeId[] = ['gang', 'syndicate'];
-/** A city's groups from Phase 3 on (a group whose districts the city lacks is left out). */
-export const CITY_GROUPS: ArchetypeId[] = ['gang', 'syndicate', 'techno', 'cult'];
+/** A city's groups from Phase 3 on, the eco-radicals and necromancers from Phase 4 (a group whose districts the city lacks is left out). */
+export const CITY_GROUPS: ArchetypeId[] = ['gang', 'syndicate', 'techno', 'cult', 'eco', 'necro'];

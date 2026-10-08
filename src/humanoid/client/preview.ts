@@ -134,7 +134,7 @@ export class HumanoidPreview {
   private frame(focus: 'body' | 'face', aspect: number, outPos: THREE.Vector3, outTarget: THREE.Vector3, padBottom = 0.22): void {
     const rig = this.rig;
     const h = rig?.height ?? 1.75;
-    let boxH: number, boxW: number, cy: number;
+    let boxH: number, boxW: number, cy: number, cx = 0;
     const headBone = rig?.char?.bone('head');
     if (focus === 'face' && headBone) {
       headBone.getWorldPosition(this.tmp);
@@ -142,6 +142,8 @@ export class HumanoidPreview {
       boxH = neckToTop * 2.3;
       boxW = neckToTop * 1.55;
       cy = this.tmp.y + neckToTop * 0.38;
+      // Centre on the head sideways too: a hip-shot stance puts it well off the body's axis.
+      cx = this.tmp.x;
     } else {
       boxH = h * 1.1;
       boxW = h * 0.62;
@@ -152,8 +154,8 @@ export class HumanoidPreview {
     boxH *= 1 + padBottom;
     const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
     const d = Math.max(boxH / 2 / tanV, boxW / 2 / (tanV * Math.max(0.2, aspect)));
-    outTarget.set(0, cy, 0);
-    outPos.set(Math.sin(0.12) * d, cy + d * 0.04, -Math.cos(0.12) * d);
+    outTarget.set(cx, cy, 0);
+    outPos.set(cx + Math.sin(0.12) * d, cy + d * 0.04, -Math.cos(0.12) * d);
   }
 
   private loop = (): void => {

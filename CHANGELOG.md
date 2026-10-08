@@ -2,6 +2,293 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.129 — 2026-10-08
+
+- **The runaway saucer is fairer.** It now always comes down over a street lined with houses instead of over a park, where the Nannies used to spot it before its first prank. Joyriding on its own it slips across open stretches and through the discs' scan cones unnoticed, and it only bolts when you actually come at it, not when you just stand there. Once it is hurt or on the run, open sky or a cone gives it away, so chasing it into a cone works. Knock out a pod and it bolts for the tallest streets nearby: roofs tall enough still hide it, low ones give it away, and with every pod lost fewer streets are tall enough. The third pod pops it up over any roof.
+- **Brighter and clearer up close.** The rim lights now glow in strong magenta, green, yellow and blue with a soft halo, by day and at night, and the pods no longer turn white after dark. The hull is visibly battered, with dents, scorch streaks and riveted patch plates. The two kids in the dome have bigger heads with glowing eyes. Glyphs go only on walls without a street tree in front and never on top of one another, the kids don't play the same trick twice in a row, glyphs are easier to see by day and take a little longer to draw, and a column of light now joins the parent disc to the bubble it lifts the saucer in.
+
+## 0.128 — 2026-10-08
+
+- **Reputation has no upper limit any more.** It used to stop at +100; now every good deed keeps counting, however famous you already are. Past +150 the city calls you a *Living legend*. Everything that reacts to your reputation (cheering crowds, the press, fans, the statue, what strangers think of you) works as before and is at full strength from +100 on. The bottom stays at −100. Saves keep reputation above 100.
+
+## 0.127 — 2026-10-08
+
+- **Click your sidekick to see how they are doing.** Clicking (or tapping) your sidekick opens a small see-through panel above the target frame. It shows their name, their mood, what they are doing right now (around you, fighting, keeping back, flying, in hospital…), their health and trust, the karma they have put by and what they are saving for, and every power they have learned with its level. The power the shard gave them is marked. The panel closes with the target (Esc or another click).
+
+## 0.126 — 2026-10-08
+
+- **The Strider no longer stands frozen in town for minutes.** When it got held up on the way in (the army fighting it hard), it started its rampage wherever it was, and with no high-rise near enough it simply stood still for over four minutes. If it got stuck again on the way home it finally sank into the ground on the spot, which looked like it vanished. Now it always finds something to do: it looks further for a tower, takes lower blocks when there are no high-rises around, goes after the army or you when there are no buildings to attack, and otherwise walks on into downtown and roams there. A tower it has already leaned on, or can't bring down after a while, no longer keeps it waiting either: it moves on to the next one.
+- **Long console output is copied to the clipboard.** When the admin console cuts a result off (like the Strider's status), the full text is now on your clipboard, ready to paste into a bug report. The Strider's status also shows its rampage state near the start.
+
+## 0.125 — 2026-10-08
+
+- **The help dialog (H) is new, with three tabs.** **Keys** shows the controls in tidy groups (moving, powers, doing things, screens) instead of one long list, and every key can be changed: click a key, press the new one. Each action can have two keys; a key you take from another action is freed there and the dialog tells you. Your keys are kept in this browser, and **Reset to defaults** brings the old ones back. The hotbar, the powers screen and the hints show your keys. The iPad's on-screen controls are not affected. **Powers** lists every power with its exact numbers for each rank (effect, energy, karma price), taken straight from the game's own values, plus the energy, flight, giant-body and karma rules; your current rank is highlighted. **Manual** is the player's manual, readable right in the game (with a link to the PDF).
+
+## 0.124 — 2026-10-08
+
+- **Nothing hurts through the pavement any more, by one rule.** Every blow in the game now says where it came from, and your health ignores any that come from the other side of the street. That covers fists, knives, bats, guns, bombs, villain powers, dogs, robots, monsters, the army, cars and collapses, including any added later. Fighting in the sewers, the metro or the caves works as before; nothing up on the street can hurt you down there, and nothing down there can hurt you up top.
+
+## 0.123 — 2026-10-08
+
+- **Fix: Tab targeting works underground.** In the sewers, the hideouts and the metro stations, Tab found nobody, because the street overhead counted as a wall between you and everyone down there. Now the tunnel and room walls are what block the view, so Tab and clicking pick out people and crews down there, and your aimed powers can hit them. The street above still can't be targeted from below, and nobody below from the street.
+- **Fix: the street and the tunnels no longer reach through each other.** Down in the sewers and the metro, fire, frost, fireballs, lightning and quakes no longer hit people and cars on the street above (or the other way round), and your shockwave and flames work against the tunnel walls instead of the street overhead. Police on the pavement can no longer club or cuff you through the ground, and the officers and witnesses up there no longer see what you do below, so hiding underground can lose your wanted level. Monster footfalls, army shells, dog bites and collapsing buildings above no longer hurt you in a tunnel, a blast in a sewer no longer knocks people over on the street, a whirlwind spins up on the tunnel floor, and flying chips no longer jump up to the street.
+
+## 0.122 — 2026-10-08
+
+- **No more cooldowns on powers: they cost more energy instead.** You can use any power again as soon as you have the energy for it. To keep things fair the powers cost more: Fire wave 30 → 40, Fireball 32 → 40, Frost nova 35 → 55, Chain lightning 30 → 38, Seismic stomp 40 → 55, Whirlwind 35 → 50, Shrink ray 25 → 30, Shockwave 55–70 by rank (was 40–55), dash in flight 18 → 22, and the Slime call 70 / 60 / 50 by rank (was 25, with a wait of up to 75 seconds). A hotbar slot now darkens while you are short of the energy for that power, so you can see when it is ready.
+
+## 0.121 — 2026-10-08
+
+- **No more shaking arms when you stop running late in a session.** The breathing motion of the chest sped up and slowed down with your speed, and after a few minutes of play every stop made the chest, and with it the arms, shake for a second or two. Breathing now changes pace smoothly, however long you have been playing. Tails swaying on other creatures had the same problem and are fixed too.
+
+## 0.120 — 2026-10-07
+
+- **Runaway saucer.** Now and then two Warden kids steal a small, battered saucer and go joyriding low between the houses, where the roofs hide them from their parents' station. Before it happens you may see one zip down a street or find a glowing glyph on a wall. While they are out they play pranks: they beam up a parked car and drop it on a low roof, lift someone off the pavement and set them down in a fountain, or draw big glowing glyphs on a facade that stay lit for a long time. The saucer whines as it flies, giggles after a prank, and people point, laugh or grumble about it.
+- **Get them caught.** The Nannies never chase their kids under the roofs, but if the saucer is out in the open sky for a couple of seconds, or crosses a disc's scan cone, they have it. Chase it and punch out its three glowing hover pods: each one lost makes it fly higher, and with all three out it bobs up over the roofs like a cork. Getting close also makes them flee, sometimes into the open. Then a big parent disc comes down, holds the saucer in a bubble with a stern tone and lifts it away.
+- **Handing them over pays.** If you knocked out a pod or were close when they were seen, you get karma, a little reputation and cheers, and the news reports that you handed the saucer back. The Wardens quietly remember every problem you hand them. If nobody catches the kids, they fly home on their own after a while and the news writes about cars on roofs instead.
+
+## 0.119 — 2026-10-07
+
+- **Your sidekick earns karma and learns new powers.** They earn karma of their own by knocking out bad guys, winning fights at your side and helping people up who were left lying. They spend it themselves on powers that suit who they are: fireballs and lightning for the curious and outgoing, a ground quake, a shoulder charge and more strength for the hard-headed, a stunning flash and a shield for the dutiful, a blast of wind and toughness for the nervous. A message tells you what they learned. In a fight they mix their powers, using whichever fits and switching between them rather than repeating one, and raise a shield when they get hurt.
+- **Talk to your sidekick about the two of you.** Press E next to them and pick "About the two of us…": ask how they are getting on (their powers, their savings, how much they trust you), give them some of your karma, perhaps with a wish for a power they might learn (whether they listen depends on their trust and their character), or ask them to help you, stay back, go home for now or come with you. They say yes or no in their own way.
+- **Trust.** Your sidekick's trust in you grows with time together, gifts, fights won side by side and when you help someone close to them. It drops when you knock down people near them, when you leave them alone in a losing fight, or when you push them into something that is not them. A wary sidekick may not come when you call (K). If they leave you because the city turned against you, they keep their powers and karma for when you win them back.
+- **Fix:** a sidekick no longer takes off and lands again and again when you stand in water; they hover nearby instead.
+
+## 0.118 — 2026-10-07
+
+- **The Nannies are here.** The Wardens' station hangs high over the city like a second moon: a pale ghost against the blue by day, a dark shape with slow lights crawling round its rim at night, hidden by thick cloud and fog. Their silver discs cross the sky: usually a handful, some hours none at all, and now and then, for no reason anyone knows, a swarm of a hundred or more with festive lights, then an empty sky. Discs come down to hang over a street and sweep it with a pale scan cone, gather high over a crime or a fight and watch it to the end without ever helping, hang over a landmark for hours, and turn a cone on you when you fly high or grow giant. Now and then a disc sets a tall robot walker down on a square with its beam; it stands there for a while, looks around (at you, if you come close), takes a few slow steps and is lifted away again. People look up at the cones, crowd round the walkers and film them, grumble or joke about the Nannies, talk about them when you chat, and the news reports swarms, walkers and long stares. The discs hum as they pass and chime when a cone comes on.
+
+## 0.117 — 2026-10-07
+
+- **Your sidekick is around.** Once you have given someone the second shard, they become a full companion: they hang about nearby (not glued to your heels), fly to keep up when you go far, land close to you, and if you leave them far behind they catch up out of sight and fly in rather than popping up.
+- **They fight in their own way.** When a fight breaks out near you they join in with punches and now and then their own power, which the shard picks by who they are: fireballs or lightning for the curious and outgoing, a ground quake for the hard-headed, a stunning flash for the dutiful, a blast of wind for the nervous. The awakening tells you which one they got. The proud and hard go for the leader, the nervous first shout people clear, everyone else jumps straight in, and they say so in short bubbles.
+- **Press K to call them** (touch: "Call sidekick" under More). They come at full speed and stay close for a while.
+- **They stay out of trouble with the police.** If the police are after you, your sidekick keeps their distance and tells you so; they never fight officers and their actions never cost you reputation.
+- **When they go down,** the hospital's med drones lift them away to be revived. Most come back after a while, but one time in five the revival fails. Then the city mourns them, they get a grave with their name in a cemetery (shown on the map), and about a day and a half later news of another glowing stone comes in.
+- **The second shard is easier to find and take.** On the map it now has its own glowing crystal mark (also in the legend) instead of looking like a power core, walking into it takes it just like a core, a clear "You carry the second shard" label shows while you have it, and offering it is the first choice when you talk to someone.
+- **Your sidekick no longer gets stuck on parked cars.** In a fight they could land on a car roof and freeze there; they now always come down on the street.
+
+## 0.116 — 2026-10-07
+
+- **Every slime colony leads down into its own realm.** A city now has 2–3 hidden colonies, all near the centre, and none is a dead end any more: each opens into a deep realm of its own with its own Lumen home, its own Murk lair and its own war. Each realm's battleground is different, chosen per city: a single trench line, a double line, a chasm with one rock bridge across no-man's land, flooded craters, or a Murk siege wall with a crystal forest and hive towers. Width, depth and the Murk's lane vary too. Wars in the other realms go on while you are away. Murk that cannot walk straight at you (over their berm, across the chasm) now go round to reach you.
+- **The Lumen's sewer signs are much easier to see.** Big glowing arrows on both walkways at each junction, wider chevrons along the way that never fade below 60%, and bigger, brighter colony signs on the walls at eye height.
+
+## 0.115 — 2026-10-07
+
+- **Every sewer ladder leads out.** About one manhole shaft in twelve lay outside every city block, so standing at its ladder never showed the E prompt. Every shaft now has its E prompt from the start, and its lid lies on the street of the nearest block. The decorative maintenance ladders on the metro tunnel walls, which led nowhere, are gone.
+
+## 0.114 — 2026-10-07
+
+- **Traffic lights no longer throw an error after the road network rebuilds.** When the city streamed new streets in or dropped far ones, the traffic lights still on screen kept the old network's junction numbers for a moment (or for good, if no light of that kind was near you any more), and reading their colour hit a junction that no longer existed. The console showed "[props] TypeError … reading 'signal'". The lights now switch to the new network in the same frame, and lights that are no longer drawn are forgotten.
+
+## 0.113 — 2026-10-07
+
+- **Aliens plan, decided points.** The Lumen slimes are the old ones who came long before the Wardens and get cryptic speech bubbles; the number of discs in the sky is random, now and then a sudden unexplained swarm of a hundred; beating a Warden first raises their interest in you, then no longer, then lowers it more with each further win. Nothing in the game changes yet.
+
+## 0.112 — 2026-10-07
+
+- **Plan: aliens.** A design plan for the aliens who already live alongside us (docs/ALIENS_PLAN.md): the Wardens, mostly robotic nannies who watch from discs and a station in the sky and never meddle, and the forbidden kinds who sneak in anyway (runaway teens of their own species, smugglers selling alien tech, old ones living underground). Nothing in the game changes yet.
+
+## 0.111 — 2026-10-07
+
+- **No more shimmering arms far out in the city.** The further you went from the centre of the map (super speed takes you far), the more arms, hands and clothes could shimmer, because the skin was computed in world coordinates with too little precision. It is now computed relative to the character, so it looks the same everywhere.
+- **Smoother stop from a run.** The arms no longer straighten and bend again while you come to a halt.
+
+## 0.110 — 2026-10-07
+
+- **A second shard.** Once your reputation reaches +30 (or after a short while in the sandbox), the news reports a strange glowing stone in one of the city's parks or squares. The area shows up as a circle on the map; nearer in, a soft glow at the edge of the screen and a hum lead you to it, and a pale column of light rises from the stone. Sometimes a gang has got there first and guards it: deal with them before you can pick it up.
+- **Give it to someone.** Carry the shard and talk to anyone: a new option offers it to them. Most people say yes. Children, people at work, people who dislike you or are against heroes on principle say no, and some have something they need help with first (do that favour and they will take it).
+- **Your sidekick awakens.** The shard floats into them, light floods out, and they say a few words in their own manner. They are then marked gold on the map as your sidekick. For now they carry on with their own life; their powers and helping you come in the next steps. If your reputation drops below zero, they break with you, and you can ask again later. Saved with the game.
+
+## 0.109 — 2026-10-07
+
+- **Nothing blocks the front door any more.** House interiors were laid out without looking at where the street door is, so about one door in three opened onto a wall, the lift shaft or the staircase. Now the stairs and the lift are placed clear of the way in, room walls across it get an opening, and nothing solid stands right behind the door. A sweep over 16,679 buildings found 0.2% with a narrower way in (odd little triangular houses), down from 33%. A few such tiny houses now go without inner stairs rather than have them right behind the door.
+
+## 0.108 — 2026-10-07
+
+- **Shoulders no longer sit back.** In every animation the shoulders were pulled behind the chest, so the arms hung from the back of the body. The collarbones now come forward and the arms hang along the side of the body, as in the procedural pose.
+
+## 0.107 — 2026-10-07
+
+- **Super speed no longer drops you into the sewers.** Running across a river at super speed and onto a steep quay used to carry the hero through the bank into the sewer or culvert beneath the street (or into the earth), without any manhole. Now the runner goes up onto the street; the only ways down stay the manholes and the metro stairs.
+
+## 0.106 — 2026-10-07
+
+- **Smoother hero masks.** The cowl and full mask are smooth stretch fabric like the tights (no more grainy speckle), and they hug the face round the eye holes and the cowl's jaw opening, so there is no dark rim or see-through sliver at the edges. The lightning bolt design is a proper zigzag.
+
+## 0.105 — 2026-10-07
+
+- **Superhero tights and masks.** The character creator (and the fitting mirror in clothes shops) has a new **Hero** tab. **Tights**: a skin-tight, slightly shiny bodysuit in any colour with an accent colour and a design: plain, star emblem, lightning bolt, chevron, side stripes, or trunks with a golden belt; gloves in the suit or accent colour if wanted. Putting the tights on takes off the everyday clothes and pulls on boots in the accent colour; anything added back in Outfit is worn over them. **Masks**: a domino mask round the eyes, a cowl (head, nose and neck covered, mouth and chin free), or a full mask with only the eyes open. Hair and beard hide under a cowl or full mask; the eyes still blink and look around.
+- Collars no longer let you see through the neck when looking down past them (the neck stays under every garment).
+
+## 0.104 — 2026-10-07
+
+- **Player's manual.** A "Manual" link next to Feedback on the start screen (and in the pause menu) opens a 25-page illustrated PDF manual: getting started, controls, powers, landmarks, places to explore, people and favours, crime and the six organisations, big threats and the army, reputation, and what happens when you go down. Spoiler-light by design.
+
+## 0.103 — 2026-10-07
+
+- **No game changes.** The plan for an optional sidekick is written down (docs/SIDEKICK_PLAN.md).
+
+## 0.102 — 2026-10-07
+
+- **The police really stop a public menace.** With a reputation of −70 or worse, being taken down by the police is the end: the hero stays down, the officers come and cuff them, and it is game over ("Arrested — taken into custody"). No more waking up and walking off. If no officer can get to the body, backup takes the hero in after 20 seconds anyway.
+- **Officers no longer walk away from a fight.** Officers heading back to their car after an arrest turn round and come after the hero again when attacked (or when the hero is wanted again), instead of ignoring it; the ones already in the car get back out.
+- **Beaten is beaten.** An officer (or a soldier) knocked out cold stays down for good instead of standing up again after a while; the others leave them lying when they drive off. Being knocked down without losing all health still means getting back up.
+
+## 0.101 — 2026-10-07
+
+- **Shoulders stay down while people move.** The standing, walking and running animations still pulled the collarbones up into a shrug a moment after any change (0.099 only fixed the pose without animation). Every animation now keeps the shoulders sloping down from the neck.
+
+## 0.100 — 2026-10-07
+
+- **"Awakened tree" works next to any tree.** The debug entry only looked for street, park and cemetery trees and reported a misleading "unknown archetype" when none was found. It now also wakes forest and countryside trees (the woken tree leaves its spot for good), and it says "no tree standing nearby" when there really is none.
+- **Beating an awakened tree pays properly.** It now gives 120 karma (was 60) and a big reputation boost, the same as defeating the strider, and it has a third less health, so the fight is shorter.
+- **Other villain debug entries try harder.** Crimes and boss operations that cannot start straight ahead now also try nearer, farther and to the sides before giving up, and the procession explains that it needs people walking about.
+
+## 0.099 — 2026-10-07
+
+- **Shoulders sit lower.** People no longer hold their collarbones up as in a shrug: the shoulder line now slopes down from the neck, the neck shows its full length, and the arms hang from lower, closer shoulders.
+
+## 0.098 — 2026-10-07
+
+- **Arcades only where there is room for one.** They are now only in big, plainly rectangular buildings, never in small or oddly shaped corner houses, so every arcade is a real hall with at least seven cabinets.
+- **Nothing walls an arcade off any more.** Cabinets used to stand in front of the doorway from the stairs or the lift lobby, and where the street door led in that way, the hall was shut off. They now keep doorways clear, and a self test walks from the street door to every cabinet.
+- **Arcades are easier to find on the map:** a round cyan "A" badge, with its own line in the map's legend.
+- **The ARCADE sign no longer sits on a painted shop sign** — arcade fronts have no generic sign band now, and their windows glow in the evening.
+- **People keep out of your view while you play:** passers-by in the hall no longer step between you and the screen.
+
+## 0.097 — 2026-10-07
+
+- **Metro entrance stairs no longer run into the station's underpass.** At every station one entrance's stairs used to end right where the passage under the tracks starts down, so its side wall stood across the stairs (a wall you could walk through) and the steps dipped below the hall and climbed back up. Seen at Spring Market and Highland Park. Those stairs now take a different way down and end level with the hall.
+
+## 0.096 — 2026-10-07
+
+- **People who trip no longer scream as if dying.** When someone falls in the street they now let out a short, mild cry instead: an "oof", "ow", "whoa", "ugh", "ah" or "whoops", picked at random each time. Men and women have their own voices, every person keeps a slightly different pitch, children sound higher and older people a little lower. It is also a touch quieter than before.
+
+## 0.095 — 2026-10-07
+
+- **Flying no longer recharges your energy.** Flight itself is still free, but energy only comes back on the ground (or on a roof), so a hero who flies and fights has to land now and then to catch their breath. The energy bar turns grey while it is not recovering.
+- **Being a giant costs energy.** The bigger you are, the more it takes: a few metres tall costs little, at 10 m it eats all of your regeneration, and at 100 m a full pool lasts about 20 seconds. When you run dry you shrink back to 10 m on your own and catch your breath there for a few seconds; once a quarter of your energy is back you can grow again (and 10 m holds that energy steady). The energy bar turns orange while your size is draining it. Super speed and super jump are unchanged.
+
+## 0.094 — 2026-10-07
+
+- **Arcades.** Some general stores on the shopping streets are now arcades, with a neon ARCADE sign over the door (the map shows the nearest few). Inside is one dim hall full of tall video game cabinets along the walls and in back-to-back rows, their screens running a demo and their titles lit on top.
+- **The games really play.** Walk up to a cabinet and press **E**: the arrows or WASD and Space now drive the game instead of your hero, right there on the big screen in the hall, and **E** steps back. Six classics: Rock Storm (shoot the asteroids), Block Drop (falling blocks), Space Raiders (invaders), Snake, Brick Breaker and Paddle Ball (against the machine). Each keeps a high score.
+
+## 0.093 — 2026-10-07
+
+- **New characters start from the plain face and body:** every shape slider in the middle, age 25, evenly mixed ancestry and no random tweaks. Only hair, colours and outfit are picked at random. A new **Plain** button next to Randomize brings any character back to that base (it keeps the sex, hair, skin and outfit). Playing without a created character also gives you the plain body.
+
+## 0.092 — 2026-10-07
+
+- **Cemeteries.** Every city now has a few walled cemeteries, mostly in the old town and the quiet residential streets (on the map they show green, like parks). A stone wall with corner pillars runs round each one, with a gate in the middle of its longest side. A gravel path leads from the gate past tall dark yews to a mausoleum at the far end, and a cross path meets it at a mourning figure on a pedestal. Rows of headstones, stone crosses, ledger graves and obelisks face the gate, in pale limestone, dark granite and sandstone. Headstones can be knocked over; the wall breaks.
+- **The necromancers go to the cemetery.** If there is one nearby, their raisings happen there, and the Grave Lord's great circle gathers there rather than before the cathedral.
+
+## 0.091 — 2026-10-07
+
+- **Your hero starts from the plain face.** City people still get small random differences in nose, lips, eyes and ears, but your own character no longer does, so the face sliders work from the clean base face. A new "Random tweaks" slider on the Face page adds them back if you want them.
+- **Faces look closer to the original model:** eyebrows sit lower, nearer the eyes, and are a bit fuller and darker; a dark lash line runs along the upper lids; lips are rosier.
+
+## 0.090 — 2026-10-07
+
+- **The procession's lantern really shows now,** a green-lit lantern held up in the necromancer's hand.
+- **The skeletons' eyes burn green** instead of a pale white, and their skulls are a little smaller.
+
+## 0.089 — 2026-10-07
+
+- **The raised dead are real skeletons now.** Instead of a person in a striped bodysuit, they are bare bones: a skull with glowing eyes, ribs round a spine, a pelvis, and arm, leg, hand and foot bones that move with them.
+- **The procession's necromancer carries a lantern,** lit in the group's colour and held up high as they lead the entranced along.
+
+## 0.088 — 2026-10-07
+
+- **The awakened tree is drawn properly.** Its crown and trunk now show on top of its root legs, and the legs and branch arms stay with its body.
+- **The Beast-master's dogs bite a little less hard,** so a pack is a nuisance to deal with rather than a quick knockout.
+
+## 0.087 — 2026-10-07
+
+- **Bosses come out for their big set piece.** Now and then a group's boss leads a whole crew to one big job near its turf, marked on your map. The city answers it like a monster attack (police lines, SWAT, people cleared away). Leave it alone and it succeeds; knock the boss out and the crew breaks and runs. The more you anger a group, the sooner it comes.
+  - The Syndicate cracks a bank vault and the boss runs off with the money.
+  - The street gang takes over a street and sets the cars on fire.
+  - The techno-cult turns the city's robots on the people.
+  - The elemental cult holds a great ritual before a landmark.
+- **The eco-radicals are here.** They live in parks and the leafy suburbs and dress in patchwork greens and browns with leaf wreaths. They sabotage delivery robots and parked cars and leave the pavement grown over with moss. Their Beast-master brings three or four trained dogs that run you down and bite, and a whistle sends them lunging at you. Punch a dog and it goes down and slinks off; fire scares them away. Their boss, the Elder, gathers a circle round a big tree and sings it awake.
+- **The awakened tree.** The tree tears itself out of the ground and walks on its roots. It goes for anything with a motor or a plug: cars, robots, street lamps, traffic lights. Hurt it and it comes for you instead. It is weak to fire and slowed by frost, and lightning barely bothers it. When it rears up for a slam, its glowing heart shows; hits there count triple. Beaten, it takes root where it stands and stays there as a gnarled old tree.
+- **The necromancers are here.** They haunt the old town and the parks, mostly at night, in black robes and bone-white masks. In a park they kneel in a ring and chant, and skeletons claw their way out of the ground. Knocked apart, a skeleton pulls itself back together while a necromancer still stands; beat the necromancers and the bones sink back into the earth. They also lead processions: a few people in a trance shuffling after a necromancer with a lantern. Walk up and press E to wake them one by one, or beat the necromancer to wake them all at once. Their Bone-caller drains your strength with a beam and wails you back. Their boss, the Grave Lord, curses you and raises the dead before the cathedral.
+## 0.086 — 2026-10-07
+
+- **Men are back to the earlier body** with the fixed upper legs: the broader, higher shoulders from 0.081 are undone (they gave men a hunched look). Walkers still carry their arms a little away from the body.
+
+## 0.085 — 2026-10-07
+
+- **People know each other.** Friends, family, neighbours and colleagues who pass each other in the street stop for a chat: a wave, a greeting by name, a few words with their hands going, a goodbye, then they walk on.
+- **Word gets round.** What you did to someone reaches the people close to them. Help a woman up and her neighbour likes you a little more, and tells you so when you meet ("You're the one who helped my neighbour Mara up!"). Knock someone down and their family will remember that too.
+- **People have needs.** Hunger between meals, tiredness late in the day, and loneliness after a long day at home (outgoing people feel it sooner) make them feel worse, and they tell you about it when you ask how they are. A hungry or tired passer-by sometimes stops for a bite or a coffee on the way.
+- **Favours.** A new option in the talk menu: "Can I do anything for you?" Someone who knows and likes you may ask you to look in on a friend or relative. That person then shows as a golden dot on the map, and they come out to their door when you get near. Or they may ask you to deal with the gang on their street, which counts once you stop a crime nearby. You have two game days. They remember whether you did it: they thank you and like you more, or they tell you they were let down. There is no quest log; the person who asked remembers it, and their dot on the map says so.
+
+## 0.084 — 2026-10-07
+
+- **Reputation is only lost for what you hit yourself.** Rubble flying out of a collapsing building used to count as your doing, so standing by while a monster brought a block down could wreck your reputation as the neighbours fell. Now only what your own punches, steps and powers hit counts. What collapse rubble breaks, and what your body breaks while a monster has knocked you flying, is nobody's fault.
+- **No reputation lost while fighting a big monster.** Near a monster like the Strider (and for a short while after it leaves or falls), damage you cause costs no reputation or karma and draws no police. A short note on screen says so. Away from monsters, collateral counts as before.
+- **The city no longer blames you when the last resort strikes.** The strike still costs karma, but no reputation any more, and being knocked out by criminals no longer costs reputation either.
+
+## 0.083 — 2026-10-07
+
+- **Soldiers stay out of the water.** Every spot the army picks (where a unit digs in, where it gathers when you rally it with G, where it drives or walks off to when the battle is over, where a squad on foot gets out) is now on dry ground. A spot over a river, lake or the sea moves to the nearest dry street. As a backstop, soldiers, police and anyone else heading straight for a point, and people running off in a panic, now stop at the bank or walk along it instead of stepping into the water.
+- **After the battle the army leaves sensibly.** Units used to head off eastwards once the monster was gone, whatever lay there, and their target moved with them. Each one now gets one fixed street point away from where the fight was.
+- **Rally (G) is calmer.** Each unit has its own spot around you and only moves when you do. Before, all of them got a new random spot every four seconds and kept milling about.
+- **The army fights instead of standing around.**
+  - Units no longer drive or walk on into the monster's feet on the way to their position. They fall back as soon as it is on top of them. Tanks and trucks used to keep going and were stepped on.
+  - A squad digs in once most of its soldiers are there. One soldier held up behind a car kept the whole squad running about without firing for minutes.
+  - Guns look for any part of the Strider that shows over the roofs or past a corner, not only the middle of each body part. Rifles and APCs without a clear line fire over the roofs at its back. A unit that keeps having no line moves to a spot that has one. A tank with a building in the way shoots through it.
+  - Helicopters keep closing in until they have a clear line before firing, instead of giving up the run at 300 m. One that has used up its rockets comes back rearmed after a while instead of leaving for good.
+
+## 0.082 — 2026-10-07
+
+- **People behave like who they are.** Everyone already had a personality; now it shows in the street:
+  - Outgoing, orderly people walk briskly, dreamers dawdle. The calm get over a scare quickly; the nervous keep running longer. The curious stand and stare longer at a spectacle.
+  - People who dislike you (because you hurt them, or because of your reputation) step out of your way when you come near, don't hang about next to you, and sometimes tell you to keep away. Someone who really can't stand you won't talk to you at all.
+  - Kind passers-by walk over and help up someone lying in the street once it is calm again. An everyday fall is still yours to help with first; after a while a stranger does it.
+  - When a thief runs past, an agreeable passer-by points after them and shouts which way they went.
+  - People who know and like you stop and wave when they say hello. People you saved greet you as their hero.
+  - Victims of a crime you stop, and people whose stolen things you bring back, now remember being saved by you.
+  - What people shout when they run, gawk, film, fall or thank you is in their own temperament (grumpy, anxious, chatty and so on).
+
+## 0.081 — 2026-10-07
+
+- **Change your look at the tailor's.** Clothes shops now have a full-length fitting mirror on a side wall. Step up to it and press E: the character creator opens on your hero's current look, and saving changes the hero on the spot (and keeps the look as your selected character for the next game). The game is paused for input while the creator is open, and Esc closes it without opening the pause menu. The four nearest clothes shops show on the map in lilac.
+- **Underwear can be switched off in the character creator** (Outfit tab, "Underwear: shown / removed"). With top, trousers and shoes on "none" and underwear removed, the character is fully nude, in the creator and in the city. It stays on by default.
+- **The separate Woman and Man characters are gone from the start screen's character picker.** Every human is built on those bodies now, and the creator does everything they did. A save or a selection that still points to one of them starts with the default human. The body credit (Bananaboy, CC BY 3.0) is shown at the bottom of the creator, and the clothes shops are in the map legend.
+- **Men have broader shoulders.** The male base body was too narrow at the shoulders, so walking men swung their hands in front of the crotch. Walkers also carry their arms a little away from the body now, so the forward hand no longer swings in front of the hips.
+
+## 0.080 — 2026-10-06
+
+- **The starship has an inside.** Doors between its fins open into a lobby at its foot. Beyond it a great hall rises dozens of metres through the middle of the ship around a glowing core. Every storey has a gallery with glass rails running around the hall, with cabins, labs, mess rooms, lounges, control rooms and stores behind it. Stairs climb from level to level, and bridges cross the hall every few storeys. The rooms are furnished from a sci-fi prop set (bunks, lockers, consoles, holo tables, screens, crates and more).
+- This is the first job of a new interior designer that works on any shape (round, oval, tapering), not only boxes. Its look comes from a swappable prop set, so other buildings and themes can follow.
+
+## 0.079 — 2026-10-06
+
+- **Super speed hops over people.** Running at super speed, the hero now hops over someone a little ahead, and over cars, vans and benches too, in a short, snappy hurdle that keeps the speed. It only hops when the arc is clear (no wall, bus, tree or overhang in the way) and the landing spot is free and on about the same level; several people in a row are cleared in one hop.
+- **Brushing past someone is no misdeed any more.** When a hop is not possible, the person still stumbles out of the way, but it costs no reputation or karma, draws no police, does them no harm and they get up on their own. Instead they call after you in a red bubble low on the screen ("Mara, behind you: “Slow down, hero!”"). Helping such a person up earns nothing, like anyone you knocked down yourself. Dashes and giants running through crowds count as before. A hop that grazes a façade in the air no longer turns into a wall run up onto the roof.
+
+## 0.078 — 2026-10-06
+
+- **You can walk to the starship (and every other landmark) again.** In big cities the houses around a landmark's square could close into an unbroken ring, so the only way in was to fly (seed 873738 at full size had its starship, town hall, cathedral and stadium walled in). Now a paved way leads from the middle of each side of a landmark's square straight out to the street. No house, café terrace, fountain, statue or bench is put on it.
+
+## 0.077 — 2026-10-06
+
+- **No more walls to walk through in the metro entrances.** Two things from above could stand across an entrance passage as a wall without substance:
+  - The ground is drawn in square tiles, and along every tile edge a curtain hangs a few metres into the earth to hide the seams. It was hidden only once the camera itself was underground, so in a corridor right under the street the camera, still at street level, showed it across the way. It now stays hidden whenever you are in a stairwell or passage.
+  - The shafts of the sewer manholes run from the sewer straight up to the street, through anything in between. They now keep clear of metro tunnels, halls and side rooms, and of the ground around every station where its stairs run.
+- **Nobody walks on the tracks any more.** Commuters can no longer step off the edge of a platform. People halfway through a door when it shuts stay on the train. Someone knocked over in a train standing at a platform, or knocked off the platform, no longer gets up on the track bed and wanders there: they are lifted back onto the platform and go back to waiting.
+
+## 0.076 — 2026-10-06
+
+- **Every human is now built on the new Woman and Man bodies.** NPCs and the character you create get their proportions, body shape and face, while height, weight, age, muscle, the face sliders, the other races, clothes and facial expressions all keep working as before. Crowds perform the same (same mesh size and detail levels).
+- **Better bending.** Humans now use the Woman's skin weights, so shoulders, elbows, hips and knees deform more smoothly. Jumps, flight and other procedural poses bend the legs at the real hip and knee instead of kinking the thigh and shin.
+- **Superman flight.** At speed the hero flies with the right fist stretched out ahead, the left arm straight back along the body with the hand flat against the thigh, legs together and toes pointed; the fist points straight ahead past the head. Boosting still puts both fists forward.
+- The character creator can leave top, trousers or shoes off ("none"). Nude is an option only; new characters still start dressed.
+- The creator's Face view centres on the head, so a character standing with a hip-shot pose no longer has their face cut off at the side.
+
 ## 0.075 — 2026-10-06
 
 - **"Preparing shaders" is much shorter.** The shaders were already meant to compile in parallel on the graphics driver's own threads, but that compile ran before the sky had made its environment light. The first frame then added it, and that changed every lit material, so about 40 shaders were compiled a second time, one after the other, while the loading screen waited (and the parallel work had been thrown away). The environment light now exists from the start, so the parallel compile is the only one. The first frame's new content (cars, effects, the first crowd) now also compiles in parallel instead of one by one. About a quarter fewer shaders are built at the start (154 to 106).

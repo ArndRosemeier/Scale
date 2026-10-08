@@ -42,7 +42,7 @@ export interface PoliceHost {
   sound(id: string, x: number, y: number, z: number, gain: number, pitch?: number): void;
   sirenLoop(): { set(x: number, y: number, z: number, gain: number, rate?: number): void; stop(): void } | null;
   emit(kind: StimulusKind, x: number, y: number, z: number, intensity: number, radius: number): void;
-  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number): void;
+  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number, fromY: number): void;
   /** The player is on the ground (knocked down / out). */
   playerDown(): boolean;
   /** An officer has the player cuffed. */
@@ -149,7 +149,7 @@ export class Police {
   readonly units: Unit[] = [];
   private calls: { crime: Crime | null; at: number; swat?: boolean }[] = [];
   private seed = 0x9e1;
-  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0, atPlayer: 0, heldAtPlayer: 0 };
+  stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0, atPlayer: 0, heldAtPlayer: 0, rejoined: 0 };
 
   constructor(private h: PoliceHost) {}
 
@@ -166,6 +166,15 @@ export class Police {
     for (const u of this.units) {
       if (have >= want) break;
       if (u.job.kind === 'crime' && u.state === 'scene' && !u.job.crime.active && Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z) < 250) { u.job = { kind: 'player' }; have++; }
+    }
+    // So do units on their way back to the car (an arrest just made, a crime cleared): attacked, or
+    // the player wanted again, they turn round instead of walking off.
+    for (const u of this.units) {
+      if (have >= want) break;
+      if (u.state !== 'leaving' || u.job.kind === 'incident' || !u.car.alive || u.car.state >= VState.Abandoned) continue;
+      if (Math.hypot(u.car.x - this.h.player.x, u.car.z - this.h.player.z) > 250) continue;
+      this.rejoin(u);
+      have++;
     }
     for (; have < want; have++) this.calls.push({ crime: null, at: this.h.time + 2 + have * 6 });
     // Wanted enough to be shot at: a SWAT van joins (once).
@@ -309,6 +318,8 @@ export class Police {
     for (const o of u.officers) {
       if (!o.alive) { inside++; continue; }
       const act = o.actor;
+      // Out cold: left lying there (the city clears them away once out of sight), not waited for.
+      if (act?.state === 'ko') { act.pinned = false; inside++; continue; }
       if (!act || o.state === PState.Down) continue;
       act.face = null;
       if (!carOk || Math.hypot(o.x - car.x, o.z - car.z) < 2.2) { o.alive = false; inside++; H.sound('door_close', o.x, 1, o.z, 0.6); continue; }
@@ -318,7 +329,7 @@ export class Police {
     if (inside >= u.officers.length || u.t > 400) {
       // Everyone in: back on patrol (hand the car back to traffic).
       if (carOk) { car.task = undefined; car.siren = false; car.fear = 0; car.vmax = 13; car.route = { edges: [car.edge], fwd: [car.fwd] }; car.ri = 0; }
-      for (const o of u.officers) o.alive = false;
+      for (const o of u.officers) if (o.actor?.state !== 'ko') o.alive = false;
       return false;
     }
     return true;
@@ -356,6 +367,17 @@ export class Police {
       u.officers.push(o);
       H.sound('door_open', x, 1, z, 0.6);
     }
+  }
+
+  /** A leaving unit back on the wanted player: the officers still out turn round, the ones in the car get out again. */
+  private rejoin(u: Unit): void {
+    u.job = { kind: 'player', swat: u.job.kind === 'player' ? u.job.swat : undefined };
+    u.officers = u.officers.filter((o) => o.alive);
+    u.state = 'scene';
+    u.t = 0;
+    u.idleT = 0;
+    u.car.fear = 0.35;
+    this.stats.rejoined++;
   }
 
   private leave(u: Unit): void {
@@ -431,6 +453,8 @@ export class Police {
         const ca = c.actor;
         if (!c.alive || !ca || ca.state === 'arrested' || ca.state === 'gone' || claimed.has(c)) continue;
         if (act.memo.skipT > 0 && act.memo.skipId === c.id) continue;
+        // (A skeleton in pieces is not cuffed: it pulls itself together, or crumbles with its master.)
+        if (ca.memo.skel && (ca.state === 'ko' || c.state === PState.Down)) continue;
         const d = Math.hypot(c.x - o.x, c.z - o.z);
         if (d < bd) { bd = d; tgt = c; }
       }
@@ -569,13 +593,15 @@ export class Police {
       act.hostile = true;
       act.mood = 'angry';
       const d = Math.hypot(p.x - o.x, p.z - o.z);
+      // Hands and cuffs: not far above or below (a sewer under the pavement), however close on the map.
+      const reach = Math.abs(p.y - o.y) < 2.5;
       lookAt(act, p.x, p.y + p.height * 0.8, p.z);
       // Wanted enough: shoot from where they are (a clear line, out of tackling reach).
       if (this.shootPlayer(o, d, dt, swat, car)) continue;
       if (p.flying && p.y - o.y > 4) { stand(act); continue; }
       // Could not get to them (no progress): wait and watch a moment.
       if (act.memo.waitT > 0) { act.memo.waitT -= dt; stand(act); if (d < 3) act.memo.waitT = 0; continue; }
-      if (H.playerDown() && d < 2.3) {
+      if (H.playerDown() && d < 2.3 && reach) {
         if (d > 1.0) goTo(act, p.x, p.z, 1.4); else stand(act);
         act.memo.cuff = (act.memo.cuff ?? 0) + dt;
         if (!act.action) play(act, 'pickup', 1.5);
@@ -590,8 +616,8 @@ export class Police {
       // Take-down: a wind-up, then a hard shove / baton if still in reach.
       if ((act.memo.windup ?? 0) > 0) {
         act.memo.windup -= dt;
-        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && !H.playerDown()) { H.hurtPlayer(24, 'police', o.x, o.z); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
-      } else if (d < 1.6 && act.attackT <= 0 && !H.playerDown()) {
+        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && reach && !H.playerDown()) { H.hurtPlayer(24, 'police', o.x, o.z, o.y); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
+      } else if (d < 1.6 && reach && act.attackT <= 0 && !H.playerDown()) {
         act.attackT = 1.6;
         act.memo.windup = 0.35;
         play(act, 'kick', 0.7);

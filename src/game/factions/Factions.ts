@@ -129,6 +129,8 @@ export const SHIFT = {
   tag: 0.04,
   /** A ritual completed, a robot hijack gone through. */
   ritual: 0.07,
+  /** A boss operation came off (gained), or the hero stopped it (lost). */
+  bossOp: 0.22,
   /** A turf brawl: the winners gain the street, the losers lose it. */
   brawlWon: 0.08,
   brawlLost: -0.1,
