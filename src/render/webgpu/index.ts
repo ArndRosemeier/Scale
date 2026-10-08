@@ -38,6 +38,14 @@ export function createRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): 
   return new THREE.WebGPURenderer({ canvas, antialias: false, powerPreference: 'high-performance', reversedDepthBuffer: true, forceWebGL, trackTimestamp: true });
 }
 
+/** The character creator's turntable: transparent, antialiased, otherwise set up like the game's. */
+export async function createPreviewRenderer(canvas: HTMLCanvasElement, forceWebGL: boolean): Promise<THREE.WebGPURenderer> {
+  const r = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance', reversedDepthBuffer: true, forceWebGL });
+  await r.init();
+  afterInit(r);
+  return r;
+}
+
 /**
  * Polygon offset with reversed depth: WebGLRenderer flips the slope factor when the depth buffer
  * is reversed, three's WebGPU and WebGL2 backends do not, so decals and the street surfaces
@@ -125,7 +133,12 @@ export function oneNodeBuildAtATime(renderer: THREE.WebGPURenderer): boolean {
  * With hundreds of instance buffers, several of them sized for growth, the per-frame copies were
  * megabytes a frame.
  */
+let uploadsPatched = false;
+
 function noPerFrameUploads(): void {
+  // (Once: the creator's preview renderer and the game's both get here.)
+  if (uploadsPatched) return;
+  uploadsPatched = true;
   for (const C of [THREE.BufferAttribute, THREE.InterleavedBuffer]) {
     const P = C.prototype as unknown as { setUsage(u: number): unknown };
     const set = P.setUsage;
