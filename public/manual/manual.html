@@ -47,7 +47,7 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <h1>SCALE</h1>
   <div class="sub">Player's Manual</div>
   <img loading="lazy" src="jpg/02-city.jpg">
-  <div class="foot">A destructible city of millions of bricks, a crowd of people with lives of their own,<br>six criminal organisations, giant monsters, and you.<br><br>Covers game version 0.098 · Play at apps.futuremagic.de/scale</div>
+  <div class="foot">A destructible city of millions of bricks, a crowd of people with lives of their own,<br>six criminal organisations, giant monsters, and you.<br><br>Covers game version 0.167 · Play at apps.futuremagic.de/scale</div>
 </div>
 
 <h1 style="page-break-before:avoid">Contents</h1>
@@ -64,82 +64,106 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <li><a href="#ch10">Crime on the street</a></li>
   <li><a href="#ch11">The six organisations</a></li>
   <li><a href="#ch12">Big threats and the army</a></li>
-  <li><a href="#ch13">Reputation and consequences</a></li>
-  <li><a href="#ch14">When you go down</a></li>
-  <li><a href="#ch15">Saving, settings and the rest</a></li>
-  <li><a href="#ch16">Tips for new heroes</a></li>
+  <li><a href="#ch13">Lights in the sky</a></li>
+  <li><a href="#ch14">Your sidekick</a></li>
+  <li><a href="#ch15">Reputation and consequences</a></li>
+  <li><a href="#ch16">When you go down</a></li>
+  <li><a href="#ch17">Saving, settings and the rest</a></li>
+  <li><a href="#ch18">Tips for new heroes</a></li>
 </ol>
 
 <h2 id="ch1">1. Welcome to the city</h2>
 <p>Scale drops you into a city that is built fresh for you: every street, tower, park and sewer pipe is generated from a single number, the <i>seed</i>. The same seed always gives you the same city, a different seed gives you a different one, and the city can be anything from a small town up to a sprawling metropolis with villages, farms and lakes around it. Every building is made of real bricks that can crack, fall and bury the street below.</p>
-<p>Into this city you bring a hero. In the normal game you start out as an ordinary person and grow into something much bigger by doing good. Along the way you will meet thousands of people who remember you, half a dozen criminal organisations with leaders of their own, creatures large enough to step over houses, and a few secrets well below street level.</p>
+<p>Into this city you bring a hero. In the normal game you start out as an ordinary person and grow into something much bigger by doing good. Along the way you will meet thousands of people who remember you, half a dozen criminal organisations with leaders of their own, creatures large enough to step over houses, watchers in the sky, perhaps a friend to fight at your side, and a few secrets well below street level.</p>
 <p>This manual tells you what is out there and how to get started. It deliberately does not tell you everything: some places are meant to be found, and some stories are meant to be lived.</p>
 
 <h1 id="ch2">2. Getting started</h1>
-<figure><img loading="lazy" src="jpg/00-start.jpg"><figcaption>The start screen: pick a mode, a city size and a seed, or continue a saved game.</figcaption></figure>
+<figure><img loading="lazy" src="jpg/00-start.jpg"><figcaption>The start screen: a living city at dusk behind the menu. Pick a seed, a size, a mode and your character, or continue a saved game.</figcaption></figure>
 <h2>Game modes</h2>
 <ul>
   <li><b>Normal.</b> You begin as an ordinary person with no powers at all. A short origin scene tells you how that changes. Good deeds earn <b>karma</b>, and karma buys powers one by one. This is the intended way to play.</li>
   <li><b>Sandbox.</b> Every power is unlocked at full strength from the first second. Ideal for exploring, experimenting and simply knocking things over.</li>
 </ul>
 <h2>Your city</h2>
-<p>Choose a city size and a seed on the start screen. You can also put them in the address bar, for example <kbd>?seed=3&amp;size=1</kbd>. Small cities load quickly and are great for a first look; large ones take longer to build but have more of everything. The first start in a browser also prepares the graphics shaders, which can take a moment.</p>
+<p>Choose a city size and a seed on the start screen. You can also put them in the address bar, for example <kbd>?seed=3&amp;size=1</kbd>. Each seed shows its own skyline behind the menu. Small cities load quickly and are great for a first look; large ones take longer to build but have more of everything. The first start in a browser also prepares the graphics shaders, which can take a moment.</p>
 <h2>Your hero</h2>
 <figure><img loading="lazy" src="jpg/01-creator.jpg"><figcaption>The character creator: body, face, hair, clothes and colours.</figcaption></figure>
-<p>The character creator lets you shape your hero's body and face, choose hair, brows and lips, and dress them from a wide wardrobe of everyday clothes and hero suits. New characters start plain; the <b>Plain</b> button takes you back to a clean slate at any time. If you have your own 3D model you can import it, and the avatar converter helps bring characters from other tools into the game. Later on, clothes shops in the city have a fitting mirror where you can change your outfit without going back to the menu.</p>
+<figure><img loading="lazy" src="jpg/50-hero-suit.jpg"><figcaption>The Hero tab: tights with an emblem, gloves, boots and a cowl.</figcaption></figure>
+<p>The character creator lets you shape your hero's body and face, choose hair, brows and lips, and dress them from a wide wardrobe of everyday clothes. The <b>Hero</b> tab adds the real thing: skin-tight <b>tights</b> in any colour with an accent colour and a design (plain, star emblem, lightning bolt, chevron, stripes, or trunks with a golden belt), matching gloves and boots, and a <b>mask</b> (domino, cowl or full mask). New characters start plain; the <b>Plain</b> button takes you back to a clean slate at any time. If you have your own 3D model you can import it, and the avatar converter helps bring characters from other tools into the game. Later on, clothes shops in the city have a fitting mirror where you can change your outfit without going back to the menu.</p>
+<h2>Three costumes</h2>
+<p>Your hero has three costumes on <kbd>F1</kbd>, <kbd>F2</kbd> and <kbd>F3</kbd>, and you can switch between them anywhere in the city. At the start all three are the look you made in the creator. The fitting mirror changes only the costume you are wearing, so you can keep street clothes on one key and your hero suit on another. All three are kept in your saves.</p>
+<figure><img loading="lazy" src="jpg/53-costume.jpg"><figcaption>Suited up and out on the street.</figcaption></figure>
 
 <h1 id="ch3">3. Controls</h1>
-<p>Press <kbd>H</kbd> in the game at any time for the full list. The essentials:</p>
+<p>Press <kbd>H</kbd> in the game at any time for the help. Its <b>Keys</b> tab lists every action, and every key can be changed there: click a key and press the new one. Each action can have two keys, your choice is kept in the browser, and <b>Reset to defaults</b> brings the original keys back. The default keys:</p>
 <table>
 <tr><th style="width:32%">Key</th><th>Action</th></tr>
 <tr><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td><td>Move</td></tr>
 <tr><td><kbd>Shift</kbd></td><td>Run, or boost while flying</td></tr>
-<tr><td><kbd>R</kbd></td><td>Autorun</td></tr>
-<tr><td><kbd>Space</kbd></td><td>Jump; hold for a super jump</td></tr>
-<tr><td><kbd>Ctrl</kbd> / <kbd>C</kbd></td><td>Go down (crouch, descend while flying)</td></tr>
+<tr><td><kbd>Alt</kbd></td><td>Walk slowly (hold)</td></tr>
+<tr><td><kbd>R</kbd></td><td>Autorun (in flight: autoflight)</td></tr>
+<tr><td><kbd>Space</kbd></td><td>Jump; hold for a super jump (hold <kbd>W</kbd> too to leap forward)</td></tr>
+<tr><td><kbd>Ctrl</kbd> / <kbd>C</kbd></td><td>Go down while flying</td></tr>
 <tr><td><kbd>F</kbd></td><td>Toggle flight</td></tr>
-<tr><td><kbd>Num +</kbd> / <kbd>Num −</kbd></td><td>Grow and shrink (size shift)</td></tr>
+<tr><td><kbd>Num +</kbd> / <kbd>Num −</kbd></td><td>Grow and shrink (size shift); <kbd>=</kbd> and <kbd>-</kbd> work too</td></tr>
 <tr><td><kbd>1</kbd> … <kbd>9</kbd>, <kbd>0</kbd></td><td>Use the power in that hotbar slot</td></tr>
-<tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Next / previous target</td></tr>
+<tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Next / previous target; on a giant creature, its body parts (weak spots first)</td></tr>
 <tr><td>Left mouse</td><td>Pick a target</td></tr>
 <tr><td>Right mouse (hold)</td><td>Look around</td></tr>
 <tr><td>Mouse wheel</td><td>Camera distance</td></tr>
 <tr><td><kbd>E</kbd></td><td>Interact: talk, help someone up, pick up, carry, use a mirror or manhole, dig, turn yourself in</td></tr>
 <tr><td><kbd>P</kbd></td><td>Powers screen</td></tr>
-<tr><td><kbd>M</kbd> / <kbd>N</kbd></td><td>Big map / minimap</td></tr>
-<tr><td><kbd>G</kbd></td><td>Rally the army to your side (during big threats)</td></tr>
-<tr><td><kbd>T</kbd></td><td>Call an airstrike on your target (when the army is with you)</td></tr>
+<tr><td><kbd>M</kbd> / <kbd>N</kbd></td><td>Big map (click it to set a marker the compass points to) / minimap on and off</td></tr>
+<tr><td><kbd>G</kbd></td><td>Rally the soldiers near you (reputation 40+ with the army)</td></tr>
+<tr><td><kbd>T</kbd></td><td>Airstrike on your target, a giant creature (reputation 70+)</td></tr>
+<tr><td><kbd>K</kbd></td><td>Call your sidekick (once you have one)</td></tr>
+<tr><td><kbd>F1</kbd> / <kbd>F2</kbd> / <kbd>F3</kbd></td><td>Put on costume 1, 2 or 3</td></tr>
 <tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Shift the time of day</td></tr>
 <tr><td><kbd>F8</kbd></td><td>Free camera</td></tr>
 <tr><td><kbd>B</kbd></td><td>Test blast (Sandbox only)</td></tr>
-<tr><td><kbd>H</kbd></td><td>Help</td></tr>
+<tr><td><kbd>H</kbd></td><td>Help: keys, powers and this manual</td></tr>
+<tr><td><kbd>F4</kbd></td><td>Detailed info line (frame rate, position)</td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>F11</kbd></td><td>Shader counter (for the curious and for bug reports)</td></tr>
 <tr><td><kbd>Esc</kbd></td><td>Pause menu: save, load, settings</td></tr>
 </table>
+<figure><img loading="lazy" src="jpg/51-help-keys.jpg"><figcaption>The help (<kbd>H</kbd>), Keys tab: click any key to change it.</figcaption></figure>
 <h2>Touch screens</h2>
-<p>On an iPad or other tablet the game shows touch controls: a movement stick on the left, a look area on the right, and buttons for jump, flight, the hotbar powers and interaction. Pinch changes the camera distance.</p>
+<p>On an iPad or other tablet the game shows touch controls: a movement stick on the left, a look area on the right, and buttons for jump, flight, the hotbar powers and interaction. Pinch changes the camera distance. A <b>More</b> button holds the rest: rallying soldiers, airstrikes, calling your sidekick, the time of day. Changing keys in the help does not affect the touch controls.</p>
 
 <h1 id="ch4">4. The screen, the map and the minimap</h1>
 <figure><img loading="lazy" src="jpg/03-hud.jpg"><figcaption>On the street: health and energy, the power hotbar, the minimap, and people going about their day.</figcaption></figure>
 <p>The heads-up display shows your <b>health</b> and <b>energy</b>, your <b>karma</b> and <b>reputation</b>, the <b>hotbar</b> with your powers, and the <b>minimap</b>. Targets you pick get a health tag above their head. When you walk into a new neighbourhood a banner tells you its name and how much crime there is; when the police are after you, wanted stars appear.</p>
 <figure class="half"><img loading="lazy" src="jpg/42-hood.jpg"><figcaption>Entering a neighbourhood: its name and crime level.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/06-map.jpg"><figcaption>The map (<kbd>M</kbd>) with the turf of every organisation.</figcaption></figure>
-<p>The big <b>map</b> shows streets, parks, water, landmarks and points of interest. Its turf layer colours in who controls which part of the city, and its legend names the organisations. Golden dots mark people who have a favour to ask; other markers show crimes in progress and big events. The <b>minimap</b> in the corner shows the same marks around you.</p>
+<p>The big <b>map</b> shows streets, parks, water, landmarks and points of interest. Its turf layer colours in who controls which part of the city, and its legend names the organisations. Golden dots mark people who have a favour to ask; other markers show crimes in progress and big events. Click anywhere on the map to set a marker; the compass at the top of the screen then points to it with the distance. The <b>minimap</b> in the corner shows the same marks around you, and the compass shows nearby points of interest: metro entrances, people who need help, crimes, small deeds and power cores.</p>
 
 <h1 id="ch5">5. Powers and karma</h1>
-<figure><img loading="lazy" src="jpg/07-powers.jpg"><figcaption>The powers screen (<kbd>P</kbd>): what you have, what it costs, and what comes next.</figcaption></figure>
-<p>In Normal mode, every good deed earns karma: stopping a thief, rescuing someone from a collapsed house, helping a lost tourist, getting a cat down from a tree. Spend karma on the powers screen to unlock new powers and to make them stronger. Most powers draw on your <b>energy</b>, which refills over time.</p>
+<figure><img loading="lazy" src="jpg/07b-powers.jpg"><figcaption>The powers screen (<kbd>P</kbd>): what each power does, what it costs, and the hotbar below.</figcaption></figure>
+<p>In Normal mode, every good deed earns karma: stopping a thief, rescuing someone from a collapsed house, helping a lost tourist, getting a cat down from a tree. Spend karma on the powers screen to unlock new powers and to make them stronger, up to rank 5, and drag them onto the hotbar. Powers have no cooldowns: each use costs <b>energy</b>, which refills over time, and you can use a power again as soon as you have the energy for it. A hotbar slot darkens while you are short of energy for that power.</p>
 <table>
 <tr><th style="width:28%">Group</th><th>Powers</th></tr>
-<tr><td>Body</td><td>Punch, super strength, super jump, super speed, flight</td></tr>
-<tr><td>Size</td><td>Size shift: from 10 cm tall to a 100 m giant. Being big costs energy.</td></tr>
-<tr><td>Force</td><td>Shockwave, seismic stomp, whirlwind</td></tr>
-<tr><td>Fire and light</td><td>Laser eyes, fire wave, fireball</td></tr>
-<tr><td>Ice and storm</td><td>Frost nova, ice path, chain lightning</td></tr>
-<tr><td>Water</td><td>Hydrokinesis</td></tr>
-<tr><td>Strange</td><td>Shrink ray, and one power you will have to earn the hard way</td></tr>
+<tr><td>Body</td><td>Punch, super strength, size shift (from 10 cm tall to a 100 m giant; being big costs energy)</td></tr>
+<tr><td>Movement</td><td>Super jump, super speed, flight</td></tr>
+<tr><td>Elemental</td><td>Shockwave, laser eyes, fire wave, fireball, frost nova, ice path, chain lightning, seismic stomp, whirlwind, hydrokinesis</td></tr>
+<tr><td>Energy (single target)</td><td>Phase pulse, focus beam, seeker orb</td></tr>
+<tr><td>Support</td><td>Shrink ray, and one power you will have to earn the hard way</td></tr>
 </table>
 <figure class="half"><img loading="lazy" src="jpg/04-flight.jpg"><figcaption>Flying over the rooftops.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/05-giant.jpg"><figcaption>At 45 metres, the town hall is a footstool.</figcaption></figure>
+<h2>New in the Energy group</h2>
+<p>These three hit only the one they are aimed at: no fire, no bystanders, nothing broken on the way.</p>
+<ul>
+  <li><b>Phase pulse</b> (tap): passes through walls, cars and people to your target, even one that ducked out of sight a moment ago. Weaker than the laser and short-ranged.</li>
+  <li><b>Focus beam</b> (hold, then let go): gathers a beam behind your eyes, then fires one heavy shot. The longer you gather, the harder it hits. Best against a monster's weak spot.</li>
+  <li><b>Seeker orb</b> (tap): a ball of energy that flies round corners and over roofs to your target and bursts only on it. It needs a target.</li>
+</ul>
+<h2>Friend/foe sense</h2>
+<p>Most area powers (laser eyes, shockwave, fire wave, fireball, frost nova, chain lightning, seismic stomp, whirlwind and hydrokinesis) can be bought with a <b>friend/foe sense</b> on the powers screen, for the price of that power's first rank. With it, the power only harms criminals still in the fight, monsters and rogue machines; bystanders, police, cars and buildings are left alone. A giant loses the sense: above normal size every power hits everything again. In the Sandbox it is a free switch.</p>
+<h2>Travelling</h2>
+<p><b>Super jump</b> is a travel power in its own right: hold <kbd>W</kbd> while you leap and the jump carries you forward, faster the higher you climb. The leap picks up speed as it flies; bounding from landing to landing is nearly as quick as flying, and a top-rank leap clears about a kilometre. At normal size, landing next to someone only startles them. <b>Super speed</b> hops over people and cars, and <b>flight</b> costs nothing, although energy does not refill in the air.</p>
+<p>The <b>shrink ray</b> works on everything, monsters included. Small things shrink by a large factor; big things lose a few metres at most, but anything shrunk hits noticeably softer.</p>
+<figure><img loading="lazy" src="jpg/52-help-powers.jpg"><figcaption>The help's Powers tab: exact numbers for every rank, from damage to energy and karma price.</figcaption></figure>
+<p>For the exact numbers, open the help (<kbd>H</kbd>) and its <b>Powers</b> tab. It lists every power with its effect, damage, energy and karma price per rank, highlights your current rank, and explains the rules for energy, flight, giant size and karma.</p>
 <div class="tip"><b>Power cores.</b> Glowing cores are hidden around the city. Picking one up gives you energy, faster regeneration or a bit of karma. Some are in plain sight, some are not.</div>
 <div class="tip"><b>Careful with your strength.</b> A super-speed run will hop over people and cars, but a fireball does not care who is standing behind the target. Bricks that fall on people are your responsibility if you caused the collapse.</div>
 
@@ -177,10 +201,11 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <figure><img loading="lazy" src="jpg/30-metro.jpg"><figcaption>A metro platform. Trains run on schedule and commuters ride them.</figcaption></figure>
 <p>Bigger cities have a metro. Take the stairs down at a station entrance, wait on the platform with the commuters, and ride the train across town.</p>
 <h2>The sewers</h2>
-<p>Lift a manhole cover with <kbd>E</kbd> and climb down. The sewers run under the streets: tunnels with rats, pump and machine halls, twisting side rooms, and here and there a hideout that someone has made their own. Hideouts are guarded, and what is stashed in them matters to the organisation that owns it.</p>
+<p>Lift a manhole cover with <kbd>E</kbd> and climb down; every ladder down there leads back up the same way. The sewers run under the streets: tunnels with rats, pump and machine halls, twisting side rooms, and here and there a hideout that someone has made their own. Hideouts are guarded, and what is stashed in them matters to the organisation that owns it.</p>
+<p>The street and the tunnels are separate worlds. A fight below does not shake the street, nothing up top can hurt you down there, and the police on the pavement cannot see what you do underground. Hiding below can be a way to lose a wanted level.</p>
 <figure><img loading="lazy" src="jpg/31-hideout.jpg"><figcaption>A hideout in the sewers, with its owners' tags on the walls.</figcaption></figure>
 <h2>Deeper still</h2>
-<p>The sewers are not the bottom. Persistent explorers who dig or find the right way down will discover that the city has neighbours nobody up top knows about, and that they have troubles of their own. That is all this manual will say.</p>
+<p>The sewers are not the bottom. Persistent explorers who dig or find the right way down will discover that the city has neighbours nobody up top knows about, and that they have troubles of their own. Keep an eye out for strange glowing signs in the sewers. That is all this manual will say.</p>
 <figure><img loading="lazy" src="jpg/32-slime-gardens.jpg"><figcaption>Somewhere far below the streets.</figcaption></figure>
 
 <h1 id="ch9">9. A living city</h1>
@@ -203,7 +228,7 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <li><b>The bomber.</b> Occasionally someone plants a bomb. You do not have long.</li>
   <li><b>Organised crime.</b> Most serious trouble comes from the six organisations described in the next chapter.</li>
 </ul>
-<p>Stopping a crime earns karma and reputation. Knocking criminals down is fine; flattening bystanders, cars and buildings is not. If you do get the police on your back, you can stand still and press <kbd>E</kbd> to turn yourself in.</p>
+<p>Stopping a crime earns karma and reputation. Knocking criminals down is fine; flattening bystanders, cars and buildings is not. If you do get the police on your back, you can stand next to an officer and press <kbd>E</kbd> to turn yourself in, or slip underground where they cannot follow your trail. Every harm is booked to whoever really did it: what the police, the army or a monster breaks is not counted against you.</p>
 <figure><img loading="lazy" src="jpg/41-collapse.jpg"><figcaption>When things go wrong: a collapsed building, a reputation penalty, and wanted stars.</figcaption></figure>
 
 <h1 id="ch11">11. The six organisations</h1>
@@ -236,42 +261,67 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <figure class="half"><img loading="lazy" src="jpg/23-tree.jpg"><figcaption>The awakened tree.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/26-swarm-frost.jpg"><figcaption>A frost nova against the swarm.</figcaption></figure>
 <h2>The army</h2>
-<p>When a big threat appears, the army moves in with soldiers, vehicles and helicopters. You can fight alongside them, or lead them: press <kbd>G</kbd> to rally the troops to you, and <kbd>T</kbd> to call an airstrike on your target. If all else fails, the army has a last resort. You will see the countdown, and you will want to finish the fight before it reaches zero.</p>
+<p>When a big threat appears, the army moves in with soldiers, vehicles and helicopters. You can fight alongside them, or lead them: press <kbd>G</kbd> to rally the troops near you (once the army thinks well enough of you), and <kbd>T</kbd> to call an airstrike on a giant creature you have targeted (for well-known heroes only). If all else fails, the army has a last resort. You will see the countdown, and you will want to finish the fight before it reaches zero.</p>
 <figure><img loading="lazy" src="jpg/25-army.jpg"><figcaption>Soldiers and a helicopter taking on the Strider.</figcaption></figure>
 <h2>Afterwards</h2>
 <p>A big fight leaves its mark. People are trapped under rubble and need digging out, a triage tent goes up for the wounded, the city counts its casualties, and memorials appear for those who were lost. The remains of what you fought may stay where they fell for a while.</p>
 
-<h1 id="ch13">13. Reputation and consequences</h1>
-<p>Karma is what you earn; <b>reputation</b> is what the city thinks of you. The two are separate. Saving people, stopping crimes and defeating threats raises your reputation. Hurting bystanders, wrecking cars and bringing buildings down lowers it. Accidents caused by falling rubble or monsters are not counted against you, but collapses you started are.</p>
+<h1 id="ch13">13. Lights in the sky</h1>
+<figure><img loading="lazy" src="jpg/70-disc.jpg"><figcaption>A silver disc sweeps a street with its scan cone.</figcaption></figure>
+<p>The city is being watched. High above it hangs a station, a pale second moon by day and a dark shape with crawling lights by night, and silver discs cross the sky: usually a handful, some hours none at all, and now and then, for no reason anyone knows, a swarm of a hundred with festive lights. People call the watchers the <b>Nannies</b>.</p>
+<p>The discs never meddle. They come down to hang over a street and sweep it with a pale scan cone, gather over a crime or a fight and watch it to the end without lifting a finger, or stare at a landmark for hours. Fly high or grow giant and you may find a cone turned on you. Sometimes a disc sets a tall robot walker down on a square; it stands there, looks around (at you, if you come close), takes a few slow steps and is lifted away again. People gawk, film it, grumble or joke, and the news reports it.</p>
+<figure><img loading="lazy" src="jpg/71-walker.jpg"><figcaption>A walker set down in a park by a disc's beam.</figcaption></figure>
+<h2>Joyriders</h2>
+<p>Not every visitor follows the rules. Now and then someone young takes a small, battered saucer out for a joyride low between the houses, where the roofs hide it from the watchers above. Watch for something zipping down a street, glowing glyphs on walls, cars that end up on roofs, and passers-by who end up in fountains. Getting the joyriders caught takes some thought: the Nannies only notice what is out in the open. Handing them over is rewarded, and the Nannies remember who helped.</p>
+<figure><img loading="lazy" src="jpg/72-saucer.jpg"><figcaption>A battered saucer with rim lights, out for a joyride.</figcaption></figure>
+
+<h1 id="ch14">14. Your sidekick</h1>
+<p>Once the city thinks well of you (or after a short while in the Sandbox), the news reports a strange glowing stone in a park or square. The map marks the area; nearer in, a hum and a glow at the edge of the screen lead you to it, and a pale column of light rises from the stone. Sometimes a gang has got there first. Pick it up and you carry the <b>second shard</b>.</p>
+<figure><img loading="lazy" src="jpg/60-shard.jpg"><figcaption>The second shard: a column of light in a small park.</figcaption></figure>
+<p>Talk to anyone while you carry it, and you can offer it to them. Most people say yes; children, people at work, and those who dislike you or heroes in general say no, and some want a favour first. The one who takes it awakens and becomes your <b>sidekick</b>, marked gold on the map.</p>
+<ul>
+  <li><b>Around you.</b> Your sidekick hangs about nearby, flies to keep up, and joins fights with punches and their own power, which suits who they are. Press <kbd>K</kbd> to call them to your side.</li>
+  <li><b>Growing.</b> They earn karma of their own and spend it on new powers that fit their character, and a message tells you what they learned.</li>
+  <li><b>Talking.</b> Press <kbd>E</kbd> next to them and choose "About the two of us…" to see how they are, give them some of your karma (perhaps with a wish for a power), or ask them to help, stay back, go home or come along.</li>
+  <li><b>Trust.</b> Trust grows with time together, gifts and fights won side by side, and drops when you hurt people near them or leave them alone in a losing fight. A wary sidekick may not come when called, and if the city turns against you, they will leave you.</li>
+  <li><b>The law.</b> Your sidekick keeps out of trouble with the police and never costs you reputation.</li>
+  <li><b>Danger.</b> When they go down, the hospital's drones carry them away. Most come back. Not all do.</li>
+</ul>
+<figure><img loading="lazy" src="jpg/62-sidekick.jpg"><figcaption>Click your sidekick to see their mood, health, trust, savings and every power they have learned.</figcaption></figure>
+
+<h1 id="ch15">15. Reputation and consequences</h1>
+<p>Karma is what you earn; <b>reputation</b> is what the city thinks of you. The two are separate. Saving people, stopping crimes and defeating threats raises your reputation. Hurting bystanders, wrecking cars and bringing buildings down lowers it. Accidents caused by falling rubble or monsters are not counted against you, but collapses you started are. Reputation has no upper limit: past +150 the city calls you a <b>Living legend</b>. The bottom is −100.</p>
 <table>
 <tr><th style="width:30%">Reputation</th><th>What happens</th></tr>
-<tr><td>High</td><td>Fans ask for autographs, press photographers follow you, a TV crew turns up at your fights. Become a true hero and the city may even put up a statue of you.</td></tr>
+<tr><td>High</td><td>Fans ask for autographs, press photographers follow you, a TV crew turns up at your fights. Become a true hero and the city may even put up a statue of you. Everything is at full strength from +100 on.</td></tr>
 <tr><td>Around zero</td><td>People do not quite know what to make of you.</td></tr>
-<tr><td>Low</td><td>Protesters with signs, people who keep their distance, and a police force that gets more and more serious. Very low, and the army may come for <i>you</i>.</td></tr>
+<tr><td>Low</td><td>Protesters with signs, people who keep their distance, and a police force that gets more and more serious. Very low, and the army may come for <i>you</i>. At −70 or worse you are a public menace, and if the police take you down, they take you in for good.</td></tr>
 </table>
 <p>When you cause harm, wanted stars appear. The more stars, the heavier the response. Turning yourself in with <kbd>E</kbd> ends a chase at once.</p>
 
-<h1 id="ch14">14. When you go down</h1>
+<h1 id="ch16">16. When you go down</h1>
 <p>Heroes get hurt. When your health runs out, what happens next depends on what the city thinks of you.</p>
 <ul>
   <li><b>Reputation zero or better:</b> rescue drones fly in, lift you up and carry you to a hospital. You wake up in the revival ward and walk back out into the city.</li>
   <li><b>Negative reputation:</b> nobody comes. The game is over, and you load your last save.</li>
+  <li><b>A public menace (−70 or worse):</b> if the police bring you down, the officers cuff you and you are arrested. That is game over too.</li>
 </ul>
 <figure class="half"><img loading="lazy" src="jpg/45-rescue.jpg"><figcaption>Rescue drones on their way.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/46-ward.jpg"><figcaption>Waking up in the hospital's revival ward.</figcaption></figure>
 <div class="tip"><b>Ordinary people fall too.</b> Knocked-down people can be helped back up with <kbd>E</kbd>. Doing so is quick, kind, and counts as a good deed.</div>
 
-<h1 id="ch15">15. Saving, settings and the rest</h1>
+<h1 id="ch17">17. Saving, settings and the rest</h1>
 <h2>Saving</h2>
 <p>The game saves automatically. In the pause menu (<kbd>Esc</kbd>) you can also make named saves, load them, and save to or load from a file on your computer, which is handy for backups or moving to another device. Saves keep your hero, your powers and your progress.</p>
 <h2>Settings</h2>
 <p>The pause menu (<kbd>Esc</kbd>) holds the settings: time speed and time of day, the weather, volume, music and a detailed sound mix, graphics level and render scale, how often street crime happens (off, calm, normal, chaos) and how often the city is hit by big events. <b>Auto</b> graphics adapts to your machine while you play; if the game still runs slowly, a smaller city helps the most.</p>
+<p>The game draws with WebGL. A newer WebGPU renderer can be tried by adding <kbd>&amp;gpu=webgpu</kbd> to the address; it looks the same and is still being tuned. <kbd>Shift</kbd>+<kbd>F11</kbd> shows a small shader counter and <kbd>F4</kbd> a detailed info line, both handy when reporting a problem.</p>
 <h2>Sound</h2>
 <p>The city sounds alive: traffic, footsteps, chatter, sirens, music, and a soundtrack that follows the mood. Listen; a scream in the distance is often the first sign of trouble.</p>
-<h2>Feedback</h2>
-<p>Found a bug or have an idea? The pause menu has a feedback link that sends your message straight to the developer.</p>
+<h2>Help and feedback</h2>
+<p>The help (<kbd>H</kbd>) has three tabs: <b>Keys</b>, <b>Powers</b> and this <b>Manual</b>. The manual is also on the start screen and in the pause menu, and can be opened as a PDF. Found a bug or have an idea? The <b>Feedback</b> link next to the version number on the start screen and in the pause menu sends your message straight to the developer.</p>
 
-<h1 id="ch16">16. Tips for new heroes</h1>
+<h1 id="ch18">18. Tips for new heroes</h1>
 <ul>
   <li>In Normal mode, the first powers come quickly. Small good deeds add up: help people up, return wallets, rescue cats.</li>
   <li>Look at the map often. Golden dots are favours, and the turf colours tell you whose territory you are standing in.</li>
@@ -281,6 +331,10 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <li>Visit landmarks at different times of day. Something different is always going on inside.</li>
   <li>Bosses only come out when their organisation takes you seriously. Earn their attention first.</li>
   <li>When a big threat appears, rally the army with <kbd>G</kbd>. You are stronger together.</li>
+  <li>Buy the friend/foe sense for your favourite area power before using it in a crowd.</li>
+  <li>Keep street clothes on one costume key and your hero suit on another.</li>
+  <li>When the news reports a strange glowing stone, go and look. Choose carefully who you give it to.</li>
+  <li>Look up now and then.</li>
   <li>Not every secret is on the map. Some of the best things in this city are below it.</li>
 </ul>
 <p style="margin-top:14pt; text-align:center; color:#666">Have fun, and look after your city.</p>
