@@ -2,10 +2,27 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.158 — 2026-10-08
+## 0.162 — 2026-10-08
 
 - **Super jump is a real travel power.** Hold W while you leap and the jump now carries you forward: the higher you climb, the faster it goes, up to 18, 39, 72, 120 and 200 m/s at ranks 1 to 5 (it was 12 m/s at every rank). Bounding on from landing to landing now covers ground at least as fast as a boosted flight at the same rank (flight 14 / 28 / 54 / 91 / 159 m/s, super jump 14 / 29 / 55 / 94 / 161 m/s even pressing Space a little late on each landing). A top-rank leap clears about a kilometre. A long leap stops on landing instead of skidding down the street, a quick hop still only moves you a little, and without W the jump is the same straight climb as before. The energy cost is unchanged, and landing beside someone at human size still costs no reputation. The Powers table shows the leap speed per rank (`npx tsx tools/travelsim.ts` measures it).
 
+## 0.161 — 2026-10-08
+
+- **Fix: the hero no longer gets stuck at turns in tunnels.** Walking from a platform into the underpass, the hero could stand stuck at the right-angle turn just inside its mouth until facing exactly down the next stretch. Underground, a body pressed against a wall only slid along the map's north-south or east-west axis; against a wall at an angle to them (most tunnels) both ways led into the wall and the hero stopped dead. Bodies now slide along walls at any angle, in the metro, its stairs and underpasses, the sewers and the caves. The metro audit and the self-test now walk every stair and underpass both ways like a player who cuts the corners: before the fix 38 of 50 passages in one city stopped such a walker, now none.
+
+## 0.160 — 2026-10-08
+
+- **Far fewer fall cries.** Someone tripping in the street now happens every three to six minutes instead of every one to two, the first one not before a minute and a half, and only within about 35 m of you (it was up to 60 m), so you can see who fell.
+- **Screams come from whoever got frightened.** When people take fright, the scream used to be played at the first frightened person in the whole city, often someone already lying knocked down somewhere else. That made screams seem to come from people on the ground with nothing happening. Now it comes from one of the people who just got scared.
+
+## 0.159 — 2026-10-08
+
+- **Behind the scenes: the self test runs in under 3 minutes instead of about 17.** It is now split into 69 independent sections that run side by side, one worker per processor core, the slowest first. `npm run test:quick` runs only the sections that touch what you changed, for quick checks while working; the full `npm test` is still required before every merge (docs/CONVENTIONS.md, "Tests: which command when"). No check was dropped or shortened.
+- **Cities are planned about twice as fast.** Laying out the metro sampled the ground along every sewer again for each metro line; it now does that once. The cities come out exactly the same, so loading a new city is a bit quicker too.
+
+## 0.158 — 2026-10-08
+
+- **Fights in the sewers stay in the sewers.** When a villain cast frost, an orb, an EMP or a fireball, when a mad bomber threw a bomb, or when a gunman missed someone underground, the scorch marks, frost, chips and the bomb itself landed on the street above. They now land on the sewer, metro or cave floor where the fight is. People knocked down underground also no longer quietly vanish: you can find them and help them up like anyone on the street.
 ## 0.157 — 2026-10-08
 
 - **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, the 99 m long Strider loses 5 m of length (about 5 %). Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.

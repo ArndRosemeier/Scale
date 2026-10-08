@@ -160,7 +160,7 @@ export class Firearms {
         // A miss: on past the target (into the sky, or the street just beyond), a little off line.
         let ex = tx, ey = ty, ez = tz;
         if (hit) { ex += (Math.random() - 0.5) * 0.25; ey += (Math.random() - 0.5) * 0.25; ez += (Math.random() - 0.5) * 0.25; }
-        else if (ground) { const r = 0.8 + Math.random() * 2.5, a = Math.random() * Math.PI * 2; ex = tx + ux * r * 2 + Math.cos(a) * r * 0.5; ez = tz + uz * r * 2 + Math.sin(a) * r * 0.5; ey = g.terrain.height(ex, ez) + 0.15; }
+        else if (ground) { const r = 0.8 + Math.random() * 2.5, a = Math.random() * Math.PI * 2; ex = tx + ux * r * 2 + Math.cos(a) * r * 0.5; ez = tz + uz * r * 2 + Math.sin(a) * r * 0.5; ey = g.floorAt(ex, ty - 1, ez) + 0.15; }
         else { ex = tx + ux * 30 + (Math.random() - 0.5) * 4; ey = ty + uy * 30 + (Math.random() - 0.3) * 4; ez = tz + uz * 30 + (Math.random() - 0.5) * 4; }
         this.tracer(mx, my, mz, ex, ey, ez, k * s.burstGap);
         if (hit && onMachine) g.debris.chipBurst(ex, ey, ez, 4, 3.5, -ux, -uy + 0.3, -uz, SPARK, 0.02, 0.35);

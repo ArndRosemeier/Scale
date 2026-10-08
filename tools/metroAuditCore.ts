@@ -6,7 +6,7 @@
  */
 import type { Terrain } from '../src/world/terrain';
 import type { MetroLine } from '../src/plan/types';
-import { tubeAt, boxAt, type Tube, type Box } from '../src/underground/Volumes';
+import { tubeAt, boxAt, slideMove, makeTube, type Tube, type Box } from '../src/underground/Volumes';
 import { TUNNEL_HW, TUNNEL_H, STATION_HW, STATION_H, PLATFORM_H, SEWER_HW, SEWER_H, TRACK_OFF, CAR_L, CARS, CAR_W, CAR_FLOOR, trainsOn, carPose, ownHallHits } from '../src/underground/layout';
 
 export interface AuditLine { line: MetroLine; tube: Tube; stops: { s: number; hall: Box | null }[] }
@@ -151,7 +151,9 @@ export function auditLines(inp: AuditInput): LineReport[] {
   return out;
 }
 
-export interface PassageReport { name: string; maxSlope: number; floorErr: number; ceilingOut: number; hits: number; endsOnPlatform: boolean; /** Highest step between floor samples 0.2 m apart anywhere across the passage (a ledge where it turns). */ ledge: number }
+export interface PassageReport { name: string; maxSlope: number; floorErr: number; ceilingOut: number; hits: number; endsOnPlatform: boolean; /** Highest step between floor samples 0.2 m apart anywhere across the passage (a ledge where it turns). */ ledge: number;
+  /** Player-like walks (both ways, cutting the turns more or less) that got stuck, and where the first one did. */
+  stuck: number; stuckAt: string }
 
 /**
  * Entrance passages: walkable slope everywhere, the floor query along the walk equals the passage
@@ -165,7 +167,9 @@ export function auditPassages(inp: AuditInput, inHole: (x: number, z: number) =>
     // (The halls' underpasses count as other volumes for every passage but themselves.)
     const vols = [...inp.lines.map((l) => l.tube), ...inp.sewers, ...under.filter((u) => u !== ps.tube)];
     const t = ps.tube, P = t.pts, n = P.length / 3;
-    const r: PassageReport = { name: ps.name, maxSlope: 0, floorErr: 0, ceilingOut: 0, hits: 0, endsOnPlatform: false, ledge: passageLedge(t) };
+    const r: PassageReport = { name: ps.name, maxSlope: 0, floorErr: 0, ceilingOut: 0, hits: 0, endsOnPlatform: false, ledge: passageLedge(t), stuck: 0, stuckAt: '' };
+    const w = passageWalk(t, [t, ...under.filter((u) => u !== t)], inp.halls);
+    r.stuck = w.stuck; r.stuckAt = w.at;
     for (let i = 0; i + 1 < n; i++) {
       const L2 = t.cum[i + 1] - t.cum[i];
       if (L2 > 1e-3) r.maxSlope = Math.max(r.maxSlope, Math.abs(P[i * 3 + 4] - P[i * 3 + 1]) / L2);
@@ -220,4 +224,88 @@ export function passageLedge(t: Tube): number {
     }
   }
   return worst;
+}
+
+/**
+ * Walk a passage end to end and back like a player: the heading turns (rate-limited, like the
+ * camera) toward a point some way ahead on the centre line, so the walker cuts the turns and
+ * runs into the walls there; it moves as Collision.collide does underground (slideMove, kept
+ * r/2 inside the volumes) on the floors Underground.floorAt finds. Counts the walks that stop
+ * making headway (stuck against a wall or a ledge).
+ */
+export function passageWalk(t: Tube, tubes: Tube[], halls: Box[]): { stuck: number; walks: number; at: string } {
+  const [bx0, bz0, bx1, bz1] = t.bounds;
+  tubes = tubes.filter((v) => v.bounds[0] < bx1 && v.bounds[2] > bx0 && v.bounds[1] < bz1 && v.bounds[3] > bz0);
+  halls = halls.filter((b) => b.bounds[0] < bx1 && b.bounds[2] > bx0 && b.bounds[1] < bz1 && b.bounds[3] > bz0);
+  const R = 0.3, SPEED = 5.2, HZ = 120;
+  const inside = (x: number, y: number, z: number) => tubes.some((v) => tubeAt(v, x, y, z, -R / 2)) || halls.some((b) => boxAt(b, x, y, z, -R / 2));
+  const floorAt = (x: number, y: number, z: number) => {
+    let best: number | null = null;
+    for (const v of tubes) { const h = tubeAt(v, x, y, z); if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor; }
+    for (const b of halls) { const h = boxAt(b, x, y, z); if (h && h.floor <= y + 0.6 && (best === null || h.floor > best)) best = h.floor; }
+    return best;
+  };
+  // The way a player takes: flat stretches cut straight across where the space allows (a landing
+  // that folds back on itself is one floor, nobody walks its zig-zag centre line).
+  const P = t.pts, way: number[] = [P[0], P[1], P[2]];
+  for (let i = 0; i < P.length / 3 - 1;) {
+    let j = i + 1;
+    for (let k = P.length / 3 - 1; k > i + 1; k--) {
+      let flat = true;
+      for (let m = i; m <= k && flat; m++) flat = Math.abs(P[m * 3 + 1] - P[i * 3 + 1]) < 0.01;
+      if (!flat) continue;
+      const L = Math.hypot(P[k * 3] - P[i * 3], P[k * 3 + 2] - P[i * 3 + 2]);
+      let clear = true;
+      for (let d = 0; d <= L && clear; d += 0.2) {
+        const f = d / Math.max(L, 1e-6), x = P[i * 3] + (P[k * 3] - P[i * 3]) * f, z = P[i * 3 + 2] + (P[k * 3 + 2] - P[i * 3 + 2]) * f;
+        clear = inside(x, P[i * 3 + 1] + 0.3, z);
+      }
+      if (clear) { j = k; break; }
+    }
+    way.push(P[j * 3], P[j * 3 + 1], P[j * 3 + 2]);
+    i = j;
+  }
+  const W = makeTube(t.kind, way, t.halfWidth, t.height);
+  const n = way.length / 3, total = W.cum[n - 1];
+  let stuck = 0, walks = 0, where = '';
+  for (const dir of [1, -1]) for (const look of [1.2, 2.5, 4]) {
+    walks++;
+    const along = (s: number) => at(W, dir > 0 ? s : total - s);
+    let [x, y, z] = along(0.3);
+    const [ax, , az] = along(1.3);
+    let yaw = Math.atan2(ax - x, az - z), s = 0.3, best = s, since = 0, tx = ax, tz = az;
+    for (let f = 0; f < HZ * 120; f++) {
+      // Headway: the nearest point of the way a little either side of the last one.
+      let bs = s, bd = Infinity;
+      for (let q = Math.max(0, s - 1); q <= Math.min(total, s + 1.5); q += 0.05) { const [qx, , qz] = along(q); const d = Math.hypot(qx - x, qz - z); if (d < bd) { bd = d; bs = q; } }
+      s = bs;
+      if (s >= total - 0.6) break;
+      if (s > best + 0.05) { best = s; since = 0; } else if (++since > HZ * 3) {
+        // (Only inside its own passage: a walker that cut a turn into the hall and stands under
+        // the stairs it aims for is lost, not stuck.)
+        if (!tubeAt(t, x, y + 0.3, z)) break;
+        stuck++;
+        if (!where) where = `${x.toFixed(1)},${y.toFixed(2)},${z.toFixed(1)} (${dir > 0 ? 'in' : 'out'}, ${s.toFixed(1)} of ${total.toFixed(1)} m)`;
+        break;
+      }
+      // The carrot: the farthest point of the way ahead (up to look m) in a clear line from the
+      // walker, like a player steering round a hairpin rather than into its middle wall.
+      if (f % 6 === 0) {
+        for (let q = Math.min(total, s + look); q >= s; q -= 0.25) {
+          const [qx, , qz] = along(q), L = Math.hypot(qx - x, qz - z);
+          let clear = true;
+          for (let d = 0.2; d < L && clear; d += 0.2) clear = inside(x + (qx - x) * d / L, y + 0.3, z + (qz - z) * d / L);
+          if (clear || q - 0.25 < s) { tx = qx; tz = qz; break; }
+        }
+      }
+      const want = Math.atan2(tx - x, tz - z), lim = 4 / HZ;
+      yaw += Math.max(-lim, Math.min(lim, Math.atan2(Math.sin(want - yaw), Math.cos(want - yaw))));
+      const [mx, mz] = slideMove((qx, qz) => inside(qx, y + 0.3, qz), x, z, x + Math.sin(yaw) * SPEED / HZ, z + Math.cos(yaw) * SPEED / HZ);
+      const g = floorAt(mx, y + 0.3, mz);
+      // (No floor in reach: off the volumes, the walker would fall; count it as not getting on.)
+      if (g === null) continue;
+      x = mx; z = mz; y = g;
+    }
+  }
+  return { stuck, walks, at: where };
 }

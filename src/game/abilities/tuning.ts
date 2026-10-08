@@ -203,7 +203,7 @@ export const TARGET = { range: 160, propRange: 45, lostAfter: 5 };
 export const CORES = { perCells: 5, min: 6, max: 24, discoverRadius: 150 };
 
 /** Small accidents (someone trips and falls) near the player, as interim good deeds. */
-export const ACCIDENTS = { minGap: 50, maxGap: 110, near: 15, far: 60, lieFor: 120 };
+export const ACCIDENTS = { minGap: 180, maxGap: 360, near: 12, far: 35, lieFor: 120 };
 
 // ---------------------------------------------------------------- slime call (granted by the Lumen's trust)
 /** Energy by rank (a bigger call is cheaper to make: the Lumen trust you more). */
