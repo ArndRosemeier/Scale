@@ -3803,6 +3803,20 @@ aliensChecks(check);
   check(hand.length === 0, `rewards: through crime.reward (${hand.join(', ') || 'none'})`);
 }
 
+// A monster's anger, armour and credit go through game/threats/aggro.ts, so they agree on who earned a win.
+{
+  const hand: string[] = [];
+  const walkA = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkA(full); continue; }
+      if (f.endsWith('.ts') && !full.endsWith('threats/aggro.ts') && /aggro\.(set|delete)\(|armour\)\)? \* \(weak \?/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkA('src');
+  check(hand.length === 0, `threats: aggro and armour through threats/aggro.ts (${hand.join(', ') || 'none'})`);
+}
+
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
 {

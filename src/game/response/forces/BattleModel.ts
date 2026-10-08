@@ -23,6 +23,7 @@
  * seed; the army drives it off or brings it down in ARMY's tuned share of runs.
  */
 import { Rng } from '../../../core/rng';
+import { bookAggro, decayAggro, topAggro, zoneDealt } from '../../threats/aggro';
 
 export type ForceKind = 'rifles' | 'truck' | 'apc' | 'tank' | 'heli' | 'jet' | 'artillery';
 export type ForceTask = 'inbound' | 'move' | 'hold' | 'fallback' | 'mount' | 'orbit' | 'leave' | 'dead';
@@ -419,13 +420,13 @@ export class SimMonster {
     if (this.mode === 'dead' || amount <= 0) return 0;
     const Z = this.zone(zone.id);
     const weak = Z.weak && Z.exposed;
-    const dealt = amount * (1 - (weak ? 0.05 : Z.armour)) * (weak ? this.spec.weakMul : 1);
+    const dealt = zoneDealt(amount, Z.armour, weak, this.spec.weakMul);
     this.hp = Math.max(0, this.hp - dealt);
     Z.recent += dealt;
     this.recentHit += dealt;
     this.stats.dealt += dealt;
     if (weak) this.stats.weakHits++;
-    this.aggro.set(key, (this.aggro.get(key) ?? 0) + dealt + amount * 0.02);
+    bookAggro(this.aggro, key, dealt + amount * 0.02);
     // The glowing throat hit hard: the breath is choked off; hard hits stagger it.
     if (weak && Z.id === 'throat' && (this.act === 'charge' || this.act === 'breath') && dealt > 60) { this.stats.chokes++; this.cool.breath = 12; this.stagger(); }
     else if ((Z.id.startsWith('fore') || Z.id.startsWith('hind')) && Z.recent > 240 && this.act !== 'stagger') { Z.recent *= 0.4; this.stagger(); }
@@ -435,11 +436,7 @@ export class SimMonster {
 
   private stagger(): void { this.act = 'stagger'; this.actT = this.spec.staggerT; this.stats.staggers++; this.breathAt = null; }
 
-  topAggro(): { key: string; v: number } | null {
-    let best: { key: string; v: number } | null = null;
-    for (const [key, v] of this.aggro) if (!best || v > best.v) best = { key, v };
-    return best;
-  }
+  topAggro(): { key: string; v: number } | null { return topAggro(this.aggro); }
 
   /**
    * One step. `target(key)`: where a squad stands (for the breath); `air`: a helicopter near the
@@ -448,7 +445,7 @@ export class SimMonster {
   step(dt: number, target: (key: string) => { x: number; z: number } | null, air: () => boolean, blow: (kind: 'breath' | 'swipe' | 'step' | 'roar' | 'swat', x: number, z: number, r: number) => void): void {
     const S = this.spec, rng = this.rng;
     this.t += dt;
-    for (const [k, v] of this.aggro) { const nv = v * Math.exp(-dt / 90); if (nv < 1) this.aggro.delete(k); else this.aggro.set(k, nv); }
+    decayAggro(this.aggro, dt, 90);
     for (const Z of this.zones) Z.recent *= Math.exp(-dt / 4);
     this.recentHit *= Math.exp(-dt / 2);
     this.cool.roar -= dt; this.cool.breath -= dt; this.cool.swipe -= dt; this.cool.swat -= dt;
