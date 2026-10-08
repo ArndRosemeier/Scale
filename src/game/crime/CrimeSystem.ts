@@ -307,7 +307,7 @@ export class CrimeSystem {
       if (s.kind !== 'collapse') return;
       const d = Math.hypot(s.x - g.player.pos.x, s.z - g.player.pos.z);
       const r = Math.min(40, Math.max(8, s.radius * 0.04));
-      if (d < r && Math.abs(s.y - g.player.pos.y) < 30) this.health.damage(35 * (1 - d / r) + 10, 'collapse', s.x, s.z);
+      if (d < r && Math.abs(s.y - g.player.pos.y) < 30 && !g.collision.underground(g.player.pos.x, g.player.pos.y, g.player.pos.z)) this.health.damage(35 * (1 - d / r) + 10, 'collapse', s.x, s.z);
     });
     this.health.onHurt = (d, kind, fx, fz) => {
       g.camRig.addShake(Math.min(0.5, 0.1 + d / 60));
@@ -551,20 +551,26 @@ export class CrimeSystem {
     };
   }
 
+  /** Is someone on the player's side of the street (both underground or both up top)? Nobody sees through the pavement. */
+  private playerSide(x: number, y: number, z: number): boolean {
+    const U = this.g.underground, P = this.g.player.pos;
+    return !U || U.isUnder(x, y + 0.5, z) === U.isUnder(P.x, P.y + 0.5, P.z);
+  }
+
   private witnesses(x: number, z: number, r: number, except?: object): number {
     let n = 0;
-    for (const a of this.g.peds.neighbours(x, z, r, [])) if (a !== except && a.alive && !a.inside && !a.actor && a.state !== PState.Down) n++;
+    for (const a of this.g.peds.neighbours(x, z, r, [])) if (a !== except && a.alive && !a.inside && !a.actor && a.state !== PState.Down && this.playerSide(a.x, a.y, a.z)) n++;
     return n;
   }
 
   private officersNear(x: number, z: number, r: number): number {
     let n = 0;
     for (const u of this.police.units) {
-      for (const o of u.officers) if (o.alive && o.state !== PState.Down && Math.hypot(o.x - x, o.z - z) < r) n++;
-      // A patrol car on the way counts as eyes too.
-      if (u.state !== 'leaving' && u.car.alive && Math.hypot(u.car.x - x, u.car.z - z) < r) n++;
+      for (const o of u.officers) if (o.alive && o.state !== PState.Down && Math.hypot(o.x - x, o.z - z) < r && this.playerSide(o.x, o.y, o.z)) n++;
+      // A patrol car on the way counts as eyes too (not down in the tunnels).
+      if (u.state !== 'leaving' && u.car.alive && Math.hypot(u.car.x - x, u.car.z - z) < r && this.playerSide(u.car.x, u.car.y, u.car.z)) n++;
     }
-    for (const o of this.beat.officers()) if (Math.hypot(o.x - x, o.z - z) < r) n++;
+    for (const o of this.beat.officers()) if (Math.hypot(o.x - x, o.z - z) < r && this.playerSide(o.x, o.y, o.z)) n++;
     return n;
   }
 

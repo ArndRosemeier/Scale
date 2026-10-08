@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.122 — 2026-10-08
+
+- **Fix: Tab targeting works underground.** In the sewers, the hideouts and the metro stations, Tab found nobody, because the street overhead counted as a wall between you and everyone down there. Now the tunnel and room walls are what block the view, so Tab and clicking pick out people and crews down there, and your aimed powers can hit them. The street above still can't be targeted from below, and nobody below from the street.
+- **Fix: the street and the tunnels no longer reach through each other.** Down in the sewers and the metro, fire, frost, fireballs, lightning and quakes no longer hit people and cars on the street above (or the other way round), and your shockwave and flames work against the tunnel walls instead of the street overhead. Police on the pavement can no longer club or cuff you through the ground, and the officers and witnesses up there no longer see what you do below, so hiding underground can lose your wanted level. Monster footfalls, army shells, dog bites and collapsing buildings above no longer hurt you in a tunnel, a blast in a sewer no longer knocks people over on the street, a whirlwind spins up on the tunnel floor, and flying chips no longer jump up to the street.
+
 ## 0.121 — 2026-10-08
 
 - **No more shaking arms when you stop running late in a session.** The breathing motion of the chest sped up and slowed down with your speed, and after a few minutes of play every stop made the chest, and with it the arms, shake for a second or two. Breathing now changes pace smoothly, however long you have been playing. Tails swaying on other creatures had the same problem and are fixed too.
