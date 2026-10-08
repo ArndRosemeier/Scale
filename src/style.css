@@ -345,6 +345,29 @@ body.looking #crosshair { display: block; }
 #tframe .ls { display: none; margin-top: 4px; font-size: 11px; font-weight: 600; color: #ff9a7a; }
 #tframe .zn { margin-top: 4px; font-size: 11px; color: #8d99a5; display: none; gap: 8px; }
 #tframe .zn span.on { color: #ffd27a; text-shadow: 0 0 6px rgba(255, 170, 60, 0.9); }
+/* The sidekick's info panel (src/ui/SidekickPanel.ts): see-through, above the target frame. */
+#mate-panel { position: fixed; left: 16px; bottom: 120px; width: 230px; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 9px 12px 10px; background: rgba(15, 20, 26, 0.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 1px solid rgba(255, 214, 120, 0.28); border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.25); color: #e8ecf0; font: 12px/1.35 system-ui, sans-serif; z-index: 6; pointer-events: none; display: none; }
+#mate-panel .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+#mate-panel .hd b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#mate-panel .tag { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #ffd27a; }
+#mate-panel .sub { margin-top: 1px; font-size: 11px; color: #9aa8b6; }
+#mate-panel .bar { display: flex; align-items: center; gap: 7px; margin-top: 6px; font-size: 11px; color: #b8c4d0; }
+#mate-panel .bar > span:first-child { width: 38px; }
+#mate-panel .bar .n { width: 52px; text-align: right; font-variant-numeric: tabular-nums; color: #e8ecf0; }
+#mate-panel .meter { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; }
+#mate-panel .meter > div { height: 100%; }
+#mate-panel .meter.hp > div { background: #7fc97f; }
+#mate-panel .meter.tr > div { background: #ffc35a; }
+#mate-panel .tw { margin: 1px 0 0 45px; font-size: 10.5px; color: #c9b88f; font-style: italic; }
+#mate-panel .kr { margin-top: 6px; font-size: 11px; color: #b8c4d0; }
+#mate-panel .kr b { color: #ffe39a; }
+#mate-panel .pws { margin-top: 6px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.1); }
+#mate-panel .pw { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 1px 0; }
+#mate-panel .pw em { font-style: normal; font-size: 10px; color: #ffd27a; }
+#mate-panel .pw.none { color: #8d99a5; }
+#mate-panel .pips { display: inline-flex; gap: 3px; }
+#mate-panel .pips i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.14); }
+#mate-panel .pips i.on { background: #ffd27a; box-shadow: 0 0 5px rgba(255, 190, 80, 0.7); }
 /* Weak spots of a big threat: rings on its body (bright and pulsing while exposed). */
 #tzones { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 4; }
 #tzones i { position: absolute; display: none; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 2px solid rgba(255, 200, 120, 0.45); box-shadow: 0 0 3px rgba(0,0,0,0.6); }

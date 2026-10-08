@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.123 — 2026-10-08
+
+- **Click your sidekick to see how they are doing.** Clicking (or tapping) your sidekick opens a small see-through panel above the target frame. It shows their name, their mood, what they are doing right now (around you, fighting, keeping back, flying, in hospital…), their health and trust, the karma they have put by and what they are saving for, and every power they have learned with its level. The power the shard gave them is marked. The panel closes with the target (Esc or another click).
+
 ## 0.122 — 2026-10-08
 
 - **No more cooldowns on powers: they cost more energy instead.** You can use any power again as soon as you have the energy for it. To keep things fair the powers cost more: Fire wave 30 → 40, Fireball 32 → 40, Frost nova 35 → 55, Chain lightning 30 → 38, Seismic stomp 40 → 55, Whirlwind 35 → 50, Shrink ray 25 → 30, Shockwave 55–70 by rank (was 40–55), dash in flight 18 → 22, and the Slime call 70 / 60 / 50 by rank (was 25, with a wait of up to 75 seconds). A hotbar slot now darkens while you are short of the energy for that power, so you can see when it is ready.

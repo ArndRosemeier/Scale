@@ -39,6 +39,16 @@ import { ROSTER, GIFTS, MATE_KARMA, TRUST, nextCost, nextWant, honoursWish, buyL
 import { MedFleet } from '../defeat/MedDrones';
 import { MATE, MATE_POWERS, fightStyle, matePower, pickFoe, revives, mateLine, type FightStyle, type MateSay, type FoeInfo, type MatePower } from './companionRules';
 
+/** Companion.panel: what the info panel shows. */
+export interface MatePanel {
+  name: string; temper: Temperament; mode: MateMode; away: Away; flying: boolean;
+  hp: number; maxHp: number;
+  karma: number; want: string | null; wantCost: number | null; wished: boolean;
+  trust: number; trustWord: string;
+  /** What they have learned (`first`: the shard's own gift); rank of max. */
+  powers: { name: string; rank: number; max: number; first: boolean }[];
+}
+
 export type MateMode = 'around' | 'fight' | 'back' | 'down' | 'ward' | 'home' | 'gone';
 
 /** What a save keeps of them (Sidekick.save); the growth fields are absent in older saves. */
@@ -1074,6 +1084,23 @@ export class Companion {
       flying: this.flying, called: this.calledT > 0, foes: this.foes.length, police: this.policeNear,
       body: a ? { x: +a.x.toFixed(1), y: +a.y.toFixed(1), z: +a.z.toFixed(1), d: Math.round(Math.hypot(a.x - p.x, a.z - p.z)), state: a.state, act: a.actor?.state ?? null } : null,
       stats: { ...this.stats },
+    };
+  }
+
+  /** For the info panel (clicking them): who they are, how they are, what they can do. */
+  panel(): MatePanel {
+    const powers: MatePanel['powers'] = [];
+    for (const g of GIFTS) {
+      const max = ROSTER[g].cost.length;
+      const rank = this.g.progress.sandbox ? max : this.ranks[g] ?? 0;
+      if (rank > 0) powers.push({ name: ROSTER[g].name, rank, max, first: g === this.power });
+    }
+    const want = this.g.progress.sandbox ? null : this.want();
+    return {
+      name: this.name, temper: this.temper, mode: this.mode, away: this.away, flying: this.flying,
+      hp: Math.round(this.hp), maxHp: Math.round(this.maxHp()),
+      karma: Math.round(this.karma), want: want ? ROSTER[want].name : null, wantCost: want ? nextCost(want, this.ranks) : null, wished: !!want && want === this.wish,
+      trust: Math.round(this.trust), trustWord: trustWord(this.trust), powers,
     };
   }
 
