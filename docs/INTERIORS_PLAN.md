@@ -48,7 +48,7 @@ storey in 3D (`?n=<building>&floor=<f>&room=<k>&top=1&type=living&still=1`).
 
 ## Phases (one PR each)
 
-1. Filler + home theme for flats (this PR, v0.167).
+1. Filler + home theme for flats (v0.169, PR #139).
 2. Room splitting for any shape with reserve-first programs; offices, shops and cafés themes.
 3. The starship hall (design step 1) as one reserve strategy on the core.
 4. Fill the museum and the other empty landmarks (impressive halls with side rooms).
