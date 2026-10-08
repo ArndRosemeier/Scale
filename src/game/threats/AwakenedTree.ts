@@ -762,7 +762,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
       this.knock(a, slam ? x : a.x - dx, slam ? z : a.z - dz, slam ? 7 : 6);
     }
     const p = g.player.pos, pd = Math.hypot(p.x - x, p.z - z);
-    if (pd < r + g.player.radius && p.y < y + 4 && p.y > y - 1.5) this.hurtPlayer(slam ? TREE.slamDmg : TREE.sweepDmg, slam ? x : p.x - dx, slam ? z : p.z - dz, slam ? TREE.slamFling : TREE.sweepFling);
+    if (pd < r + g.player.radius && p.y < y + 4) this.hurtPlayer(slam ? TREE.slamDmg : TREE.sweepDmg, slam ? x : p.x - dx, slam ? z : p.z - dz, y, slam ? TREE.slamFling : TREE.sweepFling);
     // The ground: dust, cracks, a thud.
     const cam = g.renderer.camera.position;
     g.dust.burst(x, y + 0.5, z, slam ? 30 : 12, slam ? 5 : 3, 4, 4, 3, DUST_A, -0.2, 0.7);
@@ -785,10 +785,10 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   }
 
   /** Hurt and fling the player (sized: a giant hero shrugs off more). */
-  private hurtPlayer(dmg: number, fromX: number, fromZ: number, fling: number): void {
+  private hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number, fling: number): void {
     const g = this.g, P = g.player;
     const rel = Math.min(1, Math.pow(this.height / Math.max(1, P.height), 0.8));
-    const d = g.crime.health.damage(dmg * Math.max(0.15, rel), 'monster', fromX, fromZ);
+    const d = g.crime.health.damage(dmg * Math.max(0.15, rel), 'monster', fromX, fromZ, fromY);
     this.stats.playerHits++;
     if (d <= 0 && !g.crime.health.invulnerable) return;
     const dx = P.pos.x - fromX, dz = P.pos.z - fromZ, l = Math.hypot(dx, dz) || 1, f = fling * rel;

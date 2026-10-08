@@ -42,7 +42,7 @@ export interface PoliceHost {
   sound(id: string, x: number, y: number, z: number, gain: number, pitch?: number): void;
   sirenLoop(): { set(x: number, y: number, z: number, gain: number, rate?: number): void; stop(): void } | null;
   emit(kind: StimulusKind, x: number, y: number, z: number, intensity: number, radius: number): void;
-  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number): void;
+  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number, fromY: number): void;
   /** The player is on the ground (knocked down / out). */
   playerDown(): boolean;
   /** An officer has the player cuffed. */
@@ -616,7 +616,7 @@ export class Police {
       // Take-down: a wind-up, then a hard shove / baton if still in reach.
       if ((act.memo.windup ?? 0) > 0) {
         act.memo.windup -= dt;
-        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && reach && !H.playerDown()) { H.hurtPlayer(24, 'police', o.x, o.z); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
+        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && reach && !H.playerDown()) { H.hurtPlayer(24, 'police', o.x, o.z, o.y); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
       } else if (d < 1.6 && reach && act.attackT <= 0 && !H.playerDown()) {
         act.attackT = 1.6;
         act.memo.windup = 0.35;
