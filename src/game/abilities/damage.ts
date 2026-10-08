@@ -58,7 +58,7 @@ export function powerDamage(id: AbilityId, r: number): PowerDamage | null {
     case 'lightning': return { people: `${n(fall(H.boltKnock))} each; the bolt strikes up to ${1 + BOLT_JUMPS[r]} targets`, creatures: `${n(BOLT_STUN[r] * H.boltCreature)}` };
     case 'stomp': {
       const J = QUAKE_IMPULSE[r];
-      return { people: `${n(fall(Math.min(H.quakeKnockMax, H.quakeKnock + J * H.quakeKnockPerNs)))}`, creatures: `${n(creature(Math.min(J, H.quakeShoveMax) * Math.SQRT2))}` };
+      return { people: `${n(fall(Math.min(H.quakeKnockMax, H.quakeKnock + J * H.quakeKnockPerNs)))}`, creatures: `${n(creature(J) * H.quakeCreatureMul)} at the legs` };
     }
     case 'gust': return { people: `up to ${n(fall(H.gustKnock * GUST_LIFT[r]))}, again every ${H.gustEveryPerson} s inside`, creatures: `up to ${n(H.gustCreature * GUST_LIFT[r])}, again every ${H.gustEvery} s` };
     case 'hydro': {

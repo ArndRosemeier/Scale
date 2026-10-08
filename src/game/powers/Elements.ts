@@ -1291,6 +1291,8 @@ export class Elements {
               break;
             }
             case 'drone': if (c.y - g < 3 * sk) this.shove(t, sx * 100, 200, sz * 100, 'stomp'); break;
+            // A giant creature takes the quake's full impulse at its legs (not the capped shove).
+            case 'threat': this.hurtThreat(t, J * DAMAGE_PER_IMPULSE * POWER_HIT.quakeCreatureMul, t.obj.x, t.obj.y * 0.4, t.obj.z); break;
             default: { const Js = Math.min(J, POWER_HIT.quakeShoveMax); this.shove(t, sx * Js, Js, sz * Js, 'stomp'); break; }
           }
         });
