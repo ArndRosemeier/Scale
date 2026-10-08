@@ -251,8 +251,7 @@ export class Rescues {
     const g = this.g, a = t.a;
     if (byPlayer) {
       this.stats.dug++;
-      g.progress.addKarma(RESCUE.karma.dig, 'dug someone out of the rubble');
-      g.crime.rep.add(RESCUE.rep.dig, 'rescue');
+      g.crime.reward({ karma: RESCUE.karma.dig, why: 'dug someone out of the rubble', rep: RESCUE.rep.dig, news: 'rescue', count: 'deeds' });
       g.audio.play('crowd_cheer', t.x, t.y + 2, t.z, 0.3, 1.05, 8, g.renderer.camera.position);
     } else this.stats.crewDug++;
     if (a?.actor) {
@@ -345,8 +344,7 @@ export class Rescues {
     if (byPlayer) {
       const g = this.g;
       this.stats.carried++;
-      g.progress.addKarma(RESCUE.karma.triage, 'brought someone injured to the triage tent');
-      g.crime.rep.add(RESCUE.rep.triage, 'rescue');
+      g.crime.reward({ karma: RESCUE.karma.triage, why: 'brought someone injured to the triage tent', rep: RESCUE.rep.triage, news: 'rescue', count: 'deeds' });
     } else this.stats.medicTreated++;
   }
 

@@ -832,9 +832,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     g.audio.play('tree_crack_fall', this.x, this.y + 4, this.z, 1, 0.45, 100, cam);
     g.audio.play('grow_rumble', this.x, this.y, this.z, 0.9, 0.5, 80, cam);
     if (byPlayer && outcome === 'defeated') {
-      g.progress.addKarma(TREE.karma.beaten, 'stopped the awakened tree');
-      g.crime.rep.add(TREE.rep, 'awakened tree stopped');
-      g.crime.rep.count('stopped');
+      g.crime.reward({ karma: TREE.karma.beaten, why: 'stopped the awakened tree', rep: TREE.rep, news: 'awakened tree stopped', stopped: true });
       g.powerHud.toast('The tree <b>roots where it stands</b> — an old, gnarled tree again', 'info');
     }
   }

@@ -846,7 +846,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.s = nearestS(this.route, this.rig.x, this.rig.z, this.s, 400);
     if (this.hp < this.maxHp * STRIDER.retreatAt) {
       const top = this.topAggro();
-      if (top?.key === 'player') { this.g.progress.addKarma(STRIDER.karma.retreat, 'drove the monster back'); this.g.crime.rep.add(6, 'monster driven off'); }
+      if (top?.key === 'player') this.g.crime.reward({ karma: STRIDER.karma.retreat, why: 'drove the monster back', rep: 6, news: 'monster driven off' });
     }
   }
 
@@ -1194,9 +1194,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.outcome = 'defeated';
     const top = this.topAggro();
     if (top?.key === 'player' || (this.aggro.get('player') ?? 0) > this.maxHp * 0.25) {
-      this.g.progress.addKarma(STRIDER.karma.defeated, 'brought the monster down');
-      this.g.crime.rep.add(12, 'monster defeated');
-      this.g.crime.cheer();
+      this.g.crime.reward({ karma: STRIDER.karma.defeated, why: 'brought the monster down', rep: 12, news: 'monster defeated', stopped: true });
     }
   }
 

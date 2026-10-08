@@ -562,10 +562,7 @@ export class RunawayTeens implements ThreatEvent {
     const r = teenReward(byHero, near);
     this.stats.credit = r.credit ?? 'none';
     if (r.credit && g.mode === 'normal') {
-      g.progress.addKarma(r.karma, r.credit === 'caught' ? 'handed the runaway saucer to the Nannies' : 'chased the runaway saucer into the open');
-      g.crime.rep.add(r.rep, 'runaway saucer caught');
-      g.crime.rep.count('stopped');
-      g.crime.cheer();
+      g.crime.reward({ karma: r.karma, why: r.credit === 'caught' ? 'handed the runaway saucer to the Nannies' : 'chased the runaway saucer into the open', rep: r.rep, news: 'runaway saucer caught', stopped: true });
     }
     if (r.credit) g.wardens?.handOver();
     g.city?.report('teens', this.x, this.z, r.credit ? 'hero' : 'stopped');
