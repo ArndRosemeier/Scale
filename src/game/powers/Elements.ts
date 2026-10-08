@@ -1732,6 +1732,15 @@ export class Elements {
     if (!this.chargeLoop) this.chargeLoop = this.w.synth.loop('charge', 4 * sk);
     this.chargeLoop?.set(o.x, o.y, o.z, 0.25 + 0.35 * f, f);
     if (held < 0.05) p.action = { id: 'cast_forward', t0: p.animClock, dur: FOCUS.charge + 0.5 };
+    // Gather facing what it will hit: the target, else the cursor.
+    if (!p.flying) {
+      const T = this.w.targeting, tgt = T.current && T.alive(T.current) ? T.current : null;
+      if (tgt) {
+        const c = T.aimPoint(tgt, p.pos.x, p.pos.y, p.pos.z, Infinity, _w);
+        const dx = c.x - p.pos.x, dz = c.z - p.pos.z;
+        if (Math.hypot(dx, dz) > 0.3) p.yaw = Math.atan2(-dx, -dz);
+      } else p.yaw = this.cursorYaw();
+    }
   }
 
   /**
@@ -1792,6 +1801,7 @@ export class Elements {
     this.seekers.push({ x: o.x, y: o.y, z: o.z, vx: dx * sp * 0.7, vy: sp * 0.35, vz: dz * sp * 0.7, tgt, rank: r, k: p.k, age: 0, trailT: 0, checkT: 0, clear: true, loop: this.w.synth.loop('charge', 3 * this.reachK) });
     if (!p.flying) p.yaw = Math.atan2(-dx, -dz);
     p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.5 };
+    this.sparkBurst(o.x, o.y, o.z, 6, SEEK_C, SEEK_END);
     this.w.synth.play('orb', o.x, o.y, o.z, 0.7, 5 * this.reachK);
     return true;
   }
@@ -1824,8 +1834,14 @@ export class Elements {
         s.clear = !this.w.sight || this.w.sight.clear(s.x, s.y, s.z, c.x, c.y, c.z, pad, s.tgt.kind === 'car' ? s.tgt.obj : null);
       }
       // Open: straight for it. Blocked: up and over (a building, a wall), still edging towards it.
+      // High enough above the target and still no line (a narrow street, an awning, a courtyard):
+      // cruise level to above it, then drop straight down, instead of climbing until it fizzles.
       let wx = tx, wy = ty, wz = tz;
-      if (!s.clear) { wx = tx * 0.35; wy = 1; wz = tz * 0.35; }
+      if (!s.clear) {
+        const hd = Math.hypot(c.x - s.x, c.z - s.z);
+        if (s.y - c.y < SEEKER.over * sk) { wx = tx * 0.35; wy = 1; wz = tz * 0.35; }
+        else if (hd > 2 * sk) { wx = (c.x - s.x) / hd; wy = 0; wz = (c.z - s.z) / hd; }
+      }
       const wl = Math.hypot(wx, wy, wz) || 1;
       const turn = Math.min(1, SEEKER.turn * dt);
       s.vx += (wx / wl * sp - s.vx) * turn; s.vy += (wy / wl * sp - s.vy) * turn; s.vz += (wz / wl * sp - s.vz) * turn;
@@ -1839,7 +1855,9 @@ export class Elements {
       s.x = nx; s.y = ny; s.z = nz;
       s.loop?.set(s.x, s.y, s.z, 0.35, 0.6);
       // The orb: a white heart in a violet glow, motes trailing behind.
-      const size = (0.22 + s.rank * 0.03) * sk;
+      // Grows with distance from the camera so it stays easy to follow far off.
+      const camD = this.w.camera.position.distanceTo(_v.set(s.x, s.y, s.z));
+      const size = (0.22 + s.rank * 0.03) * sk * Math.min(2.5, Math.max(1, camD / 15));
       const pulse = 1 + 0.15 * Math.sin(this.time * 18 + i);
       this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.05, size * 1.3 * pulse, size, C(3, 3, 3.4), SEEK_C, 1, 1, 0);
       this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.08, size * 2.6 * pulse, size * 2, SEEK_C, SEEK_END, 0.5, 1, 0);

@@ -240,14 +240,14 @@ export const ABILITIES: AbilityDef[] = [
   {
     id: 'focus', name: 'Focus beam', kind: 'active', group: 'energy', trigger: 'hold', maxRank: MAX_RANK,
     desc: 'Hold to gather a beam of energy behind your eyes, let go to fire one heavy shot at your target. The longer you gather, the harder it hits. Best against monsters: aim at a weak spot.',
-    icon: svg('<path d="M2 8c2.3-2.6 4.8-3.9 7.2-3.9S14.1 5.4 16.4 8c-2.3 2.6-4.8 3.9-7.2 3.9S4.3 10.6 2 8z"/><circle cx="9.2" cy="8" r="1.6" fill="currentColor"/><path d="M10.5 13l9 8" stroke-width="3"/><path d="M19 15.5l2.5-1M20.5 18.5l1.5 1" opacity="0.6"/>'),
+    icon: svg('<path d="M3 4l4.5 4.5M3 12h5M3 20l4.5-4.5" opacity="0.6"/><circle cx="10" cy="12" r="2.6" fill="currentColor"/><path d="M12.6 12H22" stroke-width="3.2"/>'),
     rankText: (r) => `Full charge ${FOCUS_DMG[r]} damage · reach ${FOCUS_RANGE[r]} m · gathers in ${FOCUS.charge} s`,
     costText: () => `${FOCUS.base} energy + up to ${FOCUS.cost - FOCUS.base} while gathering`,
   },
   {
     id: 'seeker', name: 'Seeker orb', kind: 'active', group: 'energy', trigger: 'tap', maxRank: MAX_RANK,
     desc: 'Throw a ball of energy that hunts your target: it curves round corners and over buildings and only bursts on the one it was sent after. Needs a target.',
-    icon: svg('<circle cx="17" cy="7" r="3.6"/><circle cx="17" cy="7" r="1.2" fill="currentColor"/><path d="M13.6 8.6C9 11 13 15 8.5 17.5S3 20 3 20" opacity="0.7"/><path d="M6 14.5l.6.6M10.5 12.5l.6.6" opacity="0.5"/>'),
+    icon: svg('<path d="M3 21h18"/><rect x="9" y="12" width="6" height="9" opacity="0.6"/><path d="M4 18C5 6 17 4 18.5 15" stroke-dasharray="1.6 1.8"/><circle cx="19" cy="17.5" r="2.2" fill="currentColor"/><circle cx="5" cy="15" r="1.6"/>'),
     rankText: (r) => `${SEEKER_DMG[r]} damage · target within ${SEEKER_RANGE[r]} m · flies ${SEEKER.life} s`,
     costText: () => `${SEEKER.cost} energy`,
   },

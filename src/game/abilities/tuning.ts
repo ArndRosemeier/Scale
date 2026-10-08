@@ -209,7 +209,7 @@ export const FOCUS_RANGE = [0, 60, 90, 130, 170, 220];
 /** Seeker orb: a slow ball of energy that flies round corners and over buildings to its target
  *  (it needs one). Energy, damage to a person (hit points), to a monster (laser seconds), speed
  *  (m/s), life (s), how far off the target may be when it is thrown (m). */
-export const SEEKER = { cost: 30, laserS: 0.6, speed: 25, life: 6, turn: 5 };
+export const SEEKER = { cost: 30, laserS: 0.6, speed: 25, life: 6, turn: 5, over: 10 };
 export const SEEKER_DMG = [0, 12, 17, 23, 30, 40];
 export const SEEKER_RANGE = [0, 50, 65, 80, 100, 120];
 
