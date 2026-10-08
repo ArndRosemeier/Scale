@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.123 — 2026-10-08
+
+- **Reputation has no upper limit any more.** It used to stop at +100; now every good deed keeps counting, however famous you already are. Past +150 the city calls you a *Living legend*. Everything that reacts to your reputation (cheering crowds, the press, fans, the statue, what strangers think of you) works as before and is at full strength from +100 on. The bottom stays at −100. Saves keep reputation above 100.
+
 ## 0.122 — 2026-10-08
 
 - **No more cooldowns on powers: they cost more energy instead.** You can use any power again as soon as you have the energy for it. To keep things fair the powers cost more: Fire wave 30 → 40, Fireball 32 → 40, Frost nova 35 → 55, Chain lightning 30 → 38, Seismic stomp 40 → 55, Whirlwind 35 → 50, Shrink ray 25 → 30, Shockwave 55–70 by rank (was 40–55), dash in flight 18 → 22, and the Slime call 70 / 60 / 50 by rank (was 25, with a wait of up to 75 seconds). A hotbar slot now darkens while you are short of the energy for that power, so you can see when it is ready.
