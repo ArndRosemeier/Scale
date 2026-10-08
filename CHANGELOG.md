@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.169 — 2026-10-08
+
+- **Flats are furnished so they make sense.** Furniture no longer sits at fixed spots in each room's box. The sofa stands against a wall with room in front of it, away from the door, with the coffee table, rug, a lamp and an armchair round it, and the TV goes on the wall across from it, facing it. The bed's head is against a plain wall with a nightstand on each side and a picture above it, the wardrobe has room to open, and the desk stands under the window. The kitchen counter runs along a wall without windows with the fridge at one end, and the table with its chairs stands in the free floor. Nothing stands in a doorway any more, tall pieces keep clear of windows, and every door and every piece you need to reach can still be walked to.
+- **Every room opens onto the corridor.** In flats with a corridor each room now has its own door onto it (doors used to be spaced evenly, so some rooms had two and others none), and a sliver left at the end of a row joins the room next to it instead of becoming a tiny room of its own.
+- **Interior core, step 1.** The furnishing goes through a new shared filler (`src/interior/fill/`) that every interior will use in the end: it works in rooms of any shape, and themes say what belongs together. Plan: `docs/INTERIORS_PLAN.md`. A storey is now built one per frame as you walk in, so entering a building doesn't stall.
+
 ## 0.168 — 2026-10-08
 
 - **The player's manual is up to date (0.167).** It now covers everything since 0.098: the Hero tab (tights and masks) and the three costumes on F1–F3, the new help (H) with changeable keys and the Powers tab, energy costs instead of cooldowns, the three Energy powers and the friend/foe sense, super jump as a travel power, the reworked shrink ray, open-ended reputation and the Living legend, arrest as a public menace, the street and the tunnels as separate worlds, and two new chapters: *Lights in the sky* (the Nannies, their walkers and the joyriders) and *Your sidekick* (the second shard, trust, talking, the info panel). Ten new screenshots, including the living start screen. 32 pages as PDF (Help › Manual, or Manual on the start screen).
