@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.147 — 2026-10-08
+
+- **Fix: police and army stomps no longer count against the hero.** When a soldier's or officer's footstep knocked someone down, the game booked it as the hero's doing, which could cost reputation and raise the wanted level while the hero only stood by. A giant police or army step also no longer hurts the slime brood or a monster as if the hero had stamped. When the police shoot a rampaging giant hero, the hit now counts as theirs instead of the army's. Behind the scenes, "who did it" now uses one vocabulary everywhere, and a self-test keeps it that way.
 ## 0.146 — 2026-10-08
 
 - **Behind the scenes: one "is this person underground?" question.** Two dozen places asked it by hand (crimes, threats, wardens, saves, markers, the manhole prompt); they now ask the underground system the same way. Nothing changes in play; a self-test keeps it that way.
