@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.143 — 2026-10-08
+
+- **No more floating outside the city.** Out in the countryside the hero (and everyone else standing on the ground) stood 35 cm above the grass: the terrain is drawn a little lower than its height so it never shows through the city's streets, but walking used the undropped height. The ground height now follows what is drawn: open land at the drawn terrain, country roads, village squares and farmyards at their surface. Inside the city nothing changes.
+
 ## 0.142 — 2026-10-08
 
 - **Delayed effects keep game time.** The distant boom after a last-resort blast, the army's artillery and whistles, the ritual's second burst, the car alarms after a tremor, the hospital fade and a startled passer-by's cry were timed by the browser's clock; on slow frames they ran ahead of the game. They now wait in game time, and a self-test keeps wall-clock timers out of gameplay.
