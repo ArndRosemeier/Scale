@@ -18,7 +18,7 @@ import type { Stimuli, Stimulus } from '../game/Stimuli';
 import type { Player } from '../player/Player';
 import { statusOf } from '../shared/status';
 import { calmRate } from '../game/people/behaviour';
-import { downCauseOf } from '../shared/cause';
+import { downCauseOf, stompDownCause } from '../shared/cause';
 
 export class Reactions {
   private lastSeen = 0;
@@ -96,7 +96,7 @@ export class Reactions {
           case 'stomp':
             // By the size of whoever stepped (the player, a monster), booked to it.
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
-            if (d < Math.max(1.5, (s.size ?? H) * 0.12) && this.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.knockDown(a, s.x, s.z, 4, downCauseOf(s.cause));
+            if (d < Math.max(1.5, (s.size ?? H) * 0.12) && this.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.knockDown(a, s.x, s.z, 4, stompDownCause(s.cause, s.size ?? H));
             break;
           case 'roar':
             // A monster's roar: run (far off, the bold stop, turn and film it).
