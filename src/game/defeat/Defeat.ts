@@ -733,7 +733,7 @@ export class Defeat {
     const H = this.g.crime.health;
     const was = H.invulnerable;
     H.invulnerable = false;
-    H.damage(H.hp + 1000, kind);
+    H.damage(H.hp + 1000, kind, this.g.player.pos.x, this.g.player.pos.z, this.g.player.pos.y);
     H.invulnerable = was;
     return this.phase;
   }

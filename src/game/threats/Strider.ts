@@ -652,7 +652,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       }
     });
     const pd = segDist(g.player.pos.x, g.player.pos.y + g.player.height * 0.5, g.player.pos.z, m.x, m.y, m.z, ex, ey, ez);
-    if (pd < 4 + g.player.radius) this.hurtPlayer(18, m.x, m.z, 4);
+    if (pd < 4 + g.player.radius) this.hurtPlayer(18, m.x, m.z, ey, 4);
   }
 
   private startLean(ref: BuildingRef, x: number, y: number, z: number): void {
@@ -734,7 +734,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       const p = g.player.pos;
       if (!this.swipeHit.has(g.player) && Math.hypot(p.x - mx, p.z - mz) < r + g.player.radius && p.y < my + r && p.y > my - r) {
         this.swipeHit.set(g.player, this.t);
-        this.hurtPlayer(45, mx - sx * 3, mz - sz * 3, 16);
+        this.hurtPlayer(45, mx - sx * 3, mz - sz * 3, my, 16);
       }
     }
   }
@@ -1086,16 +1086,15 @@ export class Strider implements ThreatEvent, ThreatActor {
     const p = this.g.player;
     const d = Math.hypot(p.pos.x - x, p.pos.z - z);
     const gy = this.g.terrain.height(x, z);
-    // (Down in a tunnel under the street a footfall only shakes the ceiling.)
-    if (d > r + p.radius || p.pos.y > gy + 6 || p.pos.y < gy - 1.5) return;
-    this.hurtPlayer(dmg * (1 - d / (r + p.radius + 1) * 0.5), x, z, fling);
+    if (d > r + p.radius || p.pos.y > gy + 6) return;
+    this.hurtPlayer(dmg * (1 - d / (r + p.radius + 1) * 0.5), x, z, gy, fling);
   }
 
   /** Hurt and fling the player (damage as for a 1.8 m body; a giant hero shrugs off more). */
-  private hurtPlayer(dmg: number, fromX: number, fromZ: number, fling: number): void {
+  private hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number, fling: number): void {
     const g = this.g, p = g.player;
     const k3 = p.k ** 3, rel = Math.min(1, Math.pow(this.height / Math.max(1, p.height), 0.8));
-    const d = g.crime.health.damage(dmg * k3 * Math.max(0.15, rel), 'monster', fromX, fromZ);
+    const d = g.crime.health.damage(dmg * k3 * Math.max(0.15, rel), 'monster', fromX, fromZ, fromY);
     this.stats.playerHits++;
     if (d <= 0 && !g.crime.health.invulnerable) return;
     // Thrown (small bodies fly; a giant only staggers).

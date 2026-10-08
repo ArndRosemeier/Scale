@@ -56,7 +56,7 @@ export class Bombs {
   private mesh: THREE.InstancedMesh;
   private nb: PedAgent[] = [];
   /** The player is hurt through here (CrimeSystem: PlayerHealth and its sound). */
-  hurtPlayer: ((dmg: number, kind: HurtKind, fromX: number, fromZ: number) => void) | null = null;
+  hurtPlayer: ((dmg: number, kind: HurtKind, fromX: number, fromZ: number, fromY: number) => void) | null = null;
   stats = { thrown: 0, exploded: 0, knocked: 0, wrecked: 0, atPlayer: 0 };
 
   constructor(private g: Game) {
@@ -154,7 +154,7 @@ export class Bombs {
     const PR = BOMB.playerR + P.height * 0.1;
     if (pd < PR && P.pos.y < y + R && P.pos.y + P.height > y - 1) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(BOMB.player * (1 - pd / PR) + 4, 'bomb', x, z);
+      this.hurtPlayer?.(BOMB.player * (1 - pd / PR) + 4, 'bomb', x, z, y);
     }
     g.stimuli.emit('gunfire', x, y, z, 6, 150);
     const dp = Math.hypot(P.pos.x - x, P.pos.z - z);

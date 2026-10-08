@@ -7,6 +7,7 @@
  */
 import type { Topic } from '../game/people/lines';
 import type { Destination } from '../game/people/People';
+import { isAction } from '../game/keybinds';
 
 export interface TalkUiHooks {
   choose(topic: Topic): void;
@@ -64,7 +65,7 @@ export class TalkUi {
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
       if (e.target instanceof HTMLInputElement && e.target.type === 'text') return;
-      if (e.code === 'Escape' || e.code === 'KeyE') {
+      if (e.code === 'Escape' || isAction(e, 'use')) {
         e.preventDefault(); e.stopImmediatePropagation();
         if (!e.repeat) this.hooks.close();
         return;

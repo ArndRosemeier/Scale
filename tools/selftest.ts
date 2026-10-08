@@ -33,6 +33,7 @@ import { sidekickChecks } from './sidekickTest';
 import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
+import { PlayerHealth } from '../src/game/PlayerHealth';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
@@ -2139,7 +2140,7 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
   check(keys(back) === keys(full) && keys(back.player) === keys(full.player) && keys(back.threats) === keys(full.threats) && keys(back.aftermath!) === keys(full.aftermath!) && keys(back.threats.remains[0]) === keys(full.threats.remains[0]), 'saves: all fields survive parsing');
-  // Reputation is open-ended upwards (v0.124): a save above +100 keeps it, the floor stays −100.
+  // Reputation is open-ended upwards (v0.126): a save above +100 keeps it, the floor stays −100.
   {
     const hi = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: 250.5, stats: {} } }), lo = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: -400, stats: {} } });
     const R = new Reputation(1, 0.5, 'normal');
@@ -3576,6 +3577,16 @@ doorChecks(check);
 sidekickChecks(check);
 // The Wardens (ALIENS_PLAN phase 1): the disc schedule, walkers, stares, what people say (tools/aliensTest.ts).
 aliensChecks(check);
+
+// Nothing hurts through the pavement: every blow names where it came from (the type makes the
+// height a required argument), and the health refuses one from the other side of the street.
+{
+  const pl = { pos: new THREE.Vector3(0, -4, 0), vel: new THREE.Vector3(), k: 1, flying: false, downT: 0 } as unknown as ConstructorParameters<typeof PlayerHealth>[0];
+  const H = new PlayerHealth(pl, false);
+  H.sameSide = (_x, y) => (y < -1.5) === (pl.pos.y < -1.5);
+  const fromStreet = H.damage(10, 'monster', 2, 0, 0), fromSewer = H.damage(10, 'punch', 1, 0, -4);
+  check(fromStreet === 0 && fromSewer > 0, `health: a blow from the street does not reach the sewer below (street ${fromStreet}, sewer ${fromSewer.toFixed(1)})`);
+}
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

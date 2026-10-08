@@ -94,7 +94,7 @@ export class SlimeRealm {
       const host: FactionHost = {
         field: D.field, plan: D.plan,
         player: () => { const P = g.player; return { x: P.pos.x, y: P.pos.y, z: P.pos.z, h: P.height, speed: Math.hypot(P.vel.x, P.vel.z) }; },
-        hurtPlayer: (dmg, fx, fz) => { g.crime?.health.damage(dmg, 'monster', fx, fz); g.camRig.addShake(Math.min(0.5, dmg / 40)); },
+        hurtPlayer: (dmg, fx, fz, fy) => { g.crime?.health.damage(dmg, 'monster', fx, fz, fy); g.camRig.addShake(Math.min(0.5, dmg / 40)); },
         shovePlayer: (vx, vy, vz) => { const P = g.player; if (P.flying) return; P.vel.x += vx; P.vel.y += vy; P.vel.z += vz; P.grounded = false; },
         sound: (id, x, y, z, gain, pitch = 1) => g.audio.play(id, x, y, z, gain, pitch, 5, g.renderer.camera.position),
         ground: (x, z, y) => g.collision.groundAt(x, z, y, 0.6),

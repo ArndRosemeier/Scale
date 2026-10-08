@@ -22,6 +22,7 @@ import { MapItem } from '../../stream/protocol';
 import { LANDMARK_KIND_NAME } from '../../plan/landmarks';
 import { isTouch } from '../touch';
 import { clamp } from '../../core/math';
+import { isAction } from '../../game/keybinds';
 
 const LAYERS_KEY = 'scale.map.layers';
 const MINI_KEY = 'scale.map.minimap';
@@ -309,20 +310,21 @@ export class GameMap {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement && e.target.type === 'text') return;
       if (!this.open) {
-        if (e.code === 'KeyM' && !e.repeat && this.game.player) { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(true); }
-        else if (e.code === 'KeyN' && !e.repeat) this.setMinimap(!this.miniOn);
+        if (isAction(e, 'map') && !e.repeat && this.game.player) { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(true); }
+        else if (isAction(e, 'minimap') && !e.repeat) this.setMinimap(!this.miniOn);
         return;
       }
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (e.repeat && (e.code === 'KeyM' || e.code === 'Escape')) return;
+      if (e.repeat && (isAction(e, 'map') || e.code === 'Escape')) return;
+      if (isAction(e, 'map')) { this.toggle(false); return; }
+      if (isAction(e, 'minimap')) { this.setMinimap(!this.miniOn); return; }
       switch (e.code) {
-        case 'KeyM': case 'Escape': this.toggle(false); break;
+        case 'Escape': this.toggle(false); break;
         case 'Equal': case 'NumpadAdd': this.action('in'); break;
         case 'Minus': case 'NumpadSubtract': this.action('out'); break;
         case 'KeyC': this.action('me'); break;
         case 'Digit0': case 'Numpad0': this.action('all'); break;
-        case 'KeyN': this.setMinimap(!this.miniOn); break;
         case 'ArrowLeft': case 'KeyA': this.cx -= 120 / this.s; this.clampView(); break;
         case 'ArrowRight': case 'KeyD': this.cx += 120 / this.s; this.clampView(); break;
         case 'ArrowUp': case 'KeyW': this.cz -= 120 / this.s; this.clampView(); break;
