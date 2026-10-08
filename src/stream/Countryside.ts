@@ -15,7 +15,7 @@ import { hitch } from '../debug/HitchLog';
 import type { WorkerPool } from './WorkerPool';
 import type { FromWorker } from './protocol';
 import { FOREST_DETAIL, FOREST_KINDS, FOREST_STRIDE } from '../build/forest';
-import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, batchCap, type TreeModel, type TreeSpecies } from '../props/vegetation';
+import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, batchCap, vegetationWarmup, type TreeModel, type TreeSpecies } from '../props/vegetation';
 import { TERRAIN_ROOT } from '../world/boundary';
 import type { Obstacle } from '../world/Collision';
 import { hash32, hashToFloat } from '../core/rng';
@@ -335,20 +335,17 @@ export class Countryside {
 
   /** One tiny mesh per material for background shader compilation (not added to the scene). */
   warmupObject(): THREE.Object3D {
-    const g = new THREE.Group();
-    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    const leaf = (sp: TreeSpecies | 'shrub'): THREE.Material => {
+      let lm = this.leafMats.get(sp);
+      if (!lm) { lm = createLeafMaterial(sp === 'shrub' ? undefined : sp); this.leafMats.set(sp, lm); }
+      return lm;
+    };
+    const species = [...new Set(FOREST_KINDS.map((K) => K.species).filter((s) => s !== 'shrub'))] as TreeSpecies[];
+    const shrubs = FOREST_KINDS.some((K) => K.species === 'shrub') ? [leaf('shrub')] : [];
+    const g = vegetationWarmup(this.bark, this.farMat, leaf, species, shrubs);
     const im = new THREE.InstancedMesh(this.clumpGeo[0], this.clumpMat, 1);
     im.setColorAt(0, _c.setRGB(0.1, 0.2, 0.1));
     g.add(im);
-    for (const K of FOREST_KINDS) {
-      const lk = K.species === 'shrub' ? 'shrub' : K.species;
-      if (!this.leafMats.has(lk)) this.leafMats.set(lk, createLeafMaterial(K.species === 'shrub' ? undefined : (K.species as TreeSpecies)));
-    }
-    for (const m of [this.bark, this.farMat, ...this.leafMats.values()]) {
-      const w = new THREE.InstancedMesh(geo, m, 1);
-      if (m !== this.farMat) applyVegetationShadow(w);
-      g.add(w);
-    }
     return g;
   }
 }

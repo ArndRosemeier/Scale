@@ -164,4 +164,9 @@ Ordered by how much of the screen they cover (port first what is always visible)
   24 of the 35 s compile phase, strictly one at a time; node builds are the smaller part. Pipelines
   now compile up to four at once (node builds still one at a time): headless compile phase 43.6 →
   30.5 s.
+- 2026-10-08 (2): PC at 9ec1501: load 72.7 s vs WebGL 57.3 s (shaders 20.9 s, was 29), visuals
+  identical; a second load in the same browser profile was no faster. ~133 pipelines were still
+  created blocking while drawing (shadow passes, first frames), now async. The warm-up's tree and
+  furniture stand-ins (boxes without the trees' attributes) built useless shader variants on WebGPU
+  (and all ~250 "attribute not found" warnings); they now use the real models.
 

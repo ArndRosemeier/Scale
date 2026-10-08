@@ -50,6 +50,31 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   shareInstancedShaders(renderer);
   noPerFrameUploads();
   oneNodeBuildAtATime(renderer);
+  asyncDrawPipelines(renderer);
+}
+
+/** Where pipelines created while drawing put their (unused) promises, see asyncDrawPipelines. */
+const drawSink = { push(): void { /* nobody waits for these */ } };
+
+/**
+ * A pipeline that compileAsync did not build ahead (shadow passes, which compileAsync does not
+ * cover, and whatever first shows up in a frame) is created while drawing, blocking: the GPU process
+ * compiles it before the frame goes on, ~0.1 s each on the PC, over a hundred of them during
+ * loading (6–7 fps) and a hitch whenever one turns up in play. Created async instead, the object is
+ * skipped until its pipeline is ready (three's renderer checks `isReady` before every draw; a mesh
+ * or its shadow shows up a few frames later instead of stalling the frame), and several compile in
+ * parallel. Internal: `_pipelines.updateForRender` / `getForRender(renderObject, promises)` (r186);
+ * `&syncpipes` turns it off.
+ */
+function asyncDrawPipelines(renderer: THREE.WebGPURenderer): void {
+  const url = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.name ?? location.href;
+  if (/[?&]syncpipes\b/.test(url)) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pipelines = (renderer as any)._pipelines;
+  if (typeof pipelines?.updateForRender !== 'function' || typeof pipelines.getForRender !== 'function') return;
+  pipelines.updateForRender = function (this: { getForRender(ro: unknown, p: unknown): unknown }, renderObject: unknown) {
+    this.getForRender(renderObject, drawSink);
+  };
 }
 
 /**
@@ -191,7 +216,7 @@ function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
       const o = renderObject.object, g = o.geometry;
       console.warn(`[webgpu] ${n} vertex buffers (WebGPU allows 8): ${o.type} "${o.name}" ${renderObject.material.type} attributes ${Object.keys(g.attributes).join(',')}`);
     }
-    if (promises) nodeBuilds.asyncPipes++; else nodeBuilds.syncPipes++;
+    if (promises && promises !== drawSink) nodeBuilds.asyncPipes++; else nodeBuilds.syncPipes++;
     return create(renderObject, promises);
   };
 }

@@ -1734,6 +1734,35 @@ function makeDepthMaterial(leaf: boolean, key: string): THREE.MeshDepthMaterial 
 }
 
 /** Sets mesh.customDepthMaterial from a vegetation material (call after creating the mesh). */
+/**
+ * Warm-up meshes for the vegetation materials on the trees' own geometry, one per material and
+ * vertex layout. (A stand-in box warms the WebGL program, which does not depend on the attributes,
+ * but on WebGPU a missing attribute makes another shader and pipeline: the real batches then built
+ * theirs again.) `leaf(species)` gives the leaf material of a species, `shrubLeaves` the shrubs'.
+ */
+export function vegetationWarmup(bark: THREE.Material, far: THREE.Material, leaf: (s: TreeSpecies) => THREE.Material, species: readonly TreeSpecies[], shrubLeaves: THREE.Material[]): THREE.Group {
+  const g = new THREE.Group();
+  const seen = new Set<string>();
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, shadow: boolean) => {
+    const k = mat.uuid + ':' + Object.keys(geo.attributes).sort().join(',');
+    if (seen.has(k)) return;
+    seen.add(k);
+    const im = new THREE.InstancedMesh(geo, mat, 1);
+    if (shadow) applyVegetationShadow(im);
+    g.add(im);
+  };
+  for (const sp of species) {
+    const m = treeModel(sp, 0);
+    add(m.wood, bark, true);
+    add(m.leaves, leaf(sp), true);
+    add(m.far, far, false);
+  }
+  const shrub = shrubModel(0);
+  if (shrubLeaves.length) add(shrub.wood, bark, true);
+  for (const lm of shrubLeaves) add(shrub.leaves, lm, true);
+  return g;
+}
+
 export function applyVegetationShadow(mesh: THREE.Mesh) {
   const mat = mesh.material as THREE.Material;
   const dm = mat?.userData?.depthMaterial as THREE.Material | undefined;

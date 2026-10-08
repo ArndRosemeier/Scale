@@ -123,3 +123,15 @@ the main thread) produce broken shaders. `oneNodeBuildAtATime` (webgpu/index.ts)
 node builds instead, so `Renderer.compileAsync` runs up to four calls at once and their pipelines
 compile in parallel; the warm-up compiles the scene in parts for that (`compileParts`). Internal:
 wraps `renderer._nodes.getForRenderAsync` (r186); without it, compiles run one at a time as before.
+
+Pipelines that compileAsync did not build ahead (the shadow passes, which it does not cover, and
+whatever first shows up in a frame) were created blocking while drawing. `asyncDrawPipelines`
+(webgpu/index.ts) creates them async: three skips an object until its pipeline is ready, so a mesh or
+its shadow appears a few frames later instead of the frame stalling (internal:
+`_pipelines.updateForRender`; `&syncpipes` turns it off).
+
+Warm-up stand-ins must have the real vertex layout: on WebGPU a missing attribute makes another
+shader and pipeline (and the "Vertex attribute not found" warning), so a stand-in box warms nothing
+for the real batches. Vegetation and street furniture warm up on their models' geometry
+(`vegetationWarmup`).
+
