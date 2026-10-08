@@ -277,6 +277,10 @@ interface ShellTopo {
   lodIdx: number[][];
   /** 1 on the hem (boundary not welded to a seam twin). */
   edge: Float32Array;
+  /** Distance (m) inside the hem's smooth cut line, capped at CUT_FAR; negative beyond it (the
+   * shader discards there). The body's triangles end in a sawtooth; the cut follows a smoothed
+   * line through it instead (see shellCutField). */
+  cut: Float32Array;
   /** Shell vertices that are co-located copies (UV seams): kept welded after displacement. */
   twins?: number[][];
   /** Neighbour lists for cloth smoothing (CSR: start offsets + flat list, duplicates kept). */
@@ -426,7 +430,146 @@ function shellTopology(st: HumanStatic, regions: ShellLayer['regions'], pos: Flo
     if (gl) gl.push(i); else groups.set(k, [i]);
   }
   const twins = [...groups.values()].filter((gl) => gl.length > 1);
-  return { sel, src, idx, lodIdx: lodTris, edge, nbStart, nbList, twins, hard };
+  // (A head covering keeps its own cut in the shader: its region edge lies in the openings.)
+  const cut = faceCut ? new Float32Array(n).fill(CUT_FAR) : shellCutField(tris, remap, n, pos, posKey, (a, b) => edgeCount.get(ek(a, b)) === 1 && welded.get([posKey(a), posKey(b)].sort().join('|')) === 1);
+  return { sel, src, idx, lodIdx: lodTris, edge, cut, nbStart, nbList, twins, hard };
+}
+
+/** The cut field's cap (m): no trim and no cut this far inside. */
+const CUT_FAR = 0.05;
+/** Body vertices this far (m) inside a shell's cut line stay drawn under it (none show past the cut). */
+const CUT_COVER = 0.015;
+
+/**
+ * A shell made of whole body triangles ends in teeth (neckline, sleeves, waist). Its hem is cut
+ * per pixel along a smooth line instead: the boundary is smoothed (Taubin, no shrinking), each
+ * shell vertex gets its signed distance to that line (positive inside), and the line is moved in
+ * just past the deepest notch nearby, so the kept part never reaches the ragged boundary.
+ */
+function shellCutField(tris: number[], remap: Map<number, number>, n: number, pos: Float32Array, posKey: (v: number) => string, isBoundary: (a: number, b: number) => boolean): Float32Array {
+  const cut = new Float32Array(n).fill(CUT_FAR);
+  // Boundary edges between welded (co-located) vertices, each with its direction into the shell.
+  const cid = new Map<string, number>();
+  const cpos: number[] = [];
+  const id = (v: number) => {
+    const k = posKey(v);
+    let c = cid.get(k);
+    if (c === undefined) { c = cpos.length / 3; cid.set(k, c); cpos.push(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]); }
+    return c;
+  };
+  const vid = new Map<number, number>();
+  for (const v of remap.keys()) vid.set(v, id(v));
+  const segs: { a: number; b: number; w: [number, number, number] }[] = [];
+  for (let i = 0; i < tris.length; i += 3) for (let k = 0; k < 3; k++) {
+    const a = tris[i + k], b = tris[i + ((k + 1) % 3)], c = tris[i + ((k + 2) % 3)];
+    if (!isBoundary(a, b)) continue;
+    const ex = pos[b * 3] - pos[a * 3], ey = pos[b * 3 + 1] - pos[a * 3 + 1], ez = pos[b * 3 + 2] - pos[a * 3 + 2];
+    let wx = pos[c * 3] - pos[a * 3], wy = pos[c * 3 + 1] - pos[a * 3 + 1], wz = pos[c * 3 + 2] - pos[a * 3 + 2];
+    const t = (wx * ex + wy * ey + wz * ez) / Math.max(1e-12, ex * ex + ey * ey + ez * ez);
+    wx -= ex * t; wy -= ey * t; wz -= ez * t;
+    const wl = Math.hypot(wx, wy, wz) || 1;
+    segs.push({ a: vid.get(a)!, b: vid.get(b)!, w: [wx / wl, wy / wl, wz / wl] });
+  }
+  if (!segs.length) return cut;
+  // Smooth the boundary polyline: many λ/μ steps with a low pass band, so wiggles a few
+  // centimetres long go too (they showed as a notch at the front of necklines) while whole loops
+  // keep their size.
+  const m = cpos.length / 3;
+  const nb: number[][] = Array.from({ length: m }, () => []);
+  for (const s of segs) { nb[s.a].push(s.b); nb[s.b].push(s.a); }
+  const ring0 = [...new Set(segs.flatMap((s) => [s.a, s.b]))];
+  let P = Float32Array.from(cpos);
+  let tmp = new Float32Array(P.length);
+  for (let it = 0; it < 400; it++) {
+    const f = it % 2 ? -0.51 : 0.5;
+    tmp.set(P);
+    for (const i of ring0) {
+      const l = nb[i];
+      for (let k = 0; k < 3; k++) {
+        let x = 0;
+        for (const j of l) x += P[j * 3 + k];
+        tmp[i * 3 + k] = P[i * 3 + k] + f * (x / l.length - P[i * 3 + k]);
+      }
+    }
+    [P, tmp] = [tmp, P];
+  }
+  // Inward direction at each boundary vertex (its segments' mean), for points nearest a corner.
+  const wv = new Float32Array(m * 3);
+  for (const s of segs) for (const c of [s.a, s.b]) for (let k = 0; k < 3; k++) wv[c * 3 + k] += s.w[k];
+  // Signed distance of a point to the smoothed line, and which segment is nearest.
+  const near = (x: number, y: number, z: number): [number, number, number] => {
+    let best = Infinity, bj = -1, bt = 0, bx = 0, by = 0, bz = 0;
+    for (let j = 0; j < segs.length; j++) {
+      const s = segs[j];
+      const ax = P[s.a * 3], ay = P[s.a * 3 + 1], az = P[s.a * 3 + 2];
+      const ex = P[s.b * 3] - ax, ey = P[s.b * 3 + 1] - ay, ez = P[s.b * 3 + 2] - az;
+      const t = Math.min(1, Math.max(0, ((x - ax) * ex + (y - ay) * ey + (z - az) * ez) / Math.max(1e-12, ex * ex + ey * ey + ez * ez)));
+      const dx = x - ax - ex * t, dy = y - ay - ey * t, dz = z - az - ez * t;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < best) { best = d2; bj = j; bt = t; bx = dx; by = dy; bz = dz; }
+    }
+    const s = segs[bj];
+    const w = bt <= 0 ? wv.subarray(s.a * 3, s.a * 3 + 3) : bt >= 1 ? wv.subarray(s.b * 3, s.b * 3 + 3) : s.w;
+    const d = Math.sqrt(best);
+    return [bx * w[0] + by * w[1] + bz * w[2] < 0 ? -d : d, bj, bt];
+  };
+  // How far in the cut goes along the line: past the deepest notch nearby, easing off with
+  // distance (no steps along the hem).
+  const bd = new Float32Array(m);
+  const hem: number[] = [];
+  for (let i = 0; i < m; i++) if (nb[i].length) { hem.push(i); bd[i] = near(cpos[i * 3], cpos[i * 3 + 1], cpos[i * 3 + 2])[0]; }
+  // The depth is a taut line along the hem over what each point needs (no dips where the teeth
+  // are small next to big ones: those showed as an "M" at the front of a neckline).
+  const need = new Float32Array(m), depth = new Float32Array(m);
+  for (const c of hem) need[c] = Math.max(0, bd[c]) + 0.003;
+  const taut = () => {
+    depth.set(need);
+    const d1 = new Float32Array(m);
+    for (let it = 0; it < 600; it++) {
+      for (const c of hem) {
+        let x = 0;
+        for (const j of nb[c]) x += depth[j];
+        d1[c] = Math.max(need[c], x / nb[c].length);
+      }
+      for (const c of hem) depth[c] = d1[c];
+    }
+  };
+  taut();
+  // Every boundary vertex must end up clearly beyond the cut, or the kept part reaches it and
+  // shows a tooth: deepen the cut where one doesn't.
+  for (let it = 0; it < 8; it++) {
+    let short = 0;
+    for (const c of hem) {
+      const [sd, j, t] = near(cpos[c * 3], cpos[c * 3 + 1], cpos[c * 3 + 2]);
+      const s = segs[j], over = sd - depth[s.a] * (1 - t) - depth[s.b] * t + 0.003;
+      if (over > 1e-5) { short++; need[s.a] = Math.max(need[s.a], depth[s.a] + over); need[s.b] = Math.max(need[s.b], depth[s.b] + over); }
+    }
+    if (!short) break;
+    taut();
+  }
+  // Only vertices a few rings from the hem are measured (farther ones are well inside, whatever
+  // a straight-line distance across the body says).
+  const ring = new Map<number, number>();
+  let front: number[] = [];
+  for (const s of segs) for (const c of [s.a, s.b]) if (!ring.has(c)) { ring.set(c, 0); front.push(c); }
+  const vnb: number[][] = Array.from({ length: m }, () => []);
+  for (let i = 0; i < tris.length; i += 3) for (let k = 0; k < 3; k++) vnb[vid.get(tris[i + k])!].push(vid.get(tris[i + ((k + 1) % 3)])!, vid.get(tris[i + ((k + 2) % 3)])!);
+  for (let r = 1; r <= 4 && front.length; r++) {
+    const next: number[] = [];
+    for (const c of front) for (const o of vnb[c]) if (!ring.has(o)) { ring.set(o, r); next.push(o); }
+    front = next;
+  }
+  for (const [v, i] of remap) {
+    if (!ring.has(vid.get(v)!)) continue;
+    const [sd, j, t] = near(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]);
+    cut[i] = Math.abs(sd) > CUT_FAR ? CUT_FAR : Math.min(CUT_FAR, sd - depth[segs[j].a] * (1 - t) - depth[segs[j].b] * t);
+  }
+  // (Every boundary vertex lies beyond the cut, so the kept part never reaches the teeth.)
+  for (let i = 0; i < tris.length; i += 3) for (let k = 0; k < 3; k++) {
+    const a = tris[i + k], b = tris[i + ((k + 1) % 3)];
+    if (isBoundary(a, b)) { const ia = remap.get(a)!, ib = remap.get(b)!; cut[ia] = Math.min(cut[ia], -0.001); cut[ib] = Math.min(cut[ib], -0.001); }
+  }
+  return cut;
 }
 
 export class EquipmentRig {
@@ -537,8 +680,8 @@ export class EquipmentRig {
       SHELL_TOPO.set(topoKey, topo);
     }
     if (!topo && !l.skirt && !l.hood) return;
-    const empty: ShellTopo = { sel: new Uint8Array(st.renderVerts), src: [], idx: [], lodIdx: [[], []], edge: new Float32Array(0), nbStart: new Int32Array(1), nbList: new Int32Array(0) };
-    const { sel, src, edge, nbStart, nbList, twins, hard } = topo ?? empty;
+    const empty: ShellTopo = { sel: new Uint8Array(st.renderVerts), src: [], idx: [], lodIdx: [[], []], edge: new Float32Array(0), cut: new Float32Array(0), nbStart: new Int32Array(1), nbList: new Int32Array(0) };
+    const { sel, src, edge, cut, nbStart, nbList, twins, hard } = topo ?? empty;
     const n = src.length;
     // Positions: push out along the normal; outer layers are smoothed (cloth drapes over detail).
     // A little more room than the nominal offset (thin shirts let skin poke through in motion,
@@ -579,9 +722,12 @@ export class EquipmentRig {
           let x = 0, y = 0, z = 0;
           for (let q = s0; q < s1; q++) { const j = nbList[q]; x += P[j * 3]; y += P[j * 3 + 1]; z += P[j * 3 + 2]; }
           const c = 1 / (s1 - s0);
-          tmp[i * 3] = P[i * 3] * 0.4 + x * c * 0.6;
-          tmp[i * 3 + 1] = P[i * 3 + 1] * 0.4 + y * c * 0.6;
-          tmp[i * 3 + 2] = P[i * 3 + 2] * 0.4 + z * c * 0.6;
+          // (Only along the normal: sliding sideways dragged the hem's cut line with the vertices.)
+          const v = src[i], nx = nrm[v * 3], ny = nrm[v * 3 + 1], nz = nrm[v * 3 + 2];
+          const k = ((x * c - P[i * 3]) * nx + (y * c - P[i * 3 + 1]) * ny + (z * c - P[i * 3 + 2]) * nz) * 0.6;
+          tmp[i * 3] = P[i * 3] + nx * k;
+          tmp[i * 3 + 1] = P[i * 3 + 1] + ny * k;
+          tmp[i * 3 + 2] = P[i * 3 + 2] + nz * k;
         }
         P.set(tmp);
         // Never sink below the minimum clearance.
@@ -623,7 +769,8 @@ export class EquipmentRig {
       for (let k = 0; k < 4; k++) { si[i * 4 + k] = ssi[v * 4 + k]; sw[i * 4 + k] = ssw[v * 4 + k]; }
       // (The neck stays under every shell: collars stand off it, and looking down past a collar
       // into a hidden neck showed the background through the body.)
-      if ((hard ?? sel)[v] && st.region[v] !== NECK_REGION) covered[v] |= 1 << (order & 31);
+      // (Not near the hem: the shell is cut off inside its ragged edge, and the skin shows there.)
+      if ((hard ?? sel)[v] && st.region[v] !== NECK_REGION && (l.faceCut || cut[i] > CUT_COVER)) covered[v] |= 1 << (order & 31);
     }
     let idx = keepTri(topo?.idx ?? []);
     const parts: ShellParts = { P: [], N: [], UV: [], SI: [], SW: [], E: [], I: [] };
@@ -646,8 +793,8 @@ export class EquipmentRig {
     if (l.hood) this.buildHood(parts, n);
     const total = n + parts.P.length / 3;
     const fP = new Float32Array(total * 3), fN = new Float32Array(total * 3), fUV = new Float32Array(total * 2), fSI = new Uint16Array(total * 4), fSW = new Uint8Array(total * 4), fE = new Float32Array(total);
-    fP.set(P); fN.set(N); fUV.set(uv); fSI.set(si); fSW.set(sw); fE.set(edge);
-    fP.set(parts.P, n * 3); fN.set(parts.N, n * 3); fUV.set(parts.UV, n * 2); fSI.set(parts.SI, n * 4); fSW.set(parts.SW, n * 4); fE.set(parts.E, n);
+    fP.set(P); fN.set(N); fUV.set(uv); fSI.set(si); fSW.set(sw); fE.set(cut);
+    fP.set(parts.P, n * 3); fN.set(parts.N, n * 3); fUV.set(parts.UV, n * 2); fSI.set(parts.SI, n * 4); fSW.set(parts.SW, n * 4); fE.set(parts.E.map((e) => (e ? 0 : 0.02)), n);
     idx = idx.concat(parts.I);
     g.setAttribute('position', new THREE.BufferAttribute(fP, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(fN, 3));

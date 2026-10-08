@@ -4,8 +4,8 @@
  * scales, leather grain, fur, embroidery, patchwork, silk, plates and glowing
  * runes. Patterns are evaluated triplanar in bind-pose space, so they are
  * seamless and stay glued to the body while it animates; relief goes through
- * derivative bump mapping. Edge trims come from a per-vertex boundary
- * attribute. Wear adds dirt, fraying and scuffs.
+ * derivative bump mapping. Hems are cut along a smooth line and trimmed from a
+ * per-vertex distance attribute (aEdge). Wear adds dirt, fraying and scuffs.
  */
 import * as THREE from 'three';
 import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
@@ -124,7 +124,9 @@ float h_star5(vec2 p, float r, float rf) {
 }
 
 void garmentEval() {
-  float edge = vGEdge;
+  // aEdge: distance (m) inside the hem's smooth cut line; the body triangles' teeth beyond it go.
+  if (vGEdge < 0.0) discard;
+  float edge = 1.0 - smoothstep(0.004, 0.012, vGEdge);
 #ifdef GARMENT_CUT
   // A mask's openings, cut clean per pixel (the shell reaches a little past them), with a hem.
   float md = h_maskDepth(GARMENT_CUT, vGFace);

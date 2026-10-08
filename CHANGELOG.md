@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.170 — 2026-10-08
+
+- **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts and contrast trims showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, at an even depth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line. Cloth smoothing now only lifts the fabric off the body and no longer slides it sideways, which had bent the cut line.
+
 ## 0.169 — 2026-10-08
 
 - **Flats are furnished so they make sense.** Furniture no longer sits at fixed spots in each room's box. The sofa stands against a wall with room in front of it, away from the door, with the coffee table, rug, a lamp and an armchair round it, and the TV goes on the wall across from it, facing it. The bed's head is against a plain wall with a nightstand on each side and a picture above it, the wardrobe has room to open, and the desk stands under the window. The kitchen counter runs along a wall without windows with the fridge at one end, and the table with its chairs stands in the free floor. Nothing stands in a doorway any more, tall pieces keep clear of windows, and every door and every piece you need to reach can still be walked to.
