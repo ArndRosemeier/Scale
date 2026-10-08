@@ -9,6 +9,7 @@ import type { AbilitySystem } from '../game/abilities/AbilitySystem';
 import { ABILITIES, ABILITY, HOTBAR_SLOTS, GROUP_NAMES, type AbilityId } from '../game/abilities/defs';
 import { KARMA } from '../game/abilities/tuning';
 import { isTouch } from './touch';
+import { gameCode, isAction, keyLabel, powerKeyText } from '../game/keybinds';
 
 export class PowersScreen {
   open = false;
@@ -64,14 +65,15 @@ export class PowersScreen {
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement && e.target.type === 'text') return;
       if (!this.open) {
-        if (e.code === 'KeyP' && !e.repeat && this.game.player && !this.game.map?.open) { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(true); }
+        if (isAction(e, 'powers') && !e.repeat && this.game.player && !this.game.map?.open) { e.preventDefault(); e.stopImmediatePropagation(); this.toggle(true); }
         return;
       }
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.repeat) return;
-      if (e.code === 'KeyP' || e.code === 'Escape') { this.toggle(false); return; }
-      const m = /^(Digit|Numpad)([0-9])$/.exec(e.code);
+      if (isAction(e, 'powers') || e.code === 'Escape') { this.toggle(false); return; }
+      // (A hotbar slot's key assigns to that slot, wherever it was moved.)
+      const m = /^(Digit|Numpad)([0-9])$/.exec(gameCode(e));
       const id = this.hovered ?? this.picked;
       const slot = m ? (Number(m[2]) + 9) % 10 : -1;
       if (m && id && ABILITY[id].kind === 'active' && slot < HOTBAR_SLOTS) { this.abilities.progress.assign(slot, id); this.flashSlot(slot); }
@@ -131,7 +133,7 @@ export class PowersScreen {
       card.innerHTML = `
         <div class="pw-icon">${def.icon}</div>
         <div class="pw-body">
-          <div class="pw-name">${def.name} <span class="pw-tag">${tag}${def.key ? ` · ${def.key}` : ''}</span>${where}</div>
+          <div class="pw-name">${def.name} <span class="pw-tag">${tag}${powerKeyText(def.id) ? ` · ${powerKeyText(def.id)}` : ''}</span>${where}</div>
           <div class="pw-desc">${def.desc}</div>
           ${now}${next}${costLine}
           ${def.granted && !sandbox ? `<div class="pw-how">${def.granted}${this.grantInfo?.(def.id) ? ` — ${this.grantInfo(def.id)}` : ''}</div>` : r > 0 || sandbox ? '' : `<div class="pw-how">Locked — earn karma by helping people (E next to someone who fell)</div>`}
@@ -159,7 +161,7 @@ export class PowersScreen {
       const def = id ? ABILITY[id] : null;
       const s = document.createElement('div');
       s.className = `pw-slot${def ? '' : ' empty'}${this.picked ? ' target' : ''}`;
-      s.innerHTML = `<span class="k">${(i + 1) % 10}</span>${def ? `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span>` : '<span class="nm">empty</span>'}`;
+      s.innerHTML = `<span class="k">${keyLabel(`slot${i + 1}`)}</span>${def ? `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span>` : '<span class="nm">empty</span>'}`;
       s.draggable = !!def && !isTouch();
       s.ondragstart = (e) => { if (def) e.dataTransfer?.setData('text/plain', def.id); };
       s.ondragover = (e) => { e.preventDefault(); s.classList.add('over'); };

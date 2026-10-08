@@ -1,5 +1,8 @@
+import { gameCode } from './keybinds';
+
 /**
- * Keyboard / mouse state. The cursor stays visible (left click picks targets and presses
+ * Keyboard / mouse state. Keys are kept as game codes (keybinds.ts: a reassigned key arrives as
+ * the code of the action it is bound to). The cursor stays visible (left click picks targets and presses
  * buttons); holding the right mouse button looks around (pointer lock while held).
  */
 export class Input {
@@ -24,25 +27,41 @@ export class Input {
   private _suspended = false;
   /** A dialog over the game (the character creator) has the keyboard: game keys are ignored. */
   get suspended(): boolean { return this._suspended; }
-  set suspended(v: boolean) { this._suspended = v; this.keys.clear(); this.pressed.clear(); }
+  set suspended(v: boolean) { this._suspended = v; this.keys.clear(); this.held.clear(); this.pressed.clear(); }
 
   /**
    * Something in the world takes the keyboard (an arcade game being played): it sees every key
    * going down and up first, and the game never sees the ones it returns true for.
    */
-  grab: ((code: string, down: boolean) => boolean) | null = null;
+  grab: ((code: string, down: boolean, game: string) => boolean) | null = null;
+  /** Shift held (whatever Shift is bound to): reverses target cycling. */
+  shift = false;
+  /** Physical key -> the game code its keydown added (so its keyup removes the same one). */
+  private held = new Map<string, string>();
 
   constructor(el: HTMLElement) {
     this.el = el;
     window.addEventListener('keydown', (e) => {
+      this.shift = e.shiftKey;
       if (e.target instanceof HTMLInputElement || this._suspended) return;
-      if (this.grab?.(e.code, true)) { e.preventDefault(); return; }
-      if (!this.keys.has(e.code)) this.pressed.add(e.code);
-      this.keys.add(e.code);
-      if (['Space', 'Tab', 'NumpadAdd', 'NumpadSubtract', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+      const code = gameCode(e);
+      if (this.grab?.(e.code, true, code)) { e.preventDefault(); return; }
+      if (['Space', 'Tab', 'NumpadAdd', 'NumpadSubtract', 'ArrowUp', 'ArrowDown'].includes(code || e.code)) e.preventDefault();
+      if (!code) return;
+      const was = this.held.get(e.code);
+      if (was && was !== code) this.keys.delete(was);
+      this.held.set(e.code, code);
+      if (!this.keys.has(code)) this.pressed.add(code);
+      this.keys.add(code);
     });
-    window.addEventListener('keyup', (e) => { this.grab?.(e.code, false); this.keys.delete(e.code); });
-    window.addEventListener('blur', () => { this.grab?.('Blur', false); this.keys.clear(); this.buttons = 0; this.releaseLook(); });
+    window.addEventListener('keyup', (e) => {
+      this.shift = e.shiftKey;
+      const code = this.held.get(e.code) ?? gameCode(e);
+      this.held.delete(e.code);
+      this.grab?.(e.code, false, code);
+      if (code) this.keys.delete(code);
+    });
+    window.addEventListener('blur', () => { this.grab?.('Blur', false, 'Blur'); this.keys.clear(); this.held.clear(); this.shift = false; this.buttons = 0; this.releaseLook(); });
     el.addEventListener('mousedown', (e) => {
       this.buttons |= 1 << e.button;
       this.clicked |= 1 << e.button;
@@ -78,7 +97,7 @@ export class Input {
 
   /** Hold or release a key from the touch controls (polled keys only: no keydown event). */
   setKey(code: string, on: boolean): void {
-    if (this.grab?.(code, on) && on) return;
+    if (this.grab?.(code, on, code) && on) return;
     if (on) { if (!this.keys.has(code)) this.pressed.add(code); this.keys.add(code); }
     else this.keys.delete(code);
   }

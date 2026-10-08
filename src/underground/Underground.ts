@@ -437,6 +437,33 @@ export class Underground {
     return F.ray(ox, oy, oz, dx, dy, dz, maxT);
   }
 
+  /**
+   * Line of sight in the sewers, the metro and the rooms: every point along it inside a volume
+   * (null: neither end is underground, ask someone else; false: only one end is - the street
+   * and the tunnels never see each other). The street above is not in the way down here.
+   */
+  tunnelLine(ax: number, ay: number, az: number, bx: number, by: number, bz: number, pad = 0): boolean | null {
+    const ua = this.isUnder(ax, ay, az), ub = this.isUnder(bx, by, bz);
+    if (!ua && !ub) return null;
+    if (ua !== ub) return false;
+    const dx = bx - ax, dy = by - ay, dz = bz - az, d = Math.hypot(dx, dy, dz);
+    const L = d - pad;
+    if (L <= 0) return true;
+    const n = Math.ceil(L / 0.5);
+    for (let i = 1; i < n; i++) {
+      const t = (i / n) * L / d;
+      if (!this.contains(ax + dx * t, ay + dy * t, az + dz * t, 0)) return false;
+    }
+    return true;
+  }
+
+  /** First wall along a ray from a point underground (sewers, metro, rooms; maxT: none; null: not underground). */
+  tunnelRay(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): number | null {
+    if (!this.isUnder(ox, oy, oz)) return null;
+    for (let t = 0.5; t < maxT; t += 0.5) if (!this.contains(ox + dx * t, oy + dy * t, oz + dz * t, 0)) return t;
+    return maxT;
+  }
+
   /** Strict interior test for the camera boom (vaults, vertical margins). */
   cameraFree(x: number, y: number, z: number, margin: number): boolean {
     // Riding: the camera stays inside the car.
@@ -487,6 +514,14 @@ export class Underground {
 
   isUnder(x: number, y: number, z: number): boolean {
     return y < this.ground(x, z) - 1.2 && this.floorAt(x, y, z) !== null;
+  }
+
+  /**
+   * Are two bodies (feet heights) on the same side of the street: both underground or both up
+   * top? The one rule for everything that must not reach through the pavement (blows, witnesses).
+   */
+  sameSide(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    return this.isUnder(ax, ay + 0.5, az) === this.isUnder(bx, by + 0.5, bz);
   }
 
   /** Manhole shafts by 32 m grid square (every ~45 m along each trunk), for E and hints. */

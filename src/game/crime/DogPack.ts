@@ -74,7 +74,7 @@ export interface PackWorld {
   ground(x: number, z: number): number;
   /** Inside a building (a dog does not run through walls). */
   blocked?(x: number, z: number): boolean;
-  hurtPlayer(dmg: number, fromX: number, fromZ: number): void;
+  hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number): void;
   sound(id: string, x: number, y: number, z: number, gain: number, pitch: number): void;
   random(): number;
 }
@@ -140,12 +140,12 @@ export class DogPack {
         case 'bite': {
           const dp = Math.hypot(p.x - d.x, p.z - d.z);
           if (!hunt || Math.hypot(d.x - H.x, d.z - H.z) > DOGS.leash) { d.state = 'heel'; d.t = 0; break; }
-          if (dp < DOGS.biteR) {
+          if (dp < DOGS.biteR && Math.abs(p.y - d.y) < 2) {
             d.state = 'bite';
             d.biteT -= dt;
             if (d.biteT <= 0) {
               d.biteT = DOGS.biteEvery * (0.8 + this.w.random() * 0.4);
-              this.w.hurtPlayer(DOGS.bite * (0.8 + this.w.random() * 0.4), d.x, d.z);
+              this.w.hurtPlayer(DOGS.bite * (0.8 + this.w.random() * 0.4), d.x, d.z, d.y);
               this.w.sound('dog_bark', d.x, 0.5, d.z, 0.6, 1.3 + this.w.random() * 0.2);
               this.stats.bites++;
             }
@@ -163,7 +163,7 @@ export class DogPack {
           tx = d.lx; tz = d.lz; speed = DOGS.lunge;
           if (!d.landed && !p.down && Math.hypot(p.x - d.x, p.z - d.z) < DOGS.lungeR && Math.abs(p.y - d.y) < 1.8) {
             d.landed = true;
-            this.w.hurtPlayer(DOGS.lungeHit * (0.85 + this.w.random() * 0.3), d.x, d.z);
+            this.w.hurtPlayer(DOGS.lungeHit * (0.85 + this.w.random() * 0.3), d.x, d.z, d.y);
             this.stats.lunges++;
           }
           if (d.t > DOGS.lungeT || Math.hypot(d.lx - d.x, d.lz - d.z) < 0.5) { d.state = hunt ? 'chase' : 'heel'; d.t = 0; }

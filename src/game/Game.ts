@@ -311,6 +311,7 @@ export class Game {
     this.collision.obstacleProviders.push(landmarks.provider);
     this.underground = new Underground(macro, this.terrain, tex, (x, z) => this.terrain.height(x, z) + this.world.surfaceOffset(x, z));
     this.collision.under = this.underground;
+    this.world.underRay = (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT) ?? this.underground.tunnelRay(ox, oy, oz, dx, dy, dz, maxT);
     this.underground.onTrainSound = (id, x, y, z, gain) => this.audio.play(id, x, y, z, gain, 1, 10, this.renderer.camera.position);
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
@@ -997,7 +998,7 @@ export class Game {
         p.vel.x = fx * v.speed * 1.2; p.vel.z = fz * v.speed * 1.2; p.vel.y = 2 + v.speed * 0.3;
         p.grounded = false;
         p.pos.x += fx * 0.3; p.pos.z += fz * 0.3;
-        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); this.crime?.health.damage(6 + v.speed * 3.2, 'car', v.x, v.z); }
+        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); this.crime?.health.damage(6 + v.speed * 3.2, 'car', v.x, v.z, v.y); }
       } else {
         const pushLat = (v.width / 2 + pr - Math.abs(lat)) * Math.sign(lat || 1);
         p.pos.x += -fz * pushLat; p.pos.z += fx * pushLat;
@@ -1022,9 +1023,10 @@ export class Game {
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
       threats: () => { const a = this.threats?.actors() ?? []; const b = this.slimeRealm?.actors() ?? []; return b.length ? [...a, ...b] : a; },
-      cave: {
-        ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT),
-        line: (ax, ay, az, bx, by, bz) => this.underground.caveLine(ax, ay, az, bx, by, bz, 1.0),
+      under: {
+        ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT) ?? this.underground.tunnelRay(ox, oy, oz, dx, dy, dz, maxT),
+        line: (ax, ay, az, bx, by, bz) => this.underground.caveLine(ax, ay, az, bx, by, bz, 1.0) ?? this.underground.tunnelLine(ax, ay, az, bx, by, bz, 1.0),
+        isUnder: (x, y, z) => this.underground.isUnder(x, y, z),
       },
     });
     this.elements = new Elements({

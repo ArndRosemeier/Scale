@@ -32,6 +32,7 @@ import { arcadeChecks } from './arcadeTest';
 import { sidekickChecks } from './sidekickTest';
 import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
+import { PlayerHealth } from '../src/game/PlayerHealth';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
@@ -3564,6 +3565,16 @@ doorChecks(check);
 sidekickChecks(check);
 // The Wardens (ALIENS_PLAN phase 1): the disc schedule, walkers, stares, what people say (tools/aliensTest.ts).
 aliensChecks(check);
+
+// Nothing hurts through the pavement: every blow names where it came from (the type makes the
+// height a required argument), and the health refuses one from the other side of the street.
+{
+  const pl = { pos: new THREE.Vector3(0, -4, 0), vel: new THREE.Vector3(), k: 1, flying: false, downT: 0 } as unknown as ConstructorParameters<typeof PlayerHealth>[0];
+  const H = new PlayerHealth(pl, false);
+  H.sameSide = (_x, y) => (y < -1.5) === (pl.pos.y < -1.5);
+  const fromStreet = H.damage(10, 'monster', 2, 0, 0), fromSewer = H.damage(10, 'punch', 1, 0, -4);
+  check(fromStreet === 0 && fromSewer > 0, `health: a blow from the street does not reach the sewer below (street ${fromStreet}, sewer ${fromSewer.toFixed(1)})`);
+}
 
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

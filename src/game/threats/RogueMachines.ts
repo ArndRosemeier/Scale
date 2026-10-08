@@ -391,7 +391,7 @@ export class RogueMachines implements MalfunctionCtl {
     this.keepOffPlayer(r, player, 0.45);
     // Contacts: people knocked over, the player hit, cars rammed.
     if (r.speed > 1.2 || m.tgt) this.contactPeople(m, r.x, r.z, r.yaw, 0.55, ROGUE.knock.robot);
-    if (m.tgt?.kind === 'player' && m.attackT <= 0 && this.reaches(player, r.x, r.y, r.z, 0.95, 1.2)) this.hitPlayer(m, r.x, r.z, ROGUE.hurt.robot, ROGUE.cooldown.robot);
+    if (m.tgt?.kind === 'player' && m.attackT <= 0 && this.reaches(player, r.x, r.y, r.z, 0.95, 1.2)) this.hitPlayer(m, r.x, r.z, r.y, ROGUE.hurt.robot, ROGUE.cooldown.robot);
     if (r.speed > 1 || m.role === 'rammer') this.ram(m, r);
     this.growl(m, dt, r.x, r.y, r.z);
   }
@@ -412,7 +412,7 @@ export class RogueMachines implements MalfunctionCtl {
       m.swing = Math.min(1, m.swing + dt * 3.2);
       if (before < 1 && m.swing >= 1) {
         m.attackT = ROGUE.cooldown.bot;
-        if (m.tgt?.kind === 'player') { if (this.reaches(player, b.x, b.y, b.z, 1.4, 2)) this.hitPlayer(m, b.x, b.z, ROGUE.hurt.bot, ROGUE.cooldown.bot); }
+        if (m.tgt?.kind === 'player') { if (this.reaches(player, b.x, b.y, b.z, 1.4, 2)) this.hitPlayer(m, b.x, b.z, b.y, ROGUE.hurt.bot, ROGUE.cooldown.bot); }
         else if (m.tgt?.kind === 'ped' && Math.hypot(m.tgt.a.x - b.x, m.tgt.a.z - b.z) < 1.5) { this.knockPerson(m, m.tgt.a, b.x, b.z, ROGUE.knock.bot); m.attackT = ROGUE.personGap.bot; }
       }
       if (m.swing >= 1 && m.attackT < ROGUE.cooldown.bot - 0.35) m.swing = 0;
@@ -495,7 +495,7 @@ export class RogueMachines implements MalfunctionCtl {
       w.x = t.x; w.z = t.z; w.y = head; w.r = 0.6;
       const reach = Math.hypot(d.x - t.x, d.y - head, d.z - t.z);
       if (reach < 1.25) {
-        if (m.tgt?.kind === 'player') this.hitPlayer(m, d.x, d.z, ROGUE.hurt.drone, ROGUE.cooldown.drone);
+        if (m.tgt?.kind === 'player') this.hitPlayer(m, d.x, d.z, d.y, ROGUE.hurt.drone, ROGUE.cooldown.drone);
         else if (m.tgt?.kind === 'ped') this.knockPerson(m, m.tgt.a, d.x, d.z, ROGUE.knock.drone);
         m.attackT = ROGUE.personGap.drone; m.dive = 2; m.diveT = 0;
       } else if (m.diveT > D.diveMax) { m.dive = 2; m.diveT = 0; }
@@ -594,12 +594,12 @@ export class RogueMachines implements MalfunctionCtl {
     return p.active && Math.hypot(p.x - x, p.z - z) < p.radius + r && p.y < y + dy && p.y + p.height > y - 0.3;
   }
 
-  private hitPlayer(m: Rogue, x: number, z: number, dmg: number, cd: number): void {
+  private hitPlayer(m: Rogue, x: number, z: number, y: number, dmg: number, cd: number): void {
     const g = this.g;
     m.attackT = cd;
     if (this.time - this.playerHitT < ROGUE.playerGap) return;
     this.playerHitT = this.time;
-    const dealt = g.crime.health.damage(dmg, 'robot', x, z);
+    const dealt = g.crime.health.damage(dmg, 'robot', x, z, y);
     g.audio.play('punch_impact', g.player.pos.x, g.player.pos.y + 1, g.player.pos.z, 0.75, 0.8, 4, g.renderer.camera.position);
     if (dealt <= 0) g.camRig.addShake(0.12);
     g.stimuli.emit('threat', x, g.player.pos.y + 1, z, 3, 25, { cause: 'threat' });

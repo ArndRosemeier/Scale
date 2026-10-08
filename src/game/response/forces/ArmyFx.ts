@@ -105,7 +105,7 @@ export class ArmyFx {
     if (d < 250) g.camRig.addShake(Math.min(0.35, size * 12 / Math.max(25, d)));
     // Stray splash only: the army never aims at the player (a near miss stings a little).
     const r = 3 + size * 2.5;
-    if (d < r && g.player.pos.y < y + r) g.crime.health.damage(6 * size * (1 - d / r), 'military', x, z);
+    if (d < r && Math.abs(g.player.pos.y - y) < r) g.crime.health.damage(6 * size * (1 - d / r), 'military', x, z, y);
     // People in the blast (an area effect hits bystanders): knocked down, injured.
     for (const a of g.peds.neighbours(x, z, r, this.nb)) {
       // (The army's own soldiers aside: their shells fall on the target, not on their own line.)

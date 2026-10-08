@@ -42,7 +42,7 @@ export class SidekickPanel {
     const key = JSON.stringify(p);
     if (key === this.last) return;
     this.last = key;
-    const doing = p.away === 'hold' && (p.mode === 'around' || p.mode === 'back') ? 'Keeping back' : (p.flying && p.mode !== 'fight' ? 'Flying' : DOING[p.mode]);
+    const doing = p.flying && p.mode !== 'fight' ? 'Flying' : p.away === 'hold' && (p.mode === 'around' || p.mode === 'back') ? 'Keeping back' : DOING[p.mode];
     const hp = Math.max(0, Math.min(1, p.hp / Math.max(1, p.maxHp)));
     const pips = (r: number, n: number) => n > 1 ? `<span class="pips">${'<i class="on"></i>'.repeat(r)}${'<i></i>'.repeat(n - r)}</span>` : '<span class="pips"><i class="on"></i></span>';
     const rows = p.powers.map((w) => `<div class="pw"><span>${esc(w.name)}${w.first ? ' <em>shard gift</em>' : ''}</span>${pips(w.rank, w.max)}</div>`).join('');
