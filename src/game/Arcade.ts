@@ -283,7 +283,7 @@ export class Arcade {
     c.game.beep = (f, d, w) => this.beep(f, d, w);
     this.held.clear(); this.hits.clear(); this.leave = false;
     inp.keys.clear(); inp.pressed.clear();
-    inp.grab = (code, down) => this.key(code, down);
+    inp.grab = (code, down, game) => this.key(code, down, game);
     // Face the screen; the camera behind the shoulder, a bit closer, looking over the head.
     g.player.yaw = c.yaw;
     g.camRig.yaw = c.yaw;
@@ -308,11 +308,11 @@ export class Arcade {
     this.savedZoom = 0;
   }
 
-  private key(code: string, down: boolean): boolean {
+  private key(code: string, down: boolean, game: string): boolean {
     if (PASS.has(code)) return false;
     if (code === 'Blur') { this.held.clear(); return true; }
     if (!down) { this.held.delete(code); return true; }
-    if (code === 'KeyE') { this.leave = true; return true; }
+    if (game === 'KeyE') { this.leave = true; return true; }
     const b = KEYMAP[code];
     if (b && !this.held.has(code)) this.hits.add(b);
     this.held.add(code);

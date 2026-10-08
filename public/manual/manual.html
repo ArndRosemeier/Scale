@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Scale – Player's Manual</title>
+<style>
+@page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 10.3pt; line-height: 1.45; color: #1d1f24; }
+h1 { font-size: 22pt; margin: 0 0 6pt; color: #12305a; border-bottom: 2.5pt solid #e0a020; padding-bottom: 4pt; page-break-before: always; }
+h2 { font-size: 13.5pt; margin: 14pt 0 4pt; color: #12305a; }
+h3 { font-size: 11pt; margin: 10pt 0 2pt; color: #333; }
+p { margin: 0 0 6pt; text-align: justify; }
+ul { margin: 0 0 6pt 0; padding-left: 16pt; } li { margin: 1.5pt 0; }
+figure { margin: 8pt 0 10pt; page-break-inside: avoid; text-align: center; }
+figure img { width: 100%; border-radius: 4pt; box-shadow: 0 1pt 4pt rgba(0,0,0,.35); }
+figure.half { display: inline-block; width: 48.6%; margin: 6pt 0.5% 8pt; vertical-align: top; }
+figcaption { font-size: 8.6pt; color: #555; margin-top: 3pt; font-style: italic; }
+table { border-collapse: collapse; width: 100%; margin: 4pt 0 10pt; font-size: 9.4pt; page-break-inside: avoid; }
+th, td { border: 0.6pt solid #c8ccd4; padding: 3pt 6pt; text-align: left; vertical-align: top; }
+th { background: #12305a; color: #fff; }
+tr:nth-child(even) td { background: #f2f4f8; }
+kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: #eef0f4; border: 0.6pt solid #aab; border-radius: 2pt; padding: 0 3pt; white-space: nowrap; }
+.tip { background: #fff7e0; border-left: 3pt solid #e0a020; padding: 5pt 8pt; margin: 8pt 0; page-break-inside: avoid; }
+.tip b:first-child { color: #9a6a00; }
+.cover { page-break-after: always; text-align: center; padding-top: 30mm; }
+.cover h1 { page-break-before: avoid; border: none; font-size: 54pt; letter-spacing: 6pt; margin-bottom: 0; }
+.cover .sub { font-size: 15pt; color: #444; margin-bottom: 18mm; }
+.cover img { width: 100%; border-radius: 6pt; box-shadow: 0 2pt 8pt rgba(0,0,0,.4); }
+.cover .foot { margin-top: 14mm; color: #666; font-size: 10pt; }
+.toc { columns: 2; column-gap: 12mm; font-size: 11pt; }
+.toc li { margin: 4pt 0; }
+.groups td:first-child { font-weight: bold; white-space: nowrap; }
+@media screen {
+  html { background: #e9ecf1; }
+  body { max-width: 820px; margin: 0 auto; padding: 24px 28px 40px; background: #fff; font-size: 15px; box-shadow: 0 0 24px rgba(0,0,0,.12); }
+  h1 { font-size: 26px; margin-top: 36px; }
+  h2 { font-size: 19px; } h3 { font-size: 16px; }
+  table, kbd { font-size: 13.5px; }
+  figcaption { font-size: 12.5px; }
+  .cover { padding-top: 10px; }
+  .cover h1 { font-size: 64px; margin-top: 0; }
+  .cover .sub { font-size: 20px; margin-bottom: 24px; }
+  .cover .foot { margin: 20px 0 10px; }
+  .toc { font-size: 15px; }
+  .toc a { color: #12305a; text-decoration: none; } .toc a:hover { text-decoration: underline; }
+}
+</style></head><body>
+
+<div class="cover">
+  <h1>SCALE</h1>
+  <div class="sub">Player's Manual</div>
+  <img loading="lazy" src="jpg/02-city.jpg">
+  <div class="foot">A destructible city of millions of bricks, a crowd of people with lives of their own,<br>six criminal organisations, giant monsters, and you.<br><br>Covers game version 0.098 · Play at apps.futuremagic.de/scale</div>
+</div>
+
+<h1 style="page-break-before:avoid">Contents</h1>
+<ol class="toc">
+  <li><a href="#ch1">Welcome to the city</a></li>
+  <li><a href="#ch2">Getting started</a></li>
+  <li><a href="#ch3">Controls</a></li>
+  <li><a href="#ch4">The screen, the map and the minimap</a></li>
+  <li><a href="#ch5">Powers and karma</a></li>
+  <li><a href="#ch6">The city and its landmarks</a></li>
+  <li><a href="#ch7">Places to go inside</a></li>
+  <li><a href="#ch8">Underground</a></li>
+  <li><a href="#ch9">A living city: people, talk and favours</a></li>
+  <li><a href="#ch10">Crime on the street</a></li>
+  <li><a href="#ch11">The six organisations</a></li>
+  <li><a href="#ch12">Big threats and the army</a></li>
+  <li><a href="#ch13">Reputation and consequences</a></li>
+  <li><a href="#ch14">When you go down</a></li>
+  <li><a href="#ch15">Saving, settings and the rest</a></li>
+  <li><a href="#ch16">Tips for new heroes</a></li>
+</ol>
+
+<h2 id="ch1">1. Welcome to the city</h2>
+<p>Scale drops you into a city that is built fresh for you: every street, tower, park and sewer pipe is generated from a single number, the <i>seed</i>. The same seed always gives you the same city, a different seed gives you a different one, and the city can be anything from a small town up to a sprawling metropolis with villages, farms and lakes around it. Every building is made of real bricks that can crack, fall and bury the street below.</p>
+<p>Into this city you bring a hero. In the normal game you start out as an ordinary person and grow into something much bigger by doing good. Along the way you will meet thousands of people who remember you, half a dozen criminal organisations with leaders of their own, creatures large enough to step over houses, and a few secrets well below street level.</p>
+<p>This manual tells you what is out there and how to get started. It deliberately does not tell you everything: some places are meant to be found, and some stories are meant to be lived.</p>
+
+<h1 id="ch2">2. Getting started</h1>
+<figure><img loading="lazy" src="jpg/00-start.jpg"><figcaption>The start screen: pick a mode, a city size and a seed, or continue a saved game.</figcaption></figure>
+<h2>Game modes</h2>
+<ul>
+  <li><b>Normal.</b> You begin as an ordinary person with no powers at all. A short origin scene tells you how that changes. Good deeds earn <b>karma</b>, and karma buys powers one by one. This is the intended way to play.</li>
+  <li><b>Sandbox.</b> Every power is unlocked at full strength from the first second. Ideal for exploring, experimenting and simply knocking things over.</li>
+</ul>
+<h2>Your city</h2>
+<p>Choose a city size and a seed on the start screen. You can also put them in the address bar, for example <kbd>?seed=3&amp;size=1</kbd>. Small cities load quickly and are great for a first look; large ones take longer to build but have more of everything. The first start in a browser also prepares the graphics shaders, which can take a moment.</p>
+<h2>Your hero</h2>
+<figure><img loading="lazy" src="jpg/01-creator.jpg"><figcaption>The character creator: body, face, hair, clothes and colours.</figcaption></figure>
+<p>The character creator lets you shape your hero's body and face, choose hair, brows and lips, and dress them from a wide wardrobe of everyday clothes and hero suits. New characters start plain; the <b>Plain</b> button takes you back to a clean slate at any time. If you have your own 3D model you can import it, and the avatar converter helps bring characters from other tools into the game. Later on, clothes shops in the city have a fitting mirror where you can change your outfit without going back to the menu.</p>
+
+<h1 id="ch3">3. Controls</h1>
+<p>Press <kbd>H</kbd> in the game at any time for the full list. The essentials:</p>
+<table>
+<tr><th style="width:32%">Key</th><th>Action</th></tr>
+<tr><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td><td>Move</td></tr>
+<tr><td><kbd>Shift</kbd></td><td>Run, or boost while flying</td></tr>
+<tr><td><kbd>R</kbd></td><td>Autorun</td></tr>
+<tr><td><kbd>Space</kbd></td><td>Jump; hold for a super jump</td></tr>
+<tr><td><kbd>Ctrl</kbd> / <kbd>C</kbd></td><td>Go down (crouch, descend while flying)</td></tr>
+<tr><td><kbd>F</kbd></td><td>Toggle flight</td></tr>
+<tr><td><kbd>Num +</kbd> / <kbd>Num −</kbd></td><td>Grow and shrink (size shift)</td></tr>
+<tr><td><kbd>1</kbd> … <kbd>9</kbd>, <kbd>0</kbd></td><td>Use the power in that hotbar slot</td></tr>
+<tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Next / previous target</td></tr>
+<tr><td>Left mouse</td><td>Pick a target</td></tr>
+<tr><td>Right mouse (hold)</td><td>Look around</td></tr>
+<tr><td>Mouse wheel</td><td>Camera distance</td></tr>
+<tr><td><kbd>E</kbd></td><td>Interact: talk, help someone up, pick up, carry, use a mirror or manhole, dig, turn yourself in</td></tr>
+<tr><td><kbd>P</kbd></td><td>Powers screen</td></tr>
+<tr><td><kbd>M</kbd> / <kbd>N</kbd></td><td>Big map / minimap</td></tr>
+<tr><td><kbd>G</kbd></td><td>Rally the army to your side (during big threats)</td></tr>
+<tr><td><kbd>T</kbd></td><td>Call an airstrike on your target (when the army is with you)</td></tr>
+<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>Shift the time of day</td></tr>
+<tr><td><kbd>F8</kbd></td><td>Free camera</td></tr>
+<tr><td><kbd>B</kbd></td><td>Test blast (Sandbox only)</td></tr>
+<tr><td><kbd>H</kbd></td><td>Help</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Pause menu: save, load, settings</td></tr>
+</table>
+<h2>Touch screens</h2>
+<p>On an iPad or other tablet the game shows touch controls: a movement stick on the left, a look area on the right, and buttons for jump, flight, the hotbar powers and interaction. Pinch changes the camera distance.</p>
+
+<h1 id="ch4">4. The screen, the map and the minimap</h1>
+<figure><img loading="lazy" src="jpg/03-hud.jpg"><figcaption>On the street: health and energy, the power hotbar, the minimap, and people going about their day.</figcaption></figure>
+<p>The heads-up display shows your <b>health</b> and <b>energy</b>, your <b>karma</b> and <b>reputation</b>, the <b>hotbar</b> with your powers, and the <b>minimap</b>. Targets you pick get a health tag above their head. When you walk into a new neighbourhood a banner tells you its name and how much crime there is; when the police are after you, wanted stars appear.</p>
+<figure class="half"><img loading="lazy" src="jpg/42-hood.jpg"><figcaption>Entering a neighbourhood: its name and crime level.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/06-map.jpg"><figcaption>The map (<kbd>M</kbd>) with the turf of every organisation.</figcaption></figure>
+<p>The big <b>map</b> shows streets, parks, water, landmarks and points of interest. Its turf layer colours in who controls which part of the city, and its legend names the organisations. Golden dots mark people who have a favour to ask; other markers show crimes in progress and big events. The <b>minimap</b> in the corner shows the same marks around you.</p>
+
+<h1 id="ch5">5. Powers and karma</h1>
+<figure><img loading="lazy" src="jpg/07-powers.jpg"><figcaption>The powers screen (<kbd>P</kbd>): what you have, what it costs, and what comes next.</figcaption></figure>
+<p>In Normal mode, every good deed earns karma: stopping a thief, rescuing someone from a collapsed house, helping a lost tourist, getting a cat down from a tree. Spend karma on the powers screen to unlock new powers and to make them stronger. Most powers draw on your <b>energy</b>, which refills over time.</p>
+<table>
+<tr><th style="width:28%">Group</th><th>Powers</th></tr>
+<tr><td>Body</td><td>Punch, super strength, super jump, super speed, flight</td></tr>
+<tr><td>Size</td><td>Size shift: from 10 cm tall to a 100 m giant. Being big costs energy.</td></tr>
+<tr><td>Force</td><td>Shockwave, seismic stomp, whirlwind</td></tr>
+<tr><td>Fire and light</td><td>Laser eyes, fire wave, fireball</td></tr>
+<tr><td>Ice and storm</td><td>Frost nova, ice path, chain lightning</td></tr>
+<tr><td>Water</td><td>Hydrokinesis</td></tr>
+<tr><td>Strange</td><td>Shrink ray, and one power you will have to earn the hard way</td></tr>
+</table>
+<figure class="half"><img loading="lazy" src="jpg/04-flight.jpg"><figcaption>Flying over the rooftops.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/05-giant.jpg"><figcaption>At 45 metres, the town hall is a footstool.</figcaption></figure>
+<div class="tip"><b>Power cores.</b> Glowing cores are hidden around the city. Picking one up gives you energy, faster regeneration or a bit of karma. Some are in plain sight, some are not.</div>
+<div class="tip"><b>Careful with your strength.</b> A super-speed run will hop over people and cars, but a fireball does not care who is standing behind the target. Bricks that fall on people are your responsibility if you caused the collapse.</div>
+
+<h1 id="ch6">6. The city and its landmarks</h1>
+<p>Every city has a <b>town hall</b> and a <b>stadium</b>, and between one and four other attractions: a TV tower, a cathedral, a Ferris wheel, monuments, a museum, a lighthouse, a castle ruin, glasshouses, an airport. Each one gets its own name. Paved approach paths lead up to them from the street.</p>
+<figure class="half"><img loading="lazy" src="jpg/11-cathedral.jpg"><figcaption>A cathedral.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/15-stadium.jpg"><figcaption>The stadium.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/13-townhall-rain.jpg"><figcaption>The town hall in the rain.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/16-castle.jpg"><figcaption>A castle ruin above the rooftops.</figcaption></figure>
+<h2>Marvels</h2>
+<figure><img loading="lazy" src="jpg/10-starship.jpg"><figcaption>One of the marvels: a starship-shaped tower.</figcaption></figure>
+<p>Bigger cities may have a <b>marvel</b>, a piece of impossible architecture that dominates the skyline. There are eight families of them, from a twisting tower and a floating skyship to a halo, a cluster of orbs and the starship above. Marvels are not just scenery: they are built from bricks like everything else, and some of them can be entered.</p>
+<h2>Weather, day and night</h2>
+<p>The city runs on a clock. The sun rises and sets, the moon comes out, street lamps light up, and the people's routines follow the hour: commuters in the morning, shoppers at noon, night owls after dark. The weather changes too, from clear skies to clouds, rain, storms and fog. Use <kbd>[</kbd> and <kbd>]</kbd> to move the clock if you want to see the city at a different time.</p>
+<h2>Beyond the city</h2>
+<p>Around the city lies countryside: villages, farms, fields and lakes. It is quieter out there, but not empty.</p>
+
+<h1 id="ch7">7. Places to go inside</h1>
+<h2>Cathedral and town hall</h2>
+<figure><img loading="lazy" src="jpg/12-cathedral-inside.jpg"><figcaption>Inside the cathedral: pews, columns and light from the windows.</figcaption></figure>
+<p>The cathedral and the town hall are fully enterable, with stairs, lifts and seats. They fill up at their own times: services in the morning and evening, weddings, and council sessions in the town hall's chamber. Visit at different hours and you will find different people there.</p>
+<figure><img loading="lazy" src="jpg/14-townhall-inside.jpg"><figcaption>The town hall's council chamber.</figcaption></figure>
+<h2>Other interiors</h2>
+<ul>
+  <li><b>Arcades.</b> Big halls full of cabinets, and every cabinet is a real game you can play: an asteroid shooter, falling blocks, space invaders, snake, brick breaker and paddle ball. Walk up to a cabinet and press <kbd>E</kbd>.</li>
+  <li><b>Clothes shops.</b> Step in front of the fitting mirror to change your outfit.</li>
+  <li><b>Marvels.</b> At least one marvel has an interior worth seeing.</li>
+  <li><b>Cemeteries.</b> Quiet places in the day. Less so at night.</li>
+</ul>
+<figure class="half"><img loading="lazy" src="jpg/33-arcade.jpg"><figcaption>An arcade. Every cabinet is playable.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/43-cemetery.jpg"><figcaption>A cemetery at the edge of town.</figcaption></figure>
+
+<h1 id="ch8">8. Underground</h1>
+<h2>The metro</h2>
+<figure><img loading="lazy" src="jpg/30-metro.jpg"><figcaption>A metro platform. Trains run on schedule and commuters ride them.</figcaption></figure>
+<p>Bigger cities have a metro. Take the stairs down at a station entrance, wait on the platform with the commuters, and ride the train across town.</p>
+<h2>The sewers</h2>
+<p>Lift a manhole cover with <kbd>E</kbd> and climb down. The sewers run under the streets: tunnels with rats, pump and machine halls, twisting side rooms, and here and there a hideout that someone has made their own. Hideouts are guarded, and what is stashed in them matters to the organisation that owns it.</p>
+<figure><img loading="lazy" src="jpg/31-hideout.jpg"><figcaption>A hideout in the sewers, with its owners' tags on the walls.</figcaption></figure>
+<h2>Deeper still</h2>
+<p>The sewers are not the bottom. Persistent explorers who dig or find the right way down will discover that the city has neighbours nobody up top knows about, and that they have troubles of their own. That is all this manual will say.</p>
+<figure><img loading="lazy" src="jpg/32-slime-gardens.jpg"><figcaption>Somewhere far below the streets.</figcaption></figure>
+
+<h1 id="ch9">9. A living city</h1>
+<h2>People</h2>
+<p>Everyone you meet is a person: they have a name, a home, a job and a personality. They walk to work, sit on benches, go shopping and go to bed. They notice what you do, they remember you, and they talk about you. Some are brave, some are timid, some are grumpy, some will ask you for an autograph.</p>
+<figure><img loading="lazy" src="jpg/40-talk.jpg"><figcaption>Walk up to someone and press <kbd>E</kbd> to talk.</figcaption></figure>
+<h2>Talking and favours</h2>
+<p>Press <kbd>E</kbd> near someone to start a conversation, and answer with the number keys. People will chat about the weather, the neighbourhood, the news and what they think of you. Many have needs of their own, and some will ask you a <b>favour</b>. People with a favour to ask show up as <b>golden dots</b> on the map. Helping them earns karma, and they will not forget it. People also know each other: help someone and their friends may hear about it.</p>
+<h2>Street life</h2>
+<p>The streets are full of characters: buskers and mimes, jugglers and dancers, a living statue, a doomsayer, a man in a chicken suit, a conspiracy theorist, the pigeon lady, joggers, a lost tourist who needs directions, and on certain nights a sleepwalker. There are small good deeds everywhere: a cat stuck up a tree, a runaway dog, a lost wallet to return.</p>
+<figure><img loading="lazy" src="jpg/44-performers.jpg"><figcaption>Street performers carry on even after a rough day.</figcaption></figure>
+<h2>News and neighbourhoods</h2>
+<p>The city has a pulse. Every neighbourhood has a name and a crime level, and the police patrol where they are needed. What you do changes it: clean up a rough district and it gets safer; neglect it and it gets worse. News travels: passers-by gossip about what just happened, and billboards and screens report the big events.</p>
+
+<h1 id="ch10">10. Crime on the street</h1>
+<p>Crime happens all the time, all over the city. You do not have to look for it; listen for shouts and watch the map.</p>
+<ul>
+  <li><b>Bag snatches and muggings.</b> Quick and personal. Catch the thief and return what was stolen.</li>
+  <li><b>Robberies.</b> Shops and banks. Some robbers carry guns.</li>
+  <li><b>The bomber.</b> Occasionally someone plants a bomb. You do not have long.</li>
+  <li><b>Organised crime.</b> Most serious trouble comes from the six organisations described in the next chapter.</li>
+</ul>
+<p>Stopping a crime earns karma and reputation. Knocking criminals down is fine; flattening bystanders, cars and buildings is not. If you do get the police on your back, you can stand still and press <kbd>E</kbd> to turn yourself in.</p>
+<figure><img loading="lazy" src="jpg/41-collapse.jpg"><figcaption>When things go wrong: a collapsed building, a reputation penalty, and wanted stars.</figcaption></figure>
+
+<h1 id="ch11">11. The six organisations</h1>
+<p>Every city is carved up between six criminal organisations. Their names, colours and leaders are different in every city, but their nature is always the same. Each one holds <b>turf</b> (visible on the map), runs <b>operations</b> in its own style, keeps a <b>stash</b> somewhere, has <b>lieutenants</b> who lead the dangerous jobs, and answers to a single <b>boss</b>.</p>
+<table class="groups">
+<tr><th>Organisation</th><th>What to expect</th></tr>
+<tr><td>The street gang</td><td>Loud, numerous and territorial. Tagging walls, shaking down shops, and turf wars with the neighbours. Their lieutenant is a Brute; their boss is the Kingpin.</td></tr>
+<tr><td>The syndicate</td><td>Suits, money and protection rackets, with a respectable front. Their lieutenant is an Enforcer; their boss is the Chairman, and the Chairman thinks big.</td></tr>
+<tr><td>The techno-cult</td><td>They believe in machines, and machines answer. Expect robots that do not behave as they should. Their lieutenant is a Technomancer; their boss is the Architect.</td></tr>
+<tr><td>The elemental cult</td><td>Robes, chanting circles and fire. Their rituals are not just for show. Their lieutenant is an Invoker; their boss is the High Invoker.</td></tr>
+<tr><td>The eco-radicals</td><td>They want the city given back to nature, and they have friends with four legs and roots. Their lieutenant is a Beast-master; their boss is the Elder.</td></tr>
+<tr><td>The necromancers</td><td>Graveyards, lanterns, processions at dusk. What they raise does not stay down by itself. Their lieutenant is a Bone-caller; their boss is the Grave Lord.</td></tr>
+</table>
+<figure class="half"><img loading="lazy" src="jpg/20-ritual.jpg"><figcaption>An elemental cult ritual in a city square.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/21-necro.jpg"><figcaption>Necromancers gather at dusk.</figcaption></figure>
+<figure><img loading="lazy" src="jpg/22-eco.jpg"><figcaption>Eco-radicals singing to a tree, guarded by their dogs.</figcaption></figure>
+<h2>Notoriety, bosses and taking them down</h2>
+<p>Every organisation keeps score. Beat their people and spoil their plans, and they take notice of you: their <b>notoriety</b> with you rises, and they start sending tougher crews. Push far enough and the <b>boss</b> steps out of the shadows to run one great operation of their own, each one a city-wide event in its organisation's style. Defeat a boss and they go to jail.</p>
+<p>Jail does not always hold. Bosses have been known to break out. An organisation only truly falls when its boss is behind bars <i>and</i> its stash has been found and busted. When that happens, its turf opens up, and the other organisations will be happy to move in.</p>
+
+<h1 id="ch12">12. Big threats and the army</h1>
+<p>Every so often something happens that the police cannot handle. These are the big threats:</p>
+<ul>
+  <li><b>The Strider.</b> A creature forty metres tall that rises out of the water and walks into the city.</li>
+  <li><b>The swarm.</b> A brood of creatures that spreads through the streets.</li>
+  <li><b>Robot malfunction.</b> Machines that stop taking orders.</li>
+  <li><b>The awakened tree.</b> Something old and green that has decided to move.</li>
+</ul>
+<figure><img loading="lazy" src="jpg/24-strider.jpg"><figcaption>The Strider coming out of the river.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/23-tree.jpg"><figcaption>The awakened tree.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/26-swarm-frost.jpg"><figcaption>A frost nova against the swarm.</figcaption></figure>
+<h2>The army</h2>
+<p>When a big threat appears, the army moves in with soldiers, vehicles and helicopters. You can fight alongside them, or lead them: press <kbd>G</kbd> to rally the troops to you, and <kbd>T</kbd> to call an airstrike on your target. If all else fails, the army has a last resort. You will see the countdown, and you will want to finish the fight before it reaches zero.</p>
+<figure><img loading="lazy" src="jpg/25-army.jpg"><figcaption>Soldiers and a helicopter taking on the Strider.</figcaption></figure>
+<h2>Afterwards</h2>
+<p>A big fight leaves its mark. People are trapped under rubble and need digging out, a triage tent goes up for the wounded, the city counts its casualties, and memorials appear for those who were lost. The remains of what you fought may stay where they fell for a while.</p>
+
+<h1 id="ch13">13. Reputation and consequences</h1>
+<p>Karma is what you earn; <b>reputation</b> is what the city thinks of you. The two are separate. Saving people, stopping crimes and defeating threats raises your reputation. Hurting bystanders, wrecking cars and bringing buildings down lowers it. Accidents caused by falling rubble or monsters are not counted against you, but collapses you started are.</p>
+<table>
+<tr><th style="width:30%">Reputation</th><th>What happens</th></tr>
+<tr><td>High</td><td>Fans ask for autographs, press photographers follow you, a TV crew turns up at your fights. Become a true hero and the city may even put up a statue of you.</td></tr>
+<tr><td>Around zero</td><td>People do not quite know what to make of you.</td></tr>
+<tr><td>Low</td><td>Protesters with signs, people who keep their distance, and a police force that gets more and more serious. Very low, and the army may come for <i>you</i>.</td></tr>
+</table>
+<p>When you cause harm, wanted stars appear. The more stars, the heavier the response. Turning yourself in with <kbd>E</kbd> ends a chase at once.</p>
+
+<h1 id="ch14">14. When you go down</h1>
+<p>Heroes get hurt. When your health runs out, what happens next depends on what the city thinks of you.</p>
+<ul>
+  <li><b>Reputation zero or better:</b> rescue drones fly in, lift you up and carry you to a hospital. You wake up in the revival ward and walk back out into the city.</li>
+  <li><b>Negative reputation:</b> nobody comes. The game is over, and you load your last save.</li>
+</ul>
+<figure class="half"><img loading="lazy" src="jpg/45-rescue.jpg"><figcaption>Rescue drones on their way.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/46-ward.jpg"><figcaption>Waking up in the hospital's revival ward.</figcaption></figure>
+<div class="tip"><b>Ordinary people fall too.</b> Knocked-down people can be helped back up with <kbd>E</kbd>. Doing so is quick, kind, and counts as a good deed.</div>
+
+<h1 id="ch15">15. Saving, settings and the rest</h1>
+<h2>Saving</h2>
+<p>The game saves automatically. In the pause menu (<kbd>Esc</kbd>) you can also make named saves, load them, and save to or load from a file on your computer, which is handy for backups or moving to another device. Saves keep your hero, your powers and your progress.</p>
+<h2>Settings</h2>
+<p>The pause menu (<kbd>Esc</kbd>) holds the settings: time speed and time of day, the weather, volume, music and a detailed sound mix, graphics level and render scale, how often street crime happens (off, calm, normal, chaos) and how often the city is hit by big events. <b>Auto</b> graphics adapts to your machine while you play; if the game still runs slowly, a smaller city helps the most.</p>
+<h2>Sound</h2>
+<p>The city sounds alive: traffic, footsteps, chatter, sirens, music, and a soundtrack that follows the mood. Listen; a scream in the distance is often the first sign of trouble.</p>
+<h2>Feedback</h2>
+<p>Found a bug or have an idea? The pause menu has a feedback link that sends your message straight to the developer.</p>
+
+<h1 id="ch16">16. Tips for new heroes</h1>
+<ul>
+  <li>In Normal mode, the first powers come quickly. Small good deeds add up: help people up, return wallets, rescue cats.</li>
+  <li>Look at the map often. Golden dots are favours, and the turf colours tell you whose territory you are standing in.</li>
+  <li>Talk to people. They will tell you about the neighbourhood, the news and sometimes things you could not have found yourself.</li>
+  <li>Power is dangerous in a crowded street. A precise punch is often better than a big explosion.</li>
+  <li>Keep your reputation above zero. It is the difference between a hospital bed and a game over.</li>
+  <li>Visit landmarks at different times of day. Something different is always going on inside.</li>
+  <li>Bosses only come out when their organisation takes you seriously. Earn their attention first.</li>
+  <li>When a big threat appears, rally the army with <kbd>G</kbd>. You are stronger together.</li>
+  <li>Not every secret is on the map. Some of the best things in this city are below it.</li>
+</ul>
+<p style="margin-top:14pt; text-align:center; color:#666">Have fun, and look after your city.</p>
+</body></html>
