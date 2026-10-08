@@ -90,7 +90,7 @@ export class Snatch extends Crime {
           // Confronted: fight, flee or give up.
           if (this.distToPlayer(th) < 3.2 && act.hitByPlayer) {
             // Decide again after every blow taken.
-            if (act.memo.decHp !== act.hp) { act.memo.decHp = act.hp; const d = this.decide(th); act.memo.choice = d === 'surrender' ? 2 : d === 'fight' ? 1 : 0; }
+            this.rethink(th);
             if (act.memo.choice === 2) { this.surrender(th); break; }
             if (act.memo.choice === 1) { this.fight(th, dt); break; }
           }

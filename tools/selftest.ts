@@ -3704,6 +3704,17 @@ aliensChecks(check);
   check(copies.length === 0, `helpers: no local copies of core/math, ui/esc or render/color (${copies.join(', ') || 'none'})`);
 }
 
+// Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
+// BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
+{
+  const own: string[] = [];
+  for (const f of readdirSync('src/game/crime')) {
+    if (f === 'Crime.ts' || !f.endsWith('.ts')) continue;
+    if (/memo\.decHp !== \w+\.hp\)\s*\{/.test(readFileSync(`src/game/crime/${f}`, 'utf8'))) own.push(f);
+  }
+  check(own.length === 0, `crime: decisions go through Crime.rethink (${own.join(', ') || 'none'})`);
+}
+
 // Geometry has one home too: src/core/geom2.ts (polygons, polylines) and src/core/math.ts (angles, vectors).
 // Name checks can't catch a copy under a new name, so this asks the repeated-code finder (npm run repeated)
 // for function bodies elsewhere that are near-identical (>= 0.9) to one in those two files.

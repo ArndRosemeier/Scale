@@ -190,15 +190,8 @@ export class Procession extends Crime {
       la.action = null;
     }
     if (subdued(la) || la.state === 'down') return true;
-    if (la.memo.decHp !== la.hp) {
-      la.memo.decHp = la.hp;
-      const d = this.decide(L);
-      la.memo.choice = d === 'surrender' ? 2 : d === 'fight' ? 1 : 0;
-      if (la.memo.choice === 1) this.emit('fight', L);
-    }
-    if (la.memo.choice === 2) { if (la.state !== 'surrender') this.surrender(L); return true; }
-    if (la.memo.choice === 1 && this.distToPlayer(L) < 25) this.fight(L, dt);
-    else { la.memo.panic = 4; this.flee(L, dt); }
+    this.rethink(L);
+    this.actOnChoice(L, dt);
     return true;
   }
 

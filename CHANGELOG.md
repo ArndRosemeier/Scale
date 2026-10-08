@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.141 — 2026-10-08
+
+- **Behind the scenes: crooks make up their minds in one place.** Every crime (muggers, taggers, robbers, gangs, cults, the den, the bomber, the procession, the snatcher) had its own copy of "after each blow: fight, run or give up"; they now share one, each keeping its own rule (the tagger runs first, a guard defends the door, …). Nothing changes in play; a self-test fails if a crime grows its own copy again.
+
 ## 0.140 — 2026-10-08
 
 - **Shift+F11: shader counter.** A small box at the top (off by default) shows how many shaders were compiled in the last 10 seconds, the shader cap, and the longest frame, in WebGL and WebGPU.
