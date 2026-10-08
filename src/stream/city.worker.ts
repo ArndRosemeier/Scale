@@ -105,8 +105,8 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
     if (m.type === 'rural') {
       const t = buildRuralTile(land!.settle!, terrain, m.x0, m.z0, m.size);
       const ground = t.ground?.build() ?? null, facade = t.facade?.build() ?? null, facadeLod = t.facadeLod?.build() ?? null;
-      const transfer = [...(ground ? meshTransferables(ground) : []), ...(facade ? meshTransferables(facade) : []), ...(facadeLod ? meshTransferables(facadeLod) : []), t.obstacles.buffer];
-      post({ type: 'rural', job: m.job, ground, facade, facadeLod, obstacles: t.obstacles }, transfer as Transferable[]);
+      const transfer = [...(ground ? meshTransferables(ground) : []), ...(facade ? meshTransferables(facade) : []), ...(facadeLod ? meshTransferables(facadeLod) : []), t.obstacles.buffer, t.surfaces.buffer];
+      post({ type: 'rural', job: m.job, ground, facade, facadeLod, obstacles: t.obstacles, surfaces: t.surfaces }, transfer as Transferable[]);
       return;
     }
     if (m.type === 'skyline') {
