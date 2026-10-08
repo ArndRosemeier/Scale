@@ -65,6 +65,11 @@ How the GLSL materials are ported for `?gpu=webgpu` (see WEBGPU_PLAN.md). Worked
   `.toVar('name')` once, read with `.get('field')` (see facade.ts).
 - `Fn` with a layout (`{ a: 'float', return: 'vec3' }`) becomes a real function; without one it is
   inlined. Loops: `Loop(n, ({ i }) => ...)`, `Break()`.
+- **At most 8 vertex buffers per pipeline.** Every separate attribute is one buffer, plus one for
+  the instance matrix of a large InstancedMesh. Over 8 the pipeline fails (`Vertex buffer count (9)
+  exceeds…`) and the mesh is never drawn; `watchVertexBuffers` warns `[webgpu] N vertex buffers`.
+  Put per-vertex attributes into one `InterleavedBuffer` (street furniture's aMat/aEmit/aSub/aColor
+  in props/furniture.ts: 9–11 buffers before, 6–7 now).
 - An `InstancedBufferGeometry` must have a finite `instanceCount` (default Infinity breaks WebGPU).
 - Integer / uint math: `int()`, `uint()`, `.shiftRight`, `.bitXor`, `.mod` (see parcel hashes in ground.ts).
 - `ShaderMaterial`/`RawShaderMaterial`/`onBeforeCompile` are ignored by the WebGPU renderer (it
@@ -128,7 +133,9 @@ Pipelines that compileAsync did not build ahead (the shadow passes, which it doe
 whatever first shows up in a frame) were created blocking while drawing. `asyncDrawPipelines`
 (webgpu/index.ts) creates them async: three skips an object until its pipeline is ready, so a mesh or
 its shadow appears a few frames later instead of the frame stalling (internal:
-`_pipelines.updateForRender`; `&syncpipes` turns it off).
+`_pipelines.updateForRender`; `&syncpipes` turns it off). At most six compile at once
+(`MAX_DRAW_PIPES`): unthrottled, over a hundred were in flight during loading and the warm-up's own
+compiles got slower; an object without a pipeline waits for a later frame while the limit is reached.
 
 Warm-up stand-ins must have the real vertex layout: on WebGPU a missing attribute makes another
 shader and pipeline (and the "Vertex attribute not found" warning), so a stand-in box warms nothing

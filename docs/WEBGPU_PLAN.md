@@ -173,3 +173,8 @@ Ordered by how much of the screen they cover (port first what is always visible)
   queries, `trackTimestamp`; WebGpuTimer in Graphics.ts). SwiftShader reports 0 (ignored, the
   frame-time heuristic stays), so the values still need a look on the PC.
 
+- 2026-10-08 (4): PC check of the above: visuals identical, the GPU timer works (~4.3 ms/frame,
+  auto stepped High → Ultra), but loading 74–80 s vs WebGL 54 s (compile 13.3 s vs 8.8 s before;
+  103 draw-time pipelines in flight at once). Street furniture had 9–11 vertex buffers on WebGPU
+  (limit 8), so its pipelines failed and benches, lamps, bins were never drawn; the material
+  attributes are interleaved now. Draw-time async pipelines limited to 6 at once.

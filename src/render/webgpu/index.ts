@@ -54,8 +54,16 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   asyncDrawPipelines(renderer);
 }
 
-/** Where pipelines created while drawing put their (unused) promises, see asyncDrawPipelines. */
-const drawSink = { push(): void { /* nobody waits for these */ } };
+/** Draw-time pipelines compiling at most at once, see asyncDrawPipelines. */
+const MAX_DRAW_PIPES = 6;
+let drawPipesInFlight = 0;
+/** Where pipelines created while drawing put their promises (nobody waits; only counted). */
+const drawSink = {
+  push(p: Promise<unknown>): void {
+    drawPipesInFlight++;
+    void p.finally(() => drawPipesInFlight--);
+  },
+};
 
 /**
  * A pipeline that compileAsync did not build ahead (shadow passes, which compileAsync does not
@@ -73,7 +81,11 @@ function asyncDrawPipelines(renderer: THREE.WebGPURenderer): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pipelines = (renderer as any)._pipelines;
   if (typeof pipelines?.updateForRender !== 'function' || typeof pipelines.getForRender !== 'function') return;
-  pipelines.updateForRender = function (this: { getForRender(ro: unknown, p: unknown): unknown }, renderObject: unknown) {
+  // (At most MAX_DRAW_PIPES compiling: a hundred at once during loading slowed everything else
+  // down. Over the limit, an object without any pipeline yet just waits for a later frame; one that
+  // has a pipeline is always updated, so it never draws with an outdated one.)
+  pipelines.updateForRender = function (this: { get(ro: unknown): { pipeline?: unknown }; getForRender(ro: unknown, p: unknown): unknown }, renderObject: unknown) {
+    if (drawPipesInFlight >= MAX_DRAW_PIPES && this.get(renderObject).pipeline === undefined) return;
     this.getForRender(renderObject, drawSink);
   };
 }
