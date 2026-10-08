@@ -89,6 +89,11 @@ export class Glyphs {
     this.list.push({ mesh, mat, base: colour.clone(), t: 0, drawT, until: drawT + secs, flick: seed % 13 });
   }
 
+  /** A glyph already within r (m) of a point. */
+  near(x: number, y: number, z: number, r: number): boolean {
+    return this.list.some((g) => { const p = g.mesh.position; return Math.hypot(p.x - x, p.y - y, p.z - z) < r; });
+  }
+
   /** How many are glowing now. */
   get count(): number { return this.list.length; }
 
