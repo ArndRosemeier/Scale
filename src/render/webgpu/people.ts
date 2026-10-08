@@ -32,6 +32,7 @@ import { sharedGraph as shareGraph, type Values } from './sharedGraph';
 import {
   h_hash12, h_noise2, h_noise3, h_fbm2, h_fbm3, h_voronoi2, h_voronoi3, h_beardCoverage, h_scalpCoverage, h_brow, h_eyeMask, h_bumpNormal,
 } from './peopleNoise';
+import { srgbColor as lin } from '../color';
 
 /** People of a kind share one shader (see sharedGraph); each gets its own sky value. */
 function sharedGraph<M extends THREE.NodeMaterial>(key: string, values: Values, params: Record<string, unknown>, build: (P: (name: string) => unknown) => M): { material: M; sky: SkyVisPatch } {
@@ -450,7 +451,6 @@ export interface GarmentNodeUniforms {
 }
 
 export function createGarmentNodeMaterial(m: ShellMaterial, u: GarmentNodeUniforms): GarmentHandle {
-  const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   return sharedGraph('garment', u, {
     roughness: m.roughness,
     sheen: m.sheen,

@@ -11,11 +11,12 @@ import * as THREE from 'three';
 import type { ItemVisual } from '../../items/types';
 import type { RigidPart, WearableSpec, BodyFit, BodyRegion, Socket } from '../../items/wearable';
 import { PLACARDS, FAN_SIGNS, FAN_SIGNS_FROM } from './placards';
+import { srgbColor } from '../../render/color';
 
 type C3 = [number, number, number];
 
 const std = (c: C3, rough = 0.8, metal = 0): THREE.MeshStandardMaterial =>
-  new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...c, THREE.SRGBColorSpace), roughness: rough, metalness: metal });
+  new THREE.MeshStandardMaterial({ color: srgbColor(c), roughness: rough, metalness: metal });
 
 const rigid = (socket: RigidPart['socket'], build: (fit: BodyFit) => THREE.Object3D): RigidPart => ({ kind: 'rigid', socket, build });
 
@@ -188,7 +189,7 @@ function chickenHead(fit: BodyFit, c: C3): THREE.Object3D {
 
 const lit = (c: C3, k: number): THREE.MeshStandardMaterial => {
   const m = std([c[0] * 0.3, c[1] * 0.3, c[2] * 0.3], 0.4);
-  m.emissive = new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+  m.emissive = srgbColor(c);
   m.emissiveIntensity = k;
   return m;
 };

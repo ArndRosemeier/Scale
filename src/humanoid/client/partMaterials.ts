@@ -10,14 +10,13 @@ import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
 import { GLSL_NOISE } from './glsl';
 import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import { strandTexture, leafTexture } from './textures';
+import { srgbColor as lin } from '../../render/color';
 
 export interface PatchedMaterial<U = Record<string, { value: unknown }>> {
   material: THREE.Material;
   uniforms: U;
   sky: SkyVisPatch;
 }
-
-const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
 
 // ------------------------------------------------------------------ eyes
 
