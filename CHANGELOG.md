@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.155 — 2026-10-08
+
+- **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line.
+
 ## 0.154 — 2026-10-08
 
 - **Tab only offers what your powers can actually reach.** The Tab list, the click pick and the fire wave each checked line of sight their own way: they ignored cars and holes blasted in walls, so Tab could lock onto someone behind a bus that the power then refused to hit. Now they all use the same line of sight as the powers and every shooter. People behind cars are no longer offered, targets behind a blasted-open wall are, and the fire wave no longer burns through parked cars. Also fixed: shooters and powers could fire through the solid parts of landmarks (town hall, stadium, attractions); those now block the line.

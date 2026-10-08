@@ -466,6 +466,8 @@ function garmentGraph(P: (name: string) => unknown) {
   const vGEdge = attribute('aEdge', 'float');
 
   const garmentEval = Fn(() => {
+    // aEdge: distance (m) inside the hem's smooth cut line; the body triangles' teeth beyond it go.
+    If(vGEdge.lessThan(0.0), () => { Discard(); });
     const vGBind = positionGeometry.toVar();
     const vGNrm = normalGeometry.toVar();
     const id = gParams.x.toVar();
@@ -484,7 +486,7 @@ function garmentGraph(P: (name: string) => unknown) {
     c.assign(mix(c, c.mul(vec3(0.55, 0.5, 0.42)), dirt.mul(0.6).mul(smoothstep(0.35, 0.7, h_fbm3(vGBind.mul(9.0))))));
     c.assign(mix(c, c.mul(1.15).add(0.03), wear.mul(0.3).mul(smoothstep(0.6, 0.8, h_noise3(vGBind.mul(25.0))))));
     // Trim along the garment edges.
-    const trim = smoothstep(0.35, 0.75, vGEdge).toVar();
+    const trim = smoothstep(0.35, 0.75, sub(1.0, smoothstep(0.004, 0.012, vGEdge))).toVar();
     c.assign(mix(c, gTrim, trim));
     const h = a.y.mul(sub(1.0, trim)).add(trim.mul(0.0006));
     const e = select(a.w.lessThan(-0.5), gGlow.mul(a.x).mul(3.0), vec3(0.0)).toVar();
