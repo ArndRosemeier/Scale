@@ -61,6 +61,7 @@ export class Sight {
     this.los = new LineOfSight({
       building: (x, z) => g.world.buildingAt(x, z),
       ground: (x, z) => g.terrain.height(x, z),
+      solid: (x, y, z) => !!g.world.landmarks?.hit(x, y, z),
       panel: (b, ox, oy, oz, dx, dy, dz, tMin, maxT) => g.targeting.facadeT(b as BuildingRef, ox, oy, oz, dx, dy, dz, tMin, maxT),
       cars: (x0, z0, x1, z1, out) => this.cars(x0, z0, x1, z1, out),
     });
