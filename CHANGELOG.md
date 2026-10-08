@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.147 — 2026-10-08
+
+- **Three new single-target powers (new "Energy" group).** They hit only the one they are aimed at: no fire, no bystanders, nothing broken on the way.
+  - **Phase pulse** (tap, 20 energy): passes through walls, cars and people to your target, even one that ducked out of sight a moment ago. Weaker than the laser and short-ranged (25–60 m). Never between the street and the sewers.
+  - **Focus beam** (hold, then let go): gathers a beam behind your eyes for up to 1.5 s (the charge bar fills), then one heavy shot. 15 energy on the press, up to 45 at a full charge; a shot that cannot go off gives the energy back. Best against monsters' weak spots.
+  - **Seeker orb** (tap, 30 energy): a ball of energy that flies round corners and over buildings to its target and bursts only on it. Needs a target.
+- **Friend/foe sense, bought per power.** Laser eyes, shockwave, fire wave, fireball, frost nova, chain lightning, seismic stomp, whirlwind and hydrokinesis each offer it on the powers screen, for the price of that power's first rank. With it, the power harms nothing that would cost you reputation: only criminals still in the fight, monsters and rogue machines are hit; bystanders, police, cars, props and buildings are left alone (the laser beam passes through people in the way, chain lightning only jumps to foes). A giant loses the sense: above normal size every power hits everything again. In the sandbox it is a free switch.
+
 ## 0.146 — 2026-10-08
 
 - **Behind the scenes: one "is this person underground?" question.** Two dozen places asked it by hand (crimes, threats, wardens, saves, markers, the manhole prompt); they now ask the underground system the same way. Nothing changes in play; a self-test keeps it that way.
