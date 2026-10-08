@@ -176,14 +176,22 @@ function countNodeBuilds(renderer: THREE.WebGPURenderer): void {
   (window as unknown as { nodeBuilds: typeof nodeBuilds }).nodeBuilds = nodeBuilds;
   if (!log) return;
   const gpu = timeGpuCompiles();
-  let frames = 0;
-  const tick = (): void => { frames++; requestAnimationFrame(tick); };
+  // (Hitches: frames over 50 ms, and the longest one, to see stutter while playing.)
+  let frames = 0, hitches = 0, worst = 0, last = 0;
+  const tick = (t: number): void => {
+    frames++;
+    const d = last ? t - last : 0;
+    last = t;
+    if (d > 50) hitches++;
+    worst = Math.max(worst, d);
+    requestAnimationFrame(tick);
+  };
   requestAnimationFrame(tick);
   setInterval(() => {
     const top = [...log].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${n} ${k}`).join('; ');
-    console.log(`[buildlog] ${(performance.now() / 1000).toFixed(0)} s, ${(frames / 10).toFixed(1)} fps, ${nodeBuilds.count} builds; ${gpu()}; last 10 s: ${top || 'none'}`);
+    console.log(`[buildlog] ${(performance.now() / 1000).toFixed(0)} s, ${(frames / 10).toFixed(1)} fps, ${hitches} hitches > 50 ms (worst ${worst.toFixed(0)} ms), ${nodeBuilds.count} builds; ${gpu()}; last 10 s: ${top || 'none'}`);
     log.clear();
-    frames = 0;
+    frames = hitches = worst = 0;
   }, 10000);
 }
 
