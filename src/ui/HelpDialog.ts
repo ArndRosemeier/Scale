@@ -128,12 +128,12 @@ export class HelpDialog {
     const state = this.waiting
       ? 'Press the new key · <b>Esc</b> cancels · <b>Backspace</b> clears this key'
       : this.notice || 'Click a key to change it. Each action can have two keys. Your keys are kept in this browser.';
-    this.body.keys.innerHTML = `${touch}
-      <div class="hk-grid">${groups}${fixed}</div>
+    this.body.keys.innerHTML = `
       <div class="help-foot">
         <span class="hk-state">${state}</span>
         <button type="button" class="hk-reset" ${isDefaultBinding() ? 'disabled' : ''}>Reset to defaults</button>
-      </div>
+      </div>${touch}
+      <div class="hk-grid">${groups}${fixed}</div>
       <p class="sub">Normal mode: help people to earn karma and buy powers with ${keyLabel('powers') || 'the powers screen'}. Everything can be destroyed. People live their own days, and they notice what you do.</p>`;
     for (const b of this.body.keys.querySelectorAll<HTMLButtonElement>('button.hk')) {
       b.onclick = (e) => {

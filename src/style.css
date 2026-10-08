@@ -75,6 +75,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 #help td { padding: 5px 4px; border-bottom: 1px solid #222b36; color: #c8d2dc; vertical-align: top; }
 #help td.k { color: #d8b56a; white-space: nowrap; width: 34%; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 .hk-touch { margin-bottom: 14px; }
+.help-body[data-tab="keys"] > .help-foot { position: sticky; top: -16px; z-index: 1; margin: -16px -20px 14px; padding: 10px 20px; background: rgba(20, 26, 34, 0.98); border-bottom: 1px solid #243040; }
 .hk-touch h3 + table { margin-bottom: 18px; }
 .hk-grid { columns: 2 380px; column-gap: 18px; }
 .hk-group { break-inside: avoid; margin: 0 0 16px; padding: 12px 14px 8px; background: rgba(12, 16, 22, 0.55); border: 1px solid #243040; border-radius: 9px; }
@@ -89,7 +90,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 .hk.wait { color: #1a1408; background: #d8b56a; border-color: #d8b56a; animation: hk-pulse 0.9s ease-in-out infinite alternate; }
 @keyframes hk-pulse { from { opacity: 1; } to { opacity: 0.6; } }
 .hk.fixed { display: inline-block; cursor: default; color: #b9c4cf; border-style: dashed; min-width: 0; }
-.help-foot { display: flex; align-items: center; gap: 14px; padding-top: 4px; font-size: 13px; color: #b8c4d0; }
+.help-foot { display: flex; align-items: center; gap: 14px; font-size: 13px; color: #b8c4d0; }
 .help-foot .hk-state { flex: 1; }
 .help-foot .hk-state b { color: #d8b56a; }
 .help-foot button, .help-foot a { background: #0f141a; color: #e8ecf0; border: 1px solid #34414f; border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; text-decoration: none; white-space: nowrap; }
