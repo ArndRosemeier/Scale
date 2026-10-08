@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.129 — 2026-10-08
+
+- **The runaway saucer is fairer.** It now always comes down over a street lined with houses instead of over a park, where the Nannies used to spot it before its first prank. Joyriding on its own it slips across open stretches and through the discs' scan cones unnoticed, and it only bolts when you actually come at it, not when you just stand there. Once it is hurt or on the run, open sky or a cone gives it away, so chasing it into a cone works. Knock out a pod and it bolts for the tallest streets nearby: roofs tall enough still hide it, low ones give it away, and with every pod lost fewer streets are tall enough. The third pod pops it up over any roof.
+- **Brighter and clearer up close.** The rim lights now glow in strong magenta, green, yellow and blue with a soft halo, by day and at night, and the pods no longer turn white after dark. The hull is visibly battered, with dents, scorch streaks and riveted patch plates. The two kids in the dome have bigger heads with glowing eyes. Glyphs go only on walls without a street tree in front and never on top of one another, the kids don't play the same trick twice in a row, glyphs are easier to see by day and take a little longer to draw, and a column of light now joins the parent disc to the bubble it lifts the saucer in.
+
 ## 0.128 — 2026-10-08
 
 - **Reputation has no upper limit any more.** It used to stop at +100; now every good deed keeps counting, however famous you already are. Past +150 the city calls you a *Living legend*. Everything that reacts to your reputation (cheering crowds, the press, fans, the statue, what strangers think of you) works as before and is at full strength from +100 on. The bottom stays at −100. Saves keep reputation above 100.
