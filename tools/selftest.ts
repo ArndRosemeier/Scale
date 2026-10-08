@@ -8,6 +8,7 @@
  * cities, its own state), so sections can run in any order and in any process.
  */
 import { section, check, runSections } from './testHarness';
+import { buildSkyline, BOX_FLOATS, ORBIT_R } from '../src/ui/backdrop/layout';
 import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
@@ -4019,6 +4020,27 @@ section('brush vs stomp', async () => {
   check(stompDownCause('player', 1.8) === 'brush' && stompDownCause(undefined, 1.8) === 'brush', 'brush: a human-size hero landing beside someone is a brush');
   check(stompDownCause('player', BRUSH_MAX_H + 1) === 'player', 'brush: a giant hero landing on someone is the hero\'s');
   check(stompDownCause('threat', 1.8) === 'threat' && stompDownCause('world', 1.8) === 'other', 'brush: other stompers keep their cause');
+});
+
+// The start screen's skyline: same seed, same city; nothing on the camera's ring reaches its flight
+// height (the camera circles at ORBIT_R ± 40 m, never lower than 110 m); built in a few milliseconds.
+section('start screen skyline', async () => {
+  for (const seed of [1, 42, 777, 123456]) {
+    const t0 = performance.now();
+    const a = buildSkyline(seed);
+    const ms = performance.now() - t0;
+    const b = buildSkyline(seed);
+    check(a.boxes.length === b.boxes.length && a.boxes.every((v, i) => v === b.boxes[i]) && a.lights.every((v, i) => v === b.lights[i]), `skyline ${seed} deterministic`);
+    let worst = 0;
+    for (let i = 0; i < a.boxCount; i++) {
+      const o = i * BOX_FLOATS;
+      const r = Math.hypot(a.boxes[o], a.boxes[o + 1]);
+      if (Math.abs(r - ORBIT_R) < 60) worst = Math.max(worst, a.boxes[o + 4] + a.boxes[o + 5]);
+    }
+    check(worst < 100, `skyline ${seed}: roofs on the camera ring stay under 100 m (${worst.toFixed(0)} m)`);
+    check(a.boxCount > 1500 && a.boxCount < 12000 && a.top > 150, `skyline ${seed}: ${a.boxCount} boxes, tallest ${a.top.toFixed(0)} m`);
+    check(ms < 200, `skyline ${seed} built in ${ms.toFixed(1)} ms`);
+  }
 });
 
 await runSections(import.meta.url);

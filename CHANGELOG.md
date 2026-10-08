@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.167 — 2026-10-08
+
+- **A living start screen.** The old still picture behind the menu is gone: you now look over a city at dusk, gliding slowly round its downtown. Windows light up and go dark, cars stream through the streets, red beacons pulse on the tallest roofs, aircraft circle high up, and now and then a hero streaks past the skyline. The camera leans a little with the mouse. Every seed has its own skyline: type a new seed and the city fades over to it.
+- It is up within a moment of opening the page, before the game itself has finished loading: a small separate scene with four little shaders, made in a few milliseconds. It stops and frees the graphics card as soon as you enter the city, and pauses while the character creator is open. Without WebGL 2 the old picture is shown instead; with reduced motion switched on in the system the city stands still.
+
 ## 0.166 — 2026-10-08
 
 - **No more screams at every landing.** Travelling by super jump, each touchdown made the people round about take fright and scream (the long scream, several times a minute), with nobody hurt and nothing on the map. Now someone of human size landing hard only startles people: they flinch and turn to look. A giant or a monster coming down still makes them scream and run.

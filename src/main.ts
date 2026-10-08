@@ -1,8 +1,7 @@
 /**
- * Entry point: start menu (seed, size), loading screen, game.
+ * The game's entry (loaded by boot.ts): start menu (seed, size), loading screen, game.
  */
 import { loadGpuKit } from './render/gpuMode';
-import './style.css';
 import { Game } from './game/Game';
 import { parseSeed } from './core/rng';
 import { cityRadius, cityClass } from './world/settings';
@@ -23,6 +22,7 @@ import { manualLink } from './ui/Manual';
 import { MenuMusic } from './audio/music/MenuMusic';
 import { probeGpu, maybeShowGpuHint } from './ui/GpuHint';
 import { installTouchMode } from './ui/touch';
+import { menuSeedText, setBackdropSeed, startBackdrop, stopBackdrop } from './ui/backdrop/Backdrop';
 import './ui/touch.css';
 
 const params = new URLSearchParams(location.search);
@@ -38,7 +38,7 @@ const loading = document.getElementById('loading') as HTMLDivElement;
 const loadMsg = document.getElementById('loadMsg') as HTMLDivElement;
 const loadBar = document.getElementById('loadBar') as HTMLDivElement;
 
-seedIn.value = params.get('seed') ?? String(Math.floor(Math.random() * 1e6));
+seedIn.value = menuSeedText();
 sizeIn.value = params.get('size') ?? '0.35';
 
 function refresh(): void {
@@ -47,6 +47,7 @@ function refresh(): void {
   const cls = cityClass(size);
   sizeLabel.textContent = `${cls} · ${(r * 2 / 1000).toFixed(1)} km across`;
   nameLabel.textContent = cityName(parseSeed(seedIn.value));
+  setBackdropSeed(parseSeed(seedIn.value));
 }
 // Character picker (imported models persist in the browser).
 startBtn.before(new AvatarMenu(startBtn.parentElement as HTMLElement).el);
@@ -87,6 +88,7 @@ async function start(save: SaveData | null = null): Promise<void> {
   // (The load flag is dropped: a reload later starts from the menu, not from that old save again.)
   history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') || save ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}${params.has('mute') ? '&mute' : ''}${['intro', 'warm', 'gpu'].map((k) => (params.has(k) ? `&${k}${params.get(k) ? `=${params.get(k)}` : ''}` : '')).join('')}`);
   menu.style.display = 'none';
+  stopBackdrop();
   loading.style.display = 'flex';
   disposeCreatorPreview();
   // Character made in the creator (if one is selected): the player is built with its look.
@@ -142,7 +144,12 @@ function flash(text: string): void {
 async function startFromSave(id: string): Promise<void> {
   let d: SaveData | null = null;
   try { await saveStore.recover(); d = await saveStore.get(id); } catch (e) { console.warn('[saves]', e); }
-  if (!d) { flash('That saved game could not be read — choose a city to start a new game.'); menu.style.display = ''; return; }
+  if (!d) {
+    flash('That saved game could not be read — choose a city to start a new game.');
+    menu.style.display = '';
+    startBackdrop(menu.querySelector('.menu-bg') as HTMLElement, parseSeed(seedIn.value));
+    return;
+  }
   seedIn.value = String(d.city.seed);
   sizeIn.value = String(d.city.size);
   refresh();
