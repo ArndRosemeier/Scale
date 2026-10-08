@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.131 — 2026-10-08
+
+- **Your blows no longer reach through the pavement.** A stomp, blast, punch, dash or shove on the street used to knock down people in the sewer or the metro station right below you; now only those on your side of the street go down (and the other way round from below).
+- **Dashing into someone is booked once, with who it was.** A speed dash used to add a second, nameless entry to the record of what you broke, so knocking over a mugger could still count as hurting a bystander.
+- **New docs/CONVENTIONS.md:** the one helper to use for each common question (same side of the street, sight, screen position, the harm ledger), the start of the code-duplication clean-up.
 ## 0.130 — 2026-10-08
 
 - **WebGPU renderer (try it with `?gpu=webgpu`).** The game can now draw with WebGPU instead of WebGL. WebGL stays the default and is unchanged. On WebGPU the city, people, cars, trees, street furniture, sky, weather and effects look the same as on WebGL, and shaders are compiled in the background, so loading is close to WebGL (about 23 s vs 17 s on the test PC). It still stutters for a few seconds after loading and when new kinds of pedestrians appear, runs at about 42 fps where WebGL holds 60, and hero tights patterns and mask cut-outs still show as plain cloth there; those are next.

@@ -23,6 +23,8 @@ export class Reactions {
   private lastSeen = 0;
   private screamCooldown = 0;
   onScream?: (x: number, y: number, z: number, crowd: boolean) => void;
+  /** Same side of the pavement (Underground.sameSide, feet heights): a blast or footfall knocks down only those on its side. */
+  sameSide: (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => boolean = () => true;
   /**
    * After every knock-down (Combat applies damage and the collateral ledger from here; a
    * ragdoll system can take the body over). `power` is the fling speed (m/s).
@@ -79,8 +81,9 @@ export class Reactions {
             a.fear = Math.min(2, a.fear + prox * nerve * (s.kind === 'crash' ? 0.6 : 1.4));
             // Blast wave / falling debris knocks people down close by.
             const knock = s.kind === 'blast' ? s.radius * 0.12 : s.kind === 'collapse' ? Math.min(40, s.radius * 0.05) : 0;
-            // (Not from under their feet: a blast in a sewer shakes the pavement, it does not throw people off it.)
-            if (d < knock && s.y > a.y - 2) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? 'player' : 'collapse');
+            // (Not from under their feet, nor through the pavement: a blast in a sewer shakes the street, a street blast
+            // does not floor the station below.)
+            if (d < knock && s.y > a.y - 2 && this.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? 'player' : 'collapse');
             else this.flee(a, s.x, s.z);
             break;
           }
@@ -92,7 +95,7 @@ export class Reactions {
           case 'stomp':
             // By the size of whoever stepped (the player, a monster), booked to it.
             a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
-            if (d < Math.max(1.5, (s.size ?? H) * 0.12)) this.knockDown(a, s.x, s.z, 4, s.cause === 'threat' ? 'threat' : s.cause === 'world' ? 'other' : 'player');
+            if (d < Math.max(1.5, (s.size ?? H) * 0.12) && this.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.knockDown(a, s.x, s.z, 4, s.cause === 'threat' ? 'threat' : s.cause === 'world' ? 'other' : 'player');
             break;
           case 'roar':
             // A monster's roar: run (far off, the bold stop, turn and film it).
