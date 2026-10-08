@@ -4,7 +4,7 @@
  */
 import {
   MAX_RANK, PUNCH_IMPULSE, JUMP_HEIGHT, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE, SHOCK_COST,
-  FLIGHT_SPEED, FLIGHT_CRUISE, flightBoost, SIZE_RANGE, JUMP, DASH, SPEED_TOP,
+  FLIGHT_SPEED, FLIGHT_CRUISE, flightBoost, SIZE_RANGE, JUMP, LEAP_SPEED, DASH, SPEED_TOP,
   LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN,
   FIREBALL, FIREBALL_RANGE, FIREBALL_RADIUS, FIREBALL_BLAST, FIREBALL_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE,
   ICE, ICE_WIDTH, ICE_LIFE, BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE,
@@ -131,9 +131,9 @@ export const ABILITIES: AbilityDef[] = [
   },
   {
     id: 'superJump', name: 'Super jump', kind: 'active', group: 'movement', trigger: 'hold', maxRank: MAX_RANK, key: 'Hold Space',
-    desc: 'Press Space to leap and keep holding it to climb higher; steer all the way. Heavy landings shake the ground.',
+    desc: 'Press Space to leap and keep holding it to climb higher; steer all the way. Hold W to bound forward: the higher the leap, the farther it carries, as fast as flying. Heavy landings shake the ground.',
     icon: svg('<path d="M6 11l6-6 6 6"/><path d="M6 17l6-6 6 6"/><path d="M4 21h16"/>'),
-    rankText: (r) => `Climb up to ${JUMP_HEIGHT[r]} m high`,
+    rankText: (r) => `Climb up to ${JUMP_HEIGHT[r]} m high · leap forward at up to ${LEAP_SPEED[r]} m/s`,
     costText: () => `${JUMP.cost} energy for the full height`,
   },
   {

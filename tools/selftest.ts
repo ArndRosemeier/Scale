@@ -3555,6 +3555,24 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(!!e && feet(e, 50, 43 + 0.75 - e.at) > 1.85, `speed hop: one hop over two people in a row (feet ${e ? feet(e, 50, 43 + 0.75 - e.at).toFixed(2) : '-'} m over the second)`);
 }
 
+// Super jump as travel (tools/travelsim.ts): leaping on from landing to landing with W held covers
+// ground at least as fast as a boosted flight at every rank, even pressing Space a little late on
+// each landing; without W it is still a straight climb to the rank's height.
+{
+  const { simTravel } = await import('./travelsim');
+  const { MAX_RANK, JUMP_HEIGHT } = await import('../src/game/abilities/tuning');
+  const rows: string[] = [];
+  let ok = true;
+  for (let r = 1; r <= MAX_RANK; r++) {
+    const f = simTravel('flight', r, 30), j = simTravel('jump', r, 30, 0.3);
+    rows.push(`${r}: ${j.avg.toFixed(0)} vs ${f.avg.toFixed(0)}`);
+    if (!(j.avg >= f.avg)) ok = false;
+  }
+  check(ok, `super jump: travels at least as fast as flight per rank (m/s jump vs flight ${rows.join(', ')})`);
+  const up = simTravel('jump', 5, 4, 9, false);
+  check(up.avg < 0.01 && Math.abs(up.peak - JUMP_HEIGHT[5]) < 1, `super jump: straight up without W, to the full height (drift ${(up.avg * 4).toFixed(2)} m, peak ${up.peak.toFixed(1)} m)`);
+}
+
 // Energy: no regeneration in flight; a giant body costs upkeep (even at 10 m, ~20 s at 100 m) and an
 // empty pool shrinks it back to 10 m.
 {

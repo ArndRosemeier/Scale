@@ -79,6 +79,11 @@ export const JUMP_HEIGHT = [0, 6, 10, 16, 25, 40];
 /** Energy for the full height (paid as the height is gained); `debounce`: no new take-off for this
  *  long (s), so a bounce on landing cannot fire a second jump. */
 export const JUMP = { cost: 22, debounce: 0.5 };
+/** Super jump as travel: forward speed in m/s at 1.8 m (× √k) a full-height leap carries while
+ *  steered (W held); a lower leap carries its share (Player.leap), never less than 12 m/s. Set so
+ *  that leaping on from landing to landing covers ground at least as fast as a boosted flight at
+ *  the same rank (tools/travelsim.ts, checked in the selftest). */
+export const LEAP_SPEED = [0, 18, 39, 72, 120, 200];
 
 /** Powers are balanced by their energy cost, not by cooldowns. The only wait left is this
  *  technical debounce (s) after a tap power goes off, so one press (or key and mouse together)
