@@ -79,7 +79,8 @@ export class Reactions {
             a.fear = Math.min(2, a.fear + prox * nerve * (s.kind === 'crash' ? 0.6 : 1.4));
             // Blast wave / falling debris knocks people down close by.
             const knock = s.kind === 'blast' ? s.radius * 0.12 : s.kind === 'collapse' ? Math.min(40, s.radius * 0.05) : 0;
-            if (d < knock) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? 'player' : 'collapse');
+            // (Not from under their feet: a blast in a sewer shakes the pavement, it does not throw people off it.)
+            if (d < knock && s.y > a.y - 2) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? 'player' : 'collapse');
             else this.flee(a, s.x, s.z);
             break;
           }

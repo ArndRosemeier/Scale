@@ -2,9 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.123 — 2026-10-08
+## 0.124 — 2026-10-08
 
 - **Reputation has no upper limit any more.** It used to stop at +100; now every good deed keeps counting, however famous you already are. Past +150 the city calls you a *Living legend*. Everything that reacts to your reputation (cheering crowds, the press, fans, the statue, what strangers think of you) works as before and is at full strength from +100 on. The bottom stays at −100. Saves keep reputation above 100.
+
+## 0.123 — 2026-10-08
+
+- **Fix: Tab targeting works underground.** In the sewers, the hideouts and the metro stations, Tab found nobody, because the street overhead counted as a wall between you and everyone down there. Now the tunnel and room walls are what block the view, so Tab and clicking pick out people and crews down there, and your aimed powers can hit them. The street above still can't be targeted from below, and nobody below from the street.
+- **Fix: the street and the tunnels no longer reach through each other.** Down in the sewers and the metro, fire, frost, fireballs, lightning and quakes no longer hit people and cars on the street above (or the other way round), and your shockwave and flames work against the tunnel walls instead of the street overhead. Police on the pavement can no longer club or cuff you through the ground, and the officers and witnesses up there no longer see what you do below, so hiding underground can lose your wanted level. Monster footfalls, army shells, dog bites and collapsing buildings above no longer hurt you in a tunnel, a blast in a sewer no longer knocks people over on the street, a whirlwind spins up on the tunnel floor, and flying chips no longer jump up to the street.
 
 ## 0.122 — 2026-10-08
 
