@@ -123,6 +123,7 @@ import { Fame } from './fame/Fame';
 import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
+import { POWER_HIT } from './abilities/tuning';
 
 /** What someone a super speed runner brushed past calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -935,7 +936,7 @@ export class Game {
       // stumble, are cross with the speedster and get up again (no harm on the ledger, no
       // reputation lost: one cannot run at super speed through a city and never touch anyone).
       const brush = running && p.height < 3;
-      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : 12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
+      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : POWER_HIT.dashKnockMax, (POWER_HIT.dashKnock + POWER_HIT.dashKnockPerRank * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
       if (brush) { this.brushedBy(a); continue; }
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
