@@ -79,7 +79,7 @@ export interface CrimeWorld {
   /** A positioned looping sound (alarm bell); null when audio is not running. */
   loop?(id: string, x: number, y: number, z: number, gain: number): { stop(): void } | null;
   combat: Combat;
-  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number): void;
+  hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number, fromY: number): void;
   /** The police get a call (dispatch the nearest patrol car). */
   callPolice(c: Crime, delay: number): void;
   /** Live randomness for outcomes (not generation). */
@@ -512,7 +512,7 @@ export abstract class Crime {
         if (this.distToPlayer(c) < 1.75 && act.staggerT <= 0 && c.state !== PState.Down && Math.abs(p.y - c.y) < 1.6) {
           const kind = act.armed === 'knife' ? 'knife' : act.armed === 'bat' ? 'bat' : 'punch';
           const dmg = Math.min(MELEE_MAX, (kind === 'knife' ? 15 : kind === 'bat' ? 13 : 7) * (0.8 + 0.4 * this.w.random()) * Math.sqrt(act.strength));
-          this.w.hurtPlayer(dmg, kind, c.x, c.z);
+          this.w.hurtPlayer(dmg, kind, c.x, c.z, c.y);
           this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 0.7, kind === 'knife' ? 1.4 : 1);
         }
       }
@@ -620,7 +620,7 @@ export abstract class Crime {
     goTo(act, act.memo.dashX, act.memo.dashZ, CASTERS.dashSpeed);
     if (!act.memo.dashHit && this.distToPlayer(c) < P.radius && Math.abs(p.y - c.y) < 1.6 && !p.down) {
       act.memo.dashHit = 1;
-      this.w.hurtPlayer(P.dmg * (0.85 + 0.3 * this.w.random()) * Math.sqrt(act.strength), 'punch', c.x, c.z);
+      this.w.hurtPlayer(P.dmg * (0.85 + 0.3 * this.w.random()) * Math.sqrt(act.strength), 'punch', c.x, c.z, c.y);
       this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 1, 0.75);
     }
     if (Math.hypot(act.memo.dashX - c.x, act.memo.dashZ - c.z) < 0.6) { this.casters.get(c)?.interrupt(); this.w.cast?.(c, 'dash', 'end', C.tx, C.ty, C.tz); stand(act); }

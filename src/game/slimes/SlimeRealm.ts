@@ -29,7 +29,7 @@ import type { DeepField } from '../../underground/deep/field';
 import { MurkBreach } from './MurkBreach';
 import { TrenchWar } from './TrenchWar';
 import { statusFor } from '../../shared/status';
-import { SLIME, SLIME_COOLDOWN, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
+import { SLIME_COST, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
 import { G } from '../../render/materials/globals';
 import type { ThreatActor } from '../threats/ThreatEvent';
 import type { Stimulus } from '../Stimuli';
@@ -94,7 +94,7 @@ export class SlimeRealm {
       const host: FactionHost = {
         field: D.field, plan: D.plan,
         player: () => { const P = g.player; return { x: P.pos.x, y: P.pos.y, z: P.pos.z, h: P.height, speed: Math.hypot(P.vel.x, P.vel.z) }; },
-        hurtPlayer: (dmg, fx, fz) => { g.crime?.health.damage(dmg, 'monster', fx, fz); g.camRig.addShake(Math.min(0.5, dmg / 40)); },
+        hurtPlayer: (dmg, fx, fz, fy) => { g.crime?.health.damage(dmg, 'monster', fx, fz, fy); g.camRig.addShake(Math.min(0.5, dmg / 40)); },
         shovePlayer: (vx, vy, vz) => { const P = g.player; if (P.flying) return; P.vel.x += vx; P.vel.y += vy; P.vel.z += vz; P.grounded = false; },
         sound: (id, x, y, z, gain, pitch = 1) => g.audio.play(id, x, y, z, gain, pitch, 5, g.renderer.camera.position),
         ground: (x, z, y) => g.collision.groundAt(x, z, y, 0.6),
@@ -120,7 +120,7 @@ export class SlimeRealm {
     this.trust.on((d, v, reason, up) => this.trustChanged(d, v, reason, up));
     // The power.
     g.progress.granted.slimeCall = () => callRank(this.trust.value, this.wars.some((w) => w.stats.maw > 0));
-    g.abilities.special.slimeCall = { cost: SLIME.cost, cd: SLIME_COOLDOWN, run: (r) => this.call(r) };
+    g.abilities.special.slimeCall = { cost: SLIME_COST, run: (r) => this.call(r) };
     this.lastRank = g.progress.rank('slimeCall');
     g.powers.grantInfo = (id) => (id === 'slimeCall' ? this.trustLine() : null);
     g.stimuli.on((s) => this.stimulus(s));

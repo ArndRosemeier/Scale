@@ -2,10 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.124 — 2026-10-08
+
+- **Nothing hurts through the pavement any more, by one rule.** Every blow in the game now says where it came from, and your health ignores any that come from the other side of the street. That covers fists, knives, bats, guns, bombs, villain powers, dogs, robots, monsters, the army, cars and collapses, including any added later. Fighting in the sewers, the metro or the caves works as before; nothing up on the street can hurt you down there, and nothing down there can hurt you up top.
+
+## 0.123 — 2026-10-08
+
+- **Fix: Tab targeting works underground.** In the sewers, the hideouts and the metro stations, Tab found nobody, because the street overhead counted as a wall between you and everyone down there. Now the tunnel and room walls are what block the view, so Tab and clicking pick out people and crews down there, and your aimed powers can hit them. The street above still can't be targeted from below, and nobody below from the street.
+- **Fix: the street and the tunnels no longer reach through each other.** Down in the sewers and the metro, fire, frost, fireballs, lightning and quakes no longer hit people and cars on the street above (or the other way round), and your shockwave and flames work against the tunnel walls instead of the street overhead. Police on the pavement can no longer club or cuff you through the ground, and the officers and witnesses up there no longer see what you do below, so hiding underground can lose your wanted level. Monster footfalls, army shells, dog bites and collapsing buildings above no longer hurt you in a tunnel, a blast in a sewer no longer knocks people over on the street, a whirlwind spins up on the tunnel floor, and flying chips no longer jump up to the street.
+
 ## 0.122 — 2026-10-08
 
-- **The runaway saucer is fairer and easier to read.** It now always comes down over a street lined with houses instead of over a park, where the Nannies used to spot it before it had played a single prank. Joyriding on its own it slips across open stretches unnoticed; it gets spotted in the open only once you have knocked out a pod or have it on the run. Each lost pod lifts it a little less, so a rowhouse street still hides it with two pods out and the third one is what pops it up over the roofs.
-- **Brighter and clearer up close.** The rim lights are now strong magenta, green, orange and blue, by day and at night, and the glowing pods no longer turn white after dark. The two kids in the dome have bigger heads with glowing eyes, the hull shows dents and scorch marks, glyphs are easier to see by day and take a little longer to draw, and a column of light now joins the parent disc to the bubble it lifts the saucer in.
+- **No more cooldowns on powers: they cost more energy instead.** You can use any power again as soon as you have the energy for it. To keep things fair the powers cost more: Fire wave 30 → 40, Fireball 32 → 40, Frost nova 35 → 55, Chain lightning 30 → 38, Seismic stomp 40 → 55, Whirlwind 35 → 50, Shrink ray 25 → 30, Shockwave 55–70 by rank (was 40–55), dash in flight 18 → 22, and the Slime call 70 / 60 / 50 by rank (was 25, with a wait of up to 75 seconds). A hotbar slot now darkens while you are short of the energy for that power, so you can see when it is ready.
 
 ## 0.121 — 2026-10-08
 
