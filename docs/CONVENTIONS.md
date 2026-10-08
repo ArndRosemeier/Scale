@@ -21,6 +21,7 @@ Its open items are consolidated here one PR at a time.
 | Question | Use | Not |
 |---|---|---|
 | Is someone (feet at y) underground? | `Underground.feetUnder(x, feetY, z)`. `isUnder(x, y, z)` is for a point (an eye, an orb, the camera). `Collision.underground` is the movement test (player, ragdolls, hops) and is stricter near stairs. | `isUnder(x, y + 0.5, z)` written out (**guarded**) |
+| Where does something land at a target (a decal, an orb, a bomb, a stray bullet's chip)? Can someone lying there be reached? | `game.floorAt(x, feetY, z)`: the sewer, metro or cave floor when underground, else street, deck or roof | `world.groundHeight(x, z)` or `terrain.height` at a target that may be underground (it lands on the street above a sewer fight) |
 | Are two bodies on the same side of the street (both underground or both up top)? | `Underground.sameSide(ax, ay, az, bx, by, bz)` with **feet** heights. A blow, blast or footfall point counts as feet. | `Math.abs(dy) < r`, `s.y > a.y - 2`, or a 2D `hypot` alone |
 | Does a blow, blast, stomp or shove reach a person? | 2D/3D range **and** `sameSide`. `Reactions.sameSide` is wired to it. | Range alone. A street stomp must not floor the sewer crew below. |
 | Does a blow reach the player? | `PlayerHealth.damage(…, x, z, y)` with the source's real height (the type requires it). It refuses blows from the other side. | Writing `hp`. Passing the player's own `y` as the source height. |
@@ -28,7 +29,7 @@ Its open items are consolidated here one PR at a time.
 | How high is the ground someone stands on? | `world.groundHeight` (roofs, decks, landmarks too) or the player's `collision.groundAt`; street level alone: `terrain.height + world.surfaceOffset`. It follows what is drawn: road 0, kerb `CURB_H`, open countryside `-TERRAIN_DROP` (the terrain mesh sits lower), country roads and yards 0. | Bare `terrain.height` for feet: out of town that floats 0.35 m above the grass |
 | Can the camera see a person (markers, tags)? | `makeSight` (`game/sightline.ts`) via `render/screen.ts` `setSight` | A raycast of your own |
 | Where on screen is a world point? | `render/screen.ts` `toScreen` / `screenPoint` | `.project(cam…)` (**guarded**: the selftest fails on it anywhere else) |
-| Can someone shoot or see from A to B? | `game.sight.clear` (`game/combat/sight.ts`: caves, tunnels, buildings, cars, facade holes) | `world.raycast` with your own tolerances |
+| Can someone shoot or see from A to B? | `game.sight.clear` (`game/combat/sight.ts`: caves, tunnels, buildings, landmarks, cars, facade holes). For a `Target`: `targeting.sees(from, t, centre)` (pads by `targeting.padOf(t)`, the target car never blocks). | `world.raycast` with your own tolerances (**guarded**) |
 
 ## The ledger and blame
 

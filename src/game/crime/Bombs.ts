@@ -78,10 +78,9 @@ export class Bombs {
   /** Lob a bomb from a person's hand to the ground at (tx, tz); false when too many are out already. */
   throw(by: PedAgent, tx: number, tz: number, fuse: number): boolean {
     if (this.live.length >= BOMB.cap) return false;
-    const W = this.g.world;
     const fx = tx - by.x, fz = tz - by.z, fl = Math.hypot(fx, fz) || 1;
     const ax = by.x + (fx / fl) * 0.4, az = by.z + (fz / fl) * 0.4, ay = by.y + 1.75;
-    const bz = tz, bx = tx, byy = W.groundHeight(tx, tz) + 0.13;
+    const bz = tz, bx = tx, byy = this.g.floorAt(tx, by.y, tz) + 0.13;
     const T = Math.min(BOMB.flight[1], Math.max(BOMB.flight[0], fl / BOMB.speed));
     this.live.push({ ax, ay, az, bx, by: byy, bz, t: 0, T, arc: 1 + fl * 0.22, fuse, landed: false, x: ax, y: ay, z: az, spin: Math.random() * 6 });
     this.stats.thrown++;
@@ -122,7 +121,7 @@ export class Bombs {
   explode(x: number, y: number, z: number): void {
     const g = this.g, R = BOMB.radius, cam = g.renderer.camera.position;
     this.stats.exploded++;
-    const ground = g.world.groundHeight(x, z);
+    const ground = g.floorAt(x, y - 0.13, z);
     if (Math.hypot(cam.x - x, cam.z - z) < 700) fireBurst(g.elements.fx, g.debris, g.dust, x, y + 0.5, z, 1.25, ground, 0.6);
     g.audio.play('army_explosion', x, y, z, 0.95, 1.05 + Math.random() * 0.1, 30, cam);
     g.destruction.as('fire', () => g.destruction.impact(x, y + 0.6, z, 2.4, BOMB.blast, 0, 0.2, 0, 'blast'));

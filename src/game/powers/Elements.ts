@@ -49,7 +49,7 @@ import {
   LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN, FIREBALL, FIREBALL_RANGE, FIREBALL_RADIUS, FIREBALL_BLAST,
   FIREBALL_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE, ICE, ICE_WIDTH, ICE_LIFE,
   BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE, GUST, GUST_RADIUS, GUST_TIME, GUST_LIFT,
-  HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
+  HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_TIME, SHRINK_DEALT, shrinkFactor,
   PHASE, PHASE_DMG, PHASE_RANGE, FOCUS, FOCUS_DMG, FOCUS_RANGE, SEEKER, SEEKER_DMG, SEEKER_RANGE,
   POWER_HIT,
 } from '../abilities/tuning';
@@ -345,14 +345,7 @@ export class Elements {
   }
 
   /** How far short of a target's aim point a line may end (its body). */
-  private padOf(t: Target): number {
-    switch (t.kind) {
-      case 'car': return 0.5;
-      case 'threat': { const z = this.w.targeting.zoneOf(t.obj) ?? t.obj.zones.find((zn) => zn.weak && zn.exposed); return z ? z.r * 0.8 : 3; }
-      case 'prop': return Math.max(0.3, Math.min(1.5, t.obj.radius));
-      default: return 0.45;
-    }
-  }
+  private padOf(t: Target): number { return this.w.targeting.padOf(t); }
 
   /** A targeted power that cannot go off: the frame says why, a short toast (not every frame). */
   private refuse(why: 'sight' | 'range'): void {
@@ -557,12 +550,18 @@ export class Elements {
     if (t.kind === 'car') this.savePaint(t.obj, s);
   }
 
-  private shrink(t: Target, factor: number, dur: number): void {
-    if (t.kind === 'threat') { this.hurtThreat(t, dur * POWER_HIT.shrinkCreature * (1 - factor)); return; }
+  /**
+   * Shrink ray at rank `r`: by the rank's factor, but never more than the rank's cap off the target's
+   * biggest dimension (a person halves, a car loses a metre, a monster a few). While shrunk it deals
+   * less (`dealtBy`). Monsters that cannot shrink (`setScale` absent) only hit softer.
+   */
+  private shrink(t: Target, r: number): void {
+    const factor = t.kind === 'threat' && !t.obj.setScale ? 1 : shrinkFactor(this.w.targeting.size(t), r);
     const s = this.track(t);
-    if (s.shrink <= 0) this.stats.shrunk++;
-    s.shrink = Math.max(s.shrink, dur);
+    if (s.shrink <= 0) { this.stats.shrunk++; s.dealt = 1; }
+    s.shrink = Math.max(s.shrink, SHRINK_TIME[r]);
     s.scaleTo = Math.min(s.scaleTo === 1 ? 1 : s.scaleTo, factor);
+    s.dealt = Math.min(s.dealt, SHRINK_DEALT[r]);
     if (t.kind === 'car') {
       const v = t.obj;
       const sv = (s.saved ??= {});
@@ -585,6 +584,7 @@ export class Elements {
       if (sv?.len !== undefined) { v.length = sv.len as number; v.width = sv.wid as number; }
       if (sv?.paint) v.paint = sv.charred ? [...CHARRED] : (sv.paint as [number, number, number]);
     } else if (t.kind === 'prop') this.w.props.setScale(t.obj, 1);
+    else if (t.kind === 'threat') t.obj.setScale?.(1);
     else if (t.kind === 'person' && t.obj.state === PState.Idle) t.obj.stateT = 5; // walk on soon
   }
 
@@ -712,8 +712,7 @@ export class Elements {
       const ext = t.kind === 'car' ? t.obj.length * 0.5 : 0.5;
       const cos = (vx * A.dx + vy * A.dy + vz * A.dz) / d;
       if (cos < cosA - ext / Math.max(1, d)) return;
-      const hit = this.w.world.raycast(A.ox, A.oy, A.oz, vx / d, vy / d, vz / d, d, 0.8);
-      if (hit.t < d - 1) return;
+      if (!this.w.targeting.sees({ x: A.ox, y: A.oy, z: A.oz }, t, c)) return;
       b.cand.push({ t, d });
     });
     // Walls and ground the flames lick: a few rays across the cone.
@@ -1596,7 +1595,7 @@ export class Elements {
     for (let i = 0; i < 24; i++) this.fx.glow(ex, ey, ez, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, 0.5, 0.15 * this.reachK, 0.02, SHRINK_C, SHRINK_END, 1, 2, 0);
     const H = A.hit;
     if (H.what === 'target' && H.target) {
-      this.shrink(H.target, SHRINK_FACTOR[r], SHRINK_TIME[r]);
+      this.shrink(H.target, r);
       const c = this.w.targeting.centre(H.target, _w);
       this.record('shrink', H.target, 'shrink', c.x, c.z);
     }
@@ -1933,6 +1932,7 @@ export class Elements {
           if (Math.abs(s.scale - 1) > 1e-3 || p.base) this.w.props.setScale(p, s.scale);
           break;
         }
+        case 'threat': t.obj.setScale?.(s.scale); break;
         default: break;
       }
       if (!near) continue;

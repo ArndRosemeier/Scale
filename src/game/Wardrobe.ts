@@ -3,6 +3,9 @@
  * at it, E opens the character creator on the hero's current look; saving changes the hero on
  * the spot and keeps the look as the selected created character (so the next game and saves
  * start with it).
+ *
+ * Three costumes (F1–F3): all start as the hero's starting look, the mirror changes only the one
+ * being worn, and the keys switch between them anywhere. The set goes into the save.
  */
 import type { Game } from './Game';
 import { Player } from '../player/Player';
@@ -11,6 +14,7 @@ import { outfitFromVisuals, type CharacterLook } from '../avatar/look';
 import { avatarStore, isGenerated, type StoredGenerated } from '../avatar/AvatarStore';
 import { isClothesShop } from '../interior/InteriorGen';
 import type { MapMarker } from '../ui/map/GameMap';
+import { COSTUME_COUNT, readCostumes, type SavedCostumes } from './costumes';
 
 export class Wardrobe {
   private open = false;
@@ -19,10 +23,20 @@ export class Wardrobe {
   private markT = 0;
   private markKey = '';
 
+  /** The three costumes (null: the look the hero started with) and the one being worn. */
+  private looks: (CharacterLook | null)[] = Array(COSTUME_COUNT).fill(null);
+  active = 0;
+  /** A costume being put on (the rig rebuilds); a further key press waits for it. */
+  private changing: Promise<void> | null = null;
+
   constructor(private g: Game) {}
 
-  /** Map: the nearest clothes shops (a few, so the map stays readable). */
+  /** Map: the nearest clothes shops (a few, so the map stays readable); F1–F3: put on a costume. */
   update(dt: number): void {
+    const inp = this.g.input;
+    for (let i = 0; i < COSTUME_COUNT; i++) {
+      if (inp.hit(`F${i + 1}`)) { inp.pressed.delete(`F${i + 1}`); this.wear(i); }
+    }
     this.markT -= dt;
     if (this.markT > 0) return;
     this.markT = 2;
@@ -46,7 +60,44 @@ export class Wardrobe {
     return !p.flying && p.height < 2.4 && !this.g.player.seat && !!this.g.interiors.dressMirrorNear(p.pos.x, p.pos.y, p.pos.z);
   }
 
-  hint(): string | null { return this.near() ? 'Fitting mirror — press <b>E</b> to change your look' : null; }
+  hint(): string | null { return this.near() ? `Fitting mirror — press <b>E</b> to change costume ${this.active + 1}` : null; }
+
+  /** Put on costume i (0-based). */
+  wear(i: number): void {
+    if (this.open || i === this.active || i < 0 || i >= COSTUME_COUNT) return;
+    const from = this.looks[this.active], to = this.looks[i];
+    this.active = i;
+    this.g.powerHud?.toast(`Costume <b>${i + 1}</b>`, 'info', 1600);
+    // Untouched costumes are the same look: nothing to rebuild.
+    if (!to || (from && JSON.stringify(from) === JSON.stringify(to))) return;
+    this.putOn(to);
+  }
+
+  /** Dress the hero in a look (one rebuild at a time; the last one asked for wins). */
+  private putOn(look: CharacterLook): void {
+    const P = this.g.player;
+    const run = (this.changing ?? Promise.resolve()).then(async () => {
+      if (this.looks[this.active] !== look) return; // switched on meanwhile
+      try { await P.applyLook(structuredClone(look)); } catch (e) { console.warn('[wardrobe] could not change the costume', e); }
+    });
+    this.changing = run;
+    void run.finally(() => { if (this.changing === run) this.changing = null; });
+  }
+
+  /** For the save: null while all three are still the starting look. */
+  save(): SavedCostumes | null {
+    return this.looks.some((l) => l) ? { active: this.active, looks: this.looks.map((l) => l && structuredClone(l)) } : null;
+  }
+
+  /** From a save (SaveSystem.apply): the three costumes, the hero in the one that was worn. */
+  restore(raw: unknown): void {
+    const c = readCostumes(raw);
+    if (!c) return;
+    this.looks = c.looks;
+    this.active = c.active;
+    const l = this.looks[this.active];
+    if (l && JSON.stringify(l) !== JSON.stringify(Player.look)) this.putOn(l);
+  }
 
   /** E at the mirror: open the creator. */
   use(): boolean {
@@ -60,7 +111,8 @@ export class Wardrobe {
     this.open = true;
     g.input.suspended = true;
     if (document.pointerLockElement) document.exitPointerLock();
-    const look: CharacterLook = Player.look ?? { appearance: structuredClone(P.app), outfit: outfitFromVisuals(P.rig.outfit ?? {}, P.app.seed) };
+    if (this.changing) await this.changing;
+    const look: CharacterLook = this.looks[this.active] ?? Player.look ?? { appearance: structuredClone(P.app), outfit: outfitFromVisuals(P.rig.outfit ?? {}, P.app.seed) };
     let stored: StoredGenerated | null = null;
     try {
       const id = avatarStore.selected();
@@ -71,6 +123,9 @@ export class Wardrobe {
       name: stored?.name ?? 'My hero',
       look,
       onSave: async ({ name, look: next, thumb }) => {
+        // The other costumes keep the look they had (the starting look, until changed).
+        for (let i = 0; i < COSTUME_COUNT; i++) this.looks[i] ??= structuredClone(look);
+        this.looks[this.active] = structuredClone(next);
         await P.applyLook(next);
         try {
           const a: StoredGenerated = {
