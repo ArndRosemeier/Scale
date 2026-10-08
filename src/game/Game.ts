@@ -334,6 +334,7 @@ export class Game {
     this.renderer.scene.add(this.countryside.group);
     this.rural = new RuralStreamer(this.pool, terrainExtent(macro.boundary), tex);
     this.rural.prepare = (o) => this.renderer.compileAsync(o);
+    this.world.rural = this.rural;
     this.renderer.scene.add(this.rural.group);
     const syncSky = () => this.skyline.setLoaded([...this.streamer.cells.values()].filter((c) => c.status === 'ready').map((c) => c.id));
     this.streamer.onCellReady = (c) => {
@@ -1105,7 +1106,7 @@ export class Game {
         return markerOnScreen(x, feet + 1.2, z, feet, cam, deedView, 0.85);
       },
       markers: (m) => this.map.setMarkers('deeds', m),
-      rep: (d, reason) => this.crime?.rep.add(d, reason),
+      rep: (d, reason) => this.crime?.reward({ rep: d, why: reason }),
     };
     if (normal) {
       const cores = new PowerCores(
