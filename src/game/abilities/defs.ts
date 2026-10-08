@@ -8,7 +8,7 @@ import {
   LASER, LASER_RANGE, LASER_DOSE, FIRE, FIRE_RANGE, FIRE_HEAT, FIRE_BURN,
   FIREBALL, FIREBALL_RANGE, FIREBALL_RADIUS, FIREBALL_BLAST, FIREBALL_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE,
   ICE, ICE_WIDTH, ICE_LIFE, BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE,
-  GUST, GUST_RADIUS, GUST_TIME, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
+  GUST, GUST_RADIUS, GUST_TIME, HYDRO, HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME, SHRINK_CAP, SHRINK_DEALT,
   SLIME_COST, SLIME_COUNT, SLIME_TIME, SLIME_REACH, SLIME_HOLD,
 } from './tuning';
 import { wallBreakShare, windowShatterShare, WALL_CLASSES, type WallClass } from '../../destruction/wallStrength';
@@ -229,9 +229,9 @@ export const ABILITIES: AbilityDef[] = [
   // ---------------------------------------------------------------- support
   {
     id: 'shrink', name: 'Shrink ray', kind: 'active', group: 'support', trigger: 'tap', maxRank: MAX_RANK,
-    desc: 'Zap a person, car, robot, drone or prop down to a fraction of its size for a while. It keeps working: tiny cars keep driving.',
+    desc: 'Zap anything — a person, a car, a robot, a monster — down in size for a while. Small things shrink to a fraction, big ones lose a few metres. Whatever is shrunk hits softer.',
     icon: svg('<path d="M3.5 3.5l5 5M20.5 3.5l-5 5M3.5 20.5l5-5M20.5 20.5l-5-5"/><path d="M8.5 5v3.5H5M15.5 5v3.5H19M8.5 19v-3.5H5M15.5 19v-3.5H19"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/>'),
-    rankText: (r) => `Shrinks to ${Math.round(SHRINK_FACTOR[r] * 100)} % for ${SHRINK_TIME[r]} s · reach ${SHRINK.reach} m`,
+    rankText: (r) => `Shrinks to ${Math.round(SHRINK_FACTOR[r] * 100)} %, at most ${SHRINK_CAP[r]} m off, for ${SHRINK_TIME[r]} s · deals ${Math.round(SHRINK_DEALT[r] * 100)} % damage · reach ${SHRINK.reach} m`,
     costText: () => `${SHRINK.cost} energy`,
   },
   {

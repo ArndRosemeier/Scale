@@ -32,6 +32,7 @@ import { RState } from '../../future/Robots';
 import { DecalKind } from '../powers/ElementFx';
 import type { Obstacle } from '../../world/Collision';
 import { angleDiff } from '../../core/math';
+import { dealtBy } from '../../shared/status';
 import { bookAggro, decayAggro, topAggro, zoneDealt } from './aggro';
 
 let EVENT_ID = 9000;
@@ -110,7 +111,8 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   readonly maxHp = TREE.hp;
   readonly zones: ThreatZone[];
   readonly aggro = new Map<string, number>();
-  readonly height: number;
+  /** Biggest dimension at full size (for the shrink ray). */
+  readonly size: number;
   hp = TREE.hp;
   x: number; y = 0; z: number;
   yaw: number;
@@ -136,10 +138,19 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   private readonly legs: Leg[] = [];
   private readonly arms: Arm[] = [];
   private readonly caps: Cap[] = [];
-  private readonly treeH: number;
-  private readonly trunkR: number;
-  private readonly legLen: number;
-  private readonly armLen: number;
+  /** Full-size measures; the getters below are them at the current size (shrink ray). Coordinates
+   *  local to the trunk (which carries the scale itself) use the full-size ones. */
+  private readonly treeH0: number;
+  private readonly trunkR0: number;
+  private readonly legLen0: number;
+  private readonly armLen0: number;
+  /** Shrink ray: body size factor (1 = full). */
+  private sc = 1;
+  private get treeH(): number { return this.treeH0 * this.sc; }
+  private get trunkR(): number { return this.trunkR0 * this.sc; }
+  private get legLen(): number { return this.legLen0 * this.sc; }
+  private get armLen(): number { return this.armLen0 * this.sc; }
+  get height(): number { return this.size * this.sc; }
   private readonly bark: THREE.MeshStandardMaterial;
   /** The legs' and arms' bark (plain: the vegetation shader wants instanced meshes). */
   private readonly limbMat: THREE.MeshStandardMaterial;
@@ -162,11 +173,11 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   constructor(private g: Game, readonly prop: StreetProp, readonly seed: number) {
     this.x = prop.x; this.z = prop.z;
     this.yaw = Math.atan2(prop.x - g.player.pos.x, prop.z - g.player.pos.z);
-    this.treeH = Math.max(5, prop.height);
-    this.trunkR = Math.max(0.2, prop.radius);
-    this.legLen = Math.min(TREE.legMax, Math.max(TREE.legMin, this.treeH * TREE.legShare));
-    this.armLen = Math.max(2.4, this.treeH * 0.42);
-    this.height = this.treeH + this.legLen * 0.85;
+    this.treeH0 = Math.max(5, prop.height);
+    this.trunkR0 = Math.max(0.2, prop.radius);
+    this.legLen0 = Math.min(TREE.legMax, Math.max(TREE.legMin, this.treeH0 * TREE.legShare));
+    this.armLen0 = Math.max(2.4, this.treeH0 * 0.42);
+    this.size = this.treeH0 + this.legLen0 * 0.85;
     this.zones = ZONES.map((z) => ({ ...z, exposed: false, x: 0, y: 0, z: 0, r: 1, recent: 0 }));
     // The tree itself: its own model (wood and leaves) on the trunk, as it stood.
     const [, sp, variant] = prop.kind.split(':');
@@ -295,7 +306,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     }
     // Arms: shoulders on the trunk, the hands by the act (raised for a slam, swung in a sweep, hanging).
     for (const A of this.arms) {
-      _v.set(A.side * this.trunkR * 1.05, this.treeH * 0.42, 0);
+      _v.set(A.side * this.trunkR0 * 1.05, this.treeH0 * 0.42, 0);
       this.trunk.localToWorld(_v);
       A.sh.x = _v.x; A.sh.y = _v.y; A.sh.z = _v.z;
       const hand = this.handTarget(A);
@@ -361,9 +372,9 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     C.length = 0;
     _v.set(0, 0, 0); this.trunk.localToWorld(_v);
     const bx = _v.x, by = _v.y, bz = _v.z;
-    _v.set(0, this.treeH * 0.55, 0); this.trunk.localToWorld(_v);
+    _v.set(0, this.treeH0 * 0.55, 0); this.trunk.localToWorld(_v);
     C.push({ ax: bx, ay: by, az: bz, bx: _v.x, by: _v.y, bz: _v.z, r: this.trunkR * 1.6, zone: 'trunk' });
-    _v.set(0, this.treeH * 0.72, 0); this.trunk.localToWorld(_v);
+    _v.set(0, this.treeH0 * 0.72, 0); this.trunk.localToWorld(_v);
     const cr = this.treeH * 0.28;
     C.push({ ax: _v.x, ay: _v.y - cr * 0.3, az: _v.z, bx: _v.x, by: _v.y + cr * 0.3, bz: _v.z, r: cr, zone: 'crown' });
     for (const L of this.legs) {
@@ -387,6 +398,12 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   }
 
   // ================================================================== ThreatActor
+
+  /** Shrink ray: the trunk scales (crown, heart, eyes); limbs, reach and hit capsules follow the measures. */
+  setScale(s: number): void {
+    this.sc = s;
+    this.trunk.scale.setScalar(s);
+  }
 
   ray(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): { t: number; zone: ThreatZone } | null {
     if (!this.targetable) return null;
@@ -552,7 +569,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     const fx = this.g.elements.fx;
     if (Math.hypot(this.g.renderer.camera.position.x - this.x, this.g.renderer.camera.position.z - this.z) < 400) {
       for (let i = 0; i < 4; i++) {
-        _v.set((Math.random() - 0.5) * this.treeH * 0.4, this.treeH * (0.5 + Math.random() * 0.4), (Math.random() - 0.5) * this.treeH * 0.4);
+        _v.set((Math.random() - 0.5) * this.treeH0 * 0.4, this.treeH0 * (0.5 + Math.random() * 0.4), (Math.random() - 0.5) * this.treeH0 * 0.4);
         this.trunk.localToWorld(_v);
         fx.glow(_v.x, _v.y, _v.z, (Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5), 0.7, 0.9, 0.3, FIRE_A, FIRE_B, 0.9, 1.5, 1);
       }
@@ -740,25 +757,25 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
    * and signals toppled, people knocked down, the hero hurt and flung. (dx, dz): the throw for a sweep.
    */
   private hitArea(x: number, z: number, r: number, dx: number, dz: number, kind: 'sweep' | 'slam'): void {
-    const g = this.g, y = g.world.groundHeight(x, z), slam = kind === 'slam';
+    const g = this.g, y = g.world.groundHeight(x, z), slam = kind === 'slam', k = dealtBy(this);
     for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of [...list]) {
       if (v.state === VState.Wreck || v.state === VState.Crushed || Math.hypot(v.x - x, v.z - z) > r + v.length * 0.3) continue;
       const ax = v.x - x, az = v.z - z, al = Math.hypot(ax, az) || 1;
       const jx = slam ? (ax / al) * 4000 : dx * 16000 + (ax / al) * 3000, jz = slam ? (az / al) * 4000 : dz * 16000 + (az / al) * 3000;
       g.traffic.wreckIt(v);
-      g.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, jx, slam ? -9000 : 7000, jz);
-      v.damage = Math.max(v.damage, slam ? 0.85 : 0.55);
+      g.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, jx * k, (slam ? -9000 : 7000) * k, jz * k);
+      v.damage = Math.max(v.damage, (slam ? 0.85 : 0.55) * k);
       g.consequences.record('tree', 'car', 'wreck', v.x, v.z, v, 'threat');
       this.stats.cars++;
     }
     for (const rb of g.future.robots.list) {
       if (!rb.alive || rb.state >= RState.Down || Math.hypot(rb.x - x, rb.z - z) > r) continue;
-      g.future.robots.knock(rb, (slam ? rb.x - x : dx * 8) * 300, 400, (slam ? rb.z - z : dz * 8) * 300);
+      g.future.robots.knock(rb, (slam ? rb.x - x : dx * 8) * 300 * k, 400 * k, (slam ? rb.z - z : dz * 8) * 300 * k);
       this.stats.robots++;
     }
     let n = 0;
     g.props.query(x, z, r, (p) => { if (!p.broken && !p.tree) n++; });
-    if (n) { if (slam) g.props.crush(x, z, r * 0.8); else g.props.hit(x, y + 1.5, z, r, dx * 6000, 800, dz * 6000); this.stats.props += n; }
+    if (n) { if (slam) g.props.crush(x, z, r * 0.8); else g.props.hit(x, y + 1.5, z, r, dx * 6000 * k, 800 * k, dz * 6000 * k); this.stats.props += n; }
     for (const a of g.peds.neighbours(x, z, r, [])) {
       if (a.inside || a.state === PState.Down) continue;
       this.knock(a, slam ? x : a.x - dx, slam ? z : a.z - dz, slam ? 7 : 6);
@@ -780,7 +797,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
 
   private knock(a: PedAgent, fx: number, fz: number, power: number): void {
     if (a.inside || a.state === PState.Down) return;
-    this.g.reactions.knockDown(a, fx, fz, power, 'threat');
+    this.g.reactions.knockDown(a, fx, fz, power * dealtBy(this), 'threat');
     this.g.consequences.record('tree', 'person', 'knockdown', a.x, a.z, a, 'threat');
     this.hurt++;
     this.stats.knocked++;
@@ -790,7 +807,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   private hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number, fling: number): void {
     const g = this.g, P = g.player;
     const rel = Math.min(1, Math.pow(this.height / Math.max(1, P.height), 0.8));
-    const d = g.crime.health.damage(dmg * Math.max(0.15, rel), 'monster', fromX, fromZ, fromY);
+    const d = g.crime.health.damage(dmg * Math.max(0.15, rel) * dealtBy(this), 'monster', fromX, fromZ, fromY);
     this.stats.playerHits++;
     if (d <= 0 && !g.crime.health.invulnerable) return;
     const dx = P.pos.x - fromX, dz = P.pos.z - fromZ, l = Math.hypot(dx, dz) || 1, f = fling * rel;
@@ -813,7 +830,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     // Leaves drifting off the crown as it moves.
     if (Math.hypot(g.renderer.camera.position.x - this.x, g.renderer.camera.position.z - this.z) < 300) {
       for (let i = 0; i < 6; i++) {
-        _v.set((Math.random() - 0.5) * this.treeH * 0.5, this.treeH * (0.55 + Math.random() * 0.35), (Math.random() - 0.5) * this.treeH * 0.5);
+        _v.set((Math.random() - 0.5) * this.treeH0 * 0.5, this.treeH0 * (0.55 + Math.random() * 0.35), (Math.random() - 0.5) * this.treeH0 * 0.5);
         this.trunk.localToWorld(_v);
         g.elements.fx.soft(_v.x, _v.y, _v.z, (Math.random() - 0.5) * 2, -0.5, (Math.random() - 0.5) * 2, 4, 0.12, 0.08, LEAF_A, LEAF_B, 0.9, 1, 0.8);
       }

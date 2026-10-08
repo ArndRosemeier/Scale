@@ -22,6 +22,7 @@ import type { HurtKind } from '../PlayerHealth';
 import { type Actor, type ActorRole, makeActor, attach, release, setState, play, followRoute, goTo, stand, lookAt, subdued, hold } from '../../sim/actors/Actor';
 import { personStrength } from '../Consider';
 import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
+import { dealtBy } from '../../shared/status';
 
 export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den' | 'sabotage' | 'raising' | 'procession' | BossOpKind;
 /** A boss operation (crime/BossOp): the group's boss and a big crew, a threat event with the city response. */
@@ -517,7 +518,7 @@ export abstract class Crime {
         if (this.distToPlayer(c) < 1.75 && act.staggerT <= 0 && c.state !== PState.Down && Math.abs(p.y - c.y) < 1.6) {
           const kind = act.armed === 'knife' ? 'knife' : act.armed === 'bat' ? 'bat' : 'punch';
           const dmg = Math.min(MELEE_MAX, (kind === 'knife' ? 15 : kind === 'bat' ? 13 : 7) * (0.8 + 0.4 * this.w.random()) * Math.sqrt(act.strength));
-          this.w.hurtPlayer(dmg, kind, c.x, c.z, c.y);
+          this.w.hurtPlayer(dmg * dealtBy(c), kind, c.x, c.z, c.y);
           this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 0.7, kind === 'knife' ? 1.4 : 1);
         }
       }
@@ -625,7 +626,7 @@ export abstract class Crime {
     goTo(act, act.memo.dashX, act.memo.dashZ, CASTERS.dashSpeed);
     if (!act.memo.dashHit && this.distToPlayer(c) < P.radius && Math.abs(p.y - c.y) < 1.6 && !p.down) {
       act.memo.dashHit = 1;
-      this.w.hurtPlayer(P.dmg * (0.85 + 0.3 * this.w.random()) * Math.sqrt(act.strength), 'punch', c.x, c.z, c.y);
+      this.w.hurtPlayer(P.dmg * (0.85 + 0.3 * this.w.random()) * Math.sqrt(act.strength) * dealtBy(c), 'punch', c.x, c.z, c.y);
       this.w.sound('punch_impact', p.x, p.y + 1.2, p.z, 1, 0.75);
     }
     if (Math.hypot(act.memo.dashX - c.x, act.memo.dashZ - c.z) < 0.6) { this.casters.get(c)?.interrupt(); this.w.cast?.(c, 'dash', 'end', C.tx, C.ty, C.tz); stand(act); }

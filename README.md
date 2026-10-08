@@ -91,7 +91,8 @@ keypads, call buttons); `PanelManager` routes the crosshair to them.
 | B | Test blast where the camera looks |
 | T, [ ] | Fast time on/off, time of day ±1 h |
 | F8 | Free camera |
-| H, Esc, F3 | Help, pause & settings, detailed HUD |
+| F1 / F2 / F3 | Put on costume 1 / 2 / 3 (the fitting mirror changes the one you wear) |
+| H, Esc, F4 | Help, pause & settings, detailed HUD |
 
 ## The city
 

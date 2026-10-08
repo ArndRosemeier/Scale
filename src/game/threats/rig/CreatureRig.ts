@@ -125,7 +125,8 @@ export class CreatureRig {
   private phase = 0;
   private placed = false;
   readonly caps: Capsule[] = [];
-  readonly scale: number;
+  /** Body size (× the def's metres). Changing it live (shrink ray) re-proportions the whole body. */
+  scale: number;
 
   constructor(readonly def: RigDef, scale = 1) {
     this.scale = scale;

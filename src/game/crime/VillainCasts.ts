@@ -33,6 +33,15 @@ import { BeamStyle, DecalKind } from '../powers/ElementFx';
 import { fireBurst } from '../powers/blastFx';
 import { VILLAIN_POWERS, CASTERS, segDist, type VillainPower } from '../powers/Caster';
 import type { CastStage, OpLook } from './Crime';
+import { dealtBy } from '../../shared/status';
+
+/** A ritual circle's burst hits as hard as its members on average (a shrunk member hits softer). */
+function circleDealt(circle: readonly PedAgent[]): number {
+  if (!circle.length) return 1;
+  let k = 0;
+  for (const a of circle) k += dealtBy(a);
+  return k / circle.length;
+}
 
 interface Orb { kind: 'fire' | 'stun' | 'hex'; x: number; y: number; z: number; ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; T: number; arc: number; fuse: number; by_: PedAgent }
 interface Crack { ax: number; az: number; dx: number; dz: number; L: number; s: number; y: number; hitPlayer: boolean; hit: Set<PedAgent>; by_: PedAgent }
@@ -131,7 +140,7 @@ export class VillainCasts {
       for (let i = 0; i < 2; i++) { const a = Math.random() * Math.PI * 2; fx.soft(by.x + Math.sin(a) * 0.8, by.y + 0.1, by.z + Math.cos(a) * 0.8, Math.sin(a) * 1.2, 0.8, Math.cos(a) * 1.2, 0.6, 0.3, 0.9, DUST, DUST_END, 0.5, 1.5, 0); }
       if (Math.random() < 0.5) {
         const u = Math.random(), x = by.x + (tx - by.x) * u, z = by.z + (tz - by.z) * u;
-        fx.soft(x, this.g.world.groundHeight(x, z) + 0.05, z, 0, 0.6, 0, 0.5, 0.2, 0.5, DUST, DUST_END, 0.35, 1, 0);
+        fx.soft(x, this.g.floorAt(x, by.y, z) + 0.05, z, 0, 0.6, 0, 0.5, 0.2, 0.5, DUST, DUST_END, 0.35, 1, 0);
       }
       return;
     }
@@ -192,7 +201,7 @@ export class VillainCasts {
       D.tick = 0.5;
       const dmg = D.owed; D.owed = 0;
       this.stats.atPlayer++;
-      this.hurtPlayer?.(dmg, 'power', by.x, by.z, by.y);
+      this.hurtPlayer?.(dmg * dealtBy(by), 'power', by.x, by.z, by.y);
       const act = by.actor;
       if (act) act.hp = Math.min(act.maxHp, act.hp + dmg * CASTERS.drainHeal);
     }
@@ -209,13 +218,13 @@ export class VillainCasts {
       case 'frost': {
         this.rays.push({ power, ax: H.x, ay: H.y, az: H.z, bx: ex, by: ey, bz: ez, life: power === 'bolt' ? 0.4 : P.hold, t: 0, seed: (Math.random() * 1e6) | 0 });
         this.lineHits(by, power, H.x, H.z, ex, ez, P.radius, H.y, ey);
-        if (power === 'frost' && this.near(ex, ez)) g.elements.fx.decal(DecalKind.Frost, ex, g.world.groundHeight(ex, ez) + 0.03, ez, 0, 1, 0, 2.4, 2.4, Math.random() * 6, 20);
+        if (power === 'frost' && this.near(ex, ez)) g.elements.fx.decal(DecalKind.Frost, ex, g.floorAt(ex, ey - 1, ez) + 0.03, ez, 0, 1, 0, 2.4, 2.4, Math.random() * 6, 20);
         break;
       }
       case 'fireball':
       case 'stun': {
         const fire = power === 'fireball';
-        const gy = g.world.groundHeight(tx, tz);
+        const gy = g.floorAt(tx, ty - 1, tz);
         const T = fire ? Math.max(0.25, l / CASTERS.orbSpeed) : Math.min(1.1, Math.max(0.5, l / 13));
         this.orbs.push({ kind: fire ? 'fire' : 'stun', x: H.x, y: H.y, z: H.z, ax: H.x, ay: H.y, az: H.z, bx: tx, by: fire ? ty : gy + 0.1, bz: tz, t: 0, T, arc: fire ? 0 : 1 + l * 0.18, fuse: fire ? 0 : 0.7, by_: by });
         this.casting.set(by, this.time);
@@ -254,7 +263,7 @@ export class VillainCasts {
     const yAt = ay + (ey - ay) * Math.min(1, Math.hypot(p.pos.x - ax, p.pos.z - az) / (Math.hypot(bx - ax, bz - az) || 1));
     if (pd < w + p.height * 0.08 && yAt > p.pos.y - 0.3 && yAt < p.pos.y + p.height + 0.3) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg * (0.85 + 0.3 * Math.random()), 'power', ax, az, ay);
+      this.hurtPlayer?.(P.dmg * (0.85 + 0.3 * Math.random()) * dealtBy(by), 'power', ax, az, ay);
       if (power === 'frost') { p.chillT = CASTERS.chill; p.chillSpeed = CASTERS.chillSpeed; }
     }
     const mx = (ax + bx) / 2, mz = (az + bz) / 2, R = Math.hypot(bx - ax, bz - az) / 2 + w;
@@ -268,7 +277,7 @@ export class VillainCasts {
   /** An EMP at the aim: a blue ring, cars in it stall, drones drop, the hero gets a jolt and is slowed. */
   private emp(by: PedAgent, x: number, y: number, z: number): void {
     const g = this.g, P = VILLAIN_POWERS.emp, R = P.radius, p = g.player;
-    const ground = g.world.groundHeight(x, z);
+    const ground = g.floorAt(x, y - 1, z);
     if (this.near(x, z, 500)) {
       const fx = g.elements.fx;
       for (let i = 0; i < 24; i++) {
@@ -281,7 +290,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
     if (pd < R + p.height * 0.1 && Math.abs(p.pos.y - y) < 4) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', x, z, y);
+      this.hurtPlayer?.(P.dmg * dealtBy(by), 'power', x, z, y);
       p.chillT = Math.max(p.chillT, 1.5); p.chillSpeed = CASTERS.chillSpeed;
     }
     for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) {
@@ -314,7 +323,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - by.x, p.pos.z - by.z);
     if (pd < R && Math.abs(p.pos.y - by.y) < 4) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg * (1 - 0.5 * pd / R), 'power', by.x, by.z, by.y);
+      this.hurtPlayer?.(P.dmg * (1 - 0.5 * pd / R) * dealtBy(by), 'power', by.x, by.z, by.y);
       p.chillT = Math.max(p.chillT, CASTERS.wailShaken); p.chillSpeed = Math.min(p.chillSpeed || 1, CASTERS.chillSpeed);
       g.camRig.addShake(0.3);
     }
@@ -336,7 +345,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - o.x, p.pos.z - o.z);
     if (pd < P.radius + p.height * 0.1 && o.y > p.pos.y - 1 && o.y < p.pos.y + p.height + 1) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', o.x, o.z, o.y);
+      this.hurtPlayer?.(P.dmg * dealtBy(o.by_), 'power', o.x, o.z, o.y);
       p.chillT = Math.max(p.chillT, CASTERS.curse); p.chillSpeed = CASTERS.curseSpeed;
       this.cursedT = CASTERS.curse;
     }
@@ -395,7 +404,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
     if (pd < B.radius && Math.abs(p.pos.y - y) < 5) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius), 'power', x, z, y);
+      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius) * circleDealt(circle), 'power', x, z, y);
       p.chillT = Math.max(p.chillT, CASTERS.wailShaken * 2); p.chillSpeed = CASTERS.chillSpeed;
       g.camRig.addShake(0.35);
     }
@@ -415,7 +424,7 @@ export class VillainCasts {
     };
     if (inCone(p.pos.x, p.pos.z) && Math.abs(p.pos.y - by.y) < 3) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', by.x, by.z, by.y);
+      this.hurtPlayer?.(P.dmg * dealtBy(by), 'power', by.x, by.z, by.y);
       const push = 9 / Math.max(1, Math.sqrt(p.k));
       p.vel.x += ux * push; p.vel.z += uz * push; p.vel.y += 2.5 / Math.max(1, Math.sqrt(p.k));
     }
@@ -574,7 +583,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
     if (pd < B.radius && Math.abs(p.pos.y - y) < 5) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius), 'power', x, z, y);
+      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius) * circleDealt(circle), 'power', x, z, y);
       if (element === 'frost') { p.chillT = Math.max(p.chillT, CASTERS.chill); p.chillSpeed = CASTERS.chillSpeed; }
       else if (!p.flying) { const push = 8 / Math.max(1, Math.sqrt(p.k)), l = pd || 1; p.vel.x += ((p.pos.x - x) / l) * push; p.vel.z += ((p.pos.z - z) / l) * push; p.vel.y += 3 / Math.max(1, Math.sqrt(p.k)); }
       g.camRig.addShake(0.3);
@@ -673,13 +682,13 @@ export class VillainCasts {
 
   private fireBurst(o: Orb): void {
     const g = this.g, P = VILLAIN_POWERS.fireball, R = P.radius, p = g.player;
-    const ground = g.world.groundHeight(o.x, o.z);
+    const ground = g.floorAt(o.x, o.y - 1, o.z);
     if (this.near(o.x, o.z, 700)) fireBurst(g.elements.fx, g.debris, g.dust, o.x, o.y, o.z, 0.85, ground, 0.5);
     g.audio.play('explosion', o.x, o.y, o.z, 0.7, 1.25, 25, g.renderer.camera.position);
     const pd = Math.hypot(p.pos.x - o.x, p.pos.z - o.z);
     if (pd < R && o.y > p.pos.y - 1.5 && o.y < p.pos.y + p.height + 1.5) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg * (1 - 0.6 * pd / R), 'power', o.x, o.z, o.y);
+      this.hurtPlayer?.(P.dmg * (1 - 0.6 * pd / R) * dealtBy(o.by_), 'power', o.x, o.z, o.y);
     }
     for (const a of g.peds.neighbours(o.x, o.z, R, this.nb)) {
       if (a === o.by_ || !a.alive || a.inside || a.state === PState.Down || Math.abs(a.y - o.y) > R) continue;
@@ -704,7 +713,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - o.x, p.pos.z - o.z);
     if (pd < R + p.height * 0.1 && Math.abs(p.pos.y - o.y) < 4) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', o.x, o.z, o.y);
+      this.hurtPlayer?.(P.dmg * dealtBy(o.by_), 'power', o.x, o.z, o.y);
       if (!p.flying) p.downT = Math.max(p.downT, CASTERS.stunDown * (1 - 0.5 * pd / R));
       g.camRig.addShake(0.25);
     }
@@ -722,7 +731,7 @@ export class VillainCasts {
       const s0 = k.s;
       k.s = Math.min(k.L, k.s + CASTERS.crackSpeed * dt);
       const x0 = k.ax + k.dx * s0, z0 = k.az + k.dz * s0, x1 = k.ax + k.dx * k.s, z1 = k.az + k.dz * k.s;
-      const y1 = g.world.groundHeight(x1, z1);
+      const y1 = g.floorAt(x1, k.y, z1);
       if (this.near(x1, z1)) {
         fx.decal(DecalKind.Crack, (x0 + x1) / 2, y1 + 0.03, (z0 + z1) / 2, 0, 1, 0, Math.max(0.5, k.s - s0) * 1.3, 0.9, Math.atan2(k.dx, k.dz), 25);
         for (let n = 0; n < 2; n++) fx.soft(x1 + (Math.random() - 0.5), y1 + 0.2, z1 + (Math.random() - 0.5), (Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2, 0.9, 0.4, 1.3, DUST, DUST_END, 0.55, 1.5, -3);
@@ -732,7 +741,7 @@ export class VillainCasts {
       if (!k.hitPlayer && !p.flying && Math.abs(p.pos.y - y1) < 1.2 && segDist(p.pos.x, p.pos.z, x0, z0, x1, z1) < P.radius) {
         k.hitPlayer = true;
         this.stats.atPlayer++;
-        this.hurtPlayer?.(P.dmg, 'power', x1, z1, y1);
+        this.hurtPlayer?.(P.dmg * dealtBy(k.by_), 'power', x1, z1, y1);
         p.downT = Math.max(p.downT, 1.1);
         g.camRig.addShake(0.35);
       }
