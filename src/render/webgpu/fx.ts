@@ -7,6 +7,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, mat4, vec4, buffer, instanceIndex, instancedBufferAttribute, instancedDynamicBufferAttribute, OnBeforeObjectUpdate, diffuseColor,
+  attribute, positionLocal, normalLocal, transformNormal,
 } from 'three/tsl';
 
 const _mats = new WeakMap<object, unknown>();
@@ -33,6 +34,28 @@ export const instanceMatrixNode = Fn((builder) => {
   const f = im.usage === THREE.DynamicDrawUsage ? instancedDynamicBufferAttribute : instancedBufferAttribute;
   return mat4(f(ib, 'vec4', 16, 0), f(ib, 'vec4', 16, 4), f(ib, 'vec4', 16, 8), f(ib, 'vec4', 16, 12));
 });
+
+/**
+ * Instancing through geometry attributes (render/geoInstances.ts): when the drawn geometry has
+ * iM0..iM3 (matrix columns) and iColor, position and normal are transformed by that matrix and the
+ * diffuse colour multiplied by the colour, like three does for an InstancedMesh. One node build
+ * serves every such mesh. Without those attributes the material is unchanged.
+ */
+export function geometryInstancing(mat: THREE.NodeMaterial): void {
+  const pos = mat.setupPosition, dif = mat.setupDiffuseColor;
+  mat.setupPosition = function (builder) {
+    if (builder.hasGeometryAttribute('iM0')) {
+      const M = mat4(attribute('iM0', 'vec4'), attribute('iM1', 'vec4'), attribute('iM2', 'vec4'), attribute('iM3', 'vec4'));
+      positionLocal.assign(M.mul(vec4(positionLocal, 1.0)).xyz);
+      if (builder.hasGeometryAttribute('normal')) normalLocal.assign(transformNormal(normalLocal, M));
+    }
+    return pos.call(this, builder);
+  };
+  mat.setupDiffuseColor = function (builder) {
+    dif.call(this, builder);
+    if (builder.hasGeometryAttribute('iColor')) diffuseColor.assign(vec4(diffuseColor.rgb.mul(attribute('iColor', 'vec3')), diffuseColor.a));
+  };
+}
 
 /** Column i of a mat4 node (GLSL `m[i]`). */
 export const col = (m, i: number) => m.mul(vec4(i === 0 ? 1 : 0, i === 1 ? 1 : 0, i === 2 ? 1 : 0, i === 3 ? 1 : 0));
