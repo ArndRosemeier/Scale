@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.153 — 2026-10-08
+## 0.154 — 2026-10-08
 
 - **Super jump is a real travel power.** Hold W while you leap and the jump now carries you forward: the higher you climb, the faster it goes, up to 18, 39, 72, 120 and 200 m/s at ranks 1 to 5 (it was 12 m/s at every rank). Bounding on from landing to landing now covers ground at least as fast as a boosted flight at the same rank (flight 14 / 28 / 54 / 91 / 159 m/s, super jump 14 / 29 / 55 / 94 / 161 m/s even pressing Space a little late on each landing). A top-rank leap clears about a kilometre. A long leap stops on landing instead of skidding down the street, a quick hop still only moves you a little, and without W the jump is the same straight climb as before. The energy cost is unchanged, and landing beside someone at human size still costs no reputation. The Powers table shows the leap speed per rank (`npx tsx tools/travelsim.ts` measures it).
+
+## 0.153 — 2026-10-08
+
+- **Character creator works in WebGPU mode.** With `?gpu=webgpu` the creator showed only a grey capsule, because its preview still drew with the old WebGL renderer, which cannot show the WebGPU materials. In WebGPU mode the preview now uses a WebGPU renderer too. WebGL mode is unchanged.
 
 ## 0.152 — 2026-10-08
 
