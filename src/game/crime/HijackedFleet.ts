@@ -16,6 +16,7 @@ import { BState, type ServiceBot } from '../../future/ServiceBots';
 import { DKind, DState, type Drone } from '../../future/Drones';
 import type { RogueMachines, Rogue, RogueOwner } from '../threats/RogueMachines';
 import type { Crime } from './Crime';
+import { lastHitBy } from '../threats/aggro';
 
 export const HIJACKED = { duration: 75, recruitR: 70, droneR: 160, rebootAfter: 4, karma: 4, rep: 0.4 };
 
@@ -110,10 +111,9 @@ export class HijackedFleet implements RogueOwner {
       if (m.out) continue;
       if (!this.ctl.disabled(m)) { if (m.mode !== 'off') left++; continue; }
       m.out = true;
-      if (m.lastBy !== 'player' || this.ctl.time - m.lastT > 6) continue;
+      if (lastHitBy(m.lastBy, m.lastT, this.ctl.time) !== 'player') continue;
       this.byPlayer++;
-      this.g.progress.addKarma(HIJACKED.karma, m.kind === 'drone' ? 'brought down a hijacked drone' : 'stopped a hijacked robot');
-      this.g.crime.rep.add(HIJACKED.rep, 'hijacked robot');
+      this.g.crime.reward({ karma: HIJACKED.karma, why: m.kind === 'drone' ? 'brought down a hijacked drone' : 'stopped a hijacked robot', rep: HIJACKED.rep, news: 'hijacked robot' });
     }
     if (left === 0 && this.t > 4) this.finish('stopped');
   }

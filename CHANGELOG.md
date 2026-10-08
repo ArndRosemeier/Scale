@@ -2,13 +2,32 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.153 — 2026-10-08
+
+- **Thinner lips, and a lip thickness slider.** Everyone's lips were too thick: the average mouth is now noticeably thinner, for city people and new heroes alike, and the coloured lip area is tighter. The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and goes from thin lips to full ones, on women and men alike. Saved with the character like every face slider.
+
+## 0.152 — 2026-10-08
+
+- **Fair credit against monsters.** The Strider and the last-resort strike judged differently whether the hero had earned the win. Now both use one rule: the monster was angriest with the hero, or the hero did at least a quarter of the fighting it remembers. Rogue and hijacked machines also count the hero's last blow the same way, with the same 6-second window. The Maw only rewards the hero (and raises the Lumen's trust) when the hero brought it down. Behind the scenes, every monster books its anger and armour through one place, and a self-test keeps it that way.
+## 0.151 — 2026-10-08
+
+- **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, a screen shake never pushes it through a wall, it no longer sinks into a raised platform or slips behind the walls at the underpass mouth, and near the top of a stair it keeps clear of the street overhead. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).
+
+## 0.150 — 2026-10-08
+
+- **Fix: landing a super jump next to someone no longer costs reputation.** At about human size, coming down beside a pedestrian now only makes them stumble and call a stern word after you, just like brushing past them at super speed: no harm, no reputation, no wanted level. A giant hero's landing still counts as before.
+
+## 0.149 — 2026-10-08
+
+- **Every good deed is rewarded the same way.** Each kind of rescue and win used to hand out its own mix of karma, reputation, cheers and stats, and each one forgot something different. Now they all go through one reward step. Anything that ends a crime, a den, a monster or a whole event counts as "stopped" in your stats, makes people nearby cheer, and calms the police a little. This now also applies to bringing down the Strider, stopping the awakened tree, beating back the brood or the rogue robots, catching the runaway saucer, calling off the last-resort strike and bringing down the Maw. Rescues count as good deeds, and surface slime brutes earn a little reputation like brood beasts. A self-test keeps rewards in one place.
+
 ## 0.148 — 2026-10-08
 
-- **Thinner lips.** Everyone's lips were too thick: the average mouth is now noticeably thinner, for city people and new heroes alike, and the coloured lip area is tighter. The lip thickness slider's thin end now gives really thin lips.
+- **No more floating outside the city.** Out in the countryside the hero (and everyone else standing on the ground) stood 35 cm above the grass: the terrain is drawn a little lower than its height so it never shows through the city's streets, but walking used the undropped height. The ground height now follows what is drawn: open land at the drawn terrain, country roads, village squares and farmyards at their surface. Inside the city nothing changes.
 
 ## 0.147 — 2026-10-08
 
-- **Lip thickness slider.** The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and finally does something you can see: from a thin line to very full lips, on women and men alike. Around the middle it changes little, so city people's faces stay much as they were. Saved with the character like every face slider.
+- **Fix: police and army stomps no longer count against the hero.** When a soldier's or officer's footstep knocked someone down, the game booked it as the hero's doing, which could cost reputation and raise the wanted level while the hero only stood by. A giant police or army step also no longer hurts the slime brood or a monster as if the hero had stamped. When the police shoot a rampaging giant hero, the hit now counts as theirs instead of the army's. Behind the scenes, "who did it" now uses one vocabulary everywhere, and a self-test keeps it that way.
 
 ## 0.146 — 2026-10-08
 

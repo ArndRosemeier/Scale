@@ -36,6 +36,7 @@ import type { BuildingRef } from '../../world/WorldIndex';
 import { LAST_RESORT, lastResortDue, lastResortRoll, ShockWave } from './rules';
 import { strikeCasualties } from './Casualties';
 import type { SmokeColumn } from './SmokeColumns';
+import { heroEarned } from '../threats/aggro';
 
 export type LastResortState = 'idle' | 'countdown' | 'calledOff' | 'strike';
 
@@ -192,13 +193,8 @@ export class LastResort {
     this.releaseConvoy();
     if (beaten && S) {
       // The player's doing (the most damage, or a good share of it): the city was saved.
-      let tot = 0;
-      for (const v of S.aggro.values()) tot += v;
-      const mine = S.aggro.get('player') ?? 0;
-      if (tot > 0 && (mine >= tot * 0.25 || S.topAggro()?.key === 'player')) {
-        g.progress.addKarma(LAST_RESORT.karma.saved, 'stopped it in time — the strike is called off');
-        g.crime.rep.add(LAST_RESORT.rep.saved, 'saved the city');
-        g.crime.cheer();
+      if (heroEarned(S.aggro)) {
+        g.crime.reward({ karma: LAST_RESORT.karma.saved, why: 'stopped it in time — the strike is called off', rep: LAST_RESORT.rep.saved, news: 'saved the city', stopped: true });
       }
       this.A.news(2);
     }

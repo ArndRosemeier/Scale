@@ -43,6 +43,7 @@ import type { Cause } from '../Stimuli';
 import type { BuildingRef } from '../../world/WorldIndex';
 import { angriestInReach } from '../response/forces/BattleModel';
 import { boneLayout } from './rig/skin';
+import { bookAggro, decayAggro, heroEarned, topAggro, zoneDealt } from './aggro';
 
 /** Its blows as the army's units feel them (response/forces): breath ticks, tail sweeps, footfalls, slams, roars, its fall. */
 export type StriderBlow = 'breath' | 'swipe' | 'step' | 'slam' | 'roar' | 'fall';
@@ -294,14 +295,14 @@ export class Strider implements ThreatEvent, ThreatActor {
     else if (zone) Z = zone;
     else Z = (src.x !== undefined ? this.zoneAt(src.x, src.y ?? this.y, src.z ?? this.z)?.zone : null) ?? this.zone('back');
     const weak = Z.weak && Z.exposed;
-    const dealt = amount * (1 - (weak ? 0.05 : Z.armour)) * (weak ? STRIDER.weakMul : 1);
+    const dealt = zoneDealt(amount, Z.armour, weak, STRIDER.weakMul);
     this.hp = Math.max(0, this.hp - dealt);
     Z.recent += dealt;
     this.recentHit += dealt;
     this.stats.damage += dealt;
     if (weak) this.stats.weakHits++;
     const key = src.key ?? src.cause;
-    this.aggro.set(key, (this.aggro.get(key) ?? 0) + dealt + amount * 0.02 + (src.aggro ?? 0));
+    bookAggro(this.aggro, key, dealt + amount * 0.02 + (src.aggro ?? 0));
     if (src.cause === 'player' && weak && dealt > 20) this.g.progress.addKarma(STRIDER.karma.weak, 'hit the monster where it hurts');
     this.react(Z, dealt, weak, src);
     return { dealt, zone: Z, weak };
@@ -322,11 +323,7 @@ export class Strider implements ThreatEvent, ThreatActor {
   }
 
   /** Who it is angriest with (aggro key) and how much. */
-  topAggro(): { key: string; v: number } | null {
-    let best: { key: string; v: number } | null = null;
-    for (const [key, v] of this.aggro) if (!best || v > best.v) best = { key, v };
-    return best;
-  }
+  topAggro(): { key: string; v: number } | null { return topAggro(this.aggro); }
 
   // ================================================================== ThreatEvent
 
@@ -364,7 +361,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.mode === 'gone') return;
     const g = this.g, rig = this.rig;
     // Decay: the aggro table, recent hits per zone.
-    for (const [k, v] of this.aggro) { const nv = v * Math.exp(-dt / 90); if (nv < 1) this.aggro.delete(k); else this.aggro.set(k, nv); }
+    decayAggro(this.aggro, dt, 90);
     for (const Z of this.zones) Z.recent *= Math.exp(-dt / 4);
     this.recentHit *= Math.exp(-dt / 2);
     this.tokens = Math.min(STRIDER.smashBurst, this.tokens + dt * STRIDER.smashRate);
@@ -846,7 +843,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.s = nearestS(this.route, this.rig.x, this.rig.z, this.s, 400);
     if (this.hp < this.maxHp * STRIDER.retreatAt) {
       const top = this.topAggro();
-      if (top?.key === 'player') { this.g.progress.addKarma(STRIDER.karma.retreat, 'drove the monster back'); this.g.crime.rep.add(6, 'monster driven off'); }
+      if (top?.key === 'player') this.g.crime.reward({ karma: STRIDER.karma.retreat, why: 'drove the monster back', rep: 6, news: 'monster driven off' });
     }
   }
 
@@ -1192,11 +1189,8 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.g.stimuli.emit('roar', h.x, h.y, h.z, 9, 700, { cause: 'threat', size: this.height });
     this.active = false;
     this.outcome = 'defeated';
-    const top = this.topAggro();
-    if (top?.key === 'player' || (this.aggro.get('player') ?? 0) > this.maxHp * 0.25) {
-      this.g.progress.addKarma(STRIDER.karma.defeated, 'brought the monster down');
-      this.g.crime.rep.add(12, 'monster defeated');
-      this.g.crime.cheer();
+    if (heroEarned(this.aggro)) {
+      this.g.crime.reward({ karma: STRIDER.karma.defeated, why: 'brought the monster down', rep: 12, news: 'monster defeated', stopped: true });
     }
   }
 
