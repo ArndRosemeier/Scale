@@ -28,7 +28,7 @@
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
-import { PState, type PedAgent } from '../../sim/Pedestrians';
+import { PState, type PedAgent, hasRole } from '../../sim/Pedestrians';
 import { makeActor, play, goTo, stand, lookAt, subdued, SIDEKICK_OWNER, PEOPLE_OWNER, type Actor } from '../../sim/actors/Actor';
 import { traitsOf, temperamentOf, type Temperament, type Traits } from '../people/identity';
 import { VILLAIN_POWERS, CASTERS } from '../powers/Caster';
@@ -783,12 +783,8 @@ export class Companion {
   /** Wanted with the police about: out of it, on the hero's far side from the nearest officer. */
   private keepOff(a: PedAgent, dt: number): void {
     const g = this.g, p = g.player.pos;
-    let ox = p.x + 1, oz = p.z, best = Infinity;
-    for (const o of g.peds.neighbours(p.x, p.z, MATE.policeR, this.tmp)) {
-      if (o.actor?.role !== 'police') continue;
-      const d = Math.hypot(o.x - p.x, o.z - p.z);
-      if (d < best) { best = d; ox = o.x; oz = o.z; }
-    }
+    const cop = g.peds.nearest(p.x, p.z, MATE.policeR, (o) => hasRole(o, 'police'));
+    const ox = cop ? cop.x : p.x + 1, oz = cop ? cop.z : p.z;
     const dx = p.x - ox, dz = p.z - oz, l = Math.hypot(dx, dz) || 1;
     const x = p.x + (dx / l) * MATE.keepOff, z = p.z + (dz / l) * MATE.keepOff;
     if (!this.spot || Math.hypot(this.spot.x - x, this.spot.z - z) > 12) this.spot = { x, z };

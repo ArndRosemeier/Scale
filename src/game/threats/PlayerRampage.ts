@@ -23,8 +23,7 @@ import type { Game } from '../Game';
 import type { DamageResult, DamageSource, ThreatActor, ThreatEvent, ThreatOutcome, ThreatTarget, ThreatZone } from './ThreatEvent';
 import type { AirProvider, StriderBlow } from './Strider';
 import type { ArmyFoe } from '../response/forces/Forces';
-import type { PedAgent } from '../../sim/Pedestrians';
-import { PState } from '../../sim/Pedestrians';
+import { type PedAgent, hasRole } from '../../sim/Pedestrians';
 import { DKind } from '../../future/Drones';
 import type { HarmEntry } from '../Consequences';
 import { PLAYER_ZONES, RAMPAGE, RampageWatch, furyOf, furyScale, ladderTop, playerDamage, playerPath, playerSpawn } from './rampageRules';
@@ -366,13 +365,7 @@ export class HostilePlayer {
   /** The nearest officer (or soldier) shouts up at the giant. */
   private shout(lines: string[]): void {
     const g = this.g, p = g.player.pos;
-    let best: PedAgent | null = null, bd = 120;
-    for (const a of g.peds.neighbours(p.x, p.z, 120, [])) {
-      const r = a.actor?.role;
-      if ((r !== 'police' && r !== 'soldier') || a.state === PState.Down) continue;
-      const d = Math.hypot(a.x - p.x, a.z - p.z);
-      if (d < bd) { bd = d; best = a; }
-    }
+    const best = g.peds.nearest(p.x, p.z, 120, (a) => hasRole(a, 'police', 'soldier'));
     if (best) g.barks.say(best, lines[Math.floor(Math.random() * lines.length)]);
   }
 

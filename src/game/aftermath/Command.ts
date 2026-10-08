@@ -12,7 +12,7 @@
  * here — see ARCHITECTURE.md, "The army".
  */
 import type { Game } from '../Game';
-import { PState, type PedAgent } from '../../sim/Pedestrians';
+import { type PedAgent, hasRole } from '../../sim/Pedestrians';
 
 export const COMMAND = {
   /** Reputation needed to rally the squads / call an airstrike. */
@@ -93,13 +93,7 @@ export class Command {
 
   private soldierNear(): PedAgent | null {
     const g = this.g, p = g.player.pos;
-    let best: PedAgent | null = null, bd = 30;
-    for (const a of g.peds.neighbours(p.x, p.z, 30, [])) {
-      if (a.actor?.role !== 'soldier' || a.state === PState.Down) continue;
-      const d = Math.hypot(a.x - p.x, a.z - p.z);
-      if (d < bd) { bd = d; best = a; }
-    }
-    return best;
+    return g.peds.nearest(p.x, p.z, 30, (a) => hasRole(a, 'soldier'));
   }
 
   private deny(msg: string): void {

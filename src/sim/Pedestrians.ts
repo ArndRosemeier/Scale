@@ -107,6 +107,21 @@ export const GAWK_MAX = 40;
 /** Bored of gawking (gawkT above this): new incidents no longer make them stop. */
 export const GAWK_BORED = 20;
 
+/** Up and about: alive, outdoors and not lying down (anyone a blow, a look or a shout can reach). */
+export function isUp(a: PedAgent): boolean {
+  return a.alive && !a.inside && a.state !== PState.Down;
+}
+
+/** An ordinary passer-by up and about (no actor: not a crook, an officer, a soldier or a scene's cast). */
+export function isBystander(a: PedAgent): boolean {
+  return isUp(a) && !a.actor;
+}
+
+/** An actor in one of these roles, still on their feet. */
+export function hasRole(a: PedAgent, ...roles: string[]): boolean {
+  return !!a.actor && roles.includes(a.actor.role) && a.alive && a.state !== PState.Down;
+}
+
 /** May this agent start gawking (not bored of it)? */
 export function canGawk(a: PedAgent): boolean {
   return (a.gawkT ?? 0) < GAWK_BORED;
@@ -573,6 +588,20 @@ export class Pedestrians {
       this.head[h] = i;
     }
   }
+
+  /**
+   * The nearest agent within `r` m (flat) that `ok` accepts, or null: the one nearest-person search
+   * (docs/CONVENTIONS.md). `ok` also gets the distance (for cones and leashes); see isUp, isBystander, hasRole.
+   */
+  nearest(x: number, z: number, r: number, ok: (a: PedAgent, d: number) => boolean): PedAgent | null {
+    let best: PedAgent | null = null, bd = r;
+    for (const a of this.neighbours(x, z, r, this.nearTmp)) {
+      const d = Math.hypot(a.x - x, a.z - z);
+      if (d < bd && ok(a, d)) { bd = d; best = a; }
+    }
+    return best;
+  }
+  private nearTmp: PedAgent[] = [];
 
   neighbours(x: number, z: number, r: number, out: PedAgent[]): PedAgent[] {
     out.length = 0;

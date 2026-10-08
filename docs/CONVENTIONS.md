@@ -42,6 +42,13 @@ Its open items are consolidated here one PR at a time.
 | Karma only (a weak-spot hit, a power core) | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
 | Who did it (cause) | One vocabulary, `Cause` in `game/Stimuli.ts` (`HarmCause` is the same type; `DamageCause` adds `'fire'`). Cross into a knock-down's `DownCause` with `downCauseOf(cause)` and from a broken building to the ledger with `harmCauseOf(cause)` (`shared/cause.ts`). | An inline `cause === 'threat' ? 'threat' : … 'player'` (**guarded**: police and army stomps used to land on the hero) |
 
+## People
+
+| Need | Use | Not |
+|---|---|---|
+| The nearest person who … | `peds.nearest(x, z, r, (a, d) => …)` (`sim/Pedestrians.ts`) | A `let best = null, bd = r; for (… neighbours …)` loop (**guarded**) |
+| Is this person up and about / an ordinary passer-by / an officer still standing? | `isUp(a)`, `isBystander(a)`, `hasRole(a, 'police', …)` | `a.alive && !a.inside && a.state !== PState.Down …` written out (the copies each forgot a different part), or `a.state === 5` |
+
 ## Time
 
 | Need | Use | Not |

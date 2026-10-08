@@ -542,12 +542,7 @@ export class RogueMachines implements MalfunctionCtl {
       }
       if (best) { m.tgt = { kind: 'car', v: best }; return; }
     }
-    let best: PedAgent | null = null, bd = see;
-    for (const a of g.peds.neighbours(x, z, see, this.nb)) {
-      if (!this.validPed(a, y, m.kind === 'drone') || !inLeash(a.x, a.z) || o?.spares?.(a)) continue;
-      const d = Math.hypot(a.x - x, a.z - z);
-      if (d < bd) { bd = d; best = a; }
-    }
+    const best = g.peds.nearest(x, z, see, (a) => this.validPed(a, y, m.kind === 'drone') && inLeash(a.x, a.z) && !o?.spares?.(a));
     if (best) m.tgt = { kind: 'ped', a: best };
     else if (playerOk) m.tgt = { kind: 'player' };
   }
