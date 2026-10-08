@@ -113,3 +113,13 @@ WebGPU uploads an attribute with `DynamicDrawUsage` again on every frame, whole;
 usage as a hint and uploads on `needsUpdate`. The game sets `needsUpdate` everywhere, so the kit
 maps DynamicDrawUsage to StaticDrawUsage on WebGPU (`noPerFrameUploads`). Mark changes with
 `needsUpdate` (or `addUpdateRange` + `needsUpdate`), never rely on per-frame uploads.
+
+## Parallel compiles
+
+Most of WebGPU's loading time is GPU pipeline compiles (`&buildlog` prints the time spent in the
+WebGPU API calls). three's compileAsync waits for each object's pipeline before the next, and the
+game ran one compileAsync at a time because two whose node builds interleave (async builds yield to
+the main thread) produce broken shaders. `oneNodeBuildAtATime` (webgpu/index.ts) queues the async
+node builds instead, so `Renderer.compileAsync` runs up to four calls at once and their pipelines
+compile in parallel; the warm-up compiles the scene in parts for that (`compileParts`). Internal:
+wraps `renderer._nodes.getForRenderAsync` (r186); without it, compiles run one at a time as before.

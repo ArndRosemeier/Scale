@@ -82,6 +82,7 @@ export class Renderer {
     if (!this.webgpu) return;
     await (this.gl as unknown as { init(): Promise<unknown> }).init();
     gpuKit().afterInit(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['afterInit']>[0]);
+    this.parallelCompiles = gpuKit().oneNodeBuildAtATime(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['afterInit']>[0]) ? 4 : 1;
     if (new URLSearchParams(location.search).has('offscreen')) gpuKit().offscreen(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['offscreen']>[0]);
   }
 
@@ -122,13 +123,28 @@ export class Renderer {
   /** compileAsync with matching program keys (see asScenePass). */
   compileAsync(obj: THREE.Object3D, target: THREE.Scene = this.scene): Promise<unknown> {
     if (!this.webgpu) return this.asScenePass(() => this.gl.compileAsync(obj, this.camera, target));
-    // One at a time: three's node builds are not made to run interleaved.
-    const job = this.compileQueue.then(() => this.compileNow(obj, target));
-    this.compileQueue = job.catch(() => undefined);
-    return job;
+    // A few at a time, so their GPU pipelines compile in parallel; their node builds still run one
+    // after the other (three's are not made to run interleaved; see oneNodeBuildAtATime).
+    return new Promise((resolve, reject) => {
+      this.compileWaiting.push(() => {
+        try { return this.compileNow(obj, target).then(resolve, reject); } catch (e) { reject(e); return Promise.resolve(); }
+      });
+      this.nextCompile();
+    });
   }
 
-  private compileQueue: Promise<unknown> = Promise.resolve();
+  /** WebGPU: how many compileAsync calls may run at once (1 without the node build queue). */
+  private parallelCompiles = 1;
+  private compilesRunning = 0;
+  private compileWaiting: (() => Promise<unknown>)[] = [];
+
+  private nextCompile(): void {
+    while (this.compilesRunning < this.parallelCompiles && this.compileWaiting.length) {
+      const job = this.compileWaiting.shift()!;
+      this.compilesRunning++;
+      void job().finally(() => { this.compilesRunning--; this.nextCompile(); });
+    }
+  }
   private compileCam = new THREE.PerspectiveCamera();
 
   /**

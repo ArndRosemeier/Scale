@@ -107,7 +107,8 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   progress(0.1);
   // 3. Compile, then 4. the frame loop with the gate on.
   const tc = performance.now();
-  await R.compileAsync(scene);
+  // (WebGPU: in parts, a few compiling at once, so their pipelines compile in parallel.)
+  await (R.webgpu ? Promise.all(compileParts(scene, 32).map((o) => R.compileAsync(o))) : R.compileAsync(scene));
   rep.compileMs = performance.now() - tc;
   rep.programsCompiled = (gl.info.programs ?? []).length;
   const builds = (window as unknown as { nodeBuilds?: { count: number } }).nodeBuilds;
@@ -170,6 +171,32 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   rep.gateWaiting = host.gate.waiting().slice(0, 20);
   if (builds) rep.nodeBuilds!.push(builds.count);
   return rep;
+}
+
+/**
+ * The visible subtrees of `scene` as about `n` parts of similar size (by object count): groups
+ * without a material of their own are opened up, largest first. Compiling the parts compiles what
+ * compiling the scene does.
+ */
+function compileParts(scene: THREE.Scene, n: number): THREE.Object3D[] {
+  const size = new Map<THREE.Object3D, number>();
+  const count = (o: THREE.Object3D): number => {
+    let c = 1;
+    for (const ch of o.children) if (ch.visible) c += count(ch);
+    size.set(o, c);
+    return c;
+  };
+  count(scene);
+  let parts = scene.children.filter((o) => o.visible);
+  for (;;) {
+    if (parts.length >= n) break;
+    const open = parts
+      .filter((o) => !(o as THREE.Mesh).material && o.children.some((c) => c.visible))
+      .sort((a, b) => size.get(b)! - size.get(a)!)[0];
+    if (!open) break;
+    parts = parts.filter((o) => o !== open).concat(open.children.filter((c) => c.visible));
+  }
+  return parts;
 }
 
 /** The previous warm-up: frame loop first, compile the scene (staging out of view), calm frames. */

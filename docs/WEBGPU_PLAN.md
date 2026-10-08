@@ -158,3 +158,10 @@ Ordered by how much of the screen they cover (port first what is always visible)
   glass now share one node graph per kind (`webgpu/sharedGraph.ts`): headless, 3 person node
   builds instead of one set per person, 1 facade build; a test page renders three horn colours,
   two simple parts and an alive vs. collapsed facade correctly from shared graphs.
+- 2026-10-08: PC at 66c73f6: city matches WebGL, people normal and varied, builds while playing
+  1–2 per 10–30 s (was 10–27 per wave + facades); load 80 s vs WebGL 53–61 s (29 s shaders vs
+  9). `&buildlog` now also times the WebGPU API calls: headless, async pipeline compiles were busy
+  24 of the 35 s compile phase, strictly one at a time; node builds are the smaller part. Pipelines
+  now compile up to four at once (node builds still one at a time): headless compile phase 43.6 →
+  30.5 s.
+

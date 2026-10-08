@@ -49,6 +49,32 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   countNodeBuilds(renderer);
   shareInstancedShaders(renderer);
   noPerFrameUploads();
+  oneNodeBuildAtATime(renderer);
+}
+
+/**
+ * compileAsync builds an object's node shaders in steps that yield to the main thread
+ * (getForRenderAsync) and then waits for its pipeline. Two compileAsync calls whose node builds
+ * interleave produce broken shaders, so the game used to run them strictly one after the other,
+ * which also meant one GPU pipeline compile at a time. With the async node builds queued here
+ * (each still runs whole, as before), several compileAsync calls can run at once and their
+ * pipelines compile in parallel (the browser compiles async pipelines on worker threads).
+ * Internal: `_nodes.getForRenderAsync` (r186); without it nothing changes, see Renderer.compileAsync.
+ */
+export function oneNodeBuildAtATime(renderer: THREE.WebGPURenderer): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodes = (renderer as any)._nodes;
+  const build = nodes?.getForRenderAsync;
+  if (typeof build !== 'function') return false;
+  if (nodes.oneAtATime) return true;
+  let last: Promise<unknown> = Promise.resolve();
+  nodes.getForRenderAsync = function (this: unknown, renderObject: unknown) {
+    const run = last.then(() => build.call(this, renderObject));
+    last = run.catch(() => undefined);
+    return run;
+  };
+  nodes.oneAtATime = true;
+  return true;
 }
 
 /**
@@ -111,15 +137,45 @@ function countNodeBuilds(renderer: THREE.WebGPURenderer): void {
   };
   (window as unknown as { nodeBuilds: typeof nodeBuilds }).nodeBuilds = nodeBuilds;
   if (!log) return;
+  const gpu = timeGpuCompiles();
   let frames = 0;
   const tick = (): void => { frames++; requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
   setInterval(() => {
     const top = [...log].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${n} ${k}`).join('; ');
-    console.log(`[buildlog] ${(performance.now() / 1000).toFixed(0)} s, ${(frames / 10).toFixed(1)} fps, ${nodeBuilds.count} builds; last 10 s: ${top || 'none'}`);
+    console.log(`[buildlog] ${(performance.now() / 1000).toFixed(0)} s, ${(frames / 10).toFixed(1)} fps, ${nodeBuilds.count} builds; ${gpu()}; last 10 s: ${top || 'none'}`);
     log.clear();
     frames = 0;
   }, 10000);
+}
+
+/**
+ * `&buildlog`: how long the GPU side takes (WebGPU API calls on the device: shader modules and
+ * pipelines, blocking or async), totals since the start. `busy` is the time with at least one async
+ * pipeline in flight, `peak` the most at once, so the node-build share of a loading phase is what
+ * remains.
+ */
+function timeGpuCompiles(): () => string {
+  const t = { mods: 0, modMs: 0, sync: 0, syncMs: 0, async: 0, asyncMs: 0, busyMs: 0, flying: 0, peak: 0, since: 0 };
+  const D = (globalThis as unknown as { GPUDevice?: { prototype: Record<string, (...a: unknown[]) => unknown> } }).GPUDevice?.prototype;
+  if (!D) return () => 'no GPUDevice';
+  const timed = (name: string, add: (ms: number) => void) => {
+    const f = D[name];
+    D[name] = function (this: unknown, ...a: unknown[]) { const t0 = performance.now(); try { return f.apply(this, a); } finally { add(performance.now() - t0); } };
+  };
+  timed('createShaderModule', (ms) => { t.mods++; t.modMs += ms; });
+  timed('createRenderPipeline', (ms) => { t.sync++; t.syncMs += ms; });
+  const fa = D.createRenderPipelineAsync;
+  D.createRenderPipelineAsync = function (this: unknown, ...a: unknown[]) {
+    const t0 = performance.now();
+    if (t.flying++ === 0) t.since = t0;
+    t.peak = Math.max(t.peak, t.flying);
+    const end = () => { const now = performance.now(); t.async++; t.asyncMs += now - t0; if (--t.flying === 0) t.busyMs += now - t.since; };
+    const p = fa.apply(this, a) as Promise<unknown>;
+    p.then(end, end);
+    return p;
+  };
+  return () => `gpu: ${t.mods} modules ${t.modMs.toFixed(0)} ms, ${t.sync} pipelines blocking ${t.syncMs.toFixed(0)} ms, ${t.async} async ${t.asyncMs.toFixed(0)} ms (busy ${t.busyMs.toFixed(0)} ms, peak ${t.peak})`;
 }
 
 /** Warns about pipelines over WebGPU's vertex buffer limit, also on the WebGL2 backend (where they would work). */
