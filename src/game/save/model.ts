@@ -276,7 +276,7 @@ export function parseSave(input: string | unknown): SaveData {
     sky: { day: Math.floor(num(sky.day, 0, 0)), hour: num(sky.hour, 10.5, 0, 23.999), timeScale: num(sky.timeScale, 1, 0, 10000) },
     weather: w ? { setting: str(w.setting, 'auto', 20), wet: num(w.wet, 0, 0, 1), skipH: num(w.skipH, 0) } : null,
     progress: o.progress && typeof o.progress === 'object' ? (o.progress as Record<string, unknown>) : null,
-    reputation: { v: num(rep.v, 0, -100, 100), stats: numRecord(rep.stats) },
+    reputation: { v: num(rep.v, 0, -100), stats: numRecord(rep.stats) },
     justice: { heat: num(jus.heat, 0, 0), wanted: Math.floor(num(jus.wanted, 0, 0, 3)), stats: numRecord(jus.stats) },
     threats: {
       clock: thr.clock && typeof thr.clock === 'object' ? (thr.clock as Record<string, unknown>) : null,

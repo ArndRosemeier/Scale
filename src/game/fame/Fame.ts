@@ -680,7 +680,7 @@ export class Fame {
       fame: this,
       /** What is going on: groups, timers, the statue. */
       status: () => this.status(),
-      /** Set the reputation (−100 … 100). */
+      /** Set the reputation (−100 and up, no upper limit). */
       rep: (v: number) => setRep(v),
       /** Bring them now: the press (with a TV crew at ≥ 65), a fan, a protest (sized by the reputation). */
       press: () => (this.spawnPress(Math.max(g.crime.rep.value, FAME.pressAt)) ? this.status() : 'nowhere to come from'),

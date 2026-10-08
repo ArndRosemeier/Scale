@@ -78,6 +78,10 @@ export const STRIDER = {
   retreatAt: 0.3,
   /** In downtown: attack towers this long (s), then go back. */
   rampageT: 260,
+  /** In downtown with no tower in reach: it hunts whoever fights it, else roams (a new point this often, s). */
+  roamT: 25,
+  /** On one tower this long (s) without bringing it down: it gives up on it and picks the next. */
+  towerMax: 75,
   /** A visit ends: after this long (s) it heads back to the river whatever it is doing. */
   visitMax: 720,
   /** The incident radius (m) and its far stimulus radius. */
@@ -215,7 +219,7 @@ export class Strider implements ThreatEvent, ThreatActor {
   private newsT = 5;
   private scanT = 0;
   private interest: { x: number; y: number; z: number } | null = null;
-  private rampage: { ref: BuildingRef | null; t: number; done: Set<BuildingRef>; x: number; z: number } | null = null;
+  private rampage: Rampage | null = null;
   private recentHit = 0;
   /** Destruction tokens and the panels broken lately (decaying). */
   private tokens = 4;
@@ -347,6 +351,8 @@ export class Strider implements ThreatEvent, ThreatActor {
       id: this.id, archetype: this.archetype, t: +this.t.toFixed(1), active: this.active, outcome: this.outcome, mode: this.mode, act: this.act,
       x: Math.round(this.x), z: Math.round(this.z), hp: Math.round(this.hp), s: Math.round(this.s), route: Math.round(this.route.length),
       start: { x: Math.round(this.route.start.x), z: Math.round(this.route.start.z) }, end: { x: Math.round(this.route.end.x), z: Math.round(this.route.end.z) },
+      rampage: this.rampage ? { t: Math.round(this.rampage.t), tower: this.rampage.ref ? Math.round(this.rampage.ref.top - this.rampage.ref.base) : null, onT: Math.round(this.rampage.onT), goal: [Math.round(this.rampage.x), Math.round(this.rampage.z)], done: this.rampage.done.size } : null,
+      v: +this.v.toFixed(2), stuck: this.stuckN, direct: this.direct,
       hurt: this.hurt, aggro: Object.fromEntries([...this.aggro].map(([k, v]) => [k, Math.round(v)])), burning: this.g.threats.fires.list.length, ...this.stats,
     };
   }
@@ -407,14 +413,24 @@ export class Strider implements ThreatEvent, ThreatActor {
     // Interest: the tallest building ahead (it is drawn to them).
     this.scanT -= dt;
     if (this.scanT <= 0) { this.scanT = 2.5; this.interest = this.tallAhead(140); }
-    if (this.mode === 'advance' && this.s >= this.route.length - 12) { this.mode = 'rampage'; this.rampage = { ref: null, t: 0, done: new Set(), x: this.x, z: this.z }; }
+    if (this.mode === 'advance' && this.s >= this.route.length - 12) { this.mode = 'rampage'; this.rampage = newRampage(this.x, this.z); }
     if (this.mode === 'rampage' && this.rampage) {
       const R = this.rampage;
       if (R.t > STRIDER.rampageT || R.done.size >= 5) {
         if (!this.stay) { this.startRetreat(); return; }
         R.t = 0; R.done.clear();
       }
-      if (!R.ref || !R.ref.alive) { R.ref = this.pickTower(R.done); if (R.ref) { const c = nearestOnPoly(R.ref.poly, this.x, this.z); R.x = c.x; R.z = c.z; } }
+      // (A tower it leaned on is done even while it still stands: the next one.)
+      if (!R.ref || !R.ref.alive || R.done.has(R.ref)) {
+        R.ref = null; R.onT = 0;
+        R.seekT -= dt;
+        if (R.seekT <= 0) {
+          R.seekT = 2.5;
+          R.ref = this.pickTower(R.done);
+          if (R.ref) { const c = nearestOnPoly(R.ref.poly, this.x, this.z); R.x = c.x; R.z = c.z; }
+        }
+        if (!R.ref) this.roam(R, dt);
+      }
     }
     // Swat what flies near its head.
     if (this.cool.swat <= 0 && this.mode !== 'retreat') {
@@ -752,7 +768,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (this.mode === 'rampage' && this.rampage) {
       const R = this.rampage;
       gx = R.x; gz = R.z;
-      if (!R.ref || Math.hypot(gx - this.x, gz - this.z) < 28) stop = true;
+      if (Math.hypot(gx - this.x, gz - this.z) < (R.ref ? 28 : 20)) stop = true;
     } else if (this.mode === 'retreat' && this.direct) {
       gx = this.route.start.x; gz = this.route.start.z;
       if (Math.hypot(gx - this.x, gz - this.z) < 25) { this.mode = 'sink'; this.g.audio.play('splash_big', rig.x, 2, rig.z, 1, 0.5, 80, this.g.renderer.camera.position); return 0; }
@@ -795,8 +811,12 @@ export class Strider implements ThreatEvent, ThreatActor {
   private watch(dt: number): void {
     if ((this.mode === 'advance' || this.mode === 'rampage') && this.t > STRIDER.visitMax && !this.stay) { this.startRetreat(); return; }
     if (this.mode === 'rampage' && this.rampage) {
-      this.rampage.t += dt;
-      if (this.rampage.t > STRIDER.rampageT + 30 && !this.stay) { this.startRetreat(); return; }
+      const R = this.rampage;
+      R.t += dt;
+      if (R.t > STRIDER.rampageT + 30 && !this.stay) { this.startRetreat(); return; }
+      // A tower it cannot bring down (or never gets to lean on): the next one.
+      R.onT = R.ref ? R.onT + dt : 0;
+      if (R.ref && R.onT > STRIDER.towerMax) { R.done.add(R.ref); R.ref = null; R.onT = 0; }
     }
     if (this.mode !== 'advance' && this.mode !== 'retreat') { this.watchT = 0; this.watchX = this.x; this.watchZ = this.z; return; }
     this.watchT += dt;
@@ -805,7 +825,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     this.watchT = 0; this.watchX = this.x; this.watchZ = this.z;
     if (moved > 20) { this.stuckN = 0; return; }
     this.stuckN++;
-    if (this.mode === 'advance') { this.mode = 'rampage'; this.rampage = { ref: null, t: 0, done: new Set(), x: this.x, z: this.z }; }
+    if (this.mode === 'advance') { this.mode = 'rampage'; this.rampage = newRampage(this.x, this.z); }
     else if (!this.direct) this.direct = true;
     else { this.mode = 'sink'; this.sinkHere = true; this.g.audio.play('tremor_rumble', this.x, 2, this.z, 1, 0.6, 80, this.g.renderer.camera.position); }
   }
@@ -889,12 +909,34 @@ export class Strider implements ThreatEvent, ThreatActor {
 
   /** Downtown: the next tower to go for (tall, near, not done yet). */
   private pickTower(done: Set<BuildingRef>): BuildingRef | null {
-    const g = this.g, r = 220;
+    // A tower near, else one further off; away from the high-rises (held up on the way in), lower blocks do.
+    return this.pickTowerOf(done, 220, 20) ?? this.pickTowerOf(done, 420, 20) ?? this.pickTowerOf(done, 200, 9);
+  }
+
+  /**
+   * No building to go for (none left near, or the city there not streamed in): it never stands
+   * about — it goes for whoever fights it (the army, the player), else into downtown (the end of
+   * its route), else roams to a new spot now and then.
+   */
+  private roam(R: Rampage, dt: number): void {
+    const hostile = this.hostileTarget();
+    if (hostile) { R.x = hostile.x; R.z = hostile.z; R.roamT = 0; return; }
+    R.roamT -= dt;
+    const there = Math.hypot(R.x - this.x, R.z - this.z) < 20;
+    if (R.roamT > 0 && !there) return;
+    R.roamT = STRIDER.roamT;
+    const E = this.route.end;
+    if (Math.hypot(E.x - this.x, E.z - this.z) > 90) { R.x = E.x; R.z = E.z; return; }
+    const a = this.rng.range(0, Math.PI * 2), d = this.rng.range(80, 160);
+    R.x = E.x + Math.cos(a) * d; R.z = E.z + Math.sin(a) * d;
+  }
+  private pickTowerOf(done: Set<BuildingRef>, r: number, minH: number): BuildingRef | null {
+    const g = this.g;
     let best: BuildingRef | null = null, bs = -Infinity;
     for (const ref of g.world.buildingsIn(this.x - r, this.z - r, this.x + r, this.z + r)) {
       if (!ref.alive || done.has(ref)) continue;
       const H = ref.top - ref.base;
-      if (H < 20) continue;
+      if (H < minH) continue;
       const c = nearestOnPoly(ref.poly, this.x, this.z);
       const s = H - Math.hypot(c.x - this.x, c.z - this.z) * 0.25;
       if (s > bs) { bs = s; best = ref; }
@@ -1335,6 +1377,10 @@ export class Strider implements ThreatEvent, ThreatActor {
     set('tail', T[9], T[10], T[11], 4 * s);
   }
 }
+
+/** Downtown: the tower it is after (`ref`, approached at x, z), the ones done, and its clocks. */
+interface Rampage { ref: BuildingRef | null; t: number; done: Set<BuildingRef>; x: number; z: number; onT: number; seekT: number; roamT: number }
+function newRampage(x: number, z: number): Rampage { return { ref: null, t: 0, done: new Set(), x, z, onT: 0, seekT: 0, roamT: 0 }; }
 
 /** Distance from a point to segment a–b. */
 function segDist(px: number, py: number, pz: number, ax: number, ay: number, az: number, bx: number, by: number, bz: number): number {

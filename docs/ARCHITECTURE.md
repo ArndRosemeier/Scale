@@ -569,7 +569,7 @@ every frame) owns the parts and draws what belongs to them.
   player's into the ledger (`building:facade`, `building:collapse` with the storeys as `size`). Facade damage before
   witnesses costs a little (`JUSTICE.facade`, every 2 s at most); a collapse the player caused is always known and
   costs heat, karma and reputation by storeys (`JUSTICE.collapse`), once per building.
-* **Reputation** (`Reputation`, −100…+100 per city and mode): crowds cheer / wave or step away, police suspicion; HUD
+* **Reputation** (`Reputation`, −100 and up (no ceiling) per city and mode): crowds cheer / wave or step away, police suspicion; HUD
   chip and P screen. **Con** (`Consider.ts`): target vs player strength → grey … purple on the target frame and brackets.
 * **Small deeds** (`deeds/SmallDeeds`): seeded every few minutes — a cat up a tree (owner pointing up, meowing; climb with
   E, jump or fly), a runaway dog trailing its leash (catch it, it follows you back), a dropped wallet (the owner pats

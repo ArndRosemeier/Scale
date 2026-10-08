@@ -32,6 +32,7 @@ import { arcadeChecks } from './arcadeTest';
 import { sidekickChecks } from './sidekickTest';
 import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
+import { Reputation } from '../src/game/Reputation';
 import { PlayerHealth } from '../src/game/PlayerHealth';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
@@ -2139,6 +2140,17 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
   check(keys(back) === keys(full) && keys(back.player) === keys(full.player) && keys(back.threats) === keys(full.threats) && keys(back.aftermath!) === keys(full.aftermath!) && keys(back.threats.remains[0]) === keys(full.threats.remains[0]), 'saves: all fields survive parsing');
+  // Reputation is open-ended upwards (v0.128): a save above +100 keeps it, the floor stays −100.
+  {
+    const hi = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: 250.5, stats: {} } }), lo = parseSave({ ...JSON.parse(serializeSave(full)), reputation: { v: -400, stats: {} } });
+    const R = new Reputation(1, 0.5, 'normal');
+    R.add(180, 'test'); R.add(45.5, 'test'); R.add(-500, 'test');
+    const floor = R.value;
+    R.restore({ v: 320 });
+    check(hi.reputation.v === 250.5 && lo.reputation.v === -100 && floor === -100 && R.value === 320 && R.label() === 'Living legend' && R.attitude === 1 && R.cheers,
+      `reputation: no ceiling (save 250.5 → ${hi.reputation.v}, restore 320 → ${R.value}), floor −100 (${lo.reputation.v}, ${floor}), attitude tops out at 1`);
+    check(opinionOf(null, 400, 0.5) === opinionOf(null, 100, 0.5), 'reputation: strangers\' opinion of a hero stops growing at +100');
+  }
   // A version-1 save (before the aftermath): migrates with no aftermath; its bodies count from the load, nothing cleared.
   const v1 = JSON.parse(serializeSave(full)) as Record<string, unknown>;
   v1.v = 1; delete v1.aftermath;

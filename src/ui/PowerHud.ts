@@ -4,6 +4,7 @@
  */
 import type { AbilitySystem } from '../game/abilities/AbilitySystem';
 import { ABILITY, ABILITIES, HOTBAR_SLOTS } from '../game/abilities/defs';
+import { keyLabel, keysVersion } from '../game/keybinds';
 
 export type ToastKind = 'karma' | 'info' | 'warn' | 'core' | 'deny';
 
@@ -84,7 +85,7 @@ export class PowerHud {
   update(): void {
     const a = this.abilities, pr = a.progress;
     // Slots: rebuild the content only on change.
-    const key = `${pr.slots.join(',')}|${a.selected}|${pr.karma}|${ABILITIES.map((d) => pr.rank(d.id)).join('')}`;
+    const key = `${keysVersion()}|${pr.slots.join(',')}|${a.selected}|${pr.karma}|${ABILITIES.map((d) => pr.rank(d.id)).join('')}`;
     if (key !== this.shown) {
       this.shown = key;
       this.slots.forEach((el, i) => {
@@ -93,7 +94,7 @@ export class PowerHud {
         el.classList.toggle('sel', i === a.selected);
         el.classList.toggle('empty', !def);
         el.classList.toggle('locked', !!def && !pr.unlocked(def.id));
-        el.innerHTML = `<span class="k">${(i + 1) % 10}</span>${def ? `<span class="ic">${def.icon}</span><span class="cd"></span>` : ''}`;
+        el.innerHTML = `<span class="k">${keyLabel(`slot${i + 1}`)}</span>${def ? `<span class="ic">${def.icon}</span><span class="cd"></span>` : ''}`;
         el.title = def ? `${def.name}${pr.unlocked(def.id) ? ` (rank ${pr.rank(def.id)})` : ' (locked)'}` : 'Empty slot — assign a power with P';
       });
       this.karmaEl.innerHTML = `<b>${pr.karma}</b> karma`;
