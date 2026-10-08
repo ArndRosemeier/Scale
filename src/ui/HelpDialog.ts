@@ -204,7 +204,7 @@ export class HelpDialog {
         const rows = Array.from({ length: d.maxRank }, (_, i) => {
           const rk = i + 1;
           const price = d.id === 'punch' ? 'free' : d.granted ? '—' : prices[i] !== undefined ? String(prices[i]) : '—';
-          return `<tr class="${rk === r ? 'cur' : ''}"><td class="rk">${d.maxRank > 1 ? rk : '—'}</td><td class="kc">${price}</td><td>${d.rankText(rk)}</td><td class="dm">${dmg(d.id, rk)}</td><td class="en">${d.costText ? d.costText(rk) : d.kind === 'passive' ? 'none' : '—'}</td></tr>`;
+          return `<tr class="${rk === r ? 'cur' : ''}"><td class="rk">${d.maxRank > 1 ? rk : '—'}</td><td class="kc">${price}</td><td>${d.rankText(rk)}</td><td class="dm">${dmg(d.id, rk)}</td><td class="en">${d.costText ? d.costText(rk) : 'none'}</td></tr>`;
         }).join('');
         return `
           <div class="hp-card">

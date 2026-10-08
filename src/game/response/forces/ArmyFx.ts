@@ -180,7 +180,7 @@ export class ArmyFx {
     const fx = g.elements.fx;
     for (let i = 0; i < 3; i++) fx.glow(x, y + i * 6, z, 0, 4, 0, 0.35, 30, 70, FLASH, FLASH_END, 0.8, 1, 0);
     const delay = Math.min(12, d / 343);
-    setTimeout(() => g.audio.play('army_artillery', cam.x + dx / d * 300, cam.y + 30, cam.z + dz / d * 300, 0.9, 0.9 + Math.random() * 0.15, 150), delay * 1000);
+    g.later.after(delay, () => g.audio.play('army_artillery', cam.x + dx / d * 300, cam.y + 30, cam.z + dz / d * 300, 0.9, 0.9 + Math.random() * 0.15, 150));
   }
 
   update(dt: number): void {

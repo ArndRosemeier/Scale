@@ -36,6 +36,12 @@ Its open items are consolidated here one PR at a time.
 | Add damage to a car | `dentCar(v, amount, cap?)` (`sim/Traffic.ts`; never lowers it) | `v.damage = Math.min(…)` by hand (**guarded**) |
 | Karma | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
 
+## Time
+
+| Need | Use | Not |
+|---|---|---|
+| Do something in a few seconds (a delayed boom, a second burst, a bark) | `g.later.after(seconds, fn)` (`core/later.ts`, ticked with simulation time) | `setTimeout` in `src/game` (**guarded**; UI, loading, intro and autosave may) |
+
 ## Crimes
 
 | Need | Use | Not |

@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.142 — 2026-10-08
+## 0.143 — 2026-10-08
 
 - **The power table in the help (H, Powers) now shows damage.** Every rank has a Damage column: the health a person loses (and how: per punch, per fall, everyone in the blast, at the rim or the centre …) and the points a giant creature takes before its armour. A new line on top gives what that means: a passer-by has 36 health, a mugger 55, a robber 80, lieutenants ×1.8 and bosses ×3.1; the Strider has 3000 points, the awakened tree 1000, with their weak spots and the tree's weakness to fire. The numbers are the ones the game itself uses, so they stay right when powers are rebalanced.
+
+## 0.142 — 2026-10-08
+
+- **Delayed effects keep game time.** The distant boom after a last-resort blast, the army's artillery and whistles, the ritual's second burst, the car alarms after a tremor, the hospital fade and a startled passer-by's cry were timed by the browser's clock; on slow frames they ran ahead of the game. They now wait in game time, and a self-test keeps wall-clock timers out of gameplay.
 
 ## 0.141 — 2026-10-08
 
