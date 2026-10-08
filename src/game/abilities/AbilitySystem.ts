@@ -20,7 +20,7 @@ import type { Progress } from './Progress';
 import type { Target } from '../Targeting';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
-  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, DASH, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE,
+  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, LEAP_SPEED, DASH, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE,
   SHOCK_COST, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIREBALL, NOVA,
   BOLT, QUAKE, GUST, SHRINK, GIANT, sizeUpkeep, TAP_DEBOUNCE, PHASE, SEEKER, FOCUS, SENSE,
 } from './tuning';
@@ -139,6 +139,7 @@ export class AbilitySystem {
     p.flightAllowed = rf > 0;
     p.flightSpeed = FLIGHT_SPEED[rf] || 1;
     p.flightBoost = FLIGHT_BOOST_MUL[rf] || FLIGHT_BOOST_MUL[FLIGHT_BOOST_MUL.length - 1];
+    p.leapSpeed = LEAP_SPEED[this.rank('superJump')] || 12;
     [p.minHeight, p.maxHeight] = SIZE_RANGE[rz];
     for (const [id, c] of this.cooldown) { c.left -= dt; if (c.left <= 0) this.cooldown.delete(id); }
     this.updateEnergy(dt);

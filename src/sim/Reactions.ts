@@ -54,6 +54,7 @@ export class Reactions {
     for (let k = 0; k < fresh.length; k++) this.room[k] = GAWK_CROWD - gawkersNear(this.peds, fresh[k].x, fresh[k].z, GAWK_R, this.tmp);
     this.playerRoom = H > 2.3 || flyingFast ? GAWK_CROWD + 6 - gawkersNear(this.peds, px, pz, Math.min(6 * H, 60), this.tmp) : 0;
     let screamers = 0;
+    let screamer: PedAgent | null = null;
     for (const a of this.peds.agents) {
       // Actors (crime, police, deeds) are staged by their owner.
       if (a.state === PState.Down || a.actor) continue;
@@ -173,11 +174,11 @@ export class Reactions {
       // (The calm get over it quickly, the nervous keep running: game/people.)
       a.fear = Math.max(0, a.fear - dt * calmRate(a.cit.nerve));
       if (a.fear > 0.55 && a.state !== PState.Flee) this.flee(a, a.fearX || px, a.fearZ || pz);
-      if (before < 0.6 && a.fear >= 0.6) screamers++;
+      if (before < 0.6 && a.fear >= 0.6) { screamers++; screamer ??= a; }
     }
     if (screamers > 0 && this.screamCooldown <= 0) {
-      const a = this.peds.agents.find((x) => x.fear >= 0.6);
-      if (a) this.onScream?.(a.x, a.y + 1.6, a.z, screamers > 4);
+      // From one who just took fright (not anyone still at fear 2, such as people lying knocked down).
+      if (screamer) this.onScream?.(screamer.x, screamer.y + 1.6, screamer.z, screamers > 4);
       this.screamCooldown = screamers > 4 ? 2.5 : 1.2;
     }
   }

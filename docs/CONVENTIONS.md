@@ -7,7 +7,8 @@ and line-of-sight checks.
 
 **Read this before writing gameplay code.** If your code needs one of the answers below, call
 the helper and don't re-derive it. If the helper doesn't fit, extend the helper. Where a
-selftest guard exists (`npm test`), it fails on a stray copy.
+selftest guard exists (`npm test`), it fails on a stray copy. Which test command to run when: see
+[Tests](#tests-which-command-when) below.
 
 To look for new copies, use the two finders from Arnd's Toolbox. Both write reading lists, not verdicts.
 `npm run dup` lists functions that share a name (`reports/duplicate-candidates.md`). `npm run repeated` lists
@@ -75,6 +76,25 @@ Its open items are consolidated here one PR at a time.
 | Polygon or polyline maths (area, bounds, point in polygon, distance to the outline, length, reverse, rectangularity) | `core/geom2.ts`: `polyArea`, `polyBounds`, `pointInPoly`, `distPointPolyEdge`, `polylineLength` (`stride` 3 for x,z,extra routes), `reversePoly`, `rectangularity` | A local `polyBox`, `routeLength`, `reversed`, … (**guarded by body, not name**) |
 | Angle difference, turning toward an angle, 3D vector basics | `core/math.ts`: `angleDiff(from, to)` (= to − from, wrapped to ±π), `lerpAngle`, `v3add`, `v3sub`, `v3scale`, `v3madd`, `v3dot`, `v3cross`, `v3len`, `v3norm`, `v3lerp` (alias them to short names if you like) | A local `angDiff` / `turn` / `norm` / `cross` (**guarded by body**; a typed-out cross product is **guarded** too) |
 | Find more copies | `npm run dup`, `npm run repeated` | |
+
+## Tests: which command when
+
+The self test (`tools/selftest.ts`) is a list of independent sections; `tools/testHarness.ts` runs them.
+
+| When | Run | Takes (4 cores) |
+|---|---|---|
+| While working on a change, after each edit | `npm run test:quick`: only the sections that import (through any chain) a file changed against `origin/main`, committed or not, plus the source-tree guards and any section whose own lines changed. A change to the harness, the selftest's shared helpers or `package.json` runs everything. | seconds to ~2 min |
+| A few named sections | `npm test -- --only sewer,deep` (name contains a word; `npm test -- --list` shows the names) | |
+| **Before merging any PR** (after merging `main` into it) | the full `npm test`: every section, spread over one worker per core | ~3 min (was ~17 min) |
+| A section seems to depend on another one | `npm test -- --serial` (one process, file order, as before v0.153) | ~10 min |
+
+Rules for tests:
+
+- **Never skip, disable or shorten a check to save time.** Make the code under test faster instead, or split a slow section.
+- Each top-level block is `section('short name', async () => { … })` (a `check()` outside a section fails the run) and stands alone: it builds its own cities and state and never reads another section's variables. Sections run in any order and in any process.
+- Put shared helpers (pure functions) above the first section; a change there makes `test:quick` run everything.
+- A section that reads files itself (`readFileSync`, `readdirSync`, …) always runs in `test:quick`, so keep these guards cheap.
+- The slowest sections start first, by the times of the last full run (`.cache/selftest-times.json`; the baseline is `tools/selftest-times.json`, rewritten with `npm test -- --save-times`).
 
 ## Shaders
 

@@ -92,6 +92,8 @@ export class Player {
   flightSpeed = 1;
   /** Boost = cruise × this (grows with the flight rank, see FLIGHT_BOOST_MUL). */
   flightBoost = 7.3;
+  /** Forward speed (m/s at 1.8 m) a full-height super jump carries while steered (LEAP_SPEED by rank). */
+  leapSpeed = 12;
   /** Allowed body height range (size shift). */
   minHeight = MIN_HEIGHT;
   maxHeight = MAX_HEIGHT;
@@ -311,9 +313,11 @@ export class Player {
     const fast = this.speedTop > 0;
     let speed = (fast ? this.speedTop * sk : (slow ? 0.8 : run ? 5.2 : 1.45) * sk) * (this.chillT > 0 ? this.chillSpeed : 1);
     const moving = wish.lengthSq() > 0;
-    // A super jump is steered all the way through the air, at a good clip.
+    // A super jump is steered all the way through the air, at a good clip: the higher the leap,
+    // the faster it carries (up to leapSpeed for the full height), so leaping covers ground.
     const leaping = !this.grounded && this.leap > 0;
-    if (leaping) speed = Math.max(12 * sk, fast ? Math.min(speed, Math.hypot(this.vel.x, this.vel.z)) : speed);
+    const carry = Math.max(12, this.leapSpeed * Math.sqrt(Math.max(0, this.leap - 0.05) / 0.95)) * sk;
+    if (leaping) speed = Math.max(carry, fast ? Math.min(speed, Math.hypot(this.vel.x, this.vel.z)) : speed);
     if (moving) {
       wish.normalize();
       if (fast && (this.grounded || this.onWater) && this.collision) {
@@ -337,7 +341,7 @@ export class Player {
     // on ice there is hardly any grip at all.
     let accel = this.grounded ? 9 * (run ? 1.2 : 1) * Math.min(1, sk) + 3 : 2;
     if (fast && (this.grounded || this.onWater)) accel = Math.max(accel, (moving ? 0.65 : 1.2) * this.speedTop);
-    else if (leaping && moving) accel = Math.max(accel, 14 * Math.min(1, sk) + 4);
+    else if (leaping && moving) accel = Math.max(accel, 14 * Math.min(1, sk) + 4, carry / sk / 0.5);
     if (this.onIce && this.grounded && !this.onWater) accel = fast ? accel * 0.35 : 1.1;
     const dvx = wish.x - this.vel.x, dvz = wish.z - this.vel.z;
     const dv = Math.hypot(dvx, dvz);
@@ -352,6 +356,11 @@ export class Player {
     // Jump.
     if (this.grounded && this.jumpOnSpace && input.hit('Space')) this.launch(this.jumpSpeed);
     this.integrate(dt);
+    // A long leap lands on its feet: the carry stops there instead of skidding on down the street.
+    if (leaping && this.grounded) {
+      const hs = Math.hypot(this.vel.x, this.vel.z), vmax = Math.max(6 * sk, fast ? this.speedTop * sk : 0);
+      if (hs > vmax) { this.vel.x *= vmax / hs; this.vel.z *= vmax / hs; }
+    }
     // Parkour at super speed: running into a wall carries on up it (up to the roof), running
     // into a car or a bench vaults over it.
     // (Not out of a hop: a façade grazed in the air would carry the runner up onto a roof.)

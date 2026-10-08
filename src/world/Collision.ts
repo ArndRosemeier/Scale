@@ -9,6 +9,7 @@ import type { CityStreamer } from '../stream/CityStreamer';
 import { gridCell, stoopTop, buildingEntrance, STOOP_REACH, type Stoop } from '../build/buildingLayout';
 import { roofSurface, roofEquipment } from '../build/buildingShell';
 import { pointInPoly } from '../core/geom2';
+import { slideMove } from '../underground/Volumes';
 
 /**
  * A solid street object for the player: a vertical cylinder (trees, poles, bins) or an
@@ -230,12 +231,10 @@ export class Collision {
     if (this.under) {
       const surf = this.world.terrain.height(px, pz);
       if (y < surf - 1.0 && this.under.contains(px, y + 0.3, pz, 0)) {
-        if (!this.under.contains(x, y + 0.3, z, r * 0.5)) {
-          if (this.under.contains(x, y + 0.3, pz, r * 0.5)) { res.z = pz; }
-          else if (this.under.contains(px, y + 0.3, z, r * 0.5)) { res.x = px; }
-          else { res.x = px; res.z = pz; }
-          res.hit = true;
-        }
+        // (Slides along walls at any angle: see slideMove.)
+        const under = this.under;
+        const [sx, sz, hit] = slideMove((qx, qz) => under.contains(qx, y + 0.3, qz, r * 0.5), px, pz, x, z);
+        res.x = sx; res.z = sz; res.hit = hit;
         // Solid things down here too (train cars).
         if (this.obstacleProviders.length) this.collideObstacles(y, h, r, px, pz, 0);
         return res;
