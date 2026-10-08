@@ -7,8 +7,7 @@
  */
 import { buildSkyline, BOX_FLOATS, LIGHT_FLOATS, PITCH, BLOCK_HALF, REACH, ORBIT_R, type Skyline } from './layout';
 import * as S from './shaders';
-
-type Vec3 = [number, number, number];
+import { v3cross as cross, v3norm as norm, v3sub as sub, type Vec3 } from '../../core/math';
 
 /** The sun just under the western horizon. */
 const SUN: Vec3 = norm([-0.94, -0.04, 0.34]);
@@ -315,9 +314,6 @@ function boxMesh(): Float32Array {
   return new Float32Array(out);
 }
 
-function sub(a: Vec3, b: Vec3): Vec3 { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
-function cross(a: Vec3, b: Vec3): Vec3 { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
-function norm(a: Vec3): Vec3 { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
 
 function perspective(fovY: number, aspect: number, near: number, far: number): Float32Array {
   const f = 1 / Math.tan(fovY / 2), nf = 1 / (near - far);
