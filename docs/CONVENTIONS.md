@@ -21,6 +21,7 @@ Its open items are consolidated here one PR at a time.
 | Question | Use | Not |
 |---|---|---|
 | Is someone (feet at y) underground? | `Underground.feetUnder(x, feetY, z)`. `isUnder(x, y, z)` is for a point (an eye, an orb, the camera). `Collision.underground` is the movement test (player, ragdolls, hops) and is stricter near stairs. | `isUnder(x, y + 0.5, z)` written out (**guarded**) |
+| Where does something land at a target (a decal, an orb, a bomb, a stray bullet's chip)? Can someone lying there be reached? | `game.floorAt(x, feetY, z)`: the sewer, metro or cave floor when underground, else street, deck or roof | `world.groundHeight(x, z)` or `terrain.height` at a target that may be underground (it lands on the street above a sewer fight) |
 | Are two bodies on the same side of the street (both underground or both up top)? | `Underground.sameSide(ax, ay, az, bx, by, bz)` with **feet** heights. A blow, blast or footfall point counts as feet. | `Math.abs(dy) < r`, `s.y > a.y - 2`, or a 2D `hypot` alone |
 | Does a blow, blast, stomp or shove reach a person? | 2D/3D range **and** `sameSide`. `Reactions.sameSide` is wired to it. | Range alone. A street stomp must not floor the sewer crew below. |
 | Does a blow reach the player? | `PlayerHealth.damage(…, x, z, y)` with the source's real height (the type requires it). It refuses blows from the other side. | Writing `hp`. Passing the player's own `y` as the source height. |
