@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.135 — 2026-10-08
+
+- **WebGPU (`?gpu=webgpu`) no longer stutters after loading.** The distant forest no longer prepares a shader for every patch of trees as you move, and every car model is prepared behind the loading screen instead of the first time it drives by. In the first minute of play, hitches over 50 ms dropped from 36 to 7, the worst from 217 ms to about 150 ms. Loading takes about 7 s longer for it. Auto quality stepping up no longer freezes the game for several seconds (on WebGPU the shadow map keeps the size it started with). WebGL is unchanged.
+
 ## 0.134 — 2026-10-08
 
 - **Behind the scenes: small helpers have one home.** Text shown in menus and panels is escaped by one shared function, and the small maths helpers (clamp, lerp, smoothstep) come from one module instead of a dozen local copies. Nothing changes in play; a self-test now fails if a new copy appears.
