@@ -12,6 +12,7 @@ import type { EquipmentVisuals } from '../../items/types';
 import type { MoveState } from '../../shared/types';
 import { BodyService, geometryKey } from './BodyService';
 import { HumanoidRig } from './HumanoidRig';
+import { WEBGPU, WEBGPU_FORCE_GL, gpuKit, loadGpuKit } from '../../render/gpuMode';
 
 const POSES: Record<string, { move: MoveState; speed?: number }> = {
   idle: { move: 'idle' },
@@ -46,14 +47,19 @@ export class HumanoidPreview {
   }
 
   private async init(): Promise<void> {
-    const r = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    // With ?gpu=webgpu the people's materials are node materials: they need the WebGPU renderer.
+    let r: THREE.WebGLRenderer;
+    if (WEBGPU) {
+      await loadGpuKit();
+      r = await gpuKit().createPreviewRenderer(this.canvas, WEBGPU_FORCE_GL) as unknown as THREE.WebGLRenderer;
+    } else r = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
     r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
     this.renderer = r;
-    const pmrem = new THREE.PMREMGenerator(r);
+    const pmrem = WEBGPU ? gpuKit().createPMREM(r) as unknown as THREE.PMREMGenerator : new THREE.PMREMGenerator(r);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     pmrem.dispose();
     this.scene.environmentIntensity = 0.32;
@@ -230,7 +236,7 @@ export class HumanoidPreview {
     this.rig = null;
     this.scene.environment?.dispose();
     this.renderer?.dispose();
-    this.renderer?.forceContextLoss();
+    if (!WEBGPU) this.renderer?.forceContextLoss();
     this.renderer = null;
   }
 }

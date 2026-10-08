@@ -2405,6 +2405,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(losH.clear(0, 5, 0, 30, 5, 0), 'los: a line through a holed facade is clear');
   holes = false;
   check(!losH.clear(0, 5, 0, 30, 5, 0), 'los: an intact facade blocks it');
+  // A landmark's solid parts (here a pillar at x 10..12, z 8..12, up to 8 m) block it too; over it the line is clear.
+  const losL = new LineOfSight({ ...world, solid: (x, y, z) => x > 10 && x < 12 && z > 8 && z < 12 && y < 8 }, () => 0);
+  check(losL.clear(0, 2, 10, 0, 2, 25), 'los: a line past a landmark is clear');
+  check(!losL.clear(0, 2, 10, 25, 2, 10) && losL.last === 'building', `los: a landmark's solid part blocks the line (${losL.last})`);
+  check(losL.clear(0, 12, 10, 25, 12, 10), 'los: a line over a landmark is clear');
   // Cars block at chest height (parked or moving: the same boxes); a line up to a drone passes over.
   cars.push(car('sedan', 0, 10));
   check(!los.clear(0, 1.42, 0, 0, 1.25, 20) && los.last === 'car', `los: a car in between blocks the line (${los.last})`);
@@ -3815,6 +3820,21 @@ aliensChecks(check);
   };
   walkA('src');
   check(hand.length === 0, `threats: aggro and armour through threats/aggro.ts (${hand.join(', ') || 'none'})`);
+}
+
+// "Can I see / hit that target" goes through game.sight.clear (Targeting.sees): the Tab list, the click pick and the
+// fire wave used their own world.raycast with other tolerances (no cars, no wall holes) and disagreed with the powers.
+{
+  const hand: string[] = [];
+  const walkS = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkS(full); continue; }
+      if (f.endsWith('.ts') && /\.t < \w+ - [0-9.]+\)? *(return|continue)/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkS('src');
+  check(hand.length === 0, `sight: targets through game.sight / Targeting.sees (${hand.join(', ') || 'none'})`);
 }
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).

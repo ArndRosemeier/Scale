@@ -7,6 +7,7 @@
  * A line from a to b (ending `pad` m short of b: the target's own body) is blocked by
  *   - buildings: the prism of a footprint between its low and top; with `panel` (the game: the
  *     building's standing facade panels) a hole blasted in a wall lets the line through;
+ *   - the landmarks' solid parts (town hall, stadium, attractions);
  *   - terrain (hills, embankments);
  *   - vehicles, parked and moving, wrecks too (oriented boxes, by kind: a bus stands 3.1 m, a
  *     sedan 1.5 m — a round at chest height over a car does not pass, one up at a drone does).
@@ -46,6 +47,8 @@ export interface LosWorld {
    * distance, or Infinity (none: a hole lets the line through). Optional (tests: solid prisms).
    */
   panel?(b: LosBuilding, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, tMin: number, maxT: number): number;
+  /** Other solid structure at a point (the landmarks: town hall, stadium, attractions). Optional. */
+  solid?(x: number, y: number, z: number): boolean;
   /** Vehicles near the box x0..x1, z0..z1 (written to `out` from 0; the count is returned). */
   cars(x0: number, z0: number, x1: number, z1: number, out: LosCar[]): number;
 }
@@ -193,6 +196,7 @@ export class LineOfSight {
         if (y >= b.top - 0.6 || y < (b.base ?? b.low) + 0.2) { wall = t; by_ = 'building'; break; }
         this.stats.holes++;
       }
+      if (W.solid?.(x, y, z)) { wall = t; by_ = 'building'; break; }
       if ((i % LOS.terrainEvery === 0 || i === n) && y < W.ground(x, z) - LOS.groundTol) { wall = t; by_ = 'terrain'; break; }
     }
     // ---- vehicles up to the wall (or the end)
