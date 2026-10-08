@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.139 — 2026-10-08
+
+- **No more fall cries out of nowhere.** The everyday accidents (someone trips and needs a hand up) now only happen to people you can actually see: on screen, not behind a building, and never while you are indoors or underground. So when you hear an "oof", you see who fell. Before, they picked anyone 15 to 60 m away, often behind you or round a corner.
+
 ## 0.138 — 2026-10-08
 
 - **Behind the scenes: one sRGB conversion.** Skin, eyes, garments, street props, the wardrobe, furniture and trees each converted their authored colours to linear light with their own copy; they now share one. Colours look exactly as before; a self-test fails if a new copy appears.

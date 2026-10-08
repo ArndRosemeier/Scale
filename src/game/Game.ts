@@ -65,7 +65,7 @@ import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
 import { Compass } from '../ui/Compass';
 import { Barks } from '../ui/Barks';
-import { setSight } from '../render/screen';
+import { setSight, markerOnScreen, screenPoint } from '../render/screen';
 import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { terrainHoles } from '../render/materials/ground';
@@ -1076,6 +1076,7 @@ export class Game {
       this.audio.chime('buy');
     };
     this.deeds = new Deeds(this.peds, this.reactions, this.player, this.progress);
+    const deedView = screenPoint();
     this.deeds.hooks = {
       toast,
       reachable: (a) => {
@@ -1085,6 +1086,14 @@ export class Game {
         return !this.world.wet(a.x, a.z, 0);
       },
       sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
+      inView: (x, feet, z) => {
+        // Not from indoors (an interior, a landmark's rooms, a building prism): the street is out of sight.
+        const c = cam.position;
+        if (this.indoorsAt(c.x, c.y, c.z)) return false;
+        const b = this.world.buildingAt(c.x, c.z);
+        if (b && c.y < b.top && c.y > b.low) return false;
+        return markerOnScreen(x, feet + 1.2, z, feet, cam, deedView, 0.85);
+      },
       markers: (m) => this.map.setMarkers('deeds', m),
       rep: (d, reason) => this.crime?.rep.add(d, reason),
     };

@@ -18,6 +18,8 @@ import { isFemale } from './people/identity';
 export interface DeedHooks {
   toast?: (html: string, kind?: 'karma' | 'info' | 'warn') => void;
   sound?: (id: string, x: number, y: number, z: number, gain: number, pitch?: number) => void;
+  /** Can the player see someone standing here (on screen, in sight, the camera not indoors)? */
+  inView?: (x: number, feet: number, z: number) => boolean;
   markers?: (m: MapMarker[]) => void;
   /** Can the player get to this person (not indoors, not in the water, lying on a real surface)? */
   reachable?: (a: PedAgent) => boolean;
@@ -92,16 +94,18 @@ export class Deeds {
       this.accidentT -= dt;
       if (this.accidentT <= 0) {
         this.accidentT = ACCIDENTS.minGap + Math.random() * (ACCIDENTS.maxGap - ACCIDENTS.minGap);
-        const c = this.peds.agents.filter((a) => a.alive && !a.inside && !a.actor && a.state === PState.Walk && a.onRoad === false && inRing(a, p.pos.x, p.pos.z));
-        const pool = c.length ? c : this.peds.agents.filter((a) => a.alive && !a.inside && !a.actor && a.state === PState.Walk && inRing(a, p.pos.x, p.pos.z));
-        if (pool.length) {
-          const a = pool[Math.floor(Math.random() * pool.length)];
+        // Only someone the player can see: an unseen fall is just a disembodied cry (through walls,
+        // from behind the camera, up from the street into a building). Off the road
+        // first; the sight test (a raycast) only for as many as it takes to find one.
+        const walking = this.peds.agents.filter((a) => a.alive && !a.inside && !a.actor && a.state === PState.Walk && inRing(a, p.pos.x, p.pos.z));
+        const a = pickSeen(walking.filter((w) => w.onRoad === false), this.hooks.inView) ?? pickSeen(walking.filter((w) => w.onRoad !== false), this.hooks.inView);
+        if (a) {
           this.reactions.knockDown(a, a.x + Math.sin(a.heading), a.z + Math.cos(a.heading), 1.2, 'accident');
           a.fear = 0;
           // A mild "oof" / "whoa" in their own voice, not a scream: this happens often.
           this.hooks.sound?.(isFemale(a.cit) ? 'cry_fall_f' : 'cry_fall_m', a.x, a.y + 1.5, a.z, 0.4, fallPitch(a));
           this.hooks.toast?.('Someone fell nearby — find them and help them up', 'warn');
-        } else this.accidentT = 10;
+        } else this.accidentT = 5;
       }
     }
     // People who need help, on the minimap.
@@ -132,4 +136,15 @@ function fallPitch(a: PedAgent): number {
   const y = a.cit.age * 100;
   const age = y < 14 ? 1.3 : y < 19 ? 1.1 : y > 65 ? 0.93 : 1;
   return age * (0.92 + ((Math.abs(a.look) * 7919) % 1000) / 1000 * 0.16);
+}
+
+/** A random one of `list` the player can see (any, without a sight test), or null; at most 24 sight tests. */
+function pickSeen(list: PedAgent[], inView?: (x: number, feet: number, z: number) => boolean): PedAgent | null {
+  for (let n = list.length, tries = 0; n > 0 && tries < 24; n--, tries++) {
+    const i = Math.floor(Math.random() * n);
+    const a = list[i];
+    if (!inView || inView(a.x, a.y, a.z)) return a;
+    list[i] = list[n - 1];
+  }
+  return null;
 }
