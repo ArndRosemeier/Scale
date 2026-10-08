@@ -87,10 +87,11 @@ export interface TargetWorld {
   camera: THREE.PerspectiveCamera;
   /** Big threat bodies (the threat director's actors). */
   threats?: () => ThreatActor[];
+  /** The game's one line of sight (combat/sight.ts: caves, tunnels, buildings with their holes, landmarks, terrain, cars). */
+  sight?: { clear(ax: number, ay: number, az: number, bx: number, by: number, bz: number, pad?: number, skip?: object | null): boolean };
   /** Underground (the deep realm's caves, the sewers, metro and rooms): first wall along a ray / a clear line (null: the point is not underground, the street rules apply). */
   under?: {
     ray(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): number | null;
-    line(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean | null;
     /** Is a point underground (sewers, metro, rooms, caves)? Area effects stay on their own side of the street. */
     isUnder(x: number, y: number, z: number): boolean;
   };
@@ -232,6 +233,24 @@ export class Targeting {
   }
 
   /** The body part of this threat picked with Tab, or null. */
+  /**
+   * A clear line from `o` (the camera, the hands) to target `t` at `c` (its centre): the same line of sight the
+   * powers and every shooter use, ending the target's body short of `c` (padOf); the target car itself never blocks.
+   */
+  sees(o: { x: number; y: number; z: number }, t: Target, c: { x: number; y: number; z: number }): boolean {
+    return !this.w.sight || this.w.sight.clear(o.x, o.y, o.z, c.x, c.y, c.z, this.padOf(t), t.kind === 'car' ? t.obj : null);
+  }
+
+  /** How far short of a target's centre a line of sight may end (its body). */
+  padOf(t: Target): number {
+    switch (t.kind) {
+      case 'car': return 0.5;
+      case 'threat': { const z = this.zoneOf(t.obj) ?? t.obj.zones.find((zn) => zn.weak && zn.exposed); return z ? z.r * 0.8 : 3; }
+      case 'prop': return Math.max(0.3, Math.min(1.5, t.obj.radius));
+      default: return 0.45;
+    }
+  }
+
   zoneOf(obj: ThreatActor): ThreatActor['zones'][number] | null {
     if (!this.zone || this.current?.obj !== obj) return null;
     return obj.zones.find((z) => z.id === this.zone) ?? null;
@@ -577,7 +596,7 @@ export class Targeting {
       if (far <= (t.kind === 'prop' ? propRange : t.kind === 'threat' ? range * THREAT_RANGE : range)) return { ...t } as Target;
     }
     // Near miss: closest projected centre within PICK_PX, in line of sight.
-    const W = this.w.world, el = document.getElementById('view');
+    const el = document.getElementById('view');
     const halfW = (el?.clientWidth || window.innerWidth) / 2, halfH = (el?.clientHeight || window.innerHeight) / 2;
     let best: Target | null = null, bestPx = PICK_PX;
     this.each(p.pos.x, p.pos.z, range, (t) => {
@@ -587,13 +606,7 @@ export class Targeting {
       if (!vecToScreen(c, cam, _s).front) return;
       const px = Math.hypot((_s.x - nx) * halfW, (_s.y - ny) * halfH);
       if (px >= bestPx) return;
-      const cl = this.w.under?.line(cam.position.x, cam.position.y, cam.position.z, c.x, c.y, c.z);
-      if (cl === false) return;
-      if (cl === null) {
-        const cx = c.x - cam.position.x, cy = c.y - cam.position.y, cz = c.z - cam.position.z;
-        const hit = W.raycast(cam.position.x, cam.position.y, cam.position.z, cx / dc, cy / dc, cz / dc, Math.max(0.1, dc - 1.5), Math.max(0.5, dc / 60));
-        if (hit.t < dc - 2) return;
-      }
+      if (!this.sees(cam.position, t, c)) return;
       bestPx = px; best = { ...t } as Target;
     });
     return best;
@@ -649,16 +662,11 @@ export class Targeting {
     list.sort((a, b) => a.score - b.score);
     // Line of sight for the best few (a coarse ray against buildings and terrain).
     const out: Target[] = [];
-    const W = this.w.world, o = cam.position;
+    const o = cam.position;
     for (const e of list) {
       if (out.length >= 16) break;
       const c = this.centre(e.t, _v);
-      const dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, d = Math.hypot(dx, dy, dz);
-      const cl = this.w.under?.line(o.x, o.y, o.z, c.x, c.y, c.z);
-      if (cl !== null && cl !== undefined) { if (cl) out.push(e.t); continue; }
-      const hit = W.raycast(o.x, o.y, o.z, dx / d, dy / d, dz / d, Math.max(0.1, d - 1.5), Math.max(0.5, d / 60));
-      if (hit.t < d - 2) continue;
-      out.push(e.t);
+      if (this.sees(o, e.t, c)) out.push(e.t);
     }
     return out;
   }
