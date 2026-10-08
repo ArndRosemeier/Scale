@@ -3695,10 +3695,13 @@ aliensChecks(check);
       const txt = readFileSync(full, 'utf8');
       if (!full.endsWith('core/math.ts') && MATH.test(txt)) copies.push(`${full} (${MATH.exec(txt)![1]})`);
       if (!full.endsWith('ui/esc.ts') && ESC.test(txt)) copies.push(`${full} (esc)`);
+      // sRGB to linear: srgbToLinear (core/math) or srgbColor (render/color). Shaders keep their own (GLSL/TSL strings).
+      if (!/core\/math\.ts$|props\/vehicles\.ts$|webgpu\/vehicles\.ts$/.test(full) && /0\.04045/.test(txt)) copies.push(`${full} (sRGB curve)`);
+      if (!full.endsWith('render/color.ts') && /=>\s*new THREE\.Color\(\)\.setRGB\([^;]*SRGBColorSpace/.test(txt)) copies.push(`${full} (sRGB colour helper)`);
     }
   };
   walkM('src');
-  check(copies.length === 0, `helpers: no local copies of core/math or ui/esc (${copies.join(', ') || 'none'})`);
+  check(copies.length === 0, `helpers: no local copies of core/math, ui/esc or render/color (${copies.join(', ') || 'none'})`);
 }
 
 // Geometry has one home too: src/core/geom2.ts (polygons, polylines) and src/core/math.ts (angles, vectors).

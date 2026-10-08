@@ -13,6 +13,7 @@ import type { ShellMaterial } from '../../items/wearable';
 import { GLSL_NOISE } from './glsl';
 import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import { GLSL_MASK_CUT } from './faceRegions';
+import { srgbColor as lin } from '../../render/color';
 
 const PATTERNS: Record<ShellMaterial['pattern'], number> = {
   plain: 0, stripes: 1, checks: 2, quilted: 3, chainmail: 4, scales: 5, leather: 6, fur: 7, embroidered: 8, patchwork: 9, silk: 10, plates: 11, runes: 12, bones: 13, hero: 14,
@@ -215,7 +216,6 @@ type GarmentFig = { height: number; design: number; cut?: 'cowl' | 'full'; neckY
 
 /** The garment's uniforms (shared by the GLSL and the node material). */
 function garmentUniforms(m: ShellMaterial, seed: number, trim?: [number, number, number], fig?: GarmentFig) {
-  const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   const metal = m.metalness;
   return {
     gColor: { value: lin(m.color) },
@@ -231,7 +231,6 @@ function garmentUniforms(m: ShellMaterial, seed: number, trim?: [number, number,
 /** Create a garment material for a shell. */
 export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [number, number, number], fig?: GarmentFig): GarmentHandle {
   if (WEBGPU) return gpuKit().createGarmentNodeMaterial(m, garmentUniforms(m, seed, trim, fig)) as unknown as GarmentHandle;
-  const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   const material = new THREE.MeshPhysicalMaterial({
     roughness: m.roughness,
     metalness: 0,

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.138 — 2026-10-08
+
+- **Behind the scenes: one sRGB conversion.** Skin, eyes, garments, street props, the wardrobe, furniture and trees each converted their authored colours to linear light with their own copy; they now share one. Colours look exactly as before; a self-test fails if a new copy appears.
+
 ## 0.137 — 2026-10-08
 
 - **Behind the scenes: 3D vector maths has one home.** Eight files had their own add, subtract, dot, cross, length, normalise and blend helpers for 3D points, and four more typed out cross products by hand; they all use the shared versions now. Nothing changes in play; a self-test fails if a typed-out cross product or a copied helper comes back.

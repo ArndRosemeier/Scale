@@ -28,6 +28,7 @@ import { GLSL_NOISE } from './glsl';
 import { GLSL_FACE, GLSL_EYE_MASK, BEARD_IDS } from './faceRegions';
 import { poreTexture } from './textures';
 import { MARK_IDS } from '../appearance';
+import { srgbColor as lin } from '../../render/color';
 
 export const PATTERN_IDS: Record<HumanoidAppearance['skinPattern'], number> = {
   none: 0, freckles: 1, scales: 2, bark: 3, spots: 4, tattoos: 5, veins: 6, stripes: 7, crystals: 8,
@@ -446,8 +447,6 @@ export function createSkinMaterial(opts: { expr: boolean; exprTex: THREE.Texture
   const sky = patchSkyOcclusion(material, 'uniform');
   return { material, uniforms, sky };
 }
-
-const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
 
 /** Push an appearance into the skin uniforms. */
 export function applySkinLook(u: SkinUniforms, a: HumanoidAppearance, opts: { shavedScalp: number; hairCovered: boolean }) {

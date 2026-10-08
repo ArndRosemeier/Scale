@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { Rng, hash2i, hashToFloat } from '../core/rng';
 import { Noise } from '../core/noise';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
-import { clamp, smoothstep as smooth, lerp as mix } from '../core/math';
+import { clamp, smoothstep as smooth, lerp as mix, srgbToLinear as srgbToLin } from '../core/math';
 
 export type TreeSpecies = 'plane' | 'linden' | 'maple' | 'oak' | 'birch' | 'pine' | 'palm' | 'cypress' | 'chestnut' | 'ginkgo';
 export const TREE_SPECIES: TreeSpecies[] = ['plane', 'linden', 'maple', 'oak', 'birch', 'pine', 'palm', 'cypress', 'chestnut', 'ginkgo'];
@@ -741,8 +741,6 @@ function buildLeaves(cfg: SpeciesCfg, sk: TreeSkeleton, rng: Rng): THREE.BufferG
 // ---------------------------------------------------------------------------------------------
 // Far LOD
 // ---------------------------------------------------------------------------------------------
-
-const srgbToLin = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 
 class FarBuilder {
   pos: number[] = []; nrm: number[] = []; uv: number[] = []; col: number[] = []; aut: number[] = []; wind: number[] = [];
