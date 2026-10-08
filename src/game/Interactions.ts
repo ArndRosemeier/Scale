@@ -16,6 +16,7 @@ import { Stimuli, noticeRadius } from './Stimuli';
 import { GiantSteps } from './GiantBody';
 import { pointInPoly, polyArea } from '../core/geom2';
 import type { Target } from './Targeting';
+import { POWER_HIT } from './abilities/tuning';
 
 export class Interactions {
   private punchT = -10;
@@ -96,7 +97,7 @@ export class Interactions {
       const sx = p.pos.x + fx * t, sz = p.pos.z + fz * t;
       const impulse = this.punchImpulse * k * k;
       const n = this.destruction.impact(sx, sy, sz, 0.35 * p.height, impulse, fx, -0.05, fz, 'wall');
-      this.onStrike?.(sx, sy, sz, 0.45 * p.height, fx * impulse, impulse * 0.25, fz * impulse);
+      this.onStrike?.(sx, sy, sz, 0.45 * p.height, fx * impulse, impulse * POWER_HIT.punchLift, fz * impulse);
       this.stimuli.emit('impact', sx, sy, sz, Math.log10(impulse * 10), noticeRadius(impulse * 20));
       if (n > 0) {
         this.camRig.addShake(0.25);
@@ -161,7 +162,7 @@ export class Interactions {
   blast(x: number, y: number, z: number, impulse: number, spare?: (t: Target) => boolean): void {
     const r = 3 + Math.cbrt(impulse) * 0.08;
     if (!spare) this.destruction.impact(x, y, z, r, impulse, 0, 0.2, 0, 'blast');
-    this.onStrike?.(x, y, z, r * 1.5, 0, impulse * 0.5, 0, spare);
+    this.onStrike?.(x, y, z, r * 1.5, 0, impulse * POWER_HIT.blastShare, 0, spare);
     this.dust.burst(x, y, z, 50, r * 0.6, 12, r * 0.8, 10, new THREE.Color(0.35, 0.33, 0.32), 0.9, 0.7);
     this.dust.burst(x, y, z, 20, r * 0.3, 16, r * 0.5, 2.5, new THREE.Color(1.0, 0.55, 0.2).multiplyScalar(3), 1.5, 0.9);
     this.debris.chipBurst(x, y, z, 120, 18, 0, 0.5, 0, new THREE.Color(0.4, 0.38, 0.35), 0.12, 4);

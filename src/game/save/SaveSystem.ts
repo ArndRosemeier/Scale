@@ -96,7 +96,7 @@ export class SaveSystem {
     // Defeated, on the way to the hospital or in its ward: saved standing outside it, healed.
     const out = g.defeat?.saveSpot() ?? null;
     const p = out ?? P.pos;
-    const under = !out && g.underground.isUnder(p.x, p.y + 0.5, p.z);
+    const under = !out && g.underground.feetUnder(p.x, p.y, p.z);
     const indoors = !out && !!g.interiors.insideAt(p.x, p.y + 0.5, p.z);
     const player: SavePlayer = {
       x: r3(p.x), y: r3(p.y), z: r3(p.z), yaw: r3(P.yaw), height: r3(out ? 1.8 : P.height), sizeOverride: P.sizeOverride, flying: !out && P.flying,
@@ -307,7 +307,7 @@ export class SaveSystem {
     if (s.flying !== P.flying && (P.flightAllowed || !s.flying)) P.toggleFlight();
     let exact = false;
     if (s.indoors) exact = false; // interiors open on approach: outside the door is the safe spot
-    else if (s.under) exact = g.underground.isUnder(s.x, s.y + 0.5, s.z);
+    else if (s.under) exact = g.underground.feetUnder(s.x, s.y, s.z);
     else if (s.flying && P.flying) exact = s.y > g.world.groundHeight(s.x, s.z) - 0.5;
     else {
       const ground = g.collision.groundAt(s.x, s.z, s.y + 0.6, 1.2);

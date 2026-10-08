@@ -352,7 +352,7 @@ export class Wardens {
   /** Find a square or a park near the hero (not on top of them), clear of everything, and start a visit there. */
   private startVisit(seed: number, until: number): boolean {
     const g = this.g, P = g.player.pos;
-    if (g.underground.isUnder(P.x, P.y + 0.5, P.z)) return false;
+    if (g.underground.feetUnder(P.x, P.y, P.z)) return false;
     const r = new Rng(deriveSeed(seed, 'spot'));
     const cells = [...g.streamer.cells.values()].filter((c) => c.plan && (c.plan.plazas.length || c.plan.parks.length));
     r.shuffle(cells);
@@ -451,7 +451,7 @@ export class Wardens {
     }
     // A low streak along the nearest street, past the hero.
     const ne = g.net.nearestEdge(P.x, P.z, 60);
-    if (!ne || g.underground.isUnder(P.x, P.y + 0.5, P.z)) return false;
+    if (!ne || g.underground.feetUnder(P.x, P.y, P.z)) return false;
     const e = g.net.edges[ne.e], o = { x: 0, z: 0, dx: 0, dz: 0 };
     g.net.pointAt(e, ne.s, 0, o);
     const dir = rng.chance(0.5) ? 1 : -1, pts: { x: number; y: number; z: number }[] = [];

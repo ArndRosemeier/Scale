@@ -319,7 +319,7 @@ export class ThreatDirector {
   /** Events wait while the player is underground, indoors or a towering giant (nobody would see it). */
   private ready(): boolean {
     const g = this.g, p = g.player.pos;
-    return !g.underground.isUnder(p.x, p.y + 0.5, p.z) && !g.indoorsAt(p.x, p.y + 0.5, p.z) && g.player.height < 12 && !this.events.some((e) => e.active);
+    return !g.underground.feetUnder(p.x, p.y, p.z) && !g.indoorsAt(p.x, p.y + 0.5, p.z) && g.player.height < 12 && !this.events.some((e) => e.active);
   }
 
   private showOmens(dt: number): void {
@@ -486,7 +486,7 @@ export class ThreatDirector {
     g.audio.play('tremor_rumble', p.x, p.y, p.z, 0.8, 0.9 + rng.range(0, 0.2), 30, cam);
     g.stimuli.emit('tremor', p.x, p.y, p.z, 4, 420, { cause: 'threat' });
     const cars = g.parkedCars.filter((v) => Math.hypot(v.x - p.x, v.z - p.z) < 110).sort(() => rng.float() - 0.5).slice(0, rng.int(2, 4));
-    for (const v of cars) setTimeout(() => g.audio.play('car_alarm', v.x, v.y + 1, v.z, 0.6, 0.95 + Math.random() * 0.1, 8, g.renderer.camera.position), rng.range(200, 1500));
+    for (const v of cars) g.later.after(rng.range(0.2, 1.5), () => g.audio.play('car_alarm', v.x, v.y + 1, v.z, 0.6, 0.95 + Math.random() * 0.1, 8, g.renderer.camera.position));
     return true;
   }
 

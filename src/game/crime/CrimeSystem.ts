@@ -79,7 +79,6 @@ export const CRIME_KARMA = {
   returned: 8,
 };
 
-
 export const ACTOR_BUDGET = 40;
 const SETTING_KEY = 'scale.crime.setting';
 
@@ -1080,7 +1079,7 @@ export class CrimeSystem {
 
   private startRoll(r: CrimeRoll): boolean {
     if (this.actorCount > ACTOR_BUDGET - 6 || this.crimes.filter((c) => c.active).length >= 3) return false;
-    if (this.g.player.height > 6 || this.g.underground.isUnder(this.g.player.pos.x, this.g.player.pos.y + 0.5, this.g.player.pos.z)) return false;
+    if (this.g.player.height > 6 || this.g.underground.feetUnder(this.g.player.pos.x, this.g.player.pos.y, this.g.player.pos.z)) return false;
     return this.begin(this.make(r.kind, r.seed, null));
   }
 
@@ -1299,7 +1298,7 @@ export class CrimeSystem {
     this.bossOpT = BOSS_OP.every;
     const g = this.g, p = g.player.pos;
     if (this.director.setting === 'off' || this.bossOps.size || !g.threats?.canHost() || this.actorCount > ACTOR_BUDGET - BOSS_OP.room) return;
-    if (g.player.height > 6 || g.underground.isUnder(p.x, p.y + 0.5, p.z) || g.indoorsAt(p.x, p.y + 0.5, p.z) || g.intro) return;
+    if (g.player.height > 6 || g.underground.feetUnder(p.x, p.y, p.z) || g.indoorsAt(p.x, p.y + 0.5, p.z) || g.intro) return;
     const here = this.cellAt(p.x, p.z);
     if (here < 0) return;
     const F = this.factions, now = g.sky.hoursAbs;
@@ -1361,7 +1360,7 @@ export class CrimeSystem {
       case 'awakening': {
         // The great burst (three rings of it) and something stirs: the city's next event comes sooner.
         this.casts.ritualBurst(c.criminals, x, z, c.element);
-        setTimeout(() => this.casts.ritualBurst(c.criminals, x, z, c.element), 600);
+        g.later.after(0.6, () => this.casts.ritualBurst(c.criminals, x, z, c.element));
         if (g.threats) g.threats.clock.state.pressure += 600;
         g.camRig.addShake(0.35);
         if (near) g.powerHud.toast(`${who} completed their great ritual — something stirs beneath the city`, 'warn');
@@ -1748,7 +1747,7 @@ export class CrimeSystem {
     this.health.koT = 0;
     this.health.hp = this.health.max * 0.6;
     this.hud.fade(true);
-    setTimeout(() => this.hud.fade(false), 2200);
+    this.g.later.after(2.2, () => this.hud.fade(false));
     this.g.player.downT = 2.2;
     for (const u of this.police.units) if (u.job.kind === 'player') u.state = 'leaving';
   }

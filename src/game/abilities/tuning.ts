@@ -238,3 +238,42 @@ export const SLIME_COUNT = [0, 6, 10, 16];
 export const SLIME_TIME = [0, 20, 28, 40];
 export const SLIME_REACH = [0, 25, 35, 45];
 export const SLIME_HOLD = [0, 8, 12, 18];
+
+/**
+ * How hard the powers hit people and giant creatures (Interactions, Game.dashSweep, Elements,
+ * SlimeRealm); the help's power table computes its damage column from these too.
+ *  - People: a power knocks a person down at a fling speed (m/s, the `…Knock` values), which
+ *    costs COMBAT.knockBase + knockPerSpeed × speed health (Combat.knocked). Punches and the
+ *    shockwave land as impulses instead (Combat.hitActor: COMBAT.dmgPerNs per N·s).
+ *  - Creatures: points before armour (ThreatActor.damage); impulses count DAMAGE_PER_IMPULSE per N·s.
+ */
+export const POWER_HIT = {
+  /** Punch: upward share of the impulse; shockwave: share of SHOCK_IMPULSE each body takes. */
+  punchLift: 0.25, blastShare: 0.5,
+  /** Super speed / dash: fling speed (1.5 + 0.6 × rank) × √size, at most 12 m/s. */
+  dashKnock: 1.5, dashKnockPerRank: 0.6, dashKnockMax: 12,
+  laserKnock: 2.5,
+  /** Fire wave: knocks down people within this share of its range; creatures: × heat impulse. */
+  fireKnock: 3, fireKnockReach: 0.45, fireCreatureMul: 1.5,
+  /** Fireball: fling 3 m/s at the rim up to 3 + 6 at the centre. */
+  fireballKnock: 3, fireballKnockCentre: 6, fireballCreatureMul: 1.5,
+  /** Ice path: someone who slips falls at 1.2 + 0.4 × their speed. */
+  iceSlipKnock: 1.2, iceSlipPerSpeed: 0.4,
+  /** Chain lightning: fling per person; creatures: points per second of stun (× reach scale). */
+  boltKnock: 1.4, boltCreature: 40,
+  /** Frost nova on a creature: points per second of freeze, at a leg. */
+  frostCreature: 18,
+  /** Shrink ray on a creature: points per second of shrink × the share it loses. */
+  shrinkCreature: 4,
+  /** Seismic stomp: fling 3 + impulse / 30 000 (at most 9); machines and props are shoved with at
+   *  most `quakeShoveMax` per axis; giant creatures take this share of the full impulse at the legs. */
+  quakeKnock: 3, quakeKnockPerNs: 1 / 30000, quakeKnockMax: 9, quakeShoveMax: 3000, quakeCreatureMul: 1,
+  /** Whirlwind: fling = 0.7 × lift; creatures: 6 × lift per hit; the same person is caught again
+   *  after `gustEveryPerson` s, anything else (but cars) after `gustEvery` s. */
+  gustKnock: 0.7, gustCreature: 6, gustEveryPerson: 2.2, gustEvery: 1.2,
+  /** Hydrokinesis: a person falls once the jet has built up this impulse (N·s), at 2 + impulse / 250
+   *  (at most 9), pushing every `hydroTick` s; creatures take this share of the jet's impulse. */
+  hydroKnockAt: 260, hydroTick: 0.1, hydroKnock: 2, hydroKnockPerNs: 1 / 250, hydroKnockMax: 9, hydroCreatureMul: 0.3,
+  /** Slime call: points per second for every Lumen on a creature. */
+  lumenCreature: 6,
+};
