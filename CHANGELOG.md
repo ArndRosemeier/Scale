@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.133 — 2026-10-08
+
+- **Hitting a car is on the record now.** Wrecking a car with a punch, a shockwave or a dash used to cost nothing, unlike the same wreck by a power; now it is booked like any other harm (a dent costs only on a police car, a wreck in front of witnesses as before). Cars flattened under a giant hero's feet are booked too, and those under a monster's or the army's feet go to them.
+- **Car damage has one helper.** Eight places added damage to cars by hand; one of them could even repair a car that was already wrecked. They now share one helper, and the selftest fails if a new copy appears.
+- **`npm run dup`** runs the duplicate finder from Arnd's Toolbox over the code and writes `reports/duplicate-candidates.md`.
 ## 0.132 — 2026-10-08
 
 - **Nobody gets placed in the river any more.** Police firing spots, monster and robot spawns, crooks, protesters and the press, street performers, the Wardens and the runaway teens' stand-off spots, mourners, cordon barriers and rescue spots now all use one shared test for "can someone stand here": no building, no landmark, no open water. Bridges count as dry land everywhere now; some systems used to treat them as water.

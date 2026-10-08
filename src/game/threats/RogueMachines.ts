@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import type { Game } from '../Game';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
-import { VState, type Vehicle } from '../../sim/Traffic';
+import { VState, dentCar, type Vehicle } from '../../sim/Traffic';
 import { RState, RKind, type Robot } from '../../future/Robots';
 import { BState, type ServiceBot } from '../../future/ServiceBots';
 import { DState, type Drone } from '../../future/Drones';
@@ -617,7 +617,7 @@ export class RogueMachines implements MalfunctionCtl {
       const along = ox * cfx + oz * cfz, lat = ox * -cfz + oz * cfx;
       if (Math.abs(along) > v.length / 2 + 0.45 || Math.abs(lat) > v.width / 2 + 0.45) continue;
       m.attackT = 1.4;
-      v.damage = Math.min(0.9, v.damage + 0.12);
+      dentCar(v, 0.12, 0.9);
       v.speed *= 0.2;
       v.fear = Math.min(2, v.fear + 0.45);
       g.consequences.record('robot', 'car', 'damage', v.x, v.z, v, 'threat');

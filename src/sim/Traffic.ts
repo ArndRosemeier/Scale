@@ -26,6 +26,11 @@ export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'ta
   | 'ambulance' | 'firetruck' | 'crane' | 'flatbed';
 
 /** Military vehicles (the army's, response/forces): one model each, never in ordinary traffic. */
+/** Dent a car by `amount` (damage 0..1, at most `cap`): the one way a blow, a blast or a bite adds damage (docs/CONVENTIONS.md). */
+export function dentCar(v: Vehicle, amount: number, cap = 1): void {
+  v.damage = Math.max(v.damage, Math.min(cap, v.damage + amount));
+}
+
 export function isMilitary(kind: VKind): boolean { return kind === 'army_truck' || kind === 'apc' || kind === 'tank'; }
 
 export const enum VState { Drive = 0, Stopped = 1, Fleeing = 2, Abandoned = 3, Wreck = 4, Crushed = 5 }
@@ -827,7 +832,7 @@ export class Traffic {
     if (p.state === 5) return;
     this.onHitPed?.(v, p);
     v.speed *= 0.6;
-    v.damage = Math.min(1, v.damage + 0.15);
+    dentCar(v, 0.15);
   }
 
   /** Pedestrian wants to step on the road: wait if a car is close on that street. */
