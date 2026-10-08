@@ -10,7 +10,15 @@ import type { Game } from '../game/Game';
 import {
   KEY_ACTION, KEY_ACTIONS, KEY_GROUPS, bindingOf, gameCodeOf, bind, canBind, isDefaultBinding, keyName, keyLabel, powerKeyText, resetKeys, type KeyAction,
 } from '../game/keybinds';
-import { ABILITIES, GROUP_NAMES, type AbilityGroup } from '../game/abilities/defs';
+import { ABILITIES, GROUP_NAMES, type AbilityGroup, type AbilityId } from '../game/abilities/defs';
+import { powerDamage } from '../game/abilities/damage';
+import { COMBAT } from '../game/Combat';
+import { MUGGING } from '../game/crime/Mugging';
+import { ROBBERY } from '../game/crime/Robbery';
+import { LIEUTENANT } from '../game/crime/Crime';
+import { BOSS } from '../game/factions/Bosses';
+import { STRIDER } from '../game/threats/Strider';
+import { TREE } from '../game/threats/AwakenedTree';
 import { ENERGY, GIANT, KARMA, KARMA_COST, sizeUpkeep } from '../game/abilities/tuning';
 import { isTouch } from './touch';
 import { esc } from './esc';
@@ -183,6 +191,10 @@ export class HelpDialog {
     const pr = this.game.progress;
     const sandbox = pr?.sandbox ?? false;
     const fmt = (n: number) => String(Math.round(n * 10) / 10);
+    const dmg = (id: AbilityId, rk: number) => {
+      const v = powerDamage(id, id === 'punch' ? 0 : rk);
+      return v ? `<div><b>People</b> ${v.people}</div><div><b>Creatures</b> ${v.creatures}</div>` : '—';
+    };
     const groups = (Object.keys(GROUP_NAMES) as AbilityGroup[]).map((g) => {
       const cards = ABILITIES.filter((d) => d.group === g).map((d) => {
         const r = pr ? pr.rank(d.id) : 0;
@@ -192,13 +204,13 @@ export class HelpDialog {
         const rows = Array.from({ length: d.maxRank }, (_, i) => {
           const rk = i + 1;
           const price = d.id === 'punch' ? 'free' : d.granted ? '—' : prices[i] !== undefined ? String(prices[i]) : '—';
-          return `<tr class="${rk === r ? 'cur' : ''}"><td class="rk">${d.maxRank > 1 ? rk : '—'}</td><td class="kc">${price}</td><td>${d.rankText(rk)}</td><td class="en">${d.costText ? d.costText(rk) : d.kind === 'passive' ? 'none' : '—'}</td></tr>`;
+          return `<tr class="${rk === r ? 'cur' : ''}"><td class="rk">${d.maxRank > 1 ? rk : '—'}</td><td class="kc">${price}</td><td>${d.rankText(rk)}</td><td class="dm">${dmg(d.id, rk)}</td><td class="en">${d.costText ? d.costText(rk) : d.kind === 'passive' ? 'none' : '—'}</td></tr>`;
         }).join('');
         return `
           <div class="hp-card">
             <div class="hp-head"><span class="hp-ic">${d.icon}</span><span class="hp-name">${d.name}</span><span class="hp-tag">${tag}${key ? ` · ${esc(key)}` : ''}</span>${r > 0 && d.maxRank > 1 ? `<span class="hp-you">your rank ${r}</span>` : ''}</div>
             <div class="hp-desc">${d.desc}${d.granted ? ` <i>${d.granted}.</i>` : ''}</div>
-            <table class="hp-t"><thead><tr><th>Rank</th><th>Karma</th><th>Effect</th><th>Energy</th></tr></thead><tbody>${rows}</tbody></table>
+            <table class="hp-t"><thead><tr><th>Rank</th><th>Karma</th><th>Effect</th><th>Damage</th><th>Energy</th></tr></thead><tbody>${rows}</tbody></table>
           </div>`;
       }).join('');
       return `<h3 class="hp-group">${GROUP_NAMES[g]}</h3>${cards}`;
@@ -209,6 +221,7 @@ export class HelpDialog {
         <div><b>Energy</b> ${ENERGY.max} at the start, refills ${ENERGY.regen} / s. Each power core: +${ENERGY.coreMax} max, +${ENERGY.coreRegen} / s.</div>
         <div><b>Flight</b> costs nothing, but energy does not refill in the air.</div>
         <div><b>Giant body</b> upkeep: free up to 1.8 m · ${up(5)} / s at 5 m · ${up(GIANT.even)} / s at ${GIANT.even} m · ${up(50)} / s at 50 m · ${up(GIANT.top)} / s at ${GIANT.top} m. Out of energy, you shrink back to ${GIANT.fallback} m.</div>
+        <div><b>Damage</b> to <b>people</b> is the health they lose: a passer-by has ${COMBAT.civilianHp}, a mugger ${MUGGING.hp}, a robber ${ROBBERY.hp}; a lieutenant ×${LIEUTENANT.hp}, a boss ×${fmt(LIEUTENANT.hp * BOSS.hp)}. Most powers floor a person only once until they are back on their feet; punches on someone who is down do half. To <b>giant creatures</b> it is points before their armour: the Strider has ${STRIDER.hp} (an open weak spot takes ×${STRIDER.weakMul}), the awakened tree ${TREE.hp} (its heart ×${TREE.heartMul}; fire ×${TREE.fire}, lightning ×${TREE.shock}).</div>
         <div><b>Karma</b> ${KARMA.start} at the start · +${KARMA.helpUp} for helping someone up (+${KARMA.helpUpCollapse} after a collapse, nothing for someone you knocked down) · +${KARMA.coreKarma} from a karma core. Prices below are for reaching that rank.</div>
         ${sandbox ? '<div><b>Sandbox:</b> energy is unlimited and ranks are set freely in the powers screen.</div>' : ''}
         <div class="sub">Values are for a body of normal size (1.8 m); a bigger body hits harder and reaches farther. Your current rank is highlighted.</div>

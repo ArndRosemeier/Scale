@@ -118,7 +118,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 #help .hp-t td { padding: 4px; }
 #help .hp-t td.rk, #help .hp-t td.kc { width: 52px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 #help .hp-t td.kc { color: #d8b56a; }
-#help .hp-t td.en { width: 28%; color: #9fd0ff; }
+#help .hp-t td.en { width: 16%; color: #9fd0ff; }
+#help .hp-t td.dm { width: 30%; color: #f0b0a0; }
+#help .hp-t td.dm b { color: #8fa3b5; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 4px; }
 #help .hp-t tr.cur td { background: rgba(216, 181, 106, 0.12); }
 #help .hp-t tr.cur td.rk { color: #ffd36b; font-weight: 700; }
 @media (max-width: 640px) {
