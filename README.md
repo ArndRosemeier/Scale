@@ -11,7 +11,8 @@ sewers. Everything you do has physical consequences that the citizens notice.
 ```bash
 npm install
 npm run dev          # http://localhost:5180
-npm test             # headless determinism / invariant checks
+npm test             # headless determinism / invariant checks (all sections, parallel)
+npm run test:quick   # only the sections touching what changed against origin/main
 npm run build        # type-check + production bundle
 npm run build:publish # the same, based for the shared host's /scale/ subpath
 ```
