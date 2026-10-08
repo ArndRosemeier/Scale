@@ -87,10 +87,12 @@ export interface TargetWorld {
   camera: THREE.PerspectiveCamera;
   /** Big threat bodies (the threat director's actors). */
   threats?: () => ThreatActor[];
-  /** The deep realm's caves: first rock along a ray / a clear line (null: the point is not in the caves). */
-  cave?: {
+  /** Underground (the deep realm's caves, the sewers, metro and rooms): first wall along a ray / a clear line (null: the point is not underground, the street rules apply). */
+  under?: {
     ray(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): number | null;
     line(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean | null;
+    /** Is a point underground (sewers, metro, rooms, caves)? Area effects stay on their own side of the street. */
+    isUnder(x: number, y: number, z: number): boolean;
   };
 }
 
@@ -323,12 +325,15 @@ export class Targeting {
 
   /**
    * Everything whose body is within r of (x, y, z) — what an area effect hits. `fn` gets the
-   * target and its distance to the point.
+   * target and its distance to the point. Only on the point's side of the street: a blast in a
+   * sewer does not reach the pavement overhead, nor one on the street the tunnel below.
    */
   inSphere(x: number, y: number, z: number, r: number, fn: (t: Target, d: number) => void, kinds: KindMask = ALL_KINDS): void {
     const z0 = z;
+    const U = this.w.under, under = U ? U.isUnder(x, y, z) : false;
     this.each(x, z, r + 3, (t) => {
       const c = this.centre(t, _w);
+      if (U && t.kind !== 'threat' && U.isUnder(c.x, c.y, c.z) !== under) return;
       if (t.kind === 'threat') {
         // The nearest body surface.
         const z = t.obj.zoneAt(x, y, z0);
@@ -404,8 +409,8 @@ export class Targeting {
    * the far wall). Writes into h (t, what, normal, building) when something is nearer.
    */
   probeWorld(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number, h: ProbeHit): void {
-    // In the caves: the rock.
-    const ct = this.w.cave?.ray(ox, oy, oz, dx, dy, dz, maxT);
+    // Underground: the rock or the tunnel walls (the street overhead is not in the way).
+    const ct = this.w.under?.ray(ox, oy, oz, dx, dy, dz, maxT);
     if (ct !== null && ct !== undefined) {
       if (ct < h.t) { h.t = ct; h.what = 'ground'; h.building = null; h.nx = -dx; h.ny = -dy; h.nz = -dz; }
       return;
@@ -582,9 +587,13 @@ export class Targeting {
       if (!vecToScreen(c, cam, _s).front) return;
       const px = Math.hypot((_s.x - nx) * halfW, (_s.y - ny) * halfH);
       if (px >= bestPx) return;
-      const cx = c.x - cam.position.x, cy = c.y - cam.position.y, cz = c.z - cam.position.z;
-      const hit = W.raycast(cam.position.x, cam.position.y, cam.position.z, cx / dc, cy / dc, cz / dc, Math.max(0.1, dc - 1.5), Math.max(0.5, dc / 60));
-      if (hit.t < dc - 2) return;
+      const cl = this.w.under?.line(cam.position.x, cam.position.y, cam.position.z, c.x, c.y, c.z);
+      if (cl === false) return;
+      if (cl === null) {
+        const cx = c.x - cam.position.x, cy = c.y - cam.position.y, cz = c.z - cam.position.z;
+        const hit = W.raycast(cam.position.x, cam.position.y, cam.position.z, cx / dc, cy / dc, cz / dc, Math.max(0.1, dc - 1.5), Math.max(0.5, dc / 60));
+        if (hit.t < dc - 2) return;
+      }
       bestPx = px; best = { ...t } as Target;
     });
     return best;
@@ -645,7 +654,7 @@ export class Targeting {
       if (out.length >= 16) break;
       const c = this.centre(e.t, _v);
       const dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, d = Math.hypot(dx, dy, dz);
-      const cl = this.w.cave?.line(o.x, o.y, o.z, c.x, c.y, c.z);
+      const cl = this.w.under?.line(o.x, o.y, o.z, c.x, c.y, c.z);
       if (cl !== null && cl !== undefined) { if (cl) out.push(e.t); continue; }
       const hit = W.raycast(o.x, o.y, o.z, dx / d, dy / d, dz / d, Math.max(0.1, d - 1.5), Math.max(0.5, d / 60));
       if (hit.t < d - 2) continue;

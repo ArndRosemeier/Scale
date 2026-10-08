@@ -732,7 +732,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       this.onBlow?.('swipe', mx, my, mz, r + 2);
       // The player.
       const p = g.player.pos;
-      if (!this.swipeHit.has(g.player) && Math.hypot(p.x - mx, p.z - mz) < r + g.player.radius && p.y < my + r) {
+      if (!this.swipeHit.has(g.player) && Math.hypot(p.x - mx, p.z - mz) < r + g.player.radius && p.y < my + r && p.y > my - r) {
         this.swipeHit.set(g.player, this.t);
         this.hurtPlayer(45, mx - sx * 3, mz - sz * 3, 16);
       }
@@ -1085,7 +1085,9 @@ export class Strider implements ThreatEvent, ThreatActor {
   private hurtPlayerNear(x: number, z: number, r: number, dmg: number, fling: number): void {
     const p = this.g.player;
     const d = Math.hypot(p.pos.x - x, p.pos.z - z);
-    if (d > r + p.radius || p.pos.y > this.g.terrain.height(x, z) + 6) return;
+    const gy = this.g.terrain.height(x, z);
+    // (Down in a tunnel under the street a footfall only shakes the ceiling.)
+    if (d > r + p.radius || p.pos.y > gy + 6 || p.pos.y < gy - 1.5) return;
     this.hurtPlayer(dmg * (1 - d / (r + p.radius + 1) * 0.5), x, z, fling);
   }
 

@@ -140,7 +140,7 @@ export class DogPack {
         case 'bite': {
           const dp = Math.hypot(p.x - d.x, p.z - d.z);
           if (!hunt || Math.hypot(d.x - H.x, d.z - H.z) > DOGS.leash) { d.state = 'heel'; d.t = 0; break; }
-          if (dp < DOGS.biteR) {
+          if (dp < DOGS.biteR && Math.abs(p.y - d.y) < 2) {
             d.state = 'bite';
             d.biteT -= dt;
             if (d.biteT <= 0) {
