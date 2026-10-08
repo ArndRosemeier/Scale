@@ -53,6 +53,15 @@ Its open items are consolidated here one PR at a time.
 | A crook decides again after a blow: fight, flee or surrender | `this.rethink(c, pick?)` in `game/crime/Crime.ts` (sets `memo.choice` 0/1/2, announces a fight; `pick` holds the crime's own rule) | A local `if (act.memo.decHp !== act.hp) { … }` block (**guarded**) |
 | Then the usual follow-through | `this.actOnChoice(c, dt, reach?)`: give up, fight within `reach`, or run | Copying the three lines |
 
+## Threats
+
+| Need | Use | Not |
+|---|---|---|
+| A monster's anger (who hurt it most) | `game/threats/aggro.ts`: `bookAggro`, `decayAggro(m, dt, tau)`, `topAggro(m, min?)` | `aggro.set(…)` and a decay loop by hand (**guarded**) |
+| Did the hero earn the win against a big monster? | `heroEarned(aggro, share = 0.25)`: angriest with the hero, or a quarter of all its anger | Your own share or HP threshold (Strider and the last-resort strike used to disagree) |
+| Who brought a machine down? | `lastHitBy(lastBy, lastT, now, window = 6)` | `now - lastT < 6` written out |
+| Damage through a zone's armour and weak spot | `zoneDealt(amount, armour, weak, weakMul, weakArmour?)` | `amount * (1 - armour) * (weak ? …)` by hand (**guarded**) |
+
 ## Small helpers
 
 | Need | Use | Not |

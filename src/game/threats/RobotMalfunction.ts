@@ -27,6 +27,7 @@ import { DKind, DState, type Drone } from '../../future/Drones';
 import type { Cause } from '../Stimuli';
 import type { RogueMachines, Rogue, RogueOwner, RogueRole } from './RogueMachines';
 import type { ThreatEvent, ThreatOutcome, ThreatTarget } from './ThreatEvent';
+import { lastHitBy } from './aggro';
 
 export interface RobotEventOpts {
   robots?: number;
@@ -240,7 +241,7 @@ export class RobotMalfunction implements ThreatEvent, RogueOwner {
       if (m.out) continue;
       if (!this.ctl.disabled(m)) { if (m.mode !== 'off') left++; continue; }
       m.out = true;
-      const by: Cause | 'other' = m.lastBy && this.ctl.time - m.lastT < 6 ? m.lastBy : 'other';
+      const by = lastHitBy(m.lastBy, m.lastT, this.ctl.time);
       this.credit[by]++;
       if (by !== 'player') continue;
       const k = m.kind === 'bot' ? K.bot : m.kind === 'drone' ? K.drone : K.robot;
