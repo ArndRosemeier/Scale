@@ -24,6 +24,7 @@ import type { DeepPlan, NavNode } from './plan';
 import { LUMEN_COL, MURK_COL } from './mesher';
 import type { DamageResult, DamageSource, ThreatActor, ThreatZone } from '../../game/threats/ThreatEvent';
 import { dealtBy } from '../../shared/status';
+import { bookAggro, zoneDealt } from '../../game/threats/aggro';
 
 export type Fac = 'lumen' | 'murk';
 export type Role =
@@ -901,9 +902,9 @@ export class MurkActor implements ThreatActor {
     this.sync();
     const zn = typeof zone === 'string' ? this.zones.find((q) => q.id === zone) ?? this.zones[0] : zone ?? this.zones[0];
     const weak = zn.weak && zn.exposed;
-    const dealt = amount * (1 - zn.armour) * (weak ? 2.5 : 1);
+    const dealt = zoneDealt(amount, zn.armour, weak, 2.5, zn.armour);
     zn.recent += dealt;
-    this.aggro.set(src.key ?? src.cause, (this.aggro.get(src.key ?? src.cause) ?? 0) + dealt);
+    bookAggro(this.aggro, src.key ?? src.cause, dealt);
     this.F.hurt(this.b, dealt, src.cause === 'player', src.x ?? this.b.x, src.z ?? this.b.z);
     return { dealt, zone: zn, weak };
   }

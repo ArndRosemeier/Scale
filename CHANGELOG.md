@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.152 — 2026-10-08
+## 0.153 — 2026-10-08
 
 - **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, the 99 m long Strider loses 5 m of length (about 5 %). Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.
+
+## 0.152 — 2026-10-08
+
+- **Fair credit against monsters.** The Strider and the last-resort strike judged differently whether the hero had earned the win. Now both use one rule: the monster was angriest with the hero, or the hero did at least a quarter of the fighting it remembers. Rogue and hijacked machines also count the hero's last blow the same way, with the same 6-second window. The Maw only rewards the hero (and raises the Lumen's trust) when the hero brought it down. Behind the scenes, every monster books its anger and armour through one place, and a self-test keeps it that way.
 
 ## 0.151 — 2026-10-08
 

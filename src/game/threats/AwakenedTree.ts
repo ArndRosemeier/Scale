@@ -33,6 +33,7 @@ import { DecalKind } from '../powers/ElementFx';
 import type { Obstacle } from '../../world/Collision';
 import { angleDiff } from '../../core/math';
 import { dealtBy } from '../../shared/status';
+import { bookAggro, decayAggro, topAggro, zoneDealt } from './aggro';
 
 let EVENT_ID = 9000;
 
@@ -434,13 +435,13 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     else Z = (src.x !== undefined ? this.zoneAt(src.x, src.y ?? this.y + 3, src.z ?? this.z)?.zone : null) ?? this.zone('trunk');
     if (Z.id === 'heart' && !Z.exposed) Z = this.zone('trunk');
     const weak = Z.weak && Z.exposed;
-    const dealt = amount * (1 - Z.armour) * (weak ? TREE.heartMul : 1);
+    const dealt = zoneDealt(amount, Z.armour, weak, TREE.heartMul, Z.armour);
     this.hp = Math.max(0, this.hp - dealt);
     Z.recent += dealt;
     this.stats.damage += dealt;
     if (weak) this.stats.weakHits++;
     const key = src.key ?? src.cause;
-    this.aggro.set(key, (this.aggro.get(key) ?? 0) + dealt + (src.aggro ?? 0));
+    bookAggro(this.aggro, key, dealt + (src.aggro ?? 0));
     if (src.x !== undefined && src.z !== undefined) this.lastSrc.set(key, { x: src.x, z: src.z });
     if (src.cause === 'player' && weak && dealt > 15) this.g.progress.addKarma(TREE.karma.weak, 'hit the awakened tree in its heart');
     if (this.hp <= 0) this.startRooting(src.cause === 'player');
@@ -521,7 +522,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
 
   update(dt: number): void {
     this.t += dt;
-    for (const [k, v] of this.aggro) { const nv = v * Math.exp(-dt / 20); if (nv < 1) this.aggro.delete(k); else this.aggro.set(k, nv); }
+    decayAggro(this.aggro, dt, 20);
     for (const Z of this.zones) Z.recent *= Math.exp(-dt / 4);
     this.cool.sweep -= dt; this.cool.slam -= dt; this.cool.scan -= dt;
     if (this.slowT > 0) this.slowT -= dt;
@@ -564,7 +565,7 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
     const dealt = TREE.burnDps * dt;
     this.hp = Math.max(0, this.hp - dealt);
     this.stats.damage += dealt;
-    this.aggro.set('player', (this.aggro.get('player') ?? 0) + dealt * 0.5);
+    bookAggro(this.aggro, 'player', dealt * 0.5);
     const fx = this.g.elements.fx;
     if (Math.hypot(this.g.renderer.camera.position.x - this.x, this.g.renderer.camera.position.z - this.z) < 400) {
       for (let i = 0; i < 4; i++) {
@@ -614,8 +615,8 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
   /** What to go for: whoever hurt it most (while they still count), else the nearest machine, else a stroll. */
   private pick(): Tgt | null {
     const g = this.g, p = g.player.pos;
-    let top: [string, number] | null = null;
-    for (const e of this.aggro) if (e[1] > TREE.aggroMin && (!top || e[1] > top[1])) top = e;
+    const angry = topAggro(this.aggro, TREE.aggroMin);
+    const top: [string, number] | null = angry ? [angry.key, angry.v] : null;
     if (top) {
       if (top[0] === 'player' && Math.hypot(p.x - this.x, p.z - this.z) < 90 && g.player.pos.y < this.y + this.height) return { kind: 'player', x: p.x, z: p.z };
       const s = this.lastSrc.get(top[0]);
