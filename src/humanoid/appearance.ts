@@ -11,6 +11,7 @@ import { Rng, deriveSeed } from '../core/rng';
 import type { HumanoidAppearance, RaceId } from './types';
 import { RACE_IDS } from './types';
 import { RACE_STYLES, type RGB, type RaceStyle } from './races';
+import { saturate as clamp01, clamp, lerp } from '../core/math';
 
 export interface RaceDef {
   id: RaceId;
@@ -108,8 +109,6 @@ export const RACES: Record<RaceId, RaceDef> = {
 
 // ------------------------------------------------------------------ helpers
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 function pickW<T>(rng: Rng, list: [T, number][]): T {
   return rng.weighted(list, (e) => e[1])[0];
 }
@@ -117,7 +116,6 @@ function jitterColor(rng: Rng, c: RGB, amt: number): RGB {
   const l = rng.gaussian(0, amt);
   return [clamp01(c[0] * (1 + l) + rng.gaussian(0, amt * 0.35)), clamp01(c[1] * (1 + l) + rng.gaussian(0, amt * 0.35)), clamp01(c[2] * (1 + l) + rng.gaussian(0, amt * 0.35))];
 }
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const lerpC = (a: RGB, b: RGB, t: number): RGB => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const lum = (c: RGB) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 

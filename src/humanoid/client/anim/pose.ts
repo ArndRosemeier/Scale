@@ -13,6 +13,8 @@
  * Poses blend linearly (angles stay moderate, so Euler blending is smooth).
  */
 import * as THREE from 'three';
+import { clamp, smoothstep as smooth } from '../../../core/math';
+export { clamp, smooth };
 
 export type Side = 'L' | 'R';
 
@@ -133,10 +135,5 @@ export function kf(t: number, keys: [number, number][]): number {
 
 /** Angle difference folded into [−π, π]. */
 export const wrapPi = (d: number) => d - Math.round(d / (Math.PI * 2)) * Math.PI * 2;
-export const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
-export const smooth = (a: number, b: number, x: number) => {
-  const t = clamp((x - a) / (b - a), 0, 1);
-  return t * t * (3 - 2 * t);
-};
 /** Exponential approach (frame-rate independent). */
 export const approach = (cur: number, target: number, rate: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-rate * dt));

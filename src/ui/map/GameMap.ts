@@ -23,6 +23,7 @@ import { LANDMARK_KIND_NAME } from '../../plan/landmarks';
 import { isTouch } from '../touch';
 import { clamp } from '../../core/math';
 import { isAction } from '../../game/keybinds';
+import { esc } from '../esc';
 
 const LAYERS_KEY = 'scale.map.layers';
 const MINI_KEY = 'scale.map.minimap';
@@ -53,10 +54,6 @@ const DISTRICT_LABEL: Record<string, string> = {
   downtown: 'Downtown', commercial: 'Commercial district', oldtown: 'Old town', apartments: 'Apartment blocks', rowhouses: 'Row houses',
   suburban: 'Suburbs', industrial: 'Industrial area', port: 'Port', park: 'Park', water: 'Waterfront',
 };
-
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-}
 
 function loadJSON<T>(key: string, def: T): T {
   try { const v = localStorage.getItem(key); return v ? { ...def, ...JSON.parse(v) } : def; } catch { return def; }

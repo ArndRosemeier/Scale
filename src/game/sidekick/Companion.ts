@@ -38,6 +38,7 @@ import type { DownCause } from '../../sim/Pedestrians';
 import { ROSTER, GIFTS, MATE_KARMA, TRUST, nextCost, nextWant, honoursWish, buyLine, giftLine, wishLine, trustWord, askAnswer, answersCall, leaning, type Gift, type Ranks, type Ask } from './growthRules';
 import { MedFleet } from '../defeat/MedDrones';
 import { MATE, MATE_POWERS, fightStyle, matePower, pickFoe, revives, mateLine, type FightStyle, type MateSay, type FoeInfo, type MatePower } from './companionRules';
+import { smoothstep as smooth } from '../../core/math';
 
 /** Companion.panel: what the info panel shows. */
 export interface MatePanel {
@@ -71,7 +72,6 @@ interface Carry {
 }
 
 const SLOTS: [number, number][] = [[0, 0.95], [-0.8, -0.55], [0.8, -0.55]];
-const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export class Companion {
   mode: MateMode = 'gone';

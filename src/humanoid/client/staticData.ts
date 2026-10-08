@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import type { HumanAssets } from '../assets';
 import { targetMask } from '../bodyBuild';
 import type { BodyRegion } from '../../items/wearable';
+import { smoothstep as smooth } from '../../core/math';
 
 export const BODY_REGIONS: BodyRegion[] = [
   'scalp', 'face', 'neck', 'chest', 'belly', 'back', 'pelvis', 'buttocks',
@@ -49,11 +50,6 @@ export interface HumanStatic {
 }
 
 let staticCache: HumanStatic | null = null;
-
-const smooth = (a: number, b: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
 
 export function getHumanStatic(as: HumanAssets): HumanStatic {
   if (staticCache && staticCache.assets === as) return staticCache;

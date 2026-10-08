@@ -6,13 +6,12 @@
 import type { Targeting } from '../game/Targeting';
 import type { Sidekick } from '../game/sidekick/Sidekick';
 import type { MatePanel } from '../game/sidekick/Companion';
+import { esc } from './esc';
 
 const DOING: Record<MatePanel['mode'], string> = {
   around: 'Around you', fight: 'Fighting', back: 'On the way back', down: 'Knocked out',
   ward: 'In hospital', home: 'At home', gone: '',
 };
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export class SidekickPanel {
   private el: HTMLDivElement;

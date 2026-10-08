@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.134 — 2026-10-08
+
+- **Behind the scenes: small helpers have one home.** Text shown in menus and panels is escaped by one shared function, and the small maths helpers (clamp, lerp, smoothstep) come from one module instead of a dozen local copies. Nothing changes in play; a self-test now fails if a new copy appears.
+- **A second copy finder for developers.** `npm run repeated` lists functions copied under a different name and code pasted into several files.
+
 ## 0.133 — 2026-10-08
 
 - **Hitting a car is on the record now.** Wrecking a car with a punch, a shockwave or a dash used to cost nothing, unlike the same wreck by a power; now it is booked like any other harm (a dent costs only on a police car, a wreck in front of witnesses as before). Cars flattened under a giant hero's feet are booked too, and those under a monster's or the army's feet go to them.

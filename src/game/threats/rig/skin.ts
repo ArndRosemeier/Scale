@@ -20,6 +20,7 @@
  * eye mask) and uv (square scales: around a tube a fixed number of tiles, along it by girth).
  */
 import type { RigDef } from './CreatureRig';
+import { lerp, saturate as clamp01, smoothstep as sstep } from '../../../core/math';
 
 export type V3 = [number, number, number];
 
@@ -71,10 +72,7 @@ const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[
 const len = (a: V3): number => Math.hypot(a[0], a[1], a[2]);
 const norm = (a: V3): V3 => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 const madd = (a: V3, b: V3, k: number): V3 => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
-const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 const lerp3 = (a: V3, b: V3, t: number): V3 => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
-const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
-const sstep = (a: number, b: number, x: number): number => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const P = (o: { x: number; y: number; z: number }): V3 => [o.x, o.y, o.z];
 const joint = (c: Float64Array, i: number): V3 => [c[i * 3], c[i * 3 + 1], c[i * 3 + 2]];
 

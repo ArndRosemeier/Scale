@@ -3679,5 +3679,27 @@ aliensChecks(check);
   check(hand.length === 0, `cars: every dent goes through dentCar (${hand.join(', ') || 'no hand-written copies'})`);
 }
 
+// Small helpers have one home: scalar maths in src/core/math.ts, HTML escaping in src/ui/esc.ts.
+// No file declares its own clamp / lerp / smoothstep or esc (import, alias if you like the short name).
+{
+  const { esc } = await import('../src/ui/esc');
+  check(esc(`<b a="1">'&'</b>`) === '&lt;b a=&quot;1&quot;&gt;&#39;&amp;&#39;&lt;/b&gt;', `ui: esc escapes all five (${esc(`<"'&>`)})`);
+  const MATH = /^(?:export\s+)?(?:const|function)\s+(clamp|clamp01|saturate|lerp|mix|smoothstep|smooth|sstep)\b[^\n]*?\(\s*\w+(?:\s*:\s*number)?\s*[,)]/m;
+  const ESC = /^(?:export\s+)?(?:const|function)\s+esc\b/m;
+  const copies: string[] = [];
+  const walkM = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkM(full); continue; }
+      if (!/\.ts$/.test(f)) continue;
+      const txt = readFileSync(full, 'utf8');
+      if (!full.endsWith('core/math.ts') && MATH.test(txt)) copies.push(`${full} (${MATH.exec(txt)![1]})`);
+      if (!full.endsWith('ui/esc.ts') && ESC.test(txt)) copies.push(`${full} (esc)`);
+    }
+  };
+  walkM('src');
+  check(copies.length === 0, `helpers: no local copies of core/math or ui/esc (${copies.join(', ') || 'none'})`);
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

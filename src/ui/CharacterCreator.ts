@@ -10,6 +10,7 @@
 import type { HumanoidAppearance } from '../humanoid/types';
 import { HAIR_STYLES, BEARD_STYLES, BROW_STYLES } from '../humanoid/appearance';
 import { HumanoidPreview } from '../humanoid/client/preview';
+import { saturate as clamp01 } from '../core/math';
 import {
   randomLook, plainLook, plainAppearance, normalizeLook, outfitVisuals, TOPS, OUTERS, BOTTOMS, SHOES, HATS, PATTERNS,
   SUITS, SUIT_DESIGNS, GLOVES, MASKS,
@@ -63,7 +64,6 @@ const SHOE_COL = ['#141414', '#40261a', '#e5e5e5', '#664d33', '#262e4d', '#8c1f1
 
 const FIRST = ['Alex', 'Sam', 'Robin', 'Jamie', 'Charlie', 'Noa', 'Kim', 'Toni', 'Max', 'Lou', 'Mika', 'Jo', 'Ari', 'Remy', 'Sasha', 'Jules', 'Eli', 'Nico', 'Rio', 'Kai'];
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const hex = (c: RGB) => '#' + c.map((v) => Math.round(clamp01(v) * 255).toString(16).padStart(2, '0')).join('');
 const rgb = (s: string): RGB => [parseInt(s.slice(1, 3), 16) / 255, parseInt(s.slice(3, 5), 16) / 255, parseInt(s.slice(5, 7), 16) / 255];
 const title = (s: string) => LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
