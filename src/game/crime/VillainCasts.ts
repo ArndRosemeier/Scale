@@ -33,6 +33,15 @@ import { BeamStyle, DecalKind } from '../powers/ElementFx';
 import { fireBurst } from '../powers/blastFx';
 import { VILLAIN_POWERS, CASTERS, segDist, type VillainPower } from '../powers/Caster';
 import type { CastStage, OpLook } from './Crime';
+import { dealtBy } from '../../shared/status';
+
+/** A ritual circle's burst hits as hard as its members on average (a shrunk member hits softer). */
+function circleDealt(circle: readonly PedAgent[]): number {
+  if (!circle.length) return 1;
+  let k = 0;
+  for (const a of circle) k += dealtBy(a);
+  return k / circle.length;
+}
 
 interface Orb { kind: 'fire' | 'stun' | 'hex'; x: number; y: number; z: number; ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; T: number; arc: number; fuse: number; by_: PedAgent }
 interface Crack { ax: number; az: number; dx: number; dz: number; L: number; s: number; y: number; hitPlayer: boolean; hit: Set<PedAgent>; by_: PedAgent }
@@ -192,7 +201,7 @@ export class VillainCasts {
       D.tick = 0.5;
       const dmg = D.owed; D.owed = 0;
       this.stats.atPlayer++;
-      this.hurtPlayer?.(dmg, 'power', by.x, by.z, by.y);
+      this.hurtPlayer?.(dmg * dealtBy(by), 'power', by.x, by.z, by.y);
       const act = by.actor;
       if (act) act.hp = Math.min(act.maxHp, act.hp + dmg * CASTERS.drainHeal);
     }
@@ -254,7 +263,7 @@ export class VillainCasts {
     const yAt = ay + (ey - ay) * Math.min(1, Math.hypot(p.pos.x - ax, p.pos.z - az) / (Math.hypot(bx - ax, bz - az) || 1));
     if (pd < w + p.height * 0.08 && yAt > p.pos.y - 0.3 && yAt < p.pos.y + p.height + 0.3) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg * (0.85 + 0.3 * Math.random()), 'power', ax, az, ay);
+      this.hurtPlayer?.(P.dmg * (0.85 + 0.3 * Math.random()) * dealtBy(by), 'power', ax, az, ay);
       if (power === 'frost') { p.chillT = CASTERS.chill; p.chillSpeed = CASTERS.chillSpeed; }
     }
     const mx = (ax + bx) / 2, mz = (az + bz) / 2, R = Math.hypot(bx - ax, bz - az) / 2 + w;
@@ -281,7 +290,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
     if (pd < R + p.height * 0.1 && Math.abs(p.pos.y - y) < 4) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', x, z, y);
+      this.hurtPlayer?.(P.dmg * dealtBy(by), 'power', x, z, y);
       p.chillT = Math.max(p.chillT, 1.5); p.chillSpeed = CASTERS.chillSpeed;
     }
     for (const list of [g.traffic.vehicles, g.parkedCars]) for (const v of list) {
@@ -314,7 +323,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - by.x, p.pos.z - by.z);
     if (pd < R && Math.abs(p.pos.y - by.y) < 4) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg * (1 - 0.5 * pd / R), 'power', by.x, by.z, by.y);
+      this.hurtPlayer?.(P.dmg * (1 - 0.5 * pd / R) * dealtBy(by), 'power', by.x, by.z, by.y);
       p.chillT = Math.max(p.chillT, CASTERS.wailShaken); p.chillSpeed = Math.min(p.chillSpeed || 1, CASTERS.chillSpeed);
       g.camRig.addShake(0.3);
     }
@@ -336,7 +345,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - o.x, p.pos.z - o.z);
     if (pd < P.radius + p.height * 0.1 && o.y > p.pos.y - 1 && o.y < p.pos.y + p.height + 1) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', o.x, o.z, o.y);
+      this.hurtPlayer?.(P.dmg * dealtBy(o.by_), 'power', o.x, o.z, o.y);
       p.chillT = Math.max(p.chillT, CASTERS.curse); p.chillSpeed = CASTERS.curseSpeed;
       this.cursedT = CASTERS.curse;
     }
@@ -395,7 +404,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
     if (pd < B.radius && Math.abs(p.pos.y - y) < 5) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius), 'power', x, z, y);
+      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius) * circleDealt(circle), 'power', x, z, y);
       p.chillT = Math.max(p.chillT, CASTERS.wailShaken * 2); p.chillSpeed = CASTERS.chillSpeed;
       g.camRig.addShake(0.35);
     }
@@ -415,7 +424,7 @@ export class VillainCasts {
     };
     if (inCone(p.pos.x, p.pos.z) && Math.abs(p.pos.y - by.y) < 3) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', by.x, by.z, by.y);
+      this.hurtPlayer?.(P.dmg * dealtBy(by), 'power', by.x, by.z, by.y);
       const push = 9 / Math.max(1, Math.sqrt(p.k));
       p.vel.x += ux * push; p.vel.z += uz * push; p.vel.y += 2.5 / Math.max(1, Math.sqrt(p.k));
     }
@@ -574,7 +583,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - x, p.pos.z - z);
     if (pd < B.radius && Math.abs(p.pos.y - y) < 5) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius), 'power', x, z, y);
+      this.hurtPlayer?.(B.dmg * (1 - 0.5 * pd / B.radius) * circleDealt(circle), 'power', x, z, y);
       if (element === 'frost') { p.chillT = Math.max(p.chillT, CASTERS.chill); p.chillSpeed = CASTERS.chillSpeed; }
       else if (!p.flying) { const push = 8 / Math.max(1, Math.sqrt(p.k)), l = pd || 1; p.vel.x += ((p.pos.x - x) / l) * push; p.vel.z += ((p.pos.z - z) / l) * push; p.vel.y += 3 / Math.max(1, Math.sqrt(p.k)); }
       g.camRig.addShake(0.3);
@@ -679,7 +688,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - o.x, p.pos.z - o.z);
     if (pd < R && o.y > p.pos.y - 1.5 && o.y < p.pos.y + p.height + 1.5) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg * (1 - 0.6 * pd / R), 'power', o.x, o.z, o.y);
+      this.hurtPlayer?.(P.dmg * (1 - 0.6 * pd / R) * dealtBy(o.by_), 'power', o.x, o.z, o.y);
     }
     for (const a of g.peds.neighbours(o.x, o.z, R, this.nb)) {
       if (a === o.by_ || !a.alive || a.inside || a.state === PState.Down || Math.abs(a.y - o.y) > R) continue;
@@ -704,7 +713,7 @@ export class VillainCasts {
     const pd = Math.hypot(p.pos.x - o.x, p.pos.z - o.z);
     if (pd < R + p.height * 0.1 && Math.abs(p.pos.y - o.y) < 4) {
       this.stats.atPlayer++;
-      this.hurtPlayer?.(P.dmg, 'power', o.x, o.z, o.y);
+      this.hurtPlayer?.(P.dmg * dealtBy(o.by_), 'power', o.x, o.z, o.y);
       if (!p.flying) p.downT = Math.max(p.downT, CASTERS.stunDown * (1 - 0.5 * pd / R));
       g.camRig.addShake(0.25);
     }
@@ -732,7 +741,7 @@ export class VillainCasts {
       if (!k.hitPlayer && !p.flying && Math.abs(p.pos.y - y1) < 1.2 && segDist(p.pos.x, p.pos.z, x0, z0, x1, z1) < P.radius) {
         k.hitPlayer = true;
         this.stats.atPlayer++;
-        this.hurtPlayer?.(P.dmg, 'power', x1, z1, y1);
+        this.hurtPlayer?.(P.dmg * dealtBy(k.by_), 'power', x1, z1, y1);
         p.downT = Math.max(p.downT, 1.1);
         g.camRig.addShake(0.35);
       }

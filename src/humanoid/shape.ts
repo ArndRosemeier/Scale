@@ -71,6 +71,9 @@ function netPairs(map: Map<string, number>) {
   }
 }
 
+/** Lip volume at the slider's middle (see computeShape). */
+const LIP_BASE = -0.5;
+
 export function computeShape(a: HumanoidAppearance): ShapeParams {
   const A = RACE_STYLES[a.race];
   const B = a.race2 ? RACE_STYLES[a.race2] : A;
@@ -113,8 +116,15 @@ export function computeShape(a: HumanoidAppearance): ShapeParams {
   t.signed('%-eye-scale', f.eyeSize);
   t.signed('%-eye-trans', f.eyeSpacing, 2);
   t.signed('mouth-scale-horiz', f.mouthWidth);
-  t.signed('mouth-upperlip-volume', f.lipFullness);
-  t.signed('mouth-lowerlip-volume', f.lipFullness);
+  // Lip thickness: MakeHuman's average lips read too thick on our bodies, so 0 sits thinner
+  // than the raw mesh. The thin end stops where the thinning targets start to crumple the
+  // mouth; the full side grows faster towards its end. Volume plus the lips' own height.
+  const lv = f.lipFullness;
+  const lips = lv < 0 ? LIP_BASE + 0.9 * lv : LIP_BASE + lv * (1 + 0.5 * lv);
+  t.signed('mouth-upperlip-volume', lips);
+  t.signed('mouth-lowerlip-volume', lips);
+  t.signed('mouth-upperlip-height', lips, 0, lips < 0 ? 0.8 : 0.3);
+  t.signed('mouth-lowerlip-height', lips, 0, lips < 0 ? 0.8 : 0.3);
   t.signed('%-ear-scale', f.earSize);
   if (f.earPoint > 0) t.add('%-ear-shape-pointed', Math.min(1, f.earPoint));
   else t.add('%-ear-shape-round', -f.earPoint);

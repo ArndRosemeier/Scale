@@ -25,7 +25,6 @@ import type { PedAgent, DownCause } from '../sim/Pedestrians';
 import { PState } from '../sim/Pedestrians';
 import type { HarmEffect, HarmTarget } from './Consequences';
 import { play, setState } from '../sim/actors/Actor';
-import { statusOf } from '../shared/status';
 import { Role } from '../sim/Population';
 import { CASTERS } from './powers/Caster';
 
@@ -103,8 +102,7 @@ export class Combat {
     if (!a.alive || (a.inside && !a.hall) || J < COMBAT.minJ) return res;
     const act = a.actor;
     if (act && (act.state === 'arrested' || act.state === 'gone')) return res;
-    const scale = statusOf(a)?.scale ?? 1;
-    let dmg = J * COMBAT.dmgPerNs / Math.max(0.2, scale);
+    let dmg = J * COMBAT.dmgPerNs;
     if (kind === 'knife') dmg *= 1.4;
     // Someone already down takes less from a light hit (no "kicking people who are down" loop).
     const down = a.state === PState.Down;
