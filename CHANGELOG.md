@@ -2,9 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.162 — 2026-10-08
+## 0.163 — 2026-10-08
 
 - **One way to find the nearest person.** About a dozen places searched for the nearest passer-by, officer or soldier with their own loop and their own idea of who counts, and some forgot something. Small fixes come with it: the sidekick no longer keeps away from an officer who is lying knocked out, and a mad bomber and the rescue scenes no longer pick someone who is no longer there. A self-test keeps new copies out.
+
+## 0.162 — 2026-10-08
+
+- **Super jump is a real travel power.** Hold W while you leap and the jump now carries you forward: the higher you climb, the faster it goes, up to 18, 39, 72, 120 and 200 m/s at ranks 1 to 5 (it was 12 m/s at every rank). Bounding on from landing to landing now covers ground at least as fast as a boosted flight at the same rank (flight 14 / 28 / 54 / 91 / 159 m/s, super jump 14 / 29 / 55 / 94 / 161 m/s even pressing Space a little late on each landing). A top-rank leap clears about a kilometre. A long leap stops on landing instead of skidding down the street, a quick hop still only moves you a little, and without W the jump is the same straight climb as before. The energy cost is unchanged, and landing beside someone at human size still costs no reputation. The Powers table shows the leap speed per rank (`npx tsx tools/travelsim.ts` measures it).
+
 ## 0.161 — 2026-10-08
 
 - **Fix: the hero no longer gets stuck at turns in tunnels.** Walking from a platform into the underpass, the hero could stand stuck at the right-angle turn just inside its mouth until facing exactly down the next stretch. Underground, a body pressed against a wall only slid along the map's north-south or east-west axis; against a wall at an angle to them (most tunnels) both ways led into the wall and the hero stopped dead. Bodies now slide along walls at any angle, in the metro, its stairs and underpasses, the sewers and the caves. The metro audit and the self-test now walk every stair and underpass both ways like a player who cuts the corners: before the fix 38 of 50 passages in one city stopped such a walker, now none.
