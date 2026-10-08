@@ -102,6 +102,7 @@ export class RunawayTeens implements ThreatEvent {
   constructor(private g: Game, site: { x: number; z: number }, seed: number, opts: TeenOpts = {}) {
     this.rng = new Rng(seed);
     this.maxT = opts.duration ?? TEENS.maxT;
+    site = this.startSpot(site);
     this.x = site.x; this.z = site.z;
     this.ground = g.terrain.height(site.x, site.z);
     this.cover = this.coverAt(site.x, site.z);
@@ -120,6 +121,24 @@ export class RunawayTeens implements ThreatEvent {
     for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; top = Math.max(top, W.groundHeight(x + Math.cos(a) * R, z + Math.sin(a) * R)); }
     for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + 0.3; top = Math.max(top, W.groundHeight(x + Math.cos(a) * R * 0.5, z + Math.sin(a) * R * 0.5)); }
     return Math.max(0, top - gh);
+  }
+
+  /**
+   * Where they come down: the site if the roofs round it hide them, else the nearest well-covered
+   * street node (a saucer starting over a park would be seen before its first prank).
+   */
+  private startSpot(site: { x: number; z: number }): { x: number; z: number } {
+    if (this.coverAt(site.x, site.z) >= TEENS.startCover) return site;
+    let best: { x: number; z: number } | null = null, bs = -Infinity;
+    for (const n of this.g.net.nodes) {
+      const d = Math.hypot(n.x - site.x, n.z - site.z);
+      if (d > TEENS.startR || !n.edges.length) continue;
+      const c = this.coverAt(n.x, n.z);
+      if (c < TEENS.startCover) continue;
+      const s = Math.min(c, 30) - d * 0.05;
+      if (s > bs) { bs = s; best = { x: n.x, z: n.z }; }
+    }
+    return best ?? site;
   }
 
   get podsOut(): number { return this.podHp.filter((h) => h <= 0).length; }
@@ -156,10 +175,14 @@ export class RunawayTeens implements ThreatEvent {
       const d = Math.hypot(n.x - cx, n.z - cz);
       if (d < rMin || d > rMax || !n.edges.length) continue;
       let s = this.rng.float();
-      if (this.coverAt(n.x, n.z) >= TEENS.routeCover) s += 1;
+      // Hurt (pods out), they keep to the tallest streets they can find.
+      const hurt = this.podsOut > 0;
+      const c = this.coverAt(n.x, n.z);
+      if (c >= TEENS.routeCover) s += 1;
+      if (hurt) s += Math.min(c, 30) / 6;
       if (away) {
         const ax = cx - away.x, az = cz - away.z, L = Math.hypot(ax, az) || 1;
-        s += (((n.x - cx) * ax + (n.z - cz) * az) / (d * L)) * 1.5;
+        s += (((n.x - cx) * ax + (n.z - cz) * az) / (d * L)) * (hurt ? 0.8 : 1.5);
       }
       if (s > bs) { bs = s; best = i; }
     }
@@ -183,7 +206,8 @@ export class RunawayTeens implements ThreatEvent {
     this.mode = 'flee';
     this.dropCargo();
     this.prank = null;
-    const n = this.pickNode(this.x, this.z, 110, 320, { x: P.x, z: P.z });
+    const hurt = this.podsOut > 0;
+    const n = this.pickNode(this.x, this.z, hurt ? 40 : 110, hurt ? 220 : 320, { x: P.x, z: P.z });
     this.path = n >= 0 ? this.routeTo(n) ?? [] : [];
     this.pi = 0;
     this.planT = 4;
@@ -195,7 +219,9 @@ export class RunawayTeens implements ThreatEvent {
   /** Pick something to do near where it is: a car on a roof, someone in a fountain, a glyph. */
   private startPrank(): boolean {
     const g = this.g, rng = this.rng;
-    const kinds = rng.chance(0.45) ? ['car', 'person', 'glyph'] : rng.chance(0.5) ? ['person', 'glyph', 'car'] : ['glyph', 'car', 'person'];
+    let kinds = rng.chance(0.45) ? ['car', 'person', 'glyph'] : rng.chance(0.5) ? ['person', 'glyph', 'car'] : ['glyph', 'car', 'person'];
+    // Not the same trick twice running.
+    if (this.lastPrank) kinds = [...kinds.filter((k) => k !== this.lastPrank), this.lastPrank];
     for (const k of kinds) {
       if (k === 'car') {
         const cars = g.parkedCars.filter((v) => v.alive && v.state !== VState.Wreck && v.state !== VState.Crushed && v.kind !== 'tank' && v.kind !== 'apc'
@@ -217,6 +243,7 @@ export class RunawayTeens implements ThreatEvent {
         this.prank = { kind: 'glyph', at, stage: 'go', t: 0 };
       }
       this.mode = 'prank';
+      this.lastPrank = k;
       this.stats.pranks++;
       return true;
     }
@@ -269,8 +296,13 @@ export class RunawayTeens implements ThreatEvent {
       if (!b.alive || b.top - b.base < 10) continue;
       const d = doorOf(b.desc);
       const y = b.base + Math.min(b.top - b.base - 3, 6 + this.rng.range(0, 5));
-      // Stand-off point clear of other buildings.
+      // Stand-off point clear of other buildings, and no street tree in front of the wall.
       if (W.buildingAt(d.x + d.nx * 8, d.z + d.nz * 8)) continue;
+      let tree = false;
+      for (const k of [2.5, 6]) this.g.props.query(d.x + d.nx * k, d.z + d.nz * k, 4, (p) => { if (!tree && !p.broken && p.kind.startsWith('tree:')) tree = true; });
+      if (tree) continue;
+      // One glyph per wall: not over one still glowing there.
+      if (this.g.wardens?.glyphs.near(d.x, y, d.z, 9)) continue;
       cands.push({ x: d.x - d.nx * 0.8, y, z: d.z - d.nz * 0.8, nx: d.nx, nz: d.nz });
     }
     return cands.length ? cands[this.rng.int(0, cands.length - 1)] : null;
@@ -287,6 +319,7 @@ export class RunawayTeens implements ThreatEvent {
 
   /** People being let down slowly after the saucer let go of them. */
   private lowering: PedAgent[] = [];
+  private lastPrank: string | null = null;
 
   private releaseCar(v: Vehicle): void {
     const body = this.g.vehicles.extra(v).body;
@@ -387,14 +420,14 @@ export class RunawayTeens implements ThreatEvent {
       const sx = at.x + at.nx * 9, sz = at.z + at.nz * 9;
       if (p.stage === 'go') {
         want.x = sx; want.z = sz; want.h = at.y - this.ground; want.v = TEENS.vCarry;
-        if (Math.hypot(this.x - sx, this.z - sz) < 2.5 && Math.abs(this.y - at.y) < 3) { p.stage = 'draw'; p.t = 0; this.zap(); g.wardens?.glyphs.add(at.x, at.y, at.z, at.nx, at.nz, this.rng.range(5, 7.5), this.rng.int(0, 1 << 20), TEEN_COLOURS[this.rng.int(0, TEEN_COLOURS.length - 1)], 3.5, 600); }
+        if (Math.hypot(this.x - sx, this.z - sz) < 2.5 && Math.abs(this.y - at.y) < 3) { p.stage = 'draw'; p.t = 0; this.zap(); g.wardens?.glyphs.add(at.x, at.y, at.z, at.nx, at.nz, this.rng.range(5, 7.5), this.rng.int(0, 1 << 20), TEEN_COLOURS[this.rng.int(0, TEEN_COLOURS.length - 1)], 5.5, 600); }
         if (p.t > 25) this.prank = null;
       } else {
         want.x = sx; want.z = sz; want.h = at.y - this.ground; want.v = 1;
         // The beam scribbles over the wall.
         const s = Math.sin(p.t * 9) * 2.2, c = Math.cos(p.t * 6.3) * 2;
         this.beam(at.x - at.nz * s, at.y + c, at.z + at.nx * s);
-        if (p.t > 4) { this.stats.glyphs++; this.giggle(); this.prank = null; }
+        if (p.t > 6) { this.stats.glyphs++; this.giggle(); this.prank = null; }
       }
     }
   }
@@ -429,8 +462,11 @@ export class RunawayTeens implements ThreatEvent {
     const dHero = Math.hypot(P.x - this.x, P.y - this.y, P.z - this.z), hHero = Math.hypot(P.x - this.x, P.z - this.z);
     switch (this.mode) {
       case 'joy': case 'flee': case 'prank': {
-        // The hero coming: off they go; right under them: pop up out of reach.
-        if (dHero < TEENS.fleeR && !g.freeCam) { if (this.mode !== 'flee' || this.planT <= 0) this.flee(); this.fleeCalm = 0; }
+        // The hero coming at them (closing in): off they go; a hero just
+        // standing about is only stared at. Right under them: pop up out of reach.
+        const V = g.player.vel, closing = ((this.x - P.x) * V.x + (this.y - P.y) * V.y + (this.z - P.z) * V.z) / (dHero || 1);
+        const chased = closing > 3;
+        if (dHero < TEENS.fleeR && chased && !g.freeCam) { if (this.mode !== 'flee' || this.planT <= 0) this.flee(); this.fleeCalm = 0; }
         if (hHero < TEENS.dodgeR && P.y < this.y - 1 && this.dodgeT <= 0) { this.dodgeT = TEENS.dodgeT; this.stats.dodges++; }
         if (this.mode === 'flee') {
           this.planT -= dt;
@@ -497,10 +533,15 @@ export class RunawayTeens implements ThreatEvent {
   /** The Wardens' eyes: the open sky (the station sees it) and their discs' cones. */
   private watch(dt: number): void {
     const g = this.g;
-    const open = this.t > TEENS.graceT && inOpen(this.y - this.ground, this.cover);
+    // Joyriding on their own they slip across open stretches before anyone looks; once a pod is
+    // out, or the hero has them on the run, a moment in the open gives them away.
+    const pressed = this.podsOut > 0 || this.mode === 'flee';
+    const open = this.t > TEENS.graceT && pressed && inOpen(this.y - this.ground, this.cover);
+    // A disc's cone catches them only when they are flustered (hurt or on the run): calm, they
+    // slip out of a sweeping cone before it settles. Herding them into one is the hero's job.
     let cone = false;
     const W = g.wardens;
-    if (W) for (const d of W.discs.list) if (d.cone > 0.5 && d.task !== 'parent' && W.discs.inCone(d, this.x, this.y, this.z)) { cone = true; break; }
+    if (W && pressed) for (const d of W.discs.list) if (d.cone > 0.5 && d.task !== 'parent' && W.discs.inCone(d, this.x, this.y, this.z)) { cone = true; break; }
     if (open) this.stats.open += dt;
     if (cone) this.stats.cone += dt;
     this.seen = seeStep(this.seen, dt, open, cone);
@@ -557,6 +598,7 @@ export class RunawayTeens implements ThreatEvent {
         this.g.audio.play('ufo_stern', this.x, this.y, this.z, 1, 1, 90, cam);
         this.heldT = 0;
       }
+      this.mesh.setTether(d.y - d.r * 0.2, Math.min(1, this.heldT * 2));
       if (this.heldT > 1.2) { this.mode = 'lifted'; this.heldT = 0; }
     }
     if (this.heldT > 25) this.finish('stopped');
@@ -573,6 +615,7 @@ export class RunawayTeens implements ThreatEvent {
       this.y += Math.min(top - this.y, dt * ((top - this.y) / TEENS.liftT + 1.5));
       this.x += (d.x - this.x) * Math.min(1, dt); this.z += (d.z - this.z) * Math.min(1, dt);
       this.mesh.root.scale.setScalar(clamp((top - this.y) / 6, 0.15, 1));
+      this.mesh.setTether(top);
       if (top - this.y < 1.5) {
         this.g.wardens?.discs.leave(d);
         this.finish('stopped');
@@ -598,6 +641,7 @@ export class RunawayTeens implements ThreatEvent {
     for (const a of this.lowering.splice(0)) { a.airborne = false; a.y = this.g.terrain.height(a.x, a.z); a.state = PState.Flee; }
     this.mesh.root.visible = false;
     this.mesh.setBeam(null);
+    this.mesh.setTether(null);
     if (this.parent && !this.parent.gone && this.parent.task === 'parent') this.g.wardens?.discs.leave(this.parent);
     this.whine?.stop();
     this.whine = null;
@@ -628,7 +672,8 @@ export class RunawayTeens implements ThreatEvent {
     this.vy += 6;
     this.dropCargo();
     if (cause === 'player' && g.mode === 'normal') g.progress.addKarma(TEENS.karma.pod, 'knocked out a hover pod of the runaway saucer');
-    if (this.mode === 'prank') this.flee();
+    // Hit, they bolt for the nearest tall street.
+    if (this.mode === 'prank' || this.mode === 'joy' || this.mode === 'flee') this.flee();
   }
 
   // ================================================================== sounds and people
