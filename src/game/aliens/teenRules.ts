@@ -21,6 +21,8 @@ export const TEENS = {
   coverR: 34, routeCover: 9,
   /** Height over the street (m): a share of the cover, clamped; each pod out lifts it this much more. */
   hShare: 0.5, hMin: 6, hMax: 19, perPod: 4,
+  /** With pods out they duck under roofs at least this tall per pod out (m); lower ones no longer hide them. */
+  podExpose: 7,
   /** All three pods out: it bobs up like a cork, this far over the roofs round it (m). */
   cork: 22,
   /** The hero right under it within this (m, horizontally): it pops up out of reach for a moment. */
@@ -44,11 +46,14 @@ export const TEENS = {
 
 /**
  * How high the saucer wants to fly over the street (m): about half the cover round it, so the roofs
- * hide it from the station; each pod lost lifts it; with none left it bobs up into the open.
+ * hide it from the station; each pod lost lifts it, and only roofs tall enough for the pods lost
+ * still hide it; with none left it bobs up into the open.
  */
 export function teenHeight(cover: number, podsOut: number): number {
   if (podsOut >= 3) return cover + TEENS.cork;
-  return Math.min(TEENS.hMax, Math.max(TEENS.hMin, cover * TEENS.hShare)) + podsOut * TEENS.perPod;
+  const h = Math.min(TEENS.hMax, Math.max(TEENS.hMin, cover * TEENS.hShare)) + podsOut * TEENS.perPod;
+  // Limping, they still duck under roofs tall enough for the pods they have lost.
+  return podsOut > 0 && cover >= podsOut * TEENS.podExpose ? Math.min(h, cover + TEENS.openBy - 0.5) : h;
 }
 
 /** Out in the open: higher over the ground than the roofs round it (by TEENS.openBy). */

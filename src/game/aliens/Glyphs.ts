@@ -52,7 +52,7 @@ function drawGlyph(seed: number): THREE.CanvasTexture {
  * The gaudy colours the teens' beam draws in, linear and pure (no secondary channel to wash them
  * out). Scaled by `teenGlow.gain` when drawn.
  */
-export const TEEN_COLOURS = [new THREE.Color(1, 0, 0.55), new THREE.Color(0, 1, 0.06), new THREE.Color(1, 0.5, 0), new THREE.Color(0, 0.45, 1)];
+export const TEEN_COLOURS = [new THREE.Color(1, 0, 0.55), new THREE.Color(0, 1, 0.06), new THREE.Color(1, 0.8, 0), new THREE.Color(0, 0.45, 1)];
 
 /**
  * How bright the teens' lights and glyphs are drawn: the AgX tone mapping bleaches anything far

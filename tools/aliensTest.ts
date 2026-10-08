@@ -77,7 +77,7 @@ export function aliensChecks(check: Check): void {
   // Under the roofs they stay hidden; pods out lift them; with none left they bob up into the open.
   let hidden = true;
   for (const cover of [8, 12, 20, 35, 60, 120]) if (inOpen(teenHeight(cover, 0), cover) || (cover >= 20 && inOpen(teenHeight(cover, 1), cover))) hidden = false;
-  check(hidden && inOpen(teenHeight(6, 1), 6) && !inOpen(teenHeight(17, 2), 17), 'teens: under roofs (8–120 m round them) they keep hidden; a pod out, very low roofs no longer hide them; two out, a rowhouse street still does');
+  check(hidden && inOpen(teenHeight(6, 1), 6) && !inOpen(teenHeight(17, 2), 17) && !inOpen(teenHeight(9, 1), 9) && inOpen(teenHeight(10, 2), 10), 'teens: under roofs (8–120 m round them) they keep hidden; a pod out, very low roofs no longer hide them; two out, a rowhouse street still does, a low one no longer');
   check([5, 12, 40, 100].every((c) => inOpen(teenHeight(c, 3), c)) && teenHeight(20, 2) > teenHeight(20, 1) && teenHeight(20, 1) > teenHeight(20, 0), 'teens: each pod out lifts the saucer; all three out, it bobs up into the open');
   check(inOpen(teenHeight(0, 0), 0) && inOpen(teenHeight(2, 0), 2), 'teens: over open ground (a park, a square) there is no cover: seen');
   // Being seen: in the open ~2.4 s, in a cone three times faster, a moment in the open forgiven.
