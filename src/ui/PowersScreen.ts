@@ -180,7 +180,7 @@ export class PowersScreen {
     // Footer: how to earn karma, cores, reset.
     const info = this.info();
     this.foot.innerHTML = `
-      <div class="pw-tips">${sandbox ? 'Sandbox: energy is unlimited; cooldowns are short. <b>B</b> fires a test blast.' : `Earn karma: help people who fell or were hurt (<b>E</b>) · +${KARMA.helpUp} each. ${info}`}</div>
+      <div class="pw-tips">${sandbox ? 'Sandbox: energy is unlimited. <b>B</b> fires a test blast.' : `Earn karma: help people who fell or were hurt (<b>E</b>) · +${KARMA.helpUp} each. ${info}`}</div>
       <button class="pw-reset">${sandbox ? 'Reset to defaults' : this.confirmReset ? 'Click again to erase all progress' : 'Reset progress…'}</button>`;
     const rb = this.foot.querySelector<HTMLButtonElement>('.pw-reset')!;
     rb.classList.toggle('danger', this.confirmReset > 0);

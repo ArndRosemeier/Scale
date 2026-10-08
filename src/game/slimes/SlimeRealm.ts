@@ -29,7 +29,7 @@ import type { DeepField } from '../../underground/deep/field';
 import { MurkBreach } from './MurkBreach';
 import { TrenchWar } from './TrenchWar';
 import { statusFor } from '../../shared/status';
-import { SLIME, SLIME_COOLDOWN, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
+import { SLIME_COST, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
 import { G } from '../../render/materials/globals';
 import type { ThreatActor } from '../threats/ThreatEvent';
 import type { Stimulus } from '../Stimuli';
@@ -120,7 +120,7 @@ export class SlimeRealm {
     this.trust.on((d, v, reason, up) => this.trustChanged(d, v, reason, up));
     // The power.
     g.progress.granted.slimeCall = () => callRank(this.trust.value, this.wars.some((w) => w.stats.maw > 0));
-    g.abilities.special.slimeCall = { cost: SLIME.cost, cd: SLIME_COOLDOWN, run: (r) => this.call(r) };
+    g.abilities.special.slimeCall = { cost: SLIME_COST, run: (r) => this.call(r) };
     this.lastRank = g.progress.rank('slimeCall');
     g.powers.grantInfo = (id) => (id === 'slimeCall' ? this.trustLine() : null);
     g.stimuli.on((s) => this.stimulus(s));
