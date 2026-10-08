@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.121 — 2026-10-08
+
+- **No more shaking arms when you stop running late in a session.** The breathing motion of the chest sped up and slowed down with your speed, and after a few minutes of play every stop made the chest, and with it the arms, shake for a second or two. Breathing now changes pace smoothly, however long you have been playing. Tails swaying on other creatures had the same problem and are fixed too.
+
 ## 0.120 — 2026-10-07
 
 - **Runaway saucer.** Now and then two Warden kids steal a small, battered saucer and go joyriding low between the houses, where the roofs hide them from their parents' station. Before it happens you may see one zip down a street or find a glowing glyph on a wall. While they are out they play pranks: they beam up a parked car and drop it on a low roof, lift someone off the pavement and set them down in a fountain, or draw big glowing glyphs on a facade that stay lit for a long time. The saucer whines as it flies, giggles after a prank, and people point, laugh or grumble about it.
