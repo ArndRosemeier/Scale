@@ -3657,5 +3657,27 @@ aliensChecks(check);
   check(orphans.length === 0, `webgpu: every GLSL shader file is named by its TSL twin (${orphans.join(', ') || 'all twinned'})`);
 }
 
+// Car damage: one helper adds it (sim/Traffic dentCar, never lowers it past a cap), and the player's own
+// blows on cars go through Game.hitCar, which books them; no system adds damage by hand.
+{
+  const { dentCar } = await import('../src/sim/Traffic');
+  const car = { damage: 0.5 } as unknown as import('../src/sim/Traffic').Vehicle;
+  dentCar(car, 0.2); const a = car.damage;
+  dentCar(car, 0.5, 0.9); const b = car.damage;
+  car.damage = 1; dentCar(car, 0.1, 0.9);
+  check(Math.abs(a - 0.7) < 1e-9 && Math.abs(b - 0.9) < 1e-9 && car.damage === 1, `cars: dentCar adds, caps, and never repairs a worse car (${a.toFixed(2)}, ${b.toFixed(2)}, ${car.damage})`);
+  const hand: string[] = [];
+  const walkC = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkC(full); continue; }
+      if (!/\.ts$/.test(f) || full.endsWith('sim/Traffic.ts')) continue;
+      if (/\.damage\s*=\s*Math\.min\(/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkC('src');
+  check(hand.length === 0, `cars: every dent goes through dentCar (${hand.join(', ') || 'no hand-written copies'})`);
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

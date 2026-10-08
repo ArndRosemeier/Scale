@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "tsx tools/selftest.ts",
+    "dup": "node tools/duplicate-candidates/find-duplicate-candidates.mjs --src src --report reports/duplicate-candidates.md",
     "avatar": "node tools/avatar/convert.mjs",
     "build-converter": "node tools/avatar/build-converter.mjs"
   },

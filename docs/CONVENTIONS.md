@@ -9,6 +9,9 @@ and line-of-sight checks.
 the helper and don't re-derive it. If the helper doesn't fit, extend the helper. Where a
 selftest guard exists (`npm test`), it fails on a stray copy.
 
+To look for new copies, run `npm run dup`. It is the name-based duplicate finder from Arnd's Toolbox and writes
+`reports/duplicate-candidates.md`, a reading list rather than a verdict.
+
 The audit that started this list (v0.130) is in the project files, `code-audit/findings.md`.
 Its open items are consolidated here one PR at a time.
 
@@ -28,6 +31,8 @@ Its open items are consolidated here one PR at a time.
 | Question | Use | Not |
 |---|---|---|
 | The player knocked someone down | `reactions.knockDown(a, …, 'player')`. It books the `body` entry **with the victim** through `CrimeSystem`. | An extra `consequences.record(…, 'person', 'knockdown', x, z)` without a ref. Justice can't tell a mugger from a bystander, and the threat clock counts it twice. |
+| The player's blow hits a car (punch, shockwave, dash) | `Game.hitCar`: a wreck or a dent, booked on the ledger with the car | `wreckIt` + `makeWreck` or a dent with no ledger entry (wrecking a police car with a punch used to cost nothing) |
+| Add damage to a car | `dentCar(v, amount, cap?)` (`sim/Traffic.ts`; never lowers it) | `v.damage = Math.min(…)` by hand (**guarded**) |
 | Karma | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
 
 ## Shaders

@@ -45,7 +45,7 @@ import { Pedestrians, PState, type PedAgent } from '../sim/Pedestrians';
 import { Reactions } from '../sim/Reactions';
 import { CrowdRenderer } from '../sim/CrowdRenderer';
 import { bakeCrowdTemplates } from '../sim/CrowdBaker';
-import { Traffic, VState, VehicleObstacles, type Vehicle, type VKind } from '../sim/Traffic';
+import { Traffic, VState, VehicleObstacles, dentCar, type Vehicle, type VKind } from '../sim/Traffic';
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
@@ -533,7 +533,7 @@ export class Game {
         if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
-          if (threat) this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, 'threat');
+          if (s.cause !== 'world') this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, s.cause ?? 'player');
         }
         if (h > 4) this.props.crush(s.x, s.z, r);
         // A giant hero's foot comes down on the brood.
@@ -939,8 +939,7 @@ export class Game {
     for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
       if (this.dashHit.has(v) || Math.abs(v.y - p.pos.y) > 2 + p.height || segDist(v.x, v.z) > r + v.length * 0.4) continue;
       this.dashHit.add(v);
-      if (J > 2500) { this.traffic.wreckIt(v); this.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, dx * J, J * 0.3, dz * J); this.audio.play('car_crash', v.x, v.y, v.z, 0.8, 1, 10, this.renderer.camera.position); }
-      else v.damage = Math.min(1, v.damage + J / 5000);
+      this.hitCar(v, J, v.x, v.y + 0.8, v.z, dx * J, J * 0.3, dz * J, 'speed');
     }
   }
 
@@ -1173,6 +1172,22 @@ export class Game {
     this.parkedList = [...this.parked.values()].flat();
   }
 
+  /**
+   * The player's own blow on a car (a punch, a shockwave, a dash; impulse J N·s, pushed from
+   * (x, y, z) by (jx, jy, jz)): a wreck past 2500 N·s, else a dent, and booked on the ledger with the
+   * car either way (Justice decides what that costs: a dent only for a police car).
+   */
+  private hitCar(v: Vehicle, J: number, x: number, y: number, z: number, jx: number, jy: number, jz: number, power: string): void {
+    // (Pushing a wreck or a flattened car about is no new harm.)
+    const intact = v.state !== VState.Wreck && v.state !== VState.Crushed, wreck = J > 2500;
+    if (wreck) {
+      this.traffic.wreckIt(v);
+      this.vehicles.makeWreck(v, x, y, z, jx, jy, jz);
+      this.audio.play('car_crash', v.x, v.y, v.z, Math.min(1, J / 20000 + 0.3), 1, 10, this.renderer.camera.position);
+    } else dentCar(v, J / 5000);
+    if (intact) this.consequences.record(power, 'car', wreck ? 'wreck' : 'damage', v.x, v.z, v);
+  }
+
   /** A physical strike at a point hits cars, people and props. */
   strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): void {
     const J = Math.hypot(jx, jy, jz);
@@ -1191,11 +1206,7 @@ export class Game {
     for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
       const d = Math.hypot(v.x - x, v.z - z);
       if (d > r + v.length / 2 || y > v.y + 3 + r) continue;
-      if (J > 2500) {
-        this.traffic.wreckIt(v);
-        this.vehicles.makeWreck(v, x, y, z, jx, jy, jz);
-        this.audio.play('car_crash', v.x, v.y, v.z, Math.min(1, J / 20000 + 0.3), 1, 10, this.renderer.camera.position);
-      } else v.damage = Math.min(1, v.damage + J / 5000);
+      this.hitCar(v, J, x, y, z, jx, jy, jz, 'strike');
     }
     // People: through the combat model (stagger, knock-down, KO by impulse and health). A punch
     // (small radius) lands on one body — the nearest, the soft-locked target first; a blast hits all.

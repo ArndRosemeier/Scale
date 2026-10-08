@@ -25,7 +25,7 @@ import * as THREE from 'three';
 import type { Game } from '../Game';
 import { Rng } from '../../core/rng';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
-import { VState, type Vehicle } from '../../sim/Traffic';
+import { VState, dentCar, type Vehicle } from '../../sim/Traffic';
 import { RState, type Robot } from '../../future/Robots';
 import type { Cause } from '../Stimuli';
 import type { ThreatEvent, ThreatOutcome, ThreatTarget } from './ThreatEvent';
@@ -196,7 +196,7 @@ export class Brood implements ThreatEvent {
         if (v.state >= VState.Wreck) return;
         const n = (this.gnaw.get(v) ?? 0) + (big ? 4 : 1);
         this.gnaw.set(v, n);
-        v.speed *= 0.3; v.fear = 2; v.damage = Math.min(0.95, v.damage + 0.05);
+        v.speed *= 0.3; v.fear = 2; dentCar(v, 0.05, 0.95);
         if (v.state === VState.Drive) v.brake = 1;
         if (n === 1) { this.stats.cars++; g.traffic.onHorn?.(v); }
         if (n >= BROOD_EVENT.carBites) this.flip(v, c);
