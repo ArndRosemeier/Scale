@@ -6,7 +6,7 @@
  */
 import type { Game } from '../game/Game';
 import type { AbilitySystem } from '../game/abilities/AbilitySystem';
-import { ABILITIES, ABILITY, HOTBAR_SLOTS, GROUP_NAMES, type AbilityId } from '../game/abilities/defs';
+import { ABILITIES, ABILITY, HOTBAR_SLOTS, GROUP_NAMES, hasSenseOption, senseCost, type AbilityGroup, type AbilityId } from '../game/abilities/defs';
 import { KARMA } from '../game/abilities/tuning';
 import { isTouch } from './touch';
 import { gameCode, isAction, keyLabel, powerKeyText } from '../game/keybinds';
@@ -25,6 +25,8 @@ export class PowersScreen {
   /** Extra footer info (power cores found). */
   info: () => string = () => '';
   onBuy?: (id: AbilityId, rank: number) => void;
+  /** A power's friend/foe sense was bought. */
+  onSense?: (id: AbilityId) => void;
   /** A granted power's progress line (how far to the next rank), or null. */
   grantInfo: ((id: AbilityId) => string | null) | null = null;
 
@@ -103,7 +105,7 @@ export class PowersScreen {
     this.karmaEl.innerHTML = sandbox ? '' : `<b>${pr.karma}</b><span>karma</span>`;
     this.list.innerHTML = '';
     let group = '';
-    const order = ['body', 'movement', 'elemental', 'support'];
+    const order = Object.keys(GROUP_NAMES) as AbilityGroup[];
     const sorted = ABILITIES.slice().sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
     for (const def of sorted) {
       if (def.group !== group) {
@@ -123,6 +125,16 @@ export class PowersScreen {
       const now = r > 0 ? `<div class="pw-eff"><span>Now</span>${def.rankText(r)}</div>` : '';
       const next = r < def.maxRank ? `<div class="pw-eff next"><span>${r > 0 ? 'Next' : 'Unlock'}</span>${def.rankText(r + 1)}</div>` : '';
       const costLine = def.costText ? `<div class="pw-cost">${def.costText(Math.max(1, r))}</div>` : '';
+      // Friend/foe sense: bought per power, once it is unlocked (sandbox: a free switch).
+      let sense = '';
+      if (hasSenseOption(def.id) && (r > 0 || sandbox)) {
+        const has = pr.hasSense(def.id), sc = senseCost(def.id);
+        const btn = has
+          ? (sandbox ? `<button class="pw-sense on" data-act="sense-off">Friend/foe sense: on</button>` : `<span class="pw-sense on">Friend/foe sense ✓</span>`)
+          : sandbox ? `<button class="pw-sense" data-act="sense">Friend/foe sense: off</button>`
+            : `<button class="pw-sense${pr.karma >= sc ? '' : ' poor'}" data-act="sense" ${pr.karma >= sc ? '' : 'disabled'}>Friend/foe sense <b>${sc}</b> karma</button>`;
+        sense = `<div class="pw-senseline">${btn}<span>${has ? 'Hurts only foes; spares people, cars, props and buildings' : 'Hurt only foes: spare people, cars, props and buildings'} (not while you are a giant).</span></div>`;
+      }
       let action: string;
       if (sandbox) action = `<div class="pw-sb"><button data-act="down" ${r <= 0 ? 'disabled' : ''}>−</button><span>Rank ${r}</span><button data-act="up" ${r >= def.maxRank ? 'disabled' : ''}>+</button></div>`;
       else if (def.granted) action = `<button class="pw-buy max" disabled>${r >= def.maxRank ? 'Max rank' : r > 0 ? `Rank ${r}` : 'Not yet'}</button>`;
@@ -135,7 +147,7 @@ export class PowersScreen {
         <div class="pw-body">
           <div class="pw-name">${def.name} <span class="pw-tag">${tag}${powerKeyText(def.id) ? ` · ${powerKeyText(def.id)}` : ''}</span>${where}</div>
           <div class="pw-desc">${def.desc}</div>
-          ${now}${next}${costLine}
+          ${now}${next}${costLine}${sense}
           ${def.granted && !sandbox ? `<div class="pw-how">${def.granted}${this.grantInfo?.(def.id) ? ` — ${this.grantInfo(def.id)}` : ''}</div>` : r > 0 || sandbox ? '' : `<div class="pw-how">Locked — earn karma by helping people (E next to someone who fell)</div>`}
         </div>
         <div class="pw-side"><div class="pw-pips">${pips}</div>${action}</div>`;
@@ -147,6 +159,8 @@ export class PowersScreen {
           if (pr.buy(def.id)) { this.onBuy?.(def.id, pr.rank(def.id)); }
           return;
         }
+        if (act === 'sense') { if (pr.buySense(def.id)) this.onSense?.(def.id); return; }
+        if (act === 'sense-off') { pr.dropSense(def.id); return; }
         if (act === 'up' || act === 'down') { pr.setRank(def.id, r + (act === 'up' ? 1 : -1)); return; }
         if (def.kind === 'active' && pr.rank(def.id) > 0) { this.picked = this.picked === def.id ? null : def.id; this.render(); }
       };

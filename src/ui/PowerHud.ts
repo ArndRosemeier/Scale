@@ -117,13 +117,15 @@ export class PowerHud {
       this.energyFill.classList.toggle('hold', trend === 'hold');
       this.energyFill.parentElement!.title = trend === 'drain' ? 'Energy — your giant size is draining it' : trend === 'hold' ? 'Energy — not recovering (flying, or your size eats the regeneration)' : 'Energy';
     }
-    const e = `${Math.floor(a.energy)}/${Math.round(a.maxEnergy)}|${a.charge.toFixed(2)}`;
+    // The charge bar: a super jump's climb, or a focus beam gathering.
+    const charge = Math.max(a.charge, a.gathering);
+    const e = `${Math.floor(a.energy)}/${Math.round(a.maxEnergy)}|${charge.toFixed(2)}`;
     if (e !== this.lastE) {
       this.lastE = e;
       this.energyFill.style.width = `${(a.energy / a.maxEnergy) * 100}%`;
       this.energyText.textContent = pr.sandbox ? '∞' : `${Math.floor(a.energy)}`;
-      this.chargeFill.style.width = a.charge >= 0 ? `${a.charge * 100}%` : '0%';
-      this.chargeFill.style.opacity = a.charge >= 0 ? '1' : '0';
+      this.chargeFill.style.width = charge >= 0 ? `${charge * 100}%` : '0%';
+      this.chargeFill.style.opacity = charge >= 0 ? '1' : '0';
     }
   }
 }

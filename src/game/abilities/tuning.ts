@@ -24,6 +24,9 @@ export const KARMA_COST = {
   gust: [45, 50, 75, 105, 145],
   hydro: [40, 45, 65, 90, 125],
   shrink: [70, 60, 85, 120, 165],
+  phase: [60, 60, 85, 120, 165],
+  focus: [60, 60, 85, 120, 165],
+  seeker: [55, 55, 80, 110, 150],
   /** Not bought: the Lumen's trust grants it (deep/Trust.callRank). */
   slimeCall: [],
 } as const;
@@ -195,6 +198,43 @@ export const SHRINK_DEALT = [1, 0.9, 0.8, 0.7, 0.6, 0.5];
 export function shrinkFactor(size: number, r: number): number {
   return Math.min(1, Math.max(SHRINK_FACTOR[r], (size - SHRINK_CAP[r]) / Math.max(1e-3, size)));
 }
+
+// ---------------------------------------------------------------- single-target powers
+// They hit only what they are aimed at: no fire, no wall breaking beyond one panel (the focus
+// beam), never a bystander next to the target. People take damage in hit points (Combat), a
+// monster in "laser seconds": what the laser of the same rank does to it in one second.
+
+/** Phase pulse: passes through walls, cars and people and lands only on the target (Tab, or what
+ *  the crosshair is on), even one that ducked out of sight a few seconds ago (TARGET.lostAfter).
+ *  Energy, damage to a person (hit points), to a monster (laser seconds), reach (m). Never across
+ *  the street / sewer boundary. */
+export const PHASE = { cost: 20, laserS: 0.5 };
+export const PHASE_DMG = [0, 10, 14, 19, 25, 32];
+export const PHASE_RANGE = [0, 25, 32, 40, 50, 60];
+
+/** Focus beam: hold to gather the beam (up to `charge` s), let go to fire one heavy hit. `base`
+ *  energy is paid on the press, the rest while it gathers (all of `cost` at a full charge); a
+ *  shot that cannot go off gives the energy back. Damage scales from `min` (a quick tap) to the
+ *  full charge: a person in hit points, a monster in laser seconds (exposed weak spots multiply it
+ *  as for every power), a wall panel or a car takes the impulse. Reach (m). */
+export const FOCUS = { base: 15, cost: 45, charge: 1.5, min: 0.25, laserS: 3, wallS: 1.5, flash: 0.28 };
+export const FOCUS_DMG = [0, 45, 60, 80, 105, 140];
+export const FOCUS_RANGE = [0, 60, 90, 130, 170, 220];
+
+/** Seeker orb: a slow ball of energy that flies round corners and over buildings to its target
+ *  (it needs one). Energy, damage to a person (hit points), to a monster (laser seconds), speed
+ *  (m/s), life (s), how far off the target may be when it is thrown (m). */
+export const SEEKER = { cost: 30, laserS: 0.6, speed: 25, life: 6, turn: 5, over: 10 };
+export const SEEKER_DMG = [0, 12, 17, 23, 30, 40];
+export const SEEKER_RANGE = [0, 50, 65, 80, 100, 120];
+
+/** Friend/foe sense: bought per power, at that power's first-rank price. With it, the power
+ *  spares everyone who is not fighting you (bystanders, your sidekick, police not after you) and
+ *  their cars and machines; walls, props and the ground still take it. */
+/** A giant body never has the sense (Arnd, 2026-10-08: being a giant keeps its downside): above
+ *  this height (m) every power hits everything again. */
+export const SENSE = { maxHeight: 2.5 };
+export const SENSE_POWERS = ['laser', 'shockwave', 'fireWave', 'fireball', 'frostNova', 'lightning', 'stomp', 'gust', 'hydro'] as const;
 
 /** Tab targeting: how far targets are picked (m at 1.8 m, × √k). */
 export const TARGET = { range: 160, propRange: 45, lostAfter: 5 };

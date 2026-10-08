@@ -11,6 +11,8 @@
  *  'tremor': the ground shaking (a giant's steps far off, an omen) — birds flush, people stop and look round.
  *  'thunder': a close thunderclap (render/Weather) — people flinch a little and look up, birds lift.
  *  'gunfire': the army firing (bursts, a tank's gun, rockets) — people near it run, the farther ones duck and look. */
+import type { PedAgent } from '../sim/Pedestrians';
+
 export type StimulusKind = 'impact' | 'glass' | 'collapse' | 'blast' | 'stomp' | 'giant' | 'flyby' | 'crash' | 'scream' | 'horn' | 'sonic' | 'power' | 'cry' | 'alarm' | 'siren' | 'threat' | 'roar' | 'tremor' | 'thunder' | 'gunfire';
 
 /** Who caused something (THREATS_PLAN §4: stimuli and the collateral ledger carry it; 'military': the army;
@@ -35,9 +37,11 @@ export interface Stimulus {
    * the size of whoever made it (the player, a monster), not the player's (THREATS_PLAN §4.2).
    */
   size?: number;
+  /** A blast with the friend/foe sense: the people its wave must not knock down. */
+  spare?: (a: PedAgent) => boolean;
 }
 
-export interface StimulusExtra { evac?: boolean; cause?: Cause; size?: number }
+export interface StimulusExtra { evac?: boolean; cause?: Cause; size?: number; spare?: (a: PedAgent) => boolean }
 
 export class Stimuli {
   private list: Stimulus[] = [];

@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.164 — 2026-10-08
+
+- **Three new single-target powers (new "Energy" group).** They hit only the one they are aimed at: no fire, no bystanders, nothing broken on the way.
+  - **Phase pulse** (tap, 20 energy): passes through walls, cars and people to your target, even one that ducked out of sight a moment ago. Weaker than the laser and short-ranged (25–60 m). Never between the street and the sewers.
+  - **Focus beam** (hold, then let go): gathers a beam behind your eyes for up to 1.5 s (the charge bar fills), then one heavy shot. 15 energy on the press, up to 45 at a full charge; a shot that cannot go off gives the energy back. Best against monsters' weak spots.
+  - **Seeker orb** (tap, 30 energy): a ball of energy that flies round corners and over buildings to its target and bursts only on it. Needs a target. When it can't see its target, it climbs over the roofs, flies across and drops onto it. It grows a little with distance so you can follow it.
+- **Friend/foe sense, bought per power.** Laser eyes, shockwave, fire wave, fireball, frost nova, chain lightning, seismic stomp, whirlwind and hydrokinesis each offer it on the powers screen, for the price of that power's first rank. With it, the power harms nothing that would cost you reputation: only criminals still in the fight, monsters and rogue machines are hit; bystanders, police, cars, props and buildings are left alone (the laser beam passes through people in the way, chain lightning only jumps to foes). A giant loses the sense: above normal size every power hits everything again. In the sandbox it is a free switch.
+
 ## 0.163 — 2026-10-08
 
 - **One way to find the nearest person.** About a dozen places searched for the nearest passer-by, officer or soldier with their own loop and their own idea of who counts, and some forgot something. Small fixes come with it: the sidekick no longer keeps away from an officer who is lying knocked out, and a mad bomber and the rescue scenes no longer pick someone who is no longer there. A self-test keeps new copies out.

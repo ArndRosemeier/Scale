@@ -540,12 +540,12 @@ export class Robots {
   }
 
   /** A strike at a point (punch, thrown object). Returns the number hit. */
-  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number): number {
+  hit(x: number, y: number, z: number, rad: number, jx: number, jy: number, jz: number, skip?: (r: Robot) => boolean): number {
     const J = Math.hypot(jx, jy, jz);
     if (J < J_TOPPLE) return 0;
     let n = 0;
     for (const r of this.list) {
-      if (r.crushed) continue;
+      if (r.crushed || skip?.(r)) continue;
       const d = Math.hypot(r.x - x, r.z - z);
       if (d > rad + 0.45 || y > r.y + 1.0 + rad || y < r.y - rad - 0.5) continue;
       this.knock(r, jx, jy, jz);

@@ -4,8 +4,9 @@
  * Built from oscillators and one shared noise buffer, positioned with panners, routed into
  * the game's effects bus.
  */
-export type SynthShot = 'thunder' | 'zap' | 'frost' | 'fire' | 'shrink' | 'squeak' | 'quake' | 'sizzle' | 'splash' | 'pop' | 'crackle';
-export type SynthLoop = 'laser' | 'water' | 'wind' | 'run' | 'burn';
+export type SynthShot = 'thunder' | 'zap' | 'frost' | 'fire' | 'shrink' | 'squeak' | 'quake' | 'sizzle' | 'splash' | 'pop' | 'crackle' | 'phase' | 'beam' | 'orb';
+/** 'charge': a rising hum (param 0..1: how far it has gathered); the focus beam and the seeker orb. */
+export type SynthLoop = 'laser' | 'water' | 'wind' | 'run' | 'burn' | 'charge';
 
 export interface SynthHandle {
   set(x: number, y: number, z: number, gain: number, param?: number): void;
@@ -145,6 +146,25 @@ export class PowerSynth {
       case 'crackle':
         for (let i = 0; i < 5; i++) noise('highpass', 4500, 3500, 1, 0.25, 0.001, 0.025, t + Math.random() * 0.3);
         break;
+      case 'phase':
+        // A hollow, ghostly whoop: two detuned sines sweeping down, a breath of air.
+        tone('sine', 1300, 420, 0.22, 0.004, 0.22);
+        tone('sine', 1340, 400, 0.16, 0.004, 0.26);
+        noise('bandpass', 2400, 900, 2, 0.12, 0.01, 0.2);
+        break;
+      case 'beam':
+        // The focus beam's release: a sharp crack and a deep, bright thrum.
+        noise('highpass', 5000, 2500, 0.7, 0.7, 0.002, 0.08);
+        tone('sawtooth', 220, 90, 0.22, 0.005, 0.35);
+        tone('sine', 880, 330, 0.18, 0.003, 0.25);
+        noise('lowpass', 1200, 200, 0.8, 0.45, 0.01, 0.5, t + 0.02);
+        break;
+      case 'orb':
+        // A soft, round "whum".
+        tone('sine', 300, 520, 0.28, 0.02, 0.2);
+        tone('triangle', 900, 1500, 0.07, 0.02, 0.18);
+        noise('bandpass', 800, 1400, 1.5, 0.12, 0.02, 0.15);
+        break;
     }
     this.voices++;
     const done = Math.max(0.05, end - ctx.currentTime);
@@ -196,6 +216,11 @@ export class PowerSynth {
       case 'wind': band('bandpass', 500, 2.5, 1.2); band('lowpass', 200, 0.7, 0.6); break;
       case 'run': band('bandpass', 800, 1.2, 1); break;
       case 'burn': band('lowpass', 500, 0.7, 0.8); band('highpass', 6000, 0.7, 0.12); break;
+      case 'charge': {
+        const a = osc('sine', 180, 0.12), b = osc('triangle', 362, 0.05), c = osc('sine', 1440, 0.02);
+        tuned = [a, b, c];
+        break;
+      }
     }
     let stopped = false;
     return {
@@ -206,6 +231,7 @@ export class PowerSynth {
         master.gain.setTargetAtTime(gain, t, 0.06);
         if (kind === 'wind' || kind === 'run') for (const f of filters) f.frequency.setTargetAtTime((kind === 'run' ? 500 : 350) + 900 * param, t, 0.1);
         if (kind === 'laser') tuned.forEach((s, i) => s.frequency.setTargetAtTime([110, 220.7, 1760][i] * param, t, 0.05));
+        if (kind === 'charge') tuned.forEach((s, i) => s.frequency.setTargetAtTime([180, 362, 1440][i] * (1 + 1.6 * param), t, 0.05));
       },
       stop: () => {
         if (stopped) return;

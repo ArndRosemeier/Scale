@@ -85,7 +85,7 @@ export class Reactions {
             const knock = s.kind === 'blast' ? s.radius * 0.12 : s.kind === 'collapse' ? Math.min(40, s.radius * 0.05) : 0;
             // (Not from under their feet, nor through the pavement: a blast in a sewer shakes the street, a street blast
             // does not floor the station below.)
-            if (d < knock && s.y > a.y - 2 && this.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? downCauseOf(s.cause) : 'collapse');
+            if (d < knock && s.y > a.y - 2 && this.sameSide(s.x, s.y, s.z, a.x, a.y, a.z) && !s.spare?.(a)) this.knockDown(a, s.x, s.z, (1 - d / knock) * 9, s.kind === 'blast' ? downCauseOf(s.cause) : 'collapse');
             else this.flee(a, s.x, s.z);
             break;
           }
