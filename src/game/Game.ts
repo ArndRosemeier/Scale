@@ -995,7 +995,7 @@ export class Game {
         p.vel.x = fx * v.speed * 1.2; p.vel.z = fz * v.speed * 1.2; p.vel.y = 2 + v.speed * 0.3;
         p.grounded = false;
         p.pos.x += fx * 0.3; p.pos.z += fz * 0.3;
-        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); this.crime?.health.damage(6 + v.speed * 3.2, 'car', v.x, v.z); }
+        if (this.kickCooldown <= 0) { this.audio.play('car_crash', p.pos.x, p.pos.y, p.pos.z, 0.4, 1.3, 4, this.renderer.camera.position); this.kickCooldown = 1; this.camRig.addShake(0.3); this.crime?.health.damage(6 + v.speed * 3.2, 'car', v.x, v.z, v.y); }
       } else {
         const pushLat = (v.width / 2 + pr - Math.abs(lat)) * Math.sign(lat || 1);
         p.pos.x += -fz * pushLat; p.pos.z += fx * pushLat;
