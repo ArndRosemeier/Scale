@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.146 — 2026-10-08
+
+- **Behind the scenes: one "is this person underground?" question.** Two dozen places asked it by hand (crimes, threats, wardens, saves, markers, the manhole prompt); they now ask the underground system the same way. Nothing changes in play; a self-test keeps it that way.
+
 ## 0.145 — 2026-10-08
 
 - **Fix: Seismic stomp now hurts giant creatures.** Its crack pushed them with a capped shove, so at every rank it did only about 3 points to the Strider or the awakened tree. Now they take the quake's full force at the legs: 10 points at rank 1, 27 at rank 2, 60 at rank 3, 120 at rank 4 and 213 at rank 5 (before armour). The power table in the help shows the new values.

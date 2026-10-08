@@ -160,7 +160,7 @@ export class Fame {
     const g = this.g, P = g.player;
     if (g.freeCam || g.defeat.active || g.intro?.active || P.flying || P.height > 3.5 || P.height < 0.8) return false;
     const p = P.pos;
-    if (g.underground.isUnder(p.x, p.y + 0.5, p.z) || g.indoorsAt(p.x, p.y + 1, p.z)) return false;
+    if (g.underground.feetUnder(p.x, p.y, p.z) || g.indoorsAt(p.x, p.y + 1, p.z)) return false;
     return p.y - g.world.groundHeight(p.x, p.z) < 2.5;
   }
 
