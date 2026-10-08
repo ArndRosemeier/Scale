@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.154 — 2026-10-08
+
+- **Tab only offers what your powers can actually reach.** The Tab list, the click pick and the fire wave each checked line of sight their own way: they ignored cars and holes blasted in walls, so Tab could lock onto someone behind a bus that the power then refused to hit. Now they all use the same line of sight as the powers and every shooter. People behind cars are no longer offered, targets behind a blasted-open wall are, and the fire wave no longer burns through parked cars. Also fixed: shooters and powers could fire through the solid parts of landmarks (town hall, stadium, attractions); those now block the line.
+
 ## 0.153 — 2026-10-08
 
 - **Character creator works in WebGPU mode.** With `?gpu=webgpu` the creator showed only a grey capsule, because its preview still drew with the old WebGL renderer, which cannot show the WebGPU materials. In WebGPU mode the preview now uses a WebGPU renderer too. WebGL mode is unchanged.

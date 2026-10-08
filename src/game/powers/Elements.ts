@@ -323,14 +323,7 @@ export class Elements {
   }
 
   /** How far short of a target's aim point a line may end (its body). */
-  private padOf(t: Target): number {
-    switch (t.kind) {
-      case 'car': return 0.5;
-      case 'threat': { const z = this.w.targeting.zoneOf(t.obj) ?? t.obj.zones.find((zn) => zn.weak && zn.exposed); return z ? z.r * 0.8 : 3; }
-      case 'prop': return Math.max(0.3, Math.min(1.5, t.obj.radius));
-      default: return 0.45;
-    }
-  }
+  private padOf(t: Target): number { return this.w.targeting.padOf(t); }
 
   /** A targeted power that cannot go off: the frame says why, a short toast (not every frame). */
   private refuse(why: 'sight' | 'range'): void {
@@ -667,8 +660,7 @@ export class Elements {
       const ext = t.kind === 'car' ? t.obj.length * 0.5 : 0.5;
       const cos = (vx * A.dx + vy * A.dy + vz * A.dz) / d;
       if (cos < cosA - ext / Math.max(1, d)) return;
-      const hit = this.w.world.raycast(A.ox, A.oy, A.oz, vx / d, vy / d, vz / d, d, 0.8);
-      if (hit.t < d - 1) return;
+      if (!this.w.targeting.sees({ x: A.ox, y: A.oy, z: A.oz }, t, c)) return;
       b.cand.push({ t, d });
     });
     // Walls and ground the flames lick: a few rays across the cone.
