@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.153 — 2026-10-08
+## 0.155 — 2026-10-08
 
 - **Shrink ray reworked.** It now works on everything, monsters included, and the same way for all of them. Small things still shrink by the rank's factor (rank 1 halves a person), but the ray never takes more than 1 m off something's biggest dimension at rank 1, up to 5 m at rank 5: a car loses a metre, the 99 m long Strider loses 5 m of length (about 5 %). Monsters (Strider, awakened tree, runaway saucer, Murk) visibly shrink, and their reach and hit zones shrink with them, instead of just taking some damage. Anything shrunk deals 10 % less damage per rank (50 % at rank 5): punches, guns, spells, robots, monster stomps and swipes. Shrunk targets no longer take extra damage.
+
+## 0.153 — 2026-10-08
+
+- **Character creator works in WebGPU mode.** With `?gpu=webgpu` the creator showed only a grey capsule, because its preview still drew with the old WebGL renderer, which cannot show the WebGPU materials. In WebGPU mode the preview now uses a WebGPU renderer too. WebGL mode is unchanged.
 
 ## 0.152 — 2026-10-08
 
