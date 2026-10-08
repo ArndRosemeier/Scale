@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.168 — 2026-10-08
+
+- **The player's manual is up to date (0.167).** It now covers everything since 0.098: the Hero tab (tights and masks) and the three costumes on F1–F3, the new help (H) with changeable keys and the Powers tab, energy costs instead of cooldowns, the three Energy powers and the friend/foe sense, super jump as a travel power, the reworked shrink ray, open-ended reputation and the Living legend, arrest as a public menace, the street and the tunnels as separate worlds, and two new chapters: *Lights in the sky* (the Nannies, their walkers and the joyriders) and *Your sidekick* (the second shard, trust, talking, the info panel). Ten new screenshots, including the living start screen. 32 pages as PDF (Help › Manual, or Manual on the start screen).
+
 ## 0.167 — 2026-10-08
 
 - **A living start screen.** The old still picture behind the menu is gone: you now look over a city at dusk, gliding slowly round its downtown. Windows light up and go dark, cars stream through the streets, red beacons pulse on the tallest roofs, aircraft circle high up, and now and then a hero streaks past the skyline. The camera leans a little with the mouse. Every seed has its own skyline: type a new seed and the city fades over to it.
