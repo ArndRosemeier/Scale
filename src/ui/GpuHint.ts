@@ -12,6 +12,7 @@
  */
 
 import { gpuName } from '../render/Graphics';
+import { esc } from './esc';
 
 const DISMISS_KEY = 'scale.gpuHint.dismissed';
 
@@ -101,8 +102,6 @@ export function maybeShowGpuHint(p: GpuProbe, slow = false): void {
   open = build(p);
   document.body.appendChild(open);
 }
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
 function copyable(text: string): string {
   return `<button type="button" class="gh-copy" data-copy="${esc(text)}" title="Copy — browsers do not let pages open this address">${esc(text)}</button>`;

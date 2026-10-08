@@ -3588,5 +3588,118 @@ aliensChecks(check);
   check(fromStreet === 0 && fromSewer > 0, `health: a blow from the street does not reach the sewer below (street ${fromStreet}, sewer ${fromSewer.toFixed(1)})`);
 }
 
+// Nor does the player's own blow: a blast or a giant's footfall on the street knocks down the
+// people up there, not the sewer crew or the commuters below (sim/Reactions via Underground.sameSide).
+{
+  const { Reactions } = await import('../src/sim/Reactions');
+  const P = await import('../src/sim/Pedestrians');
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.2 }))), 42);
+  const mk = (k: number, x: number, y: number) => ({ id: k + 1, cit: { ...pop.synthetic(900 + k), curiosity: 0.1, nerve: 0.3 }, x, z: 0, y, heading: 0, speed: 1.3, pref: 1.3, state: P.PState.Walk, route: Float32Array.from([0, 0, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: k, vy: 0, vx: 0, vz: 0, alive: true, slot: -1 } as unknown as import('../src/sim/Pedestrians').PedAgent);
+  const { Stimuli } = await import('../src/game/Stimuli');
+  const result: string[] = [];
+  for (const kind of ['blast', 'stomp'] as const) {
+    const agents = [mk(0, 1, 0), mk(1, 1, -4)];
+    const gp = { agents, neighbours: (x: number, z: number, r: number, out: typeof agents) => { out.length = 0; for (const a of agents) if (Math.abs(a.x - x) <= r && Math.abs(a.z - z) <= r) out.push(a); return out; } };
+    const st = new Stimuli();
+    const re = new Reactions(gp as never, st);
+    re.sameSide = (_ax, ay, _az, _bx, by) => (ay < -1.5) === (by < -1.5);
+    st.emit(kind, 0, 0.2, 0, 9, 80, { cause: 'player', size: 40 });
+    st.update(1 / 30);
+    re.update(1 / 30, { height: 1.8, pos: { x: 500, y: 0, z: 500 }, flying: false, vel: { length: () => 0 }, k: 1 } as never);
+    result.push(`${kind}: street ${agents[0].state === P.PState.Down ? 'down' : 'up'}, sewer ${agents[1].state === P.PState.Down ? 'down' : 'up'}`);
+    check(agents[0].state === P.PState.Down && agents[1].state !== P.PState.Down, `pavement: a ${kind} on the street floors the street, not the sewer below (${result.at(-1)})`);
+  }
+}
+
+// One test for "can someone stand here" and one for open water (world/WorldIndex standable / wet):
+// no building, no landmark, no river, but a bridge is fine. No system keeps its own copy.
+{
+  const { WorldIndex } = await import('../src/world/WorldIndex');
+  const fake = {
+    terrain: { isWater: (x: number, _z: number, bank: number) => x > 10 - bank },
+    bridgeDeck: (_x: number, z: number) => (z > 50 ? 4 : -Infinity),
+    buildingAt: (x: number) => (x < -10 ? {} : null),
+    landmarks: { onFootprint: (_x: number, z: number, m: number) => z < -50 + m },
+    wet: WorldIndex.prototype.wet,
+  };
+  const st = (x: number, z: number, bank?: number) => WorldIndex.prototype.standable.call(fake as never, x, z, bank);
+  check(st(0, 0) && !st(-20, 0) && !st(0, -60) && !st(20, 0) && st(20, 60) && !st(9.7, 0) && st(9.7, 0, 0), 'standable: not in buildings, landmarks or open water; bridges and the bank (bank 0) are fine');
+  // Raw water tests outside the world layer: open water is `world.wet` (bridge-aware), spots `world.standable`.
+  const raw: string[] = [];
+  const plain = new Set(['src/game/threats/StriderRoute.ts', 'src/game/abilities/cores.ts']); // plan-level, terrain only
+  const walkW = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkW(full); continue; }
+      if (!/\.ts$/.test(f) || plain.has(full)) continue;
+      const txt = readFileSync(full, 'utf8');
+      if (/\bisWater\(/.test(txt) || /bridgeDeck\([^)]*\)\s*[=!]==\s*-Infinity/.test(txt)) raw.push(full);
+    }
+  };
+  for (const d of ['src/game', 'src/sim', 'src/ui']) walkW(d);
+  check(raw.length === 0, `water: every gameplay water test goes through world.wet / world.standable (${raw.join(', ') || 'no copies'})`);
+}
+
+// Every GLSL shader has a WebGPU (TSL) twin in src/render/webgpu that names its file: change one, change both.
+{
+  const twins = readdirSync('src/render/webgpu').filter((f) => f.endsWith('.ts')).map((f) => readFileSync(`src/render/webgpu/${f}`, 'utf8')).join('\n');
+  const orphans: string[] = [];
+  const walkG = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { if (!full.endsWith('render/webgpu')) walkG(full); continue; }
+      if (!/\.ts$/.test(f) || full.endsWith('render/ShaderGate.ts')) continue;
+      if (!/onBeforeCompile|ShaderMaterial\(/.test(readFileSync(full, 'utf8'))) continue;
+      if (!new RegExp(`\\b${f.replace(/\.ts$/, '')}\\b`).test(twins)) orphans.push(full);
+    }
+  };
+  walkG('src');
+  check(orphans.length === 0, `webgpu: every GLSL shader file is named by its TSL twin (${orphans.join(', ') || 'all twinned'})`);
+}
+
+// Car damage: one helper adds it (sim/Traffic dentCar, never lowers it past a cap), and the player's own
+// blows on cars go through Game.hitCar, which books them; no system adds damage by hand.
+{
+  const { dentCar } = await import('../src/sim/Traffic');
+  const car = { damage: 0.5 } as unknown as import('../src/sim/Traffic').Vehicle;
+  dentCar(car, 0.2); const a = car.damage;
+  dentCar(car, 0.5, 0.9); const b = car.damage;
+  car.damage = 1; dentCar(car, 0.1, 0.9);
+  check(Math.abs(a - 0.7) < 1e-9 && Math.abs(b - 0.9) < 1e-9 && car.damage === 1, `cars: dentCar adds, caps, and never repairs a worse car (${a.toFixed(2)}, ${b.toFixed(2)}, ${car.damage})`);
+  const hand: string[] = [];
+  const walkC = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkC(full); continue; }
+      if (!/\.ts$/.test(f) || full.endsWith('sim/Traffic.ts')) continue;
+      if (/\.damage\s*=\s*Math\.min\(/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkC('src');
+  check(hand.length === 0, `cars: every dent goes through dentCar (${hand.join(', ') || 'no hand-written copies'})`);
+}
+
+// Small helpers have one home: scalar maths in src/core/math.ts, HTML escaping in src/ui/esc.ts.
+// No file declares its own clamp / lerp / smoothstep or esc (import, alias if you like the short name).
+{
+  const { esc } = await import('../src/ui/esc');
+  check(esc(`<b a="1">'&'</b>`) === '&lt;b a=&quot;1&quot;&gt;&#39;&amp;&#39;&lt;/b&gt;', `ui: esc escapes all five (${esc(`<"'&>`)})`);
+  const MATH = /^(?:export\s+)?(?:const|function)\s+(clamp|clamp01|saturate|lerp|mix|smoothstep|smooth|sstep)\b[^\n]*?\(\s*\w+(?:\s*:\s*number)?\s*[,)]/m;
+  const ESC = /^(?:export\s+)?(?:const|function)\s+esc\b/m;
+  const copies: string[] = [];
+  const walkM = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkM(full); continue; }
+      if (!/\.ts$/.test(f)) continue;
+      const txt = readFileSync(full, 'utf8');
+      if (!full.endsWith('core/math.ts') && MATH.test(txt)) copies.push(`${full} (${MATH.exec(txt)![1]})`);
+      if (!full.endsWith('ui/esc.ts') && ESC.test(txt)) copies.push(`${full} (esc)`);
+    }
+  };
+  walkM('src');
+  check(copies.length === 0, `helpers: no local copies of core/math or ui/esc (${copies.join(', ') || 'none'})`);
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');

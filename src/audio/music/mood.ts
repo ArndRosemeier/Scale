@@ -13,6 +13,7 @@
  * (hysteresis: a robot stepping in and out of range does not flap the score). Calm moods
  * switch with their own thresholds and delays (night at dusk, going underground …).
  */
+import { saturate as clamp01 } from '../../core/math';
 
 export type Mood = 'menu' | 'day' | 'night' | 'under' | 'hero' | 'tension' | 'battle' | 'elegy';
 export const MOODS: Mood[] = ['menu', 'day', 'night', 'under', 'hero', 'tension', 'battle', 'elegy'];
@@ -207,8 +208,6 @@ export class MoodDirector {
 
 /** After a fight, an elegy may follow even if one played this long ago. */
 const T_ELEGY_AFTER_FIGHT = 120;
-
-function clamp01(v: number): number { return v < 0 ? 0 : v > 1 ? 1 : v; }
 
 /** How each mood's layers are mixed (levels 0…1 and how the melody / perc come and go). */
 export interface LayerMix {

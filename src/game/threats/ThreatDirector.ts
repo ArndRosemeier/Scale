@@ -358,7 +358,7 @@ export class ThreatDirector {
     for (const r of W.buildingsIn(p.x - rMax, p.z - rMax, p.x + rMax, p.z + rMax)) {
       if (!r.alive || !(r.desc.shopfront || r.desc.use === 'retail')) continue;
       const d = doorOf(r.desc), x = d.x + d.nx * 3, z = d.z + d.nz * 3, dist = Math.hypot(x - p.x, z - p.z);
-      if (dist < rMin || dist > rMax || W.buildingAt(x, z)) continue;
+      if (dist < rMin || dist > rMax || !W.standable(x, z)) continue;
       doors.push({ x, z });
     }
     if (doors.length) return doors[rng.int(0, doors.length - 1)];

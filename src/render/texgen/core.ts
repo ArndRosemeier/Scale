@@ -8,13 +8,9 @@
  * Pure TS, no DOM, no three.js: runs in a worker and in Node.
  */
 import { hash2i, hash32, hashToFloat } from '../../core/rng';
+import { saturate as clamp01, lerp as mix, smoothstep as smooth } from '../../core/math';
+export { clamp01, mix, smooth };
 
-export const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
-export const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
-export function smooth(a: number, b: number, x: number): number {
-  const t = clamp01((x - a) / (b - a));
-  return t * t * (3 - 2 * t);
-}
 /** Hash of (seed, a, b) to [0,1). */
 export const rnd = (seed: number, a: number, b = 0): number => hashToFloat(hash2i(seed, a, b));
 /** Wrapped signed difference a-b on a period p (result in [-p/2, p/2)). */

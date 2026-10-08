@@ -45,7 +45,7 @@ import { Pedestrians, PState, type PedAgent } from '../sim/Pedestrians';
 import { Reactions } from '../sim/Reactions';
 import { CrowdRenderer } from '../sim/CrowdRenderer';
 import { bakeCrowdTemplates } from '../sim/CrowdBaker';
-import { Traffic, VState, VehicleObstacles, type Vehicle, type VKind } from '../sim/Traffic';
+import { Traffic, VState, VehicleObstacles, dentCar, type Vehicle, type VKind } from '../sim/Traffic';
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
 import { NearFuture } from '../future/NearFuture';
@@ -424,6 +424,8 @@ export class Game {
     // A sewer den's crew walks the underground's floors.
     this.peds.underFloor = (x, y, z) => this.underground.floorAt(x, y, z);
     this.reactions = new Reactions(this.peds, this.stimuli);
+    // Blasts and footfalls knock down only those on their side of the pavement.
+    this.reactions.sameSide = (ax, ay, az, bx, by, bz) => this.underground.sameSide(ax, ay, az, bx, by, bz);
     this.interiors = new Interiors(this.world, this.destruction, this.streamer, this.collision, this.population, this.peds);
     // The town hall's rooms light up like the buildings' interiors.
     this.interiors.extraLights = (x, y, z) => landmarks.lightsNear(x, y, z);
@@ -527,11 +529,11 @@ export class Game {
       if (s.kind === 'stomp') {
         const h = s.size ?? this.player.height, threat = s.cause === 'threat';
         const r = Math.max(0.6, h * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : s.cause === 'world' ? 'other' : 'player');
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, threat ? 'threat' : s.cause === 'world' ? 'other' : 'player');
         if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
-          if (threat) this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, 'threat');
+          if (s.cause !== 'world') this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, s.cause ?? 'player');
         }
         if (h > 4) this.props.crush(s.x, s.z, r);
         // A giant hero's foot comes down on the brood.
@@ -916,7 +918,7 @@ export class Game {
     this.future.hit(mx, y, mz, r + L / 2, dx * J, J * 0.15, dz * J);
     // (In a super speed hop the arc was planned over everyone under it.)
     if (k > 0.45 && !(running && p.hopping)) for (const a of this.peds.neighbours(mx, mz, r + L / 2 + 0.5, [])) {
-      if (this.dashHit.has(a) || a.state === 5 || (a.inside && !a.hall) || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
+      if (this.dashHit.has(a) || a.state === 5 || (a.inside && !a.hall) || Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height) || !this.underground.sameSide(p.pos.x, p.pos.y, p.pos.z, a.x, a.y, a.z)) continue;
       if (segDist(a.x, a.z) > r + 0.3) continue;
       this.dashHit.add(a);
       // Flung forward and aside: the "from" point lies behind them on the dash line (a runner
@@ -930,7 +932,6 @@ export class Game {
       this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : 12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
       if (brush) { this.brushedBy(a); continue; }
-      this.consequences.record('speed', 'person', 'knockdown', a.x, a.z);
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
       this.stimuli.emit('impact', a.x, a.y + 1, a.z, 3, 30);
     }
@@ -938,8 +939,7 @@ export class Game {
     for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
       if (this.dashHit.has(v) || Math.abs(v.y - p.pos.y) > 2 + p.height || segDist(v.x, v.z) > r + v.length * 0.4) continue;
       this.dashHit.add(v);
-      if (J > 2500) { this.traffic.wreckIt(v); this.vehicles.makeWreck(v, v.x, v.y + 0.8, v.z, dx * J, J * 0.3, dz * J); this.audio.play('car_crash', v.x, v.y, v.z, 0.8, 1, 10, this.renderer.camera.position); }
-      else v.damage = Math.min(1, v.damage + J / 5000);
+      this.hitCar(v, J, v.x, v.y + 0.8, v.z, dx * J, J * 0.3, dz * J, 'speed');
     }
   }
 
@@ -963,7 +963,7 @@ export class Game {
     for (const a of near) {
       // (Indoors only those in a landmark's hall are in reach; seated ones stay in their seat.)
       if (a.state === 5 || (a.inside && (!a.hall || a.state === PState.Sit))) continue;
-      if (Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height)) continue;
+      if (Math.abs(a.y - p.pos.y) > Math.max(1.8, p.height) || !this.underground.sameSide(p.pos.x, p.pos.y, p.pos.z, a.x, a.y, a.z)) continue;
       const dx = p.pos.x - a.x, dz = p.pos.z - a.z;
       const d = Math.hypot(dx, dz);
       const rr = pr + 0.25;
@@ -1082,7 +1082,7 @@ export class Game {
         if (a.inside) return false;
         const g = this.world.groundHeight(a.x, a.z, a.y + 0.5);
         if (Math.abs(a.y - g) > 1.2) return false;
-        return !this.terrain.isWater(a.x, a.z, 0) || this.world.bridgeDeck(a.x, a.z) > -Infinity;
+        return !this.world.wet(a.x, a.z, 0);
       },
       sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
       markers: (m) => this.map.setMarkers('deeds', m),
@@ -1172,6 +1172,22 @@ export class Game {
     this.parkedList = [...this.parked.values()].flat();
   }
 
+  /**
+   * The player's own blow on a car (a punch, a shockwave, a dash; impulse J N·s, pushed from
+   * (x, y, z) by (jx, jy, jz)): a wreck past 2500 N·s, else a dent, and booked on the ledger with the
+   * car either way (Justice decides what that costs: a dent only for a police car).
+   */
+  private hitCar(v: Vehicle, J: number, x: number, y: number, z: number, jx: number, jy: number, jz: number, power: string): void {
+    // (Pushing a wreck or a flattened car about is no new harm.)
+    const intact = v.state !== VState.Wreck && v.state !== VState.Crushed, wreck = J > 2500;
+    if (wreck) {
+      this.traffic.wreckIt(v);
+      this.vehicles.makeWreck(v, x, y, z, jx, jy, jz);
+      this.audio.play('car_crash', v.x, v.y, v.z, Math.min(1, J / 20000 + 0.3), 1, 10, this.renderer.camera.position);
+    } else dentCar(v, J / 5000);
+    if (intact) this.consequences.record(power, 'car', wreck ? 'wreck' : 'damage', v.x, v.z, v);
+  }
+
   /** A physical strike at a point hits cars, people and props. */
   strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number): void {
     const J = Math.hypot(jx, jy, jz);
@@ -1190,15 +1206,11 @@ export class Game {
     for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
       const d = Math.hypot(v.x - x, v.z - z);
       if (d > r + v.length / 2 || y > v.y + 3 + r) continue;
-      if (J > 2500) {
-        this.traffic.wreckIt(v);
-        this.vehicles.makeWreck(v, x, y, z, jx, jy, jz);
-        this.audio.play('car_crash', v.x, v.y, v.z, Math.min(1, J / 20000 + 0.3), 1, 10, this.renderer.camera.position);
-      } else v.damage = Math.min(1, v.damage + J / 5000);
+      this.hitCar(v, J, x, y, z, jx, jy, jz, 'strike');
     }
     // People: through the combat model (stagger, knock-down, KO by impulse and health). A punch
     // (small radius) lands on one body — the nearest, the soft-locked target first; a blast hits all.
-    const hit = this.peds.neighbours(x, z, r + 0.5, []).filter((a) => Math.hypot(a.x - x, a.z - z) < r + 0.4 && Math.abs(a.y + 0.9 - y) < r + 1.5);
+    const hit = this.peds.neighbours(x, z, r + 0.5, []).filter((a) => Math.hypot(a.x - x, a.z - z) < r + 0.4 && Math.abs(a.y + 0.9 - y) < r + 1.5 && this.underground.sameSide(x, y, z, a.x, a.y, a.z));
     if (r <= this.player.height * 0.5 && hit.length > 1) {
       const cur = this.targeting.current?.kind === 'person' ? this.targeting.current.obj : null;
       hit.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : 0) || (b.actor?.hostile ? 1 : 0) - (a.actor?.hostile ? 1 : 0) || Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));

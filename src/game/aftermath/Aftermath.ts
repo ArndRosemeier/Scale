@@ -505,7 +505,7 @@ export class Aftermath {
       const k = Math.max(d, r + 4) / d;
       x = hx + dx * k; z = hz + dz * k;
     }
-    for (let k = 0; k < 8 && g.world.buildingAt(x, z); k++) { x += (x - hx) * 0.08; z += (z - hz) * 0.08; }
+    for (let k = 0; k < 8 && !g.world.standable(x, z); k++) { x += (x - hx) * 0.08; z += (z - hz) * 0.08; }
     this.memorials.push({ x, z, yaw: Math.atan2(hx - x, hz - z), since: this.hours });
     this.stats.memorials++;
     this.cordonKey = '';
@@ -533,7 +533,7 @@ export class Aftermath {
       const c = g.population.synthetic(hash32(Math.floor(now * 60) * 131 + this.mourners.length) || 1);
       const ang = M.yaw + Math.PI + this.rng.range(-0.8, 0.8), d = this.rng.range(1.6, 2.6);
       const x = M.x + Math.sin(ang) * d, z = M.z + Math.cos(ang) * d;
-      if (!g.world.buildingAt(x, z) && !g.crime.visible(x, 1.5, z)) {
+      if (g.world.standable(x, z) && !g.crime.visible(x, 1.5, z)) {
         const a = g.peds.spawnAt(c, x, z, ang + Math.PI, false);
         if (a) { attach(a, makeActor('bystander', AFTERMATH_OWNER, { mood: 'sad', held: null, memo: { leaveT: now + this.rng.range(0.15, 0.4) } })); this.mourners.push(a); }
       }
@@ -570,7 +570,7 @@ export class Aftermath {
       let prev: { x: number; y: number; z: number } | null = null;
       for (let k = 0; k <= n; k++) {
         const a = (k / n) * Math.PI * 2, x = c.x + Math.cos(a) * c.r, z = c.z + Math.sin(a) * c.r;
-        if (W.buildingAt(x, z) || g.terrain.isWater(x, z, 0)) { prev = null; continue; }
+        if (!W.standable(x, z, 0)) { prev = null; continue; }
         const y = W.groundHeight(x, z);
         if (k < n) out.push({ kind: 'post', x, y, z, yaw: 0, paint: POST });
         if (prev) {

@@ -17,6 +17,9 @@ meters, Y is up, and the city is centred on the world origin.
 5. **World-ready:** terrain and water are global functions of world coordinates. A city is
    a `Settlement` placed into a `World`, so more cities and countryside can be added later
    without rewriting the city code.
+6. **One helper per question.** Underground tests, same side of the street, screen projection, sight
+   and the harm ledger each have one shared helper: see `docs/CONVENTIONS.md` before writing
+   gameplay code.
 
 ## Layers
 

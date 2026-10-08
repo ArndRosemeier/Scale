@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { Rng, hash2i, hashToFloat } from '../core/rng';
 import { Noise } from '../core/noise';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
+import { clamp, smoothstep as smooth, lerp as mix } from '../core/math';
 
 export type TreeSpecies = 'plane' | 'linden' | 'maple' | 'oak' | 'birch' | 'pine' | 'palm' | 'cypress' | 'chestnut' | 'ginkgo';
 export const TREE_SPECIES: TreeSpecies[] = ['plane', 'linden', 'maple', 'oak', 'birch', 'pine', 'palm', 'cypress', 'chestnut', 'ginkgo'];
@@ -53,11 +54,6 @@ export const vegetationUniforms = {
 type V3 = THREE.Vector3;
 const UP = new THREE.Vector3(0, 1, 0);
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
-const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
-const smooth = (a: number, b: number, x: number) => {
-  const t = clamp((x - a) / (b - a), 0, 1);
-  return t * t * (3 - 2 * t);
-};
 const deg = Math.PI / 180;
 
 function perpBasis(t: V3): [V3, V3] {
@@ -1032,7 +1028,6 @@ function pworley(seed: number, x: number, y: number, px: number, py: number, jit
   return [f1, f2, id];
 }
 
-const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 type RGBH = [number, number, number, number];
 
 function barkPixel(strip: number, u: number, v: number): RGBH {

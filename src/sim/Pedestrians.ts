@@ -781,7 +781,7 @@ export class Pedestrians {
 
   /** Open water at (x, z): a river, lake or the sea, not under a bridge deck. */
   wet(x: number, z: number): boolean {
-    return this.terrain.isWater(x, z, 0.5) && this.world.bridgeDeck(x, z) === -Infinity;
+    return this.world.wet(x, z);
   }
 
   /** The player as an obstacle (only when not tiny). */

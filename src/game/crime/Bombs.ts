@@ -14,7 +14,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Game } from '../Game';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
-import { VState } from '../../sim/Traffic';
+import { VState, dentCar } from '../../sim/Traffic';
 import { fireBurst } from '../powers/blastFx';
 import type { HurtKind } from '../PlayerHealth';
 
@@ -147,7 +147,7 @@ export class Bombs {
         g.traffic.wreckIt(v);
         g.vehicles.makeWreck(v, x, y + 0.3, z, (hx / hl) * 6000 * f, 5000 * f, (hz / hl) * 6000 * f);
         this.stats.wrecked++;
-      } else { v.speed *= 0.3; v.damage = Math.min(1, v.damage + 0.3 * f); }
+      } else { v.speed *= 0.3; dentCar(v, 0.3 * f); }
     }
     // The player.
     const P = g.player, pd = Math.hypot(P.pos.x - x, P.pos.z - z);

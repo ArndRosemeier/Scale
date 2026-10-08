@@ -5,6 +5,7 @@
  */
 import changelog from '../../CHANGELOG.md?raw';
 import { VERSION } from '../version';
+import { esc } from './esc';
 
 let overlay: HTMLDivElement | null = null;
 
@@ -35,10 +36,6 @@ export function showChangelog(): void {
 
 function hide(): void {
   overlay?.classList.remove('open');
-}
-
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
 
 /** Headings, nested bullets, paragraphs and **bold** — all CHANGELOG.md uses. */

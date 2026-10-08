@@ -23,6 +23,7 @@ import { LANDMARK_KIND_NAME } from '../../plan/landmarks';
 import { isTouch } from '../touch';
 import { clamp } from '../../core/math';
 import { isAction } from '../../game/keybinds';
+import { esc } from '../esc';
 
 const LAYERS_KEY = 'scale.map.layers';
 const MINI_KEY = 'scale.map.minimap';
@@ -53,10 +54,6 @@ const DISTRICT_LABEL: Record<string, string> = {
   downtown: 'Downtown', commercial: 'Commercial district', oldtown: 'Old town', apartments: 'Apartment blocks', rowhouses: 'Row houses',
   suburban: 'Suburbs', industrial: 'Industrial area', port: 'Port', park: 'Park', water: 'Waterfront',
 };
-
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-}
 
 function loadJSON<T>(key: string, def: T): T {
   try { const v = localStorage.getItem(key); return v ? { ...def, ...JSON.parse(v) } : def; } catch { return def; }
@@ -458,7 +455,7 @@ export class GameMap {
       html = `<div class="t">${esc(s.name)}</div><div class="d">${chips} Metro station · ${far}</div>${this.buttons(`Travel to ${esc(s.name)} <small>(street entrance)</small>`)}`;
     } else {
       const c = this.world.cellAt(x, z);
-      const wet = this.game.terrain.isWater(x, z, 0) && this.game.world.bridgeDeck(x, z) === -Infinity;
+      const wet = this.game.world.wet(x, z, 0);
       const road = this.nearestArterial(x, z);
       const what = wet ? (this.game.terrain.coastDistance(x, z) < 0 ? 'The sea' : 'The river') : c >= 0 ? DISTRICT_LABEL[m.cells[c].district] : 'Outskirts';
       const near = road && road.d < 250 ? ` · near ${esc(streetName(this.game.settings.seed, road.edge, m.edges[road.edge].cls))}` : '';
@@ -494,7 +491,7 @@ export class GameMap {
   }
 
   private wet(x: number, z: number): boolean {
-    return this.game.terrain.isWater(x, z, 1.5) && this.game.world.bridgeDeck(x, z) === -Infinity;
+    return this.game.world.wet(x, z, 1.5);
   }
 
   private blocked(x: number, z: number): boolean {

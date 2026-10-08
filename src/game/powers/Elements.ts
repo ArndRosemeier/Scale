@@ -34,7 +34,7 @@ import type { WorldIndex } from '../../world/WorldIndex';
 import type { Collision } from '../../world/Collision';
 import { PState, type Pedestrians, type PedAgent } from '../../sim/Pedestrians';
 import type { Reactions } from '../../sim/Reactions';
-import { VState, type Traffic, type Vehicle } from '../../sim/Traffic';
+import { VState, dentCar, type Traffic, type Vehicle } from '../../sim/Traffic';
 import type { VehicleRenderer } from '../../sim/VehicleRenderer';
 import type { NearFuture } from '../../future/NearFuture';
 import type { PropRenderer } from '../../props/PropRenderer';
@@ -433,7 +433,7 @@ export class Elements {
       case 'car': {
         const v = t.obj;
         if (J > carWreckJ || v.state === VState.Wreck) { this.wreck(v, v.x, v.y + 0.8, v.z, jx, jy, jz, J < carWreckJ * 3); this.record(power, t, 'wreck', v.x, v.z); return true; }
-        v.damage = Math.min(1, v.damage + J / 8000);
+        dentCar(v, J / 8000);
         v.speed *= 0.5;
         this.record(power, t, 'damage', v.x, v.z);
         return false;
@@ -622,7 +622,7 @@ export class Elements {
         }
         case 'car': {
           const v = t.obj;
-          v.damage = Math.min(1, v.damage + dose / 12000);
+          dentCar(v, dose / 12000);
           v.speed *= 0.8;
           v.fear = Math.max(v.fear, 1.2);
           this.burn(t, 6);
@@ -848,7 +848,7 @@ export class Elements {
           this.record('fireball', t, 'burn', v.x, v.z);
           // Rank 3 on: the car is thrown and burns out; below, scorched and stalled.
           if (r >= 3 && f > 0.25) { this.wreck(v, x, y, z, hx * 9000 * f * k, 7000 * f * k, hz * 9000 * f * k); this.record('fireball', t, 'wreck', v.x, v.z); }
-          else { v.speed *= 0.2; v.damage = Math.min(1, v.damage + 0.25 * f); }
+          else { v.speed *= 0.2; dentCar(v, 0.25 * f); }
           break;
         }
         case 'robot': case 'bot': this.shove(t, hx * 900 * f * k, 400 * f * k, hz * 900 * f * k, 'fireball'); this.burn(t, burnT * 0.5); break;
@@ -1164,7 +1164,7 @@ export class Elements {
       case 'car': {
         const v = t.obj;
         v.speed = 0; v.brake = 1;
-        v.damage = Math.min(1, v.damage + 0.12);
+        dentCar(v, 0.12);
         v.fear = Math.max(v.fear, 1);
         this.stun(t, stunT * 2);
         this.record('lightning', t, 'stall', v.x, v.z);
@@ -1286,7 +1286,7 @@ export class Elements {
               const v = t.obj, near = Math.hypot(c.x - mx, c.z - mz) < 2.6 * sk;
               const Jc = Math.min(2.4e4, J * 0.35 + 4000);
               if (near || J > 6e4) { this.wreck(v, v.x - sx * 0.8, v.y + 0.3, v.z - sz * 0.8, sx * Jc * 0.3, Jc, sz * Jc * 0.3); this.record('stomp', t, 'wreck', v.x, v.z); }
-              else { v.speed = 0; v.fear = 2; v.damage = Math.min(1, v.damage + 0.2); this.record('stomp', t, 'damage', v.x, v.z); }
+              else { v.speed = 0; v.fear = 2; dentCar(v, 0.2); this.record('stomp', t, 'damage', v.x, v.z); }
               break;
             }
             case 'drone': if (c.y - g < 3 * sk) this.shove(t, sx * 100, 200, sz * 100, 'stomp'); break;

@@ -159,7 +159,7 @@ export class Rescues {
     const d = r * 1.18;
     for (let k = 0; k < 8; k++) {
       const ang = rng.range(0, Math.PI * 2), x = mx + Math.cos(ang) * d, z = mz + Math.sin(ang) * d;
-      if (W.buildingAt(x, z) || this.g.terrain.isWater(x, z, 0)) continue;
+      if (!W.standable(x, z, 0)) continue;
       // Facing away from the mound (towards the street).
       this.trapped.push({ x, z, y: W.groundHeight(x, z), yaw: Math.atan2(-(x - mx), -(z - mz)), seed, a: null, dig: 0, callT: rng.range(0, 3), crewAt: -1, freed: false });
       return true;
@@ -497,7 +497,7 @@ export class Rescues {
     for (let k = 0; k < 90; k++) {
       const ang = rng.range(0, Math.PI * 2), r = avoid + 40 + rng.range(0, 220);
       const x = cx + Math.cos(ang) * r, z = cz + Math.sin(ang) * r;
-      if (g.terrain.isWater(x, z, 2) || W.buildingsIn(x - 8, z - 8, x + 8, z + 8).some((b) => b.alive && polyNear(b.poly, x, z, 7))) continue;
+      if (W.wet(x, z, 2) || W.buildingsIn(x - 8, z - 8, x + 8, z + 8).some((b) => b.alive && polyNear(b.poly, x, z, 7))) continue;
       const ne = net.nearestEdge(x, z, 40);
       if (!ne) continue;
       const e = net.edges[ne.e];

@@ -13,6 +13,7 @@ import {
 import { ABILITIES, GROUP_NAMES, type AbilityGroup } from '../game/abilities/defs';
 import { ENERGY, GIANT, KARMA, KARMA_COST, sizeUpkeep } from '../game/abilities/tuning';
 import { isTouch } from './touch';
+import { esc } from './esc';
 
 export type HelpTab = 'keys' | 'powers' | 'manual';
 
@@ -44,8 +45,6 @@ const FIXED: [string, string][] = [
  *  loads, before the map, the powers screen and Input add theirs, so nothing else reacts. */
 let capture: ((e: KeyboardEvent) => void) | null = null;
 window.addEventListener('keydown', (e) => { if (capture && e.isTrusted) capture(e); }, true);
-
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export class HelpDialog {
   readonly el: HTMLDivElement;

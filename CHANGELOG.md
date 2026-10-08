@@ -2,6 +2,26 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.134 — 2026-10-08
+
+- **Behind the scenes: small helpers have one home.** Text shown in menus and panels is escaped by one shared function, and the small maths helpers (clamp, lerp, smoothstep) come from one module instead of a dozen local copies. Nothing changes in play; a self-test now fails if a new copy appears.
+- **A second copy finder for developers.** `npm run repeated` lists functions copied under a different name and code pasted into several files.
+
+## 0.133 — 2026-10-08
+
+- **Hitting a car is on the record now.** Wrecking a car with a punch, a shockwave or a dash used to cost nothing, unlike the same wreck by a power; now it is booked like any other harm (a dent costs only on a police car, a wreck in front of witnesses as before). Cars flattened under a giant hero's feet are booked too, and those under a monster's or the army's feet go to them.
+- **Car damage has one helper.** Eight places added damage to cars by hand; one of them could even repair a car that was already wrecked. They now share one helper, and the selftest fails if a new copy appears.
+- **`npm run dup`** runs the duplicate finder from Arnd's Toolbox over the code and writes `reports/duplicate-candidates.md`.
+## 0.132 — 2026-10-08
+
+- **Nobody gets placed in the river any more.** Police firing spots, monster and robot spawns, crooks, protesters and the press, street performers, the Wardens and the runaway teens' stand-off spots, mourners, cordon barriers and rescue spots now all use one shared test for "can someone stand here": no building, no landmark, no open water. Bridges count as dry land everywhere now; some systems used to treat them as water.
+- **One water test for everything.** The map, the army, pedestrians, small deeds and saves used four slightly different shore margins; they now share one helper, and the selftest fails if a new private copy appears.
+- **Shader twins are guarded:** the selftest fails if a GLSL shader file has no WebGPU twin naming it.
+## 0.131 — 2026-10-08
+
+- **Your blows no longer reach through the pavement.** A stomp, blast, punch, dash or shove on the street used to knock down people in the sewer or the metro station right below you; now only those on your side of the street go down (and the other way round from below).
+- **Dashing into someone is booked once, with who it was.** A speed dash used to add a second, nameless entry to the record of what you broke, so knocking over a mugger could still count as hurting a bystander.
+- **New docs/CONVENTIONS.md:** the one helper to use for each common question (same side of the street, sight, screen position, the harm ledger), the start of the code-duplication clean-up.
 ## 0.130 — 2026-10-08
 
 - **WebGPU renderer (try it with `?gpu=webgpu`).** The game can now draw with WebGPU instead of WebGL. WebGL stays the default and is unchanged. On WebGPU the city, people, cars, trees, street furniture, sky, weather and effects look the same as on WebGL, and shaders are compiled in the background, so loading is close to WebGL (about 23 s vs 17 s on the test PC). It still stutters for a few seconds after loading and when new kinds of pedestrians appear, runs at about 42 fps where WebGL holds 60, and hero tights patterns and mask cut-outs still show as plain cloth there; those are next.

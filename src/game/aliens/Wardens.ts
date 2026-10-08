@@ -439,7 +439,7 @@ export class Wardens {
       for (const b of g.world.buildingsIn(P.x - 110, P.z - 110, P.x + 110, P.z + 110)) {
         if (!b.alive || b.top - b.base < 10) continue;
         const d = doorOf(b.desc), dist = Math.hypot(d.x - P.x, d.z - P.z);
-        if (dist < 25 || dist > 110 || g.world.buildingAt(d.x + d.nx * 8, d.z + d.nz * 8)) continue;
+        if (dist < 25 || dist > 110 || !g.world.standable(d.x + d.nx * 8, d.z + d.nz * 8)) continue;
         // Facing the hero, roughly.
         if ((P.x - d.x) * d.nx + (P.z - d.z) * d.nz < 0) continue;
         cands.push({ x: d.x - d.nx * 0.8, y: b.base + Math.min(b.top - b.base - 3, 7), z: d.z - d.nz * 0.8, nx: d.nx, nz: d.nz });

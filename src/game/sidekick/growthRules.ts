@@ -17,6 +17,7 @@
 import type { Temperament, Traits } from '../people/identity';
 import { deriveSeed, hashToFloat } from '../../core/rng';
 import type { MatePower } from './companionRules';
+import { clamp } from '../../core/math';
 
 export type Gift = MatePower | 'shield' | 'strength' | 'toughness';
 
@@ -63,8 +64,6 @@ export const TRUST = {
   /** The bond broke. */
   parted: -15,
 };
-
-const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 
 /** The next rank's price (null: they have all of it). */
 export function nextCost(g: Gift, ranks: Ranks): number | null {

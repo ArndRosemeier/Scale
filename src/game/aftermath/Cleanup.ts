@@ -22,6 +22,7 @@ import { Strider, STRIDER_RIG, CUT_LAYOUT } from '../threats/Strider';
 import { CARCASS, carcassStage, removalOrder, boneScales } from './rules';
 import { CRANE_BOOM_LEN, CRANE_BOOM_PIVOT, vehicleModel } from '../../props/vehicles';
 import { parked } from './park';
+import { smoothstep } from '../../core/math';
 
 const ORDER = removalOrder(CUT_LAYOUT, { tail: STRIDER_RIG.tail.length, neck: STRIDER_RIG.neck.length, spine: STRIDER_RIG.spine.length, legs: STRIDER_RIG.legs.length });
 const HIDE: [number, number, number] = [0.13, 0.12, 0.11];
@@ -106,7 +107,7 @@ export class Cleanup {
       const R = CARCASS.cordonR, n = Math.round((Math.PI * 2 * R) / 7);
       for (let k = 0; k < n; k++) {
         const a = (k / n) * Math.PI * 2, x = b.x + Math.cos(a) * R, z = b.z + Math.sin(a) * R;
-        if (g.world.buildingAt(x, z) || g.terrain.isWater(x, z, 0)) continue;
+        if (!g.world.standable(x, z, 0)) continue;
         list.push({ kind: 'barrier', x, y: g.world.groundHeight(x, z), z, yaw: -a, paint: BARRIER, o: { blink: k % 3 === 0 ? 2 : 0 } });
       }
     }
@@ -190,7 +191,7 @@ export class Cleanup {
     const lift = phase < 0.3 ? 0 : phase < 0.45 ? (phase - 0.3) / 0.15 : 1;
     const swing = phase < 0.45 ? 0 : phase < 0.75 ? (phase - 0.45) / 0.3 : 1;
     const lower = phase < 0.8 ? 0 : (phase - 0.8) / 0.2;
-    const hx = from.x + (to.x - from.x) * smooth(swing), hz = from.z + (to.z - from.z) * smooth(swing);
+    const hx = from.x + (to.x - from.x) * smoothstep(0, 1, swing), hz = from.z + (to.z - from.z) * smoothstep(0, 1, swing);
     const hy = Math.max(from.y, to.y) + 9 * lift * (1 - lower) + (to.y - Math.max(from.y, to.y)) * lower * (swing >= 1 ? 1 : 0);
     this.aimBoom(crane, hx, hz, dt);
     const tip = this.boomTip(crane);
@@ -293,7 +294,6 @@ export class Cleanup {
   }
 }
 
-function smooth(t: number): number { return t * t * (3 - 2 * t); }
 
 function angle(a: number): number {
   while (a > Math.PI) a -= Math.PI * 2;

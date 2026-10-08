@@ -336,7 +336,7 @@ export class OriginIntro {
     const dx = Math.sin(a), dz = Math.cos(a);
     for (let d = 0.6; d <= max; d += 0.4) {
       const x = o.x - dx * d, z = o.z - dz * d;
-      if (g.world.buildingAt(x, z) || g.terrain.isWater(x, z, 0.5)) return d - 0.4;
+      if (!g.world.standable(x, z)) return d - 0.4;
       const y = g.world.groundHeight(x, z, o.y + 1);
       if (Math.abs(y - o.y) > 0.45) return d - 0.4;
       const c = g.collision.collide(x, z, y, 1.7, 0.45, x, z);
@@ -354,7 +354,7 @@ export class OriginIntro {
   private chooseSite(): THREE.Vector3 {
     const g = this.g, M = this.M;
     const rate = (x: number, z: number) => {
-      if (g.world.buildingAt(x, z) || g.terrain.isWater(x, z, 0.5)) return null;
+      if (!g.world.standable(x, z)) return null;
       const y = g.world.groundHeight(x, z, this.gM + 4);
       if (!isFinite(y) || Math.abs(y - this.gM) > 4) return null;
       // Room for the shard: nothing standing within a metre (kiosks, benches, poles, parked cars).

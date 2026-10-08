@@ -5,6 +5,7 @@
  * that carries the white-out into the morning. Played through the effects bus of the game's audio.
  */
 import type { Audio } from '../../audio/Audio';
+import { smoothstep as smooth } from '../../core/math';
 
 type Kind = 'streak' | 'crack' | 'impact' | 'hum' | 'surge' | 'dawn';
 
@@ -93,7 +94,6 @@ export class IntroSound {
 
 let seed = 0x0c1a55ed;
 const rnd = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return ((seed >>> 0) / 4294967296) * 2 - 1; };
-const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 /** One-pole low-pass with a (time-varying) cutoff. */
 function lowpass(x: Float32Array, fc: (t: number) => number): Float32Array {

@@ -5,11 +5,8 @@
  * features in the skin shader and in TS for placing hair/beard card roots,
  * so painted stubble and 3D beard hair always agree.
  */
-
-export const smoothstep = (a: number, b: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
+import { smoothstep } from '../../core/math';
+export { smoothstep };
 
 /** Beard style ids shared by shader and generator. */
 export const BEARD_IDS: Record<string, number> = {
