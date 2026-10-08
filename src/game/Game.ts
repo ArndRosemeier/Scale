@@ -31,6 +31,7 @@ import { Destruction } from '../destruction/Destruction';
 import { Collision } from '../world/Collision';
 import { Interactions } from './Interactions';
 import { Stimuli, noticeRadius } from './Stimuli';
+import { Later } from '../core/later';
 import { Audio } from '../audio/Audio';
 import { G } from '../render/materials/globals';
 import { clamp, lerp, smoothstep } from '../core/math';
@@ -151,6 +152,8 @@ export class Game {
   collision!: Collision;
   interactions!: Interactions;
   stimuli = new Stimuli();
+  /** Game-time callbacks (instead of setTimeout for anything that changes the game). */
+  readonly later = new Later();
   audio = new Audio();
   /** Background music (src/audio/music): moods from the game state, stems loaded on first need. */
   music = new Music(this);
@@ -766,6 +769,7 @@ export class Game {
     // (The ward lies deep under the hospital: lit, heard and seen like the underground.)
     if (this.defeat.inWard) this.camRig.underground = true;
     this.stimuli.update(dt);
+    this.later.update(dt);
     this.simT += dt;
     const readyCells = [...this.streamer.cells.values()].filter((c) => c.status === 'ready');
     this.T('net', () => this.net.maybeRebuild(this.simT, readyCells));

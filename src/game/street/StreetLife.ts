@@ -483,7 +483,7 @@ export class StreetLife {
       o.lookX = a.x; o.lookY = a.y + 1.6; o.lookZ = a.z;
       const dx = o.x - a.x, dz = o.z - a.z, dl = Math.hypot(dx, dz) || 1;
       o.x += (dx / dl) * 0.35; o.z += (dz / dl) * 0.35;
-      setTimeout(() => { if (o.alive) this.g.barks.say(o, c.rng.pick(['Aah!', 'It MOVED!', 'Jesus!', 'Don\'t DO that!']), 10); }, 450);
+      this.g.later.after(0.45, () => { if (o.alive) this.g.barks.say(o, c.rng.pick(['Aah!', 'It MOVED!', 'Jesus!', 'Don\'t DO that!']), 10); });
       return;
     }
   }
