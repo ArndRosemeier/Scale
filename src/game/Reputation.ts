@@ -1,6 +1,7 @@
 /**
- * Reputation (PLAYGROUND_PLAN §0 decision 4, §2.6): what the city thinks of the player, −100 … +100,
- * kept per city (seed, size) and mode in localStorage. Stopped crimes, returned property and small
+ * Reputation (PLAYGROUND_PLAN §0 decision 4, §2.6): what the city thinks of the player, from −100
+ * up with no upper limit (+100 is no longer the top, only `REP.scale`, where the city's feelings are
+ * at their strongest: crowd attitude and strangers' opinions stop growing there), kept per city (seed, size) and mode in localStorage. Stopped crimes, returned property and small
  * kindnesses raise it; hurting bystanders, attacking the police and wrecking things in front of
  * witnesses lower it. It shapes the world rather than gating anything:
  *
@@ -11,7 +12,10 @@
 import type { GameMode } from './mode';
 
 export const REP = {
-  min: -100, max: 100,
+  /** The floor; there is no ceiling. */
+  min: -100, max: Infinity,
+  /** Where the crowd's attitude and strangers' opinions are at full strength (they don't grow beyond). */
+  scale: 100,
   cheerAt: 30,
   fearAt: -40,
   suspectAt: -50,
@@ -54,7 +58,7 @@ export class Reputation {
   }
 
   /** −1 (feared) … +1 (loved): crowd attitude. */
-  get attitude(): number { return this.v / 100; }
+  get attitude(): number { return Math.min(1, this.v / REP.scale); }
   get cheers(): boolean { return this.v >= REP.cheerAt; }
   get feared(): boolean { return this.v <= REP.fearAt; }
   get suspect(): boolean { return this.v <= REP.suspectAt; }
@@ -62,7 +66,7 @@ export class Reputation {
   /** Short words for the HUD title / P screen. */
   label(): string {
     const v = this.v;
-    return v >= 70 ? 'City hero' : v >= 35 ? 'Well liked' : v >= 10 ? 'Known for good deeds' : v > -10 ? 'Unknown' : v > -35 ? 'Troublemaker' : v > -70 ? 'Feared' : 'Public menace';
+    return v >= 150 ? 'Living legend' : v >= 70 ? 'City hero' : v >= 35 ? 'Well liked' : v >= 10 ? 'Known for good deeds' : v > -10 ? 'Unknown' : v > -35 ? 'Troublemaker' : v > -70 ? 'Feared' : 'Public menace';
   }
 
   /** Saves: the value and the statistics. */

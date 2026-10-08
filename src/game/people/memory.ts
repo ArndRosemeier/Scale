@@ -90,12 +90,12 @@ export function newKnown(cit: Citizen, name: string, now: number, x: number, z: 
 /**
  * How they feel about the hero: what you did to them (and favours done or forgotten), what they
  * heard about you from the people close to them (`heard`, social.ts hearsay), plus your
- * reputation, weighted by how agreeable they are.
+ * reputation (counted up to +100: beyond that the hero is simply famous), weighted by how agreeable they are.
  */
 export function opinionOf(k: (Pick<Known, 'talks' | 'helped' | 'saved' | 'hurt'> & { favours?: number; letDown?: number }) | null, rep: number, agree: number, heard = 0): number {
   const own = k ? Math.min(PEOPLE.talkMax, k.talks * PEOPLE.talk) + k.helped * PEOPLE.helped + k.saved * PEOPLE.saved + k.hurt * PEOPLE.hurt
     + (k.favours ?? 0) * SOCIAL.favourDone + (k.letDown ?? 0) * SOCIAL.favourLost : 0;
-  return Math.max(-100, Math.min(100, Math.round(own + heard + rep * (PEOPLE.repBase + PEOPLE.repAgree * agree))));
+  return Math.max(-100, Math.min(100, Math.round(own + heard + Math.min(rep, 100) * (PEOPLE.repBase + PEOPLE.repAgree * agree))));
 }
 
 /** Higher: kept longer when the list is full. */

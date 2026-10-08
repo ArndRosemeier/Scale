@@ -1,5 +1,5 @@
 /**
- * Fame: the city's reputation of the player made visible (Reputation, −100 … +100). Pure rules: no
+ * Fame: the city's reputation of the player made visible (Reputation, −100 and up, open-ended). Pure rules: no
  * three.js, no game — the game's `Fame` (fame/Fame.ts) and the headless checks share them.
  *
  *   ≥ FAME.pressAt   photographers turn up where the hero is and flash away; the more famous, the

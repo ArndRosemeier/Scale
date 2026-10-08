@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.128 — 2026-10-08
+
+- **Reputation has no upper limit any more.** It used to stop at +100; now every good deed keeps counting, however famous you already are. Past +150 the city calls you a *Living legend*. Everything that reacts to your reputation (cheering crowds, the press, fans, the statue, what strangers think of you) works as before and is at full strength from +100 on. The bottom stays at −100. Saves keep reputation above 100.
+
 ## 0.127 — 2026-10-08
 
 - **Click your sidekick to see how they are doing.** Clicking (or tapping) your sidekick opens a small see-through panel above the target frame. It shows their name, their mood, what they are doing right now (around you, fighting, keeping back, flying, in hospital…), their health and trust, the karma they have put by and what they are saving for, and every power they have learned with its level. The power the shard gave them is marked. The panel closes with the target (Esc or another click).
