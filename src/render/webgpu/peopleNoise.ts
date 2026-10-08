@@ -124,14 +124,24 @@ export const h_brow = Fn(([f, br]) => {
   const ax = abs(f.x).toVar();
   const u = ax.sub(0.17).div(0.86).toVar();
   const uc = clamp(u, 0.0, 1.0).toVar();
-  const cy = add(0.43, br.y.mul(0.1).mul(sin(uc.mul(2.7)))).sub(mul(0.09, uc.mul(uc)));
-  const th = br.x.mul(mix(0.085, 0.03, uc));
+  const cy = add(0.2, br.y.mul(0.1).mul(sin(uc.mul(2.7)))).sub(mul(0.09, uc.mul(uc)));
+  const th = br.x.mul(mix(0.085, 0.05, uc));
   const d = abs(f.y.sub(cy)).div(max(th, 1e-3));
   const m = sub(1.0, smoothstep(0.55, 1.05, d)).mul(smoothstep(-0.12, 0.04, u)).mul(sub(1.0, smoothstep(0.88, 1.05, u))).toVar();
-  m.assign(max(m, br.z.mul(sub(1.0, smoothstep(0.12, 0.2, ax))).mul(sub(1.0, smoothstep(0.5, 1.0, abs(f.y.sub(0.42)).div(0.07))))));
+  m.assign(max(m, br.z.mul(sub(1.0, smoothstep(0.12, 0.2, ax))).mul(sub(1.0, smoothstep(0.5, 1.0, abs(f.y.sub(0.19)).div(0.07))))));
   m.mulAssign(smoothstep(-0.55, -0.3, f.z));
   return vec2(m, u);
 }, { f: 'vec3', br: 'vec4', return: 'vec2' });
+
+/** The painted domino (h_eyeMask, faceRegions.ts): coverage 0..1 round both eyes and across the nose bridge. */
+export const h_eyeMask = Fn(([f]) => {
+  const ax = abs(f.x).toVar();
+  const lift = max(ax.sub(0.5), 0.0).mul(0.45);
+  const lobe = length(vec2(ax.sub(0.52).div(0.45), f.y.sub(0.03).sub(lift).div(0.27))).sub(1.0);
+  const bridge = max(abs(f.y.sub(0.05)).sub(0.11), ax.sub(0.4)).div(0.25);
+  const d = min(lobe, bridge);
+  return sub(1.0, smoothstep(-0.04, 0.04, d)).mul(smoothstep(-0.75, -0.5, f.z));
+}, { f: 'vec3', return: 'float' });
 
 // ------------------------------------------------------------------ shared by the humanoid materials
 

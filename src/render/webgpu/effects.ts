@@ -14,6 +14,7 @@ import {
   Fn, float, int, vec2, vec3, vec4, mix, normalize, max, min, abs, fract, floor, exp, pow, sin, cos, atan, length, distance, dot, cross,
   clamp, smoothstep, step, sub, add, mul, select, If, Discard, attribute, uniform, varyingProperty, positionGeometry, positionView, uv,
   modelViewMatrix, cameraProjectionMatrix, cameraViewMatrix, cameraPosition, normalViewGeometry, screenSize, instancedDynamicBufferAttribute,
+  normalView, positionViewDirection, materialOpacity,
 } from 'three/tsl';
 import { vnoise, shared } from './common';
 import { instanceMatrixNode, col, shaderLike } from './fx';
@@ -229,6 +230,18 @@ export function createDecalNodeMaterial(uTime: U, uNight: U): THREE.NodeMaterial
         const lines = smoothstep(0.03, 0.0, cr);
         c.assign(mix(vec3(0.72, 0.86, 0.96), vec3(1.0), lines.mul(0.8)).mul(add(0.85, mul(0.25, dfbm(w.mul(4.0))))).mul(lightK).add(vec3(0.04, 0.07, 0.1).mul(N)));
         a.assign(body.mul(select(kind.equal(4), 0.5, 0.82)).mul(fade));
+      }).ElseIf(kind.equal(5), () => {               // moss and creepers: patchy green, vines across it
+        const m = dfbm(w.mul(1.3).add(seed)).toVar();
+        const leaf = step(0.5, dfbm(w.mul(7.0).add(seed.mul(1.7))));
+        const vine = smoothstep(0.05, 0.0, abs(dfbm(w.mul(0.8).add(seed).add(7.0)).sub(0.5))).toVar();
+        c.assign(mix(vec3(0.07, 0.17, 0.04), vec3(0.2, 0.36, 0.08), leaf).mul(add(0.7, mul(0.5, m))).mul(lightK));
+        c.assign(mix(c, vec3(0.05, 0.09, 0.03).mul(lightK), vine.mul(0.8)));
+        a.assign(max(body.mul(smoothstep(0.3, 0.55, m.add(0.2))).mul(0.9), vine.mul(body)).mul(fade));
+      }).ElseIf(kind.equal(6), () => {               // grave earth: churned, dark, pale splinters of bone
+        c.assign(vec3(0.11, 0.075, 0.05).mul(add(0.6, mul(0.6, dfbm(w.mul(3.0).add(seed))))).mul(lightK));
+        const bone = step(0.8, dfbm(w.mul(9.0).add(seed.mul(2.3))));
+        c.assign(mix(c, vec3(0.75, 0.72, 0.62).mul(lightK), bone));
+        a.assign(body.mul(0.88).mul(fade));
       }).Else(() => {                               // puddle: dark, glossy
         c.assign(vec3(0.05, 0.065, 0.08).mul(lightK).add(vec3(0.25, 0.3, 0.35).mul(pow(dfbm(w.mul(0.7).add(seed.mul(0.3))), 3.0)).mul(lightK)));
         a.assign(body.mul(0.62).mul(fade));
@@ -418,3 +431,13 @@ export function createStarParticlesNode(P: THREE.BufferAttribute, C: THREE.Buffe
   return mesh;
 }
 
+
+// ---------------------------------------------------------------- teen saucer halo (game/aliens/TeenSaucer.ts)
+
+/** Additive halo that fades toward the silhouette: alpha × dot(N, V)³. */
+export function createHaloNodeMaterial(): THREE.MeshBasicNodeMaterial {
+  const m = new THREE.MeshBasicNodeMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const k = max(dot(normalize(normalView), positionViewDirection), 0.0);
+  m.opacityNode = materialOpacity.mul(k.mul(k).mul(k));
+  return m;
+}

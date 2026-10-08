@@ -7,6 +7,7 @@
  * omens fly a copy past.
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import { hullGeometry } from './Discs';
 import { TEEN_COLOURS, teenGlow } from './Glyphs';
 
@@ -45,6 +46,7 @@ function materials() {
 
 /** The rim lights' glow: additive, fading out towards the sphere's silhouette so it reads as a soft halo. */
 function haloMaterial(): THREE.MeshBasicMaterial {
+  if (WEBGPU) return gpuKit().createHaloNodeMaterial() as unknown as THREE.MeshBasicMaterial;
   const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   m.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader

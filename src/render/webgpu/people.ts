@@ -30,7 +30,7 @@ import { patchSkyOcclusionNode, onLightingModel, ownSkyPatch } from './skyOcclus
 import type { SkyVisPatch } from '../skyOcclusion';
 import { sharedGraph as shareGraph, type Values } from './sharedGraph';
 import {
-  h_hash12, h_noise2, h_noise3, h_fbm2, h_fbm3, h_voronoi2, h_voronoi3, h_beardCoverage, h_scalpCoverage, h_brow, h_bumpNormal,
+  h_hash12, h_noise2, h_noise3, h_fbm2, h_fbm3, h_voronoi2, h_voronoi3, h_beardCoverage, h_scalpCoverage, h_brow, h_eyeMask, h_bumpNormal,
 } from './peopleNoise';
 
 /** People of a kind share one shader (see sharedGraph); each gets its own sky value. */
@@ -80,7 +80,7 @@ function skinGraph(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUni
     sheenColor: new THREE.Color(0.32, 0.26, 0.24),
   });
   const uTone = P('uTone'), uAccent = P('uAccent'), uHair = P('uHair'), uPattern = P('uPattern'), uLook = P('uLook');
-  const uBrow = P('uBrow'), uBeard = P('uBeard'), uMarks = P('uMarks');
+  const uBrow = P('uBrow'), uBeard = P('uBeard'), uMarks = P('uMarks'), uMask = P('uMask');
 
   // Vertex: facial expressions (expression-unit deltas from the shared texture).
   const units = Math.max(1, opts.exprUnits);
@@ -115,7 +115,10 @@ function skinGraph(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUni
     const f = vFace.toVar();
     const age = uLook.x, male = uLook.y;
     const lips = vMaskA.x.toVar(), cheeks = vMaskA.y.toVar(), socket = vMaskA.z, nose = vMaskA.w.toVar();
-    const ears = vMaskB.x.toVar(), ageZ = vMaskB.y, laugh = vMaskB.z, nails = vMaskB.w.toVar();
+    const ears = vMaskB.x.toVar(), ageZ = vMaskB.y, laugh = vMaskB.z;
+    // One channel holds the nails and the lid line (they never meet): face height tells them apart.
+    const onFace = step(-3.0, f.y);
+    const nails = vMaskB.w.mul(sub(1.0, onFace)).toVar(), lidLine = vMaskB.w.mul(onFace).toVar();
     const lumT = dot(tone, vec3(0.2126, 0.7152, 0.0722));
     const fair = smoothstep(0.03, 0.4, lumT).toVar(); // how visible redness is
 
@@ -134,9 +137,9 @@ function skinGraph(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUni
     const blood = vec3(1.08, 0.86, 0.84);
     c.assign(mix(c, c.mul(blood), mul(0.5, fair).mul(cheeks.mul(add(0.55, uLook.z)).add(nose.mul(0.6)).add(ears.mul(0.5)))));
     // Lips: darker, redder; tint toward hair/accent for fantasy tones.
-    const lipCol = c.mul(mix(vec3(0.82, 0.55, 0.56), vec3(0.75, 0.62, 0.7), sub(1.0, fair))).mul(add(0.9, mul(0.1, male))).toVar();
+    const lipCol = c.mul(mix(vec3(0.86, 0.5, 0.48), vec3(0.75, 0.62, 0.7), sub(1.0, fair))).mul(add(0.9, mul(0.1, male))).toVar();
     lipCol.assign(mix(lipCol, uAccent.mul(0.8), uBeard.w));
-    c.assign(mix(c, lipCol, lips.mul(0.85)));
+    c.assign(mix(c, lipCol, smoothstep(0.0, 0.6, lips).mul(0.9)));
     // Eye sockets: thinner, slightly violet skin.
     c.assign(mix(c, c.mul(vec3(0.84, 0.8, 0.86)), socket.mul(add(0.45, age.mul(0.4)))));
     // Nails: pinkish-white, glossy.
@@ -183,11 +186,13 @@ function skinGraph(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUni
     rough.addAssign(stub.mul(0.15));
     const scalp = h_scalpCoverage(f, uBeard.z).mul(uLook.w);
     c.assign(mix(c, mix(c, hairC.mul(0.8), 0.8), scalp.mul(add(0.35, mul(0.5, hairDot)))));
+    // Lash line along the lids (darker, softer on men).
+    c.assign(mix(c, mix(hairC.mul(0.5), vec3(0.06, 0.04, 0.035), 0.6), lidLine.mul(sub(0.9, mul(0.25, male)))));
     const brow = h_brow(f, uBrow).toVar();
     If(brow.x.greaterThan(0.001), () => {
-      const strokes = h_noise2(vec2(brow.y.mul(140.0).add(f.y.mul(60.0).mul(sign(f.x))), f.y.sub(0.43).mul(420.0).add(seed.mul(9.0))));
+      const strokes = h_noise2(vec2(brow.y.mul(140.0).add(f.y.mul(60.0).mul(sign(f.x))), f.y.sub(0.2).mul(420.0).add(seed.mul(9.0))));
       const bm = brow.x.mul(add(0.5, mul(0.5, smoothstep(0.3, 0.7, strokes.add(mul(0.2, uBrow.w)))))).mul(uBrow.w).mul(0.92).toVar();
-      c.assign(mix(c, hairC.mul(0.55), clamp(bm, 0.0, 1.0)));
+      c.assign(mix(c, mix(hairC.mul(0.5), vec3(0.08, 0.055, 0.04), 0.4), clamp(bm, 0.0, 1.0)));
       height.addAssign(bm.mul(0.00012));
       rough.addAssign(bm.mul(0.1));
     });
@@ -316,6 +321,17 @@ function skinGraph(opts: { expr: boolean; exprTex: THREE.Texture | null; exprUni
         const zone = sub(1.0, smoothstep(0.6, 1.0, length(vec2(f.x, f.y.add(0.45).mul(1.6))))).mul(smoothstep(-0.4, -0.1, f.z));
         c.assign(mix(c, c.mul(vec3(0.75, 0.58, 0.46)), sub(1.0, smoothstep(0.1, 0.28, v.x)).mul(step(0.35, v.z)).mul(zone)));
       });
+    });
+
+    // ---- a hero's eye mask (worn, set by the equipment): matte cloth over brows and lids, a raised edge.
+    If(uMask.x.greaterThan(0.5), () => {
+      const em = h_eyeMask(f).toVar();
+      If(uMask.x.greaterThan(1.5), () => {
+        em.assign(max(em, sub(1.0, smoothstep(1.25, 1.35, length(vec2(abs(f.x).sub(0.5).div(0.33), f.y.add(0.01).div(0.22))))).mul(smoothstep(-0.75, -0.5, f.z))));
+      });
+      c.assign(mix(c, uMask.yzw.mul(add(0.92, mul(0.16, midN))), em));
+      rough.assign(mix(rough, 0.5, em));
+      height.addAssign(em.mul(0.0007));
     });
 
     const thin = ears.mul(0.9).add(nose.mul(0.25)).add(lips.mul(0.2));

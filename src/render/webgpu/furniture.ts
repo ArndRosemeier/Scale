@@ -84,7 +84,7 @@ export function createFurnitureNodeMaterial(
       rough.assign(0.9);
     }).ElseIf(mid.equal(4), () => { // stone (granite / limestone)
       const speck = step(0.82, fn(vOPos.mul(90.0)));
-      base.assign(vec3(0.25, 0.235, 0.215).mul(add(0.82, mul(0.25, n0)).add(mul(0.12, n1)).add(mul(0.06, n2))).mul(sub(1.0, speck.mul(0.3))));
+      base.assign(vPaint.mul(vec3(1.168, 1.098, 1.005)).mul(add(0.82, mul(0.25, n0)).add(mul(0.12, n1)).add(mul(0.06, n2))).mul(sub(1.0, speck.mul(0.3))));
       rough.assign(add(0.72, mul(0.1, n2)));
     }).ElseIf(mid.equal(5), () => { // glass (screen-door transparency)
       If(fc.x.equal(fc.y), () => { Discard(); });
