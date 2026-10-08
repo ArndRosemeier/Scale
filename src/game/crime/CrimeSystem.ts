@@ -22,7 +22,7 @@ import { Role, doorOf, type Citizen } from '../../sim/Population';
 import { cityOutfit } from '../../humanoid/client/wardrobe';
 import { hash32 } from '../../core/rng';
 import { pointInPoly } from '../../core/geom2';
-import { statusOf } from '../../shared/status';
+import { statusOf, dealtBy } from '../../shared/status';
 import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, type ActorRole } from '../../sim/actors/Actor';
 import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
@@ -420,8 +420,9 @@ export class CrimeSystem {
     if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5)) return 'held';
     if (!this.guns.clear(c, mx, my, mz, tx, ty, tz, at === 'player' ? null : at, false, at === 'player')) return 'held';
     this.guns.fire(c, S, mx, my, mz, tx, ty, tz, 1, false, false, undefined);
-    if (at === 'player') this.hurtPlayer(S.player * (0.8 + Math.random() * 0.4), 'gun', c.x, c.z, c.y);
-    else this.combat.hitActor(at, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'npc', c.x, c.z);
+    const k = dealtBy(c);
+    if (at === 'player') this.hurtPlayer(S.player * (0.8 + Math.random() * 0.4) * k, 'gun', c.x, c.z, c.y);
+    else this.combat.hitActor(at, (fx / fl) * gunJ(S.person) * k, 20, (fz / fl) * gunJ(S.person) * k, 'gun', 'npc', c.x, c.z);
     return 'hit';
   }
 
@@ -437,7 +438,8 @@ export class CrimeSystem {
     if (d > S.range || !this.guns.los(mx, my, mz, tx, ty, tz, 0.5)) return 'held';
     if (!this.guns.clear(o, mx, my, mz, tx, ty, tz, c, true)) return 'held';
     this.guns.fire(o, S, mx, my, mz, tx, ty, tz, 1, false, true, 'police');
-    this.combat.hitActor(c, (fx / fl) * gunJ(S.person), 20, (fz / fl) * gunJ(S.person), 'gun', 'police', o.x, o.z);
+    const k = dealtBy(o);
+    this.combat.hitActor(c, (fx / fl) * gunJ(S.person) * k, 20, (fz / fl) * gunJ(S.person) * k, 'gun', 'police', o.x, o.z);
     return 'hit';
   }
 
@@ -456,7 +458,7 @@ export class CrimeSystem {
     if (!this.guns.clear(o, mx, my, mz, tx, ty, tz, null, false, true)) return 'held';
     this.guns.fire(o, S, mx, my, mz, tx, ty, tz, S.burst, false, false, 'police');
     this.guns.stats.atPlayer += S.burst;
-    this.hurtPlayer(S.player * S.burst, 'police', o.x, o.z, o.y);
+    this.hurtPlayer(S.player * S.burst * dealtBy(o), 'police', o.x, o.z, o.y);
     return 'hit';
   }
 

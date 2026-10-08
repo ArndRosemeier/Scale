@@ -1092,7 +1092,7 @@ export class Game {
       toast,
       reachable: (a) => {
         if (a.inside) return false;
-        const g = this.world.groundHeight(a.x, a.z, a.y + 0.5);
+        const g = this.floorAt(a.x, a.y, a.z);
         if (Math.abs(a.y - g) > 1.2) return false;
         return !this.world.wet(a.x, a.z, 0);
       },
@@ -1266,6 +1266,15 @@ export class Game {
   }
 
   /** Inside a building (an active interior) or a landmark's rooms (the town hall)? */
+  /**
+   * The floor under something at height `feetY` (feet, or a point just above the floor): a sewer, metro or
+   * cave floor when it is underground, else the street, a bridge deck or a roof (world.groundHeight).
+   * Effects that land at a target (decals, orbs, bombs, chips) use this, so a sewer fight stays in the sewer.
+   */
+  floorAt(x: number, feetY: number, z: number): number {
+    return this.underground.floorAt(x, feetY + 0.5, z) ?? this.world.groundHeight(x, z, feetY + 0.5);
+  }
+
   indoorsAt(x: number, y: number, z: number): boolean {
     return !!this.interiors.insideAt(x, y, z) || !!this.world.landmarks?.insideAt(x, y, z);
   }
