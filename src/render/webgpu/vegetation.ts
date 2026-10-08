@@ -21,6 +21,7 @@ import {
   positionViewDirection, normalView, normalViewGeometry, diffuseColor, varying, dFdx, dFdy,
 } from 'three/tsl';
 import { shared } from './common';
+import { geometryInstancing } from './fx';
 
 /** The shared `{ value }` uniforms of props/vegetation (`vegetationUniforms`). */
 export interface VegUniforms { uTime: { value: number }; uWind: { value: number }; uSeason: { value: number } }
@@ -304,6 +305,7 @@ export function createFarTreeNodeMaterial(U: VegUniforms): THREE.MeshStandardNod
 /** Clump material: instance colour, darker towards the base of the crown. */
 export function createClumpNodeMaterial(): THREE.MeshStandardNodeMaterial {
   const mat = new THREE.MeshStandardNodeMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
+  geometryInstancing(mat);
   const vClumpY = positionGeometry.y;
   afterDiffuse(mat, () => {
     diffuseColor.assign(vec4(diffuseColor.rgb.mul(mix(0.5, 1.1, smoothstep(0.2, 1.0, vClumpY))), diffuseColor.a));

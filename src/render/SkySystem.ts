@@ -99,7 +99,9 @@ export class SkySystem {
    */
   setShadows(on: boolean, size: number): void {
     const sh = this.sun.shadow;
-    if (sh.mapSize.x !== size) {
+    // (WebGPU: a new shadow map is a new texture in every lit shader, so all of them were built
+    // again, ~10 s frozen when auto quality stepped High → Ultra. The size stays as first set.)
+    if (sh.mapSize.x !== size && !(WEBGPU && sh.map)) {
       sh.mapSize.set(size, size);
       if (sh.map) { sh.map.depthTexture?.dispose(); sh.map.dispose(); sh.map = null; }
     }

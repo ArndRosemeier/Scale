@@ -20,6 +20,7 @@ import { TERRAIN_ROOT } from '../world/boundary';
 import type { Obstacle } from '../world/Collision';
 import { hash32, hashToFloat } from '../core/rng';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
+import { GeoInstances } from '../render/geoInstances';
 
 /** Full tree models nearer than this (m). */
 const NEAR = 75;
@@ -36,7 +37,8 @@ interface FTile {
   status: 'loading' | 'ready';
   recs: Float32Array | null;
   /** Clump meshes (built when first shown). */
-  clumps: THREE.InstancedMesh[] | null;
+  /** InstancedMeshes; on WebGPU plain meshes instanced through their geometry (GeoInstances). */
+  clumps: THREE.Mesh[] | null;
   used: number;
   bytes: number;
 }
@@ -147,7 +149,7 @@ export class Countryside {
     for (const t of this.tiles.values()) {
       if (!t.recs) continue;
       if (t.size <= FOREST_DETAIL) trees += t.recs.length / FOREST_STRIDE;
-      if (t.clumps) clumps += t.clumps.reduce((a, m) => a + m.count, 0);
+      if (t.clumps) clumps += t.clumps.reduce((a, m) => a + clumpCount(m), 0);
       bytes += t.bytes;
     }
     for (const b of this.batches.values()) bytes += b.cap * 64 * b.meshes.length;
@@ -173,7 +175,7 @@ export class Countryside {
   }
 
   private dropTile(t: FTile): void {
-    if (t.clumps) for (const m of t.clumps) { this.group.remove(m); m.dispose(); }
+    if (t.clumps) for (const m of t.clumps) { this.group.remove(m); if ((m as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose(); else m.geometry.dispose(); }
     this.tiles.delete(t.key);
   }
 
@@ -191,9 +193,12 @@ export class Countryside {
     t.clumps = [];
     for (let k = 0; k < 2; k++) {
       if (!counts[k]) continue;
-      const im = new THREE.InstancedMesh(this.clumpGeo[k], this.clumpMat, counts[k]);
-      im.castShadow = false;
-      im.receiveShadow = true;
+      // (WebGPU: one shader build for all tiles, see render/geoInstances.ts.)
+      const gi = WEBGPU ? new GeoInstances(this.clumpGeo[k], this.clumpMat, counts[k]) : null;
+      const im = gi ?? new THREE.InstancedMesh(this.clumpGeo[k], this.clumpMat, counts[k]);
+      const mesh = gi ? gi.mesh : (im as THREE.InstancedMesh);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
       let c = 0;
       for (let i = 0; i < n; i++) {
         const o = i * FOREST_STRIDE;
@@ -212,12 +217,12 @@ export class Countryside {
         im.setColorAt(c, _c);
         c++;
       }
-      im.computeBoundingSphere();
-      im.visible = false;
-      im.name = 'clumps';
-      t.clumps.push(im);
+      if (gi) gi.finish(); else (im as THREE.InstancedMesh).computeBoundingSphere();
+      mesh.visible = false;
+      mesh.name = 'clumps';
+      t.clumps.push(mesh);
       t.bytes += counts[k] * (64 + 12);
-      this.group.add(im);
+      this.group.add(mesh);
     }
   }
 
@@ -376,11 +381,25 @@ export class Countryside {
     const species = [...new Set(FOREST_KINDS.map((K) => K.species).filter((s) => s !== 'shrub'))] as TreeSpecies[];
     const shrubs = FOREST_KINDS.some((K) => K.species === 'shrub') ? [leaf('shrub')] : [];
     const g = vegetationWarmup(this.bark, this.farMat, leaf, species, shrubs);
-    const im = new THREE.InstancedMesh(this.clumpGeo[0], this.clumpMat, 1);
-    im.setColorAt(0, _c.setRGB(0.1, 0.2, 0.1));
-    g.add(im);
+    if (WEBGPU) {
+      const gi = new GeoInstances(this.clumpGeo[0], this.clumpMat, 1);
+      gi.setMatrixAt(0, _m.identity());
+      gi.setColorAt(0, _c.setRGB(0.1, 0.2, 0.1));
+      gi.finish();
+      gi.mesh.receiveShadow = true;
+      g.add(gi.mesh);
+    } else {
+      const im = new THREE.InstancedMesh(this.clumpGeo[0], this.clumpMat, 1);
+      im.setColorAt(0, _c.setRGB(0.1, 0.2, 0.1));
+      g.add(im);
+    }
     return g;
   }
+}
+
+/** Clumps drawn by a tile mesh. */
+function clumpCount(m: THREE.Mesh): number {
+  return (m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count : (m.geometry as THREE.InstancedBufferGeometry).instanceCount;
 }
 
 /** Unit canopy clump: a rounded crown (broadleaf) or a cone (conifer), base at y = 0, top at 1. */

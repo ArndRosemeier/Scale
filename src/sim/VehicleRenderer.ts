@@ -3,12 +3,13 @@
  * traffic, parked cars and wrecks. Wrecks are Rapier rigid bodies.
  */
 import * as THREE from 'three';
-import { vehicleModel, createInstancedVehicleGeometry, createVehicleMaterial, vehicleUniforms, paintColor, type VehicleModel, type VehicleKind } from '../props/vehicles';
+import { VEHICLE_KINDS, vehicleModel, createInstancedVehicleGeometry, createVehicleMaterial, vehicleUniforms, paintColor, type VehicleModel, type VehicleKind } from '../props/vehicles';
 import { VState, type Vehicle } from './Traffic';
 import type { Physics } from '../physics/Physics';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { G } from '../render/materials/globals';
 import { statusOf } from '../shared/status';
+import { WEBGPU } from '../render/gpuMode';
 
 const CAP = 160;
 const MOVE_RANGE = 420;
@@ -55,12 +56,17 @@ export class VehicleRenderer {
 
   constructor(private physics: Physics) {
     this.mat = createVehicleMaterial(true);
+    // WebGPU builds the shaders of every instanced mesh separately (render/geoInstances.ts): a
+    // model's batch made the first time that car shows up stalled the frame. All batches exist
+    // from the start instead, so the warm-up draws (and builds) them behind the loading screen.
+    if (WEBGPU) for (const k of VEHICLE_KINDS) for (let v = 0; v < 4; v++) this.bucket(k, v);
   }
 
   /** The shared instanced vehicle material (the army's aircraft and sandbags draw with it too: one program). */
   get material(): THREE.Material { return this.mat; }
 
   private bucket(kind: VehicleKind, variant: number): Bucket {
+    variant = ((variant | 0) % 4 + 4) % 4; // (vehicleModel's variants)
     const key = `${kind}:${variant}`;
     let b = this.buckets.get(key);
     if (b) return b;
