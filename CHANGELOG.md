@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.152 — 2026-10-08
+## 0.153 — 2026-10-08
 
 - **Three new single-target powers (new "Energy" group).** They hit only the one they are aimed at: no fire, no bystanders, nothing broken on the way.
   - **Phase pulse** (tap, 20 energy): passes through walls, cars and people to your target, even one that ducked out of sight a moment ago. Weaker than the laser and short-ranged (25–60 m). Never between the street and the sewers.
@@ -10,6 +10,9 @@ Every push raises the version by 0.001. Newest first.
   - **Seeker orb** (tap, 30 energy): a ball of energy that flies round corners and over buildings to its target and bursts only on it. Needs a target. When it can't see its target, it climbs over the roofs, flies across and drops onto it. It grows a little with distance so you can follow it.
 - **Friend/foe sense, bought per power.** Laser eyes, shockwave, fire wave, fireball, frost nova, chain lightning, seismic stomp, whirlwind and hydrokinesis each offer it on the powers screen, for the price of that power's first rank. With it, the power harms nothing that would cost you reputation: only criminals still in the fight, monsters and rogue machines are hit; bystanders, police, cars, props and buildings are left alone (the laser beam passes through people in the way, chain lightning only jumps to foes). A giant loses the sense: above normal size every power hits everything again. In the sandbox it is a free switch.
 
+## 0.152 — 2026-10-08
+
+- **Fair credit against monsters.** The Strider and the last-resort strike judged differently whether the hero had earned the win. Now both use one rule: the monster was angriest with the hero, or the hero did at least a quarter of the fighting it remembers. Rogue and hijacked machines also count the hero's last blow the same way, with the same 6-second window. The Maw only rewards the hero (and raises the Lumen's trust) when the hero brought it down. Behind the scenes, every monster books its anger and armour through one place, and a self-test keeps it that way.
 ## 0.151 — 2026-10-08
 
 - **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, a screen shake never pushes it through a wall, it no longer sinks into a raised platform or slips behind the walls at the underpass mouth, and near the top of a stair it keeps clear of the street overhead. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).
