@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.148 — 2026-10-08
+
+- **Fix: landing a super jump next to someone no longer costs reputation.** At about human size, coming down beside a pedestrian now only makes them stumble and call a stern word after you, just like brushing past them at super speed: no harm, no reputation, no wanted level. A giant hero's landing still counts as before.
+
 ## 0.147 — 2026-10-08
 
 - **Fix: police and army stomps no longer count against the hero.** When a soldier's or officer's footstep knocked someone down, the game booked it as the hero's doing, which could cost reputation and raise the wanted level while the hero only stood by. A giant police or army step also no longer hurts the slime brood or a monster as if the hero had stamped. When the police shoot a rampaging giant hero, the hit now counts as theirs instead of the army's. Behind the scenes, "who did it" now uses one vocabulary everywhere, and a self-test keeps it that way.

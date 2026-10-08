@@ -124,10 +124,10 @@ import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
 import { POWER_HIT } from './abilities/tuning';
-import { downCauseOf, harmCauseOf } from '../shared/cause';
+import { BRUSH_MAX_H, downCauseOf, harmCauseOf, stompDownCause } from '../shared/cause';
 
-/** What someone a super speed runner brushed past calls after them: stern, not hurt. */
-const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
+/** What someone the hero brushed past or landed beside calls after them: stern, not hurt. */
+const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re going!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
 
 export class Game {
   readonly renderer: Renderer;
@@ -535,7 +535,7 @@ export class Game {
       if (s.kind === 'stomp') {
         const h = s.size ?? this.player.height, hero = downCauseOf(s.cause) === 'player';
         const r = Math.max(0.6, h * 0.09);
-        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, downCauseOf(s.cause));
+        for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, stompDownCause(s.cause, h));
         if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
@@ -936,10 +936,10 @@ export class Game {
       // A runner of about human size who could not hop over them only brushes past: they
       // stumble, are cross with the speedster and get up again (no harm on the ledger, no
       // reputation lost: one cannot run at super speed through a city and never touch anyone).
-      const brush = running && p.height < 3;
+      const brush = running && p.height < BRUSH_MAX_H;
       this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : POWER_HIT.dashKnockMax, (POWER_HIT.dashKnock + POWER_HIT.dashKnockPerRank * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
-      if (brush) { this.brushedBy(a); continue; }
+      if (brush) continue; // (the stern word: brushedBy, on every 'brush' knock-down)
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
       this.stimuli.emit('impact', a.x, a.y + 1, a.z, 3, 30);
     }
@@ -951,7 +951,7 @@ export class Game {
     }
   }
 
-  /** Someone a super speed runner brushed past calls after them (now and then, see BRUSH_LINES). */
+  /** Someone the hero brushed past or landed beside calls after them (now and then, see BRUSH_LINES). */
   private brushedBy(a: PedAgent): void {
     this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.3, 1.1, 4, this.renderer.camera.position);
     const now = this.consequences.time;
@@ -1134,6 +1134,10 @@ export class Game {
     this.city = new CityNews(this);
     if (this.startCell >= 0) this.city.freshStart(this.startCell);
     this.crime = new CrimeSystem(this);
+    // Anyone the hero only made stumble (a super speed runner brushing past, a super jump coming
+    // down beside them) calls after them: no harm, no reputation, a stern word.
+    const knocked = this.reactions.onKnockDown;
+    this.reactions.onKnockDown = (a, fx, fz, power, cause) => { knocked?.(a, fx, fz, power, cause); if (cause === 'brush') this.brushedBy(a); };
     // Sewer hideouts wear the colours and tags of the group holding the street above.
     this.underground.hideoutLook = (x, z, seed) => {
       const f = this.crime.factionAt(x, z);
