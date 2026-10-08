@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.160 — 2026-10-08
+
+- **Far fewer fall cries.** Someone tripping in the street now happens every three to six minutes instead of every one to two, the first one not before a minute and a half, and only within about 35 m of you (it was up to 60 m), so you can see who fell.
+- **Screams come from whoever got frightened.** When people take fright, the scream used to be played at the first frightened person in the whole city, often someone already lying knocked down somewhere else. That made screams seem to come from people on the ground with nothing happening. Now it comes from one of the people who just got scared.
+
 ## 0.159 — 2026-10-08
 
 - **Behind the scenes: the self test runs in under 3 minutes instead of about 17.** It is now split into 69 independent sections that run side by side, one worker per processor core, the slowest first. `npm run test:quick` runs only the sections that touch what you changed, for quick checks while working; the full `npm test` is still required before every merge (docs/CONVENTIONS.md, "Tests: which command when"). No check was dropped or shortened.

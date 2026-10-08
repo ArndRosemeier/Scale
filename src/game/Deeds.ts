@@ -40,7 +40,7 @@ export class Deeds {
   onHelped: ((a: PedAgent) => void) | null = null;
 
   constructor(private peds: Pedestrians, private reactions: Reactions, private player: Player, private progress: Progress) {
-    this.accidentT = 25;
+    this.accidentT = 90;
   }
 
   /** The person next to the player who can be helped up, if any. */
