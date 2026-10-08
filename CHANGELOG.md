@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.157 — 2026-10-08
+
+- **Far fewer fall cries.** Someone tripping in the street now happens every three to six minutes instead of every one to two, the first one not before a minute and a half, and only within about 35 m of you (it was up to 60 m), so you can see who fell.
+- **Screams come from whoever got frightened.** When people take fright, the scream used to be played at the first frightened person in the whole city, often someone already lying knocked down somewhere else. That made screams seem to come from people on the ground with nothing happening. Now it comes from one of the people who just got scared.
+
 ## 0.156 — 2026-10-08
 
 - **Thinner lips, and a lip thickness slider.** Everyone's lips were too thick: the average mouth is now noticeably thinner, for city people and new heroes alike, and the coloured lip area is tighter. The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and goes from thin lips to full ones, on women and men alike. Saved with the character like every face slider.
