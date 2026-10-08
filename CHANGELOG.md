@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.159 — 2026-10-08
+
+- **Behind the scenes: the self test runs in under 3 minutes instead of about 17.** It is now split into 69 independent sections that run side by side, one worker per processor core, the slowest first. `npm run test:quick` runs only the sections that touch what you changed, for quick checks while working; the full `npm test` is still required before every merge (docs/CONVENTIONS.md, "Tests: which command when"). No check was dropped or shortened.
+- **Cities are planned about twice as fast.** Laying out the metro sampled the ground along every sewer again for each metro line; it now does that once. The cities come out exactly the same, so loading a new city is a bit quicker too.
+
 ## 0.158 — 2026-10-08
 
 - **Fights in the sewers stay in the sewers.** When a villain cast frost, an orb, an EMP or a fireball, when a mad bomber threw a bomb, or when a gunman missed someone underground, the scorch marks, frost, chips and the bomb itself landed on the street above. They now land on the sewer, metro or cave floor where the fight is. People knocked down underground also no longer quietly vanish: you can find them and help them up like anyone on the street.

@@ -27,10 +27,11 @@ interface Section { name: string; fn: Body }
 interface Result { name: string; ms: number; failures: number; out: string[] }
 
 const sections: Section[] = [];
-let failures = 0;
+let failures = 0, running = false;
 
-/** One test assertion: counts and prints a failure, never throws. */
+/** One test assertion: counts and prints a failure, never throws (but only inside a section). */
 export const check = (ok: boolean, msg: string) => {
+  if (!running) throw new Error(`selftest: check() outside a section ("${msg}"): wrap the block in section('name', async () => { … })`);
   if (!ok) { failures++; console.error('  FAIL', msg); }
 };
 
@@ -57,10 +58,11 @@ async function runOne(s: Section): Promise<Result> {
   console.log = console.info = (...a: unknown[]) => { out.push(format(...a)); };
   console.error = console.warn = (...a: unknown[]) => { out.push(format(...a)); };
   const f0 = failures, t0 = performance.now();
+  running = true;
   try { await s.fn(); } catch (e) {
     failures++;
     out.push(`  FAIL ${s.name}: threw ${e instanceof Error ? e.stack ?? e.message : String(e)}`);
-  } finally { Object.assign(console, keep); }
+  } finally { running = false; Object.assign(console, keep); }
   return { name: s.name, ms: performance.now() - t0, failures: failures - f0, out };
 }
 

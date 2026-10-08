@@ -91,7 +91,7 @@ The self test (`tools/selftest.ts`) is a list of independent sections; `tools/te
 Rules for tests:
 
 - **Never skip, disable or shorten a check to save time.** Make the code under test faster instead, or split a slow section.
-- Each top-level block is `section('short name', async () => { … })` and stands alone: it builds its own cities and state and never reads another section's variables. Sections run in any order and in any process.
+- Each top-level block is `section('short name', async () => { … })` (a `check()` outside a section fails the run) and stands alone: it builds its own cities and state and never reads another section's variables. Sections run in any order and in any process.
 - Put shared helpers (pure functions) above the first section; a change there makes `test:quick` run everything.
 - A section that reads files itself (`readFileSync`, `readdirSync`, …) always runs in `test:quick`, so keep these guards cheap.
 - The slowest sections start first, by the times of the last full run (`.cache/selftest-times.json`; the baseline is `tools/selftest-times.json`, rewritten with `npm test -- --save-times`).

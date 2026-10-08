@@ -3608,7 +3608,7 @@ section('energy', async () => {
 // Shrink ray: the rank's factor, capped by metres off the biggest dimension (a person halves, a car
 // loses a metre, a 40 m monster 5 m at rank 5); a shrunk attacker deals 10 % less per rank, and
 // nothing takes more damage for being small.
-{
+section('shrink ray', async () => {
   const { shrinkFactor, SHRINK_DEALT } = await import('../src/game/abilities/tuning');
   const { statusFor, dealtBy, clearStatus } = await import('../src/shared/status');
   check(Math.abs(shrinkFactor(1.8, 1) - 0.5) < 1e-9, `shrink: rank 1 halves a person (${shrinkFactor(1.8, 1).toFixed(3)})`);
@@ -3640,7 +3640,7 @@ section('energy', async () => {
   for (let i = 0; i < n; i++) len += Math.hypot(sp[i * 3 + 3] - sp[i * 3], sp[i * 3 + 4] - sp[i * 3 + 1], sp[i * 3 + 5] - sp[i * 3 + 2]);
   const want = STRIDER_RIG.spine.reduce((a: number, b: number) => a + b, 0) * 0.875;
   check(Math.abs(rig.length / L0 - 0.875) < 1e-9 && Math.abs(len - want) < want * 0.08, `shrink: the Strider's body follows a live scale (spine ${len.toFixed(1)} m, want ${want.toFixed(1)} m)`);
-}
+});
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
 section('motion capture', async () => { cmuBvhChecks(check); });
@@ -3868,7 +3868,7 @@ section('threat aggro: one home', async () => {
 
 // "Can I see / hit that target" goes through game.sight.clear (Targeting.sees): the Tab list, the click pick and the
 // fire wave used their own world.raycast with other tolerances (no cars, no wall holes) and disagreed with the powers.
-{
+section('target sight: one test', async () => {
   const hand: string[] = [];
   const walkS = (dir: string): void => {
     for (const f of readdirSync(dir)) {
@@ -3879,7 +3879,7 @@ section('threat aggro: one home', async () => {
   };
   walkS('src');
   check(hand.length === 0, `sight: targets through game.sight / Targeting.sees (${hand.join(', ') || 'none'})`);
-}
+});
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
