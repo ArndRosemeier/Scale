@@ -1038,9 +1038,9 @@ export class Game {
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
       threats: () => { const a = this.threats?.actors() ?? []; const b = this.slimeRealm?.actors() ?? []; return b.length ? [...a, ...b] : a; },
+      sight: this.sight,
       under: {
         ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT) ?? this.underground.tunnelRay(ox, oy, oz, dx, dy, dz, maxT),
-        line: (ax, ay, az, bx, by, bz) => this.underground.caveLine(ax, ay, az, bx, by, bz, 1.0) ?? this.underground.tunnelLine(ax, ay, az, bx, by, bz, 1.0),
         isUnder: (x, y, z) => this.underground.isUnder(x, y, z),
       },
     });
