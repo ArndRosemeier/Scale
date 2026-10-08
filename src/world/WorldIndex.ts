@@ -41,6 +41,11 @@ export class WorldIndex {
   bridges: BridgeProfile[] = [];
   /** Solid parts of the landmarks (town hall, stadium, attractions, airport): set by the game. */
   landmarks: LandmarkSolids | null = null;
+  /**
+   * Underground (set by the game): the first wall along a ray from a point in the sewers, metro,
+   * rooms or caves (null: the point is not underground). There the street overhead is not the ground.
+   */
+  underRay: ((ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number) => number | null) | null = null;
 
   constructor(readonly terrain: Terrain, private cellPolys: (id: number) => number[]) {}
 
@@ -180,6 +185,8 @@ export class WorldIndex {
 
   /** Ray cast against terrain and building prisms. Returns hit distance or Infinity. */
   raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, stepLen = 1): { t: number; building: BuildingRef | null } {
+    const u = this.underRay?.(ox, oy, oz, dx, dy, dz, maxDist);
+    if (u !== null && u !== undefined) return { t: u < maxDist ? u : Infinity, building: null };
     const n = Math.ceil(maxDist / stepLen);
     let prevAbove = true;
     for (let i = 1; i <= n; i++) {

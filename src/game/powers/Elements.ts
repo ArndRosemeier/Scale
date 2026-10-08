@@ -1332,7 +1332,9 @@ export class Elements {
       const back = A.hit.what === 'building' ? GUST_RADIUS[r] * sk * 0.6 : 0;
       x = A.ox + A.dx * Math.max(2, A.t - back); z = A.oz + A.dz * Math.max(2, A.t - back);
     }
-    const gy = this.w.collision.groundAt(x, z, p.pos.y + 20, 25);
+    // (Underground: the tunnel floor, not the street overhead.)
+    const below = this.w.collision.underground(p.pos.x, p.pos.y, p.pos.z);
+    const gy = this.w.collision.groundAt(x, z, p.pos.y + (below ? 2 : 20), below ? 4 : 25);
     // A target up in the air (a drone): the vortex spins up there.
     const air = ty - gy > 4;
     const y = air ? ty - GUST_RADIUS[r] * sk * 0.6 : gy;

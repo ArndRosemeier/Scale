@@ -593,13 +593,15 @@ export class Police {
       act.hostile = true;
       act.mood = 'angry';
       const d = Math.hypot(p.x - o.x, p.z - o.z);
+      // Hands and cuffs: not far above or below (a sewer under the pavement), however close on the map.
+      const reach = Math.abs(p.y - o.y) < 2.5;
       lookAt(act, p.x, p.y + p.height * 0.8, p.z);
       // Wanted enough: shoot from where they are (a clear line, out of tackling reach).
       if (this.shootPlayer(o, d, dt, swat, car)) continue;
       if (p.flying && p.y - o.y > 4) { stand(act); continue; }
       // Could not get to them (no progress): wait and watch a moment.
       if (act.memo.waitT > 0) { act.memo.waitT -= dt; stand(act); if (d < 3) act.memo.waitT = 0; continue; }
-      if (H.playerDown() && d < 2.3) {
+      if (H.playerDown() && d < 2.3 && reach) {
         if (d > 1.0) goTo(act, p.x, p.z, 1.4); else stand(act);
         act.memo.cuff = (act.memo.cuff ?? 0) + dt;
         if (!act.action) play(act, 'pickup', 1.5);
@@ -614,8 +616,8 @@ export class Police {
       // Take-down: a wind-up, then a hard shove / baton if still in reach.
       if ((act.memo.windup ?? 0) > 0) {
         act.memo.windup -= dt;
-        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && !H.playerDown()) { H.hurtPlayer(24, 'police', o.x, o.z); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
-      } else if (d < 1.6 && act.attackT <= 0 && !H.playerDown()) {
+        if (act.memo.windup <= 0 && Math.hypot(p.x - o.x, p.z - o.z) < 1.8 && reach && !H.playerDown()) { H.hurtPlayer(24, 'police', o.x, o.z); H.sound('punch_impact', p.x, p.y + 1, p.z, 0.9, 0.8); }
+      } else if (d < 1.6 && reach && act.attackT <= 0 && !H.playerDown()) {
         act.attackT = 1.6;
         act.memo.windup = 0.35;
         play(act, 'kick', 0.7);
