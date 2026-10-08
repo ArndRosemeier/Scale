@@ -3736,6 +3736,37 @@ section('player\'s blows and the street', async () => {
   }
 });
 
+// Travelling by leaps: the hero (human size) landing hard among people every second and a half
+// startles them, it does not make the street scream at each touchdown; a giant's landing still does.
+section('landings and screams', async () => {
+  const { Reactions } = await import('../src/sim/Reactions');
+  const P = await import('../src/sim/Pedestrians');
+  const { Stimuli, noticeRadius } = await import('../src/game/Stimuli');
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.2 }))), 42);
+  const run = (size: number): number => {
+    const agents = Array.from({ length: 300 }, (_, k) => ({ id: k + 1, cit: { ...pop.synthetic(1500 + k) }, x: (k % 30) * 10, z: Math.floor(k / 30) * 6 - 30, y: 0, heading: 0, speed: 1.3, pref: 1.3, state: P.PState.Walk, route: Float32Array.from([0, 0, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: k, vy: 0, vx: 0, vz: 0, alive: true, slot: -1 } as unknown as import('../src/sim/Pedestrians').PedAgent));
+    const gp = { agents, neighbours: (x: number, z: number, r: number, out: typeof agents) => { out.length = 0; for (const a of agents) if (Math.abs(a.x - x) <= r && Math.abs(a.z - z) <= r) out.push(a); return out; } };
+    const st = new Stimuli();
+    const re = new Reactions(gp as never, st);
+    let screams = 0;
+    re.onScream = () => { screams++; };
+    // A leap's touchdown at ~25 m/s down (an 80 kg hero), 20 m further along every 1.5 s.
+    const E = 0.5 * 80 * 25 * 25;
+    for (let i = 0; i < 30 * 20; i++) {
+      const dt = 1 / 30;
+      if (i % 45 === 0) st.emit('stomp', (i / 45) * 20, 0.1, 0, Math.log10(E), noticeRadius(E), { cause: 'player', size });
+      st.update(dt);
+      re.update(dt, { height: size, pos: { x: (i / 45) * 20, y: 0, z: 0 }, flying: false, vel: { length: () => 0 }, k: 1 } as never);
+      for (const a of agents) a.stateT += dt;
+    }
+    return screams;
+  };
+  const hero = run(1.8), giant = run(30);
+  check(hero === 0, `landings: the hero leaping through a crowd for 20 s raises no screams (${hero})`);
+  check(giant > 0, `landings: a giant coming down among people still does (${giant})`);
+  console.log(`landings: screams in 20 s of leaps through a crowd: hero ${hero}, giant ${giant}`);
+});
+
 // One test for "can someone stand here" and one for open water (world/WorldIndex standable / wet):
 // no building, no landmark, no river, but a bridge is fine. No system keeps its own copy.
 section('standable and water: one test', async () => {

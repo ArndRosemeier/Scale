@@ -20,6 +20,9 @@ import { statusOf } from '../shared/status';
 import { calmRate } from '../game/people/behaviour';
 import { downCauseOf, stompDownCause } from '../shared/cause';
 
+/** Below this height a stomp or landing is a person's, not a giant's or a monster's. */
+const HUMAN_SIZE = 2.3;
+
 export class Reactions {
   private lastSeen = 0;
   private screamCooldown = 0;
@@ -95,8 +98,13 @@ export class Reactions {
             if (a.fear > 0.5) this.flee(a, s.x, s.z); else this.gawk(a, s.x, s.y, s.z);
             break;
           case 'stomp':
-            // By the size of whoever stepped (the player, a monster), booked to it.
-            a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
+            // By the size of whoever stepped (the player, a monster), booked to it. Someone of
+            // human size coming down hard (the hero's leaps and drops) only startles: people
+            // flinch and look, they do not scream and run at every landing.
+            if ((s.size ?? H) < HUMAN_SIZE) {
+              a.fear = Math.max(a.fear, Math.min(0.5, a.fear + prox * nerve * 0.9));
+              if (prox > 0.2 && a.fear < 0.5) this.gawk(a, s.x, s.y, s.z);
+            } else a.fear = Math.min(2, a.fear + prox * nerve * 0.9);
             if (d < Math.max(1.5, (s.size ?? H) * 0.12) && this.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.knockDown(a, s.x, s.z, 4, stompDownCause(s.cause, s.size ?? H));
             break;
           case 'roar':
@@ -174,7 +182,8 @@ export class Reactions {
       // (The calm get over it quickly, the nervous keep running: game/people.)
       a.fear = Math.max(0, a.fear - dt * calmRate(a.cit.nerve));
       if (a.fear > 0.55 && a.state !== PState.Flee) this.flee(a, a.fearX || px, a.fearZ || pz);
-      if (before < 0.6 && a.fear >= 0.6) { screamers++; screamer ??= a; }
+      // (Not the one knocked over just now, by an event above: that is a fall, not a scream.)
+      if (before < 0.6 && a.fear >= 0.6 && (a.state as PState) !== PState.Down) { screamers++; screamer ??= a; }
     }
     if (screamers > 0 && this.screamCooldown <= 0) {
       // From one who just took fright (not anyone still at fear 2, such as people lying knocked down).

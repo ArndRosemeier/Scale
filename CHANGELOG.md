@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.166 — 2026-10-08
+
+- **No more screams at every landing.** Travelling by super jump, each touchdown made the people round about take fright and scream (the long scream, several times a minute), with nobody hurt and nothing on the map. Now someone of human size landing hard only startles people: they flinch and turn to look. A giant or a monster coming down still makes them scream and run.
+- **Being knocked over is not a scream.** Someone knocked down just now no longer counts as a screamer (a fall is a fall).
+
 ## 0.165 — 2026-10-08
 
 - **Super jump builds up speed in the air.** A forward leap no longer shoots off at full speed. It starts as a jump and picks up speed as it flies, reaching its top speed (18 / 40 / 80 / 120 / 200 m/s at ranks 1 to 5) about three seconds in, near the top of a high leap. As a travel power it is now a little slower than a boosted flight: bounding on from landing to landing averages 14 / 25 / 46 / 77 / 138 m/s, against flight's 14 / 28 / 54 / 90 / 159 m/s.
