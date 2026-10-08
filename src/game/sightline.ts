@@ -12,11 +12,11 @@ import type * as THREE from 'three';
 import type { WorldIndex } from '../world/WorldIndex';
 import type { Sight } from '../render/screen';
 
-/** `viewerUnder`: the camera is down there (the camera rig's own flag). `isUnder`: a point is inside the underground. */
-export function makeSight(world: WorldIndex, viewerUnder: () => boolean, isUnder: (x: number, y: number, z: number) => boolean): Sight {
+/** `viewerUnder`: the camera is down there (the camera rig's own flag). `feetUnder`: someone standing there is underground. */
+export function makeSight(world: WorldIndex, viewerUnder: () => boolean, feetUnder: (x: number, feet: number, z: number) => boolean): Sight {
   return (x: number, feet: number, z: number, cam: THREE.Camera): boolean => {
     const camUnder = viewerUnder();
-    if (camUnder !== isUnder(x, feet + 0.5, z)) return false;
+    if (camUnder !== feetUnder(x, feet, z)) return false;
     if (camUnder) return true;
     const c = cam.position;
     const b = world.buildingAt(c.x, c.z);

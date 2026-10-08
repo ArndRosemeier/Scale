@@ -20,6 +20,7 @@ Its open items are consolidated here one PR at a time.
 
 | Question | Use | Not |
 |---|---|---|
+| Is someone (feet at y) underground? | `Underground.feetUnder(x, feetY, z)`. `isUnder(x, y, z)` is for a point (an eye, an orb, the camera). `Collision.underground` is the movement test (player, ragdolls, hops) and is stricter near stairs. | `isUnder(x, y + 0.5, z)` written out (**guarded**) |
 | Are two bodies on the same side of the street (both underground or both up top)? | `Underground.sameSide(ax, ay, az, bx, by, bz)` with **feet** heights. A blow, blast or footfall point counts as feet. | `Math.abs(dy) < r`, `s.y > a.y - 2`, or a 2D `hypot` alone |
 | Does a blow, blast, stomp or shove reach a person? | 2D/3D range **and** `sameSide`. `Reactions.sameSide` is wired to it. | Range alone. A street stomp must not floor the sewer crew below. |
 | Does a blow reach the player? | `PlayerHealth.damage(…, x, z, y)` with the source's real height (the type requires it). It refuses blows from the other side. | Writing `hp`. Passing the player's own `y` as the source height. |
@@ -56,6 +57,7 @@ Its open items are consolidated here one PR at a time.
 |---|---|---|
 | clamp, 0..1 clamp, lerp, smoothstep | `core/math.ts`: `clamp`, `saturate`, `lerp`, `smoothstep` (import with an alias such as `saturate as clamp01` or `smoothstep as smooth` if the short name reads better) | A local `const clamp = …` (**guarded**) |
 | An sRGB colour as linear | `srgbColor([r, g, b])` from `render/color.ts` (a `THREE.Color`), or `srgbToLinear(c)` from `core/math.ts` for one channel | A local `lin` / `srgbToLin`, or the 0.04045 curve typed out (**guarded**; GLSL/TSL shaders keep their own) |
+| Random numbers in game code | `Rng` from `core/rng.ts` (`new Rng(seed)`, `Rng.from(...)`, `deriveSeed`); saved state rolls from a seed, never `Math.random` | A hand-rolled `seed * 1103515245` LCG (the float product loses bits and the sequence decays; **guarded**) |
 | Text into HTML | `esc` from `ui/esc.ts` (escapes `& < > " '`) | A local `esc` (the six old copies escaped different sets; **guarded**) |
 | Polygon or polyline maths (area, bounds, point in polygon, distance to the outline, length, reverse, rectangularity) | `core/geom2.ts`: `polyArea`, `polyBounds`, `pointInPoly`, `distPointPolyEdge`, `polylineLength` (`stride` 3 for x,z,extra routes), `reversePoly`, `rectangularity` | A local `polyBox`, `routeLength`, `reversed`, … (**guarded by body, not name**) |
 | Angle difference, turning toward an angle, 3D vector basics | `core/math.ts`: `angleDiff(from, to)` (= to − from, wrapped to ±π), `lerpAngle`, `v3add`, `v3sub`, `v3scale`, `v3madd`, `v3dot`, `v3cross`, `v3len`, `v3norm`, `v3lerp` (alias them to short names if you like) | A local `angDiff` / `turn` / `norm` / `cross` (**guarded by body**; a typed-out cross product is **guarded** too) |

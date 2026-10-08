@@ -2,9 +2,24 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.143 — 2026-10-08
+## 0.147 — 2026-10-08
 
 - **No more floating outside the city.** Out in the countryside the hero (and everyone else standing on the ground) stood 35 cm above the grass: the terrain is drawn a little lower than its height so it never shows through the city's streets, but walking used the undropped height. The ground height now follows what is drawn: open land at the drawn terrain, country roads, village squares and farmyards at their surface. Inside the city nothing changes.
+## 0.146 — 2026-10-08
+
+- **Behind the scenes: one "is this person underground?" question.** Two dozen places asked it by hand (crimes, threats, wardens, saves, markers, the manhole prompt); they now ask the underground system the same way. Nothing changes in play; a self-test keeps it that way.
+
+## 0.145 — 2026-10-08
+
+- **Fix: Seismic stomp now hurts giant creatures.** Its crack pushed them with a capped shove, so at every rank it did only about 3 points to the Strider or the awakened tree. Now they take the quake's full force at the legs: 10 points at rank 1, 27 at rank 2, 60 at rank 3, 120 at rank 4 and 213 at rank 5 (before armour). The power table in the help shows the new values.
+
+## 0.144 — 2026-10-08
+
+- **Fairer dice for the police and the slime war.** Patrol officers and the officers stepping out of a car used a home-made random generator whose numbers slowly got worse; they now use the game's own. The deep slime war rolled with the browser's dice, so a loaded game could go differently each time; it now rolls from the city's seed. A self-test catches the broken generator if it comes back.
+
+## 0.143 — 2026-10-08
+
+- **The power table in the help (H, Powers) now shows damage.** Every rank has a Damage column: the health a person loses (and how: per punch, per fall, everyone in the blast, at the rim or the centre …) and the points a giant creature takes before its armour. A new line on top gives what that means: a passer-by has 36 health, a mugger 55, a robber 80, lieutenants ×1.8 and bosses ×3.1; the Strider has 3000 points, the awakened tree 1000, with their weak spots and the tree's weakness to fire. The numbers are the ones the game itself uses, so they stay right when powers are rebalanced.
 
 ## 0.142 — 2026-10-08
 
