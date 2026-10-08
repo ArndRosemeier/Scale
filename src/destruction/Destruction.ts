@@ -14,6 +14,7 @@
  *    element texture), shed debris as they go and leave a rubble mound.
  *  - Collapses hit their surroundings (neighbouring panels, props, people).
  */
+import type { Cause } from '../game/Stimuli';
 import * as THREE from 'three';
 import { toGeometry, type CityStreamer, type CellState } from '../stream/CityStreamer';
 import { MeshBuilder } from '../build/meshBuilder';
@@ -35,7 +36,8 @@ import { extractElements } from './extract';
  * Who broke a building: the player, a threat (monster, rogue machines), the army, a fire, or nobody
  * in particular ('world': material flying out of a collapse, a hero's body flung by a monster).
  */
-export type DamageCause = 'player' | 'threat' | 'military' | 'fire' | 'world';
+/** Who broke a building: a stimulus `Cause`, or a fire spreading on its own. */
+export type DamageCause = Cause | 'fire';
 /** Seconds a building remembers who broke it (a later collapse is theirs). */
 const BLAME_S = 120;
 import { WallMat } from '../plan/building';
