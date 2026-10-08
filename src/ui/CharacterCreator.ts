@@ -24,7 +24,7 @@ type Tab = 'body' | 'face' | 'hair' | 'skin' | 'outfit' | 'hero';
 const FACE: [FaceKey, string][] = [
   ['headRound', 'Head shape'], ['foreheadSlope', 'Forehead'], ['browRidge', 'Brow ridge'], ['eyeSize', 'Eye size'], ['eyeSpacing', 'Eye spacing'],
   ['noseSize', 'Nose size'], ['noseWidth', 'Nose width'], ['noseBridge', 'Nose bridge'], ['cheekbones', 'Cheekbones'], ['jaw', 'Jaw'],
-  ['chin', 'Chin'], ['mouthWidth', 'Mouth width'], ['lipFullness', 'Lips'], ['earSize', 'Ears'],
+  ['chin', 'Chin'], ['mouthWidth', 'Mouth width'], ['lipFullness', 'Lip thickness (thin – full)'], ['earSize', 'Ears'],
   ['cheekFullness', 'Cheeks (lean – full)'], ['faceWidth', 'Face width'], ['smile', 'Expression (stern – smiling)'],
 ];
 const BODY: [BodyKey, string][] = [

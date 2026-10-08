@@ -48,6 +48,7 @@ import { GUNS, MUZZLE_Y, type GunSpec } from '../crime/Firearms';
 import { POLICE, equipSwat, type IncidentJob, type Unit } from '../crime/Police';
 import type { ThreatEvent, ThreatTarget, ThreatZone } from '../threats/ThreatEvent';
 import type { Stimulus } from '../Stimuli';
+import { dealtBy } from '../../shared/status';
 
 export const RESPONSE = {
   /** Patrol cars sent at once, after the first calls come in (s), one every callGap s. */
@@ -713,7 +714,7 @@ export class ResponseDirector {
     this.giantAggro += GIANT.aggro * spec.burst;
     const lump = this.giantAggro >= 1.5 ? this.giantAggro : 0;
     if (lump) this.giantAggro = 0;
-    const r = A.damage(Z, (swat ? GIANT.rifle : GIANT.pistol) * spec.burst, { cause: 'police', key: 'police', x: o.x, y: o.y + 1, z: o.z, aggro: lump });
+    const r = A.damage(Z, (swat ? GIANT.rifle : GIANT.pistol) * spec.burst * dealtBy(o), { cause: 'police', key: 'police', x: o.x, y: o.y + 1, z: o.z, aggro: lump });
     this.stats.giantShots += spec.burst;
     this.stats.giantDealt += r.dealt;
     const sp = this.giantSpot;

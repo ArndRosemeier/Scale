@@ -14,7 +14,7 @@ export class Hud {
     this.el = document.createElement('div');
     this.el.id = 'hud';
     document.body.appendChild(this.el);
-    window.addEventListener('keydown', (e) => { if (e.code === 'F3') { this.detail = !this.detail; e.preventDefault(); } });
+    window.addEventListener('keydown', (e) => { if (e.code === 'F4') { this.detail = !this.detail; e.preventDefault(); } });
   }
 
   update(dt: number): void {

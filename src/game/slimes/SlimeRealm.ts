@@ -324,8 +324,10 @@ export class SlimeRealm {
       if (b.area === 'raid') raiderDown(this.war, byPlayer); else murkDown(this.war, byPlayer);
       if (b.role === 'maw') {
         mawDown(this.war);
-        this.trust.add(25, 'brought down the Maw');
-        g.crime.reward({ karma: 60, why: 'The Maw is down', stopped: true });
+        if (byPlayer) {
+          this.trust.add(25, 'brought down the Maw');
+          g.crime.reward({ karma: 60, why: 'The Maw is down', stopped: true });
+        }
         g.powerHud.toast('The Maw collapses — the Heart dims, and the Murk scatter', 'core', 9000);
         g.audio.play('maw_roar', b.x, b.y, b.z, 1, 0.5, 30, g.renderer.camera.position);
         g.saves?.notable();

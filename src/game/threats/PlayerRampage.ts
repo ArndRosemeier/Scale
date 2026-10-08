@@ -28,6 +28,7 @@ import { PState } from '../../sim/Pedestrians';
 import { DKind } from '../../future/Drones';
 import type { HarmEntry } from '../Consequences';
 import { PLAYER_ZONES, RAMPAGE, RampageWatch, furyOf, furyScale, ladderTop, playerDamage, playerPath, playerSpawn } from './rampageRules';
+import { bookAggro, decayAggro } from './aggro';
 
 let EVENT_ID = 5000;
 
@@ -69,7 +70,7 @@ export class PlayerBody implements ThreatActor {
   update(dt: number): void {
     this.place();
     for (const Z of this.zones) Z.recent *= Math.exp(-dt / 4);
-    for (const [k, v] of this.aggro) { const nv = v * Math.exp(-dt / 90); if (nv < 1) this.aggro.delete(k); else this.aggro.set(k, nv); }
+    decayAggro(this.aggro, dt, 90);
   }
 
   ray(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): { t: number; zone: ThreatZone } | null {
@@ -98,7 +99,7 @@ export class PlayerBody implements ThreatActor {
     const Z = (typeof zone === 'string' ? this.zones.find((z) => z.id === zone) : zone) ?? (src.x !== undefined ? this.zoneAt(src.x, src.y ?? this.y, src.z ?? this.z)?.zone : null) ?? this.zones[1];
     const dealt = playerDamage(Z.armour, amount);
     const key = src.key ?? src.cause;
-    this.aggro.set(key, (this.aggro.get(key) ?? 0) + dealt + (src.aggro ?? 0));
+    bookAggro(this.aggro, key, dealt + (src.aggro ?? 0));
     Z.recent += dealt;
     this.stats.hits++;
     this.stats.dealt += dealt;

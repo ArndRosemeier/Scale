@@ -47,6 +47,7 @@ const FIXED: [string, string][] = [
   ['Left click', 'On someone or something: target it (punch is a hotbar power, slot 1 by default)'],
   ['Esc', 'Clear the target · close a screen · pause & settings'],
   ['1 … 7 in a talk', 'Pick an answer'],
+  ['F4', 'Detailed info line (frame rate, position, streaming)'],
 ];
 
 /** While a key button waits for a key: this sees every keydown first. Registered when the module

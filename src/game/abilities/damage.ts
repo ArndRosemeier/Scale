@@ -6,7 +6,7 @@
  */
 import {
   PUNCH_IMPULSE, SHOCK_IMPULSE, LASER_DOSE, FIRE_RANGE, FIRE_HEAT, FIREBALL_BLAST, NOVA_FREEZE,
-  BOLT_JUMPS, BOLT_STUN, QUAKE_IMPULSE, GUST_LIFT, HYDRO_FORCE, SHRINK_FACTOR, SHRINK_TIME, SLIME_COUNT, SLIME_HOLD,
+  BOLT_JUMPS, BOLT_STUN, QUAKE_IMPULSE, GUST_LIFT, HYDRO_FORCE, SHRINK_CAP, SHRINK_DEALT, SLIME_COUNT, SLIME_HOLD,
   POWER_HIT as H,
 } from './tuning';
 import type { AbilityId } from './defs';
@@ -68,8 +68,8 @@ export function powerDamage(id: AbilityId, r: number): PowerDamage | null {
       return { people: `${n(fall(p))} when they fall (after ${n(acc / HYDRO_FORCE[r])} s)`, creatures: `${n(creature(HYDRO_FORCE[r]) * H.hydroCreatureMul)} / s` };
     }
     case 'shrink': return {
-      people: `none; while shrunk, punches hurt them ×${n(1 / Math.max(0.2, SHRINK_FACTOR[r]))}`,
-      creatures: `${n(SHRINK_TIME[r] * H.shrinkCreature * (1 - SHRINK_FACTOR[r]))}`,
+      people: `none; while shrunk they deal ${n(SHRINK_DEALT[r] * 100)} % damage`,
+      creatures: `none; up to ${SHRINK_CAP[r]} m smaller, dealing ${n(SHRINK_DEALT[r] * 100)} % damage`,
     };
     case 'slimeCall': return { people: `none: held down for ${SLIME_HOLD[r]} s`, creatures: `${H.lumenCreature} / s per Lumen on it (up to ${n(H.lumenCreature * SLIME_COUNT[r])} / s)` };
     case 'superJump': case 'size': return { people: 'none at normal size; as a giant, your landings and steps knock over people at your feet', creatures: 'none at normal size; a giant\'s feet hurt them' };

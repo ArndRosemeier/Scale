@@ -78,6 +78,13 @@ export interface ThreatActor {
    * tree catches fire) and the multiplier on the power's damage. Absent: 1.
    */
   onElement?(el: 'fire' | 'frost' | 'shock', dur: number): number;
+  /** Biggest dimension at full size (m), for the shrink ray. Absent: `height`. */
+  readonly size?: number;
+  /**
+   * Shrink ray: the body's size factor now (1 = full; eases in and back). The body, its hit volumes
+   * and its reach follow it. Absent: the actor cannot be shrunk.
+   */
+  setScale?(s: number): void;
 }
 
 /** Points of damage per N·s of impulse (punches, shoves, blows on a threat actor). */

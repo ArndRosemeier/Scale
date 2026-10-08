@@ -1,7 +1,13 @@
 /**
  * Headless self test: determinism and invariants of world + plan generation,
- * population schedules and building layouts. `npm test`
+ * population schedules and building layouts. `npm test` runs every section in parallel worker
+ * processes; `npm run test:quick` only the sections that import what you changed. See
+ * tools/testHarness.ts and docs/CONVENTIONS.md ("Which test to run when").
+ *
+ * Each top-level block is a section('name', async () => { … }): independent of the others (its own
+ * cities, its own state), so sections can run in any order and in any process.
  */
+import { section, check, runSections } from './testHarness';
 import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
@@ -36,6 +42,8 @@ import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
 import { PlayerHealth } from '../src/game/PlayerHealth';
+import { readCostumes } from '../src/game/costumes';
+import type { CharacterLook } from '../src/avatar/look';
 import { parseSave, serializeSave, migrate, SAVE_VERSION, type SaveData } from '../src/game/save/model';
 import { encodeIndexSet, decodeIndexSet, lowIndices } from '../src/game/save/codec';
 import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor';
@@ -83,10 +91,6 @@ import { headline, gossip, whenWord, localRemark } from '../src/game/news/headli
 import { PEOPLE, onTheirWay, newKnown, applyDeed, remember, opinionOf, savePeople, restorePeople, addSaid } from '../src/game/people/memory';
 import { rescueAllowed, pickHospital, hospitalFit, planFlight, flightAt, wardInside, wardExit, hospitalName, padSpot, WARD, type HospitalCandidate } from '../src/game/defeat/rules';
 
-let failures = 0;
-const check = (ok: boolean, msg: string) => {
-  if (!ok) { failures++; console.error('  FAIL', msg); }
-};
 const hashPlan = (o: unknown) => {
   const s = JSON.stringify(o, (_k, v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v));
   let h = 2166136261;
@@ -209,13 +213,13 @@ function roofFaults(b: BuildingDesc, terrain: Terrain): number {
 
 // Regression: these cities crashed in the bridge picking (the shared terrain.water() result was
 // overwritten by a later water query before its river was read). Seed 1234 at size 1 had the same cause.
-for (const [seed, size] of [[17, 0.75]] as const) {
+section('macro plan: regression cities', async () => { for (const [seed, size] of [[17, 0.75]] as const) {
   let ok = true;
   try { buildMacroPlan(new Terrain(makeProfile({ seed, size }))); } catch (e) { ok = false; console.error(e); }
   check(ok, `seed ${seed} size ${size}: macro plan builds without crashing`);
-}
+} });
 
-for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) {
+section('macro plan and buildings', async () => { for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) {
   const t0 = performance.now();
   const profile = makeProfile({ seed, size });
   const terrain = new Terrain(profile);
@@ -287,12 +291,12 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     }
   }
   console.log(`seed ${seed} size ${size}: ${macro.cells.length} cells, ${macro.metroStations.length} stations, ${buildings} buildings checked in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+} });
 
 // Landmark sites are never walled in by buildings: from the middle of each side, walking straight
 // out reaches a sidewalk or street before any building (seed 873738 at full size had its starship,
 // town hall, cathedral and stadium ringed by houses).
-{
+section('landmark sites open to the street', async () => {
   const terrain = new Terrain(makeProfile({ seed: 873738, size: 1 }));
   const macro = buildMacroPlan(terrain);
   for (const lm of macro.landmarks.filter((l) => l.cell >= 0)) {
@@ -318,11 +322,11 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
     }
     check(cluttered === 0, `seed 873738 ${lm.name}: its approaches kept clear of furniture and terraces (${cluttered} in the way)`);
   }
-}
+});
 
 // Cemeteries (plan/cell placeCemetery): a few per city, walled, graves in rows inside the wall,
 // a mausoleum, nothing on a building.
-{
+section('cemeteries', async () => {
   const t0 = performance.now();
   const terrain = new Terrain(makeProfile({ seed: 42, size: 0.35 }));
   const macro = buildMacroPlan(terrain);
@@ -349,13 +353,13 @@ for (const [seed, size] of [[1, 0.1], [42, 0.4], [7, 0.7], [10, 0.2]] as const) 
   }
   check(n >= 1 && n <= 8, `seed 42: ${n} cemeteries in the city`);
   console.log(`cemeteries: ${n} in ${macro.cells.length} cells, in ${Math.round(performance.now() - t0)} ms`);
-}
+});
 
 // Cafés, restaurants and their terraces (plan/eatery.ts, plan/terrace.ts): deterministic; outdoor
 // seating never on a footprint, in a doorway, at a crossing or in the walking corridor of a
 // sidewalk; parklets only in the parking strip of local streets; plausible counts per district;
 // busy hours that make sense.
-for (const [seed, size] of [[3, 0.5], [42, 0.4]] as const) {
+section('eateries and terraces', async () => { for (const [seed, size] of [[3, 0.5], [42, 0.4]] as const) {
   const t0 = performance.now();
   const terrain = new Terrain(makeProfile({ seed, size }));
   const macro = buildMacroPlan(terrain);
@@ -425,9 +429,9 @@ for (const [seed, size] of [[3, 0.5], [42, 0.4]] as const) {
   }
   check(eat > 30 && terr / eat > 0.25 && terr / eat < 0.85, `seed ${seed}: a good share of the eateries with outside seating (${terr} of ${eat})`);
   console.log(`eateries seed ${seed} (${cells.length} central cells, ${(performance.now() - t0).toFixed(0)} ms): ${rows.join('; ')}`);
-}
-check(PT.Tree === PropType.Tree && PT.Mailbox === PropType.Mailbox && PT.ParkedCar === PropType.ParkedCar && PT.CafeTable === PropType.CafeTable && PT.Parklet === PropType.Parklet && PT.Awning === PropType.Awning, 'terrace planner prop numbers match PropType');
-{
+} });
+section('terrace prop numbers', async () => { check(PT.Tree === PropType.Tree && PT.Mailbox === PropType.Mailbox && PT.ParkedCar === PropType.ParkedCar && PT.CafeTable === PropType.CafeTable && PT.Parklet === PropType.Parklet && PT.Awning === PropType.Awning, 'terrace planner prop numbers match PropType'); });
+section('eatery busy hours', async () => {
   // Busy hours: coffee in the morning, lunch and dinner peaks, bars at night, closed at 4 am.
   const D = (k: Eatery, h: number, d: 'commercial' | 'suburban' = 'commercial') => eateryDemand(k, h, d);
   check(D(Eatery.Cafe, 8.6) > D(Eatery.Cafe, 10.8) && D(Eatery.Cafe, 13) > 0.5 && D(Eatery.Cafe, 4) === 0, 'demand: cafés busy at breakfast and lunch, closed at night');
@@ -436,11 +440,11 @@ check(PT.Tree === PropType.Tree && PT.Mailbox === PropType.Mailbox && PT.ParkedC
   let a = 0, b = 0;
   for (let t = 0; t < 24 * 7; t += 0.25) { if (tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t)) a++; if (tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t) && tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t)!.n === tableVisit(5, 1234, Eatery.Cafe, 'oldtown', t)!.n) b++; }
   check(a > 40 && a === b && !tableVisit(5, 1234, Eatery.Cafe, 'oldtown', 24 * 3 + 3.5), `demand: tables come and go deterministically (${a} of ${24 * 7 * 4} quarter hours taken)`);
-}
+});
 
 // Countryside: the land-use field and forest tiles are deterministic, the countryside rivers
 // leave the city's terrain untouched and run on to the edge of the world.
-for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
+section('countryside land use and rivers', async () => { for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   const t0 = performance.now();
   const p = makeProfile({ seed, size });
   const tA = new Terrain(p), tB = new Terrain(makeProfile({ seed, size })), tCity = new Terrain(p, false);
@@ -478,12 +482,12 @@ for (const [seed, size] of [[3, 0.2], [42, 0.4]] as const) {
   const edge = terrainExtent(macro.boundary) * 0.95;
   check(tA.rivers.slice(tA.baseRivers).some((R) => { for (let i = 0; i < R.pts.length; i += 2) if (Math.max(Math.abs(R.pts[i]), Math.abs(R.pts[i + 1])) > edge) return true; return false; }), `seed ${seed}: rivers reach the edge of the world`);
   console.log(`seed ${seed} countryside: ${tA.rivers.length - tA.baseRivers} countryside rivers, ${trees} trees checked in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+} });
 
 // Countryside settlements (world/rural): deterministic; villages joined to the city's arterial ring by
 // country roads that keep off the water and the city; houses, barns and churches dry, apart, off the
 // roads; garden and forest trees never on a road or a building; lakes carved below their level.
-for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
+section('countryside settlements', async () => { for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const t0 = performance.now();
   const p = makeProfile({ seed, size });
   const T = new Terrain(p), macro = buildMacroPlan(T);
@@ -551,10 +555,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(open >= 10 && openOk === open, `rural seed ${seed}: walkers stand on the drawn open land, not ${TERRAIN_DROP} m above it (${openOk}/${open})`);
   }
   console.log(`seed ${seed} rural: ${villages.length} villages, ${plan.settlements.length - villages.length} farms, ${plan.roads.length} roads, ${nb} buildings, ${T.lakes.length} lakes in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+} });
 
 // ---- powers: every rank has truthful text, super speed outruns flight, old saves migrate
-{
+section('powers and old saves', async () => {
   const { ABILITIES, LEGACY_IDS } = await import('../src/game/abilities/defs');
   const T = await import('../src/game/abilities/tuning');
   for (const d of ABILITIES) for (let r = 1; r <= d.maxRank; r++) {
@@ -573,10 +577,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(pg.rank('speed') === 3 && pg.slots[1] === 'speed' && pg.slots.length === 10 && pg.karma === 40, `old save migrates (speed ${pg.rank('speed')}, slot ${pg.slots[1]})`);
   check(pg.rank('dash' as never) === 3 && pg.rank('nonsense' as never) === 0, 'rank lookups are robust for unknown / legacy ids');
   console.log(`powers: ${ABILITIES.length} abilities checked`);
-}
+});
 
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
-{
+section('departure boards', async () => {
   const { nextTrainAt, trainsOn } = await import('../src/underground/layout');
   const macro = buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.6 })));
   let n = 0;
@@ -590,11 +594,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     }
   }
   console.log(`departure boards: ${n} announcements checked`);
-}
+});
 
 // ---- street crime: district index and director are deterministic; a purse snatch runs
 // approach → escape → KO → arrested with scripted time (headless, mocked world).
-{
+section('street crime', async () => {
   const { crimeIndex, crimesPerMinute } = await import('../src/game/crime/CrimeIndex');
   const { planHour, rollSlot } = await import('../src/game/crime/CrimeDirector');
   const t0 = performance.now();
@@ -994,12 +998,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     player.x = 0; player.z = 0;
   }
   console.log(`crime: index ${macro.cells.length} cells, ${all.length} rolls/day (chaos), snatch FSM ${phases.join(' > ')} in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // ---- villain groups (VILLAINS_PLAN Phase 1): every city gets its street gang and Syndicate with a
 // seeded name and turf in their districts; the same seed gives the same groups; in a group's turf
 // the director rolls its operations (the Syndicate robs, the gang mugs); members wear its colours.
-{
+section('villain groups', async () => {
   const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
   const { planHour } = await import('../src/game/crime/CrimeDirector');
   const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions, drift, relation, rivalsAt, strength, DRIFT } = await import('../src/game/factions/Factions');
@@ -1130,11 +1134,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   }
   check(names.size >= 5, `group names vary with the seed (${[...names].join(', ')})`);
   console.log(`factions: ${[...names].join(' · ')} in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // ---- traffic at a six-way junction with one exit blocked (its queue backs up into the box):
 // cars never stay inside each other and the junction does not lock up; gawking crowds are capped.
-{
+section('traffic at a blocked junction', async () => {
   const t0 = performance.now();
   const { Traffic, pathGap } = await import('../src/sim/Traffic');
   const { RoadNet } = await import('../src/sim/RoadNet');
@@ -1215,12 +1219,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(maxG > 5 && maxG <= P.GAWK_CROWD, `gawkers: a crowd forms but stays at most ${P.GAWK_CROWD} (${maxG})`);
   check(agents.every((a) => (a.state !== P.PState.Gawk && a.state !== P.PState.Film) || a.stateT < P.GAWK_MAX + 1), 'gawkers: nobody stands longer than GAWK_MAX');
   console.log(`traffic: six-way junction ${n} cars, longest overlap ${worst} s, ${maxBox} in the box at most; gawkers ≤ ${maxG} (${gawkingAtEnd} after 2 min of cries) in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // ---- side rooms and hidden colonies: deterministic per seed; rooms clear of every tube, station
 // hall, entrance passage and each other, under the ground; 2–5 colonies, each reachable on foot
 // from its side room (and every room from its tunnel) in steps a walker can take.
-{
+section('side rooms and colonies', async () => {
   const { planRooms, roomConflicts, roomW } = await import('../src/underground/rooms');
   const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
   const { tubeAt, boxAt } = await import('../src/underground/Volumes');
@@ -1307,11 +1311,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(kinds.size >= 12, `rooms seed ${seed}: most kinds of rooms present (${[...kinds].join(' ')})`);
     console.log(`rooms seed ${seed}: ${plan.rooms.length} side rooms (${plan.rooms.filter((r) => r.trace).length} with traces), ${plan.colonies.length} colonies in ${ms.toFixed(0)} ms`);
   }
-}
+});
 
 // ---- the sewers: one network (culverts under the rivers join the banks), junctions level, culverts
 // walkable and under the river bed; the Lumen's signs on every junction lead to a colony.
-{
+section('sewer network', async () => {
   const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
   const { planRooms } = await import('../src/underground/rooms');
   const { planSewerHints } = await import('../src/underground/sewerHints');
@@ -1358,23 +1362,23 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     const sewerColonies = rooms.colonies.filter((c) => rooms.rooms[c.room].net === 'sewer').length;
     check(!sewerColonies || (arrows >= junctions * 1.6 && marks >= junctions * 1.8 && chev > 100 && scouts >= 1), `sewers seed ${seed}: the Lumen's signs show the way at the junctions (${arrows} arrows and ${marks} signs at ${junctions} junctions, ${chev} chevrons, ${scouts} scouts, ${sewerColonies} colonies off the sewers)`);
   }
-}
+});
 
 // ---- no sewer breaks through the street: soil over every trunk's vault along its whole length
 // (seed 1234 @0.5 once had a brick trunk standing out of a street in a dip).
-{
+section('sewers under the street', async () => {
   const { sewerBreaches, MIN_COVER } = await import('./sewersweep');
   for (const [seed, size] of [[1234, 0.5], [42, 0.6], [7, 0.4], [17, 0.75]] as const) {
     const { breaches, trunks } = sewerBreaches(seed, size);
     const w = breaches.reduce((m, q) => Math.min(m, q.ground - q.crown), Infinity);
     check(!breaches.length, `sewers seed ${seed} @${size}: every trunk under the ground (${breaches.length} of ${trunks} with less than ${MIN_COVER} m over the vault${breaches.length ? `, worst ${w.toFixed(2)} m` : ''})`);
   }
-}
+});
 
 // ---- the deep realm (src/underground/deep): deterministic per seed; its caves clear of every tunnel,
 // station, room, crawl and entrance passage, deep under the ground; every waypoint edge walkable on
 // the field's floors (steps a walker can take, headroom); the war and the trust behave.
-{
+section('deep realm', async () => {
   const { planRooms } = await import('../src/underground/rooms');
   const { metroTube, sewerTube, stationHalls } = await import('../src/underground/layout');
   const { tubeAt, boxAt } = await import('../src/underground/Volumes');
@@ -1484,11 +1488,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(tierOf(-50) === 'Shunned' && tierOf(0) === 'Stranger' && tierOf(10) === 'Noticed' && tierOf(30) === 'Welcome' && tierOf(55) === 'Ally' && tierOf(80) === 'Kin', 'trust: tiers');
   check(callRank(54, true) === 0 && callRank(TRUST.ally, false) === 1 && callRank(TRUST.kin, false) === 2 && callRank(100, false) === 2 && callRank(100, true) === 3, 'trust: the Slime call rank follows trust (rank 3 after the Maw)');
   check(parseTrust({ v: 500, gifts: [1, 'x'], marks: ['a', 3] })?.v === 100 && parseTrust('x') === null, 'trust: a saved value is sanitised');
-}
+});
 
 // ---- city threats: the threat clock's schedule is deterministic per seed, the first minor event
 // comes no earlier than its minimum, omens always come first, "off" schedules nothing.
-{
+section('threat clock', async () => {
   const { ThreatClock, CLOCK, EVENT_SCALE } = await import('../src/game/threats/ThreatClock');
   type Sig = { t: number; type: string; kind?: string };
   const run = (seed: number, setting: 'off' | 'rare' | 'normal' | 'frequent', hours: number, karmaEvery = 0, from?: InstanceType<typeof ThreatClock>) => {
@@ -1532,13 +1536,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   for (let t = 0; t < 4 * 3600 && fired < 0; t++) if (w.tick(1, 0, 0, t > 2 * 3600).some((s) => s.type === 'event')) fired = t;
   check(fired > 2 * 3600, `threat clock: a due event waits until it can be seen (fired at ${(fired / 60).toFixed(0)} min)`);
   console.log(`threat clock: seed 42 normal → events at ${evA.map((e) => (e.t / 60).toFixed(0)).join(', ')} min; omens ${a.filter((s) => s.type === 'omen').map((s) => `${(s.t / 60).toFixed(0)}:${s.kind}`).join(' ')}`);
-}
+});
 
 // ---- the brood (THREATS_PLAN Phase C): the swarm's simulation is deterministic, stays within its cap,
 // comes out of its holes, spreads into a carpet (not a heap), goes for people a few at a time, climbs
 // walls without ending up inside buildings, dies to blows (a frozen brute shatters), withdraws into
 // its holes, steps 150 creatures cheaply; the clock schedules it among the minor events.
-{
+section('brood', async () => {
   const { BroodSim, BROOD, CMode } = await import('../src/game/threats/brood/BroodSim');
   const { ThreatClock } = await import('../src/game/threats/ThreatClock');
   type P = { kind: 'person'; x: number; y: number; z: number; r: number; ref: unknown; n: number; down: boolean };
@@ -1616,12 +1620,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   for (let t = 0; t < 8 * 3600; t++) for (const sg of clk.tick(1, 0, 0)) if (sg.type === 'event') arch.push(sg.archetype);
   check(arch.includes('brood') && arch.includes('robots'), `brood: the clock schedules it among the minor events (${arch.join(', ')})`);
   console.log(`brood: ${a.sim.stats.bites} bites, ${d.sim.stats.climbs} climbs, step ${ms.toFixed(3)} ms for 150`);
-}
+});
 
 // ---- the Strider (THREATS_PLAN Phase B): major events come no earlier than their floor and only after a
 // karma milestone, with their own omens; its route from the river to downtown exists for 20 seeds; the
 // rig's pure math (two-bone IK reach, follow-the-leader spacing, FABRIK, ray vs capsule) behaves.
-{
+section('strider: clock and routes', async () => {
   const { ThreatClock, CLOCK } = await import('../src/game/threats/ThreatClock');
   type Sig = { t: number; type: string; arch: string; kind?: string; karma: number };
   const run = (seed: number, hours: number, karmaFrom: number, karmaEvery: number) => {
@@ -1677,7 +1681,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const rA = planStriderRoute(buildMacroPlan(tA), tA), rB = planStriderRoute(buildMacroPlan(tB), tB);
   check(!!rA && !!rB && hashPlan(rA.pts) === hashPlan(rB.pts), 'strider route: deterministic per seed');
   console.log(`strider routes (20 seeds, size 0.6): ${lens.join(' ')} m`);
+});
 
+section('army battle', async () => {
+  const { planStriderRoute } = await import('../src/game/threats/StriderRoute');
   // The army (Phase B stage 2): the headless "no player" battle — the Strider along this city's route
   // against the response's levels 3 and 4 — deterministic per seed, the army wins in 25–55 % of runs.
   {
@@ -1725,7 +1732,9 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     for (let i = 0; i < 12 && q.morale >= ARMY.breakAt; i++) hurtUnit(u, q, 260, hr);
     check(u.crew < 6 && u.crew > 0 && q.morale < ARMY.breakAt && moraleStep(q, 0.5) !== 'ok', `army: losses drop a squad's morale until the line breaks (${u.crew} left, morale ${q.morale.toFixed(2)})`);
   }
+});
 
+section('fame, rampage and the creature rig', async () => {
   // Fame (game/fame): the press, fans and protesters by the reputation; the statue voted, built,
   // unveiled and pulled down; the justice layer's manhunt at the bottom.
   {
@@ -1981,9 +1990,9 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
       check(bad === 0 && flipped === 0, `skin: ${name}: finite, every part still out-facing with its volume (${bad} NaN, ${flipped} parts off)`);
     }
   }
-}
+});
 
-{
+section('weather', async () => {
   // Weather (src/world/weather.ts): deterministic per seed, mostly fair, storms rare, fog in the
   // mornings, and continuous (no jumps in clouds, rain, fog or light).
   const { WeatherSchedule, WEATHER_KINDS, stepWet } = await import('../src/world/weather');
@@ -2045,11 +2054,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     while (w > 0.02 && t2 < 10) { w = stepWet(w, 0, 1, 1 / 60); t2 += 1 / 60; }
     check(t < 0.25 && t2 > 0.5 && t2 < 3, `weather: streets wet after ${(t * 60).toFixed(0)} min of rain, dry ${(t2 * 60).toFixed(0)} min after it stops`);
   }
-}
+});
 
 // ------------------------------------------------------------------ the aftermath (src/game/aftermath): casualty ledger, the last
 // resort's trigger and shock wave, the carcass cleanup schedule — pure rules
-{
+section('aftermath', async () => {
   console.log('aftermath: casualty ledger, last resort, shock wave, carcass removal');
   const { CasualtyLedger, strikeCasualties } = await import('../src/game/aftermath/Casualties');
   const { LAST_RESORT, lastResortDue, lastResortRoll, ShockWave, CARCASS, carcassStage, removalOrder, boneScales } = await import('../src/game/aftermath/rules');
@@ -2122,10 +2131,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   }
   boneScales(1, ord, sB);
   check(scaleBad === 0 && ord.every((b) => sB[b] === 0) && sB[0] === 1, `carcass: pieces only ever shrink, one at a time, all gone at the end (${scaleBad} faults)`);
-}
+});
 
 // ------------------------------------------------------------------ saves (src/game/save)
-{
+section('saves', async () => {
   console.log('saves: model round trip, migrations, damage codec');
   const full: SaveData = {
     v: SAVE_VERSION, id: 'save-abc', name: 'Before the bridge', kind: 'manual', created: 1759580000000, playTime: 3725,
@@ -2154,6 +2163,16 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }] },
   };
   const back = parseSave(serializeSave(full));
+  {
+    // The three costumes (F1–F3): kept through a save, junk sanitised.
+    const look = { appearance: { gender: 1, seed: 5 }, outfit: { top: 'sweater' } } as unknown as CharacterLook;
+    const c = parseSave(serializeSave({ ...full, costumes: { active: 2, looks: [null, look, look] } })).costumes;
+    const r = readCostumes(c);
+    check(!!r && r.active === 2 && r.looks[0] === null && !!r.looks[1] && r.looks[2]?.outfit.top === 'sweater', 'costumes: the three looks and the worn one survive a save');
+    const bad = readCostumes({ active: 7, looks: ['x', { appearance: 1 }] });
+    check(!!bad && bad.active === 0 && bad.looks.length === 3 && bad.looks.every((l) => l === null), 'costumes: a broken costume set loads as the starting look');
+    check(readCostumes(null) === null && parseSave(serializeSave(full)).costumes === undefined, 'costumes: older saves have none');
+  }
   check(JSON.stringify(back) === JSON.stringify(full), `saves: serialize → parse round trip keeps every field${JSON.stringify(back) === JSON.stringify(full) ? '' : `\n${serializeSave(back)}\n${serializeSave(full)}`}`);
   // Every top-level and player field present after parsing (nothing silently dropped).
   const keys = (o: object) => Object.keys(o).sort().join(',');
@@ -2255,13 +2274,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   let diff = 0;
   for (let i = 0; i < cell.length; i++) if ((cell[i] < 128) !== (restored[i] < 128)) diff++;
   check(diff === 0, `saves: cell element state restored exactly (${diff} differences)`);
-}
+});
 
 // ------------------------------------------------------------------ actors that cannot get anywhere; small arms
 // (sim/actors/Actor watchProgress / pursue, crime/Firearms): running in place under an unreachable
 // target counts as stuck, a pursuit re-plans once and then gives up; a goal flipping back and forth
 // every frame (the old "move in / hold" flip at an incident) is caught too; guns stay weaker than powers.
-{
+section('stuck actors and small arms', async () => {
   const act = makeActor('police', 0);
   const a = { x: 0, z: 0 };
   // Running hard at a point 10 m off without getting anywhere (blocked): stuck after the window.
@@ -2315,10 +2334,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(copHp < 2.5 && swatHp < 2.5, `guns: an officer at wanted 3 costs the player ${copHp.toFixed(2)} hp/s, SWAT ${swatHp.toFixed(2)} hp/s`);
   check(GUNS.crook.player < 22 && GUNS.rifle.player * GUNS.rifle.burst < 22 && GUNS.pistol.player < 22, 'guns: no single trigger pull knocks the player down (HEALTH.knockAt 22)');
   console.log(`actors & guns: stuck after ${STUCK.window} s, drone ${droneS.toFixed(1)} s, robot ${robotS.toFixed(1)} s, robber ${playerHp.toFixed(2)} hp/s`);
-}
+});
 
 // Background music: mood selection (src/audio/music/mood.ts) and the stem manifest (public/music).
-{
+section('music', async () => {
   let seed = 12345;
   const rng = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
   const run = (d: MoodDirector, secs: number, s: Partial<MusicSignals> | ((t: number) => Partial<MusicSignals>)) => {
@@ -2363,13 +2382,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     for (const list of Object.values(set?.layers ?? {})) for (const f of list ?? []) { files++; check(existsSync(`public/music/${f}`), `music: ${f} exists`); }
   }
   console.log(`music: ${MOODS.length} moods, ${files} stems, calm share ${Math.round(share * 100)} %`);
-}
+});
 
 // ------------------------------------------------------------------ line of sight and shots (combat/los, combat/shot)
 // One rule for everybody: buildings, terrain and cars block a line (people never do); a holed
 // facade lets it through; a targeted shot without a clear line does not fire, with one it always
 // hits; an untargeted one hits whatever is on its ray — the bystander behind a miss.
-{
+section('line of sight and shots', async () => {
   const cacheT = LOS.cacheT;
   LOS.cacheT = 0;
   const box = { low: 0, top: 20 };
@@ -2393,6 +2412,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(losH.clear(0, 5, 0, 30, 5, 0), 'los: a line through a holed facade is clear');
   holes = false;
   check(!losH.clear(0, 5, 0, 30, 5, 0), 'los: an intact facade blocks it');
+  // A landmark's solid parts (here a pillar at x 10..12, z 8..12, up to 8 m) block it too; over it the line is clear.
+  const losL = new LineOfSight({ ...world, solid: (x, y, z) => x > 10 && x < 12 && z > 8 && z < 12 && y < 8 }, () => 0);
+  check(losL.clear(0, 2, 10, 0, 2, 25), 'los: a line past a landmark is clear');
+  check(!losL.clear(0, 2, 10, 25, 2, 10) && losL.last === 'building', `los: a landmark's solid part blocks the line (${losL.last})`);
+  check(losL.clear(0, 12, 10, 25, 12, 10), 'los: a line over a landmark is clear');
   // Cars block at chest height (parked or moving: the same boxes); a line up to a drone passes over.
   cars.push(car('sedan', 0, 10));
   check(!los.clear(0, 1.42, 0, 0, 1.25, 20) && los.last === 'car', `los: a car in between blocks the line (${los.last})`);
@@ -2453,11 +2477,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   for (let k = 0; k < 10; k++) lc.clear(0, 1.42, 0, 30, 1.25, 0);
   check(lc.stats.rays === 1 && lc.stats.cached === 9, `los: the same line is cached (${lc.stats.rays} traced, ${lc.stats.cached} cached)`);
   console.log(`line of sight: ${(per * 1000).toFixed(1)} µs a line (headless boxes)`);
-}
+});
 
 // Street characters (game/street/cast.ts): sites clear of the walking corridors, footprints, doors and
 // furniture; the cast deterministic, only in its hours, everyone turning up somewhere.
-{
+section('street characters', async () => {
   const t0 = performance.now();
   const terrain = new Terrain(makeProfile({ seed: 42, size: 0.4 }));
   const macro = buildMacroPlan(terrain);
@@ -2497,10 +2521,10 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(STREET_KIND_LIST.every((k) => (['own', 'greet', 'panic', 'hit', 'leave', 'fly', 'giant'] as const).every((t) => !!lineFor(k, t, () => 0.5, 'X'))), 'street: every character has a line for every common moment');
   check(lineFor('tourist', 'greet', () => 0, 'Linden station')!.includes('Linden station'), 'street: places filled into the lines');
   console.log(`street: ${n} sites in ${cells.length} cells (${(performance.now() - t0).toFixed(0)} ms), ${seen.size} kinds cast`);
-}
+});
 
 // Justice: wrecking buildings is not free (facade damage before witnesses; a collapse always known).
-{
+section('justice', async () => {
   let rep = 0, karma = 0, called = 0, witnesses = 0;
   const host = { time: 0, player: { x: 0, z: 0 }, witnesses: () => witnesses, officersNear: () => 0, karma: (n: number) => { karma += n; }, rep: (d: number) => { rep += d; }, repValue: () => rep, pursue: () => { called++; }, toast: () => {}, sound: () => {} };
   const J = new Justice(host);
@@ -2540,13 +2564,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   const hunt = (repV: number) => { const H = new Justice({ ...host, time: 100, officersNear: () => 1, repValue: () => repV, pursue: () => { hunted++; } }); H.update(0.5); return H.wanted; };
   check(hunt(JUSTICE.manhunt - 5) === 1 && hunt(JUSTICE.manhunt + 15) === 0 && hunted > 0, 'justice: a public menace is hunted by the first officer who sees them; a disliked hero is not');
   check(lockedAway(JUSTICE.manhunt) && lockedAway(-100) && !lockedAway(JUSTICE.manhunt + 1) && !lockedAway(0), 'justice: a public menace arrested is locked away for good (game over); a merely disliked hero gets a fine');
-}
+});
 
 // Landmarks (plan/landmarks.ts, plan/landmarkParts.ts): deterministic; a town hall and a stadium in
 // every city, 1–4 attractions by size, an airport only for big ones; sites clear of each other, of
 // water, roads, buildings and sewer manholes, the structures inside their sites, no furniture on them;
 // the airfield levelled, outside the city and free of forest; different from city to city.
-{
+section('landmarks', async () => {
   const t0 = performance.now();
   const sigs: string[] = [];
   const kinds = new Set<string>();
@@ -2652,12 +2676,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(thLooks.size >= 5, `landmarks: town halls differ (${thLooks.size} looks in ${sigs.length} cities)`);
   check([...ATTRACTION_KINDS].filter((k) => kinds.has(k)).length >= 5, `landmarks: varied attractions (${[...kinds].join(', ')})`);
   console.log(`landmarks: ${sigs.length} cities, kinds ${[...kinds].join(', ')} in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // Marvels (plan/marvelParts): every family builds for many seeds and city sizes (finite parts inside
 // the site, near and far meshes within budget); the helix walkway can be walked from the street to
 // the roof between its walls; a pierced slab's holes are open; more of them the bigger the city.
-{
+section('marvels', async () => {
   const t0 = performance.now();
   const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
   const make = (style: MS, seed: number, R: number): Landmark | null => {
@@ -2740,13 +2764,13 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   check(town < city && city < metro && metro < mega && townMax <= 1 && megaMax <= 3 && town > 0.15 && town < 0.45,
     `marvels: more in bigger cities (town ${town.toFixed(2)}, city ${city.toFixed(2)}, metropolis ${metro.toFixed(2)}, megacity ${mega.toFixed(2)})`);
   console.log(`marvels: ${MARVEL_STYLES} families checked in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // Breakable marvels (build/landmarkDice, destruction/LandmarkWreck): meshes diced into pieces that
 // all three meshes agree on; a hit breaks what it reaches, a few broken pieces don't bring it down,
 // a cut-through level drops everything above (it falls, lands and leaves rubble), collision follows
 // and a save brings the same state back.
-{
+section('breakable marvels', async () => {
   const t0 = performance.now();
   const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
   const noop = new Proxy({}, { get: () => () => undefined }) as never;
@@ -2820,11 +2844,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
   }
   check(badElem === 0 && unnamed === 0, `wrecks: every triangle of the near meshes is a piece, the far ones agree (${badElem} out of range, ${unnamed} unnamed)`);
   console.log(`wrecks: ${results.join(', ')} pieces in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // Defeat: the rescue needs reputation 0+, the hospital is a fitting block (the same ones every
 // time, never the one beside the hero when another is near), the flight climbs over the roofs.
-{
+section('defeat and rescue', async () => {
   check(rescueAllowed(0) && rescueAllowed(35) && !rescueAllowed(-0.1) && !rescueAllowed(-60), 'defeat: drones come at reputation 0 or better, not below');
   const blocks: HospitalCandidate[] = [];
   for (let i = 0; i < 400; i++) {
@@ -2854,12 +2878,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(tank >= 4 && p.clear >= 4 && p.x > 1 && p.x < 29 && Math.hypot(empty.x - 15, empty.z - 10) < 1.5, `defeat: the roof pad keeps clear of the water tank and the edges (${tank.toFixed(1)} m from the tank, ${p.clear.toFixed(1)} m clear; empty roof: the middle)`);
   }
   check(hospitalName(5) === hospitalName(5) && hospitalName(5).length > 4, `defeat: the city's hospital has a name (${hospitalName(5)})`);
-}
+});
 
 // Cathedrals (plan/cathedralParts): walk in through the west door, under the vaults to the nave; the
 // stained glass shatters on a light hit while the walls hold (and lets you through), the meshes
 // agree on the pieces and a save brings the broken windows back.
-{
+section('cathedrals', async () => {
   const t0 = performance.now();
   const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
   const noop = new Proxy({}, { get: () => () => undefined }) as never;
@@ -2929,12 +2953,12 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     results.push(`${style}: ${w.n} pieces, ${panes} panes`);
   }
   console.log(`cathedrals: ${results.join('; ')} in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // The starship's great hall (interior/design, plan/marvelParts): in from the square through a lobby
 // door and the hull to the hall floor; up every flight to its level; from every gallery through a
 // room's door; all without a wall in the way or a step a walker can't take.
-{
+section('starship great hall', async () => {
   const t0 = performance.now();
   const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
   const results: string[] = [];
@@ -3019,11 +3043,11 @@ for (const [seed, size] of [[1, 0.35], [42, 0.4]] as const) {
     check(badRooms === 0, `starship ${seed}: every one of the ${hall.design.rooms.length} rooms is walkable in through its door (${badRooms} bad)`);
   }
   console.log(`starship halls in ${(performance.now() - t0).toFixed(0)} ms ${results.join('; ')}`);
-}
+});
 
 // Front doors in real cities: from the square up the steps (however far below the floor it lies)
 // and through the door of the town hall and the cathedral, with no pit or wall on the way.
-for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
+section('front doors in real cities', async () => { for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const terrain = new Terrain(makeProfile({ seed, size }));
   const macro = buildMacroPlan(terrain);
   const S = new LandmarkSolids(macro, terrain);
@@ -3044,12 +3068,12 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     const ways = auditWays(lm, landmarkInterior(lm, terrain)!, S, terrain);
     check(!ways.bad.length, `seed ${seed} size ${size}: the ${lm.kind}'s ${ways.legs} walkway legs and ${ways.spots} spots clear, on the floor and reachable (${ways.bad.slice(0, 3).join('; ') || 'ok'})`);
   }
-}
+} });
 
 
 // People in the landmarks (sim/LandmarkCrowds): who is there by the hour, nobody inside a wall or
 // floating, they walk their ways, a scare empties the building, at night the town hall's porter.
-{
+section('people in the landmarks', async () => {
   const t0 = performance.now();
   const { RoadNet } = await import('../src/sim/RoadNet');
   const { Pedestrians, PState } = await import('../src/sim/Pedestrians');
@@ -3114,10 +3138,10 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     }
   }
   console.log(`landmark people: ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // People (NPC_PERSONALITY_PLAN phase 1): names, personalities, talk lines, memory.
-{
+section('people phase 1', async () => {
   const t0 = performance.now();
   const terrain = new Terrain(makeProfile({ seed: 7, size: 0.4 }));
   const macro = buildMacroPlan(terrain);
@@ -3232,10 +3256,10 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const mime = ruleAnswer({ topic: 'job', facts: { ...base, temper: 'chatty', met: 0, deed: null, job: { kind: 'street', title: 'mime' } }, seed: 4, used: new Set() });
   check(mime.id.startsWith('js2#') && !mime.id.includes(' '), `people: the mime only mimes (${mime.text})`);
   console.log(`people: ${TEMPERAMENTS.length} temperaments, ${topics.reduce((s, t) => s + LINES[t].length, 0)} line rules, ${n} answers in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // People, phase 2 (NPC_PERSONALITY_PLAN §3.5): behaviour from personality.
-{
+section('people phase 2', async () => {
   const t0 = performance.now();
   const B = await import('../src/game/people/behaviour');
   const { Manners } = await import('../src/game/people/Manners');
@@ -3343,10 +3367,10 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
     check(chatting && !r3.M['jobs'].some((j) => j.kind === 'chat') && r3.said.length >= 2, `people: family or neighbours meeting in the street stop for a chat and go on (${r3.said.join(' | ')})`);
   }
   console.log(`people, phase 2: ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // People, phase 4 (NPC_PERSONALITY_PLAN §5): bonds, word getting round, needs, favours.
-{
+section('people phase 4', async () => {
   const t0 = performance.now();
   const S = await import('../src/game/people/social');
   const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 7, size: 0.4 }))), 7);
@@ -3389,11 +3413,11 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(restorePeople({ people: [{ ...JSON.parse(JSON.stringify(k)), favour: { kind: 'visit', who: 'junk' } }] })[0]?.favour === undefined, 'people: a damaged favour is dropped, the person kept');
   check(['family', 'friend', 'neighbour', 'colleague'].every((b) => { const m = S.meetLines(b as never, 0.3); return m.hi && m.back && m.bye; }), 'people: words for meeting people you know');
   console.log(`people, phase 4: ${friends} friend pairs of ${pairs}, ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live
 // crime index, police presence, the fresh start, off-screen crime and the news in words
-{
+section('city pulse', async () => {
   const t0 = performance.now();
   const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
   const { planFactions } = await import('../src/game/factions/Factions');
@@ -3449,11 +3473,11 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(whenWord(30, 30.2) === 'just now' && whenWord(2, 30) === 'last night' && whenWord(10, 40) === 'yesterday', 'news: when words');
   check(['safe', 'quiet', 'mixed', 'rough', 'dangerous'].every((s) => localRemark(s as Safety, 0.5).length > 5) && safetyOf(0.05) === 'safe' && safetyOf(0.8) === 'dangerous', 'news: a word about the streets for every level');
   console.log(`news: ${H1.list.length} neighbourhoods, ${off} off-screen crimes in 600 ticks (${stopped} stopped), start block index ${base[start].toFixed(2)}, in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // Screen overlays (health tags, target brackets, speech bubbles): one projection for all of them,
 // right in front of and behind the camera with either depth convention (src/render/screen.ts).
-{
+section('screen overlays', async () => {
   const s = screenPoint();
   let bad = 0;
   for (const rev of [false, true]) {
@@ -3492,12 +3516,12 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   wall = 5;
   const walled = look(false, 2, 0);
   check(street && sewer && !fromStreet && !fromSewer && !walled, `screen: no tags through the ground or walls (street ${street}, sewer ${sewer}, sewer from street ${fromStreet}, street from sewer ${fromSewer}, through a wall ${walled})`);
-}
+});
 
 // Station life: commuters come down the real entrance stairs (Pedestrians' own steps over the
 // underground floors), cross by the underpass, wait, board, ride, get off and walk up and out;
 // nobody stalls on a step, leaves the floor or ends up on the tracks.
-{
+section('station life', async () => {
   const { runLife } = await import('./metrolife');
   const t0 = performance.now();
   const terrain = new Terrain(makeProfile({ seed: 1, size: 0.5 }));
@@ -3509,11 +3533,11 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   const s = runLife(macro, terrain, 1, 9, 60, 1, true);
   check(s.onTracks === 0 && s.offFloor === 0, `metro life: shoved commuters stop at the platform edge, knocked-off ones climb back (${s.onTracks} on the tracks)`);
   console.log(`metro life: ${r.spawned} commuters, ${r.boarded} boarded, ${r.alighted} got off, ${r.left} walked out, in ${(performance.now() - t0).toFixed(0)} ms`);
-}
+});
 
 // Super speed hops (src/player/speedHop.ts): over a person or a car ahead when the arc and the
 // landing are clear; never into a wall, never onto someone, never when too late.
-{
+section('super speed hops', async () => {
   type O = import('../src/world/Collision').Obstacle;
   let obs: O[] = [], walls: { x0: number; x1: number }[] = [];
   const person = (x: number): O => ({ cyl: true, x, z: 0, r: 0.4, hx: 0, hz: 0, ux: 1, uz: 0, y0: 0, y1: 1.85 });
@@ -3553,11 +3577,11 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   obs = [person(40), person(43)];
   const e = plan(50, 40);
   check(!!e && feet(e, 50, 43 + 0.75 - e.at) > 1.85, `speed hop: one hop over two people in a row (feet ${e ? feet(e, 50, 43 + 0.75 - e.at).toFixed(2) : '-'} m over the second)`);
-}
+});
 
 // Energy: no regeneration in flight; a giant body costs upkeep (even at 10 m, ~20 s at 100 m) and an
 // empty pool shrinks it back to 10 m.
-{
+section('energy', async () => {
   const { AbilitySystem } = await import('../src/game/abilities/AbilitySystem');
   const { ENERGY, GIANT, sizeUpkeep } = await import('../src/game/abilities/tuning');
   const prog = { sandbox: false, bonusMax: 0, bonusRegen: 0, rank: () => 0 } as any;
@@ -3579,36 +3603,73 @@ for (const [seed, size] of [[9, 0.6], [12, 0.8]] as const) {
   check(!ab.exhausted && tr > 1 && tr < 10, `energy: an exhausted giant at 10 m refills and the cap lifts (${tr.toFixed(1)} s)`);
   run(10);
   check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 10 m holds the recovered pool (${ab.energy.toFixed(1)})`);
-}
+});
+
+// Shrink ray: the rank's factor, capped by metres off the biggest dimension (a person halves, a car
+// loses a metre, a 40 m monster 5 m at rank 5); a shrunk attacker deals 10 % less per rank, and
+// nothing takes more damage for being small.
+section('shrink ray', async () => {
+  const { shrinkFactor, SHRINK_DEALT } = await import('../src/game/abilities/tuning');
+  const { statusFor, dealtBy, clearStatus } = await import('../src/shared/status');
+  check(Math.abs(shrinkFactor(1.8, 1) - 0.5) < 1e-9, `shrink: rank 1 halves a person (${shrinkFactor(1.8, 1).toFixed(3)})`);
+  check(Math.abs(shrinkFactor(4.5, 1) * 4.5 - 3.5) < 1e-9, `shrink: rank 1 takes a 4.5 m car down 1 m (${(shrinkFactor(4.5, 1) * 4.5).toFixed(2)} m)`);
+  check(Math.abs(shrinkFactor(40, 5) * 40 - 35) < 1e-9, `shrink: rank 5 takes a 40 m monster down 5 m (${(shrinkFactor(40, 5) * 40).toFixed(1)} m)`);
+  check(Math.abs(shrinkFactor(1.2, 5) - 0.12) < 1e-9, `shrink: rank 5 takes a drone to 12 % (${shrinkFactor(1.2, 5).toFixed(3)})`);
+  check(SHRINK_DEALT[1] === 0.9 && SHRINK_DEALT[5] === 0.5, 'shrink: deals 90 % at rank 1, 50 % at rank 5');
+  const mob = {};
+  check(dealtBy(mob) === 1 && dealtBy(null) === 1, 'shrink: an unshrunk attacker deals full damage');
+  const st = statusFor(mob);
+  st.shrink = 10; st.dealt = SHRINK_DEALT[3];
+  check(Math.abs(dealtBy(mob) - 0.7) < 1e-9, `shrink: a rank 3 shrunk attacker deals 70 % (${dealtBy(mob)})`);
+  st.shrink = 0;
+  check(dealtBy(mob) === 1, 'shrink: back to full once the ray wears off');
+  clearStatus(mob);
+  const combatSrc = readFileSync('src/game/Combat.ts', 'utf8');
+  check(!/statusOf\(a\)\?\.scale/.test(combatSrc), 'shrink: a shrunk person takes normal damage (Combat does not scale damage taken by size)');
+  // The Strider's rig re-proportions live: a 0.875 body walks on with a 0.875 length.
+  const { CreatureRig } = await import('../src/game/threats/rig/CreatureRig');
+  const { STRIDER_RIG } = await import('../src/game/threats/Strider');
+  const rig = new CreatureRig(STRIDER_RIG, 1);
+  rig.ground = () => 0;
+  rig.place();
+  const L0 = rig.length;
+  rig.scale = 0.875;
+  for (let i = 0; i < 120; i++) rig.update(1 / 60, 0);
+  const sp = rig.spine, n = STRIDER_RIG.spine.length;
+  let len = 0;
+  for (let i = 0; i < n; i++) len += Math.hypot(sp[i * 3 + 3] - sp[i * 3], sp[i * 3 + 4] - sp[i * 3 + 1], sp[i * 3 + 5] - sp[i * 3 + 2]);
+  const want = STRIDER_RIG.spine.reduce((a: number, b: number) => a + b, 0) * 0.875;
+  check(Math.abs(rig.length / L0 - 0.875) < 1e-9 && Math.abs(len - want) < want * 0.08, `shrink: the Strider's body follows a live scale (spine ${len.toFixed(1)} m, want ${want.toFixed(1)} m)`);
+});
 
 // Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
-cmuBvhChecks(check);
+section('motion capture', async () => { cmuBvhChecks(check); });
 
 // Villain groups, Phase 4: boss operations as threat events, the eco-radicals, the necromancers (tools/villainTest.ts).
-await villainChecks(check);
+section('villains phase 4', async () => { await villainChecks(check); });
 
 // Arcades: halls of video game cabinets on shopping streets, and their games (tools/arcadeTest.ts).
-arcadeChecks(check);
-doorChecks(check);
+section('arcades', async () => { arcadeChecks(check); });
+section('doors', async () => { doorChecks(check); });
 
 // The second shard (SIDEKICK_PLAN phase 1): where it turns up, who takes it (tools/sidekickTest.ts).
-sidekickChecks(check);
+section('sidekick', async () => { sidekickChecks(check); });
 // The Wardens (ALIENS_PLAN phase 1): the disc schedule, walkers, stares, what people say (tools/aliensTest.ts).
-aliensChecks(check);
+section('aliens', async () => { aliensChecks(check); });
 
 // Nothing hurts through the pavement: every blow names where it came from (the type makes the
 // height a required argument), and the health refuses one from the other side of the street.
-{
+section('blows through the pavement', async () => {
   const pl = { pos: new THREE.Vector3(0, -4, 0), vel: new THREE.Vector3(), k: 1, flying: false, downT: 0 } as unknown as ConstructorParameters<typeof PlayerHealth>[0];
   const H = new PlayerHealth(pl, false);
   H.sameSide = (_x, y) => (y < -1.5) === (pl.pos.y < -1.5);
   const fromStreet = H.damage(10, 'monster', 2, 0, 0), fromSewer = H.damage(10, 'punch', 1, 0, -4);
   check(fromStreet === 0 && fromSewer > 0, `health: a blow from the street does not reach the sewer below (street ${fromStreet}, sewer ${fromSewer.toFixed(1)})`);
-}
+});
 
 // Nor does the player's own blow: a blast or a giant's footfall on the street knocks down the
 // people up there, not the sewer crew or the commuters below (sim/Reactions via Underground.sameSide).
-{
+section('player\'s blows and the street', async () => {
   const { Reactions } = await import('../src/sim/Reactions');
   const P = await import('../src/sim/Pedestrians');
   const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.2 }))), 42);
@@ -3627,11 +3688,11 @@ aliensChecks(check);
     result.push(`${kind}: street ${agents[0].state === P.PState.Down ? 'down' : 'up'}, sewer ${agents[1].state === P.PState.Down ? 'down' : 'up'}`);
     check(agents[0].state === P.PState.Down && agents[1].state !== P.PState.Down, `pavement: a ${kind} on the street floors the street, not the sewer below (${result.at(-1)})`);
   }
-}
+});
 
 // One test for "can someone stand here" and one for open water (world/WorldIndex standable / wet):
 // no building, no landmark, no river, but a bridge is fine. No system keeps its own copy.
-{
+section('standable and water: one test', async () => {
   const { WorldIndex } = await import('../src/world/WorldIndex');
   const fake = {
     terrain: { isWater: (x: number, _z: number, bank: number) => x > 10 - bank },
@@ -3656,10 +3717,10 @@ aliensChecks(check);
   };
   for (const d of ['src/game', 'src/sim', 'src/ui']) walkW(d);
   check(raw.length === 0, `water: every gameplay water test goes through world.wet / world.standable (${raw.join(', ') || 'no copies'})`);
-}
+});
 
 // Every GLSL shader has a WebGPU (TSL) twin in src/render/webgpu that names its file: change one, change both.
-{
+section('shader twins', async () => {
   const twins = readdirSync('src/render/webgpu').filter((f) => f.endsWith('.ts')).map((f) => readFileSync(`src/render/webgpu/${f}`, 'utf8')).join('\n');
   const orphans: string[] = [];
   const walkG = (dir: string): void => {
@@ -3673,11 +3734,11 @@ aliensChecks(check);
   };
   walkG('src');
   check(orphans.length === 0, `webgpu: every GLSL shader file is named by its TSL twin (${orphans.join(', ') || 'all twinned'})`);
-}
+});
 
 // Car damage: one helper adds it (sim/Traffic dentCar, never lowers it past a cap), and the player's own
 // blows on cars go through Game.hitCar, which books them; no system adds damage by hand.
-{
+section('car damage: one helper', async () => {
   const { dentCar } = await import('../src/sim/Traffic');
   const car = { damage: 0.5 } as unknown as import('../src/sim/Traffic').Vehicle;
   dentCar(car, 0.2); const a = car.damage;
@@ -3695,11 +3756,11 @@ aliensChecks(check);
   };
   walkC('src');
   check(hand.length === 0, `cars: every dent goes through dentCar (${hand.join(', ') || 'no hand-written copies'})`);
-}
+});
 
 // Small helpers have one home: scalar maths in src/core/math.ts, HTML escaping in src/ui/esc.ts.
 // No file declares its own clamp / lerp / smoothstep or esc (import, alias if you like the short name).
-{
+section('small helpers: one home', async () => {
   const { esc } = await import('../src/ui/esc');
   check(esc(`<b a="1">'&'</b>`) === '&lt;b a=&quot;1&quot;&gt;&#39;&amp;&#39;&lt;/b&gt;', `ui: esc escapes all five (${esc(`<"'&>`)})`);
   const MATH = /^(?:export\s+)?(?:const|function)\s+(clamp|clamp01|saturate|lerp|mix|smoothstep|smooth|sstep)\b[^\n]*?\(\s*\w+(?:\s*:\s*number)?\s*[,)]/m;
@@ -3722,10 +3783,10 @@ aliensChecks(check);
   };
   walkM('src');
   check(copies.length === 0, `helpers: no local copies of core/math, ui/esc, render/color or core/rng (${copies.join(', ') || 'none'})`);
-}
+});
 
 // Gameplay waits in game time (core/later): Game.later.after(s, fn), not setTimeout.
-{
+section('game-time timers', async () => {
   const { Later } = await import('../src/core/later');
   const L = new Later(), got: string[] = [];
   L.after(0.5, () => got.push('b')); L.after(0.2, () => got.push('a')); L.after(2, () => got.push('c'));
@@ -3743,10 +3804,10 @@ aliensChecks(check);
   };
   walkT('src/game');
   check(timers.length === 0, `later: no wall-clock timers in gameplay (${timers.join(', ') || 'none'})`);
-}
+});
 
 // Bodies are underground by Underground.feetUnder (feet height), not a hand-written isUnder(x, y + 0.5, z).
-{
+section('bodies underground: one test', async () => {
   const hand: string[] = [];
   const walkU = (dir: string): void => {
     for (const f of readdirSync(dir)) {
@@ -3757,11 +3818,11 @@ aliensChecks(check);
   };
   walkU('src');
   check(hand.length === 0, `underground: bodies use feetUnder (${hand.join(', ') || 'none'})`);
-}
+});
 
 // Causes cross vocabularies (Stimuli Cause, DownCause, DamageCause) only in shared/cause.ts: inline
 // conversions used to book police and army stomps as the player's knock-downs.
-{
+section('cause vocabularies', async () => {
   const hand: string[] = [];
   const walkC = (dir: string): void => {
     for (const f of readdirSync(dir)) {
@@ -3772,11 +3833,11 @@ aliensChecks(check);
   };
   walkC('src');
   check(hand.length === 0, `causes: conversions go through shared/cause.ts (${hand.join(', ') || 'none'})`);
-}
+});
 
 // Rewards (reputation, stats, cheers) go through CrimeSystem.reward, so every "stopped" deed counts,
 // cools the police and gets its cheer the same way.
-{
+section('rewards: one path', async () => {
   const hand: string[] = [];
   const walkR = (dir: string): void => {
     for (const f of readdirSync(dir)) {
@@ -3789,23 +3850,52 @@ aliensChecks(check);
   };
   walkR('src');
   check(hand.length === 0, `rewards: through crime.reward (${hand.join(', ') || 'none'})`);
-}
+});
+
+// A monster's anger, armour and credit go through game/threats/aggro.ts, so they agree on who earned a win.
+section('threat aggro: one home', async () => {
+  const hand: string[] = [];
+  const walkA = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkA(full); continue; }
+      if (f.endsWith('.ts') && !full.endsWith('threats/aggro.ts') && /aggro\.(set|delete)\(|armour\)\)? \* \(weak \?/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkA('src');
+  check(hand.length === 0, `threats: aggro and armour through threats/aggro.ts (${hand.join(', ') || 'none'})`);
+});
+
+// "Can I see / hit that target" goes through game.sight.clear (Targeting.sees): the Tab list, the click pick and the
+// fire wave used their own world.raycast with other tolerances (no cars, no wall holes) and disagreed with the powers.
+section('target sight: one test', async () => {
+  const hand: string[] = [];
+  const walkS = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkS(full); continue; }
+      if (f.endsWith('.ts') && /\.t < \w+ - [0-9.]+\)? *(return|continue)/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkS('src');
+  check(hand.length === 0, `sight: targets through game.sight / Targeting.sees (${hand.join(', ') || 'none'})`);
+});
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
-{
+section('crime choices: one path', async () => {
   const own: string[] = [];
   for (const f of readdirSync('src/game/crime')) {
     if (f === 'Crime.ts' || !f.endsWith('.ts')) continue;
     if (/memo\.decHp !== \w+\.hp\)\s*\{/.test(readFileSync(`src/game/crime/${f}`, 'utf8'))) own.push(f);
   }
   check(own.length === 0, `crime: decisions go through Crime.rethink (${own.join(', ') || 'none'})`);
-}
+});
 
 // Geometry has one home too: src/core/geom2.ts (polygons, polylines) and src/core/math.ts (angles, vectors).
 // Name checks can't catch a copy under a new name, so this asks the repeated-code finder (npm run repeated)
 // for function bodies elsewhere that are near-identical (>= 0.9) to one in those two files.
-{
+section('geometry: one home', async () => {
   const t0 = Date.now();
   const dupPath = './duplicate-candidates/find-duplicate-candidates.mjs', repPath = './repeated-code/find-repeated-code.mjs';
   const { listSourceFiles, extractFunctions } = await import(dupPath);
@@ -3827,16 +3917,15 @@ aliensChecks(check);
   const CROSS = /(\w+)\[1\] \* (\w+)\[2\] - \1\[2\] \* \2\[1\]/;
   const crosses = (files as string[]).filter((f) => !f.endsWith('core/math.ts') && CROSS.test(readFileSync(f, 'utf8')));
   check(crosses.length === 0, `helpers: cross products use v3cross from core/math (${crosses.join(', ') || 'none'})`);
-}
+});
 
 // A hero of about human size bumping into people (super speed, a super jump landing) only makes
 // them stumble: 'brush', no reputation; a giant's landing still counts. One rule: shared/cause.ts.
-{
+section('brush vs stomp', async () => {
   const { stompDownCause, BRUSH_MAX_H } = await import('../src/shared/cause');
   check(stompDownCause('player', 1.8) === 'brush' && stompDownCause(undefined, 1.8) === 'brush', 'brush: a human-size hero landing beside someone is a brush');
   check(stompDownCause('player', BRUSH_MAX_H + 1) === 'player', 'brush: a giant hero landing on someone is the hero\'s');
   check(stompDownCause('threat', 1.8) === 'threat' && stompDownCause('world', 1.8) === 'other', 'brush: other stompers keep their cause');
-}
+});
 
-if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
-console.log('all checks passed');
+await runSections(import.meta.url);

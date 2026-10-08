@@ -23,6 +23,8 @@ import type { DeepField } from './field';
 import type { DeepPlan, NavNode } from './plan';
 import { LUMEN_COL, MURK_COL } from './mesher';
 import type { DamageResult, DamageSource, ThreatActor, ThreatZone } from '../../game/threats/ThreatEvent';
+import { dealtBy } from '../../shared/status';
+import { bookAggro, zoneDealt } from '../../game/threats/aggro';
 
 export type Fac = 'lumen' | 'murk';
 export type Role =
@@ -564,7 +566,7 @@ export class Factions {
       if (b.cd <= 0) {
         b.cd = b.role === 'maw' ? 2.2 : 1.1 + Math.random() * 0.6;
         b.lunge = 0.3;
-        this.host.hurtPlayer(S.dmg, b.x, b.z, b.y);
+        this.host.hurtPlayer(S.dmg * dealtBy(b.actor), b.x, b.z, b.y);
         const k = b.role === 'maw' ? 9 : b.role === 'brute' ? 5 : 1.5;
         this.host.shovePlayer(((P.x - b.x) / (dp || 1)) * k, k * 0.4, ((P.z - b.z) / (dp || 1)) * k);
         this.host.sound(b.role === 'maw' || b.role === 'brute' ? 'murk_slam' : 'slime_squish', b.x, b.y, b.z, 0.7, b.role === 'drone' ? 0.8 : 0.6);
@@ -609,7 +611,7 @@ export class Factions {
     if (a.cd > 0) return;
     a.cd = 0.7 + Math.random() * 0.5;
     a.lunge = 0.25;
-    const dmg = Math.max(0.6, ROLE[a.role].dmg * 0.35) * (0.7 + Math.random() * 0.6);
+    const dmg = Math.max(0.6, ROLE[a.role].dmg * 0.35) * (0.7 + Math.random() * 0.6) * dealtBy(a.actor);
     this.stats.fights++;
     this.hurt(f, dmg, false, a.x, a.z);
     if (Math.random() < 0.4) this.host.sound('slime_squish', f.x, f.y, f.z, 0.45, a.fac === 'murk' ? 0.7 : 1.2);
@@ -659,7 +661,7 @@ export class Factions {
       const hitP = Math.hypot(s.x - P.x, s.z - P.z) < 0.7 && s.y > P.y - 0.2 && s.y < P.y + P.h + 0.2;
       const rock = F.near(s.x, s.y, s.z) ? F.sdf(s.x, s.y, s.z) > 0 : s.y < this.host.ground(s.x, s.z, s.y);
       if (hitP || rock || s.life <= 0) {
-        if (hitP) { this.host.hurtPlayer(s.dmg, s.from.x, s.from.z, s.from.y); this.host.shovePlayer(s.vx * 0.2, 1.5, s.vz * 0.2); }
+        if (hitP) { this.host.hurtPlayer(s.dmg * dealtBy(s.from.actor), s.from.x, s.from.z, s.from.y); this.host.shovePlayer(s.vx * 0.2, 1.5, s.vz * 0.2); }
         for (let k = 0; k < 5; k++) this.drops.push({ x: s.x, y: s.y, z: s.z, vx: (Math.random() - 0.5) * 3, vy: Math.random() * 2, vz: (Math.random() - 0.5) * 3, r: 0.06, col: MURK_COL[0], life: 0, murk: true });
         this.host.sound('slime_squish', s.x, s.y, s.z, 0.5, 0.8);
         this.spits.splice(i, 1);
@@ -845,7 +847,10 @@ export class Factions {
 export class MurkActor implements ThreatActor {
   readonly zones: ThreatZone[];
   readonly aggro = new Map<string, number>();
+  /** Full-size radius (the shrink ray scales `b.r`, which body, hits and reach all use). */
+  private readonly r0: number;
   constructor(readonly b: Blob, private F: Factions) {
+    this.r0 = b.r;
     const core = b.role === 'brute' || b.role === 'maw';
     this.zones = [{ id: 'body', name: b.role === 'maw' ? 'Hide' : 'Body', armour: b.role === 'maw' ? 0.55 : b.role === 'brute' ? 0.25 : 0, weak: false, exposed: false, x: b.x, y: b.y, z: b.z, r: b.r, recent: 0 }];
     if (core) this.zones.push({ id: 'core', name: 'Ember core', armour: 0, weak: true, exposed: false, x: b.x, y: b.y, z: b.z, r: b.r * 0.4, recent: 0 });
@@ -859,6 +864,8 @@ export class MurkActor implements ThreatActor {
   get y(): number { return this.b.y + this.b.r * 0.6; }
   get z(): number { return this.b.z; }
   get height(): number { return this.b.r * 1.3; }
+  get size(): number { return this.r0 * 2; }
+  setScale(s: number): void { this.b.r = this.r0 * s; }
   private sync(): void {
     const b = this.b;
     for (const z of this.zones) {
@@ -895,9 +902,9 @@ export class MurkActor implements ThreatActor {
     this.sync();
     const zn = typeof zone === 'string' ? this.zones.find((q) => q.id === zone) ?? this.zones[0] : zone ?? this.zones[0];
     const weak = zn.weak && zn.exposed;
-    const dealt = amount * (1 - zn.armour) * (weak ? 2.5 : 1);
+    const dealt = zoneDealt(amount, zn.armour, weak, 2.5, zn.armour);
     zn.recent += dealt;
-    this.aggro.set(src.key ?? src.cause, (this.aggro.get(src.key ?? src.cause) ?? 0) + dealt);
+    bookAggro(this.aggro, src.key ?? src.cause, dealt);
     this.F.hurt(this.b, dealt, src.cause === 'player', src.x ?? this.b.x, src.z ?? this.b.z);
     return { dealt, zone: zn, weak };
   }

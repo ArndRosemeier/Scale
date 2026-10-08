@@ -7,7 +7,8 @@ and line-of-sight checks.
 
 **Read this before writing gameplay code.** If your code needs one of the answers below, call
 the helper and don't re-derive it. If the helper doesn't fit, extend the helper. Where a
-selftest guard exists (`npm test`), it fails on a stray copy.
+selftest guard exists (`npm test`), it fails on a stray copy. Which test command to run when: see
+[Tests](#tests-which-command-when) below.
 
 To look for new copies, use the two finders from Arnd's Toolbox. Both write reading lists, not verdicts.
 `npm run dup` lists functions that share a name (`reports/duplicate-candidates.md`). `npm run repeated` lists
@@ -21,6 +22,7 @@ Its open items are consolidated here one PR at a time.
 | Question | Use | Not |
 |---|---|---|
 | Is someone (feet at y) underground? | `Underground.feetUnder(x, feetY, z)`. `isUnder(x, y, z)` is for a point (an eye, an orb, the camera). `Collision.underground` is the movement test (player, ragdolls, hops) and is stricter near stairs. | `isUnder(x, y + 0.5, z)` written out (**guarded**) |
+| Where does something land at a target (a decal, an orb, a bomb, a stray bullet's chip)? Can someone lying there be reached? | `game.floorAt(x, feetY, z)`: the sewer, metro or cave floor when underground, else street, deck or roof | `world.groundHeight(x, z)` or `terrain.height` at a target that may be underground (it lands on the street above a sewer fight) |
 | Are two bodies on the same side of the street (both underground or both up top)? | `Underground.sameSide(ax, ay, az, bx, by, bz)` with **feet** heights. A blow, blast or footfall point counts as feet. | `Math.abs(dy) < r`, `s.y > a.y - 2`, or a 2D `hypot` alone |
 | Does a blow, blast, stomp or shove reach a person? | 2D/3D range **and** `sameSide`. `Reactions.sameSide` is wired to it. | Range alone. A street stomp must not floor the sewer crew below. |
 | Does a blow reach the player? | `PlayerHealth.damage(…, x, z, y)` with the source's real height (the type requires it). It refuses blows from the other side. | Writing `hp`. Passing the player's own `y` as the source height. |
@@ -28,7 +30,7 @@ Its open items are consolidated here one PR at a time.
 | How high is the ground someone stands on? | `world.groundHeight` (roofs, decks, landmarks too) or the player's `collision.groundAt`; street level alone: `terrain.height + world.surfaceOffset`. It follows what is drawn: road 0, kerb `CURB_H`, open countryside `-TERRAIN_DROP` (the terrain mesh sits lower), country roads and yards 0. | Bare `terrain.height` for feet: out of town that floats 0.35 m above the grass |
 | Can the camera see a person (markers, tags)? | `makeSight` (`game/sightline.ts`) via `render/screen.ts` `setSight` | A raycast of your own |
 | Where on screen is a world point? | `render/screen.ts` `toScreen` / `screenPoint` | `.project(cam…)` (**guarded**: the selftest fails on it anywhere else) |
-| Can someone shoot or see from A to B? | `game.sight.clear` (`game/combat/sight.ts`: caves, tunnels, buildings, cars, facade holes) | `world.raycast` with your own tolerances |
+| Can someone shoot or see from A to B? | `game.sight.clear` (`game/combat/sight.ts`: caves, tunnels, buildings, landmarks, cars, facade holes). For a `Target`: `targeting.sees(from, t, centre)` (pads by `targeting.padOf(t)`, the target car never blocks). | `world.raycast` with your own tolerances (**guarded**) |
 
 ## The ledger and blame
 
@@ -54,6 +56,15 @@ Its open items are consolidated here one PR at a time.
 | A crook decides again after a blow: fight, flee or surrender | `this.rethink(c, pick?)` in `game/crime/Crime.ts` (sets `memo.choice` 0/1/2, announces a fight; `pick` holds the crime's own rule) | A local `if (act.memo.decHp !== act.hp) { … }` block (**guarded**) |
 | Then the usual follow-through | `this.actOnChoice(c, dt, reach?)`: give up, fight within `reach`, or run | Copying the three lines |
 
+## Threats
+
+| Need | Use | Not |
+|---|---|---|
+| A monster's anger (who hurt it most) | `game/threats/aggro.ts`: `bookAggro`, `decayAggro(m, dt, tau)`, `topAggro(m, min?)` | `aggro.set(…)` and a decay loop by hand (**guarded**) |
+| Did the hero earn the win against a big monster? | `heroEarned(aggro, share = 0.25)`: angriest with the hero, or a quarter of all its anger | Your own share or HP threshold (Strider and the last-resort strike used to disagree) |
+| Who brought a machine down? | `lastHitBy(lastBy, lastT, now, window = 6)` | `now - lastT < 6` written out |
+| Damage through a zone's armour and weak spot | `zoneDealt(amount, armour, weak, weakMul, weakArmour?)` | `amount * (1 - armour) * (weak ? …)` by hand (**guarded**) |
+
 ## Small helpers
 
 | Need | Use | Not |
@@ -65,6 +76,25 @@ Its open items are consolidated here one PR at a time.
 | Polygon or polyline maths (area, bounds, point in polygon, distance to the outline, length, reverse, rectangularity) | `core/geom2.ts`: `polyArea`, `polyBounds`, `pointInPoly`, `distPointPolyEdge`, `polylineLength` (`stride` 3 for x,z,extra routes), `reversePoly`, `rectangularity` | A local `polyBox`, `routeLength`, `reversed`, … (**guarded by body, not name**) |
 | Angle difference, turning toward an angle, 3D vector basics | `core/math.ts`: `angleDiff(from, to)` (= to − from, wrapped to ±π), `lerpAngle`, `v3add`, `v3sub`, `v3scale`, `v3madd`, `v3dot`, `v3cross`, `v3len`, `v3norm`, `v3lerp` (alias them to short names if you like) | A local `angDiff` / `turn` / `norm` / `cross` (**guarded by body**; a typed-out cross product is **guarded** too) |
 | Find more copies | `npm run dup`, `npm run repeated` | |
+
+## Tests: which command when
+
+The self test (`tools/selftest.ts`) is a list of independent sections; `tools/testHarness.ts` runs them.
+
+| When | Run | Takes (4 cores) |
+|---|---|---|
+| While working on a change, after each edit | `npm run test:quick`: only the sections that import (through any chain) a file changed against `origin/main`, committed or not, plus the source-tree guards and any section whose own lines changed. A change to the harness, the selftest's shared helpers or `package.json` runs everything. | seconds to ~2 min |
+| A few named sections | `npm test -- --only sewer,deep` (name contains a word; `npm test -- --list` shows the names) | |
+| **Before merging any PR** (after merging `main` into it) | the full `npm test`: every section, spread over one worker per core | ~3 min (was ~17 min) |
+| A section seems to depend on another one | `npm test -- --serial` (one process, file order, as before v0.153) | ~10 min |
+
+Rules for tests:
+
+- **Never skip, disable or shorten a check to save time.** Make the code under test faster instead, or split a slow section.
+- Each top-level block is `section('short name', async () => { … })` (a `check()` outside a section fails the run) and stands alone: it builds its own cities and state and never reads another section's variables. Sections run in any order and in any process.
+- Put shared helpers (pure functions) above the first section; a change there makes `test:quick` run everything.
+- A section that reads files itself (`readFileSync`, `readdirSync`, …) always runs in `test:quick`, so keep these guards cheap.
+- The slowest sections start first, by the times of the last full run (`.cache/selftest-times.json`; the baseline is `tools/selftest-times.json`, rewritten with `npm test -- --save-times`).
 
 ## Shaders
 
