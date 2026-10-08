@@ -142,3 +142,18 @@ shader and pipeline (and the "Vertex attribute not found" warning), so a stand-i
 for the real batches. Vegetation and street furniture warm up on their models' geometry
 (`vegetationWarmup`).
 
+## Shared instancing (stutter)
+
+three builds the node shaders of every InstancedMesh separately: its render-object cache key
+contains the mesh's uuid, because the instance matrix buffer is part of the build. Pipelines are
+still shared (same WGSL), but the node build runs on the main thread, so an instanced mesh that
+first shows up in play stalls the frame (measured: the countryside's canopy clumps, one or two
+meshes per terrain tile, were most of the ~400 builds right after loading on the PC).
+
+- Content made of many short-lived instanced meshes: a plain Mesh with the matrices in its
+  InstancedBufferGeometry (`render/geoInstances.ts`, attributes iM0..iM3 + iColor); the material
+  reads them with `geometryInstancing` (webgpu/fx.ts). One build for all of them. Shadow passes only
+  take the material's `positionNode`, so casting shadows this way needs the transform there too
+  (the clumps cast none).
+- A fixed set of instanced batches made on first use (a car model's batch): create them all at
+  start-up on WebGPU so the warm-up draws and builds them (VehicleRenderer).
