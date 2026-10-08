@@ -159,7 +159,7 @@ export class Brood implements ThreatEvent {
       out.push(this.preyFor(a, 'person', a.x, a.y, a.z, 0.3));
     }
     const p = g.player;
-    if (!p.flying && p.height < 6 && Math.hypot(p.pos.x - cx, p.pos.z - cz) < R && !g.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z)) {
+    if (!p.flying && p.height < 6 && Math.hypot(p.pos.x - cx, p.pos.z - cz) < R && !g.underground.feetUnder(p.pos.x, p.pos.y, p.pos.z)) {
       out.push(this.preyFor(p, 'player', p.pos.x, p.pos.y, p.pos.z, p.radius));
     }
     const near = (v: { x: number; z: number }) => Math.abs(v.x - cx) < R && Math.abs(v.z - cz) < R;
@@ -477,7 +477,7 @@ export class BroodGlimpse {
  */
 export function broodOmen(g: Game, site: { x: number; z: number }, kind: string, rng: Rng, glimpses: BroodGlimpse[]): boolean {
   const p = g.player.pos, cam = g.renderer.camera.position;
-  if (g.underground.isUnder(p.x, p.y + 0.5, p.z)) return false;
+  if (g.underground.feetUnder(p.x, p.y, p.z)) return false;
   // Manholes between 15 and 80 m of the player, towards the site first.
   const near: { x: number; z: number; d: number }[] = [];
   g.underground.forEachManhole((x, z) => {

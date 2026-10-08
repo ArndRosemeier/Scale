@@ -315,7 +315,7 @@ export class Defeat {
     const g = this.g, P = g.player, h = this.hosp!;
     this.set('inbound');
     // Down in the metro or the sewers, or inside a building: carried out under the black.
-    if (g.underground.isUnder(P.pos.x, P.pos.y + 0.5, P.pos.z) || g.indoorsAt(P.pos.x, P.pos.y + 0.5, P.pos.z)) { this.startSkip(); return; }
+    if (g.underground.feetUnder(P.pos.x, P.pos.y, P.pos.z) || g.indoorsAt(P.pos.x, P.pos.y + 0.5, P.pos.z)) { this.startSkip(); return; }
     this.fleet.group.visible = true;
     this.fleet.pad.visible = !!h.ref;
     this.fleet.pad.position.copy(h.pad);

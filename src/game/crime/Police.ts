@@ -31,6 +31,7 @@ import { setState, play, goTo, stand, lookAt, followRoute, pursue, endPursuit, h
 import { GUNS, type Firearms, type GunSpec } from './Firearms';
 import type { EquipmentVisuals } from '../../items/types';
 import { dealtBy } from '../../shared/status';
+import { Rng } from '../../core/rng';
 
 export interface PoliceHost {
   time: number;
@@ -149,7 +150,7 @@ let UNIT_ID = 1;
 export class Police {
   readonly units: Unit[] = [];
   private calls: { crime: Crime | null; at: number; swat?: boolean }[] = [];
-  private seed = 0x9e1;
+  private rng = new Rng(0x9e1);
   stats = { dispatched: 0, spawnedCars: 0, arrests: 0, tackles: 0, gaveUp: 0, shots: 0, hits: 0, yielded: 0, atPlayer: 0, heldAtPlayer: 0, rejoined: 0 };
 
   constructor(private h: PoliceHost) {}
@@ -250,7 +251,7 @@ export class Police {
     }
     if (!car) {
       for (let k = 0; k < 10 && !car; k++) {
-        const a = (this.seed = (this.seed * 1103515245 + 12345) >>> 0) / 4294967296 * Math.PI * 2;
+        const a = this.rng.float() * Math.PI * 2;
         const r = (job.kind === 'incident' ? job.job.spawnR ?? POLICE.spawnMin : POLICE.spawnMin) + k * 15;
         const x = t.x + Math.cos(a) * r, z = t.z + Math.sin(a) * r;
         if (H.visible(x, 1, z) && Math.hypot(x - H.player.x, z - H.player.z) < 200) continue;
@@ -361,7 +362,7 @@ export class Police {
       const side = i & 1 ? 1 : -1;
       const back = (i >> 1) * 1.4;
       const x = car.x + fz * side * 1.6 + fx * (0.3 - back), z = car.z - fx * side * 1.6 + fz * (0.3 - back);
-      const o = H.spawnOfficer((this.seed = (this.seed * 1103515245 + 12345) >>> 0), x, z, car.yaw);
+      const o = H.spawnOfficer(this.rng.nextU32(), x, z, car.yaw);
       if (!o) continue;
       if (u.job.kind === 'incident') u.job.job.equip?.(o);
       else if (swat) equipSwat(o);

@@ -3735,10 +3735,12 @@ aliensChecks(check);
       // sRGB to linear: srgbToLinear (core/math) or srgbColor (render/color). Shaders keep their own (GLSL/TSL strings).
       if (!/core\/math\.ts$|props\/vehicles\.ts$|webgpu\/vehicles\.ts$/.test(full) && /0\.04045/.test(txt)) copies.push(`${full} (sRGB curve)`);
       if (!full.endsWith('render/color.ts') && /=>\s*new THREE\.Color\(\)\.setRGB\([^;]*SRGBColorSpace/.test(txt)) copies.push(`${full} (sRGB colour helper)`);
+      // A float `seed * 1103515245` loses its low bits past 2^53, so the sequence decays; use core/rng's Rng.
+      if (/\w\s*\*\s*1103515245/.test(txt)) copies.push(`${full} (float LCG)`);
     }
   };
   walkM('src');
-  check(copies.length === 0, `helpers: no local copies of core/math, ui/esc or render/color (${copies.join(', ') || 'none'})`);
+  check(copies.length === 0, `helpers: no local copies of core/math, ui/esc, render/color or core/rng (${copies.join(', ') || 'none'})`);
 }
 
 // Gameplay waits in game time (core/later): Game.later.after(s, fn), not setTimeout.
@@ -3760,6 +3762,20 @@ aliensChecks(check);
   };
   walkT('src/game');
   check(timers.length === 0, `later: no wall-clock timers in gameplay (${timers.join(', ') || 'none'})`);
+}
+
+// Bodies are underground by Underground.feetUnder (feet height), not a hand-written isUnder(x, y + 0.5, z).
+{
+  const hand: string[] = [];
+  const walkU = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkU(full); continue; }
+      if (f.endsWith('.ts') && !full.endsWith('underground/Underground.ts') && /isUnder\([^;]*?\+ 0\.5/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkU('src');
+  check(hand.length === 0, `underground: bodies use feetUnder (${hand.join(', ') || 'none'})`);
 }
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).

@@ -123,6 +123,7 @@ import { Fame } from './fame/Fame';
 import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
+import { POWER_HIT } from './abilities/tuning';
 
 /** What someone a super speed runner brushed past calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -322,7 +323,7 @@ export class Game {
     this.underground.onEntrance = (e) => this.props?.addExtra(e.cell, 'metroEntrance', e.x, e.z, Math.atan2(e.dx, e.dz));
     this.underground.onManhole = (cell, x, z, yaw) => this.props?.addExtra(cell, 'manhole', x, z, yaw);
     this.underground.sound = this.audio;
-    setSight(makeSight(this.world, () => this.camRig?.underground ?? false, (x, y, z) => this.underground.isUnder(x, y, z)));
+    setSight(makeSight(this.world, () => this.camRig?.underground ?? false, (x, feet, z) => this.underground.feetUnder(x, feet, z)));
     this.stimuli.on((s) => this.underground.onStimulus(s.kind, s.x, s.y, s.z, s.radius));
     this.renderer.scene.add(this.underground.group);
     this.net = new RoadNet(macro);
@@ -754,7 +755,7 @@ export class Game {
         this.defeat.gate();
         this.player.update(dt, this.input, this.camRig.yaw, this.camRig.pitch);
         this.defeat.afterPlayer(dt);
-        this.camRig.underground = this.defeat.inWard || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z);
+        this.camRig.underground = this.defeat.inWard || this.underground.feetUnder(this.player.pos.x, this.player.pos.y, this.player.pos.z);
         this.camRig.update(dt, this.player, this.input);
         // In-world panels (elevator buttons) get the click first when the crosshair is on one in reach.
         const hand = _hand.copy(this.player.pos); hand.y += this.player.height * 0.6;
@@ -783,7 +784,7 @@ export class Game {
     this.T('halls', () => this.halls.update(dt, this.sky.hoursAbs, pp.x, pp.z, pp.y));
     this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs));
     // Cars only brake for a player on the street (not one under it in the sewer or metro).
-    this.traffic.player = this.freeCam || this.underground.isUnder(this.player.pos.x, this.player.pos.y + 0.5, this.player.pos.z) ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
+    this.traffic.player = this.freeCam || this.underground.feetUnder(this.player.pos.x, this.player.pos.y, this.player.pos.z) ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     if (!this.freeCam) this.bodyContacts(dt);
     this.T('elements', () => this.elements.update(dt, this.freeCam ? null : this.abilities.channel));
@@ -935,7 +936,7 @@ export class Game {
       // stumble, are cross with the speedster and get up again (no harm on the ledger, no
       // reputation lost: one cannot run at super speed through a city and never touch anyone).
       const brush = running && p.height < 3;
-      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : 12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
+      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : POWER_HIT.dashKnockMax, (POWER_HIT.dashKnock + POWER_HIT.dashKnockPerRank * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
       if (brush) { this.brushedBy(a); continue; }
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
@@ -1292,7 +1293,7 @@ export class Game {
     const p = this.player.pos;
     // Manholes are climbed from the sewers only (not from metro halls, passages or trains).
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
-    const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
+    const m = under || !this.underground.feetUnder(p.x, p.y, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
     if (!m) return this.crime?.deeds.putDownHint() ?? null;
     if (under) return 'Manhole above — press <b>E</b> to climb out';
     if (this.player.height >= 2.4) return 'A manhole — you are too big to fit through';
@@ -1304,7 +1305,7 @@ export class Game {
     const P = this.player;
     if (P.flying || !P.grounded || P.height > 2.4 || P.height < 1.2 || P.downT > 0 || P.ragdoll) return null;
     // Underground: train seats, platform benches.
-    if (this.underground.isUnder(P.pos.x, P.pos.y + 0.5, P.pos.z) || this.underground.ride) return this.underground.seatNear(P.pos.x, P.pos.y, P.pos.z, 1.3);
+    if (this.underground.feetUnder(P.pos.x, P.pos.y, P.pos.z) || this.underground.ride) return this.underground.seatNear(P.pos.x, P.pos.y, P.pos.z, 1.3);
     let best: { x: number; z: number; yaw: number } | null = null, bd = 1.3;
     this.props.query(P.pos.x, P.pos.z, 1.6, (pr) => {
       if (pr.broken || !/^furn:(bench|cafeChair):/.test(pr.kind)) return;
@@ -1353,7 +1354,7 @@ export class Game {
     }
     const p = this.player.pos;
     const under = this.underground.inSewer(p.x, p.y + 0.5, p.z);
-    const m = under || !this.underground.isUnder(p.x, p.y + 0.5, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
+    const m = under || !this.underground.feetUnder(p.x, p.y, p.z) ? this.underground.nearestManhole(p.x, p.z, under ? 3 : 1.4) : null;
     // Nothing else to do with E: put down what you carry (a rescued cat, a found wallet).
     if (!m) { if (this.crime.deeds.putDown()) this.input.pressed.delete('KeyE'); return; }
     // Climb out (pushing the lid off if it is on) or open the lid and climb down: see ManholeClimb.
@@ -1419,7 +1420,7 @@ export class Game {
     const speed = p.flying ? p.vel.length() / Math.sqrt(p.k) : 0;
     const wind = p.flying ? clamp(speed / 60, 0.08, 1) : clamp(alt / 300, 0, 0.4);
     const ward = !!this.defeat?.inWard;
-    const ug = !ward && this.underground.isUnder(p.pos.x, p.pos.y + 0.5, p.pos.z);
+    const ug = !ward && this.underground.feetUnder(p.pos.x, p.pos.y, p.pos.z);
     const inStation = ug && this.underground.boxes.some((b) => b.kind === 'station' && Math.hypot(b.cx - p.pos.x, b.cz - p.pos.z) < b.hu + 5);
     const surf = ug ? 0.08 : ward ? 0 : 1;
     // Weather: rain (light / heavy) and gusts, muffled indoors and underground; a wet city is quieter.

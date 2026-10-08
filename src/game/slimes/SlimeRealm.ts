@@ -29,10 +29,11 @@ import type { DeepField } from '../../underground/deep/field';
 import { MurkBreach } from './MurkBreach';
 import { TrenchWar } from './TrenchWar';
 import { statusFor } from '../../shared/status';
-import { SLIME_COST, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
+import { POWER_HIT, SLIME_COST, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
 import { G } from '../../render/materials/globals';
 import type { ThreatActor } from '../threats/ThreatEvent';
 import type { Stimulus } from '../Stimuli';
+import { Rng, deriveSeed } from '../../core/rng';
 
 /** Areas: where they are, reach (m) — agents live while the player is within reach + SPAWN. */
 const SPAWN = 110, DROP = 170;
@@ -84,7 +85,7 @@ export class SlimeRealm {
       const pens = realms[i]?.plan.pens.length ?? 0;
       let w: WarState | null = null;
       try { w = parseWar(JSON.parse(localStorage.getItem(this.keyOf(i)) ?? 'null'), pens, now); } catch { /* storage unavailable */ }
-      w ??= freshWar(now, pens);
+      w ??= freshWar(now, pens, this.warRnd(i, now));
       // A save from another session's clock: never step from the far past or future.
       if (Math.abs(w.at - now) > 24 * 10) w.at = now;
       this.wars.push(w);
@@ -224,12 +225,12 @@ export class SlimeRealm {
       },
       breach: () => this.startBreach(),
       mawBack: () => { this.F?.despawn('heart'); },
-    });
+    }, this.warRnd(this.realm, now));
     // The other realms' wars go on unseen (decided by strength; their breakouts still come up).
     this.wars.forEach((o, i) => {
       if (i === this.realm) return;
       if (o.at > now) o.at = now;
-      stepWar(o, now, false, night, { raid: () => {}, resolved: () => {}, breach: () => this.startBreach(i), mawBack: () => {} });
+      stepWar(o, now, false, night, { raid: () => {}, resolved: () => {}, breach: () => this.startBreach(i), mawBack: () => {} }, this.warRnd(i, now));
     });
     this.saveLocal();
   }
@@ -248,6 +249,12 @@ export class SlimeRealm {
     this.g.underground.group.add(this.trenches!.group);
     this.safe.set(1e9, 0, 0);
     this.live = false; this.trenchOn = false;
+  }
+
+  /** The war's dice: from the city seed, the realm and the war's clock, so a loaded game rolls the same. */
+  private warRnd(i: number, now: number): () => number {
+    const r = new Rng(deriveSeed(this.g.settings.seed, 'slimewar', i, Math.floor(now * 60)));
+    return () => r.float();
   }
 
   private keyOf(i: number): string {
@@ -293,7 +300,7 @@ export class SlimeRealm {
     if (!done) return;
     const murkWon = through >= 2 || (raiders.length > 0 && guards.length === 0) || (this.raidT > 200 && raiders.length > guards.length);
     const withPlayer = this.nearTrench(80);
-    endRaid(w, murkWon);
+    endRaid(w, murkWon, this.warRnd(this.realm, this.g.sky.hoursAbs + 0.5));
     if (!murkWon && withPlayer && this.raidT < 200) this.trust.add(8, 'helped the Lumen hold their trenches');
     this.g.powerHud.toast(murkWon ? 'The Murk broke through the Lumen\'s trenches' : 'The Murk fall back into the Warrens', murkWon ? 'deny' : 'karma', 5000);
     if (!murkWon) for (const b of raiders) { b.path = []; F.goTo(b, F.nodeNear(P.places.warrens.x, P.places.warrens.y, P.places.warrens.z, 'warrens')); b.area = 'retreat'; b.ttl = 60; }
@@ -680,7 +687,7 @@ export class SlimeRealm {
         st.stunned = Math.max(st.stunned, Math.min(SLIME_HOLD[c.rank], 1.5));
         // A monster: they gnaw at it (a little damage, a lot of distraction).
         const actor = c.obj as Partial<ThreatActor>;
-        if (typeof actor.damage === 'function' && typeof actor.zones !== 'undefined') actor.damage(null, dt * 6 * onIt, { cause: 'player', key: 'lumen', aggro: dt * 20 });
+        if (typeof actor.damage === 'function' && typeof actor.zones !== 'undefined') actor.damage(null, dt * POWER_HIT.lumenCreature * onIt, { cause: 'player', key: 'lumen', aggro: dt * 20 });
       }
       if (c.kind === 'douse' && onIt >= 2) this.g.threats?.fires.douse(c.x, c.y, c.z, 4, dt * 2);
       if (c.t > Math.min(c.life, c.kind === 'hold' ? SLIME_HOLD[c.rank] + 4 : c.life)) {

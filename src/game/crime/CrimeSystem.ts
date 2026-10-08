@@ -1081,7 +1081,7 @@ export class CrimeSystem {
 
   private startRoll(r: CrimeRoll): boolean {
     if (this.actorCount > ACTOR_BUDGET - 6 || this.crimes.filter((c) => c.active).length >= 3) return false;
-    if (this.g.player.height > 6 || this.g.underground.isUnder(this.g.player.pos.x, this.g.player.pos.y + 0.5, this.g.player.pos.z)) return false;
+    if (this.g.player.height > 6 || this.g.underground.feetUnder(this.g.player.pos.x, this.g.player.pos.y, this.g.player.pos.z)) return false;
     return this.begin(this.make(r.kind, r.seed, null));
   }
 
@@ -1300,7 +1300,7 @@ export class CrimeSystem {
     this.bossOpT = BOSS_OP.every;
     const g = this.g, p = g.player.pos;
     if (this.director.setting === 'off' || this.bossOps.size || !g.threats?.canHost() || this.actorCount > ACTOR_BUDGET - BOSS_OP.room) return;
-    if (g.player.height > 6 || g.underground.isUnder(p.x, p.y + 0.5, p.z) || g.indoorsAt(p.x, p.y + 0.5, p.z) || g.intro) return;
+    if (g.player.height > 6 || g.underground.feetUnder(p.x, p.y, p.z) || g.indoorsAt(p.x, p.y + 0.5, p.z) || g.intro) return;
     const here = this.cellAt(p.x, p.z);
     if (here < 0) return;
     const F = this.factions, now = g.sky.hoursAbs;

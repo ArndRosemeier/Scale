@@ -319,7 +319,7 @@ export class ThreatDirector {
   /** Events wait while the player is underground, indoors or a towering giant (nobody would see it). */
   private ready(): boolean {
     const g = this.g, p = g.player.pos;
-    return !g.underground.isUnder(p.x, p.y + 0.5, p.z) && !g.indoorsAt(p.x, p.y + 0.5, p.z) && g.player.height < 12 && !this.events.some((e) => e.active);
+    return !g.underground.feetUnder(p.x, p.y, p.z) && !g.indoorsAt(p.x, p.y + 0.5, p.z) && g.player.height < 12 && !this.events.some((e) => e.active);
   }
 
   private showOmens(dt: number): void {
