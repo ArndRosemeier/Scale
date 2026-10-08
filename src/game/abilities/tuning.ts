@@ -225,9 +225,9 @@ export const POWER_HIT = {
   frostCreature: 18,
   /** Shrink ray on a creature: points per second of shrink × the share it loses. */
   shrinkCreature: 4,
-  /** Seismic stomp: fling 3 + impulse / 30 000 (at most 9); creatures and machines are shoved
-   *  with at most this impulse per axis. */
-  quakeKnock: 3, quakeKnockPerNs: 1 / 30000, quakeKnockMax: 9, quakeShoveMax: 3000,
+  /** Seismic stomp: fling 3 + impulse / 30 000 (at most 9); machines and props are shoved with at
+   *  most `quakeShoveMax` per axis; giant creatures take this share of the full impulse at the legs. */
+  quakeKnock: 3, quakeKnockPerNs: 1 / 30000, quakeKnockMax: 9, quakeShoveMax: 3000, quakeCreatureMul: 1,
   /** Whirlwind: fling = 0.7 × lift; creatures: 6 × lift per hit; the same person is caught again
    *  after `gustEveryPerson` s, anything else (but cars) after `gustEvery` s. */
   gustKnock: 0.7, gustCreature: 6, gustEveryPerson: 2.2, gustEvery: 1.2,

@@ -541,8 +541,18 @@ export class Underground {
     return this.near(x, z).tubes.some((t) => t.kind === 'sewer' && !!tubeAt(t, x, y, z));
   }
 
+  /** Is a point (an eye, an orb, the camera) inside the underground, below the street? */
   isUnder(x: number, y: number, z: number): boolean {
     return y < this.ground(x, z) - 1.2 && this.floorAt(x, y, z) !== null;
+  }
+
+  /**
+   * Is someone standing with their feet at y underground? The gameplay rule for bodies (blows,
+   * witnesses, crimes, threats, saves); see docs/CONVENTIONS.md. (Collision.underground is the
+   * movement test: it counts feet 1 m below the bare terrain, this one 1.7 m below the kerb.)
+   */
+  feetUnder(x: number, feetY: number, z: number): boolean {
+    return this.isUnder(x, feetY + 0.5, z);
   }
 
   /**
@@ -550,7 +560,7 @@ export class Underground {
    * top? The one rule for everything that must not reach through the pavement (blows, witnesses).
    */
   sameSide(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
-    return this.isUnder(ax, ay + 0.5, az) === this.isUnder(bx, by + 0.5, bz);
+    return this.feetUnder(ax, ay, az) === this.feetUnder(bx, by, bz);
   }
 
   /** Manhole shafts by 32 m grid square (every ~45 m along each trunk), for E and hints. */
@@ -728,7 +738,7 @@ export class Underground {
       this.lastBuildPos.copy(cam.position);
       this.buildNear(cam.position.x, cam.position.z);
     }
-    const under = this.isUnder(player.x, player.y + 0.5, player.z);
+    const under = this.feetUnder(player.x, player.y, player.z);
     // Headlamp underground (sewers are dark).
     const inStation = under && this.boxes.some((b) => b.kind === 'station' && boxAt(b, player.x, player.y + 0.5, player.z, 2));
     // Side rooms: animation, sounds; the slimes.

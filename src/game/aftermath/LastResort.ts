@@ -252,7 +252,7 @@ export class LastResort {
     let left = 0;
     for (const a of g.peds.agents) {
       if (!a.alive || a.actor?.role === 'soldier' || Math.hypot(a.x - this.x, a.z - this.z) > this.r) continue;
-      if (a.inside || g.underground.isUnder(a.x, a.y + 0.5, a.z)) continue;
+      if (a.inside || g.underground.feetUnder(a.x, a.y, a.z)) continue;
       left++;
       a.alive = false;
     }
@@ -263,7 +263,7 @@ export class LastResort {
     this.A.strikeCasualties(this.x, this.z, this.r, cas.trapped, cas.injured);
     // The player inside the ring (not underground) is knocked out and comes round at its edge.
     const dp = Math.hypot(p.x - this.x, p.z - this.z);
-    if (dp < this.r * LAST_RESORT.koK && !g.underground.isUnder(p.x, p.y + 0.5, p.z)) {
+    if (dp < this.r * LAST_RESORT.koK && !g.underground.feetUnder(p.x, p.y, p.z)) {
       this.stats.playerKO++;
       const k = (this.r * 1.2 + 25) / Math.max(1, dp);
       this.wake = { x: this.x + (p.x - this.x) * k, z: this.z + (p.z - this.z) * k };

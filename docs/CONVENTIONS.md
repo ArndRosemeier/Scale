@@ -20,6 +20,7 @@ Its open items are consolidated here one PR at a time.
 
 | Question | Use | Not |
 |---|---|---|
+| Is someone (feet at y) underground? | `Underground.feetUnder(x, feetY, z)`. `isUnder(x, y, z)` is for a point (an eye, an orb, the camera). `Collision.underground` is the movement test (player, ragdolls, hops) and is stricter near stairs. | `isUnder(x, y + 0.5, z)` written out (**guarded**) |
 | Are two bodies on the same side of the street (both underground or both up top)? | `Underground.sameSide(ax, ay, az, bx, by, bz)` with **feet** heights. A blow, blast or footfall point counts as feet. | `Math.abs(dy) < r`, `s.y > a.y - 2`, or a 2D `hypot` alone |
 | Does a blow, blast, stomp or shove reach a person? | 2D/3D range **and** `sameSide`. `Reactions.sameSide` is wired to it. | Range alone. A street stomp must not floor the sewer crew below. |
 | Does a blow reach the player? | `PlayerHealth.damage(…, x, z, y)` with the source's real height (the type requires it). It refuses blows from the other side. | Writing `hp`. Passing the player's own `y` as the source height. |
@@ -36,6 +37,7 @@ Its open items are consolidated here one PR at a time.
 | The player's blow hits a car (punch, shockwave, dash) | `Game.hitCar`: a wreck or a dent, booked on the ledger with the car | `wreckIt` + `makeWreck` or a dent with no ledger entry (wrecking a police car with a punch used to cost nothing) |
 | Add damage to a car | `dentCar(v, amount, cap?)` (`sim/Traffic.ts`; never lowers it) | `v.damage = Math.min(…)` by hand (**guarded**) |
 | Karma | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
+| Who did it (cause) | One vocabulary, `Cause` in `game/Stimuli.ts` (`HarmCause` is the same type; `DamageCause` adds `'fire'`). Cross into a knock-down's `DownCause` with `downCauseOf(cause)` and from a broken building to the ledger with `harmCauseOf(cause)` (`shared/cause.ts`). | An inline `cause === 'threat' ? 'threat' : … 'player'` (**guarded**: police and army stomps used to land on the hero) |
 
 ## Time
 

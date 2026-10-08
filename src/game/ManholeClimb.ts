@@ -659,7 +659,7 @@ export class ManholeClimb {
   private updateCamera(dt: number): void {
     const P = this.h.player, cam = this.h.camera, rig = this.h.camRig, s = this.spot!;
     if (this.cam === 'orbit') {
-      rig.underground = this.h.underground.isUnder(P.pos.x, P.pos.y + 0.5, P.pos.z);
+      rig.underground = this.h.underground.feetUnder(P.pos.x, P.pos.y, P.pos.z);
       rig.update(dt, P, this.h.input);
     } else {
       const head = _w.set(P.pos.x, P.pos.y + P.height * 0.85, P.pos.z);
