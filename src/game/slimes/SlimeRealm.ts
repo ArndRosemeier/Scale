@@ -29,7 +29,7 @@ import type { DeepField } from '../../underground/deep/field';
 import { MurkBreach } from './MurkBreach';
 import { TrenchWar } from './TrenchWar';
 import { statusFor } from '../../shared/status';
-import { SLIME_COST, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
+import { POWER_HIT, SLIME_COST, SLIME_COUNT, SLIME_HOLD, SLIME_REACH, SLIME_TIME } from '../abilities/tuning';
 import { G } from '../../render/materials/globals';
 import type { ThreatActor } from '../threats/ThreatEvent';
 import type { Stimulus } from '../Stimuli';
@@ -687,7 +687,7 @@ export class SlimeRealm {
         st.stunned = Math.max(st.stunned, Math.min(SLIME_HOLD[c.rank], 1.5));
         // A monster: they gnaw at it (a little damage, a lot of distraction).
         const actor = c.obj as Partial<ThreatActor>;
-        if (typeof actor.damage === 'function' && typeof actor.zones !== 'undefined') actor.damage(null, dt * 6 * onIt, { cause: 'player', key: 'lumen', aggro: dt * 20 });
+        if (typeof actor.damage === 'function' && typeof actor.zones !== 'undefined') actor.damage(null, dt * POWER_HIT.lumenCreature * onIt, { cause: 'player', key: 'lumen', aggro: dt * 20 });
       }
       if (c.kind === 'douse' && onIt >= 2) this.g.threats?.fires.douse(c.x, c.y, c.z, 4, dt * 2);
       if (c.t > Math.min(c.life, c.kind === 'hold' ? SLIME_HOLD[c.rank] + 4 : c.life)) {
