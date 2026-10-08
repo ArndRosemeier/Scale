@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
 import { GLSL_NOISE } from './glsl';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import { strandTexture, leafTexture } from './textures';
 
 export interface PatchedMaterial<U = Record<string, { value: unknown }>> {
@@ -74,6 +75,7 @@ void eyeEval() {
 `;
 
 export function createEyeMaterial(): PatchedMaterial<EyeUniforms> {
+  if (WEBGPU) return gpuKit().createEyeNodeMaterial() as unknown as PatchedMaterial<EyeUniforms>;
   const material = new THREE.MeshPhysicalMaterial({ roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.03, ior: 1.376, specularIntensity: 0.6 });
   const uniforms: EyeUniforms = {
     uIris: { value: new THREE.Color(0.2, 0.12, 0.05) },
@@ -163,6 +165,7 @@ function hairLightChunk(): string {
 let hairChunk: string | null = null;
 
 export function createHairMaterial(leaf: boolean): PatchedMaterial<HairUniforms> {
+  if (WEBGPU) return gpuKit().createHairNodeMaterial(leaf) as unknown as PatchedMaterial<HairUniforms>;
   const tex = leaf ? leafTexture() : strandTexture();
   const material = new THREE.MeshPhysicalMaterial({
     roughness: 0.55,
@@ -239,6 +242,7 @@ export function applyHairColor(u: HairUniforms, hair: [number, number, number], 
 export interface HornUniforms { uBase: { value: THREE.Color }; uTipC: { value: THREE.Color }; uRidge: { value: number } }
 
 export function createHornMaterial(): PatchedMaterial<HornUniforms> {
+  if (WEBGPU) return gpuKit().createHornNodeMaterial() as unknown as PatchedMaterial<HornUniforms>;
   const material = new THREE.MeshPhysicalMaterial({ roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.4 });
   const uniforms: HornUniforms = {
     uBase: { value: new THREE.Color(0.3, 0.26, 0.2) },
@@ -275,6 +279,7 @@ export function createHornMaterial(): PatchedMaterial<HornUniforms> {
 }
 
 export function simpleMaterial(color: THREE.ColorRepresentation, opts: THREE.MeshPhysicalMaterialParameters = {}): PatchedMaterial<Record<string, never>> {
+  if (WEBGPU) return gpuKit().simpleNodeMaterial(color, opts as Record<string, unknown>) as unknown as PatchedMaterial<Record<string, never>>;
   const material = new THREE.MeshPhysicalMaterial({ color, ...opts });
   const sky = patchSkyOcclusion(material, 'uniform');
   return { material, uniforms: {}, sky };
@@ -282,6 +287,7 @@ export function simpleMaterial(color: THREE.ColorRepresentation, opts: THREE.Mes
 
 /** Eyelash cards: strand texture along the lid. */
 export function createLashMaterial(): PatchedMaterial<{ uColor: { value: THREE.Color } }> {
+  if (WEBGPU) return gpuKit().createLashNodeMaterial() as unknown as PatchedMaterial<{ uColor: { value: THREE.Color } }>;
   const tex = strandTexture();
   const material = new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 0.6, side: THREE.DoubleSide, alphaMap: tex, alphaTest: 0.55, envMapIntensity: 0 });
   // Lower lashes (negative u = below the eye centre) are sparser and shorter.

@@ -27,6 +27,7 @@
 import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { Noise } from '../core/noise';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth' | 'evCharger'
   | 'cafeTable' | 'cafeChair' | 'parasol' | 'awning' | 'menuBoard' | 'terraceRail' | 'parklet'
@@ -234,10 +235,25 @@ export class FB {
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
-    g.setAttribute('aMat', new THREE.Float32BufferAttribute(this.mat, 1));
-    g.setAttribute('aEmit', new THREE.Float32BufferAttribute(this.emit, 1));
-    g.setAttribute('aSub', new THREE.Float32BufferAttribute(this.sub, 1));
-    g.setAttribute('aColor', new THREE.Float32BufferAttribute(this.col, 3));
+    if (WEBGPU) {
+      // One vertex buffer for the four material attributes: WebGPU allows 8 per pipeline, and the
+      // batches add iColor, iState and the instance matrix (9–11 buffers as separate attributes).
+      const n = this.mat.length, d = new Float32Array(n * 6);
+      for (let i = 0; i < n; i++) {
+        d[i * 6] = this.mat[i]; d[i * 6 + 1] = this.emit[i]; d[i * 6 + 2] = this.sub[i];
+        d[i * 6 + 3] = this.col[i * 3]; d[i * 6 + 4] = this.col[i * 3 + 1]; d[i * 6 + 5] = this.col[i * 3 + 2];
+      }
+      const ib = new THREE.InterleavedBuffer(d, 6);
+      g.setAttribute('aMat', new THREE.InterleavedBufferAttribute(ib, 1, 0));
+      g.setAttribute('aEmit', new THREE.InterleavedBufferAttribute(ib, 1, 1));
+      g.setAttribute('aSub', new THREE.InterleavedBufferAttribute(ib, 1, 2));
+      g.setAttribute('aColor', new THREE.InterleavedBufferAttribute(ib, 3, 3));
+    } else {
+      g.setAttribute('aMat', new THREE.Float32BufferAttribute(this.mat, 1));
+      g.setAttribute('aEmit', new THREE.Float32BufferAttribute(this.emit, 1));
+      g.setAttribute('aSub', new THREE.Float32BufferAttribute(this.sub, 1));
+      g.setAttribute('aColor', new THREE.Float32BufferAttribute(this.col, 3));
+    }
     g.setIndex(this.count > 65535 ? new THREE.Uint32BufferAttribute(this.idx, 1) : new THREE.Uint16BufferAttribute(this.idx, 1));
     g.computeBoundingBox();
     g.computeBoundingSphere();
@@ -1616,6 +1632,7 @@ function getSignAtlas(): THREE.CanvasTexture {
 // ---------------------------------------------------------------------------------------------
 
 export function createFurnitureMaterial(): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().createFurnitureNodeMaterial(getSignAtlas(), furnitureUniforms) as unknown as THREE.MeshStandardMaterial;
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   const sign = getSignAtlas();
   m.onBeforeCompile = (shader) => {

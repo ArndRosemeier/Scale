@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
 import type { ShellMaterial } from '../../items/wearable';
 import { GLSL_NOISE } from './glsl';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import { GLSL_MASK_CUT } from './faceRegions';
 
 const PATTERNS: Record<ShellMaterial['pattern'], number> = {
@@ -210,10 +211,27 @@ void garmentEval() {
 }
 `;
 
-/** Create a garment material for a shell. */
-export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [number, number, number], fig?: { height: number; design: number; cut?: 'cowl' | 'full'; neckY?: number; neckSlope?: number }): GarmentHandle {
+type GarmentFig = { height: number; design: number; cut?: 'cowl' | 'full'; neckY?: number; neckSlope?: number };
+
+/** The garment's uniforms (shared by the GLSL and the node material). */
+function garmentUniforms(m: ShellMaterial, seed: number, trim?: [number, number, number], fig?: GarmentFig) {
   const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   const metal = m.metalness;
+  return {
+    gColor: { value: lin(m.color) },
+    gColor2: { value: lin(m.color2) },
+    gTrim: { value: lin(trim ?? m.color2) },
+    gParams: { value: new THREE.Vector4(PATTERNS[m.pattern] ?? 0, Math.max(0.5, m.patternScale), m.wear, (seed % 997) * 0.37) },
+    gGlow: { value: lin(m.glowColor).multiplyScalar(m.glow) },
+    gMetal: { value: metal },
+    gFig: { value: new THREE.Vector4(fig?.height ?? 1.75, fig?.design ?? 0, fig?.neckY ?? 0, fig?.neckSlope ?? 0) },
+  };
+}
+
+/** Create a garment material for a shell. */
+export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [number, number, number], fig?: GarmentFig): GarmentHandle {
+  if (WEBGPU) return gpuKit().createGarmentNodeMaterial(m, garmentUniforms(m, seed, trim, fig)) as unknown as GarmentHandle;
+  const lin = (c: [number, number, number]) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
   const material = new THREE.MeshPhysicalMaterial({
     roughness: m.roughness,
     metalness: 0,
@@ -224,15 +242,7 @@ export function createGarmentMaterial(m: ShellMaterial, seed: number, trim?: [nu
     emissiveIntensity: m.glow * 0.6,
     side: THREE.FrontSide,
   });
-  const uniforms = {
-    gColor: { value: lin(m.color) },
-    gColor2: { value: lin(m.color2) },
-    gTrim: { value: lin(trim ?? m.color2) },
-    gParams: { value: new THREE.Vector4(PATTERNS[m.pattern] ?? 0, Math.max(0.5, m.patternScale), m.wear, (seed % 997) * 0.37) },
-    gGlow: { value: lin(m.glowColor).multiplyScalar(m.glow) },
-    gMetal: { value: metal },
-    gFig: { value: new THREE.Vector4(fig?.height ?? 1.75, fig?.design ?? 0, fig?.neckY ?? 0, fig?.neckSlope ?? 0) },
-  };
+  const uniforms = garmentUniforms(m, seed, trim, fig);
   const cut = fig?.cut ? (fig.cut === 'cowl' ? 1 : 2) : 0;
   if (cut) material.defines = { GARMENT_CUT: `${cut}.0` };
   material.onBeforeCompile = (s) => {

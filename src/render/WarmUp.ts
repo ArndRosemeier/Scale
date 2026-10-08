@@ -64,6 +64,8 @@ export interface WarmReport {
   programsCompiled: number;
   /** What the shader gate was still waiting for when the warm-up ended. */
   gateWaiting: string[];
+  /** WebGPU only: node shader builds after compile, after the views, at the end. */
+  nodeBuilds?: number[];
 }
 
 export const LEGACY_WARMUP = new URLSearchParams(location.search).get('warm') === '0';
@@ -105,9 +107,12 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   progress(0.1);
   // 3. Compile, then 4. the frame loop with the gate on.
   const tc = performance.now();
-  await R.compileAsync(scene);
+  // (WebGPU: in parts, a few compiling at once, so their pipelines compile in parallel.)
+  await (R.webgpu ? Promise.all(compileParts(scene, 32).map((o) => R.compileAsync(o))) : R.compileAsync(scene));
   rep.compileMs = performance.now() - tc;
   rep.programsCompiled = (gl.info.programs ?? []).length;
+  const builds = (window as unknown as { nodeBuilds?: { count: number } }).nodeBuilds;
+  if (builds) rep.nodeBuilds = [builds.count];
   // (Gate first: startLoop runs the first frame at once, and what that frame adds — vehicle and
   // FX batches, the first crowd — would otherwise compile one program after the other in it.)
   host.gate.enabled = true;
@@ -147,11 +152,14 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
     progress(0.4 + 0.4 * ((i + 1) / views.length));
   }
   rep.viewsMs = performance.now() - tv;
+  if (builds) rep.nodeBuilds!.push(builds.count);
   scene.remove(stage);
   // 6. Calm frames; meanwhile the gate's parallel compiles finish (not waiting forever on one).
   const tw = performance.now();
   let calm = 0;
-  while ((calm < 20 || (host.gate.busy > 0 && performance.now() - tw < 3000)) && performance.now() - tw < 8000) {
+  // (WebGPU: new meshes stay hidden until their background compile is done; wait for those longer.)
+  const busyMs = R.webgpu ? 20000 : 3000;
+  while ((calm < 20 || (host.gate.busy > 0 && performance.now() - tw < busyMs)) && performance.now() - tw < Math.max(8000, busyMs)) {
     const f0 = performance.now();
     await host.nextFrame();
     calm = performance.now() - f0 < 45 ? calm + 1 : 0;
@@ -161,7 +169,34 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   rep.totalMs = performance.now() - t0;
   rep.programs = (gl.info.programs ?? []).length;
   rep.gateWaiting = host.gate.waiting().slice(0, 20);
+  if (builds) rep.nodeBuilds!.push(builds.count);
   return rep;
+}
+
+/**
+ * The visible subtrees of `scene` as about `n` parts of similar size (by object count): groups
+ * without a material of their own are opened up, largest first. Compiling the parts compiles what
+ * compiling the scene does.
+ */
+function compileParts(scene: THREE.Scene, n: number): THREE.Object3D[] {
+  const size = new Map<THREE.Object3D, number>();
+  const count = (o: THREE.Object3D): number => {
+    let c = 1;
+    for (const ch of o.children) if (ch.visible) c += count(ch);
+    size.set(o, c);
+    return c;
+  };
+  count(scene);
+  let parts = scene.children.filter((o) => o.visible);
+  for (;;) {
+    if (parts.length >= n) break;
+    const open = parts
+      .filter((o) => !(o as THREE.Mesh).material && o.children.some((c) => c.visible))
+      .sort((a, b) => size.get(b)! - size.get(a)!)[0];
+    if (!open) break;
+    parts = parts.filter((o) => o !== open).concat(open.children.filter((c) => c.visible));
+  }
+  return parts;
 }
 
 /** The previous warm-up: frame loop first, compile the scene (staging out of view), calm frames. */

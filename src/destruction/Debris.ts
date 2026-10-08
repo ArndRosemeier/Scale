@@ -11,6 +11,7 @@ import { GROUPS, type Physics } from '../physics/Physics';
 import type { MaterialArrays } from '../render/TextureLibrary';
 import { Rng } from '../core/rng';
 import { GLSL_COMMON } from '../render/materials/glsl';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 const TEMPLATES = 8;
 const CAP = 1600;          // instances per template (moving + frozen)
@@ -354,6 +355,7 @@ export class Debris {
 }
 
 function debrisMaterial(arrays: MaterialArrays): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().createDebrisNodeMaterial(arrays) as unknown as THREE.MeshStandardMaterial;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 });
   const uniforms = { uAlb: { value: arrays.albedo }, uNrm: { value: arrays.normal } };
   mat.onBeforeCompile = (shader) => {

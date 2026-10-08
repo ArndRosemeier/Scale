@@ -11,14 +11,13 @@ import type { MaterialArrays } from '../render/TextureLibrary';
 import { G } from '../render/materials/globals';
 import { GLSL_COMMON } from '../render/materials/glsl';
 import { hitch } from '../debug/HitchLog';
-
-const TILE = 1500;
-
-interface Tile { key: string; mesh: THREE.InstancedMesh | null; records: number[]; cx: number; cz: number }
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export class Skyline {
   readonly group = new THREE.Group();
-  private tiles = new Map<string, Tile>();
+  private mesh: THREE.InstancedMesh | null = null;
+  private cap = 0;
+  private n = 0;
   private mask: THREE.DataTexture;
   private maskData: Uint8Array;
   private maskW = 256;
@@ -62,48 +61,68 @@ export class Skyline {
   }
 
   private add(rec: Float32Array): void {
-    const touched = new Set<Tile>();
-    for (let o = 0; o < rec.length; o += SKY_STRIDE) {
-      const tx = Math.floor(rec[o] / TILE), tz = Math.floor(rec[o + 1] / TILE);
-      const key = `${tx},${tz}`;
-      let t = this.tiles.get(key);
-      if (!t) { t = { key, mesh: null, records: [], cx: (tx + 0.5) * TILE, cz: (tz + 0.5) * TILE }; this.tiles.set(key, t); }
-      for (let k = 0; k < SKY_STRIDE; k++) t.records.push(rec[o + k]);
-      touched.add(t);
-      this.loaded++;
+    const k = rec.length / SKY_STRIDE;
+    if (!k) return;
+    if (this.n + k > this.cap) this.grow(this.n + k);
+    const mesh = this.mesh!, g = mesh.geometry as THREE.InstancedBufferGeometry;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    const iA = g.getAttribute('iA') as THREE.InstancedBufferAttribute, iB = g.getAttribute('iB') as THREE.InstancedBufferAttribute;
+    const iS = g.getAttribute('iS') as THREE.InstancedBufferAttribute | undefined, iP = g.getAttribute('iP') as THREE.InstancedBufferAttribute | undefined;
+    const start = this.n;
+    for (let j = 0; j < k; j++) {
+      const R = rec, o = j * SKY_STRIDE, i = this.n++;
+      q.setFromAxisAngle(_up, -R[o + 4]);
+      m.compose(p.set(R[o], R[o + 5] - 1, R[o + 1]), q, s.set(R[o + 2] * 2, R[o + 6] + 1, R[o + 3] * 2));
+      mesh.setMatrixAt(i, m);
+      iA.setXYZW(i, R[o + 7], R[o + 11], R[o + 12], R[o + 13]); // layer, floorH, flags, cell
+      iB.setXYZW(i, R[o + 8], R[o + 9], R[o + 10], (i * 0.618) % 1);
+      iS?.setXYZW(i, s.x, s.y, s.z, 0);
+      iP?.setXYZW(i, p.x, p.z, 0, 0);
     }
-    for (const t of touched) this.rebuild(t);
+    // (Upload only what was added.)
+    for (const a of [mesh.instanceMatrix, iA, iB, iS, iP]) {
+      if (!a) continue;
+      a.addUpdateRange(start * a.itemSize, k * a.itemSize);
+      a.needsUpdate = true;
+    }
+    mesh.count = this.n;
+    g.instanceCount = this.n;
+    this.loaded += k;
   }
 
-  private rebuild(t: Tile): void {
-    const n = t.records.length / SKY_STRIDE;
-    if (t.mesh) { this.group.remove(t.mesh); t.mesh.geometry.dispose(); }
+  /**
+   * All far buildings are one instanced mesh, grown in big steps. (It was one per 1.5 km tile,
+   * rebuilt whenever a tile got more buildings: on WebGPU every new instanced mesh builds its
+   * shaders again, about a thousand times while the city streamed in.) Static buffers: on WebGPU a
+   * dynamic one is uploaded whole every frame.
+   */
+  private grow(need: number): void {
+    let cap = Math.max(this.cap, 4096);
+    while (cap < need * 1.25) cap *= 2;
+    const old = this.mesh;
     const box = new THREE.BoxGeometry(1, 1, 1);
     box.translate(0, 0.5, 0);
     const g = new THREE.InstancedBufferGeometry();
     g.index = box.index;
     for (const k of ['position', 'normal', 'uv']) g.setAttribute(k, box.getAttribute(k));
-    const a0 = new Float32Array(n * 4), a1 = new Float32Array(n * 4);
-    const mesh = new THREE.InstancedMesh(g, this.mat, n);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
-    const R = t.records;
-    for (let i = 0; i < n; i++) {
-      const o = i * SKY_STRIDE;
-      q.setFromAxisAngle(_up, -R[o + 4]);
-      m.compose(p.set(R[o], R[o + 5] - 1, R[o + 1]), q, s.set(R[o + 2] * 2, R[o + 6] + 1, R[o + 3] * 2));
-      mesh.setMatrixAt(i, m);
-      a0.set([R[o + 7], R[o + 11], R[o + 12], R[o + 13]], i * 4); // layer, floorH, flags, cell
-      a1.set([R[o + 8], R[o + 9], R[o + 10], (i * 0.618) % 1], i * 4);
+    // The node material reads scale and centre from attributes rather than the instance matrix.
+    const names = WEBGPU ? ['iA', 'iB', 'iS', 'iP'] : ['iA', 'iB'];
+    for (const k of names) {
+      const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);
+      const prev = old?.geometry.getAttribute(k);
+      if (prev) a.array.set(prev.array as Float32Array);
+      g.setAttribute(k, a);
     }
-    g.setAttribute('iA', new THREE.InstancedBufferAttribute(a0, 4));
-    g.setAttribute('iB', new THREE.InstancedBufferAttribute(a1, 4));
-    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(t.cx, 100, t.cz), TILE);
-    mesh.boundingSphere = g.boundingSphere;
-    mesh.frustumCulled = true;
+    const mesh = new THREE.InstancedMesh(g, this.mat, cap);
+    if (old) mesh.instanceMatrix.array.set(old.instanceMatrix.array);
+    mesh.count = this.n;
+    g.instanceCount = this.n; // (InstancedBufferGeometry defaults to Infinity: WebGPU draws that count)
+    mesh.frustumCulled = false;
     mesh.castShadow = false;
     mesh.receiveShadow = true;
-    mesh.instanceMatrix.needsUpdate = true;
-    t.mesh = mesh;
+    if (old) { this.group.remove(old); old.geometry.dispose(); old.dispose(); }
+    this.mesh = mesh;
+    this.cap = cap;
     this.group.add(mesh);
   }
 
@@ -120,6 +139,7 @@ export class Skyline {
 const _up = new THREE.Vector3(0, 1, 0);
 
 function skylineMaterial(arrays: MaterialArrays, mask: THREE.Texture, maskW: number, ruins: THREE.Vector4[]): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().skylineNodeMaterial(arrays, mask, maskW, ruins) as unknown as THREE.MeshStandardMaterial;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
   const uniforms = {
     uAlb: { value: arrays.albedo },

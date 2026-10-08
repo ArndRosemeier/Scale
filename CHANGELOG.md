@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.130 — 2026-10-08
+
+- **WebGPU renderer (try it with `?gpu=webgpu`).** The game can now draw with WebGPU instead of WebGL. WebGL stays the default and is unchanged. On WebGPU the city, people, cars, trees, street furniture, sky, weather and effects look the same as on WebGL, and shaders are compiled in the background, so loading is close to WebGL (about 23 s vs 17 s on the test PC). It still stutters for a few seconds after loading and when new kinds of pedestrians appear, runs at about 42 fps where WebGL holds 60, and hero tights patterns and mask cut-outs still show as plain cloth there; those are next.
+- **Auto quality also measures the GPU on WebGPU**, so it picks the right quality level there too.
+
 ## 0.129 — 2026-10-08
 
 - **The runaway saucer is fairer.** It now always comes down over a street lined with houses instead of over a park, where the Nannies used to spot it before its first prank. Joyriding on its own it slips across open stretches and through the discs' scan cones unnoticed, and it only bolts when you actually come at it, not when you just stand there. Once it is hurt or on the run, open sky or a cone gives it away, so chasing it into a cone works. Knock out a pod and it bolts for the tallest streets nearby: roofs tall enough still hide it, low ones give it away, and with every pod lost fewer streets are tall enough. The third pod pops it up over any roof.

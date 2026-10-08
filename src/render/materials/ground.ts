@@ -7,8 +7,10 @@ import type { MaterialArrays } from '../TextureLibrary';
 import { G } from './globals';
 import { GLSL_COMMON } from './glsl';
 import { landGlsl, parcelParams } from '../../world/landuse';
+import { WEBGPU, gpuKit } from '../gpuMode';
 
 export function createGroundMaterial(arrays: MaterialArrays): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().createGroundNodeMaterial(arrays) as unknown as THREE.MeshStandardMaterial;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   const uniforms = {
     uAlb: { value: arrays.albedo },
@@ -107,6 +109,7 @@ export const terrainHoles = {
  */
 export function createTerrainMaterial(arrays: MaterialArrays, seed?: number): THREE.MeshStandardMaterial {
   const land = seed !== undefined;
+  if (WEBGPU) return gpuKit().createTerrainNodeMaterial(arrays, land ? parcelParams(seed) : null) as unknown as THREE.MeshStandardMaterial;
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   const uniforms = {
     ...terrainHoles,
@@ -240,6 +243,7 @@ void landUse(inout vec4 a, inout vec4 nn, vec4 g, vec4 d, vec4 gn, vec4 dn, floa
 
 /** Animated water: procedural normal waves, fresnel reflection of the environment, depth tint. */
 export function createWaterMaterial(murky = false): THREE.MeshPhysicalMaterial {
+  if (WEBGPU) return gpuKit().createWaterNodeMaterial(murky) as unknown as THREE.MeshPhysicalMaterial;
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0x1d3b44,
     roughness: 0.06,

@@ -15,10 +15,11 @@ import { hitch } from '../debug/HitchLog';
 import type { WorkerPool } from './WorkerPool';
 import type { FromWorker } from './protocol';
 import { FOREST_DETAIL, FOREST_KINDS, FOREST_STRIDE } from '../build/forest';
-import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, type TreeModel, type TreeSpecies } from '../props/vegetation';
+import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, batchCap, vegetationWarmup, type TreeModel, type TreeSpecies } from '../props/vegetation';
 import { TERRAIN_ROOT } from '../world/boundary';
 import type { Obstacle } from '../world/Collision';
 import { hash32, hashToFloat } from '../core/rng';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 /** Full tree models nearer than this (m). */
 const NEAR = 75;
@@ -309,7 +310,7 @@ export class Countryside {
     for (const [k, b] of this.batches) if (owns(k) && !groups.has(k)) for (const m of b.meshes) m.count = 0;
     for (const [k, L] of groups) {
       const n = L.length / 5;
-      const b = this.batch(k, Math.max(64, 1 << Math.ceil(Math.log2(n * 1.25))));
+      const b = this.batch(k, batchCap(n));
       for (let i = 0; i < n; i++) {
         _q.setFromAxisAngle(_up, L[i * 5 + 4]);
         _m.compose(_p.set(L[i * 5], L[i * 5 + 1], L[i * 5 + 2]), _q, _s.setScalar(L[i * 5 + 3]));
@@ -367,20 +368,17 @@ export class Countryside {
 
   /** One tiny mesh per material for background shader compilation (not added to the scene). */
   warmupObject(): THREE.Object3D {
-    const g = new THREE.Group();
-    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    const leaf = (sp: TreeSpecies | 'shrub'): THREE.Material => {
+      let lm = this.leafMats.get(sp);
+      if (!lm) { lm = createLeafMaterial(sp === 'shrub' ? undefined : sp); this.leafMats.set(sp, lm); }
+      return lm;
+    };
+    const species = [...new Set(FOREST_KINDS.map((K) => K.species).filter((s) => s !== 'shrub'))] as TreeSpecies[];
+    const shrubs = FOREST_KINDS.some((K) => K.species === 'shrub') ? [leaf('shrub')] : [];
+    const g = vegetationWarmup(this.bark, this.farMat, leaf, species, shrubs);
     const im = new THREE.InstancedMesh(this.clumpGeo[0], this.clumpMat, 1);
     im.setColorAt(0, _c.setRGB(0.1, 0.2, 0.1));
     g.add(im);
-    for (const K of FOREST_KINDS) {
-      const lk = K.species === 'shrub' ? 'shrub' : K.species;
-      if (!this.leafMats.has(lk)) this.leafMats.set(lk, createLeafMaterial(K.species === 'shrub' ? undefined : (K.species as TreeSpecies)));
-    }
-    for (const m of [this.bark, this.farMat, ...this.leafMats.values()]) {
-      const w = new THREE.InstancedMesh(geo, m, 1);
-      if (m !== this.farMat) applyVegetationShadow(w);
-      g.add(w);
-    }
     return g;
   }
 }
@@ -411,6 +409,7 @@ function clumpGeometry(conifer: boolean): THREE.BufferGeometry {
 
 /** Clump material: instance colour, darker towards the base of the crown. */
 function createClumpMaterial(): THREE.MeshStandardMaterial {
+  if (WEBGPU) return gpuKit().createClumpNodeMaterial() as unknown as THREE.MeshStandardMaterial;
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader

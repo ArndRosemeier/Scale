@@ -13,6 +13,7 @@
  */
 import * as THREE from 'three';
 import { CMode, type BroodSim, type Critter } from './BroodSim';
+import { WEBGPU, gpuKit } from '../../../render/gpuMode';
 
 const BODY = 0, LEG = 1, EYE = 2;
 
@@ -93,6 +94,7 @@ export function createBroodGeometry(): THREE.BufferGeometry {
 }
 
 export function createBroodMaterial(): THREE.MeshLambertMaterial {
+  if (WEBGPU) return gpuKit().createBroodNodeMaterial() as unknown as THREE.MeshLambertMaterial;
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide, flatShading: true });
   mat.name = 'brood';
   mat.onBeforeCompile = (sh) => {

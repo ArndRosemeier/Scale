@@ -70,7 +70,7 @@ export class Graphics {
   /** The ladder rung in use. */
   step: number;
   readonly gpu: string;
-  readonly timer: GpuTimer | null;
+  readonly timer: GpuTimer | WebGpuTimer | null;
   private targets: GraphicsTargets | null = null;
   private shadowsApplied: boolean | null = null;
   /** Rungs auto had to leave this session (never tried again). */
@@ -85,10 +85,10 @@ export class Graphics {
   /** Called after auto changed the level (the pause menu shows it). */
   onChange: ((level: GraphicsLevel, why: string) => void) | null = null;
 
-  constructor(gl: THREE.WebGLRenderer) {
-    const ctx = gl.getContext();
-    this.gpu = gpuName(ctx);
-    this.timer = GpuTimer.create(ctx);
+  constructor(gl: THREE.WebGLRenderer, webgpu = false) {
+    const ctx = webgpu ? null : gl.getContext();
+    this.gpu = ctx ? gpuName(ctx) : 'WebGPU';
+    this.timer = ctx ? GpuTimer.create(ctx) : WebGpuTimer.create(gl as unknown as TimestampRenderer);
     this.setting = loadSetting();
     this.scaleOverride = loadScale();
     this.step = this.setting === 'auto' ? this.autoStart() : PRESET[this.setting];
@@ -149,7 +149,8 @@ export class Graphics {
     if (!this.auto || !this.targets) return;
     const g = this.timer?.poll();
     if (g !== undefined && g !== null) this.gpus.push(g);
-    // Hidden tabs, hitches (streaming, compiles) and the pause menu are no measure of the GPU.
+    // Hidden tabs, hitches (streaming, compiles), the pause menu and background shader compiles
+    // (`paused`) are no measure of the GPU.
     if (document.hidden || paused || frameMs > 250) return;
     if (this.settle > 0) { this.settle -= frameMs / 1000; this.gpus.length = 0; return; }
     this.frames.push(frameMs);
@@ -254,6 +255,48 @@ class GpuTimer {
     this.free.push(q);
     if (gl.getParameter(this.ext.GPU_DISJOINT_EXT)) return null;
     return (gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6;
+  }
+}
+
+interface TimestampRenderer {
+  hasFeature(name: string): boolean;
+  resolveTimestampsAsync(type?: string): Promise<number | undefined>;
+}
+
+/**
+ * GPU time per frame on WebGPU: three's timestamp queries (renderer created with trackTimestamp),
+ * resolved for all render passes since the last resolve, divided by the frames in between.
+ */
+class WebGpuTimer {
+  private frames = 0;
+  private resolving = false;
+  private ready: number[] = [];
+  private on: boolean | null = null;
+
+  private constructor(private r: TimestampRenderer) {}
+
+  static create(r: TimestampRenderer): WebGpuTimer | null {
+    return typeof r.resolveTimestampsAsync === 'function' ? new WebGpuTimer(r) : null;
+  }
+
+  measure(fn: () => void): void {
+    fn();
+    if (this.on === null) {
+      try { this.on = this.r.hasFeature('timestamp-query'); } catch { return; } // (not initialised yet)
+    }
+    if (!this.on) return;
+    this.frames++;
+    if (this.resolving) return;
+    this.resolving = true;
+    const n = this.frames;
+    this.frames = 0;
+    this.r.resolveTimestampsAsync('render').then((ms) => {
+      if (typeof ms === 'number' && ms > 0 && n > 0) this.ready.push(ms / n);
+    }, () => { /* no measurement this time */ }).finally(() => { this.resolving = false; });
+  }
+
+  poll(): number | null {
+    return this.ready.shift() ?? null;
   }
 }
 

@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { G } from '../render/materials/globals';
 import { furnitureUniforms } from '../props/furniture';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export class NavGlows {
   readonly mesh: THREE.InstancedMesh;
@@ -27,7 +28,7 @@ export class NavGlows {
     g.setAttribute('iPhase', ph);
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
     const u = this.uniforms;
-    mat.onBeforeCompile = (sh) => {
+    if (!WEBGPU) mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = u.uTime; sh.uniforms.uNight = u.uNight;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
@@ -61,7 +62,7 @@ varying vec2 vG; varying vec4 vGlow; varying float vPh;`)
 }`);
     };
     mat.customProgramCacheKey = () => 'future-navglow-v1';
-    this.mesh = new THREE.InstancedMesh(g, mat, cap);
+    this.mesh = new THREE.InstancedMesh(g, WEBGPU ? gpuKit().createNavGlowNodeMaterial(u) as unknown as THREE.MeshBasicMaterial : mat, cap);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;

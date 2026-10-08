@@ -4,6 +4,7 @@
  * (PMREM of the sky), fog, and the shared lighting uniforms.
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from './gpuMode';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { G } from './materials/globals';
 import { clamp, smoothstep, lerp } from '../core/math';
@@ -43,7 +44,7 @@ export class SkySystem {
     this.envSky = makeSky(false, true);
     this.envSky.scale.setScalar(1000);
     this.envScene.add(this.envSky);
-    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.pmrem = WEBGPU ? gpuKit().createPMREM(renderer) as unknown as THREE.PMREMGenerator : new THREE.PMREMGenerator(renderer);
     // An environment map from the start: it is part of every lit material's program key, so
     // shaders compiled before the first frame (the loading warm-up, streamed cells) would
     // otherwise all be compiled again — one after the other — once the first frame sets it.
@@ -79,7 +80,9 @@ export class SkySystem {
       sh.vertexShader = 'uniform vec3 moonDir;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
 	if ( dot( normalize( position ), moonDir ) > ${Math.cos(MOON_R * 1.15).toFixed(7)} ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );`);
     };
-    this.stars = new THREE.Points(g, starMat);
+    this.stars = WEBGPU
+      ? gpuKit().makeStarsNode(pos, col, 2, moonU, Math.cos(MOON_R * 1.15)) as unknown as THREE.Points
+      : new THREE.Points(g, starMat);
     this.stars.renderOrder = -999;
     this.stars.frustumCulled = false;
     scene.add(this.stars);
@@ -246,10 +249,17 @@ export class SkySystem {
     if (this.lastEnvSun.distanceTo(this.sunDir) > 0.02 || Math.abs(envWx - this.envWx) > 0.08) {
       this.lastEnvSun.copy(this.sunDir);
       this.envWx = envWx;
-      const rt = this.pmrem.fromScene(this.envScene, 0, 1, 2000);
-      if (this.envRT) this.envRT.dispose();
-      this.envRT = rt;
-      this.scene.environment = rt.texture;
+      if (WEBGPU) {
+        // Into the same target: a new environment texture changes every lit material's
+        // pipeline key there, and they would all be built again (the ones the loading
+        // screen prepared too).
+        this.pmrem.fromScene(this.envScene, 0, 1, 2000, { renderTarget: this.envRT } as never);
+      } else {
+        const rt = this.pmrem.fromScene(this.envScene, 0, 1, 2000);
+        if (this.envRT) this.envRT.dispose();
+        this.envRT = rt;
+        this.scene.environment = rt.texture;
+      }
       this.envBase = lerp(0.05, 0.22, day) * (1 - 0.3 * wx.dark);
     }
     // Underground: no sun or sky; a faint neutral fill, dense dark haze, slightly higher exposure.
@@ -300,6 +310,8 @@ export function moonPhase(hoursAbs: number): number {
 }
 
 function makeSky(reversed: boolean, env: boolean): Sky {
+  // WebGPU: the same sky as a node material (render/webgpu/sky.ts), same uniforms.
+  if (WEBGPU) return gpuKit().makeSkyNode(reversed, env, SUN_R, MOON_R) as unknown as Sky;
   const sky = new Sky();
   const u = sky.material.uniforms;
   u.turbidity.value = 4;

@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { buildArmyTruck, buildApc, buildTank } from './military';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 // ---------------------------------------------------------------- public API
 
@@ -2114,6 +2115,7 @@ material.clearcoatRoughness = min(max(vhCCR, 0.0525) + geometryRoughness, 1.0);
  * The material is double sided and corrects lighting for mirrored instances (scale x = -1).
  */
 export function createVehicleMaterial(instanced: boolean): THREE.MeshPhysicalMaterial {
+  if (WEBGPU) return gpuKit().createVehicleNodeMaterial(instanced, vehicleUniforms) as unknown as THREE.MeshPhysicalMaterial;
   const mat = new THREE.MeshPhysicalMaterial({
     color: 0xffffff, roughness: 0.5, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide,
   });

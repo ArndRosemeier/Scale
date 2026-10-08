@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
 import { GLSL_NOISE } from './glsl';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 import { GLSL_FACE, beardCoverage, scalpCoverage, BEARD_IDS } from './faceRegions';
 import type { HumanStatic } from './staticData';
 
@@ -70,6 +71,7 @@ export interface ShellLayerHandle {
  * shadowing); a sheen lobe gives the soft anisotropic-looking rim highlight.
  */
 export function createShellMaterial(spec: ShellSpec, layer: number, color: THREE.Color): ShellLayerHandle {
+  if (WEBGPU) return gpuKit().createShellNodeMaterial(spec, layer, color) as unknown as ShellLayerHandle;
   const t = (layer + 1) / spec.layers;
   const material = new THREE.MeshPhysicalMaterial({
     roughness: 0.62, metalness: 0, specularIntensity: 0.25, envMapIntensity: 0.15,

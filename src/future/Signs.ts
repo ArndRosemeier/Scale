@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { deriveSeed, hashToFloat, hash32 } from '../core/rng';
 import { CURB_H } from '../build/ground';
 import { G } from '../render/materials/globals';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 import type { CellState } from '../stream/CityStreamer';
 import type { BuildingRef } from '../world/WorldIndex';
 import type { District } from '../plan/types';
@@ -520,6 +521,7 @@ export class Signs {
   // ------------------------------------------------------------------ materials
 
   private signMaterial(u: Signs['uniforms'] = this.uniforms): THREE.MeshBasicMaterial {
+    if (WEBGPU) return gpuKit().createSignNodeMaterial(u) as unknown as THREE.MeshBasicMaterial;
     const m = new THREE.MeshBasicMaterial({ color: 0xffffff });
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = u.uTime; sh.uniforms.uAtlas = u.uAtlas; sh.uniforms.uNight = u.uNight; sh.uniforms.uAlert = u.uAlert;
@@ -706,6 +708,7 @@ vec3 slideOr(float i, vec2 l, float seed) {
   }
 
   private holoMaterial(): THREE.MeshBasicMaterial {
+    if (WEBGPU) return gpuKit().createHoloNodeMaterial(this.uniforms) as unknown as THREE.MeshBasicMaterial;
     const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
     const u = this.uniforms;
     m.onBeforeCompile = (sh) => {

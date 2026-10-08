@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import { cityName } from '../../plan/names';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 
 export const PHOTO = { w: 512, h: 288, fov: 30, gap: 75, show: 75, fadeIn: 1.5, fadeOut: 4 };
 
@@ -61,13 +62,17 @@ export class PressPhoto {
     cam.lookAt(P.pos.x, P.pos.y + P.height * 0.62, P.pos.z);
     cam.updateMatrixWorld();
     const gl = g.renderer.gl, scene = g.renderer.scene, prev = gl.getRenderTarget(), auto = gl.shadowMap.autoUpdate;
-    const px = new Uint16Array(PHOTO.w * PHOTO.h * 4);
+    const px: Uint16Array | null = WEBGPU ? null : new Uint16Array(PHOTO.w * PHOTO.h * 4);
     gl.shadowMap.autoUpdate = false;
     try {
       gl.setRenderTarget(rt);
       gl.clear();
       gl.render(scene, cam);
-      gl.readRenderTargetPixels(rt, 0, 0, PHOTO.w, PHOTO.h, px);
+      if (px) gl.readRenderTargetPixels(rt, 0, 0, PHOTO.w, PHOTO.h, px);
+      else {
+        // WebGPU reads back asynchronously: the page goes up when the pixels arrive.
+        gpuKit().readPixels(gl as never, rt as never, PHOTO.w, PHOTO.h).then((d) => { this.compose(d, rep, street); }, (e) => console.warn('[fame] press photo failed', e));
+      }
     } catch (e) {
       console.warn('[fame] press photo failed', e);
       return false;
@@ -75,7 +80,7 @@ export class PressPhoto {
       gl.setRenderTarget(prev);
       gl.shadowMap.autoUpdate = auto;
     }
-    this.compose(px, rep, street);
+    if (px) this.compose(px, rep, street);
     this.t = 0;
     this.lastT = this.time;
     this.stats.photos++;

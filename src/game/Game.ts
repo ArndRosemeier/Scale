@@ -260,18 +260,20 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, readonly settings: CitySettings, readonly mode: GameMode = 'normal') {
     this.renderer = new Renderer(canvas);
-    this.graphics = new Graphics(this.renderer.gl);
+    this.graphics = new Graphics(this.renderer.gl, this.renderer.webgpu);
     // A start without shadows compiles the shaders without them (the cheapest for weak GPUs).
     this.renderer.gl.shadowMap.enabled = this.graphics.startShadows;
-    hitch.attach(this.renderer.gl, this.renderer.scene);
+    if (!this.renderer.webgpu) hitch.attach(this.renderer.gl, this.renderer.scene);
     this.gate = new ShaderGate(this.renderer.gl, this.renderer.scene, this.renderer.camera, (fn) => this.renderer.asScenePass(fn));
     this.gate.enabled = false; // the start-up warm-up compiles everything present
     (window as unknown as { shaderGate: ShaderGate }).shaderGate = this.gate;
+    if (this.renderer.webgpu) this.gate.gpuCompile = (o) => this.renderer.compileAsync(o);
     this.input = new Input(canvas);
   }
 
   async start(progress: (msg: string, f: number) => void): Promise<void> {
     const loadT0 = performance.now();
+    await this.renderer.init();
     this.profile = makeProfile(this.settings);
     progress('Generating materials', 0);
     const tex = new TextureLibrary();
@@ -634,7 +636,7 @@ export class Game {
       views: this.intro?.warmViews(),
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
-    console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms (${warm.programsCompiled} programs), ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs`);
+    console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms (${warm.programsCompiled} programs), ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs${warm.nodeBuilds ? `, node builds ${warm.nodeBuilds.join(' / ')} (pipelines ${(window as unknown as { nodeBuilds: { asyncPipes: number } }).nodeBuilds.asyncPipes} in advance, ${(window as unknown as { nodeBuilds: { syncPipes: number } }).nodeBuilds.syncPipes} while drawing)` : ''}`);
     if (warm.gateWaiting.length) console.log(`[warm-up] still waiting for shaders: ${warm.gateWaiting.join(", ")}`);
     console.log(`[load] ${((performance.now() - loadT0) / 1000).toFixed(1)} s in all, ${((performance.now() - shadersAt) / 1000).toFixed(1)} s preparing shaders`);
     hitch.clear();
@@ -680,7 +682,9 @@ export class Game {
       while (left > 0.1) { this.tick(0.05, false); left -= 0.05; }
       this.tick(left, true);
     } else this.tick(Math.min(0.1, raw), true);
-    this.graphics.frame(raw * 1000, performance.now() - t0 - this.renderMs, this.menu?.paused ?? false);
+    // (While the shader gate still compiles in the background the frames are no measure of the
+    // GPU: on WebGPU that runs for many seconds after loading, and auto quality stepped down then.)
+    this.graphics.frame(raw * 1000, performance.now() - t0 - this.renderMs, (this.menu?.paused ?? false) || (this.gate?.busy ?? 0) > 0);
     hitch.endFrame();
     if (this.frameWaiters.length) { const w = this.frameWaiters; this.frameWaiters = []; for (const r of w) r(); }
   };

@@ -25,6 +25,7 @@ import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Vo
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
 import { pointInPoly, polyBounds, distPointPolyEdge } from '../core/geom2';
 import { G } from '../render/materials/globals';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 import { TUNNEL_HW, TUNNEL_H, PLATFORM_H, PLATFORM_EDGE, CAR_FLOOR, DOOR_U, DOOR_HW, DOOR_CLOSE, PASSAGE_HW, PASSAGE_H, CARS, CAR_L, CAR_W, CAR_H, metroTube, sewerTube, stationHalls, entranceRoute, underpassRoute, routeEnv, TRAIN_SEATS, seatYaw, platformSeats, trainsOn, nextTrainAt, carPose, DWELL, SEWER_HW, MANHOLE_EVERY, SHAFT_IN, SHAFT_HS, LID_LAT, LADDER_LAT, LADDER_HW, RUNG, SHAFT_VAULT, HOLE_R, COLLAR, shaftPoint, type ManholeSpot, type TrainState } from './layout';
 import type { Obstacle } from '../world/Collision';
 import { planRooms, type RoomPlan } from './rooms';
@@ -248,8 +249,9 @@ export class Underground {
     this.trainColor = new THREE.InstancedBufferAttribute(new Float32Array(400 * 3), 3);
     carGeo.setAttribute('iLine', this.trainColor);
     // Double-sided: riders see the car's walls from inside.
-    const trainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.5, side: THREE.DoubleSide });
-    trainMat.onBeforeCompile = (sh) => {
+    const trainMat = WEBGPU ? gpuKit().undergroundTrainNodeMaterial() as unknown as THREE.MeshStandardMaterial
+      : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.5, side: THREE.DoubleSide });
+    if (!WEBGPU) trainMat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 iLine;\nattribute float aStripe;')
         .replace('#include <color_vertex>', '#include <color_vertex>\nvColor.rgb = mix(vColor.rgb, iLine, aStripe);');
     };

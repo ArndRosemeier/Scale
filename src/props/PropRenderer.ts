@@ -4,7 +4,7 @@
  * lights at night; props can be toppled / crushed and fall as rigid bodies.
  */
 import * as THREE from 'three';
-import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, vegetationUniforms, TREE_SPECIES, type TreeSpecies } from './vegetation';
+import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, batchCap, vegetationUniforms, vegetationWarmup, TREE_SPECIES, type TreeSpecies } from './vegetation';
 import { furnitureModel, createFurnitureMaterial, furnitureUniforms, type FurnitureKind } from './furniture';
 import { PropType } from '../plan/cell';
 import type { CellState } from '../stream/CityStreamer';
@@ -273,31 +273,19 @@ export class PropRenderer {
    * impostors, street furniture) for background shader precompilation. Not added to the scene.
    */
   warmupObject(): THREE.Object3D {
-    const g = new THREE.Group();
-    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-    const mats: THREE.Material[] = [this.bark, this.farMat, this.furnMat];
-    for (const sp of TREE_SPECIES) {
-      let lm = this.leafMats.get(sp);
-      if (!lm) { lm = createLeafMaterial(sp); this.leafMats.set(sp, lm); }
-      mats.push(lm);
-    }
-    for (let k = 0; k < 4; k++) {
-      let lm = this.leafMats.get(String(k));
-      if (!lm) { lm = createLeafMaterial(undefined); this.leafMats.set(String(k), lm); }
-      mats.push(lm);
-    }
-    for (const m of mats) {
-      const fg = m === this.furnMat ? geo.clone() : geo;
-      if (m === this.furnMat) {
-        fg.setAttribute('iColor', new THREE.InstancedBufferAttribute(new Float32Array(3), 3));
-        fg.setAttribute('iState', new THREE.InstancedBufferAttribute(new Float32Array(4), 4));
-      }
-      const im = new THREE.InstancedMesh(fg, m, 1);
-      // Shadow variants as the real batches use them (vegetation has custom depth shaders).
-      im.castShadow = m !== this.farMat;
-      if (m !== this.furnMat && m !== this.farMat) applyVegetationShadow(im);
-      g.add(im);
-    }
+    const leaf = (k: string, sp: TreeSpecies | undefined): THREE.Material => {
+      let lm = this.leafMats.get(k);
+      if (!lm) { lm = createLeafMaterial(sp); this.leafMats.set(k, lm); }
+      return lm;
+    };
+    const g = vegetationWarmup(this.bark, this.farMat, (sp) => leaf(sp, sp), TREE_SPECIES, [0, 1, 2, 3].map((k) => leaf(String(k), undefined)));
+    // Street furniture on a real model's geometry with the batches' instance attributes.
+    const fg = furnitureModel('bench', 0).geometry.clone();
+    fg.setAttribute('iColor', new THREE.InstancedBufferAttribute(new Float32Array(3), 3));
+    fg.setAttribute('iState', new THREE.InstancedBufferAttribute(new Float32Array(4), 4));
+    const im = new THREE.InstancedMesh(fg, this.furnMat, 1);
+    im.castShadow = true;
+    g.add(im);
     return g;
   }
 
@@ -424,7 +412,7 @@ export class PropRenderer {
     for (const [k, b] of this.batches) if (owns(k)) { b.n = 0; (b as Batch & { list?: Prop[] }).list = undefined; for (const m of b.meshes) m.count = 0; }
     let drawn = 0;
     for (const [k, list] of groups) {
-      const b = this.batch(k, Math.max(64, Math.ceil(list.length * 2)));
+      const b = this.batch(k, batchCap(list.length));
       list.forEach((p, i) => {
         this.q.setFromAxisAngle(_up, p.yaw);
         this.m4.compose(this.v.set(p.x, p.y, p.z), this.q, this.s.setScalar(p.scale));

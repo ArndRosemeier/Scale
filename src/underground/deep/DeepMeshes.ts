@@ -13,6 +13,7 @@ import { CHUNK, keyOf } from './mesher';
 import { createWaterMaterial } from '../../render/materials/ground';
 import { SHARD_VS, SHARD_FS } from '../../game/intro/StarFx';
 import { G } from '../../render/materials/globals';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 
 /** Chunks are built within BUILD m of the camera and dropped beyond DROP. */
 const BUILD = 230, DROP = 300;
@@ -47,8 +48,9 @@ export class DeepMeshes {
 
   constructor(readonly plan: DeepPlan, skip: SkipBox[]) {
     this.group.name = 'deep';
-    const cave = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
-    cave.onBeforeCompile = (sh) => {
+    const cave = WEBGPU ? gpuKit().deepCaveNodeMaterial() as unknown as THREE.MeshStandardMaterial
+      : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
+    if (!WEBGPU) cave.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aGlow;\nvarying vec3 vGlow;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vGlow;')
@@ -56,7 +58,7 @@ export class DeepMeshes {
     };
     cave.customProgramCacheKey = () => 'deep-cave';
     this.caveMat = cave;
-    this.fallsMat = new THREE.ShaderMaterial({
+    this.fallsMat = WEBGPU ? gpuKit().deepFallsNodeMaterial(this.fallsU) as unknown as THREE.ShaderMaterial : new THREE.ShaderMaterial({
       uniforms: this.fallsU, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
       vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */ `
@@ -105,7 +107,7 @@ export class DeepMeshes {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(P, 3));
       g.setAttribute('aSeed', new THREE.BufferAttribute(S, 1));
-      this.spores = new THREE.Points(g, this.sporeMat);
+      this.spores = WEBGPU ? gpuKit().deepMotesNode(P, S, this.sporeU, null) as unknown as THREE.Points : new THREE.Points(g, this.sporeMat);
       this.spores.frustumCulled = false;
       this.spores.renderOrder = 6;
       this.group.add(this.spores);
@@ -120,11 +122,15 @@ export class DeepMeshes {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(P, 3));
       g.setAttribute('aSeed', new THREE.BufferAttribute(S, 1));
-      const m = this.sporeMat.clone();
-      m.uniforms = { uT: { value: 0 }, uColor: { value: new THREE.Color(0.4, 1.0, 0.85) }, uScale: { value: 520 } };
-      m.vertexShader = m.vertexShader.replace('p.y += mod(uT * (0.15 + aSeed * 0.25) + aSeed * 40.0, 40.0) - 20.0;', `p.y = mod(p.y + uT * (3.0 + aSeed * 3.0), ${(L.y1 - L.y0).toFixed(1)});`)
-        .replace('smoothstep(60.0, 10.0, -mv.z)', 'smoothstep(90.0, 10.0, -mv.z)');
-      this.lift = new THREE.Points(g, m);
+      const liftU = { uT: { value: 0 }, uColor: { value: new THREE.Color(0.4, 1.0, 0.85) }, uScale: { value: 520 } };
+      if (WEBGPU) this.lift = gpuKit().deepMotesNode(P, S, liftU, +(L.y1 - L.y0).toFixed(1)) as unknown as THREE.Points;
+      else {
+        const m = this.sporeMat.clone();
+        m.uniforms = liftU;
+        m.vertexShader = m.vertexShader.replace('p.y += mod(uT * (0.15 + aSeed * 0.25) + aSeed * 40.0, 40.0) - 20.0;', `p.y = mod(p.y + uT * (3.0 + aSeed * 3.0), ${(L.y1 - L.y0).toFixed(1)});`)
+          .replace('smoothstep(60.0, 10.0, -mv.z)', 'smoothstep(90.0, 10.0, -mv.z)');
+        this.lift = new THREE.Points(g, m);
+      }
       this.lift.position.set(L.x, L.y0, L.z);
       this.lift.frustumCulled = false;
       this.lift.renderOrder = 6;
@@ -152,7 +158,8 @@ export class DeepMeshes {
     // The Heart: a cluster of the star's crystal, big, and its glow.
     {
       const H = plan.heart;
-      const sm = new THREE.ShaderMaterial({ vertexShader: SHARD_VS, fragmentShader: SHARD_FS, uniforms: this.shardU, toneMapped: false });
+      const sm = WEBGPU ? gpuKit().deepShardNodeMaterial(this.shardU) as unknown as THREE.ShaderMaterial
+        : new THREE.ShaderMaterial({ vertexShader: SHARD_VS, fragmentShader: SHARD_FS, uniforms: this.shardU, toneMapped: false });
       const parts: [number, number, number, number, number, number][] = [
         [0.9, 3.4, 0.9, 0.05, 0.0, 0], [0.55, 2.1, 0.55, 0.55, 0.35, 0.7], [0.45, 1.6, 0.45, -0.5, -0.5, -0.6], [0.35, 1.2, 0.35, 0.2, -0.8, 0.4],
       ];

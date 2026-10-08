@@ -20,6 +20,7 @@
 import * as THREE from 'three';
 import { Rng, hash2i, hashToFloat } from '../core/rng';
 import { Noise } from '../core/noise';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export type TreeSpecies = 'plane' | 'linden' | 'maple' | 'oak' | 'birch' | 'pine' | 'palm' | 'cypress' | 'chestnut' | 'ginkgo';
 export const TREE_SPECIES: TreeSpecies[] = ['plane', 'linden', 'maple', 'oak', 'birch', 'pine', 'palm', 'cypress', 'chestnut', 'ginkgo'];
@@ -1733,6 +1734,35 @@ function makeDepthMaterial(leaf: boolean, key: string): THREE.MeshDepthMaterial 
 }
 
 /** Sets mesh.customDepthMaterial from a vegetation material (call after creating the mesh). */
+/**
+ * Warm-up meshes for the vegetation materials on the trees' own geometry, one per material and
+ * vertex layout. (A stand-in box warms the WebGL program, which does not depend on the attributes,
+ * but on WebGPU a missing attribute makes another shader and pipeline: the real batches then built
+ * theirs again.) `leaf(species)` gives the leaf material of a species, `shrubLeaves` the shrubs'.
+ */
+export function vegetationWarmup(bark: THREE.Material, far: THREE.Material, leaf: (s: TreeSpecies) => THREE.Material, species: readonly TreeSpecies[], shrubLeaves: THREE.Material[]): THREE.Group {
+  const g = new THREE.Group();
+  const seen = new Set<string>();
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, shadow: boolean) => {
+    const k = mat.uuid + ':' + Object.keys(geo.attributes).sort().join(',');
+    if (seen.has(k)) return;
+    seen.add(k);
+    const im = new THREE.InstancedMesh(geo, mat, 1);
+    if (shadow) applyVegetationShadow(im);
+    g.add(im);
+  };
+  for (const sp of species) {
+    const m = treeModel(sp, 0);
+    add(m.wood, bark, true);
+    add(m.leaves, leaf(sp), true);
+    add(m.far, far, false);
+  }
+  const shrub = shrubModel(0);
+  if (shrubLeaves.length) add(shrub.wood, bark, true);
+  for (const lm of shrubLeaves) add(shrub.leaves, lm, true);
+  return g;
+}
+
 export function applyVegetationShadow(mesh: THREE.Mesh) {
   const mat = mesh.material as THREE.Material;
   const dm = mat?.userData?.depthMaterial as THREE.Material | undefined;
@@ -1743,6 +1773,7 @@ export function applyVegetationShadow(mesh: THREE.Mesh) {
 
 export function createBarkMaterial(): THREE.MeshStandardMaterial {
   const tex = getBarkTextures();
+  if (WEBGPU) return gpuKit().createBarkNodeMaterial(tex.map, tex.normal, BARK_STRIPS, vegetationUniforms) as unknown as THREE.MeshStandardMaterial;
   const m = new THREE.MeshStandardMaterial({
     map: tex.map,
     normalMap: tex.normal,
@@ -1797,6 +1828,7 @@ export function createLeafMaterial(species?: TreeSpecies): THREE.MeshStandardMat
   m.shadowSide = THREE.DoubleSide;
   const autumn = AUTUMN.map((a) => new THREE.Vector4(srgbToLin(a[0]), srgbToLin(a[1]), srgbToLin(a[2]), a[3]));
   const trans = species === 'pine' || species === 'cypress' ? 0.35 : 0.85;
+  if (WEBGPU) return gpuKit().createLeafNodeMaterial(tex, autumn, trans, vegetationUniforms) as unknown as THREE.MeshStandardMaterial;
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSeason = vegetationUniforms.uSeason;
     shader.uniforms.uAutumn = { value: autumn };
@@ -1867,6 +1899,7 @@ export function createLeafMaterial(species?: TreeSpecies): THREE.MeshStandardMat
 }
 
 export function createFarTreeMaterial(): THREE.Material {
+  if (WEBGPU) return gpuKit().createFarTreeNodeMaterial(vegetationUniforms) as unknown as THREE.Material;
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSeason = vegetationUniforms.uSeason;
@@ -1911,4 +1944,14 @@ export function createFarTreeMaterial(): THREE.Material {
   m.customProgramCacheKey = () => 'vegFar';
   m.userData.depthMaterial = makeDepthMaterial(false, 'far');
   return m;
+}
+
+/**
+ * Room for `n` instances with headroom, in few big steps: a batch that grows is a new InstancedMesh,
+ * and on WebGPU every new instanced mesh builds its shaders again (main and shadow pass).
+ */
+export function batchCap(n: number): number {
+  let c = 512;
+  while (c < n * 1.25) c *= 4;
+  return c;
 }

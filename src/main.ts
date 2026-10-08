@@ -1,6 +1,7 @@
 /**
  * Entry point: start menu (seed, size), loading screen, game.
  */
+import { loadGpuKit } from './render/gpuMode';
 import './style.css';
 import { Game } from './game/Game';
 import { parseSeed } from './core/rng';
@@ -84,7 +85,7 @@ async function start(save: SaveData | null = null): Promise<void> {
   const settings = save ? { ...save.city } : { seed: parseSeed(seedIn.value), size: Number(sizeIn.value) };
   if (save) mode = save.mode;
   // (The load flag is dropped: a reload later starts from the menu, not from that old save again.)
-  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') || save ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}${params.has('mute') ? '&mute' : ''}${['intro', 'warm'].map((k) => (params.has(k) ? `&${k}${params.get(k) ? `=${params.get(k)}` : ''}` : '')).join('')}`);
+  history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') || save ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}${params.has('mute') ? '&mute' : ''}${['intro', 'warm', 'gpu'].map((k) => (params.has(k) ? `&${k}${params.get(k) ? `=${params.get(k)}` : ''}` : '')).join('')}`);
   menu.style.display = 'none';
   loading.style.display = 'flex';
   disposeCreatorPreview();
@@ -106,6 +107,7 @@ async function start(save: SaveData | null = null): Promise<void> {
     console.error('[avatar] could not load the selected character', e);
   }
   const canvas = document.getElementById('view') as HTMLCanvasElement;
+  await loadGpuKit();
   const game = new Game(canvas, settings, mode);
   (window as unknown as { game: Game }).game = game;
   if (save) { game.pendingSave = save; game.startAt = { x: save.player.x, z: save.player.z }; }

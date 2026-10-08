@@ -14,6 +14,7 @@
  * and its skinned shadow-depth variant compile behind the loading screen.
  */
 import * as THREE from 'three';
+import { WEBGPU, gpuKit } from '../../../render/gpuMode';
 import { CreatureRig, type RigDef } from './CreatureRig';
 import { boneLayout, buildCreatureSkin, type BoneLayout } from './skin';
 
@@ -70,10 +71,12 @@ function scaleTextures(): { normal: THREE.DataTexture; orm: THREE.DataTexture } 
 /** The shared creature material (opaque, depth-writing, front faces of closed surfaces). */
 export function createCreatureMaterial(): THREE.MeshStandardMaterial {
   const tx = scaleTextures();
-  const m = new THREE.MeshStandardMaterial({
+  const params: THREE.MeshStandardMaterialParameters = {
     vertexColors: true, roughness: 1, metalness: 0, envMapIntensity: 0.45,
     normalMap: tx.normal, normalScale: new THREE.Vector2(1.1, 1.1), roughnessMap: tx.orm, aoMap: tx.orm, aoMapIntensity: 0.9,
-  });
+  };
+  if (WEBGPU) return gpuKit().createCreatureNodeMaterial(params) as unknown as THREE.MeshStandardMaterial;
+  const m = new THREE.MeshStandardMaterial(params);
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 glow;\nvarying vec3 vGlow;\nvarying float vWet;')
