@@ -148,7 +148,9 @@ function planMetro(plan: MacroPlan, field: CityField, terrain: Terrain): void {
     lines.push({ id: lines.length, color: LINE_COLORS[lines.length % LINE_COLORS.length], name: String(lines.length + 1), stations: lineStations, pts: track, stationS, depth: [], y: [] });
   }
   for (const L of lines) alignStations(L, stations);
-  for (const L of lines) profileLine(L, lines, stations, plan, terrain);
+  // The sewer inverts are the same for every line: worked out once (they sample the terrain densely).
+  const inv = plan.sewers.map((sw) => sewerInvert(sw.pts, terrain, sw.culvert));
+  for (const L of lines) profileLine(L, lines, stations, plan, terrain, inv);
   plan.metroLines = lines;
   plan.metroStations = stations;
 }
@@ -373,13 +375,12 @@ function easeFrom(pts: number[], x0: number, z0: number, dx: number, dz: number,
  * tunnel/hall roofs, passes under the sewers and under every earlier line with a slab between,
  * stays level through the halls and never exceeds MAX_GRADE (upper gradient envelope).
  */
-function profileLine(L: MetroLine, lines: MetroLine[], stations: MetroStation[], plan: MacroPlan, terrain: Terrain): void {
+function profileLine(L: MetroLine, lines: MetroLine[], stations: MetroStation[], plan: MacroPlan, terrain: Terrain, inv: number[][]): void {
   const P = L.pts, n = P.length >> 1;
   const cum = [0];
   for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(P[i * 2] - P[i * 2 - 2], P[i * 2 + 1] - P[i * 2 - 1]));
   const hallOf = new Int32Array(n).fill(-1);
   L.stationS.forEach((s, k) => { for (let i = 0; i < n; i++) if (Math.abs(cum[i] - s) <= HALL_SPAN + 0.5) hallOf[i] = k; });
-  const inv = plan.sewers.map((sw) => sewerInvert(sw.pts, terrain, sw.culvert));
   const ymax = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const x = P[i * 2], z = P[i * 2 + 1];
