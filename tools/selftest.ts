@@ -3588,5 +3588,28 @@ aliensChecks(check);
   check(fromStreet === 0 && fromSewer > 0, `health: a blow from the street does not reach the sewer below (street ${fromStreet}, sewer ${fromSewer.toFixed(1)})`);
 }
 
+// Nor does the player's own blow: a blast or a giant's footfall on the street knocks down the
+// people up there, not the sewer crew or the commuters below (sim/Reactions via Underground.sameSide).
+{
+  const { Reactions } = await import('../src/sim/Reactions');
+  const P = await import('../src/sim/Pedestrians');
+  const pop = new Population(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.2 }))), 42);
+  const mk = (k: number, x: number, y: number) => ({ id: k + 1, cit: { ...pop.synthetic(900 + k), curiosity: 0.1, nerve: 0.3 }, x, z: 0, y, heading: 0, speed: 1.3, pref: 1.3, state: P.PState.Walk, route: Float32Array.from([0, 0, 0]), wp: 1, dest: null, fear: 0, fearX: 0, fearZ: 0, lookX: 0, lookZ: 0, lookY: 0, stateT: 0, onRoad: false, phase: 0, look: k, vy: 0, vx: 0, vz: 0, alive: true, slot: -1 } as unknown as import('../src/sim/Pedestrians').PedAgent);
+  const { Stimuli } = await import('../src/game/Stimuli');
+  const result: string[] = [];
+  for (const kind of ['blast', 'stomp'] as const) {
+    const agents = [mk(0, 1, 0), mk(1, 1, -4)];
+    const gp = { agents, neighbours: (x: number, z: number, r: number, out: typeof agents) => { out.length = 0; for (const a of agents) if (Math.abs(a.x - x) <= r && Math.abs(a.z - z) <= r) out.push(a); return out; } };
+    const st = new Stimuli();
+    const re = new Reactions(gp as never, st);
+    re.sameSide = (_ax, ay, _az, _bx, by) => (ay < -1.5) === (by < -1.5);
+    st.emit(kind, 0, 0.2, 0, 9, 80, { cause: 'player', size: 40 });
+    st.update(1 / 30);
+    re.update(1 / 30, { height: 1.8, pos: { x: 500, y: 0, z: 500 }, flying: false, vel: { length: () => 0 }, k: 1 } as never);
+    result.push(`${kind}: street ${agents[0].state === P.PState.Down ? 'down' : 'up'}, sewer ${agents[1].state === P.PState.Down ? 'down' : 'up'}`);
+    check(agents[0].state === P.PState.Down && agents[1].state !== P.PState.Down, `pavement: a ${kind} on the street floors the street, not the sewer below (${result.at(-1)})`);
+  }
+}
+
 if (failures) { console.error(`${failures} check(s) failed`); process.exit(1); }
 console.log('all checks passed');
