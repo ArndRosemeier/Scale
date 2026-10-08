@@ -311,7 +311,7 @@ export class SaveSystem {
     else if (s.flying && P.flying) exact = s.y > g.world.groundHeight(s.x, s.z) - 0.5;
     else {
       const ground = g.collision.groundAt(s.x, s.z, s.y + 0.6, 1.2);
-      exact = Number.isFinite(ground) && Math.abs(ground - s.y) < 1.5 && !g.terrain.isWater(s.x, s.z, 0);
+      exact = Number.isFinite(ground) && Math.abs(ground - s.y) < 1.5 && !g.world.wet(s.x, s.z, 0);
       if (exact) s = { ...s, y: Math.max(s.y, ground) };
     }
     if (exact) P.pos.set(s.x, s.y + 0.05, s.z);

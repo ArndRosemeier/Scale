@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.132 — 2026-10-08
+
+- **Nobody gets placed in the river any more.** Police firing spots, monster and robot spawns, crooks, protesters and the press, street performers, the Wardens and the runaway teens' stand-off spots, mourners, cordon barriers and rescue spots now all use one shared test for "can someone stand here": no building, no landmark, no open water. Bridges count as dry land everywhere now; some systems used to treat them as water.
+- **One water test for everything.** The map, the army, pedestrians, small deeds and saves used four slightly different shore margins; they now share one helper, and the selftest fails if a new private copy appears.
+- **Shader twins are guarded:** the selftest fails if a GLSL shader file has no WebGPU twin naming it.
 ## 0.131 — 2026-10-08
 
 - **Your blows no longer reach through the pavement.** A stomp, blast, punch, dash or shove on the street used to knock down people in the sewer or the metro station right below you; now only those on your side of the street go down (and the other way round from below).

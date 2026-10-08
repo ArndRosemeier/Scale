@@ -297,7 +297,7 @@ export class RunawayTeens implements ThreatEvent {
       const d = doorOf(b.desc);
       const y = b.base + Math.min(b.top - b.base - 3, 6 + this.rng.range(0, 5));
       // Stand-off point clear of other buildings, and no street tree in front of the wall.
-      if (W.buildingAt(d.x + d.nx * 8, d.z + d.nz * 8)) continue;
+      if (!W.standable(d.x + d.nx * 8, d.z + d.nz * 8)) continue;
       let tree = false;
       for (const k of [2.5, 6]) this.g.props.query(d.x + d.nx * k, d.z + d.nz * k, 4, (p) => { if (!tree && !p.broken && p.kind.startsWith('tree:')) tree = true; });
       if (tree) continue;

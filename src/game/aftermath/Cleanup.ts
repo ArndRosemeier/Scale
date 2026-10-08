@@ -106,7 +106,7 @@ export class Cleanup {
       const R = CARCASS.cordonR, n = Math.round((Math.PI * 2 * R) / 7);
       for (let k = 0; k < n; k++) {
         const a = (k / n) * Math.PI * 2, x = b.x + Math.cos(a) * R, z = b.z + Math.sin(a) * R;
-        if (g.world.buildingAt(x, z) || g.terrain.isWater(x, z, 0)) continue;
+        if (!g.world.standable(x, z, 0)) continue;
         list.push({ kind: 'barrier', x, y: g.world.groundHeight(x, z), z, yaw: -a, paint: BARRIER, o: { blink: k % 3 === 0 ? 2 : 0 } });
       }
     }

@@ -570,7 +570,7 @@ export class ResponseDirector {
     for (let k = 0; k < 4; k++) {
       const a = base + SPOT_TURN[(k + tries * 2) % SPOT_TURN.length];
       const x = t.x + Math.cos(a) * r, z = t.z + Math.sin(a) * r;
-      if (g.world.buildingAt(x, z)) continue;
+      if (!g.world.standable(x, z)) continue;
       if (!guns.los(x, g.terrain.height(x, z) + MUZZLE_Y.stand, z, t.x, ty, t.z)) continue;
       return { x, z };
     }
