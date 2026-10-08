@@ -3883,7 +3883,7 @@ section('target sight: one test', async () => {
 
 // The nearest person goes through peds.nearest (with isUp / isBystander / hasRole). The loops left by hand
 // score by more than distance or walk another list (officers, a brawl's fighters, the entranced).
-{
+section('nearest person: one search', async () => {
   const keep = ['sim/Pedestrians.ts', 'game/Deeds.ts', 'crime/Procession.ts', 'crime/TurfBrawl.ts', 'crime/Police.ts', 'people/Manners.ts', 'future/ServiceBots.ts'];
   const hand: string[] = [];
   const walkN = (dir: string): void => {
@@ -3895,7 +3895,7 @@ section('target sight: one test', async () => {
   };
   walkN('src');
   check(hand.length === 0, `people: nearest through peds.nearest (${hand.join(', ') || 'none'})`);
-}
+});
 
 // Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
 // BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
