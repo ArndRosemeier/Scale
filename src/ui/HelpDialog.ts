@@ -112,7 +112,7 @@ export class HelpDialog {
       const c = bindingOf(a.id)[i];
       const w = this.waiting && this.waiting.id === a.id && this.waiting.i === i;
       const cls = `hk${w ? ' wait' : ''}${c ? '' : ' none'}`;
-      return `<button type="button" class="${cls}" data-id="${a.id}" data-i="${i}" title="${i ? 'Second key' : 'Key'}: click, then press the new key">${w ? 'press a key…' : esc(keyName(c))}</button>`;
+      return `<button type="button" class="${cls}" data-id="${a.id}" data-i="${i}" title="${i ? 'Second key' : 'Key'}: click, then press the new key">${w ? 'press…' : esc(keyName(c))}</button>`;
     };
     const groups = KEY_GROUPS.map((g) => `
       <div class="hk-group">

@@ -58,6 +58,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 #pause button:hover { border-color: #d8b56a; }
 #pause .buttons { display: flex; gap: 10px; margin-top: 18px; }
 #pause #pResume { background: #d8b56a; color: #1a1408; border: 0; font-weight: 600; }
+/* Above the origin intro (#cine, 60): H during the intro gives a usable dialog. */
+#help { z-index: 65; }
 #help .help-panel { width: min(1040px, 96vw); height: min(880px, 90vh); padding: 0; display: flex; flex-direction: column; overflow: hidden; background: rgba(20, 26, 34, 0.97); }
 .help-head { display: flex; align-items: flex-end; gap: 12px; padding: 14px 18px 0; border-bottom: 1px solid #2c3846; }
 .help-tabs { flex: 1; display: flex; gap: 4px; }
@@ -87,7 +89,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 .hk { min-width: 64px; padding: 4px 8px; background: #0f141a; color: #ffd98a; border: 1px solid #3a4756; border-bottom-width: 2px; border-radius: 6px; font: 600 12.5px ui-monospace, Consolas, monospace; text-align: center; cursor: pointer; white-space: nowrap; }
 .hk:hover { border-color: #d8b56a; }
 .hk.none { color: #556270; }
-.hk.wait { color: #1a1408; background: #d8b56a; border-color: #d8b56a; animation: hk-pulse 0.9s ease-in-out infinite alternate; }
+.hk.wait { min-width: 64px; color: #1a1408; background: #d8b56a; border-color: #d8b56a; animation: hk-pulse 0.9s ease-in-out infinite alternate; }
 @keyframes hk-pulse { from { opacity: 1; } to { opacity: 0.6; } }
 .hk.fixed { display: inline-block; cursor: default; color: #b9c4cf; border-style: dashed; min-width: 0; }
 .help-foot { display: flex; align-items: center; gap: 14px; font-size: 13px; color: #b8c4d0; }
