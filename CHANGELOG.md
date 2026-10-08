@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.120 — 2026-10-08
+
+- **No more shaking arms when you stop running late in a session.** The breathing motion of the chest sped up and slowed down with your speed, and after a few minutes of play every stop made the chest, and with it the arms, shake for a second or two. Breathing now changes pace smoothly, however long you have been playing. Tails swaying on other creatures had the same problem and are fixed too.
+
 ## 0.119 — 2026-10-07
 
 - **Your sidekick earns karma and learns new powers.** They earn karma of their own by knocking out bad guys, winning fights at your side and helping people up who were left lying. They spend it themselves on powers that suit who they are: fireballs and lightning for the curious and outgoing, a ground quake, a shoulder charge and more strength for the hard-headed, a stunning flash and a shield for the dutiful, a blast of wind and toughness for the nervous. A message tells you what they learned. In a fight they mix their powers, using whichever fits and switching between them rather than repeating one, and raise a shield when they get hurt.
