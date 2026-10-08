@@ -52,7 +52,7 @@ export const WAR = {
   penMax: 5,
 };
 
-export function freshWar(at: number, pens: number, rnd: () => number = Math.random): WarState {
+export function freshWar(at: number, pens: number, rnd: () => number): WarState {
   return {
     v: 1, murk: 0.45, lumen: 0.7, front: 0.08, at, nextRaid: at + 1.5 + rnd() * 2, mawBack: 0, raid: null,
     captives: Array.from({ length: pens }, () => 2 + Math.floor(rnd() * 3)), nextBreach: at + 24, stats: { won: 0, lost: 0, kills: 0, freed: 0, maw: 0, breaches: 0 },
@@ -74,7 +74,7 @@ export interface WarEvents {
  * Advance the war to game hour `now`. `live`: the player is near the Front (raids are fought out
  * by agents and end through `endRaid`); `night`: breakouts happen at night.
  */
-export function stepWar(w: WarState, now: number, live: boolean, night: boolean, ev: WarEvents = {}, rnd: () => number = Math.random): void {
+export function stepWar(w: WarState, now: number, live: boolean, night: boolean, ev: WarEvents = {}, rnd: () => number): void {
   // Long gaps (a loaded save, time skipped) are stepped an hour at a time.
   let guard = 0;
   while (w.at < now && guard++ < 24 * 30) {
@@ -146,7 +146,7 @@ export function murkDown(w: WarState, byPlayer: boolean): void {
 }
 
 /** A live raid ends: Murk won (they broke through: some got past the line) or not. */
-export function endRaid(w: WarState, murkWon: boolean, rnd: () => number = Math.random): void {
+export function endRaid(w: WarState, murkWon: boolean, rnd: () => number): void {
   if (!w.raid) return;
   w.raid = null;
   applyOutcome(w, murkWon, rnd);
