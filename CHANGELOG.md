@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.155 — 2026-10-08
+
+- **Three costumes, on F1, F2 and F3.** At the start all three are your hero's look. The fitting mirror in a clothes shop now changes only the costume you are wearing, so you can keep, say, street clothes on F1 and your hero suit on F2 and switch anywhere in the city. The three costumes are kept in your saves. The keys can be moved in the help (H, Keys). The detailed info line (frame rate, position) moved from F3 to F4.
+
 ## 0.154 — 2026-10-08
 
 - **Tab only offers what your powers can actually reach.** The Tab list, the click pick and the fire wave each checked line of sight their own way: they ignored cars and holes blasted in walls, so Tab could lock onto someone behind a bus that the power then refused to hit. Now they all use the same line of sight as the powers and every shooter. People behind cars are no longer offered, targets behind a blasted-open wall are, and the fire wave no longer burns through parked cars. Also fixed: shooters and powers could fire through the solid parts of landmarks (town hall, stadium, attractions); those now block the line.
@@ -13,6 +17,7 @@ Every push raises the version by 0.001. Newest first.
 ## 0.152 — 2026-10-08
 
 - **Fair credit against monsters.** The Strider and the last-resort strike judged differently whether the hero had earned the win. Now both use one rule: the monster was angriest with the hero, or the hero did at least a quarter of the fighting it remembers. Rogue and hijacked machines also count the hero's last blow the same way, with the same 6-second window. The Maw only rewards the hero (and raises the Lumen's trust) when the hero brought it down. Behind the scenes, every monster books its anger and armour through one place, and a self-test keeps it that way.
+
 ## 0.151 — 2026-10-08
 
 - **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, a screen shake never pushes it through a wall, it no longer sinks into a raised platform or slips behind the walls at the underpass mouth, and near the top of a stair it keeps clear of the street overhead. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).
