@@ -9,6 +9,8 @@ import type { WorldIndex } from '../world/WorldIndex';
 import type { Input } from '../game/Input';
 import { clamp, damp, lerp } from '../core/math';
 
+const _origin = new THREE.Vector3();
+
 export class CameraRig {
   yaw = 0;
   pitch = -0.2;
@@ -84,6 +86,14 @@ export class CameraRig {
         if (this.solidAt(sx + right.x * shoulder * f, sy, sz + right.z * shoulder * f)) { origin = this.smoothPivot.clone(); break; }
       }
     }
+    if (this.solidAt && this.solidAt(origin.x, origin.y, origin.z)) {
+      // The boom must start in open air: the lagging pivot (going down stairs) can sit in a low
+      // ceiling. Fall back toward the head, then down the body, to the first free point.
+      const px = this.pivot.x, pz = this.pivot.z;
+      for (const y of [this.pivot.y, this.pivot.y - h * 0.2, this.pivot.y - h * 0.4, p.pos.y + h * 0.3]) {
+        if (!this.solidAt(px, y, pz)) { origin = _origin.set(px, y, pz); break; }
+      }
+    }
     if (this.solidAt) {
       // Dense enough that thin interior walls (tested within 0.12 m) can't be stepped over.
       const steps = Math.min(400, Math.max(40, Math.ceil(want / 0.08)));
@@ -98,8 +108,9 @@ export class CameraRig {
     }
     this.dist = maxD < this.dist ? maxD : lerp(this.dist, maxD, damp(3, dt));
     const camPos = origin.clone().addScaledVector(dir, this.dist);
-    // Keep above the ground.
-    if (!this.underground) {
+    // Keep above the ground (not while the boom starts under it: on a stair down from the street
+    // the camera would be lifted out of the stairwell and look at the hero through the pavement).
+    if (!this.underground && origin.y > this.world.terrain.height(origin.x, origin.z)) {
       const g = this.world.terrain.height(camPos.x, camPos.z);
       if (camPos.y < g + h * 0.15 + 0.05) camPos.y = g + h * 0.15 + 0.05;
     }
@@ -110,9 +121,9 @@ export class CameraRig {
     this.shakeT += (dt * 30) / Math.sqrt(Math.max(1, h / 1.8));
     if (this.shake > 0) {
       const s = this.shake * this.shake * h * 0.05;
-      camPos.x += Math.sin(this.shakeT * 1.1) * s;
-      camPos.y += Math.sin(this.shakeT * 1.7 + 1) * s;
-      camPos.z += Math.sin(this.shakeT * 1.3 + 2) * s;
+      const sx = camPos.x + Math.sin(this.shakeT * 1.1) * s, sy = camPos.y + Math.sin(this.shakeT * 1.7 + 1) * s, sz = camPos.z + Math.sin(this.shakeT * 1.3 + 2) * s;
+      // (Never shaken through a tunnel wall.)
+      if (!this.solidAt || !this.solidAt(sx, sy, sz)) camPos.set(sx, sy, sz);
     }
     this.cam.position.copy(camPos);
     this.cam.lookAt(origin);

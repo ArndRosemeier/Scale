@@ -443,7 +443,9 @@ export class Game {
       if (this.camRig.underground) return !this.underground.cameraFree(x, y, z, 0.12);
       const inside = this.interiors.insideAt(p.pos.x, p.pos.y + p.height * 0.5, p.pos.z);
       if (inside) return this.interiors.solidIndoors(inside, x, y, z);
-      if (y < this.terrain.height(x, z) + 0.05) return true;
+      // Under the street only the tunnels are open (the camera follows the hero down a stairwell
+      // before the hero counts as underground).
+      if (y < this.terrain.height(x, z) + 0.05) return !this.underground.cameraFree(x, y, z, 0.12);
       // Landmark walls and floors (the town hall can be walked into: the camera stays inside).
       if (landmarks.hit(x, y, z)) return true;
       const b = this.world.buildingAt(x, z);
