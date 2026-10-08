@@ -50,6 +50,7 @@ import {
   FIREBALL_BURN, NOVA, NOVA_RADIUS, NOVA_FREEZE, ICE, ICE_WIDTH, ICE_LIFE,
   BOLT, BOLT_JUMPS, BOLT_JUMP_RANGE, BOLT_REACH, BOLT_STUN, QUAKE, QUAKE_LENGTH, QUAKE_IMPULSE, GUST, GUST_RADIUS, GUST_TIME, GUST_LIFT,
   HYDRO_RANGE, HYDRO_FORCE, SHRINK, SHRINK_FACTOR, SHRINK_TIME,
+  POWER_HIT,
 } from '../abilities/tuning';
 
 export interface PowerWorld {
@@ -453,7 +454,7 @@ export class Elements {
 
   private freeze(t: Target, dur: number): void {
     // A monster: the frost bites into the leg nearest the player (enough of it and the leg buckles).
-    if (t.kind === 'threat') { this.hurtThreat(t, dur * 18 * (t.obj.onElement?.('frost', dur) ?? 1), t.obj.x + (this.w.player.pos.x - t.obj.x) * 0.3, t.obj.y * 0.4, t.obj.z + (this.w.player.pos.z - t.obj.z) * 0.3); return; }
+    if (t.kind === 'threat') { this.hurtThreat(t, dur * POWER_HIT.frostCreature * (t.obj.onElement?.('frost', dur) ?? 1), t.obj.x + (this.w.player.pos.x - t.obj.x) * 0.3, t.obj.y * 0.4, t.obj.z + (this.w.player.pos.z - t.obj.z) * 0.3); return; }
     const s = this.track(t);
     const fresh = s.frozen <= 0;
     s.frozen = Math.max(s.frozen, dur);
@@ -512,7 +513,7 @@ export class Elements {
   }
 
   private shrink(t: Target, factor: number, dur: number): void {
-    if (t.kind === 'threat') { this.hurtThreat(t, dur * 4 * (1 - factor)); return; }
+    if (t.kind === 'threat') { this.hurtThreat(t, dur * POWER_HIT.shrinkCreature * (1 - factor)); return; }
     const s = this.track(t);
     if (s.shrink <= 0) this.stats.shrunk++;
     s.shrink = Math.max(s.shrink, dur);
@@ -615,7 +616,7 @@ export class Elements {
       switch (t.kind) {
         case 'person': {
           const a = t.obj;
-          if (a.state !== PState.Down) { this.knock(a, A.ox, A.oz, 2.5); this.record('laser', t, 'knockdown', a.x, a.z); }
+          if (a.state !== PState.Down) { this.knock(a, A.ox, A.oz, POWER_HIT.laserKnock); this.record('laser', t, 'knockdown', a.x, a.z); }
           if ((statusOf(a)?.burning ?? 0) <= 0) this.record('laser', t, 'burn', a.x, a.z);
           this.burn(t, 3);
           break;
@@ -751,7 +752,7 @@ export class Elements {
       case 'person': {
         const a = t.obj;
         // Close: thrown off their feet. Further: on fire and running (they pat themselves out).
-        if (d < b.range * 0.45 && a.state !== PState.Down) { this.knock(a, b.ox, b.oz, 3); this.record('fireWave', t, 'knockdown', a.x, a.z); }
+        if (d < b.range * POWER_HIT.fireKnockReach && a.state !== PState.Down) { this.knock(a, b.ox, b.oz, POWER_HIT.fireKnock); this.record('fireWave', t, 'knockdown', a.x, a.z); }
         else if (a.state !== PState.Down) { a.state = PState.Flee; a.stateT = 0; a.fearX = b.ox; a.fearZ = b.oz; a.fear = 2; }
         this.burn(t, burnT);
         this.record('fireWave', t, 'burn', a.x, a.z);
@@ -767,7 +768,7 @@ export class Elements {
       }
       case 'robot': case 'bot': this.shove(t, b.dx * 500, 150, b.dz * 500, 'fireWave'); this.burn(t, burnT * 0.5); break;
       case 'drone': this.shove(t, b.dx * 60, 20, b.dz * 60, 'fireWave'); break;
-      case 'threat': this.hurtThreat(t, FIRE_HEAT[b.rank] * b.k * b.k * DAMAGE_PER_IMPULSE * 1.5 * (t.obj.onElement?.('fire', burnT) ?? 1), b.ox + b.dx * d, b.oy + b.dy * d, b.oz + b.dz * d); break;
+      case 'threat': this.hurtThreat(t, FIRE_HEAT[b.rank] * b.k * b.k * DAMAGE_PER_IMPULSE * POWER_HIT.fireCreatureMul * (t.obj.onElement?.('fire', burnT) ?? 1), b.ox + b.dx * d, b.oy + b.dy * d, b.oz + b.dz * d); break;
       case 'prop': {
         const p = t.obj;
         if (p.tree || p.kind.includes('bench') || p.kind.includes('bin')) { this.burn(t, burnT * 1.5); this.record('fireWave', t, 'burn', c.x, c.z); }
@@ -836,7 +837,7 @@ export class Elements {
       switch (t.kind) {
         case 'person': {
           const a = t.obj;
-          if (a.state !== PState.Down) { this.knock(a, x, z, 3 + 6 * f, 2 + 4 * f); this.record('fireball', t, 'knockdown', a.x, a.z); }
+          if (a.state !== PState.Down) { this.knock(a, x, z, POWER_HIT.fireballKnock + POWER_HIT.fireballKnockCentre * f, 2 + 4 * f); this.record('fireball', t, 'knockdown', a.x, a.z); }
           this.burn(t, burnT);
           this.record('fireball', t, 'burn', a.x, a.z);
           break;
@@ -853,7 +854,7 @@ export class Elements {
         }
         case 'robot': case 'bot': this.shove(t, hx * 900 * f * k, 400 * f * k, hz * 900 * f * k, 'fireball'); this.burn(t, burnT * 0.5); break;
         case 'drone': this.shove(t, hx * 120 * f, 60 * f, hz * 120 * f, 'fireball'); break;
-        case 'threat': this.hurtThreat(t, FIREBALL_BLAST[r] * k * k * DAMAGE_PER_IMPULSE * 1.5 * (t.obj.onElement?.('fire', burnT) ?? 1), x, y, z); break;
+        case 'threat': this.hurtThreat(t, FIREBALL_BLAST[r] * k * k * DAMAGE_PER_IMPULSE * POWER_HIT.fireballCreatureMul * (t.obj.onElement?.('fire', burnT) ?? 1), x, y, z); break;
         case 'prop': {
           const p = t.obj;
           this.shove(t, hx * 600 * f * k, 400 * f * k, hz * 600 * f * k, 'fireball');
@@ -1053,7 +1054,7 @@ export class Elements {
         if (s && s.frozen > 0) continue;
         if (!this.onIceAt(a.x, a.y, a.z) || Math.random() > 0.35) continue;
         const fx = -Math.sin(a.heading), fz = -Math.cos(a.heading);
-        this.knock(a, a.x - fx, a.z - fz, 1.2 + a.speed * 0.4, 1);
+        this.knock(a, a.x - fx, a.z - fz, POWER_HIT.iceSlipKnock + a.speed * POWER_HIT.iceSlipPerSpeed, 1);
         this.record('icePath', { kind: 'person', obj: a }, 'knockdown', a.x, a.z);
         this.w.sound('land_thud', a.x, a.y, a.z, 0.4, 1.2, 4);
       }
@@ -1156,7 +1157,7 @@ export class Elements {
     switch (t.kind) {
       case 'person': {
         const a = t.obj;
-        if (a.state !== PState.Down) this.knock(a, x + (Math.random() - 0.5), z + (Math.random() - 0.5), 1.4, 1.2);
+        if (a.state !== PState.Down) this.knock(a, x + (Math.random() - 0.5), z + (Math.random() - 0.5), POWER_HIT.boltKnock, 1.2);
         this.stun(t, stunT);
         this.record('lightning', t, 'stun', a.x, a.z);
         break;
@@ -1173,7 +1174,7 @@ export class Elements {
       case 'robot': this.w.future.robots.knock(t.obj, (Math.random() - 0.5) * 400, 1500, (Math.random() - 0.5) * 400); this.record('lightning', t, 'break', x, z); break;
       case 'bot': this.w.future.service.knock(t.obj, (Math.random() - 0.5) * 400, 1500, (Math.random() - 0.5) * 400); this.record('lightning', t, 'break', x, z); break;
       case 'drone': this.w.future.drones.knock(t.obj, 0, -60, 0); this.stun(t, stunT); this.record('lightning', t, 'break', x, z); break;
-      case 'threat': this.hurtThreat(t, stunT * 40 * this.reachK * (t.obj.onElement?.('shock', stunT) ?? 1), x, y, z); break;
+      case 'threat': this.hurtThreat(t, stunT * POWER_HIT.boltCreature * this.reachK * (t.obj.onElement?.('shock', stunT) ?? 1), x, y, z); break;
       case 'prop': {
         const p = t.obj;
         if (p.kind.includes('lamp') || p.kind.includes('traffic') || p.kind.includes('sign')) {
@@ -1281,7 +1282,7 @@ export class Elements {
           const sl = Math.hypot(sx, sz) || 1;
           sx /= sl; sz /= sl;
           switch (t.kind) {
-            case 'person': this.knock(t.obj, c.x - sx, c.z - sz, Math.min(9, 3 + J / 30000), Math.min(9, 3.5 + J / 25000)); this.record('stomp', t, 'knockdown', c.x, c.z); break;
+            case 'person': this.knock(t.obj, c.x - sx, c.z - sz, Math.min(POWER_HIT.quakeKnockMax, POWER_HIT.quakeKnock + J * POWER_HIT.quakeKnockPerNs), Math.min(9, 3.5 + J / 25000)); this.record('stomp', t, 'knockdown', c.x, c.z); break;
             case 'car': {
               const v = t.obj, near = Math.hypot(c.x - mx, c.z - mz) < 2.6 * sk;
               const Jc = Math.min(2.4e4, J * 0.35 + 4000);
@@ -1290,7 +1291,7 @@ export class Elements {
               break;
             }
             case 'drone': if (c.y - g < 3 * sk) this.shove(t, sx * 100, 200, sz * 100, 'stomp'); break;
-            default: this.shove(t, sx * Math.min(J, 3000), Math.min(J, 3000), sz * Math.min(J, 3000), 'stomp'); break;
+            default: { const Js = Math.min(J, POWER_HIT.quakeShoveMax); this.shove(t, sx * Js, Js, sz * Js, 'stomp'); break; }
           }
         });
         // Walls along the crack (only where there are buildings).
@@ -1396,7 +1397,7 @@ export class Elements {
         const dx = c.x - v.x, dz = c.z - v.z, d = Math.hypot(dx, dz);
         if (d > v.r + (t.kind === 'car' ? t.obj.length * 0.4 : 0.3) || c.y < v.y - 1 || c.y > v.y + v.r * 3) return;
         const last = v.hitT.get(t.obj) ?? -1e9;
-        if (this.time - last < (t.kind === 'person' ? 2.2 : t.kind === 'car' ? 3 : 1.2)) return;
+        if (this.time - last < (t.kind === 'person' ? POWER_HIT.gustEveryPerson : t.kind === 'car' ? 3 : POWER_HIT.gustEvery)) return;
         v.hitT.set(t.obj, this.time);
         // Round the axis, a little outward, and up.
         const tx = d > 1e-3 ? -dz / d : 1, tz = d > 1e-3 ? dx / d : 0;
@@ -1406,7 +1407,7 @@ export class Elements {
           case 'person': {
             const a = t.obj;
             if (a.state === PState.Down && a.vy > 0) return;
-            this.knock(a, a.x - tx, a.z - tz, lift * 0.7 * k, lift * k);
+            this.knock(a, a.x - tx, a.z - tz, lift * POWER_HIT.gustKnock * k, lift * k);
             a.vx = (tx * 0.8 + ox * 0.4) * lift * k; a.vz = (tz * 0.8 + oz * 0.4) * lift * k;
             this.record('gust', t, 'lift', a.x, a.z);
             break;
@@ -1424,7 +1425,7 @@ export class Elements {
           }
           case 'robot': case 'bot': this.shove(t, (tx + ox * 0.3) * 160 * lift * k, 120 * lift * k, (tz + oz * 0.3) * 160 * lift * k, 'gust'); break;
           case 'drone': this.shove(t, tx * 14 * lift * k, 8 * lift * k, tz * 14 * lift * k, 'gust'); break;
-          case 'threat': this.hurtThreat(t, 6 * lift * k); break;
+          case 'threat': this.hurtThreat(t, POWER_HIT.gustCreature * lift * k); break;
           case 'prop': {
             const J = 250 * r * lift * k;
             this.shove(t, tx * J, 0, tz * J, 'gust');
@@ -1470,8 +1471,8 @@ export class Elements {
     // Force, 10 ticks a second.
     this.hydroTick -= dt;
     if (this.hydroTick > 0) return;
-    this.hydroTick = 0.1;
-    const J = HYDRO_FORCE[r] * p.k * p.k * 0.1;
+    this.hydroTick = POWER_HIT.hydroTick;
+    const J = HYDRO_FORCE[r] * p.k * p.k * POWER_HIT.hydroTick;
     const H = A.hit;
     const T = this.w.targeting;
     // Fire out near the impact (burning facades too).
@@ -1501,7 +1502,7 @@ export class Elements {
       switch (t.kind) {
         case 'person': {
           const a = t.obj;
-          if (a.state !== PState.Down && e.acc > 260) { this.knock(a, A.ox, A.oz, Math.min(9, 2 + e.acc / 250), 0.8); this.record('hydro', t, 'knockdown', a.x, a.z); e.acc = 0; }
+          if (a.state !== PState.Down && e.acc > POWER_HIT.hydroKnockAt) { this.knock(a, A.ox, A.oz, Math.min(POWER_HIT.hydroKnockMax, POWER_HIT.hydroKnock + e.acc * POWER_HIT.hydroKnockPerNs), 0.8); this.record('hydro', t, 'knockdown', a.x, a.z); e.acc = 0; }
           else if (a.state === PState.Down) { a.vx += A.dx * J / 150; a.vz += A.dz * J / 150; }
           break;
         }
@@ -1513,7 +1514,7 @@ export class Elements {
         }
         case 'robot': case 'bot': if (e.acc > 120) { this.shove(t, A.dx * e.acc, 80, A.dz * e.acc, 'hydro'); e.acc = 0; } break;
         case 'drone': this.shove(t, A.dx * J * 0.15, -J * 0.05, A.dz * J * 0.15, 'hydro'); break;
-        case 'threat': this.hurtThreat(t, J * DAMAGE_PER_IMPULSE * 0.3, ex, ey, ez); break;
+        case 'threat': this.hurtThreat(t, J * DAMAGE_PER_IMPULSE * POWER_HIT.hydroCreatureMul, ex, ey, ez); break;
         case 'prop': if (this.shove(t, A.dx * e.acc, 0, A.dz * e.acc, 'hydro')) e.acc = 0; break;
       }
     };

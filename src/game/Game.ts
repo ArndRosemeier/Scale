@@ -31,6 +31,7 @@ import { Destruction } from '../destruction/Destruction';
 import { Collision } from '../world/Collision';
 import { Interactions } from './Interactions';
 import { Stimuli, noticeRadius } from './Stimuli';
+import { Later } from '../core/later';
 import { Audio } from '../audio/Audio';
 import { G } from '../render/materials/globals';
 import { clamp, lerp, smoothstep } from '../core/math';
@@ -65,9 +66,10 @@ import { Menu } from '../ui/Menu';
 import { GameMap } from '../ui/map/GameMap';
 import { Compass } from '../ui/Compass';
 import { Barks } from '../ui/Barks';
-import { setSight } from '../render/screen';
+import { setSight, markerOnScreen, screenPoint } from '../render/screen';
 import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
+import { ShaderCounter } from '../debug/ShaderCounter';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -121,6 +123,7 @@ import { Fame } from './fame/Fame';
 import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
+import { POWER_HIT } from './abilities/tuning';
 
 /** What someone a super speed runner brushed past calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re running!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -150,6 +153,8 @@ export class Game {
   collision!: Collision;
   interactions!: Interactions;
   stimuli = new Stimuli();
+  /** Game-time callbacks (instead of setTimeout for anything that changes the game). */
+  readonly later = new Later();
   audio = new Audio();
   /** Background music (src/audio/music): moods from the game state, stems loaded on first need. */
   music = new Music(this);
@@ -558,6 +563,7 @@ export class Game {
     this.compass = new Compass(this);
     this.barks = new Barks(this);
     this.admin = new AdminConsole(this);
+    new ShaderCounter(this.renderer.gl as unknown as THREE.WebGLRenderer, this.renderer.webgpu);
     this.skyline.start(this.player.pos.x, this.player.pos.z);
     this.flightFx = new FlightFX(this.dust);
     this.renderer.scene.add(this.flightFx.group);
@@ -766,6 +772,7 @@ export class Game {
     // (The ward lies deep under the hospital: lit, heard and seen like the underground.)
     if (this.defeat.inWard) this.camRig.underground = true;
     this.stimuli.update(dt);
+    this.later.update(dt);
     this.simT += dt;
     const readyCells = [...this.streamer.cells.values()].filter((c) => c.status === 'ready');
     this.T('net', () => this.net.maybeRebuild(this.simT, readyCells));
@@ -931,7 +938,7 @@ export class Game {
       // stumble, are cross with the speedster and get up again (no harm on the ledger, no
       // reputation lost: one cannot run at super speed through a city and never touch anyone).
       const brush = running && p.height < 3;
-      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : 12, (1.5 + 0.6 * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
+      this.reactions.knockDown(a, fx, fz, Math.min(brush ? 5 : POWER_HIT.dashKnockMax, (POWER_HIT.dashKnock + POWER_HIT.dashKnockPerRank * this.dashRank) * Math.sqrt(k)), brush ? 'brush' : 'player');
       if (running) a.heading += side * 2.5;
       if (brush) { this.brushedBy(a); continue; }
       this.audio.play('punch_impact', a.x, a.y + 1, a.z, 0.5, 0.9, 4, this.renderer.camera.position);
@@ -1078,6 +1085,7 @@ export class Game {
       this.audio.chime('buy');
     };
     this.deeds = new Deeds(this.peds, this.reactions, this.player, this.progress);
+    const deedView = screenPoint();
     this.deeds.hooks = {
       toast,
       reachable: (a) => {
@@ -1087,6 +1095,14 @@ export class Game {
         return !this.world.wet(a.x, a.z, 0);
       },
       sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
+      inView: (x, feet, z) => {
+        // Not from indoors (an interior, a landmark's rooms, a building prism): the street is out of sight.
+        const c = cam.position;
+        if (this.indoorsAt(c.x, c.y, c.z)) return false;
+        const b = this.world.buildingAt(c.x, c.z);
+        if (b && c.y < b.top && c.y > b.low) return false;
+        return markerOnScreen(x, feet + 1.2, z, feet, cam, deedView, 0.85);
+      },
       markers: (m) => this.map.setMarkers('deeds', m),
       rep: (d, reason) => this.crime?.rep.add(d, reason),
     };

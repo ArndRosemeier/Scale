@@ -34,7 +34,7 @@ export function camSweep(seed: number, size: number, sewers: boolean): CamReport
   const u: any = new Underground(macro, terrain, { facade: { tileMeters: [] } } as any, ground);
   console.log(`  underground built in ${Date.now() - t0} ms`);
   const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
-  const tubes = (u.tubes as any[]).filter((t) => t.kind === 'passage' || (sewers && t.kind === 'sewer'));
+  const tubes = (u.tubes as any[]).filter((t) => (sewers ? t.kind === 'sewer' : t.kind === 'passage')).slice(0, sewers ? 20 : Infinity);
   // Drawn geometry: every tube chunk and station hall (built once each).
   const chunks = new Map<string, any>();
   const meshesNear = (x: number, z: number): any[] => {
@@ -94,7 +94,7 @@ export function camSweep(seed: number, size: number, sewers: boolean): CamReport
     const all = new Set(meshes);
     for (const m of meshesNear(Pt[(n - 1) * 3], Pt[(n - 1) * 3 + 2])) all.add(m);
     const M = [...all];
-    for (const dir of [1, -1]) for (const lat of [-(t.halfWidth - 0.45), 0, t.halfWidth - 0.45]) for (const pitch of [-0.35, -0.1, 0.25]) {
+    for (const dir of [1, -1]) for (const lat of [-(t.halfWidth - 0.45), 0, t.halfWidth - 0.45]) for (const pitch of [-1.1, -0.35, 0.25, 0.9]) {
       rig.pitch = pitch;
       rig.snap();
       let bad = 0, first = '';

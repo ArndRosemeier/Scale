@@ -3695,10 +3695,47 @@ aliensChecks(check);
       const txt = readFileSync(full, 'utf8');
       if (!full.endsWith('core/math.ts') && MATH.test(txt)) copies.push(`${full} (${MATH.exec(txt)![1]})`);
       if (!full.endsWith('ui/esc.ts') && ESC.test(txt)) copies.push(`${full} (esc)`);
+      // sRGB to linear: srgbToLinear (core/math) or srgbColor (render/color). Shaders keep their own (GLSL/TSL strings).
+      if (!/core\/math\.ts$|props\/vehicles\.ts$|webgpu\/vehicles\.ts$/.test(full) && /0\.04045/.test(txt)) copies.push(`${full} (sRGB curve)`);
+      if (!full.endsWith('render/color.ts') && /=>\s*new THREE\.Color\(\)\.setRGB\([^;]*SRGBColorSpace/.test(txt)) copies.push(`${full} (sRGB colour helper)`);
+      // A float `seed * 1103515245` loses its low bits past 2^53, so the sequence decays; use core/rng's Rng.
+      if (/\w\s*\*\s*1103515245/.test(txt)) copies.push(`${full} (float LCG)`);
     }
   };
   walkM('src');
-  check(copies.length === 0, `helpers: no local copies of core/math or ui/esc (${copies.join(', ') || 'none'})`);
+  check(copies.length === 0, `helpers: no local copies of core/math, ui/esc, render/color or core/rng (${copies.join(', ') || 'none'})`);
+}
+
+// Gameplay waits in game time (core/later): Game.later.after(s, fn), not setTimeout.
+{
+  const { Later } = await import('../src/core/later');
+  const L = new Later(), got: string[] = [];
+  L.after(0.5, () => got.push('b')); L.after(0.2, () => got.push('a')); L.after(2, () => got.push('c'));
+  L.update(0.1); L.update(0.5);
+  check(got.join('') === 'ab' && L.pending === 1, `later: due callbacks run in order (${got.join('')}, ${L.pending} left)`);
+  // UI, loading, the hidden-tab ticker and the autosave may use wall-clock timers.
+  const OK = /^src\/game\/(Game\.ts|intro\/|save\/)/;
+  const timers: string[] = [];
+  const walkT = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkT(full); continue; }
+      if (f.endsWith('.ts') && !OK.test(full) && /\bset(Timeout|Interval)\(/.test(readFileSync(full, 'utf8'))) timers.push(full);
+    }
+  };
+  walkT('src/game');
+  check(timers.length === 0, `later: no wall-clock timers in gameplay (${timers.join(', ') || 'none'})`);
+}
+
+// Crimes decide fight / flee / surrender through Crime.rethink (and usually act through Crime.actOnChoice).
+// BossOp re-decides on a timer too and keeps its own block (its condition has an extra clause).
+{
+  const own: string[] = [];
+  for (const f of readdirSync('src/game/crime')) {
+    if (f === 'Crime.ts' || !f.endsWith('.ts')) continue;
+    if (/memo\.decHp !== \w+\.hp\)\s*\{/.test(readFileSync(`src/game/crime/${f}`, 'utf8'))) own.push(f);
+  }
+  check(own.length === 0, `crime: decisions go through Crime.rethink (${own.join(', ') || 'none'})`);
 }
 
 // Geometry has one home too: src/core/geom2.ts (polygons, polylines) and src/core/math.ts (angles, vectors).

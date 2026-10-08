@@ -2,9 +2,38 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.145 — 2026-10-08
+
+- **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, a screen shake never pushes it through a wall, it no longer sinks into a raised platform or slips behind the walls at the underpass mouth, and near the top of a stair it keeps clear of the street overhead. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).
+
+## 0.144 — 2026-10-08
+
+- **Fairer dice for the police and the slime war.** Patrol officers and the officers stepping out of a car used a home-made random generator whose numbers slowly got worse; they now use the game's own. The deep slime war rolled with the browser's dice, so a loaded game could go differently each time; it now rolls from the city's seed. A self-test catches the broken generator if it comes back.
+
+## 0.143 — 2026-10-08
+
+- **The power table in the help (H, Powers) now shows damage.** Every rank has a Damage column: the health a person loses (and how: per punch, per fall, everyone in the blast, at the rim or the centre …) and the points a giant creature takes before its armour. A new line on top gives what that means: a passer-by has 36 health, a mugger 55, a robber 80, lieutenants ×1.8 and bosses ×3.1; the Strider has 3000 points, the awakened tree 1000, with their weak spots and the tree's weakness to fire. The numbers are the ones the game itself uses, so they stay right when powers are rebalanced.
+
+## 0.142 — 2026-10-08
+
+- **Delayed effects keep game time.** The distant boom after a last-resort blast, the army's artillery and whistles, the ritual's second burst, the car alarms after a tremor, the hospital fade and a startled passer-by's cry were timed by the browser's clock; on slow frames they ran ahead of the game. They now wait in game time, and a self-test keeps wall-clock timers out of gameplay.
+
+## 0.141 — 2026-10-08
+
+- **Behind the scenes: crooks make up their minds in one place.** Every crime (muggers, taggers, robbers, gangs, cults, the den, the bomber, the procession, the snatcher) had its own copy of "after each blow: fight, run or give up"; they now share one, each keeping its own rule (the tagger runs first, a guard defends the door, …). Nothing changes in play; a self-test fails if a crime grows its own copy again.
+
+## 0.140 — 2026-10-08
+
+- **Shift+F11: shader counter.** A small box at the top (off by default) shows how many shaders were compiled in the last 10 seconds, the shader cap, and the longest frame, in WebGL and WebGPU.
+- **Hard cap on new shaders.** Once loading is done, at most 5 new shaders start per second, and at most one mesh's worth per frame. Anything new that would need more stays hidden until there is room, so things can pop in a little later instead of the game freezing. URL `&shadercap=N` changes the limit (0 turns it off); in the console `shaderCap.maxPerSecond = N`.
+
+## 0.139 — 2026-10-08
+
+- **No more fall cries out of nowhere.** The everyday accidents (someone trips and needs a hand up) now only happen to people you can actually see: on screen, not behind a building, and never while you are indoors or underground. So when you hear an "oof", you see who fell. Before, they picked anyone 15 to 60 m away, often behind you or round a corner.
+
 ## 0.138 — 2026-10-08
 
-- **The camera stays inside narrow tunnels.** On metro stairs, in the underpasses and at every turn of a tunnel the camera could slip through the wall and show the empty void outside. The drawn walls pinched in at each turn (a right-angle landing was about 30 % narrower than the space the camera and the hero were allowed in); they now keep their full width round the corner. Going down from the street, the camera is no longer lifted above the pavement before you count as underground, the camera's anchor never sits inside a low ceiling, and a screen shake never pushes it through a wall. In a headless walk down every stair and underpass of two cities, the camera left the tunnel in 11 % of frames before and 0.04 % now (`npx tsx tools/camsweep.ts`).
+- **Behind the scenes: one sRGB conversion.** Skin, eyes, garments, street props, the wardrobe, furniture and trees each converted their authored colours to linear light with their own copy; they now share one. Colours look exactly as before; a self-test fails if a new copy appears.
 
 ## 0.137 — 2026-10-08
 

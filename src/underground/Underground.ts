@@ -475,12 +475,38 @@ export class Underground {
     const n = this.near(x, z);
     for (const t of n.tubes) {
       if (!tubeInterior(t, x, y, z, margin)) continue;
-      // Passage ceilings stay under the street (see buildTubeChunk), except in the opening.
-      if (t.kind !== 'passage' || y < this.ground(x, z) - 0.15 - margin || this.inHole(x, z)) return true;
+      // Passage ceilings stay under the street (see buildTubeChunk), except in the opening. (The
+      // drawn street can lie up to ~0.4 m under the ground height: keep well under both.)
+      if (t.kind !== 'passage' || y < this.ground(x, z) - 0.15 - margin - STREET_SLACK || this.inHole(x, z)) return true;
     }
-    for (const b of n.boxes) if (boxAt(b, x, y, z, -margin) && y > b.y0 + margin && y < b.y1 - margin) return true;
+    for (const b of n.boxes) {
+      // Above the floor where the point is: a raised platform is solid, not air.
+      const h = boxAt(b, x, y, z, -margin);
+      if (!h || y <= h.floor + margin || y >= b.y1 - margin) continue;
+      // A passage drawn inside a station hall (the underpass mouth) has walls the hall's box doesn't know.
+      if (b.kind === 'station' && this.behindPassageWall(n.tubes, x, y, z, margin)) continue;
+      return true;
+    }
     const F = this.fieldAt(x, y, z);
     return !!F && F.sdf(x, y, z) < -margin;
+  }
+
+  /** Near a drawn passage wall (within its thickness, or behind it) at a height the passage spans? */
+  private behindPassageWall(tubes: Tube[], x: number, y: number, z: number, margin: number): boolean {
+    for (const t of tubes) {
+      if (t.kind !== 'passage') continue;
+      const h = tubeAt(t, x, y, z, 0.6);
+      if (!h || Math.abs(h.lat) < t.halfWidth - margin || y > h.floor + t.height) continue;
+      if (!this.passageSegInHall(t, h.seg)) return true;
+    }
+    return false;
+  }
+
+  /** A passage segment running through a station hall: the hall draws it, the tube draws nothing there. */
+  private passageSegInHall(t: Tube, i: number): boolean {
+    const P = t.pts, k = i * 3;
+    const mx = (P[k] + P[k + 3]) / 2, my = (P[k + 1] + P[k + 4]) / 2, mz = (P[k + 2] + P[k + 5]) / 2;
+    return this.boxes.some((bb) => bb.kind === 'station' && !!boxAt(bb, mx, my + 0.5, mz, -0.05));
   }
 
   /** Spatial index of the volumes (cells of GRID m): tubes by their segments, boxes by their bounds. */
@@ -908,7 +934,7 @@ export class Underground {
       const w0 = sideAt(P, i), w1 = sideAt(P, i + 1);
       const mx = (ax + bx) / 2, mz = (az + bz) / 2;
       const segCuts = cuts.filter((c) => c.s1 > t.cum[i] && c.s0 < t.cum[i + 1]);
-      const inStation = !sewer && halls.some((bb) => boxAt(bb, mx, (ay + by) / 2 + 0.5, mz, -0.05));
+      const inStation = !sewer && (passage ? this.passageSegInHall(t, i) : halls.some((bb) => boxAt(bb, mx, (ay + by) / 2 + 0.5, mz, -0.05)));
       // Through a hall the station draws walls, track bed and rails itself.
       if (inStation && !passage) continue;
       const open = passage && this.inHole(mx, mz);
@@ -2030,6 +2056,9 @@ function dirAt(P: number[], i: number): [number, number] {
  * of the two legs and lengthened by 1/cos(half the turn), so a wall offset by l stays l from both
  * legs (the volume, tubeAt, is that wide right into the corner). Turns sharper than 120° are capped.
  */
+/** How far the drawn street may lie under the ground height over a passage (the camera keeps clear of it). */
+const STREET_SLACK = 0.45;
+
 function sideAt(P: number[], i: number): [number, number] {
   const n = P.length / 3;
   const leg = (a: number, b: number): [number, number] => {

@@ -28,6 +28,7 @@ import * as THREE from 'three';
 import { Rng } from '../core/rng';
 import { Noise } from '../core/noise';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
+import { srgbToLinear as lin } from '../core/math';
 
 export type FurnitureKind = 'lampModern' | 'lampClassic' | 'lampDouble' | 'trafficLight' | 'bench' | 'bin' | 'hydrant' | 'mailbox' | 'bollard' | 'planter' | 'busStop' | 'fountain' | 'statue' | 'kiosk' | 'stopSign' | 'playground' | 'manhole' | 'metroEntrance' | 'newsStand' | 'bikeRack' | 'phoneBooth' | 'evCharger'
   | 'cafeTable' | 'cafeChair' | 'parasol' | 'awning' | 'menuBoard' | 'terraceRail' | 'parklet'
@@ -59,7 +60,6 @@ export const furnitureUniforms = {
 export type V = [number, number, number];
 export interface PO { m: FMat; c?: V; e?: number; s?: number }
 
-const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 const _e = new THREE.Euler();
 const _q = new THREE.Quaternion();
 const _n3 = new THREE.Matrix3();

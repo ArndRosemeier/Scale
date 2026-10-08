@@ -37,11 +37,26 @@ Its open items are consolidated here one PR at a time.
 | Add damage to a car | `dentCar(v, amount, cap?)` (`sim/Traffic.ts`; never lowers it) | `v.damage = Math.min(…)` by hand (**guarded**) |
 | Karma | `Progress.addKarma` (it already ignores the sandbox) | Your own `sandbox` check in front of it |
 
+## Time
+
+| Need | Use | Not |
+|---|---|---|
+| Do something in a few seconds (a delayed boom, a second burst, a bark) | `g.later.after(seconds, fn)` (`core/later.ts`, ticked with simulation time) | `setTimeout` in `src/game` (**guarded**; UI, loading, intro and autosave may) |
+
+## Crimes
+
+| Need | Use | Not |
+|---|---|---|
+| A crook decides again after a blow: fight, flee or surrender | `this.rethink(c, pick?)` in `game/crime/Crime.ts` (sets `memo.choice` 0/1/2, announces a fight; `pick` holds the crime's own rule) | A local `if (act.memo.decHp !== act.hp) { … }` block (**guarded**) |
+| Then the usual follow-through | `this.actOnChoice(c, dt, reach?)`: give up, fight within `reach`, or run | Copying the three lines |
+
 ## Small helpers
 
 | Need | Use | Not |
 |---|---|---|
 | clamp, 0..1 clamp, lerp, smoothstep | `core/math.ts`: `clamp`, `saturate`, `lerp`, `smoothstep` (import with an alias such as `saturate as clamp01` or `smoothstep as smooth` if the short name reads better) | A local `const clamp = …` (**guarded**) |
+| An sRGB colour as linear | `srgbColor([r, g, b])` from `render/color.ts` (a `THREE.Color`), or `srgbToLinear(c)` from `core/math.ts` for one channel | A local `lin` / `srgbToLin`, or the 0.04045 curve typed out (**guarded**; GLSL/TSL shaders keep their own) |
+| Random numbers in game code | `Rng` from `core/rng.ts` (`new Rng(seed)`, `Rng.from(...)`, `deriveSeed`); saved state rolls from a seed, never `Math.random` | A hand-rolled `seed * 1103515245` LCG (the float product loses bits and the sequence decays; **guarded**) |
 | Text into HTML | `esc` from `ui/esc.ts` (escapes `& < > " '`) | A local `esc` (the six old copies escaped different sets; **guarded**) |
 | Polygon or polyline maths (area, bounds, point in polygon, distance to the outline, length, reverse, rectangularity) | `core/geom2.ts`: `polyArea`, `polyBounds`, `pointInPoly`, `distPointPolyEdge`, `polylineLength` (`stride` 3 for x,z,extra routes), `reversePoly`, `rectangularity` | A local `polyBox`, `routeLength`, `reversed`, … (**guarded by body, not name**) |
 | Angle difference, turning toward an angle, 3D vector basics | `core/math.ts`: `angleDiff(from, to)` (= to − from, wrapped to ±π), `lerpAngle`, `v3add`, `v3sub`, `v3scale`, `v3madd`, `v3dot`, `v3cross`, `v3len`, `v3norm`, `v3lerp` (alias them to short names if you like) | A local `angDiff` / `turn` / `norm` / `cross` (**guarded by body**; a typed-out cross product is **guarded** too) |

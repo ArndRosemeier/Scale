@@ -152,12 +152,8 @@ export class Bomber extends Crime {
   private weighUp(c: PedAgent): boolean {
     const act = c.actor!;
     if (act.hp >= act.maxHp * BOMBER.hurt && !(act.memo.choice >= 0)) return false;
-    if (act.memo.decHp !== act.hp) {
-      act.memo.decHp = act.hp;
-      const d = this.decide(c);
-      act.memo.choice = d === 'surrender' ? 2 : d === 'fight' && act.memo.brave ? 1 : 0;
-      if (act.memo.choice === 1) this.emit('fight', c);
-      if (act.memo.choice === 0 && this.phase === 'commit') { act.memo.panic = 4; this.go('escape'); }
+    if (this.rethink(c, (d) => (d === 'surrender' ? 2 : d === 'fight' && act.memo.brave ? 1 : 0)) && act.memo.choice === 0 && this.phase === 'commit') {
+      act.memo.panic = 4; this.go('escape');
     }
     if (act.memo.choice === 2) { if (act.state !== 'surrender') this.surrender(c); return true; }
     return false;

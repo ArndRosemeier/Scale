@@ -15,6 +15,7 @@ import { followRoute, goTo, setState, stand, lookAt, endPursuit } from '../../si
 import type { Crime } from './Crime';
 import type { Police } from './Police';
 import { beatPairs } from '../news/pulse';
+import { Rng } from '../../core/rng';
 
 export const BEAT = {
   /** Seconds between two looks at the pairs (spawning, leaving, crimes near). */
@@ -56,7 +57,7 @@ interface Pair {
 export class Beat {
   readonly pairs: Pair[] = [];
   private t = 0;
-  private seed = 0x5eed;
+  private rng = new Rng(0x5eed);
   stats = { spawned: 0, left: 0, steppedIn: 0 };
 
   constructor(private h: BeatHost) {}
@@ -190,6 +191,6 @@ export class Beat {
     }
   }
 
-  private next(): number { return (this.seed = (this.seed * 1103515245 + 12345) >>> 0); }
-  private rand(): number { return this.next() / 4294967296; }
+  private next(): number { return this.rng.nextU32(); }
+  private rand(): number { return this.rng.float(); }
 }

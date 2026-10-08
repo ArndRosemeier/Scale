@@ -167,17 +167,9 @@ export class Mugging extends Crime {
     for (const c of crooks) {
       const act = c.actor!;
       if (subdued(act) || act.state === 'down') continue;
-      if (act.memo.decHp !== act.hp) {
-        act.memo.decHp = act.hp;
-        const d = this.decide(c);
-        act.memo.choice = d === 'surrender' ? 2 : d === 'fight' ? 1 : 0;
-        // The one with the wallet runs first, the knife covers him.
-        if (d === 'fight' && this.loot?.carrier === c && crooks.length > 1 && act.armed === 'none') act.memo.choice = 0;
-        if (act.memo.choice === 1) this.emit('fight', c);
-      }
-      if (act.memo.choice === 2) { if (act.state !== 'surrender') this.surrender(c); continue; }
-      if (act.memo.choice === 1 && this.distToPlayer(c) < 25) this.fight(c, dt);
-      else { act.memo.panic = 4; this.flee(c, dt); }
+      // The one with the wallet runs first, the knife covers him.
+      this.rethink(c, (d) => (d === 'surrender' ? 2 : d === 'fight' && !(this.loot?.carrier === c && crooks.length > 1 && act.armed === 'none') ? 1 : 0));
+      this.actOnChoice(c, dt);
     }
     return true;
   }

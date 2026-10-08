@@ -132,6 +132,11 @@ export function rgbToHex(r: number, g: number, b: number): number {
   return ((clamp(Math.round(r * 255), 0, 255) << 16) | (clamp(Math.round(g * 255), 0, 255) << 8) | clamp(Math.round(b * 255), 0, 255)) >>> 0;
 }
 
+/** One sRGB channel (0..1) to linear light (the exact piecewise curve, not a gamma 2.2 guess). */
+export function srgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
 export function hexToRgb(hex: number): [number, number, number] {
   return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 }

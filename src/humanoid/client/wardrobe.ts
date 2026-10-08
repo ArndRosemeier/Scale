@@ -7,6 +7,7 @@ import type { EquipmentVisuals, ItemVisual } from '../../items/types';
 import type { ShellLayer, ShellMaterial, WearableSpec, BodyFit, RigidPart } from '../../items/wearable';
 import { Rng } from '../../core/rng';
 import { streetWearable, streetHeld } from './streetwear';
+import { srgbColor } from '../../render/color';
 
 type C3 = [number, number, number];
 
@@ -80,7 +81,7 @@ function capPart(c: C3): RigidPart {
     socket: 'head',
     build(fit: BodyFit) {
       const g = new THREE.Group();
-      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...c, THREE.SRGBColorSpace), roughness: 0.85 });
+      const m = new THREE.MeshStandardMaterial({ color: srgbColor(c), roughness: 0.85 });
       const r = fit.headRadius * 1.08;
       const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.45), m);
       dome.position.set(0, fit.headRadius * 0.35, -0.005);
@@ -99,7 +100,7 @@ function helmetPart(c: C3): RigidPart {
     kind: 'rigid',
     socket: 'head',
     build(fit: BodyFit) {
-      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...c, THREE.SRGBColorSpace), roughness: 0.9 });
+      const m = new THREE.MeshStandardMaterial({ color: srgbColor(c), roughness: 0.9 });
       const r = fit.headRadius * 1.2;
       const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), m);
       dome.position.set(0, fit.headRadius * 0.22, -0.01);
@@ -114,7 +115,7 @@ function beaniePart(c: C3): RigidPart {
     kind: 'rigid',
     socket: 'head',
     build(fit: BodyFit) {
-      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(...c, THREE.SRGBColorSpace), roughness: 0.95 });
+      const m = new THREE.MeshStandardMaterial({ color: srgbColor(c), roughness: 0.95 });
       const r = fit.headRadius * 1.1;
       const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), m);
       dome.position.set(0, fit.headRadius * 0.25, -0.01);
@@ -133,7 +134,7 @@ export function itemDef(defId: string): { visual: { shape: string }; category?: 
 
 export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
   const g = new THREE.Group();
-  const col = new THREE.Color().setRGB(...v.primary, THREE.SRGBColorSpace);
+  const col = srgbColor(v.primary);
   switch (defId) {
     case 'phone': {
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.15, 0.008), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.5 }));
@@ -229,7 +230,7 @@ export function buildItemObject(defId: string, v: ItemVisual): THREE.Object3D {
     case 'lantern': {
       // A procession's lantern (the necromancers'): a bail in the fist, the lit glass hanging below.
       const iron = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.5, metalness: 0.6 });
-      const glow = new THREE.Color().setRGB(...(v.glowColor ?? v.accent ?? v.primary), THREE.SRGBColorSpace);
+      const glow = srgbColor(v.glowColor ?? v.accent ?? v.primary);
       const glass = new THREE.MeshStandardMaterial({ color: glow, emissive: glow, emissiveIntensity: 2.4, roughness: 0.3 });
       const bail = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.005, 5, 12, Math.PI), iron);
       bail.rotation.z = Math.PI;
