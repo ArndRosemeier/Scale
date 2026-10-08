@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.148 — 2026-10-08
+
+- **Thinner lips.** Everyone's lips were too thick: the average mouth is now noticeably thinner, for city people and new heroes alike, and the coloured lip area is tighter. The lip thickness slider's thin end now gives really thin lips.
+
 ## 0.147 — 2026-10-08
 
 - **Lip thickness slider.** The creator's Lips slider (Face tab) is now "Lip thickness (thin – full)" and finally does something you can see: from a thin line to very full lips, on women and men alike. Around the middle it changes little, so city people's faces stay much as they were. Saved with the character like every face slider.
