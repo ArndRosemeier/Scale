@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.153 — 2026-10-08
+
+- **Character creator works in WebGPU mode.** With `?gpu=webgpu` the creator showed only a grey capsule, because its preview still drew with the old WebGL renderer, which cannot show the WebGPU materials. In WebGPU mode the preview now uses a WebGPU renderer too. WebGL mode is unchanged.
+
 ## 0.152 — 2026-10-08
 
 - **Fair credit against monsters.** The Strider and the last-resort strike judged differently whether the hero had earned the win. Now both use one rule: the monster was angriest with the hero, or the hero did at least a quarter of the fighting it remembers. Rogue and hijacked machines also count the hero's last blow the same way, with the same 6-second window. The Maw only rewards the hero (and raises the Lumen's trust) when the hero brought it down. Behind the scenes, every monster books its anger and armour through one place, and a self-test keeps it that way.
