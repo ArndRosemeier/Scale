@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.187 — 2026-10-09
+
+- **Less memory used by the people of the city.** Until now, every building you passed queued its residents' trips for the next six game hours (about 18 real minutes) and kept them after you left. Driving or flying around the city piled them up and pushed the browser toward its memory limit. Now trips are queued two game hours ahead and are dropped when you move away from a building or its block unloads. The same number of people walk the streets.
+- Shop signs no longer keep a copy of each building's floor layout after they are placed, and the cache of residents' day plans is smaller.
+
 ## 0.186 — 2026-10-09
 
 - Tests only: the "room splitting" speed check allows 60 ms per office, shop or café storey (about 21 ms alone), and the brood's speed check takes the fastest of three runs against 1.5 ms. Under a full parallel test run, other workers sharing the CPU no longer make them fail.
