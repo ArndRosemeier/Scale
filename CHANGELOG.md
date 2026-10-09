@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.214 — 2026-10-09
+
+- **A freeze log.** Once the game is running, any moment it stops for more than half a second is recorded with what was going on: which parts of the game ran and for how long, work done between frames (city cells arriving, crowd bodies, autosaves), what the browser itself reports about the slow frame and which scripts it blames, whether memory dropped sharply (garbage collection), and where you were and what was happening. The first freeze of a session over a second shows a short note. **Shift+F9** saves the log as a file (this session plus the last few freezes from earlier ones, which survive a reload) to send with a bug report. The Shift+F11 box now also shows how many freezes there were and when the last one was.
+
 ## 0.213 — 2026-10-09
 
 - **A new big threat: the Roc.** After the first Strider, a giant bird of prey, 40 m from wingtip to wingtip, can come to town. It is heralded by a far-off screech from high up, or by the bird itself crossing the sky far above with its shadow sweeping over the streets. It comes in from beyond you, circles overhead screeching, then picks what to do. It may perch on the roof edge of one of the tallest buildings nearby (landing on a lower one breaks its top floor), spread its wings over the street and beat them: the gusts knock people down and throw benches, bins and debris about, and it pecks at whoever comes close. It may stoop on a car, a bus by preference, carry it up high and drop it. It dives on helicopters and drones, and rakes whoever hurt it most with its talons in a low pass. A whirlwind, or enough damage to its wings, tumbles it out of the sky onto the street for a few seconds with its head low; its head is the weak spot (three times the damage) while it screeches or is grounded. Hurt badly it flies off; brought down it falls and lies where it fell for a few game hours. The army fights it wherever it goes. The admin console has a "Roc" section, and `dev.threat.roc` has tools for testing.

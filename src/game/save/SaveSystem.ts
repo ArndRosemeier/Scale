@@ -17,6 +17,7 @@ import { avatarStore } from '../../avatar/AvatarStore';
 import { cityName } from '../../plan/names';
 import { CityDamage } from './CityDamage';
 import { saveStore } from './SaveStore';
+import { hitch } from '../../debug/HitchLog';
 import { SAVE_VERSION, metaOf, parseSave, serializeSave, type SaveData, type SaveKind, type SaveMeta, type SavePlayer } from './model';
 
 /** Seconds of play between autosaves. */
@@ -170,9 +171,10 @@ export class SaveSystem {
     const run = (async () => {
       this.setStatus('saving');
       try {
-        const d = this.capture(kind, name, id);
-        const meta = this.meta(d, this.thumbnail());
-        const ok = await saveStore.put(d, meta);
+        // (Measured: autosaves run from a timer, between frames; the freeze log should see them.)
+        const d = hitch.measure('save:capture', () => this.capture(kind, name, id));
+        const meta = this.meta(d, hitch.measure('save:thumbnail', () => this.thumbnail()));
+        const ok = await hitch.measure('save:store', () => saveStore.put(d, meta));
         if (!ok) { this.setStatus('failed'); return null; }
         this.lastSaved = Date.now();
         this.lastKind = kind;
