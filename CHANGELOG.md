@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.184 — 2026-10-09
+
+- **The title music starts as soon as the start screen shows.** It no longer waits for a click wherever the browser lets a page play sound by itself. Chrome and Edge allow that on sites you have played on before, so it will usually start right away on apps.futuremagic.de. On a first visit, and always in Safari and Firefox by default, browsers block sound until the first click, tap or key press (moving the mouse doesn't count), and the music then starts with that first input.
+
 ## 0.183 — 2026-10-09
 
 - **Observation towers have a lobby and an observation deck.** Walk into the glass drum at the foot of the TV tower, or the foot of the glass tower, and you're in a lobby round the core with a ticket desk, lift doors, souvenir racks and benches. Up top, the deck sits behind the glass ring of the pod, in the lowest disc of a stacked tower, in an octagon on the lattice tower's platform, or in the lower part of the glass tower's box. Each deck has coin telescopes at the glass, benches looking out, a snack counter and tables, and an outdoor gallery with a railing round it. You get up there by flying and walk in from the gallery.
