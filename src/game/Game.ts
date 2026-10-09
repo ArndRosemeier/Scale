@@ -1258,8 +1258,9 @@ export class Game {
       hit.length = 1;
     }
     for (const a of hit) {
-      // A blast with a person cap (the shockwave): at most personJ at the centre, half at the rim.
-      const s = personJ === undefined || J <= 0 ? 1 : Math.min(1, personJ * (1 - 0.5 * Math.min(1, Math.hypot(a.x - x, a.z - z) / r)) / J);
+      // A person cap (the shockwave, a punch): at most personJ; a blast gives half of it at the rim.
+      const fall = r > this.player.height * 0.5 ? 1 - 0.5 * Math.min(1, Math.hypot(a.x - x, a.z - z) / r) : 1;
+      const s = personJ === undefined || J <= 0 ? 1 : Math.min(1, personJ * fall / J);
       this.crime.combat.hitActor(a, jx * s, jy * s, jz * s, 'strike', 'player');
     }
   }

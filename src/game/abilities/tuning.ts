@@ -74,6 +74,11 @@ export function sizeUpkeep(h: number): number {
 /** Super strength (passive). Punch impulse in N·s at 1.8 m (× k²); index = rank. Rank 0 is an
  *  ordinary punch: shoves people, never breaks a wall or a window. */
 export const PUNCH_IMPULSE = [200, 900, 25000, 60000, 200000, 400000];
+/** Health a punch takes off a person at most, by rank (× k² for a giant). The impulse above is sized
+ *  to smash walls; on a person it made every punch from rank 2 on a sure KO, bosses included
+ *  (balance audit, v0.187). Still the hardest hit there is, but you have to get close:
+ *  rank 5 floors a thug in one punch, a lieutenant in two, a boss in three. */
+export const PUNCH_PERSON = [12, 22, 30, 40, 52, 65];
 /** Wall smashing by body momentum (running, dashing, flying into a wall): momentum multiplier. */
 export const SMASH_MUL = [0.5, 1, 2, 5, 12, 30];
 

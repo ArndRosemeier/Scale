@@ -5,7 +5,7 @@
  * DAMAGE_PER_IMPULSE), for a hero of normal size (1.8 m).
  */
 import {
-  PUNCH_IMPULSE, SHOCK_IMPULSE, SHOCK_PERSON, LASER_DOSE, FIRE_RANGE, FIRE_HEAT, FIREBALL_BLAST, NOVA_FREEZE,
+  PUNCH_IMPULSE, SHOCK_IMPULSE, SHOCK_PERSON, PUNCH_PERSON, LASER_DOSE, FIRE_RANGE, FIRE_HEAT, FIREBALL_BLAST, NOVA_FREEZE,
   BOLT_JUMPS, BOLT_STUN, QUAKE_IMPULSE, GUST_LIFT, HYDRO_FORCE, SHRINK_CAP, SHRINK_DEALT, SLIME_COUNT, SLIME_HOLD,
   POWER_HIT as H, PHASE, PHASE_DMG, FOCUS, FOCUS_DMG, SEEKER, SEEKER_DMG,
 } from './tuning';
@@ -34,8 +34,8 @@ const punchJ = (r: number) => PUNCH_IMPULSE[r] * Math.hypot(1, H.punchLift);
 /** A power's damage at rank r (1-based; the punch row is rank 0 of super strength). null: no table row. */
 export function powerDamage(id: AbilityId, r: number): PowerDamage | null {
   switch (id) {
-    case 'punch': return { people: `${n(blow(punchJ(0)))} per punch`, creatures: `${n(creature(punchJ(0)))} per punch` };
-    case 'strength': return { people: `${n(blow(punchJ(r)))} per punch`, creatures: `${n(creature(punchJ(r)))} per punch` };
+    case 'punch': return { people: `${n(Math.min(blow(punchJ(0)), PUNCH_PERSON[0]))} per punch`, creatures: `${n(creature(punchJ(0)))} per punch` };
+    case 'strength': return { people: `${n(Math.min(blow(punchJ(r)), PUNCH_PERSON[r]))} per punch`, creatures: `${n(creature(punchJ(r)))} per punch` };
     case 'shockwave': {
       const J = SHOCK_IMPULSE[r] * H.blastShare, P = Math.min(J, SHOCK_PERSON[r]);
       return { people: `${n(blow(P))} at the centre … ${n(blow(P / 2))} at the rim`, creatures: `${n(creature(J))}` };
