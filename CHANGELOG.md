@@ -2,6 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.201 — 2026-10-09
+
+- **A concert at the stadium every evening.** The act is VELA. Doors open at 19:00, the band plays from 20:00 to 23:00, and the crowd has gone home by about 23:45.
+  - **The stage:** a deck at one end of the pitch with a roof, speaker stacks and a crush barrier. Behind the band is an LED wall that shows the act, the song title and a spectrum that moves with the music.
+  - **The lights:** colour beams sweep the crowd on the beat, searchlights sweep the night sky, blinders flash on the big beats, pyro fires at the opener and the finale, and a front light shines on the band.
+  - **The band:** a singer, guitar, bass, keys and drums. The singer walks the stage and talks to the crowd between songs ("How are you doing, …?!"), and the band bows at the end.
+  - **The crowd:** the pit in front of the stage fills with real people who dance on the beat, cheer between songs and leave through the far gate afterwards. The stands fill with a seated crowd.
+  - **The music:** you hear it from far across the city, softer and more muffled the further away you are, and the score goes quiet near the show. The songs and their running order come from public/music/live.json. Until Arnd's Lyria songs are built with tools/music/build_live.py, pieces of the score stand in for them.
+  - **Trouble ends the show:** an explosion, a monster, gunfire, an evacuation or a hit fan stops the music, and everyone runs for the exits.
+  - Console commands: dev.concert.start(), go('pit' | 'stand' | 'stage' | 'far'), next(), panic(), stop().
+- **Street bands:** a trio (guitar, bass and a cajón player sitting on the box) plays on plazas, in parks and at metro stations from late morning until late evening. A few people stop to listen, and you can talk to them. They play folk, bossa or swing loops once those are built, and the street guitar until then.
+
 ## 0.200 — 2026-10-09
 
 - **Factions, step 4: the villain groups' feelings for each other change by themselves.** Each street fight between two groups deepens their feud. When two rival groups are both hunting you, they draw closer every game hour, and after about six hours they call a truce. A toast tells you: "… have called a truce — against you". During a truce they stop brawling and stop pushing into each other's turf. Once one of them stops hunting you, old habits come back within a few hours ("The truce is over"). Every pair also drifts slowly back towards its usual feelings. Truces and feuds are kept in save files.
