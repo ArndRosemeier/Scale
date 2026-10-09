@@ -111,6 +111,10 @@ class HitchLogImpl {
   armed = false;
   /** What the game is doing, for a freeze record (set by Game). */
   context: (() => string) | null = null;
+  /** Has the shader gate checked this object with its current material? (set by Game) */
+  gateKnows: ((o: THREE.Object3D) => boolean) | null = null;
+  /** The shader gate's state for a freeze record: what it waits for, what it asked for lately. */
+  gateState: (() => string) | null = null;
   /** Called after a freeze is recorded (the HUD hint). */
   onFreeze: ((f: FreezeRecord) => void) | null = null;
   version = '';
@@ -226,8 +230,11 @@ class HitchLogImpl {
         if (!hit && p.programs) for (const v of p.programs.values()) if (v === pr) hit = true;
         if (!hit) continue;
         let path = o.name || o.type, q = o.parent;
-        for (let k = 0; k < 2 && q; k++, q = q.parent) if (q.name) path = q.name + '/' + path;
-        found.push(`${path}:${mat.type}${extra.includes(mat) ? '(depth)' : ''}`);
+        for (let k = 0; k < 4 && q; k++, q = q.parent) if (q.name) path = q.name + '/' + path;
+        // (Whether the shader gate had looked at this mesh: a program it never asked for was
+        // compiled while drawing.)
+        const gate = this.gateKnows ? (this.gateKnows(o) ? ' gate:seen' : ' gate:NEVER') : '';
+        found.push(`${path}:${mat.type}${extra.includes(mat) ? '(depth)' : ''}${mat.side === 2 ? ' double' : mat.side === 1 ? ' back' : ''}${gate}`);
         break;
       }
     });
@@ -328,6 +335,7 @@ class HitchLogImpl {
     for (const [k, v] of Object.entries(all)) (k.startsWith('~') ? outside : sections)[k.replace(/^~/, '')] = v;
     let context = '';
     try { context = this.context?.() ?? ''; } catch (e) { context = 'context failed: ' + String(e); }
+    try { if (this.gateState) context += ' · ' + this.gateState(); } catch { /* diagnostics */ }
     const f: FreezeRecord = {
       at: new Date().toLocaleString(), t: +(now / 1000).toFixed(1), ms: Math.round(ms), work: Math.round(work),
       unmeasured: Math.max(0, Math.round(ms - work)), sections: top(sections, 8), outside: top(outside, 6), notes: this.notes.slice(0, 12),

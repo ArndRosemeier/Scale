@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.236 — 2026-10-09
+
+- **No more 10-second freeze the first time you meet someone in a coat, a dress or a mask.** The clothes shaders for skirts, coats and both mask cuts, and the shadows of people's hair, were only compiled when the first person wearing them came close, and that could freeze the game for up to 10 seconds on a fresh browser (it happened in the intro). Loading now dresses two unseen stand-ins in all of them, so these shaders are ready before play starts. The freeze log also names what the shader check missed and what it was compiling when a freeze happens, which should explain the remaining 1 to 4 second stalls the next time one is caught.
+
 ## 0.235 — 2026-10-09
 
 - **Less flickering inside the museum** (and the other walk-in landmarks). Four causes: the paintings in the museum (and anything hung in the airport terminal) were sunk into the thick inner walls with the canvas exactly level with the wall's face, so they were cut up by sawtooth stripes or hidden; every doorway's light frame stood exactly level with the wall's own edge, so the two surfaces fought over the jamb and it shimmered as you moved; the glass of display cases (and sleeping pods, holo tables and the great lens) sat exactly on its plinth, so the plinth's top flickered through the glass; and only the four nearest room lights are lit, which switched on and off hard as you walked past the museum's many lamps, so walls and floors blinked. Pieces along those thicker walls now stand off their face as on any other wall, frames now reach a centimetre into the doorway, glass stands half a centimetre above its plinth, and a light now fades out before another one takes its place. The great hall's lamps of the classical museum hang low enough to reach the floor.
