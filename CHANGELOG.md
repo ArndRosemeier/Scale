@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.234 — 2026-10-09
+
+- **The admin console (Ctrl+Shift+F12) can take you anywhere worth a look.** New "Go to" sections at the top list what this city has: every landmark (onto its square, facing it) and, for the ones you can walk into (museum, town hall, cathedral, fortress, airport terminal, glasshouse, towers, the starship and the Twist), a button that takes you in through the door and then room by room, one room per press. Also the next cemetery, arcade or clothes shop anywhere in the city (you are flown there and put inside once its block has loaded), the fitting mirror, the concert stage, pit and stands, towns, villages, hamlets and farms in the countryside, each metro station platform, the nearest manhole, every kind of sewer and metro side room, the slime colonies and the halls, gardens, trenches and hearts of their deep realms, the gang hideouts, and whatever threat or crime is going on right now. A button for several places of a kind steps to the next one each press and says which one it is ("3/7"). On the command line: `dev.goto.list()` and `dev.goto.go(n or 'name')`.
+
 ## 0.233 — 2026-10-09
 
 - **You no longer fall through the Twist's upper floors.** Their floor slabs were too thin for the hero's footing, so only the stairs held you. Now every floor you can walk on up there holds. The same goes for the observation decks of the TV tower and the glass tower and the lighthouse gallery. The walk-in test now measures floors the way the hero's footing does.
