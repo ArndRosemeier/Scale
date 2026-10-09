@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.234 — 2026-10-09
+
+- **Less flickering inside the museum** (and the other walk-in landmarks). Three causes: every doorway's light frame stood exactly level with the wall's own edge, so the two surfaces fought over the jamb and it shimmered as you moved; the glass of display cases (and sleeping pods, holo tables and the great lens) sat exactly on its plinth, so the plinth's top flickered through the glass; and only the four nearest room lights are lit, which switched on and off hard as you walked past the museum's many lamps, so walls and floors blinked. Frames now reach a centimetre into the doorway, glass stands half a centimetre above its plinth, and a light now fades out before another one takes its place. The great hall's lamps of the classical museum hang low enough to reach the floor.
+- `tools/zfight.ts <kind>` lists where a landmark's surfaces lie in the same plane and overlap.
+
 ## 0.233 — 2026-10-09
 
 - **You no longer fall through the Twist's upper floors.** Their floor slabs were too thin for the hero's footing, so only the stairs held you. Now every floor you can walk on up there holds. The same goes for the observation decks of the TV tower and the glass tower and the lighthouse gallery. The walk-in test now measures floors the way the hero's footing does.

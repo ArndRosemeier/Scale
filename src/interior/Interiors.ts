@@ -433,12 +433,17 @@ export class Interiors {
       }
       cand.sort((p, q) => p.d - q.d);
     }
-    const level = 2.2 + 7 * G.uNight.value;
+    // Only the nearest few are lit. Each fades out as it nears the edge (14 m, or the next one in
+    // line), so a light gives way at zero brightness: switched hard, rooms with many lights (the
+    // museum) blinked as one walked.
+    const level = 2.2 + 7 * G.uNight.value, n = this.lights.length;
+    const edge = Math.min(14, cand[n]?.d ?? Infinity);
     this.lights.forEach((l, i) => {
       const c = cand[i];
-      if (!c || c.d > 14) { l.intensity = 0; return; }
+      const f = c ? Math.min(1, (edge - c.d) / 2) : 0;
+      if (!c || f <= 0) { l.intensity = 0; return; }
       l.position.set(c.x, c.y, c.z);
-      l.intensity = level;
+      l.intensity = level * f;
     });
   }
 
