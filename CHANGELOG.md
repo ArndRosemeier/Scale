@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.183 — 2026-10-09
+
+- **Observation towers have a lobby and an observation deck.** Walk into the glass drum at the foot of the TV tower, or the foot of the glass tower, and you're in a lobby round the core with a ticket desk, lift doors, souvenir racks and benches. Up top, the deck sits behind the glass ring of the pod, in the lowest disc of a stacked tower, in an octagon on the lattice tower's platform, or in the lower part of the glass tower's box. Each deck has coin telescopes at the glass, benches looking out, a snack counter and tables, and an outdoor gallery with a railing round it. You get up there by flying and walk in from the gallery.
+- **The lighthouse can be walked into.** The door at its foot opens into a round room with a spiral stair going up. At the top, the lantern room holds the great lens, and its door opens onto the gallery. The keeper's house now stands beside the tower, so the door is clear.
+- **The fortress keep has a great hall.** Climb the steps from the courtyard into a stone hall with the throne on its dais facing the door, a long table with benches, a fireplace, banners and suits of armour. A ruined castle's hall also has fallen stones in it.
+- Interior core, step 4 of 6 completed (`docs/INTERIORS_PLAN.md`). The walk-in self-test now covers these three landmarks too: it follows a fortress's way out through its gate, and walks each room's door at that room's own floor height.
+
 ## 0.181 — 2026-10-09
 
 - **The botanical glasshouse can be walked into.** Go up the steps and through the door in the front: inside are gravel paths between green beds, a fountain in the middle of the dome with a ring path round it, and palms, broadleaf trees and ferns lining the paths, with flower beds along the glass and benches to sit on. The wings or side halls each get a planting of their own: a desert hall with cacti and rocks, or a flower hall with beds and small trees. The palm house's dome opens into its wings, and the three parallel halls are joined by arches. Plants are only as tall as each hall allows.

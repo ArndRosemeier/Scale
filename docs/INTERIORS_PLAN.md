@@ -122,9 +122,31 @@ lining the paths, seat rows at a gate) instead of its coarse grid.
 Selftest section "walk-in landmarks": museums (both styles), glasshouses (all three styles) and
 terminals, walked in from the ground through every door, every room passable through its door
 (a security lane through each scanner), key pieces present. `preview-landmark.html?kind=<museum|
-glasshouse|airport>&seed=&size=&at=u,v,y,tu,tv,ty&still=1` renders one from a real city plan on
-flat ground, outside or from a point inside. Tower deck, lighthouse and fortress keep are still
-empty.
+glasshouse|airport|tower|lighthouse|fortress>&seed=&size=&at=u,v,y,tu,tv,ty&still=1` renders one from a real city plan on
+flat ground, outside or from a point inside.
+
+## Tower deck, lighthouse and fortress keep (phase 4c)
+
+`plan/lookoutParts.ts` builds the three with a walled room shell each (walls round an outline,
+the door in the middle of its front edge, `wallAB` for walls between any two points) and
+`fill/lookout.ts` furnishes them; every room is one `fillStorey` reserved whole.
+
+- Observation tower: the TV tower's glass drum and the glass tower's shaft foot are a lobby round
+  the core (ticket desk, lift doors on the core, souvenir racks, benches); the deck sits in the
+  pod (behind the glass ring of the sphere, or in the lowest disc), in the lattice tower's octagon
+  on the third-level platform (corners cut clear of the legs, the bracing no longer solid) or in
+  the lower part of the glass tower's box. Decks have coin telescopes at the glass, benches
+  looking out, a snack counter and tables, and a gallery with a railing round them.
+- Lighthouse: the stair room at the foot (a spiral stair up through the ceiling) and the lantern
+  room with the lens, its door out onto the gallery. The keeper's house moved beside the tower.
+- Fortress keep: a great hall in the foot of the keep behind 1.6 m walls, up steps from the
+  courtyard (throne on its dais facing the door, a long table with benches, fireplace, banners,
+  armour; a ruin's has fallen stones too). Its way out leads across the courtyard and out
+  through the gate.
+
+The rooms up top (decks, the lantern room) have no way up but flying; their doors open onto
+the gallery. The walk-in test follows every exit's whole way (a fortress's through the gate)
+and walks each room's door from inside out, at the room's own floor.
 
 Checks: `tools/homeTest.ts` (selftest section "furnished homes"), `tools/splitTest.ts` (section
 "room splitting": odd outlines and real storeys, coverage, overlap, room size, reachability,
@@ -137,6 +159,6 @@ storey in 3D (`?n=<building>&floor=<f>&room=<k>&top=1&type=living&still=1`).
 1. Filler + home theme for flats (v0.169, PR #139).
 2. Room splitting for any shape with reserve-first programs; offices, shops and cafés themes (v0.172).
 3. The starship hall (design step 1) as one reserve strategy on the core (v0.173).
-4. The museum (great hall + galleries) on the core (v0.176); glasshouse and airport terminal (v0.181); tower deck, lighthouse and fortress keep next.
+4. The museum (great hall + galleries) on the core (v0.176); glasshouse and airport terminal (v0.181); tower deck, lighthouse and fortress keep (v0.183).
 5. Town hall, cathedral and sewer side rooms on the core.
 6. Delete the old builders.

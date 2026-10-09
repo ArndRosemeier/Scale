@@ -21,6 +21,7 @@ import { cathedral } from './cathedralParts';
 import { museum } from './museumParts';
 import { glasshouse } from './glasshouseParts';
 import { terminal } from './terminalParts';
+import { tower, lighthouse, fortress } from './lookoutParts';
 
 export const enum PK { Box = 0, Cyl = 1, Dome = 2, Gable = 3, Pyramid = 4, Ramp = 5, Beam = 6, Tube = 7, Vault = 8, Flat = 9, Quad = 10, Lathe = 11, Prism = 12, Perf = 13, Helix = 14, Strut = 15 }
 
@@ -177,7 +178,7 @@ export const COPPER: RGB = [0.48, 0.72, 0.62];
 export const GOLD: RGB = [1.25, 1.0, 0.45];
 const BRONZE: RGB = [0.55, 0.42, 0.3];
 /** Paint colours (team colours, wheels, liveries). */
-const PAINT: RGB[] = [[0.85, 0.15, 0.12], [0.15, 0.3, 0.75], [0.95, 0.8, 0.15], [0.15, 0.6, 0.3], [0.95, 0.95, 0.95], [0.55, 0.15, 0.55], [0.95, 0.45, 0.1], [0.12, 0.12, 0.14]];
+export const PAINT: RGB[] = [[0.85, 0.15, 0.12], [0.15, 0.3, 0.75], [0.95, 0.8, 0.15], [0.15, 0.6, 0.3], [0.95, 0.95, 0.95], [0.55, 0.15, 0.55], [0.95, 0.45, 0.1], [0.12, 0.12, 0.14]];
 const STONES = [LIME, SAND, GRANITE, BRICK_WHITE];
 
 export interface Opt {
@@ -605,6 +606,16 @@ export function wallRun(k: Kit, axis: 'u' | 'v', c: number, a0: number, a1: numb
     }
     put(l, r, b, y1);
   }
+}
+
+/**
+ * A straight wall from a to b (local, its centre line) with openings along it (`a` measured from
+ * a): wallRun turned to run between any two points.
+ */
+export function wallAB(k: Kit, a: [number, number], b: [number, number], y0: number, y1: number, th: number, m: PartMat, open: Opening[], o: Opt = {}): void {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (L < 0.02) return;
+  k.sub(a[0], a[1], Math.atan2(b[1] - a[1], b[0] - a[0]), () => wallRun(k, 'u', 0, 0, L, y0, y1, th, m, open, o));
 }
 
 interface Shell {
@@ -1171,74 +1182,6 @@ function stadium(k: Kit, lm: Landmark, r: Rng): void {
   }
 }
 
-function tower(k: Kit, lm: Landmark, r: Rng): void {
-  const P = lm.p, B = k.B, H = B + P.h;
-  const conc = mat(CONC, [0.93, 0.93, 0.92]);
-  const glass = mat(GLASS, WHITE, WIN | CURTAIN, 1.6, 3.2, 3.2);
-  const stripe = PAINT[[0, 4, 6, 0][P.colour % 4]];
-  if (lm.style === 0) {
-    // Concrete TV tower: tapering shaft, a pod (sphere, disc stack or saucer), antenna.
-    const pr = P.podR, py = B + P.h * P.pod;
-    k.cyl(0, 0, 16, 16, B, B + 6, glass, { foot: true, top: mat(GRAVEL, WHITE, ROOF) });
-    k.cyl(0, 0, P.r * 1.7, P.r, B, py, conc, { seg: 24 });
-    if (P.tiers === 1) {
-      k.dome(0, 0, pr, pr, py + pr, py + 2 * pr, mat(METAL_ROOF, [0.85, 0.86, 0.9], ROOF), { seg: 24 });
-      k.dome(0, 0, pr, pr, py + pr, py, mat(METAL_ROOF, [0.85, 0.86, 0.9], ROOF), { seg: 24 });
-      k.cyl(0, 0, pr + 0.05, pr + 0.05, py + pr - 1.4, py + pr + 1.4, glass, { seg: 24 });
-      k.solidCyl(0, 0, pr, py, py + 2 * pr);
-      k.cyl(0, 0, P.r, P.r * 0.7, py + 2 * pr, B + P.h * 0.86, conc, { seg: 16 });
-    } else {
-      // Stacked discs: a restaurant ring of glass between concrete rims.
-      for (let t = 0; t < P.tiers; t++) {
-        const y = py + t * 7, rr = pr * (1 - t * 0.12);
-        k.cyl(0, 0, rr * 0.55, rr, y, y + 1.6, conc, { seg: 24 });
-        k.cyl(0, 0, rr - 0.4, rr - 0.4, y + 1.6, y + 5.2, glass, { seg: 24 });
-        k.cyl(0, 0, rr, rr * 0.8, y + 5.2, y + 6.4, conc, { seg: 24 });
-      }
-      k.cyl(0, 0, P.r, P.r * 0.7, py + P.tiers * 7, B + P.h * 0.86, conc, { seg: 16 });
-    }
-    k.cyl(0, 0, 1.2, 0.35, B + P.h * 0.86, H, mat(METAL, stripe), { seg: 8 });
-    for (let s = 0; s < 3; s++) k.cyl(0, 0, 1.15 - s * 0.25, 1.1 - s * 0.25, B + P.h * (0.89 + s * 0.035), B + P.h * (0.9 + s * 0.035), mat(PLASTER, [1.2, 1.2, 1.2]), { detail: true, solid: false, seg: 8 });
-  } else if (lm.style === 1) {
-    // Steel lattice tower: four curved legs meeting at the top, platforms, bracing.
-    const col = P.colour % 2 ? mat(METAL, [0.62, 0.45, 0.32]) : mat(METAL, [0.82, 0.36, 0.22]);
-    const s0 = P.h * 0.13, legs = 7;
-    const sAt = (y: number) => 1.6 + (s0 - 1.6) * Math.pow(1 - y, 1.9);
-    for (const [su, sv] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
-      for (let i = 0; i < legs; i++) {
-        const ya = i / legs, yb = (i + 1) / legs;
-        k.beam(su * sAt(ya), sv * sAt(ya), B + P.h * 0.85 * ya, su * sAt(yb), sv * sAt(yb), B + P.h * 0.85 * yb, 0.9 * (1 - ya * 0.6), col, { detail: false });
-      }
-      k.box(su * s0, sv * s0, 2.2, 2.2, B, B + 4, mat(GRANITE, [0.8, 0.78, 0.74]), { foot: true });
-    }
-    // Bracing on each face per level (near only).
-    for (let i = 0; i < legs; i++) {
-      const ya = i / legs, yb = (i + 1) / legs, sa = sAt(ya), sb = sAt(yb);
-      const y0 = B + P.h * 0.85 * ya, y1 = B + P.h * 0.85 * yb;
-      for (const [a, b] of [[[1, 1], [-1, 1]], [[-1, 1], [-1, -1]], [[-1, -1], [1, -1]], [[1, -1], [1, 1]]] as const) {
-        k.beam(a[0] * sa, a[1] * sa, y0, b[0] * sb, b[1] * sb, y1, 0.25, col, { detail: true });
-        k.beam(b[0] * sa, b[1] * sa, y0, a[0] * sb, a[1] * sb, y1, 0.25, col, { detail: true });
-      }
-    }
-    for (const f of [0.2, 0.45]) {
-      const y = B + P.h * 0.85 * f, s = sAt(f) + 1.5;
-      k.box(0, 0, s, s, y - 1.2, y + 1.6, col, { solid: true, map: 0 });
-      k.box(0, 0, s - 0.6, s - 0.6, y + 1.6, y + 4.5, glass, { detail: true, solid: false });
-    }
-    k.box(0, 0, 3, 3, B + P.h * 0.85, B + P.h * 0.88, glass, { solid: false });
-    k.cyl(0, 0, 0.8, 0.2, B + P.h * 0.88, H, col, { seg: 6 });
-    k.box(0, 0, s0 * 0.9, s0 * 0.9, B, B + 0.4, mat(GRANITE), { solid: false, detail: true });
-  } else {
-    // Slender glass tower: square shaft, an observation box, a spire.
-    const w = P.r * 1.3, oy = B + P.h * P.pod;
-    k.box(0, 0, w, w, B, oy, mat(GLASS, [0.85, 0.92, 1], WIN | CURTAIN, 1.5, 3.6, 5), { foot: true });
-    k.box(0, 0, w + 0.4, 0.4, B, oy, mat(PANEL, WHITE), { solid: false, rot: Math.PI / 4, detail: true });
-    k.box(0, 0, w + 5, w + 5, oy, oy + 12, glass, { top: mat(GRAVEL, WHITE, ROOF) });
-    k.box(0, 0, w + 5.5, w + 5.5, oy + 12, oy + 13, mat(PANEL, WHITE), { solid: false });
-    k.pyramid(0, 0, w * 0.8, w * 0.8, oy + 13, H, 0, mat(METAL, [0.9, 0.9, 0.92]));
-  }
-}
-
 function wheel(k: Kit, lm: Landmark, r: Rng): void {
   const P = lm.p, B = k.B, R = P.D / 2, hy = B + R + 4.5, hw = P.w / 2;
   const col = mat(METAL, PAINT[[4, 0, 1, 2, 3, 4][P.colour % 6]]);
@@ -1330,98 +1273,6 @@ function figure(k: Kit, u: number, v: number, y: number, h: number, m: PartMat, 
   if (torch) {
     k.cyl(u + h * 0.16, v, h * 0.03, h * 0.05, y + h * 1.0, y + h * 1.08, m, { detail: true, solid: false, seg: 8 });
     k.dome(u + h * 0.16, v, h * 0.05, h * 0.05, y + h * 1.08, y + h * 1.16, mat(METAL, GOLD), { detail: true, seg: 8 });
-  }
-}
-
-function lighthouse(k: Kit, lm: Landmark, r: Rng): void {
-  const P = lm.p, B = k.B, H = B + P.h;
-  const bands = P.stripes ? 6 : 1;
-  const c1: RGB = [1, 1, 1], c2: RGB = P.stripes === 1 ? [0.85, 0.15, 0.12] : [0.15, 0.15, 0.16];
-  for (let i = 0; i < bands; i++) {
-    const y0 = B + (P.h * i) / bands, y1 = B + (P.h * (i + 1)) / bands;
-    const ra = P.r * (1.35 - 0.35 * (i / bands)), rb = P.r * (1.35 - 0.35 * ((i + 1) / bands));
-    k.cyl(0, 0, ra, rb, y0, y1, mat(PLASTER, i % 2 ? c2 : c1, WIN, 9, 7, 7), { foot: i === 0, seg: 18 });
-  }
-  k.cyl(0, 0, P.r + 1.3, P.r + 1.3, H, H + 0.5, mat(METAL, [0.2, 0.2, 0.22]), { seg: 18 });
-  k.cyl(0, 0, P.r * 0.75, P.r * 0.75, H + 0.5, H + 3.8, mat(GLASS, [1.3, 1.25, 1.1], WIN | CURTAIN, 1.2, 3.3, 3.3), { seg: 12 });
-  k.cyl(0, 0, P.r * 0.9, 0, H + 3.8, H + 6, mat(METAL_ROOF, PAINT[[0, 3, 7][P.colour % 3]], ROOF), { seg: 12, solid: false });
-  k.dome(0, 0, 0.4, 0.4, H + 5.9, H + 6.6, mat(METAL, [0.2, 0.2, 0.2]), { detail: true, seg: 6 });
-  // Keeper's house.
-  const hv = P.r * 1.5 + 5;
-  k.box(0, -hv, 5, 3.5, B, B + 3.2, mat(PLASTER, WHITE, WIN, 2.5, 3.2, 3.2), { foot: true });
-  k.gable(0, -hv, 5, 3.5, B + 3.2, B + 5.6, mat(PLASTER, WHITE), mat(CLAY, WHITE, ROOF));
-  void r;
-}
-
-function fortress(k: Kit, lm: Landmark, r: Rng): void {
-  const P = lm.p, n = P.sides, R = P.R;
-  const ruin = lm.style === 1;
-  const stoneL = [GRANITE, SAND, LIME][P.stone % 3];
-  const tint: RGB = ruin ? [0.78, 0.76, 0.72] : [0.88, 0.85, 0.8];
-  const wall = mat(stoneL, tint);
-  const wallW = mat(stoneL, tint, WIN | ARCH, 6.5, 9, 9);
-  const roofM = mat(SLATE, WHITE, ROOF);
-  const a0 = r.range(0, Math.PI * 2 / n) - Math.PI / 2;
-  const corners: [number, number][] = [];
-  for (let i = 0; i < n; i++) { const a = a0 + (i / n) * Math.PI * 2; corners.push([Math.cos(a) * R, Math.sin(a) * R]); }
-  // Gate in the edge whose middle faces -v most.
-  let gate = 0, gv = Infinity;
-  for (let i = 0; i < n; i++) { const j = (i + 1) % n, mv = (corners[i][1] + corners[j][1]) / 2; if (mv < gv) { gv = mv; gate = i; } }
-  for (let i = 0; i < n; i++) {
-    const [ua, va] = corners[i], [ub, vb] = corners[(i + 1) % n];
-    const L = Math.hypot(ub - ua, vb - va), rot = Math.atan2(vb - va, ub - ua);
-    const pieces = ruin ? r.int(2, 4) : 1;
-    for (let p = 0; p < pieces; p++) {
-      const t0 = p / pieces, t1 = (p + 1) / pieces;
-      // The gate: a gap in the middle of the gate wall with a gatehouse.
-      if (i === gate && t0 < 0.55 && t1 > 0.45 && pieces > 1) continue;
-      const tm = (t0 + t1) / 2, mu = ua + (ub - ua) * tm, mv = va + (vb - va) * tm, hl = (L * (t1 - t0)) / 2 - (pieces > 1 ? 0.4 : 0);
-      if (ruin && r.chance(0.18)) continue; // fallen
-      const gmin = k.groundMin(mu, mv, hl, 1.3, rot), gmax = k.groundMax(mu, mv, hl, 1.3, rot);
-      const h = P.wallH * (ruin ? r.range(0.35, 1) : 1);
-      if (i === gate && pieces === 1) {
-        // Intact: the gate passage through the middle.
-        for (const s of [-1, 1]) {
-          const su = ua + (ub - ua) * (0.5 + s * 0.27), sv = va + (vb - va) * (0.5 + s * 0.27);
-          k.box(su, sv, L * 0.23, 1.3, gmin - 0.5, gmax + h, wall, { rot });
-        }
-        const gu = (ua + ub) / 2, gvv = (va + vb) / 2;
-        k.box(gu, gvv, 3.4, 1.3, gmax + 4.2, gmax + h + 1, wall, { rot });
-        for (const s of [-1, 1]) {
-          const tu = gu + Math.cos(rot) * s * 5.5, tv = gvv + Math.sin(rot) * s * 5.5;
-          k.cyl(tu, tv, 3.2, 3.0, k.groundMin(tu, tv, 3, 3) - 0.5, gmax + h + 4, wallW, { seg: 12 });
-          k.cyl(tu, tv, 3.5, 0, gmax + h + 4, gmax + h + 10, roofM, { seg: 12, solid: false });
-        }
-        continue;
-      }
-      k.box(mu, mv, hl, 1.3, gmin - 0.5, gmax + h, wall, { rot });
-      // Crenellations on intact stretches.
-      if (!ruin || h > P.wallH * 0.95) for (let s = -hl + 0.8; s < hl - 0.4; s += 2.4) k.box(mu + Math.cos(rot) * s, mv + Math.sin(rot) * s, 0.6, 1.3, gmax + h, gmax + h + 1.1, wall, { rot, detail: true, solid: false });
-    }
-  }
-  // Towers at the corners.
-  for (const [u, v] of corners) {
-    if (ruin && r.chance(0.2)) continue;
-    const g = k.groundMin(u, v, 5, 5), gt = k.groundMax(u, v, 5, 5);
-    const th = (P.wallH + 6) * (ruin ? r.range(0.45, 1) : 1);
-    const tr = r.range(4.2, 5.6);
-    k.cyl(u, v, tr + 0.4, tr, g - 0.5, gt + th, wallW, { seg: 14 });
-    if (!ruin) k.cyl(u, v, tr + 0.5, 0, gt + th, gt + th + tr * 1.6, roofM, { seg: 14, solid: false });
-  }
-  // The keep at the back.
-  const kv = R * 0.25, ks = R * 0.22;
-  const g = k.groundMin(0, kv, ks, ks), gt = k.groundMax(0, kv, ks, ks);
-  const kh = P.keepH * (ruin ? 0.7 : 1);
-  k.box(0, kv, ks, ks, g - 0.5, gt + kh, wallW, { top: ruin ? wall : roofM });
-  if (!ruin) {
-    k.pyramid(0, kv, ks + 0.3, ks + 0.3, gt + kh, gt + kh + ks * 1.1, 0, roofM);
-    for (const [cu, cv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      k.cyl(cu * ks, kv + cv * ks, 1.6, 1.6, gt + kh - 4, gt + kh + 3, wall, { detail: true, solid: false, seg: 8 });
-      k.cyl(cu * ks, kv + cv * ks, 1.8, 0, gt + kh + 3, gt + kh + 7, roofM, { detail: true, solid: false, seg: 8 });
-    }
-  } else {
-    // Broken top: a few jagged blocks.
-    for (let i = 0; i < 5; i++) k.box(r.range(-ks, ks) * 0.8, kv + r.range(-ks, ks) * 0.8, r.range(1, 2.5), r.range(1, 2.5), gt + kh, gt + kh + r.range(1, 4), wall, { detail: true, solid: false });
   }
 }
 
