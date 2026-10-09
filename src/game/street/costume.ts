@@ -158,6 +158,7 @@ export function costumeFor(kind: StreetKind, seed: number, female: boolean): Cos
         },
         paint: null, held: null,
       };
+    case 'band': return musicianCostume('guitar', seed, female, false);
     case 'jogger': {
       const n1 = pick(NEON), n2 = pick(NEON);
       return {
@@ -171,6 +172,37 @@ export function costumeFor(kind: StreetKind, seed: number, female: boolean): Cos
       };
     }
   }
+}
+
+/** Who plays what: the street bands (guitar, bass, cajón) and the stadium's band (game/concert). */
+export type MusicianPart = 'guitar' | 'bass' | 'cajon' | 'singer' | 'keys' | 'drums';
+
+const STAGE: C3[] = [[0.05, 0.05, 0.06], [0.75, 0.08, 0.12], [0.9, 0.9, 0.92], [0.55, 0.1, 0.6], [0.85, 0.7, 0.25]];
+
+/**
+ * A musician's clothes and instrument: street players in jeans and earthy shirts, the stadium band
+ * (`stage`) in black, red and silver, the singer in a glittering top or dress with a microphone.
+ */
+export function musicianCostume(part: MusicianPart, seed: number, female: boolean, stage: boolean): Costume {
+  const r = new Rng(seed ^ 0x6a7d1);
+  const s = () => r.nextU32();
+  const pick = <T>(a: readonly T[]) => r.pick(a);
+  const top = stage ? pick(STAGE) : pick(EARTH);
+  const eq: EquipmentVisuals = {
+    chest: { defId: r.chance(0.5) ? 'tshirt' : 'shirt', visual: v(s(), top, pick(EARTH), !stage && r.chance(0.4) ? 'checks' : 'plain') },
+    back: r.chance(stage ? 0.6 : 0.35) ? { defId: 'jacket', visual: v(s(), stage ? DARK : [0.14, 0.12, 0.11], DARK, 'leather') } : undefined,
+    legs: { defId: 'jeans', visual: v(s(), stage ? DARK : [0.16, 0.22, 0.38]) },
+    feet: { defId: 'boots', visual: v(s(), stage ? DARK : [0.25, 0.16, 0.1]) },
+    head: !stage && r.chance(0.4) ? { defId: 'beanie', visual: v(s(), pick(EARTH)) } : undefined,
+  };
+  if (part === 'guitar') eq.trinket = { defId: 'guitar', visual: v(s(), stage ? pick([[0.75, 0.08, 0.1], [0.08, 0.08, 0.09], [0.9, 0.88, 0.8]] as C3[]) : pick([[0.72, 0.45, 0.2], [0.55, 0.3, 0.12], [0.85, 0.62, 0.32]] as C3[])) };
+  if (part === 'bass') eq.trinket = { defId: 'bass', visual: v(s(), pick([[0.1, 0.25, 0.55], [0.08, 0.08, 0.09], [0.6, 0.12, 0.1], [0.85, 0.82, 0.7]] as C3[])) };
+  if (part === 'singer') {
+    const sparkle = pick([[0.85, 0.85, 0.9], [0.8, 0.65, 0.25], [0.75, 0.1, 0.2]] as C3[]);
+    if (female && r.chance(0.5)) { eq.chest = { defId: 'dress', visual: v(s(), sparkle, sparkle, 'scales') }; eq.legs = undefined; eq.back = undefined; }
+    else { eq.chest = { defId: 'tshirt', visual: v(s(), sparkle, sparkle, 'scales') }; eq.back = { defId: 'jacket', visual: v(s(), DARK, DARK, 'leather') }; }
+  }
+  return { eq, paint: null, held: part === 'singer' ? 'stagemic' : null };
 }
 
 /** Body paint over the appearance (CrowdRenderer.appearance): silver / gold statues, the mime's white face. */

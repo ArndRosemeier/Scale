@@ -5,6 +5,21 @@
  */
 import * as THREE from 'three';
 
+/** A streamed piece placed in the world (Audio.stream). */
+export interface LiveStream {
+  el: HTMLAudioElement;
+  /** Position, gain and lowpass cutoff (Hz) now. */
+  set(x: number, y: number, z: number, gain: number, cutoff?: number): void;
+  /** Loudness of a band of the spectrum (fractions of Nyquist), 0…1. */
+  level(lo?: number, hi?: number): number;
+  /** Seconds into the piece. */
+  time(): number;
+  ended(): boolean;
+  /** Fade out over about `sec` seconds (then stop it). */
+  fade(sec: number): void;
+  stop(): void;
+}
+
 interface ManifestEntry { files: string[]; loop: boolean; gain: number; description?: string }
 type Manifest = Record<string, ManifestEntry>;
 
@@ -247,6 +262,78 @@ export class Audio {
         src.playbackRate.setTargetAtTime(rate, t, 0.2);
       },
       stop: () => { try { src.stop(); } catch { /* not started */ } g.disconnect(); pan.disconnect(); },
+    };
+  }
+
+  /**
+   * A positioned streamed piece (an MP3 through an audio element: nothing is decoded up front, a
+   * three-minute song costs no memory) that its owner moves and sets every frame: the stadium
+   * concert, a street band. `set` takes a lowpass cutoff too (far off, or heard through the stands,
+   * only the low end carries). `level()` is the music's loudness now (0…1, for lights and crowds).
+   * Null until audio has started.
+   */
+  stream(url: string, o: { refDist?: number; rolloff?: number; loop?: boolean; cat?: SoundCategory; offset?: number } = {}): LiveStream | null {
+    if (!this.ctx || !this.enabled) return null;
+    const ctx = this.ctx;
+    const el = new window.Audio();
+    el.src = url.startsWith('http') || url.startsWith('/') ? url : `${this.base}${url}`;
+    el.preload = 'auto';
+    el.loop = !!o.loop;
+    if (o.offset) el.currentTime = o.offset;
+    const node = ctx.createMediaElementSource(el);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 18000;
+    lp.Q.value = 0.6;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const pan = ctx.createPanner();
+    pan.panningModel = 'equalpower';
+    pan.distanceModel = 'inverse';
+    pan.refDistance = o.refDist ?? 5;
+    pan.rolloffFactor = o.rolloff ?? 1;
+    pan.maxDistance = 20000;
+    const an = ctx.createAnalyser();
+    an.fftSize = 512;
+    an.smoothingTimeConstant = 0.5;
+    const bins = new Uint8Array(an.frequencyBinCount);
+    node.connect(an);
+    node.connect(lp).connect(g).connect(pan).connect(this.cats.get(o.cat ?? 'music') ?? this.sfxBus);
+    let started = false, retryAt = 0, stopped = false;
+    const tryPlay = () => {
+      if (started || stopped || performance.now() < retryAt) return;
+      started = true;
+      el.play().catch(() => { started = false; retryAt = performance.now() + 1500; });
+    };
+    tryPlay();
+    return {
+      el,
+      set: (x, y, z, gain, cutoff = 18000) => {
+        if (stopped) return;
+        tryPlay();
+        const t = ctx.currentTime;
+        pan.positionX.setTargetAtTime(x, t, 0.05); pan.positionY.setTargetAtTime(y, t, 0.05); pan.positionZ.setTargetAtTime(z, t, 0.05);
+        g.gain.setTargetAtTime(gain, t, 0.25);
+        lp.frequency.setTargetAtTime(cutoff, t, 0.3);
+      },
+      level: (lo = 0, hi = 1) => {
+        an.getByteFrequencyData(bins);
+        const a = Math.floor(lo * bins.length), b = Math.max(a + 1, Math.floor(hi * bins.length));
+        let s = 0;
+        for (let i = a; i < b; i++) s += bins[i];
+        return s / ((b - a) * 255);
+      },
+      time: () => el.currentTime,
+      ended: () => el.ended,
+      fade: (sec) => { if (!stopped) g.gain.setTargetAtTime(0, ctx.currentTime, Math.max(0.05, sec / 3)); },
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+        node.disconnect(); an.disconnect(); lp.disconnect(); g.disconnect(); pan.disconnect();
+      },
     };
   }
 

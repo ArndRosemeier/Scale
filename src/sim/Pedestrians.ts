@@ -97,6 +97,11 @@ export interface PedAgent {
    */
   airborne?: boolean;
   fly?: { tilt: number; bank: number; boost: number };
+  /**
+   * A raised floor its owner knows of (the stadium's field and the concert stage, game/concert):
+   * the height to stand at here, or null where it ends (the street's ground again).
+   */
+  floorAt?: (x: number, z: number) => number | null;
 }
 
 /** Gawkers per incident (people already standing and looking within GAWK_R m count). */
@@ -611,6 +616,7 @@ export class Pedestrians {
    * single largest cost of stepping 2600 people, and most of the garbage).
    */
   private groundOf(a: PedAgent, heading = NaN, yRef = NaN): number {
+    if (a.floorAt) { const f = a.floorAt(a.x, a.z); if (f !== null) return f; }
     const dx = a.x - (a.gx ?? 1e9), dz = a.z - (a.gz ?? 1e9);
     if (!(dx * dx + dz * dz <= GROUND_REUSE * GROUND_REUSE)) { a.gx = a.x; a.gz = a.z; a.gh = this.terrain.height(a.x, a.z); }
     return this.groundOver(a.gh!, a.x, a.z, a.onRoad, heading, yRef);

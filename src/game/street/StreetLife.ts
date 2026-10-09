@@ -28,13 +28,17 @@ import { Rng, deriveSeed, hash32 } from '../../core/rng';
 import { statusOf } from '../../shared/status';
 import type { Stimulus } from '../Stimuli';
 import type { District } from '../../plan/types';
+import type { LiveStream } from '../../audio/Audio';
 import { eateryName } from '../../plan/eatery';
 import type { CellState } from '../../stream/CityStreamer';
 import { STREET_KINDS, STREET_KIND_LIST, SiteKind, streetCast, streetSites, type StreetKind, type StreetSite, type StreetCast } from './cast';
 import { lineFor, type LineTopic } from './lines';
-import { costumeFor, paintAppearance, type Paint } from './costume';
-import { guitarCase, hat, boombox, balls as makeBalls, type Gear } from './gear';
+import { costumeFor, musicianCostume, paintAppearance, type Paint } from './costume';
+import { guitarCase, hat, boombox, bandGear, balls as makeBalls, type Gear } from './gear';
 
+/** The street bands' styles (their pieces: public/music/live.json `bands`) and their level. */
+const BAND_STYLES = ['folk', 'bossa', 'swing'] as const;
+const BAND_GAIN = 0.5;
 /** Sites within ACTIVE_R m of the player are lived in; characters beyond DROP_R leave (unseen). */
 const ACTIVE_R = 120;
 const DROP_R = 165;
@@ -46,10 +50,10 @@ const SAME_KIND_R = 100;
 /** Player lines within this (m); the doomsayer is heard farther. */
 const TALK_R = 20;
 /** Most watchers a performer draws. */
-const WATCHERS: Partial<Record<StreetKind, number>> = { busker: 4, juggler: 6, dancer: 6, statue: 3, mime: 4, preacher: 2 };
+const WATCHERS: Partial<Record<StreetKind, number>> = { busker: 4, band: 7, juggler: 6, dancer: 6, statue: 3, mime: 4, preacher: 2 };
 /** Seconds between their own lines (random within). */
 const PATTER: Record<StreetKind, [number, number]> = {
-  preacher: [5, 8], busker: [16, 26], statue: [1e9, 1e9], mime: [24, 38], juggler: [14, 22], dancer: [12, 20], mascot: [10, 16],
+  preacher: [5, 8], busker: [16, 26], band: [18, 28], statue: [1e9, 1e9], mime: [24, 38], juggler: [14, 22], dancer: [12, 20], mascot: [10, 16],
   conspiracy: [8, 13], pigeons: [14, 22], sleepwalker: [11, 18], tourist: [12, 20], jogger: [1e9, 1e9],
 };
 
@@ -343,6 +347,7 @@ export class StreetLife {
       case 'mime': if (c.rng.chance(0.6)) put(hat(0x111111), 1.0, -0.4); break;
       case 'pigeons': c.m.feedT = 0; break;
       case 'dancer': this.crewUp(c); break;
+      case 'band': this.bandUp(c); break;
       case 'conspiracy': c.m.dir = c.rng.chance(0.5) ? 1 : -1; c.m.pause = 2; break;
       case 'jogger': case 'sleepwalker': this.planLoop(c); break;
       case 'mascot': c.m.next = 2; break;
@@ -375,6 +380,35 @@ export class StreetLife {
       c.crew.push(o);
     }
     if (c.crew.length) c.m.crew = 1;
+  }
+
+  /**
+   * A street band: the leader on guitar with the case open in front, a bassist to the right and a
+   * cajón player sitting on the box behind to the left. The style of music is the band's (by seed).
+   */
+  private bandUp(c: Char): void {
+    const g = this.g, a = c.a, h = a.heading;
+    const gear = bandGear();
+    gear.object.position.set(a.x, a.y, a.z);
+    gear.object.rotation.y = h;
+    gear.setCoins(c.coins);
+    this.group.add(gear.object);
+    c.gear = gear;
+    c.m.style = hash32(c.id * 977 + (c.cast?.seed ?? 0)) % 3;
+    const at = (side: number, back: number) => ({ x: a.x + Math.cos(h) * side + Math.sin(h) * back, z: a.z - Math.sin(h) * side + Math.cos(h) * back });
+    for (const [part, side, back] of [['bass', 1.5, 0.3], ['cajon', -1.45, 0.65]] as const) {
+      const p = at(side, back);
+      if (!g.world.standable(p.x, p.z)) continue;
+      const cit = this.citizen('band', hash32(c.id * 31 + side * 100 + 11));
+      if (!cit) continue;
+      const o = g.peds.spawnAt(cit, p.x, p.z, h);
+      if (!o) continue;
+      const cos = musicianCostume(part, cit.seed, cit.gender < 0.5, false);
+      this.paints.set(cit.id, null);
+      const act = attach(o, makeActor('bystander', STREET_OWNER, { title: 'Street band', outfit: cos.eq, held: null, face: { x: p.x - Math.sin(h) * 4, y: o.y + 1.4, z: p.z - Math.cos(h) * 4 } }));
+      act.memo.part = part === 'bass' ? 1 : 2;
+      c.crew.push(o);
+    }
   }
 
   /** Jogger and sleepwalker: a route out to a point down the streets and back, round and round. */
@@ -415,6 +449,21 @@ export class StreetLife {
         c.m.songT = (c.m.songT ?? 40 + c.rng.float() * 30) - dt;
         if (c.m.songT <= 0) { c.m.songT = 45 + c.rng.float() * 35; play(act, 'bow', 1.8); this.say(c, 'own', 8); }
         if (!act.action || act.action.id === 'play_guitar') this.loop(c, 'play_guitar');
+        break;
+      }
+      case 'band': {
+        this.faceNear(c, 9);
+        act.mood = 'happy';
+        // Between songs: the leader bows, says something; the others keep still a moment.
+        c.m.songT = (c.m.songT ?? 50 + c.rng.float() * 30) - dt;
+        if (c.m.songT <= 0) { c.m.songT = 55 + c.rng.float() * 40; play(act, 'bow', 1.8); this.say(c, 'own', 8); }
+        if (!act.action || act.action.id === 'play_guitar') this.loop(c, 'play_guitar');
+        for (const o of c.crew) {
+          const oa = o.actor;
+          if (!o.alive || !oa) continue;
+          oa.mood = 'happy';
+          if (oa.memo.part === 2) { oa.move = 'sit'; this.loop(c, 'play_cajon', oa); } else this.loop(c, 'play_guitar', oa);
+        }
         break;
       }
       case 'statue': this.statue(c, dt, dp); break;
@@ -703,7 +752,7 @@ export class StreetLife {
       if (still) { n++; continue; }
       c.watchers.splice(i, 1);
       // Walking on after watching: a coin in the hat now and then.
-      if (w.alive && w.state === PState.Walk && c.gear && (c.kind === 'busker' || c.kind === 'juggler' || c.kind === 'statue' || c.kind === 'mime') && c.rng.float() < 0.4) this.coin(c);
+      if (w.alive && w.state === PState.Walk && c.gear && (c.kind === 'busker' || c.kind === 'band' || c.kind === 'juggler' || c.kind === 'statue' || c.kind === 'mime') && c.rng.float() < 0.4) this.coin(c);
     }
     return n;
   }
@@ -735,7 +784,7 @@ export class StreetLife {
     c.gear!.setCoins(c.coins);
     this.stats.coins++;
     g.audio.play('street_coin', o.x, o.y + 0.1, o.z, 0.5, 0.9 + Math.random() * 0.25, 3, g.renderer.camera.position);
-    if (c.kind === 'busker' || c.kind === 'statue') this.say(c, 'special', 10);
+    if (c.kind === 'busker' || c.kind === 'band' || c.kind === 'statue') this.say(c, 'special', 10);
   }
 
   /** What to say to the player now (null: nothing in particular). */
@@ -885,16 +934,26 @@ export class StreetLife {
 
   // ================================================================== sound
 
-  /** The nearest busker's guitar and the nearest crew's boombox (one positional loop each). */
+  /**
+   * The nearest busker's guitar, the nearest crew's boombox (one positional loop each) and the
+   * nearest street band (its piece streamed: public/music/live.json `bands`; until there is one, the
+   * busker's guitar loop stands in).
+   */
   private sound(dt: number): void {
     const g = this.g, cam = g.renderer.camera.position;
-    let bus: Char | null = null, crew: Char | null = null, bd = 45, cd = 45;
+    let bus: Char | null = null, crew: Char | null = null, band: Char | null = null, bd = 45, cd = 45, nd = 60;
     for (const c of this.chars) {
       if (c.phase !== 'perform') continue;
       const d = Math.hypot(c.a.x - cam.x, c.a.z - cam.z);
       if (c.kind === 'busker' && d < bd && c.act.action?.id === 'play_guitar') { bus = c; bd = d; }
       if (c.kind === 'dancer' && c.m.crew && c.gear && d < cd) { crew = c; cd = d; }
+      if (c.kind === 'band' && d < nd && c.act.action?.id === 'play_guitar') { band = c; nd = d; }
     }
+    // The band's piece (or, with none, the guitar loop: unless a busker is nearer).
+    const style = band ? BAND_STYLES[band.m.style ?? 0] : null;
+    const file = style ? g.concert?.bandFile(style) ?? null : null;
+    if (band && !file && (!bus || nd < bd)) { bus = band; bd = nd; }
+    this.bandSound(band && file ? band : null, file);
     this.loopTry -= dt;
     if ((bus && !this.guitar) || (crew && !this.beat)) {
       if (this.loopTry <= 0) {
@@ -906,6 +965,20 @@ export class StreetLife {
     if (this.guitar) { if (bus) this.guitar.set(bus.a.x, bus.a.y + 1.1, bus.a.z, 0.8); else this.guitar.set(cam.x, -1000, cam.z, 0); }
     if (this.beat) { const o = crew?.gear?.object.position; if (o) this.beat.set(o.x, o.y + 0.3, o.z, 0.75); else this.beat.set(cam.x, -1000, cam.z, 0); }
   }
+
+  /** The street band's streamed piece: started when one plays near, moved with it, stopped when it is gone. */
+  private bandSound(c: Char | null, file: string | null): void {
+    const b = this.band;
+    if (b && (!c || b.file !== file || b.char !== c)) { b.s.fade(1.5); const s = b.s; this.g.later.after(2, () => s.stop()); this.band = null; }
+    if (!c || !file) return;
+    if (!this.band) {
+      const s = this.g.audio.stream(file, { refDist: 6, rolloff: 1.2, loop: true, cat: 'voices', offset: (c.id * 37) % 40 });
+      if (!s) return;
+      this.band = { s, file, char: c };
+    }
+    this.band.s.set(c.a.x, c.a.y + 1.1, c.a.z, BAND_GAIN);
+  }
+  private band: { s: LiveStream; file: string; char: Char } | null = null;
 
   // ================================================================== dev
 

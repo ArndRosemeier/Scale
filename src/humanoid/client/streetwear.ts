@@ -31,6 +31,7 @@ export function streetWearable(defId: string, v: ItemVisual): WearableSpec | nul
     case 'sweatband': return { layers: [rigid('head', (f) => sweatband(f, c))] };
     case 'sandwichboard': return { layers: [rigid('chest', (f) => sandwichBoard(f, v.style || 'THE END IS NIGH', c))] };
     case 'guitar': return { layers: [rigid('chest', (f) => guitar(f, c))] };
+    case 'bass': return { layers: [rigid('chest', (f) => guitar(f, c, true))] };
     case 'citymap': return { layers: [rigid('chest', cityMap)] };
     // Villain groups' heads (game/factions/outfits): the raised dead, the necromancers, the eco-radicals.
     case 'skull': return { layers: [rigid('head', (f) => skull(f, c, v.glowColor ?? v.accent))], hideHair: true, hideBeard: true, hideRegions: ['scalp', 'face'] };
@@ -49,6 +50,7 @@ export function streetHeld(defId: string): THREE.Object3D | null {
   const turned = (o: THREE.Object3D, dx = 0, dz = 0) => { o.rotation.set(Math.PI / 2, 0, Math.PI); o.position.set(dx, 0, dz); return new THREE.Group().add(o); };
   if (defId === 'presscam') return turned(pressCamera(), 0.17, -0.02);
   if (defId === 'mic') return microphone();
+  if (defId === 'stagemic') return microphone(false);
   if (defId === 'tvcam') return turned(tvCamera());
   if (defId !== 'flyer') return null;
   // A flyer pinched in the fist, standing up out of the thumb side.
@@ -101,16 +103,22 @@ function pressCamera(): THREE.Object3D {
   return g;
 }
 
-/** A TV reporter's microphone with the channel's cube on it. */
-function microphone(): THREE.Object3D {
+/** A TV reporter's microphone with the channel's cube on it (`cube` false: a singer's, silver, without). */
+function microphone(cube = true): THREE.Object3D {
   const g = new THREE.Group();
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.011, 0.2, 10), std([0.08, 0.08, 0.09], 0.4, 0.4));
   shaft.position.y = 0.06;
   const ball = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), std([0.15, 0.15, 0.16], 0.9));
   ball.position.y = 0.18;
-  const cube = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.045, 0.055), new THREE.MeshStandardMaterial({ map: textTexture('6', '#c61f2b', '#ffffff', 64, 64), roughness: 0.5 }));
-  cube.position.y = 0.12;
-  g.add(shaft, ball, cube);
+  if (!cube) {
+    (ball.material as THREE.MeshStandardMaterial).color.setRGB(0.55, 0.56, 0.6);
+    (ball.material as THREE.MeshStandardMaterial).metalness = 0.7;
+    g.add(shaft, ball);
+    return g;
+  }
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.045, 0.055), new THREE.MeshStandardMaterial({ map: textTexture('6', '#c61f2b', '#ffffff', 64, 64), roughness: 0.5 }));
+  box.position.y = 0.12;
+  g.add(shaft, ball, box);
   return g;
 }
 
@@ -475,29 +483,35 @@ function sandwichBoard(fit: BodyFit, text: string, c: C3): THREE.Object3D {
   return g;
 }
 
-/** An acoustic guitar slung across the chest: body at the right hip, neck up to the left. */
-function guitar(fit: BodyFit, c: C3): THREE.Object3D {
+/**
+ * An acoustic guitar slung across the chest: body at the right hip, neck up to the left. `bass`: an
+ * electric bass instead (a flat solid body, a long neck; the concert's and the street bands' bassist).
+ */
+function guitar(fit: BodyFit, c: C3, bass = false): THREE.Object3D {
   const g = new THREE.Group();
-  const wood = std(c, 0.45), dark = std([0.08, 0.06, 0.05], 0.6), neckM = std([0.3, 0.2, 0.12], 0.6);
+  const wood = std(c, bass ? 0.3 : 0.45, bass ? 0.1 : 0), dark = std([0.08, 0.06, 0.05], 0.6), neckM = std([0.3, 0.2, 0.12], 0.6);
   const body = new THREE.Group();
-  const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.09, 20), wood);
-  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.09, 20), wood);
+  const th = bass ? 0.045 : 0.09;
+  const lower = new THREE.Mesh(new THREE.CylinderGeometry(bass ? 0.17 : 0.19, bass ? 0.17 : 0.19, th, 20), wood);
+  const upper = new THREE.Mesh(new THREE.CylinderGeometry(bass ? 0.12 : 0.145, bass ? 0.12 : 0.145, th, 20), wood);
   lower.rotation.x = upper.rotation.x = Math.PI / 2;
-  upper.position.set(0, 0.22, 0);
-  const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.092, 14), dark);
-  hole.rotation.x = Math.PI / 2;
+  upper.position.set(bass ? 0.03 : 0, bass ? 0.19 : 0.22, 0);
+  // A sound hole, or the bass's pickguard and pickups.
+  const hole = bass ? new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, th + 0.004), dark) : new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.092, 14), dark);
+  if (!bass) hole.rotation.x = Math.PI / 2;
   hole.position.set(0, 0.12, 0);
   body.add(lower, upper, hole);
-  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 0.025), neckM);
-  neck.position.set(0, 0.6, 0.02);
+  const L = bass ? 0.78 : 0.5;
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(bass ? 0.045 : 0.05, L, 0.025), neckM);
+  neck.position.set(0, 0.35 + L / 2, 0.02);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.16, 0.022), neckM);
-  head.position.set(0, 0.92, 0.015);
+  head.position.set(0, 0.42 + L, 0.015);
   body.add(neck, head);
   // Hand anchors for the play_guitar action (anim/actions.ts): the left hand's place on the neck
   // and the strings over the sound hole (+Y up the neck, +Z out of the top).
   const fret = new THREE.Object3D(), strum = new THREE.Object3D();
   fret.name = 'reach:fret';
-  fret.position.set(0, 0.6, 0.02);
+  fret.position.set(0, bass ? 0.72 : 0.6, 0.02);
   strum.name = 'reach:strum';
   strum.position.set(0, 0.12, 0.045);
   body.add(fret, strum);

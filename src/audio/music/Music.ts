@@ -186,7 +186,8 @@ export class Music {
       }
       s.night = G.uNight.value;
       s.rain = g.weather?.p.rain ?? 0;
-      s.hush = !!g.intro?.active || !!g.freeCam || g.defeat?.phase === 'revive' || g.defeat?.phase === 'over';
+      // (Near the stadium's concert its own music is what one hears.)
+      s.hush = !!g.intro?.active || !!g.freeCam || g.defeat?.phase === 'revive' || g.defeat?.phase === 'over' || !!g.concert?.hushes(p.x, p.z);
       s.flySpeed = g.player.flying ? g.player.vel.length() / Math.sqrt(Math.max(0.05, g.player.k)) : 0;
       // Threats: the Strider (major) anywhere near is tension, close is battle; robots near are tension,
       // a full fight with them (the response escalated) is battle.
