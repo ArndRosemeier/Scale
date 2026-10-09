@@ -39,6 +39,10 @@ export class RoadNet {
   edges: REdge[] = [];
   private grid = new Map<number, number[]>(); // edge spatial hash
   version = 0;
+  /** Where the way is cut (a fallen bridge span): edges passing within `r` of a point are closed. */
+  private cuts: { x: number; z: number; r: number }[] = [];
+  private closedSet: Set<number> | null = null;
+  private closedVer = -1;
   private dirty = true;
   private lastBuild = -10;
 
@@ -170,6 +174,28 @@ export class RoadNet {
     this.version++;
   }
 
+  /** Set the cuts (a fallen bridge span's middle, half its length): routes go round them. */
+  setCuts(cuts: { x: number; z: number; r: number }[]): void {
+    this.cuts = cuts;
+    this.closedSet = null;
+  }
+
+  /** Is an edge cut (nobody gets along it: a span of its bridge is down)? */
+  closed(eid: number): boolean {
+    if (!this.cuts.length) return false;
+    if (!this.closedSet || this.closedVer !== this.version) {
+      this.closedVer = this.version;
+      this.closedSet = new Set();
+      this.edges.forEach((e, id) => {
+        for (let k = 0; k + 3 < e.pts.length; k += 2) {
+          const ax = e.pts[k], az = e.pts[k + 1], dx = e.pts[k + 2] - ax, dz = e.pts[k + 3] - az, L2 = dx * dx + dz * dz || 1;
+          if (this.cuts.some((c) => { const t = Math.max(0, Math.min(1, ((c.x - ax) * dx + (c.z - az) * dz) / L2)); return Math.hypot(ax + dx * t - c.x, az + dz * t - c.z) < c.r; })) { this.closedSet!.add(id); break; }
+        }
+      });
+    }
+    return this.closedSet.has(eid);
+  }
+
   /** Nearest edge to a point: edge id, arc param s, distance, side (+1 right of a→b). */
   nearestEdge(x: number, z: number, maxR = 120): { e: number; s: number; d: number; side: number } | null {
     let best: { e: number; s: number; d: number; side: number } | null = null;
@@ -259,6 +285,7 @@ export class RoadNet {
       if (u === to) break;
       const gu = g[u];
       for (const eid of this.nodes[u].edges) {
+        if (this.closed(eid)) continue;
         const e = this.edges[eid];
         const v = e.a === u ? e.b : e.a;
         // Cars prefer arterials; pedestrians prefer short local streets.

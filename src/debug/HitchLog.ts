@@ -116,7 +116,9 @@ class HitchLogImpl {
   version = '';
   private lastFrameEnd = 0;
   private lastHeap = 0;
+  /** When the page last went hidden / became visible (performance.now ms). */
   private hiddenAt = -1;
+  private visibleAt = -1;
   /** Freezes still collecting browser entries (those arrive a little later): [record, from, to]. */
   private open: [FreezeRecord, number, number][] = [];
   private loafs: { start: number; ms: number; text: string }[] = [];
@@ -147,7 +149,7 @@ class HitchLogImpl {
       });
       po.observe({ type: 'long-animation-frame', buffered: false });
     } catch { /* not supported */ }
-    document.addEventListener('visibilitychange', () => { this.hiddenAt = performance.now(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.hiddenAt = performance.now(); else this.visibleAt = performance.now(); });
     try {
       const old = JSON.parse(localStorage.getItem(FREEZE_STORE) ?? '[]') as FreezeRecord[];
       if (Array.isArray(old)) this.earlier.push(...old.slice(-FREEZE_STORED));
@@ -161,8 +163,9 @@ class HitchLogImpl {
 
   /** Start recording freezes (the game is loaded and running). */
   arm(): void {
+    // (lastFrameEnd stays: the very first frame of play is measured from the last warm-up frame;
+    // resetting it here hid a 9 s freeze in that frame.)
     this.armed = true;
-    this.lastFrameEnd = 0;
   }
 
   private scene: THREE.Object3D | null = null;
@@ -310,9 +313,11 @@ class HitchLogImpl {
       if (keep.length !== this.open.length) { this.open = keep; this.store(); }
     }
     if (!this.armed || !prevEnd || document.hidden) return;
-    const ms = now - prevEnd;
-    // A hidden stretch in between (tab switched, minimised) is not a freeze.
-    if (ms < FREEZE_MS || this.hiddenAt > prevEnd - 50) return;
+    // Only the visible part counts: going hidden in between (tab switched, minimised) is no
+    // freeze, but a long frame right after the page became visible again is one.
+    if (this.hiddenAt > prevEnd - 50) return;
+    const ms = now - Math.max(prevEnd, this.visibleAt);
+    if (ms < FREEZE_MS) return;
     const top = (o: Record<string, number>, n: number) => {
       const r: Record<string, number> = {};
       for (const [k, v] of Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n)) if (v >= 1) r[k] = Math.round(v);

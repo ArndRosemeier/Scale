@@ -766,6 +766,8 @@ export class Pedestrians {
         return;
       }
       desired = a.pref * (a.evac ?? this.paceK);
+      // The way ahead is gone (a fallen bridge span): stop at the edge, look, turn back.
+      if (this.cuts.length && !act && this.cutAhead(a, tx, tz)) { this.turnBack(a); return; }
     }
     // Shrunk: little legs, slower steps.
     if (st && st.scale < 1) desired *= Math.sqrt(st.scale);
@@ -850,6 +852,35 @@ export class Pedestrians {
     a.phase += a.speed * dt;
     const gy = a.under ? this.underFloor?.(a.x, a.y + 0.5, a.z) ?? a.y : this.groundOf(a, a.heading, a.y);
     a.y += (gy - a.y) * Math.min(1, dt * 10);
+  }
+
+  /** Where the way is cut (fallen bridge spans: middle, half length), kept by their owner. */
+  cuts: { x: number; z: number; r: number }[] = [];
+
+  /** Near a cut, the next step towards (tx, tz) would leave dry ground for open water. */
+  private cutAhead(a: PedAgent, tx: number, tz: number): boolean {
+    if (!this.cuts.some((c) => Math.hypot(c.x - a.x, c.z - a.z) < c.r + 6)) return false;
+    const d = Math.hypot(tx - a.x, tz - a.z) || 1, step = Math.min(d, 1.2);
+    return this.wet(a.x + ((tx - a.x) / d) * step, a.z + ((tz - a.z) / d) * step) && !this.wet(a.x, a.z);
+  }
+
+  /**
+   * Turn round at a gap: stand a moment looking at it, then walk back the way it came (the
+   * points behind it) and go (its trip is off).
+   */
+  private turnBack(a: PedAgent): void {
+    const back: number[] = [a.x, a.z, 0];
+    for (let i = Math.min(a.wp, a.route.length / 3) - 1; i >= 0; i--) back.push(a.route[i * 3], a.route[i * 3 + 1], a.route[i * 3 + 2]);
+    a.lookX = a.route[a.wp * 3] ?? a.x; a.lookZ = a.route[a.wp * 3 + 1] ?? a.z; a.lookY = a.y;
+    a.route = Float32Array.from(back.length > 3 ? back : [a.x, a.z, 0, a.x, a.z, 0]);
+    a.wp = 1;
+    a.wpD = undefined;
+    a.dest = null;
+    a.carDest = undefined;
+    a.onRoad = false;
+    a.state = PState.Gawk;
+    a.stateT = 0;
+    a.speed = 0;
   }
 
   /** After fleeing: new route from here to the destination (or vanish). */

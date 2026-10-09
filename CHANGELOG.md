@@ -2,6 +2,32 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.222 — 2026-10-09
+
+- **No long freeze right after loading.** Your hero is dressed piece by piece over the first frames, and on a fresh browser the shaders for their clothes were still compiling when play began, so the first frame stalled until they were done (9 seconds in one freeze log). The loading screen now waits until the hero is dressed and every shader still compiling is ready, up to 20 seconds. The freeze log also missed that freeze, because it skipped the very first frame of play; it no longer does, and a long frame right after switching back to the game's tab now counts too.
+
+## 0.221 — 2026-10-09
+
+- **No freeze when a giant first shows up on the news screens.** The news drone's picture for the billboards left out the sewers, and with them the sewer lights, so the game had to prepare every shader in the picture a second time, all at once: about a second and a half the first time the mech fired its missiles. The lights now stay in the picture (only what the drone can't see is left out), so it reuses the shaders already prepared.
+
+## 0.220 — 2026-10-09
+
+- **No more long freezes when missiles hit buildings.** The giant mech's missile blasts gave the wreckage a direction that was really a distance, so pieces flew off at hundreds of metres per second, and each one made the game prepare the physics ground for kilometres around in one go: the game froze for seconds, sometimes minutes. Blasts now always throw debris at sensible speeds, debris only asks for the ground close to it, and looking up the countryside roads under the ground is much faster.
+
+## 0.219 — 2026-10-09
+
+- **Nobody walks or drives over a fallen bridge span any more.** When the Leviathan brought a span down, people and cars carried on along the bridge as if it were still there, through the water. Now the street over the gap counts as cut: cars and walkers plan their way round it by another bridge, a car that reaches the broken end stops and turns round, and someone walking up to the gap stops, stares at it for a moment and walks back the way they came. Once the span is mended, the way is open again.
+
+## 0.218 — 2026-10-09
+
+- **A new big threat: the giant mech.** After the first Strider, a 30 m war machine can stride into town, heralded by an emergency bulletin or by heavy footfalls from far off that shake the ground. It walks the streets towards the centre on two legs, each step crushing cars and knocking people over. Its shoulder pods fire salvos of twelve missiles that blast whatever they hit, its right arm is a three-barrel cannon that sweeps bursts of tracers, and its left arm is a hammer fist it smashes down on anyone close. Salvos heat it up: when it's hot it stops and opens the vents on its back, which glow and are then a weak spot (3.5 times the damage); frost while it vents shuts it down for a few seconds. The cockpit is always a weak spot (twice the damage), and enough damage to the legs brings it down on one knee for a while. Badly hurt it walks off; destroyed it sparks, topples forward and lies smouldering where it fell for a few game hours. The army fights it wherever it goes. The admin console has a "Giant mech" section, and `dev.threat.mech` has tools for testing.
+
+## 0.217 — 2026-10-09
+
+- **Clothes shops look like clothes shops again.** Since the interior work they had only a few display tables, a rug and pictures, so they looked like a flat. Now they have rails of hanging clothes down the floor and along the walls, a couple of dressed shop dummies by the window, a few tables of folded clothes and wall shelves, plus the counter and the fitting mirror (E there changes your look).
+- **Fewer clothes shops.** Only one in three of the shops that used to be clothes shops still are; the rest are general stores. Arcades stay where they were.
+- `preview-interior.html` takes `&clothes=1` to step through clothes shops only.
+
 ## 0.216 — 2026-10-09
 
 - **First person view.** Zoom the camera all the way in with the mouse wheel (or pinch) and one more notch takes you through the hero's eyes: the head, hair and hat fold away (in fast flight the forearms too, so the outstretched fist doesn't cover the view), you see your arms and body when you look down, and the body turns with the view, so A and D strafe and S backs up. It works on foot, in flight and at giant size. While first person is on, the hero casts no shadow (a headless shadow looked wrong). Knockdowns, the manhole climb and other scenes still show the hero from outside. One notch out returns to the closest third person view.

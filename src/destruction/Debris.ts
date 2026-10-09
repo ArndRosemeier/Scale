@@ -160,7 +160,7 @@ export class Debris {
     this.physics.world.createCollider(desc, body);
     f.body = body;
     this.active.push(f);
-    this.physics.ensureGround(x, z, 20 + Math.hypot(vx, vz) * 2);
+    this.physics.ensureGround(x, z, Math.min(80, 20 + Math.hypot(vx, vz) * 2));
   }
 
   /** Ballistic chip/shard particles (glass, plaster bits). */
