@@ -939,7 +939,7 @@ export class Roc implements ThreatEvent, ThreatActor {
 
   devPerch(): string { if (!this.targetable) return this.mode; if (!this.findPerch()) return 'no roof to perch on'; this.setAct('perch'); return `perching at ${Math.round(this.perchAt!.x)}, ${Math.round(this.perchAt!.z)} (${Math.round(this.perchAt!.y)} m up)`; }
   devSnatch(): string { if (!this.targetable) return this.mode; if (!this.findPrey()) return 'no car near'; this.setAct('snatch'); return `going for a ${this.prey!.kind}`; }
-  devSwoop(): string { if (!this.targetable) return this.mode; this.aggro.set('player', Math.max(this.aggro.get('player') ?? 0, 500)); this.setAct('swoop'); return 'swooping at you'; }
+  devSwoop(): string { if (!this.targetable) return this.mode; bookAggro(this.aggro, 'player', Math.max(0, 500 - (this.aggro.get('player') ?? 0))); this.setAct('swoop'); return 'swooping at you'; }
   devDive(): string { const a = this.airNear(this.x, this.y, this.z, 2000); if (!a) return 'nothing flying'; this.air = a; this.setAct('dive'); return 'diving'; }
   devGround(): string { if (!this.flying) return 'not flying'; this.startGrounded(); return 'grounded'; }
   devLeave(): string { this.startLeaving(false); this.startLeave(); return this.mode; }
