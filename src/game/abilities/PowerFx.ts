@@ -104,20 +104,27 @@ export class PowerFx {
     // (One material for the whole copy: super speed leaves one every 70 ms.)
     const mat = new THREE.MeshBasicMaterial({ color: GHOST_COLOR, transparent: true, opacity: alpha, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
     const g: Ghost = { group, mats: [mat], skels: [], t: 0, life, a0: alpha };
+    // The body and everything worn share one skeleton: so does the copy. (A frozen skeleton per
+    // part meant a bone texture made and uploaded for each of ~20 parts, every 70 ms.)
+    const frozen = new Map<THREE.Skeleton, THREE.Skeleton>();
     root.traverseVisible((o) => {
       const src = o as THREE.SkinnedMesh;
       if (!(o as THREE.Mesh).isMesh || (o as THREE.InstancedMesh).isInstancedMesh) return;
       let m: THREE.Mesh;
       if (src.isSkinnedMesh && src.skeleton) {
         // Same geometry, a frozen copy of the bone matrices (Skeleton.update made a no-op).
-        const skel = new THREE.Skeleton(src.skeleton.bones, src.skeleton.boneInverses);
-        skel.update();
-        skel.update = () => {};
+        let skel = frozen.get(src.skeleton);
+        if (!skel) {
+          skel = new THREE.Skeleton(src.skeleton.bones, src.skeleton.boneInverses);
+          skel.update();
+          skel.update = () => {};
+          frozen.set(src.skeleton, skel);
+          g.skels.push(skel);
+        }
         const sm = new THREE.SkinnedMesh(src.geometry, mat);
         // Attached binding with the source's world matrix reproduces its bind inverse exactly.
         sm.bind(skel, src.bindMatrix);
         sm.bindMode = src.bindMode;
-        g.skels.push(skel);
         m = sm;
       } else m = new THREE.Mesh(src.geometry, mat);
       m.matrixAutoUpdate = false;

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.228 — 2026-10-09
+
+- **Super speed afterimages cost far less to draw.** Each glowing copy the runner leaves behind (one every 70 ms) made its own frozen skeleton for every part of the body and clothing, so the graphics card got about twenty new bone textures with every copy. Now a copy shares one skeleton, as the hero does.
+
 ## 0.227 — 2026-10-09
 
 - **The city rebuilds.** Buildings damaged by monsters, villains or you no longer stay broken forever. A couple of game hours after the damage round them stops (and with no big monster nearby), building crews move in: scaffolding with safety netting goes up round each damaged building, collapsed plots get a site fence, there is a site board, and a tower crane stands over the worst-hit building, its jib slowly turning. Round a collapsed building the scaffolding climbs as the work goes on. After 10 to 60 game hours (longer for more and worse damage) each building is whole again: walls, windows, floors, upper storeys, and its rubble cleared. That only happens while you are not looking: off screen or far away. A few broken windows are just mended quietly. A district levelled by the last resort becomes one big fenced site with cranes once its cordon is lifted, and stands again after three game days. Saves keep it all. The scaffolding leaves room for lamp posts, traffic lights and trees on the pavement.
