@@ -19,6 +19,8 @@ import type { Landmark } from './landmarks';
 import { marvel } from './marvelParts';
 import { cathedral } from './cathedralParts';
 import { museum } from './museumParts';
+import { glasshouse } from './glasshouseParts';
+import { terminal } from './terminalParts';
 
 export const enum PK { Box = 0, Cyl = 1, Dome = 2, Gable = 3, Pyramid = 4, Ramp = 5, Beam = 6, Tube = 7, Vault = 8, Flat = 9, Quad = 10, Lathe = 11, Prism = 12, Perf = 13, Helix = 14, Strut = 15 }
 
@@ -1423,44 +1425,6 @@ function fortress(k: Kit, lm: Landmark, r: Rng): void {
   }
 }
 
-function glasshouse(k: Kit, lm: Landmark, r: Rng): void {
-  const P = lm.p, B = k.B;
-  const frame: RGB = [[1.15, 1.15, 1.12], [0.35, 0.55, 0.42], [0.25, 0.26, 0.28]][P.frame % 3] as RGB;
-  const glass = mat(GLASS, [0.88 * frame[0] * 0.5 + 0.5, 0.95 * frame[1] * 0.4 + 0.6, 0.95], WIN | CURTAIN, 1.6, 2.2, 2.2);
-  const plinth = mat(BRICK, [0.9, 0.85, 0.8]);
-  const hw = P.W / 2, hl = P.L / 2;
-  if (lm.style === 0) {
-    // Palm house: a domed middle, vaulted wings either side.
-    const dr = hw * 1.1;
-    k.cyl(0, 0, dr, dr, B, B + 1, plinth, { foot: true });
-    k.cyl(0, 0, dr, dr, B + 1, B + P.H * 0.5, glass, { seg: 20 });
-    k.dome(0, 0, dr, dr, B + P.H * 0.5, B + P.H * 0.5 + dr, glass, { seg: 20 });
-    k.cyl(0, 0, 1.5, 1.2, B + P.H * 0.5 + dr - 0.3, B + P.H * 0.5 + dr + 2.5, mat(METAL, frame), { detail: true, solid: false, seg: 8 });
-    for (const s of [-1, 1]) {
-      const wu = s * (dr + (hl - dr) / 2 - 1), wl = (hl - dr) / 2 + 1.5;
-      k.box(wu, 0, wl, hw * 0.75, B, B + 1, plinth, { foot: true });
-      k.box(wu, 0, wl, hw * 0.75, B + 1, B + P.H * 0.28, glass, { solid: false });
-      k.vault(wu, 0, wl, hw * 0.75, B + P.H * 0.28, B + P.H * 0.28 + hw * 0.7, glass);
-    }
-    k.solidBox(0, 0, hl - 1, hw * 0.75, B, B + P.H * 0.28 + hw * 0.7);
-  } else if (lm.style === 1) {
-    const dr = Math.min(hl, hw * 1.6);
-    k.cyl(0, 0, dr, dr, B, B + 1.2, plinth, { foot: true });
-    k.cyl(0, 0, dr, dr * 0.96, B + 1.2, B + P.H * 0.4, glass, { seg: 24 });
-    k.dome(0, 0, dr * 0.96, dr * 0.96, B + P.H * 0.4, B + P.H * 0.4 + dr * 0.75, glass, { seg: 24 });
-  } else {
-    for (const [i, s] of [[0, -1], [1, 0], [2, 1]] as const) {
-      const len = hl * (i === 1 ? 1 : 0.75), w = hw * 0.36, h = P.H * (i === 1 ? 0.8 : 0.6);
-      k.box(0, s * w * 2.05, len, w, B, B + 1, plinth, { foot: true });
-      k.box(0, s * w * 2.05, len, w, B + 1, B + h * 0.35, glass, { solid: false });
-      k.vault(0, s * w * 2.05, len, w, B + h * 0.35, B + h * 0.35 + w * 1.1, glass);
-      // Glass end walls.
-      for (const e of [-1, 1]) k.box(e * len, s * w * 2.05, 0.05, w, B + 1, B + h * 0.35, glass, { detail: true, solid: false });
-    }
-  }
-  void r;
-}
-
 function airport(k: Kit, lm: Landmark, r: Rng): void {
   const P = lm.p, B = k.B, hv = lm.hv, len = P.len;
   const asph = mat(TAR, [0.55, 0.55, 0.56]), asphD = mat(ASPHALT, [0.6, 0.6, 0.62]);
@@ -1493,7 +1457,9 @@ function airport(k: Kit, lm: Landmark, r: Rng): void {
   // Terminal: a long glazed hall under a flat, waved or saw-tooth roof; piers out onto the apron.
   const tc = (vT0 + vT1) / 2, th = 18 + r.range(0, 6);
   const glassT = mat(GLASS, [0.85, 0.92, 1], WIN | CURTAIN, 2.2, 4.5, 6);
-  k.box(0, tc, tw / 2, (vT1 - vT0) / 2, B, B + th, glassT, { top: mat(METAL_ROOF, [0.9, 0.9, 0.92], ROOF) });
+  const gates = P.gates, gw = tw / gates;
+  const gateU = Array.from({ length: gates }, (_, g) => -tw / 2 + (g + 0.5) * gw);
+  terminal(k, lm, tc, tw / 2, (vT1 - vT0) / 2, th, glassT, mat(METAL_ROOF, [0.9, 0.9, 0.92], ROOF), [-tw * 0.25, 0, tw * 0.25], gateU);
   if (lm.style === 1) k.vault(0, tc, tw / 2 + 4, (vT1 - vT0) / 2 + 6, B + th, B + th + 9, mat(METAL_ROOF, [0.92, 0.92, 0.94], ROOF), { solid: false });
   else if (lm.style === 2) {
     const nb = Math.max(3, Math.round(tw / 70));
@@ -1501,7 +1467,6 @@ function airport(k: Kit, lm: Landmark, r: Rng): void {
   } else k.box(0, tc - 3, tw / 2 + 6, (vT1 - vT0) / 2 + 6, B + th, B + th + 1.2, mat(PANEL, WHITE), { solid: false });
   // Landside canopy over the kerb.
   k.box(0, vT0 - 7, tw * 0.4, 5, B + 6, B + 6.6, mat(PANEL, WHITE), { solid: false });
-  const gates = P.gates, gw = tw / gates;
   const planesU: number[] = [];
   for (let g = 0; g < gates; g++) {
     const u = -tw / 2 + (g + 0.5) * gw;

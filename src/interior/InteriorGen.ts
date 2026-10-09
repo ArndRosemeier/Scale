@@ -21,7 +21,11 @@ export type RoomType =
   // A starship's (fill/starship): round its great hall.
   | 'quarters' | 'lab' | 'mess' | 'lounge' | 'control' | 'gallery'
   // A museum's (fill/museum): galleries round its great hall.
-  | 'exhibit';
+  | 'exhibit'
+  // A glasshouse's (fill/garden).
+  | 'garden'
+  // An airport terminal's (fill/terminal).
+  | 'checkin' | 'security' | 'gates';
 
 export type FurnKind =
   | 'bed' | 'bedDouble' | 'wardrobe' | 'nightstand' | 'sofa' | 'armchair' | 'coffeeTable' | 'tvStand' | 'tv' | 'rug'
@@ -32,7 +36,11 @@ export type FurnKind =
   // A starship's props (built as landmark parts by interior/design/props).
   | 'pod' | 'locker' | 'console' | 'holo' | 'stool' | 'bench' | 'planter' | 'table'
   // A museum's.
-  | 'case' | 'statue' | 'bigStatue' | 'seat';
+  | 'case' | 'statue' | 'bigStatue' | 'seat'
+  // A glasshouse's.
+  | 'palm' | 'tree' | 'fern' | 'flowerBed' | 'cactus' | 'rock' | 'fountain'
+  // An airport's.
+  | 'checkDesk' | 'scanner' | 'belt' | 'gateDesk' | 'seatRow' | 'board';
 
 export interface Room {
   type: RoomType;

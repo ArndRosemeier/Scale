@@ -67,7 +67,7 @@ function rail(k: Kit, a: P2, b: P2, y0: number, y1: number, T: Theme): void {
 }
 
 /** Props whose front (where one stands or sits) is their local -v: turned round. */
-const BACKWARDS = new Set<PropName>(['bench', 'rack', 'counter', 'pod']);
+const BACKWARDS = new Set<PropName>(['bench', 'rack', 'counter', 'pod', 'seatRow', 'checkDesk', 'gateDesk']);
 
 /** The room's furniture (placed by fill/place: x/z are u/v, front to +z) as props of the theme. */
 function furnish(k: Kit, room: DRoom, T: Theme): void {
@@ -76,7 +76,7 @@ function furnish(k: Kit, room: DRoom, T: Theme): void {
     const name = f.kind as PropName;
     // (A prop's front faces +v after turning by rot; the piece's front is (sin yaw, cos yaw).)
     const rot = Math.atan2(Math.cos(f.yaw), Math.sin(f.yaw)) - Math.PI / 2 + (BACKWARDS.has(name) ? Math.PI : 0);
-    buildProp(k, name, f.x, f.z, room.y, rot, T, r);
+    buildProp(k, name, f.x, f.z, room.y, rot, T, r, f.h);
   }
 }
 

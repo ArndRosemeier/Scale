@@ -9,7 +9,7 @@ import type { Rng } from '../../core/rng';
 import { Rng as R } from '../../core/rng';
 import { pointInPoly, type Poly } from '../../core/geom2';
 import { splitStorey, type Program, type Space, type Split } from '../fill/split';
-import { roomArea, type Area, type EdgeKind } from '../fill/area';
+import { roomArea, type Area, type EdgeKind, type WallSeg } from '../fill/area';
 import { Filler, type Item } from '../fill/place';
 import type { RoomType } from '../InteriorGen';
 import type { Design, P2, RoomFn } from './types';
@@ -31,6 +31,15 @@ export interface StoreyBrief {
   /** Walk grid cell for the filler (big plain rooms can do with a coarser one). */
   cell?: number;
   wallTh?: number;
+  /**
+   * Walls the caller builds itself (the shell) with their openings: the way in through the
+   * outline, arches to the next hall. The filler keeps the floor in front of their doors clear.
+   */
+  entrances?: WallSeg[];
+  /** Floor nothing may stand on (convex polygons). */
+  keepOut?: Poly[];
+  /** Furnish the fixed spaces too (a hall the caller laid out itself). */
+  furnishFixed?: boolean;
 }
 
 /** Divides and furnishes the storey into D; returns the split (spaces with the fixed ones first). */
@@ -41,13 +50,13 @@ export function fillStorey(D: Design, b: StoreyBrief): Split {
   for (const w of split.walls) D.walls.push({ a: [w.ax, w.az], b: [w.bx, w.bz], y0: b.y, y1: b.top, th: b.wallTh ?? 0.2, kind: 'wall', doors: w.doors });
   const facade = b.facade ?? (() => 'blind' as EdgeKind);
   for (const sp of split.spaces) {
-    if (sp.fixed) continue;
-    const A = roomArea(sp.poly, split.walls, b.outline, facade, []);
+    if (sp.fixed && !b.furnishFixed) continue;
+    const A = roomArea(sp.poly, [...split.walls, ...(b.entrances ?? [])], b.outline, facade, b.keepOut ?? []);
     const furniture = new Filler(A, r, b.cell).fill(b.items(sp.type, A, r));
     const poly: P2[] = [];
     for (let k = 0; k < sp.poly.length; k += 2) poly.push([sp.poly[k], sp.poly[k + 1]]);
     const mid = mean(poly);
-    const { door, facing } = doorOf(sp.poly, split.walls, mid);
+    const { door, facing } = doorOf(sp.poly, [...split.walls, ...(b.entrances ?? [])], mid);
     D.rooms.push({ fn: sp.type as RoomFn, poly, y: b.y, h: b.top - b.y, door, facing, seed: seed++, furniture });
     D.lights.push([mid[0], mid[1], b.top - 0.25]);
   }
@@ -57,8 +66,9 @@ export function fillStorey(D: Design, b: StoreyBrief): Split {
 const mean = (p: P2[]): P2 => [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length];
 
 /** A room's door (the middle of the first door in its walls) and the way out through it. */
-function doorOf(p: Poly, walls: Split['walls'], mid: P2): { door: P2; facing: P2 } {
+function doorOf(p: Poly, walls: WallSeg[], mid: P2): { door: P2; facing: P2 } {
   for (const w of walls) for (const [t0, t1] of w.doors) {
+    if (t1 - t0 <= 0) continue;
     const t = (t0 + t1) / 2, x = w.ax + (w.bx - w.ax) * t, z = w.az + (w.bz - w.az) * t;
     const L = Math.hypot(w.bx - w.ax, w.bz - w.az), nx = -(w.bz - w.az) / L, nz = (w.bx - w.ax) / L;
     const a = pointInPoly(p, x + nx * 0.3, z + nz * 0.3), c = pointInPoly(p, x - nx * 0.3, z - nz * 0.3);
