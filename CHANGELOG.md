@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.179 — 2026-10-09
+
+- **New title music: "Dusk Awakening", Arnd's heroic main theme.** It starts with a soft fade-in after your first click or key on the start screen and loops while you choose a city. It plays on through the loading screen and fades out as the game begins. It streams in only when it starts, so the page doesn't load any slower. It follows the volume, mute, music switch and music level from the settings (and `?mute`).
+
 ## 0.178 — 2026-10-09
 
 - Tests only: the "room splitting" speed check times each office, shop or café storey three times and counts the fastest, so other test workers sharing the CPU no longer make it fail.
