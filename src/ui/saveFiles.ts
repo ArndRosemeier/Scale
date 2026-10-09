@@ -50,7 +50,7 @@ export async function writeSaveFile(meta: SaveMeta, get: () => Promise<SaveData 
   return download(await encodeSaveFile(d, meta), name);
 }
 
-function download(blob: Blob, name: string): string {
+export function download(blob: Blob, name: string): string {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

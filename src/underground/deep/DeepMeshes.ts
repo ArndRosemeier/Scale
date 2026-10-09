@@ -14,6 +14,7 @@ import { createWaterMaterial } from '../../render/materials/ground';
 import { SHARD_VS, SHARD_FS } from '../../game/intro/StarFx';
 import { G } from '../../render/materials/globals';
 import { WEBGPU, gpuKit } from '../../render/gpuMode';
+import { hitch } from '../../debug/HitchLog';
 
 /** Chunks are built within BUILD m of the camera and dropped beyond DROP. */
 const BUILD = 230, DROP = 300;
@@ -213,7 +214,7 @@ export class DeepMeshes {
         const m = e.data as { type: string; list?: [number, number, number][]; data?: ChunkData; ms?: number; message?: string };
         if (m.type === 'chunks') this.list = m.list ?? [];
         if (m.type === 'chunks') this.lastPick.set(1e9, 0, 0);
-        else if (m.type === 'chunk' && m.data) { this.inFlight--; this.addChunk(m.data, m.ms ?? 0); }
+        else if (m.type === 'chunk' && m.data) { this.inFlight--; hitch.measure('deep:chunk', () => this.addChunk(m.data!, m.ms ?? 0)); }
         else if (m.type === 'error') { this.inFlight = Math.max(0, this.inFlight - 1); this.onError?.(m.message ?? 'deep worker'); }
       };
       w.postMessage({ type: 'init', plan: this.plan, skip });

@@ -9,6 +9,7 @@
  */
 import type * as THREE from 'three';
 import { shaderCap } from '../render/shaderCap';
+import { hitch } from './HitchLog';
 
 const WINDOW_MS = 10000;
 
@@ -88,6 +89,14 @@ export class ShaderCounter {
     const cap = !c.active ? 'cap: starts after loading' : c.maxPerSecond > 0 ? `cap ${c.maxPerSecond}/s, last second ${c.lastSecond}, waiting ${c.waiting}` : 'cap: off';
     this.el.textContent = (this.webgpu
       ? `Shaders built, last 10 s: ${s}  ·  GPU pipelines: ${p}`
-      : `Shaders compiled, last 10 s: ${s}`) + `\n${cap}\nlongest frame: ${worst.toFixed(0)} ms`;
+      : `Shaders compiled, last 10 s: ${s}`) + `\n${cap}\nlongest frame: ${worst.toFixed(0)} ms` + this.freezeLine(t);
+  }
+
+  /** Freezes (src/debug/HitchLog.ts) this session: how many, the last one (Shift+F9 saves them). */
+  private freezeLine(t: number): string {
+    const f = hitch.freezes, last = f[f.length - 1];
+    if (!last) return '\nfreezes: none (Shift+F9 saves the log)';
+    const ago = Math.max(0, (t / 1000 - last.t) / 60);
+    return `\nfreezes: ${f.length}, last ${(last.ms / 1000).toFixed(1)} s, ${ago < 1 ? 'just now' : ago.toFixed(0) + ' min ago'} (Shift+F9 saves the log)`;
   }
 }
