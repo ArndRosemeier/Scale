@@ -771,6 +771,8 @@ export class Game {
       const ms = this.manhole.spot, H = this.traffic.holds;
       H.length = 0;
       if (ms) H.push({ x: ms.x, z: ms.z, r: 1.7 });
+      // Cutscenes and the free camera show the hero from outside.
+      if (this.intro?.active || this.freeCam || this.defeat.drives || this.manhole.active) this.player.leaveFirstPerson();
       if (this.intro?.active) this.intro.update(dt);
       else if (this.freeCam) this.updateFreeCam(dt);
       else if (this.defeat.drives) { /* the defeat's scene moves the body and the camera (below) */ }

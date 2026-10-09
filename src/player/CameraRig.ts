@@ -2,6 +2,7 @@
  * Third-person orbit camera. Distance is measured in body heights (mouse
  * wheel), collides with terrain/buildings, and the near/far planes scale
  * with the player's size. Speed widens the field of view in flight.
+ * Zoomed all the way in it becomes a first person view from the hero's eyes.
  */
 import * as THREE from 'three';
 import type { Player } from './Player';
@@ -10,6 +11,10 @@ import type { Input } from '../game/Input';
 import { clamp, damp, lerp } from '../core/math';
 
 const _origin = new THREE.Vector3();
+const _look = new THREE.Vector3(), _fpPos = new THREE.Vector3(), _fpAt = new THREE.Vector3();
+
+/** Wheel zoom at (or below) this looks through the hero's eyes; one notch out is third person again. */
+export const FIRST_PERSON_ZOOM = 0.3;
 
 export class CameraRig {
   yaw = 0;
@@ -27,6 +32,11 @@ export class CameraRig {
   private pivot = new THREE.Vector3();
   private smoothPivot = new THREE.Vector3();
   private init = false;
+  /** First person: the eye point, steadied vertically (the walk's head bob, landings). */
+  private eye = new THREE.Vector3();
+  private fpInit = false;
+  /** True while the view is through the eyes (last update). */
+  firstPerson = false;
 
   /** Optional solidity test overriding the default building-prism ray cast (used indoors). */
   solidAt: ((x: number, y: number, z: number) => boolean) | null = null;
@@ -57,10 +67,20 @@ export class CameraRig {
     this.dist = 1e3;
   }
 
-  update(dt: number, p: Player, input: Input): void {
+  /** `firstPersonOk` false: a scene shows the hero from outside even when zoomed all the way in. */
+  update(dt: number, p: Player, input: Input, firstPersonOk = true): void {
     this.yaw -= input.mouseDX * 0.0024;
     this.pitch = clamp(this.pitch - input.mouseDY * 0.0024, -1.45, 1.2);
-    if (input.wheel) this.zoom = clamp(this.zoom * Math.pow(1.15, input.wheel), 0.35, 40);
+    if (input.wheel) {
+      const z = this.zoom * Math.pow(1.15, input.wheel);
+      // Past the closest boom the next notch in goes through the eyes.
+      this.zoom = z < 0.35 - 1e-6 ? (input.wheel < 0 ? FIRST_PERSON_ZOOM : 0.35) : Math.min(40, z);
+    }
+    const fp = firstPersonOk && this.zoom <= FIRST_PERSON_ZOOM + 1e-6 && p.canFirstPerson;
+    p.firstPerson = fp;
+    this.firstPerson = fp;
+    if (fp) { this.updateFirstPerson(dt, p); return; }
+    this.fpInit = false;
     const h = p.height;
     p.pivot(this.pivot);
     if (!this.init) { this.smoothPivot.copy(this.pivot); this.init = true; }
@@ -127,6 +147,40 @@ export class CameraRig {
     }
     this.cam.position.copy(camPos);
     this.cam.lookAt(origin);
+    this.lens(dt, p, clamp(Math.min(h * 0.04, this.dist * 0.2), 0.004, 2));
+  }
+
+  /** Through the eyes: the camera sits at the hero's eye point (the head is folded away, see Player.firstPerson). */
+  private updateFirstPerson(dt: number, p: Player): void {
+    const h = p.height, e = p.eyePoint;
+    if (!this.fpInit) { this.eye.copy(e); this.fpInit = true; this.init = false; }
+    // Horizontal stays exact (the body turns with the view); height eases a little.
+    this.eye.x = e.x;
+    this.eye.z = e.z;
+    this.eye.y = lerp(this.eye.y, e.y, damp(p.flying ? 30 : 18, dt));
+    if (Math.abs(this.eye.y - e.y) > h * 0.5) this.eye.y = e.y;
+    // (Leaving: the boom grows out of the head.)
+    this.dist = 0;
+    const look = _look.set(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
+    // A little ahead of the eyes: looking down, the collar and the folded neck stay behind the lens.
+    const camPos = _fpPos.copy(this.eye);
+    camPos.x += -Math.sin(this.yaw) * h * 0.03;
+    camPos.z += -Math.cos(this.yaw) * h * 0.03;
+    this.shake = Math.max(0, this.shake - dt * 1.8);
+    this.shakeT += (dt * 30) / Math.sqrt(Math.max(1, h / 1.8));
+    if (this.shake > 0) {
+      // (Half the boom's rattle: right at the eyes it reads stronger.)
+      const s = this.shake * this.shake * h * 0.025;
+      const sx = camPos.x + Math.sin(this.shakeT * 1.1) * s, sy = camPos.y + Math.sin(this.shakeT * 1.7 + 1) * s, sz = camPos.z + Math.sin(this.shakeT * 1.3 + 2) * s;
+      if (!this.solidAt || !this.solidAt(sx, sy, sz)) camPos.set(sx, sy, sz);
+    }
+    this.cam.position.copy(camPos);
+    this.cam.lookAt(_fpAt.copy(camPos).add(look));
+    this.lens(dt, p, clamp(h * 0.012, 0.004, 2));
+  }
+
+  /** Field of view (flight speed, kicks) and the near plane. */
+  private lens(dt: number, p: Player, near: number): void {
     // FOV widens with flight speed.
     const speed = p.vel.length() / Math.sqrt(p.k);
     // (Super speed on foot widens it more: everything else seems to stand still.)
@@ -136,7 +190,6 @@ export class CameraRig {
     const kt = this.kickT, kick = this.kickDeg * Math.min(1, kt / 0.06) * (kt < this.kickHold ? 1 : Math.exp(-(kt - this.kickHold) * 6));
     const fov = this.fov + (kick > 0.05 ? kick : 0);
     // Near/far planes follow the player's size (reversed depth keeps precision).
-    const near = clamp(Math.min(h * 0.04, this.dist * 0.2), 0.004, 2);
     if (Math.abs(this.cam.near - near) > near * 0.05 || this.cam.fov !== fov) {
       this.cam.near = near;
       this.cam.far = 60000;
