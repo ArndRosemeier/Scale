@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.229 — 2026-10-09
+
+- **No more looking through the world at the slime tunnels' entrances.** Where a slime colony's road leaves its hidden chamber, the wall had a square hole cut into it, but the rock tunnel behind is round and starts a little way past the wall, so its corners and edges showed the city and the sky. The opening is now a round arch that sits inside the tunnel, with a short stone lining reaching out into the rock, for every entrance. The glowing wall markings and cracks no longer hang in the opening either.
+
 ## 0.228 — 2026-10-09
 
 - **No bare skin between top and trousers.** Since the smooth hems (0.170), every garment's edge is cut a few centimetres inside the body's ragged triangle edge, so a T-shirt and jeans that used to meet exactly at the waist left a band of skin between them (front, sides and back, down to the top of the seat). Now the inner of the two reaches well under the outer one: a shirt or T-shirt tucked into trousers, shorts or a skirt continues down inside them, and trousers under a sweater, jacket or coat reach up under it. The extra part is hidden, so nothing else changes in the look.

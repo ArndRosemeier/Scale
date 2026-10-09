@@ -747,9 +747,68 @@ export function colonyLayout(c: Colony): ColonyLayout {
 /** The hidden chamber: rough walls, moss gardens, little domes and stacks of salvaged things, fungus lamps. */
 /**
  * The opening of a colony's road out of its chamber (deep/plan.ts Road.hole): which wall, the
- * centre along it (chamber frame: v on the u+ wall, u on the side walls), half width, height.
+ * centre along it (chamber frame: v on the u+ wall, u on the side walls), half width (the arch's
+ * radius), height (its crown), the arch's centre above the floor.
  */
-export interface ChamberHole { wall: 'u+' | 'v+' | 'v-'; c: number; hw: number; h: number }
+export interface ChamberHole { wall: 'u+' | 'v+' | 'v-'; c: number; hw: number; h: number; cy: number }
+
+/** How far the stone lining of the road's arch reaches out of the chamber, into the rock tunnel. */
+const ARCH_SLEEVE = 1.8;
+
+/**
+ * The road's opening as a round arch (the wall cut is a rectangle; this fills its corners) and a
+ * short stone lining out from it. The tunnel behind is round and its rock starts a little way past
+ * the wall, so a bare cut showed the world through its corners and seams.
+ */
+function chamberArch(mb: MeshBuilder, f: Frame, hole: ChamberHole, hu: number, hv: number, y: number): void {
+  const { c, hw: r, h, cy } = hole;
+  // Frame (u, v) of a point l along the wall from the arch's centre, s out of the chamber.
+  const at = (l: number, s: number): [number, number] => (hole.wall === 'u+' ? fw(f, hu + s, c + l) : hole.wall === 'v+' ? fw(f, c + l, hv + s) : fw(f, c + l, -hv - s));
+  const [ox, oz] = at(0, 0), [sx, sz] = at(0, 1), [lx, lz] = at(1, 0);
+  const nx = sx - ox, nz = sz - oz, ax = lx - ox, az = lz - oz;
+  const quad = (A: number[], B: number[], C: number[], D: number[], n: number[]) => {
+    const i = mb.v(A[0], A[1], A[2], n[0], n[1], n[2], A[3], A[4]);
+    mb.v(B[0], B[1], B[2], n[0], n[1], n[2], B[3], B[4]);
+    mb.v(C[0], C[1], C[2], n[0], n[1], n[2], C[3], C[4]);
+    mb.v(D[0], D[1], D[2], n[0], n[1], n[2], D[3], D[4]);
+    mb.quad(i, i + 1, i + 2, i + 3);
+    mb.quad(i, i + 3, i + 2, i + 1);
+  };
+  /** World point: l along the wall, t above the floor, s out; uv in metres. */
+  const P = (l: number, t: number, s: number, uvA = l): number[] => { const [x, z] = at(l, s); return [x, y + t, z, uvA, t]; };
+  // The arch's outline, left foot to right foot (where the circle meets the floor): a little wider
+  // than the opening, so the wall's edge overlaps the lining (no crack between them).
+  const rl = r + 0.08;
+  const foot = Math.sqrt(Math.max(0, rl * rl - cy * cy));
+  const a0 = Math.atan2(-cy, -foot), a1 = Math.atan2(-cy, foot) + Math.PI * 2;
+  const N = 24;
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= N; i++) { const a = a0 + ((a1 - a0) * i) / N; pts.push([Math.cos(a) * rl, Math.max(0, cy + Math.sin(a) * rl)]); }
+  pts[0][1] = pts[N][1] = 0;
+  // Spandrels: the wall between the arch and the rectangle cut (above it, and below it beside the feet).
+  // (Lit like the wall around it: wall() takes the normal to the left of its run, +v on both side walls.)
+  const wf = hole.wall === 'v+' ? 1 : -1, wn = [nx * wf, 0, nz * wf];
+  // (A hair over the cut's edges too: the wall's own edges there would leave pinholes.)
+  const cols = 32, e = 0.03, rs = r - 0.02;
+  const top = (l: number) => cy + Math.sqrt(Math.max(0, rs * rs - l * l));
+  const bot = (l: number) => Math.max(0, cy - Math.sqrt(Math.max(0, rs * rs - l * l)));
+  for (let i = 0; i < cols; i++) {
+    const l0 = -r - e + (2 * (r + e) * i) / cols, l1 = -r - e + (2 * (r + e) * (i + 1)) / cols;
+    quad(P(l0, top(l0), 0), P(l1, top(l1), 0), P(l1, h + 0.02, 0), P(l0, h + 0.02, 0), wn);
+    if (bot(l0) > 1e-3 || bot(l1) > 1e-3) quad(P(l0, -0.01, 0), P(l1, -0.01, 0), P(l1, bot(l1), 0), P(l0, bot(l0), 0), wn);
+  }
+  // The lining: the arch's inside carried out into the tunnel, and its floor.
+  let run = 0;
+  for (let i = 0; i < N; i++) {
+    const [p0, q0] = pts[i], [p1, q1] = pts[i + 1];
+    const seg = Math.hypot(p1 - p0, q1 - q0);
+    const ml = (p0 + p1) / 2, mt = (q0 + q1) / 2 - cy, ml2 = Math.hypot(ml, mt) || 1;
+    const n = [(-ax * ml) / ml2, -mt / ml2, (-az * ml) / ml2];
+    quad(P(p0, q0, 0, run), P(p1, q1, 0, run + seg), P(p1, q1, ARCH_SLEEVE, run + seg), P(p0, q0, ARCH_SLEEVE, run), n);
+    run += seg;
+  }
+  quad(P(-foot, 0.04, 0), P(foot, 0.04, 0), P(foot, 0.04, ARCH_SLEEVE), P(-foot, 0.04, ARCH_SLEEVE), [0, 1, 0]);
+}
 
 export function buildChamber(c: Colony, L: ColonyLayout, mats: RoomMats, hole: ChamberHole | null = null): BuiltRoom {
   const f = L.frame, y = L.y, hu = L.hu, hv = L.hv, top = y + c.chamber.y1 - c.chamber.y0;
@@ -763,8 +822,9 @@ export function buildChamber(c: Colony, L: ColonyLayout, mats: RoomMats, hole: C
   wall(k.lit, f, hu, -hv, hu, hv, y, top, cut('u+', hv));
   wall(k.lit, f, -hu, -hv, hu, -hv, y, top, cut('v-', hu));
   wall(k.lit, f, -hu, hv, hu, hv, y, top, cut('v+', hu));
+  if (hole) chamberArch(k.lit, f, hole, hu, hv, y);
   /** Near the road's opening (keep it clear of boulders). */
-  const nearHole = (u: number, v: number) => !!hole && (hole.wall === 'u+' ? Math.abs(u - hu) < 1.5 && Math.abs(v - hole.c) < hole.hw + 1 : Math.abs(v - (hole.wall === 'v+' ? hv : -hv)) < 1.5 && Math.abs(u - hole.c) < hole.hw + 1);
+  const nearHole = (u: number, v: number, pad = 1) => !!hole && (hole.wall === 'u+' ? Math.abs(u - hu) < 1.5 && Math.abs(v - hole.c) < hole.hw + pad : Math.abs(v - (hole.wall === 'v+' ? hv : -hv)) < 1.5 && Math.abs(u - hole.c) < hole.hw + pad);
   k.m(8, 0.3, 0.24, 0.19); flat(k.lit, f, -hu, hu, -hv, hv, top, false);
   k.m(22, 0.4, 0.33, 0.26); flat(k.lit, f, -hu, hu, -hv, hv, y + 0.002);
   // Boulders along the foot of the walls, roots hanging from the ceiling.
@@ -872,10 +932,11 @@ export function buildChamber(c: Colony, L: ColonyLayout, mats: RoomMats, hole: C
   for (let i = 0; i < 6; i++) {
     const cell = CELL.mark + (i % 4), s = k.rng.range(0.35, 0.7), col = dim(pal[i % pal.length], 0.45);
     k.glow.set('color', ...col);
-    if (i % 2 === 0) wallDecal(k.glow, f, hu, k.rng.range(-hv + 1, hv - 1), -1, 0, y + k.rng.range(1.1, 2.4), s, s, cell);
-    else { const sv = i % 4 === 1 ? 1 : -1; wallDecal(k.glow, f, k.rng.range(-hu + 2, hu - 1), sv * hv, 0, -sv, y + k.rng.range(1.1, 2.4), s, s, cell); }
+    // (None hanging in the road's opening.)
+    if (i % 2 === 0) { const v = k.rng.range(-hv + 1, hv - 1), yy = y + k.rng.range(1.1, 2.4); if (!nearHole(hu, v, s)) wallDecal(k.glow, f, hu, v, -1, 0, yy, s, s, cell); }
+    else { const sv = i % 4 === 1 ? 1 : -1, u = k.rng.range(-hu + 2, hu - 1), yy = y + k.rng.range(1.1, 2.4); if (!nearHole(u, sv * hv, s)) wallDecal(k.glow, f, u, sv * hv, 0, -sv, yy, s, s, cell); }
   }
-  for (const q of L.crevices) wallDecal(k.dec, f, q.u, q.v, q.fu, q.fv, y + 0.38, 0.16, 0.4, CELL.crack);
+  for (const q of L.crevices) if (!nearHole(q.u, q.v, 0.16)) wallDecal(k.dec, f, q.u, q.v, q.fu, q.fv, y + 0.38, 0.16, 0.4, CELL.crack);
   // Their circle: a ring of small flat stones.
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2;

@@ -1680,6 +1680,22 @@ section('deep realm', async () => {
     while (q.length) for (const m of adj[q.shift()!]) if (!seen.has(m)) { seen.add(m); q.push(m); }
     const gates = plan.nodes.filter((q2) => q2.name.startsWith('gate'));
     check(gates.length === plan.roads.length && gates.every((g2) => seen.has(g2.id)), `deep seed ${seed}: every gate (${gates.length}) leads down to the Heart`);
+    // The chamber's arch and its stone lining (RoomMeshes chamberArch, 1.8 m out) keep inside the neck's
+    // rough rock: anywhere outside it, the world showed through the opening's corners.
+    let outside = 0, archPts = 0;
+    for (const r of plan.roads) {
+      const b = rooms.colonies[r.colony].chamber, H = r.hole, rl = H.hw + 0.1;
+      const at = (l: number, s2: number) => {
+        const [u, v] = H.wall === 'u+' ? [b.hu + s2, H.c + l] : H.wall === 'v+' ? [H.c + l, b.hv + s2] : [H.c + l, -b.hv - s2];
+        return [b.cx + b.ux * u - b.uz * v, b.cz + b.uz * u + b.ux * v];
+      };
+      for (let a = -0.5; a <= Math.PI + 0.5; a += 0.15) for (const s2 of [0.3, 1.0, 1.8]) {
+        const t = Math.max(0.15, H.cy + Math.sin(a) * rl), [x, z] = at(Math.cos(a) * rl, s2);
+        archPts++;
+        if (!F.air(x, b.y0 + t, z)) outside++;
+      }
+    }
+    check(outside === 0, `deep seed ${seed}: the chambers' arches keep inside the roads' rock (${outside} of ${archPts} points outside)`);
     // The trench war in the Warrens' mouth: the line laid out, the Lumen's sentries hold it against the endless pushes
     // (most Murk fall in no-man's land, hardly any get past, the fallen are replaced; dice seeded per realm),
     // and the Murk go for a player in their way.
