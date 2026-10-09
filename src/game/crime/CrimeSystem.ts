@@ -63,7 +63,7 @@ import type { Target } from '../Targeting';
 import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
-import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, relation, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
+import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, hostileGroups, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
 import { planBosses, bossLabel, bossPowers, heatOf, raise, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, bossOpChance, NOTORIETY, BOSS, BOSS_OP, BOSS_KINDS, type Boss, type Heat } from '../factions/Bosses';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
@@ -183,7 +183,7 @@ export class CrimeSystem {
     // planned on the seeded one.
     this.index = g.city.live.live;
     g.map.world.crimeIndex = this.index;
-    this.factions = planFactions(g.macro, seed, g.city.base, CITY_GROUPS);
+    this.factions = planFactions(g.macro, seed, g.city.base, CITY_GROUPS, g.relations);
     this.hideouts = planHideouts(this.factions);
     this.bosses = planBosses(this.factions, seed);
     this.notoriety = this.factions.factions.map(() => 0);
@@ -1091,7 +1091,7 @@ export class CrimeSystem {
     if (c instanceof TurfBrawl && f) {
       // The rivals who came to take the street: whoever presses here, else any hostile group.
       const F = this.factions;
-      c.rival = rivalsAt(F, this.cellAt(c.x, c.z), f.id)[0] ?? F.factions.find((o) => relation(F, f.id, o.id) === 'hostile')?.id ?? -1;
+      c.rival = rivalsAt(F, this.cellAt(c.x, c.z), f.id)[0] ?? F.factions.find((o) => hostileGroups(F, f.id, o.id))?.id ?? -1;
       if (c.rival < 0) { c.abort(); c.dispose(); return false; }
     }
     if (f) this.enlist(c, f);

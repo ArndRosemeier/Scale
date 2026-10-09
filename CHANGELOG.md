@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.188 — 2026-10-09
+
+- **Factions, step 1: one table of who is hostile to whom.** Every side in the game (civilians, police, army, the hero, the sidekick, street crooks, each villain group, Lumen, Murk, Wardens, runaway teens, monsters, rogue machines) now has a relation to every other one, as a number from −100 to +100; −50 or lower is hostile. The civilians' feeling about the hero is the reputation itself. For now the numbers repeat today's rules, so nothing plays differently: the friend/foe sense and the villain groups' turf wars ask the table instead of their own lists. Later steps will move the hero's other standings into it and let the numbers change.
+
 ## 0.187 — 2026-10-09
 
 - **Super strength punches no longer knock out anyone in one blow.** From rank 2 on, a punch hit a person with the full force that smashes walls, which did thousands of damage: one punch took out anyone, bosses included. A punch now takes at most 22, 30, 40, 52 or 65 health off a person by rank (an ordinary punch still does 12). It is still the hardest single hit in the game, since you have to get close for it: at rank 5 a thug goes down in one punch, a lieutenant in two and a boss in three. A giant's punch hits harder in proportion to its size. Walls, cars and monsters still take the full force.

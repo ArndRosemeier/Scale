@@ -8,6 +8,7 @@
  * points, armour per body zone, weak spots and an aggro table. Everything that hurts it — the
  * player's punches and powers now, the army's ForceUnits later — goes through `damage`.
  */
+import type { FactionId } from '../factions/relations';
 import type { Cause } from '../Stimuli';
 
 /**
@@ -73,6 +74,8 @@ export interface ThreatActor {
   conStrength(): number;
   /** The player's own body (a rampaging giant: the police's and the army's target, never the player's). */
   readonly self?: boolean;
+  /** Its faction (factions/relations.ts); unset: 'monsters'. */
+  readonly faction?: FactionId;
   /**
    * An element from the powers lands on it (fire, frost, lightning): its own reaction (an awakened
    * tree catches fire) and the multiplier on the power's damage. Absent: 1.
