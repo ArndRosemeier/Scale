@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.216 — 2026-10-09
+
+- **Nobody walks or drives over a fallen bridge span any more.** When the Leviathan brought a span down, people and cars carried on along the bridge as if it were still there, through the water. Now the street over the gap counts as cut: cars and walkers plan their way round it by another bridge, a car that reaches the broken end stops and turns round, and someone walking up to the gap stops, stares at it for a moment and walks back the way they came. Once the span is mended, the way is open again.
+
 ## 0.215 — 2026-10-09
 
 - **A new big threat: the giant mech.** After the first Strider, a 30 m war machine can stride into town, heralded by an emergency bulletin or by heavy footfalls from far off that shake the ground. It walks the streets towards the centre on two legs, each step crushing cars and knocking people over. Its shoulder pods fire salvos of twelve missiles that blast whatever they hit, its right arm is a three-barrel cannon that sweeps bursts of tracers, and its left arm is a hammer fist it smashes down on anyone close. Salvos heat it up: when it's hot it stops and opens the vents on its back, which glow and are then a weak spot (3.5 times the damage); frost while it vents shuts it down for a few seconds. The cockpit is always a weak spot (twice the damage), and enough damage to the legs brings it down on one knee for a while. Badly hurt it walks off; destroyed it sparks, topples forward and lies smouldering where it fell for a few game hours. The army fights it wherever it goes. The admin console has a "Giant mech" section, and `dev.threat.mech` has tools for testing.

@@ -289,7 +289,7 @@ export class Traffic {
     for (let tries = 0; tries < 12; tries++) {
       const ei = this.rng.int(0, E.length - 1);
       const e = E[ei];
-      if (e.cls > 2 || e.len < 20) continue;
+      if (e.cls > 2 || e.len < 20 || this.net.closed(ei)) continue;
       const mx = e.pts[e.pts.length >> 1 & ~1], mz = e.pts[(e.pts.length >> 1 & ~1) + 1];
       const d = Math.hypot(mx - px, mz - pz);
       // Prefer spawning out of sight (ring), occasionally closer to fill in.
@@ -322,7 +322,7 @@ export class Traffic {
   spawnTrip(driver: Citizen, ax: number, az: number, bx: number, bz: number): boolean {
     if (this.vehicles.length >= MAX_VEHICLES) return false;
     const ea = this.net.nearestEdge(ax, az, 80), eb = this.net.nearestEdge(bx, bz, 300);
-    if (!ea) return false;
+    if (!ea || this.net.closed(ea.e)) return false;
     const E = this.net.edges;
     const fwd = ea.side * this.hand > 0;
     const v = this.makeVehicle(driver.seed % 5 === 0 ? 'suv' : driver.seed % 7 === 0 ? 'hatch' : 'sedan', ea.e, fwd, ea.s, driver);
@@ -371,13 +371,45 @@ export class Traffic {
     }
   }
 
+  /**
+   * The way is cut somewhere (a bridge span down, RoadNet.setCuts): cars routed over it pick
+   * another way at the next junction; a car stopped short of the gap on the cut street itself
+   * turns round (`turnBack`).
+   */
+  rerouteCuts(): void {
+    for (const v of this.vehicles) {
+      if (v.state !== VState.Drive || v.task || v.turn) continue;
+      let cut = false;
+      for (let i = v.ri + 1; i < v.route.edges.length; i++) if (this.net.closed(v.route.edges[i])) { cut = true; break; }
+      if (!cut) continue;
+      v.route = this.randomRoute(v.edge, v.fwd, 12);
+      v.ri = 0;
+      if (v.dest) {
+        const e = this.net.edges[v.edge], eb = this.net.nearestEdge(v.dest.x, v.dest.z, 300);
+        const r = eb ? this.net.route(v.fwd ? e.b : e.a, this.net.edgeEndNear(eb.e, eb.s), true, 5000) : null;
+        if (r) v.route = { edges: [v.edge, ...r.edges], fwd: [v.fwd, ...r.fwd] };
+      }
+    }
+  }
+
+  /** A car facing a dead end it cannot pass (a fallen span ahead): a U-turn, and on another way. */
+  turnBack(v: Vehicle): void {
+    if (v.turn || v.state !== VState.Drive) return;
+    v.fwd = !v.fwd;
+    v.route = this.randomRoute(v.edge, v.fwd, 10);
+    v.ri = 0;
+    v.speed = 0;
+    this.pose(v);
+  }
+
   private randomRoute(edge: number, fwd: boolean, n: number): { edges: number[]; fwd: boolean[] } {
     const edges = [edge], fw = [fwd];
     let cur = edge, f = fwd;
     for (let k = 0; k < n; k++) {
       const e = this.net.edges[cur];
       const node = f ? e.b : e.a;
-      const opts = this.net.nodes[node].edges.filter((x) => x !== cur);
+      // (Never onto a street that is cut: a bridge with a span down.)
+      const opts = this.net.nodes[node].edges.filter((x) => x !== cur && !this.net.closed(x));
       if (!opts.length) break;
       // Prefer continuing straight and bigger roads.
       const dirIn = this.dirAtEnd(e, f);
