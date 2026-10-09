@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.176 — 2026-10-09
+
+- **The museum can be walked into.** Climb the steps, go through the big door in the middle of the front and you're in a great hall that runs to the back, the full height of the building in the classical museum. A big statue stands in the middle with benches round it, and there are display cases, plants, large paintings and a reception desk just inside the door. Either side, a gallery corridor leads to exhibition rooms with paintings round the walls, display cases, statues and a bench, plus a museum shop, a café and a store room. The modern glass museum gets the same inside under its glazed walls.
+- Interior core, step 4 of 6 (`docs/INTERIORS_PLAN.md`). The room splitter can now keep a hall down the middle of a building, and one shared storey helper fills the starship's decks and the museum alike.
+
 ## 0.175 — 2026-10-09
 
 - **Voices are speech bubbles now, not synthesized sounds.** A mugging or bag-snatch victim shows "Help!" in a bubble over their head instead of the robotic cry. If they are out of sight, the cry appears low on the screen with the direction it came from ("Help me!" (from behind you)). The same goes for people trapped under rubble, a shopkeeper shouting after a robber, officers warning a gunman or you, the mad bomber, a lost dog's owner calling, people stumbling ("Oof!", "Whoops!"), a villain's charge yell and the beast master's whistle, and the call to your sidekick.

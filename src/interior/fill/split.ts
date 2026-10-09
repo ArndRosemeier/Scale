@@ -36,9 +36,10 @@ export interface Reserve {
   type: RoomType;
   /**
    * Where: 'front' a band along the street front, 'back' one along the far side, 'all' the whole
-   * floor left (an open hall).
+   * floor left (an open hall), 'centre' a band through the middle from the front to the back (a
+   * great hall with wings either side; its width is `depth` / `share` of the floor's width).
    */
-  at: 'front' | 'back' | 'all';
+  at: 'front' | 'back' | 'all' | 'centre';
   /** Depth of the band (m), or its share of the floor's depth. */
   depth?: number; share?: number;
   /** Leftover depth below which the band takes everything (no slivers behind it). */
@@ -69,6 +70,8 @@ export interface Program {
   sectors?: { cx: number; cz: number; angles: number[] };
   /** Doors in the middle of their wall (default: near the end nearer the hall, leaving the walls for furniture). */
   doorsMid?: boolean;
+  /** Door width (default 0.9 m; between two halls at least 1.4). */
+  doorW?: number;
 }
 
 export interface Storey {
@@ -177,7 +180,7 @@ export function splitStorey(S: Storey, P: Program, r: Rng): Split {
   mergeSmall(spaces);
   clearOfFixed(spaces, S.fixed.length);
   // 4. Walls where spaces meet, doors so that everything can be reached.
-  return { spaces, walls: wallsAndDoors(spaces, leaf, mergeSmall, S.solid ?? [], !!P.doorsMid) };
+  return { spaces, walls: wallsAndDoors(spaces, leaf, mergeSmall, S.solid ?? [], !!P.doorsMid, P.doorW ?? DOOR) };
 }
 
 /**
@@ -240,6 +243,11 @@ function bandOf(free: Poly[], S: Storey, R: Reserve): Poly {
     const d = p[i] * nx + p[i + 1] * nz, s = p[i] * ux + p[i + 1] * uz;
     d0 = Math.min(d0, d); d1 = Math.max(d1, d); s0 = Math.min(s0, s); s1 = Math.max(s1, s);
   }
+  const P = (s: number, d: number) => [ux * s + nx * d, uz * s + nz * d];
+  if (R.at === 'centre') {
+    const m = (s0 + s1) / 2, h = (R.depth ?? (R.share ?? 0.33) * (s1 - s0)) / 2;
+    return [...P(m - h, d0 - 1), ...P(m + h, d0 - 1), ...P(m + h, d1 + 1), ...P(m - h, d1 + 1)];
+  }
   const span = d1 - d0;
   let depth = R.depth ?? (R.share ?? 0.5) * span;
   if (R.leave !== undefined) depth = Math.max(depth, span - R.leave);
@@ -247,7 +255,6 @@ function bandOf(free: Poly[], S: Storey, R: Reserve): Poly {
   let a = d0 - 1, b = d0 + depth;
   if (R.at === 'back') { a = d1 - depth; b = d1 + 1; }
   if (depth >= span) { a = d0 - 1; b = d1 + 1; }
-  const P = (s: number, d: number) => [ux * s + nx * d, uz * s + nz * d];
   return [...P(s0 - 1, a), ...P(s1 + 1, a), ...P(s1 + 1, b), ...P(s0 - 1, b)];
 }
 
@@ -446,7 +453,7 @@ export function shared(a: Poly, b: Poly, min = 0.3): Seg[] {
  * that goes through halls and corridors first and through rooms one shouldn't walk through only
  * when nothing else reaches. A room no door can reach joins a neighbour.
  */
-function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) => void, solid: NonNullable<Storey['solid']>, mid: boolean): IWall[] {
+function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) => void, solid: NonNullable<Storey['solid']>, mid: boolean, dw: number): IWall[] {
   for (let guard = 0; guard < 20; guard++) {
     const n = spaces.length;
     // Shared stretches per pair (less what standing walls already close); a stretch takes a door
@@ -463,7 +470,7 @@ function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) 
     // A door only where a step through it leads from the one space into the other (a stretch can
     // border a void the outline leaves, such as the stairwell, on one side).
     const through = (s: Seg, i: number, j: number) => {
-      const [t0, t1] = doorSpan(s, spaces[i], spaces[j], mid), t = (t0 + t1) / 2;
+      const [t0, t1] = doorSpan(s, spaces[i], spaces[j], mid, dw), t = (t0 + t1) / 2;
       const x = s.ax + (s.bx - s.ax) * t, z = s.az + (s.bz - s.az) * t, nx = -(s.bz - s.az) / s.len, nz = (s.bx - s.ax) / s.len;
       const a = spaceAt(spaces, x + nx * 0.3, z + nz * 0.3), b = spaceAt(spaces, x - nx * 0.3, z - nz * 0.3);
       return (a === i && b === j) || (a === j && b === i);
@@ -471,7 +478,7 @@ function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) 
     const best = new Map<number, Seg | null>();
     const doorSeg = (i: number, j: number) => {
       const k = Math.min(i, j) * n + Math.max(i, j);
-      if (!best.has(k)) best.set(k, pair(i, j).filter((s) => s.len >= DOOR + 0.3).sort((p, q) => q.len - p.len).find((s) => through(s, Math.min(i, j), Math.max(i, j))) ?? null);
+      if (!best.has(k)) best.set(k, pair(i, j).filter((s) => s.len >= dw + 0.3).sort((p, q) => q.len - p.len).find((s) => through(s, Math.min(i, j), Math.max(i, j))) ?? null);
       return best.get(k) ?? undefined;
     };
     // Prim from the way in.
@@ -521,7 +528,7 @@ function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) 
       const d = isDoor.has(key) ? doorSeg(i, j) : null;
       for (const s of list) {
         const w: IWall = { ax: s.ax, az: s.az, bx: s.bx, bz: s.bz, doors: [] };
-        if (s === d) w.doors.push(doorSpan(s, spaces[i], spaces[j], mid));
+        if (s === d) w.doors.push(doorSpan(s, spaces[i], spaces[j], mid, dw));
         walls.push(w);
       }
     }
@@ -554,8 +561,8 @@ function open(s: Seg, solid: NonNullable<Storey['solid']>): Seg[] {
  * and wider; into a room near one end (the end nearer the hall's middle), so the room keeps its
  * walls for furniture.
  */
-function doorSpan(s: Seg, a: Space, b: Space, mid = false): [number, number] {
-  const w = a.hub && b.hub ? Math.min(1.4, s.len - 0.4) : DOOR;
+function doorSpan(s: Seg, a: Space, b: Space, mid = false, dw = DOOR): [number, number] {
+  const w = a.hub && b.hub ? Math.min(Math.max(1.4, dw), s.len - 0.4) : dw;
   if (mid || a.hub && b.hub || s.len < w + 2 * DOOR_END + 0.6) { const m = 0.5, h = w / 2 / s.len; return [m - h, m + h]; }
   const hub = a.hub ? a : b.hub ? b : a;
   const [x0, z0, x1, z1] = polyBounds(hub.poly), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;

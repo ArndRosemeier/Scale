@@ -10,11 +10,12 @@
  */
 import { Rng } from '../../core/rng';
 import { emptyDesign, type Design, type DFloor, type P2, type RoomFn, type Volume } from './types';
-import { lerp2, pointInPoly, type Poly } from '../../core/geom2';
-import { splitStorey, type Program, type Space } from '../fill/split';
-import { roomArea, type Area } from '../fill/area';
-import { Filler, type Item } from '../fill/place';
+import { lerp2, type Poly } from '../../core/geom2';
+import type { Program, Space } from '../fill/split';
+import type { Area } from '../fill/area';
+import type { Item } from '../fill/place';
 import type { RoomType } from '../InteriorGen';
+import { fillStorey } from './storey';
 
 export interface HallProgram {
   /** Ground floor level (the hall's floor; the host builds that plate). */
@@ -131,21 +132,8 @@ export function designHall(vol: Volume, P: HallProgram): HallPlan | null {
     const angles = Array.from({ length: n }, (_, i) => { const q = sec.at(th(i), 1); return Math.atan2(q[1] - c[1], q[0] - c[0]); });
     // (Rising from the first ray, once round.)
     for (let i = 1; i < n; i++) while (angles[i] <= angles[i - 1]) angles[i] += Math.PI * 2;
-    const lr = new Rng(seed++);
-    const split = splitStorey({ poly: outline, fixed, front: null, holes: [ring(() => voidR)] }, P.rooms(c[0], c[1], angles), lr);
-    for (const w of split.walls) D.walls.push({ a: [w.ax, w.az], b: [w.bx, w.bz], y0: y, y1: yTop, th: 0.2, kind: 'wall', doors: w.doors });
-    for (const sp of split.spaces) {
-      if (sp.fixed) continue;
-      const A = roomArea(sp.poly, split.walls, outline, () => 'blind', []);
-      // (A coarser walk grid: the rooms are big and plain.)
-      const furniture = new Filler(A, lr, 0.35).fill(P.items(sp.type, A, lr));
-      const poly: P2[] = [];
-      for (let k = 0; k < sp.poly.length; k += 2) poly.push([sp.poly[k], sp.poly[k + 1]]);
-      const mid = mean(poly);
-      const { door, facing } = doorOf(sp.poly, split.walls, mid);
-      D.rooms.push({ fn: sp.type as RoomFn, poly, y, h: yTop - y, door, facing, seed: seed++, furniture });
-      D.lights.push([mid[0], mid[1], yTop - 0.25]);
-    }
+    fillStorey(D, { outline, fixed, holes: [ring(() => voidR)], front: null, program: P.rooms(c[0], c[1], angles), items: P.items, y, top: yTop, seed, cell: 0.35 });
+    seed += 1000;
   });
   // The hall's ceiling: a plate over the whole section at the top.
   const sT = vol.section(top);
@@ -158,23 +146,10 @@ export function designHall(vol: Volume, P: HallProgram): HallPlan | null {
 
 function plate(a: P2, b: P2, c: P2, d: P2, y: number, th: number, fn: RoomFn): DFloor { return { q: [a, b, c, d], y, th, fn }; }
 const chord = (a: P2, b: P2) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-const mean = (p: P2[]): P2 => [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length];
-const norm = (v: P2): P2 => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
 
 /** Smallest outline radius round the section (sampled). */
 function minEdge(edge: (t: number) => number): number {
   let m = Infinity;
   for (let i = 0; i < 24; i++) m = Math.min(m, edge((i / 24) * Math.PI * 2));
   return m;
-}
-
-/** A room's door (the middle of the first door in its walls, the gallery's first) and the way out through it. */
-function doorOf(p: Poly, walls: { ax: number; az: number; bx: number; bz: number; doors: [number, number][] }[], mid: P2): { door: P2; facing: P2 } {
-  for (const w of walls) for (const [t0, t1] of w.doors) {
-    const t = (t0 + t1) / 2, x = w.ax + (w.bx - w.ax) * t, z = w.az + (w.bz - w.az) * t;
-    const L = Math.hypot(w.bx - w.ax, w.bz - w.az), nx = -(w.bz - w.az) / L, nz = (w.bx - w.ax) / L;
-    const a = pointInPoly(p, x + nx * 0.3, z + nz * 0.3), b = pointInPoly(p, x - nx * 0.3, z - nz * 0.3);
-    if (a !== b) return { door: [x, z], facing: a ? [-nx, -nz] : [nx, nz] };
-  }
-  return { door: mid, facing: [1, 0] };
 }

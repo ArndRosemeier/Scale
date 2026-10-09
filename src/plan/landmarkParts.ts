@@ -18,6 +18,7 @@ import type { Terrain } from '../world/terrain';
 import type { Landmark } from './landmarks';
 import { marvel } from './marvelParts';
 import { cathedral } from './cathedralParts';
+import { museum } from './museumParts';
 
 export const enum PK { Box = 0, Cyl = 1, Dome = 2, Gable = 3, Pyramid = 4, Ramp = 5, Beam = 6, Tube = 7, Vault = 8, Flat = 9, Quad = 10, Lathe = 11, Prism = 12, Perf = 13, Helix = 14, Strut = 15 }
 
@@ -1327,39 +1328,6 @@ function figure(k: Kit, u: number, v: number, y: number, h: number, m: PartMat, 
   if (torch) {
     k.cyl(u + h * 0.16, v, h * 0.03, h * 0.05, y + h * 1.0, y + h * 1.08, m, { detail: true, solid: false, seg: 8 });
     k.dome(u + h * 0.16, v, h * 0.05, h * 0.05, y + h * 1.08, y + h * 1.16, mat(METAL, GOLD), { detail: true, seg: 8 });
-  }
-}
-
-function museum(k: Kit, lm: Landmark, r: Rng): void {
-  const P = lm.p, B = k.B, H = B + P.h;
-  const vb = lm.hv - 3 - P.d / 2, hw = P.w / 2, hd = P.d / 2, fv = vb - hd;
-  if (lm.style === 0) {
-    const wallL = [LIME, SAND, BRICK_WHITE][P.wall % 3];
-    const wall = mat(wallL, [0.96, 0.94, 0.9], WIN | ARCH, 5.5, P.h * 0.5, P.h * 0.5);
-    const plain = mat(wallL, [0.94, 0.92, 0.88]);
-    const roofM = mat(ZINC, r.chance(0.5) ? COPPER : WHITE, ROOF);
-    k.box(0, vb, hw, hd, B, H, wall, { foot: true, top: mat(GRAVEL, WHITE, ROOF) });
-    k.box(0, vb - hd + 0.3, hw, 0.3, H, H + 1.2, plain, { detail: true, solid: false });
-    // Colonnade across the front, entablature, pediment.
-    const cw = P.w * 0.62, cv = fv - 4.5, n = P.cols;
-    for (let i = 0; i < n; i++) k.cyl(-cw / 2 + (i + 0.5) * (cw / n), cv, 0.85, 0.72, B, H - 2.4, mat(wallL, WHITE), { seg: 12 });
-    k.box(0, cv + 0.8, cw / 2 + 1, 3.3, H - 2.4, H, plain, { solid: false });
-    k.gable(0, cv + 0.8, 3.3, cw / 2 + 1, H, H + cw * 0.14, plain, roofM, { rot: Math.PI / 2 });
-    if (P.dome) {
-      const dr = Math.min(P.d * 0.3, 11);
-      k.cyl(0, vb + 2, dr, dr, H, H + 5, mat(wallL, WHITE, WIN | ARCH, 2.4, 5, 5), { solid: false });
-      k.dome(0, vb + 2, dr + 0.3, dr + 0.3, H + 5, H + 5 + dr, roofM, { seg: 24 });
-    }
-    for (let i = 0; i < 4; i++) k.box(0, fv - 7.5 - i * 0.9, cw / 2 + 2 - i * 0.2, 0.45, k.F, B - i * 0.17, mat(GRANITE, [0.85, 0.85, 0.85]), { solid: false, detail: i > 0 });
-  } else {
-    // Modern: a glazed hall, a closed block cantilevered over it, a glass pyramid in the forecourt.
-    const clad = mat(r.pick([PANEL, METAL, LIME]), r.pick<RGB>([[0.95, 0.95, 0.95], [0.7, 0.72, 0.75], [0.88, 0.82, 0.72]]));
-    k.box(0, vb, hw, hd, B, B + 7, mat(GLASS, WHITE, WIN | CURTAIN, 1.8, 7, 7), { foot: true, top: mat(GRAVEL, WHITE, ROOF) });
-    k.box(-hw * 0.2, vb - 4, hw * 0.75, hd * 0.8, B + 7, H + 4, clad, { top: mat(GRAVEL, WHITE, ROOF) });
-    k.box(-hw * 0.2, vb - 4 - hd * 0.8 - 0.1, hw * 0.5, 0.1, B + 10, B + 12, mat(GLASS, [0.5, 0.55, 0.6], WIN | CURTAIN, 1.5, 2, 2), { detail: true, solid: false });
-    const pv = fv - P.fc / 2, ps = Math.min(P.fc * 0.32, 11);
-    k.pyramid(0, pv, ps, ps, B, B + ps * 1.3, 0, mat(GLASS, [0.92, 0.97, 1], WIN | CURTAIN, 1.4, 1.4, 1.4), { solid: true, foot: true });
-    for (const s of [-1, 1]) k.flat(s * (ps + 9), pv, 6, ps * 0.9, B + 0.05, mat(GLASS, [0.25, 0.4, 0.5]), { map: 2 });
   }
 }
 

@@ -3,9 +3,10 @@
  * (fill/starship lists it, fill/place finds the spots); the prop catalogue (design/props) builds
  * each piece in these materials.
  */
-import { mat, METAL, PANEL, CONC, GLASS, GLOW, type PartMat, type RGB } from '../../plan/landmarkParts';
+import { mat, METAL, PANEL, CONC, GLASS, GLOW, PLASTER, GRANITE, type PartMat, type RGB } from '../../plan/landmarkParts';
 
-export type PropName = 'pod' | 'locker' | 'console' | 'holo' | 'table' | 'stool' | 'bench' | 'planter' | 'screen' | 'crate' | 'counter' | 'rack';
+export type PropName = 'pod' | 'locker' | 'console' | 'holo' | 'table' | 'stool' | 'bench' | 'planter' | 'screen' | 'crate' | 'counter' | 'rack'
+  | 'case' | 'statue' | 'bigStatue' | 'seat' | 'painting' | 'reception';
 
 export interface Theme {
   name: string;
@@ -29,5 +30,20 @@ export function scifiTheme(accent: RGB, light: RGB = [0.45, 0.9, 1.0]): Theme {
     glass: mat(GLASS, [0.7, 0.9, 1.0]),
     glow: mat(PANEL, light, GLOW),
     furniture: mat(CONC, [0.9, 0.92, 0.94]),
+  };
+}
+
+/** A museum's: pale stone walls, polished floors, dark wood and bronze; `stone` the facade's. */
+export function museumTheme(stone: PartMat, modern: boolean): Theme {
+  return {
+    name: 'museum',
+    floor: modern ? mat(CONC, [1.05, 1.05, 1.05]) : mat(GRANITE, [0.9, 0.88, 0.84]),
+    walk: mat(GRANITE, [0.9, 0.88, 0.84]),
+    wall: modern ? mat(PLASTER, [1.04, 1.04, 1.04]) : mat(PLASTER, [1.06, 1.02, 0.94]),
+    trim: mat(METAL, modern ? [0.75, 0.76, 0.78] : [0.62, 0.45, 0.25]),
+    glass: mat(GLASS, [0.85, 0.95, 1.0]),
+    // (Door frames: the facade's stone.)
+    glow: stone,
+    furniture: mat(PLASTER, modern ? [0.22, 0.22, 0.24] : [0.36, 0.22, 0.13]),
   };
 }
