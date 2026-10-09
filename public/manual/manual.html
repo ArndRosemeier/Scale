@@ -47,7 +47,7 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <h1>SCALE</h1>
   <div class="sub">Player's Manual</div>
   <img loading="lazy" src="jpg/02-city.jpg">
-  <div class="foot">A destructible city of millions of bricks, a crowd of people with lives of their own,<br>six criminal organisations, giant monsters, and you.<br><br>Covers game version 0.167 · Play at apps.futuremagic.de/scale</div>
+  <div class="foot">A destructible city of millions of bricks, a crowd of people with lives of their own,<br>six criminal organisations, giant monsters, and you.<br><br>Covers game version 0.222 · Play at apps.futuremagic.de/scale</div>
 </div>
 
 <h1 style="page-break-before:avoid">Contents</h1>
@@ -79,6 +79,7 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 
 <h1 id="ch2">2. Getting started</h1>
 <figure><img loading="lazy" src="jpg/00-start.jpg"><figcaption>The start screen: a living city at dusk behind the menu. Pick a seed, a size, a mode and your character, or continue a saved game.</figcaption></figure>
+<p>The SCALE title rises from the street like towers going up, saucers circle over the skyline (keep watching, one of them likes to come a little too close), and the title theme, "Dusk Awakening", plays while you choose. It carries on through the loading screen and fades as the game begins.</p>
 <h2>Game modes</h2>
 <ul>
   <li><b>Normal.</b> You begin as an ordinary person with no powers at all. A short origin scene tells you how that changes. Good deeds earn <b>karma</b>, and karma buys powers one by one. This is the intended way to play.</li>
@@ -108,7 +109,7 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <tr><td><kbd>Num +</kbd> / <kbd>Num −</kbd></td><td>Grow and shrink (size shift); <kbd>=</kbd> and <kbd>-</kbd> work too</td></tr>
 <tr><td><kbd>1</kbd> … <kbd>9</kbd>, <kbd>0</kbd></td><td>Use the power in that hotbar slot</td></tr>
 <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Next / previous target; on a giant creature, its body parts (weak spots first)</td></tr>
-<tr><td>Left mouse</td><td>Pick a target</td></tr>
+<tr><td>Left mouse</td><td>Pick a target, in the world or by clicking its marker on the minimap or compass</td></tr>
 <tr><td>Right mouse (hold)</td><td>Look around</td></tr>
 <tr><td>Mouse wheel</td><td>Camera distance (all the way in: first person, through the hero's eyes)</td></tr>
 <tr><td><kbd>E</kbd></td><td>Interact: talk, help someone up, pick up, carry, use a mirror or manhole, dig, turn yourself in</td></tr>
@@ -123,10 +124,15 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <tr><td><kbd>B</kbd></td><td>Test blast (Sandbox only)</td></tr>
 <tr><td><kbd>H</kbd></td><td>Help: keys, powers and this manual</td></tr>
 <tr><td><kbd>F4</kbd></td><td>Detailed info line (frame rate, position)</td></tr>
-<tr><td><kbd>Shift</kbd>+<kbd>F11</kbd></td><td>Shader counter (for the curious and for bug reports)</td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>F11</kbd></td><td>Shader and freeze counter (for the curious and for bug reports)</td></tr>
+<tr><td><kbd>Shift</kbd>+<kbd>F9</kbd></td><td>Save the freeze log as a file, to send with a bug report</td></tr>
 <tr><td><kbd>Esc</kbd></td><td>Pause menu: save, load, settings</td></tr>
 </table>
 <figure><img loading="lazy" src="jpg/51-help-keys.jpg"><figcaption>The help (<kbd>H</kbd>), Keys tab: click any key to change it.</figcaption></figure>
+<h2>First person</h2>
+<p>Roll the mouse wheel all the way in (or pinch on a tablet) and one more notch puts you behind the hero's eyes. Look down and you see your own arms and body; <kbd>A</kbd> and <kbd>D</kbd> strafe and <kbd>S</kbd> backs up. It works on foot, in flight and at giant size. One notch out brings the usual camera back.</p>
+<h2>Autorun</h2>
+<p><kbd>R</kbd> keeps going at the pace you had when you pressed it: hold <kbd>Shift</kbd> and the hero keeps sprinting (or boosting in flight) after you let go, hold <kbd>Alt</kbd> and it stays a stroll. Press <kbd>R</kbd> again, <kbd>W</kbd> or <kbd>S</kbd> to stop.</p>
 <h2>Touch screens</h2>
 <p>On an iPad or other tablet the game shows touch controls: a movement stick on the left, a look area on the right, and buttons for jump, flight, the hotbar powers and interaction. Pinch changes the camera distance. A <b>More</b> button holds the rest: rallying soldiers, airstrikes, calling your sidekick, the time of day. Changing keys in the help does not affect the touch controls.</p>
 
@@ -135,11 +141,13 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <p>The heads-up display shows your <b>health</b> and <b>energy</b>, your <b>karma</b> and <b>reputation</b>, the <b>hotbar</b> with your powers, and the <b>minimap</b>. Targets you pick get a health tag above their head. When you walk into a new neighbourhood a banner tells you its name and how much crime there is; when the police are after you, wanted stars appear.</p>
 <figure class="half"><img loading="lazy" src="jpg/42-hood.jpg"><figcaption>Entering a neighbourhood: its name and crime level.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/06-map.jpg"><figcaption>The map (<kbd>M</kbd>) with the turf of every organisation.</figcaption></figure>
-<p>The big <b>map</b> shows streets, parks, water, landmarks and points of interest. Its turf layer colours in who controls which part of the city, and its legend names the organisations. Golden dots mark people who have a favour to ask; other markers show crimes in progress and big events. Click anywhere on the map to set a marker; the compass at the top of the screen then points to it with the distance. The <b>minimap</b> in the corner shows the same marks around you, and the compass shows nearby points of interest: metro entrances, people who need help, crimes, small deeds and power cores.</p>
+<p>The big <b>map</b> shows streets, parks, water, landmarks and points of interest. Its turf layer colours in who controls which part of the city, and its legend names the organisations. Golden dots mark people who have a favour to ask; other markers show crimes in progress and big events. Click anywhere on the map to set a marker; the compass at the top of the screen then points to it with the distance. The <b>minimap</b> in the corner shows the same marks around you, and the compass shows nearby points of interest: metro entrances, people who need help, crimes, small deeds and power cores. Click a dot or a "!" on the minimap or compass and what it stands for becomes your target: a thief, a getaway car, a rogue machine, a monster.</p>
+<p>What people shout appears in <b>speech bubbles</b> over their heads. A cry for help from somewhere you cannot see shows low on the screen with the direction it came from, and animals have their say in small italic bubbles.</p>
 
 <h1 id="ch5">5. Powers and karma</h1>
 <figure><img loading="lazy" src="jpg/07b-powers.jpg"><figcaption>The powers screen (<kbd>P</kbd>): what each power does, what it costs, and the hotbar below.</figcaption></figure>
-<p>In Normal mode, every good deed earns karma: stopping a thief, rescuing someone from a collapsed house, helping a lost tourist, getting a cat down from a tree. Spend karma on the powers screen to unlock new powers and to make them stronger, up to rank 5, and drag them onto the hotbar. Powers have no cooldowns: each use costs <b>energy</b>, which refills over time, and you can use a power again as soon as you have the energy for it. A hotbar slot darkens while you are short of energy for that power.</p>
+<p>In Normal mode, every good deed earns karma: stopping a thief, rescuing someone from a collapsed house, helping a lost tourist, getting a cat down from a tree, helping up someone who tripped in the street. Spend karma on the powers screen to unlock new powers and to make them stronger, up to rank 5, and drag them onto the hotbar. Powers have no cooldowns: each use costs <b>energy</b>, which refills over time, and you can use a power again as soon as you have the energy for it. A hotbar slot darkens while you are short of energy for that power.</p>
+<p>Ranks matter. The area powers hit people harder at every rank, not just wider, and the shockwave reaches farther (from 45 m at rank 1 to 130 m at rank 5). A punch against a person holds back, though: even at the top rank it knocks someone down hard rather than out in one blow, so a boss takes a proper fight. Walls are another matter.</p>
 <table>
 <tr><th style="width:28%">Group</th><th>Powers</th></tr>
 <tr><td>Body</td><td>Punch, super strength, size shift (from 10 cm tall to a 100 m giant; being big costs energy)</td></tr>
@@ -154,13 +162,13 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <p>These three hit only the one they are aimed at: no fire, no bystanders, nothing broken on the way.</p>
 <ul>
   <li><b>Phase pulse</b> (tap): passes through walls, cars and people to your target, even one that ducked out of sight a moment ago. Weaker than the laser and short-ranged.</li>
-  <li><b>Focus beam</b> (hold, then let go): gathers a beam behind your eyes, then fires one heavy shot. The longer you gather, the harder it hits. Best against a monster's weak spot.</li>
-  <li><b>Seeker orb</b> (tap): a ball of energy that flies round corners and over roofs to your target and bursts only on it. It needs a target.</li>
+  <li><b>Focus beam</b> (hold, then let go): gathers a beam behind your eyes, then fires one heavy shot, a white-hot core in a golden haze that lands like a blow. The longer you gather, the harder it hits. Best against a monster's weak spot.</li>
+  <li><b>Seeker orb</b> (tap): a crackling violet ball of energy with a comet tail that flies round corners and over roofs to your target and bursts only on it. It needs a target.</li>
 </ul>
 <h2>Friend/foe sense</h2>
 <p>Most area powers (laser eyes, shockwave, fire wave, fireball, frost nova, chain lightning, seismic stomp, whirlwind and hydrokinesis) can be bought with a <b>friend/foe sense</b> on the powers screen, for the price of that power's first rank. With it, the power only harms criminals still in the fight, monsters and rogue machines; bystanders, police, cars and buildings are left alone. A giant loses the sense: above normal size every power hits everything again. In the Sandbox it is a free switch.</p>
 <h2>Travelling</h2>
-<p><b>Super jump</b> is a travel power in its own right: hold <kbd>W</kbd> while you leap and the jump carries you forward, faster the higher you climb. The leap picks up speed as it flies; bounding from landing to landing is nearly as quick as flying, and a top-rank leap clears about a kilometre. At normal size, landing next to someone only startles them. <b>Super speed</b> hops over people and cars, and <b>flight</b> costs nothing, although energy does not refill in the air.</p>
+<p><b>Super jump</b> is a travel power in its own right: hold <kbd>W</kbd> while you leap and the jump carries you forward, faster the higher you climb. The leap picks up speed as it flies; bounding from landing to landing is nearly as quick as flying, and a top-rank leap clears about a kilometre. At normal size, landing next to someone only startles them, and coming down on a car leaves it in one piece. Being the better way to travel, super jump costs a little more karma than super speed. <b>Super speed</b> hops over people and cars, and <b>flight</b> costs nothing, although energy does not refill in the air.</p>
 <p>The <b>shrink ray</b> works on everything, monsters included. Small things shrink by a large factor; big things lose a few metres at most, but anything shrunk hits noticeably softer.</p>
 <figure><img loading="lazy" src="jpg/52-help-powers.jpg"><figcaption>The help's Powers tab: exact numbers for every rank, from damage to energy and karma price.</figcaption></figure>
 <p>For the exact numbers, open the help (<kbd>H</kbd>) and its <b>Powers</b> tab. It lists every power with its effect, damage, energy and karma price per rank, highlights your current rank, and explains the rules for energy, flight, giant size and karma.</p>
@@ -173,6 +181,9 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <figure class="half"><img loading="lazy" src="jpg/15-stadium.jpg"><figcaption>The stadium.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/13-townhall-rain.jpg"><figcaption>The town hall in the rain.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/16-castle.jpg"><figcaption>A castle ruin above the rooftops.</figcaption></figure>
+<h2>Concert night</h2>
+<figure><img loading="lazy" src="jpg/80-concert.jpg"><figcaption>VELA live at the stadium: the stage, the light show and a packed field.</figcaption></figure>
+<p>Every evening the stadium hosts a concert by the band <b>VELA</b>. Doors open at 18:00 and the band plays from 19:00 to 23:00: a big stage with an LED wall, colour beams sweeping over the field, pyro, a crowd in the pit and phones held up in the stands. Fly in, find a spot and listen. Trouble in the stadium ends the show early, so keep the fighting outside.</p>
 <h2>Marvels</h2>
 <figure><img loading="lazy" src="jpg/10-starship.jpg"><figcaption>One of the marvels: a starship-shaped tower.</figcaption></figure>
 <p>Bigger cities may have a <b>marvel</b>, a piece of impossible architecture that dominates the skyline. There are eight families of them, from a twisting tower and a floating skyship to a halo, a cluster of orbs and the starship above. Marvels are not just scenery: they are built from bricks like everything else, and some of them can be entered.</p>
@@ -186,11 +197,23 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <figure><img loading="lazy" src="jpg/12-cathedral-inside.jpg"><figcaption>Inside the cathedral: pews, columns and light from the windows.</figcaption></figure>
 <p>The cathedral and the town hall are fully enterable, with stairs, lifts and seats. They fill up at their own times: services in the morning and evening, weddings, and council sessions in the town hall's chamber. Visit at different hours and you will find different people there.</p>
 <figure><img loading="lazy" src="jpg/14-townhall-inside.jpg"><figcaption>The town hall's council chamber.</figcaption></figure>
+<h2>Landmarks you can walk into</h2>
+<ul>
+  <li><b>The museum.</b> Up the steps and through the big front door into a great hall with a statue in the middle and exhibits all around.</li>
+  <li><b>The glasshouse.</b> Gravel paths between green beds, palms and ferns, and a fountain under the dome.</li>
+  <li><b>The airport terminal.</b> A check-in hall with desks and departure boards, security lanes, and the gates beyond.</li>
+  <li><b>Observation towers.</b> A lobby at the foot of the TV tower or glass tower, and a deck at the top with coin telescopes, a snack counter and a gallery outside. Fly up and land on the gallery.</li>
+  <li><b>The lighthouse.</b> A spiral stair up to the lantern room with its great lens, and a gallery outside.</li>
+  <li><b>The castle keep.</b> A great hall with the throne on its dais, a long table, a fireplace, banners and suits of armour.</li>
+</ul>
+<figure class="half"><img loading="lazy" src="jpg/81-glasshouse.jpg"><figcaption>Under the glasshouse dome.</figcaption></figure>
+<figure class="half"><img loading="lazy" src="jpg/83-terminal.jpg"><figcaption>The airport's check-in hall.</figcaption></figure>
 <h2>Other interiors</h2>
 <ul>
+  <li><b>Homes, offices, shops and cafés.</b> Ordinary buildings are furnished room by room, and every room can be reached from the stairs or a corridor.</li>
   <li><b>Arcades.</b> Big halls full of cabinets, and every cabinet is a real game you can play: an asteroid shooter, falling blocks, space invaders, snake, brick breaker and paddle ball. Walk up to a cabinet and press <kbd>E</kbd>.</li>
-  <li><b>Clothes shops.</b> Step in front of the fitting mirror to change your outfit.</li>
-  <li><b>Marvels.</b> At least one marvel has an interior worth seeing.</li>
+  <li><b>Clothes shops.</b> Rails of clothes and dressed dummies in the window. Step in front of the fitting mirror to change your outfit.</li>
+  <li><b>Marvels.</b> At least one marvel has a great hall and rooms worth seeing.</li>
   <li><b>Cemeteries.</b> Quiet places in the day. Less so at night.</li>
 </ul>
 <figure class="half"><img loading="lazy" src="jpg/33-arcade.jpg"><figcaption>An arcade. Every cabinet is playable.</figcaption></figure>
@@ -215,7 +238,8 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <h2>Talking and favours</h2>
 <p>Press <kbd>E</kbd> near someone to start a conversation, and answer with the number keys. People will chat about the weather, the neighbourhood, the news and what they think of you. Many have needs of their own, and some will ask you a <b>favour</b>. People with a favour to ask show up as <b>golden dots</b> on the map. Helping them earns karma, and they will not forget it. People also know each other: help someone and their friends may hear about it.</p>
 <h2>Street life</h2>
-<p>The streets are full of characters: buskers and mimes, jugglers and dancers, a living statue, a doomsayer, a man in a chicken suit, a conspiracy theorist, the pigeon lady, joggers, a lost tourist who needs directions, and on certain nights a sleepwalker. There are small good deeds everywhere: a cat stuck up a tree, a runaway dog, a lost wallet to return.</p>
+<p>The streets are full of characters: buskers and mimes, jugglers and dancers, a living statue, a doomsayer, a man in a chicken suit, a conspiracy theorist, the pigeon lady, joggers, a lost tourist who needs directions, and on certain nights a sleepwalker. There are small good deeds everywhere: a cat stuck up a tree, a runaway dog, a lost wallet to return, and every few minutes someone near you trips and needs a hand up.</p>
+<p>From late morning to late evening, <b>street bands</b> play on plazas, in parks and at metro stations: a guitar, a bass and someone drumming on a box, with a few people stopping to listen. The game's music steps aside while you are near them.</p>
 <figure><img loading="lazy" src="jpg/44-performers.jpg"><figcaption>Street performers carry on even after a rough day.</figcaption></figure>
 <h2>News and neighbourhoods</h2>
 <p>The city has a pulse. Every neighbourhood has a name and a crime level, and the police patrol where they are needed. What you do changes it: clean up a rough district and it gets safer; neglect it and it gets worse. News travels: passers-by gossip about what just happened, and billboards and screens report the big events.</p>
@@ -228,7 +252,7 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <li><b>The bomber.</b> Occasionally someone plants a bomb. You do not have long.</li>
   <li><b>Organised crime.</b> Most serious trouble comes from the six organisations described in the next chapter.</li>
 </ul>
-<p>Stopping a crime earns karma and reputation. Knocking criminals down is fine; flattening bystanders, cars and buildings is not. If you do get the police on your back, you can stand next to an officer and press <kbd>E</kbd> to turn yourself in, or slip underground where they cannot follow your trail. Every harm is booked to whoever really did it: what the police, the army or a monster breaks is not counted against you.</p>
+<p>Crooks are not fearless: when a monster comes near, they drop what they stole and run, and a job that has not started yet is called off. Stopping a crime earns karma and reputation. Knocking criminals down is fine; flattening bystanders, cars and buildings is not. If you do get the police on your back, you can stand next to an officer and press <kbd>E</kbd> to turn yourself in, or slip underground where they cannot follow your trail. Every harm is booked to whoever really did it: what the police, the army or a monster breaks is not counted against you.</p>
 <figure><img loading="lazy" src="jpg/41-collapse.jpg"><figcaption>When things go wrong: a collapsed building, a reputation penalty, and wanted stars.</figcaption></figure>
 
 <h1 id="ch11">11. The six organisations</h1>
@@ -247,6 +271,7 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <figure><img loading="lazy" src="jpg/22-eco.jpg"><figcaption>Eco-radicals singing to a tree, guarded by their dogs.</figcaption></figure>
 <h2>Notoriety, bosses and taking them down</h2>
 <p>Every organisation keeps score. Beat their people and spoil their plans, and they take notice of you: their <b>notoriety</b> with you rises, and they start sending tougher crews. Push far enough and the <b>boss</b> steps out of the shadows to run one great operation of their own, each one a city-wide event in its organisation's style. Defeat a boss and they go to jail.</p>
+<p>The organisations are not friends. Fights between them deepen old feuds, and turf changes hands. But when two rivals are both hunting you, they may put their feud aside and call a <b>truce against you</b>. You will hear about it, and about the day the truce falls apart.</p>
 <p>Jail does not always hold. Bosses have been known to break out. An organisation only truly falls when its boss is behind bars <i>and</i> its stash has been found and busted. When that happens, its turf opens up, and the other organisations will be happy to move in.</p>
 
 <h1 id="ch12">12. Big threats and the army</h1>
@@ -257,6 +282,15 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <li><b>Robot malfunction.</b> Machines that stop taking orders.</li>
   <li><b>The awakened tree.</b> Something old and green that has decided to move.</li>
 </ul>
+<p>Once the city has survived its first Strider, worse things can come:</p>
+<ul>
+  <li><b>The giant worm.</b> Nearly a hundred metres long, it tunnels under the main roads. A rumble underfoot or a pothole caving in is the warning; then the street opens.</li>
+  <li><b>The Leviathan.</b> A long V of foam moving up the river. It rises at the bridges with its tentacles and pulls cars, people and whole spans into the water. Fallen spans are rebuilt in time.</li>
+  <li><b>The Roc.</b> A bird of prey with a forty-metre wingspan. It perches on the tallest roofs, its wingbeats sweep the street below, and it likes to carry off a car or two.</li>
+  <li><b>The giant mech.</b> A war machine thirty metres tall that walks towards the centre on heavy footfalls, with missiles, a cannon and a hammer fist.</li>
+</ul>
+<p>Each of them has a weak spot and something that stops it for a moment. Watch how it moves, and try your powers: the right one can make a long fight short. <kbd>Tab</kbd> on a giant cycles its body parts, weak spots first.</p>
+<figure><img loading="lazy" src="jpg/85-roc.jpg"><figcaption>The Roc perched on a tower, wings spread over the street.</figcaption></figure>
 <figure><img loading="lazy" src="jpg/24-strider.jpg"><figcaption>The Strider coming out of the river.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/23-tree.jpg"><figcaption>The awakened tree.</figcaption></figure>
 <figure class="half"><img loading="lazy" src="jpg/26-swarm-frost.jpg"><figcaption>A frost nova against the swarm.</figcaption></figure>
@@ -316,8 +350,10 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
 <h2>Settings</h2>
 <p>The pause menu (<kbd>Esc</kbd>) holds the settings: time speed and time of day, the weather, volume, music and a detailed sound mix, graphics level and render scale, how often street crime happens (off, calm, normal, chaos) and how often the city is hit by big events. <b>Auto</b> graphics adapts to your machine while you play; if the game still runs slowly, a smaller city helps the most.</p>
 <p>The game draws with WebGL. A newer WebGPU renderer can be tried by adding <kbd>&amp;gpu=webgpu</kbd> to the address; it looks the same and is still being tuned. <kbd>Shift</kbd>+<kbd>F11</kbd> shows a small shader counter and <kbd>F4</kbd> a detailed info line, both handy when reporting a problem.</p>
-<h2>Sound</h2>
-<p>The city sounds alive: traffic, footsteps, chatter, sirens, music, and a soundtrack that follows the mood. Listen; a scream in the distance is often the first sign of trouble.</p>
+<p>If the game ever stops for a moment, it notes what was going on. <kbd>Shift</kbd>+<kbd>F9</kbd> saves that <b>freeze log</b> as a file you can attach to a bug report; it keeps a few freezes from earlier sessions too.</p>
+<h2>Sound and music</h2>
+<p>The city sounds alive: traffic, footsteps, chatter and sirens. Listen; a scream in the distance is often the first sign of trouble.</p>
+<p>The soundtrack follows what you are doing, with its own piece for each mood: calm days and quiet nights, the tunnels under the city, flight, chases, battles, the villains, the countryside and the great halls. There are cues for victories, for waking up in hospital and for the end, and the visitors in the sky have a theme of their own. Volume and music can be set in the pause menu.</p>
 <h2>Help and feedback</h2>
 <p>The help (<kbd>H</kbd>) has three tabs: <b>Keys</b>, <b>Powers</b> and this <b>Manual</b>. The manual is also on the start screen and in the pause menu, and can be opened as a PDF. Found a bug or have an idea? The <b>Feedback</b> link next to the version number on the start screen and in the pause menu sends your message straight to the developer.</p>
 
@@ -331,6 +367,9 @@ kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: 
   <li>Visit landmarks at different times of day. Something different is always going on inside.</li>
   <li>Bosses only come out when their organisation takes you seriously. Earn their attention first.</li>
   <li>When a big threat appears, rally the army with <kbd>G</kbd>. You are stronger together.</li>
+  <li>Every big monster has a weak spot. Find it before you spend all your energy.</li>
+  <li>Lost track of a thief? Click their marker on the minimap to target them.</li>
+  <li>Spend an evening at the stadium.</li>
   <li>Buy the friend/foe sense for your favourite area power before using it in a crowd.</li>
   <li>Keep street clothes on one costume key and your hero suit on another.</li>
   <li>When the news reports a strange glowing stone, go and look. Choose carefully who you give it to.</li>

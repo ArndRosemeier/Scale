@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.222 — 2026-10-09
+
+- **The player's manual is up to date again (0.222).** New in it: the animated title and title music, first person view, autorun pace, clicking minimap and compass markers to target, speech bubbles, the freeze log (Shift+F9), how ranks change the powers (area damage, shockwave reach, held-back punches), the new focus beam and seeker orb looks, the VELA concert at the stadium every evening, street bands, the landmarks you can now walk into (museum, glasshouse, airport terminal, observation decks, lighthouse, castle keep), furnished homes, offices, shops and cafés, crooks running from monsters, truces between rival organisations, the new big threats (giant worm, Leviathan, Roc, giant mech), and the new music. New pictures of the concert, the glasshouse, the airport terminal and the Roc. Help > Manual, the start screen's Manual button and the PDF all show the new version.
+
 ## 0.221 — 2026-10-09
 
 - **No freeze when a giant first shows up on the news screens.** The news drone's picture for the billboards left out the sewers, and with them the sewer lights, so the game had to prepare every shader in the picture a second time, all at once: about a second and a half the first time the mech fired its missiles. The lights now stay in the picture (only what the drone can't see is left out), so it reuses the shaders already prepared.
