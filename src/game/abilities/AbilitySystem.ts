@@ -20,7 +20,7 @@ import type { Progress } from './Progress';
 import type { Target } from '../Targeting';
 import { ABILITY, HOTBAR_SLOTS, type AbilityId } from './defs';
 import {
-  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, LEAP_SPEED, DASH, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE,
+  ENERGY, PUNCH_IMPULSE, SMASH_MUL, JUMP_HEIGHT, JUMP, LEAP_SPEED, DASH, DASH_DIST, SHOCK_IMPULSE, SHOCK_RANGE, SHOCK_PERSON,
   SHOCK_COST, FLIGHT_SPEED, FLIGHT_BOOST_MUL, SIZE_RANGE, SPEED_TOP, LASER, ICE, HYDRO, FIRE, FIREBALL, NOVA,
   BOLT, QUAKE, GUST, SHRINK, GIANT, sizeUpkeep, TAP_DEBOUNCE, PHASE, SEEKER, FOCUS, SENSE,
 } from './tuning';
@@ -245,7 +245,7 @@ export class AbilitySystem {
       case 'shockwave': {
         if (this.energy < SHOCK_COST[r]) { this.hooks.deny?.('Not enough energy'); return false; }
         const spare = this.senseOn('shockwave') ? this.spared ?? undefined : undefined;
-        if (!this.interactions.blastAtView(SHOCK_RANGE[r] * Math.max(1, Math.sqrt(p.k)), SHOCK_IMPULSE[r], true, spare)) return false;
+        if (!this.interactions.blastAtView(SHOCK_RANGE[r] * Math.max(1, Math.sqrt(p.k)), SHOCK_IMPULSE[r], true, spare, SHOCK_PERSON[r])) return false;
         this.energy -= SHOCK_COST[r];
         this.debounce(id, TAP_DEBOUNCE);
         p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.6 };

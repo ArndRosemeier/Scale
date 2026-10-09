@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.184 — 2026-10-09
+
+- **The shockwave no longer flattens everyone in it.** Until now, every person in the blast took the full force that breaks walls: 900 to 15 000 damage, a sure knockout for anyone, bosses included. Now a person takes 27 to 60 at the centre, depending on rank, and half that at the rim. That still knocks people down, about as hard as a fireball does. Walls, cars and monsters still take the full blast.
+- **The shockwave's reach is shorter**: 45, 60, 80, 100 and 130 m by rank, down from 80 m up to 800 m, so you can no longer blow up a building from across the city.
+- **Chain lightning does less to monsters**: 22 points per second of stun instead of 40. At low ranks it used to do several times more damage per energy against monsters than any other power.
+- The Powers table in the help shows the shockwave's new damage.
+
 ## 0.183 — 2026-10-09
 
 - **Observation towers have a lobby and an observation deck.** Walk into the glass drum at the foot of the TV tower, or the foot of the glass tower, and you're in a lobby round the core with a ticket desk, lift doors, souvenir racks and benches. Up top, the deck sits behind the glass ring of the pod, in the lowest disc of a stacked tower, in an octagon on the lattice tower's platform, or in the lower part of the glass tower's box. Each deck has coin telescopes at the glass, benches looking out, a snack counter and tables, and an outdoor gallery with a railing round it. You get up there by flying and walk in from the gallery.
