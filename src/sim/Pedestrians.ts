@@ -179,6 +179,9 @@ export class Pedestrians {
   private events = new MinHeap();
   private pending: Pending[] = [];
   private freePending: number[] = [];
+  /** Filled slots of `pending` (the rest wait for their heap entry, or for reuse). */
+  private live = 0;
+  private forgetT = 0;
   private scanQueue: BuildingRef[] = [];
   private lastScan = -100;
   private head = new Int32Array(HASH).fill(-1);
@@ -209,8 +212,13 @@ export class Pedestrians {
       this.lastScan = hours;
       const refs = this.world.buildingsIn(px - SCAN_R, pz - SCAN_R, px + SCAN_R, pz + SCAN_R);
       this.scanQueue = refs.filter((r) => (this.scanned.get(r) ?? -Infinity) - hours < 0.25);
-      this.forgetFar(px, pz);
       this.scanQueue.sort((a, b) => dist2(a, px, pz) - dist2(b, px, pz));
+    }
+    // (On its own clock: scanning waits while a backlog is worked off, or while game time stands still.)
+    this.forgetT += dt;
+    if (this.forgetT > 1) {
+      this.forgetT = 0;
+      this.forgetFar(px, pz);
     }
     // Budgeted per citizen (a tower can house hundreds), then spawning (path finding) per agent.
     const t0 = performance.now();
@@ -235,6 +243,7 @@ export class Pedestrians {
       this.freePending.push(idx);
       if (!p) continue;
       this.pending[idx] = undefined as unknown as Pending;
+      this.live--;
       if (this.agents.length < MAX_AGENTS) this.spawnQueue.push({ cit: p.cit, trip: p.trip, progress: 0 });
     }
     // ---- agents (distant ones update round-robin at a quarter of the rate)
@@ -278,7 +287,17 @@ export class Pedestrians {
       if (!far && this.streamer.cells.get(p.ref.cell.id) === p.ref.cell) continue;
       // (Its heap entry stays and frees the slot when it comes due.)
       this.pending[i] = undefined as unknown as Pending;
+      this.live--;
       this.scanned.delete(p.ref);
+    }
+    // Travelling fast drops slots far quicker than their entries come due (game hours later): once
+    // the dead outnumber the living, rebuild queue and heap from the living.
+    if (this.pending.length - this.live > Math.max(20000, this.live)) {
+      const keep = this.pending.filter((p) => p);
+      this.pending = keep;
+      this.freePending = [];
+      this.events.clear();
+      for (let i = 0; i < keep.length; i++) this.events.push(keep[i].trip.depart, i);
     }
   }
 
@@ -300,6 +319,7 @@ export class Pedestrians {
           } else if (tr.depart > t0 && tr.depart > h && tr.depart <= h + AHEAD_H) {
             const idx = this.freePending.length ? this.freePending.pop()! : this.pending.length;
             this.pending[idx] = { cit: c, trip: tr, ref };
+            this.live++;
             this.events.push(tr.depart, idx);
           }
         }
