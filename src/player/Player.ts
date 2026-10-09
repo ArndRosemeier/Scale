@@ -601,7 +601,8 @@ export class Player {
 
   /**
    * First person (the camera rig sets it each frame it looks through the eyes): the head with
-   * its hair, hat and eyes folds away to nothing so the view isn't inside it, and the body casts
+   * its hair, hat and eyes folds away to nothing so the view isn't inside it (in flight the
+   * forearms too, the outstretched fist covered the view), and the body casts
    * no shadow (a headless shadow walking alongside looked wrong).
    */
   firstPerson = false;
@@ -616,18 +617,23 @@ export class Player {
     return !this.puppet && !this.ragdoll && this.downT <= 0;
   }
 
-  private headBones(): THREE.Bone[] {
+  /** The head; in flight also the forearms (the flight pose reaches one fist out in front of the eyes). */
+  private foldBones(arms: boolean): THREE.Bone[] {
     const out: THREE.Bone[] = [];
-    const ch = this.rig.char;
-    const i = ch?.boneIndex.get('head');
-    if (ch && i !== undefined) out.push(ch.bones[i]);
-    const ah = this.avatar?.mapping.bones.head;
-    if (ah) out.push(ah);
+    const ch = this.rig.char, M = this.avatar?.mapping.bones;
+    for (const n of arms ? ['head', 'lowerarm01.L', 'lowerarm01.R'] : ['head']) {
+      const i = ch?.boneIndex.get(n);
+      if (ch && i !== undefined) out.push(ch.bones[i]);
+    }
+    for (const k of arms ? ['head', 'leftLowerArm', 'rightLowerArm'] as const : ['head'] as const) {
+      const b = M?.[k];
+      if (b) out.push(b);
+    }
     return out;
   }
 
-  private setHeadScale(s: number): void {
-    for (const b of this.headBones()) if (b.scale.x !== s) b.scale.setScalar(s);
+  private setHeadScale(s: number, arms = true): void {
+    for (const b of this.foldBones(arms)) if (b.scale.x !== s) b.scale.setScalar(s);
   }
 
   /** Out of first person now (a cutscene or free camera takes over; the body may not pose this frame). */
@@ -644,7 +650,7 @@ export class Player {
     else this.pivot(this.eyePoint);
     const fp = this.firstPerson && this.canFirstPerson;
     // (Not zero: a singular bone matrix breaks the normals.)
-    if (fp) this.setHeadScale(0.001);
+    if (fp) this.setHeadScale(0.001, this.flightBlend > 0.3);
     // Shadows: switched off once per character (a new appearance builds new meshes).
     const want = fp ? this.rig.object : null;
     if (want !== this.shadowOff || (fp && this.shadowChar !== this.rig.char)) {
