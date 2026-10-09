@@ -2512,6 +2512,7 @@ section('music', async () => {
   const v = new MoodDirector(rng);
   v.play();
   check(run(v, 3, { halls: true }).at(-1) === 'halls' && run(v, 3, {}).at(-1) === 'day', 'music: a landmark\'s halls, then the street again');
+  check(run(v, 4, { aliens: true }).at(-1) === 'aliens' && run(v, 5, {}).at(-1) === 'aliens' && run(v, 20, {}).at(-1) === 'day', 'music: a Warden overhead, and it lingers a while after');
   check(run(v, 1, { country: true }).at(-1) === 'country' && run(v, 1, { country: true, night: 1 }).at(-1) === 'night', 'music: out of town by day (night stays night)');
   check(run(v, 3, { danger: 1, villain: true }).at(-1) === 'villain', 'music: a boss near plays the villain\'s theme');
   check(run(v, 2, { battle: 1, villain: true }).at(-1) === 'battle', 'music: a monster beats the villain\'s theme');

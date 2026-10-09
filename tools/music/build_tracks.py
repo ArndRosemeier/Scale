@@ -53,6 +53,7 @@ TRACKS: dict[str, tuple[str, str, dict]] = {
     'elegy-2': ('stream', 'elegy-2.mp3', {}),
     'country': ('stream', 'beyond-the-city.mp3', {}),
     'halls': ('stream', 'grand-halls.mp3', {}),
+    'aliens': ('stream', 'visitors-overhead.mp3', {}),
     'gameover': ('stream', 'game-over.mp3', {}),
     'rescue': ('stream', 'rescue.mp3', {}),
     # Lyria makes a minute at least: the sting is the first phrase (a dip at ~10 s).

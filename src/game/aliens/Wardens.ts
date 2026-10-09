@@ -397,6 +397,15 @@ export class Wardens {
     }
   }
 
+  /** A Warden visiting near (x, z): a disc hovering, watching or staring over the player, or a walker down (the music's aliens mood). */
+  visitingNear(x: number, z: number): boolean {
+    for (const d of this.discs.list) {
+      if ((d.mode === 'hover' || d.mode === 'watch' || d.mode === 'stare' || d.mode === 'courier') && Math.hypot(d.x - x, d.z - z) < 220) return true;
+    }
+    for (const v of this.visits) if (Math.hypot(v.w.x - x, v.w.z - z) < 160) return true;
+    return false;
+  }
+
   // ================================================================== the runaway teens
 
   /** The runaway saucer out on its joyride now, if any. */

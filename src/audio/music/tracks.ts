@@ -13,6 +13,7 @@ export const MOOD_TRACKS: Record<Mood, readonly string[]> = {
   night: ['night-1', 'night-2'],
   under: ['under-1', 'under-2'],
   halls: ['halls'],
+  aliens: ['aliens'],
   country: ['country'],
   hero: ['hero-1', 'hero-2'],
   tension: ['tension-1', 'tension-2'],
