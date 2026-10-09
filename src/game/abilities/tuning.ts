@@ -99,9 +99,12 @@ export const TAP_DEBOUNCE = 0.25;
 export const DASH_DIST = [0, 7, 10, 13, 17, 22];
 export const DASH = { time: 0.2, cost: 22 };
 
-/** Shockwave (blast where you look): impulse N·s, range m, energy. */
+/** Shockwave (blast where you look): impulse N·s (on walls, cars, creatures), range m, energy.
+ *  A person takes at most SHOCK_PERSON N·s at the centre, half of it at the rim (balance audit,
+ *  v0.185: the full blast did 900 to 15 000 damage to everyone in it, a sure KO for anyone). */
 export const SHOCK_IMPULSE = [0, 3e4, 6e4, 1.2e5, 2.5e5, 5e5];
-export const SHOCK_RANGE = [0, 80, 150, 300, 500, 800];
+export const SHOCK_RANGE = [0, 45, 60, 80, 100, 130];
+export const SHOCK_PERSON = [0, 450, 550, 650, 800, 1000];
 export const SHOCK_COST = [0, 55, 55, 60, 65, 70];
 
 /** Flight: speed multiplier on cruise (22 m/s at 1.8 m). */
@@ -277,7 +280,7 @@ export const POWER_HIT = {
   /** Ice path: someone who slips falls at 1.2 + 0.4 × their speed. */
   iceSlipKnock: 1.2, iceSlipPerSpeed: 0.4,
   /** Chain lightning: fling per person; creatures: points per second of stun (× reach scale). */
-  boltKnock: 1.4, boltCreature: 40,
+  boltKnock: 1.4, boltCreature: 22,
   /** Frost nova on a creature: points per second of freeze, at a leg. */
   frostCreature: 18,
   /** Seismic stomp: fling 3 + impulse / 30 000 (at most 9); machines and props are shoved with at

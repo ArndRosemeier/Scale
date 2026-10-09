@@ -432,7 +432,7 @@ migrated — dash was folded into super speed, now only its flight burst).
   **Fireball** (tap): an `Orb` flies from the hands at `FIREBALL.speed` to what the aim probe met (or full reach) and
   bursts there: the old test blast's destruction impact (`'blast'`, `FIREBALL_BLAST`), `Targeting.inSphere` knock /
   burn / wreck (cars from rank 3), the shared look `powers/blastFx.fireBurst`. The old blast itself is still the
-  **Shockwave** power (`Interactions.blastAtView`).
+  **Shockwave** power (`Interactions.blastAtView`); a person in it takes at most `SHOCK_PERSON` (half at the rim, `Game.strike`).
 * **States** (`src/shared/status.ts`): frozen, shrunk, burning, stunned, wet — a WeakMap registry the sim and
   renderers read with one lookup (`statusOf`, free while nothing is affected): peds hold still / walk slower,
   cars stall, crowd instances ice-tint and stop animating, cars / robots / drones / props draw scaled.
