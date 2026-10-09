@@ -10,6 +10,9 @@ export function downCauseOf(c: Cause | undefined): DownCause {
 
 /** Tallest hero (m) whose bumps into people are only a stumble ('brush': a stern word, no reputation). */
 export const BRUSH_MAX_H = 3;
+/** A footfall or a landing crushes cars only from a body taller than this (m): a giant's foot, never
+ *  a hero of about human size coming down from a super jump onto a car. */
+export const CAR_CRUSH_H = 6;
 
 /** Who is booked for a stomp's knock-down: a hero of about human size landing on someone (a super
  * jump coming down beside them) only makes them stumble, like a super speed runner brushing past. */

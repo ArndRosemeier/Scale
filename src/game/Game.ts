@@ -128,7 +128,7 @@ import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
 import { POWER_HIT } from './abilities/tuning';
-import { BRUSH_MAX_H, downCauseOf, harmCauseOf, stompDownCause } from '../shared/cause';
+import { BRUSH_MAX_H, CAR_CRUSH_H, downCauseOf, harmCauseOf, stompDownCause } from '../shared/cause';
 
 /** What someone the hero brushed past or landed beside calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re going!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -548,7 +548,7 @@ export class Game {
         const h = s.size ?? this.player.height, hero = downCauseOf(s.cause) === 'player';
         const r = Math.max(0.6, h * 0.09);
         for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, stompDownCause(s.cause, h));
-        if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
+        if (h > CAR_CRUSH_H) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
           if (s.cause !== 'world') this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, s.cause ?? 'player');

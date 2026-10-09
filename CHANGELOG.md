@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.208 — 2026-10-09
+
+- **Super jump landings leave cars whole.** Coming down from a high super jump on or right next to a driving car used to flatten it. At about human size a landing now leaves cars intact. Only a giant's foot (a body over 6 m) still crushes them, as before.
+
 ## 0.207 — 2026-10-09
 
 - The concert's sky searchlights are wider and fainter, shafts of light in the haze instead of hard white sticks.

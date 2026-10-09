@@ -1395,6 +1395,15 @@ section('traffic at a blocked junction', async () => {
   const car = { x: 0, z: 0, yaw: 0, length: 4.7, width: 1.85, speed: 5 };
   check(Math.abs(pathGap(car, { x: 0, z: -10, yaw: 0, length: 4.7, width: 1.85 }) - 5.3) < 1e-6 && pathGap(car, { x: 3, z: -10, yaw: 0, length: 4.7, width: 1.85 }) === Infinity && pathGap(car, { x: 0, z: 10, yaw: 0, length: 4.7, width: 1.85 }) === Infinity, 'traffic: pathGap sees only what is in the way');
 
+  // A hero of about human size landing a super jump on a car leaves it whole; a giant's foot crushes it.
+  {
+    const { VState } = await import('../src/sim/Traffic');
+    const v = tr.vehicles.find((c) => c.state !== VState.Crushed)!;
+    const stomp = (size: number) => { stimuli.emit('stomp', v.x, 0, v.z, 4.6, 80, { cause: 'player', size }); stimuli.update(1 / 30); tr.update(1 / 30, 8.3, 0, 0); return v.state === VState.Crushed; };
+    const hero = stomp(1.8), giant = stomp(20);
+    check(!hero && giant, `traffic: a super jump landing on a car leaves it whole, a giant's foot crushes it (hero ${hero ? 'crushed' : 'whole'}, giant ${giant ? 'crushed' : 'whole'})`);
+  }
+
   // Gawkers: a cry repeated every 3 s for 2 minutes among 200 idle walkers.
   const { Reactions } = await import('../src/sim/Reactions');
   const P = await import('../src/sim/Pedestrians');
