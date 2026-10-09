@@ -49,6 +49,8 @@ export class Player {
   flying = false;
   /** R: keep moving forward (autorun on foot, autoflight in the air) until R, W or S. */
   autoMove = false;
+  /** The pace autorun keeps: the one held (Shift fast, Alt slow) when R switched it on. */
+  private autoPace: 'fast' | 'slow' | 'normal' = 'normal';
   grounded = false;
   readonly rig: HumanoidRig;
   app: HumanoidAppearance;
@@ -193,8 +195,12 @@ export class Player {
     this.sinceToggle += dt;
     if (input.hit('KeyF') && this.flightAllowed) this.toggleFlight();
     else if (this.flying && !this.flightAllowed) this.toggleFlight();
-    if (input.hit('KeyR')) this.autoMove = !this.autoMove;
-    else if (input.hit('KeyW') || input.hit('KeyS')) this.autoMove = false;
+    const runHeld = input.down('ShiftLeft') || input.down('ShiftRight') || input.touchRun;
+    const slowHeld = input.down('AltLeft') || input.touchSlow;
+    if (input.hit('KeyR')) {
+      this.autoMove = !this.autoMove;
+      this.autoPace = runHeld ? 'fast' : slowHeld ? 'slow' : 'normal';
+    } else if (input.hit('KeyW') || input.hit('KeyS')) this.autoMove = false;
 
     // ---- desired movement in camera space
     const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
@@ -204,8 +210,9 @@ export class Player {
     if (input.down('KeyS')) wish.sub(fwd);
     if (input.down('KeyD')) wish.add(right);
     if (input.down('KeyA')) wish.sub(right);
-    const run = input.down('ShiftLeft') || input.down('ShiftRight') || input.touchRun;
-    const walkSlow = input.down('AltLeft') || input.touchSlow;
+    // Autorun keeps the pace it was started at; holding Shift or Alt still overrides it.
+    const run = runHeld || (this.autoMove && this.autoPace === 'fast' && !slowHeld);
+    const walkSlow = slowHeld || (this.autoMove && this.autoPace === 'slow' && !runHeld);
     if (this.chillT > 0) this.chillT = Math.max(0, this.chillT - dt);
     if (this.downT > 0 || this.ragdoll) {
       this.downT = Math.max(0, this.downT - dt);

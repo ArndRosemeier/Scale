@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.190 — 2026-10-09
+## 0.191 — 2026-10-09
 
 - **Factions, step 2: every faction's feeling about the hero is in the table.** Each value is read live from the system that already keeps it, so nothing is stored twice and nothing plays differently: civilians = reputation; police = friendly, wary of a suspect, hostile while you are wanted (more at higher levels) or rampaging; army = hostile only against a rampaging giant; each villain group = its notoriety (hunting you is the hostile line); Lumen = their trust; Wardens = their regard (10 per problem handed over). Your own feelings, which the friend/foe sense uses, stay as they were. In the dev console, `dev.factions()` lists every faction's feeling about the hero and `dev.factions(true)` the whole table.
+
+## 0.190 — 2026-10-09
+
+- **Autorun keeps your pace.** Press R while holding Shift and the hero keeps sprinting (in flight: keeps boosting) after you let go of Shift. Started with Alt held, autorun stays at a slow walk; started plain, it runs at the normal pace. Holding Shift or Alt during autorun still changes the pace while held.
 
 ## 0.189 — 2026-10-09
 
