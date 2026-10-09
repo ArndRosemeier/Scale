@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.173 — 2026-10-09
+
+- **The starship's rooms are planned and furnished like every other interior.** Round the great hall the rooms are no longer one wedge each with props at fixed spots. The ring behind each gallery is divided by the shared room splitter: quarters and labs one wedge wide, messes and lounges two, one control room per deck. Each room is furnished by the shared filler: sleep pods head to a wall, lockers and racks along the walls, consoles with their stools, holo tables and mess tables with stools in the free floor. Doorways and the way in from the gallery stay clear.
+- Interior core, step 3 of 6 (`docs/INTERIORS_PLAN.md`). The starship's old room recipes are gone.
+
 ## 0.172 — 2026-10-09
 
 - **Offices, shops and cafés are laid out and furnished for real.** Every floor of a flat, office or shop is now divided by one shared room splitter that works for any outline (an L, a triangle, a round end, a skewed block). The theme claims its big space first: a shop's sales floor along the street front, an office's open plan, a café's guest room, a lobby on an office's ground floor. Only the rest becomes rooms. Open-plan offices get rows of paired desks with monitors and chairs, plus meeting rooms with their table, single offices, a tea kitchen, a WC and a store. Grocery shops get a checkout by the door, aisles and wall shelves; clothes shops their fitting mirror (E still changes your look there), display tables and shelves; cafés a counter and table sets by the windows, with a kitchen behind.

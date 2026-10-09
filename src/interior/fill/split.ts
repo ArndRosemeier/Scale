@@ -25,6 +25,8 @@ export interface Space {
   hub?: boolean;
   /** Given by the caller (the stair hall, the lift lobby): never merged or reshaped. */
   fixed?: boolean;
+  /** No wall to another open space (the pieces of a gallery round a hall and its stairs). */
+  open?: boolean;
   /** A leftover that could not join a neighbour: kept as a room of its own (a closet). */
   odd?: boolean;
 }
@@ -59,6 +61,14 @@ export interface Program {
   corridorType?: RoomType;
   /** Rooms one should not have to walk through (bathrooms, bedrooms). */
   leaf?: RoomType[];
+  /**
+   * Round floors (a ring round a hall): the floor left over is cut along rays from a centre at
+   * these angles (rising, once round) instead of into strips; neighbouring wedges join until a
+   * room is as wide at its far wall as its type wants (`len`).
+   */
+  sectors?: { cx: number; cz: number; angles: number[] };
+  /** Doors in the middle of their wall (default: near the end nearer the hall, leaving the walls for furniture). */
+  doorsMid?: boolean;
 }
 
 export interface Storey {
@@ -67,6 +77,8 @@ export interface Storey {
   fixed: Space[];
   /** Inward normal of the street front (the way the building faces is minus this), or null. */
   front: [number, number] | null;
+  /** Floor there is none of (the void of a hall several storeys high). */
+  holes?: Poly[];
   /** Walls already standing (the stair core's, the lift shaft's): no second wall and no door where they are. */
   solid?: { ax: number; az: number; bx: number; bz: number }[];
 }
@@ -94,7 +106,7 @@ export function splitStorey(S: Storey, P: Program, r: Rng): Split {
     const q = shapesOf(difference([spaces[j].poly], before)).sort((a, b) => polyArea(b) - polyArea(a))[0];
     if (q) spaces[j] = { ...spaces[j], poly: q };
   }
-  const nf = spaces.length, fixedPolys = () => spaces.slice(0, nf).map((f) => f.poly);
+  const nf = spaces.length, fixedPolys = () => [...spaces.slice(0, nf).map((f) => f.poly), ...(S.holes ?? [])];
   // A stair hall standing free inside the floor reaches out to the nearest facade: no room or
   // hall has to wrap round it.
   for (let it = 0; it < 3; it++) {
@@ -129,6 +141,7 @@ export function splitStorey(S: Storey, P: Program, r: Rng): Split {
   const leaf = new Set(P.leaf ?? []);
   let k = r.int(0, Math.max(1, P.rooms.length));
   const count = new Map<RoomType, number>();
+  if (P.sectors) { sectorRooms(free, P, P.sectors, spaces, r); free = []; }
   for (const piece of free) {
     for (const part of rectParts(piece, 3)) {
       if (Math.abs(polyArea(part)) < MIN_AREA || !P.rooms.length) { spaces.push({ type: P.rooms[0]?.type ?? 'storage', poly: part }); continue; }
@@ -164,7 +177,55 @@ export function splitStorey(S: Storey, P: Program, r: Rng): Split {
   mergeSmall(spaces);
   clearOfFixed(spaces, S.fixed.length);
   // 4. Walls where spaces meet, doors so that everything can be reached.
-  return { spaces, walls: wallsAndDoors(spaces, leaf, mergeSmall, S.solid ?? []) };
+  return { spaces, walls: wallsAndDoors(spaces, leaf, mergeSmall, S.solid ?? [], !!P.doorsMid) };
+}
+
+/**
+ * The floor cut along rays from a centre (Program.sectors): wedges in turn, neighbours joined
+ * until the room is as wide as its type wants; a wedge with no floor (a stair well) ends a room.
+ */
+function sectorRooms(free: Poly[], P: Program, S: NonNullable<Program['sectors']>, spaces: Space[], r: Rng): void {
+  const A = S.angles, n = A.length, far = 1e4;
+  const wedge = (i: number): Poly[] => {
+    const a0 = A[i], a1 = i + 1 < n ? A[i + 1] : A[0] + Math.PI * 2;
+    const tri = [S.cx, S.cz, S.cx + Math.cos(a0) * far, S.cz + Math.sin(a0) * far, S.cx + Math.cos(a1) * far, S.cz + Math.sin(a1) * far];
+    return shapesOf(intersection(free, [tri])).filter((q) => Math.abs(polyArea(q)) > 0.5);
+  };
+  // Width across a wedge piece: its span across the ray through its middle.
+  const across = (q: Poly, i: number) => {
+    const a = i + 1 < n ? (A[i] + A[i + 1]) / 2 : (A[i] + A[0] + Math.PI * 2) / 2, tx = -Math.sin(a), tz = Math.cos(a);
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < q.length; k += 2) { const d = q[k] * tx + q[k + 1] * tz; lo = Math.min(lo, d); hi = Math.max(hi, d); }
+    return hi - lo;
+  };
+  const pieces = A.map((_, i) => wedge(i));
+  // Start after a wedge with no floor (the rooms then never wrap round past it).
+  const s0 = Math.max(0, pieces.findIndex((p) => p.length !== 1));
+  const count = new Map<RoomType, number>();
+  let k = r.int(0, Math.max(1, P.rooms.length));
+  const pick = () => {
+    let want = P.rooms[k % P.rooms.length];
+    for (let t = 0; t < P.rooms.length && want.max !== undefined && (count.get(want.type) ?? 0) >= want.max; t++) want = P.rooms[++k % P.rooms.length];
+    k++;
+    return { type: want.type, width: r.range(want.len[0], want.len[1]) };
+  };
+  let cur: Poly[] = [], width = 0, want = pick();
+  const close = () => {
+    if (!cur.length) return;
+    for (const q of shapesOf(union(cur))) spaces.push({ type: want.type, poly: straight(q) });
+    count.set(want.type, (count.get(want.type) ?? 0) + 1);
+    cur = []; width = 0; want = pick();
+  };
+  for (let j = 0; j < n; j++) {
+    const i = (s0 + j) % n, p = pieces[i];
+    if (p.length !== 1) { close(); for (const q of p) spaces.push({ type: want.type, poly: q }); continue; }
+    const w = across(p[0], i);
+    // (Joining this wedge would overshoot more than stopping short: stop here.)
+    if (cur.length && width + w - want.width > want.width - width) close();
+    cur.push(p[0]); width += w;
+    if (width >= want.width) close();
+  }
+  close();
 }
 
 /** The band of a reservation, as a big quad in the front's frame. */
@@ -385,13 +446,16 @@ export function shared(a: Poly, b: Poly, min = 0.3): Seg[] {
  * that goes through halls and corridors first and through rooms one shouldn't walk through only
  * when nothing else reaches. A room no door can reach joins a neighbour.
  */
-function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) => void, solid: NonNullable<Storey['solid']>): IWall[] {
+function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) => void, solid: NonNullable<Storey['solid']>, mid: boolean): IWall[] {
   for (let guard = 0; guard < 20; guard++) {
     const n = spaces.length;
     // Shared stretches per pair (less what standing walls already close); a stretch takes a door
     // when it is long enough.
     const segs = new Map<number, Seg[]>();
+    // Two open spaces (pieces of one gallery) join without a wall.
+    const joined = new Set<number>();
     for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      if (spaces[i].open && spaces[j].open) { if (shared(spaces[i].poly, spaces[j].poly).length) joined.add(i * n + j); continue; }
       const s = shared(spaces[i].poly, spaces[j].poly).flatMap((q) => open(q, solid));
       if (s.length) segs.set(i * n + j, s);
     }
@@ -399,7 +463,7 @@ function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) 
     // A door only where a step through it leads from the one space into the other (a stretch can
     // border a void the outline leaves, such as the stairwell, on one side).
     const through = (s: Seg, i: number, j: number) => {
-      const [t0, t1] = doorSpan(s, spaces[i], spaces[j]), t = (t0 + t1) / 2;
+      const [t0, t1] = doorSpan(s, spaces[i], spaces[j], mid), t = (t0 + t1) / 2;
       const x = s.ax + (s.bx - s.ax) * t, z = s.az + (s.bz - s.az) * t, nx = -(s.bz - s.az) / s.len, nz = (s.bx - s.ax) / s.len;
       const a = spaceAt(spaces, x + nx * 0.3, z + nz * 0.3), b = spaceAt(spaces, x - nx * 0.3, z - nz * 0.3);
       return (a === i && b === j) || (a === j && b === i);
@@ -423,6 +487,7 @@ function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) 
         if (!inTree[i]) continue;
         for (let j = 0; j < n; j++) {
           if (inTree[j]) continue;
+          if (joined.has(Math.min(i, j) * n + Math.max(i, j))) { if (-1 < bc) { bc = -1; bi = i; bj = j; } continue; }
           const s = doorSeg(i, j);
           // (Nobody walks through a closet to the rooms beyond.)
           if (!s || spaces[i].odd) continue;
@@ -456,7 +521,7 @@ function wallsAndDoors(spaces: Space[], leaf: Set<RoomType>, tidy: (s: Space[]) 
       const d = isDoor.has(key) ? doorSeg(i, j) : null;
       for (const s of list) {
         const w: IWall = { ax: s.ax, az: s.az, bx: s.bx, bz: s.bz, doors: [] };
-        if (s === d) w.doors.push(doorSpan(s, spaces[i], spaces[j]));
+        if (s === d) w.doors.push(doorSpan(s, spaces[i], spaces[j], mid));
         walls.push(w);
       }
     }
@@ -489,9 +554,9 @@ function open(s: Seg, solid: NonNullable<Storey['solid']>): Seg[] {
  * and wider; into a room near one end (the end nearer the hall's middle), so the room keeps its
  * walls for furniture.
  */
-function doorSpan(s: Seg, a: Space, b: Space): [number, number] {
+function doorSpan(s: Seg, a: Space, b: Space, mid = false): [number, number] {
   const w = a.hub && b.hub ? Math.min(1.4, s.len - 0.4) : DOOR;
-  if (a.hub && b.hub || s.len < w + 2 * DOOR_END + 0.6) { const m = 0.5, h = w / 2 / s.len; return [m - h, m + h]; }
+  if (mid || a.hub && b.hub || s.len < w + 2 * DOOR_END + 0.6) { const m = 0.5, h = w / 2 / s.len; return [m - h, m + h]; }
   const hub = a.hub ? a : b.hub ? b : a;
   const [x0, z0, x1, z1] = polyBounds(hub.poly), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
   const nearA = Math.hypot(s.ax - cx, s.az - cz) <= Math.hypot(s.bx - cx, s.bz - cz);

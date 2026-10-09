@@ -17,14 +17,18 @@ import { splitStorey, type Program } from './fill/split';
 
 export type RoomType =
   | 'living' | 'bedroom' | 'kitchen' | 'bath' | 'hall' | 'office' | 'meeting' | 'shop' | 'cafe' | 'storage'
-  | 'warehouse' | 'nave' | 'lobby' | 'corridor' | 'stairs' | 'parking' | 'arcade';
+  | 'warehouse' | 'nave' | 'lobby' | 'corridor' | 'stairs' | 'parking' | 'arcade'
+  // A starship's (fill/starship): round its great hall.
+  | 'quarters' | 'lab' | 'mess' | 'lounge' | 'control' | 'gallery';
 
 export type FurnKind =
   | 'bed' | 'bedDouble' | 'wardrobe' | 'nightstand' | 'sofa' | 'armchair' | 'coffeeTable' | 'tvStand' | 'tv' | 'rug'
   | 'diningTable' | 'chair' | 'kitchenRow' | 'fridge' | 'stove' | 'toilet' | 'bathtub' | 'sink' | 'shower'
   | 'desk' | 'officeChair' | 'monitor' | 'meetingTable' | 'shelf' | 'bookshelf' | 'plant' | 'floorLamp' | 'painting'
   | 'counter' | 'shopShelf' | 'rack' | 'cafeTable' | 'barCounter' | 'palletRack' | 'crate' | 'pew' | 'altar' | 'reception' | 'column' | 'clothesStack'
-  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror' | 'arcade';
+  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror' | 'arcade'
+  // A starship's props (built as landmark parts by interior/design/props).
+  | 'pod' | 'locker' | 'console' | 'holo' | 'stool' | 'bench' | 'planter' | 'table';
 
 export interface Room {
   type: RoomType;
