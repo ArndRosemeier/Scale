@@ -694,6 +694,33 @@ every frame (`prof.threats`).
   metro (less than 2.2 m deep: refused). Opening (1.6 s, a sag then the drop): cars wrecked into it, people knocked
   down, props crushed, building fronts within 5 m undermined (`stomp` impacts at their foot), dust, `collapse`. Kept
   12 game hours, then filled in when the camera is > 260 m away; at most 12; saved (`SaveThreats.sinkholes`).
+* **The Leviathan** (`leviathan/Leviathan.ts`, archetype `leviathan`, major; Phase E part 1): a river creature that
+  never leaves the water. Way: `leviathan/leviRoute.ts` (pure, tested) — of the city's own rivers the one with the most
+  bridges, entered `LEVI_ROUTE.lead` m downstream of its first bridge (inside the city), up to three bridges within
+  1500 m, a quay stop (a bank node within 130 m) between two bridges more than 260 m apart, each bridge stop 13 m off
+  the deck in the channel. Body: a `WormRig` (from the Burrower) at 0.55 size whose head rears 12 m out of the water
+  and six tentacle rigs at 0.27 size anchored on a 5.5 m ring under the surface (anchored mode: a curve from the tip
+  down to the root), all drawn by one tinted `WormMesh` (7 slots, the creature material: no new program). Phases:
+  `travel` 5 m down at 7 m/s (foam wake, a `leviathan_surface` surge, drivers stopping), `rise` 3 s, `attack`
+  (bridges 45–70 s, quays 25–35 s: tentacle acts reach / grab (a car follows the tip, then is flung into the river) /
+  smash and sweep (impacts on the deck or bank: knock-downs, crushed cars, cracks; five blows on a span and
+  `BridgeBreaks.collapse`, at most `spansPerVisit` 2 per stop, decals in the gap cleared) / swat (air targets); the head
+  roars and snaps), `sink` 3 s and on. Ends after its last stop, at 30 % hp (60 karma + 6 rep if the hero hurt it
+  most), after `visitMax` 720 s, or brought down (slumps, sinks, gone after 26 s; 120 karma + 12 rep). Frost freezes it
+  (1.2 s per s of frost, up to 8 s, ice decals), fire ×0.5, shock ×1.4. A ThreatActor (2200 hp; zones maw 0.5 (weak
+  ×4), head 0.7, tentacles 0.6, neck 0.85), `actors` empty while under; an ArmyFoe (`hidden` under the surface, no
+  last resort). Not saved. Omens (`ThreatDirector.leviathanOmen`): `wake` — a V of foam moving up the river from its
+  entry, `surge` — the water boils beside one of its stops, a deep surge, drivers on the bridge stopping. Sounds (`tools/synthLeviathan.mjs`): `leviathan_surface`,
+  `leviathan_roar`, `leviathan_slap`. Dev: `dev.threat.spawn('leviathan', { near })`, `dev.threat.leviathan.status() /
+  .surface() / .near() / .sink() / .breakSpan() / .damage(zone, n) / .freeze(s) / .die() / .retreat() / .route() /
+  .omen(kind) / .bridges()`; admin console "Leviathan".
+* **Fallen bridge spans** (`leviathan/BridgeBreaks.ts`, `threats.bridgeBreaks`): a gap per fallen span (`breakSpan`,
+  pure: between neighbouring piers (`bridgePiers`) or a 16–24 m piece, 4 m inside the deck ends, clear of other gaps).
+  The gaps go on the bridge profiles (`BridgeProfile.gaps`: `WorldIndex.bridgeDeck` finds no deck there, so `wet()`
+  sees the river) and to the worker (`buildBridges(macro, terrain, gaps)`: broken ends, slabs in the water;
+  `CityStreamer.rebuildBridges` swaps the geometry). Collapse: cars and people on the piece drop into the river, dust
+  and foam, the `bridge` HarmTarget booked. Mended after `BRIDGE_BREAK.keepH` 24 game hours with the camera > 300 m
+  away; saved (`SaveThreats.bridges`, rows edge, s0, s1, until, seed).
 * **City response** (`ResponseDirector`, levels 0–2 of the ladder, per incident): 0 — three patrol cars with sirens
   (`Police.respond(IncidentJob)`: the job says where, how many get out, what they do there, when to go), a police
   drone; officers hold a line facing it and wave people back. 1 (after 30 s with > 45 % of it still in action, or 8

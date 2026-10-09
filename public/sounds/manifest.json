@@ -1079,5 +1079,29 @@
     "loop": false,
     "gain": 0.9,
     "description": "the Burrower diving back into the street: a rush of air, soil torn up, grinding away below (procedural, tools/synthBurrower.mjs)"
+  },
+  "leviathan_surface": {
+    "files": [
+      "leviathan_surface.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the river heaving as the Leviathan comes up or goes under: a deep surge, a wash, spray (procedural, tools/synthLeviathan.mjs)"
+  },
+  "leviathan_roar": {
+    "files": [
+      "leviathan_roar.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the Leviathan's call: a deep wet bellow with a whale-like moan and a gurgle (procedural, tools/synthLeviathan.mjs)"
+  },
+  "leviathan_slap": {
+    "files": [
+      "leviathan_slap.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a Leviathan tentacle slapping down on a deck or quay: a heavy wet thud (procedural, tools/synthLeviathan.mjs)"
   }
 }
