@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.215 — 2026-10-09
+
+- **A new big threat: the giant mech.** After the first Strider, a 30 m war machine can stride into town, heralded by an emergency bulletin or by heavy footfalls from far off that shake the ground. It walks the streets towards the centre on two legs, each step crushing cars and knocking people over. Its shoulder pods fire salvos of twelve missiles that blast whatever they hit, its right arm is a three-barrel cannon that sweeps bursts of tracers, and its left arm is a hammer fist it smashes down on anyone close. Salvos heat it up: when it's hot it stops and opens the vents on its back, which glow and are then a weak spot (3.5 times the damage); frost while it vents shuts it down for a few seconds. The cockpit is always a weak spot (twice the damage), and enough damage to the legs brings it down on one knee for a while. Badly hurt it walks off; destroyed it sparks, topples forward and lies smouldering where it fell for a few game hours. The army fights it wherever it goes. The admin console has a "Giant mech" section, and `dev.threat.mech` has tools for testing.
+
 ## 0.214 — 2026-10-09
 
 - **"Spawn at the nearest bridge" now really comes to your bridge.** The Leviathan only ever planned its way along one river (the one with the most bridges) and to at most three of its bridges, so standing on any other bridge it went to the nearest of those, often a kilometre or more away, and seemed to do nothing. With the admin button (or `dev.threat.spawn('leviathan', { near: true })`) it now picks the river of the bridge nearest you and comes up it to that bridge, surfacing right away. Only bridges at the very edge of the city, outside its reach, still fall back to the usual way.

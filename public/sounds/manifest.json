@@ -1127,5 +1127,45 @@
     "loop": false,
     "gain": 1,
     "description": "a Roc wingbeat: a great whoomp of air with a low thump (procedural, tools/synthRoc.mjs)"
+  },
+  "mech_step": {
+    "files": [
+      "mech_step.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a giant mech's footfall: a deep thud, steel clanging on steel, a hydraulic hiss (procedural, tools/synthMech.mjs)"
+  },
+  "mech_launch": {
+    "files": [
+      "mech_launch.wav"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "a missile leaving the mech's pod: a sharp pop and a tearing rush of rocket exhaust (procedural, tools/synthMech.mjs)"
+  },
+  "mech_cannon": {
+    "files": [
+      "mech_cannon.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "a short burst of the mech's rotary cannon: rapid hard pops over a motor whine (procedural, tools/synthMech.mjs)"
+  },
+  "mech_vent": {
+    "files": [
+      "mech_vent.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the mech's heat vents opening: a clunk and a long roaring hiss of steam (procedural, tools/synthMech.mjs)"
+  },
+  "mech_alarm": {
+    "files": [
+      "mech_alarm.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "the mech's warning klaxon: a two-tone blaring horn echoing off the town (procedural, tools/synthMech.mjs)"
   }
 }

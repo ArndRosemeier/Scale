@@ -46,6 +46,7 @@ import { aliensChecks } from './aliensTest';
 import { burrowerChecks } from './burrowerTest';
 import { leviathanChecks } from './leviathanTest';
 import { rocChecks } from './rocTest';
+import { mechChecks } from './mechTest';
 import { bridgeGapChecks } from './bridgeGapTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
@@ -4047,6 +4048,7 @@ section('aliens', async () => { aliensChecks(check); });
 section('burrower', async () => { burrowerChecks(check); });
 section('leviathan', async () => { leviathanChecks(check); });
 section('roc', async () => { rocChecks(check); });
+section('mech', async () => { mechChecks(check); });
 section('fallen bridge spans', async () => { bridgeGapChecks(check); });
 
 // Nothing hurts through the pavement: every blow names where it came from (the type makes the
