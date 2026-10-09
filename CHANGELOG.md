@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.222 — 2026-10-09
+
+- **No long freeze right after loading.** Your hero is dressed piece by piece over the first frames, and on a fresh browser the shaders for their clothes were still compiling when play began, so the first frame stalled until they were done (9 seconds in one freeze log). The loading screen now waits until the hero is dressed and every shader still compiling is ready, up to 20 seconds. The freeze log also missed that freeze, because it skipped the very first frame of play; it no longer does, and a long frame right after switching back to the game's tab now counts too.
+
 ## 0.221 — 2026-10-09
 
 - **No freeze when a giant first shows up on the news screens.** The news drone's picture for the billboards left out the sewers, and with them the sewer lights, so the game had to prepare every shader in the picture a second time, all at once: about a second and a half the first time the mech fired its missiles. The lights now stay in the picture (only what the drone can't see is left out), so it reuses the shaders already prepared.

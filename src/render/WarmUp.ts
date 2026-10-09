@@ -48,7 +48,15 @@ export interface WarmOpts {
   later?: THREE.Object3D[];
   /** Extra views to render from (a cutscene's shots). */
   views?: WarmView[];
+  /**
+   * Content built over the first frames that must be compiled before play starts (the hero,
+   * dressed piece by piece): waited for (at most WAIT_FOR_MS) before the calm frames.
+   */
+  waitFor?: Promise<unknown>[];
 }
+
+/** Longest wait for `waitFor` and, after it, for the shader gate's compiles (ms). */
+const WAIT_FOR_MS = 20000;
 
 export interface WarmReport {
   legacy: boolean;
@@ -154,11 +162,20 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
   rep.viewsMs = performance.now() - tv;
   if (builds) rep.nodeBuilds!.push(builds.count);
   scene.remove(stage);
+  // Content that is still being built (the hero is dressed piece by piece over frames).
+  if (opts.waitFor?.length) {
+    let waiting = true;
+    void Promise.all(opts.waitFor).catch(() => undefined).then(() => { waiting = false; });
+    const t = performance.now();
+    while (waiting && performance.now() - t < WAIT_FOR_MS) await host.nextFrame();
+  }
   // 6. Calm frames; meanwhile the gate's parallel compiles finish (not waiting forever on one).
+  // Waited for on WebGL too: a program still compiling when play starts is drawn after the gate
+  // gives up, and the driver then finishes it in that frame (a skinned garment once took 9 s
+  // on Arnd's PC right after the start). A longer loading screen is the better deal.
   const tw = performance.now();
   let calm = 0;
-  // (WebGPU: new meshes stay hidden until their background compile is done; wait for those longer.)
-  const busyMs = R.webgpu ? 20000 : 3000;
+  const busyMs = WAIT_FOR_MS;
   while ((calm < 20 || (host.gate.busy > 0 && performance.now() - tw < busyMs)) && performance.now() - tw < Math.max(8000, busyMs)) {
     const f0 = performance.now();
     await host.nextFrame();
