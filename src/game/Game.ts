@@ -105,6 +105,7 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { Concert } from './concert/Concert';
 import { StationLife } from './metro/StationLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
@@ -218,6 +219,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** The stadium's evening concert (src/game/concert). */
+  concert: Concert | null = null;
   /** Commuters on the metro's stairs, platforms and trains near the player. */
   stationLife: StationLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
@@ -802,7 +805,7 @@ export class Game {
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
-    this.T('street', () => this.street?.update(dt));
+    this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); });
     this.T('people', () => { this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1166,6 +1169,7 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.concert = new Concert(this);
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
