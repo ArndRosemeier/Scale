@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.202 — 2026-10-09
+
+- **The concert now plays Arnd's own VELA songs** (Lyria 3 Pro, with vocals): City of Lights, Neon Heartbeat, Paper Wings, Hold On to the Night, Gravity and Rise. **The street bands play his folk, bossa and swing pieces**, each turned into a seamless loop. The lights and the crowd follow each song's measured beat. The ballad is read at its real slow tempo, not double time.
+- **The show is longer, and each night's set fits the evening.** Doors now open at 18:00 and the band plays from 19:00 to 23:00. The songs run at their real length, which is longer than those four game hours allow at the usual time scale, so each night plays the opener, the closer, and as many of the other songs as fit, in a different order every night.
+
 ## 0.201 — 2026-10-09
 
 - **A concert at the stadium every evening.** The act is VELA. Doors open at 19:00, the band plays from 20:00 to 23:00, and the crowd has gone home by about 23:45.

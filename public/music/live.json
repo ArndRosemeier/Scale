@@ -4,41 +4,57 @@
   {
    "id": "concert-1",
    "title": "City of Lights",
-   "file": "music/tracks/hero-1.mp3",
-   "seconds": 101.453,
-   "bpm": 120.19,
-   "beat0": 0.232,
-   "placeholder": true,
+   "file": "music/live/concert-1.mp3",
+   "seconds": 157.563,
+   "bpm": 139.67,
+   "beat0": 0.197,
    "opener": true
   },
   {
    "id": "concert-2",
    "title": "Neon Heartbeat",
-   "file": "music/tracks/day-1.mp3",
-   "seconds": 159.083,
-   "bpm": 103.36,
-   "beat0": 0.209,
-   "placeholder": true
+   "file": "music/live/concert-2.mp3",
+   "seconds": 126.664,
+   "bpm": 120.19,
+   "beat0": 0.139
   },
   {
    "id": "concert-3",
    "title": "Paper Wings",
-   "file": "music/tracks/night-2.mp3",
-   "seconds": 162.215,
-   "bpm": 76.0,
-   "beat0": 0.058,
-   "placeholder": true
+   "file": "music/live/concert-3.mp3",
+   "seconds": 131.841,
+   "bpm": 93.96,
+   "beat0": 0.163
+  },
+  {
+   "id": "concert-4",
+   "title": "Hold On to the Night",
+   "file": "music/live/concert-4.mp3",
+   "seconds": 163.898,
+   "bpm": 73.83,
+   "beat0": 0.232
+  },
+  {
+   "id": "concert-5",
+   "title": "Gravity",
+   "file": "music/live/concert-5.mp3",
+   "seconds": 173.915,
+   "bpm": 139.67,
+   "beat0": 0.221
   },
   {
    "id": "concert-6",
    "title": "Rise",
-   "file": "music/tracks/hero-2.mp3",
-   "seconds": 103.353,
-   "bpm": 136.0,
-   "beat0": 0.337,
-   "placeholder": true,
+   "file": "music/live/concert-6.mp3",
+   "seconds": 179.271,
+   "bpm": 126.05,
+   "beat0": 0.232,
    "closer": true
   }
  ],
- "bands": {}
+ "bands": {
+  "folk": "music/live/band-folk.mp3",
+  "bossa": "music/live/band-bossa.mp3",
+  "swing": "music/live/band-swing.mp3"
+ }
 }

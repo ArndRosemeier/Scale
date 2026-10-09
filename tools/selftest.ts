@@ -57,7 +57,7 @@ import { resolveShot, newShot, type ShotTrace } from '../src/game/combat/shot';
 import { MoodDirector, MOODS, LOOPED, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
 import { MOOD_TRACKS, CUES, TENSION_HIGH, parseTracks } from '../src/audio/music/tracks';
 import { angleDiff } from '../src/core/math';
-import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP } from '../src/game/concert/plan';
+import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP, SHOW, SHOW_END } from '../src/game/concert/plan';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
@@ -2767,12 +2767,16 @@ section('concert', async () => {
   check(P.pit.length === PIT_CAP && offField === 0 && front < 5 && back > front + 10 && close === 0, `concert: pit of ${P.pit.length} on the field (${offField} off), nearest the stage first (${front.toFixed(1)} … ${back.toFixed(1)} m), nobody on top of another (${close})`);
   const facing = P.seats.filter((s) => { const h = Math.atan2(-(P.stage.fx - s.x), -(P.stage.fz - s.z)); return Math.abs(angleDiff(s.heading, h)) < 0.35; }).length;
   check(P.seats.length > 400 && P.seats.length <= SEAT_CAP * 1.1 && P.seats.every((s) => s.y > lm.base + 1) && facing > P.seats.length * 0.9, `concert: ${P.seats.length} seats up in the stands, facing the stage (${facing})`);
-  check(concertAt(18).phase === 'none' && concertAt(19.5).phase === 'doors' && concertAt(24 + 21).phase === 'show' && concertAt(23.2).phase === 'out' && concertAt(48 + 0.5).phase === 'none' && concertAt(24 + 21).day === 1, 'concert: doors, show and going home in the evening');
+  check(concertAt(17.5).phase === 'none' && concertAt(18.5).phase === 'doors' && concertAt(24 + 21).phase === 'show' && concertAt(23.2).phase === 'out' && concertAt(48 + 0.5).phase === 'none' && concertAt(24 + 21).day === 1, 'concert: doors, show and going home in the evening');
   const live = parseLive(JSON.parse(readFileSync('public/music/live.json', 'utf8')));
   const missingFile = live.songs.filter((s) => !existsSync(`public/${s.file}`)).map((s) => s.id);
   check(live.songs.length >= 4 && missingFile.length === 0 && live.songs.every((s) => s.bpm > 50 && s.bpm < 220), `concert: ${live.songs.length} songs in live.json, all on disk (missing: ${missingFile.join(', ') || 'none'})`);
   const L1 = setList(42, 3, live.songs), L2 = setList(42, 3, live.songs), L3 = setList(42, 4, live.songs);
   check(L1[0].opener === true && L1[L1.length - 1].closer === true && L1.length === live.songs.length && L1.map((s) => s.id).join() === L2.map((s) => s.id).join() && new Set(L3.map((s) => s.id)).size === live.songs.length, 'concert: set list from the opener to the closer, the same for a night');
+  // At the usual 20x day the evening (19-23 h) is 12 real minutes: as many songs as fit, opener and closer always.
+  const budget = ((SHOW_END - SHOW) * 3600) / 20 - 9, B = setList(42, 3, live.songs, budget, 16);
+  const used = B.reduce((t, s) => t + s.seconds + 16, 0);
+  check(B.length >= 3 && B[0].opener === true && B[B.length - 1].closer === true && used <= budget, `concert: a night's set fits its evening (${B.length} songs, ${used.toFixed(0)} of ${budget.toFixed(0)} s)`);
 });
 
 // Justice: wrecking buildings is not free (facade damage before witnesses; a collapse always known).

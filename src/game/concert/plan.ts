@@ -9,8 +9,9 @@
  *    the deck, the standing pit in front of the stage (front rows first), seats in the stands
  *    (facing the stage, those behind the stage left empty) and the way out through the gate at
  *    the far end.
- *  - The set: `setList(seed, day, songs)`: the opener first, the closer last, the rest shuffled per
- *    night.
+ *  - The set: `setList(seed, day, songs, budget, gap)`: the opener first, the closer last, the rest
+ *    shuffled per night, as many of them as fit the evening (songs run their real length, longer
+ *    than the game hours allow for all of them at the usual time scale).
  *
  * Headings use the Pedestrians convention (atan2(-dx, -dz): the way one faces).
  */
@@ -19,7 +20,7 @@ import { siteToWorld, worldToSite, type Landmark } from '../../plan/landmarks';
 import { stadiumBowl } from '../../plan/landmarkParts';
 
 /** Game hours of the evening (of every day): doors, show, last song, crowd gone. */
-export const DOORS = 19, SHOW = 20, SHOW_END = 23, OUT = 23.75;
+export const DOORS = 18, SHOW = 19, SHOW_END = 23, OUT = 23.75;
 
 export type ConcertPhase = 'none' | 'doors' | 'show' | 'out';
 
@@ -163,13 +164,19 @@ export function concertPlan(lm: Landmark, seed: number): ConcertPlan {
 /** One song of the act (public/music/live.json). */
 export interface LiveSong { id: string; title: string; file: string; seconds: number; bpm: number; beat0: number; opener?: boolean; closer?: boolean }
 
-/** The night's running order: the opener first, the closer last, the others shuffled by night. */
-export function setList(seed: number, day: number, songs: readonly LiveSong[]): LiveSong[] {
+/**
+ * The night's running order: the opener first, the closer last, the others shuffled by night, as
+ * many as fit `budget` seconds (each song costs its length plus `gap`; opener and closer always play).
+ */
+export function setList(seed: number, day: number, songs: readonly LiveSong[], budget = Infinity, gap = 0): LiveSong[] {
   const first = songs.filter((s) => s.opener), last = songs.filter((s) => s.closer && !s.opener);
   const mid = songs.filter((s) => !s.opener && !s.closer);
   const r = new Rng(deriveSeed(seed, 'setlist', day));
   for (let i = mid.length - 1; i > 0; i--) { const j = r.int(0, i); [mid[i], mid[j]] = [mid[j], mid[i]]; }
-  return [...first, ...mid, ...last];
+  let left = budget;
+  for (const s of [...first, ...last]) left -= s.seconds + gap;
+  const play = mid.filter((s) => (left >= s.seconds + gap ? ((left -= s.seconds + gap), true) : false));
+  return [...first, ...play, ...last];
 }
 
 /** Parse public/music/live.json (missing parts: empty). */

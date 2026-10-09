@@ -30,14 +30,14 @@ OUT = ROOT / 'public' / 'music' / 'live'
 MANIFEST = ROOT / 'public' / 'music' / 'live.json'
 ACT = 'VELA'
 
-# id: (title, source, options)
-SONGS: dict[str, tuple[str, str, dict]] = {
-    'concert-1': ('City of Lights', 'concert-1.mp3', {'opener': True}),
-    'concert-2': ('Neon Heartbeat', 'concert-2.mp3', {}),
-    'concert-3': ('Paper Wings', 'concert-3.mp3', {}),
-    'concert-4': ('Hold On to the Night', 'concert-4.mp3', {}),
-    'concert-5': ('Gravity', 'concert-5.mp3', {}),
-    'concert-6': ('Rise', 'concert-6.mp3', {'closer': True}),
+# id: (title, source, tempo asked for in the prompt, options)
+SONGS: dict[str, tuple[str, str, float, dict]] = {
+    'concert-1': ('City of Lights', 'concert-1.mp3', 126, {'opener': True}),
+    'concert-2': ('Neon Heartbeat', 'concert-2.mp3', 118, {}),
+    'concert-3': ('Paper Wings', 'concert-3.mp3', 94, {}),
+    'concert-4': ('Hold On to the Night', 'concert-4.mp3', 70, {}),
+    'concert-5': ('Gravity', 'concert-5.mp3', 140, {}),
+    'concert-6': ('Rise', 'concert-6.mp3', 124, {'closer': True}),
 }
 BANDS: dict[str, str] = {'folk': 'band-folk.mp3', 'bossa': 'band-bossa.mp3', 'swing': 'band-swing.mp3'}
 
@@ -47,11 +47,15 @@ PLACEHOLDERS: dict[str, str] = {
 }
 
 
-def beat_of(y: np.ndarray) -> tuple[float, float]:
-    """(bpm, time of the first beat in s) of a piece."""
+def beat_of(y: np.ndarray, hint: float = 0) -> tuple[float, float]:
+    """(bpm, time of the first beat in s) of a piece (`hint`: the tempo the prompt asked for, to
+    tell a ballad from its double time)."""
     mono = librosa.to_mono(y) if y.ndim > 1 else y
     tempo, beats = librosa.beat.beat_track(y=mono, sr=SR, units='time')
     bpm = float(np.atleast_1d(tempo)[0])
+    if hint and (bpm > hint * 1.5 or bpm < hint / 1.5):
+        tempo, beats = librosa.beat.beat_track(y=mono, sr=SR, units='time', start_bpm=hint)
+        bpm = float(np.atleast_1d(tempo)[0])
     # Lyria's tempos are steady: fit the grid to all the beats found (a better phase than the first one).
     if len(beats) > 8:
         period = 60 / bpm
@@ -78,7 +82,7 @@ def put_song(m: dict, entry: dict) -> None:
 
 
 def song(src: Path, sid: str, m: dict) -> None:
-    title, file, o = SONGS[sid]
+    title, file, hint, o = SONGS[sid]
     path = src / file
     if not path.exists():
         print(f'{sid}: no {file}, kept as it was')
@@ -88,7 +92,7 @@ def song(src: Path, sid: str, m: dict) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     dest = OUT / f'{sid}.mp3'
     encode(y, dest, 'mp3')
-    bpm, beat0 = beat_of(y)
+    bpm, beat0 = beat_of(y, hint)
     put_song(m, {'id': sid, 'title': title, 'file': f'music/live/{sid}.mp3', 'seconds': round(y.shape[1] / SR, 3), 'bpm': bpm, 'beat0': beat0, **o})
     print(f'{sid}: {y.shape[1] / SR:.1f} s, {bpm} bpm -> {dest.relative_to(ROOT)}')
 
@@ -113,7 +117,7 @@ def placeholders(m: dict) -> None:
     for sid, track in PLACEHOLDERS.items():
         if any(s['id'] == sid and s['file'].startswith('music/live/') for s in m['songs']):
             continue
-        title, _, o = SONGS[sid]
+        title, _, _, o = SONGS[sid]
         f = ROOT / 'public' / 'music' / 'tracks' / f'{track}.mp3'
         y = load(f)
         bpm, beat0 = beat_of(y)

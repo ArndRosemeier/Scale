@@ -36,7 +36,7 @@ import { hash32, deriveSeed, Rng } from '../../core/rng';
 import { clamp, smoothstep } from '../../core/math';
 import { cityName } from '../../plan/names';
 import { musicianCostume, type MusicianPart } from '../street/costume';
-import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, type ConcertPlan, type ConcertPhase, type LiveSong, type BandRole } from './plan';
+import { SHOW, SHOW_END, concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, type ConcertPlan, type ConcertPhase, type LiveSong, type BandRole } from './plan';
 import { Stage } from './Stage';
 
 const BASE = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
@@ -191,7 +191,9 @@ export class Concert {
 
   private newShow(day: number): void {
     const songs = this.live?.songs ?? [];
-    const list = setList(this.g.settings.seed, day, songs);
+    // The evening's show hours in real seconds (a dev show: the whole set).
+    const budget = this.forced ? Infinity : ((SHOW_END - SHOW) * 3600) / Math.max(1, this.g.sky.timeScale) - INTRO_GAP;
+    const list = setList(this.g.settings.seed, day, songs, budget, GAP);
     const items: Item[] = [{ kind: 'gap', dur: INTRO_GAP }];
     for (const s of list) { items.push({ kind: 'song', dur: s.seconds, song: s }); items.push({ kind: 'gap', dur: GAP }); }
     this.show = { day, items, clock: 0, ended: false, cancelled: false, lastStarted: -1 };
