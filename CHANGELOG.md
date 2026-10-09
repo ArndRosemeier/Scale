@@ -4,7 +4,7 @@ Every push raises the version by 0.001. Newest first.
 
 ## 0.216 — 2026-10-09
 
-- **First person view.** Zoom the camera all the way in with the mouse wheel (or pinch) and one more notch takes you through the hero's eyes: the head, hair and hat fold away, you see your arms and body when you look down, and the body turns with the view, so A and D strafe and S backs up. It works on foot, in flight and at giant size. While first person is on, the hero casts no shadow (a headless shadow looked wrong). Knockdowns, the manhole climb and other scenes still show the hero from outside. One notch out returns to the closest third person view.
+- **First person view.** Zoom the camera all the way in with the mouse wheel (or pinch) and one more notch takes you through the hero's eyes: the head, hair and hat fold away (in fast flight the forearms too, so the outstretched fist doesn't cover the view), you see your arms and body when you look down, and the body turns with the view, so A and D strafe and S backs up. It works on foot, in flight and at giant size. While first person is on, the hero casts no shadow (a headless shadow looked wrong). Knockdowns, the manhole climb and other scenes still show the hero from outside. One notch out returns to the closest third person view.
 
 ## 0.215 — 2026-10-09
 
