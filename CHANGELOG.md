@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.209 — 2026-10-09
+
+- **Street accidents twice as often.** Someone near you trips and falls every 1.5 to 3 minutes instead of every 3 to 6, so a young hero who cannot fight yet has a steady source of karma from helping people up. They still only happen where you can see them.
+
 ## 0.208 — 2026-10-09
 
 - **Super jump landings leave cars whole.** Coming down from a high super jump on or right next to a driving car used to flatten it. At about human size a landing now leaves cars intact. Only a giant's foot (a body over 6 m) still crushes them, as before.
