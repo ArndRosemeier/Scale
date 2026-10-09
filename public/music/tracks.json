@@ -1,6 +1,11 @@
 {
  "version": 1,
  "tracks": {
+  "aliens": {
+   "file": "tracks/aliens.mp3",
+   "kind": "stream",
+   "seconds": 104.655
+  },
   "battle-1": {
    "file": "tracks/battle-1.ogg",
    "kind": "loop",

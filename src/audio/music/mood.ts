@@ -4,8 +4,9 @@
  * The game is scored sparsely: calm music comes in episodes (one piece, then silence until the
  * next); danger always gets music while it lasts.
  *
- *   calm     day · night · under (sewers, metro) · halls (inside a landmark) · country (out of
- *            town by day) · hero (flying fast)                             — episodes and rests
+ *   calm     day · night · under (sewers, metro) · halls (inside a landmark) · aliens (a Warden's
+ *            disc or walker close by) · country (out of town by day) · hero (flying fast)
+ *                                                                          — episodes and rests
  *   tension  a threat or a crime close by, the police after the player     — while it lasts
  *   villain  a named boss's operation or a cult's rite close by (instead of tension / battle)
  *   battle   the Strider rampaging nearby, robots in a full fight, the last-resort countdown
@@ -20,8 +21,8 @@
  */
 import { saturate as clamp01 } from '../../core/math';
 
-export type Mood = 'day' | 'night' | 'under' | 'halls' | 'country' | 'hero' | 'tension' | 'villain' | 'battle' | 'slime' | 'elegy';
-export const MOODS: Mood[] = ['day', 'night', 'under', 'halls', 'country', 'hero', 'tension', 'villain', 'battle', 'slime', 'elegy'];
+export type Mood = 'day' | 'night' | 'under' | 'halls' | 'aliens' | 'country' | 'hero' | 'tension' | 'villain' | 'battle' | 'slime' | 'elegy';
+export const MOODS: Mood[] = ['day', 'night', 'under', 'halls', 'aliens', 'country', 'hero', 'tension', 'villain', 'battle', 'slime', 'elegy'];
 /** Moods that loop for as long as they last (the rest play one piece). */
 export const LOOPED: ReadonlySet<Mood> = new Set<Mood>(['tension', 'villain', 'battle', 'slime']);
 
@@ -31,6 +32,8 @@ export interface MusicSignals {
   under: boolean;
   /** Inside a landmark's halls (cathedral, museum, town hall, starship …). */
   halls: boolean;
+  /** A Warden's disc hovering over the player, or a walker down close by. */
+  aliens: boolean;
   /** Out of town (past the city's edge). */
   country: boolean;
   /** 0 day … 1 night. */
@@ -53,7 +56,7 @@ export interface MusicSignals {
   hush: boolean;
 }
 
-export const CALM_SIGNALS: MusicSignals = { under: false, halls: false, country: false, night: 0, rain: 0, danger: 0, battle: 0, villain: false, slime: false, grief: false, flySpeed: 0, hush: false };
+export const CALM_SIGNALS: MusicSignals = { under: false, halls: false, aliens: false, country: false, night: 0, rain: 0, danger: 0, battle: 0, villain: false, slime: false, grief: false, flySpeed: 0, hush: false };
 
 /** Timing (seconds). */
 export const MOOD_TUNING = {
@@ -74,6 +77,8 @@ export const MOOD_TUNING = {
   nightOn: 0.62, nightOff: 0.38,
   underT: 2.5,
   hallsT: 2,
+  /** A disc must be about this long before its music comes (and gone this long before it goes). */
+  aliensOn: 3, aliensOff: 20,
 };
 
 export type Phase = 'rest' | 'play';
@@ -101,6 +106,7 @@ export class MoodDirector {
   under = false;
   hero = false;
   halls = false;
+  aliens = false;
   country = false;
   /** Seconds of elegy left (> 0: playing it). */
   elegy = 0;
@@ -112,6 +118,7 @@ export class MoodDirector {
   private downT = 0;
   private underT = 0;
   private hallsT = 0;
+  private aliensT = 0;
   private heroT = 0;
   private heroPlay = 0;
   private fought = false;
@@ -158,6 +165,8 @@ export class MoodDirector {
     if (this.underT >= T.underT) { this.under = s.under; this.underT = 0; }
     if (this.hallsT >= T.hallsT) { this.halls = s.halls; this.hallsT = 0; }
     this.country = s.country;
+    this.aliensT = s.aliens === this.aliens ? 0 : this.aliensT + dt;
+    if (this.aliensT >= (s.aliens ? T.aliensOn : T.aliensOff)) { this.aliens = s.aliens; this.aliensT = 0; }
     if (!this.night && s.night >= T.nightOn) this.night = true;
     else if (this.night && s.night <= T.nightOff) this.night = false;
     const fast = this.hero ? s.flySpeed > T.heroOff : s.flySpeed > T.heroOn;
@@ -203,7 +212,7 @@ export class MoodDirector {
   }
 
   private place(): Mood {
-    return this.under ? 'under' : this.halls ? 'halls' : this.hero ? 'hero' : this.night ? 'night' : this.country ? 'country' : 'day';
+    return this.under ? 'under' : this.halls ? 'halls' : this.aliens ? 'aliens' : this.hero ? 'hero' : this.night ? 'night' : this.country ? 'country' : 'day';
   }
 
   /** The calm piece played to its end: rest until the next episode. */
@@ -256,6 +265,7 @@ export const MOOD_FADE: Record<Mood, { fadeIn: number; fadeOut: number; level: n
   night: { fadeIn: 4, fadeOut: 8, level: 0.85 },
   under: { fadeIn: 4, fadeOut: 8, level: 0.85 },
   halls: { fadeIn: 4, fadeOut: 6, level: 0.75 },
+  aliens: { fadeIn: 4, fadeOut: 8, level: 0.85 },
   country: { fadeIn: 4, fadeOut: 8, level: 0.85 },
   hero: { fadeIn: 1.5, fadeOut: 5, level: 0.9 },
   tension: { fadeIn: 2, fadeOut: 6, level: 0.9 },
