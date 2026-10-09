@@ -57,6 +57,9 @@ export class Audio {
   private buffers = new Map<string, AudioBuffer[]>();
   private loading = new Map<string, Promise<AudioBuffer[]>>();
   private amb = new Map<string, { src: AudioBufferSourceNode; gain: GainNode; target: number }>();
+  /** When each sound was last wanted (s): decoded clips nobody wanted for IDLE_S are dropped. */
+  private used = new Map<string, number>();
+  private sweptAt = 0;
   private base = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
   private voices = 0;
   enabled = true;
@@ -89,7 +92,6 @@ export class Audio {
         g.connect(c.id === 'ambience' ? this.ambBus : c.id === 'music' ? this.master : this.sfxBus);
         this.cats.set(c.id, g);
       }
-      for (const id of Object.keys(this.manifest)) if (id.startsWith('amb_')) void this.load(id);
     };
     // (iPad Safari only lets a touch's end start audio: pointerdown is not a gesture there.)
     for (const ev of ['pointerdown', 'pointerup', 'touchend', 'keydown']) window.addEventListener(ev, start, { passive: true });
@@ -102,6 +104,7 @@ export class Audio {
   wake: () => void = () => {};
 
   private load(id: string): Promise<AudioBuffer[]> {
+    this.used.set(id, performance.now() / 1000);
     const m = this.manifest[id];
     if (!m || !this.ctx) return Promise.resolve([]);
     let p = this.loading.get(id);
@@ -163,8 +166,7 @@ export class Audio {
       src.onended = () => { this.voices--; g.disconnect(); pan.disconnect(); };
     };
     const b = this.buffers.get(id);
-    if (b) go(b);
-    else void this.load(id).then(go);
+    if (b) { this.used.set(id, performance.now() / 1000); go(b); } else void this.load(id).then(go);
   }
 
   /** Non-spatial one-shot (UI, the player's own body). */
@@ -183,8 +185,7 @@ export class Audio {
       src.start();
     };
     const b = this.buffers.get(id);
-    if (b) go(b);
-    else void this.load(id).then(go);
+    if (b) { this.used.set(id, performance.now() / 1000); go(b); } else void this.load(id).then(go);
   }
 
   /**
@@ -224,6 +225,7 @@ export class Audio {
     const m = this.manifest[id];
     const bufs = this.buffers.get(id);
     if (!m || !bufs?.length) { if (m) void this.load(id); return null; }
+    this.used.set(id, performance.now() / 1000);
     const ctx = this.ctx;
     const src = ctx.createBufferSource();
     src.buffer = bufs[0];
@@ -257,9 +259,12 @@ export class Audio {
   setAmbience(levels: Partial<Record<AmbienceLayer, number>>, rates: Partial<Record<AmbienceLayer, number>> = {}): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const now = performance.now() / 1000;
     for (const [id, lvl] of Object.entries(levels) as [AmbienceLayer, number][]) {
       let a = this.amb.get(id);
       const bufs = this.buffers.get(id);
+      // A layer is loaded when it is first heard (it fades in once decoded), not all at start.
+      if (lvl > 0.001) { if (bufs?.length) this.used.set(id, now); else if (this.manifest[id]) void this.load(id); }
       if (!a) {
         if (!bufs?.length || lvl <= 0.001) continue;
         const src = ctx.createBufferSource();
@@ -276,6 +281,22 @@ export class Audio {
       a.gain.gain.setTargetAtTime(a.target, ctx.currentTime, 0.6);
       const r = rates[id];
       if (r !== undefined) a.src.playbackRate.setTargetAtTime(r, ctx.currentTime, 0.2);
+    }
+    if (now - this.sweptAt > 10) { this.sweptAt = now; this.dropIdle(now); }
+  }
+
+  /**
+   * Decoded audio is float PCM, about ten times its file size (an ambience bed ≈ 8 MB): clips
+   * and ambience layers nobody wanted for IDLE_S are dropped and decoded again when next needed.
+   * (A source still playing keeps its own buffer until it ends.)
+   */
+  private dropIdle(now: number): void {
+    for (const id of [...this.buffers.keys()]) {
+      if (now - (this.used.get(id) ?? 0) < IDLE_S) continue;
+      const a = this.amb.get(id);
+      if (a) { try { a.src.stop(); } catch { /* not started */ } a.src.disconnect(); a.gain.disconnect(); this.amb.delete(id); }
+      this.buffers.delete(id);
+      this.loading.delete(id);
     }
   }
 
@@ -325,6 +346,8 @@ export class Audio {
   }
 }
 
+/** Seconds a decoded clip may go unwanted before it is dropped (Audio.dropIdle). */
+const IDLE_S = 90;
 const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted', MIX_KEY = 'scale.soundMix', MUSIC_KEY = 'scale.music';
 
 /** The stored master volume, mute, music switch and music level (the start screen's music reads them before the game's Audio exists). */
