@@ -63,6 +63,8 @@ import { resolveShot, newShot, type ShotTrace } from '../src/game/combat/shot';
 import { MoodDirector, MOODS, LOOPED, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
 import { MOOD_TRACKS, CUES, TENSION_HIGH, parseTracks } from '../src/audio/music/tracks';
 import { angleDiff } from '../src/core/math';
+import { Match, makeTeam, PITCH, STEP as SOCCER_STEP } from '../src/game/soccer/match';
+import { soccerAt, soccerPlan, clubs as soccerClubs, fixture as soccerFixture } from '../src/game/soccer/plan';
 import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP, SHOW, SHOW_END } from '../src/game/concert/plan';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
@@ -2878,6 +2880,60 @@ section('street characters', async () => {
 // band on its deck, the pit in front (nearest first, on the field, clear of the stage), seats in the
 // stands facing the stage, the set list (opener first, closer last, the same each night per seed),
 // and the songs listed in public/music/live.json on disk.
+section('soccer', async () => {
+  // The clubs: six, named and kitted apart; a fixture pairs two of the same kind (women play women).
+  const C = soccerClubs(42);
+  check(C.length === 6 && new Set(C.map((c) => c.name)).size === 6 && new Set(C.map((c) => c.short)).size === 6, `soccer: six clubs with their own names (${C.map((c) => c.name).join(', ')})`);
+  let badFix = 0;
+  for (let day = 0; day < 20; day++) for (let k = 0; k < 4; k++) { const f = soccerFixture(42, day, k, C); if (f.home === f.away || C[f.home].women !== C[f.away].women) badFix++; }
+  check(badFix === 0, `soccer: fixtures pair two different clubs of the same kind (${badFix} bad)`);
+  check(!soccerAt(9.5, 20).open && soccerAt(24 * 3 + 12, 20).open && !soccerAt(17.2, 20).open && soccerAt(24 * 3 + 12, 20).day === 3, 'soccer: matches by day only, none starting too late to finish');
+  // Matches: played to the end, the same every time for a seed, goals now and then, everyone on the pitch.
+  const team = (seed: number, k: number) => {
+    const c = C[k];
+    return makeTeam(new MRng(seed * 31 + k), c.name, c.short, c.kit, c.level, (i) => ({ name: `${c.short} ${i}`, cit: i }));
+  };
+  const play = (seed: number) => {
+    const m = new Match(seed, [team(seed, 0), team(seed, 1)], -(PITCH.L - 2));
+    let t = 0, out = 0, ballOut = 0, kicks = 0, n = 0;
+    const phases = new Set<string>();
+    while (!m.over && t < 1500) {
+      m.update(SOCCER_STEP); t += SOCCER_STEP;
+      phases.add(m.phase);
+      for (; n < m.events.length; n++) if (m.events[n].kind === 'kick') kicks++;
+      if (m.phase === 'play') {
+        for (const p of m.men) if (p.on && (Math.abs(p.x) > PITCH.L + 9 || Math.abs(p.y) > PITCH.W + 9)) out++;
+        if (Math.abs(m.ball.x) > PITCH.L + 6 || Math.abs(m.ball.y) > PITCH.W + 6 || m.ball.h < 0 || !Number.isFinite(m.ball.x)) ballOut++;
+      }
+    }
+    return { m, t, out, ballOut, kicks, phases, sig: `${m.score.join('-')}/${m.events.length}/${m.goals.map((g) => g.min).join(',')}` };
+  };
+  const a = play(7), b = play(7);
+  check(a.sig === b.sig, `soccer: a match plays the same for the same seed (${a.sig} vs ${b.sig})`);
+  let goals = 0, unfinished = 0, out = 0, ballOut = 0, fewKicks = 0;
+  const phases = new Set<string>();
+  for (let seed = 1; seed <= 6; seed++) {
+    const r = play(seed);
+    goals += r.m.score[0] + r.m.score[1];
+    if (!r.m.over) unfinished++;
+    out += r.out; ballOut += r.ballOut;
+    if (r.kicks < 80) fewKicks++;
+    r.phases.forEach((p) => phases.add(p));
+  }
+  check(unfinished === 0, `soccer: every match is played to the end (${unfinished} unfinished)`);
+  check(['walkout', 'kickoff', 'play', 'restart', 'goal', 'half', 'full', 'done'].every((p) => phases.has(p)), `soccer: walk-out, kick-off, play, restarts, goals, half time and full time all happen (${[...phases].join(', ')})`);
+  check(goals >= 3 && goals <= 30, `soccer: goals now and then (${goals} in 6 matches)`);
+  check(fewKicks === 0, `soccer: the ball is played about (${fewKicks} matches with few kicks)`);
+  check(out === 0 && ballOut === 0, `soccer: players and the ball stay on and around the pitch (${out} player and ${ballOut} ball frames off)`);
+  // In the stadium: the pitch frame on the site, the seats in the stands.
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.4 }));
+  const lm = buildMacroPlan(terrain).landmarks.find((l) => l.kind === 'stadium')!;
+  const P = soccerPlan(lm, 42);
+  const [cx, cz] = P.toWorld(0, 0), [px, pz] = P.toWorld(PITCH.L, PITCH.W), [pu, pv] = P.toPitch(px, pz);
+  check(Math.hypot(cx - lm.x, cz - lm.z) < 1e-6 && Math.abs(pu - PITCH.L) < 1e-6 && Math.abs(pv - PITCH.W) < 1e-6 && P.onPitch(cx, cz) && !P.onPitch(...P.toWorld(PITCH.L + 5, 0)), 'soccer: pitch frame and site agree');
+  check(PITCH.L + 2 < lm.p.ia && P.seats.length > 300 && P.seats.every((q) => q.y > P.field + 1), `soccer: the pitch fits the stadium, ${P.seats.length} seats up in the stands`);
+});
+
 section('concert', async () => {
   const terrain = new Terrain(makeProfile({ seed: 42, size: 0.4 }));
   const lm = buildMacroPlan(terrain).landmarks.find((l) => l.kind === 'stadium')!;

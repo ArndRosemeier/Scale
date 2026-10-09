@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.239 — 2026-10-09
+
+- **Soccer in the stadium.** By day (10:00 until a little after 17:00, game time) the city's six clubs play match after match on the stadium's pitch. The sides walk out of the tunnel, kick off, pass, dribble, tackle, shoot, head, take throw-ins, corners and free kicks, and score now and then (about one or two goals a match). Keepers catch, parry and dive. There is half time, then full time, and the players walk off. Each player has one strength and one weakness, such as a deadly finisher who is slow, or a rock in the tackle with a wayward pass. Target a player to see theirs. The clubs have their own names and kits and play in a change kit when the colours clash. Women's sides play women's sides. The referee in black follows play and whistles. The scoreboard over one of the gates shows the score, the minute and the last scorer. The stands fill, the crowd murmurs, groans at a near miss and jumps up for a goal. Walk onto the pitch and play stops until you leave it. Hit a player, or bring danger to the stadium, and the match is abandoned while everyone runs.
+- People in shorts now wear shorts when seen from afar, too. Before, they were drawn in long trousers once they were more than about 20 m away.
+- `dev.soccer`: `status()`, `start()` (a match now), `go('pitch' | 'stand' | 'far')`, `skip(s)`, `stop()`.
+
 ## 0.238 — 2026-10-09
 
 - **You can walk into the stadium, and you land on its pitch.** The pitch sits a few metres above the street, but nothing held it up, so landing on it dropped you to the ground underneath, and a hero thrown onto it by a fall sank through. Now the grass is solid, so you stand on it after a jump, a flight or a hard fall. The two gates at the ends of the pitch have steps down to the street, so you can walk in and out. Four flights of stairs lead from the pitch up into the stands, and the stands can be climbed row by row.

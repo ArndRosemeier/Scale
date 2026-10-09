@@ -78,6 +78,38 @@ export const SEAT_CAP = 1800;
 /** Most pit places planned (the system fills the nearest ones it has room for). */
 export const PIT_CAP = 420;
 
+/**
+ * Every seat of the stadium's stands (a seat every 0.62 m along each row of each stand segment,
+ * gates left out), each facing the site point aim(u, v) gives for its own site point; skip(mu, mv)
+ * leaves out a segment by its middle.
+ */
+export function standSeats(lm: Landmark, aim: (u: number, v: number) => [number, number], skip: (mu: number, mv: number) => boolean = () => false): Spot[] {
+  const P = lm.p, bowl = stadiumBowl(lm);
+  const W = (u: number, v: number) => siteToWorld(lm, u, v);
+  const all: Spot[] = [];
+  for (let i = 0; i < bowl.N; i++) {
+    if (bowl.gate(i)) continue;
+    const p0 = bowl.ring[i], p1 = bowl.ring[i + 1];
+    if (skip((p0.u + p1.u) / 2, (p0.v + p1.v) / 2)) continue;
+    for (let tr = 0; tr < P.tiers; tr++) {
+      for (let r = 0; r < bowl.rows; r++) {
+        const o = tr * P.depth + (r + 0.55) * bowl.rowD;
+        const y = bowl.tierY(tr) + (r + 1) * bowl.rise;
+        const a0u = p0.u + p0.nu * o, a0v = p0.v + p0.nv * o, a1u = p1.u + p1.nu * o, a1v = p1.v + p1.nv * o;
+        const L = Math.hypot(a1u - a0u, a1v - a0v), k = Math.max(1, Math.floor(L / 0.62));
+        for (let s = 0; s < k; s++) {
+          const f = (s + 0.5) / k;
+          const su = a0u + (a1u - a0u) * f, sv = a0v + (a1v - a0v) * f;
+          const [x, z] = W(su, sv);
+          const [cx, cz] = W(...aim(su, sv));
+          all.push({ x, y, z, heading: Math.atan2(-(cx - x), -(cz - z)) });
+        }
+      }
+    }
+  }
+  return all;
+}
+
 export function concertPlan(lm: Landmark, seed: number): ConcertPlan {
   const P = lm.p, bowl = stadiumBowl(lm);
   const { n } = bowl;
@@ -115,29 +147,9 @@ export function concertPlan(lm: Landmark, seed: number): ConcertPlan {
     }
   }
   pit.sort((p, q) => p.d - q.d);
-  // Seats: each row of each stand segment, a seat every 0.62 m, a share of them filled (not behind the stage).
+  // Seats: a share of the stands' seats filled (not behind the stage).
   const seats: Spot[] = [];
-  const all: Spot[] = [];
-  const [cx, cz] = W(u1, 0);
-  for (let i = 0; i < bowl.N; i++) {
-    if (bowl.gate(i)) continue;
-    const p0 = bowl.ring[i], p1 = bowl.ring[i + 1];
-    const mu = (p0.u + p1.u) / 2, mv = (p0.v + p1.v) / 2;
-    if (mu > u1 - 4 && Math.abs(mv) < STAGE.w / 2 + 14) continue;
-    for (let tr = 0; tr < P.tiers; tr++) {
-      for (let r = 0; r < bowl.rows; r++) {
-        const o = tr * P.depth + (r + 0.55) * bowl.rowD;
-        const y = bowl.tierY(tr) + (r + 1) * bowl.rise;
-        const a0u = p0.u + p0.nu * o, a0v = p0.v + p0.nv * o, a1u = p1.u + p1.nu * o, a1v = p1.v + p1.nv * o;
-        const L = Math.hypot(a1u - a0u, a1v - a0v), k = Math.max(1, Math.floor(L / 0.62));
-        for (let s = 0; s < k; s++) {
-          const f = (s + 0.5) / k;
-          const [x, z] = W(a0u + (a1u - a0u) * f, a0v + (a1v - a0v) * f);
-          all.push({ x, y, z, heading: Math.atan2(-(cx - x), -(cz - z)) });
-        }
-      }
-    }
-  }
+  const all = standSeats(lm, () => [u1, 0], (mu, mv) => mu > u1 - 4 && Math.abs(mv) < STAGE.w / 2 + 14);
   const share = Math.min(0.55, SEAT_CAP / Math.max(1, all.length));
   for (const s of all) if (rng.chance(share)) seats.push(s);
   const [gix, giz] = W(-ia + 3, 0), [gox, goz] = W(-ia - P.tiers * P.depth - 8, 0);

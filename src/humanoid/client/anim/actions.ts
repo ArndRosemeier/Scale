@@ -9,7 +9,7 @@
  * with eased keys (`kf`), which is what makes procedural motion read as
  * weighty rather than robotic.
  */
-import { kf, type Pose } from './pose';
+import { kf, type Pose, type Side } from './pose';
 
 export type GripClass = 'none' | 'blade' | 'dagger' | 'axe' | 'blunt' | 'twohand' | 'polearm' | 'staff' | 'bow' | 'crossbow' | 'shield' | 'torch' | 'tool' | 'wand' | 'thrown' | 'item';
 
@@ -720,6 +720,104 @@ function playCajon(p: Pose, _t: number, c: ActionCtx) {
   p.neck(-0.25, Math.sin(e * 0.9) * 0.2, 0);
 }
 
+// ---- Soccer (game/soccer): the players, the keepers, the bench of emotions.
+
+/** A kick of the ball off the right foot: plant, back-swing, strike through, arms out for balance. */
+function soccerKick(p: Pose, t: number) {
+  const back = kf(t, [[0, 0], [0.32, 1], [0.48, 0], [1, 0]]);
+  const swing = kf(t, [[0, 0], [0.3, 0], [0.5, 1], [0.7, 0.75], [1, 0]]);
+  p.leg('R', -0.55 * back + 1.15 * swing, 0.05, 0, 1.5 * back + 0.25 * swing, 0.45 * swing);
+  p.leg('L', 0.2 * (back + swing), 0, 0, 0.35 * (back + swing));
+  p.root.y -= 0.06 * (back + swing);
+  p.spine(0.15 * swing - 0.12 * back, 0.25 * back - 0.25 * swing);
+  p.arm('L', 0.35 * (back + swing), 0.85 * (back + swing), 0, 0.5);
+  p.arm('R', -0.35 * swing + 0.2 * back, 0.55 * (back + swing), 0, 0.4);
+}
+
+/** A header: spring up, arch back, snap the forehead through the ball. */
+function soccerHeader(p: Pose, t: number) {
+  const j = kf(t, [[0, 0], [0.2, -0.3], [0.45, 1], [0.7, 0.5], [1, 0]]);
+  const snap = kf(t, [[0, 0], [0.32, -1], [0.5, 1], [0.7, 0.3], [1, 0]]);
+  const up = Math.max(0, j);
+  p.root.y += 0.32 * up - 0.12 * Math.max(0, -j);
+  p.spine(-0.35 * snap);
+  p.neck(-0.45 * snap);
+  for (const s of ['L', 'R'] as const) {
+    p.arm(s, 0.7 * up, 0.9 * up, 0, 1.0 * up);
+    p.leg(s, 0.35 * Math.abs(j), 0, 0, 0.9 * Math.abs(j), 0.3 * up);
+  }
+}
+
+/** A sliding tackle: drop low on the left hip, right leg out ahead, leaning back on a hand. */
+function slideTackle(p: Pose, t: number) {
+  const d = kf(t, [[0, 0], [0.15, 1], [0.72, 1], [1, 0]]);
+  p.add('root', 0.65 * d, 0, 0.25 * d);
+  p.root.y -= 0.72 * d;
+  p.spine(-0.35 * d);
+  p.neck(-0.3 * d);
+  // (The hips are tipped back 0.65 rad: the leading leg out level along the grass, the other tucked.)
+  p.leg('R', 0.88 * d, 0.05 * d, 0, 0.08 * d, 0.3 * d);
+  p.leg('L', 0.15 * d, 0.3 * d, 0, 1.7 * d);
+  p.arm('L', -0.5 * d, 0.65 * d, 0, 0.25 * d);
+  p.arm('R', 0.4 * d, 0.9 * d, 0, 0.5 * d);
+}
+
+/** A keeper's dive to one side (+1 his left): set, spring, full stretch with both hands over the head, land, get up. */
+function dive(p: Pose, t: number, side: 1 | -1) {
+  const tilt = kf(t, [[0, 0], [0.12, -0.08], [0.4, 1.3], [0.72, 1.45], [0.88, 1.2], [1, 0]]);
+  const y = kf(t, [[0, 0], [0.12, -0.18], [0.32, 0.12], [0.58, -0.75], [0.86, -0.8], [1, 0]]);
+  const reach = kf(t, [[0, 0], [0.12, 0], [0.4, 1], [0.8, 1], [1, 0]]);
+  const near: Side = side > 0 ? 'L' : 'R', far: Side = side > 0 ? 'R' : 'L';
+  p.add('root', 0, 0, side * tilt);
+  p.root.y += y;
+  // (The character's left is -x.)
+  p.root.x -= side * 0.75 * reach;
+  p.spine(0, 0, side * 0.2 * reach);
+  p.neck(0, 0, side * 0.25 * reach);
+  p.arm(near, 0.35 * reach, 2.8 * reach, 0, 0.15 * reach, 1.0 * reach);
+  p.arm(far, 0.5 * reach, 2.9 * reach, 0, 0.35 * reach, 1.0 * reach);
+  p.leg(near, 0.2 * reach, 0, 0, 0.3 * reach);
+  p.leg(far, 0.1 * reach, 0.35 * reach, 0, 0.2 * reach);
+  const set = kf(t, [[0, 0], [0.12, 1], [0.3, 0], [1, 0]]);
+  for (const s of ['L', 'R'] as const) p.leg(s, 0.5 * set, 0.15 * set, 0, 0.9 * set);
+}
+
+/** A keeper gathering the ball into the chest. */
+function keeperCatch(p: Pose, t: number) {
+  const c = kf(t, [[0, 0], [0.25, 1], [0.75, 1], [1, 0]]);
+  for (const s of ['L', 'R'] as const) p.arm(s, 1.35 * c, -0.15 * c, 0.3 * c, 1.7 * c, 1.0 * c);
+  p.spine(-0.3 * c);
+  p.neck(-0.25 * c);
+  for (const s of ['L', 'R'] as const) p.leg(s, 0.3 * c, 0, 0, 0.5 * c);
+  p.root.y -= 0.08 * c;
+}
+
+/** A throw-in: the ball behind the head in both hands, the back arched, then over and forward. */
+function throwIn(p: Pose, t: number) {
+  const u = kf(t, [[0, 0], [0.2, 1], [0.85, 1], [1, 0]]);
+  const a = kf(t, [[0, 0], [0.45, 1], [0.62, -0.4], [0.8, -0.3], [1, 0]]);
+  for (const s of ['L', 'R'] as const) p.arm(s, (2.6 + 0.45 * a) * u, 0.25 * u, 0, (1.2 * Math.max(0, a) + 0.25) * u, 0.8 * u);
+  p.spine(0.35 * Math.max(0, a) - 0.3 * Math.max(0, -a));
+  p.neck(0.15 * Math.max(0, a));
+  p.leg('L', 0.25 * u, 0, 0, 0.2 * u);
+  p.leg('R', -0.2 * u, 0, 0, 0.15 * u, 0, 0.4 * u);
+}
+
+/** Both hands on the head: a miss, a goal against. */
+function handsOnHead(p: Pose, t: number, c: ActionCtx) {
+  const u = kf(t, [[0, 0], [0.12, 1], [0.85, 1], [1, 0]]);
+  for (const s of ['L', 'R'] as const) p.arm(s, 1.9 * u, 1.25 * u, 0.3 * u, 2.45 * u, 0.6 * u);
+  p.spine(-0.15 * u);
+  p.neck((0.25 + Math.sin(c.elapsed * 1.3) * 0.1) * u, Math.sin(c.elapsed * 0.8) * 0.3 * u);
+}
+
+/** Clapping: hands meeting in front of the chest a few times a second. */
+function clap(p: Pose, t: number, c: ActionCtx) {
+  const u = kf(t, [[0, 0], [0.1, 1], [0.9, 1], [1, 0]]);
+  const o = 0.5 + 0.5 * Math.sin(c.elapsed * PI * 5);
+  for (const s of ['L', 'R'] as const) p.arm(s, 1.05 * u, (-0.18 + 0.4 * o) * u, 0.2 * u, 1.55 * u, 1.3 * u);
+}
+
 export const ACTIONS: Record<string, ActionDef> = {
   hands_up: { mask: 'upper', blendIn: 0.15, blendOut: 0.2, pose: handsUp, mood: 'afraid' },
   cower: { mask: 'full', blendIn: 0.2, blendOut: 0.25, pose: cower, mood: 'afraid' },
@@ -779,6 +877,16 @@ export const ACTIONS: Record<string, ActionDef> = {
   interview: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: interview, mood: 'happy', loop: true },
   chant: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: chant, mood: 'angry', loop: true },
   hero_pose: { mask: 'full', blendIn: 0.1, blendOut: 0.1, pose: heroPose, mood: 'happy', loop: true },
+  // Soccer in the stadium (game/soccer).
+  soccer_kick: { mask: 'full', blendIn: 0.06, blendOut: 0.15, pose: soccerKick, mood: 'focused' },
+  soccer_header: { mask: 'full', blendIn: 0.08, blendOut: 0.15, pose: soccerHeader, mood: 'focused' },
+  slide_tackle: { mask: 'full', blendIn: 0.06, blendOut: 0.2, pose: slideTackle, mood: 'focused' },
+  dive_l: { mask: 'full', blendIn: 0.04, blendOut: 0.2, pose: (p, t) => dive(p, t, 1), mood: 'focused' },
+  dive_r: { mask: 'full', blendIn: 0.04, blendOut: 0.2, pose: (p, t) => dive(p, t, -1), mood: 'focused' },
+  keeper_catch: { mask: 'full', blendIn: 0.08, blendOut: 0.15, pose: keeperCatch, mood: 'focused', curl: { L: 0.5, R: 0.5 } },
+  throw_in: { mask: 'full', blendIn: 0.1, blendOut: 0.15, pose: throwIn, mood: 'focused' },
+  hands_on_head: { mask: 'upper', blendIn: 0.1, blendOut: 0.15, pose: handsOnHead, mood: 'sad' },
+  clap: { mask: 'arms', blendIn: 0.1, blendOut: 0.15, pose: clap, mood: 'happy', curl: { L: 0.1, R: 0.1 } },
   // The stadium concert (game/concert) and the street bands (game/street).
   groove: { mask: 'full', blendIn: 0.15, blendOut: 0.15, pose: groove, mood: 'happy', loop: true },
   sing: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: sing, mood: 'happy', loop: true },
