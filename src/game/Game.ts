@@ -1106,7 +1106,6 @@ export class Game {
         if (Math.abs(a.y - g) > 1.2) return false;
         return !this.world.wet(a.x, a.z, 0);
       },
-      sound: (id, x, y, z, g, pitch = 1) => this.audio.play(id, x, y, z, g, pitch, 8, cam.position),
       inView: (x, feet, z) => {
         // Not from indoors (an interior, a landmark's rooms, a building prism): the street is out of sight.
         const c = cam.position;

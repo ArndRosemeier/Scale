@@ -11,6 +11,7 @@
  * the powers' `swarm` hook). The pack counts against the actor budget as one actor.
  */
 import type { HitEffect } from '../threats/brood/BroodSim';
+import { voice } from '../../ui/voices';
 
 export const DOGS = {
   /** Dogs in a pack. */
@@ -75,7 +76,6 @@ export interface PackWorld {
   /** Inside a building (a dog does not run through walls). */
   blocked?(x: number, z: number): boolean;
   hurtPlayer(dmg: number, fromX: number, fromZ: number, fromY: number): void;
-  sound(id: string, x: number, y: number, z: number, gain: number, pitch: number): void;
   random(): number;
 }
 
@@ -103,16 +103,17 @@ export class DogPack {
 
   /** The whistle: every dog still in it lunges at (tx, tz). */
   sic(tx: number, tz: number): number {
-    let n = 0;
+    let n = 0, first: Dog | null = null;
     for (const d of this.dogs) {
       if (d.state === 'down' || d.state === 'flee' || d.state === 'gone' || d.frozen > 0) continue;
+      first ??= d;
       d.state = 'lunge'; d.t = 0; d.landed = false;
       // Spread round the point (they come at it from their own sides).
       const ox = (this.w.random() - 0.5) * 1.2, oz = (this.w.random() - 0.5) * 1.2;
       d.lx = tx + ox; d.lz = tz + oz;
       n++;
     }
-    if (n) this.w.sound('dog_bark', tx, 0.6, tz, 0.7, 1.15);
+    if (first) voice(first, 'growl');
     return n;
   }
 
@@ -146,7 +147,7 @@ export class DogPack {
             if (d.biteT <= 0) {
               d.biteT = DOGS.biteEvery * (0.8 + this.w.random() * 0.4);
               this.w.hurtPlayer(DOGS.bite * (0.8 + this.w.random() * 0.4), d.x, d.z, d.y);
-              this.w.sound('dog_bark', d.x, 0.5, d.z, 0.6, 1.3 + this.w.random() * 0.2);
+              voice(d, 'growl', { pause: 1.5 });
               this.stats.bites++;
             }
             // Snapping round the hero's legs: circle a little.
@@ -185,7 +186,7 @@ export class DogPack {
     if (hunt && this.barkT <= 0) {
       this.barkT = 1.2 + this.w.random() * 1.5;
       const d = this.active[0];
-      if (d) this.w.sound('dog_bark', d.x, 0.5, d.z, 0.55, 0.9 + this.w.random() * 0.3);
+      if (d) voice(d, 'dog');
     }
   }
 
@@ -226,14 +227,14 @@ export class DogPack {
       if (d.state === 'gone' || d.state === 'down' || Math.hypot(d.x - x, d.z - z) > r + 0.4 || Math.abs(d.y + 0.4 - y) > r + 1.5) continue;
       out.push(d);
       if (effect === 'frost') { d.frozen = Math.max(d.frozen, dmg); continue; }
-      if (effect === 'fire' || effect === 'heat') { if (d.state !== 'flee') { this.flee(d); this.w.sound('dog_bark', d.x, 0.5, d.z, 0.7, 1.6); } continue; }
+      if (effect === 'fire' || effect === 'heat') { if (d.state !== 'flee') { this.flee(d); voice(d, 'yelp'); } continue; }
       d.hp -= Math.max(effect === 'wind' || effect === 'water' ? 0.5 : 0, dmg);
       const ax = d.x - x, az = d.z - z, al = Math.hypot(ax, az) || 1;
       d.vx += (ax / al) * fling * 1.5; d.vz += (az / al) * fling * 1.5;
       if (d.hp <= 0 || fling > 5) {
         d.state = 'down'; d.t = 0; d.hp = Math.max(d.hp, 0);
         this.stats.downed++;
-        this.w.sound('dog_bark', d.x, 0.4, d.z, 0.8, 1.8);
+        voice(d, 'yelp', { head: 0.5 });
       }
     }
     return out;

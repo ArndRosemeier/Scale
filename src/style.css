@@ -538,6 +538,8 @@ body.looking #crosshair { display: block; }
 .bark.behind::after { display: none; }
 .bark.cheer { background: rgba(255, 214, 92, 0.96); color: #2a1d00; }
 .bark.cheer::after { border-top-color: rgba(255, 214, 92, 0.96); }
+/* Animal calls (src/ui/voices.ts): a sound word, smaller and in italics. */
+.bark.animal { font-style: italic; font-weight: 500; font-size: 11px; padding: 3px 8px 4px; }
 
 /* Hidden admin console (src/ui/AdminConsole.ts, Ctrl+Shift+F12). */
 #admin { position: fixed; right: 16px; top: 64px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 220px); display: none; flex-direction: column; background: rgba(14, 18, 24, 0.94); border: 1px solid #2c3846; border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,0.45); color: #d8dee6; font: 12px/1.35 system-ui, sans-serif; z-index: 40; }

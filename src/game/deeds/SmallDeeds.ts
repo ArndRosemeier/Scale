@@ -21,6 +21,7 @@ import type { StreetProp } from '../../props/PropRenderer';
 import type { MapMarker } from '../../ui/map/GameMap';
 import { makeActor, attach, release, setState, play, goTo, stand, lookAt, followRoute } from '../../sim/actors/Actor';
 import { makeCat, makeDog, makeItem, makeGlint, type Critter } from './critters';
+import { voice } from '../../ui/voices';
 
 export type SmallDeedKind = 'cat' | 'dog' | 'wallet';
 
@@ -225,7 +226,7 @@ export class SmallDeeds {
       lookAt(oa, d.x, d.y, d.z);
       setState(oa, 'point');
       if (!oa.action) play(oa, d.rng.chance(0.6) ? 'gesture_point' : 'gesture_shrug', 2.4);
-      if (d.callT <= 0) { d.callT = 3 + d.rng.float() * 3.5; this.h.sound('cat_meow', d.x, d.y, d.z, 0.7, 0.9 + d.rng.float() * 0.25); }
+      if (d.callT <= 0) { d.callT = 3 + d.rng.float() * 3.5; voice(d, 'cat'); }
       // Climbing the trunk (E started it): up at a steady pace.
       if (this.climbT > 0) {
         this.climbT -= dt;
@@ -237,13 +238,13 @@ export class SmallDeeds {
       if (Math.hypot(p.x - d.x, p.z - d.z) < 1.6 && Math.abs(p.y + P.height * 0.6 - d.y) < 1.4) {
         d.phase = 'carried';
         this.climbT = 0;
-        this.h.sound('cat_meow', d.x, d.y, d.z, 0.9, 1.2);
+        voice(d, 'cat', { text: 'Mrrp!' });
       }
     } else if (d.phase === 'carried' || d.phase === 'set down') {
       stand(oa);
       lookAt(oa, d.phase === 'carried' ? p.x : d.x, d.phase === 'carried' ? p.y + 1.2 : d.y, d.phase === 'carried' ? p.z : d.z);
       oa.mood = 'surprised';
-      if (d.callT <= 0) { d.callT = 6 + d.rng.float() * 4; this.h.sound('cat_meow', p.x, p.y + 1.2, p.z, 0.4, 1.1); }
+      if (d.callT <= 0) { d.callT = 6 + d.rng.float() * 4; voice(p, 'cat', { head: P.height * 0.6 + 0.5 }); }
     }
   }
 
@@ -259,14 +260,14 @@ export class SmallDeeds {
       else if (d.turnT <= 0) { d.turnT = 1.5 + d.rng.float() * 2.5; d.heading += (d.rng.float() - 0.5) * 2.2; }
       d.speed += (sp - d.speed) * Math.min(1, dt * 3);
       this.dogMove(d, dt);
-      if (d.callT <= 0) { d.callT = 2 + d.rng.float() * 3; this.h.sound('dog_bark', d.x, d.y + 0.5, d.z, 0.75, 0.9 + d.rng.float() * 0.2); }
+      if (d.callT <= 0) { d.callT = 2 + d.rng.float() * 3; voice(d, 'dog'); }
       const od = Math.hypot(o.x - d.x, o.z - d.z);
       if (od > 3) goTo(oa, d.x, d.z, od > 12 ? 4.2 : 2.6); else stand(oa);
       setState(oa, 'run');
       oa.face = { x: d.x, y: d.y + 0.4, z: d.z };
       oa.memo.call = (oa.memo.call ?? 2) - dt;
-      if (oa.memo.call < 0) { oa.memo.call = 3.5 + d.rng.float() * 2; this.h.sound('shout_hey', o.x, o.y + 1.6, o.z, 0.55, 0.9 + d.rng.float() * 0.2); play(oa, 'gesture_point', 1.4); }
-      if (dp < 1.2) { d.phase = 'following'; this.h.sound('dog_bark', d.x, d.y + 0.5, d.z, 0.5, 1.15); }
+      if (oa.memo.call < 0) { oa.memo.call = 3.5 + d.rng.float() * 2; voice(o, 'dogOwner'); play(oa, 'gesture_point', 1.4); }
+      if (dp < 1.2) { d.phase = 'following'; voice(d, 'dog', { text: 'Arf!' }); }
     } else if (d.phase === 'following') {
       // Caught: trots at the player's heel; the owner waits, waving.
       this.dogFollow(d, p.x, p.z, dt, 1.1);
@@ -376,7 +377,7 @@ export class SmallDeeds {
       return true;
     }
     d.phase = 'set down';
-    if (d.kind === 'cat') this.h.sound('cat_meow', d.x, d.y, d.z, 0.6, 1.1);
+    if (d.kind === 'cat') voice(d, 'cat');
     return true;
   }
 
@@ -390,8 +391,8 @@ export class SmallDeeds {
     lookAt(oa, this.h.player.pos.x, this.h.player.pos.y + 1.5, this.h.player.pos.z);
     play(oa, d.kind === 'dog' ? 'pickup' : 'cheer', 2.4);
     if (d.kind === 'wallet') { oa.held = undefined; if (d.item) d.item.visible = false; }
-    if (d.kind === 'cat') this.h.sound('cat_meow', o.x, o.y + 1.2, o.z, 0.6, 1.25);
-    if (d.kind === 'dog') this.h.sound('dog_bark', d.x, d.y + 0.5, d.z, 0.6, 1.2);
+    if (d.kind === 'cat') voice(o, 'cat', { head: 1.6, text: 'Purr…' });
+    if (d.kind === 'dog') voice(d, 'dog', { text: 'Woof!' });
     this.h.reward(SMALL_DEEDS.karma[d.kind], SMALL_DEEDS.rep[d.kind], reason);
     this.stats.done++;
   }

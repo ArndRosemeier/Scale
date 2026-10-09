@@ -1,10 +1,8 @@
 // Procedural sounds for the street-crime layer (public/sounds/*.wav, 22.05 kHz mono, deterministic):
 //   siren_loop    police siren "wail" (seamless loop)          siren_short   a single whoop
 //   alarm_bell    shop alarm bell, hammer on a bell (loop)      cuffs         handcuffs ratcheting shut
-//   cat_meow      a cat's "mi-aow"                              dog_bark      two barks
-//   crowd_cheer   a small crowd cheering and clapping           shout_hey     a man shouting "hey!"
-//   cry_help      a woman crying "help!"
-// Voices are additive harmonics shaped by moving formants (gaussian resonances per harmonic).
+//   crowd_cheer   a small crowd cheering and clapping
+// (Cries, shouts and animal calls are speech bubbles now: src/ui/voices.ts.)
 import { writeFileSync } from 'node:fs';
 
 const SR = 22050;
@@ -146,64 +144,6 @@ function loopify(x, xf) {
   const b = bandpass(out, 4200, 0.7);
   for (let i = 0; i < N; i++) out[i] = b[i] * 1.2 + out[i] * 0.3;
   write('cuffs', out);
-}
-
-// ---------------------------------------------------------------- cat
-{
-  const N = Math.round(SR * 0.85);
-  const f0 = (t) => 470 + 260 * smooth(0.05, 0.3, t) - 200 * smooth(0.35, 0.8, t);
-  const fm = (t) => {
-    const a = smooth(0.08, 0.35, t), b = smooth(0.4, 0.8, t);
-    return [[lerp(lerp(450, 950, a), 600, b), 260, 1], [lerp(lerp(2300, 1500, a), 1000, b), 360, 0.6], [3200, 500, 0.25]];
-  };
-  const out = voice(N, f0, fm, (t) => smooth(0, 0.06, t) * (1 - smooth(0.6, 0.85, t)), 0.03, 0.6, 0.006);
-  write('cat_meow', out);
-}
-
-// ---------------------------------------------------------------- dog
-{
-  const N = Math.round(SR * 0.75);
-  const out = new Float32Array(N);
-  for (const [t0, p] of [[0.0, 1], [0.34, 0.92]]) {
-    const n = Math.round(SR * 0.22);
-    const v = voice(n, (t) => (420 - 220 * smooth(0, 0.2, t)) * p, () => [[620, 250, 1], [1350, 400, 0.7], [2600, 600, 0.3]], (t) => smooth(0, 0.012, t) * Math.exp(-t * 9), 0.35, 0.9, 0.02);
-    const i0 = Math.round(t0 * SR);
-    for (let i = 0; i < n && i0 + i < N; i++) out[i0 + i] += v[i];
-  }
-  write('dog_bark', out);
-}
-
-// ---------------------------------------------------------------- shouts
-{
-  const N = Math.round(SR * 0.55);
-  const f0 = (t) => 185 + 60 * smooth(0.05, 0.18, t) - 50 * smooth(0.25, 0.5, t);
-  const fm = (t) => {
-    const g = smooth(0.12, 0.42, t);
-    return [[lerp(620, 380, g), 120, 1], [lerp(1850, 2250, g), 180, 0.7], [2750, 260, 0.35]];
-  };
-  // "h" breath then the vowel.
-  const v = voice(N, f0, fm, (t) => smooth(0.05, 0.1, t) * (1 - smooth(0.36, 0.55, t)), 0.02, 0.5, 0.008);
-  const h = bandpass(Float32Array.from({ length: N }, () => rnd()), 1700, 0.6);
-  for (let i = 0; i < N; i++) { const t = i / SR; v[i] += h[i] * 0.5 * smooth(0, 0.02, t) * (1 - smooth(0.05, 0.11, t)); }
-  write('shout_hey', v);
-}
-{
-  const N = Math.round(SR * 0.72);
-  const f0 = (t) => 330 + 70 * smooth(0.05, 0.2, t) - 60 * smooth(0.3, 0.55, t);
-  const fm = (t) => {
-    // "he" → "l" → (p closure)
-    const l = smooth(0.28, 0.36, t);
-    return [[lerp(680, 380, l), 130, 1], [lerp(2050, 1150, l), 200, lerp(0.75, 0.4, l)], [3000, 300, 0.3]];
-  };
-  const v = voice(N, f0, fm, (t) => smooth(0.05, 0.1, t) * (1 - smooth(0.4, 0.47, t) * 0.92), 0.02, 0.5, 0.008);
-  const h = bandpass(Float32Array.from({ length: N }, () => rnd()), 1900, 0.6);
-  for (let i = 0; i < N; i++) {
-    const t = i / SR;
-    v[i] += h[i] * 0.45 * smooth(0, 0.02, t) * (1 - smooth(0.05, 0.11, t));
-    // The "p": a little burst after the closure.
-    if (t > 0.53 && t < 0.58) v[i] += rnd() * 0.25 * Math.exp(-(t - 0.53) * 80);
-  }
-  write('cry_help', v);
 }
 
 // ---------------------------------------------------------------- crowd cheer

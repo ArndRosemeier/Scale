@@ -1,8 +1,6 @@
 // Procedural ambience of a busy café terrace (public/sounds/*.wav, 22.05 kHz mono, deterministic):
-//   terrace_murmur   a seamless loop: a dozen voices talking at tables around the listener (indistinct
-//                    babble, men and women, near and farther off), now and then a laugh, cups set on
-//                    saucers, spoons and cutlery clinking
-// Voices are additive harmonics shaped by moving formants (as in synthCrime.mjs).
+//   terrace_clatter  a seamless loop: cups set on saucers, spoons and cutlery clinking over a soft room
+//                    tone (no voices: the guests' talk is in bubbles, procedural voices never made words)
 // Run: node tools/synthTerrace.mjs
 import { writeFileSync } from 'node:fs';
 
@@ -17,67 +15,6 @@ function lowpass(x, fc) {
   let y = 0;
   for (let i = 0; i < x.length; i++) { y += a * (x[i] - y); out[i] = y; }
   return out;
-}
-
-// Vowel formants [F1, F2, F3] (Hz), scaled for women / men.
-const VOWELS = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [300, 870, 2240], [660, 1720, 2410], [490, 1350, 1690]];
-
-/** One talker: syllables in phrases with pauses, a moving pitch contour. */
-function talker(N, female, level) {
-  const out = new Float32Array(N);
-  const f0b = female ? 190 + u01() * 50 : 100 + u01() * 35;
-  const fk = female ? 1.15 : 1.0;
-  // Syllable timeline.
-  const syl = [];
-  let t = u01() * 1.5;
-  while (t < N / SR) {
-    const phrase = 3 + Math.floor(u01() * 9);
-    for (let k = 0; k < phrase && t < N / SR; k++) {
-      const d = 0.11 + u01() * 0.16;
-      syl.push({ t0: t, d, v: VOWELS[Math.floor(u01() * VOWELS.length)], p: 1 + rnd() * 0.12 + (k === phrase - 1 ? -0.1 : 0.04) });
-      t += d + 0.02 + u01() * 0.05;
-    }
-    t += 0.35 + u01() * 1.6;
-  }
-  let ph = 0, si = 0;
-  for (let i = 0; i < N; i++) {
-    const tt = i / SR;
-    while (si < syl.length - 1 && tt > syl[si].t0 + syl[si].d) si++;
-    const sy = syl[si];
-    const x = (tt - sy.t0) / sy.d;
-    const env = x < 0 || x > 1 ? 0 : Math.sin(Math.PI * x) ** 0.7;
-    if (env <= 0) continue;
-    const f0 = f0b * sy.p * (1 + 0.03 * Math.sin(tt * 3.1));
-    ph += (2 * Math.PI * f0) / SR;
-    let v = 0;
-    for (let k = 1; k * f0 < 3800 && k < 30; k++) {
-      const hf = k * f0;
-      let g = 0;
-      for (let j = 0; j < 3; j++) { const ff = sy.v[j] * fk, bw = 90 + j * 60; const dd = (hf - ff) / bw; g += Math.exp(-0.5 * dd * dd) * (j === 0 ? 1 : 0.6 / j); }
-      v += Math.sin(ph * k) * g / Math.sqrt(k);
-    }
-    out[i] = v * env * level;
-  }
-  return out;
-}
-
-/** A short laugh: "ha-ha-ha" bursts. */
-function laugh(out, at, female, level) {
-  const f0b = female ? 260 : 150;
-  for (let k = 0; k < 4 + Math.floor(u01() * 3); k++) {
-    const t0 = at + k * 0.17, n = Math.round(0.12 * SR);
-    let ph = 0;
-    for (let i = 0; i < n; i++) {
-      const j = Math.round(t0 * SR) + i;
-      if (j >= out.length) return;
-      const x = i / n, env = Math.sin(Math.PI * x) ** 0.6;
-      const f0 = f0b * (1.1 - k * 0.04);
-      ph += (2 * Math.PI * f0) / SR;
-      let v = rnd() * 0.25;
-      for (let h = 1; h < 14; h++) { const dd = (h * f0 - 750) / 260; v += Math.sin(ph * h) * Math.exp(-0.5 * dd * dd) / Math.sqrt(h); }
-      out[j] += v * env * level;
-    }
-  }
 }
 
 /** Porcelain / metal clink: inharmonic partials with fast decays. */
@@ -116,23 +53,14 @@ function write(name, out) {
   console.log(`${name}.wav`, (buf.length / 1024).toFixed(0), 'KB');
 }
 
-// ---------------------------------------------------------------- terrace murmur
+// ---------------------------------------------------------------- terrace clatter
 {
   const L = 12, XF = 1.5, N = Math.round(SR * (L + XF));
   const mix = new Float32Array(N);
-  // Talkers at the tables: the nearer ones brighter and louder, the farther ones dull.
-  for (let k = 0; k < 12; k++) {
-    const female = k % 2 === 0;
-    const near = k < 4;
-    let v = talker(N, female, near ? 0.55 : 0.32);
-    v = lowpass(v, near ? 3000 : 1300 + u01() * 600);
-    for (let i = 0; i < N; i++) mix[i] += v[i];
-  }
-  for (let k = 0; k < 3; k++) laugh(mix, 1 + u01() * (L - 2), k !== 1, 0.5);
   // Cups on saucers, spoons, cutlery.
   for (let t = 0.3; t < L + XF - 0.3; t += 0.25 + u01() * 1.2) clink(mix, t, u01() < 0.45 ? 'cup' : u01() < 0.5 ? 'spoon' : 'fork', 0.08 + u01() * 0.16);
-  // A soft bed of room tone (distant voices, street).
+  // A soft bed of room tone (the street).
   let b = 0;
   for (let i = 0; i < N; i++) { b += 0.02 * (rnd() - b); mix[i] += b * 0.6; }
-  write('terrace_murmur', loopify(mix, XF));
+  write('terrace_clatter', loopify(lowpass(mix, 9000), XF));
 }

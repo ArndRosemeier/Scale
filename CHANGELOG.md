@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.175 — 2026-10-09
+
+- **Voices are speech bubbles now, not synthesized sounds.** A mugging or bag-snatch victim shows "Help!" in a bubble over their head instead of the robotic cry. If they are out of sight, the cry appears low on the screen with the direction it came from ("Help me!" (from behind you)). The same goes for people trapped under rubble, a shopkeeper shouting after a robber, officers warning a gunman or you, the mad bomber, a lost dog's owner calling, people stumbling ("Oof!", "Whoops!"), a villain's charge yell and the beast master's whistle, and the call to your sidekick.
+- **Animals speak in small italic bubbles.** Cats ("Meow!"), dogs and attack dogs ("Woof!", "Grrr!", "Yip!"), pigeons, gulls, crows and sewer rats show their call as a bubble instead of a sound. Bird calls come less often so the sky doesn't fill with bubbles.
+- Protesters keep their drum, but the chanting is only in their red bubbles. Booing is in their bubbles too. The café terrace loop keeps its cups and cutlery, without the babble.
+- Kept as sounds: screams, crowd cheers, crowd murmur ambience, monsters, slimes and the alien teens' robot giggle, since none of these try to be words.
 ## 0.174 — 2026-10-09
 
 - **An animated title.** On the start screen the letters of SCALE rise from the street like towers going up. Their faces are lit facades glowing warm towards the bottom, like the sunset city behind them, and a red beacon blinks on the L. Every 16 seconds a golden glint runs across the word and it swells for a moment, like the size power, with a flash of light along its base. Plain CSS, no shaders. With reduced motion switched on, the title stands still.

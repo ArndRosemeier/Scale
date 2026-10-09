@@ -98,8 +98,8 @@ export class Terraces {
   private wallT = 0;
   private hours = 0;
   private now = 0;
-  private murmur: Loop | null = null;
-  private murmurTry = 0;
+  private clatter: Loop | null = null;
+  private clatterTry = 0;
   stats = { places: 0, tables: 0, guests: 0, seated: 0, waiters: 0, evicted: 0 };
   /** Rain 0..1 (render/Weather): the terraces empty (guests go inside), and fill again once it is dry. */
   rain = 0;
@@ -498,7 +498,7 @@ export class Terraces {
     }
   }
 
-  /** Murmur and cutlery of the nearest busy terrace. */
+  /** Cups and cutlery of the nearest busy terrace (the talk is in bubbles). */
   private sound(px: number, pz: number, dt: number): void {
     if (!this.d.loop) return;
     let best: Place | null = null, bd = 45, n = 0;
@@ -509,16 +509,16 @@ export class Terraces {
       for (const t of p.tables) for (const a of t.guests) if (this.guests.get(a)?.phase === Phase.Seated) k++;
       if (k >= 3) { best = p; bd = d; n = k; }
     }
-    if (!this.murmur) {
+    if (!this.clatter) {
       if (!best) return;
-      this.murmurTry -= dt;
-      if (this.murmurTry > 0) return;
-      this.murmurTry = 2;
-      this.murmur = this.d.loop('terrace_murmur', 6);
-      if (!this.murmur) return;
+      this.clatterTry -= dt;
+      if (this.clatterTry > 0) return;
+      this.clatterTry = 2;
+      this.clatter = this.d.loop('terrace_clatter', 6);
+      if (!this.clatter) return;
     }
-    if (best) this.murmur.set(best.cx, this.d.terrain.height(best.cx, best.cz) + 1.3, best.cz, Math.min(1, 0.25 + n / 14));
-    else this.murmur.set(px, 0, pz, 0);
+    if (best) this.clatter.set(best.cx, this.d.terrain.height(best.cx, best.cz) + 1.3, best.cz, Math.min(1, 0.25 + n / 14));
+    else this.clatter.set(px, 0, pz, 0);
   }
 
   /** Terrace furniture props of the loaded plans (debug / tests): [table, chair, parasol, awning] counts. */
