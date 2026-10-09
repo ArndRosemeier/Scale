@@ -251,7 +251,7 @@ function clothes(A: Area, r: Rng): Item[] {
       kids: [{ kind: 'clothesStack', du: 0, dv: 0, w: 1.2, d: 0.6, h: 0.8, color: r.pick(FABRIC), onTop: true }],
       score: (c, f) => Math.min(f.doorDist(c.x, c.z), 4) * 0.3,
     }),
-    ...many(Math.min(6, area / 16), { kind: 'shopShelf', at: 'wall', w: 1.8, d: 0.5, h: 2.1, color: fixture, front: 0.9, score: plainWall }),
+    ...many(Math.min(6, area / 16), { kind: 'clothesShelf', at: 'wall', w: 1.8, d: 0.5, h: 2.1, color: fixture, front: 0.9, score: plainWall }),
     plant(1.3), plant(1.1),
     picture([0.75, 0.8, 0.85], 0.7), picture(r.pick(FABRIC), 0.7),
   ];

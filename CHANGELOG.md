@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.231 — 2026-10-09
+
+- **Clothes shops' wall shelves hold folded clothes**, not books. The shelves along the walls of a clothes shop now carry stacks of folded clothes in many colours instead of the general store's goods, which looked like rows of books.
+
 ## 0.230 — 2026-10-09
 
 - **The Twist has an inside.** Walk in through the door at the foot of the twisted tower into a lobby with a reception desk, a lounge corner and, in a big one, a café. Stairs in the middle climb from storey to storey. Each storey is turned a little further than the one below, like the tower, and the stairs are laid out so they still meet. Up there are about three more storeys (two in towers with very tall storeys), each with rooms round a stair hall that runs out to the glass at the back: a café storey, a capsule hotel with sleeping pods and lounges, and a storey of studios and a control room. Glass rails run round each stairwell. The blocks above stay solid.
