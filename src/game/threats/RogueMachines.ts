@@ -15,6 +15,8 @@
  * itself), so a robot the player broke is the player's credit, and every harm the machines do
  * goes on the ledger with cause 'threat' (Consequences), never the player's.
  */
+import { actorFaction } from '../friendFoe';
+import type { FactionId } from '../factions/relations';
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import type { PedAgent } from '../../sim/Pedestrians';
@@ -516,7 +518,7 @@ export class RogueMachines implements MalfunctionCtl {
   private pickTarget(m: Rogue, x: number, y: number, z: number, player: PlayerProbe, cars: boolean, see = ROGUE.seePeople): void {
     const g = this.g;
     const pd = player.active && player.height > 0.3 ? Math.hypot(player.x - x, player.z - z) : Infinity;
-    let playerOk = pd < (m.kind === 'drone' ? ROGUE.drone.see : ROGUE.seePlayer) && (m.kind === 'drone' || Math.abs(player.y - y) < 2.5) && !g.player.flying;
+    let playerOk = pd < (m.kind === 'drone' ? ROGUE.drone.see : ROGUE.seePlayer) && (m.kind === 'drone' || Math.abs(player.y - y) < 2.5) && !g.player.flying && this.hates('hero');
     // Not all of them at once: a few go for the player, the rest for whoever is about.
     if (playerOk && m.tgt?.kind !== 'player') {
       let n = 0;
@@ -548,7 +550,12 @@ export class RogueMachines implements MalfunctionCtl {
   }
 
   private validPed(a: PedAgent, y: number, flying: boolean): boolean {
-    return a.alive && !a.inside && !a.ragdoll && a.state !== PState.Down && (flying || Math.abs(a.y - y) < 2);
+    return a.alive && !a.inside && !a.ragdoll && a.state !== PState.Down && (flying || Math.abs(a.y - y) < 2) && this.hates(actorFaction(a.actor));
+  }
+
+  /** Do machines gone rogue go for this faction (factions/relations.ts; no table in headless tools: yes)? */
+  private hates(f: FactionId): boolean {
+    return this.g.relations?.hostile('machines', f) ?? true;
   }
 
   private tgtPos(t: Tgt, player: PlayerProbe): { x: number; y: number; z: number } | null {

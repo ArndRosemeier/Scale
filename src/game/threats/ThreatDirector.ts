@@ -404,11 +404,11 @@ export class ThreatDirector {
     this.markT = 0.5;
     const list: MapMarker[] = [];
     const p = this.g.player.pos;
-    for (const t of AwakenedTree.grove()) list.push({ x: t.x, z: t.z, color: '#5a7d3a', kind: 'dot', title: 'A gnarled old tree — it walked here' });
-    for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
+    for (const t of AwakenedTree.grove()) list.push({ x: t.x, z: t.z, color: '#5a7d3a', kind: 'dot', place: true, title: 'A gnarled old tree — it walked here' });
+    for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', place: true, title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
     for (const ev of this.events) {
-      if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', title: 'Fallen creature' });
-      if (ev instanceof AwakenedTree && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#5a7d3a', kind: 'dot', title: 'A gnarled old tree — it walked here' });
+      if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen creature' });
+      if (ev instanceof AwakenedTree && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#5a7d3a', kind: 'dot', place: true, title: 'A gnarled old tree — it walked here' });
       // (A rampaging player is the incident: no alert marker on themselves.)
       if (!ev.active || ev.archetype === 'rampage') continue;
       list.push({ x: ev.x, z: ev.z, color: '#ff3b30', kind: 'alert', title: (ev as ThreatEvent).title ?? ( ev.archetype === 'robots' ? 'Rogue robots — machines attacking people' : ev.archetype === 'strider' ? 'Giant creature — stay clear or fight it' : ev.archetype === 'murk' ? 'Creatures from below — attacking people' : ev.archetype === 'brood' ? 'A swarm from the sewers — creatures attacking people' : 'Threat'), always: true });

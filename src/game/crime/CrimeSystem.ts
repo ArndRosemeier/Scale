@@ -11,6 +11,7 @@
  *                                      bystander hurt), its reputation, the crowd cheers
  *   returning the stolen bag / wallet  8 karma, +2 rep
  */
+import { menaceNear, defaultRelations, driftGroups, feud, FEUD, saveGroupRelations, restoreGroupRelations, type Menace } from '../factions/relations';
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import { aimDir } from '../aimRay';
@@ -67,7 +68,7 @@ import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, 
 import { planBosses, bossLabel, bossPowers, heatOf, raise, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, bossOpChance, NOTORIETY, BOSS, BOSS_OP, BOSS_KINDS, type Boss, type Heat } from '../factions/Bosses';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
-import { ARCHETYPES, CITY_GROUPS } from '../factions/archetypes';
+import { ARCHETYPES, CITY_GROUPS, type ArchetypeId } from '../factions/archetypes';
 import { siteToWorld } from '../../plan/landmarks';
 import { RState } from '../../future/Robots';
 import { factionOutfit, lieutenantOutfit, bossOutfit, skeletonOutfit, GRAVE_GREEN } from '../factions/outfits';
@@ -359,6 +360,7 @@ export class CrimeSystem {
       combat: this.combat,
       hurtPlayer: (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy),
       callPolice: (c, delay) => this.police.call(c, delay * responseFactor(g.city.presenceAt(c.x, c.z))),
+      menace: (c, x, y, z) => this.menace(c, x, y, z),
       random: Math.random,
       shops: (rMin, rMax) => this.shops(rMin, rMax),
       walls: (rMin, rMax) => this.shops(rMin, rMax, true),
@@ -670,6 +672,15 @@ export class CrimeSystem {
   /** The group behind a crime, or null. */
   factionOf(c: Crime): Faction | null { return c.faction < 0 ? null : this.factions.factions[c.faction] ?? null; }
 
+  /** A threat the crime's faction (its group, or the street's crooks) is hostile to, near enough to run from. */
+  private menace(c: Crime, x: number, y: number, z: number): Menace | null {
+    const g = this.g;
+    const a = g.threats?.actors() ?? [], b = g.slimeRealm?.actors() ?? [];
+    if (!a.length && !b.length) return null;
+    const from = this.factionOf(c)?.archetype ?? 'crooks';
+    return menaceNear(g.relations, from, x, y, z, b.length ? [...a, ...b] : a, (m) => g.underground.sameSide(x, y + 1, z, m.x, m.y, m.z));
+  }
+
   /** Delivery robots standing free on the pavement near the player: a point beside one (hack it there). */
   private machines(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {
     const p = this.g.player.pos, W = this.g.world, out: { x: number; z: number; nx: number; nz: number; d: number }[] = [];
@@ -809,12 +820,13 @@ export class CrimeSystem {
   }
 
   /** Turf, tags and hideouts for a save (SaveData.factions). */
-  saveFactions(): { turf: unknown; tags: Tag[]; hideouts: unknown[]; bosses: unknown[] } {
-    return { turf: saveFactions(this.factions, this.factionStats), tags: this.graffiti.tags.map((t) => ({ ...t })), hideouts: saveHideouts(this.factions, this.hideouts), bosses: saveBosses(this.factions, this.bosses, this.notoriety) };
+  saveFactions(): { turf: unknown; tags: Tag[]; hideouts: unknown[]; bosses: unknown[]; relations: Record<string, number> } {
+    return { turf: saveFactions(this.factions, this.factionStats), tags: this.graffiti.tags.map((t) => ({ ...t })), hideouts: saveHideouts(this.factions, this.hideouts), bosses: saveBosses(this.factions, this.bosses, this.notoriety), relations: saveGroupRelations(this.g.relations, this.relBase) };
   }
 
   /** Put saved turf, tags and hideouts back (null: the seeded turf, no tags, hideouts not yet found). */
-  restoreFactions(d: { turf: unknown; tags: unknown; hideouts?: unknown; bosses?: unknown } | null): void {
+  restoreFactions(d: { turf: unknown; tags: unknown; hideouts?: unknown; bosses?: unknown; relations?: unknown } | null): void {
+    restoreGroupRelations(this.g.relations, this.relBase, d?.relations ?? null);
     const stats = restoreFactions(this.factions, d?.turf ?? null);
     this.factionStats = { stopped: 0, succeeded: 0, tags: 0, lost: 0, gained: 0, brawls: 0, busts: 0, drifted: 0, ...stats };
     for (const gd of this.guards.values()) gd.standDown();
@@ -1262,12 +1274,33 @@ export class CrimeSystem {
     this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> got away — and will remember you`, 'warn');
   }
 
+  /** The seeded faction table: where the groups' feelings for each other drift back to. */
+  private readonly relBase = defaultRelations();
+
+  /**
+   * Game hours for the groups' feelings for each other (factions/relations.ts driftGroups): two groups
+   * both hunting the hero draw together (rivals may call a truce: no more brawls), time pulls every
+   * pair back towards the seeded table.
+   */
+  private groupHours(hours: number): void {
+    const F = this.factions.factions;
+    const byArch = new Map(F.map((f) => [f.archetype, f] as const));
+    const hunting = (a: ArchetypeId) => { const f = byArch.get(a); return !!f && heatOf(this.notoriety[f.id] ?? 0) === 'hunted'; };
+    for (const x of driftGroups(this.g.relations, this.relBase, F.map((f) => f.archetype), hunting, hours)) {
+      const A = byArch.get(x.a)!, B = byArch.get(x.b)!;
+      const name = (f: Faction) => `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>`;
+      this.g.powerHud.toast(x.war ? `The truce is over: ${name(A)} and ${name(B)} are at war again` : `${name(A)} and ${name(B)} have called a truce — against you`, 'warn', 6000);
+    }
+  }
+
   /** Once per game hour: notoriety fades; a boss whose time is up breaks out; a collapse ends. */
   private bossHours(): void {
     const now = this.g.sky.hoursAbs, h = Math.floor(now);
     if (this.heatHour < 0 || h < this.heatHour) { this.heatHour = h; return; }
     if (h === this.heatHour) return;
-    fade(this.notoriety, Math.min(48, h - this.heatHour));
+    const hours = Math.min(48, h - this.heatHour);
+    this.groupHours(hours);
+    fade(this.notoriety, hours);
     this.heatHour = h;
     for (const B of this.bosses) {
       const f = this.factions.factions[B.faction];
@@ -1606,7 +1639,7 @@ export class CrimeSystem {
         this.factionStats.brawls++;
         if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 140) g.powerHud.toast(`<b style="color:${win.palette.map}">${win.emblem} ${win.name}</b> beat ${lose ? inSentence(lose) : 'their rivals'} in a street fight`, 'warn');
         this.turf(c, win, SHIFT.brawlWon);
-        if (lose) this.turf(c, lose, SHIFT.brawlLost);
+        if (lose) { this.turf(c, lose, SHIFT.brawlLost); feud(g.relations, win.archetype, lose.archetype, FEUD.brawl); }
         break;
       }
       case 'subdued':
@@ -1994,7 +2027,7 @@ export class CrimeSystem {
     for (const L of this.loots) {
       if (L.loot.carrier !== 'player') continue;
       const T = this.returnTarget(L);
-      list.push({ x: T.x, z: T.z, color: '#4cd964', kind: 'alert', title: 'The stolen goods go back here (E)', always: true });
+      list.push({ x: T.x, z: T.z, color: '#4cd964', kind: 'alert', place: true, title: 'The stolen goods go back here (E)', always: true });
     }
     const key = list.map((m) => `${m.kind[0]}${Math.round(m.x / 2)},${Math.round(m.z / 2)}`).join(';');
     if (key !== this.markKey) { this.markKey = key; this.g.map.setMarkers('crime', list); }

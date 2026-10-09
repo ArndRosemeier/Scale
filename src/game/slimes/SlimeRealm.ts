@@ -100,6 +100,7 @@ export class SlimeRealm {
         sound: (id, x, y, z, gain, pitch = 1) => g.audio.play(id, x, y, z, gain, pitch, 5, g.renderer.camera.position),
         ground: (x, z, y) => g.collision.groundAt(x, z, y, 0.6),
         trust: () => this.trust.value,
+        murkHostile: (to) => g.relations.hostile('murk', to),
         clear: (ax, ay, az, bx, by, bz) => { const f = this.field!; return f.near(ax, ay, az) && f.air(ax, ay, az) ? f.lineClear(ax, ay, az, bx, by, bz, 0.3) : g.sight.clear(ax, ay, az, bx, by, bz, 0.3); },
         onKill: (b, byPlayer) => this.killed(b, byPlayer),
         onLumenHurt: (b, byPlayer) => this.lumenHurt(b, byPlayer),

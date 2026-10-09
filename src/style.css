@@ -624,6 +624,7 @@ body.looking #crosshair { display: block; }
 #casualties svg { width: 14px; height: 14px; fill: currentColor; }
 #casualties .ev { color: #9ecbff; } #casualties .in { color: #ff8a73; } #casualties .tr { color: #ffc35a; } #casualties .re { color: #7fe39a; }
 #casualties b { color: #eef1f4; font-weight: 700; }
+#compass .poi.hit { pointer-events: auto; cursor: pointer; }
 #compass .poi.zone i { width: 11px; height: 11px; font: 800 8px/11px system-ui, sans-serif; color: #1a1408; text-align: center; font-style: normal; border-radius: 2px; }
 
 /* "Your graphics card is not used" hint (ui/GpuHint). */

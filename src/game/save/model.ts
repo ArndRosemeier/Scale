@@ -151,7 +151,7 @@ export interface SaveData {
    * SavedFactions, sanitised by `restoreFactions`), the tags on the walls and the hideouts (Hideouts
    * SavedHideout, sanitised by `restoreHideouts`; older saves have none: not found yet).
    */
-  factions: { turf: unknown; tags: unknown[]; hideouts?: unknown[]; bosses?: unknown[] } | null;
+  factions: { turf: unknown; tags: unknown[]; hideouts?: unknown[]; bosses?: unknown[]; relations?: unknown } | null;
   /**
    * The people the hero met and what they remember (game/people memory SavedPeople, sanitised by
    * `restorePeople`); older saves have none (null: the browser's own record for the city stays).
@@ -317,6 +317,8 @@ export function parseSave(input: string | unknown): SaveData {
       tags: (Array.isArray(obj(o.factions).tags) ? (obj(o.factions).tags as unknown[]) : []).slice(-64),
       hideouts: (Array.isArray(obj(o.factions).hideouts) ? (obj(o.factions).hideouts as unknown[]) : []).slice(0, 16),
       bosses: (Array.isArray(obj(o.factions).bosses) ? (obj(o.factions).bosses as unknown[]) : []).slice(0, 16),
+      // (The groups' feelings for each other: sanitised by factions/relations restoreGroupRelations.)
+      ...(obj(o.factions).relations && typeof obj(o.factions).relations === 'object' ? { relations: obj(o.factions).relations } : {}),
     } : null,
     ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
     ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
