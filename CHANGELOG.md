@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.174 — 2026-10-09
+
+- **An animated title.** On the start screen the letters of SCALE rise from the street like towers going up. Their faces are lit facades glowing warm towards the bottom, like the sunset city behind them, and a red beacon blinks on the L. Every 16 seconds a golden glint runs across the word and it swells for a moment, like the size power, with a flash of light along its base. Plain CSS, no shaders. With reduced motion switched on, the title stands still.
+
 ## 0.173 — 2026-10-09
 
 - **The starship's rooms are planned and furnished like every other interior.** Round the great hall the rooms are no longer one wedge each with props at fixed spots. The ring behind each gallery is divided by the shared room splitter: quarters and labs one wedge wide, messes and lounges two, one control room per deck. Each room is furnished by the shared filler: sleep pods head to a wall, lockers and racks along the walls, consoles with their stools, holo tables and mess tables with stools in the free floor. Doorways and the way in from the gallery stay clear.
