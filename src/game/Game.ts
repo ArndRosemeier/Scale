@@ -298,6 +298,7 @@ export class Game {
     this.streamer = new CityStreamer(macro, this.pool, tex);
     this.renderer.scene.add(this.streamer.root);
     this.streamer.prepare = (o) => this.renderer.compileAsync(o);
+    this.streamer.primer.enabled = !this.renderer.webgpu;
     this.attachGraphics();
     this.world = new WorldIndex(this.terrain, (id) => macro.cells[id].poly);
     this.world.bridges = bridgeProfiles(macro, this.terrain);

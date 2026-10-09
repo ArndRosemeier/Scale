@@ -196,6 +196,17 @@ export class Destruction {
     return mesh;
   }
 
+  /**
+   * One building's outer shell exactly as the worker built it into the cell's facade mesh (same
+   * builder, origin and element numbers), for cutting falling parts out of.
+   */
+  shellOf(ref: BuildingRef, facade: THREE.Object3D): THREE.BufferGeometry | null {
+    const mb = new MeshBuilder(facadeSpecs());
+    mb.setOrigin(facade.position.x, facade.position.y, facade.position.z);
+    buildBuildingShell(mb, ref.desc, ref.elemBase, this.terrain, 0, 'shell');
+    return mb.empty ? null : toGeometry(mb.build());
+  }
+
   /** Rubble height at (x,z) (for walking on it), 0 if none. */
   rubbleHeight(x: number, z: number): number {
     let h = -Infinity;
@@ -593,9 +604,12 @@ export class Destruction {
       for (let k = fl.panelStart; k < fl.panelStart + fl.panelCount; k++) set.add(L.panels[k].e);
     }
     set.add(L.roof);
-    // Extract geometry of those elements (shell, and the slabs if they were built).
+    // Extract geometry of those elements (shell, and the slabs if they were built). The cell's
+    // facade mesh keeps no CPU copy (it is GPU-only, see CityStreamer.onCell): the shell is built
+    // again for this one building, the same way the worker built it into the cell.
     const slabs = this.ensureSlabs(ref);
-    const parts = [extractElements(facade.geometry, set), slabs ? extractElements(slabs.geometry, set) : null].filter((g): g is THREE.BufferGeometry => !!g);
+    const shell = this.shellOf(ref, facade);
+    const parts = [shell ? extractElements(shell, set) : null, slabs ? extractElements(slabs.geometry, set) : null].filter((g): g is THREE.BufferGeometry => !!g);
     if (!parts.length) return;
     const geo = parts.length > 1 ? mergeGeometries(parts) ?? parts[0] : parts[0];
     const b = this.blame.get(ref);

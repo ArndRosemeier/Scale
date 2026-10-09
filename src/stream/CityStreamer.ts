@@ -16,6 +16,7 @@ import type { WreckGrid } from '../build/landmarkDice';
 import type { Landmark } from '../plan/landmarks';
 import { createGroundMaterial, createTerrainMaterial, createWaterMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
+import { releaseAfterUpload, UploadPrimer } from '../render/gpuOnly';
 
 export function toGeometry(m: MeshData): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
@@ -28,13 +29,6 @@ export function toGeometry(m: MeshData): THREE.BufferGeometry {
   g.boundingBox = new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1));
   g.boundingSphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2);
   return g;
-}
-
-/** Free the CPU copy of a geometry once it is on the GPU (bounds are precomputed). */
-export function releaseAfterUpload(g: THREE.BufferGeometry): void {
-  const drop = function (this: THREE.BufferAttribute) { (this as unknown as { array: unknown }).array = null; };
-  for (const k in g.attributes) (g.attributes[k] as THREE.BufferAttribute).onUpload(drop);
-  g.index?.onUpload(drop);
 }
 
 /** Bytes of a geometry's buffers (before upload). */
@@ -105,6 +99,8 @@ export class CityStreamer {
   memoryBudget = 700e6;
   /** Facade LOD switch distance multiplier (graphics settings). */
   lodScale = 1;
+  /** Uploads the cell meshes that are hidden at first (their CPU copies go once on the GPU). */
+  readonly primer = new UploadPrimer();
   /** Bytes held by loaded cells. */
   bytesLoaded = 0;
   frame = 0;
@@ -215,6 +211,12 @@ export class CityStreamer {
   }
 
   update(dt: number, cam: THREE.Vector3): void {
+    this.primer.settle();
+    this.updateCells(dt, cam);
+    this.primer.prime((m) => { const id = m.parent?.userData.cell as number | undefined; return id !== undefined && this.cells.get(id)?.group === m.parent; });
+  }
+
+  private updateCells(dt: number, cam: THREE.Vector3): void {
     this.t += dt;
     this.frame++;
     if (this.t - this.lastUpdate < 0.25) return;
@@ -319,10 +321,14 @@ export class CityStreamer {
     cs.lod1 = lod;
     cs.bytes = geoBytes(ground.geometry) * 2 + geoBytes(facade.geometry) * 2 + geoBytes(lod.geometry) + data.byteLength;
     this.bytesLoaded += cs.bytes;
-    // Ground and LOD facades are never read back on the CPU: keep only the GPU copy. (The
-    // detailed facade stays: collapses extract their geometry from it.)
+    // Cell meshes are never read back on the CPU: keep only the GPU copy. (Collapses rebuild the
+    // one building's shell to cut the falling part from, Destruction.shellOf; the detailed facade's
+    // CPU copy was about half of all city memory.)
     releaseAfterUpload(ground.geometry);
+    releaseAfterUpload(facade.geometry);
     releaseAfterUpload(lod.geometry);
+    this.primer.add(facade);
+    this.primer.add(lod);
     cs.group.add(ground, facade, lod);
     cs.group.userData.cell = cs.id;
     this.root.add(cs.group);

@@ -23,6 +23,7 @@ import type { BuildingDesc } from '../src/plan/building';
 import { pointInPoly, distPointPolyEdge } from '../src/core/geom2';
 import { buildBuildingShell, facadeSpecs } from '../src/build/buildingShell';
 import { MeshBuilder } from '../src/build/meshBuilder';
+import { extractElements } from '../src/destruction/extract';
 import { Population } from '../src/sim/Population';
 import { routeNearest } from '../src/sim/Pedestrians';
 import { planFloor, planLift, planStair, coreFits } from '../src/interior/InteriorGen';
@@ -294,6 +295,52 @@ section('macro plan and buildings', async () => { for (const [seed, size] of [[1
   }
   console.log(`seed ${seed} size ${size}: ${macro.cells.length} cells, ${macro.metroStations.length} stations, ${buildings} buildings checked in ${(performance.now() - t0).toFixed(0)} ms`);
 } });
+
+// Collapses cut the falling part out of one building's shell rebuilt on the main thread
+// (Destruction.shellOf: the cell's facade mesh keeps no CPU copy). That rebuild must give exactly
+// the triangles the worker put into the cell's facade for the building's elements.
+section('collapse shell = cell facade', async () => {
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.4 }));
+  const macro = buildMacroPlan(terrain);
+  const geo = (m: MeshData) => {
+    const g = new THREE.BufferGeometry();
+    for (const k in m.attrs) g.setAttribute(k, new THREE.BufferAttribute(m.attrs[k].array, m.attrs[k].size, m.attrs[k].normalized));
+    g.setIndex(new THREE.BufferAttribute(m.index, 1));
+    return g;
+  };
+  let buildings = 0, bad = 0;
+  for (const cell of [...macro.cells].sort((p, q) => Math.hypot(...p.centroid) - Math.hypot(...q.centroid)).slice(0, 4)) {
+    const plan = planCell(macro, cell, terrain);
+    const origin: [number, number, number] = [Math.round(cell.centroid[0]), 0, Math.round(cell.centroid[1])];
+    const fb = new MeshBuilder(facadeSpecs());
+    fb.setOrigin(...origin);
+    const ranges: [number, number][] = [];
+    let elem = 0;
+    for (const b of plan.buildings) { const n = buildBuildingShell(fb, b, elem, terrain, 0, 'shell').elemCount; ranges.push([elem, n]); elem += n; }
+    if (fb.empty) continue;
+    const cellGeo = geo(fb.build());
+    plan.buildings.forEach((b, i) => {
+      const [base, n] = ranges[i];
+      if (!n) return;
+      const one = new MeshBuilder(facadeSpecs());
+      one.setOrigin(...origin);
+      buildBuildingShell(one, b, base, terrain, 0, 'shell');
+      const set = new Set<number>();
+      for (let e = base; e < base + n; e++) set.add(e);
+      const a = extractElements(cellGeo, set), c = one.empty ? null : extractElements(geo(one.build()), set);
+      buildings++;
+      if (!a || !c) { if (a !== c) bad++; return; }
+      let same = a.index!.count === c.index!.count;
+      for (const k in a.attributes) {
+        const x = a.getAttribute(k).array, y = c.getAttribute(k)?.array;
+        if (!y || x.length !== y.length) { same = false; break; }
+        for (let j = 0; j < x.length && same; j++) if (Math.abs(x[j] - y[j]) > 1e-4) same = false;
+      }
+      if (!same) bad++;
+    });
+  }
+  check(buildings > 20 && bad === 0, `rebuilt shells match the cell facade (${buildings} buildings, ${bad} differ)`);
+});
 
 // Landmark sites are never walled in by buildings: from the middle of each side, walking straight
 // out reaches a sidewalk or street before any building (seed 873738 at full size had its starship,
