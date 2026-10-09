@@ -181,6 +181,7 @@ export class Pedestrians {
   private freePending: number[] = [];
   /** Filled slots of `pending` (the rest wait for their heap entry, or for reuse). */
   private live = 0;
+  private forgetT = 0;
   private scanQueue: BuildingRef[] = [];
   private lastScan = -100;
   private head = new Int32Array(HASH).fill(-1);
@@ -211,8 +212,13 @@ export class Pedestrians {
       this.lastScan = hours;
       const refs = this.world.buildingsIn(px - SCAN_R, pz - SCAN_R, px + SCAN_R, pz + SCAN_R);
       this.scanQueue = refs.filter((r) => (this.scanned.get(r) ?? -Infinity) - hours < 0.25);
-      this.forgetFar(px, pz);
       this.scanQueue.sort((a, b) => dist2(a, px, pz) - dist2(b, px, pz));
+    }
+    // (On its own clock: scanning waits while a backlog is worked off, or while game time stands still.)
+    this.forgetT += dt;
+    if (this.forgetT > 1) {
+      this.forgetT = 0;
+      this.forgetFar(px, pz);
     }
     // Budgeted per citizen (a tower can house hundreds), then spawning (path finding) per agent.
     const t0 = performance.now();
