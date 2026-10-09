@@ -2,6 +2,25 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.182 — 2026-10-09
+
+- **New music throughout the game: Arnd's Lyria pieces, in the style of the title theme.** The old background music, built from short AI layers, is gone. Every mood now plays a real piece:
+  - Calm: a light orchestral day theme and a nocturnal night theme, with two of each taking turns. There is a dark piece under the city (sewers, metro) and a soaring one for fast flight. Calm music still comes in episodes: one whole piece, then silence until the next.
+  - Danger: a chase loop for tension, which switches to a harder version when the danger is very close. There is a huge battle loop for giant monsters and full fights. These loop without a seam for as long as the fight lasts.
+  - After a fight with casualties, a cello elegy plays.
+- **New moods.**
+  - A villain theme plays when a named boss's operation or a cult's rite is close by, instead of the chase music.
+  - The war under the city gets its own slimy battle music.
+  - Out past the city's edge by day, a pastoral piece plays.
+  - Inside a landmark (cathedral, museum, town hall, starship …), a quiet piece for the grand halls plays.
+- **Cues.**
+  - A short victory fanfare plays when a threat you were fighting is beaten near you. The fight music stops at once instead of holding on.
+  - A tender piece plays while the drones carry you to the hospital.
+  - A somber one plays under the game over screen.
+  - The origin scene has its own score now, lined up so its impact lands with the star's. It plays out into the first seconds of the game, and is cut short if you skip the scene.
+- **The busker's guitar, the boombox and the statue's fanfare** are real recordings now (Lyria) instead of synthesized sounds.
+- Long pieces stream as they play, so they cost no memory. Only the danger loops are decoded, and only when they are needed. `tools/music/build_tracks.py` builds everything from the source tracks: it trims them, evens out their loudness, finds a loop point that falls on a bar, and cuts the stings. Dev: `dev.music.cue('victory')`.
+
 ## 0.181 — 2026-10-09
 
 - **The botanical glasshouse can be walked into.** Go up the steps and through the door in the front: inside are gravel paths between green beds, a fountain in the middle of the dome with a ring path round it, and palms, broadleaf trees and ferns lining the paths, with flower beds along the glass and benches to sit on. The wings or side halls each get a planting of their own: a desert hall with cacti and rocks, or a flower hall with beds and small trees. The palm house's dome opens into its wings, and the three parallel halls are joined by arches. Plants are only as tall as each hall allows.
