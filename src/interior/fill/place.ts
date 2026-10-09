@@ -227,9 +227,10 @@ export class Filler {
     const out: Cand[] = [];
     const widths = it.widths ?? [it.w];
     if (it.at === 'wall') {
-      const off = it.d / 2 + (it.hung ? HUNG_GAP : WALL_GAP);
+      const off0 = it.d / 2 + (it.hung ? HUNG_GAP : WALL_GAP);
       for (const e of this.A.edges) {
         if (e.kind === 'open') continue;
+        const off = off0 + (e.kind === 'inner' ? this.A.innerGap ?? 0 : 0);
         if ((it.hung || isTall(it)) && e.kind === 'window') continue;
         const yaw = Math.atan2(e.nx, e.nz);
         for (const w of widths) {
@@ -266,7 +267,7 @@ export class Filler {
       // Onto the wall face behind it (a companion's offset is only roughly there).
       const e = this.wallBehind(x, z, yaw, p.d);
       if (!e) return null;
-      const t = HUNG_GAP + p.d / 2 - ((x - e.ax) * e.nx + (z - e.az) * e.nz);
+      const t = HUNG_GAP + (e.kind === 'inner' ? this.A.innerGap ?? 0 : 0) + p.d / 2 - ((x - e.ax) * e.nx + (z - e.az) * e.nz);
       x += e.nx * t; z += e.nz * t;
     }
     const f: Furn = { kind: p.kind, x, z, yaw, w: p.w, d: p.d, h: p.h, color: p.color, use: p.use, game: p.game };

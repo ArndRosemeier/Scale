@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.235 — 2026-10-09
+
+- **Less flickering inside the museum** (and the other walk-in landmarks). Four causes: the paintings in the museum (and anything hung in the airport terminal) were sunk into the thick inner walls with the canvas exactly level with the wall's face, so they were cut up by sawtooth stripes or hidden; every doorway's light frame stood exactly level with the wall's own edge, so the two surfaces fought over the jamb and it shimmered as you moved; the glass of display cases (and sleeping pods, holo tables and the great lens) sat exactly on its plinth, so the plinth's top flickered through the glass; and only the four nearest room lights are lit, which switched on and off hard as you walked past the museum's many lamps, so walls and floors blinked. Pieces along those thicker walls now stand off their face as on any other wall, frames now reach a centimetre into the doorway, glass stands half a centimetre above its plinth, and a light now fades out before another one takes its place. The great hall's lamps of the classical museum hang low enough to reach the floor.
+- `tools/zfight.ts <kind>` lists where a landmark's surfaces lie in the same plane and overlap.
+
 ## 0.234 — 2026-10-09
 
 - **The admin console (Ctrl+Shift+F12) can take you anywhere worth a look.** New "Go to" sections at the top list what this city has: every landmark (onto its square, facing it) and, for the ones you can walk into (museum, town hall, cathedral, fortress, airport terminal, glasshouse, towers, the starship and the Twist), a button that takes you in through the door and then room by room, one room per press. Also the next cemetery, arcade or clothes shop anywhere in the city (you are flown there and put inside once its block has loaded), the fitting mirror, the concert stage, pit and stands, towns, villages, hamlets and farms in the countryside, each metro station platform, the nearest manhole, every kind of sewer and metro side room, the slime colonies and the halls, gardens, trenches and hearts of their deep realms, the gang hideouts, and whatever threat or crime is going on right now. A button for several places of a kind steps to the next one each press and says which one it is ("3/7"). On the command line: `dev.goto.list()` and `dev.goto.go(n or 'name')`.
