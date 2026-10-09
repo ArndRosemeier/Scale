@@ -239,7 +239,7 @@ export class HelpDialog {
     const base = import.meta.env.BASE_URL;
     this.body.manual.innerHTML = `
       <iframe class="help-iframe" title="Player's manual" src="${base}manual/manual.html"></iframe>
-      <div class="help-foot"><span class="sub">The manual describes version 0.167; the Keys and Powers tabs are always current.</span>
+      <div class="help-foot"><span class="sub">The manual describes version 0.224; the Keys and Powers tabs are always current.</span>
         <a class="hm-pdf" href="${base}manual/Scale-Manual.pdf" target="_blank" rel="noopener">Open as PDF</a></div>`;
     // While the manual has the keyboard (after a click into it): Esc and the help key still close.
     const frame = this.body.manual.querySelector<HTMLIFrameElement>('iframe')!;

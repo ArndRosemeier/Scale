@@ -13,6 +13,12 @@
  * The crime phase extends this with threat colours ("con") and health: see `TargetInfo`.
  * Big threats (a monster: ThreatActor) are a target kind of their own, `threat`, with body zones and
  * weak spots (TargetInfo.zones), targetable from much further off.
+ *
+ * Swarm creatures (the brood's critters: ThreatActor with `swarm`) are `threat` targets too, so every
+ * power and the friend/foe sense treat them as monsters, but at the normal range and without body
+ * parts. Only the picking paths (Tab, clicks, map markers) list them (KindMask.swarm): area effects
+ * reach the swarm through ThreatDirector.broodHit already. Tab steps through the critters nearest
+ * the crosshair; when the targeted one dies the target moves on to the nearest one left close by.
  */
 import * as THREE from 'three';
 import type { Pedestrians, PedAgent } from '../sim/Pedestrians';
@@ -47,6 +53,12 @@ export type Target =
 
 /** Big threats are targetable this many times further than people and cars. */
 export const THREAT_RANGE = 3;
+/** A big threat (not a swarm creature): targetable from THREAT_RANGE times further, body parts with Tab. */
+export const bigThreat = (t: Target): t is { kind: 'threat'; obj: ThreatActor } => t.kind === 'threat' && !t.obj.swarm;
+/** Range factor of a target: THREAT_RANGE for a big threat, else 1. */
+const rangeK = (t: Target) => (bigThreat(t) ? THREAT_RANGE : 1);
+/** The targeted swarm creature died: the next one within this (m) of it becomes the target. */
+const SWARM_NEXT_R = 12;
 
 /** What a ray met first. */
 export interface ProbeHit {
@@ -87,6 +99,8 @@ export interface TargetWorld {
   camera: THREE.PerspectiveCamera;
   /** Big threat bodies (the threat director's actors). */
   threats?: () => ThreatActor[];
+  /** Swarm creatures out near a point (ThreatDirector.swarmActors). */
+  swarm?: (x: number, z: number, r: number, fn: (a: ThreatActor) => void) => void;
   /** The game's one line of sight (combat/sight.ts: caves, tunnels, buildings with their holes, landmarks, terrain, cars). */
   sight?: { clear(ax: number, ay: number, az: number, bx: number, by: number, bz: number, pad?: number, skip?: object | null): boolean };
   /** Underground (the deep realm's caves, the sewers, metro and rooms): first wall along a ray / a clear line (null: the point is not underground, the street rules apply). */
@@ -228,6 +242,7 @@ export class Targeting {
       case 'person': { const a = t.obj; return a.state === 5 ? out.set(a.vx, a.vy, a.vz) : out.set(-Math.sin(a.heading) * a.speed, 0, -Math.cos(a.heading) * a.speed); }
       case 'car': { const v = t.obj; return out.set(-Math.sin(v.yaw) * v.speed, 0, -Math.cos(v.yaw) * v.speed); }
       case 'drone': return out.set(t.obj.vx, t.obj.vy, t.obj.vz);
+      case 'threat': { const o = t.obj as ThreatActor & { vx?: number; vz?: number }; return out.set(o.swarm ? o.vx ?? 0 : 0, 0, o.swarm ? o.vz ?? 0 : 0); }
       default: return out.set(0, 0, 0);
     }
   }
@@ -258,7 +273,7 @@ export class Targeting {
   padOf(t: Target): number {
     switch (t.kind) {
       case 'car': return 0.5;
-      case 'threat': { const z = this.zoneOf(t.obj) ?? t.obj.zones.find((zn) => zn.weak && zn.exposed); return z ? z.r * 0.8 : 3; }
+      case 'threat': { if (t.obj.swarm) return Math.min(0.5, t.obj.height); const z = this.zoneOf(t.obj) ?? t.obj.zones.find((zn) => zn.weak && zn.exposed); return z ? z.r * 0.8 : 3; }
       case 'prop': return Math.max(0.3, Math.min(1.5, t.obj.radius));
       default: return 0.45;
     }
@@ -351,6 +366,7 @@ export class Targeting {
     if (kinds.drone) for (const o of w.future.drones.list) if (o.alive && Math.abs(o.x - x) < r && Math.abs(o.z - z) < r) fn({ kind: 'drone', obj: o });
     if (kinds.prop) w.props.query(x, z, r, (p) => { if (!p.broken) fn({ kind: 'prop', obj: p }); });
     // Big threats: their reach is their size.
+    if (kinds.threat && kinds.swarm && w.swarm) w.swarm(x, z, r, (a) => fn({ kind: 'threat', obj: a }));
     if (kinds.threat && w.threats) for (const a of w.threats()) if (Math.abs(a.x - x) < r * THREAT_RANGE + a.height * 2 && Math.abs(a.z - z) < r * THREAT_RANGE + a.height * 2) fn({ kind: 'threat', obj: a });
   }
   private nb: PedAgent[] = [];
@@ -552,7 +568,7 @@ export class Targeting {
     }
     const t = this.current;
     if (!t) return;
-    if (!this.alive(t)) { this.set(null); return; }
+    if (!this.alive(t)) { this.set(t.kind === 'threat' && t.obj.swarm ? this.nextCritter(t.obj) : null); return; }
     // Despawned people / cars leave their arrays without a flag: check now and then.
     this.checkT -= dt;
     if (this.checkT <= 0) {
@@ -561,7 +577,7 @@ export class Targeting {
     }
     const k = Math.max(1, Math.sqrt(this.w.player.k));
     const c = this.centre(t, _v);
-    if (c.distanceTo(this.w.player.pos) > TARGET.range * k * 1.6 * (t.kind === 'threat' ? THREAT_RANGE : 1)) { this.set(null); return; }
+    if (c.distanceTo(this.w.player.pos) > TARGET.range * k * 1.6 * rangeK(t)) { this.set(null); return; }
     this.unseen = this.onScreen(c) ? 0 : this.unseen + dt;
     if (this.unseen > TARGET.lostAfter) this.set(null);
   }
@@ -574,6 +590,25 @@ export class Targeting {
     this.unseen = 0;
     this.checkT = 0.5;
     this.onChange?.(t);
+  }
+
+  /**
+   * The swarm creature to go on with when the targeted one died: the nearest one left within
+   * SWARM_NEXT_R of it, on screen and in range (null: none, the target is cleared).
+   */
+  private nextCritter(dead: ThreatActor): Target | null {
+    const p = this.w.player, cam = this.w.camera;
+    const range = TARGET.range * Math.max(1, Math.sqrt(p.k));
+    let best: Target | null = null, bd = SWARM_NEXT_R;
+    this.each(dead.x, dead.z, SWARM_NEXT_R, (t) => {
+      if (t.kind !== 'threat' || !t.obj.swarm || t.obj === dead) return;
+      const d = Math.hypot(t.obj.x - dead.x, t.obj.z - dead.z);
+      if (d >= bd) return;
+      const c = this.centre(t, _v);
+      if (c.distanceTo(p.pos) > range || !onScreen(vecToScreen(c, cam, _s))) return;
+      bd = d; best = t;
+    }, SWARM_ONLY);
+    return best;
   }
 
   /** Is the target still in its world list (people and cars despawn silently)? */
@@ -604,11 +639,11 @@ export class Targeting {
     _ray.setFromCamera(_ndc.set(nx, ny), cam);
     const o = _ray.ray.origin, d = _ray.ray.direction;
     const reach = range * (this.w.threats?.().length ? THREAT_RANGE : 1) + cam.position.distanceTo(p.pos);
-    const h = this.probe(o.x, o.y, o.z, d.x, d.y, d.z, reach);
+    const h = this.probe(o.x, o.y, o.z, d.x, d.y, d.z, reach, null, PICK_ALL);
     if (h.what === 'target' && h.target) {
       const t = h.target;
       const far = this.centre(t, _v).distanceTo(p.pos);
-      if (far <= (t.kind === 'prop' ? propRange : t.kind === 'threat' ? range * THREAT_RANGE : range)) return { ...t } as Target;
+      if (far <= (t.kind === 'prop' ? propRange : range * rangeK(t))) return { ...t } as Target;
     }
     // Near miss: closest projected centre within PICK_PX, in line of sight.
     const el = document.getElementById('view');
@@ -623,7 +658,7 @@ export class Targeting {
       if (px >= bestPx) return;
       if (!this.sees(cam.position, t, c)) return;
       bestPx = px; best = { ...t } as Target;
-    });
+    }, PICK_ALL);
     return best;
   }
 
@@ -638,10 +673,10 @@ export class Targeting {
     let best: Target | null = null, bestS = Infinity;
     this.each(x, z, r, (t) => {
       const c = this.centre(t, _v);
-      const reach = t.kind === 'threat' ? Math.max(r, t.obj.height) : r;
+      const reach = bigThreat(t) ? Math.max(r, t.obj.height) : r;
       const d = Math.hypot(c.x - x, c.z - z);
       if (d > reach) return;
-      if (c.distanceTo(p.pos) > range * (t.kind === 'threat' ? THREAT_RANGE : 1)) return;
+      if (c.distanceTo(p.pos) > range * rangeK(t)) return;
       const s = d / reach + (this.priority?.(t) ?? 0);
       if (s < bestS) { bestS = s; best = { ...t } as Target; }
     }, PICK_KINDS);
@@ -650,7 +685,7 @@ export class Targeting {
 
   /** Tab (dir 1) / Shift+Tab (-1). On a giant creature: its body parts in turn (weak spots first), then the whole body again; Esc lets go. */
   tab(dir: number): void {
-    if (this.current?.kind === 'threat') {
+    if (this.current && bigThreat(this.current)) {
       const Z = this.current.obj.zones;
       const order = [...Z.filter((z) => z.weak), ...Z.filter((z) => !z.weak)].map((z) => z.id);
       const i = this.zone ? order.indexOf(this.zone) : -1;
@@ -687,14 +722,14 @@ export class Targeting {
     this.each(p.pos.x, p.pos.z, range, (t) => {
       const c = this.centre(t, _v);
       const d = c.distanceTo(cam.position);
-      if (d > (t.kind === 'prop' ? propRange : t.kind === 'threat' ? range * THREAT_RANGE : range)) return;
+      if (d > (t.kind === 'prop' ? propRange : range * rangeK(t))) return;
       if (!onScreen(vecToScreen(c, cam, _s), 0.95)) return;
       // Screen distance from the crosshair (aspect-corrected), with a slight preference for the
       // living and moving over furniture.
       const sx = _s.x * aspect, sy = _s.y;
       const score = Math.hypot(sx, sy) + (t.kind === 'prop' ? 0.12 : 0) + d * 0.0006 + (this.priority?.(t) ?? 0);
       list.push({ t, score });
-    });
+    }, PICK_ALL);
     list.sort((a, b) => a.score - b.score);
     // Line of sight for the best few (a coarse ray against buildings and terrain).
     const out: Target[] = [];
@@ -713,7 +748,7 @@ export class Targeting {
    */
   aimPoint(t: Target, fromX: number, fromY: number, fromZ: number, speed: number, out: THREE.Vector3): THREE.Vector3 {
     // A big threat: an exposed weak spot if there is one (the soft lock goes for it).
-    if (t.kind === 'threat') {
+    if (bigThreat(t)) {
       const picked = this.zoneOf(t.obj);
       if (picked) return out.set(picked.x, picked.y, picked.z);
       const w = t.obj.zones.find((z) => z.weak && z.exposed);
@@ -730,6 +765,10 @@ export class Targeting {
 }
 
 export const ALL_KINDS = { person: true, car: true, robot: true, drone: true, prop: true, threat: true } as const;
-export type KindMask = { person?: boolean; car?: boolean; robot?: boolean; drone?: boolean; prop?: boolean; threat?: boolean };
+/** swarm: the swarm creatures too (with threat), only where the player picks a target. */
+export type KindMask = { person?: boolean; car?: boolean; robot?: boolean; drone?: boolean; prop?: boolean; threat?: boolean; swarm?: boolean };
+/** What Tab and a click can pick: everything, swarm creatures included. */
+const PICK_ALL: KindMask = { ...ALL_KINDS, swarm: true };
 /** What a map / compass marker can stand for (not street furniture). */
-const PICK_KINDS: KindMask = { person: true, car: true, robot: true, drone: true, threat: true };
+const PICK_KINDS: KindMask = { person: true, car: true, robot: true, drone: true, threat: true, swarm: true };
+const SWARM_ONLY: KindMask = { threat: true, swarm: true };

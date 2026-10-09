@@ -74,6 +74,11 @@ export interface ThreatActor {
   conStrength(): number;
   /** The player's own body (a rampaging giant: the police's and the army's target, never the player's). */
   readonly self?: boolean;
+  /**
+   * One small creature of a swarm (a brood critter, brood/CritterActor): targetable like a monster, but
+   * not a big threat: no body parts to pick, normal targeting range, never in ThreatDirector.actors().
+   */
+  readonly swarm?: boolean;
   /** Its faction (factions/relations.ts); unset: 'monsters'. */
   readonly faction?: FactionId;
   /**

@@ -2,9 +2,25 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.223 — 2026-10-09
+## 0.227 — 2026-10-09
 
 - **No more looking through the world at the slime tunnels' entrances.** Where a slime colony's road leaves its hidden chamber, the wall had a square hole cut into it, but the rock tunnel behind is round and starts a little way past the wall, so its corners and edges showed the city and the sky. The opening is now a round arch that sits inside the tunnel, with a short stone lining reaching out into the rock, for every entrance. The glowing wall markings and cracks no longer hang in the opening either.
+
+## 0.226 — 2026-10-09
+
+- **Super speed runs more smoothly.** Racing through the city at super speed looked like a string of small jumps with brief stops in between, even at a good frame rate. The running itself was even; the hitches came from work the game did for the places raced past: every building door passed opened its interior (a storey or two furnished each time, for a fraction of a second nobody saw), and every 40 m the sewer tunnels ahead were built in one go. Now, while you race, interiors only open for a building you are inside (doors open up again as soon as you slow down), and the sewers are built after you slow down, one piece per frame, nearest first (still at once when you are down there). The same goes for a fast low flight. Frame times also follow the screen's own clock instead of the moment the code happened to run, which removes a small jitter that was most visible at high speed. Afterimages share one material per copy instead of one per body part.
+
+## 0.225 — 2026-10-09
+
+- **Helping the Lumen gets you somewhere again.** Each colony's war goes on while you are away, and left alone the Murk win it within a day or two of game time: they take the Lumen's trench and then their Hall. From then on nothing you did there counted. Murk killed with no Lumen within sight gave no trust, there were no sentries left in the trench to see them, and the line only moved back after a won raid. Raids come hours apart on the game clock, which runs at real speed by default, so in practice they never came. Now every Murk you kill below ground earns trust. Clearing the Murk out of the Hall wins it back (+10 trust), and clearing them out of the trench, or off the gallery's lip, gives the trench back to the Lumen (+8): their sentries return and the trench war starts again. If you stay at the Front, the Murk storm it within a few minutes, so you can help hold the line (+8). Small gains no longer pass silently: they are added up and shown with your trust and the next step, for example "The Lumen trust you more (+2.4) — you fought the Murk · trust 14, welcome at 30".
+
+## 0.224 — 2026-10-09
+
+- **The player's manual is up to date again (0.224).** New in it: the animated title and title music, first person view, autorun pace, clicking minimap and compass markers to target, speech bubbles, the freeze log (Shift+F9), how ranks change the powers (area damage, shockwave reach, held-back punches), the new focus beam and seeker orb looks, the VELA concert at the stadium every evening, street bands, the landmarks you can now walk into (museum, glasshouse, airport terminal, observation decks, lighthouse, castle keep), furnished homes, offices, shops and cafés, crooks running from monsters, truces between rival organisations, the new big threats (giant worm, Leviathan, Roc, giant mech), and the new music. New pictures of the concert, the glasshouse, the airport terminal and the Roc. Help > Manual, the start screen's Manual button and the PDF all show the new version.
+
+## 0.223 — 2026-10-09
+
+- **Swarm creatures can be targeted.** The brood's creatures (the swarm that pours out of the manholes) were never offered as targets, so Tab, clicking on one, clicking the swarm's marker on the minimap or compass, and the phase pulse, focus beam and seeker orb all passed them by. Each creature is now a target like a monster: Tab steps through the ones nearest your crosshair (a big threat still comes first, then the creatures, then hostile people), a click picks the one under the cursor, the swarm's map marker picks a creature near it, and the single-target powers hit the one you picked (a small one dies to any of them; frost freezes it so the next hit shatters it). The friend/foe sense counts them as foes. When the creature you target dies, the target moves on to the nearest one still close by, so you can keep firing. They are not big threats: no body parts to pick with Tab, the normal targeting range, and no airstrike on them.
 
 ## 0.222 — 2026-10-09
 

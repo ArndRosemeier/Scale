@@ -695,14 +695,18 @@ export class Game {
     if (document.hidden) {
       if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
       if (!this.timerPending) { this.timerPending = true; hiddenTimer(() => { this.timerPending = false; this.loop(); }); }
-    } else if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = 0; this.loop(); });
+    } else if (!this.raf) this.raf = requestAnimationFrame((ts) => { this.raf = 0; this.loop(ts); });
   };
 
-  private loop = () => {
+  /** `ts`: the animation frame's time (ms), when there is one. */
+  private loop = (ts?: number) => {
     if (!this.running) return;
     // Keep simulating in hidden tabs (timer fallback) so background testing works.
     this.schedule();
-    const raw = this.clock.update().getDelta();
+    // The frame's own time, not the moment this code happens to run: that wobbles by a few
+    // milliseconds from frame to frame, and at super speed (40+ m/s) every millisecond is
+    // several centimetres of jitter in the world sliding past.
+    const raw = Math.max(0, this.clock.update(ts).getDelta());
     hitch.beginFrame();
     const t0 = performance.now();
     // Hidden tabs are throttled to ~1 Hz: catch up in substeps so the world keeps real time.
@@ -765,6 +769,15 @@ export class Game {
     hitch.section(name, ms);
   }
 
+  /**
+   * The hero races past (super speed, a fast low flight): what would only be seen on stopping
+   * (interiors behind doors, the sewers below) is not built meanwhile; it hitched every few frames.
+   */
+  private get passing(): boolean {
+    const P = this.player;
+    return !this.freeCam && Math.hypot(P.vel.x, P.vel.z) > 9 * Math.sqrt(P.k);
+  }
+
   private tick(dt: number, render: boolean): void {
     if (this.input.hit('F8')) this.freeCam = !this.freeCam;
     this.T('player', () => {
@@ -816,7 +829,7 @@ export class Game {
     this.T('react', () => this.reactions.update(dt, this.player));
     this.T('terraces', () => this.terraces.update(dt, this.sky.hoursAbs, pp.x, pp.z));
     this.T('halls', () => this.halls.update(dt, this.sky.hoursAbs, pp.x, pp.z, pp.y));
-    this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs));
+    this.T('interiors', () => this.interiors.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z, this.player.height, this.sky.hoursAbs, this.passing));
     // Cars only brake for a player on the street (not one under it in the sewer or metro).
     this.traffic.player = this.freeCam || this.underground.feetUnder(this.player.pos.x, this.player.pos.y, this.player.pos.z) ? null : { x: this.player.pos.x, z: this.player.pos.z, r: this.player.radius, h: this.player.height };
     this.T('traffic', () => this.traffic.update(dt, this.sky.hoursAbs, pp.x, pp.z));
@@ -834,7 +847,7 @@ export class Game {
     this.T('army', () => { this.hostile.update(dt); this.forces.update(dt); });
     this.T('aftermath', () => this.aftermath.update(dt));
     this.T('underground', () => {
-      this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height);
+      this.underground.update(dt, this.traffic.time, this.renderer.camera, this.player.pos, this.player.height, this.passing);
       this.stationLife?.update(dt, this.player.pos.x, this.player.pos.y, this.player.pos.z);
       this.rideFx(dt);
       this.updateHoles();
@@ -1068,6 +1081,7 @@ export class Game {
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
       threats: () => { const a = this.threats?.actors() ?? []; const b = this.slimeRealm?.actors() ?? []; return b.length ? [...a, ...b] : a; },
+      swarm: (x, z, r, fn) => this.threats?.swarmActors(x, z, r, fn),
       sight: this.sight,
       under: {
         ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT) ?? this.underground.tunnelRay(ox, oy, oz, dx, dy, dz, maxT),

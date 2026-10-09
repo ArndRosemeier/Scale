@@ -43,6 +43,13 @@ import { v3lerp, type Vec3 } from '../core/math';
 const BUILD_R = 380;
 /** Side rooms and hidden chambers are built within these distances (m). */
 const ROOM_R = 200, COLONY_R = 150;
+/**
+ * New pieces wait in a queue built nearest first, a little each frame (BUILD_BUDGET ms, at least
+ * one piece): a fast runner or flyer crossed a 40 m step every second and the whole ring of new
+ * pieces was built in one frame, a hitch each time. Only down here (and at loading) the pieces
+ * closer than BUILD_NOW (m) are built at once.
+ */
+const BUILD_NOW = 90, BUILD_BUDGET = 1.5;
 /** Cell size (m) of the volume index. */
 const GRID = 32;
 const NONE: { tubes: Tube[]; boxes: Box[] } = { tubes: [], boxes: [] };
@@ -89,6 +96,10 @@ export class Underground {
   private stationLights: THREE.PointLight[] = [];
   private sewerTubes: Tube[] = [];
   private lastBuildPos = new THREE.Vector3(1e9, 0, 0);
+  /** Wanted pieces not built yet (see BUILD_NOW), by key: where they are and how to build them. */
+  private pendingBuild = new Map<string, { x: number; z: number; build: () => void }>();
+  /** buildNear has run once (the first time, at loading, the near pieces are built at once). */
+  private planned = false;
   /** Hole rectangles (cx, cz, ux, uz, hw, hl) for the terrain shader / ground queries. */
   holes: number[] = [];
   openManholes: { x: number; z: number }[] = [];
@@ -737,13 +748,21 @@ export class Underground {
   private metroRate = 1;
   private metroLag = 0;
 
-  update(dt: number, time: number, cam: THREE.Camera, player: THREE.Vector3, playerH: number): void {
-    // Build geometry near the player (and the camera).
-    if (cam.position.distanceTo(this.lastBuildPos) > 40) {
-      this.lastBuildPos.copy(cam.position);
-      this.buildNear(cam.position.x, cam.position.z);
-    }
+  /** `passing`: the player races by up top (super speed, a low flight): nothing new is built down here meanwhile. */
+  update(dt: number, time: number, cam: THREE.Camera, player: THREE.Vector3, playerH: number, passing = false): void {
     const under = this.feetUnder(player.x, player.y, player.z);
+    // Build geometry near the player (and the camera). (A sewer chunk takes milliseconds to build:
+    // racing over the city, the ring of new ones ahead was a hitch every 40 m, for tunnels nobody
+    // saw. They are built once the runner slows down, nearest first.)
+    const below = under || this.isUnder(cam.position.x, cam.position.y, cam.position.z);
+    if (!passing || below) {
+      if (cam.position.distanceTo(this.lastBuildPos) > 40) {
+        this.lastBuildPos.copy(cam.position);
+        this.buildNear(cam.position.x, cam.position.z, below || !this.planned);
+        this.planned = true;
+      }
+      this.pumpBuilds(cam.position.x, cam.position.z);
+    }
     // Headlamp underground (sewers are dark).
     const inStation = under && this.boxes.some((b) => b.kind === 'station' && boxAt(b, player.x, player.y + 0.5, player.z, 2));
     // Side rooms: animation, sounds; the slimes.
@@ -799,8 +818,30 @@ export class Underground {
     void playerH; void G;
   }
 
-  private buildNear(x: number, z: number): void {
+  /** Queued pieces (buildNear), nearest first, within the frame's budget (at least one). */
+  private pumpBuilds(x: number, z: number): void {
+    const t0 = performance.now();
+    while (this.pendingBuild.size) {
+      let best = '', bd = Infinity;
+      for (const [k, p] of this.pendingBuild) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd) { bd = d; best = k; } }
+      const job = this.pendingBuild.get(best)!;
+      this.pendingBuild.delete(best);
+      if (!this.built.has(best)) { job.build(); this.group.add(this.built.get(best)!); }
+      if (performance.now() - t0 > BUILD_BUDGET) break;
+    }
+  }
+
+  /** `now`: pieces within BUILD_NOW are built at once (down here, or at loading), the rest queued. */
+  private buildNear(x: number, z: number, now: boolean): void {
     const want = new Set<string>();
+    this.pendingBuild.clear();
+    // Built now when close, else queued (pumpBuilds); `build` files the piece under its key.
+    const need = (key: string, px: number, pz: number, build: () => void) => {
+      want.add(key);
+      if (this.built.has(key)) return;
+      if (now && Math.hypot(px - x, pz - z) < BUILD_NOW) build();
+      else this.pendingBuild.set(key, { x: px, z: pz, build });
+    };
     // Tube segments (chunks of ~60 m).
     this.tubes.forEach((t, ti) => {
       if (t.kind === 'crawl') return;
@@ -813,48 +854,46 @@ export class Underground {
         const mx = (P[i * 3] + P[j * 3]) / 2, mz = (P[i * 3 + 2] + P[j * 3 + 2]) / 2;
         if (Math.hypot(mx - x, mz - z) > BUILD_R) continue;
         const key = `t${ti}:${i}`;
-        want.add(key);
-        if (!this.built.has(key)) this.built.set(key, this.buildTubeChunk(t, i, j));
+        need(key, mx, mz, () => this.built.set(key, this.buildTubeChunk(t, i, j)));
       }
     });
     this.boxes.forEach((b, bi) => {
       if (b.kind !== 'station' || Math.hypot(b.cx - x, b.cz - z) > BUILD_R + 60) return;
       const key = `b${bi}`;
-      want.add(key);
-      if (!this.built.has(key)) this.built.set(key, this.buildStation(b, bi));
+      need(key, b.cx, b.cz, () => this.built.set(key, this.buildStation(b, bi)));
     });
     // Side rooms (a lone one may sit in a room with a trail), crawls and chambers.
     for (const r of this.rooms.rooms) {
       if (Math.abs(r.ox - x) > ROOM_R || Math.abs(r.oz - z) > ROOM_R || Math.hypot(r.ox - x, r.oz - z) > ROOM_R) continue;
       const key = `r${r.id}`;
-      want.add(key);
-      if (this.built.has(key)) continue;
-      const [lx, lz] = [r.ox + r.nx * 3, r.oz + r.nz * 3];
-      const look = r.kind === 'hideout' ? this.hideoutLook?.(lx, lz, r.seed) ?? null : null;
-      const br = buildRoom(r, this.mats, look ? { accent: look.accent } : {});
-      if (look) for (const t of br.tags) {
-        const tag = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 0.9), look.tag);
-        tag.position.set(t.x + t.nx * 0.03, t.y, t.z + t.nz * 0.03);
-        tag.rotation.y = Math.atan2(t.nx, t.nz);
-        tag.renderOrder = 2;
-        br.obj.add(tag);
-      }
-      this.builtRooms.set(key, br);
-      this.built.set(key, br.obj);
-      if (br.scout) this.slimes.setScout(key, br.scout, r.seed);
+      need(key, r.ox, r.oz, () => {
+        const [lx, lz] = [r.ox + r.nx * 3, r.oz + r.nz * 3];
+        const look = r.kind === 'hideout' ? this.hideoutLook?.(lx, lz, r.seed) ?? null : null;
+        const br = buildRoom(r, this.mats, look ? { accent: look.accent } : {});
+        if (look) for (const t of br.tags) {
+          const tag = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 0.9), look.tag);
+          tag.position.set(t.x + t.nx * 0.03, t.y, t.z + t.nz * 0.03);
+          tag.rotation.y = Math.atan2(t.nx, t.nz);
+          tag.renderOrder = 2;
+          br.obj.add(tag);
+        }
+        this.builtRooms.set(key, br);
+        this.built.set(key, br.obj);
+        if (br.scout) this.slimes.setScout(key, br.scout, r.seed);
+      });
     }
     for (const c of this.rooms.colonies) {
       if (Math.hypot(c.chamber.cx - x, c.chamber.cz - z) > COLONY_R) continue;
       const key = `c${c.id}`;
-      want.add(key);
-      if (this.built.has(key)) continue;
-      const L = colonyLayout(c);
-      const road = this.deeps.map((d) => d.plan.roads.find((r) => r.colony === c.id)).find((r) => !!r) ?? null;
-      const br = buildChamber(c, L, this.mats, road?.hole ?? null);
-      br.obj.add(buildCrawl(c, this.mats));
-      this.builtRooms.set(key, br);
-      this.built.set(key, br.obj);
-      this.slimes.setColony(c, L);
+      need(key, c.chamber.cx, c.chamber.cz, () => {
+        const L = colonyLayout(c);
+        const road = this.deeps.map((d) => d.plan.roads.find((r) => r.colony === c.id)).find((r) => !!r) ?? null;
+        const br = buildChamber(c, L, this.mats, road?.hole ?? null);
+        br.obj.add(buildCrawl(c, this.mats));
+        this.builtRooms.set(key, br);
+        this.built.set(key, br.obj);
+        this.slimes.setColony(c, L);
+      });
     }
     for (const [k, o] of this.built) {
       if (want.has(k)) { if (!o.parent) this.group.add(o); continue; }
