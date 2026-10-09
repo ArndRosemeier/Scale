@@ -76,7 +76,7 @@ export class Command {
   /** T: an airstrike on the Tab target (a giant creature). True when it is called. */
   airstrike(): boolean {
     const g = this.g, t = g.targeting.current;
-    if (!t || t.kind !== 'threat') { this.deny('Target a giant creature first (Tab)'); return false; }
+    if (!t || t.kind !== 'threat' || t.obj.swarm) { this.deny('Target a giant creature first (Tab)'); return false; }
     if (g.crime.rep.value < COMMAND.strikeRep) { this.deny('The army won\'t send jets for you — not yet'); return false; }
     if (this.strikeT > 0 || this.queued) { this.deny('The jets are rearming'); return false; }
     const o = t.obj as { x: number; z: number };

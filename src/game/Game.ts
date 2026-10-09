@@ -1081,6 +1081,7 @@ export class Game {
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
       threats: () => { const a = this.threats?.actors() ?? []; const b = this.slimeRealm?.actors() ?? []; return b.length ? [...a, ...b] : a; },
+      swarm: (x, z, r, fn) => this.threats?.swarmActors(x, z, r, fn),
       sight: this.sight,
       under: {
         ray: (ox, oy, oz, dx, dy, dz, maxT) => this.underground.caveRay(ox, oy, oz, dx, dy, dz, maxT) ?? this.underground.tunnelRay(ox, oy, oz, dx, dy, dz, maxT),
