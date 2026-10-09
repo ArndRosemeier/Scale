@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.186 — 2026-10-09
+
+- Tests only: the "room splitting" speed check allows 60 ms per office, shop or café storey (about 21 ms alone), and the brood's speed check takes the fastest of three runs against 1.5 ms. Under a full parallel test run, other workers sharing the CPU no longer make them fail.
+
 ## 0.185 — 2026-10-09
 
 - **The shockwave no longer flattens everyone in it.** Until now, every person in the blast took the full force that breaks walls: 900 to 15 000 damage, a sure knockout for anyone, bosses included. Now a person takes 27 to 60 at the centre, depending on rank, and half that at the rim. That still knocks people down, about as hard as a fireball does. Walls, cars and monsters still take the full blast.
