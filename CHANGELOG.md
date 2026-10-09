@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.198 — 2026-10-09
+
+- **Factions, step 3c: the Murk ask the table.** Murk breaking out into the street go only for people whose faction they are hostile to. Below ground they go for you and for the Lumen the same way. In the seeded table that is still everyone, so nothing plays differently yet. Changing one number would make them leave a whole faction alone (police, for example).
+
 ## 0.197 — 2026-10-09
 
 - **Fix: crooks really run from monsters now.** In 0.195 the faction table had no entry between crews and the monsters or the Murk, so crews never actually scattered. Now monsters, the Murk and rogue machines are enemies of every crew, and a new test checks the real table.

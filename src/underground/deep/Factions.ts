@@ -98,6 +98,8 @@ export interface FactionHost {
   ground(x: number, z: number, y: number): number;
   /** The Lumen's trust in the player (−100 … 100). */
   trust(): number;
+  /** Do the Murk go for the player / for the Lumen (the faction table, factions/relations.ts)? Unset: yes. */
+  murkHostile?(to: 'hero' | 'lumen'): boolean;
   /** Line of sight in the caves (or anywhere for surface agents). */
   clear(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean;
   /** Something died / was hurt: credit, war, trust. */
@@ -526,9 +528,9 @@ export class Factions {
     // Pick a fight: the player first, whenever in reach and in sight (dropping a Lumen for them when
     // they come close), else the nearest Lumen.
     if (!b.detour && (b.mode !== 'fight' || (b.foe && dp < SWITCH)) && (b.t * 4 + b.id * 0.37) % 1 < dt * 4) {
-      const sees = dp < (b.mode === 'fight' ? SWITCH : AGGRO * (b.role === 'maw' ? 1.6 : 1)) && dy < 8 && this.host.clear(b.x, b.y + b.r, b.z, P.x, P.y + P.h * 0.6, P.z);
+      const sees = (this.host.murkHostile?.('hero') ?? true) && dp < (b.mode === 'fight' ? SWITCH : AGGRO * (b.role === 'maw' ? 1.6 : 1)) && dy < 8 && this.host.clear(b.x, b.y + b.r, b.z, P.x, P.y + P.h * 0.6, P.z);
       if (sees) { b.foe = null; if (b.mode !== 'fight') { b.best = Infinity; b.bestT = 0; } b.mode = 'fight'; if (b.cd < 0.3) this.host.sound(b.role === 'maw' ? 'maw_roar' : 'murk_growl', b.x, b.y, b.z, b.role === 'maw' ? 1 : 0.55, b.role === 'brute' ? 0.7 : 1 + Math.random() * 0.3); b.cd = 0.6; }
-      else if (b.mode !== 'fight') {
+      else if (b.mode !== 'fight' && (this.host.murkHostile?.('lumen') ?? true)) {
         const l = this.nearest(b, 'lumen', b.role === 'raider' || b.role === 'breacher' ? 16 : 9);
         if (l && l.role !== 'captive' && l.mode !== 'hidden') { b.foe = l; b.mode = 'fight'; }
       }

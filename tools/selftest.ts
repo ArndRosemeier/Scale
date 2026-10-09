@@ -718,6 +718,14 @@ section('faction relations', async () => {
   check(H.hostile('army', eventFaction({ actors: [{ self: true }] })) && H.hostile('army', 'monsters'), 'army: hostile to monsters, and to the hero while the rampage lasts');
   st.rampage = false;
   check(!H.hostile('army', eventFaction({ actors: [{ self: true }] })), 'army: not hostile to the hero once the rampage is over');
+  // Phase 3c: the Murk go for every person on the surface (MurkBreach.prey) and for the hero and the Lumen below (FactionHost.murkHostile).
+  const { actorFaction } = await import('../src/game/friendFoe');
+  const { SIDEKICK_OWNER } = await import('../src/sim/actors/Actor');
+  const people = [undefined, { role: 'police', owner: 1 }, { role: 'soldier', owner: 1 }, { role: 'criminal', owner: 1 }, { role: 'criminal', owner: 1, faction: 0 }, { role: 'bystander', owner: SIDEKICK_OWNER }, { role: 'medic', owner: -2 }] as never[];
+  check(people.every((a) => M.hostile('murk', actorFaction(a, () => 'necro'))) && M.hostile('murk', 'hero') && M.hostile('murk', 'lumen'), 'murk: hostile to every person (civilians, police, soldiers, crooks, a group, the sidekick), the hero and the Lumen');
+  const calm = defaultRelations();
+  calm.set('murk', 'police', REL.wary);
+  check(!calm.hostile('murk', actorFaction({ role: 'police', owner: 1 } as never)) && calm.hostile('murk', actorFaction(undefined)), 'murk: follows the table (made wary of the police, they leave officers alone)');
 });
 
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
