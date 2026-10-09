@@ -148,6 +148,30 @@ The rooms up top (decks, the lantern room) have no way up but flying; their door
 the gallery. The walk-in test follows every exit's whole way (a fortress's through the gate)
 and walks each room's door from inside out, at the room's own floor.
 
+## The twisted tower (phase 4d, `plan/twistParts.ts`)
+
+The Twist (marvel style 3) gets its lowest blocks walkable: four storeys, or two when the
+storeys are 7.8 m tall. Each storey is its block's rectangle turned by that block's twist, with
+glass walls round its own floor plate and a ceiling slab under the next plate (the slab's
+corners outside the next block are the ledges seen from outside). Scissor stairs go up the
+middle. A flight climbs one storey along the long axis through a well in the plate above, and
+the next flight starts beside where it arrives and runs back. The flights sit apart by how far
+a flight's far corner swings over one storey's turn. The well is cut in the turned plate as the
+flight's bounding box in that plate's frame, with glass rails round it, open at the arrival
+end. The storeys get as few as fit: a narrower tower gets steeper flights, and no stairs (lobby
+only) when nothing fits.
+
+- Lobby: one open room (the tower foyer's desk and benches, the lounge's holo table and seats,
+  a café's counter and tables when it is over 300 m²); the stair core is a keep-out.
+- Storeys above: the stair core (flights, wells, landings, an aisle of 1.7 m beside them) is a
+  fixed hub that runs out to the back facade, so the splitter never has to wrap rooms round it.
+  Rooms are cut in sectors round the middle (`Program.sectors`, 16 rays turned with the
+  storey). The café storey, the capsule hotel and the studios are furnished with
+  `fill/starship` items and the sci-fi theme in the tower's accent colour.
+
+The walk-in test also climbs every flight of each Twist it finds (seeds 1, 5, 9) to the top
+storey with an inside.
+
 Checks: `tools/homeTest.ts` (selftest section "furnished homes"), `tools/splitTest.ts` (section
 "room splitting": odd outlines and real storeys, coverage, overlap, room size, reachability,
 reservation first, desks, tables, checkouts, mirrors, counters, timing), `npx tsx tools/interiorPlans.ts
@@ -159,6 +183,6 @@ storey in 3D (`?n=<building>&floor=<f>&room=<k>&top=1&type=living&still=1`).
 1. Filler + home theme for flats (v0.169, PR #139).
 2. Room splitting for any shape with reserve-first programs; offices, shops and cafés themes (v0.172).
 3. The starship hall (design step 1) as one reserve strategy on the core (v0.173).
-4. The museum (great hall + galleries) on the core (v0.176); glasshouse and airport terminal (v0.181); tower deck, lighthouse and fortress keep (v0.183).
+4. The museum (great hall + galleries) on the core (v0.176); glasshouse and airport terminal (v0.181); tower deck, lighthouse and fortress keep (v0.183); the twisted tower (v0.230).
 5. Town hall, cathedral and sewer side rooms on the core.
 6. Delete the old builders.

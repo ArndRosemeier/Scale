@@ -1680,6 +1680,22 @@ section('deep realm', async () => {
     while (q.length) for (const m of adj[q.shift()!]) if (!seen.has(m)) { seen.add(m); q.push(m); }
     const gates = plan.nodes.filter((q2) => q2.name.startsWith('gate'));
     check(gates.length === plan.roads.length && gates.every((g2) => seen.has(g2.id)), `deep seed ${seed}: every gate (${gates.length}) leads down to the Heart`);
+    // The chamber's arch and its stone lining (RoomMeshes chamberArch, 1.8 m out) keep inside the neck's
+    // rough rock: anywhere outside it, the world showed through the opening's corners.
+    let outside = 0, archPts = 0;
+    for (const r of plan.roads) {
+      const b = rooms.colonies[r.colony].chamber, H = r.hole, rl = H.hw + 0.1;
+      const at = (l: number, s2: number) => {
+        const [u, v] = H.wall === 'u+' ? [b.hu + s2, H.c + l] : H.wall === 'v+' ? [H.c + l, b.hv + s2] : [H.c + l, -b.hv - s2];
+        return [b.cx + b.ux * u - b.uz * v, b.cz + b.uz * u + b.ux * v];
+      };
+      for (let a = -0.5; a <= Math.PI + 0.5; a += 0.15) for (const s2 of [0.3, 1.0, 1.8]) {
+        const t = Math.max(0.15, H.cy + Math.sin(a) * rl), [x, z] = at(Math.cos(a) * rl, s2);
+        archPts++;
+        if (!F.air(x, b.y0 + t, z)) outside++;
+      }
+    }
+    check(outside === 0, `deep seed ${seed}: the chambers' arches keep inside the roads' rock (${outside} of ${archPts} points outside)`);
     // The trench war in the Warrens' mouth: the line laid out, the Lumen's sentries hold it against the endless pushes
     // (most Murk fall in no-man's land, hardly any get past, the fallen are replaced; dice seeded per realm),
     // and the Murk go for a player in their way.
@@ -3447,19 +3463,25 @@ section('front doors in real cities', async () => { for (const [seed, size] of [
 // into the great hall; into every room through its door; every room furnished for what it is.
 section('walk-in landmarks', async () => {
   const t0 = performance.now();
-  const count: Record<string, number> = { museum: 0, glasshouse: 0, airport: 0, tower: 0, lighthouse: 0, fortress: 0 };
+  const count: Record<string, number> = { museum: 0, glasshouse: 0, airport: 0, tower: 0, lighthouse: 0, fortress: 0, twist: 0 };
   const styles: Record<string, Set<number>> = Object.fromEntries(Object.keys(count).map((k) => [k, new Set<number>()]));
   const built: { lm: Landmark; terrain: Terrain; S: LandmarkSolids }[] = [];
   const NAME: Record<string, string[]> = { museum: ['classical museum', 'modern museum'], glasshouse: ['palm house', 'domed glasshouse', 'triple glasshouse'], airport: ['airport terminal', 'vaulted terminal', 'saw-tooth terminal'],
-    tower: ['TV tower', 'lattice tower', 'glass tower'], lighthouse: ['lighthouse', 'lighthouse', 'lighthouse'], fortress: ['fortress keep', 'ruined keep'] };
-  for (const [seed, size] of [[1, 0.8], [7, 0.8], [11, 0.8], [2, 0.8], [10, 0.8], [6, 0.8], [9, 0.8]] as const) {
+    tower: ['TV tower', 'lattice tower', 'glass tower'], lighthouse: ['lighthouse', 'lighthouse', 'lighthouse'], fortress: ['fortress keep', 'ruined keep'],
+    twist: ['', '', '', 'twisted tower'] };
+  // (The twisted tower is a marvel of style 3.)
+  const kindOf = (l: Landmark) => (l.kind === 'marvel' && l.style === 3 ? 'twist' : l.kind);
+  const { landmarkDesign } = await import('../src/plan/designs');
+  let climbs = 0;
+  for (const [seed, size] of [[1, 0.8], [7, 0.8], [11, 0.8], [2, 0.8], [10, 0.8], [6, 0.8], [9, 0.8], [5, 0.8]] as const) {
     const terrain = new Terrain(makeProfile({ seed, size }));
     const macro = buildMacroPlan(terrain);
     const S = new LandmarkSolids(macro, terrain);
-    for (const lm of macro.landmarks.filter((l) => l.kind in count)) {
-      if (lm.kind === 'airport' && count.airport >= 2) continue;
-      count[lm.kind]++;
-      styles[lm.kind].add(lm.style);
+    for (const lm of macro.landmarks.filter((l) => kindOf(l) in count)) {
+      const kind = kindOf(lm);
+      if (kind === 'airport' && count.airport >= 2) continue;
+      count[kind]++;
+      styles[kind].add(lm.style);
       built.push({ lm, terrain, S });
       const ins = landmarkInterior(lm, terrain)!;
       // Walk a polyline of world points from height y: biggest step up and down, blocked samples.
@@ -3492,10 +3514,26 @@ section('walk-in landmarks', async () => {
         const end: [number, number] = [pts[n - 1][0] + (ex / el) * 4, pts[n - 1][1] + (ez / el) * 4];
         const w = walk([start, ...pts, end], terrain.height(start[0], start[1]));
         check(w.up <= 0.31 && w.down < 0.31 && w.blocked === 0 && Math.abs(w.y - floor) < 0.05 && !!S.insideAt(end[0], w.y + 1, end[1]),
-          `seed ${seed}: walk in to the ${NAME[lm.kind][lm.style]} (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, floor ${(w.y - floor).toFixed(2)} m)`);
+          `seed ${seed}: walk in to the ${NAME[kind][lm.style]} (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, floor ${(w.y - floor).toFixed(2)} m)`);
+      }
+      // The twisted tower: from the lobby up every flight (landing, flight, landing, across to
+      // the next) to the top storey with an inside.
+      if (kind === 'twist') {
+        const st = [...landmarkDesign(lm)!.stairs].sort((a, b) => a.y0 - b.y0);
+        const pts: [number, number][] = [];
+        for (const f of st) {
+          const L = f.n * f.tread, P = (t: number) => siteToWorld(lm, f.from[0] + f.dir[0] * t, f.from[1] + f.dir[1] * t);
+          pts.push(P(-0.8), P(L + 0.6));
+        }
+        const topY = Math.max(...landmarkDesign(lm)!.rooms.map((r) => r.y));
+        const w = pts.length ? walk(pts, st[0].y0) : { up: 0, down: 0, blocked: 0, y: topY };
+        climbs++;
+        check(st.length >= 1 && w.up <= 0.31 && w.down < 0.31 && w.blocked === 0 && Math.abs(w.y - topY) < 0.05 && !!S.insideAt(pts[pts.length - 1][0], w.y + 1, pts[pts.length - 1][1]),
+          `seed ${seed}: up the stairs of the twisted tower, ${st.length} flights (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, ends ${(w.y - topY).toFixed(2)} m off the top storey)`);
       }
     }
   }
+  check(climbs >= 3, `twisted towers climbed (${climbs})`);
   check(count.museum >= 3 && styles.museum.size === 2, `museums checked (${count.museum}, both styles)`);
   check(count.glasshouse >= 3 && styles.glasshouse.size === 3, `glasshouses checked (${count.glasshouse}, styles ${[...styles.glasshouse].join(', ')})`);
   check(count.airport >= 2, `airport terminals checked (${count.airport})`);
@@ -3512,7 +3550,8 @@ section('walk-in landmarks', async () => {
   for (const { lm, terrain, S } of built) {
     for (const room of landmarkRooms(lm) ?? []) {
       rooms++;
-      const key = KEY[room.fn];
+      // (The twisted tower's lobby has no lift: its desk and the lounge's holo table.)
+      const key = kindOf(lm) === 'twist' && room.fn === 'foyer' ? ['counter', 'holo'] : KEY[room.fn];
       if (key && !key.every((k) => room.furniture.some((f) => f.kind === k)) && !(room.fn === 'garden' && key.some((k) => room.furniture.filter((f) => f.kind === k).length >= 3))) bare++;
       let blocked = 0, y = room.y;
       // (A security lane has no door: walk through each scanner arch from the check-in side.)
@@ -3527,7 +3566,7 @@ section('walk-in landmarks', async () => {
         if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
         if (room.fn === 'security' || i < 3) off = Math.max(off, Math.abs(y - room.y));
       }
-      if (blocked || off > 0.05) { bad++; badOnes.push(`${lm.kind} ${room.fn}`); }
+      if (blocked || off > 0.05) { bad++; badOnes.push(`${lm.kind} ${room.fn} (${lm.name}, y ${room.y.toFixed(1)}, door ${room.door.map((d) => d.toFixed(1))}, ${blocked} blocked, off ${off.toFixed(2)})`); }
     }
   }
   check(bad === 0, `landmark rooms: every one of the ${rooms} is walkable in through its door (${bad} bad${bad ? ': ' + badOnes.join(', ') : ''})`);

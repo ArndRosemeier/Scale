@@ -2,9 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.230 — 2026-10-09
+
+- **The Twist has an inside.** Walk in through the door at the foot of the twisted tower into a lobby with a reception desk, a lounge corner and, in a big one, a café. Stairs in the middle climb from storey to storey. Each storey is turned a little further than the one below, like the tower, and the stairs are laid out so they still meet. Up there are about three more storeys (two in towers with very tall storeys), each with rooms round a stair hall that runs out to the glass at the back: a café storey, a capsule hotel with sleeping pods and lounges, and a storey of studios and a control room. Glass rails run round each stairwell. The blocks above stay solid.
+- `preview-landmark.html` takes `&style=<n>` to pick a landmark of one style (the Twist: `kind=marvel&style=3`).
+
+## 0.229 — 2026-10-09
+
+- **No more looking through the world at the slime tunnels' entrances.** Where a slime colony's road leaves its hidden chamber, the wall had a square hole cut into it, but the rock tunnel behind is round and starts a little way past the wall, so its corners and edges showed the city and the sky. The opening is now a round arch that sits inside the tunnel, with a short stone lining reaching out into the rock, for every entrance. The glowing wall markings and cracks no longer hang in the opening either.
+
 ## 0.228 — 2026-10-09
 
-- **Super speed afterimages cost far less to draw.** Each glowing copy the runner leaves behind (one every 70 ms) made its own frozen skeleton for every part of the body and clothing, so the graphics card got about twenty new bone textures with every copy. Now a copy shares one skeleton, as the hero does.
+- **No bare skin between top and trousers.** Since the smooth hems (0.170), every garment's edge is cut a few centimetres inside the body's ragged triangle edge, so a T-shirt and jeans that used to meet exactly at the waist left a band of skin between them (front, sides and back, down to the top of the seat). Now the inner of the two reaches well under the outer one: a shirt or T-shirt tucked into trousers, shorts or a skirt continues down inside them, and trousers under a sweater, jacket or coat reach up under it. The extra part is hidden, so nothing else changes in the look.
 
 ## 0.227 — 2026-10-09
 
