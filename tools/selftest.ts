@@ -3071,6 +3071,11 @@ section('starship great hall', async () => {
     check(badRing === 0, `starship ${seed}: round every gallery unhindered (${badRing} of ${hall.levels.length} blocked)`);
     check(badFlights === 0, `starship ${seed}: every one of the ${hall.design.stairs.length} flights climbs clear to its level (${badFlights} bad)`);
     check(badRooms === 0, `starship ${seed}: every one of the ${hall.design.rooms.length} rooms is walkable in through its door (${badRooms} bad)`);
+    // Furnished by the interior core (fill/starship): each room has what makes it what it is.
+    const KEY: Record<string, string> = { quarters: 'pod', lab: 'console', mess: 'counter', lounge: 'bench', control: 'console', storage: 'rack' };
+    const kinds = new Set(hall.design.rooms.map((q) => q.fn));
+    const bare = hall.design.rooms.filter((q) => KEY[q.fn] && !q.furniture.some((f) => f.kind === KEY[q.fn]));
+    check(bare.length <= hall.design.rooms.length * 0.03 && kinds.size >= 5, `starship ${seed}: rooms furnished for what they are (${bare.length} of ${hall.design.rooms.length} without their key piece: ${[...new Set(bare.map((q) => q.fn))].join(', ') || 'none'}; ${kinds.size} kinds)`);
   }
   console.log(`starship halls in ${(performance.now() - t0).toFixed(0)} ms ${results.join('; ')}`);
 });

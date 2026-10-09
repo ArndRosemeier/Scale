@@ -70,6 +70,18 @@ clothes: fitting mirror, display tables, shelves) and cafés (counter, table set
 old wing and split layouts in `InteriorGen.planFloor` are gone; churches, industry, car parks and
 arcades still use their own builders until the later phases.
 
+## Great halls (phase 3, `design/hall.ts` + `fill/starship.ts`)
+
+`designHall` plans the section of a hall through several storeys: the void up the middle, the
+gallery ring on every level, two stair columns, bridges. That is its reservation. Each level is
+then handed to the core: the gallery pieces and stair wells are fixed `open` spaces (no walls
+between them), the void is a `hole`, and the ring behind is cut along rays from the axis
+(`Program.sectors`: neighbouring wedges join until a room is as wide as its type wants), with
+doors in the middle of the gallery wall (`doorsMid`). The theme (`starshipProgram` /
+`starshipItems`: quarters, labs, messes, lounges, control rooms, stores) furnishes each room
+through the filler, and `design/emit` builds the pieces as landmark parts (`design/props`).
+The old per-room prop recipes in `design/theme` are gone; a theme there is only materials.
+
 Checks: `tools/homeTest.ts` (selftest section "furnished homes"), `tools/splitTest.ts` (section
 "room splitting": odd outlines and real storeys, coverage, overlap, room size, reachability,
 reservation first, desks, tables, checkouts, mirrors, counters, timing), `npx tsx tools/interiorPlans.ts
@@ -80,7 +92,7 @@ storey in 3D (`?n=<building>&floor=<f>&room=<k>&top=1&type=living&still=1`).
 
 1. Filler + home theme for flats (v0.169, PR #139).
 2. Room splitting for any shape with reserve-first programs; offices, shops and cafés themes (v0.172).
-3. The starship hall (design step 1) as one reserve strategy on the core.
+3. The starship hall (design step 1) as one reserve strategy on the core (v0.173).
 4. Fill the museum and the other empty landmarks (impressive halls with side rooms).
 5. Town hall, cathedral and sewer side rooms on the core.
 6. Delete the old builders.

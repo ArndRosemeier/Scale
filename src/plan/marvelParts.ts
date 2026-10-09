@@ -22,6 +22,7 @@ import { Kit, mat, entranceSteps, WHITE, WIN, CURTAIN, ROOF, CONC, PANEL, GLASS,
 import { designHall, type HallPlan } from '../interior/design/hall';
 import { emitDesign } from '../interior/design/emit';
 import { scifiTheme } from '../interior/design/theme';
+import { starshipProgram, starshipItems } from '../interior/fill/starship';
 import { ellipseStar, type Volume } from '../interior/design/types';
 
 export const MARVEL_STYLES = 8;
@@ -218,7 +219,7 @@ function starshipHall(lm: Landmark, f: (t: number) => number, B: number, H: numb
   const vol: Volume = { y0: B, y1: B + H, section: (y) => ellipseStar(0, 0, f((y - B) / H) - SKIN - 0.1, ell) };
   return designHall(vol, {
     y0: B, yMax: B + Math.min(66, Math.max(40, H * 0.08)), levelH: 5, slab: 0.5, walk: 3.6, depth: 13, minDepth: 8, roomW: 11,
-    mix: ['quarters', 'quarters', 'lab', 'mess', 'quarters', 'lounge', 'storage', 'lab', 'control', 'quarters', 'lounge'],
+    rooms: starshipProgram, items: starshipItems,
     seed: (lm.seed ^ 0x51f1) >>> 0, bridgeEvery: 3,
   });
 }

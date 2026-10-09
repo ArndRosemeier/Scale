@@ -92,7 +92,8 @@ export class Filler {
   private grid: { x0: number; z0: number; nx: number; nz: number; walk: Uint8Array } | null = null;
   private readonly cell: number;
 
-  constructor(readonly A: Area, readonly r: Rng) {
+  /** `cell`: the walk grid's cell (m) at least (big plain rooms can do with a coarser one). */
+  constructor(readonly A: Area, readonly r: Rng, cell = CELL) {
     for (const e of A.edges) {
       const spans: [number, number, number][] = e.kind === 'open' ? [[0, e.len, 0.6]] : e.doors.map(([s0, s1]) => [s0, s1, 1.0]);
       for (const [s0, s1, depth] of spans) {
@@ -106,7 +107,7 @@ export class Filler {
     const o = minAreaRect(A.poly);
     this.frame = { cx: o.cx, cz: o.cz, ux: o.ux, uz: o.uz, hu: o.hu, hv: o.hv };
     const [x0, z0, x1, z1] = polyBounds(A.poly);
-    this.cell = Math.max(CELL, Math.sqrt(((x1 - x0) * (z1 - z0)) / MAX_CELLS));
+    this.cell = Math.max(cell, Math.sqrt(((x1 - x0) * (z1 - z0)) / MAX_CELLS));
   }
 
   /** The furniture placed so far. */
