@@ -52,8 +52,11 @@ export const LEVI_ROUTE = {
   minLength: 220,
 };
 
-/** The Leviathan's way, or null (no river with a bridge in the city). */
-export function planLeviathanRoute(macro: MacroPlan, terrain: Terrain, seed: number): LeviRoute | null {
+/**
+ * The Leviathan's way, or null (no river with a bridge in the city). With `near` (dev: the hero's
+ * spot) it goes for the bridge nearest that point instead: up its river to that bridge alone.
+ */
+export function planLeviathanRoute(macro: MacroPlan, terrain: Terrain, seed: number, near?: { x: number; z: number }): LeviRoute | null {
   const L = LEVI_ROUTE, rng = new Rng(seed ^ 0x1e71);
   const profiles = bridgeProfiles(macro, terrain);
   // ---- bridges by river: where each deck's middle crosses which river
@@ -66,8 +69,12 @@ export function planLeviathanRoute(macro: MacroPlan, terrain: Terrain, seed: num
     list.push({ edge: p.edge, s: w.s, x, z, dx: p.dx, dz: p.dz });
     onRiver.set(w.river, list);
   }
-  let river = -1, most = 0;
+  let river = -1, most = 0, goal = -1;
   for (const [r, list] of onRiver) if (list.length > most || (list.length === most && r < river)) { most = list.length; river = r; }
+  if (near) {
+    let bd = Infinity;
+    for (const [r, list] of onRiver) for (const b of list) { const d = Math.hypot(b.x - near.x, b.z - near.z); if (d < bd) { bd = d; river = r; goal = b.edge; } }
+  }
   if (river < 0) return null;
   const R = terrain.rivers[river], P = R.pts, n = P.length >> 1;
   // ---- its stretch inside the city
@@ -85,13 +92,15 @@ export function planLeviathanRoute(macro: MacroPlan, terrain: Terrain, seed: num
   const bridges = onRiver.get(river)!
     .filter((b) => b.s >= R.s[i0] && b.s <= R.s[i1])
     .map((b) => ({ ...b, d: (b.s - sStart) * dir }))
-    .filter((b) => b.d > 40)
+    .filter((b) => b.d > 40 || b.edge === goal)
     .sort((a, b) => a.d - b.d);
+  // (Dev: that one bridge only.)
+  if (goal >= 0) { const gb = bridges.find((b) => b.edge === goal); if (gb) bridges.splice(0, bridges.length, gb); }
   if (!bridges.length) return null;
   // (Comes up a little before the first, visits those within its span.)
   const d0 = Math.max(0, bridges[0].d - L.lead);
-  const near = bridges.filter((b) => b.d - bridges[0].d < L.span).slice(0, L.bridges).map((b) => ({ ...b, d: b.d - d0 }));
-  bridges.length = 0; bridges.push(...near);
+  const near_ = bridges.filter((b) => b.d - bridges[0].d < L.span).slice(0, L.bridges).map((b) => ({ ...b, d: b.d - d0 }));
+  bridges.length = 0; bridges.push(...near_);
   // ---- the way: the centreline from the entry to just short of the last bridge
   const lastD = bridges[bridges.length - 1].d - L.offDeck;
   const pts: number[] = [], s: number[] = [];

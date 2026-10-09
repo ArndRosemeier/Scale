@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.214 — 2026-10-09
+
+- **"Spawn at the nearest bridge" now really comes to your bridge.** The Leviathan only ever planned its way along one river (the one with the most bridges) and to at most three of its bridges, so standing on any other bridge it went to the nearest of those, often a kilometre or more away, and seemed to do nothing. With the admin button (or `dev.threat.spawn('leviathan', { near: true })`) it now picks the river of the bridge nearest you and comes up it to that bridge, surfacing right away. Only bridges at the very edge of the city, outside its reach, still fall back to the usual way.
+
 ## 0.213 — 2026-10-09
 
 - **A new big threat: the Roc.** After the first Strider, a giant bird of prey, 40 m from wingtip to wingtip, can come to town. It is heralded by a far-off screech from high up, or by the bird itself crossing the sky far above with its shadow sweeping over the streets. It comes in from beyond you, circles overhead screeching, then picks what to do. It may perch on the roof edge of one of the tallest buildings nearby (landing on a lower one breaks its top floor), spread its wings over the street and beat them: the gusts knock people down and throw benches, bins and debris about, and it pecks at whoever comes close. It may stoop on a car, a bus by preference, carry it up high and drop it. It dives on helicopters and drones, and rakes whoever hurt it most with its talons in a low pass. A whirlwind, or enough damage to its wings, tumbles it out of the sky onto the street for a few seconds with its head low; its head is the weak spot (three times the damage) while it screeches or is grounded. Hurt badly it flies off; brought down it falls and lies where it fell for a few game hours. The army fights it wherever it goes. The admin console has a "Roc" section, and `dev.threat.roc` has tools for testing.

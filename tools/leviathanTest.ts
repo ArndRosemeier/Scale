@@ -11,6 +11,7 @@ import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
 import { boundaryAt } from '../src/world/boundary';
+import { bridgeProfiles } from '../src/build/bridges';
 
 type Check = (ok: boolean, msg: string) => void;
 
@@ -47,6 +48,28 @@ function routeChecks(check: Check): void {
   const tA = new Terrain(makeProfile({ seed: 42, size: 0.6 })), tB = new Terrain(makeProfile({ seed: 42, size: 0.6 }));
   const a = planLeviathanRoute(buildMacroPlan(tA), tA, 9), b = planLeviathanRoute(buildMacroPlan(tB), tB, 9);
   check(JSON.stringify(a) === JSON.stringify(b), 'leviathan route: deterministic per seed');
+  nearChecks(check);
+}
+
+/** Dev spawn at the nearest bridge: from the middle of any river bridge's deck, the way goes to that bridge. */
+function nearChecks(check: Check): void {
+  let decks = 0, hit = 0;
+  const miss: string[] = [];
+  for (let seed = 1; seed <= 12; seed++) {
+    const terrain = new Terrain(makeProfile({ seed, size: 0.6 }));
+    const macro = buildMacroPlan(terrain);
+    for (const p of bridgeProfiles(macro, terrain)) {
+      const sm = (p.s0 + p.s1) / 2, x = p.ax + p.dx * sm, z = p.az + p.dz * sm;
+      const w = terrain.water(x, z);
+      if (w.river < 0 || w.d > w.halfWidth + 4) continue;
+      decks++;
+      const R = planLeviathanRoute(macro, terrain, seed, { x, z });
+      const last = R?.stops[R.stops.length - 1];
+      if (R && last?.kind === 'bridge' && last.edge === p.edge && R.length < LEVI_ROUTE.lead + 60) hit++;
+      else miss.push(`seed ${seed} edge ${p.edge}: ${R ? R.stops.map((s) => `${s.kind}${s.edge}@${Math.round(s.s)}`).join(' ') : 'none'}`);
+    }
+  }
+  check(decks >= 10 && hit >= decks * 0.9, `leviathan route: spawn at the nearest bridge goes straight to the hero's bridge (${hit}/${decks} river decks${miss.length ? '; missed ' + miss.slice(0, 4).join(', ') : ''})`);
 }
 
 function clockChecks(check: Check): void {

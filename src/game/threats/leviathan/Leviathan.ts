@@ -160,9 +160,10 @@ export class Leviathan implements ThreatEvent, ThreatActor {
   private newsT = 6;
   private surgeT = 0;
 
-  constructor(private g: Game, private breaks: BridgeBreaks, seed: number) {
+  /** `near` (dev): its way goes to the bridge nearest that point. */
+  constructor(private g: Game, private breaks: BridgeBreaks, seed: number, near?: { x: number; z: number }) {
     this.rng = new Rng(seed);
-    const route = planLeviathanRoute(g.macro, g.terrain, seed);
+    const route = planLeviathanRoute(g.macro, g.terrain, seed, near);
     if (!route) throw new Error('leviathan: no river with a bridge');
     this.route = route;
     this.zones = LEVIATHAN_ZONES.map((z) => ({ ...z, exposed: false, x: 0, y: 0, z: 0, r: 3, recent: 0 }));

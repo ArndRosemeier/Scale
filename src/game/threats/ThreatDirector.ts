@@ -89,9 +89,10 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
     omen: (d, _site, kind, rng) => d.leviathanOmen(kind, rng),
     start: (d, _site, seed, opts) => {
       try {
-        const l = new Leviathan(d.g, d.bridgeBreaks, seed);
-        // (dev: { near: true } — on to the stop nearest the hero.)
-        if (opts.near) l.devNear(d.g.player.pos.x, d.g.player.pos.z);
+        // (dev: { near: true } — up the river to the bridge nearest the hero, already close.)
+        const P = d.g.player.pos;
+        const l = new Leviathan(d.g, d.bridgeBreaks, seed, opts.near ? { x: P.x, z: P.z } : undefined);
+        if (opts.near) l.devNear(P.x, P.z);
         return l;
       } catch (err) { console.warn('[threats]', err); return null; }
     },
