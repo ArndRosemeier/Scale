@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.202 — 2026-10-09
+
+- **The focus beam hits like a blow, and the seeker orb got a glow-up.** Looks only: damage and energy costs are unchanged. The focus beam now has a wide golden haze round its white-hot core. Rings of air ripple away along its path, and a flash and a ring leave your eyes when it fires. Where it lands you get a white flash, a shock ring across the surface, sparks thrown back, chips and dust kicked up, and a heavier camera shake. A well-charged shot also lands with a thud. The seeker orb is now a white-hot heart in a violet glow with a soft halo, three sparks circling it, little arcs crackling off it and a smooth comet tail behind it. It leaves your hands with a flash and bursts on its target with a violet flash, shock rings and a spray of sparks.
+
 ## 0.201 — 2026-10-09
 
 - **Fixed a memory leak that let long sessions run out of memory.** The body of every person who walked past stayed in memory for good, about 3.5 MB each. On a PC, ten minutes of fast travel added over 1.5 GB. Bodies nobody has used for 30 seconds are now freed; the 24 most recent ones stay for quick reuse.
