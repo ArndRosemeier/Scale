@@ -37,6 +37,8 @@ import { costumeFor, musicianCostume, paintAppearance, type Paint } from './cost
 import { guitarCase, hat, boombox, bandGear, balls as makeBalls, type Gear } from './gear';
 
 /** The street bands' styles (their pieces: public/music/live.json `bands`) and their level. */
+/** The score fades out within HUSH_ON m of a playing street musician, and comes back beyond HUSH_OFF. */
+const HUSH_ON = 32, HUSH_OFF = 42;
 const BAND_STYLES = ['folk', 'bossa', 'swing'] as const;
 const BAND_GAIN = 0.5;
 /** Sites within ACTIVE_R m of the player are lived in; characters beyond DROP_R leave (unseen). */
@@ -941,13 +943,15 @@ export class StreetLife {
    */
   private sound(dt: number): void {
     const g = this.g, cam = g.renderer.camera.position;
-    let bus: Char | null = null, crew: Char | null = null, band: Char | null = null, bd = 45, cd = 45, nd = 60;
+    let bus: Char | null = null, crew: Char | null = null, band: Char | null = null, bd = 45, cd = 45, nd = 60, near = Infinity;
     for (const c of this.chars) {
       if (c.phase !== 'perform') continue;
       const d = Math.hypot(c.a.x - cam.x, c.a.z - cam.z);
       if (c.kind === 'busker' && d < bd && c.act.action?.id === 'play_guitar') { bus = c; bd = d; }
       if (c.kind === 'dancer' && c.m.crew && c.gear && d < cd) { crew = c; cd = d; }
       if (c.kind === 'band' && d < nd && c.act.action?.id === 'play_guitar') { band = c; nd = d; }
+      // (A musician between songs still counts: the score stays away until they pack up.)
+      if ((c.kind === 'busker' || c.kind === 'band' || (c.kind === 'dancer' && c.m.crew && c.gear)) && d < near) near = d;
     }
     // The band's piece (or, with none, the guitar loop: unless a busker is nearer).
     const style = band ? BAND_STYLES[band.m.style ?? 0] : null;
@@ -964,7 +968,13 @@ export class StreetLife {
     }
     if (this.guitar) { if (bus) this.guitar.set(bus.a.x, bus.a.y + 1.1, bus.a.z, 0.8); else this.guitar.set(cam.x, -1000, cam.z, 0); }
     if (this.beat) { const o = crew?.gear?.object.position; if (o) this.beat.set(o.x, o.y + 0.3, o.z, 0.75); else this.beat.set(cam.x, -1000, cam.z, 0); }
+    // Near live street music the score makes way (Music: hush), with a margin so it doesn't flap.
+    this.hush = near < (this.hush ? HUSH_OFF : HUSH_ON);
   }
+
+  /** Street music is playing near the listener: the score keeps quiet (Music). */
+  hushes(): boolean { return this.hush; }
+  private hush = false;
 
   /** The street band's streamed piece: started when one plays near, moved with it, stopped when it is gone. */
   private bandSound(c: Char | null, file: string | null): void {

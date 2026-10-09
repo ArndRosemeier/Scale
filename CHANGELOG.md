@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.205 — 2026-10-09
+
+- **The background music makes way for street musicians.** Within about 30 m of a busker, a street band or a dance crew's boombox, the score fades out, so the two pieces no longer play on top of each other. It comes back once you are about 40 m away, or when they pack up.
+
 ## 0.204 — 2026-10-09
 
 - **Concert lights, after the check on Arnd's PC.** The colour beams now reach just to the ground and fade out there, so there are no more bright round caps where they land. They stay over the field instead of sweeping out across the stands. Every beam and searchlight has a soft glow cone round it in place of a hard edge.
