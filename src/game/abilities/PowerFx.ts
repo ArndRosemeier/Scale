@@ -101,11 +101,12 @@ export class PowerFx {
     const root = this.player.rig.object;
     root.updateMatrixWorld(true);
     const group = new THREE.Group();
-    const g: Ghost = { group, mats: [], skels: [], t: 0, life, a0: alpha };
+    // (One material for the whole copy: super speed leaves one every 70 ms.)
+    const mat = new THREE.MeshBasicMaterial({ color: GHOST_COLOR, transparent: true, opacity: alpha, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
+    const g: Ghost = { group, mats: [mat], skels: [], t: 0, life, a0: alpha };
     root.traverseVisible((o) => {
       const src = o as THREE.SkinnedMesh;
       if (!(o as THREE.Mesh).isMesh || (o as THREE.InstancedMesh).isInstancedMesh) return;
-      const mat = new THREE.MeshBasicMaterial({ color: GHOST_COLOR, transparent: true, opacity: alpha, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
       let m: THREE.Mesh;
       if (src.isSkinnedMesh && src.skeleton) {
         // Same geometry, a frozen copy of the bone matrices (Skeleton.update made a no-op).
@@ -123,10 +124,9 @@ export class PowerFx {
       m.matrix.copy(src.matrixWorld);
       m.frustumCulled = false;
       m.renderOrder = 9;
-      g.mats.push(mat);
       group.add(m);
     });
-    if (!group.children.length) return;
+    if (!group.children.length) { mat.dispose(); return; }
     // Shifted back toward where the body was `back` (0..1) of a frame ago.
     group.position.subVectors(this.last, this.player.pos).multiplyScalar(back);
     this.scene.add(group);
