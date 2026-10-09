@@ -25,7 +25,9 @@ export type RoomType =
   // A glasshouse's (fill/garden).
   | 'garden'
   // An airport terminal's (fill/terminal).
-  | 'checkin' | 'security' | 'gates';
+  | 'checkin' | 'security' | 'gates'
+  // The lookouts' (fill/lookout): a tower's foot and deck, a lighthouse's rooms, a keep's hall.
+  | 'foyer' | 'deck' | 'stairhall' | 'lantern' | 'greatHall';
 
 export type FurnKind =
   | 'bed' | 'bedDouble' | 'wardrobe' | 'nightstand' | 'sofa' | 'armchair' | 'coffeeTable' | 'tvStand' | 'tv' | 'rug'
@@ -40,7 +42,9 @@ export type FurnKind =
   // A glasshouse's.
   | 'palm' | 'tree' | 'fern' | 'flowerBed' | 'cactus' | 'rock' | 'fountain'
   // An airport's.
-  | 'checkDesk' | 'scanner' | 'belt' | 'gateDesk' | 'seatRow' | 'board';
+  | 'checkDesk' | 'scanner' | 'belt' | 'gateDesk' | 'seatRow' | 'board'
+  // The lookouts'.
+  | 'telescope' | 'liftDoor' | 'spiralStair' | 'lens' | 'throne' | 'longTable' | 'banner' | 'armour' | 'fireplace';
 
 export interface Room {
   type: RoomType;

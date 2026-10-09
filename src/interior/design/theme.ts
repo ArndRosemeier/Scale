@@ -8,7 +8,8 @@ import { mat, METAL, PANEL, CONC, GLASS, GLOW, PLASTER, GRANITE, GRAVEL, type Pa
 export type PropName = 'pod' | 'locker' | 'console' | 'holo' | 'table' | 'stool' | 'bench' | 'planter' | 'screen' | 'crate' | 'counter' | 'rack'
   | 'case' | 'statue' | 'bigStatue' | 'seat' | 'painting' | 'reception'
   | 'palm' | 'tree' | 'fern' | 'flowerBed' | 'cactus' | 'rock' | 'fountain'
-  | 'checkDesk' | 'scanner' | 'belt' | 'gateDesk' | 'seatRow' | 'board';
+  | 'checkDesk' | 'scanner' | 'belt' | 'gateDesk' | 'seatRow' | 'board'
+  | 'telescope' | 'liftDoor' | 'spiralStair' | 'lens' | 'throne' | 'longTable' | 'banner' | 'armour' | 'fireplace';
 
 export interface Theme {
   name: string;
@@ -75,5 +76,47 @@ export function terminalTheme(): Theme {
     glass: mat(GLASS, [0.85, 0.95, 1.0]),
     glow: mat(PANEL, [0.35, 0.6, 1.1], GLOW),
     furniture: mat(PLASTER, [0.3, 0.33, 0.38]),
+  };
+}
+
+/** An observation tower's: concrete floors, white panels, steel, warm wood benches. */
+export function towerTheme(): Theme {
+  return {
+    name: 'tower',
+    floor: mat(CONC, [0.95, 0.95, 0.94]),
+    walk: mat(GRANITE, [0.85, 0.85, 0.86]),
+    wall: mat(PANEL, [0.95, 0.95, 0.96]),
+    trim: mat(METAL, [0.72, 0.74, 0.77]),
+    glass: mat(GLASS, [0.85, 0.95, 1.0]),
+    glow: mat(PANEL, [1.1, 0.9, 0.55], GLOW),
+    furniture: mat(PLASTER, [0.55, 0.38, 0.22]),
+  };
+}
+
+/** A lighthouse's: whitewashed walls, scrubbed boards, brass, tarred wood. */
+export function lighthouseTheme(): Theme {
+  return {
+    name: 'lighthouse',
+    floor: mat(PLASTER, [0.6, 0.45, 0.3]),
+    walk: mat(PLASTER, [0.6, 0.45, 0.3]),
+    wall: mat(PLASTER, [1.05, 1.05, 1.02]),
+    trim: mat(METAL, [0.85, 0.65, 0.3]),
+    glass: mat(GLASS, [0.85, 0.95, 1.0]),
+    glow: mat(PANEL, [1.3, 1.1, 0.6], GLOW),
+    furniture: mat(PLASTER, [0.3, 0.2, 0.12]),
+  };
+}
+
+/** A keep's great hall: the castle's stone, dark oak, iron and gold. */
+export function keepTheme(stone: PartMat): Theme {
+  return {
+    name: 'keep',
+    floor: stone,
+    walk: stone,
+    wall: stone,
+    trim: mat(METAL, [1.0, 0.8, 0.35]),
+    glass: mat(GLASS, [0.85, 0.95, 1.0]),
+    glow: stone,
+    furniture: mat(PLASTER, [0.32, 0.2, 0.11]),
   };
 }
