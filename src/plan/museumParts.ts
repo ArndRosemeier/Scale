@@ -12,17 +12,12 @@ import {
   Kit, mat, wallRun, entranceSteps, type Opt, type PartMat, type RGB,
   WIN, CURTAIN, ARCH, ROOF, LIME, SAND, BRICK_WHITE, PLASTER, PANEL, METAL, GLASS, GRANITE, ZINC, GRAVEL, WHITE, COPPER,
 } from './landmarkParts';
-import { emptyDesign, type Design, type DRoom } from '../interior/design/types';
+import { emptyDesign } from '../interior/design/types';
+import { setDesign } from './designs';
 import { emitDesign } from '../interior/design/emit';
 import { museumTheme } from '../interior/design/theme';
 import { fillStorey } from '../interior/design/storey';
 import { museumProgram, museumItems } from '../interior/fill/museum';
-
-const designs = new WeakMap<Landmark, Design>();
-/** A museum's rooms as designed (after its parts were made: plan/landmarkParts), or null. */
-export function museumRooms(lm: Landmark): DRoom[] | null { return designs.get(lm)?.rooms ?? null; }
-/** Its whole design (walls, rooms, lights; local u, v). */
-export function museumDesign(lm: Landmark): Design | null { return designs.get(lm) ?? null; }
 
 /** Outer wall thickness, the doorway, the great hall's share of the width. */
 const T = 0.6, DOOR_W = 4.4, DOOR_H = 4.4, HALL = 0.34;
@@ -108,9 +103,10 @@ function inside(k: Kit, lm: Landmark, vb: number, hw: number, hd: number, top: n
     outline: [-iu, iv0, iu, iv0, iu, iv1, -iu, iv1], fixed: [], front: [0, 1],
     program: museumProgram(HALL), items: museumItems, y: B, top: B + gh,
     seed: deriveSeed(lm.seed, 'museum-rooms'), wallTh: 0.3,
+    entrances: [{ ax: -iu, az: iv0, bx: iu, bz: iv0, doors: [[0.5 - DOOR_W / 4 / iu, 0.5 + DOOR_W / 4 / iu]] }],
   });
   k.inner(() => emitDesign(k, Ds, Th));
-  designs.set(lm, Ds);
+  setDesign(lm, Ds);
   // The great hall's light from high up.
   for (let v = iv0 + 4; v < iv1 - 2; v += 7) for (const u of [-hu / 2, hu / 2]) k.light(u, v, top - 1.5);
   const door = k.node(0, iv0 + 1.4, B);

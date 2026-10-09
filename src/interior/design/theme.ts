@@ -3,10 +3,12 @@
  * (fill/starship lists it, fill/place finds the spots); the prop catalogue (design/props) builds
  * each piece in these materials.
  */
-import { mat, METAL, PANEL, CONC, GLASS, GLOW, PLASTER, GRANITE, type PartMat, type RGB } from '../../plan/landmarkParts';
+import { mat, METAL, PANEL, CONC, GLASS, GLOW, PLASTER, GRANITE, GRAVEL, type PartMat, type RGB } from '../../plan/landmarkParts';
 
 export type PropName = 'pod' | 'locker' | 'console' | 'holo' | 'table' | 'stool' | 'bench' | 'planter' | 'screen' | 'crate' | 'counter' | 'rack'
-  | 'case' | 'statue' | 'bigStatue' | 'seat' | 'painting' | 'reception';
+  | 'case' | 'statue' | 'bigStatue' | 'seat' | 'painting' | 'reception'
+  | 'palm' | 'tree' | 'fern' | 'flowerBed' | 'cactus' | 'rock' | 'fountain'
+  | 'checkDesk' | 'scanner' | 'belt' | 'gateDesk' | 'seatRow' | 'board';
 
 export interface Theme {
   name: string;
@@ -45,5 +47,33 @@ export function museumTheme(stone: PartMat, modern: boolean): Theme {
     // (Door frames: the facade's stone.)
     glow: stone,
     furniture: mat(PLASTER, modern ? [0.22, 0.22, 0.24] : [0.36, 0.22, 0.13]),
+  };
+}
+
+/** A glasshouse's: gravel paths, the plinth's brick, the frame's painted iron, wooden benches. */
+export function gardenTheme(frame: PartMat, plinth: PartMat): Theme {
+  return {
+    name: 'garden',
+    floor: mat(GRAVEL, [0.95, 0.88, 0.74]),
+    walk: mat(GRAVEL, [0.95, 0.88, 0.74]),
+    wall: plinth,
+    trim: frame,
+    glass: mat(GLASS, [0.85, 0.95, 1.0]),
+    glow: frame,
+    furniture: mat(PLASTER, [0.42, 0.28, 0.16]),
+  };
+}
+
+/** An airport terminal's: pale stone floors, white panels, steel, blue signs. */
+export function terminalTheme(): Theme {
+  return {
+    name: 'terminal',
+    floor: mat(GRANITE, [1.0, 1.0, 0.98]),
+    walk: mat(GRANITE, [1.0, 1.0, 0.98]),
+    wall: mat(PANEL, [0.95, 0.95, 0.96]),
+    trim: mat(METAL, [0.72, 0.74, 0.77]),
+    glass: mat(GLASS, [0.85, 0.95, 1.0]),
+    glow: mat(PANEL, [0.35, 0.6, 1.1], GLOW),
+    furniture: mat(PLASTER, [0.3, 0.33, 0.38]),
   };
 }

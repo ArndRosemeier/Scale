@@ -36,7 +36,8 @@ export interface Volume {
 }
 
 /** What a room is for: the theme furnishes it accordingly. */
-export type RoomFn = 'quarters' | 'lab' | 'mess' | 'lounge' | 'storage' | 'control' | 'stairs' | 'lobby' | 'hall' | 'gallery';
+export type RoomFn = 'quarters' | 'lab' | 'mess' | 'lounge' | 'storage' | 'control' | 'stairs' | 'lobby' | 'hall' | 'gallery'
+  | 'exhibit' | 'shop' | 'cafe' | 'corridor' | 'office' | 'garden' | 'checkin' | 'security' | 'gates';
 
 /** A flat floor plate (four corners, counter-clockwise from above), its top at y. */
 export interface DFloor { q: [P2, P2, P2, P2]; y: number; th: number; fn: RoomFn }

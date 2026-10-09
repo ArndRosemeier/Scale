@@ -94,9 +94,37 @@ either side get a gallery corridor with exhibition rooms, one shop, one café an
 (`museumProgram` / `museumItems`), with wide doors (`Program.doorW`) in the middle of each wall.
 Above the wings a solid block reaches the roof, so the classical hall alone rises the full height.
 Exhibition pieces (display case, statue, big statue, painting, bench, reception desk) are built in
-`design/props`; colours come from `museumTheme`. Selftest section "museum": walk in from the steps,
-every room's door passable, the key pieces present. Glasshouse, airport, tower deck, lighthouse
-and fortress are still empty shells.
+`design/props`; colours come from `museumTheme`.
+
+## Glasshouse and airport terminal (phase 4b)
+
+Every designed landmark registers its design in `plan/designs.ts` (`landmarkDesign`,
+`landmarkRooms`). `fillStorey` also takes `entrances` (shell walls the caller builds itself, with
+their openings, so the filler keeps the floor in front of them clear), `keepOut` floor and
+`furnishFixed` (furnish halls the caller laid out itself). The filler takes `Item.spots`: a
+free-standing piece tries only those points (a fountain in the middle of a ring path, plants
+lining the paths, seat rows at a gate) instead of its coarse grid.
+
+- Glasshouse (`plan/glasshouseParts.ts`, `fill/garden.ts`): the shell is glass panels on a brick
+  plinth (polygons round the domes, the door a gap in the front panel, entrance steps), domes and
+  vaults stay as roofs with a clear inner copy. Each hall is its own storey: the dome a ring path
+  round a fountain with spokes to the door and the wings (a second ring in big domes), the wings
+  and parallel halls a path along their axis with cross paths to the arches. Plantings: palms
+  (palms, broadleaf trees, ferns, beds along the glass), desert (cacti, rocks, low palms), flowers
+  (beds, small trees); plants only as tall as the hall allows. Paths are gravel over green beds.
+- Airport terminal (`plan/terminalParts.ts`, `fill/terminal.ts`): the glazed hall is a shell with
+  three doors under the kerb canopy. Fixed open spaces: the check-in hall along the front, the
+  gate lounges along the apron, two security lanes through the band between; the core cuts the
+  rest of the band into shops, cafés, a back office and stores (under its own ceiling) and
+  furnishes everything: a row of check-in desks facing the doors, departures boards, scanner
+  arches with bag belts, seat rows facing the glass at each gate with its desk.
+
+Selftest section "walk-in landmarks": museums (both styles), glasshouses (all three styles) and
+terminals, walked in from the ground through every door, every room passable through its door
+(a security lane through each scanner), key pieces present. `preview-landmark.html?kind=<museum|
+glasshouse|airport>&seed=&size=&at=u,v,y,tu,tv,ty&still=1` renders one from a real city plan on
+flat ground, outside or from a point inside. Tower deck, lighthouse and fortress keep are still
+empty.
 
 Checks: `tools/homeTest.ts` (selftest section "furnished homes"), `tools/splitTest.ts` (section
 "room splitting": odd outlines and real storeys, coverage, overlap, room size, reachability,
@@ -109,6 +137,6 @@ storey in 3D (`?n=<building>&floor=<f>&room=<k>&top=1&type=living&still=1`).
 1. Filler + home theme for flats (v0.169, PR #139).
 2. Room splitting for any shape with reserve-first programs; offices, shops and cafés themes (v0.172).
 3. The starship hall (design step 1) as one reserve strategy on the core (v0.173).
-4. The museum (great hall + galleries) on the core (v0.176); the other empty landmarks follow.
+4. The museum (great hall + galleries) on the core (v0.176); glasshouse and airport terminal (v0.181); tower deck, lighthouse and fortress keep next.
 5. Town hall, cathedral and sewer side rooms on the core.
 6. Delete the old builders.

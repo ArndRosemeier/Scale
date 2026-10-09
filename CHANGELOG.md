@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.181 — 2026-10-09
+
+- **The botanical glasshouse can be walked into.** Go up the steps and through the door in the front: inside are gravel paths between green beds, a fountain in the middle of the dome with a ring path round it, and palms, broadleaf trees and ferns lining the paths, with flower beds along the glass and benches to sit on. The wings or side halls each get a planting of their own: a desert hall with cacti and rocks, or a flower hall with beds and small trees. The palm house's dome opens into its wings, and the three parallel halls are joined by arches. Plants are only as tall as each hall allows.
+- **The airport terminal can be walked into.** Three doors under the kerbside canopy lead into the check-in hall, with a row of check-in desks and bag belts, departures boards and seats. Two security lanes with scanner arches and bag belts lead through a low band of shops, cafés and back rooms to the gate lounges along the glass, where rows of seats face the apron and each gate has its desk and sign.
+- Interior core, step 4 of 6 continued (`docs/INTERIORS_PLAN.md`). New `preview-landmark.html` shows a walkable landmark from a real city, inside or out.
+
 ## 0.180 — 2026-10-09
 
 - **Less memory: the game's tab holds about 1 GB less after a while of travelling.** Building meshes, the crowd's baked animation and the facade and street texture sets used to stay in the tab's memory a second time after they had been handed to the graphics card. Now each is kept once, on the graphics card. Buildings that start hidden (the detailed version of far blocks, the simple version of near ones) are handed over within a few frames of arriving, one per frame. Measured on a real PC (size 1, four minutes of travel): the tab's JavaScript heap fell from 3.7 GB to 2.8 GB (Chrome's limit is 4.2 GB) and the tab's process from 6.0 to 5.0 GB; the graphics process grew by 0.3 GB. Frame rate unchanged, fewer long frames. Nothing looks different.

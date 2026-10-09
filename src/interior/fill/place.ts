@@ -57,6 +57,8 @@ export interface Item extends Piece {
   /** Lowest acceptable score: below it the item is left out. */
   min?: number;
   kids?: Kid[];
+  /** Free-standing: try only these spots (x, z) instead of a grid over the room. */
+  spots?: [number, number][];
 }
 
 /** A candidate spot: centre, facing, width, and the wall it stands against (if any) with the position along it. */
@@ -239,6 +241,9 @@ export class Filler {
           }
         }
       }
+    } else if (it.spots) {
+      const F = this.frame, yaws = (it.sym ? [0, 1] : [0, 1, 2, 3]).map((k) => Math.atan2(F.ux, F.uz) + (k * Math.PI) / 2);
+      for (const w of widths) for (const [x, z] of it.spots) if (pointInPoly(this.A.poly, x, z)) for (const yaw of yaws) out.push({ x, z, yaw, w, edge: null, s: 0 });
     } else {
       const F = this.frame;
       // A grid of about 180 spots over the room, four facings (two for pieces that look the same turned round).
