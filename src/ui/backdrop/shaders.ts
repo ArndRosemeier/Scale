@@ -317,3 +317,99 @@ void main() {
   float a = exp(-r * r * 5.0) + 0.25 * exp(-r * r * 1.5) - 0.06;
   o = vec4(v_col * max(a, 0.0), 1.0);
 }`;
+
+/** Saucers (u_mode 0) and their beams (u_mode 1): one instance per saucer, poses from uniforms (ufos.ts). */
+export const UFO_VS = (max: number) => /* glsl */ `#version 300 es
+uniform mat4 u_viewProj;
+uniform vec4 u_ufo[${max}];   // x, y, z, spin
+uniform vec4 u_ufo2[${max}];  // tilt axis * angle (x, z), radius, beam
+uniform float u_mode;
+in vec3 a_pos;
+in vec3 a_norm;
+out vec3 v_world;
+out vec3 v_norm;
+out vec3 v_local;
+flat out vec4 v_u;
+flat out vec4 v_u2;
+
+vec3 rot(vec3 v, vec3 k, float a) {
+  return v * cos(a) + cross(k, v) * sin(a) + k * dot(k, v) * (1.0 - cos(a));
+}
+
+void main() {
+  vec4 u = u_ufo[gl_InstanceID];
+  vec4 u2 = u_ufo2[gl_InstanceID];
+  vec3 p, n;
+  if (u_mode > 0.5) {
+    // Beam: from under the saucer down to the street, widening.
+    p = vec3(a_pos.x * a_norm.x * u2.z, a_pos.y * (u.y - 2.0) - u2.z * 0.2, a_pos.z * a_norm.x * u2.z);
+    n = normalize(vec3(a_pos.x, 0.0, a_pos.z));
+  } else {
+    float ta = length(u2.xy);
+    vec3 k = ta > 1e-4 ? vec3(u2.x, 0.0, u2.y) / ta : vec3(1.0, 0.0, 0.0);
+    p = rot(a_pos * u2.z, k, ta);
+    n = rot(a_norm, k, ta);
+  }
+  v_local = a_pos;
+  v_world = u.xyz + p;
+  v_norm = n;
+  v_u = u;
+  v_u2 = u2;
+  gl_Position = u_viewProj * vec4(v_world, 1.0);
+}`;
+
+export const UFO_FS = COMMON + /* glsl */ `
+in vec3 v_world;
+in vec3 v_norm;
+in vec3 v_local;
+flat in vec4 v_u;
+flat in vec4 v_u2;
+out vec4 o;
+void main() {
+  vec3 n = normalize(v_norm);
+  vec3 view = normalize(v_world - u_cam);
+  if (dot(n, view) > 0.0) n = -n;
+  float y = v_local.y, r = length(v_local.xz);
+  vec3 env = sky(reflect(view, n));
+  float fres = pow(1.0 - abs(dot(n, view)), 3.0);
+  float sunL = max(dot(n, normalize(vec3(u_sun.x, 0.3, u_sun.z))), 0.0);
+  vec3 h = normalize(normalize(vec3(u_sun.x, 0.3, u_sun.z)) - view);
+  float spec = pow(max(dot(n, h), 0.0), 40.0);
+  // The belly is dark, worn metal (it would mirror the bright horizon otherwise); the top is polished.
+  float top = smoothstep(-0.03, 0.03, y);
+  vec3 c = vec3(0.28, 0.29, 0.32) * mix(0.25, 1.0, top) * (0.18 + 0.6 * sunL) + env * mix(0.06 + 0.2 * fres, 0.45 + 0.8 * fres, top) + vec3(1.0, 0.6, 0.35) * spec * 0.8 * top;
+  // Glass dome with something green glowing inside.
+  if (y > 0.165) c = mix(c, vec3(0.25, 0.95, 0.65) * (0.7 + 0.3 * sin(u_time * 3.0 + v_u.w)), 0.65) + env * 0.25;
+  // Running lights round the rim.
+  float ang = atan(v_local.z, v_local.x) + v_u.w;
+  float cell = ang * 14.0 / 6.2832;
+  float id = mod(floor(cell), 2.0);
+  float dotm = smoothstep(0.32, 0.12, abs(fract(cell) - 0.5)) * smoothstep(0.05, 0.0, abs(y - 0.005));
+  vec3 lc = id < 0.5 ? vec3(1.0, 0.55, 0.15) : vec3(0.3, 0.9, 1.0);
+  c += lc * dotm * 4.0;
+  // The belly glows.
+  if (y < -0.05) {
+    c += vec3(0.35, 1.0, 0.6) * smoothstep(0.55, 0.0, r) * (1.4 + 0.5 * sin(u_time * 5.0 + v_u.w));
+    // A ring of pulsing ports round the belly.
+    float port = smoothstep(0.3, 0.1, abs(fract(atan(v_local.z, v_local.x) * 8.0 / 6.2832 - v_u.w * 0.3) - 0.5)) * smoothstep(0.08, 0.0, abs(r - 0.68));
+    c += vec3(1.0, 0.35, 0.2) * port * (2.0 + 1.5 * sin(u_time * 9.0));
+  }
+  o = finish(fog(c, v_world));
+}`;
+
+export const BEAM_FS = COMMON + /* glsl */ `
+in vec3 v_world;
+in vec3 v_norm;
+in vec3 v_local;
+flat in vec4 v_u;
+flat in vec4 v_u2;
+out vec4 o;
+void main() {
+  vec3 view = normalize(v_world - u_cam);
+  float edge = pow(abs(dot(normalize(v_norm), view)), 1.4);
+  float along = 1.0 + v_local.y;  // 1 at the saucer, 0 on the street
+  float rings = 0.75 + 0.25 * sin(v_local.y * 60.0 + u_time * 8.0);
+  float a = v_u2.w * edge * (0.12 + 0.5 * along * along) * rings;
+  vec3 c = vec3(0.35, 1.0, 0.65) * a * exp(-length(v_world - u_cam) / 2600.0);
+  o = vec4(c * u_fade, 1.0);
+}`;

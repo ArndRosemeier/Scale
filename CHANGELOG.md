@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.177 — 2026-10-09
+
+- **UFOs over the start screen.** Three flying saucers circle high over the city with running lights round their rims and a glowing dome. Every half minute or so one sinks a little and sweeps a green scanning beam over the roofs.
+- **Watch out.** Every 40 to 75 seconds (the first time about 12 seconds in) a saucer comes in from far over the skyline, picks up speed and dives straight at you, its glowing belly filling the screen. Then there is a green flash and the camera jolts. Once you have clicked or pressed a key on the page, you also hear it: a wobbling hum rising to a shriek, then a whoosh as it passes. There is no sound with `?mute`, and no dive with reduced motion switched on.
+
 ## 0.176 — 2026-10-09
 
 - **The museum can be walked into.** Climb the steps, go through the big door in the middle of the front and you're in a great hall that runs to the back, the full height of the building in the classical museum. A big statue stands in the middle with benches round it, and there are display cases, plants, large paintings and a reception desk just inside the door. Either side, a gallery corridor leads to exhibition rooms with paintings round the walls, display cases, statues and a bench, plus a museum shop, a café and a store room. The modern glass museum gets the same inside under its glazed walls.
