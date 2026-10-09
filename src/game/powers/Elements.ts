@@ -661,7 +661,7 @@ export class Elements {
       switch (t.kind) {
         case 'person': {
           const a = t.obj;
-          if (a.state !== PState.Down) { this.knock(a, A.ox, A.oz, POWER_HIT.laserKnock); this.record('laser', t, 'knockdown', a.x, a.z); }
+          if (a.state !== PState.Down) { this.knock(a, A.ox, A.oz, POWER_HIT.laserKnock[r]); this.record('laser', t, 'knockdown', a.x, a.z); }
           if ((statusOf(a)?.burning ?? 0) <= 0) this.record('laser', t, 'burn', a.x, a.z);
           this.burn(t, 3);
           break;
@@ -796,7 +796,7 @@ export class Elements {
       case 'person': {
         const a = t.obj;
         // Close: thrown off their feet. Further: on fire and running (they pat themselves out).
-        if (d < b.range * POWER_HIT.fireKnockReach && a.state !== PState.Down) { this.knock(a, b.ox, b.oz, POWER_HIT.fireKnock); this.record('fireWave', t, 'knockdown', a.x, a.z); }
+        if (d < b.range * POWER_HIT.fireKnockReach && a.state !== PState.Down) { this.knock(a, b.ox, b.oz, POWER_HIT.fireKnock[b.rank]); this.record('fireWave', t, 'knockdown', a.x, a.z); }
         else if (a.state !== PState.Down) { a.state = PState.Flee; a.stateT = 0; a.fearX = b.ox; a.fearZ = b.oz; a.fear = 2; }
         this.burn(t, burnT);
         this.record('fireWave', t, 'burn', a.x, a.z);
@@ -883,7 +883,7 @@ export class Elements {
       switch (t.kind) {
         case 'person': {
           const a = t.obj;
-          if (a.state !== PState.Down) { this.knock(a, x, z, POWER_HIT.fireballKnock + POWER_HIT.fireballKnockCentre * f, 2 + 4 * f); this.record('fireball', t, 'knockdown', a.x, a.z); }
+          if (a.state !== PState.Down) { this.knock(a, x, z, POWER_HIT.fireballKnock[r] * (0.5 + 0.5 * f), 2 + 4 * f); this.record('fireball', t, 'knockdown', a.x, a.z); }
           this.burn(t, burnT);
           this.record('fireball', t, 'burn', a.x, a.z);
           break;
@@ -1205,7 +1205,7 @@ export class Elements {
     switch (t.kind) {
       case 'person': {
         const a = t.obj;
-        if (a.state !== PState.Down) this.knock(a, x + (Math.random() - 0.5), z + (Math.random() - 0.5), POWER_HIT.boltKnock, 1.2);
+        if (a.state !== PState.Down) this.knock(a, x + (Math.random() - 0.5), z + (Math.random() - 0.5), POWER_HIT.boltKnock[r], 1.2);
         this.stun(t, stunT);
         this.record('lightning', t, 'stun', a.x, a.z);
         break;
@@ -1553,7 +1553,7 @@ export class Elements {
       switch (t.kind) {
         case 'person': {
           const a = t.obj;
-          if (a.state !== PState.Down && e.acc > POWER_HIT.hydroKnockAt) { this.knock(a, A.ox, A.oz, Math.min(POWER_HIT.hydroKnockMax, POWER_HIT.hydroKnock + e.acc * POWER_HIT.hydroKnockPerNs), 0.8); this.record('hydro', t, 'knockdown', a.x, a.z); e.acc = 0; }
+          if (a.state !== PState.Down && e.acc > POWER_HIT.hydroKnockAt) { this.knock(a, A.ox, A.oz, Math.min(POWER_HIT.hydroKnockMax, POWER_HIT.hydroKnock[r] + e.acc * POWER_HIT.hydroKnockPerNs), 0.8); this.record('hydro', t, 'knockdown', a.x, a.z); e.acc = 0; }
           else if (a.state === PState.Down) { a.vx += A.dx * J / 150; a.vz += A.dz * J / 150; }
           break;
         }

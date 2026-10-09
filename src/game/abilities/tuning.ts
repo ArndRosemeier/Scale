@@ -277,15 +277,17 @@ export const POWER_HIT = {
   punchLift: 0.25, blastShare: 0.5,
   /** Super speed / dash: fling speed (1.5 + 0.6 × rank) × √size, at most 12 m/s. */
   dashKnock: 1.5, dashKnockPerRank: 0.6, dashKnockMax: 12,
-  laserKnock: 2.5,
+  /** Fling speeds by rank (index = rank) for the powers that knock people down: a higher rank hits
+   *  harder, not only wider (balance audit v0.192; before, every rank did the same to a person). */
+  laserKnock: [0, 2, 2.6, 3.3, 4.2, 5.4],
   /** Fire wave: knocks down people within this share of its range; creatures: × heat impulse. */
-  fireKnock: 3, fireKnockReach: 0.45, fireCreatureMul: 1.5,
-  /** Fireball: fling 3 m/s at the rim up to 3 + 6 at the centre. */
-  fireballKnock: 3, fireballKnockCentre: 6, fireballCreatureMul: 1.5,
+  fireKnock: [0, 2.4, 3, 3.8, 4.8, 6], fireKnockReach: 0.45, fireCreatureMul: 1.5,
+  /** Fireball: fling at the centre by rank, half of it at the rim. */
+  fireballKnock: [0, 4, 5.2, 6.5, 8, 10], fireballCreatureMul: 1.5,
   /** Ice path: someone who slips falls at 1.2 + 0.4 × their speed. */
   iceSlipKnock: 1.2, iceSlipPerSpeed: 0.4,
   /** Chain lightning: fling per person; creatures: points per second of stun (× reach scale). */
-  boltKnock: 1.4, boltCreature: 22,
+  boltKnock: [0, 1.2, 1.6, 2.1, 2.7, 3.4], boltCreature: 22,
   /** Frost nova on a creature: points per second of freeze, at a leg. */
   frostCreature: 18,
   /** Seismic stomp: fling 3 + impulse / 30 000 (at most 9); machines and props are shoved with at
@@ -294,9 +296,9 @@ export const POWER_HIT = {
   /** Whirlwind: fling = 0.7 × lift; creatures: 6 × lift per hit; the same person is caught again
    *  after `gustEveryPerson` s, anything else (but cars) after `gustEvery` s. */
   gustKnock: 0.7, gustCreature: 6, gustEveryPerson: 2.2, gustEvery: 1.2,
-  /** Hydrokinesis: a person falls once the jet has built up this impulse (N·s), at 2 + impulse / 250
+  /** Hydrokinesis: a person falls once the jet has built up this impulse (N·s), at hydroKnock[rank] + impulse / 250
    *  (at most 9), pushing every `hydroTick` s; creatures take this share of the jet's impulse. */
-  hydroKnockAt: 260, hydroTick: 0.1, hydroKnock: 2, hydroKnockPerNs: 1 / 250, hydroKnockMax: 9, hydroCreatureMul: 0.3,
+  hydroKnockAt: 260, hydroTick: 0.1, hydroKnock: [0, 1.5, 2, 2.6, 3.3, 4], hydroKnockPerNs: 1 / 250, hydroKnockMax: 9, hydroCreatureMul: 0.3,
   /** Slime call: points per second for every Lumen on a creature. */
   lumenCreature: 6,
 };
