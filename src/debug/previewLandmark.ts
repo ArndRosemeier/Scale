@@ -1,9 +1,10 @@
 /**
  * Standalone preview of a walkable landmark from a real city plan (preview-landmark.html): the
- * museum, the glasshouse or the airport terminal of ?seed=<n>&size=<s>&kind=<kind>, rebuilt on
- * flat ground, outside or inside. URL: &at=<u,v,y,tu,tv,ty> (camera and target in its local
- * frame, y above its floor; default: outside, three-quarter view)&night=1&still=1 (one frame, for
- * screenshots). Inside, the room lights nearest the camera are lit as the game does.
+ * museum, the glasshouse, the airport terminal or any other walkable landmark of
+ * ?seed=<n>&size=<s>&kind=<kind>[&style=<n>], rebuilt on flat ground, outside or inside.
+ * URL: &at=<u,v,y,tu,tv,ty> (camera and target in its local frame, y above its floor; default:
+ * outside, three-quarter view)&night=1&still=1 (one frame, for screenshots). Inside, the room
+ * lights nearest the camera are lit as the game does.
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -23,7 +24,7 @@ import type { MeshBuilder } from '../build/meshBuilder';
 
 const q = new URLSearchParams(location.search);
 const seed = Number(q.get('seed') ?? 7), size = Number(q.get('size') ?? 0.8), kind = q.get('kind') ?? 'glasshouse';
-const night = q.get('night') === '1';
+const night = q.get('night') === '1', style = q.get('style');
 const hud = document.getElementById('hud')!;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -52,7 +53,7 @@ for (const l of lights) scene.add(l);
 const tex = new TextureLibrary();
 await tex.load();
 // The landmark as planned in that city, moved to the origin on flat ground.
-const real = buildMacroPlan(new Terrain(makeProfile({ seed, size }))).landmarks.find((l) => l.kind === kind);
+const real = buildMacroPlan(new Terrain(makeProfile({ seed, size }))).landmarks.find((l) => l.kind === kind && (style === null || l.style === Number(style)));
 if (!real) throw new Error(`no ${kind} in seed ${seed} size ${size}`);
 const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
 const lm: Landmark = { ...real, x: 0, z: 0, angle: 0, base: 0.15, low: 0, site: [] };

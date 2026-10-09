@@ -24,6 +24,7 @@ import { emitDesign } from '../interior/design/emit';
 import { scifiTheme } from '../interior/design/theme';
 import { starshipProgram, starshipItems } from '../interior/fill/starship';
 import { ellipseStar, type Volume } from '../interior/design/types';
+import { twistInside } from './twistParts';
 
 export const MARVEL_STYLES = 8;
 export const enum MS { Starship = 0, Helix = 1, Porous = 2, Twist = 3, Skyship = 4, Halo = 5, Orbs = 6, Stack = 7 }
@@ -389,13 +390,16 @@ function twist(k: Kit, lm: Landmark, r: Rng, L: Look): void {
   const P = lm.p, B = k.B, H = P.h, n = Math.max(8, Math.round(H / P.segH)), dh = H / n;
   const wall = r.chance(0.6) ? L.glass : L.hull;
   const ease = r.chance(0.5);
-  for (let i = 0; i < n; i++) {
-    const t = i / n, tw = P.twist * (ease ? (1 - Math.cos(t * Math.PI)) / 2 : t);
-    const s = 1 - (1 - P.taper) * t;
-    const y = B + i * dh;
-    k.box(0, 0, P.side * s, P.side * s * P.aspect, y, y + dh, wall, { rot: tw, foot: i === 0 ? true : undefined, top: L.roof });
+  const tw = (i: number) => { const t = i / n; return P.twist * (ease ? (1 - Math.cos(t * Math.PI)) / 2 : t); };
+  const sz = (i: number) => 1 - (1 - P.taper) * (i / n);
+  // The lowest storeys walkable (plan/twistParts), solid blocks above.
+  const [, a, g] = PALETTES[P.col % PALETTES.length];
+  const m = twistInside(k, lm, { n, dh, tw, s: sz, wall, plain: L.hullPlain, roof: L.roof, accent: a, glass: g });
+  for (let i = m; i < n; i++) {
+    const s = sz(i), y = B + i * dh;
+    k.box(0, 0, P.side * s, P.side * s * P.aspect, y, y + dh, wall, { rot: tw(i), foot: i === 0 ? true : undefined, top: L.roof });
     // Floor plate lips every other block (near only).
-    if (i % 2 === 1) k.box(0, 0, P.side * s + 0.6, P.side * s * P.aspect + 0.6, y + dh - 0.4, y + dh, L.hullPlain, { rot: tw, detail: true, solid: false });
+    if (i % 2 === 1) k.box(0, 0, P.side * s + 0.6, P.side * s * P.aspect + 0.6, y + dh - 0.4, y + dh, L.hullPlain, { rot: tw(i), detail: true, solid: false });
   }
   const tw1 = P.twist, s1 = P.taper;
   if (r.chance(0.5)) k.pyramid(0, 0, P.side * s1, P.side * s1 * P.aspect, B + H, B + H + P.side * s1 * r.range(1.5, 3), 0, L.accent, { rot: tw1 });
