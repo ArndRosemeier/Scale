@@ -656,6 +656,39 @@ section('friend/foe sense', async () => {
   check(isFoe({ kind: 'threat', obj: {} } as never, W) && !isFoe({ kind: 'threat', obj: { self: true } } as never, W), 'foe: monsters (not the rampaging hero body)');
 });
 
+// ---- factions: one table of who is hostile to whom (factions/relations.ts); numbers, today's rules.
+section('faction relations', async () => {
+  const { defaultRelations, REL, FACTIONS } = await import('../src/game/factions/relations');
+  const { ARCHETYPES } = await import('../src/game/factions/archetypes');
+  const { factionOf, isFoe } = await import('../src/game/friendFoe');
+  const R = defaultRelations();
+  const ids = Object.keys(ARCHETYPES) as (keyof typeof ARCHETYPES)[];
+  let same = true;
+  for (const a of ids) for (const b of ids) if (a !== b) {
+    const old = ARCHETYPES[a].rivals.includes(b) || ARCHETYPES[b].rivals.includes(a);
+    if (R.hostile(a, b) !== old || R.hostile(b, a) !== old) same = false;
+  }
+  check(same, 'relations: the villain groups at war are exactly the archetypes\' rivals');
+  check(FACTIONS.every((f) => R.get(f, f) === REL.max && !R.hostile(f, f)), 'relations: nobody is hostile to their own faction');
+  check(['crooks', ...ids, 'murk', 'monsters', 'machines', 'teens'].every((f) => R.hostile('hero', f as never)), 'relations: the hero is hostile to crooks, villain groups, Murk, monsters, rogue machines and runaway teens');
+  check(['civilians', 'police', 'army', 'sidekick', 'lumen', 'wardens'].every((f) => !R.hostile('hero', f as never)), 'relations: … and not to civilians, the forces, the sidekick, the Lumen or the Wardens');
+  check(R.hostile('lumen', 'murk') && R.hostile('police', 'crooks') && R.hostile('army', 'monsters') && !R.hostile('wardens', 'hero'), 'relations: Lumen vs Murk, police vs crooks, army vs monsters; the Wardens never meddle');
+  let rep = -70;
+  R.bind('civilians', 'hero', () => rep);
+  check(R.get('civilians', 'hero') === -70 && R.hostile('civilians', 'hero'), 'relations: the civilians\' feeling about the hero is the reputation (bound)');
+  rep = 240;
+  check(R.get('civilians', 'hero') === 240, 'relations: a bound standing is not clamped (reputation has no ceiling)');
+  R.set('gang', 'syndicate', 400); R.shift('gang', 'syndicate', -500);
+  check(R.get('gang', 'syndicate') === REL.min, 'relations: set and shift clamp to the scale');
+  const W = { hostileThing: () => false, group: (i: number) => (i === 2 ? 'necro' : undefined) } as never;
+  const crook = (faction?: number) => ({ kind: 'person', obj: { actor: { role: 'criminal', state: 'fight', hostile: true, owner: 1, faction } } }) as never;
+  check(factionOf(crook(), W) === 'crooks' && factionOf(crook(2), W) === 'necro', 'factionOf: a criminal of no group is a crook, else their group');
+  check(factionOf({ kind: 'threat', obj: { faction: 'murk' } } as never, W) === 'murk' && factionOf({ kind: 'threat', obj: {} } as never, W) === 'monsters', 'factionOf: Murk are Murk, other threats monsters');
+  const T = defaultRelations();
+  T.set('hero', 'necro', REL.wary);
+  check(isFoe(crook(), { hostileThing: () => false, relations: T } as never) && !isFoe(crook(2), { hostileThing: () => false, relations: T, group: () => 'necro' } as never), 'isFoe follows the table: a group the hero is no longer hostile to is spared');
+});
+
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
 section('departure boards', async () => {
   const { nextTrainAt, trainsOn } = await import('../src/underground/layout');
@@ -1083,7 +1116,7 @@ section('street crime', async () => {
 section('villain groups', async () => {
   const { crimeIndex } = await import('../src/game/crime/CrimeIndex');
   const { planHour } = await import('../src/game/crime/CrimeDirector');
-  const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions, drift, relation, rivalsAt, strength, DRIFT } = await import('../src/game/factions/Factions');
+  const { planFactions, HOLD, shift, SHIFT, saveFactions, restoreFactions, drift, relation, hostileGroups, rivalsAt, strength, DRIFT } = await import('../src/game/factions/Factions');
   const { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts } = await import('../src/game/factions/Hideouts');
   const { planBosses, bossLabel, raise, heatOf, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, NOTORIETY, BOSS } = await import('../src/game/factions/Bosses');
   const { ARCHETYPES, CITY_GROUPS } = await import('../src/game/factions/archetypes');
@@ -1150,7 +1183,7 @@ section('villain groups', async () => {
     const grow = shift(G, gang.home, gang.id, SHIFT.tag);
     check(grow.length === 0 && G.influence[gang.id][gang.home] <= SHIFT.max, 'a tag at home strengthens the hold without flipping it');
     // Phase 2: the gang and the Syndicate are at war; turf brawls only where they meet.
-    check(relation(F, gang.id, syn.id) === 'hostile' && relation(F, syn.id, gang.id) === 'hostile' && relation(F, gang.id, gang.id) === 'self', 'the gang and the Syndicate are rivals');
+    check(hostileGroups(F, gang.id, syn.id) && hostileGroups(F, syn.id, gang.id) && !hostileGroups(F, gang.id, gang.id) && relation(F, gang.id, gang.id) === 100, `the gang and the Syndicate are rivals (${relation(F, gang.id, syn.id)})`);
     const border = F.holder.findIndex((h, i) => h === gang.id && F.near[i].some((j) => F.holder[j] === syn.id));
     const deep = F.holder.findIndex((h, i) => h === gang.id && [i, ...F.near[i]].every((j) => F.holder[j] !== syn.id && F.influence[syn.id][j] < 0.12));
     if (border >= 0) check(rivalsAt(F, border, gang.id)[0] === syn.id, `a border cell: the Syndicate presses there (cell ${border})`);
