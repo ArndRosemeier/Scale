@@ -43,7 +43,7 @@ const TOUCH_CONTROLS: [string, string][] = [
 /** Mouse and the keys that cannot be moved. */
 const FIXED: [string, string][] = [
   ['Right mouse (hold)', 'Look around'],
-  ['Mouse wheel', 'Camera distance'],
+  ['Mouse wheel', 'Camera distance (all the way in: first person)'],
   ['Left click', 'On someone or something: target it (punch is a hotbar power, slot 1 by default)'],
   ['Esc', 'Clear the target · close a screen · pause & settings'],
   ['1 … 7 in a talk', 'Pick an answer'],
