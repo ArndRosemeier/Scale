@@ -5,7 +5,6 @@ Every push raises the version by 0.001. Newest first.
 ## 0.209 — 2026-10-09
 
 - **The focus beam hits like a blow, and the seeker orb got a glow-up.** Looks only: damage and energy costs are unchanged. The focus beam now has a wide golden haze round its white-hot core. Rings of air ripple away along its path, and a flash and a ring leave your eyes when it fires. Where it lands you get a white flash, a shock ring across the surface, sparks thrown back, chips and dust kicked up, and a heavier camera shake. A well-charged shot also lands with a thud. The seeker orb is now a white-hot heart in a violet glow with a soft halo, three sparks circling it, little arcs crackling off it and a smooth comet tail behind it. It leaves your hands with a flash and bursts on its target with a violet flash, shock rings and a spray of sparks.
-=======
 ## 0.208 — 2026-10-09
 
 - **Super jump landings leave cars whole.** Coming down from a high super jump on or right next to a driving car used to flatten it. At about human size a landing now leaves cars intact. Only a giant's foot (a body over 6 m) still crushes them, as before.
