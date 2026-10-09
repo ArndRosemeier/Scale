@@ -30,6 +30,10 @@ export function geometryKey(a: HumanoidAppearance): string {
   ].join(',');
 }
 
+/** BodyService.collect: how often it runs on its own, and how long an unused geometry is kept at least. */
+const COLLECT_EVERY_MS = 5000;
+const IDLE_MS = 30000;
+
 export class BodyService {
   private static inst: BodyService | null = null;
   static get(): BodyService {
@@ -46,6 +50,7 @@ export class BodyService {
   private noWorkers = false;
   private builds = new Map<string, Promise<CharacterGeometry>>();
   private geos = new Map<string, CharacterGeometry>();
+  private collectedAt = 0;
   /** Diagnostics: last build durations (ms). */
   readonly stats = { builds: 0, avgMs: 0 };
 
@@ -82,6 +87,13 @@ export class BodyService {
   /** Geometry for an appearance (cached; lower priority value = sooner). */
   geometry(app: HumanoidAppearance, priority = 0): Promise<CharacterGeometry> {
     const key = geometryKey(app);
+    const now = performance.now();
+    if (now - this.collectedAt > COLLECT_EVERY_MS) {
+      this.collectedAt = now;
+      this.collect();
+    }
+    const had = this.geos.get(key);
+    if (had) had.lastUsed = now;
     let p = this.builds.get(key);
     if (!p) {
       p = this.ready().then(async (st) => {
@@ -104,9 +116,15 @@ export class BodyService {
     return this.geos.get(geometryKey(app)) ?? null;
   }
 
-  /** Drop unreferenced geometries (call occasionally). */
+  /**
+   * Drop unreferenced geometries, all but the `keep` most recently used, and none used in the last
+   * IDLE_MS (a rig may hold one between its build and its Character). Runs on its own from
+   * geometry(): the crowd builds a new body for nearly every walker, and they used to stay cached
+   * forever (about 3.5 MB each: on a PC over 1.5 GB after ten minutes of travel).
+   */
   collect(keep = 24) {
-    const unused = [...this.geos.entries()].filter(([, g]) => g.refs <= 0);
+    const now = performance.now();
+    const unused = [...this.geos.entries()].filter(([, g]) => g.refs <= 0 && now - g.lastUsed > IDLE_MS).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
     for (const [key, g] of unused.slice(0, Math.max(0, unused.length - keep))) {
       g.dispose();
       this.geos.delete(key);
