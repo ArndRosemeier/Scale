@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.215 — 2026-10-09
+
+- **A freeze log.** Once the game is running, any moment it stops for more than half a second is recorded with what was going on: which parts of the game ran and for how long, work done between frames (city cells arriving, crowd bodies, autosaves), what the browser itself reports about the slow frame and which scripts it blames, whether memory dropped sharply (garbage collection), and where you were and what was happening. The first freeze of a session over a second shows a short note. **Shift+F9** saves the log as a file (this session plus the last few freezes from earlier ones, which survive a reload) to send with a bug report. The Shift+F11 box now also shows how many freezes there were and when the last one was.
+
 ## 0.214 — 2026-10-09
 
 - **"Spawn at the nearest bridge" now really comes to your bridge.** The Leviathan only ever planned its way along one river (the one with the most bridges) and to at most three of its bridges, so standing on any other bridge it went to the nearest of those, often a kilometre or more away, and seemed to do nothing. With the admin button (or `dev.threat.spawn('leviathan', { near: true })`) it now picks the river of the bridge nearest you and comes up it to that bridge, surfacing right away. Only bridges at the very edge of the city, outside its reach, still fall back to the usual way.

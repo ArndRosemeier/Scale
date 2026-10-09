@@ -11,6 +11,7 @@ import type { HumanoidAppearance } from '../types';
 import { getHumanStatic, type HumanStatic } from './staticData';
 import { CharacterGeometry } from './Character';
 import { budgets } from '../../core/budgets';
+import { hitch } from '../../debug/HitchLog';
 
 interface Job {
   id: number;
@@ -60,10 +61,11 @@ export class BodyService {
       const n = budgets.bodyWorkers;
       for (let i = 0; i < n; i++) {
         const w = new Worker(new URL('../body.worker.ts', import.meta.url), { type: 'module' });
-        w.addEventListener('message', (e) => this.onMessage(w, e.data));
+        w.addEventListener('message', (e) => hitch.measure('bodies:message', () => this.onMessage(w, e.data)));
         w.addEventListener('error', (e) => {
           console.warn('[humanoid] body worker failed, building on the main thread', e.message);
           this.noWorkers = true;
+          hitch.note('body worker failed: bodies now build on the main thread');
           this.flushToMainThread();
         });
         this.workers.push(w);
@@ -98,7 +100,7 @@ export class BodyService {
     if (!p) {
       p = this.ready().then(async (st) => {
         const build = await this.build(app, priority);
-        const g = new CharacterGeometry(st, build);
+        const g = hitch.measure('bodies:geometry', () => new CharacterGeometry(st, build));
         this.geos.set(key, g);
         return g;
       });
@@ -131,6 +133,9 @@ export class BodyService {
       this.builds.delete(key);
     }
   }
+
+  /** The workers failed: every body is built on the main thread (slow; shows in the freeze log). */
+  get onMainThread(): boolean { return this.noWorkers; }
 
   get pending() {
     return this.queue.length + this.inflight.size;
@@ -180,7 +185,7 @@ export class BodyService {
     try {
       const as = await this.assetsP;
       await new Promise((r) => setTimeout(r, 0));
-      job.resolve(buildCharacter(as, job.app));
+      job.resolve(hitch.measure('bodies:mainThreadBuild', () => buildCharacter(as, job.app)));
     } catch (e) {
       job.reject(e);
     }
