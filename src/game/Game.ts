@@ -105,6 +105,7 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { Concert } from './concert/Concert';
 import { StationLife } from './metro/StationLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
@@ -127,7 +128,7 @@ import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
 import { Wardens } from './aliens/Wardens';
 import { POWER_HIT } from './abilities/tuning';
-import { BRUSH_MAX_H, downCauseOf, harmCauseOf, stompDownCause } from '../shared/cause';
+import { BRUSH_MAX_H, CAR_CRUSH_H, downCauseOf, harmCauseOf, stompDownCause } from '../shared/cause';
 
 /** What someone the hero brushed past or landed beside calls after them: stern, not hurt. */
 const BRUSH_LINES = ['Hey! Watch it!', 'Slow down, hero!', 'Some of us walk here!', 'Watch where you\'re going!', 'Unbelievable…', 'Mind the people!', 'This is a sidewalk!', 'Show-off!'];
@@ -218,6 +219,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** The stadium's evening concert (src/game/concert). */
+  concert: Concert | null = null;
   /** Commuters on the metro's stairs, platforms and trains near the player. */
   stationLife: StationLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
@@ -545,7 +548,7 @@ export class Game {
         const h = s.size ?? this.player.height, hero = downCauseOf(s.cause) === 'player';
         const r = Math.max(0.6, h * 0.09);
         for (const a of this.peds.agents) if (Math.hypot(a.x - s.x, a.z - s.z) < r && this.underground.sameSide(s.x, s.y, s.z, a.x, a.y, a.z)) this.reactions.knockDown(a, s.x, s.z, 2, stompDownCause(s.cause, h));
-        if (h > 6) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
+        if (h > CAR_CRUSH_H) for (const v of [...this.traffic.vehicles, ...this.parkedList]) {
           if (v.state === VState.Crushed || Math.hypot(v.x - s.x, v.z - s.z) >= r + v.length * 0.3) continue;
           this.traffic.crush(v);
           if (s.cause !== 'world') this.consequences.record('body', 'car', 'wreck', v.x, v.z, v, s.cause ?? 'player');
@@ -802,7 +805,7 @@ export class Game {
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
-    this.T('street', () => this.street?.update(dt));
+    this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); });
     this.T('people', () => { this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1166,6 +1169,7 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.concert = new Concert(this);
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
@@ -1283,9 +1287,15 @@ export class Game {
     }
   }
 
-  /** Nearest street holes and whether the camera is underground -> terrain shader. */
+  private holeList: number[] = [];
+
+  /** Nearest street holes (metro entrances, open manholes, sinkholes) and whether the camera is underground -> terrain shader. */
   private updateHoles(): void {
-    const H = this.underground.holes;
+    // (Sinkholes first: few, and big.)
+    const H = this.holeList;
+    H.length = 0;
+    this.threats?.sinkholes.holes(H);
+    for (const v of this.underground.holes) H.push(v);
     const c = this.renderer.camera.position;
     const list: number[] = [];
     for (let i = 0; i < H.length; i += 6) list.push(i);

@@ -732,6 +732,11 @@ export class Underground {
 
   // ------------------------------------------------------------ update
 
+  /** Hold every train (the Burrower under the city): they slow to a stop, `metroLag` s behind their timetable. */
+  metroHold = false;
+  private metroRate = 1;
+  private metroLag = 0;
+
   update(dt: number, time: number, cam: THREE.Camera, player: THREE.Vector3, playerH: number): void {
     // Build geometry near the player (and the camera).
     if (cam.position.distanceTo(this.lastBuildPos) > 40) {
@@ -782,8 +787,13 @@ export class Underground {
       l.position.set(near.cx + near.ux * u, near.y1 - 1, near.cz + near.uz * u);
       l.intensity = 6;
     });
-    this.time = time;
-    this.updateTrains(time, cam.position);
+    // Trains held (something big tunnelling under the city): they ease to a stop where they are and
+    // ease off again after; the timetable just runs that much later.
+    this.metroRate += (this.metroHold ? -1 : 1) * dt / 6;
+    this.metroRate = Math.max(0, Math.min(1, this.metroRate));
+    this.metroLag += dt * (1 - this.metroRate);
+    this.time = time - this.metroLag;
+    this.updateTrains(this.time, cam.position);
     this.boardT -= dt;
     if (this.boardT <= 0) { this.boardT = 0.5; this.updateBoards(cam.position); }
     void playerH; void G;

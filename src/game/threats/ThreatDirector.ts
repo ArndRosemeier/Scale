@@ -35,6 +35,10 @@ import { BroodMesh } from './brood/broodMesh';
 import type { HitEffect } from './brood/BroodSim';
 import type { Obstacle } from '../../world/Collision';
 import { RunawayTeens, type TeenOpts } from '../aliens/RunawayTeens';
+import { Burrower, BURROWER } from './burrower/Burrower';
+import { WormMesh } from './burrower/WormMesh';
+import { Sinkholes } from './burrower/Sinkholes';
+import { DecalKind } from '../powers/ElementFx';
 
 /** How an archetype shows itself before it comes (omens) and how it starts. */
 interface ArchetypeImpl {
@@ -60,6 +64,19 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
       } catch (err) { console.warn('[threats]', err); return null; }
     },
     fallback: ['tremor'],
+  },
+  // The Burrower: tunnels in from the hero's side of town; omens a rumble underfoot and potholes.
+  burrower: {
+    omen: (d, _site, kind, rng) => d.burrowerOmen(kind, rng),
+    start: (d, _site, seed, opts) => {
+      try {
+        const b = new Burrower(d.g, d.sinkholes, seed, opts as { toward?: { x: number; z: number } });
+        // (dev: { near: true } — it starts under the street nearest the hero.)
+        if (opts.near) b.devNear();
+        return b;
+      } catch (err) { console.warn('[threats]', err); return null; }
+    },
+    fallback: ['rumble'],
   },
   // A rampaging giant player (started by HostilePlayer after its warnings, never by the clock).
   rampage: {
@@ -155,6 +172,12 @@ export class ThreatDirector {
   readonly mesh: CreatureMesh;
   /** Facades set burning (breath, later crashes and shells). */
   readonly fires: FacadeFires;
+  /** The Burrower's skinned bodies (a live worm and one lying in the city), in the creatures' material. */
+  readonly wormMesh: WormMesh;
+  /** Holes in the street (the Burrower's breaches, its omen's potholes). */
+  readonly sinkholes: Sinkholes;
+  /** Dead worms lying in the city (gone after BURROWER.bodyHours game hours, when nobody is looking). */
+  readonly wormRemains: Burrower[] = [];
   /** Every brood swarm's creatures (one instanced mesh). */
   readonly broodMesh: BroodMesh;
   /** The few creatures of a brood omen darting between manholes. */
@@ -192,6 +215,9 @@ export class ThreatDirector {
     // in the city); the skin is built now and the program compiles during the warm-up.
     this.mesh = new CreatureMesh([{ def: STRIDER_RIG, count: 2, name: 'strider' }]);
     g.renderer.scene.add(this.mesh.group);
+    this.wormMesh = new WormMesh(this.mesh.material, 2);
+    g.renderer.scene.add(this.wormMesh.group);
+    this.sinkholes = new Sinkholes(g);
     this.broodMesh = new BroodMesh();
     g.renderer.scene.add(this.broodMesh.mesh);
     this.fires = new FacadeFires(g.elements.fx, g.destruction, g.renderer.camera);
@@ -208,6 +234,7 @@ export class ThreatDirector {
   /** Is this object part of a threat (a machine gone rogue, a monster)? Fair game for the player. */
   isHostile(ref: object): boolean {
     if (ref instanceof Strider) return true;
+    if (ref instanceof Burrower) return !ref.defeated;
     if (ref instanceof AwakenedTree) return !ref.defeated;
     const m = (ref as { mal?: { mode: string } }).mal;
     return !!m && m.mode === 'hostile';
@@ -268,7 +295,8 @@ export class ThreatDirector {
   }
 
   private obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
-    for (const ev of this.events) if (ev instanceof Strider) ev.obstacles(x0, z0, x1, z1, out);
+    for (const ev of this.events) if (ev instanceof Strider || ev instanceof Burrower) ev.obstacles(x0, z0, x1, z1, out);
+    for (const w of this.wormRemains) w.obstacles(x0, z0, x1, z1, out);
     for (const r of this.remains) r.obstacles(x0, z0, x1, z1, out);
     // Awakened trees, walking or rooted where they were beaten.
     for (const ev of this.events) if (ev instanceof AwakenedTree) ev.obstacles(x0, z0, x1, z1, out);
@@ -297,10 +325,15 @@ export class ThreatDirector {
       if (!ev.active && ev.t > (this.ended.get(ev) ?? ev.t) + LINGER) {
         // A defeated monster's body stays in the city.
         if (ev instanceof Strider && ev.defeated) this.remains.push(ev);
+        if (ev instanceof Burrower && ev.mode === 'dead') this.wormRemains.push(ev);
         ev.dispose(); this.ended.delete(ev); this.events.splice(i, 1);
       }
     }
     this.fires.update(dt);
+    this.sinkholes.update(dt);
+    this.wormsAfter(dt);
+    // Trains held while a worm tunnels under the city.
+    g.underground.metroHold = this.events.some((e) => e instanceof Burrower && e.active);
     for (let i = this.glimpses.length - 1; i >= 0; i--) { const gl = this.glimpses[i]; gl.update(dt); if (gl.done) this.glimpses.splice(i, 1); }
     this.updateWakes(dt);
     this.draw();
@@ -406,8 +439,10 @@ export class ThreatDirector {
     const p = this.g.player.pos;
     for (const t of AwakenedTree.grove()) list.push({ x: t.x, z: t.z, color: '#5a7d3a', kind: 'dot', place: true, title: 'A gnarled old tree — it walked here' });
     for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', place: true, title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
+    for (const w of this.wormRemains) list.push({ x: w.x, z: w.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen worm — cordoned off' });
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen creature' });
+      if (ev instanceof Burrower && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen worm' });
       if (ev instanceof AwakenedTree && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#5a7d3a', kind: 'dot', place: true, title: 'A gnarled old tree — it walked here' });
       // (A rampaging player is the incident: no alert marker on themselves.)
       if (!ev.active || ev.archetype === 'rampage') continue;
@@ -439,6 +474,13 @@ export class ThreatDirector {
       M.warm(p.x, p.y - 2, p.z);
     }
     M.end();
+    // Worms (a live one, a body lying in the street).
+    const W = this.wormMesh;
+    W.begin();
+    for (const ev of this.events) if (ev instanceof Burrower) ev.draw(W);
+    for (const w of this.wormRemains) w.draw(W);
+    if (!this.g.gate.enabled) { const p = this.g.player.pos; W.warm(p.x, p.y - 2, p.z); }
+    W.end();
     // The brood's creatures (and those of an omen).
     const B = this.broodMesh;
     B.begin();
@@ -446,6 +488,94 @@ export class ThreatDirector {
     for (const gl of this.glimpses) B.add(gl.sim);
     if (!this.g.gate.enabled) { const p = this.g.player.pos; B.warm(p.x, p.y - 2, p.z); }
     B.end();
+  }
+
+  // ================================================================== the Burrower
+
+  /** Dead worms lying in the city: gone after their hours when the camera is far (nobody sees it go). */
+  private wormsAfter(dt: number): void {
+    this.wormT -= dt;
+    if (this.wormT > 0 || !this.wormRemains.length) return;
+    this.wormT = 4;
+    const c = this.g.renderer.camera.position, now = this.g.sky.hoursAbs;
+    for (let i = this.wormRemains.length - 1; i >= 0; i--) {
+      const w = this.wormRemains[i];
+      if (now - w.downAt > BURROWER.bodyHours && Math.hypot(w.x - c.x, w.z - c.z) > 320) { this.wormRemains.splice(i, 1); this.note('worm body gone'); }
+    }
+  }
+  private wormT = 0;
+
+  /**
+   * An omen of the Burrower: 'rumble' — a deep rumble under the street where the player is, cracks
+   * running across the asphalt, dust from the gutters, people looking down, car alarms; 'pothole' —
+   * a small hole caving in on a street near the player with a crack round it.
+   */
+  burrowerOmen(kind: string, rng: Rng): boolean {
+    const g = this.g, p = g.player.pos, cam = g.renderer.camera.position;
+    if (kind === 'pothole') {
+      for (let k = 0; k < 8; k++) {
+        const a = rng.range(0, Math.PI * 2), d = rng.range(18, 45);
+        const site = this.sinkholes.site(p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, rng.range(1.1, 1.7), true);
+        if (!site) continue;
+        const hole = this.sinkholes.open(site, (rng.float() * 2 ** 32) >>> 0, true);
+        this.sinkholes.rimCracks(hole, 3, 600);
+        const y = g.terrain.height(site.x, site.z);
+        g.audio.play('tremor_rumble', site.x, y, site.z, 0.6, 0.6, 30, cam);
+        g.stimuli.emit('tremor', site.x, y, site.z, 3, 120, { cause: 'threat' });
+        return true;
+      }
+      return false;
+    }
+    // Rumble: low and long, the ground shudders, cracks run along the street.
+    g.camRig.addShake(0.22);
+    g.audio.play('burrower_rumble_far', p.x, p.y - 6, p.z, 0.9, 0.9 + rng.range(0, 0.15), 30, cam);
+    g.stimuli.emit('tremor', p.x, p.y, p.z, 4, 380, { cause: 'threat' });
+    const a = rng.range(0, Math.PI * 2);
+    for (let i = 0; i < 4; i++) {
+      const x = p.x + Math.cos(a) * (8 + i * 7), z = p.z + Math.sin(a) * (8 + i * 7);
+      if (g.world.buildingAt(x, z)) break;
+      const y = g.world.groundHeight(x, z);
+      g.later.after(0.3 + i * 0.35, () => {
+        g.elements.fx.decal(DecalKind.Crack, x, y + 0.05, z, 0, 1, 0, 8, 2.4, -a + rng.range(-0.3, 0.3), 240); // (along the line: long axis (cos yaw, −sin yaw))
+        g.dust.burst(x, y + 0.2, z, 4, 1.5, 1.2, 1.2, 3, WORM_DUST, 0.15, 0.4);
+      });
+    }
+    const cars = g.parkedCars.filter((v) => Math.hypot(v.x - p.x, v.z - p.z) < 90).sort(() => rng.float() - 0.5).slice(0, rng.int(1, 3));
+    for (const v of cars) g.later.after(rng.range(0.5, 2), () => g.audio.play('car_alarm', v.x, v.y + 1, v.z, 0.6, 0.95 + Math.random() * 0.1, 8, g.renderer.camera.position));
+    return true;
+  }
+
+  /** The running (or latest) worm. */
+  burrower(): Burrower | null {
+    for (let i = this.events.length - 1; i >= 0; i--) { const e = this.events[i]; if (e instanceof Burrower) return e; }
+    return null;
+  }
+
+  private burrowerDev(): Record<string, unknown> {
+    const B = () => this.burrower();
+    return {
+      status: () => B()?.snapshot() ?? 'no worm',
+      breach: (atHero = false) => B()?.devBreach(atHero) ?? 'no worm',
+      dive: () => B()?.devDive() ?? 'no worm',
+      slam: () => B()?.devSlam() ?? 'no worm',
+      skip: (m = 100) => B()?.devSkip(m) ?? 'no worm',
+      damage: (zone: string | null = 'body', amount = 300) => { const b = B(); return b ? b.damage(zone, amount, { cause: 'player' }) : 'no worm'; },
+      die: () => { const b = B(); if (!b) return 'no worm'; if (!b.surfaced) return 'not up'; b.damage('maw', 1e6, { cause: 'player' }); b.hp = 0; return b.mode; },
+      retreat: () => { const b = B(); if (!b) return 'no worm'; b.shutdown(); return b.mode; },
+      route: () => { const R = B()?.route; return R ? { start: R.start, end: R.end, length: Math.round(R.length), breaches: R.breaches.map(Math.round), points: R.pts.length / 2 } : null; },
+      /** Show one of its omens now ('rumble' | 'pothole'). */
+      omen: (kind = 'rumble') => this.burrowerOmen(kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
+      /** Open a sinkhole `dist` m ahead of the player (radius r). */
+      hole: (dist = 20, r = 7) => {
+        const fy = this.g.camRig.forwardYaw, P = this.g.player.pos;
+        const site = this.sinkholes.site(P.x - Math.sin(fy) * dist, P.z - Math.cos(fy) * dist, r);
+        if (!site) return 'no site';
+        this.sinkholes.open(site, (Math.random() * 2 ** 32) >>> 0);
+        return site;
+      },
+      holes: () => this.sinkholes.status(),
+      tuning: BURROWER,
+    };
   }
 
   // ================================================================== the Strider's omens
@@ -514,10 +644,11 @@ export class ThreatDirector {
 
   /**
    * Saves: the clock, the setting, the bodies of defeated monsters (those lying in the city and
-   * one just brought down) and a Strider on the move (resumed at its route position). Robot
-   * malfunctions and omens are not kept: they end with the session.
+   * one just brought down), a Strider on the move (resumed at its route position) and the holes in
+   * the street. Robot malfunctions, a Burrower (alive or dead) and omens are not kept: they end
+   * with the session.
    */
-  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level: number } | null } {
+  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level: number } | null; sinkholes: number[][] } {
     const remains: SavedBody[] = [];
     let strider: { s: number; hp: number; mode: string; level: number } | null = null;
     for (const b of [...this.remains, ...this.events.filter((e): e is Strider => e instanceof Strider && e.defeated)]) {
@@ -525,16 +656,18 @@ export class ThreatDirector {
       remains.push({ kind: 'strider', x: st.x, z: st.z, yaw: st.yaw, side: st.side, s: st.s, downAt: Math.round(b.downAt * 1000) / 1000, cleared: Math.round(b.cleared * 1000) / 1000 });
     }
     for (const e of this.events) if (e instanceof Strider && e.active && (e.mode === 'emerge' || e.mode === 'advance' || e.mode === 'rampage')) { const st = e.saveState(); strider = { s: st.s, hp: st.hp, mode: st.mode, level: this.g.response.incidents.find((i) => i.ev === e)?.level ?? 0 }; }
-    return { clock: { ...this.clock.state }, setting: this.setting, remains, strider };
+    return { clock: { ...this.clock.state }, setting: this.setting, remains, strider, sinkholes: this.sinkholes.saveState() };
   }
 
   /** Saves: restore what `saveState` kept (on a fresh city: no events running yet). */
-  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level?: number } | null }): void {
+  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level?: number } | null; sinkholes?: number[][] }): void {
     const S = this.clock.state as unknown as Record<string, unknown>;
     if (o.clock && o.clock.v === 1) for (const k of Object.keys(S)) if (k in o.clock && (typeof o.clock[k] === typeof S[k] || o.clock[k] === null || S[k] === null)) S[k] = o.clock[k];
     if (o.setting === 'off' || o.setting === 'rare' || o.setting === 'normal' || o.setting === 'frequent') this.setting = o.setting;
     this.earned = this.chaos = -1;
     for (const r of this.remains.splice(0)) r.dispose();
+    this.wormRemains.length = 0;
+    this.sinkholes.restoreState(o.sinkholes ?? []);
     o.remains.forEach((b, i) => {
       if (b.kind !== 'strider') return;
       try {
@@ -663,6 +796,11 @@ export class ThreatDirector {
        * .player(dist) (put the player near the swarm).
        */
       brood: this.broodDev(),
+      /**
+       * The Burrower: dev.threat.burrower.status() · .breach(atHero?) · .dive() · .slam() · .skip(m) · .damage(zone, amount) ·
+       * .die() · .retreat() · .route() · .omen('rumble' | 'pothole') · .hole(dist, r) · .holes()
+       */
+      burrower: this.burrowerDev(),
       setting: (s?: CityEvents) => { if (s) this.setting = s; return this.setting; },
       log: () => this.log,
       stats: () => ({ ...this.stats, rogue: this.rogue.stats, machines: this.rogue.list.length }),
@@ -673,6 +811,7 @@ export class ThreatDirector {
 /** A brood's creatures range this far from its centre (m): hits further off skip it. */
 const BROOD_REACH = 160;
 
+const WORM_DUST = new THREE.Color(0.5, 0.46, 0.4);
 const WAKE_A = new THREE.Color(0.86, 0.9, 0.92), WAKE_B = new THREE.Color(0.6, 0.68, 0.72);
 
 function loadSetting(): CityEvents {

@@ -43,6 +43,7 @@ import { homeChecks } from './homeTest';
 import { splitChecks } from './splitTest';
 import { sidekickChecks } from './sidekickTest';
 import { aliensChecks } from './aliensTest';
+import { burrowerChecks } from './burrowerTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
 import { PlayerHealth } from '../src/game/PlayerHealth';
@@ -56,6 +57,8 @@ import { LineOfSight, LOS, type LosCar, type LosWorld } from '../src/game/combat
 import { resolveShot, newShot, type ShotTrace } from '../src/game/combat/shot';
 import { MoodDirector, MOODS, LOOPED, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
 import { MOOD_TRACKS, CUES, TENSION_HIGH, parseTracks } from '../src/audio/music/tracks';
+import { angleDiff } from '../src/core/math';
+import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP, SHOW, SHOW_END } from '../src/game/concert/plan';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
@@ -1391,6 +1394,15 @@ section('traffic at a blocked junction', async () => {
   // pathGap: a car straight ahead in the corridor, one in the next lane, one behind.
   const car = { x: 0, z: 0, yaw: 0, length: 4.7, width: 1.85, speed: 5 };
   check(Math.abs(pathGap(car, { x: 0, z: -10, yaw: 0, length: 4.7, width: 1.85 }) - 5.3) < 1e-6 && pathGap(car, { x: 3, z: -10, yaw: 0, length: 4.7, width: 1.85 }) === Infinity && pathGap(car, { x: 0, z: 10, yaw: 0, length: 4.7, width: 1.85 }) === Infinity, 'traffic: pathGap sees only what is in the way');
+
+  // A hero of about human size landing a super jump on a car leaves it whole; a giant's foot crushes it.
+  {
+    const { VState } = await import('../src/sim/Traffic');
+    const v = tr.vehicles.find((c) => c.state !== VState.Crushed)!;
+    const stomp = (size: number) => { stimuli.emit('stomp', v.x, 0, v.z, 4.6, 80, { cause: 'player', size }); stimuli.update(1 / 30); tr.update(1 / 30, 8.3, 0, 0); return v.state === VState.Crushed; };
+    const hero = stomp(1.8), giant = stomp(20);
+    check(!hero && giant, `traffic: a super jump landing on a car leaves it whole, a giant's foot crushes it (hero ${hero ? 'crushed' : 'whole'}, giant ${giant ? 'crushed' : 'whole'})`);
+  }
 
   // Gawkers: a cry repeated every 3 s for 2 minutes among 200 idle walkers.
   const { Reactions } = await import('../src/sim/Reactions');
@@ -2744,6 +2756,39 @@ section('street characters', async () => {
   console.log(`street: ${n} sites in ${cells.length} cells (${(performance.now() - t0).toFixed(0)} ms), ${seen.size} kinds cast`);
 });
 
+// The stadium concert (game/concert/plan.ts): the evening's hours, the stage on the pitch with the
+// band on its deck, the pit in front (nearest first, on the field, clear of the stage), seats in the
+// stands facing the stage, the set list (opener first, closer last, the same each night per seed),
+// and the songs listed in public/music/live.json on disk.
+section('concert', async () => {
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.4 }));
+  const lm = buildMacroPlan(terrain).landmarks.find((l) => l.kind === 'stadium')!;
+  const P = concertPlan(lm, 42);
+  const P2 = concertPlan(lm, 42);
+  check(hashPlan(P.pit) === hashPlan(P2.pit) && hashPlan(P.seats) === hashPlan(P2.seats), 'concert: plan deterministic');
+  const field = lm.base + 0.02;
+  const [scx, scz] = P.onStage(STAGE.d / 2, 0);
+  check(Math.abs((P.floor(scx, scz) ?? 0) - P.stage.deckY) < 1e-6 && P.band.every((b) => Math.abs((P.floor(b.x, b.z) ?? 0) - P.stage.deckY) < 1e-6), 'concert: the band stands on the stage deck');
+  check(inSite(lm, P.stage.x, P.stage.z) && inSite(lm, P.stage.fx, P.stage.fz), 'concert: the stage inside the stadium');
+  const offField = P.pit.filter((s) => Math.abs((P.floor(s.x, s.z) ?? -1) - field) > 1e-6).length;
+  const front = Math.hypot(P.pit[0].x - P.stage.fx, P.pit[0].z - P.stage.fz), back = Math.hypot(P.pit[P.pit.length - 1].x - P.stage.fx, P.pit[P.pit.length - 1].z - P.stage.fz);
+  let close = 0;
+  for (let i = 0; i < P.pit.length; i++) for (let j = i + 1; j < P.pit.length; j++) if (Math.hypot(P.pit[i].x - P.pit[j].x, P.pit[i].z - P.pit[j].z) < 0.45) close++;
+  check(P.pit.length === PIT_CAP && offField === 0 && front < 5 && back > front + 10 && close === 0, `concert: pit of ${P.pit.length} on the field (${offField} off), nearest the stage first (${front.toFixed(1)} … ${back.toFixed(1)} m), nobody on top of another (${close})`);
+  const facing = P.seats.filter((s) => { const h = Math.atan2(-(P.stage.fx - s.x), -(P.stage.fz - s.z)); return Math.abs(angleDiff(s.heading, h)) < 0.35; }).length;
+  check(P.seats.length > 400 && P.seats.length <= SEAT_CAP * 1.1 && P.seats.every((s) => s.y > lm.base + 1) && facing > P.seats.length * 0.9, `concert: ${P.seats.length} seats up in the stands, facing the stage (${facing})`);
+  check(concertAt(17.5).phase === 'none' && concertAt(18.5).phase === 'doors' && concertAt(24 + 21).phase === 'show' && concertAt(23.2).phase === 'out' && concertAt(48 + 0.5).phase === 'none' && concertAt(24 + 21).day === 1, 'concert: doors, show and going home in the evening');
+  const live = parseLive(JSON.parse(readFileSync('public/music/live.json', 'utf8')));
+  const missingFile = live.songs.filter((s) => !existsSync(`public/${s.file}`)).map((s) => s.id);
+  check(live.songs.length >= 4 && missingFile.length === 0 && live.songs.every((s) => s.bpm > 50 && s.bpm < 220), `concert: ${live.songs.length} songs in live.json, all on disk (missing: ${missingFile.join(', ') || 'none'})`);
+  const L1 = setList(42, 3, live.songs), L2 = setList(42, 3, live.songs), L3 = setList(42, 4, live.songs);
+  check(L1[0].opener === true && L1[L1.length - 1].closer === true && L1.length === live.songs.length && L1.map((s) => s.id).join() === L2.map((s) => s.id).join() && new Set(L3.map((s) => s.id)).size === live.songs.length, 'concert: set list from the opener to the closer, the same for a night');
+  // At the usual 20x day the evening (19-23 h) is 12 real minutes: as many songs as fit, opener and closer always.
+  const budget = ((SHOW_END - SHOW) * 3600) / 20 - 9, B = setList(42, 3, live.songs, budget, 16);
+  const used = B.reduce((t, s) => t + s.seconds + 16, 0);
+  check(B.length >= 3 && B[0].opener === true && B[B.length - 1].closer === true && used <= budget, `concert: a night's set fits its evening (${B.length} songs, ${used.toFixed(0)} of ${budget.toFixed(0)} s)`);
+});
+
 // Justice: wrecking buildings is not free (facade damage before witnesses; a collapse always known).
 section('justice', async () => {
   let rep = 0, karma = 0, called = 0, witnesses = 0;
@@ -3996,6 +4041,7 @@ section('doors', async () => { doorChecks(check); });
 section('sidekick', async () => { sidekickChecks(check); });
 // The Wardens (ALIENS_PLAN phase 1): the disc schedule, walkers, stares, what people say (tools/aliensTest.ts).
 section('aliens', async () => { aliensChecks(check); });
+section('burrower', async () => { burrowerChecks(check); });
 
 // Nothing hurts through the pavement: every blow names where it came from (the type makes the
 // height a required argument), and the health refuses one from the other side of the street.

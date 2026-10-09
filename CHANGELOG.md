@@ -2,9 +2,48 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.202 — 2026-10-09
+## 0.209 — 2026-10-09
 
 - **The focus beam hits like a blow, and the seeker orb got a glow-up.** Looks only: damage and energy costs are unchanged. The focus beam now has a wide golden haze round its white-hot core. Rings of air ripple away along its path, and a flash and a ring leave your eyes when it fires. Where it lands you get a white flash, a shock ring across the surface, sparks thrown back, chips and dust kicked up, and a heavier camera shake. A well-charged shot also lands with a thud. The seeker orb is now a white-hot heart in a violet glow with a soft halo, three sparks circling it, little arcs crackling off it and a smooth comet tail behind it. It leaves your hands with a flash and bursts on its target with a violet flash, shock rings and a spray of sparks.
+=======
+## 0.208 — 2026-10-09
+
+- **Super jump landings leave cars whole.** Coming down from a high super jump on or right next to a driving car used to flatten it. At about human size a landing now leaves cars intact. Only a giant's foot (a body over 6 m) still crushes them, as before.
+
+## 0.207 — 2026-10-09
+
+- The concert's sky searchlights are wider and fainter, shafts of light in the haze instead of hard white sticks.
+
+## 0.206 — 2026-10-09
+
+- **The background music makes way for street musicians.** Within about 30 m of a busker, a street band or a dance crew's boombox, the score fades out, so the two pieces no longer play on top of each other. It comes back once you are about 40 m away, or when they pack up.
+
+## 0.205 — 2026-10-09
+
+- **Concert lights, after the check on Arnd's PC.** The colour beams now reach just to the ground and fade out there, so there are no more bright round caps where they land. They stay over the field instead of sweeping out across the stands. Every beam and searchlight has a soft glow cone round it in place of a hard edge.
+- **The stands read at night:** the seated crowd is brighter after dark, and during the songs phones are held up and swaying in the stands. A slow song gets more of them.
+- dev.concert.stop() during the evening now means no show tonight (it used to start a new one straight away).
+
+## 0.204 — 2026-10-09
+
+- **The concert now plays Arnd's own VELA songs** (Lyria 3 Pro, with vocals): City of Lights, Neon Heartbeat, Paper Wings, Hold On to the Night, Gravity and Rise. **The street bands play his folk, bossa and swing pieces**, each turned into a seamless loop. The lights and the crowd follow each song's measured beat. The ballad is read at its real slow tempo, not double time.
+- **The show is longer, and each night's set fits the evening.** Doors now open at 18:00 and the band plays from 19:00 to 23:00. The songs run at their real length, which is longer than those four game hours allow at the usual time scale, so each night plays the opener, the closer, and as many of the other songs as fit, in a different order every night.
+
+## 0.203 — 2026-10-09
+
+- **A concert at the stadium every evening.** The act is VELA. Doors open at 19:00, the band plays from 20:00 to 23:00, and the crowd has gone home by about 23:45.
+  - **The stage:** a deck at one end of the pitch with a roof, speaker stacks and a crush barrier. Behind the band is an LED wall that shows the act, the song title and a spectrum that moves with the music.
+  - **The lights:** colour beams sweep the crowd on the beat, searchlights sweep the night sky, blinders flash on the big beats, pyro fires at the opener and the finale, and a front light shines on the band.
+  - **The band:** a singer, guitar, bass, keys and drums. The singer walks the stage and talks to the crowd between songs ("How are you doing, …?!"), and the band bows at the end.
+  - **The crowd:** the pit in front of the stage fills with real people who dance on the beat, cheer between songs and leave through the far gate afterwards. The stands fill with a seated crowd.
+  - **The music:** you hear it from far across the city, softer and more muffled the further away you are, and the score goes quiet near the show. The songs and their running order come from public/music/live.json. Until Arnd's Lyria songs are built with tools/music/build_live.py, pieces of the score stand in for them.
+  - **Trouble ends the show:** an explosion, a monster, gunfire, an evacuation or a hit fan stops the music, and everyone runs for the exits.
+  - Console commands: dev.concert.start(), go('pit' | 'stand' | 'stage' | 'far'), next(), panic(), stop().
+- **Street bands:** a trio (guitar, bass and a cajón player sitting on the box) plays on plazas, in parks and at metro stations from late morning until late evening. A few people stop to listen, and you can talk to them. They play folk, bossa or swing loops once those are built, and the street guitar until then.
+
+## 0.202 — 2026-10-09
+
+- **A new big threat: the giant worm.** After the first Strider, a 95 m worm can come instead of a strider or a swarm. It is heralded by a rumble underfoot with cracks running along the street, or a pothole that suddenly caves in. It tunnels under the main roads from your side of town towards downtown: cracks, dust and a rumble run along the street above it, drivers stop and the metro waits. Now and then the street bulges and caves in, and the worm rears 30 m out of the sinkhole. It roars, slams down on whatever is near, snatches cars and people, bites and swats, then dives back in an arc and opens a new hole further on. It comes up beside you when you are close, and a heavy super-jump landing above its head brings it up stunned. Its maw is the weak spot (four times the damage). The army fights it only while it is up. Hurt badly it flees underground; beaten, it topples across the street and lies there for a few hours. The sinkholes stay a while and are filled once you are far away. Cars drive around them and people walk around them. They are saved with the game. The admin console has a "Giant worm" section, and `dev.threat.burrower` has tools for testing.
 
 ## 0.201 — 2026-10-09
 

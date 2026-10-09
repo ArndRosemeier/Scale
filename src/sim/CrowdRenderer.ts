@@ -11,7 +11,8 @@ import { HumanoidRig } from '../humanoid/client/HumanoidRig';
 import { randomAppearance } from '../humanoid/appearance';
 import type { EquipmentVisuals } from '../items/types';
 import type { HumanoidAppearance } from '../humanoid/types';
-import { Role } from './Population';
+import { Role, type Citizen } from './Population';
+import { GROOVE_PERIOD } from '../humanoid/client/anim/actions';
 import { statusOf } from '../shared/status';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
 
@@ -147,6 +148,15 @@ export class CrowdRenderer {
   /** Work clothes for someone (the priest, a clerk: sim/LandmarkCrowds), or null for their own. */
   outfit: ((a: PedAgent) => EquipmentVisuals | null) | null = null;
   stats = { crowd: 0, rigs: 0 };
+  /**
+   * Figures that are only drawn (never simulated, never a rig): the stadium concert's audience in
+   * the stands (game/concert). Each is a synthetic citizen's looks at a place with a clip.
+   */
+  figures: CrowdFigure[] = [];
+  /** Brightness of the figures' clothes (the concert raises it at night: the stands read in the dark). */
+  figureGain = 1;
+  /** The concert's beat (cycles of GROOVE_PERIOD) for everyone grooving, or null (their own clocks). */
+  groovePhase: (() => number) | null = null;
 
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
     templates.forEach((t) => {
@@ -202,11 +212,16 @@ export class CrowdRenderer {
     });
   }
 
+  /** Phase of the groove clip: on the concert's beat (a little early or late per person), else its own. */
+  private groove(time: number, seed: number): number {
+    const j = ((seed % 13) - 6) * 0.012;
+    return this.groovePhase ? this.groovePhase() + j : time / GROOVE_PERIOD + (seed % 97) / 97;
+  }
+
   lookOf(a: PedAgent): Look {
     let l = this.looks.get(a.cit.id);
     if (l) return l;
     const c = a.cit;
-    const female = c.gender < 0.5;
     const formal = c.role === Role.Worker ? 0.45 : 0.08;
     // Actors may wear a uniform (police).
     const work = a.actor?.outfit ? null : this.outfit?.(a) ?? null;
@@ -214,12 +229,31 @@ export class CrowdRenderer {
     // (Nothing in the hand at work.)
     const held = work ? undefined : heldItem(c.seed);
     if (held && !eq.mainhand) eq.mainhand = held;
+    const app = randomAppearance('human', c.seed, { gender: c.gender, age: c.age });
+    this.appearance?.(a, app);
+    l = this.makeLook(c, eq, app);
+    this.looks.set(c.id, l);
+    if (this.looks.size > 20000) this.looks.clear();
+    return l;
+  }
+
+  /** A drawn figure's looks (its own city clothes, nothing in the hand). */
+  private lookOfFigure(c: Citizen): Look {
+    let l = this.figureLooks.get(c.seed);
+    if (l) return l;
+    l = this.makeLook(c, cityOutfit(c.seed, c.gender, c.age, 0.08, 0.3), randomAppearance('human', c.seed, { gender: c.gender, age: c.age }));
+    this.figureLooks.set(c.seed, l);
+    if (this.figureLooks.size > 6000) this.figureLooks.clear();
+    return l;
+  }
+  private figureLooks = new Map<number, Look>();
+
+  private makeLook(c: Citizen, eq: EquipmentVisuals, app: HumanoidAppearance): Look {
+    const female = c.gender < 0.5;
     const kind = eq.back?.defId === 'suitjacket' ? 'suit' : eq.back?.defId === 'coat' ? 'coat' : eq.chest?.defId === 'dress' ? 'dress' : eq.legs?.defId === 'skirt' ? 'skirt' : eq.back?.defId === 'jacket' ? 'jacket' : 'casual';
     let ti = this.templates.findIndex((t) => t.female === female && t.outfit === kind);
     if (ti < 0) ti = this.templates.findIndex((t) => t.female === female && t.outfit === 'casual');
     if (ti < 0) ti = Math.max(0, this.templates.findIndex((t) => t.female === female));
-    const app = randomAppearance('human', c.seed, { gender: c.gender, age: c.age });
-    this.appearance?.(a, app);
     const col = (rgb: [number, number, number] | undefined, fb: [number, number, number]) => {
       const cc = new THREE.Color().setRGB(...(rgb ?? fb), THREE.SRGBColorSpace);
       return [cc.r, cc.g, cc.b];
@@ -231,10 +265,7 @@ export class CrowdRenderer {
     const shoes = col(eq.feet?.visual.primary, [0.1, 0.1, 0.1]);
     const outer = col(eq.back?.visual.primary ?? eq.chest?.visual.primary, [0.3, 0.3, 0.3]);
     const ageScale = c.role === Role.Child ? 0.55 + c.age * 2.2 : 1;
-    l = { template: Math.max(0, ti), colors: [...skin, ...hair, ...top, ...bottom, ...shoes, ...outer], eq, scale: (0.93 + (c.seed % 100) / 100 * 0.14) * ageScale };
-    this.looks.set(c.id, l);
-    if (this.looks.size > 20000) this.looks.clear();
-    return l;
+    return { template: Math.max(0, ti), colors: [...skin, ...hair, ...top, ...bottom, ...shoes, ...outer], eq, scale: (0.93 + (c.seed % 100) / 100 * 0.14) * ageScale };
   }
 
   /** The person's full rig when one is shown (built, dressed, visible), else null. */
@@ -266,8 +297,8 @@ export class CrowdRenderer {
       // Frozen people are drawn as (ice-tinted, motionless) crowd instances, not rigs.
       const forced = d < FORCE_RANGE && this.forceRig !== null && this.forceRig(a);
       if ((statusOf(a)?.frozen ?? 0) > 0) continue;
-      if (!forced && a.actor && d < ACTOR_RIG_RANGE && d >= RIG_RANGE) { actors.push(this.entry(a, d)); continue; }
-      if (d < RIG_RANGE || forced) near.push(this.entry(a, forced ? d - 1000 : a.actor ? d - 500 : d));
+      if (!forced && a.actor && !a.actor.crowd && d < ACTOR_RIG_RANGE && d >= RIG_RANGE) { actors.push(this.entry(a, d)); continue; }
+      if (d < RIG_RANGE || forced) near.push(this.entry(a, forced ? d - 1000 : a.actor && !a.actor.crowd ? d - 500 : d));
     }
     // Actors farther out: the nearest few get rigs before ordinary people.
     actors.sort(byD);
@@ -382,12 +413,14 @@ export class CrowdRenderer {
       const t = this.templates[ti];
       // Animation clip and phase.
       let clip = t.clips.idle;
+      const act = a.actor;
       if (a.state === PState.Down) clip = t.clips.down;
       else if (a.state === PState.Film) clip = t.clips.film;
-      else if (a.state === PState.Sit) clip = t.clips.sit ?? t.clips.idle;
+      else if (a.state === PState.Sit || act?.move === 'sit') clip = t.clips.sit ?? t.clips.idle;
       else if (a.speed > 2.4 || a.state === PState.Flee) clip = t.clips.run;
       else if (a.speed > 0.15) clip = t.clips.walk;
-      let phase = clip.cycleDist > 0 ? a.phase / (clip.cycleDist * look.scale) : (time + (a.look % 97)) / clip.cycleTime;
+      else if (act?.action?.id === 'groove') clip = t.clips.groove;
+      let phase = clip === t.clips.groove ? this.groove(time, a.look) : clip.cycleDist > 0 ? a.phase / (clip.cycleDist * look.scale) : (time + (a.look % 97)) / clip.cycleTime;
       const frozen = !!st && st.frozen > 0;
       if (frozen) {
         // Held mid-stride (or mid-breath): no animation.
@@ -399,6 +432,29 @@ export class CrowdRenderer {
       else for (let c = 0; c < 6; c++) this.cols[ti][c].setXYZ(k, look.colors[c * 3], look.colors[c * 3 + 1], look.colors[c * 3 + 2]);
       this.q.setFromAxisAngle(_up, a.heading + (st && st.stunned > 0 ? Math.sin(time * 47 + a.id) * 0.18 : 0));
       this.mat4.compose(this.p.set(a.x, a.y, a.z), this.q, this.s.setScalar(look.scale * (st ? st.scale : 1)));
+      this.meshes[ti].setMatrixAt(k, this.mat4);
+    }
+    // Drawn-only figures (the concert's stands).
+    for (const f of this.figures) {
+      if (!f.on) continue;
+      const d = Math.hypot(f.x - cx, f.y - cy, f.z - cz);
+      if (d > FIGURE_RANGE) continue;
+      this.sphere.center.set(f.x, f.y + 0.9, f.z);
+      this.sphere.radius = 1.2;
+      if (!this.frustum.intersectsSphere(this.sphere)) continue;
+      const look = this.lookOfFigure(f.cit);
+      const ti = look.template;
+      const k = counts[ti];
+      if (k >= CAP) continue;
+      counts[ti]++;
+      const t = this.templates[ti];
+      const clip = t.clips[f.clip];
+      const phase = f.clip === 'groove' ? this.groove(time, f.cit.seed) : clip.cycleDist > 0 ? f.phase / (clip.cycleDist * look.scale) : (time + (f.cit.seed % 97)) / clip.cycleTime;
+      this.anim[ti].setXYZW(k, clip.start, clip.frames, phase, 0);
+      const fg = this.figureGain;
+      for (let c = 0; c < 6; c++) this.cols[ti][c].setXYZ(k, look.colors[c * 3] * fg, look.colors[c * 3 + 1] * fg, look.colors[c * 3 + 2] * fg);
+      this.q.setFromAxisAngle(_up, f.heading);
+      this.mat4.compose(this.p.set(f.x, f.y, f.z), this.q, this.s.setScalar(look.scale));
       this.meshes[ti].setMatrixAt(k, this.mat4);
     }
     let total = 0;
@@ -426,6 +482,20 @@ export class CrowdRenderer {
 }
 
 const _up = new THREE.Vector3(0, 1, 0);
+
+/** Drawn-only figures are drawn out to here (m): a stadium's stands read from across the district. */
+const FIGURE_RANGE = 650;
+
+/** A figure that is only drawn (CrowdRenderer.figures): a synthetic citizen's looks, a place and a clip. */
+export interface CrowdFigure {
+  cit: Citizen;
+  x: number; y: number; z: number;
+  heading: number;
+  clip: 'idle' | 'groove' | 'walk' | 'run' | 'sit';
+  /** Distance walked (walk / run clips). */
+  phase: number;
+  on: boolean;
+}
 const byD = (p: Near, q: Near) => p.d - q.d;
 /** A far rig's meshes stop casting shadows; each remembers whether it did (eyes, lashes, hair shells never do). */
 const dropShadow = (o: THREE.Object3D) => {

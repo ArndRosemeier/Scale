@@ -645,6 +645,55 @@ every frame (`prof.threats`).
   was on someone (every 4 s at most), 20 karma +4 rep and cheers when it is stopped with ≥ 8 kills by the player.
   Dev: `dev.threat.spawn('brood', { count: 150, brutes, dist })`, `dev.threat.brood.status() / .hit(effect, r, dmg) /
   .leave() / .player(dist)`, `dev.threat.omen('chitter' | 'glimpse')`; admin console "City events".
+* **The Burrower** (`burrower/Burrower.ts`, archetype `burrower`, major; Phase C part 2): a 95 m worm tunnelling under
+  the city. Body: `burrower/wormRig.ts` (pure, tested) — a chain of 26 joints laid at fixed arc lengths along one
+  polyline: the trail the head has travelled (under the streets, up out of a hole, over in an arc and down into the
+  next: the tail slides out of one hole and into the other), or, standing in a hole (`anchorAt`), a Hermite curve from
+  the head down into the hole's mouth and the trail below it (`release` bakes the curve into the trail when it dives);
+  frames are parallel-transported from the head (no flips standing straight up), a slow peristaltic swell, three maw
+  petals swung about hinges on the lip (`petal`); never through the street outside its holes (`keepAboveGround`).
+  Skin: `burrower/wormSkin.ts` builds a closed skinned mesh with the creature skin's `Builder` (`rig/skin.ts`: ringed
+  segments with dorsal plates, a flattened belly, bristles, glowing flank pits, a throat with tooth rings, three
+  toothed petal shells); `WormMesh` draws it in `CreatureMesh`'s one material (bone 0: pits on the ridge channel, the
+  gullet on the eyes channel), so it compiles no program of its own. Way: `burrower/burrowerRoute.ts` (pure, tested) —
+  an arterial junction 650–1050 m out on the hero's side (inside 82 % of the city's radius), Dijkstra over the
+  arterials (trunks cheaper, bridges allowed) to the junction nearest the main centre, resampled every 8 m, breach arc
+  lengths (first after 90–150 m, then every 130–210 m). Event: travels 18 m down at ~9 m/s steering for its goal (the
+  route ahead; whoever it hates most within 200 m; a tower downtown; the way out), with cracks (`DecalKind.Crack`),
+  dust and a positional `burrower_rumble` loop above it, `tremor` stimuli, drivers stopping; breaks out at a planned
+  breach, beside the hero (within 45 m, every 25 s at most), under whoever it hunts, beside a tower downtown, or at a
+  heavy landing over it (a `stomp` / `blast` stimulus of the player's of intensity ≥ 3.6 within 30 m: stunned 4 s).
+  A breach: the street bulges 2.4 s, a sinkhole opens (`Sinkholes.open`), the head bursts up and rears 26 m over the
+  street; 14–22 s up (roar with the maw open — `maw` exposed, ×4; slam = `GiantSteps.land` at its size plus knock-downs,
+  crushed cars and the player hurt; snatch = a car wrecked and flung; bite = a destruction impact on a facade, low
+  buildings crushed; swat = drones and the army's helicopters near its head), then a 2.6 s quadratic arc into a
+  second, smaller hole 18–26 m on (or back down its own). Downtown (`rampage`) it breaks out beside towers for 240 s,
+  then leaves (`retreat`: tunnels towards its entry, gone after 70 s); 30 % hp: it dives and leaves (60 karma + 6 rep
+  if the hero hurt it most); 0 hp while up: the column topples onto the street (crushing what is under it), 120 karma
+  + 12 rep, the body lies in `ThreatDirector.wormRemains` for `BURROWER.bodyHours` game hours, then goes when the
+  camera is > 320 m away (no crane: the cleanup is the Strider's). A ThreatActor (2600 hp; zones maw 0.55 (weak while
+  open), head 0.65, body 0.88, belly 0.72) whose `actors` are empty under the street (nothing targets or hits it
+  there), and an ArmyFoe (`armyFoe`): the Guard and the army come along its route, `hidden` holds their fire while it
+  is under; police on foot fire while it is up; `ceiling` 4 (no last resort). `Underground.metroHold` eases every
+  train to a stop while it is active (the timetable runs `metroLag` s late after). Not saved (it ends with the
+  session). Omens (`ThreatDirector.burrowerOmen`): `rumble` — a shudder, `burrower_rumble_far`, cracks running across
+  the street from the hero, car alarms; `pothole` — a small sinkhole 18–45 m away with a crack round it. The clock's
+  first major event is always the Strider (`FIRST_MAJOR`). Sounds (`tools/synthBurrower.mjs`): `burrower_rumble`,
+  `burrower_rumble_far`, `burrower_breach`, `burrower_roar`, `burrower_slam`, `burrower_dive`. Dev:
+  `dev.threat.spawn('burrower', { near })`, `dev.threat.burrower.status() / .breach(atHero) / .slam() / .dive() /
+  .skip(m) / .damage(zone, n) / .die() / .retreat() / .route() / .omen(kind) / .hole(dist, r) / .holes()`; admin
+  console "Giant worm".
+* **Sinkholes** (`burrower/Sinkholes.ts`, `threats.sinkholes`): a crater mesh per hole (`buildCrater`, pure: a jagged
+  broken-asphalt rim just proud of the street, a sheer wall of asphalt and sub-base, a soil bowl to 4.5–6.5 m
+  (`craterDepth`), tilted road slabs on the slope, rubble, a pipe stub) in one vertex-coloured material warmed at
+  start; the street and terrain shaders discard over it (`holes` → `Game.updateHoles`, before the metro entrances);
+  the ground dips (`WorldIndex.dip` in `surfaceOffset`: walking, physics heightfields — invalidated as it opens —
+  cars, decals and debris follow it); cars stop short of it and none spawn by it (`Traffic.holds`), people keep off
+  (`Pedestrians.pits`). `site(x, z, r)` only allows a carriageway (snapped to its middle) in a loaded cell, clear of
+  water, bridges, buildings, landmarks, metro entrances and other holes, keeping 1 m of ground over a sewer or the
+  metro (less than 2.2 m deep: refused). Opening (1.6 s, a sag then the drop): cars wrecked into it, people knocked
+  down, props crushed, building fronts within 5 m undermined (`stomp` impacts at their foot), dust, `collapse`. Kept
+  12 game hours, then filled in when the camera is > 260 m away; at most 12; saved (`SaveThreats.sinkholes`).
 * **City response** (`ResponseDirector`, levels 0–2 of the ladder, per incident): 0 — three patrol cars with sirens
   (`Police.respond(IncidentJob)`: the job says where, how many get out, what they do there, when to go), a police
   drone; officers hold a line facing it and wave people back. 1 (after 30 s with > 45 % of it still in action, or 8

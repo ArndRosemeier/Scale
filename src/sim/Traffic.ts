@@ -20,6 +20,7 @@ import { Rng, hash32 } from '../core/rng';
 import type { Citizen } from './Population';
 import type { Obstacle, ObstacleProvider } from '../world/Collision';
 import { statusOf } from '../shared/status';
+import { CAR_CRUSH_H } from '../shared/cause';
 
 export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle' | 'swat'
   | 'army_truck' | 'apc' | 'tank'
@@ -249,7 +250,7 @@ export class Traffic {
         if (d > s.radius) continue;
         // A roar: drivers panic (turn round or leave the car); a tremor only unsettles them.
         v.fear = Math.min(2, v.fear + (1 - d / s.radius) * (s.kind === 'giant' || s.kind === 'tremor' ? 0.3 : s.kind === 'roar' ? 2 : 1.2));
-        if (s.kind === 'stomp' && d < Math.max(3, s.intensity)) this.crush(v);
+        if (s.kind === 'stomp' && (s.size ?? 0) > CAR_CRUSH_H && d < Math.max(3, s.intensity)) this.crush(v);
       }
     }
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
@@ -308,6 +309,8 @@ export class Traffic {
       if (!this.clearAt(v, 8)) continue;
       // Not on top of a robot on the road.
       if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 12 && Math.abs(o.z - v.z) < 12)) continue;
+      // Not in (or right by) a hole in the street.
+      if (this.holds.some((o) => Math.hypot(o.x - v.x, o.z - v.z) < o.r + 10)) continue;
       // Route: random walk of a few edges ahead, preferring straight on.
       v.route = this.randomRoute(ei, fwd, 12);
       this.vehicles.push(v);
@@ -324,6 +327,7 @@ export class Traffic {
     const fwd = ea.side * this.hand > 0;
     const v = this.makeVehicle(driver.seed % 5 === 0 ? 'suv' : driver.seed % 7 === 0 ? 'hatch' : 'sedan', ea.e, fwd, ea.s, driver);
     if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 8 && Math.abs(o.z - v.z) < 8)) return false;
+    if (this.holds.some((o) => Math.hypot(o.x - v.x, o.z - v.z) < o.r + 8)) return false;
     if (!this.placeFree(v)) return false;
     v.dest = { x: bx, z: bz };
     if (eb) {

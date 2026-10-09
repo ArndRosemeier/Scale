@@ -137,6 +137,23 @@ export class WorldIndex {
    * TERRAIN_DROP lower (0 on the countryside roads and paved yards draped on it).
    */
   surfaceOffset(x: number, z: number): number {
+    return this.dip ? this.flatOffset(x, z) - this.dip(x, z) : this.flatOffset(x, z);
+  }
+
+  /** How far the ground is sunk at a point (sinkholes: threats/burrower/Sinkholes), or null. */
+  dip: ((x: number, z: number) => number) | null = null;
+
+  /** Is the city cell under (x, z) loaded (its streets, buildings and ground in the world)? */
+  loaded(x: number, z: number): boolean {
+    for (const s of this.cellShapes.values()) {
+      const b = s.bounds;
+      if (x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3] && pointInPoly(s.poly, x, z)) return true;
+    }
+    return false;
+  }
+
+  /** surfaceOffset as the city was built (no sinkholes). */
+  private flatOffset(x: number, z: number): number {
     for (const s of this.cellShapes.values()) {
       const b = s.bounds;
       if (x < b[0] || x > b[2] || z < b[1] || z > b[3]) continue;

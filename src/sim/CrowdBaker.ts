@@ -11,6 +11,7 @@ import type { EquipmentVisuals, ItemVisual } from '../items/types';
 import { frameWork } from '../core/frameWork';
 import { BODY_REGIONS } from '../humanoid/client/staticData';
 import { clipLibraryReady } from '../humanoid/client/anim/clips';
+import { GROOVE_PERIOD } from '../humanoid/client/anim/actions';
 import { releaseTextureAfterUpload } from '../render/gpuOnly';
 
 export const enum Slot { Skin = 0, Hair = 1, Top = 2, Bottom = 3, Shoes = 4, Outer = 5 }
@@ -23,7 +24,7 @@ export interface CrowdTemplate {
   nrm: THREE.DataTexture;
   verts: number;
   frames: number;
-  clips: { walk: ClipInfo; run: ClipInfo; idle: ClipInfo; film: ClipInfo; down: ClipInfo; sit: ClipInfo };
+  clips: { walk: ClipInfo; run: ClipInfo; idle: ClipInfo; film: ClipInfo; down: ClipInfo; sit: ClipInfo; groove: ClipInfo };
   height: number;
   female: boolean;
   outfit: string;
@@ -140,7 +141,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   an.update({ anim: { move: 'idle' }, vel: [0, 0, 0], yaw: 0, time: 0, main: 'none', off: 'none', combat: false, sneaking: false }, 1 / 60, 1, null);
   const idleCycle = an.idleCycle;
   // Clips to bake.
-  const clipsSpec: { name: keyof CrowdTemplate['clips']; move: 'walk' | 'run' | 'idle' | 'dead' | 'sit'; speed: number; frames: number; film?: boolean; still?: boolean }[] = [
+  const clipsSpec: { name: keyof CrowdTemplate['clips']; move: 'walk' | 'run' | 'idle' | 'dead' | 'sit'; speed: number; frames: number; film?: boolean; still?: boolean; action?: string }[] = [
     { name: 'walk', move: 'walk', speed: 1.35, frames: 24 },
     { name: 'run', move: 'run', speed: 4.2, frames: 18 },
     { name: 'idle', move: 'idle', speed: 0, frames: Math.max(20, Math.round(idleCycle * 3.5)) },
@@ -148,6 +149,9 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     { name: 'down', move: 'dead', speed: 0, frames: 1, still: true },
     // Seated (café terraces, interiors): one settled pose.
     { name: 'sit', move: 'sit', speed: 0, frames: 1, still: true },
+    // A concert crowd bouncing to the music (the 'groove' action: exactly one GROOVE_PERIOD; the
+    // renderer sets its phase from the song's beat).
+    { name: 'groove', move: 'idle', speed: 0, frames: 16, action: 'groove' },
   ];
   const totalFrames = clipsSpec.reduce((a, c) => a + c.frames, 0);
   const posData = new Float32Array(nv * totalFrames * 4);
@@ -160,10 +164,11 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   geoTmp.setIndex(index);
   let row = 0;
   let time = 0;
-  const step = (move: string, speed: number, dt: number, film: boolean) => {
+  let actionT0 = 0;
+  const step = (move: string, speed: number, dt: number, film: boolean, action?: string) => {
     time += dt;
     // Eyes ahead: the animator's random glances would not repeat with the loop (a head snap at the seam).
-    an.update({ anim: { move: move as 'walk', lookAt: [0, 1.55, -20] }, vel: [0, 0, -speed], yaw: 0, time, main: 'none', off: 'none', combat: false, sneaking: false }, dt, 1, null);
+    an.update({ anim: { move: move as 'walk', lookAt: [0, 1.55, -20], action: action ? { id: action, t0: actionT0, dur: 2 } : undefined }, vel: [0, 0, -speed], yaw: 0, time, main: 'none', off: 'none', combat: false, sneaking: false }, dt, 1, null);
     if (film) {
       const set = (name: string, x: number, y: number, z: number) => {
         const bi = ch.boneIndex.get(name);
@@ -197,9 +202,11 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     }
   };
   for (const c of clipsSpec) {
-    // Warm up the gait / settle the pose.
-    for (let k = 0; k < 150; k++) step(c.move, c.speed, 1 / 60, !!c.film);
-    let period = c.move === 'idle' ? idleCycle : 2.5;
+    // Warm up the gait / settle the pose (an action from its start, blended fully in: 3 whole
+    // cycles, so the first frame captured is the start of one).
+    actionT0 = time;
+    for (let k = 0; k < (c.action ? 180 : 150); k++) step(c.move, c.speed, 1 / 60, !!c.film, c.action);
+    let period = c.action ? GROOVE_PERIOD : c.move === 'idle' ? idleCycle : 2.5;
     if (c.speed > 0) {
       // Detect the gait period from the left thigh swing (autocorrelation).
       const thigh = ch.bones[ch.boneIndex.get('upperleg01.L')!];
@@ -220,7 +227,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     for (let f = 0; f < c.frames; f++) {
       // (Sub-steps: the animator clamps its step to 0.1 s, and a long idle cycle has longer gaps.)
       const sub = Math.ceil(period / c.frames / 0.05);
-      if (f > 0 && !c.still) for (let k = 0; k < sub; k++) step(c.move, c.speed, period / c.frames / sub, !!c.film);
+      if (f > 0 && !c.still) for (let k = 0; k < sub; k++) step(c.move, c.speed, period / c.frames / sub, !!c.film, c.action);
       capture(row++);
     }
     clips[c.name] = { start, frames: c.frames, cycleDist: c.speed * period, cycleTime: period };

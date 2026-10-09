@@ -56,6 +56,18 @@ const LINES: Record<StreetKind, Pool> = {
     leave: ['Thanks folks, you\'ve been great!', 'That\'s my set. Goodnight!'],
     special: ['Thank you kindly!', 'Cheers, mate!', 'Bless you!', 'That\'s a sandwich tonight!'],
   },
+  band: {
+    own: ['One, two, one two three four!', 'This one\'s called "Sunday on the Square".', 'Give it up for the bass, everybody!', 'Thank you! We\'re here every week.', 'Clap along if you know it!', 'Our album\'s in the case. Well, the CD.', 'Little bit faster now!', 'Two more and we\'re on a break.'],
+    greet: ['Stay for a song!', 'Any requests? We know about four.', 'Hey, nice of you to stop!'],
+    fly: ['Was that a bird? A plane?', 'Now that\'s a stage dive!', 'Somebody write a song about that!'],
+    giant: ['Uh, guys… keep playing. Keep playing.', 'Our biggest fan yet!'],
+    hero: ['We wrote a song about you! Kind of. It\'s mostly about pigeons.', 'Hero in the house!'],
+    villain: ['Play something calm. Play something calm!', 'Please don\'t smash the cajón.'],
+    panic: ['Grab the instruments!', 'Gig\'s over, run!', 'Not the bass!'],
+    hit: ['Hey! Not the band!'],
+    leave: ['That\'s our set, thank you!', 'Same spot next week!'],
+    special: ['Thank you kindly!', 'Cheers!', 'That\'s the bus fare home!', 'You\'re a star!'],
+  },
   statue: {
     own: ['…', '……', '(perfectly still)'],
     greet: ['…', '(the statue winks)'],
