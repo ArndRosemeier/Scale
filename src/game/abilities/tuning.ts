@@ -101,7 +101,7 @@ export const DASH = { time: 0.2, cost: 22 };
 
 /** Shockwave (blast where you look): impulse N·s (on walls, cars, creatures), range m, energy.
  *  A person takes at most SHOCK_PERSON N·s at the centre, half of it at the rim (balance audit,
- *  v0.184: the full blast did 900 to 15 000 damage to everyone in it, a sure KO for anyone). */
+ *  v0.185: the full blast did 900 to 15 000 damage to everyone in it, a sure KO for anyone). */
 export const SHOCK_IMPULSE = [0, 3e4, 6e4, 1.2e5, 2.5e5, 5e5];
 export const SHOCK_RANGE = [0, 45, 60, 80, 100, 130];
 export const SHOCK_PERSON = [0, 450, 550, 650, 800, 1000];
