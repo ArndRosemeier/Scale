@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.206 — 2026-10-09
+
+- The concert's sky searchlights are wider and fainter, shafts of light in the haze instead of hard white sticks.
+
 ## 0.205 — 2026-10-09
 
 - **The background music makes way for street musicians.** Within about 30 m of a busker, a street band or a dance crew's boombox, the score fades out, so the two pieces no longer play on top of each other. It comes back once you are about 40 m away, or when they pack up.

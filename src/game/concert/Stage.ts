@@ -210,8 +210,9 @@ export class Stage {
         // Searchlights: slow sweeps, only after dusk, whenever the show is on.
         const a = time * 0.25 + b.k * 1.7;
         b.mesh.quaternion.setFromUnitVectors(_y, _d.set(Math.sin(a) * 0.4, 1, Math.cos(a * 0.8) * 0.4).normalize());
-        b.mesh.scale.set(3, 260, 3);
-        b.mat.opacity = on ? 0.035 * night : 0;
+        // (Wide and faint: a shaft of light in the haze, not a stick.)
+        b.mesh.scale.set(9, 240, 9);
+        b.mat.opacity = on ? 0.02 * night : 0;
         b.mat.color.setHex(0xe8f0ff);
         b.halo.opacity = b.mat.opacity * 0.45;
         b.halo.color.copy(b.mat.color);
