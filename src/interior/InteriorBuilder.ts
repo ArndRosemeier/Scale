@@ -534,17 +534,29 @@ function buildFurniture(G: Geos, f: Furn, y: number): void {
       for (const a of [-1, 1]) B(a * 0.05, h * 0.52, d + 0.02, 0.01, 0.12, 0.015, [0.75, 0.72, 0.6]);
       B(0, h - 0.02, 0, w + 0.02, 0.02, d + 0.02, sc(0.85));
       break;
-    case 'bookshelf': case 'shelf': case 'shopShelf': {
-      // A frame and shelves; books (or goods) in deterministic colours and heights.
+    case 'bookshelf': case 'shelf': case 'shopShelf': case 'clothesShelf': {
+      // A frame and shelves; books (or goods, or folded clothes) in deterministic colours and heights.
       B(-w + 0.02, h / 2, 0, 0.02, h / 2, d, c); B(w - 0.02, h / 2, 0, 0.02, h / 2, d, c);
       B(0, h - 0.02, 0, w, 0.02, d, c); B(0, 0.04, 0, w, 0.04, d, c);
       B(0, h / 2, -d + 0.01, w, h / 2, 0.01, sc(0.75));
-      const levels = f.kind === 'shelf' ? 3 : 5;
+      const levels = f.kind === 'shelf' ? 3 : f.kind === 'clothesShelf' ? 4 : 5;
       for (let k = 1; k < levels; k++) {
         const yy = (h * k) / levels;
         B(0, yy, 0, w - 0.03, 0.012, d - 0.01, sc(0.85));
       }
       if (f.kind === 'shelf') { for (let k = 0; k < levels; k++) B(0, (h * (k + 0.5)) / levels, d + 0.004, w - 0.04, h / levels / 2 - 0.02, 0.005, sc(0.92)); B(0, 0, 0, 0, 0, 0); break; }
+      if (f.kind === 'clothesShelf') {
+        // Stacks of folded clothes, a hand's width apart, in the shelf's own colours.
+        for (let k = 0; k < levels; k++) {
+          const yy = (h * k) / levels + 0.02;
+          for (let x = -w + 0.06; x + 0.3 < w - 0.04; x += 0.36) {
+            if (rnd() < 0.1) continue;
+            const bh = 0.08 + rnd() * 0.16, col = [0.2 + rnd() * 0.7, 0.2 + rnd() * 0.6, 0.2 + rnd() * 0.65] as C3;
+            B(x + 0.15, yy + bh / 2, 0.02, 0.15, bh / 2, d * 0.75, col);
+          }
+        }
+        break;
+      }
       for (let k = 0; k < levels; k++) {
         const yy = (h * k) / levels + 0.02, room = h / levels - 0.06;
         let x = -w + 0.05;
