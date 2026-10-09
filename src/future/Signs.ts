@@ -205,7 +205,7 @@ export class Signs {
     const wantBlade = d.shopfront && d.floors >= 3 && r2 < dens * 0.3;
     const wantScreen = (district === 'downtown' || district === 'commercial') && d.floors >= 5 && r3 < dens * 0.25;
     if (!wantFascia && !wantBlade && !wantScreen) return;
-    const L = this.ctx.destruction.layoutOf(ref);
+    const L = this.ctx.destruction.layoutOnce(ref);
     const front = L.panels.filter((p) => p.edge === d.front);
     if (!front.length) return;
     const byFloor = (f: number) => front.filter((p) => p.floor === f);
@@ -287,7 +287,7 @@ export class Signs {
     const d = ref.desc;
     const ep = ref.cell.plan?.eateries.find((e) => e.b === ref.index);
     if (!ep) return;
-    const L = this.ctx.destruction.layoutOf(ref);
+    const L = this.ctx.destruction.layoutOnce(ref);
     const g0 = L.panels.filter((p) => p.edge === d.front && p.floor === 0);
     if (!g0.length) return;
     const e0 = g0[0];
