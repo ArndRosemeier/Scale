@@ -24,6 +24,8 @@ export interface Area {
   edges: Edge[];
   /** Floor nothing may stand on (convex polygons). */
   keepOut: Poly[];
+  /** How much further pieces stand off inner walls than usual (walls thicker than 20 cm). */
+  innerGap?: number;
 }
 
 /** A wall segment with door openings as parameters 0..1 along it (InteriorGen IWall shape). */
