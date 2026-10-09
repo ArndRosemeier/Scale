@@ -661,6 +661,7 @@ export class Game {
       staging: [interiorWarmup(), this.gate.warmStandins()],
       later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), Wardens.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
       views: this.intro?.warmViews(),
+      waitFor: [this.player.rig.whenDressed],
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
     console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms (${warm.programsCompiled} programs), ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs${warm.nodeBuilds ? `, node builds ${warm.nodeBuilds.join(' / ')} (pipelines ${(window as unknown as { nodeBuilds: { asyncPipes: number } }).nodeBuilds.asyncPipes} in advance, ${(window as unknown as { nodeBuilds: { syncPipes: number } }).nodeBuilds.syncPipes} while drawing)` : ''}`);
