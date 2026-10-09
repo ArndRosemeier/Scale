@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.187 — 2026-10-09
+
+- **Super strength punches no longer knock out anyone in one blow.** From rank 2 on, a punch hit a person with the full force that smashes walls, which did thousands of damage: one punch took out anyone, bosses included. A punch now takes at most 22, 30, 40, 52 or 65 health off a person by rank (an ordinary punch still does 12). It is still the hardest single hit in the game, since you have to get close for it: at rank 5 a thug goes down in one punch, a lieutenant in two and a boss in three. A giant's punch hits harder in proportion to its size. Walls, cars and monsters still take the full force.
+- The Powers table in the help shows the new punch damage.
+
 ## 0.186 — 2026-10-09
 
 - Tests only: the "room splitting" speed check allows 60 ms per office, shop or café storey (about 21 ms alone), and the brood's speed check takes the fastest of three runs against 1.5 ms. Under a full parallel test run, other workers sharing the CPU no longer make them fail.

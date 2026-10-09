@@ -134,6 +134,7 @@ export class AbilitySystem {
     const p = this.player, i = this.interactions;
     const rs = this.rank('strength'), rz = this.rank('size'), rf = this.rank('flight');
     i.punchImpulse = PUNCH_IMPULSE[rs];
+    i.strengthRank = rs;
     i.smashMul = SMASH_MUL[rs];
     i.debugBlast = this.progress.sandbox;
     p.flightAllowed = rf > 0;

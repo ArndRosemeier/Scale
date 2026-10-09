@@ -16,7 +16,8 @@ import { Stimuli, noticeRadius } from './Stimuli';
 import { GiantSteps } from './GiantBody';
 import { pointInPoly, polyArea } from '../core/geom2';
 import type { Target } from './Targeting';
-import { POWER_HIT } from './abilities/tuning';
+import { POWER_HIT, PUNCH_PERSON } from './abilities/tuning';
+import { COMBAT } from './Combat';
 
 export class Interactions {
   private punchT = -10;
@@ -26,6 +27,8 @@ export class Interactions {
   private roofT = 0;
   /** Punch impulse at 1.8 m (N·s, × k²): set by the AbilitySystem from super strength. */
   punchImpulse = 380;
+  /** Super strength rank (AbilitySystem): caps what a punch does to a person (PUNCH_PERSON). */
+  strengthRank = 0;
   /** Body-momentum wall smashing multiplier (super strength). */
   smashMul = 1;
   /** B = test blast where the camera looks (debug; sandbox only). */
@@ -97,7 +100,7 @@ export class Interactions {
       const sx = p.pos.x + fx * t, sz = p.pos.z + fz * t;
       const impulse = this.punchImpulse * k * k;
       const n = this.destruction.impact(sx, sy, sz, 0.35 * p.height, impulse, fx, -0.05, fz, 'wall');
-      this.onStrike?.(sx, sy, sz, 0.45 * p.height, fx * impulse, impulse * POWER_HIT.punchLift, fz * impulse);
+      this.onStrike?.(sx, sy, sz, 0.45 * p.height, fx * impulse, impulse * POWER_HIT.punchLift, fz * impulse, undefined, PUNCH_PERSON[this.strengthRank] / COMBAT.dmgPerNs * Math.max(1, k * k));
       this.stimuli.emit('impact', sx, sy, sz, Math.log10(impulse * 10), noticeRadius(impulse * 20));
       if (n > 0) {
         this.camRig.addShake(0.25);
