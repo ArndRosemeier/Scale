@@ -520,7 +520,7 @@ export class Game {
     // (Nothing in hand inside a landmark: no coffee in the pews, no umbrella indoors.)
     this.crowd.heldFor = (a) => { if (a.hall) return null; const t = this.terraces.heldFor(a); return t !== undefined ? t : this.weather.heldFor(a); };
     this.crowd.talking = (a, t) => this.terraces.talking(a, t);
-    this.interactions.onStrike = (x, y, z, r, jx, jy, jz, spare) => this.strike(x, y, z, r, jx, jy, jz, spare);
+    this.interactions.onStrike = (x, y, z, r, jx, jy, jz, spare, personJ) => this.strike(x, y, z, r, jx, jy, jz, spare, personJ);
     this.reactions.onScream = (x, y, z, crowd) => this.audio.play(crowd ? 'scream_crowd' : 'scream_single', x, y, z, 0.8, 0.95 + Math.random() * 0.1, 12, cam.position);
     this.crowd.rigGround = (x, y, z) => this.collision.groundAt(x, z, y + 0.4, 0.3);
     this.ragdolls = new RagdollSystem({
@@ -1230,7 +1230,7 @@ export class Game {
 
   /** A physical strike at a point hits cars, people and props. `spare` (a power's friend/foe sense):
    *  only foes are hit, no car or prop. */
-  strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, spare?: (t: Target) => boolean): void {
+  strike(x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, spare?: (t: Target) => boolean, personJ?: number): void {
     const J = Math.hypot(jx, jy, jz);
     // A monster in reach takes the blow (armour, weak spots).
     this.threats?.blow(x, y, z, r, jx, jy, jz, { cause: 'player', x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z });
@@ -1257,7 +1257,11 @@ export class Game {
       hit.sort((a, b) => (a === cur ? -1 : b === cur ? 1 : 0) || (b.actor?.hostile ? 1 : 0) - (a.actor?.hostile ? 1 : 0) || Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
       hit.length = 1;
     }
-    for (const a of hit) this.crime.combat.hitActor(a, jx, jy, jz, 'strike', 'player');
+    for (const a of hit) {
+      // A blast with a person cap (the shockwave): at most personJ at the centre, half at the rim.
+      const s = personJ === undefined || J <= 0 ? 1 : Math.min(1, personJ * (1 - 0.5 * Math.min(1, Math.hypot(a.x - x, a.z - z) / r)) / J);
+      this.crime.combat.hitActor(a, jx * s, jy * s, jz * s, 'strike', 'player');
+    }
   }
 
   /** Nearest street holes and whether the camera is underground -> terrain shader. */

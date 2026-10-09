@@ -2,6 +2,28 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.186 — 2026-10-09
+
+- Tests only: the "room splitting" speed check allows 60 ms per office, shop or café storey (about 21 ms alone), and the brood's speed check takes the fastest of three runs against 1.5 ms. Under a full parallel test run, other workers sharing the CPU no longer make them fail.
+
+## 0.185 — 2026-10-09
+
+- **The shockwave no longer flattens everyone in it.** Until now, every person in the blast took the full force that breaks walls: 900 to 15 000 damage, a sure knockout for anyone, bosses included. Now a person takes 27 to 60 at the centre, depending on rank, and half that at the rim. That still knocks people down, about as hard as a fireball does. Walls, cars and monsters still take the full blast.
+- **The shockwave's reach is shorter**: 45, 60, 80, 100 and 130 m by rank, down from 80 m up to 800 m, so you can no longer blow up a building from across the city.
+- **Chain lightning does less to monsters**: 22 points per second of stun instead of 40. At low ranks it used to do several times more damage per energy against monsters than any other power.
+- The Powers table in the help shows the shockwave's new damage.
+
+## 0.184 — 2026-10-09
+
+- **The title music starts as soon as the start screen shows.** It no longer waits for a click wherever the browser lets a page play sound by itself. Chrome and Edge allow that on sites you have played on before, so it will usually start right away on apps.futuremagic.de. On a first visit, and always in Safari and Firefox by default, browsers block sound until the first click, tap or key press (moving the mouse doesn't count), and the music then starts with that first input.
+
+## 0.183 — 2026-10-09
+
+- **Observation towers have a lobby and an observation deck.** Walk into the glass drum at the foot of the TV tower, or the foot of the glass tower, and you're in a lobby round the core with a ticket desk, lift doors, souvenir racks and benches. Up top, the deck sits behind the glass ring of the pod, in the lowest disc of a stacked tower, in an octagon on the lattice tower's platform, or in the lower part of the glass tower's box. Each deck has coin telescopes at the glass, benches looking out, a snack counter and tables, and an outdoor gallery with a railing round it. You get up there by flying and walk in from the gallery.
+- **The lighthouse can be walked into.** The door at its foot opens into a round room with a spiral stair going up. At the top, the lantern room holds the great lens, and its door opens onto the gallery. The keeper's house now stands beside the tower, so the door is clear.
+- **The fortress keep has a great hall.** Climb the steps from the courtyard into a stone hall with the throne on its dais facing the door, a long table with benches, a fireplace, banners and suits of armour. A ruined castle's hall also has fallen stones in it.
+- Interior core, step 4 of 6 completed (`docs/INTERIORS_PLAN.md`). The walk-in self-test now covers these three landmarks too: it follows a fortress's way out through its gate, and walks each room's door at that room's own floor height.
+
 ## 0.182 — 2026-10-09
 
 - **New music throughout the game: Arnd's Lyria pieces, in the style of the title theme.** The old background music, built from short AI layers, is gone. Every mood now plays a real piece:

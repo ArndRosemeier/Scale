@@ -3,7 +3,7 @@
  * local point, its front facing the frame's +v after turning by `rot`. Small pieces are detail
  * only; anything one would bump into or stand on is solid.
  */
-import { Kit, mat, GREEN_ROOF, PLASTER, GRANITE, GLASS, GRAVEL, CONC, type Opt } from '../../plan/landmarkParts';
+import { Kit, mat, GREEN_ROOF, PLASTER, GRANITE, GLASS, GRAVEL, CONC, GLOW, type Opt } from '../../plan/landmarkParts';
 import type { Rng } from '../../core/rng';
 import type { PropName, Theme } from './theme';
 
@@ -184,6 +184,68 @@ export function buildProp(k: Kit, name: PropName, u: number, v: number, y: numbe
         for (const s of [-1.3, 0, 1.3]) k.box(s, 0, 0.04, 0.2, y, y + 0.3, T.trim, D);
         break;
       }
+      case 'telescope': { // A coin telescope on its post, looking out over the glass (-v).
+        k.cyl(0, 0, 0.09, 0.09, y, y + 1.15, T.trim, { ...DS, seg: 8 });
+        k.cyl(0, 0, 0.22, 0.25, y, y + 0.06, T.trim, { ...D, seg: 10 });
+        k.box(0, 0, 0.16, 0.12, y + 1.15, y + 1.32, T.furniture, D);
+        for (const s of [-0.08, 0.08]) k.box(s, -0.1, 0.06, 0.2, y + 1.2, y + 1.36, T.furniture, { ...D, rot: 0 });
+        break;
+      }
+      case 'liftDoor': // Lift doors on the core: a steel frame, two leaves, the call button.
+        k.box(0, 0, 0.8, 0.08, y, y + 2.6, T.trim, D);
+        for (const s of [-0.36, 0.36]) k.box(s, 0.05, 0.35, 0.04, y + 0.02, y + 2.35, mat(PLASTER, [0.72, 0.74, 0.77]), D);
+        k.box(0.95, 0.05, 0.06, 0.03, y + 1.1, y + 1.3, T.glow, D);
+        break;
+      case 'spiralStair': { // A spiral stair round its newel, up through the ceiling.
+        const n = 16, top = h || 3.4;
+        k.cyl(0, 0, 0.16, 0.16, y, y + top, T.trim, { ...DS, seg: 8 });
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 * 1.1, yy = y + ((i + 1) * top) / (n + 1);
+          k.sub(0, 0, a, () => k.box(0.7, 0, 0.55, 0.2, yy - 0.06, yy, T.furniture, D));
+        }
+        k.cyl(0, 0, 1.3, 1.3, y, y + 0.02, T.trim, { ...D, seg: 16 });
+        break;
+      }
+      case 'lens': // The great lens on its pedestal, ringed in brass.
+        k.cyl(0, 0, 0.7, 0.55, y, y + 1.0, T.furniture, { ...DS, seg: 12 });
+        k.cyl(0, 0, 0.75, 0.75, y + 1.0, y + 2.1, mat(GLASS, [1.4, 1.3, 1.0]), { ...D, clear: true, seg: 12 });
+        for (const yy of [1.0, 1.35, 1.7, 2.05]) k.cyl(0, 0, 0.78, 0.78, y + yy, y + yy + 0.05, T.trim, { ...D, seg: 12 });
+        k.cyl(0, 0, 0.22, 0.22, y + 1.4, y + 1.7, T.glow, { ...D, seg: 8 });
+        k.dome(0, 0, 0.6, 0.6, y + 2.1, y + 2.4, T.trim, { ...D, seg: 10 });
+        break;
+      case 'throne': // The throne on its dais, a tall carved back against the wall.
+        k.box(0, 0.1, 1.2, 0.8, y, y + 0.25, T.wall, DS);
+        k.box(0, -0.1, 0.45, 0.4, y + 0.25, y + 0.75, T.furniture, DS);
+        k.box(0, -0.45, 0.5, 0.1, y + 0.25, y + 2.6, T.furniture, D);
+        k.pyramid(0, -0.45, 0.5, 0.1, y + 2.6, y + 3.1, 0, T.trim, D);
+        for (const s of [-0.45, 0.45]) k.box(s, -0.1, 0.06, 0.35, y + 0.75, y + 1.05, T.trim, D);
+        k.box(0, 0.05, 0.35, 0.3, y + 0.75, y + 0.8, mat(PLASTER, [0.55, 0.08, 0.1]), D);
+        break;
+      case 'longTable': // A long trestle table.
+        k.box(0, 0, 0.7, 3.0, y + 0.72, y + 0.8, T.furniture, DS);
+        for (const s of [-2.4, 0, 2.4]) k.box(0, s, 0.55, 0.08, y, y + 0.72, T.furniture, DS);
+        for (const s of [-1.5, 1.5]) k.cyl(0.2, s, 0.08, 0.06, y + 0.8, y + 1.1, T.trim, { ...D, seg: 6 });
+        break;
+      case 'banner': // A hanging banner on its pole.
+        k.box(0, 0, 0.62, 0.025, y + 4.1, y + 4.18, T.trim, D);
+        k.box(0, 0, 0.55, 0.012, y + 1.6, y + 4.1, mat(PLASTER, r.pick<[number, number, number]>([[0.6, 0.08, 0.1], [0.12, 0.2, 0.55], [0.15, 0.4, 0.2]])), D);
+        k.box(0, 0.015, 0.18, 0.005, y + 3.0, y + 3.5, mat(PLASTER, [1.2, 1.0, 0.45]), D);
+        break;
+      case 'armour': // A suit of armour on its stand.
+        k.box(0, 0, 0.3, 0.25, y, y + 0.1, T.furniture, DS);
+        k.cyl(0, 0, 0.22, 0.2, y + 0.1, y + 1.05, mat(CONC, [0.75, 0.77, 0.8]), { ...DS, seg: 8 });
+        k.cyl(0, 0, 0.28, 0.22, y + 1.05, y + 1.6, mat(CONC, [0.75, 0.77, 0.8]), { ...D, seg: 8 });
+        k.dome(0, 0, 0.14, 0.14, y + 1.62, y + 1.95, mat(CONC, [0.75, 0.77, 0.8]), { ...D, seg: 8 });
+        k.box(0.35, 0.1, 0.02, 0.02, y + 0.1, y + 2.0, T.trim, D);
+        break;
+      case 'fireplace': // A stone fireplace with a fire in it, its chimney breast up the wall.
+        k.box(0, 0, 1.3, 0.45, y, y + 0.15, T.wall, DS);
+        for (const s of [-1.05, 1.05]) k.box(s, 0, 0.25, 0.45, y, y + 1.5, T.wall, DS);
+        k.box(0, 0, 1.3, 0.45, y + 1.5, y + 1.8, T.wall, D);
+        k.box(0, -0.2, 0.9, 0.25, y + 1.8, y + 3.0, T.wall, D);
+        k.box(0, -0.35, 0.8, 0.05, y + 0.15, y + 1.5, mat(CONC, [0.12, 0.1, 0.1]), D);
+        k.box(0, 0, 0.5, 0.2, y + 0.15, y + 0.5, mat(PLASTER, [1.6, 0.7, 0.2], GLOW), D);
+        break;
       case 'board': // A departures board on a post.
         k.box(0, 0, 0.06, 0.06, y, y + 2.2, T.trim, DS);
         k.box(0, 0, 0.9, 0.05, y + 2.2, y + 2.9, mat(CONC, [0.15, 0.16, 0.2]), D);

@@ -37,7 +37,7 @@ export class Interactions {
   readonly steps: GiantSteps;
   /** Physical strike on movable things (cars, props, people): point, radius, impulse vector (N*s). */
   /** A physical strike (punch, blast); `spare`: the friend/foe sense leaves these out. */
-  onStrike?: (x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, spare?: (t: Target) => boolean) => void;
+  onStrike?: (x: number, y: number, z: number, r: number, jx: number, jy: number, jz: number, spare?: (t: Target) => boolean, personJ?: number) => void;
 
   constructor(
     private player: Player,
@@ -148,21 +148,22 @@ export class Interactions {
   }
 
   /** Blast where the cursor points, up to `range` m (anywhere=true: also mid-air at the range).
-   *  `spare` (the friend/foe sense): it hurts only foes and breaks nothing. */
-  blastAtView(range: number, impulse: number, anywhere: boolean, spare?: (t: Target) => boolean): boolean {
+   *  `spare` (the friend/foe sense): it hurts only foes and breaks nothing. `personJ`: the most a
+   *  person takes at the centre (N·s; half at the rim), see Game.strike. */
+  blastAtView(range: number, impulse: number, anywhere: boolean, spare?: (t: Target) => boolean, personJ?: number): boolean {
     const dir = aimDir(this.cam, new THREE.Vector3());
     const o = this.cam.position;
     const hit = this.world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, range, 1);
     const t = hit.t < Infinity ? hit.t : anywhere ? range : -1;
     if (t < 0) return false;
-    this.blast(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t, impulse, spare);
+    this.blast(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t, impulse, spare, personJ);
     return true;
   }
 
-  blast(x: number, y: number, z: number, impulse: number, spare?: (t: Target) => boolean): void {
+  blast(x: number, y: number, z: number, impulse: number, spare?: (t: Target) => boolean, personJ?: number): void {
     const r = 3 + Math.cbrt(impulse) * 0.08;
     if (!spare) this.destruction.impact(x, y, z, r, impulse, 0, 0.2, 0, 'blast');
-    this.onStrike?.(x, y, z, r * 1.5, 0, impulse * POWER_HIT.blastShare, 0, spare);
+    this.onStrike?.(x, y, z, r * 1.5, 0, impulse * POWER_HIT.blastShare, 0, spare, personJ);
     this.dust.burst(x, y, z, 50, r * 0.6, 12, r * 0.8, 10, new THREE.Color(0.35, 0.33, 0.32), 0.9, 0.7);
     this.dust.burst(x, y, z, 20, r * 0.3, 16, r * 0.5, 2.5, new THREE.Color(1.0, 0.55, 0.2).multiplyScalar(3), 1.5, 0.9);
     this.debris.chipBurst(x, y, z, 120, 18, 0, 0.5, 0, new THREE.Color(0.4, 0.38, 0.35), 0.12, 4);
