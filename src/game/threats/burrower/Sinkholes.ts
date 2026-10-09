@@ -11,6 +11,8 @@
  *  - Opening: the street sags and drops over a second and a half; cars on it are wrecked and fall in,
  *    people are knocked off their feet, street furniture is crushed, the foot of a building beside
  *    it is undermined; dust, a tremor, a collapse heard far off.
+ *  - Before it opens the street swells (`swell`): a dome of cracked asphalt rising over the worm's
+ *    head (the same mesh, posed up instead of down; cars on it tilt), then it caves in (`open`).
  *  - Holes stay SINK.keep game hours, then are filled in (when nobody is looking); saves keep them.
  *  - A small pothole (an omen) is the same with a 1–2 m mouth and no harm done.
  *
@@ -37,6 +39,8 @@ export const SINK = {
   rim: 0.13, rimH: 0.07,
   /** Most holes kept at once (the oldest is filled first). */
   max: 12,
+  /** The swell before it opens: dome height (m), rise time (s), and how long it waits for the break-out. */
+  domeH: 0.9, swellT: 2.2, swellWait: 12,
 };
 
 /** Crater depth below the street at u = distance / radius (0 centre … 1 edge), for depth D. */
@@ -52,6 +56,9 @@ export interface Sinkhole {
   x: number; z: number; r: number; depth: number;
   /** Opening 0..1. */
   k: number;
+  /** The swell before the opening 0..1, and until when (game seconds) it waits to open. */
+  rise: number;
+  swellUntil: number;
   /** Absolute game hours when it is filled in. */
   until: number;
   small: boolean;
@@ -62,6 +69,12 @@ export interface Sinkhole {
   /** The street height at each vertex and the crater depth there (opening animation). */
   base: Float32Array | null;
   drop: Float32Array | null;
+  /** Per vertex: share of the radius out (the dome's profile), the pit's colours and the dome's. */
+  uOf: Float32Array | null;
+  pitCol: Float32Array | null;
+  domeCol: Float32Array | null;
+  /** Indices of the bowl alone (the slabs and rubble are hidden under the swell). */
+  bowlIdx: number;
   /** Its stop sign for cars and people. */
   hold: { x: number; z: number; r: number };
 }
@@ -80,6 +93,8 @@ export class Sinkholes {
   readonly material: THREE.MeshStandardMaterial;
   private warmMesh: THREE.Mesh;
   private checkT = 0;
+  /** Its own clock (s; the swell's wait and wobble). */
+  private t = 0;
   stats = { opened: 0, refused: 0, cars: 0, people: 0, filled: 0 };
 
   constructor(private g: Game) {
@@ -105,15 +120,17 @@ export class Sinkholes {
       const dx = x - h.x, dz = z - h.z;
       const R = h.r * 1.08;
       if (dx * dx + dz * dz > R * R) continue;
-      const e = edgeAt(h, Math.atan2(dz, dx));
-      d = Math.max(d, craterDepth(Math.hypot(dx, dz) / e, h.depth) * ease(h.k));
+      const e = edgeAt(h, Math.atan2(dz, dx)), u = Math.hypot(dx, dz) / e;
+      // (Swelling: a negative dip, the ground rises.)
+      if (h.k <= 0) { if (u < 1) d = Math.min(d, -domeAt(u) * h.rise); continue; }
+      d = Math.max(d, craterDepth(u, h.depth) * ease(h.k));
     }
     return d;
   }
 
   /** Holes for the street / terrain shaders (Game.updateHoles): x, z, cos, sin, radius, −1 (round). */
   holes(out: number[]): void {
-    for (const h of this.list) if (h.k > 0.02) out.push(h.x, h.z, 1, 0, h.r * (h.small ? 0.96 : 0.985), -1);
+    for (const h of this.list) if (h.k > 0.02 || h.rise > 0.02) out.push(h.x, h.z, 1, 0, h.r * (h.small ? 0.96 : 0.985), -1);
   }
 
   /**
@@ -161,10 +178,25 @@ export class Sinkholes {
   why = '';
   private refuse(why: string): null { this.why = why; this.stats.refused++; return null; }
 
-  /** Open a hole at a site (`site`'s answer): it caves in over SINK.openT. */
+  /**
+   * The street swells over a site (`site`'s answer) before it opens there: a dome rising over
+   * SINK.swellT. `open` at the same site turns it into the hole; unopened it settles back.
+   */
+  swell(at: { x: number; z: number; r: number; depth: number }, seed: number): Sinkhole {
+    const h = this.add(at, seed, false);
+    h.swellUntil = this.t + SINK.swellWait;
+    this.pose(h, 0);
+    return h;
+  }
+
+  /** Open a hole at a site (`site`'s answer): it caves in over SINK.openT (a swell there turns into it). */
   open(at: { x: number; z: number; r: number; depth: number }, seed: number, small = false): Sinkhole {
     const g = this.g;
-    const h = this.add(at, seed, small, small ? at.depth : undefined);
+    const sw = this.list.find((s) => s.k <= 0 && s.swellUntil > 0 && Math.hypot(s.x - at.x, s.z - at.z) < 0.5);
+    const h = sw ?? this.add(at, seed, small, small ? at.depth : undefined);
+    if (sw) { sw.swellUntil = 0; sw.until = g.sky.hoursAbs + SINK.keep; }
+    // The street's cracks and scorch marks over the mouth go with it (decals lie flat at street level).
+    if (!small) g.elements.fx.clearDecals(h.x, h.z, h.r * 1.05);
     this.stats.opened++;
     const y = g.terrain.height(h.x, h.z), cam = g.renderer.camera.position;
     if (!small) {
@@ -187,8 +219,8 @@ export class Sinkholes {
       edge[i] = at.r * (1 + 0.06 * Math.sin(a * 3 + p1) + 0.035 * Math.sin(a * 7 + p2) + rng.range(-0.035, 0.035));
     }
     const h: Sinkhole = {
-      x: at.x, z: at.z, r: at.r, depth: d, k: 0, until: this.g.sky.hoursAbs + SINK.keep, small, seed, edge,
-      mesh: null, base: null, drop: null, hold: { x: at.x, z: at.z, r: at.r * 1.1 + 0.5 },
+      x: at.x, z: at.z, r: at.r, depth: d, k: 0, rise: 0, swellUntil: 0, until: this.g.sky.hoursAbs + SINK.keep, small, seed, edge,
+      mesh: null, base: null, drop: null, uOf: null, pitCol: null, domeCol: null, bowlIdx: 0, hold: { x: at.x, z: at.z, r: at.r * 1.1 + 0.5 },
     };
     this.build(h);
     this.list.push(h);
@@ -198,10 +230,21 @@ export class Sinkholes {
 
   update(dt: number): void {
     const g = this.g;
+    this.t += dt;
     this.warmMesh.visible = !g.gate.enabled;
     if (this.warmMesh.visible) { const p = g.player.pos; this.warmMesh.position.set(p.x, p.y - 2, p.z); }
-    for (const h of this.list) {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const h = this.list[i];
       if (h.k >= 1) continue;
+      if (h.swellUntil > 0) {
+        // Swelling: up while it waits, then (never opened) back down and gone.
+        const before = h.rise, up = this.t < h.swellUntil;
+        h.rise = Math.max(0, Math.min(1, h.rise + (up ? dt / SINK.swellT : -dt / 3)));
+        this.pose(h, 0);
+        if (Math.floor(before * 4) !== Math.floor(h.rise * 4)) g.physics.invalidateGround(h.x - h.r - 2, h.z - h.r - 2, h.x + h.r + 2, h.z + h.r + 2);
+        if (!up && h.rise <= 0) this.remove(h);
+        continue;
+      }
       const before = h.k;
       h.k = Math.min(1, h.k + dt / (h.small ? 0.5 : SINK.openT));
       // (Eased: a sag, then the drop.)
@@ -288,7 +331,7 @@ export class Sinkholes {
 
   /** Saves: [x, z, r, depth, until, small] per hole. */
   saveState(): number[][] {
-    return this.list.map((h) => [Math.round(h.x * 10) / 10, Math.round(h.z * 10) / 10, Math.round(h.r * 100) / 100, Math.round(h.depth * 100) / 100, Math.round(h.until * 1000) / 1000, h.small ? 1 : 0, h.seed]);
+    return this.list.filter((h) => h.k > 0).map((h) => [Math.round(h.x * 10) / 10, Math.round(h.z * 10) / 10, Math.round(h.r * 100) / 100, Math.round(h.depth * 100) / 100, Math.round(h.until * 1000) / 1000, h.small ? 1 : 0, h.seed]);
   }
 
   restoreState(rows: number[][]): void {
@@ -326,15 +369,41 @@ export class Sinkholes {
     h.mesh = mesh;
     h.base = geo.base;
     h.drop = geo.drop;
+    h.bowlIdx = geo.bowlIdx;
+    // The swell's look: plain asphalt, darker along a few cracks running out from the middle.
+    const P = geo.geometry.getAttribute('position') as THREE.BufferAttribute, C = geo.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const n = P.count, rng = new Rng(h.seed ^ 0x7d1);
+    h.uOf = new Float32Array(n);
+    h.pitCol = (C.array as Float32Array).slice();
+    h.domeCol = new Float32Array(n * 3);
+    const cracks = Array.from({ length: 5 + rng.int(0, 3) }, () => rng.range(0, Math.PI * 2));
+    for (let i = 0; i < n; i++) {
+      const x = P.getX(i), z = P.getZ(i), r = Math.hypot(x, z), a = Math.atan2(z, x);
+      h.uOf[i] = Math.min(1.2, r / edgeAt(h, a));
+      let dark = 0;
+      for (const c of cracks) { const da = Math.abs(((a - c + Math.PI * 3) % (Math.PI * 2)) - Math.PI); if (da * r < 0.35) dark = 1; }
+      const sh = (0.85 + 0.3 * rng.float()) * (dark ? 0.25 : 1) * (h.uOf[i] > 0.95 && h.uOf[i] < 1.05 ? 0.4 : 1);
+      h.domeCol[i * 3] = ASPHALT[0] * sh; h.domeCol[i * 3 + 1] = ASPHALT[1] * sh; h.domeCol[i * 3 + 2] = ASPHALT[2] * sh;
+    }
     this.pose(h, ease(h.k));
   }
 
   /** The opening: every vertex between the street and its place in the crater. */
   private pose(h: Sinkhole, k: number): void {
     if (!h.mesh || !h.base || !h.drop) return;
-    const P = h.mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const geo = h.mesh.geometry;
+    const P = geo.getAttribute('position') as THREE.BufferAttribute;
     const A = P.array as Float32Array, B = h.base, D = h.drop;
-    for (let i = 0; i < B.length; i++) A[i * 3 + 1] = B[i] - D[i] * k;
+    // Swelling (not yet open): the bowl alone, raised in a dome of cracked asphalt.
+    const swelling = h.k <= 0 && h.swellUntil > 0 && !!h.uOf;
+    const C = geo.getAttribute('color') as THREE.BufferAttribute;
+    const want = swelling ? h.domeCol! : h.pitCol;
+    if (want && C.array !== want && (C.array as Float32Array)[0] !== want[0]) { (C.array as Float32Array).set(want); C.needsUpdate = true; }
+    geo.setDrawRange(0, swelling ? h.bowlIdx : Infinity);
+    if (swelling) {
+      const U = h.uOf!, wob = 0.04 * Math.sin(this.t * 23 + h.seed);
+      for (let i = 0; i < B.length; i++) A[i * 3 + 1] = B[i] + (domeAt(U[i]) * (1 + wob) + (U[i] >= 1 ? 0.02 : 0)) * h.rise;
+    } else for (let i = 0; i < B.length; i++) A[i * 3 + 1] = B[i] - D[i] * k;
     P.needsUpdate = true;
     h.mesh.geometry.computeVertexNormals();
     h.mesh.geometry.computeBoundingSphere();
@@ -345,6 +414,9 @@ export class Sinkholes {
     return { why: this.why, holes: this.list.map((h) => ({ x: Math.round(h.x), z: Math.round(h.z), r: +h.r.toFixed(1), depth: +h.depth.toFixed(1), k: +h.k.toFixed(2), small: h.small })), ...this.stats };
   }
 }
+
+/** The swell's height profile at u (0 centre … 1 edge), times SINK.domeH. */
+function domeAt(u: number): number { return u >= 1 ? 0 : SINK.domeH * (1 - u * u) * (1 - u * u); }
 
 function ease(k: number): number { return k < 0.4 ? 0.12 * (k / 0.4) : 0.12 + 0.88 * (1 - Math.pow(1 - (k - 0.4) / 0.6, 3)); }
 
@@ -359,7 +431,7 @@ function edgeAt(h: { edge: Float32Array }, a: number): number {
  * The crater as a mesh: positions are written by the opening (`base` − `drop` × k per vertex).
  * Exported for the self-test (watertight bowl, profile).
  */
-export function buildCrater(h: { x: number; z: number; r: number; depth: number; seed: number; edge: Float32Array; small: boolean }, street: (x: number, z: number) => number): { geometry: THREE.BufferGeometry; base: Float32Array; drop: Float32Array; y0: number } {
+export function buildCrater(h: { x: number; z: number; r: number; depth: number; seed: number; edge: Float32Array; small: boolean }, street: (x: number, z: number) => number): { geometry: THREE.BufferGeometry; base: Float32Array; drop: Float32Array; y0: number; bowlIdx: number } {
   const rng = new Rng(h.seed ^ 0x51ab);
   const pos: number[] = [], col: number[] = [], base: number[] = [], drop: number[] = [], idx: number[] = [];
   const D = h.depth, y0 = street(h.x, h.z);
@@ -410,6 +482,7 @@ export function buildCrater(h: { x: number; z: number; r: number; depth: number;
       idx.push(A[i], A[j], B[j], A[i], B[j], B[i]);
     }
   }
+  const bowlIdx = idx.length;
   if (!h.small) {
     // ---- slabs of the road on the slope, rubble, a pipe stub in the wall
     const box = (cx: number, cz: number, u: number, w: number, l: number, t: number, yaw: number, tilt: number, c: [number, number, number]) => {
@@ -456,5 +529,5 @@ export function buildCrater(h: { x: number; z: number; r: number; depth: number;
   geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
   geometry.setIndex(idx);
   geometry.computeVertexNormals();
-  return { geometry, base: new Float32Array(base), drop: new Float32Array(drop), y0 };
+  return { geometry, base: new Float32Array(base), drop: new Float32Array(drop), y0, bowlIdx };
 }

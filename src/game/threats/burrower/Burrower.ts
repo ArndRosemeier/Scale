@@ -313,7 +313,7 @@ export class Burrower implements ThreatEvent, ThreatActor {
     this.recentHit *= Math.exp(-dt / 2);
     for (const k of Object.keys(this.cool) as (keyof Burrower['cool'])[]) this.cool[k] -= dt;
     rig.t += dt;
-    rig.holes = this.holes.list.filter((h) => Math.hypot(h.x - rig.head.x, h.z - rig.head.z) < 160);
+    rig.holes = this.holes.list.filter((h) => h.k > 0 && Math.hypot(h.x - rig.head.x, h.z - rig.head.z) < 160);
     if (this.mode === 'dead') { this.lying(dt); return; }
     if (this.mode === 'dying') this.dying(dt);
     else {
@@ -455,6 +455,7 @@ export class Burrower implements ThreatEvent, ThreatActor {
     this.bulgeFor = BURROWER.bulgeT * quick;
     this.lastBreachT = this.t;
     const g = this.g;
+    this.holes.swell(site, (this.rng.float() * 2 ** 32) >>> 0);
     g.elements.fx.decal(DecalKind.Crack, site.x, site.y + 0.05, site.z, 0, 1, 0, site.r * 2.2, site.r * 2.2, this.rng.range(0, 6), 120);
     g.audio.play('tremor_rumble', site.x, site.y, site.z, 1, 0.7, 60, g.renderer.camera.position);
     g.stimuli.emit('tremor', site.x, site.y, site.z, 6, 300, { cause: 'threat', size: this.height });
@@ -1053,7 +1054,7 @@ export class Burrower implements ThreatEvent, ThreatActor {
         this.crackT = 0.15;
         this.crackX = h.x; this.crackZ = h.z;
         const yaw = Math.atan2(this.heading.x, this.heading.z);
-        if (!g.world.buildingAt(h.x, h.z)) g.elements.fx.decal(DecalKind.Crack, h.x, sy + 0.05, h.z, 0, 1, 0, 9, 4, yaw + this.rng.range(-0.4, 0.4), 90);
+        if (!g.world.buildingAt(h.x, h.z)) g.elements.fx.decal(DecalKind.Crack, h.x, sy + 0.05, h.z, 0, 1, 0, 8, 2.4, yaw + this.rng.range(-0.4, 0.4), 45);
         if (Math.random() < 0.5) g.dust.burst(h.x, sy + 0.2, h.z, 4, 2, 1.5, 1.5, 3, DUST, 0.15, 0.4);
       }
       if (dc < 90) g.camRig.addShake(dt * 0.25 * (1 - dc / 90));
@@ -1155,6 +1156,8 @@ export class Burrower implements ThreatEvent, ThreatActor {
     const P = this.g.player.pos, h = this.rig.head;
     const s = atHero ? this.findSite(P.x, P.z, BURROWER.holeR[0]) : this.findSite(h.x + this.heading.x * 20, h.z + this.heading.z * 20, BURROWER.holeR[0]);
     if (!s) return 'no site';
+    // (From far off: brought in under the site, so the swell and break-out play as they would.)
+    if (Math.hypot(h.x - s.x, h.z - s.z) > 40) { this.head.set(s.x - this.heading.x * 20, s.y - BURROWER.depth, s.z - this.heading.z * 20); this.rig.moveHead(this.head.x, this.head.y, this.head.z); }
     this.startBulge(s, 0.5);
     return 'bulge';
   }
