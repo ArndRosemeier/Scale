@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.223 — 2026-10-09
+
+- **No more looking through the world at the slime tunnels' entrances.** Where a slime colony's road leaves its hidden chamber, the wall had a square hole cut into it, but the rock tunnel behind is round and starts a little way past the wall, so its corners and edges showed the city and the sky. The opening is now a round arch that sits inside the tunnel, with a short stone lining reaching out into the rock, for every entrance. The glowing wall markings and cracks no longer hang in the opening either.
+
 ## 0.222 — 2026-10-09
 
 - **No long freeze right after loading.** Your hero is dressed piece by piece over the first frames, and on a fresh browser the shaders for their clothes were still compiling when play began, so the first frame stalled until they were done (9 seconds in one freeze log). The loading screen now waits until the hero is dressed and every shader still compiling is ready, up to 20 seconds. The freeze log also missed that freeze, because it skipped the very first frame of play; it no longer does, and a long frame right after switching back to the game's tab now counts too.
