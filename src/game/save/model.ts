@@ -96,6 +96,8 @@ export interface SaveAftermath {
   memorials: [number, number, number, number][];
   /** City news on the screens (a pictogram: 'lost' — the strike; 'saved' — called off; 'down' — the monster brought down) until when. */
   news: { kind: string; until: number } | null;
+  /** Reconstruction (game/aftermath/Reconstruction SaveRebuild): logged damage, sites, rebuilds due. */
+  rebuild?: unknown;
 }
 
 /** One cell's damage: index sets (codec.encodeIndexSet) over its elements. */

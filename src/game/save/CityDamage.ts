@@ -61,6 +61,15 @@ export class CityDamage {
     }
   }
 
+  /** A building rebuilt (Reconstruction): no longer collapsed, nothing of it to restore. */
+  forget(cell: number, index: number): void {
+    const m = this.collapsed.get(cell);
+    if (m) { m.delete(index); if (!m.size) this.collapsed.delete(cell); }
+    const dead = this.pendingDead.get(cell);
+    const ref = this.g.world.cellBuildings(cell)[index];
+    if (dead && ref) this.pendingDead.set(cell, dead.filter((e) => e < ref.elemBase || e >= ref.elemBase + ref.elemCount));
+  }
+
   capture(): SaveDamage | null {
     const g = this.g, D = g.destruction, I = g.interiors;
     const cells: SaveDamage['cells'] = [];

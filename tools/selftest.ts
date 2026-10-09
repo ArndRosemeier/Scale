@@ -2355,6 +2355,21 @@ section('weather', async () => {
   }
 });
 
+// ------------------------------------------------------------------ reconstruction site props (src/props/construction.ts)
+section('construction site models', async () => {
+  const C = await import('../src/props/construction');
+  const box = (geo: THREE.BufferGeometry) => { geo.computeBoundingBox(); return geo.boundingBox!; };
+  const sane = (geo: THREE.BufferGeometry) => { const a = geo.getAttribute('position').array; for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])) return false; return a.length > 0; };
+  const bay = C.scaffoldBay(), net = C.scaffoldNet(), mast = C.craneMast(), top = C.craneTop(), fence = C.siteFence(), board = C.siteBoard();
+  check([bay, net, mast, top, fence, board].every(sane), 'construction: every model has finite vertices');
+  const b = box(bay), n = box(net), m = box(mast), t = box(top);
+  check(Math.abs(b.max.y - C.BAY.h) < 0.3 && b.min.y > -0.05 && b.max.x < C.BAY.w + 0.2 && b.min.z > 0.1 && b.max.z < 0.3 + C.BAY.d + 0.2,
+    `construction: a scaffold bay stands ${C.BAY.w} m wide, ${C.BAY.h} m up, out from the wall (+Z) (${b.min.toArray().map((v) => v.toFixed(2))} … ${b.max.toArray().map((v) => v.toFixed(2))})`);
+  check(n.min.z > b.max.z - 0.1 && n.max.y <= C.BAY.h + 0.01, 'construction: the net hangs outside the bay');
+  check(Math.abs(m.max.y - C.MAST.h) < 0.1 && m.max.x <= C.MAST.w / 2 + 0.1, 'construction: mast sections stack (height = MAST.h, inside MAST.w)');
+  check(t.max.x > C.JIB.reach - 1 && t.min.x < -C.JIB.back + 0.5 && t.max.y > C.JIB.apex, 'construction: crane jib, counter-jib and apex as JIB says');
+});
+
 // ------------------------------------------------------------------ the aftermath (src/game/aftermath): casualty ledger, the last
 // resort's trigger and shock wave, the carcass cleanup schedule — pure rules
 section('aftermath', async () => {
