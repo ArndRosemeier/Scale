@@ -2361,7 +2361,7 @@ section('saves', async () => {
       memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
     },
     slimes: { trust: { v: 42.5, gifts: [0, 2], marks: ['heart'] }, war: { v: 1, murk: 0.5, lumen: 0.625, front: 0.25, at: 130.5, nextRaid: 133, mawBack: 0, raid: null, captives: [2, 4, 0], nextBreach: 150, stats: { won: 3, lost: 1, kills: 12, freed: 4, maw: 0, breaches: 0 } } },
-    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }] },
+    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }], relations: { 'gang>syndicate': -42.5, 'syndicate>gang': -44 } },
   };
   const back = parseSave(serializeSave(full));
   {

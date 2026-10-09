@@ -318,7 +318,7 @@ export function parseSave(input: string | unknown): SaveData {
       hideouts: (Array.isArray(obj(o.factions).hideouts) ? (obj(o.factions).hideouts as unknown[]) : []).slice(0, 16),
       bosses: (Array.isArray(obj(o.factions).bosses) ? (obj(o.factions).bosses as unknown[]) : []).slice(0, 16),
       // (The groups' feelings for each other: sanitised by factions/relations restoreGroupRelations.)
-      relations: obj(o.factions).relations ?? null,
+      ...(obj(o.factions).relations && typeof obj(o.factions).relations === 'object' ? { relations: obj(o.factions).relations } : {}),
     } : null,
     ...(o.people && typeof o.people === 'object' ? { people: o.people } : {}),
     ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
