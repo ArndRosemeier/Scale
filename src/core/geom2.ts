@@ -93,6 +93,20 @@ export function distPointPolyEdge(p: Poly, x: number, z: number): number {
   return Math.sqrt(best);
 }
 
+/** Closest point on a closed polygon's outline. */
+export function closestOnPoly(p: Poly, x: number, z: number): { x: number; z: number } {
+  let best = Infinity, bx = x, bz = z;
+  const n = p.length >> 1;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const ax = p[j * 2], az = p[j * 2 + 1], dx = p[i * 2] - ax, dz = p[i * 2 + 1] - az, l2 = dx * dx + dz * dz;
+    let t = l2 > 0 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const qx = ax + dx * t, qz = az + dz * t, d = (qx - x) ** 2 + (qz - z) ** 2;
+    if (d < best) { best = d; bx = qx; bz = qz; }
+  }
+  return { x: bx, z: bz };
+}
+
 /** Segment intersection; returns t along AB and u along CD or null. */
 export function segIntersect(
   ax: number, az: number, bx: number, bz: number,

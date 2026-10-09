@@ -395,6 +395,23 @@ class Decals {
     this.mesh.renderOrder = 2;
   }
 
+  /** End every decal whose middle lies within r of (x, z) (the ground under it gave way). */
+  clearIn(x: number, z: number, r: number): void {
+    const M = this.mesh.instanceMatrix.array as Float32Array, now = this.uTime.value;
+    let hit = false;
+    for (let i = 0; i < this.used; i++) {
+      if (this.ends[i] <= now) continue;
+      const dx = M[i * 16 + 12] - x, dz = M[i * 16 + 14] - z;
+      // (Its long half counts: a crack across the mouth goes too.)
+      const half = Math.hypot(M[i * 16], M[i * 16 + 1], M[i * 16 + 2]) * 0.4;
+      if (dx * dx + dz * dz > (r + half) ** 2) continue;
+      this.attr.setZ(i, Math.max(0, now - this.attr.getY(i)));
+      this.ends[i] = now;
+      hit = true;
+    }
+    if (hit) this.attr.needsUpdate = true;
+  }
+
   /**
    * A decal at (x, y, z) facing the normal (nx, ny, nz) (ground: 0, 1, 0), `len` × `wid` m,
    * long axis turned by yaw (ground) — lifted a few cm off the surface.
@@ -538,6 +555,9 @@ export class ElementFx {
   decal(kind: DecalKind, x: number, y: number, z: number, nx: number, ny: number, nz: number, len: number, wid: number, yaw: number, life: number): void {
     this.decals.add(kind, x, y, z, nx, ny, nz, len, wid, yaw, life);
   }
+
+  /** Remove the decals lying over (x, z) within r (a sinkhole opened under them). */
+  clearDecals(x: number, z: number, r: number): void { this.decals.clearIn(x, z, r); }
 
   crystal(x: number, y: number, z: number, size: number, yaw: number, tx: number, tz: number): void { this.ice.crystal(x, y, z, size, yaw, tx, tz); }
   sheet(x: number, y: number, z: number, yaw: number, pitch: number, len: number, wid: number, thick: number): void { this.ice.sheet(x, y, z, yaw, pitch, len, wid, thick); }

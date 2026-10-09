@@ -1283,9 +1283,15 @@ export class Game {
     }
   }
 
-  /** Nearest street holes and whether the camera is underground -> terrain shader. */
+  private holeList: number[] = [];
+
+  /** Nearest street holes (metro entrances, open manholes, sinkholes) and whether the camera is underground -> terrain shader. */
   private updateHoles(): void {
-    const H = this.underground.holes;
+    // (Sinkholes first: few, and big.)
+    const H = this.holeList;
+    H.length = 0;
+    this.threats?.sinkholes.holes(H);
+    for (const v of this.underground.holes) H.push(v);
     const c = this.renderer.camera.position;
     const list: number[] = [];
     for (let i = 0; i < H.length; i += 6) list.push(i);
