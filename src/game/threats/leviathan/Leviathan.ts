@@ -295,7 +295,8 @@ export class Leviathan implements ThreatEvent, ThreatActor {
   }
 
   /** Frost on it while it is up: the water round it ices over and holds it fast. */
-  onElement(el: 'fire' | 'frost' | 'shock', dur: number): number {
+  onElement(el: 'fire' | 'frost' | 'shock' | 'wind', dur: number): number {
+    if (el === 'wind') return 1;
     if (el === 'fire') return 0.5; // (wet through)
     if (el === 'shock') return 1.4; // (in the water)
     if (!this.surfaced || !this.targetable) return 1;

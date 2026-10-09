@@ -721,6 +721,27 @@ every frame (`prof.threats`).
   `CityStreamer.rebuildBridges` swaps the geometry). Collapse: cars and people on the piece drop into the river, dust
   and foam, the `bridge` HarmTarget booked. Mended after `BRIDGE_BREAK.keepH` 24 game hours with the camera > 300 m
   away; saved (`SaveThreats.bridges`, rows edge, s0, s1, until, seed).
+* **The Roc** (`roc/Roc.ts`, archetype `roc`, major; Phase E part 2): a giant bird of prey. Body: `roc/rocRig.ts` (pure,
+  24 bones: body, tail fan, neck, head and jaw, three-bone wings with a primaries bone, three-bone legs; controls for
+  spread / beat / mantle / fold, perch, grip, look, gape, tail; 15 hit capsules), `roc/rocSkin.ts` (one closed skin of
+  47 parts: body loft with eye spots, scalloped wing blades, seven primaries a side, nine tail feathers, feathered
+  thighs, scaly shanks, four toes with talons) and `roc/RocMesh.ts` (a 3-slot SkinnedMesh pool in the creature
+  material: no new program; bone 0 carries the eye glow). Where it goes: `roc/rocPlan.ts` (pure, tested) —
+  `pickPerch` (one of the three tallest standing buildings ≥ 20 m within 340 m, feet 3.2 m in from the edge facing
+  the looker), `entryPoint` (900 m out beyond the hero, 120 m up), `pickPrey` (buses count thrice). Acts: `arrive`,
+  `circle` (60–90 m round the hero, screeches), `perch` (approach, final glide, stand 18–28 s: gusts every 5–8 s
+  within 30 m knock people down and hit props and the player, pecks), `snatch` / `carry` (the car follows the
+  talons, dropped from 55 m: `makeWreck`), `dive` (air targets), `swoop` (talons at the top aggro), `grounded`
+  (tumble, stand `groundT` 9 s, takeoff), `leave`, `fall`. Flight steers round roofs (`clear` 22 m over the floor
+  ahead). Grounded by wind (`onElement('wind')`, summed `windDown` 2.5; the gust power passes it through
+  `Elements` for every threat) or 240 recent wing damage. A ThreatActor (1800 hp; zones head 0.45 (weak ×3 while
+  screeching or grounded), body 0.7, wings 0.5, talons 0.65); frost ×0.8. Ends flown off at 30 % hp (60 karma + 6
+  rep), after `visitMax` 600 s, or brought down (falls, lies `bodyHours` 6 game hours in `rocRemains`; 120 karma +
+  12 rep). An ArmyFoe (`chased`, route via `playerPath`). Not saved. Omens (`ThreatDirector.rocOmen`): `cry` — a
+  far-off screech from high up, `flyover` — the bird passes high over the hero (drawn in `rocFly`). Sounds
+  (`tools/synthRoc.mjs`): `roc_screech`, `roc_cry_far`, `roc_flap`. Dev: `dev.threat.spawn('roc', { near })`,
+  `dev.threat.roc.status() / .near() / .perch() / .snatch() / .swoop() / .dive() / .ground() / .leave() /
+  .damage(zone, n) / .die() / .omen(kind)`; admin console "Roc".
 * **City response** (`ResponseDirector`, levels 0–2 of the ladder, per incident): 0 — three patrol cars with sirens
   (`Police.respond(IncidentJob)`: the job says where, how many get out, what they do there, when to go), a police
   drone; officers hold a line facing it and wave people back. 1 (after 30 s with > 45 % of it still in action, or 8

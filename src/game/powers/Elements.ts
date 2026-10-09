@@ -1477,7 +1477,8 @@ export class Elements {
           }
           case 'robot': case 'bot': this.shove(t, (tx + ox * 0.3) * 160 * lift * k, 120 * lift * k, (tz + oz * 0.3) * 160 * lift * k, 'gust'); break;
           case 'drone': this.shove(t, tx * 14 * lift * k, 8 * lift * k, tz * 14 * lift * k, 'gust'); break;
-          case 'threat': this.hurtThreat(t, POWER_HIT.gustCreature * lift * k); break;
+          // (A flier is tumbled out of the sky by enough of it: the roc.)
+          case 'threat': this.hurtThreat(t, POWER_HIT.gustCreature * lift * k * (t.obj.onElement?.('wind', (lift * k) / 4) ?? 1)); break;
           case 'prop': {
             const J = 250 * r * lift * k;
             this.shove(t, tx * J, 0, tz * J, 'gust');

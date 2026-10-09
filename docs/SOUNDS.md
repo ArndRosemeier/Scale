@@ -102,3 +102,6 @@ Voices are not synthesized: cries, shouts, falls and animal calls are speech bub
 | leviathan_surface | leviathan_surface.wav | 3.2 | `tools/synthLeviathan.mjs`: brown-noise surge under a sweeping band-passed wash and a spray of short noise bursts, two echoes. The river heaving as the Leviathan comes up or goes under (quieter: its surge while it travels, the omen). |
 | leviathan_roar | leviathan_roar.wav | 3.6 | `tools/synthLeviathan.mjs`: a 62–88 Hz bellow with a fifth and a saturated third harmonic, a 23 Hz growl, a wet gurgle and breath noise, echoes. Its call. |
 | leviathan_slap | leviathan_slap.wav | 1.2 | `tools/synthLeviathan.mjs`: a falling sine thud with a noise slap and wet crackle. A tentacle slapping down on a deck or quay. |
+| roc_screech | roc_screech.wav | 1.9 | `tools/synthRoc.mjs`: a saturated harmonic tone rising briefly at ~1.35 kHz then falling to ~760 Hz ("kee-eeer"), rough amplitude flutter, breath noise, town echoes. The Roc's scream (perching, grounded, diving). |
+| roc_cry_far | roc_cry_far.wav | 2.2 | `tools/synthRoc.mjs`: the same scream low-passed to 1.3 kHz with long echoes. Far off and high up: the Roc's omen. |
+| roc_flap | roc_flap.wav | 1.1 | `tools/synthRoc.mjs`: brown-noise rush and a falling 68→38 Hz thump under a closing low-pass. One great wingbeat. |

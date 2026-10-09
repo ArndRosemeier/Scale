@@ -460,8 +460,9 @@ export class AwakenedTree implements ThreatEvent, ThreatActor {
    * A power's element on it (powers/Elements): fire sets it alight (it burns on, panics, takes
    * more); frost slows it; lightning barely bothers it. Returns the multiplier on the power's damage.
    */
-  onElement(el: 'fire' | 'frost' | 'shock', dur: number): number {
+  onElement(el: 'fire' | 'frost' | 'shock' | 'wind', dur: number): number {
     if (this.defeated) return 0;
+    if (el === 'wind') return 1;
     if (el === 'fire') { this.burning = Math.max(this.burning, Math.min(10, this.burning + dur * 1.5)); this.stats.fire++; return TREE.fire; }
     if (el === 'frost') { this.slowT = Math.max(this.slowT, dur * 1.5); this.burning = 0; return TREE.frost; }
     return TREE.shock;
