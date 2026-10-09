@@ -23,6 +23,8 @@ export const PEOPLE = {
   said: 24,
   /** Opinion: per conversation (up to talkMax), helped up, saved, knocked down. */
   talk: 2, talkMax: 10, helped: 25, saved: 40, hurt: -30,
+  /** Typed chat: how far words alone move an opinion, down and up; things the hero likes remembered. */
+  chatMin: -40, chatMax: 15, likes: 6,
   /** Reputation's weight in the opinion: base + agreeableness × this. */
   repBase: 0.15, repAgree: 0.35,
   /**
@@ -81,6 +83,11 @@ export interface Known {
   favour?: Favour;
   /** They took the shard from the hero (game/sidekick): never forgotten, a gold dot on the map. */
   sidekick?: true;
+  /** Typed chat (chat/respond.ts): what words did to their opinion (bounded: PEOPLE.chatMin..chatMax). */
+  chat?: number;
+  /** What the hero told them: a name, and things the hero likes (newest last). */
+  heroName?: string;
+  heroLikes?: string[];
 }
 
 export function newKnown(cit: Citizen, name: string, now: number, x: number, z: number, street: string | null): Known {
@@ -92,9 +99,9 @@ export function newKnown(cit: Citizen, name: string, now: number, x: number, z: 
  * heard about you from the people close to them (`heard`, social.ts hearsay), plus your
  * reputation (counted up to +100: beyond that the hero is simply famous), weighted by how agreeable they are.
  */
-export function opinionOf(k: (Pick<Known, 'talks' | 'helped' | 'saved' | 'hurt'> & { favours?: number; letDown?: number }) | null, rep: number, agree: number, heard = 0): number {
+export function opinionOf(k: (Pick<Known, 'talks' | 'helped' | 'saved' | 'hurt'> & { favours?: number; letDown?: number; chat?: number }) | null, rep: number, agree: number, heard = 0): number {
   const own = k ? Math.min(PEOPLE.talkMax, k.talks * PEOPLE.talk) + k.helped * PEOPLE.helped + k.saved * PEOPLE.saved + k.hurt * PEOPLE.hurt
-    + (k.favours ?? 0) * SOCIAL.favourDone + (k.letDown ?? 0) * SOCIAL.favourLost : 0;
+    + (k.favours ?? 0) * SOCIAL.favourDone + (k.letDown ?? 0) * SOCIAL.favourLost + (k.chat ?? 0) : 0;
   return Math.max(-100, Math.min(100, Math.round(own + heard + Math.min(rep, 100) * (PEOPLE.repBase + PEOPLE.repAgree * agree))));
 }
 
@@ -150,7 +157,7 @@ export function remember(list: Known[], k: Known, now: number, cap: number = PEO
 export interface SavedPeople { v: 1; people: Known[] }
 
 export function savePeople(list: readonly Known[]): SavedPeople {
-  return { v: 1, people: list.map((k) => ({ ...k, said: [...k.said], notes: k.notes.map((n) => ({ ...n })), ...(k.favour ? { favour: { ...k.favour } } : {}) })) };
+  return { v: 1, people: list.map((k) => ({ ...k, said: [...k.said], notes: k.notes.map((n) => ({ ...n })), ...(k.favour ? { favour: { ...k.favour } } : {}), ...(k.heroLikes ? { heroLikes: [...k.heroLikes] } : {}) })) };
 }
 
 const num = (v: unknown, d: number, lo = -Infinity, hi = Infinity): number => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
@@ -214,6 +221,9 @@ export function restorePeople(raw: unknown): Known[] {
       favours: Math.floor(num(k.favours, 0, 0)), letDown: Math.floor(num(k.letDown, 0, 0)),
       ...(favour(k.favour) ? { favour: favour(k.favour) } : {}),
       ...(k.sidekick === true ? { sidekick: true as const } : {}),
+      ...(Number.isFinite(k.chat) ? { chat: num(k.chat, 0, PEOPLE.chatMin, PEOPLE.chatMax) } : {}),
+      ...(str(k.heroName, 24) ? { heroName: str(k.heroName, 24)! } : {}),
+      ...(Array.isArray(k.heroLikes) ? { heroLikes: k.heroLikes.filter((s): s is string => typeof s === 'string').slice(-PEOPLE.likes).map((s) => s.slice(0, 40)) } : {}),
     });
     if (out.length >= PEOPLE.cap) break;
   }

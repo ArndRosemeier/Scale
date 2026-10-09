@@ -4,6 +4,11 @@
  * and what you can say: keys 1–9 or a click. "Show me the way" lists places (the nearest metro
  * station and landmarks); Esc or E closes. While open it takes the number keys (no powers go
  * off) and Esc; walking keys still move the hero.
+ *
+ * Or type (game/people/Chat.ts): the text box under their words has the keyboard as soon as the
+ * talk opens, so the hero stands still while you type; Enter says it, Esc closes the talk, and
+ * a number key in the empty box still picks a topic. Click into the world to walk again (E then
+ * closes the talk as before).
  */
 import type { Topic } from '../game/people/lines';
 import type { Destination } from '../game/people/People';
@@ -16,6 +21,10 @@ export interface TalkUiHooks {
   destinations(): Destination[];
   /** More things to say while they apply (offering the shard …), after the usual topics. */
   extras(): { label: string; run: () => void }[];
+  /** A typed line (Enter). */
+  typed(text: string): void;
+  /** Keys typed in the box (they are not idle). */
+  typing(): void;
 }
 
 const TOPICS: { topic: Topic; label: string }[] = [
@@ -36,6 +45,8 @@ export class TalkUi {
   private sub: HTMLDivElement;
   private known: HTMLDivElement;
   private said: HTMLDivElement;
+  private you: HTMLDivElement;
+  private input: HTMLInputElement;
   private opts: HTMLDivElement;
   private actions: (() => void)[] = [];
   private closedAt = -1e9;
@@ -50,7 +61,9 @@ export class TalkUi {
       <div class="tk-head"><div class="tk-nm"></div><button class="tk-x" title="Close (Esc / E)">×</button></div>
       <div class="tk-sub"></div>
       <div class="tk-known"></div>
+      <div class="tk-you"></div>
       <div class="tk-said"></div>
+      <input class="tk-in" type="text" maxlength="160" autocomplete="off" spellcheck="false" placeholder="Say something… (Enter)">
       <div class="tk-opts"></div>`;
     document.body.appendChild(this.root);
     const q = <T extends Element>(s: string) => this.root.querySelector(s) as T;
@@ -58,14 +71,31 @@ export class TalkUi {
     this.sub = q('.tk-sub');
     this.known = q('.tk-known');
     this.said = q('.tk-said');
+    this.you = q('.tk-you');
+    this.input = q('.tk-in');
     this.opts = q('.tk-opts');
+    this.input.addEventListener('keydown', (e) => {
+      // The box keeps its keys from the game (Hud, map, powers …).
+      e.stopPropagation();
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        e.preventDefault();
+        const t = this.input.value.trim();
+        if (t) { this.input.value = ''; this.hooks.typed(t); }
+        return;
+      }
+      this.hooks.typing();
+    });
+    this.input.addEventListener('keyup', (e) => e.stopPropagation());
     q<HTMLButtonElement>('.tk-x').onclick = () => this.hooks.close();
     // Clicks on the panel are not clicks in the game (targeting, punches).
     for (const ev of ['pointerdown', 'mousedown', 'wheel', 'contextmenu'] as const) this.root.addEventListener(ev, (e) => e.stopPropagation());
     window.addEventListener('keydown', (e) => {
       if (!this.open) return;
-      if (e.target instanceof HTMLInputElement && e.target.type === 'text') return;
-      if (e.code === 'Escape' || isAction(e, 'use')) {
+      const inBox = e.target === this.input;
+      // In the box: Esc closes; a number key while it is empty picks a topic; everything else is typing.
+      if (inBox && e.code !== 'Escape' && !(this.input.value === '' && /^(Digit|Numpad)[0-9]$/.test(e.code))) return;
+      if (!inBox && e.target instanceof HTMLInputElement && e.target.type === 'text') return;
+      if (e.code === 'Escape' || (!inBox && isAction(e, 'use'))) {
         e.preventDefault(); e.stopImmediatePropagation();
         if (!e.repeat) this.hooks.close();
         return;
@@ -75,7 +105,7 @@ export class TalkUi {
       e.preventDefault(); e.stopImmediatePropagation();
       if (e.repeat) return;
       const i = (Number(m[2]) + 9) % 10;
-      this.actions[i]?.();
+      if (this.actions[i]) { this.clearYou(); this.actions[i](); }
     }, true);
   }
 
@@ -84,10 +114,32 @@ export class TalkUi {
     this.sub.textContent = head.sub;
     this.known.textContent = head.known;
     this.line(line);
+    this.you.textContent = '';
+    this.input.value = '';
+    this.input.disabled = false;
     this.showTopics();
     this.root.classList.remove('closing');
     this.root.classList.add('open');
     this.open = true;
+    // (Touch screens keep their keyboard down until the box is tapped.)
+    if (!matchMedia('(pointer: coarse)').matches) setTimeout(() => { if (this.open) this.input.focus({ preventScroll: true }); }, 0);
+  }
+
+  /** New header text (their opinion or mood changed while you talk). */
+  head(head: { name: string; sub: string; known: string }): void {
+    this.nm.textContent = head.name;
+    this.sub.textContent = head.sub;
+    this.known.textContent = head.known;
+  }
+
+  /** What you typed, shown above their answer. */
+  youSaid(text: string): void {
+    this.you.textContent = text;
+  }
+
+  /** While they think it over (the sentence model, a moment at most). */
+  thinking(): void {
+    this.said.textContent = '…';
   }
 
   line(text: string): void {
@@ -101,14 +153,19 @@ export class TalkUi {
   closing(): void {
     this.root.classList.add('closing');
     this.setOptions([]);
+    this.input.disabled = true;
   }
 
   close(): void {
     if (!this.open) return;
     this.open = false;
     this.closedAt = performance.now();
+    this.input.blur();
     this.root.classList.remove('open', 'closing');
   }
+
+  /** Topic clicks and keys clear what you typed last (their answer is to the topic now). */
+  private clearYou(): void { this.you.textContent = ''; }
 
   showTopics(): void {
     // The extras (offering the shard) first: they are why you came.
@@ -140,7 +197,7 @@ export class TalkUi {
       const b = document.createElement('button');
       b.innerHTML = `<span>${(i + 1) % 10}</span>`;
       b.append(o.label);
-      b.onclick = () => o.run();
+      b.onclick = () => { this.clearYou(); o.run(); };
       this.opts.appendChild(b);
     });
   }

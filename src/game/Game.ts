@@ -124,6 +124,7 @@ import { MedFleet } from './defeat/MedDrones';
 import { Arcade } from './Arcade';
 import { Wardrobe } from './Wardrobe';
 import { People } from './people/People';
+import { readMissed, clearMissed } from './people/chat/log';
 import { Fame } from './fame/Fame';
 import { Sidekick } from './sidekick/Sidekick';
 import type { Companion } from './sidekick/Companion';
@@ -610,6 +611,8 @@ export class Game {
         return { x: m.x, z: m.z, floor: m.floor, side: m.side };
       };
       if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
+      // Typed chat: the lines nobody understood (chat/log.ts), and saying something to the one you talk to.
+      if (dev) dev.chat = { log: () => readMissed(), clear: () => clearMissed(), say: (t: string) => this.people.sayTyped(t), model: () => this.people.chat.understand.modelReady };
       if (dev) dev.sidekick = {
         status: () => this.sidekick.status(),
         report: (gang?: boolean) => this.sidekick.devReport(gang),

@@ -21,6 +21,7 @@
     "clipper-lib": "^6.4.2",
     "delaunator": "^5.1.0",
     "earcut": "^3.2.4",
+    "onnxruntime-web": "^1.30.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

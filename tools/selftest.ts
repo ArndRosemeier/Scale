@@ -49,6 +49,7 @@ import { rocChecks } from './rocTest';
 import { mechChecks } from './mechTest';
 import { bridgeGapChecks } from './bridgeGapTest';
 import { doorChecks } from './doorsweep';
+import { chatChecks } from './chatTest';
 import { Reputation } from '../src/game/Reputation';
 import { PlayerHealth } from '../src/game/PlayerHealth';
 import { readCostumes } from '../src/game/costumes';
@@ -3873,6 +3874,7 @@ section('people phase 2', async () => {
 });
 
 // People, phase 4 (NPC_PERSONALITY_PLAN §5): bonds, word getting round, needs, favours.
+section('typed chat', async () => { await chatChecks(check); });
 section('people phase 4', async () => {
   const t0 = performance.now();
   const S = await import('../src/game/people/social');
