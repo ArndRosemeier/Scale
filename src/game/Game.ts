@@ -89,7 +89,8 @@ import { TouchControls } from '../ui/TouchControls';
 import { isTouch } from '../ui/touch';
 import { Targeting, type Target } from './Targeting';
 import { spared, type FoeWorld } from './friendFoe';
-import { defaultRelations } from './factions/relations';
+import { defaultRelations, bindHero } from './factions/relations';
+import { REP } from './Reputation';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { Sight } from './combat/sight';
@@ -1150,7 +1151,6 @@ export class Game {
     this.city = new CityNews(this);
     if (this.startCell >= 0) this.city.freshStart(this.startCell);
     this.crime = new CrimeSystem(this);
-    this.relations.bind('civilians', 'hero', () => this.crime.rep.value);
     // Anyone the hero only made stumble (a super speed runner brushing past, a super jump coming
     // down beside them) calls after them: no harm, no reputation, a stern word.
     const knocked = this.reactions.onKnockDown;
@@ -1175,6 +1175,16 @@ export class Game {
     this.sidekick = new Sidekick(this);
     this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
     this.wardens = new Wardens(this);
+    // Every faction's feeling about the hero, read live from the system that keeps it (factions/relations.ts).
+    bindHero(this.relations, {
+      rep: () => this.crime.rep.value,
+      wanted: () => this.crime.justice.wanted,
+      suspect: () => this.crime.rep.value <= REP.suspectAt,
+      rampage: () => !!this.hostile.ev?.active,
+      notoriety: (a) => { const f = this.crime.factions.factions.find((x) => x.archetype === a); return f ? this.crime.notoriety[f.id] ?? 0 : undefined; },
+      lumenTrust: () => this.slimeRealm.trust.value,
+      wardenRegard: () => this.wardens.regard.regard,
+    });
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.190 — 2026-10-09
+
+- **Factions, step 2: every faction's feeling about the hero is in the table.** Each value is read live from the system that already keeps it, so nothing is stored twice and nothing plays differently: civilians = reputation; police = friendly, wary of a suspect, hostile while you are wanted (more at higher levels) or rampaging; army = hostile only against a rampaging giant; each villain group = its notoriety (hunting you is the hostile line); Lumen = their trust; Wardens = their regard (10 per problem handed over). Your own feelings, which the friend/foe sense uses, stay as they were. In the dev console, `dev.factions()` lists every faction's feeling about the hero and `dev.factions(true)` the whole table.
+
 ## 0.189 — 2026-10-09
 
 - **Factions, step 1: one table of who is hostile to whom.** Every side in the game (civilians, police, army, the hero, the sidekick, street crooks, each villain group, Lumen, Murk, Wardens, runaway teens, monsters, rogue machines) now has a relation to every other one, as a number from −100 to +100; −50 or lower is hostile. The civilians' feeling about the hero is the reputation itself. For now the numbers repeat today's rules, so nothing plays differently: the friend/foe sense and the villain groups' turf wars ask the table instead of their own lists. Later steps will move the hero's other standings into it and let the numbers change.

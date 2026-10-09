@@ -107,3 +107,77 @@ export function defaultRelations(): Relations {
   R.setBoth('hero', 'teens', REL.rival);
   return R;
 }
+
+// ---------------------------------------------------------------------------------------------
+// The hero's standings (phase 2): what every faction feels about the hero is read live from the
+// system that already keeps it, so the table is the one place to ask. Nothing is stored twice.
+//
+//   civilians → hero   the reputation (−100 … open-ended above)
+//   police → hero      wanted (or a rampage): hostile, the more the higher the level; a suspect
+//                      (reputation ≤ −50): wary; else friendly
+//   army → hero        a rampaging giant: hostile; else friendly
+//   villain group → hero   its notoriety (Bosses.ts): hunted (60) is the hostile line
+//   lumen → hero       the Lumen's trust (deep/Trust.ts, −100 … 100)
+//   wardens → hero     their regard: each problem handed over is worth `REGARD_STEP`
+
+/** Live readers of the hero's standings (Game supplies them; tests pass fakes). */
+export interface HeroStandings {
+  rep(): number;
+  wanted(): number;
+  /** Reputation at or below the police's suspect line. */
+  suspect(): boolean;
+  /** The army is fighting the hero's rampaging giant body. */
+  rampage(): boolean;
+  /** A villain group's notoriety (0 … 100), undefined: not in this city. */
+  notoriety(group: ArchetypeId): number | undefined;
+  lumenTrust(): number;
+  wardenRegard(): number;
+}
+
+/** Notoriety at which a group hunts the hero (Bosses NOTORIETY.hunted): maps to REL.hostile. */
+export const HUNTED_AT = 60;
+/** Warden regard per problem handed over. */
+export const REGARD_STEP = 10;
+
+const clampRel = (v: number) => Math.max(REL.min, Math.min(REL.max, v));
+
+/** The police's feeling about the hero. */
+export function policeStanding(wanted: number, suspect: boolean, rampage: boolean): number {
+  if (wanted > 0 || rampage) return clampRel(REL.hostile - 15 * Math.max(1, rampage ? 3 : wanted));
+  return suspect ? REL.wary : REL.friendly;
+}
+
+/** The army's feeling about the hero. */
+export function armyStanding(rampage: boolean): number {
+  return rampage ? REL.min + 5 : REL.friendly;
+}
+
+/** A villain group's feeling about the hero from its notoriety: hunted is the hostile line. */
+export function groupStanding(notoriety: number): number {
+  return clampRel(-Math.max(0, notoriety) * -REL.hostile / HUNTED_AT);
+}
+
+/** The Wardens' feeling about the hero from their regard. */
+export function wardenStanding(regard: number): number {
+  return clampRel(regard * REGARD_STEP);
+}
+
+/** Bind every faction's feeling about the hero to the live standings. */
+export function bindHero(R: Relations, s: HeroStandings): void {
+  R.bind('civilians', 'hero', () => s.rep());
+  R.bind('police', 'hero', () => policeStanding(s.wanted(), s.suspect(), s.rampage()));
+  R.bind('army', 'hero', () => armyStanding(s.rampage()));
+  for (const a of VILLAINS) {
+    const seeded = R.get(a, 'hero');
+    R.bind(a, 'hero', () => { const n = s.notoriety(a); return n === undefined ? seeded : groupStanding(n); });
+  }
+  R.bind('lumen', 'hero', () => clampRel(s.lumenTrust()));
+  R.bind('wardens', 'hero', () => wardenStanding(s.wardenRegard()));
+}
+
+/** The table as rows (dev console): each faction's feeling about every other, rounded. */
+export function relationTable(R: Relations, ids: readonly FactionId[] = FACTIONS): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {};
+  for (const a of ids) { const row: Record<string, number> = {}; for (const b of ids) row[b] = Math.round(R.get(a, b)); out[a] = row; }
+  return out;
+}
