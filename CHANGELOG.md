@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.188 — 2026-10-09
+
+- **Less memory used by the people of the city.** Until now, every building you passed queued its residents' trips for the next six game hours (about 18 real minutes) and kept them after you left. Driving or flying around the city piled them up and pushed the browser toward its memory limit. Now trips are queued two game hours ahead and are dropped when you move away from a building or its block unloads. The same number of people walk the streets.
+- Shop signs no longer keep a copy of each building's floor layout after they are placed, and the cache of residents' day plans is smaller.
+
 ## 0.187 — 2026-10-09
 
 - **Super strength punches no longer knock out anyone in one blow.** From rank 2 on, a punch hit a person with the full force that smashes walls, which did thousands of damage: one punch took out anyone, bosses included. A punch now takes at most 22, 30, 40, 52 or 65 health off a person by rank (an ordinary punch still does 12). It is still the hardest single hit in the game, since you have to get close for it: at rank 5 a thug goes down in one punch, a lieutenant in two and a boss in three. A giant's punch hits harder in proportion to its size. Walls, cars and monsters still take the full force.
