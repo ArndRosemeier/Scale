@@ -49,6 +49,9 @@ export class HumanoidRig {
   animator: Animator | null = null;
   equipment: EquipmentRig | null = null;
   readonly ready: Promise<void>;
+  /** Resolves once the first build is dressed and shown (the warm-up waits for the hero's). */
+  readonly whenDressed: Promise<void>;
+  private markDressed: () => void = () => undefined;
   private placeholder: THREE.Mesh | null = null;
   private pendingEq: EquipmentVisuals | undefined;
   private skyVis = 1;
@@ -64,6 +67,7 @@ export class HumanoidRig {
     this.object.name = 'humanoid-rig';
     this.geoKey = geometryKey(app);
     this.makePlaceholder();
+    this.whenDressed = new Promise<void>((r) => { this.markDressed = r; });
     this.ready = this.build();
   }
 
@@ -124,6 +128,7 @@ export class HumanoidRig {
       if (this.disposed || this.char !== ch) return;
       this.equipment?.setSkyVis(this.skyVis);
       ch.object.visible = true;
+      this.markDressed();
       if (this.placeholder) {
         this.placeholder.removeFromParent();
         this.placeholder.geometry.dispose();
