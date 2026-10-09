@@ -88,6 +88,12 @@ export class OriginIntro {
 
   active = false;
   private t = 0;
+  /** Scene seconds (the music lines its impact up with the scene's). */
+  get time(): number { return this.t; }
+  /** When the shard hits the street (scene seconds). */
+  static readonly IMPACT = T.impact;
+  /** When the scene hands over to the game (scene seconds). */
+  static readonly END = T.end;
   private ui: IntroUi | null = null;
   private fx = new StarFx();
   private snd: IntroSound;
