@@ -118,7 +118,7 @@ interface Vortex { air: boolean; x: number; y: number; z: number; dx: number; dz
 interface Nova { x: number; y: number; z: number; r: number; t: number }
 interface Beam { ax: number; ay: number; az: number; bx: number; by: number; bz: number; t: number; life: number; w: number; c: THREE.Color; style: BeamStyle; I: number }
 /** A seeker orb on its way: position, velocity, the one target it hunts, and whether the line to it is clear. */
-interface Seeker { x: number; y: number; z: number; vx: number; vy: number; vz: number; tgt: Target; rank: number; k: number; age: number; trailT: number; checkT: number; clear: boolean; loop: SynthHandle | null }
+interface Seeker { x: number; y: number; z: number; vx: number; vy: number; vz: number; tgt: Target; rank: number; k: number; age: number; trailT: number; checkT: number; clear: boolean; loop: SynthHandle | null; tail: number[]; tailT: number }
 interface IcePatch { x: number; y: number; z: number; r: number; until: number; sense?: boolean }
 interface IceTile { x: number; y: number; z: number; yaw: number; pitch: number; len: number; wid: number; born: number; life: number }
 
@@ -133,8 +133,9 @@ const WATER = C(0.72, 0.84, 0.95), WATER_END = C(0.55, 0.7, 0.85), STEAM = C(0.9
 const DUST_C = C(0.55, 0.5, 0.44), DUST_END = C(0.45, 0.42, 0.38), LEAF = C(0.32, 0.38, 0.16), LEAF_END = C(0.4, 0.33, 0.15);
 const SHRINK_C = C(2.4, 0.9, 3.0), SHRINK_END = C(0.6, 0.3, 1.2);
 const PHASE_C = C(1.1, 2.2, 3.2), PHASE_END = C(0.25, 0.5, 1.1);
-const FOCUS_C = C(3.2, 2.6, 1.4), FOCUS_END = C(1.4, 0.7, 0.2);
-const SEEK_C = C(1.6, 1.4, 3.4), SEEK_END = C(0.5, 0.25, 1.4);
+const FOCUS_C = C(3.2, 2.6, 1.4), FOCUS_END = C(1.4, 0.7, 0.2), FOCUS_HOT = C(4.5, 4, 3.2), FOCUS_WHITE = C(3.5, 3.4, 3);
+const SEEK_C = C(1.6, 1.4, 3.4), SEEK_END = C(0.5, 0.25, 1.4), SEEK_HOT = C(4, 3.8, 4.4), SEEK_WHITE = C(3, 3, 3.4);
+const SEEK_MID = C(2.4, 2, 4), SEEK_SPARK = C(3.2, 3, 4);
 const CHARRED: [number, number, number] = [0.05, 0.045, 0.04];
 const ICE_PAINT: [number, number, number] = [0.8, 0.9, 0.98];
 
@@ -1674,6 +1675,57 @@ export class Elements {
     this.fx.glow(x, y, z, 0, 0, 0, 0.18, 0.9 * sk, 1.6 * sk, c0, c1, 0.8, 1, 0);
   }
 
+  /**
+   * A ring of glowing motes flung outward in the plane across (nx, ny, nz): a shock front in the
+   * air (the focus beam's ripples, an orb bursting). `speed` m/s outward.
+   */
+  private shockRing(x: number, y: number, z: number, nx: number, ny: number, nz: number, n: number, speed: number, life: number,
+    s0: number, s1: number, c0: THREE.Color, c1: THREE.Color, alpha: number): void {
+    // Two axes across the normal.
+    let ux = -nz, uy = 0, uz = nx;
+    if (Math.abs(ny) > 0.9) { ux = 1; uy = 0; uz = 0; }
+    const ul = Math.hypot(ux, uy, uz) || 1;
+    ux /= ul; uy /= ul; uz /= ul;
+    const vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+    const a0 = Math.random() * Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i / n) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      this.fx.glow(x, y, z, (ux * ca + vx * sa) * speed, (uy * ca + vy * sa) * speed, (uz * ca + vz * sa) * speed, life, s0, s1, c0, c1, alpha, 4, 0);
+    }
+  }
+
+  /**
+   * Where a focus beam lands (`f` the charge): a white-hot flash, a shock front across the
+   * surface, sparks spraying back off it, dust and chips kicked up. Looks only.
+   */
+  private focusImpact(x: number, y: number, z: number, dx: number, dy: number, dz: number, nx: number, ny: number, nz: number, f: number): void {
+    const sk = this.reachK, s = (0.8 + 1.2 * f) * sk;
+    this.fx.glow(x, y, z, 0, 0, 0, 0.25, s * 3.5, s * 6, FOCUS_HOT, FOCUS_C, 1, 1, 0);
+    this.fx.glow(x, y, z, 0, 0, 0, 0.7, s * 2.5, s * 4.5, FOCUS_C, FOCUS_END, 0.6, 1, 0);
+    this.shockRing(x, y, z, nx, ny, nz, 32, (12 + 14 * f) * sk, 0.4, 0.3 * s, 0.08 * s, FOCUS_C, FOCUS_END, 1);
+    this.shockRing(x, y, z, nx, ny, nz, 18, (5 + 6 * f) * sk, 0.5, 0.4 * s, 0.12 * s, FOCUS_WHITE, FOCUS_END, 0.7);
+    // The blow carries on past what it hit: a spray of light out the far side.
+    for (let i = 0; i < 10; i++) {
+      const sp = (10 + Math.random() * 16) * sk;
+      this.fx.glow(x, y, z, (dx + (Math.random() - 0.5) * 0.7) * sp, (dy + (Math.random() - 0.5) * 0.7) * sp, (dz + (Math.random() - 0.5) * 0.7) * sp, 0.18 + Math.random() * 0.15, 0.18 * s, 0.03 * s, FOCUS_WHITE, FOCUS_END, 0.8, 3, 0);
+    }
+    // Sparks thrown back out of the hit, in a cone round the reflected beam.
+    const dn = dx * nx + dy * ny + dz * nz;
+    const rx = dx - 2 * dn * nx, ry = dy - 2 * dn * ny, rz = dz - 2 * dn * nz;
+    const nSp = Math.round(10 + 18 * f);
+    for (let i = 0; i < nSp; i++) {
+      const sp = (6 + Math.random() * 14) * sk;
+      this.fx.glow(x, y, z, (rx + (Math.random() - 0.5) * 1.4) * sp, (ry + (Math.random() - 0.5) * 1.4) * sp + 1, (rz + (Math.random() - 0.5) * 1.4) * sp,
+        0.25 + Math.random() * 0.35, 0.07 * sk, 0.02 * sk, SPARK, FOCUS_END, 1, 2, 9);
+    }
+    this.w.debris.chipBurst(x, y, z, Math.round(4 + 10 * f), 5 + 6 * f, rx, ry + 0.4, rz, DUST_C, 0.05, 1.4);
+    const g = this.w.collision.groundAt(x, z, y + 1, 2);
+    // Near the ground a slower ring rolls out across it.
+    if (y - g < 2.5 * sk) this.shockRing(x, g + 0.3 * sk, z, 0, 1, 0, 28, (6 + 6 * f) * sk, 0.8, 0.5 * s, 0.25 * s, FOCUS_WHITE, FOCUS_END, 0.55);
+    if (y - g < 2.5 * sk) this.w.dust.burst(x, g + 0.2, z, Math.round(6 + 10 * f), s * 1.2, 3 + 4 * f, s * 0.9, 2, DUST_C, 0.3, 0.45);
+    if (f > 0.5) this.w.sound('land_thud', x, y, z, 0.3 + 0.5 * f, 0.8, 6 * sk);
+  }
+
   // ================================================================== phase pulse
 
   /** A pulse through walls, cars and people to the one target (Tab, or under the crosshair). */
@@ -1767,14 +1819,25 @@ export class Elements {
     if (H.what !== 'none') {
       this.fx.decal(DecalKind.Scorch, ex, ey, ez, H.nx, H.ny, H.nz, 0.9 * sk * f, 0.9 * sk * f, Math.random() * 6, 35);
       if (H.what !== 'target') this.sparkBurst(ex, ey, ez, 14, FOCUS_C, FOCUS_END);
+      this.focusImpact(ex, ey, ez, A.dx, A.dy, A.dz, H.what === 'target' ? -A.dx : H.nx, H.what === 'target' ? -A.dy : H.ny, H.what === 'target' ? -A.dz : H.nz, f);
     }
-    // The shot: a thick white-gold beam from the eyes that fades fast.
-    const w = (0.08 + 0.1 * f) * sk;
-    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash, w: w * 3, c: FOCUS_C, style: BeamStyle.Laser, I: 1.2 });
-    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 0.8, w, c: C(3.5, 3.4, 3), style: BeamStyle.Laser, I: 3 });
+    // The shot: a white-gold haze round a white-hot core, and a slower afterglow. The air it
+    // punches through ripples away in rings along the line, densest at the eyes.
+    const w = (0.1 + 0.16 * f) * sk;
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 2.2, w: w * 5, c: FOCUS_C, style: BeamStyle.Ring, I: 0.55 });
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 1.4, w: w * 3, c: FOCUS_C, style: BeamStyle.Laser, I: 1.6 });
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 1.1, w, c: FOCUS_WHITE, style: BeamStyle.Laser, I: 4 });
+    const L = A.t, rings = Math.min(9, Math.max(2, Math.floor(L / (2.5 * sk))));
+    for (let i = 0; i < rings; i++) {
+      const u = (i + 0.3) / rings, d = L * u * u;
+      this.shockRing(A.ox + A.dx * d, A.oy + A.dy * d, A.oz + A.dz * d, A.dx, A.dy, A.dz, 14, (3 + 5 * f) * sk * (1 - 0.5 * u), 0.3, (0.16 + 0.12 * f) * sk, 0.04 * sk, FOCUS_C, FOCUS_END, 0.7 * (1 - 0.5 * u));
+    }
+    // Muzzle: a flash at the eyes and a ring blown back off the face.
+    this.fx.glow(A.ox, A.oy, A.oz, 0, 0, 0, 0.14, (0.5 + 0.9 * f) * sk, (0.2 + 0.3 * f) * sk, FOCUS_HOT, FOCUS_C, 1, 1, 0);
+    this.shockRing(A.ox + A.dx * 0.3 * sk, A.oy + A.dy * 0.3 * sk, A.oz + A.dz * 0.3 * sk, A.dx, A.dy, A.dz, 16, (5 + 6 * f) * sk, 0.25, 0.12 * sk, 0.03 * sk, FOCUS_C, FOCUS_END, 0.8);
     const p = this.w.player;
     p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.4 };
-    this.w.camRig.addShake(0.06 + 0.12 * f);
+    this.w.camRig.addShake(0.12 + 0.3 * f);
     this.w.synth.play('beam', A.ox, A.oy, A.oz, 0.6 + 0.4 * f, 6 * sk, 1.15 - 0.3 * f);
     this.w.stimuli.emit('power', ex, ey, ez, 4 + 2 * f, 40 + 40 * f);
     return true;
@@ -1797,10 +1860,12 @@ export class Elements {
     const hl = Math.hypot(dx, dz) || 1;
     dx /= hl; dz /= hl;
     // Off the hands forward and a little up; it finds its way from there.
-    this.seekers.push({ x: o.x, y: o.y, z: o.z, vx: dx * sp * 0.7, vy: sp * 0.35, vz: dz * sp * 0.7, tgt, rank: r, k: p.k, age: 0, trailT: 0, checkT: 0, clear: true, loop: this.w.synth.loop('charge', 3 * this.reachK) });
+    this.seekers.push({ x: o.x, y: o.y, z: o.z, vx: dx * sp * 0.7, vy: sp * 0.35, vz: dz * sp * 0.7, tgt, rank: r, k: p.k, age: 0, trailT: 0, checkT: 0, clear: true, loop: this.w.synth.loop('charge', 3 * this.reachK), tail: [], tailT: 0 });
     if (!p.flying) p.yaw = Math.atan2(-dx, -dz);
     p.action = { id: 'cast_forward', t0: p.animClock, dur: 0.5 };
     this.sparkBurst(o.x, o.y, o.z, 6, SEEK_C, SEEK_END);
+    this.fx.glow(o.x, o.y, o.z, 0, 0, 0, 0.2, 0.3 * this.reachK, 1.1 * this.reachK, SEEK_WHITE, SEEK_C, 0.9, 1, 0);
+    this.shockRing(o.x, o.y, o.z, dx, 0.4, dz, 12, 3 * this.reachK, 0.3, 0.1 * this.reachK, 0.02 * this.reachK, SEEK_C, SEEK_END, 0.8);
     this.w.synth.play('orb', o.x, o.y, o.z, 0.7, 5 * this.reachK);
     return true;
   }
@@ -1820,6 +1885,7 @@ export class Elements {
       if (td < pad + 0.35 * sk) {
         const vl = Math.hypot(s.vx, s.vy, s.vz) || 1;
         this.energyHit('seeker', s.tgt, s.rank, SEEKER_DMG[s.rank], SEEKER.laserS, s.x, s.y, s.z, s.vx / vl, s.vy / vl, s.vz / vl);
+        this.seekerBurst(s, s.vx / vl, s.vy / vl, s.vz / vl);
         this.w.synth.play('orb', s.x, s.y, s.z, 0.6, 5 * sk, 0.6);
         s.loop?.stop();
         this.seekers.splice(i, 1);
@@ -1853,19 +1919,73 @@ export class Elements {
       if (ny < g + 0.4 * sk) { ny = g + 0.4 * sk; s.vy = Math.max(0, s.vy); }
       s.x = nx; s.y = ny; s.z = nz;
       s.loop?.set(s.x, s.y, s.z, 0.35, 0.6);
-      // The orb: a white heart in a violet glow, motes trailing behind.
-      // Grows with distance from the camera so it stays easy to follow far off.
-      const camD = this.w.camera.position.distanceTo(_v.set(s.x, s.y, s.z));
-      const size = (0.22 + s.rank * 0.03) * sk * Math.min(2.5, Math.max(1, camD / 15));
-      const pulse = 1 + 0.15 * Math.sin(this.time * 18 + i);
-      this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.05, size * 1.3 * pulse, size, C(3, 3, 3.4), SEEK_C, 1, 1, 0);
-      this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.08, size * 2.6 * pulse, size * 2, SEEK_C, SEEK_END, 0.5, 1, 0);
-      s.trailT -= dt;
-      if (s.trailT <= 0) {
-        s.trailT = 0.025;
-        this.fx.glow(s.x, s.y, s.z, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, 0.4 + Math.random() * 0.2, size * 0.6, size * 0.1, SEEK_C, SEEK_END, 0.7, 1, 0);
-      }
+      this.drawSeeker(s, i, dt);
     }
+  }
+
+  /**
+   * The orb: a white-hot heart in a violet glow inside a faint halo, sparks circling it on tilted
+   * orbits, little arcs crackling off its skin, and a tapering comet tail behind it. Grows with
+   * distance from the camera so it stays easy to follow far off.
+   */
+  private drawSeeker(s: Seeker, i: number, dt: number): void {
+    const sk = Math.max(0.5, Math.sqrt(s.k));
+    const camD = this.w.camera.position.distanceTo(_v.set(s.x, s.y, s.z));
+    const size = (0.22 + s.rank * 0.03) * sk * Math.min(2.5, Math.max(1, camD / 15));
+    const pulse = 1 + 0.15 * Math.sin(this.time * 18 + i);
+    this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.05, size * 0.9 * pulse, size * 0.8, SEEK_HOT, SEEK_WHITE, 1, 1, 0);
+    this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.05, size * 1.5 * pulse, size * 1.2, SEEK_MID, SEEK_C, 1, 1, 0);
+    this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.08, size * 3 * pulse, size * 2.4, SEEK_C, SEEK_END, 0.5, 1, 0);
+    this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.08, size * 6, size * 5.5, SEEK_END, SEEK_END, 0.18, 1, 0);
+    // Three sparks on tilted orbits.
+    for (let j = 0; j < 3; j++) {
+      const a = this.time * (9 + j * 2.5) + j * 2.09 + i, tilt = 0.6 + j * 0.9;
+      const ca = Math.cos(a), sa = Math.sin(a), ct = Math.cos(tilt), st = Math.sin(tilt), R = size * 1.25;
+      this.fx.glow(s.x + ca * R, s.y + sa * st * R, s.z + sa * ct * R, 0, 0, 0, 0.12, size * 0.32, size * 0.08, SEEK_SPARK, SEEK_C, 1, 1, 0);
+    }
+    // Arcs crackling off the skin.
+    if (Math.random() < dt * 14) {
+      const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r0 = Math.sqrt(1 - u * u), R = size * (1.6 + Math.random() * 0.8);
+      const ex = s.x + Math.cos(a) * r0 * R, ey = s.y + u * R, ez = s.z + Math.sin(a) * r0 * R;
+      const mx = (s.x + ex) / 2 + (Math.random() - 0.5) * size * 0.6, my = (s.y + ey) / 2 + (Math.random() - 0.5) * size * 0.6, mz = (s.z + ez) / 2 + (Math.random() - 0.5) * size * 0.6;
+      this.fx.seg(s.x, s.y, s.z, mx, my, mz, size * 0.12, SEEK_C.r, SEEK_C.g, SEEK_C.b, 1.2, BeamStyle.Bolt);
+      this.fx.seg(mx, my, mz, ex, ey, ez, size * 0.1, SEEK_C.r, SEEK_C.g, SEEK_C.b, 1, BeamStyle.Bolt);
+    }
+    // Comet tail: the last positions as a ribbon that thins and fades behind the orb.
+    s.tailT -= dt;
+    if (s.tailT <= 0) {
+      s.tailT = 0.03;
+      s.tail.unshift(s.x, s.y, s.z);
+      if (s.tail.length > 30) s.tail.length = 30;
+    }
+    // (Each piece spans two steps, so they overlap by half and the joints don't bead.)
+    // A piece right at the camera would be seen edge-on as a band across the screen: skipped.
+    const T = s.tail, nT = T.length / 3, cp = this.w.camera.position, near = Math.max(2.5, size * 4);
+    for (let j = -1; j < nT - 1; j++) {
+      const f = 1 - (j + 1) / nT, o = j * 3, q = Math.min(nT - 1, j + 2) * 3;
+      const ax = j < 0 ? s.x : T[o], ay = j < 0 ? s.y : T[o + 1], az = j < 0 ? s.z : T[o + 2];
+      if (Math.hypot(ax - cp.x, ay - cp.y, az - cp.z) < near || Math.hypot(T[q] - cp.x, T[q + 1] - cp.y, T[q + 2] - cp.z) < near) continue;
+      this.fx.seg(ax, ay, az, T[q], T[q + 1], T[q + 2], size * (0.3 + 1.1 * f), SEEK_C.r, SEEK_C.g, SEEK_C.b, 0.5 * f, BeamStyle.Ring);
+    }
+    s.trailT -= dt;
+    if (s.trailT <= 0) {
+      s.trailT = 0.025;
+      this.fx.glow(s.x, s.y, s.z, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.2, 0.5 + Math.random() * 0.3, size * 0.5, size * 0.08, SEEK_MID, SEEK_END, 0.8, 1, 0);
+    }
+  }
+
+  /** A seeker orb bursts on its target: a violet flash, a shock front, arcs and sparks flung out. */
+  private seekerBurst(s: Seeker, dx: number, dy: number, dz: number): void {
+    const sk = Math.max(0.5, Math.sqrt(s.k)), q = (0.8 + s.rank * 0.12) * sk;
+    this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.12, q * 0.8, q * 3, SEEK_HOT, SEEK_C, 1, 1, 0);
+    this.fx.glow(s.x, s.y, s.z, 0, 0, 0, 0.35, q * 1.5, q * 3.5, SEEK_C, SEEK_END, 0.55, 1, 0);
+    this.shockRing(s.x, s.y, s.z, dx, dy, dz, 20, 9 * q, 0.3, 0.22 * q, 0.04 * q, SEEK_C, SEEK_END, 0.9);
+    this.shockRing(s.x, s.y, s.z, 0, 1, 0, 16, 6 * q, 0.4, 0.2 * q, 0.04 * q, SEEK_MID, SEEK_END, 0.7);
+    for (let j = 0; j < 18; j++) {
+      const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r0 = Math.sqrt(1 - u * u), sp = (4 + Math.random() * 8) * q;
+      this.fx.glow(s.x, s.y, s.z, Math.cos(a) * r0 * sp, u * sp, Math.sin(a) * r0 * sp, 0.3 + Math.random() * 0.3, 0.08 * q, 0.02 * q, SEEK_SPARK, SEEK_END, 1, 2.5, 0);
+    }
+    this.w.camRig.addShake(Math.min(0.25, 3 / Math.max(8, this.w.camera.position.distanceTo(_v.set(s.x, s.y, s.z)))));
   }
 
   /** A seeker orb that lost its target or ran out: it fades in a soft puff. */
