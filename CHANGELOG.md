@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.221 — 2026-10-09
+
+- **No freeze when a giant first shows up on the news screens.** The news drone's picture for the billboards left out the sewers, and with them the sewer lights, so the game had to prepare every shader in the picture a second time, all at once: about a second and a half the first time the mech fired its missiles. The lights now stay in the picture (only what the drone can't see is left out), so it reuses the shaders already prepared.
+
 ## 0.220 — 2026-10-09
 
 - **No more long freezes when missiles hit buildings.** The giant mech's missile blasts gave the wreckage a direction that was really a distance, so pieces flew off at hundreds of metres per second, and each one made the game prepare the physics ground for kilometres around in one go: the game froze for seconds, sometimes minutes. Blasts now always throw debris at sensible speeds, debris only asks for the ground close to it, and looking up the countryside roads under the ground is much faster.
