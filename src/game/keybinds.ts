@@ -43,7 +43,7 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'right', group: 'move', label: 'Right', defaults: ['KeyD'] },
   { id: 'run', group: 'move', label: 'Run / boost', defaults: ['ShiftLeft', 'ShiftRight'] },
   { id: 'slow', group: 'move', label: 'Walk slowly', info: 'Hold to stroll', defaults: ['AltLeft'] },
-  { id: 'auto', group: 'move', label: 'Autorun', info: 'In flight: autoflight · Forward or Back stops it', defaults: ['KeyR'] },
+  { id: 'auto', group: 'move', label: 'Autorun', info: 'Keeps the pace it was started at (Shift fast, Alt slow) · in flight: autoflight · Forward or Back stops it', defaults: ['KeyR'] },
   { id: 'jump', group: 'move', label: 'Jump / up', info: 'With super jump: hold to keep climbing · in flight: up', defaults: ['Space'] },
   { id: 'down', group: 'move', label: 'Down (in flight)', defaults: ['ControlLeft', 'KeyC'] },
   { id: 'fly', group: 'move', label: 'Flight on / off', info: 'Once Flight is unlocked', defaults: ['KeyF'] },

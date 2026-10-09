@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.190 — 2026-10-09
+
+- **Autorun keeps your pace.** Press R while holding Shift and the hero keeps sprinting (in flight: keeps boosting) after you let go of Shift. Started with Alt held, autorun stays at a slow walk; started plain, it runs at the normal pace. Holding Shift or Alt during autorun still changes the pace while held.
+
 ## 0.189 — 2026-10-09
 
 - **Factions, step 1: one table of who is hostile to whom.** Every side in the game (civilians, police, army, the hero, the sidekick, street crooks, each villain group, Lumen, Murk, Wardens, runaway teens, monsters, rogue machines) now has a relation to every other one, as a number from −100 to +100; −50 or lower is hostile. The civilians' feeling about the hero is the reputation itself. For now the numbers repeat today's rules, so nothing plays differently: the friend/foe sense and the villain groups' turf wars ask the table instead of their own lists. Later steps will move the hero's other standings into it and let the numbers change.
