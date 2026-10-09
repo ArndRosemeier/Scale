@@ -2,24 +2,27 @@
  * Compass strip at the top of the screen: heading ticks (N, NE, …) for the camera's view
  * direction, nearby points of interest (metro entrances, people needing help, crimes, small
  * deeds, power cores — the map's marker layers) and the player's own map marker, which is
- * always shown (pinned to the edge when behind) with its distance.
+ * always shown (pinned to the edge when behind) with its distance. Clicking a point of interest
+ * targets what it stands for, when that is targetable (GameMap.targetAt).
  */
 import * as THREE from 'three';
 import type { Game } from '../game/Game';
-import type { MapMarker } from './map/GameMap';
+import { targetsSomething, type MapMarker } from './map/GameMap';
 
 /** Degrees across the strip. */
 const SPAN = 180;
 /** Points of interest within this range (m, × √size). */
 const NEAR = 320;
 
-interface Poi { x: number; z: number; cls: string; color: string; text: string }
+interface Poi { x: number; z: number; cls: string; color: string; text: string; spot?: boolean }
 
 export class Compass {
   private el: HTMLDivElement;
   private ticks: HTMLDivElement[] = [];
   private labels: HTMLDivElement[] = [];
   private pois: HTMLDivElement[] = [];
+  /** World spot of each shown point of interest (null: nothing to target there, like a metro sign). */
+  private spots: ({ x: number; z: number } | null)[] = [];
   private dir = new THREE.Vector3();
 
   constructor(private game: Game) {
@@ -27,6 +30,11 @@ export class Compass {
     this.el.id = 'compass';
     this.el.innerHTML = '<div class="caret"></div>';
     document.body.appendChild(this.el);
+    this.el.addEventListener('click', (e) => {
+      const i = this.pois.indexOf((e.target as HTMLElement).closest?.('.poi') as HTMLDivElement);
+      const s = i >= 0 ? this.spots[i] : null;
+      if (s) game.map.targetAt(s.x, s.z);
+    });
   }
 
   update(): void {
@@ -91,7 +99,7 @@ export class Compass {
       const b = bearingOf(q.x - p.x, q.z - p.z);
       const off = wrap(b - head);
       if (Math.abs(off) > SPAN / 2 - 4) continue;
-      this.show(pi++, q.cls, q.color, q.text, '', W / 2 + off * pxDeg);
+      this.show(pi++, q.cls, q.color, q.text, '', W / 2 + off * pxDeg, q.spot ? q : null);
     }
     // The player's marker and goals (where carried loot goes back): always, pinned to the edge
     // when outside the strip, with the distance.
@@ -108,23 +116,25 @@ export class Compass {
         gx = m.x + (dx / d) * m.r; gz = m.z + (dz / d) * m.r;
       }
       const q = pinned(gx, gz), poi = poiOf(m);
-      this.show(pi++, `${poi.cls} goal${q.edge ? ' edge' : ''}`, poi.color, poi.text, q.d, q.x);
+      this.show(pi++, `${poi.cls} goal${q.edge ? ' edge' : ''}`, poi.color, poi.text, q.d, q.x, targetsSomething(m) ? m : null);
     }
     const w = g.map.waypoint;
     if (w) {
       const q = pinned(w.x, w.z);
-      this.show(pi++, q.edge ? 'poi pin edge' : 'poi pin', '', '', q.d, q.x);
+      this.show(pi++, q.edge ? 'poi pin edge' : 'poi pin', '', '', q.d, q.x, null);
     }
     for (; pi < this.pois.length; pi++) this.pois[pi].style.display = 'none';
   }
 
-  private show(i: number, cls: string, color: string, icon: string, label: string, x: number): void {
+  private show(i: number, cls: string, color: string, icon: string, label: string, x: number, spot: { x: number; z: number } | null): void {
     let el = this.pois[i];
     if (!el) {
       el = this.add(this.pois, 'poi');
       el.innerHTML = '<i></i><b></b>';
     }
     el.style.display = '';
+    this.spots[i] = spot;
+    if (spot) cls += ' hit';
     if (el.className !== cls) el.className = cls;
     el.style.left = `${x.toFixed(1)}px`;
     const ic = el.firstElementChild as HTMLElement, lb = el.lastElementChild as HTMLElement;
@@ -159,9 +169,10 @@ function wrap(a: number): number {
 }
 
 function poiOf(m: MapMarker): Poi {
-  if (m.kind === 'alert') return { x: m.x, z: m.z, cls: 'poi alert', color: m.color, text: '!' };
+  const spot = targetsSomething(m);
+  if (m.kind === 'alert') return { x: m.x, z: m.z, cls: 'poi alert', color: m.color, text: '!', spot };
   if (m.kind === 'core') return { x: m.x, z: m.z, cls: 'poi core', color: m.color, text: '' };
   if (m.kind === 'zone') return { x: m.x, z: m.z, cls: 'poi zone', color: m.color, text: '!' };
   if (m.kind === 'landmark') return { x: m.x, z: m.z, cls: 'poi landmark', color: m.color, text: '★' };
-  return { x: m.x, z: m.z, cls: 'poi', color: m.color, text: '' };
+  return { x: m.x, z: m.z, cls: 'poi', color: m.color, text: '', spot };
 }

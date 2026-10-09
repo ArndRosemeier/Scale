@@ -688,6 +688,45 @@ section('faction relations', async () => {
   const T = defaultRelations();
   T.set('hero', 'necro', REL.wary);
   check(isFoe(crook(), { hostileThing: () => false, relations: T } as never) && !isFoe(crook(2), { hostileThing: () => false, relations: T, group: () => 'necro' } as never), 'isFoe follows the table: a group the hero is no longer hostile to is spared');
+  // Phase 2: every faction's feeling about the hero is read live from the system that keeps it.
+  const { bindHero, policeStanding, groupStanding, HUNTED_AT } = await import('../src/game/factions/relations');
+  const { NOTORIETY } = await import('../src/game/factions/Bosses');
+  const { TRUST } = await import('../src/underground/deep/Trust');
+  check(HUNTED_AT === NOTORIETY.hunted && groupStanding(NOTORIETY.hunted) === REL.hostile && !(groupStanding(NOTORIETY.wary) <= REL.hostile) && groupStanding(0) === 0 && groupStanding(NOTORIETY.max) < REL.hostile, `standing: a group hunting the hero is exactly hostile (wary ${groupStanding(NOTORIETY.wary).toFixed(1)})`);
+  check(TRUST.min === REL.min && TRUST.max === REL.max, 'standing: Lumen trust is on the relation scale');
+  check(policeStanding(0, false, false) === REL.friendly && policeStanding(0, true, false) === REL.wary && policeStanding(1, false, false) <= REL.hostile && policeStanding(3, false, false) < policeStanding(1, false, false) && policeStanding(0, false, true) <= REL.hostile, 'standing: police friendly, wary of a suspect, hostile while wanted (more at higher levels) or during a rampage');
+  const st = { rep: 12, wanted: 0, suspect: false, rampage: false, not: { gang: 70 } as Record<string, number>, trust: 35, regard: 2 };
+  const H = defaultRelations();
+  bindHero(H, { rep: () => st.rep, wanted: () => st.wanted, suspect: () => st.suspect, rampage: () => st.rampage, notoriety: (a) => st.not[a], lumenTrust: () => st.trust, wardenRegard: () => st.regard });
+  check(H.get('civilians', 'hero') === 12 && !H.hostile('police', 'hero') && !H.hostile('army', 'hero') && H.hostile('gang', 'hero') && H.get('lumen', 'hero') === 35 && H.get('wardens', 'hero') === 20, 'bindHero: rep, forces, a hunting gang, Lumen trust, Warden regard');
+  check(H.get('necro', 'hero') === REL.enemy, 'bindHero: a group not in this city keeps its seeded feeling');
+  st.wanted = 2; st.rampage = true; st.not.gang = 0; st.rep = -80;
+  check(H.hostile('police', 'hero') && H.hostile('army', 'hero') && !H.hostile('gang', 'hero') && H.hostile('civilians', 'hero'), 'bindHero: the values follow live (wanted, rampage, notoriety faded, rep down)');
+  check(!H.hostile('hero', 'police') && !H.hostile('hero', 'civilians') && H.hostile('hero', 'gang'), "bindHero: the hero's own feelings (the friend/foe sense) are not bound");
+  // Phase 3: who runs from whom.
+  const { menaceNear, scatterReach, SCATTER, eventFaction } = await import('../src/game/factions/relations');
+  const M = defaultRelations();
+  const strider = { x: 80, y: 15, z: 0, height: 30 }, murk = { x: 15, y: 0.5, z: 0, height: 1, faction: 'murk' as const }, saucer = { x: 5, y: 3, z: 0, height: 2.4, faction: 'teens' as const };
+  check(scatterReach(30) === 108 && scatterReach(1) === 21 && scatterReach(100) === SCATTER.max, `scatter reach grows with size (${scatterReach(30)}, ${scatterReach(1)})`);
+  check(menaceNear(M, 'gang', 0, 0, 0, [strider, saucer]) === strider && menaceNear(M, 'crooks', 0, 0, 0, [murk, saucer]) === murk, 'menace: a crew runs from a monster and the Murk, not from a runaway saucer');
+  check(menaceNear(M, 'gang', 0, 0, 0, [{ ...strider, x: 120 }]) === null && menaceNear(M, 'gang', 0, -60, 0, [murk]) === null && menaceNear(M, 'gang', 0, 0, 0, [murk], () => false) === null, 'menace: not out of reach, far above or below, or on the other side of the ground');
+  check((['crooks', ...ids] as const).every((f) => menaceNear(M, f, 0, 0, 0, [strider]) === strider && menaceNear(M, f, 0, 0, 0, [murk]) === murk), 'menace: in the seeded table every crew (street crooks and each group) runs from monsters and the Murk');
+  M.set('necro', 'monsters', REL.neutral);
+  check(menaceNear(M, 'necro', 0, 0, 0, [strider]) === null, 'menace: follows the table (a group not hostile to monsters stays)');
+  // Phase 3b: the army fights a major threat whose faction it is hostile to (Forces.armyFoe).
+  check(eventFaction({ actors: [{}] }) === 'monsters' && eventFaction({ actors: [{ self: true }] }) === 'hero' && eventFaction({ actors: [{ faction: 'murk' }] }) === 'murk' && eventFaction({}) === 'monsters', 'eventFaction: a monster, the rampaging hero, the Murk');
+  st.rampage = true;
+  check(H.hostile('army', eventFaction({ actors: [{ self: true }] })) && H.hostile('army', 'monsters'), 'army: hostile to monsters, and to the hero while the rampage lasts');
+  st.rampage = false;
+  check(!H.hostile('army', eventFaction({ actors: [{ self: true }] })), 'army: not hostile to the hero once the rampage is over');
+  // Phase 3c: the Murk go for every person on the surface (MurkBreach.prey) and for the hero and the Lumen below (FactionHost.murkHostile).
+  const { actorFaction } = await import('../src/game/friendFoe');
+  const { SIDEKICK_OWNER } = await import('../src/sim/actors/Actor');
+  const people = [undefined, { role: 'police', owner: 1 }, { role: 'soldier', owner: 1 }, { role: 'criminal', owner: 1 }, { role: 'criminal', owner: 1, faction: 0 }, { role: 'bystander', owner: SIDEKICK_OWNER }, { role: 'medic', owner: -2 }] as never[];
+  check(people.every((a) => M.hostile('murk', actorFaction(a, () => 'necro'))) && M.hostile('murk', 'hero') && M.hostile('murk', 'lumen'), 'murk: hostile to every person (civilians, police, soldiers, crooks, a group, the sidekick), the hero and the Lumen');
+  const calm = defaultRelations();
+  calm.set('murk', 'police', REL.wary);
+  check(!calm.hostile('murk', actorFaction({ role: 'police', owner: 1 } as never)) && calm.hostile('murk', actorFaction(undefined)), 'murk: follows the table (made wary of the police, they leave officers alone)');
 });
 
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
@@ -841,6 +880,28 @@ section('street crime', async () => {
     drive(racket, () => racket.phase === 'escape' || racket.phase === 'aborted', 2400, rEv);
     check(racket.phase === 'escape' && racket.loot?.carrier === racket.criminals[0] && racket.criminals[0].actor?.held === 'envelope', `racket: they take the envelope and walk off (${racket.phase}, events ${rEv.join(',')})`);
     check(racket.victim!.actor?.state !== 'cower' && racket.victim!.state !== 5, `racket: the shopkeeper pays up, not cowering or shoved down (${racket.victim!.actor?.state})`);
+
+    // Factions phase 3: a monster their faction is hostile to comes near and the crew scatters (or never starts).
+    {
+      let monster: { x: number; z: number; height: number } | null = null;
+      const wM = Object.assign(Object.create(w2) as typeof w2, { menace: () => monster });
+      const early = new Racket(wM, 778);
+      check(early.setup(), 'scatter: a second racket');
+      drive(early, () => early.phase !== 'approach', 10, []);
+      monster = { x: early.criminals[0].x + 30, z: early.criminals[0].z, height: 12 };
+      drive(early, () => !early.active, 40, []);
+      check(early.phase === 'aborted' && !early.committed, `scatter: a monster near before it began: off (${early.phase})`);
+      monster = null;
+      const late = new Racket(wM, 777);
+      late.setup();
+      drive(late, () => late.phase === 'escape' || late.phase === 'aborted', 2400, []);
+      const lead = late.criminals[0];
+      check(late.phase === 'escape' && late.loot?.carrier === lead, `scatter: the racket came off (${late.phase})`);
+      monster = { x: lead.x + 20, z: lead.z, height: 12 };
+      const sEv: string[] = [];
+      drive(late, () => !late.active, 1200, sEv);
+      check(late.outcome === 'aborted' && late.loot?.carrier === null && !!lead.actor?.memo.scattered && lead.x < monster.x - 40, `scatter: they drop the envelope and run from it, the crime is off with no turf gained (${late.outcome}, ${sEv.join(',')}, ${(monster.x - lead.x).toFixed(0)} m away)`);
+    }
 
     const tag = new Tagging(w2, 4242);
     check(tag.setup() && !!tag.spot && tag.kind === 'tagging', 'tagging: setup finds a wall beside a door and a tagger');

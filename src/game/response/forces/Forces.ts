@@ -56,6 +56,7 @@ import {
   type ZoneView,
 } from './BattleModel';
 import { ArmyFx } from './ArmyFx';
+import { eventFaction, type Relations } from '../../factions/relations';
 import { Aircraft } from './Aircraft';
 import { TANK_GUN, TANK_TURRET } from '../../../props/military';
 import { vehicleModel } from '../../../props/vehicles';
@@ -97,9 +98,14 @@ export interface ArmyFoe {
   readonly hidden?: boolean;
 }
 
-/** The army's foe in an incident (a major threat with a body), or null. */
-export function armyFoe(ev: ThreatEvent): ArmyFoe | null {
-  return ev.tier === 'major' && (ev instanceof Strider || ev instanceof PlayerRampage || ev instanceof Burrower) ? ev : null;
+/**
+ * The army's foe in an incident, or null: a major threat it can fight (a body on a route: the Strider,
+ * the Burrower, a rampaging giant player) whose faction the army is hostile to (factions/relations.ts; a rampaging
+ * hero only while the rampage lasts).
+ */
+export function armyFoe(ev: ThreatEvent, R?: Relations): ArmyFoe | null {
+  if (ev.tier !== 'major' || !(ev instanceof Strider || ev instanceof PlayerRampage || ev instanceof Burrower)) return null;
+  return !R || R.hostile('army', eventFaction(ev)) ? ev : null;
 }
 
 const VEHICLE_KIND: Partial<Record<ForceKind, VKind>> = { truck: 'army_truck', apc: 'apc', tank: 'tank' };
@@ -168,7 +174,7 @@ export class Forces {
   }
 
   /** The army comes for a major threat with a body (the Strider, a rampaging giant player). */
-  private armyFor(inc: Incident): boolean { return this.enabled && !!armyFoe(inc.ev); }
+  private armyFor(inc: Incident): boolean { return this.enabled && !!armyFoe(inc.ev, this.g.relations); }
 
   /** Off: the ladder stops at 2 (dev.army.enabled(false): measurements without the army). */
   enabled = true;
@@ -176,7 +182,7 @@ export class Forces {
   // ================================================================== levels
 
   private engage(inc: Incident, level: 3 | 4): void {
-    const foe = armyFoe(inc.ev);
+    const foe = armyFoe(inc.ev, this.g.relations);
     if (!this.enabled || !foe) return;
     this.attach(inc, foe);
     const S = this.mon!, R = S.route;

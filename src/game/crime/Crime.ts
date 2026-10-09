@@ -24,6 +24,7 @@ import { personStrength } from '../Consider';
 import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
 import { dealtBy } from '../../shared/status';
 import { voice } from '../../ui/voices';
+import { SCATTER, scatterReach } from '../factions/relations';
 
 export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den' | 'sabotage' | 'raising' | 'procession' | BossOpKind;
 /** A boss operation (crime/BossOp): the group's boss and a big crew, a threat event with the city response. */
@@ -84,6 +85,11 @@ export interface CrimeWorld {
   hurtPlayer(dmg: number, kind: HurtKind, fromX: number, fromZ: number, fromY: number): void;
   /** The police get a call (dispatch the nearest patrol car). */
   callPolice(c: Crime, delay: number): void;
+  /**
+   * A threat this crime's faction is hostile to, near enough to run from (factions/relations.ts
+   * `menaceNear`), or null. Unset: crews never scatter (tests).
+   */
+  menace?(c: Crime, x: number, y: number, z: number): { x: number; z: number; height: number } | null;
   /** Live randomness for outcomes (not generation). */
   random(): number;
   /** Shop entrances (door point outside the wall and its outward normal) in a ring around the player. */
@@ -225,6 +231,9 @@ export abstract class Crime {
   /** Witnesses already staged (once each). */
   private staged = new WeakSet<PedAgent>();
   private stageT = 0;
+  /** Running from a menace (a monster, the Murk): where it was last seen; null: not scattering. */
+  scattering: { x: number; z: number; height: number } | null = null;
+  private menaceT = 0;
 
   constructor(protected w: CrimeWorld, readonly seed: number) {
     this.rng = new Rng(seed);
@@ -251,6 +260,8 @@ export abstract class Crime {
     for (const list of [this.criminals, this.victims, this.extras]) {
       for (let i = list.length - 1; i >= 0; i--) if (!list[i].alive) { if (list[i].actor && list[i].actor!.state !== 'arrested') setState(list[i].actor!, 'gone'); }
     }
+    // A threat their faction is hostile to comes near: they drop everything and run (or never start).
+    if (this.lookRound(dt)) return;
     // Hit on the way to the site: it is off before it began, and they deal with the hero.
     if (this.phase === 'approach' && this.playerAttacked) this.ambushed();
     this.step(dt);
@@ -285,6 +296,67 @@ export abstract class Crime {
     // The police go where the criminals are.
     const lead = crooks.find((c) => !subdued(c.actor!)) ?? crooks[0];
     if (lead) { this.hot.x = lead.x; this.hot.z = lead.z; }
+  }
+
+  /**
+   * Every SCATTER.check s: is a menace near (CrimeWorld.menace)? Before it began, the crime is off;
+   * after, the crew drops the loot and scatters away from it, and the crime ends once nobody is
+   * left standing ('arrested' if the police have someone, 'stopped' if the hero already put one
+   * down, else 'aborted': no turf gained). True while scattering (the crime's own step is skipped).
+   */
+  private lookRound(dt: number): boolean {
+    if (!this.w.menace) return false;
+    this.menaceT -= dt;
+    if (this.menaceT <= 0) {
+      this.menaceT = SCATTER.check;
+      const lead = this.criminals.find((c) => c.alive && c.actor && !subdued(c.actor) && c.actor.state !== 'gone');
+      const m = lead ? this.w.menace(this, lead.x, lead.y, lead.z) : null;
+      if (m) {
+        if (!this.committed) { this.abort(); return true; }
+        if (!this.scattering) for (const c of this.criminals) if (c.actor && !subdued(c.actor)) { this.dropLoot(c); c.actor.route = null; c.actor.action = null; }
+        this.scattering = { x: m.x, z: m.z, height: m.height };
+      }
+    }
+    const S = this.scattering;
+    if (!S) return false;
+    let standing = 0;
+    for (const c of this.criminals) {
+      const act = c.actor;
+      if (!act || !c.alive || act.state === 'gone' || subdued(act)) continue;
+      if (this.runFrom(c, S)) standing++;
+    }
+    if (standing === 0) {
+      const arrested = this.criminals.some((c) => c.actor?.state === 'arrested');
+      const downed = this.criminals.some((c) => c.actor?.koByPlayer || (c.actor?.hitByPlayer && c.actor && subdued(c.actor)));
+      this.finish(arrested ? 'arrested' : downed ? 'stopped' : 'aborted');
+    }
+    return true;
+  }
+
+  /** Run from a menace; false once away (out of sight beyond its reach, or very far): gone. */
+  private runFrom(c: PedAgent, S: { x: number; z: number; height: number }): boolean {
+    const act = c.actor!;
+    const d = Math.hypot(c.x - S.x, c.z - S.z);
+    const reach = scatterReach(S.height);
+    if ((d > reach + SCATTER.clear && !this.w.visible(c.x, c.y + 1, c.z)) || d > SCATTER.far) {
+      act.memo.scattered = 1; setState(act, 'gone'); c.alive = false;
+      return false;
+    }
+    const R = act.route;
+    if (!R || act.wp >= R.length / 3) {
+      const al = d || 1, turn = (this.rng.float() - 0.5) * 1.2;
+      const ax = (c.x - S.x) / al, az = (c.z - S.z) / al;
+      const ux = ax * Math.cos(turn) - az * Math.sin(turn), uz = ax * Math.sin(turn) + az * Math.cos(turn);
+      const route = this.w.route(c.x, c.z, c.x + ux * 220, c.z + uz * 220);
+      act.route = route; act.wp = 1;
+      if (!route) goTo(act, c.x + ux * 30, c.z + uz * 30, 5);
+    }
+    if (act.route) followRoute(c, act, 5);
+    else if (act.goal) act.speed = 5;
+    setState(act, 'run');
+    act.mood = 'afraid';
+    act.face = null;
+    return true;
   }
 
   protected emit(type: CrimeEvent['type'], who?: PedAgent): void {

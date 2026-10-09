@@ -627,6 +627,27 @@ export class Targeting {
     return best;
   }
 
+  /**
+   * The target a map / compass marker at (x, z) stands for: the nearest candidate within r of it
+   * (hostiles and big threats first, never street furniture), and within targeting range of the
+   * player. Out of view is fine; update() lets it go after TARGET.lostAfter unless it comes into view.
+   */
+  pickNear(x: number, z: number, r: number): Target | null {
+    const p = this.w.player;
+    const range = TARGET.range * Math.max(1, Math.sqrt(p.k));
+    let best: Target | null = null, bestS = Infinity;
+    this.each(x, z, r, (t) => {
+      const c = this.centre(t, _v);
+      const reach = t.kind === 'threat' ? Math.max(r, t.obj.height) : r;
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d > reach) return;
+      if (c.distanceTo(p.pos) > range * (t.kind === 'threat' ? THREAT_RANGE : 1)) return;
+      const s = d / reach + (this.priority?.(t) ?? 0);
+      if (s < bestS) { bestS = s; best = { ...t } as Target; }
+    }, PICK_KINDS);
+    return best;
+  }
+
   /** Tab (dir 1) / Shift+Tab (-1). On a giant creature: its body parts in turn (weak spots first), then the whole body again; Esc lets go. */
   tab(dir: number): void {
     if (this.current?.kind === 'threat') {
@@ -710,3 +731,5 @@ export class Targeting {
 
 export const ALL_KINDS = { person: true, car: true, robot: true, drone: true, prop: true, threat: true } as const;
 export type KindMask = { person?: boolean; car?: boolean; robot?: boolean; drone?: boolean; prop?: boolean; threat?: boolean };
+/** What a map / compass marker can stand for (not street furniture). */
+const PICK_KINDS: KindMask = { person: true, car: true, robot: true, drone: true, threat: true };

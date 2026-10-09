@@ -632,7 +632,7 @@ export class Aftermath {
     const Z = this.zoneMark;
     if (Z) list.push({ x: Z.x, z: Z.z, r: Z.r, color: '#ffcc00', kind: 'zone', title: 'Strike zone — get out', always: true });
     for (const zn of this.zones) if (this.hours - zn.when < AFTERMATH.zoneSmokeH) list.push({ x: zn.x, z: zn.z, r: zn.r, color: '#8e8e93', kind: 'zone', title: 'Levelled district' });
-    for (const m of this.memorials) list.push({ x: m.x, z: m.z, color: '#d1c4e9', kind: 'dot', title: 'A memorial — flowers and candles' });
+    for (const m of this.memorials) list.push({ x: m.x, z: m.z, color: '#d1c4e9', kind: 'dot', place: true, title: 'A memorial — flowers and candles' });
     const key = list.map((m) => `${Math.round(m.x)},${Math.round(m.z)},${m.kind}`).join(';');
     if (key !== this.zoneKey) { this.zoneKey = key; this.g.map.setMarkers('aftermath', list); }
   }

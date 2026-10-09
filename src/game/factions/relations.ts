@@ -92,6 +92,10 @@ export function defaultRelations(): Relations {
   // Everything that preys on the city, and the city's forces, are enemies of each other and of the hero.
   const preys: FactionId[] = ['crooks', ...VILLAINS, 'murk', 'monsters', 'machines'];
   for (const p of preys) for (const s of [...city, 'hero', 'sidekick'] as FactionId[]) R.setBoth(p, s, REL.enemy);
+  // The beasts (monsters, the Murk, machines gone rogue) go for every person, crooks included, and the
+  // crooks want nothing to do with them (they run: Crime.lookRound).
+  const beasts: FactionId[] = ['murk', 'monsters', 'machines'];
+  for (const b of beasts) for (const c of ['crooks', ...VILLAINS] as FactionId[]) R.setBoth(b, c, REL.enemy);
   // The villain groups: rivals at war (archetypes' `rivals`, either way round), the rest wary.
   for (const a of VILLAINS) for (const b of VILLAINS) {
     if (a === b) continue;
@@ -180,4 +184,58 @@ export function relationTable(R: Relations, ids: readonly FactionId[] = FACTIONS
   const out: Record<string, Record<string, number>> = {};
   for (const a of ids) { const row: Record<string, number> = {}; for (const b of ids) row[b] = Math.round(R.get(a, b)); out[a] = row; }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Phase 3: who runs from whom. A crew at work drops everything and scatters when a threat its
+// faction is hostile to comes near (a monster, the Murk, a runaway saucer): the bigger it is, the
+// farther off they go.
+
+export const SCATTER = {
+  /** Reach (m) at which a crew runs from a menace: `near` + `perHeight` × its height, at most `max`. */
+  near: 18, perHeight: 3, max: 140,
+  /** Seconds between looks round. */
+  check: 0.5,
+  /** Safe again (m beyond the reach) once out of sight; always this far (m). */
+  clear: 40, far: 300,
+  /** Not when it is this much farther above or below than its own height (the deep realm under a sewer den). */
+  vertical: 20,
+};
+
+/** Something to run from: a threat body (ThreatActor). */
+export interface Menace { x: number; y: number; z: number; height: number; faction?: FactionId; self?: boolean }
+
+/** How close a menace of this height has to come before a crew runs. */
+export function scatterReach(height: number): number {
+  return Math.min(SCATTER.max, SCATTER.near + SCATTER.perHeight * Math.max(0, height));
+}
+
+/**
+ * The nearest menace within its scatter reach of (x, z) that faction `from` is hostile to, or null.
+ * `sameSide` (street vs underground) leaves out the ones on the other side of the ground.
+ */
+export function menaceNear(R: Relations, from: FactionId, x: number, y: number, z: number, list: Iterable<Menace>, sameSide?: (m: Menace) => boolean): Menace | null {
+  let best: Menace | null = null, bd = Infinity;
+  for (const m of list) {
+    const d = Math.hypot(m.x - x, m.z - z);
+    if (d > scatterReach(m.height) || d >= bd || Math.abs(m.y - y) > m.height + SCATTER.vertical) continue;
+    if (!R.hostile(from, bodyFaction(m))) continue;
+    if (sameSide && !sameSide(m)) continue;
+    best = m; bd = d;
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Threat bodies and events: whose side they are on.
+
+/** A threat body's faction: the player's own (rampaging) body is the hero's, else its own, else a monster. */
+export function bodyFaction(a: { readonly self?: boolean; readonly faction?: FactionId }): FactionId {
+  return a.self ? 'hero' : a.faction ?? 'monsters';
+}
+
+/** A threat event's faction, from its bodies (none: a monster). */
+export function eventFaction(ev: { readonly actors?: readonly { readonly self?: boolean; readonly faction?: FactionId }[] }): FactionId {
+  const a = ev.actors?.[0];
+  return a ? bodyFaction(a) : 'monsters';
 }
