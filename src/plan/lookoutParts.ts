@@ -38,7 +38,7 @@ function ring(R: number, n: number, cu = 0, cv = 0): P2[] {
 const square = (a: number, cu = 0, cv = 0): P2[] => [[cu - a, cv - a], [cu + a, cv - a], [cu + a, cv + a], [cu - a, cv + a]];
 
 /** Walls along a closed outline; a door (doorW wide, doorH high) in the middle of edge 0 unless doorW is 0. */
-function ringWalls(k: Kit, pts: P2[], y0: number, y1: number, th: number, m: PartMat, doorW: number, doorH: number, o: Opt = {}, sill = y0): void {
+export function ringWalls(k: Kit, pts: P2[], y0: number, y1: number, th: number, m: PartMat, doorW: number, doorH: number, o: Opt = {}, sill = y0): void {
   for (let j = 0; j < pts.length; j++) {
     const a = pts[j], b = pts[(j + 1) % pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
     // (Each wall a hair longer, so the corners close.)
@@ -78,7 +78,7 @@ function furnish(k: Kit, lm: Landmark, rooms: Shell[], Th: Theme): Design {
 }
 
 /** The way in at ground level: steps down from the door to the ground in front, the exit to the path. */
-function wayIn(k: Kit, pts: P2[], doorW: number): void {
+export function wayIn(k: Kit, pts: P2[], doorW: number): void {
   const d: P2 = [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2], B = k.B;
   const foot = entranceSteps(k, d[1] + 0.2, doorW / 2 + 0.6, B, mat(GRANITE, [0.85, 0.85, 0.85]));
   const n = k.node(d[0], d[1] + 1.4, B);
@@ -86,7 +86,7 @@ function wayIn(k: Kit, pts: P2[], doorW: number): void {
 }
 
 /** A hidden footprint part: the building's outline for the planner and the map. */
-function footprint(k: Kit, u: number, v: number, r: number, y0: number, y1: number, round: boolean): void {
+export function footprint(k: Kit, u: number, v: number, r: number, y0: number, y1: number, round: boolean): void {
   const f = round ? k.cyl(u, v, r, r, y0, y1, mat(CONC), { solid: false, map: 1 }) : k.box(u, v, r, r, y0, y1, mat(CONC), { solid: false, map: 1 });
   f.hidden = true; f.footprint = true;
 }

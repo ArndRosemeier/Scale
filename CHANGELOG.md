@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.224 — 2026-10-09
+
+- **The Twist has an inside.** Walk in through the door at the foot of the twisted tower into a lobby with a reception desk, a lounge corner and, in a big one, a café. Stairs in the middle climb from storey to storey. Each storey is turned a little further than the one below, like the tower, and the stairs are laid out so they still meet. Up there are about three more storeys (two in towers with very tall storeys), each with rooms round a stair hall that runs out to the glass at the back: a café storey, a capsule hotel with sleeping pods and lounges, and a storey of studios and a control room. Glass rails run round each stairwell. The blocks above stay solid.
+- `preview-landmark.html` takes `&style=<n>` to pick a landmark of one style (the Twist: `kind=marvel&style=3`).
+
 ## 0.223 — 2026-10-09
 
 - **Swarm creatures can be targeted.** The brood's creatures (the swarm that pours out of the manholes) were never offered as targets, so Tab, clicking on one, clicking the swarm's marker on the minimap or compass, and the phase pulse, focus beam and seeker orb all passed them by. Each creature is now a target like a monster: Tab steps through the ones nearest your crosshair (a big threat still comes first, then the creatures, then hostile people), a click picks the one under the cursor, the swarm's map marker picks a creature near it, and the single-target powers hit the one you picked (a small one dies to any of them; frost freezes it so the next hit shatters it). The friend/foe sense counts them as foes. When the creature you target dies, the target moves on to the nearest one still close by, so you can keep firing. They are not big threats: no body parts to pick with Tab, the normal targeting range, and no airstrike on them.
