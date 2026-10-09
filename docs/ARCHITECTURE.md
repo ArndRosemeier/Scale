@@ -1041,8 +1041,22 @@ every frame (`prof.threats`).
     streets cross the ring; a struck district: barriers on its streets only) for 10 game hours, a memorial on the
     pavement nearby (at a struck district's edge) — flowers, candles lit at night, a few mourners now and then who pray or
     bow — for two game days; the EMS packs up after 1.2 game hours, smoke lingers, the news shows for 8 game hours, people
-    come back (the alert lifts). `onReconstruct` (the damage clusters) is the hook for scaffolding and slow repair — not
-    built.
+    come back (the alert lifts). Then reconstruction (below).
+  * **Reconstruction** (`Reconstruction.ts`, `game.aftermath.rebuild`; THREATS_PLAN Phase E): every building that loses
+    panels, slab tiles or upper floors is logged (Destruction `onDamage` / `onCollapse`: where, footprint, height as built
+    from `streamer.buildingInfo`). Once nothing round it has been hit for `REBUILD.quietH` game hours and no major incident
+    runs within 700 m, the crews move in: damaged buildings within 70 m make one site — scaffold bays with netting along
+    every footprint edge (to the old height; round a collapsed one they climb as the work goes on), site fences round
+    collapsed plots, a site board, a tower crane (mast sections + a top whose jib slowly slews, `drawCranes`) beside the
+    worst-hit building. Under `smallElems` broken panels it is mended quietly, no props. A site's hours grow with its
+    buildings (`siteH`, at most 60). A levelled district becomes one big site once its cordon lifts (fence ring at its
+    streets, cranes), rebuilt after 72 game hours (`Aftermath.removeZone`: ruins and skyline back). When a site is due
+    each building is made whole (`Destruction.repairBuilding`: elements, slabs, height, `CityDamage.forget`, its rubble
+    mounds) only out of sight — beyond 450 m, or off screen beyond 60 m; a district with the camera 200 m outside it.
+    Buildings in unloaded cells are rebuilt as their cells stream in (`cellReady`, after CityDamage re-applies damage),
+    before they are drawn. The props are instanced statics of the aftermath (`props/construction.ts`, shared vehicle
+    material: no new programs), drawn for sites within 700 m, nearest first. Saved (`SaveAftermath.rebuild`: log, sites,
+    what is due on load). Console: `dev.aftermath.rebuild()` (status), `rebuildHalfway()`, `rebuildNow()`.
   * **The carcass** (`Cleanup.ts`; THREATS_PLAN §5.4): a monster brought down lies where it fell (`ThreatDirector.remains`,
     `Strider.downAt`) — a landmark for 5 game hours: barriers round it (42 m), people at the tape staring and filming, on
     the news feed for its first hour. Then the city removes it over 6 game hours: a mobile crane (vehicle kind `crane`: its
