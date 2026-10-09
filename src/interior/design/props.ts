@@ -3,7 +3,7 @@
  * local point, its front facing the frame's +v after turning by `rot`. Small pieces are detail
  * only; anything one would bump into or stand on is solid.
  */
-import { Kit, mat, GREEN_ROOF, type Opt } from '../../plan/landmarkParts';
+import { Kit, mat, GREEN_ROOF, PLASTER, type Opt } from '../../plan/landmarkParts';
 import type { Rng } from '../../core/rng';
 import type { PropName, Theme } from './theme';
 
@@ -44,6 +44,40 @@ export function buildProp(k: Kit, name: PropName, u: number, v: number, y: numbe
         k.box(0, 0, 0.95, 0.28, y, y + 0.45, T.furniture, DS);
         k.box(0, 0.25, 0.95, 0.04, y + 0.45, y + 0.85, T.furniture, D);
         k.box(0, -0.29, 0.9, 0.01, y + 0.05, y + 0.1, T.glow, D);
+        break;
+      case 'seat': // A backless gallery bench: a padded top on two legs.
+        for (const s of [-0.75, 0.75]) k.box(s, 0, 0.06, 0.2, y, y + 0.38, T.trim, D);
+        k.box(0, 0, 0.9, 0.25, y + 0.3, y + 0.46, T.furniture, DS);
+        break;
+      case 'case': // A display case: a plinth, a glass box, something in it.
+        k.box(0, 0, 0.6, 0.4, y, y + 0.9, T.furniture, DS);
+        k.box(0, 0, 0.58, 0.38, y + 0.9, y + 1.5, T.glass, { ...D, clear: true });
+        k.box(r.range(-0.25, 0.25), 0, r.range(0.08, 0.2), r.range(0.08, 0.15), y + 0.9, y + 0.9 + r.range(0.15, 0.45), T.trim, D);
+        break;
+      case 'statue': { // A figure on a plinth.
+        k.box(0, 0, 0.5, 0.5, y, y + 1.0, T.wall, DS);
+        const h = r.range(1.2, 1.7);
+        k.cyl(0, 0, 0.26, 0.2, y + 1.0, y + 1.0 + h * 0.8, T.trim, { ...D, seg: 10 });
+        k.cyl(0, 0, 0.13, 0.12, y + 1.0 + h * 0.8, y + 1.0 + h, T.trim, { ...D, seg: 8 });
+        break;
+      }
+      case 'bigStatue': { // The great hall's centrepiece: a tall figure on a stepped pedestal.
+        k.box(0, 0, 1.6, 1.6, y, y + 0.5, T.wall, DS);
+        k.box(0, 0, 1.2, 1.2, y + 0.5, y + 1.6, T.wall, DS);
+        k.cyl(0, 0, 0.75, 0.55, y + 1.6, y + 4.2, T.trim, { ...D, seg: 14 });
+        k.cyl(0, 0, 0.35, 0.3, y + 4.2, y + 4.9, T.trim, { ...D, seg: 10 });
+        for (const s of [-1, 1]) k.box(s * 0.75, 0.1, 0.12, 0.12, y + 3.0, y + 4.1, T.trim, { ...D, rot: s * 0.4 });
+        break;
+      }
+      case 'painting': { // A framed canvas on the wall behind (at eye height).
+        const w = r.range(0.45, 0.75), h = r.range(0.4, 0.7), c = r.pick<[number, number, number]>([[0.55, 0.3, 0.2], [0.25, 0.35, 0.55], [0.6, 0.55, 0.3], [0.3, 0.45, 0.3], [0.7, 0.6, 0.5]]);
+        k.box(0, 0.02, w + 0.06, 0.03, y + 1.6 - h - 0.06, y + 1.6 + h + 0.06, T.trim, D);
+        k.box(0, 0.05, w, 0.01, y + 1.6 - h, y + 1.6 + h, mat(PLASTER, c), D);
+        break;
+      }
+      case 'reception':
+        k.box(0, 0, 1.5, 0.45, y, y + 1.1, T.furniture, DS);
+        k.box(0, -0.05, 1.55, 0.5, y + 1.1, y + 1.15, T.trim, D);
         break;
       case 'planter':
         k.box(0, 0, 0.45, 0.45, y, y + 0.6, T.trim, DS);
