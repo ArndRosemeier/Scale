@@ -3176,11 +3176,12 @@ section('front doors in real cities', async () => { for (const [seed, size] of [
 // into the great hall; into every room through its door; every room furnished for what it is.
 section('walk-in landmarks', async () => {
   const t0 = performance.now();
-  const count: Record<string, number> = { museum: 0, glasshouse: 0, airport: 0 };
-  const styles: Record<string, Set<number>> = { museum: new Set(), glasshouse: new Set(), airport: new Set() };
+  const count: Record<string, number> = { museum: 0, glasshouse: 0, airport: 0, tower: 0, lighthouse: 0, fortress: 0 };
+  const styles: Record<string, Set<number>> = Object.fromEntries(Object.keys(count).map((k) => [k, new Set<number>()]));
   const built: { lm: Landmark; terrain: Terrain; S: LandmarkSolids }[] = [];
-  const NAME: Record<string, string[]> = { museum: ['classical museum', 'modern museum'], glasshouse: ['palm house', 'domed glasshouse', 'triple glasshouse'], airport: ['airport terminal', 'vaulted terminal', 'saw-tooth terminal'] };
-  for (const [seed, size] of [[1, 0.8], [7, 0.8], [11, 0.8], [2, 0.8], [10, 0.8]] as const) {
+  const NAME: Record<string, string[]> = { museum: ['classical museum', 'modern museum'], glasshouse: ['palm house', 'domed glasshouse', 'triple glasshouse'], airport: ['airport terminal', 'vaulted terminal', 'saw-tooth terminal'],
+    tower: ['TV tower', 'lattice tower', 'glass tower'], lighthouse: ['lighthouse', 'lighthouse', 'lighthouse'], fortress: ['fortress keep', 'ruined keep'] };
+  for (const [seed, size] of [[1, 0.8], [7, 0.8], [11, 0.8], [2, 0.8], [10, 0.8], [6, 0.8], [9, 0.8]] as const) {
     const terrain = new Terrain(makeProfile({ seed, size }));
     const macro = buildMacroPlan(terrain);
     const S = new LandmarkSolids(macro, terrain);
@@ -3195,6 +3196,7 @@ section('walk-in landmarks', async () => {
         let up = 0, down = 0, blocked = 0;
         for (let i = 0; i + 1 < pts.length; i++) {
           const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+          if (L < 1e-6) continue;
           for (let s = 0; s <= L; s += 0.1) {
             const x = pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / L, z = pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / L;
             // (A hair either side: the seam between two step boxes belongs to neither.)
@@ -3205,22 +3207,28 @@ section('walk-in landmarks', async () => {
         }
         return { up, down, blocked, y };
       };
-      // From the ground in front of each way in (the exit's last point) to 4 m inside its door.
+      // From the ground in front of each way in (past the exit's last point) back along the way
+      // (through a fortress's gate, across its courtyard) to 4 m inside its door.
       for (const exit of ins.exits) {
-        const n = exit.pts.length;
-        const from: [number, number] = [exit.pts[n - 3], exit.pts[n - 1]];
-        const [dx, dz] = [exit.pts[0] - from[0], exit.pts[2] - from[1]], dl = Math.hypot(dx, dz);
-        const start: [number, number] = [from[0] - (dx / dl) * 1.5, from[1] - (dz / dl) * 1.5];
-        const end: [number, number] = [exit.pts[0] + (dx / dl) * 4, exit.pts[2] + (dz / dl) * 4];
-        const w = walk([start, [exit.pts[0], exit.pts[2]], end], terrain.height(start[0], start[1]));
-        check(w.up <= 0.31 && w.down < 0.31 && w.blocked === 0 && Math.abs(w.y - lm.base) < 0.05 && !!S.insideAt(end[0], w.y + 1, end[1]),
-          `seed ${seed}: walk in to the ${NAME[lm.kind][lm.style]} (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, floor ${(w.y - lm.base).toFixed(2)} m)`);
+        const pts: [number, number][] = [];
+        for (let i = exit.pts.length - 3; i >= 0; i -= 3) pts.push([exit.pts[i], exit.pts[i + 2]]);
+        const n = pts.length, floor = exit.pts[1];
+        const [dx, dz] = [pts[n - 1][0] - pts[0][0], pts[n - 1][1] - pts[0][1]], dl = Math.hypot(dx, dz);
+        const start: [number, number] = [pts[0][0] - (dx / dl) * 1.5, pts[0][1] - (dz / dl) * 1.5];
+        // (Into the door from the last way point a step or more out of it.)
+        const back = pts.slice(0, n - 1).reverse().find((p) => Math.hypot(p[0] - pts[n - 1][0], p[1] - pts[n - 1][1]) > 0.5) ?? start;
+        const [ex, ez] = [pts[n - 1][0] - back[0], pts[n - 1][1] - back[1]], el = Math.hypot(ex, ez);
+        const end: [number, number] = [pts[n - 1][0] + (ex / el) * 4, pts[n - 1][1] + (ez / el) * 4];
+        const w = walk([start, ...pts, end], terrain.height(start[0], start[1]));
+        check(w.up <= 0.31 && w.down < 0.31 && w.blocked === 0 && Math.abs(w.y - floor) < 0.05 && !!S.insideAt(end[0], w.y + 1, end[1]),
+          `seed ${seed}: walk in to the ${NAME[lm.kind][lm.style]} (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, floor ${(w.y - floor).toFixed(2)} m)`);
       }
     }
   }
   check(count.museum >= 3 && styles.museum.size === 2, `museums checked (${count.museum}, both styles)`);
   check(count.glasshouse >= 3 && styles.glasshouse.size === 3, `glasshouses checked (${count.glasshouse}, styles ${[...styles.glasshouse].join(', ')})`);
   check(count.airport >= 2, `airport terminals checked (${count.airport})`);
+  check(styles.tower.size === 3 && count.lighthouse >= 2 && styles.fortress.size === 2, `lookouts checked (towers ${count.tower}, styles ${[...styles.tower].join(', ')}; lighthouses ${count.lighthouse}; fortresses ${count.fortress}, styles ${[...styles.fortress].join(', ')})`);
   // Rooms: through each door, furnished for what they are (from the design the landmark was built from).
   const { landmarkRooms } = await import('../src/plan/designs');
   let rooms = 0, bad = 0, bare = 0;
@@ -3228,23 +3236,27 @@ section('walk-in landmarks', async () => {
   const KEY: Record<string, string[]> = {
     lobby: ['bigStatue'], exhibit: ['painting'], cafe: ['counter'], shop: ['counter'], storage: ['rack'],
     garden: ['palm', 'cactus', 'flowerBed'], checkin: ['checkDesk'], security: ['scanner'], gates: ['seatRow', 'gateDesk'],
+    foyer: ['counter', 'liftDoor'], deck: ['telescope'], stairhall: ['spiralStair'], lantern: ['lens'], greatHall: ['throne', 'longTable', 'fireplace'],
   };
   for (const { lm, terrain, S } of built) {
     for (const room of landmarkRooms(lm) ?? []) {
       rooms++;
       const key = KEY[room.fn];
       if (key && !key.every((k) => room.furniture.some((f) => f.kind === k)) && !(room.fn === 'garden' && key.some((k) => room.furniture.filter((f) => f.kind === k).length >= 3))) bare++;
-      let blocked = 0, y = lm.base;
+      let blocked = 0, y = room.y;
       // (A security lane has no door: walk through each scanner arch from the check-in side.)
       const probes: [number, number][] = room.fn === 'security'
         ? room.furniture.filter((f) => f.kind === 'scanner').flatMap((f) => [-4, -2, -0.5, 0, 0.5, 2, 4].map((t): [number, number] => [f.x, f.z + t]))
-        : [-1.6, -0.8, 0, 0.6, 1.2].map((t): [number, number] => [room.door[0] - room.facing[0] * t, room.door[1] - room.facing[1] * t]);
-      for (const [pu, pv] of probes) {
+        // (From inside out through the door: outside, the way may go on down the entrance steps.)
+        : [1.2, 0.6, 0, -0.8, -1.6].map((t): [number, number] => [room.door[0] - room.facing[0] * t, room.door[1] - room.facing[1] * t]);
+      let off = 0;
+      for (const [i, [pu, pv]] of probes.entries()) {
         const [x, z] = siteToWorld(lm, pu, pv);
         y = Math.max(terrain.height(x, z), S.topAt(x, z, y, 0.5));
         if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
+        if (room.fn === 'security' || i < 3) off = Math.max(off, Math.abs(y - room.y));
       }
-      if (blocked || Math.abs(y - lm.base) > 0.05) { bad++; badOnes.push(`${lm.kind} ${room.fn}`); }
+      if (blocked || off > 0.05) { bad++; badOnes.push(`${lm.kind} ${room.fn}`); }
     }
   }
   check(bad === 0, `landmark rooms: every one of the ${rooms} is walkable in through its door (${bad} bad${bad ? ': ' + badOnes.join(', ') : ''})`);
