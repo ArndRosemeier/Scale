@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.193 — 2026-10-09
+
+- **Memory no longer creeps up over long trips through the city.** Trips the city's people had planned near a place you left were dropped, but their empty places in the queue stayed until the trip's time came, game hours later. When you travel fast, these piled up. The queue now packs itself once more than half of it is empty, and trips far away are dropped every second, even while game time stands still.
+
 ## 0.192 — 2026-10-09
 
 - **Area powers hit people harder as they rank up, not only wider.** Before, a fireball, fire wave, laser, chain lightning or water jet did the same to a person at every rank. Now the damage grows with the rank, from rank 1 to rank 5:
