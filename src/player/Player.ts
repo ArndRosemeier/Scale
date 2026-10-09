@@ -38,6 +38,7 @@ export interface PlayerEvents {
 }
 
 const _v = new THREE.Vector3();
+const _eyeL = new THREE.Vector3(), _eyeR = new THREE.Vector3();
 
 export class Player {
   readonly pos = new THREE.Vector3();
@@ -246,7 +247,11 @@ export class Player {
 
     // ---- facing
     const hs = Math.hypot(this.vel.x, this.vel.z);
-    if (!this.flying && hs > 0.1 * sk && wish.lengthSq() > 0) {
+    if (!this.flying && this.firstPerson && this.canFirstPerson) {
+      // First person: the body turns with the view (walking sideways or back is a strafe or a
+      // backpedal) at once: a lagging body would swing the eyes round the neck.
+      this.yaw = camYaw;
+    } else if (!this.flying && hs > 0.1 * sk && wish.lengthSq() > 0) {
       // Face the movement, but against an obstacle face where one is going: the slide along a
       // wall can flip direction every frame, and the body flickered with it.
       const target = this.blocked ? Math.atan2(-wish.x, -wish.z) : Math.atan2(-this.vel.x, -this.vel.z);
@@ -534,6 +539,8 @@ export class Player {
 
   private updateRig(dt: number): void {
     const k = this.k, sk = Math.sqrt(k);
+    // (The pose is built with the head at full size; foldHead shrinks it again at the end.)
+    this.setHeadScale(1);
     const scale = this.height / this.rigBaseHeight;
     // Velocity in the body frame: v / √k (a giant's slow-motion stride looks like a normal walk).
     this.animVel.lerp(this.vel, damp(14, dt));
@@ -589,7 +596,71 @@ export class Player {
       const punching = !!this.action && this.action.id === 'punch' && this.animTime - this.action.t0 < this.action.dur;
       this.avatar.update(dt / sk, move, Math.hypot(this.animVel.x, this.animVel.z) / sk, punching);
     }
+    this.foldHead();
   }
+
+  /**
+   * First person (the camera rig sets it each frame it looks through the eyes): the head with
+   * its hair, hat and eyes folds away to nothing so the view isn't inside it, and the body casts
+   * no shadow (a headless shadow walking alongside looked wrong).
+   */
+  firstPerson = false;
+  /** Midpoint between the eyes after the last pose, head at full size (world; the first person camera). */
+  readonly eyePoint = new THREE.Vector3();
+  /** False until a character with eyes has posed (eyePoint is then the pivot). */
+  eyeValid = false;
+  private shadowOff: THREE.Object3D | null = null;
+
+  /** No first person view while the hero is knocked down, tumbling or played by a cutscene. */
+  get canFirstPerson(): boolean {
+    return !this.puppet && !this.ragdoll && this.downT <= 0;
+  }
+
+  private headBones(): THREE.Bone[] {
+    const out: THREE.Bone[] = [];
+    const ch = this.rig.char;
+    const i = ch?.boneIndex.get('head');
+    if (ch && i !== undefined) out.push(ch.bones[i]);
+    const ah = this.avatar?.mapping.bones.head;
+    if (ah) out.push(ah);
+    return out;
+  }
+
+  private setHeadScale(s: number): void {
+    for (const b of this.headBones()) if (b.scale.x !== s) b.scale.setScalar(s);
+  }
+
+  /** Out of first person now (a cutscene or free camera takes over; the body may not pose this frame). */
+  leaveFirstPerson(): void {
+    if (!this.firstPerson && !this.shadowOff) return;
+    this.firstPerson = false;
+    this.foldHead();
+  }
+
+  private foldHead(): void {
+    this.setHeadScale(1);
+    this.eyeValid = this.eyePositions(_eyeL, _eyeR);
+    if (this.eyeValid) this.eyePoint.addVectors(_eyeL, _eyeR).multiplyScalar(0.5);
+    else this.pivot(this.eyePoint);
+    const fp = this.firstPerson && this.canFirstPerson;
+    // (Not zero: a singular bone matrix breaks the normals.)
+    if (fp) this.setHeadScale(0.001);
+    // Shadows: switched off once per character (a new appearance builds new meshes).
+    const want = fp ? this.rig.object : null;
+    if (want !== this.shadowOff || (fp && this.shadowChar !== this.rig.char)) {
+      const flip = (root: THREE.Object3D, off: boolean) => root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        if (off) { if (m.castShadow) { m.castShadow = false; m.userData.fpShadow = true; } }
+        else if (m.userData.fpShadow) { m.castShadow = true; delete m.userData.fpShadow; }
+      });
+      if (this.shadowOff) flip(this.shadowOff, false);
+      if (want) flip(want, true);
+      this.shadowOff = want;
+      this.shadowChar = this.rig.char;
+    }
+  }
+  private shadowChar: unknown = null;
 
   /** Imported character model shown instead of the built-in human (null: back to default). */
   avatar: ImportedAvatar | null = null;

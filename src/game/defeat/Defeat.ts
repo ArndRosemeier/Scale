@@ -625,7 +625,7 @@ export class Defeat {
         g.camRig.snap();
         this.handoff = { pos: cam.position.clone(), q: cam.quaternion.clone() };
       }
-      g.camRig.update(dt, P, ZERO_INPUT as unknown as Game['input']);
+      g.camRig.update(dt, P, ZERO_INPUT as unknown as Game['input'], false);
       const e = smoothstep(T.hand, T.end - 0.3, this.t);
       cam.position.lerpVectors(this.handoff.pos, cam.position, e);
       cam.quaternion.slerpQuaternions(this.handoff.q, cam.quaternion.clone(), e);
