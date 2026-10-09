@@ -517,9 +517,9 @@ export class ThreatDirector {
         const a = rng.range(0, Math.PI * 2), d = rng.range(18, 45);
         const site = this.sinkholes.site(p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, rng.range(1.1, 1.7), true);
         if (!site) continue;
-        this.sinkholes.open(site, (rng.float() * 2 ** 32) >>> 0, true);
+        const hole = this.sinkholes.open(site, (rng.float() * 2 ** 32) >>> 0, true);
+        this.sinkholes.rimCracks(hole, 3, 600);
         const y = g.terrain.height(site.x, site.z);
-        g.elements.fx.decal(DecalKind.Crack, site.x, y + 0.05, site.z, 0, 1, 0, 6, 6, rng.range(0, 6), 600);
         g.audio.play('tremor_rumble', site.x, y, site.z, 0.6, 0.6, 30, cam);
         g.stimuli.emit('tremor', site.x, y, site.z, 3, 120, { cause: 'threat' });
         return true;
@@ -536,7 +536,7 @@ export class ThreatDirector {
       if (g.world.buildingAt(x, z)) break;
       const y = g.world.groundHeight(x, z);
       g.later.after(0.3 + i * 0.35, () => {
-        g.elements.fx.decal(DecalKind.Crack, x, y + 0.05, z, 0, 1, 0, 8, 3, a + Math.PI / 2 + rng.range(-0.3, 0.3), 240);
+        g.elements.fx.decal(DecalKind.Crack, x, y + 0.05, z, 0, 1, 0, 8, 2.4, -a + rng.range(-0.3, 0.3), 240); // (along the line: long axis (cos yaw, −sin yaw))
         g.dust.burst(x, y + 0.2, z, 4, 1.5, 1.2, 1.2, 3, WORM_DUST, 0.15, 0.4);
       });
     }

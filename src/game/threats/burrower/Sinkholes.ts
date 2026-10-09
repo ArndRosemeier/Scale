@@ -40,7 +40,7 @@ export const SINK = {
   /** Most holes kept at once (the oldest is filled first). */
   max: 12,
   /** The swell before it opens: dome height (m), rise time (s), and how long it waits for the break-out. */
-  domeH: 0.9, swellT: 2.2, swellWait: 12,
+  domeH: 1.2, swellT: 2.2, swellWait: 12,
 };
 
 /** Crater depth below the street at u = distance / radius (0 centre … 1 edge), for depth D. */
@@ -82,6 +82,7 @@ export interface Sinkhole {
 const NA = 48, NR = 13;
 const DUST = new THREE.Color(0.5, 0.45, 0.38);
 const ASPHALT: [number, number, number] = [0.045, 0.045, 0.048];
+const CUT: [number, number, number] = [0.11, 0.105, 0.1];
 const BASE: [number, number, number] = [0.2, 0.18, 0.15];
 const SOIL: [number, number, number] = [0.13, 0.085, 0.05];
 const DEEP: [number, number, number] = [0.06, 0.04, 0.025];
@@ -263,13 +264,28 @@ export class Sinkholes {
     }
   }
 
+  /**
+   * Cracks running out from a hole's rim (never over its mouth: decals lie flat at street level and
+   * would hang over the pit). A decal's long axis is (cos yaw, −sin yaw), so outwards at angle a is −a.
+   */
+  rimCracks(h: Sinkhole, n: number, life: number): void {
+    const g = this.g, y = g.terrain.height(h.x, h.z);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, L = Math.max(1.5, h.r * (0.6 + Math.random() * 0.5));
+      const x = h.x + Math.cos(a) * (h.r + L * 0.5), z = h.z + Math.sin(a) * (h.r + L * 0.5);
+      if (g.world.buildingAt(x, z)) continue;
+      g.elements.fx.decal(DecalKind.Crack, x, y + 0.05, z, 0, 1, 0, L, h.small ? 0.8 : 1.6, -a, life);
+    }
+  }
+
   /** What the ground giving way does to what stands on it (once per stage of the opening). */
   private caveIn(h: Sinkhole, before: number, k: number, _dt: number): void {
     const g = this.g, y = g.terrain.height(h.x, h.z), R = h.r;
     const cam = g.renderer.camera.position;
     if (before === 0) {
-      // Cracks first, the sag: a shudder; dust from the rim.
-      g.elements.fx.decal(DecalKind.Crack, h.x, y + 0.05, h.z, 0, 1, 0, R * 2.6, R * 2.6, Math.random() * 6, 300);
+      // Cracks first, running out from the rim (never over the mouth: decals lie flat at street
+      // level and would hang over the pit); the sag: a shudder.
+      this.rimCracks(h, 3 + Math.floor(Math.random() * 3), 240);
       const d = Math.hypot(g.player.pos.x - h.x, g.player.pos.z - h.z);
       if (d < 160) g.camRig.addShake(0.4 * (1 - d / 160));
     }
@@ -294,12 +310,14 @@ export class Sinkholes {
       }
       g.props.crush(h.x, h.z, R + 0.5);
       // The foot of a building beside it undermined.
+      // (One a frame or so apart: each breaks a facade, together they made a hitch.)
+      let n = 0;
       for (const ref of g.world.buildingsIn(h.x - R - 6, h.z - R - 6, h.x + R + 6, h.z + R + 6)) {
         if (!ref.alive) continue;
         const c = closestOnPoly(ref.poly, h.x, h.z);
         if (Math.hypot(c.x - h.x, c.z - h.z) > R + 5) continue;
         const dx = h.x - c.x, dz = h.z - c.z, l = Math.hypot(dx, dz) || 1;
-        g.destruction.as('threat', () => g.destruction.impact(c.x - (dx / l) * 0.3, ref.base + 1.5, c.z - (dz / l) * 0.3, 3.2, 4.5e5, dx / l, -0.5, dz / l, 'stomp'));
+        g.later.after(0.12 * ++n, () => { if (ref.alive) g.destruction.as('threat', () => g.destruction.impact(c.x - (dx / l) * 0.3, ref.base + 1.5, c.z - (dz / l) * 0.3, 3.2, 4.5e5, dx / l, -0.5, dz / l, 'stomp')); });
       }
       g.dust.burst(h.x, y + 1, h.z, 18, R, 5, 3.5, 4, DUST, 0.35, 0.45);
       g.audio.play('tree_crack_fall', h.x, y, h.z, 0.9, 0.55, 50, cam);
@@ -381,8 +399,8 @@ export class Sinkholes {
       const x = P.getX(i), z = P.getZ(i), r = Math.hypot(x, z), a = Math.atan2(z, x);
       h.uOf[i] = Math.min(1.2, r / edgeAt(h, a));
       let dark = 0;
-      for (const c of cracks) { const da = Math.abs(((a - c + Math.PI * 3) % (Math.PI * 2)) - Math.PI); if (da * r < 0.35) dark = 1; }
-      const sh = (0.85 + 0.3 * rng.float()) * (dark ? 0.25 : 1) * (h.uOf[i] > 0.95 && h.uOf[i] < 1.05 ? 0.4 : 1);
+      for (const c of cracks) { const da = Math.abs(((a - c + Math.PI * 3) % (Math.PI * 2)) - Math.PI); if (r > 1.2 && da * r < 0.12) dark = 1; }
+      const sh = (0.85 + 0.3 * rng.float()) * (dark ? 0.45 : 1) * (h.uOf[i] > 0.97 && h.uOf[i] < 1.03 ? 0.6 : 1);
       h.domeCol[i * 3] = ASPHALT[0] * sh; h.domeCol[i * 3 + 1] = ASPHALT[1] * sh; h.domeCol[i * 3 + 2] = ASPHALT[2] * sh;
     }
     this.pose(h, ease(h.k));
@@ -469,7 +487,8 @@ export function buildCrater(h: { x: number; z: number; r: number; depth: number;
       if (u > 1) d = -SINK.rimH * rng.range(0.3, 1.4);
       if (u === 1) d = -SINK.rimH;
       const shade = 0.82 + rng.range(0, 0.3);
-      if (u >= SINK.wallU && u <= 1) c = d < 0.22 ? ASPHALT : BASE;
+      // (The cut face: the asphalt layer reads near black on a wall facing away from the light.)
+      if (u >= SINK.wallU && u <= 1) c = d < 0.12 ? CUT : BASE;
       row.push(vert(x, z, b, d, c, shade));
     }
     ring.push(row);

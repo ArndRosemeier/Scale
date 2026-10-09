@@ -1053,8 +1053,8 @@ export class Burrower implements ThreatEvent, ThreatActor {
       if (this.crackT <= 0 && Math.hypot(h.x - this.crackX, h.z - this.crackZ) > 7) {
         this.crackT = 0.15;
         this.crackX = h.x; this.crackZ = h.z;
-        const yaw = Math.atan2(this.heading.x, this.heading.z);
-        if (!g.world.buildingAt(h.x, h.z)) g.elements.fx.decal(DecalKind.Crack, h.x, sy + 0.05, h.z, 0, 1, 0, 8, 2.4, yaw + this.rng.range(-0.4, 0.4), 45);
+        const yaw = Math.atan2(-this.heading.z, this.heading.x); // (a decal's long axis: (cos yaw, −sin yaw))
+        if (!g.world.buildingAt(h.x, h.z)) g.elements.fx.decal(DecalKind.Crack, h.x, sy + 0.05, h.z, 0, 1, 0, 8, 2.4, yaw + this.rng.range(-0.4, 0.4), 30);
         if (Math.random() < 0.5) g.dust.burst(h.x, sy + 0.2, h.z, 4, 2, 1.5, 1.5, 3, DUST, 0.15, 0.4);
       }
       if (dc < 90) g.camRig.addShake(dt * 0.25 * (1 - dc / 90));
@@ -1158,7 +1158,7 @@ export class Burrower implements ThreatEvent, ThreatActor {
     if (!s) return 'no site';
     // (From far off: brought in under the site, so the swell and break-out play as they would.)
     if (Math.hypot(h.x - s.x, h.z - s.z) > 40) { this.head.set(s.x - this.heading.x * 20, s.y - BURROWER.depth, s.z - this.heading.z * 20); this.rig.moveHead(this.head.x, this.head.y, this.head.z); }
-    this.startBulge(s, 0.5);
+    this.startBulge(s);
     return 'bulge';
   }
 
