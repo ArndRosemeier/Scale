@@ -13,6 +13,14 @@
  * A PerformanceObserver adds browser long tasks (>50 ms) so work that nobody
  * measured still shows up. Console: `hitches.report()`, `hitches.list`,
  * `hitches.clear()`, `hitches.json()`.
+ *
+ * Freezes: once the game runs (`arm()`), any visible stretch of more than FREEZE_MS between two
+ * frames is kept apart from the small hitches (never pushed out by them) with everything known
+ * about it: the frame's sections, measured work between frames, the browser's long tasks and
+ * long animation frames that overlap it (with the scripts Chrome blames), the JS heap before and
+ * after (a big drop = garbage collection), and what the game was doing (`context`). The last
+ * few are also kept in localStorage, so a freeze is still there after a reload. Shift+F9 saves
+ * them to a file; console `hitches.freezes`.
  */
 import type * as THREE from 'three';
 
@@ -34,6 +42,42 @@ export interface HitchRecord {
   textures: number;
   notes: string[];
 }
+
+/** A frame gap longer than this (ms) is a freeze. */
+export const FREEZE_MS = 500;
+const FREEZE_KEEP = 30;
+const FREEZE_STORE = 'scale.freezes';
+const FREEZE_STORED = 12;
+
+export interface FreezeRecord {
+  /** Local wall-clock time. */
+  at: string;
+  /** Seconds since page load. */
+  t: number;
+  /** Time between the end of the previous frame and the end of this one (ms). */
+  ms: number;
+  /** Main-thread work the game measured in it (frame sections + handlers between frames). */
+  work: number;
+  /** What nobody measured: GC, browser work, unmeasured handlers, GPU/driver waits (ms). */
+  unmeasured: number;
+  sections: Record<string, number>;
+  outside: Record<string, number>;
+  notes: string[];
+  programs: number;
+  newPrograms: string[];
+  geometries: number;
+  textures: number;
+  /** JS heap (MB) at the previous frame and now; null where the browser hides it. */
+  heapMB: [number, number] | null;
+  /** Browser long tasks overlapping the freeze ([start s, ms]). */
+  longTasks: [number, number][];
+  /** Long animation frames (Chrome) overlapping it, with their blamed scripts. */
+  loaf: string[];
+  context: string;
+  version: string;
+}
+
+interface Perf { memory?: { usedJSHeapSize: number } }
 
 class HitchLogImpl {
   /** Frames above this much main-thread work are recorded (ms). */
@@ -59,14 +103,66 @@ class HitchLogImpl {
   private frames = 0;
   private workSum = 0;
 
+  /** Freezes of this session (newest last). */
+  readonly freezes: FreezeRecord[] = [];
+  /** Freezes from earlier sessions (localStorage), newest last. */
+  readonly earlier: FreezeRecord[] = [];
+  /** Freezes are recorded once this is set (after loading: loading has its own long frames). */
+  armed = false;
+  /** What the game is doing, for a freeze record (set by Game). */
+  context: (() => string) | null = null;
+  /** Called after a freeze is recorded (the HUD hint). */
+  onFreeze: ((f: FreezeRecord) => void) | null = null;
+  version = '';
+  private lastFrameEnd = 0;
+  private lastHeap = 0;
+  private hiddenAt = -1;
+  /** Freezes still collecting browser entries (those arrive a little later): [record, from, to]. */
+  private open: [FreezeRecord, number, number][] = [];
+  private loafs: { start: number; ms: number; text: string }[] = [];
+
   constructor() {
+    if (typeof window === 'undefined') return;
     try {
       const po = new PerformanceObserver((l) => {
-        for (const e of l.getEntries()) this.longTasks.push({ t: e.startTime / 1000, ms: e.duration });
+        for (const e of l.getEntries()) {
+          this.longTasks.push({ t: e.startTime / 1000, ms: e.duration });
+          this.attachEntry(e.startTime, e.duration, (f) => f.longTasks.push([+(e.startTime / 1000).toFixed(2), Math.round(e.duration)]));
+        }
         if (this.longTasks.length > this.max) this.longTasks.splice(0, this.longTasks.length - this.max);
       });
       po.observe({ type: 'longtask', buffered: true });
     } catch { /* not supported */ }
+    try {
+      // Long animation frames (Chrome 123+): which scripts ran in a slow frame, and how long the
+      // frame spent on style/layout and rendering. Only the long ones are kept.
+      const po = new PerformanceObserver((l) => {
+        for (const e of l.getEntries() as unknown as LoafEntry[]) {
+          if (e.duration < 150) continue;
+          const text = loafText(e);
+          this.loafs.push({ start: e.startTime, ms: e.duration, text });
+          if (this.loafs.length > 40) this.loafs.shift();
+          this.attachEntry(e.startTime, e.duration, (f) => { if (f.loaf.length < 8) f.loaf.push(text); });
+        }
+      });
+      po.observe({ type: 'long-animation-frame', buffered: false });
+    } catch { /* not supported */ }
+    document.addEventListener('visibilitychange', () => { this.hiddenAt = performance.now(); });
+    try {
+      const old = JSON.parse(localStorage.getItem(FREEZE_STORE) ?? '[]') as FreezeRecord[];
+      if (Array.isArray(old)) this.earlier.push(...old.slice(-FREEZE_STORED));
+    } catch { /* storage blocked */ }
+  }
+
+  /** Hands a browser entry to the open freezes it overlaps. */
+  private attachEntry(start: number, ms: number, add: (f: FreezeRecord) => void): void {
+    for (const [f, a, b] of this.open) if (start < b && start + ms > a) add(f);
+  }
+
+  /** Start recording freezes (the game is loaded and running). */
+  arm(): void {
+    this.armed = true;
+    this.lastFrameEnd = 0;
   }
 
   private scene: THREE.Object3D | null = null;
@@ -197,9 +293,69 @@ class HitchLogImpl {
       });
       if (this.list.length > this.max) this.list.shift();
     }
+    this.checkFreeze(now, work, all, dp, dg, dt);
     this.sections = {};
     this.outside = {};
     this.notes.length = 0;
+  }
+
+  private checkFreeze(now: number, work: number, all: Record<string, number>, dp: number, dg: number, dt: number): void {
+    const heap = (performance as unknown as Perf).memory?.usedJSHeapSize ?? 0;
+    const prevEnd = this.lastFrameEnd, prevHeap = this.lastHeap;
+    this.lastFrameEnd = now;
+    this.lastHeap = heap;
+    // Close freezes whose browser entries have had time to arrive.
+    if (this.open.length) {
+      const keep = this.open.filter(([, , b]) => now - b < 3000);
+      if (keep.length !== this.open.length) { this.open = keep; this.store(); }
+    }
+    if (!this.armed || !prevEnd || document.hidden) return;
+    const ms = now - prevEnd;
+    // A hidden stretch in between (tab switched, minimised) is not a freeze.
+    if (ms < FREEZE_MS || this.hiddenAt > prevEnd - 50) return;
+    const top = (o: Record<string, number>, n: number) => {
+      const r: Record<string, number> = {};
+      for (const [k, v] of Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n)) if (v >= 1) r[k] = Math.round(v);
+      return r;
+    };
+    const outside: Record<string, number> = {};
+    const sections: Record<string, number> = {};
+    for (const [k, v] of Object.entries(all)) (k.startsWith('~') ? outside : sections)[k.replace(/^~/, '')] = v;
+    let context = '';
+    try { context = this.context?.() ?? ''; } catch (e) { context = 'context failed: ' + String(e); }
+    const f: FreezeRecord = {
+      at: new Date().toLocaleString(), t: +(now / 1000).toFixed(1), ms: Math.round(ms), work: Math.round(work),
+      unmeasured: Math.max(0, Math.round(ms - work)), sections: top(sections, 8), outside: top(outside, 6), notes: this.notes.slice(0, 12),
+      programs: dp, newPrograms: this.programNames.slice(0, 6), geometries: dg, textures: dt,
+      heapMB: heap && prevHeap ? [Math.round(prevHeap / 1048576), Math.round(heap / 1048576)] : null,
+      longTasks: [], loaf: [], context, version: this.version,
+    };
+    // Entries that arrived already (an observer can run before this frame ends).
+    for (const e of this.longTasks) if (e.t * 1000 < now && (e.t * 1000 + e.ms) > prevEnd) f.longTasks.push([+e.t.toFixed(2), Math.round(e.ms)]);
+    for (const e of this.loafs) if (e.start < now && e.start + e.ms > prevEnd && f.loaf.length < 8) f.loaf.push(e.text);
+    this.freezes.push(f);
+    if (this.freezes.length > FREEZE_KEEP) this.freezes.shift();
+    this.open.push([f, prevEnd, now]);
+    this.store();
+    console.warn(`[freeze] ${f.ms} ms (measured work ${f.work} ms)`, f);
+    try { this.onFreeze?.(f); } catch { /* HUD */ }
+  }
+
+  /** Keeps the newest freezes (earlier sessions + this one) in localStorage. */
+  private store(): void {
+    try { localStorage.setItem(FREEZE_STORE, JSON.stringify([...this.earlier, ...this.freezes].slice(-FREEZE_STORED))); } catch { /* full or blocked */ }
+  }
+
+  /** Everything for a bug report: freezes (this and earlier sessions), worst hitches, totals. */
+  freezeReport(env: Record<string, unknown> = {}): string {
+    const totals = Object.entries(this.totals).map(([k, v]) => ({ section: k, hitchesBlamed: v.hitches, maxMs: Math.round(v.max), avgMs: +(v.ms / Math.max(1, this.frames)).toFixed(2) }))
+      .sort((a, b) => b.hitchesBlamed - a.hitchesBlamed || b.maxMs - a.maxMs).slice(0, 30);
+    return JSON.stringify({
+      saved: new Date().toLocaleString(), version: this.version, ...env,
+      thisSession: this.freezes, earlierSessions: this.earlier,
+      worstHitches: this.list.slice().sort((a, b) => b.work - a.work).slice(0, 15),
+      frames: this.frames, avgWorkMs: +(this.workSum / Math.max(1, this.frames)).toFixed(1), totals,
+    }, null, 1);
   }
 
   /** Human-readable summary in the console; returns the table rows. */
@@ -228,5 +384,20 @@ class HitchLogImpl {
   }
 }
 
+interface LoafScript { invoker?: string; sourceURL?: string; sourceFunctionName?: string; duration: number; forcedStyleAndLayoutDuration?: number }
+interface LoafEntry { startTime: number; duration: number; renderStart?: number; styleAndLayoutStart?: number; blockingDuration?: number; scripts?: LoafScript[] }
+
+/** A long animation frame in one line: its length, script time by script, render/layout time. */
+function loafText(e: LoafEntry): string {
+  const scripts = (e.scripts ?? []).slice().sort((a, b) => b.duration - a.duration).slice(0, 4).map((s) => {
+    const file = (s.sourceURL ?? '').split('/').pop()?.split('?')[0] ?? '';
+    return `${Math.round(s.duration)} ms ${s.invoker ?? '?'}${s.sourceFunctionName ? ' ' + s.sourceFunctionName : ''}${file ? ' @' + file : ''}${s.forcedStyleAndLayoutDuration ? ` (layout ${Math.round(s.forcedStyleAndLayoutDuration)})` : ''}`;
+  });
+  let scriptMs = 0;
+  for (const s of e.scripts ?? []) scriptMs += s.duration;
+  const render = e.renderStart ? Math.round(e.startTime + e.duration - e.renderStart) : 0;
+  return `${Math.round(e.duration)} ms frame at ${(e.startTime / 1000).toFixed(2)} s: scripts ${Math.round(scriptMs)} ms, render+layout ${render} ms, other ${Math.max(0, Math.round(e.duration - scriptMs - render))} ms${scripts.length ? ' | ' + scripts.join('; ') : ''}`;
+}
+
 export const hitch = new HitchLogImpl();
-(window as unknown as { hitches: HitchLogImpl }).hitches = hitch;
+if (typeof window !== 'undefined') (window as unknown as { hitches: HitchLogImpl }).hitches = hitch;

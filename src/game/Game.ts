@@ -70,6 +70,7 @@ import { setSight, markerOnScreen, screenPoint } from '../render/screen';
 import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { ShaderCounter } from '../debug/ShaderCounter';
+import { installFreezeLog } from '../debug/FreezeLog';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -575,6 +576,11 @@ export class Game {
     this.barks = new Barks(this);
     this.admin = new AdminConsole(this);
     new ShaderCounter(this.renderer.gl as unknown as THREE.WebGLRenderer, this.renderer.webgpu);
+    installFreezeLog({
+      context: () => this.freezeContext(),
+      hint: (m) => this.powerHud?.toast(m, 'info', 7000),
+      env: () => ({ seed: this.settings.seed, size: this.settings.size, mode: this.mode, renderer: this.renderer.webgpu ? 'webgpu' : 'webgl', gpu: this.graphics.gpu, graphics: `${this.graphics.setting} → ${this.graphics.level.name}` }),
+    });
     this.skyline.start(this.player.pos.x, this.player.pos.z);
     this.flightFx = new FlightFX(this.dust);
     this.renderer.scene.add(this.flightFx.group);
@@ -661,6 +667,7 @@ export class Game {
     if (warm.gateWaiting.length) console.log(`[warm-up] still waiting for shaders: ${warm.gateWaiting.join(", ")}`);
     console.log(`[load] ${((performance.now() - loadT0) / 1000).toFixed(1)} s in all, ${((performance.now() - shadersAt) / 1000).toFixed(1)} s preparing shaders`);
     hitch.clear();
+    hitch.arm();
     // From now on nothing new may stall a frame on a shader compile.
     this.gate.adoptScene();
     this.gate.enabled = true;
@@ -733,6 +740,17 @@ export class Game {
       },
       setLod: (k) => { this.streamer.lodScale = k; if (this.rural) this.rural.lodScale = k; },
     });
+  }
+
+  /** One line on what the game is doing, for the freeze log (src/debug/FreezeLog.ts). */
+  private freezeContext(): string {
+    const P = this.player, p = P.pos, v = P.vel;
+    const where = this.underground.feetUnder(p.x, p.y, p.z) ? 'underground' : this.interiors.insideAt(p.x, p.y + 0.5, p.z) ? 'indoors' : P.flying ? 'flying' : 'outside';
+    const B = BodyService.get();
+    const events = this.threats?.events.filter((e) => e.active).map((e) => e.archetype).join('+') || 'none';
+    return `at ${p.x.toFixed(0)},${p.y.toFixed(0)},${p.z.toFixed(0)} ${where}, height ${P.height.toFixed(1)} m, speed ${Math.hypot(v.x, v.y, v.z).toFixed(0)} m/s`
+      + ` · peds ${this.peds.agents.length}, city jobs ${this.streamer.pool.queued}+${this.streamer.pool.inFlight}, bodies ${B.pending}${B.onMainThread ? ' (MAIN THREAD)' : ''}`
+      + ` · events ${events} · ${this.intro?.active ? 'intro · ' : ''}${this.menu?.paused ? 'paused · ' : ''}day ${this.sky.day + 1} ${this.sky.hour.toFixed(1)} h`;
   }
 
   private T(name: string, fn: () => void): void {
