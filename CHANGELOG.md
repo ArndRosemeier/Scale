@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.201 — 2026-10-09
+
+- **Fixed a memory leak that let long sessions run out of memory.** The body of every person who walked past stayed in memory for good, about 3.5 MB each. On a PC, ten minutes of fast travel added over 1.5 GB. Bodies nobody has used for 30 seconds are now freed; the 24 most recent ones stay for quick reuse.
+
 ## 0.200 — 2026-10-09
 
 - **Factions, step 4: the villain groups' feelings for each other change by themselves.** Each street fight between two groups deepens their feud. When two rival groups are both hunting you, they draw closer every game hour, and after about six hours they call a truce. A toast tells you: "… have called a truce — against you". During a truce they stop brawling and stop pushing into each other's turf. Once one of them stops hunting you, old habits come back within a few hours ("The truce is over"). Every pair also drifts slowly back towards its usual feelings. Truces and feuds are kept in save files.
