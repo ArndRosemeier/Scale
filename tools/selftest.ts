@@ -1710,6 +1710,11 @@ section('deep realm', async () => {
   const lost = freshWar(0, 3, seeded(7)); lost.front = 1; lost.murk = 1; lost.lumen = 0;
   for (let h = 1; h <= 72; h++) stepWar(lost, h, false, true, { breach: () => { breaches++; } }, seeded(8 + h));
   check(breaches >= 2, `war: the Murk holding the Hall break out at night (${breaches} in three nights)`);
+  // A lost war can be won back by the player: clearing the Hall, then the trench, moves the line back (never forward).
+  const { retake } = await import('../src/underground/deep/War');
+  const hall = retake(lost, WAR.retakeHall), f1 = lost.front, trench = retake(lost, WAR.retakeTrench), f2 = lost.front, again = retake(lost, WAR.retakeHall);
+  check(hall && trench && !again && f1 === WAR.retakeHall && f2 === WAR.retakeTrench && f2 < 0.5 && lost.murk < 1 && lost.lumen > 0.2, `war: a lost war is won back by clearing the Hall and the trench (front 1 → ${f1} → ${f2}, Murk ${lost.murk.toFixed(2)}, Lumen ${lost.lumen.toFixed(2)})`);
+  check(WAR.liveRaid[1] < WAR.raidGap[0] * 3600, 'war: a player at the Front sees a raid within minutes, not game hours (time runs at real speed by default)');
   const pw = parseWar({ ...JSON.parse(JSON.stringify(wa)), murk: 7, captives: [9, 'x'] }, 3, 0);
   check(!!pw && pw.murk === 1 && pw.captives.length === 3 && pw.captives[0] === WAR.penMax && pw.captives[1] === 0, 'war: a saved state is sanitised');
   const { tierOf, callRank, parseTrust, TRUST } = await import('../src/underground/deep/Trust');
@@ -2348,6 +2353,21 @@ section('weather', async () => {
     while (w > 0.02 && t2 < 10) { w = stepWet(w, 0, 1, 1 / 60); t2 += 1 / 60; }
     check(t < 0.25 && t2 > 0.5 && t2 < 3, `weather: streets wet after ${(t * 60).toFixed(0)} min of rain, dry ${(t2 * 60).toFixed(0)} min after it stops`);
   }
+});
+
+// ------------------------------------------------------------------ reconstruction site props (src/props/construction.ts)
+section('construction site models', async () => {
+  const C = await import('../src/props/construction');
+  const box = (geo: THREE.BufferGeometry) => { geo.computeBoundingBox(); return geo.boundingBox!; };
+  const sane = (geo: THREE.BufferGeometry) => { const a = geo.getAttribute('position').array; for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])) return false; return a.length > 0; };
+  const bay = C.scaffoldBay(), net = C.scaffoldNet(), mast = C.craneMast(), top = C.craneTop(), fence = C.siteFence(), board = C.siteBoard();
+  check([bay, net, mast, top, fence, board].every(sane), 'construction: every model has finite vertices');
+  const b = box(bay), n = box(net), m = box(mast), t = box(top);
+  check(Math.abs(b.max.y - C.BAY.h) < 0.3 && b.min.y > -0.05 && b.max.x < C.BAY.w + 0.2 && b.min.z > 0.1 && b.max.z < 0.3 + C.BAY.d + 0.2,
+    `construction: a scaffold bay stands ${C.BAY.w} m wide, ${C.BAY.h} m up, out from the wall (+Z) (${b.min.toArray().map((v) => v.toFixed(2))} … ${b.max.toArray().map((v) => v.toFixed(2))})`);
+  check(n.min.z > b.max.z - 0.1 && n.max.y <= C.BAY.h + 0.01, 'construction: the net hangs outside the bay');
+  check(Math.abs(m.max.y - C.MAST.h) < 0.1 && m.max.x <= C.MAST.w / 2 + 0.1, 'construction: mast sections stack (height = MAST.h, inside MAST.w)');
+  check(t.max.x > C.JIB.reach - 1 && t.min.x < -C.JIB.back + 0.5 && t.max.y > C.JIB.apex, 'construction: crane jib, counter-jib and apex as JIB says');
 });
 
 // ------------------------------------------------------------------ the aftermath (src/game/aftermath): casualty ledger, the last

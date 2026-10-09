@@ -2,10 +2,26 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.224 — 2026-10-09
+## 0.228 — 2026-10-09
 
 - **The Twist has an inside.** Walk in through the door at the foot of the twisted tower into a lobby with a reception desk, a lounge corner and, in a big one, a café. Stairs in the middle climb from storey to storey. Each storey is turned a little further than the one below, like the tower, and the stairs are laid out so they still meet. Up there are about three more storeys (two in towers with very tall storeys), each with rooms round a stair hall that runs out to the glass at the back: a café storey, a capsule hotel with sleeping pods and lounges, and a storey of studios and a control room. Glass rails run round each stairwell. The blocks above stay solid.
 - `preview-landmark.html` takes `&style=<n>` to pick a landmark of one style (the Twist: `kind=marvel&style=3`).
+
+## 0.227 — 2026-10-09
+
+- **The city rebuilds.** Buildings damaged by monsters, villains or you no longer stay broken forever. A couple of game hours after the damage round them stops (and with no big monster nearby), building crews move in: scaffolding with safety netting goes up round each damaged building, collapsed plots get a site fence, there is a site board, and a tower crane stands over the worst-hit building, its jib slowly turning. Round a collapsed building the scaffolding climbs as the work goes on. After 10 to 60 game hours (longer for more and worse damage) each building is whole again: walls, windows, floors, upper storeys, and its rubble cleared. That only happens while you are not looking: off screen or far away. A few broken windows are just mended quietly. A district levelled by the last resort becomes one big fenced site with cranes once its cordon is lifted, and stands again after three game days. Saves keep it all. The scaffolding leaves room for lamp posts, traffic lights and trees on the pavement.
+
+## 0.226 — 2026-10-09
+
+- **Super speed runs more smoothly.** Racing through the city at super speed looked like a string of small jumps with brief stops in between, even at a good frame rate. The running itself was even; the hitches came from work the game did for the places raced past: every building door passed opened its interior (a storey or two furnished each time, for a fraction of a second nobody saw), and every 40 m the sewer tunnels ahead were built in one go. Now, while you race, interiors only open for a building you are inside (doors open up again as soon as you slow down), and the sewers are built after you slow down, one piece per frame, nearest first (still at once when you are down there). The same goes for a fast low flight. Frame times also follow the screen's own clock instead of the moment the code happened to run, which removes a small jitter that was most visible at high speed. Afterimages share one material per copy instead of one per body part.
+
+## 0.225 — 2026-10-09
+
+- **Helping the Lumen gets you somewhere again.** Each colony's war goes on while you are away, and left alone the Murk win it within a day or two of game time: they take the Lumen's trench and then their Hall. From then on nothing you did there counted. Murk killed with no Lumen within sight gave no trust, there were no sentries left in the trench to see them, and the line only moved back after a won raid. Raids come hours apart on the game clock, which runs at real speed by default, so in practice they never came. Now every Murk you kill below ground earns trust. Clearing the Murk out of the Hall wins it back (+10 trust), and clearing them out of the trench, or off the gallery's lip, gives the trench back to the Lumen (+8): their sentries return and the trench war starts again. If you stay at the Front, the Murk storm it within a few minutes, so you can help hold the line (+8). Small gains no longer pass silently: they are added up and shown with your trust and the next step, for example "The Lumen trust you more (+2.4) — you fought the Murk · trust 14, welcome at 30".
+
+## 0.224 — 2026-10-09
+
+- **The player's manual is up to date again (0.224).** New in it: the animated title and title music, first person view, autorun pace, clicking minimap and compass markers to target, speech bubbles, the freeze log (Shift+F9), how ranks change the powers (area damage, shockwave reach, held-back punches), the new focus beam and seeker orb looks, the VELA concert at the stadium every evening, street bands, the landmarks you can now walk into (museum, glasshouse, airport terminal, observation decks, lighthouse, castle keep), furnished homes, offices, shops and cafés, crooks running from monsters, truces between rival organisations, the new big threats (giant worm, Leviathan, Roc, giant mech), and the new music. New pictures of the concert, the glasshouse, the airport terminal and the Roc. Help > Manual, the start screen's Manual button and the PDF all show the new version.
 
 ## 0.223 — 2026-10-09
 

@@ -74,7 +74,7 @@ interface Collapse {
   tint: THREE.Color;
 }
 
-export interface RubbleMound { x: number; z: number; r: number; h: number; y: number }
+export interface RubbleMound { x: number; z: number; r: number; h: number; y: number; yaw: number }
 
 export class Destruction {
   readonly group = new THREE.Group();
@@ -804,11 +804,11 @@ export class Destruction {
   }
 
   private addMound(x: number, z: number, r: number, h: number, scatter?: number): void {
-    const y = this.terrain.height(x, z);
-    this.mounds.push({ x, z, r, h, y });
+    const y = this.terrain.height(x, z), yaw = Math.random() * 6;
+    this.mounds.push({ x, z, r, h, y, yaw });
     const i = this.moundMesh.count;
     if (i >= 400) return;
-    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6), new THREE.Vector3(r, h, r));
+    const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(r, h, r));
     this.moundMesh.setMatrixAt(i, m);
     this.moundMesh.count = i + 1;
     this.moundMesh.instanceMatrix.needsUpdate = true;
@@ -866,6 +866,47 @@ export class Destruction {
   restoreMound(x: number, z: number, r: number, h: number, scatter?: number): void {
     if (this.mounds.some((m) => Math.abs(m.x - x) < 0.5 && Math.abs(m.z - z) < 0.5)) return;
     this.addMound(x, z, r, h, scatter);
+  }
+
+  /**
+   * A building rebuilt (Reconstruction): every element of it whole again (but those an open
+   * interior hides), its storey slabs gone, standing at full height, its broken tiles forgotten,
+   * the rubble mounds on its plot cleared. `top0`: its height as built.
+   */
+  repairBuilding(ref: BuildingRef, top0: number): void {
+    const cs = ref.cell;
+    if (cs.elemData && cs.elemTex) {
+      for (let e = ref.elemBase; e < ref.elemBase + ref.elemCount; e++) {
+        if (this.interiorHidden?.(cs, e)) continue;
+        cs.elemData[e * 2] = 255; cs.elemData[e * 2 + 1] = 255;
+      }
+      cs.elemTex.needsUpdate = true;
+    }
+    const slabs = cs.group.getObjectByName('slabs:' + ref.index) as THREE.Mesh | undefined;
+    if (slabs) { cs.group.remove(slabs); this.streamer.unaccount(cs, slabs.geometry); slabs.geometry.dispose(); }
+    const lo = cs.id * 16777216;
+    for (let e = ref.elemBase; e < ref.elemBase + ref.elemCount; e++) { this.broken.delete(lo + e); this.doomed.delete(lo + e); }
+    this.layouts.delete(`${cs.id}:${ref.index}`);
+    this.tileWalls.delete(ref);
+    this.pendingChecks.delete(ref);
+    ref.alive = true;
+    ref.top = top0;
+    const [x0, z0, x1, z1] = ref.bounds;
+    this.removeMounds(x0 - 3, z0 - 3, x1 + 3, z1 + 3);
+    this.debris.groundChanged(x0 - 1, z0 - 1, x1 + 1, z1 + 1, ref.low - 1, top0 + 6);
+  }
+
+  /** Rubble mounds whose middle lies in a box cleared away (a plot rebuilt). */
+  removeMounds(x0: number, z0: number, x1: number, z1: number): number {
+    const before = this.mounds.length;
+    for (let i = this.mounds.length - 1; i >= 0; i--) { const m = this.mounds[i]; if (m.x >= x0 && m.x <= x1 && m.z >= z0 && m.z <= z1) this.mounds.splice(i, 1); }
+    if (this.mounds.length === before) return 0;
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), P = new THREE.Vector3(), S = new THREE.Vector3();
+    const n = Math.min(400, this.mounds.length);
+    for (let i = 0; i < n; i++) { const m = this.mounds[i]; this.moundMesh.setMatrixAt(i, M.compose(P.set(m.x, m.y, m.z), Q.setFromAxisAngle(Y, m.yaw), S.set(m.r, m.h, m.r))); }
+    this.moundMesh.count = n;
+    this.moundMesh.instanceMatrix.needsUpdate = true;
+    return before - this.mounds.length;
   }
 
   /** Is a building (index) visible as damaged? */

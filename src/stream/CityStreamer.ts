@@ -383,6 +383,13 @@ export class CityStreamer {
     this.bytesLoaded += b;
   }
 
+  /** Geometry taken off a loaded cell again (a repaired building's slabs). */
+  unaccount(cs: CellState, g: THREE.BufferGeometry): void {
+    const b = geoBytes(g) * 2;
+    cs.bytes -= b;
+    this.bytesLoaded -= b;
+  }
+
   /** Mark an element dead/alive in a cell (destruction). */
   setElement(cs: CellState, elem: number, alive: boolean): void {
     if (!cs.elemData || !cs.elemTex) return;
