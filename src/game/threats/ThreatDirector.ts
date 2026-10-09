@@ -358,6 +358,14 @@ export class ThreatDirector {
     return out;
   }
 
+  /** The brood's creatures out and alive near a point, as targets (Targeting's `swarm`). */
+  swarmActors(x: number, z: number, r: number, fn: (a: ThreatActor) => void): void {
+    for (const ev of this.events) {
+      if (!(ev instanceof Brood) || Math.hypot(ev.x - x, ev.z - z) > BROOD_REACH + r) continue;
+      ev.critters(x, z, r, fn);
+    }
+  }
+
   /** Stage 3: the aftermath has carted a body away. */
   removeRemains(s: Strider): void {
     const i = this.remains.indexOf(s);

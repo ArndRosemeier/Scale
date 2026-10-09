@@ -1710,6 +1710,11 @@ section('deep realm', async () => {
   const lost = freshWar(0, 3, seeded(7)); lost.front = 1; lost.murk = 1; lost.lumen = 0;
   for (let h = 1; h <= 72; h++) stepWar(lost, h, false, true, { breach: () => { breaches++; } }, seeded(8 + h));
   check(breaches >= 2, `war: the Murk holding the Hall break out at night (${breaches} in three nights)`);
+  // A lost war can be won back by the player: clearing the Hall, then the trench, moves the line back (never forward).
+  const { retake } = await import('../src/underground/deep/War');
+  const hall = retake(lost, WAR.retakeHall), f1 = lost.front, trench = retake(lost, WAR.retakeTrench), f2 = lost.front, again = retake(lost, WAR.retakeHall);
+  check(hall && trench && !again && f1 === WAR.retakeHall && f2 === WAR.retakeTrench && f2 < 0.5 && lost.murk < 1 && lost.lumen > 0.2, `war: a lost war is won back by clearing the Hall and the trench (front 1 → ${f1} → ${f2}, Murk ${lost.murk.toFixed(2)}, Lumen ${lost.lumen.toFixed(2)})`);
+  check(WAR.liveRaid[1] < WAR.raidGap[0] * 3600, 'war: a player at the Front sees a raid within minutes, not game hours (time runs at real speed by default)');
   const pw = parseWar({ ...JSON.parse(JSON.stringify(wa)), murk: 7, captives: [9, 'x'] }, 3, 0);
   check(!!pw && pw.murk === 1 && pw.captives.length === 3 && pw.captives[0] === WAR.penMax && pw.captives[1] === 0, 'war: a saved state is sanitised');
   const { tierOf, callRank, parseTrust, TRUST } = await import('../src/underground/deep/Trust');
@@ -1852,6 +1857,68 @@ section('brood', async () => {
   for (let t = 0; t < 8 * 3600; t++) for (const sg of clk.tick(1, 0, 0)) if (sg.type === 'event') arch.push(sg.archetype);
   check(arch.includes('brood') && arch.includes('robots'), `brood: the clock schedules it among the minor events (${arch.join(', ')})`);
   console.log(`brood: ${a.sim.stats.bites} bites, ${d.sim.stats.climbs} climbs, step ${ms.toFixed(3)} ms for 150`);
+});
+
+// ---- swarm critters are targets (Arnd 2026-10-09: "swarm critters are not targettable"): each brood
+// creature is a small ThreatActor (`swarm`): a foe for the friend/foe sense, hit by a ray, killed by a
+// targeted power's damage, frozen by frost; Tab lists them (big threats first) at the normal range
+// without body parts, a map marker picks one, area queries leave them to broodHit, and when the
+// targeted one dies the target moves on to the nearest one left.
+section('brood: critters are targets', async () => {
+  const THREE = await import('three');
+  const { BroodSim, BROOD, CMode } = await import('../src/game/threats/brood/BroodSim');
+  const { CritterActor } = await import('../src/game/threats/brood/CritterActor');
+  const { Targeting } = await import('../src/game/Targeting');
+  const { isFoe } = await import('../src/game/friendFoe');
+  const sim = new BroodSim({ surface: () => 0, wall: () => NaN, prey: () => {} }, 5, [{ x: 0, z: 20 }]);
+  sim.spawn(30, 1, 0);
+  for (let t = 0; t < 8 * BROOD.hz; t++) sim.step(1 / BROOD.hz);
+  const actors = new Map<object, InstanceType<typeof CritterActor>>();
+  const owner = { sim, hitOne: (c: (typeof sim.list)[number], fx: Parameters<typeof sim.damage>[1], dmg: number, fling: number, cause: string, fx0: number, fz0: number) => { sim.damage(c, fx, dmg, fx0, fz0, fling, cause); } };
+  const actorOf = (c: (typeof sim.list)[number]) => { let a = actors.get(c); if (!a) { a = new CritterActor(owner, c); actors.set(c, a); } return a; };
+  const out = () => sim.list.filter((c) => c.mode === CMode.Run || c.mode === CMode.Wall || c.mode === CMode.Frozen);
+  const big = { name: 'Strider', swarm: false, targetable: true, x: 0, y: -4, z: 60, height: 20, hp: 1, maxHp: 1, zones: [{ id: 'a', name: 'A', weak: true, exposed: false, armour: 0, x: 0, y: 10, z: 60, r: 2, recent: 0 }], ray: () => null, zoneAt: () => null } as never;
+  const cam = new THREE.PerspectiveCamera(60, 1.6, 0.1, 2000);
+  cam.position.set(0, 3, -10); cam.lookAt(0, 0, 30); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+  const player = { pos: new THREE.Vector3(0, 0, -8), k: 1 };
+  const T = new Targeting({
+    peds: { neighbours: () => [], agents: [] }, traffic: { vehicles: [] }, parked: () => [], future: { robots: { list: [] }, service: { list: [] }, drones: { list: [] } },
+    props: { query: () => {} }, player, camera: cam, threats: () => [big],
+    swarm: (x: number, z: number, r: number, fn: (a: never) => void) => { for (const c of out()) if (Math.abs(c.x - x) <= r && Math.abs(c.z - z) <= r) fn(actorOf(c) as never); },
+  } as never);
+  T.priority = (t) => (t.kind === 'threat' ? ((t.obj as { swarm?: boolean }).swarm ? -0.8 : -1) : 0);
+  const k0 = out().find((c) => c.kind === 0)!;
+  const a0 = actorOf(k0);
+  check(a0.swarm && a0.targetable && a0.hp === 1, 'critters: a creature out of the hole is a swarm target');
+  check(isFoe({ kind: 'threat', obj: a0 } as never, { hostileThing: () => false }), 'critters: a foe for the friend/foe sense');
+  const hit = a0.ray(a0.x, a0.y + 5, a0.z, 0, -1, 0, 20);
+  check(!!hit && Math.abs(hit.t - (5 - a0.r)) < 1e-6, `critters: a ray down onto one hits its body (${hit?.t.toFixed(2)})`);
+  // Tab (near the crosshair): the big threat first, then critters; no body parts on a critter; Tab from a critter moves on.
+  const list = T.inView();
+  const nSw = list.filter((t) => t.kind === 'threat' && (t.obj as { swarm?: boolean }).swarm).length;
+  check(list[0]?.obj === big && nSw >= 5, `critters: Tab lists the big threat first, then creatures (${nSw} creatures of ${list.length})`);
+  T.set(list[1]);
+  T.tab(1);
+  check(T.current !== null && T.current.obj !== list[1].obj && T.zone === null, 'critters: Tab on a creature steps to the next, no body parts');
+  // A map marker on the swarm picks a creature; area queries leave them out (broodHit covers them).
+  const near = T.pickNear(k0.x, k0.z, 12);
+  check(near?.kind === 'threat' && (near.obj as { swarm?: boolean }).swarm === true, 'critters: a map marker on the swarm picks a creature');
+  let inArea = 0;
+  T.inSphere(k0.x, k0.y, k0.z, 6, (t) => { if (t.kind === 'threat') inArea++; });
+  check(inArea === 0, `critters: area effects don't list them (${inArea})`);
+  // A targeted power's damage kills a small one (and books it to the player); frost freezes a brute.
+  T.set({ kind: 'threat', obj: a0 as never });
+  const killed0 = sim.stats.killedBy.player ?? 0;
+  const res = a0.damage(null, 1, { cause: 'player', x: player.pos.x, z: player.pos.z });
+  check(k0.mode === CMode.Dead && res.dealt > 0 && (sim.stats.killedBy.player ?? 0) === killed0 + 1, 'critters: a targeted power kills a small one, credited to the player');
+  T.update(0.016, null);
+  const nxt = T.current as { kind: string; obj: { swarm?: boolean; targetable?: boolean } } | null;
+  check(!!nxt && nxt.obj !== a0 && nxt.obj.swarm === true && nxt.obj.targetable === true, 'critters: the target moves on to the nearest creature left');
+  const brute = out().find((c) => c.kind === 1)!;
+  const ab = actorOf(brute);
+  check(ab.onElement('frost', 3) === 0 && brute.mode === CMode.Frozen, 'critters: frost freezes a creature');
+  ab.damage(null, 0.05, { cause: 'player' });
+  check(brute.mode === CMode.Dead && !ab.targetable, 'critters: a frozen brute shatters at the next hit and is no longer a target');
 });
 
 // ---- the Strider (THREATS_PLAN Phase B): major events come no earlier than their floor and only after a

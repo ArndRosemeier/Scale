@@ -50,6 +50,10 @@ export const WAR = {
   breachFront: 0.85, breachMurk: 0.62, breachGap: [10, 20] as [number, number],
   /** Most captives in a pen. */
   penMax: 5,
+  /** Ground the player wins back by clearing out the Murk: the trench (and the Throat) / the Hall. */
+  retakeTrench: 0.42, retakeHall: 0.8,
+  /** Real seconds at the Front before the Murk storm it (raids come on the game clock too, which runs at real time by default). */
+  liveRaid: [150, 300] as [number, number],
 };
 
 export function freshWar(at: number, pens: number, rnd: () => number): WarState {
@@ -160,6 +164,19 @@ export function freePen(w: WarState, pen: number): number {
   w.lumen = clamp01(w.lumen + 0.04 * n);
   w.stats.freed += n;
   return n;
+}
+
+/**
+ * Ground won back: the player cleared the Murk out of the trench or the Hall. The line falls back to
+ * `to` (never forward), the Murk lose heart, the Lumen take courage. Returns whether the line moved.
+ */
+export function retake(w: WarState, to: number): boolean {
+  if (w.front <= to) return false;
+  w.front = to;
+  w.murk = clamp01(w.murk - 0.08);
+  w.lumen = clamp01(Math.max(w.lumen, 0.25) + 0.08);
+  w.stats.won++;
+  return true;
 }
 
 /** The Maw brought down. */
