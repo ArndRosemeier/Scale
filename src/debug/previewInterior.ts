@@ -14,7 +14,7 @@ import { Terrain } from '../world/terrain';
 import { buildMacroPlan } from '../plan/macro';
 import { planCell } from '../plan/cell';
 import { buildingLayout } from '../build/buildingLayout';
-import { planFloor, planCores, coreFits, shopKindOf } from '../interior/InteriorGen';
+import { planFloor, planCores, coreFits, shopKindOf, isClothesShop } from '../interior/InteriorGen';
 import { buildFloorMeshes } from '../interior/InteriorBuilder';
 import { minAreaRect, polyCentroid } from '../core/geom2';
 import type { BuildingDesc } from '../plan/building';
@@ -49,6 +49,8 @@ const homes: BuildingDesc[] = [];
 for (const c of cells.slice(0, 12)) for (const b of planCell(macro, c, terrain).buildings) {
   if (b.use !== 'office' && b.use !== 'industrial' && b.use !== 'parking' && b.style !== 'church' && b.floors >= 2) homes.push(b);
 }
+// (&clothes=1: only the buildings with a clothes shop on the ground floor.)
+if (q.get('clothes') === '1') homes.splice(0, homes.length, ...homes.filter((b) => isClothesShop(b)));
 
 function show(): void {
   root.clear();

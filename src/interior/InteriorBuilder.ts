@@ -694,6 +694,38 @@ function buildFurniture(G: Geos, f: Furn, y: number): void {
       for (const a of [-1, 1]) for (const b of [-1, 1]) B(a * w, h / 2, b * d, 0.04, h / 2, 0.04, [0.2, 0.3, 0.6]);
       for (let k = 0; k < 3; k++) if (rnd() < 0.85) B((rnd() - 0.5) * 0.2, 0.4 + k * (h / 3), 0, w * (0.6 + rnd() * 0.3), 0.3, d * 0.85, [0.6 + rnd() * 0.1, 0.5 + rnd() * 0.08, 0.35 + rnd() * 0.08]);
       break;
+    case 'clothesRail': {
+      // A chrome clothes rail on two uprights, garments hanging along it (shirts, jackets, dresses).
+      const chrome: C3 = [0.78, 0.79, 0.82], top = Math.min(h, 1.5);
+      for (const sx of [-1, 1]) {
+        Cy(sx * (w - 0.03), 0, 0, top, 0.015, 0.015, chrome, 6, G.gloss);
+        B(sx * (w - 0.03), 0.015, 0, 0.03, 0.015, d - 0.02, chrome, G.gloss);
+      }
+      Cy(-w + 0.03, top - 0.02, 0, top, 0.012, 0.012, chrome, 6, G.gloss);
+      B(0, top - 0.015, 0, w - 0.03, 0.012, 0.012, chrome, G.gloss);
+      const base: C3 = c, n = Math.max(4, Math.floor((w * 2 - 0.2) / 0.075));
+      for (let k = 0; k < n; k++) {
+        if (rnd() < 0.12) continue;
+        const x = -w + 0.12 + ((w * 2 - 0.24) * (k + 0.5)) / n, len = 0.55 + rnd() * 0.55, t = 0.65 + rnd() * 0.5;
+        // (Runs of one colour with a few odd ones out.)
+        const col: C3 = rnd() < 0.45 ? [0.15 + rnd() * 0.75, 0.12 + rnd() * 0.6, 0.12 + rnd() * 0.65] : [base[0] * t, base[1] * t, base[2] * t];
+        B(x, top - 0.05 - len / 2, 0, 0.018, len / 2, Math.min(d - 0.04, 0.24), col);
+      }
+      break;
+    }
+    case 'mannequin': {
+      // A shop dummy on its stand, dressed.
+      const skin: C3 = [0.88, 0.86, 0.83];
+      Cy(0, 0, 0, 0.03, 0.2, 0.2, [0.2, 0.2, 0.22], 12, G.gloss);
+      Cy(0, 0.03, 0, 0.75, 0.015, 0.015, [0.6, 0.6, 0.62], 6, G.gloss);
+      Cy(0, 0.75, 0, 1.05, 0.15, 0.17, c, 12);
+      Cy(0, 1.05, 0, 1.45, 0.17, 0.2, c, 12);
+      Cy(0, 1.45, 0, 1.52, 0.2, 0.06, c, 12);
+      Cy(0, 1.52, 0, 1.6, 0.05, 0.05, skin, 8);
+      Cy(0, 1.6, 0, 1.82, 0.09, 0.08, skin, 10);
+      for (const sx of [-1, 1]) Cy(sx * 0.22, 0.9, 0, 1.45, 0.045, 0.055, c, 8);
+      break;
+    }
     case 'clothesStack': {
       let k = 0;
       for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j += 2) {
