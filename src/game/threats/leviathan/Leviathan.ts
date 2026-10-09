@@ -699,7 +699,7 @@ export class Leviathan implements ThreatEvent, ThreatActor {
   private tentImpact(t: Tentacle): void {
     t.hit = true;
     const g = this.g, T = t.target, cam = g.renderer.camera.position;
-    const wet = T.y < this.wl + 1.5 && g.terrain.isWater(T.x, T.z, 0);
+    const wet = T.y < this.wl + 1.5 && g.world.wet(T.x, T.z);
     g.audio.play(wet ? 'splash_big' : 'leviathan_slap', T.x, T.y, T.z, 1, 0.9 + this.rng.range(0, 0.2), 70, cam);
     if (wet) g.dust.burst(T.x, this.wl + 0.4, T.z, 12, 3, 7, 3, 2.5, FOAM, -0.2, 0.7);
     else g.dust.burst(T.x, T.y + 0.5, T.z, 8, 2, 3, 2, 2.5, new THREE.Color(0.5, 0.48, 0.45), 0.2, 0.4);
