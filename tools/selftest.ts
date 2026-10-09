@@ -726,6 +726,8 @@ section('faction relations', async () => {
   const calm = defaultRelations();
   calm.set('murk', 'police', REL.wary);
   check(!calm.hostile('murk', actorFaction({ role: 'police', owner: 1 } as never)) && calm.hostile('murk', actorFaction(undefined)), 'murk: follows the table (made wary of the police, they leave officers alone)');
+  // Phase 3d: machines gone rogue go for every person and the hero (RogueMachines.hates).
+  check(people.every((a) => M.hostile('machines', actorFaction(a, () => 'techno'))) && M.hostile('machines', 'hero'), 'machines: rogue ones are hostile to every person and the hero');
 });
 
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.199 — 2026-10-09
+
+- **Factions, step 3d: rogue machines ask the table.** Robots, service bots and drones gone rogue go for you and for people only if they are hostile to that faction. The seeded table makes that everyone, as before, so nothing plays differently. This finishes phase 3: crews, the army, the Murk and rogue machines all decide who to fight or run from through the one table.
+
 ## 0.198 — 2026-10-09
 
 - **Factions, step 3c: the Murk ask the table.** Murk breaking out into the street go only for people whose faction they are hostile to. Below ground they go for you and for the Lumen the same way. In the seeded table that is still everyone, so nothing plays differently yet. Changing one number would make them leave a whole faction alone (police, for example).
