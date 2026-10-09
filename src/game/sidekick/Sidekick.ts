@@ -699,7 +699,7 @@ export class Sidekick {
       if (Math.hypot(s.x - p.x, s.z - p.z) < SHARD.pullR) list.push({ x: s.x, z: s.z, color: SHARD_COLOR, kind: 'shard', always: true, title: 'The second shard: it lies here. Press E or walk into it to take it' });
       else list.push({ x: s.zx, z: s.zz, color: SHARD_COLOR, kind: 'shard', always: true, title: 'The second shard (on the news): somewhere in this circle. Up close you will feel its pull' });
     }
-    for (const gr of this.graves) list.push({ x: gr.x, z: gr.z, color: '#c9c6bd', kind: 'dot', title: `The grave of ${gr.name}, who stood by you` });
+    for (const gr of this.graves) list.push({ x: gr.x, z: gr.z, color: '#c9c6bd', kind: 'dot', place: true, title: `The grave of ${gr.name}, who stood by you` });
     const key = list.map((m) => `${m.kind}${m.x.toFixed(0)},${m.z.toFixed(0)}`).join(';');
     if (key === this.markKey) return;
     this.markKey = key;

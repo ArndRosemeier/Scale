@@ -681,7 +681,7 @@ export class Rescues {
     const p = this.g.player.pos;
     // (The nearest few: a struck district would fill the compass.)
     const near = this.trapped.filter((t) => !t.freed && Math.hypot(t.x - p.x, t.z - p.z) < 400).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)).slice(0, 6);
-    for (const t of near) list.push({ x: t.x, z: t.z, color: '#ffb340', kind: 'alert', title: 'Someone trapped under the rubble — hold E beside them to dig them out' });
+    for (const t of near) list.push({ x: t.x, z: t.z, color: '#ffb340', kind: 'alert', place: true, title: 'Someone trapped under the rubble — hold E beside them to dig them out' });
     for (const I of this.injured) if (I.state === 'down') list.push({ x: I.a.x, z: I.a.z, color: '#ff7a59', kind: 'dot', title: 'Injured — carry them to the triage tent (E)' });
     const T = this.triage;
     if (T) list.push({ x: T.x, z: T.z, color: '#30d158', kind: 'core', title: 'Triage tent — bring the injured here', always: !!this.carrying });

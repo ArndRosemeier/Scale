@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.196 — 2026-10-09
+
+- **Click a marker to target it.** Clicking a dot or "!" on the minimap or the compass now makes what it stands for your target, the same as Tab or clicking it in the world: a criminal, a getaway car, a rogue machine, a monster, a police car, someone you met. It works for anything within targeting range, even if it is out of sight or behind you; as with Tab, a target that stays out of view is let go after 5 seconds. Markers for places (a grave, a memorial, the spot the loot goes back to, someone trapped under rubble, someone only known to be "somewhere around here") never target whoever happens to stand there. Clicking anywhere else on the minimap still opens the full map.
 ## 0.195 — 2026-10-09
 
 - **Factions, step 3: crooks run from monsters.** Until now a mugger kept mugging and a gang kept brawling with a Strider right next to them. Now every crew at work, from a street thief to a boss operation, looks round twice a second. When a threat their faction is hostile to comes near (a monster, a swarm, the Murk), they drop what they stole and scatter away from it. The bigger it is, the farther off they run: about 20 m for the Murk, 110 m for a Strider. A crime that had not started yet is called off. One that had started ends without the group gaining turf. If you had already knocked someone down, it still counts as stopped. Runaway saucers don't scare them. The friend/foe table decides who runs from whom, so a group could later be made fearless or loyal to a monster by changing one number.
