@@ -82,6 +82,22 @@ doors in the middle of the gallery wall (`doorsMid`). The theme (`starshipProgra
 through the filler, and `design/emit` builds the pieces as landmark parts (`design/props`).
 The old per-room prop recipes in `design/theme` are gone; a theme there is only materials.
 
+## The museum (phase 4, `plan/museumParts.ts` + `fill/museum.ts`)
+
+`design/storey.ts` (`fillStorey`) is the one way a landmark hands a storey to the core: outline,
+fixed spaces, holes, program and theme items in; walls, furnished rooms (with their door and the
+way out) and lights into the design out. The starship's decks and the museum both use it.
+
+The museum's program reserves the great hall first as a `centre` band (`Reserve.at: 'centre'`: a
+share of the width through the middle, front to back, the entrance in its front wall). The wings
+either side get a gallery corridor with exhibition rooms, one shop, one café and a store
+(`museumProgram` / `museumItems`), with wide doors (`Program.doorW`) in the middle of each wall.
+Above the wings a solid block reaches the roof, so the classical hall alone rises the full height.
+Exhibition pieces (display case, statue, big statue, painting, bench, reception desk) are built in
+`design/props`; colours come from `museumTheme`. Selftest section "museum": walk in from the steps,
+every room's door passable, the key pieces present. Glasshouse, airport, tower deck, lighthouse
+and fortress are still empty shells.
+
 Checks: `tools/homeTest.ts` (selftest section "furnished homes"), `tools/splitTest.ts` (section
 "room splitting": odd outlines and real storeys, coverage, overlap, room size, reachability,
 reservation first, desks, tables, checkouts, mirrors, counters, timing), `npx tsx tools/interiorPlans.ts
@@ -93,6 +109,6 @@ storey in 3D (`?n=<building>&floor=<f>&room=<k>&top=1&type=living&still=1`).
 1. Filler + home theme for flats (v0.169, PR #139).
 2. Room splitting for any shape with reserve-first programs; offices, shops and cafés themes (v0.172).
 3. The starship hall (design step 1) as one reserve strategy on the core (v0.173).
-4. Fill the museum and the other empty landmarks (impressive halls with side rooms).
+4. The museum (great hall + galleries) on the core (v0.176); the other empty landmarks follow.
 5. Town hall, cathedral and sewer side rooms on the core.
 6. Delete the old builders.
