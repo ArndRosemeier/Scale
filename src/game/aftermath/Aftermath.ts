@@ -19,8 +19,8 @@
  *    brought down — a landmark, then carted away by a crane and flatbeds (Cleanup);
  *  - the player leading the army (Command: G rally, T airstrike — reputation unlocks).
  *
- * Reconstruction (scaffolding and cranes on damaged buildings, slow repair) is not built: the hook
- * is `onReconstruct` (a scene's damage clusters when its aftermath ends).
+ * Reconstruction (Reconstruction, `rebuild`): scaffolding and cranes on damaged buildings and on
+ * the levelled districts, the buildings made whole again when the work is done.
  */
 import * as THREE from 'three';
 import type { Game } from '../Game';
@@ -39,6 +39,7 @@ import { Leviathan } from '../threats/leviathan/Leviathan';
 import { Roc } from '../threats/roc/Roc';
 import { Mech } from '../threats/mech/Mech';
 import { PlayerRampage } from '../threats/PlayerRampage';
+import { Reconstruction, type SaveRebuild } from './Reconstruction';
 import { RESPONSE } from '../response/ResponseDirector';
 import { CasualtyLedger } from './Casualties';
 import { AFTERMATH, LAST_RESORT } from './rules';
@@ -75,7 +76,8 @@ interface Zone { x: number; z: number; r: number; when: number; settled: boolean
 interface Cordon { x: number; z: number; r: number; until: number; streets: boolean }
 interface Memorial { x: number; z: number; yaw: number; since: number }
 
-const STATIC_KINDS: PropKind[] = ['tent', 'sign', 'cot', 'barrier', 'tape', 'post', 'bouquet', 'candle'];
+const CRANE_YELLOW: [number, number, number] = [0.92, 0.7, 0.12];
+const STATIC_KINDS: PropKind[] = ['tent', 'sign', 'cot', 'barrier', 'tape', 'post', 'bouquet', 'candle', 'scaffold', 'net', 'mast', 'fence', 'board'];
 const TAPE: [number, number, number] = [0.85, 0.12, 0.08];
 const POST: [number, number, number] = [0.2, 0.2, 0.22];
 const BARRIER: [number, number, number] = [0.78, 0.1, 0.07];
@@ -95,8 +97,8 @@ export class Aftermath {
   readonly fireCrew: FireCrew;
   /** Districts levelled by the last resort. */
   readonly zones: Zone[] = [];
-  /** Reconstruction hook (not built): a scene's damage clusters when its aftermath ends. */
-  onReconstruct: ((hot: { x: number; z: number; w: number }[]) => void) | null = null;
+  /** Reconstruction: crews, scaffolding and cranes; buildings made whole again. */
+  readonly rebuild: Reconstruction;
   private sources: SmokeSource[] = [];
   private fireCols: SmokeColumn[] = [];
   private extraCols: SmokeColumn[] = [];
@@ -146,6 +148,8 @@ export class Aftermath {
     // A levelled district stays levelled when its cells stream in again.
     const ready = g.streamer.onCellReady;
     g.streamer.onCellReady = (c) => { ready?.(c); try { this.cellReady(c); } catch (err) { console.warn('[aftermath] levelled district', err); } };
+    // (After the district hook: a rebuilt district's cells come in whole.)
+    this.rebuild = new Reconstruction(g);
     // A monster brought down: when (the carcass schedule), the news.
     g.threats.onDefeated = (s) => { s.downAt = this.hours; this.news(3); this.note('the monster is down'); };
     this.hud = document.createElement('div');
@@ -159,6 +163,21 @@ export class Aftermath {
 
   /** Absolute game hours. */
   get hours(): number { return this.g.sky.hoursAbs; }
+
+  /** Game hours after the strike that a levelled district's cordon stays (then the crews move in). */
+  get zoneLiftH(): number { return AFTERMATH.zoneSmokeH; }
+
+  /** A levelled district rebuilt (Reconstruction): no longer levelled as its cells stream in, gone from the skyline. */
+  removeZone(x: number, z: number): void {
+    const i = this.zones.findIndex((zn) => Math.abs(zn.x - x) < 1 && Math.abs(zn.z - z) < 1);
+    if (i < 0) return;
+    this.zones.splice(i, 1);
+    const R = this.g.skyline.ruins;
+    for (let k = 0; k < R.length; k++) { const zn = this.zones[k]; if (zn) R[k].set(zn.x, zn.z, zn.r, 1); else R[k].set(0, 0, 0, 0); }
+    for (let k = this.cordons.length - 1; k >= 0; k--) { const c = this.cordons[k]; if (c.streets && Math.hypot(c.x - x, c.z - z) < 2) this.cordons.splice(k, 1); }
+    this.cordonKey = '';
+    this.note('a levelled district rebuilt');
+  }
 
   /** No major incident running and no countdown: crews get to work. */
   get calm(): boolean {
@@ -216,6 +235,9 @@ export class Aftermath {
     this.feed.update(dt);
     this.crowds(dt);
     this.memorialStep(dt);
+    this.rebuild.update(dt);
+    this.props.clear('craneTop');
+    this.rebuild.drawCranes((x, y, z, yaw) => this.props.put('craneTop', x, y, z, yaw, CRANE_YELLOW));
     this.drawStatics();
     this.markers(dt);
     this.hudStep();
@@ -272,7 +294,6 @@ export class Aftermath {
       const p = this.g.player.pos, dx = p.x - zn.x, dz = p.z - zn.z, l = Math.hypot(dx, dz) || 1;
       this.placeMemorial(zn.x + (dx / l) * zn.r * 0.93, zn.z + (dz / l) * zn.r * 0.93, zn.r * 0.12);
     } else if (hot.length) this.placeMemorial(hot[0].x, hot[0].z, this.cordons.find((c) => Math.hypot(c.x - hot[0].x, c.z - hot[0].z) < 1)?.r ?? 30);
-    this.onReconstruct?.(hot);
     this.cordonKey = '';
     this.note(`incident over: ${hot.length} damage clusters, ${this.cordons.length} cordons`);
   }
@@ -677,6 +698,7 @@ export class Aftermath {
       cordons: this.cordons.filter((c) => !c.streets).slice(0, 16).map((c) => [r2(c.x), r2(c.z), r2(c.r), r3(c.until)]),
       memorials: this.memorials.slice(0, 8).map((m) => [r2(m.x), r2(m.z), r2(m.yaw), r3(m.since)]),
       news: this.newsKind > 0 && this.hours < this.newsUntil ? { kind: NEWS_KINDS[this.newsKind] ?? 'lost', until: r3(this.newsUntil) } : null,
+      rebuild: this.rebuild.saveState(),
     };
   }
 
@@ -694,6 +716,7 @@ export class Aftermath {
     this.cordonKey = '';
     // Zones of cells already loaded.
     for (const cs of this.g.streamer.cells.values()) if (cs.status === 'ready') this.cellReady(cs);
+    this.rebuild.restore(d.rebuild as SaveRebuild | undefined);
     this.rescues.moundsSeen = this.g.destruction.mounds.length;
   }
 
@@ -720,6 +743,9 @@ export class Aftermath {
       aftermath: this,
       status: () => this.status(),
       rescues: () => this.rescues.status(),
+      rebuild: () => this.rebuild.status(),
+      rebuildHalfway: () => this.rebuild.devHalfway(),
+      rebuildNow: () => this.rebuild.devHurry(),
       fire: () => this.fireCrew.status(),
       /** Someone trapped at the nearest rubble mound (or a fresh one ahead). */
       trap: () => this.rescues.devTrap(),

@@ -7,12 +7,16 @@
 import * as THREE from 'three';
 import { createInstancedVehicleGeometry } from '../../props/vehicles';
 import { triageTent, tentSign, cot, barrier, tape, tapePost, bouquet, candle, chunk, hookBlock, cable } from '../../props/aftermath';
+import { scaffoldBay, scaffoldNet, craneMast, craneTop, siteFence, siteBoard } from '../../props/construction';
 
-export type PropKind = 'tent' | 'sign' | 'cot' | 'barrier' | 'tape' | 'post' | 'bouquet' | 'candle' | 'chunk' | 'hook' | 'cable';
+export type PropKind = 'tent' | 'sign' | 'cot' | 'barrier' | 'tape' | 'post' | 'bouquet' | 'candle' | 'chunk' | 'hook' | 'cable'
+  | 'scaffold' | 'net' | 'mast' | 'craneTop' | 'fence' | 'board';
 
 const MODELS: Record<PropKind, [() => THREE.BufferGeometry, number]> = {
   tent: [triageTent, 4], sign: [tentSign, 4], cot: [cot, 24], barrier: [barrier, 96], tape: [tape, 128], post: [tapePost, 128],
   bouquet: [bouquet, 48], candle: [candle, 64], chunk: [chunk, 12], hook: [hookBlock, 4], cable: [cable, 4],
+  // Reconstruction sites (Reconstruction).
+  scaffold: [scaffoldBay, 3000], net: [scaffoldNet, 1600], mast: [craneMast, 160], craneTop: [craneTop, 8], fence: [siteFence, 400], board: [siteBoard, 24],
 };
 
 interface Batch { mesh: THREE.InstancedMesh; paint: THREE.InstancedBufferAttribute; state: THREE.InstancedBufferAttribute; n: number; cap: number }
@@ -36,7 +40,7 @@ export class AftermathProps {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
       mesh.frustumCulled = false;
-      mesh.castShadow = k !== 'tape' && k !== 'candle' && k !== 'bouquet';
+      mesh.castShadow = k !== 'tape' && k !== 'candle' && k !== 'bouquet' && k !== 'net';
       mesh.receiveShadow = true;
       mesh.name = `aftermath:${k}`;
       this.group.add(mesh);
