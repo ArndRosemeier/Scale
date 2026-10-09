@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.171 — 2026-10-09
+
+- **Super jump and super speed swap karma prices.** Since super jump became a travel power it is worth more than super speed, so it now costs what super speed cost (40 / 50 / 75 / 105 / 150 karma per rank) and super speed costs what super jump cost (20 / 30 / 45 / 70 / 100). The help's Powers tab shows the new prices.
+
 ## 0.170 — 2026-10-08
 
 - **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts and contrast trims showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, at an even depth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line. Cloth smoothing now only lifts the fabric off the body and no longer slides it sideways, which had bent the cut line.
