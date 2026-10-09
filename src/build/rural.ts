@@ -22,17 +22,52 @@ export const RURAL_OBST_STRIDE = 8;
  * then n x/z pairs.
  */
 export function ruralSurfaceAt(S: Float32Array, x: number, z: number): boolean {
-  for (let o = 0; o < S.length; o += 5 + S[o] * 2) {
-    if (x < S[o + 1] || z < S[o + 2] || x > S[o + 3] || z > S[o + 4]) continue;
-    const n = S[o], b = o + 5;
-    let inside = false;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const xi = S[b + i * 2], zi = S[b + i * 2 + 1], xj = S[b + j * 2], zj = S[b + j * 2 + 1];
-      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-    }
-    if (inside) return true;
-  }
+  for (let o = 0; o < S.length; o += 5 + S[o] * 2) if (outlineHas(S, o, x, z)) return true;
   return false;
+}
+
+/** A grid over a tile's outlines (ruralSurfaceAt scans every outline; a tile has thousands of road quads). */
+export interface RuralSurfaceIndex { x0: number; z0: number; nx: number; nz: number; start: Int32Array; list: Int32Array }
+
+const SURF_CELL = 16;
+
+/** Index a tile's outlines by grid cell (each outline listed in every cell its box touches). */
+export function indexRuralSurfaces(S: Float32Array): RuralSurfaceIndex {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (let o = 0; o < S.length; o += 5 + S[o] * 2) { x0 = Math.min(x0, S[o + 1]); z0 = Math.min(z0, S[o + 2]); x1 = Math.max(x1, S[o + 3]); z1 = Math.max(z1, S[o + 4]); }
+  if (!(x1 >= x0)) return { x0: 0, z0: 0, nx: 0, nz: 0, start: new Int32Array(1), list: new Int32Array(0) };
+  const nx = Math.max(1, Math.ceil((x1 - x0) / SURF_CELL) + 1), nz = Math.max(1, Math.ceil((z1 - z0) / SURF_CELL) + 1);
+  const cells = (o: number, f: (c: number) => void) => {
+    const i0 = Math.floor((S[o + 1] - x0) / SURF_CELL), i1 = Math.floor((S[o + 3] - x0) / SURF_CELL);
+    const j0 = Math.floor((S[o + 2] - z0) / SURF_CELL), j1 = Math.floor((S[o + 4] - z0) / SURF_CELL);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) f(j * nx + i);
+  };
+  const count = new Int32Array(nx * nz + 1);
+  for (let o = 0; o < S.length; o += 5 + S[o] * 2) cells(o, (c) => count[c + 1]++);
+  for (let c = 0; c < nx * nz; c++) count[c + 1] += count[c];
+  const list = new Int32Array(count[nx * nz]), fill = count.slice(0, nx * nz);
+  for (let o = 0; o < S.length; o += 5 + S[o] * 2) cells(o, (c) => { list[fill[c]++] = o; });
+  return { x0, z0, nx, nz, start: count, list };
+}
+
+/** ruralSurfaceAt through the index: only the outlines listed in the point's cell. */
+export function ruralSurfaceAtIndexed(S: Float32Array, I: RuralSurfaceIndex, x: number, z: number): boolean {
+  const i = Math.floor((x - I.x0) / SURF_CELL), j = Math.floor((z - I.z0) / SURF_CELL);
+  if (i < 0 || j < 0 || i >= I.nx || j >= I.nz) return false;
+  const c = j * I.nx + i;
+  for (let k = I.start[c]; k < I.start[c + 1]; k++) if (outlineHas(S, I.list[k], x, z)) return true;
+  return false;
+}
+
+function outlineHas(S: Float32Array, o: number, x: number, z: number): boolean {
+  if (x < S[o + 1] || z < S[o + 2] || x > S[o + 3] || z > S[o + 4]) return false;
+  const n = S[o], b = o + 5;
+  let inside = false;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = S[b + i * 2], zi = S[b + i * 2 + 1], xj = S[b + j * 2], zj = S[b + j * 2 + 1];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
 }
 
 function pushOutline(out: number[], poly: ArrayLike<number>): void {

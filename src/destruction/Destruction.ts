@@ -260,6 +260,10 @@ export class Destruction {
    * Returns the number of panels broken.
    */
   impact(x: number, y: number, z: number, radius: number, impulse: number, dx: number, dy: number, dz: number, kind: ImpactEvent['kind'] = 'wall'): number {
+    // (A direction, not a distance: debris flies at its speed times this. A long vector once sent
+    // fragments off at hundreds of m/s and each asked for physics ground kilometres round.)
+    const dlen = Math.hypot(dx, dy, dz);
+    if (dlen > 1.01) { dx /= dlen; dy /= dlen; dz /= dlen; }
     const refs = this.world.buildingsIn(x - radius - 2, z - radius - 2, x + radius + 2, z + radius + 2);
     let broken = 0;
     let glassBroken = 0;

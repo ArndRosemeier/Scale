@@ -61,6 +61,8 @@ export class Physics {
 
   /** Make sure ground exists under (x,z) within radius r. */
   ensureGround(x: number, z: number, r = 30): void {
+    // (At most a few patches at once: sampling one costs milliseconds.)
+    r = Math.min(r, 120);
     const i0 = Math.floor((x - r) / PATCH), i1 = Math.floor((x + r) / PATCH);
     const j0 = Math.floor((z - r) / PATCH), j1 = Math.floor((z + r) / PATCH);
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {

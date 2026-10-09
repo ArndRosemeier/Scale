@@ -16,7 +16,7 @@ import { createFacadeMaterial } from '../render/materials/facade';
 import { createGroundMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
 import type { Obstacle } from '../world/Collision';
-import { RURAL_OBST_STRIDE, ruralSurfaceAt } from '../build/rural';
+import { RURAL_OBST_STRIDE, indexRuralSurfaces, ruralSurfaceAtIndexed, type RuralSurfaceIndex } from '../build/rural';
 
 const TILE = 1024;
 /** Tiles nearer than this (3D distance to the tile, m) are loaded. */
@@ -37,6 +37,8 @@ interface RTile {
   far: THREE.Mesh | null;
   obst: Float32Array | null;
   surf: Float32Array | null;
+  /** Grid over `surf` (onSurface is asked for every ground sample out here). */
+  surfIdx: RuralSurfaceIndex | null;
   used: number;
 }
 
@@ -83,7 +85,7 @@ export class RuralStreamer {
       want.add(key);
       let t = this.tiles.get(key);
       if (!t) {
-        t = { key, x0, z0, status: 'loading', ground: null, near: null, far: null, obst: null, surf: null, used: this.t };
+        t = { key, x0, z0, status: 'loading', ground: null, near: null, far: null, obst: null, surf: null, surfIdx: null, used: this.t };
         this.tiles.set(key, t);
         this.request(t, 130 + d * 0.5);
       }
@@ -121,6 +123,7 @@ export class RuralStreamer {
         t.far = this.mesh(r.facadeLod, this.facadeMat, 'ruralFar', false);
         t.obst = r.obstacles;
         t.surf = r.surfaces;
+        t.surfIdx = indexRuralSurfaces(r.surfaces);
         t.status = 'ready';
       }),
       () => { if (this.tiles.get(t.key) === t) this.tiles.delete(t.key); },
@@ -164,7 +167,7 @@ export class RuralStreamer {
   onSurface(x: number, z: number): boolean {
     for (const t of this.tiles.values()) {
       if (!t.surf?.length || x < t.x0 - SPILL || x > t.x0 + TILE + SPILL || z < t.z0 - SPILL || z > t.z0 + TILE + SPILL) continue;
-      if (ruralSurfaceAt(t.surf, x, z)) return true;
+      if (t.surfIdx && ruralSurfaceAtIndexed(t.surf, t.surfIdx, x, z)) return true;
     }
     return false;
   }

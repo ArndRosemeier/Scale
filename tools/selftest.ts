@@ -32,7 +32,7 @@ import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
 import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
-import { buildRuralTile, ruralSurfaceAt } from '../src/build/rural';
+import { buildRuralTile, ruralSurfaceAt, indexRuralSurfaces, ruralSurfaceAtIndexed } from '../src/build/rural';
 import { WorldIndex } from '../src/world/WorldIndex';
 import { TERRAIN_DROP } from '../src/build/terrainMesh';
 import { terrainExtent } from '../src/world/boundary';
@@ -600,6 +600,21 @@ section('countryside settlements', async () => { for (const [seed, size] of [[1,
   {
     const W = new WorldIndex(T, () => []);
     W.rural = { onSurface: (x, z) => ruralSurfaceAt(tile.surfaces, x, z) };
+    // The grid index (stream/Rural: onSurface for every physics ground sample) answers the same, fast.
+    {
+      const I = indexRuralSurfaces(tile.surfaces), tx0 = Math.floor(town.x / 1024) * 1024, tz0 = Math.floor(town.z / 1024) * 1024;
+      let same = 0, n = 0, tLin = 0, tIdx = 0;
+      for (let i = 0; i < 3000; i++) {
+        const x = tx0 - 40 + ((i * 7919) % 1100), z = tz0 - 40 + ((i * 104729) % 1100);
+        let t1 = performance.now();
+        const a = ruralSurfaceAt(tile.surfaces, x, z);
+        tLin += performance.now() - t1; t1 = performance.now();
+        const b = ruralSurfaceAtIndexed(tile.surfaces, I, x, z);
+        tIdx += performance.now() - t1;
+        n++; if (a === b) same++;
+      }
+      check(same === n && tIdx < tLin, `rural seed ${seed}: the surface grid agrees with the full scan (${same}/${n}) and is faster (${tIdx.toFixed(1)} vs ${tLin.toFixed(1)} ms)`);
+    }
     const tx = Math.floor(town.x / 1024) * 1024, tz = Math.floor(town.z / 1024) * 1024;
     let road = 0, roadOk = 0, open = 0, openOk = 0;
     for (let i = 0; i < 4000 && (road < 50 || open < 50); i++) {

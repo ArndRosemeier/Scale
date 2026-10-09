@@ -554,7 +554,9 @@ export class Mech implements ThreatEvent, ThreatActor {
     // A facade (above the street) or the street itself.
     if (this.tokens >= 1) {
       this.tokens -= 1;
-      const n = g.destruction.as('threat', () => g.destruction.impact(x, y, z, 3.2, 5e5 * dealtBy(this), x - this.x, 0, z - this.z, y - ground > 2 ? 'wall' : 'stomp'));
+      // (Outwards from the mech: a unit direction, the destruction scales debris speed by it.)
+      const dl = Math.hypot(x - this.x, z - this.z) || 1, ux = (x - this.x) / dl, uz = (z - this.z) / dl;
+      const n = g.destruction.as('threat', () => g.destruction.impact(x, y, z, 3.2, 5e5 * dealtBy(this), ux, 0, uz, y - ground > 2 ? 'wall' : 'stomp'));
       this.stats.broken += n;
       if (n) g.consequences.record('mech', 'building', 'facade', x, z, undefined, 'threat');
     }

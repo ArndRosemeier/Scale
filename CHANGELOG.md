@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.217 — 2026-10-09
+
+- **No more long freezes when missiles hit buildings.** The giant mech's missile blasts gave the wreckage a direction that was really a distance, so pieces flew off at hundreds of metres per second, and each one made the game prepare the physics ground for kilometres around in one go: the game froze for seconds, sometimes minutes. Blasts now always throw debris at sensible speeds, debris only asks for the ground close to it, and looking up the countryside roads under the ground is much faster.
+
 ## 0.216 — 2026-10-09
 
 - **Nobody walks or drives over a fallen bridge span any more.** When the Leviathan brought a span down, people and cars carried on along the bridge as if it were still there, through the water. Now the street over the gap counts as cut: cars and walkers plan their way round it by another bridge, a car that reaches the broken end stops and turns round, and someone walking up to the gap stops, stares at it for a moment and walks back the way they came. Once the span is mended, the way is open again.
