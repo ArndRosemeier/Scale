@@ -1,23 +1,25 @@
 /**
- * The start screen's theme: plays quietly after the first click or key on the menu
- * (browsers block audio before a gesture), through the loading screen, and fades out
- * when the game begins (the game's own music takes over later, sparsely).
- * Respects the stored volume, mute, music switch and music level, and `?mute` (tests).
+ * The start screen's theme ("Dusk Awakening", public/music/title): starts after the first click
+ * or key on the menu (browsers block audio before a gesture), loops, plays on through the
+ * loading screen and fades out when the game begins (the game's own music takes over later).
+ * Streamed from an audio element, so nothing is downloaded before it plays and the page loads
+ * no slower. Respects the stored volume, mute, music switch and music level, and `?mute` (tests).
  */
 import { storedMusicLevel } from '../Audio';
-import { StemPlayer } from './StemPlayer';
 
 const BASE = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
-/** The menu theme sits lower than in-game music. */
-const MENU_LEVEL = 0.55;
+const TRACK = `${BASE}music/title/dusk-awakening.mp3`;
+/** The theme is mastered louder than the in-game stems; this sits it at the old menu level. */
+const MENU_LEVEL = 0.34;
+/** Seconds to fade in. */
+const FADE_IN = 2.5;
 /** Events that may start audio (iPad Safari: only a touch's end, not its start). */
 const GESTURES = ['pointerdown', 'pointerup', 'touchend', 'keydown'];
 
 export class MenuMusic {
   private ctx: AudioContext | null = null;
-  private player = new StemPlayer(BASE);
-  private timer = 0;
-  private last = 0;
+  private audio: HTMLAudioElement | null = null;
+  private out: GainNode | null = null;
   private stopped = false;
   private readonly onGesture = () => this.begin();
 
@@ -27,28 +29,31 @@ export class MenuMusic {
   }
 
   private begin(): void {
-    // A context made on a touch's start stays suspended on iPad Safari: resume it on the next
-    // gesture (the touch's end counts there) and stop listening once it plays.
+    // A context made on a touch's start stays suspended on iPad Safari: resume it (and the
+    // track) on the next gesture (the touch's end counts there) and stop listening once it plays.
     if (this.ctx) {
-      if (this.ctx.state === 'running') this.unlisten();
-      else void this.ctx.resume().then(() => { if (this.ctx?.state === 'running') this.unlisten(); }).catch(() => {});
+      if (this.ctx.state === 'running' && !this.audio?.paused) this.unlisten();
+      else {
+        void this.ctx.resume().then(() => this.audio?.play()).then(() => { if (this.ctx?.state === 'running') this.unlisten(); }).catch(() => {});
+      }
       return;
     }
     if (this.stopped) { this.unlisten(); return; }
     const level = storedMusicLevel();
     if (level <= 0) return;
     try { this.ctx = new AudioContext(); } catch { this.unlisten(); return; }
-    if (this.ctx.state === 'running') this.unlisten();
+    const audio = new Audio();
+    audio.src = TRACK;
+    audio.loop = true;
+    audio.preload = 'auto';
+    this.audio = audio;
     const out = this.ctx.createGain();
-    out.gain.value = level * MENU_LEVEL;
-    out.connect(this.ctx.destination);
-    this.player.attach(this.ctx, out);
-    this.last = performance.now();
-    this.timer = window.setInterval(() => {
-      const now = performance.now(), dt = (now - this.last) / 1000;
-      this.last = now;
-      this.player.update(dt, this.stopped ? null : 'menu', 0.5, { duck: 1, rain: 0 });
-    }, 200);
+    const t = this.ctx.currentTime;
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(level * MENU_LEVEL, t + FADE_IN);
+    this.ctx.createMediaElementSource(audio).connect(out).connect(this.ctx.destination);
+    this.out = out;
+    void audio.play().then(() => { if (this.ctx?.state === 'running') this.unlisten(); }).catch(() => { /* next gesture */ });
   }
 
   private unlisten(): void {
@@ -60,15 +65,21 @@ export class MenuMusic {
     if (this.stopped) return;
     this.stopped = true;
     this.unlisten();
-    if (!this.ctx) return;
-    this.player.stopAll(secs);
-    const ctx = this.ctx;
+    const ctx = this.ctx, out = this.out, audio = this.audio;
+    if (!ctx || !out) return;
+    const t = ctx.currentTime;
+    out.gain.cancelScheduledValues(t);
+    out.gain.setValueAtTime(Math.max(out.gain.value, 0.0001), t);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + secs);
     window.setTimeout(() => {
-      window.clearInterval(this.timer);
+      audio?.pause();
+      if (audio) audio.src = '';
       void ctx.close().catch(() => {});
-    }, secs * 1000 * 1.8 + 500);
+    }, secs * 1000 + 300);
   }
 
   /** Debug. */
-  status(): unknown { return { running: !!this.ctx, stopped: this.stopped, ...this.player.status() }; }
+  status(): unknown {
+    return { running: !!this.ctx, stopped: this.stopped, state: this.ctx?.state, time: this.audio?.currentTime, paused: this.audio?.paused, gain: this.out?.gain.value };
+  }
 }
