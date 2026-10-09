@@ -9,6 +9,7 @@ import { statusOf } from '../shared/status';
 import type { WeatherSetting } from '../render/Weather';
 import { LandUse } from '../world/landuse';
 import { RuralPlan } from '../world/rural';
+import { GoTo } from './goTo';
 
 export function installDevtools(game: Game): void {
   let rural: RuralPlan | null = null;
@@ -214,6 +215,20 @@ export function installDevtools(game: Game): void {
     },
     /** Power states on a person / car / robot / drone / prop (frozen, shrunk, burning …). */
     status: statusOf,
+    /**
+     * Every place worth a look in this city (debug/goTo): goto.list() names them (grouped, numbered),
+     * goto.go(n | 'label') goes there (an entry for several places steps to the next each time).
+     */
+    goto: {
+      places: () => goto.list(),
+      list: () => goto.list().map((p, i) => `${i}: ${p.group} · ${p.label}`),
+      go: (which: number | string) => {
+        const all = goto.list();
+        const p = typeof which === 'number' ? all[which] : all.find((q) => q.label.toLowerCase().includes(which.toLowerCase()));
+        return p ? p.go() : `no place '${which}'`;
+      },
+    },
   };
+  const goto = new GoTo(game, () => dev as unknown as Record<string, unknown>);
   (window as unknown as { dev: typeof dev }).dev = dev;
 }
