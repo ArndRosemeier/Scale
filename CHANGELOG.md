@@ -2,10 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.228 — 2026-10-09
+## 0.229 — 2026-10-09
 
 - **The Twist has an inside.** Walk in through the door at the foot of the twisted tower into a lobby with a reception desk, a lounge corner and, in a big one, a café. Stairs in the middle climb from storey to storey. Each storey is turned a little further than the one below, like the tower, and the stairs are laid out so they still meet. Up there are about three more storeys (two in towers with very tall storeys), each with rooms round a stair hall that runs out to the glass at the back: a café storey, a capsule hotel with sleeping pods and lounges, and a storey of studios and a control room. Glass rails run round each stairwell. The blocks above stay solid.
 - `preview-landmark.html` takes `&style=<n>` to pick a landmark of one style (the Twist: `kind=marvel&style=3`).
+
+## 0.228 — 2026-10-09
+
+- **No bare skin between top and trousers.** Since the smooth hems (0.170), every garment's edge is cut a few centimetres inside the body's ragged triangle edge, so a T-shirt and jeans that used to meet exactly at the waist left a band of skin between them (front, sides and back, down to the top of the seat). Now the inner of the two reaches well under the outer one: a shirt or T-shirt tucked into trousers, shorts or a skirt continues down inside them, and trousers under a sweater, jacket or coat reach up under it. The extra part is hidden, so nothing else changes in the look.
 
 ## 0.227 — 2026-10-09
 
