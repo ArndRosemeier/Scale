@@ -243,9 +243,10 @@ export class LandmarkSolids {
   }
 
   /** Highest solid top under (x, z) not above yRef + step (-Infinity: none). */
-  topAt(x: number, z: number, yRef = Infinity, step = 0.5): number {
+  topAt(x: number, z: number, yRef = Infinity, step = 0.5, minH = 0): number {
     let g = -Infinity;
-    this.each(x, z, x, z, (o) => { if (o.y1 > g && o.y1 <= yRef + step && this.inside(o, x, z)) g = o.y1; });
+    // (minH: as world/Collision for a walker, slabs thinner than that only count as decks.)
+    this.each(x, z, x, z, (o) => { if (o.y1 > g && o.y1 <= yRef + step && (o.y1 - o.y0 >= minH || o.deck) && this.inside(o, x, z)) g = o.y1; });
     this.helices.forEach((p, i) => {
       for (const f of helixFloorsAt(p, x, z, 0, this.floors)) if (f > g && f <= yRef + step && this.standing(this.helixLm[i], x, f - 0.2, z)) g = f;
     });
