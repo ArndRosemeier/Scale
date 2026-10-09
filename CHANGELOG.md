@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.185 — 2026-10-09
+
+- Tests only: the "room splitting" speed check allows 60 ms per office, shop or café storey (about 21 ms alone), and the brood's speed check takes the fastest of three runs against 1.5 ms. Under a full parallel test run, other workers sharing the CPU no longer make them fail.
+
 ## 0.184 — 2026-10-09
 
 - **The title music starts as soon as the start screen shows.** It no longer waits for a click wherever the browser lets a page play sound by itself. Chrome and Edge allow that on sites you have played on before, so it will usually start right away on apps.futuremagic.de. On a first visit, and always in Safari and Firefox by default, browsers block sound until the first click, tap or key press (moving the mouse doesn't count), and the music then starts with that first input.
