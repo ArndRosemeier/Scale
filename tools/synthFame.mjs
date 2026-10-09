@@ -1,10 +1,9 @@
 // Procedural sounds of fame and infamy (game/fame; public/sounds/*.wav, 22.05 kHz mono, deterministic):
 //   camera_shutter  a press camera: the mirror slap and shutter, then the flash's short charging whine
-//   crowd_boo       a small crowd booing: many low "boo" voices swelling and dying away, a whistle
-//   protest_chant   a seamless loop: a crowd chanting two beats a bar ("Go home! Go home!"), with
-//                   a drum on the beat and murmur between
+//   protest_drum    a seamless loop: a protest's drum, two beats a bar, over a crowd's murmur bed (the
+//                   chant itself is in the protesters' bubbles: procedural voices never made words)
 //   fanfare         the statue's unveiling: a short brass fanfare (rising triad, a held chord)
-// Run: node tools/synthFame.mjs
+// Run: node tools/synthFame.mjs [names…]   (only the named sounds when given)
 import { writeFileSync } from 'node:fs';
 
 const SR = 22050;
@@ -43,7 +42,10 @@ function loopify(x, xf) {
   return out;
 }
 
+const ONLY = process.argv.slice(2);
+
 function write(name, out) {
+  if (ONLY.length && !ONLY.includes(name)) return;
   const N = out.length;
   let peak = 0; for (const v of out) peak = Math.max(peak, Math.abs(v));
   const g = 0.85 / (peak || 1);
@@ -81,61 +83,12 @@ function click(mix, t, gain, decay, f) {
   write('camera_shutter', highpass(out, 300));
 }
 
-/** One voice saying a vowel: a buzz at pitch f through formants f1, f2, with an envelope. */
-function voice(mix, t0, dur, f, f1, f2, gain, glide = 0) {
-  const i0 = Math.round(t0 * SR), n = Math.round(dur * SR);
-  const src = new Float32Array(n);
-  let ph = 0;
-  const vib = u01() * 6;
-  for (let k = 0; k < n; k++) {
-    const t = k / SR, ff = f * (1 + glide * (t / dur)) * (1 + 0.012 * Math.sin(2 * Math.PI * (5 + vib) * t));
-    ph += ff / SR;
-    // A glottal-ish pulse: a sawtooth softened.
-    src[k] = ((ph % 1) * 2 - 1) * 0.6 + rnd() * 0.08;
-  }
-  const a = band(src, f1, 90), b = band(src, f2, 140);
-  for (let k = 0; k < n && i0 + k < mix.length; k++) {
-    const t = k / n, env = Math.min(1, t * 8) * Math.min(1, (1 - t) * 5);
-    mix[i0 + k] += (a[k] + b[k] * 0.5) * env * gain;
-  }
-}
-
-// ---------------------------------------------------------------- crowd boo
-{
-  const D = 2.6, out = new Float32Array(Math.round(D * SR));
-  for (let v = 0; v < 26; v++) {
-    const male = u01() < 0.6;
-    const f = male ? 100 + u01() * 50 : 190 + u01() * 70;
-    const t0 = u01() * 0.35, dur = 1.3 + u01() * 0.9;
-    // "boo": the vowel /u/ (formants ~300 and ~870 Hz), the pitch sagging at the end.
-    voice(out, t0, Math.min(dur, D - t0 - 0.05), f, 300 + u01() * 60, 850 + u01() * 120, 0.5 + u01() * 0.5, -0.18);
-  }
-  // A whistle (two fingers) over it.
-  for (let i = Math.round(0.5 * SR); i < Math.round(1.4 * SR); i++) {
-    const t = i / SR - 0.5;
-    out[i] += Math.sin(2 * Math.PI * (2400 + 300 * Math.sin(t * 7)) * t) * 0.05 * Math.min(1, t * 10) * Math.min(1, (0.9 - t) * 6);
-  }
-  // A murmur bed.
-  const bed = new Float32Array(out.length);
-  for (let i = 0; i < bed.length; i++) bed[i] = rnd() * 0.1;
-  const m = band(bed, 450, 400);
-  for (let i = 0; i < out.length; i++) { const t = i / out.length; out[i] += m[i] * Math.min(1, t * 5) * Math.min(1, (1 - t) * 4); }
-  write('crowd_boo', highpass(out, 70));
-}
-
-// ---------------------------------------------------------------- protest chant (a loop)
+// ---------------------------------------------------------------- protest drum (a loop)
 {
   const bar = 1.6, bars = 4, XF = 0.25, D = bar * bars + XF;
   const out = new Float32Array(Math.round(D * SR));
   for (let b = 0; b < bars + 1; b++) {
     const t = b * bar;
-    // "Go home! Go home!": two syllable pairs; vowels /o/ (450, 800) and /o:/ held a little longer.
-    for (const [dt, len, f1, f2, up] of [[0, 0.22, 480, 850, 0.05], [0.32, 0.38, 430, 780, -0.08], [0.8, 0.22, 480, 850, 0.05], [1.12, 0.4, 430, 780, -0.1]]) {
-      for (let v = 0; v < 12; v++) {
-        const f = u01() < 0.55 ? 110 + u01() * 40 : 200 + u01() * 60;
-        voice(out, t + dt + u01() * 0.05, len + u01() * 0.06, f, f1 + u01() * 40, f2 + u01() * 60, 0.35 + u01() * 0.3, up);
-      }
-    }
     // A drum on the beat.
     for (const dt of [0, 0.8]) {
       const i0 = Math.round((t + dt) * SR);
@@ -149,7 +102,7 @@ function voice(mix, t0, dur, f, f1, f2, gain, glide = 0) {
   for (let i = 0; i < bed.length; i++) bed[i] = rnd() * 0.12;
   const m = band(bed, 500, 500);
   for (let i = 0; i < out.length; i++) out[i] += m[i];
-  write('protest_chant', loopify(highpass(out, 60), XF));
+  write('protest_drum', loopify(highpass(out, 60), XF));
 }
 
 // ---------------------------------------------------------------- fanfare

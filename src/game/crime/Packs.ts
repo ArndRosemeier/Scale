@@ -27,7 +27,6 @@ export class Packs {
       ground: (x, z) => g.world.groundHeight(x, z),
       blocked: (x, z) => !!g.world.buildingAt(x, z),
       hurtPlayer: (d, fx, fz, fy) => hurtPlayer(d, 'punch', fx, fz, fy),
-      sound: (id, x, y, z, gain, pitch) => g.audio.play(id, x, g.world.groundHeight(x, z) + y, z, gain, pitch, 30, g.renderer.camera.position),
       random: Math.random,
     };
   }

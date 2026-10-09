@@ -32,6 +32,7 @@ import { GUNS, type Firearms, type GunSpec } from './Firearms';
 import type { EquipmentVisuals } from '../../items/types';
 import { dealtBy } from '../../shared/status';
 import { Rng } from '../../core/rng';
+import { voice } from '../../ui/voices';
 
 export interface PoliceHost {
   time: number;
@@ -550,7 +551,7 @@ export class Police {
     if (!shooting || bd > POLICE.fireR + 15 || bd < POLICE.closeR) return false;
     act.held = 'pistol';
     lookAt(act, tgt.x, tgt.y + 1.2, tgt.z);
-    if (!act.memo.warned) { act.memo.warned = 1; H.sound('shout_hey', o.x, o.y + 1.6, o.z, 0.9, 0.8); }
+    if (!act.memo.warned) { act.memo.warned = 1; voice(o, 'police'); }
     act.memo.gunT = (act.memo.gunT ?? 0.6 + Math.random() * 0.6) - dt;
     // No clear shot lately (a corner, people in the way) or too far: close in for a bit (to
     // fireR / 3 — not into the muzzle: from there a step to the side).
@@ -658,7 +659,7 @@ export class Police {
     }
     act.memo.pheld = 0;
     this.stats.atPlayer += spec.burst;
-    if (!act.memo.warnedP) { act.memo.warnedP = 1; H.sound('shout_hey', o.x, o.y + 1.6, o.z, 0.9, 0.8); }
+    if (!act.memo.warnedP) { act.memo.warnedP = 1; voice(o, 'policeHero'); }
     return true;
   }
 

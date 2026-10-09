@@ -27,6 +27,7 @@ import type { Debris } from '../destruction/Debris';
 import { G } from '../render/materials/globals';
 import { clamp, smoothstep, angleDiff } from '../core/math';
 import { createBirdGeometry, createBirdMaterial } from './birdMesh';
+import { voice } from '../ui/voices';
 
 /** What the birds need from the game. */
 export interface BirdCtx {
@@ -1128,13 +1129,13 @@ export class Birds {
     }
   }
 
-  // ------------------------------------------------------------------ sound
+  // ------------------------------------------------------------------ calls
 
-  /** Now and then: a coo from a pigeon group nearby, a gull's call, a crow's caw. */
+  /** Now and then: a coo from a pigeon group nearby, a gull's call, a crow's caw (as bubbles, src/ui/voices). */
   private calls(dt: number, cam: THREE.Camera): void {
     this.callT -= dt;
     if (this.callT > 0) return;
-    this.callT = 1.2 + Math.random() * 2;
+    this.callT = 4 + Math.random() * 6;
     const c = cam.position;
     if (this.night > 0.6) return;
     const pick = Math.floor(Math.random() * CAP);
@@ -1143,15 +1144,15 @@ export class Birds {
       if (!b.on) continue;
       const d = Math.hypot(b.x - c.x, b.y - c.y, b.z - c.z);
       if (b.sp === Sp.Pigeon && b.mode === Mode.Ground && d < 22 && Math.random() < 0.35) {
-        this.ctx.sound('pigeon_coo', b.x, b.y + 0.2, b.z, 0.55, 0.9 + Math.random() * 0.2, 2.5);
+        voice(b, 'pigeon');
         return;
       }
-      if (b.sp === Sp.Gull && d < 140 && Math.random() < 0.3) {
-        this.ctx.sound('gull_call', b.x, b.y, b.z, 0.6, 0.9 + Math.random() * 0.25, 18);
+      if (b.sp === Sp.Gull && d < 50 && Math.random() < 0.3) {
+        voice(b, 'gull');
         return;
       }
-      if (b.sp === Sp.Crow && d < 160 && Math.random() < 0.25) {
-        this.ctx.sound('crow_caw', b.x, b.y, b.z, 0.6, 0.92 + Math.random() * 0.15, 16);
+      if (b.sp === Sp.Crow && d < 50 && Math.random() < 0.25) {
+        voice(b, 'crow');
         return;
       }
     }

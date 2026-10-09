@@ -19,6 +19,7 @@ import { tubeAt } from './Volumes';
 import { pointOnTube } from './layout';
 import { roomW, type Room } from './rooms';
 import type { Slimes } from './Slimes';
+import { voice } from '../ui/voices';
 
 export const SEWER_LIFE = {
   /** Rats kept around the player; spawn ring (m); gone beyond. */
@@ -196,7 +197,7 @@ export class SewerLife {
     }
     if (this.squeakT <= 0) {
       this.squeakT = 0.35;
-      this.host.sound?.play('rat_squeak', r.x, r.y + 0.1, r.z, 0.7 + Math.random() * 0.3);
+      voice(r, 'rat');
     }
   }
 

@@ -2,8 +2,6 @@
 //   nuke_siren        the civil-defence "attack" warning (loop): a motor siren wailing up and down fast, a
 //                     second rotor a fifth above, echoing over the city — not the slow evacuation wind-up
 //   blast_rumble      a strike far off: a dull flat crack, then a deep rumble rolling on for seconds
-//   trapped_call      a muffled call for help from under rubble: a two-syllable voice-like cry, dull and
-//                     boxed in (no words to make out)
 //   dig_rubble        digging through rubble by hand: scrapes, a shifting slab, stones clattering
 //   ambulance_siren   an ambulance's two-tone siren (loop)
 //   crane_machinery   a mobile crane at work (loop): diesel idle, hydraulic whine, a chain clinking
@@ -119,32 +117,6 @@ function sirenWave(ph) {
   x = lowpass(x, 600);
   x = echo(x, [[0.6, 0.35], [1.4, 0.25], [2.5, 0.15]]);
   write('blast_rumble', x, { fadeOut: 1.2, peak: 0.95 });
-}
-
-// ---------------------------------------------------------------- a muffled call for help
-{
-  const T = 1.5, N = Math.round(T * SR);
-  const out = new Float32Array(N);
-  // Two syllables ("he-elp" in shape, no words): a pitched voice through vowel formants.
-  const syl = [[0.05, 0.42, 230, 250], [0.55, 1.15, 255, 205]];
-  let ph = 0;
-  const src = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
-    const t = i / SR;
-    let a = 0, f = 220;
-    for (const [t0, t1, fa, fb] of syl) if (t >= t0 && t < t1) { const k = (t - t0) / (t1 - t0); a = smooth(0, 0.12, k) * (1 - smooth(0.7, 1, k)); f = fa + (fb - fa) * k + 4 * Math.sin(t * 34); }
-    ph += (2 * Math.PI * f) / SR;
-    // Glottal pulse: a sawtooth with a soft edge.
-    const saw = ((ph / (2 * Math.PI)) % 1) * 2 - 1;
-    src[i] = a * (saw * 0.8 + rnd() * 0.15);
-  }
-  const f1 = bandpass(src, (t) => (t < 0.5 ? 560 : 640), 0.25), f2 = bandpass(src, (t) => (t < 0.5 ? 1800 : 1250), 0.3), f3 = bandpass(src, 2500, 0.4);
-  for (let i = 0; i < N; i++) out[i] = f1[i] + f2[i] * 0.6 + f3[i] * 0.25;
-  // Under rubble: dull, boxed in, a short slap.
-  let x = lowpass(out, 950);
-  x = lowpass(x, 1400);
-  x = echo(x, [[0.045, 0.45], [0.09, 0.25], [0.16, 0.12]]);
-  write('trapped_call', x, { fadeOut: 0.15, peak: 0.75 });
 }
 
 // ---------------------------------------------------------------- digging through rubble

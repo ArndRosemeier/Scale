@@ -11,6 +11,7 @@ import { Crime, type CrimeWorld, play, setState, stand, lookAt } from './Crime';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 import { dealtBy } from '../../shared/status';
+import { voice } from '../../ui/voices';
 
 export const SNATCH = { ringMin: 120, ringMax: 280, approachTimeout: 45, thiefHp: 30, thiefStrength: 0.7 };
 
@@ -165,7 +166,7 @@ export class Snatch extends Crime {
     const playerClose = this.distToPlayer(v) < 45;
     if (this.shoutT <= 0 && (thiefAround || playerClose) && this.phaseT < 50) {
       this.shoutT = 3.2 + this.rng.float() * 2;
-      this.w.sound(v.cit.gender < 0.5 ? 'cry_help' : 'shout_hey', v.x, v.y + 1.6, v.z, 0.8, 0.95 + this.rng.float() * 0.15);
+      voice(v, 'help');
       this.w.emit('cry', v.x, v.y + 1.6, v.z, 1, 30);
     }
   }

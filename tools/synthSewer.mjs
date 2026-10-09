@@ -1,6 +1,5 @@
 // Procedural sounds for life in the sewers and the bigger side rooms (public/sounds/*.wav,
 // 22.05 kHz mono, deterministic):
-//   rat_squeak_1..3  a rat's short, high squeak (a chirp or two), in a tunnel
 //   under_engine     a pump engine running in a machine hall: a heavy rhythmic thump, a hiss, a whine (loop)
 //   under_gears      the winding gear of a sluice turning slowly: clanking teeth, a ratchet, a low hum (loop)
 //   under_fire       a fire in an oil drum: crackles and pops over a soft roar (loop)
@@ -65,23 +64,6 @@ function loopify(x, xf) {
   for (let i = 0; i < n; i++) { const t = i / n; out[i] = x[i] * t + x[N + i] * (1 - t); }
   return out;
 }
-
-// ---- rat squeaks: one to three fast chirps around 3–5 kHz with a pitch bend
-[[3600, 2], [4300, 1], [3100, 3]].forEach(([f0, n], k) => {
-  const N = Math.round(0.6 * SR), out = new Float32Array(N);
-  let t0 = 0.02;
-  for (let c = 0; c < n; c++) {
-    const len = 0.05 + (rnd() * 0.5 + 0.5) * 0.06, i0 = Math.round(t0 * SR);
-    for (let i = 0; i < len * SR && i0 + i < N; i++) {
-      const t = i / SR, q = t / len;
-      const f = f0 * (1 + 0.25 * Math.sin(q * Math.PI) - 0.15 * q) * (1 + c * 0.06);
-      const env = Math.sin(Math.PI * q) ** 0.6;
-      out[i0 + i] += (Math.sin(2 * Math.PI * f * t) + 0.3 * Math.sin(4 * Math.PI * f * t) + rnd() * 0.15) * env;
-    }
-    t0 += len + 0.03 + (rnd() * 0.5 + 0.5) * 0.05;
-  }
-  write(`rat_squeak_${k + 1}`, cave(bandpass(out, 3800, 0.6), 0.35, 0.5), { fadeOut: 0.08, peak: 0.7 });
-});
 
 // ---- engine: thump at ~2.2 Hz (a two-stroke rhythm), steam-like hiss, gear whine
 {

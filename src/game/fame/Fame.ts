@@ -514,7 +514,6 @@ export class Fame {
     // The hero walks right up to them: they boo.
     if (near < 6 && q.booT <= 0) {
       q.booT = 14;
-      g.audio.play('crowd_boo', q.x, p.y + 1.5, q.z, 0.9, 0.95 + Math.random() * 0.1, 8, g.renderer.camera.position);
       this.say(pick(q.members), pick(FAME_LINES.boo), 'angry');
     }
     // A chant now and then.
@@ -588,12 +587,12 @@ export class Fame {
     this.overlay.style.opacity = this.overlayT > 0.002 ? (this.overlayT * 4).toFixed(3) : '0';
   }
 
-  /** The protest's chant: one positional loop at the nearest gathered protest. */
+  /** The protest's drum (the chant itself is in their bubbles): one positional loop at the nearest gathered protest. */
   private sound(dt: number): void {
     const g = this.g, cam = g.renderer.camera.position;
     const q = this.groups.find((x) => x.kind === 'protest' && x.phase !== 'leave' && x.members.some((m) => m.act.action?.id === 'chant'));
     this.chantTry -= dt;
-    if (q && !this.chant && this.chantTry <= 0) { this.chantTry = 2; this.chant = g.audio.loop('protest_chant', 9); }
+    if (q && !this.chant && this.chantTry <= 0) { this.chantTry = 2; this.chant = g.audio.loop('protest_drum', 9); }
     if (!this.chant) return;
     if (q && Math.hypot(q.x - cam.x, q.z - cam.z) < 90) this.chant.set(q.x, g.player.pos.y + 1.6, q.z, Math.min(1, 0.35 + q.members.length * 0.06));
     else this.chant.set(cam.x, -1000, cam.z, 0);

@@ -31,6 +31,7 @@ import type { MapMarker } from '../../ui/map/GameMap';
 import { AFTERMATH } from './rules';
 import { parked } from './park';
 import { pointInPoly, distPointPolyEdge } from '../../core/geom2';
+import { voice } from '../../ui/voices';
 
 export const RESCUE = {
   /** Trapped / injured people drawn at once (near the player), entries kept, medics, ambulances. */
@@ -194,8 +195,8 @@ export class Rescues {
       t.callT -= dt;
       if (t.callT <= 0 && d < RESCUE.callR) {
         t.callT = this.rng.range(RESCUE.callGap[0], RESCUE.callGap[1]);
-        g.audio.play('trapped_call', t.x, t.y + 1.2, t.z, 0.85, 0.9 + this.rng.float() * 0.2, 7, g.renderer.camera.position);
-        if (d < 22) g.barks.say(a, pick(this.rng, CRIES));
+        // Over them, or (out of sight) low on the screen with where it came from.
+        voice(a, 'trapped');
       }
     }
     // Digging: E held beside them.
@@ -746,7 +747,6 @@ export class Rescues {
   }
 }
 
-const CRIES = ['Help!', 'Down here!', 'Help me!', 'I can\'t get out!', 'Over here!'];
 const THANKS = ['Thank you!', 'Oh, thank you…', 'I thought nobody would come.'];
 
 function pick<T>(rng: Rng, l: readonly T[]): T { return l[rng.int(0, l.length - 1)]; }

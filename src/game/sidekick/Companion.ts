@@ -41,6 +41,7 @@ import { MATE, MATE_POWERS, fightStyle, matePower, pickFoe, revives, mateLine, t
 import { smoothstep as smooth } from '../../core/math';
 import { fightingCrook } from '../friendFoe';
 import { dealtBy } from '../../shared/status';
+import { voice } from '../../ui/voices';
 
 /** Companion.panel: what the info panel shows. */
 export interface MatePanel {
@@ -202,7 +203,7 @@ export class Companion {
     if (this.mode === 'gone') return;
     this.stats.called++;
     const p = g.player.pos;
-    g.crime?.sound('shout_hey', p.x, p.y + 1.6, p.z, 0.8, 1.1);
+    voice(p, 'hey', { head: g.player.height + 0.25, text: `${this.name}!` });
     g.dust.burst(p.x, p.y + g.player.height + 1.2, p.z, 14, 0.4, 3.5, 0.5, 1.2, new THREE.Color(1.6, 1.25, 0.4), 1.2, 0.5);
     if (this.mode === 'ward') { g.powerHud.toast(`<b>${this.name}</b> is in the hospital's revival ward and cannot come`, 'warn', 4000); return; }
     if (this.mode === 'down') { g.powerHud.toast(`<b>${this.name}</b> is down and cannot come`, 'warn', 3500); return; }
@@ -729,7 +730,8 @@ export class Companion {
     stand(act);
     lookAt(act, tx, ty, tz);
     play(act, P.pose, P.windup + 0.25);
-    g.crime.sound(P.tellSound, a.x, a.y + 1.4, a.z, 0.75, 1.1);
+    if (P.tellSound) g.crime.sound(P.tellSound, a.x, a.y + 1.4, a.z, 0.75, 1.1);
+    if (P.tellVoice) voice(a, P.tellVoice);
   }
 
   private casting(a: PedAgent, dt: number): void {
