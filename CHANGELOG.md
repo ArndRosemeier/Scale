@@ -2,12 +2,18 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.202 — 2026-10-09
+## 0.204 — 2026-10-09
+
+- **Concert lights, after the check on Arnd's PC.** The colour beams now reach just to the ground and fade out there, so there are no more bright round caps where they land. They stay over the field instead of sweeping out across the stands. Every beam and searchlight has a soft glow cone round it in place of a hard edge.
+- **The stands read at night:** the seated crowd is brighter after dark, and during the songs phones are held up and swaying in the stands. A slow song gets more of them.
+- dev.concert.stop() during the evening now means no show tonight (it used to start a new one straight away).
+
+## 0.203 — 2026-10-09
 
 - **The concert now plays Arnd's own VELA songs** (Lyria 3 Pro, with vocals): City of Lights, Neon Heartbeat, Paper Wings, Hold On to the Night, Gravity and Rise. **The street bands play his folk, bossa and swing pieces**, each turned into a seamless loop. The lights and the crowd follow each song's measured beat. The ballad is read at its real slow tempo, not double time.
 - **The show is longer, and each night's set fits the evening.** Doors now open at 18:00 and the band plays from 19:00 to 23:00. The songs run at their real length, which is longer than those four game hours allow at the usual time scale, so each night plays the opener, the closer, and as many of the other songs as fit, in a different order every night.
 
-## 0.201 — 2026-10-09
+## 0.202 — 2026-10-09
 
 - **A concert at the stadium every evening.** The act is VELA. Doors open at 19:00, the band plays from 20:00 to 23:00, and the crowd has gone home by about 23:45.
   - **The stage:** a deck at one end of the pitch with a roof, speaker stacks and a crush barrier. Behind the band is an LED wall that shows the act, the song title and a spectrum that moves with the music.
@@ -18,6 +24,10 @@ Every push raises the version by 0.001. Newest first.
   - **Trouble ends the show:** an explosion, a monster, gunfire, an evacuation or a hit fan stops the music, and everyone runs for the exits.
   - Console commands: dev.concert.start(), go('pit' | 'stand' | 'stage' | 'far'), next(), panic(), stop().
 - **Street bands:** a trio (guitar, bass and a cajón player sitting on the box) plays on plazas, in parks and at metro stations from late morning until late evening. A few people stop to listen, and you can talk to them. They play folk, bossa or swing loops once those are built, and the street guitar until then.
+
+## 0.201 — 2026-10-09
+
+- **Fixed a memory leak that let long sessions run out of memory.** The body of every person who walked past stayed in memory for good, about 3.5 MB each. On a PC, ten minutes of fast travel added over 1.5 GB. Bodies nobody has used for 30 seconds are now freed; the 24 most recent ones stay for quick reuse.
 
 ## 0.200 — 2026-10-09
 

@@ -38,7 +38,7 @@ function beamFade(): THREE.Texture {
   return new THREE.CanvasTexture(c);
 }
 
-interface Beam { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; base: THREE.Vector3; yaw: number; pitch: number; k: number; sky: boolean }
+interface Beam { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; halo: THREE.MeshBasicMaterial; base: THREE.Vector3; yaw: number; pitch: number; k: number; sky: boolean }
 
 /** Colour palettes the show cycles through (one per song). */
 const PALETTES: number[][] = [
@@ -159,7 +159,14 @@ export class Stage {
       mesh.frustumCulled = false;
       mesh.renderOrder = 5;
       g.add(mesh);
-      this.beams.push({ mesh, mat, base: new THREE.Vector3(x, y, z), yaw: 0, pitch: 0, k, sky });
+      // A wider, fainter cone round it: the beam's edge is a soft glow, not a hard wall.
+      const halo = mat.clone();
+      const h = new THREE.Mesh(geo.beam, halo);
+      h.scale.set(HALO, 1, HALO);
+      h.frustumCulled = false;
+      h.renderOrder = 5;
+      mesh.add(h);
+      this.beams.push({ mesh, mat, halo, base: new THREE.Vector3(x, y, z), yaw: 0, pitch: 0, k, sky });
     };
     for (let k = 0; k < 8; k++) beam(-W / 2 + 1.5 + k * ((W - 3) / 7), R - 0.9, D - 0.6, false, k);
     for (const [s, z] of [[-1, 1.2], [1, 1.2], [-1, D - 0.6], [1, D - 0.6]]) beam(s * (W / 2 + 0.6), R + 0.8, z, true, this.beams.length);
@@ -203,20 +210,27 @@ export class Stage {
         // Searchlights: slow sweeps, only after dusk, whenever the show is on.
         const a = time * 0.25 + b.k * 1.7;
         b.mesh.quaternion.setFromUnitVectors(_y, _d.set(Math.sin(a) * 0.4, 1, Math.cos(a * 0.8) * 0.4).normalize());
-        b.mesh.scale.set(4, 260, 4);
-        b.mat.opacity = on ? 0.06 * night : 0;
+        b.mesh.scale.set(3, 260, 3);
+        b.mat.opacity = on ? 0.035 * night : 0;
         b.mat.color.setHex(0xe8f0ff);
+        b.halo.opacity = b.mat.opacity * 0.45;
+        b.halo.color.copy(b.mat.color);
         continue;
       }
       // Into the crowd: fanning sweeps on the beat, colours from the song's palette.
       const t = (song ? beat * 0.5 : time * 0.3) + b.k * 0.6;
-      const yaw = Math.sin(t * 0.9 + b.k) * 0.7;
-      const pitch = 0.45 + Math.sin(t * 0.7 + b.k * 0.4) * 0.3;
+      // (Steep enough to land on the field, never out over the stands.)
+      const yaw = Math.sin(t * 0.9 + b.k) * 0.55;
+      const pitch = 0.5 + Math.sin(t * 0.7 + b.k * 0.4) * 0.2;
       b.mesh.quaternion.setFromUnitVectors(_y, _d.set(Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).normalize());
-      b.mesh.scale.set(1.8, 38, 1.8);
+      // Just as long as it takes to reach the ground: there it has faded out (no bright cap).
+      const len = b.base.y / Math.sin(pitch);
+      b.mesh.scale.set(len * 0.045, len, len * 0.045);
       col.setHex(pal[(b.k + Math.floor(song ? beat / 8 : 0)) % pal.length]);
       b.mat.color.copy(col);
-      b.mat.opacity = song ? (0.035 + 0.07 * e + 0.06 * pulse) * (0.45 + 0.55 * night) : on ? 0.025 : 0;
+      b.mat.opacity = song ? (0.03 + 0.06 * e + 0.05 * pulse) * (0.45 + 0.55 * night) : on ? 0.02 : 0;
+      b.halo.opacity = b.mat.opacity * 0.3;
+      b.halo.color.copy(col);
     }
     // Edge strip and blinders: the beat.
     this.strips.color.setHex(pal[0]).multiplyScalar(song ? 0.6 + 1.6 * pulse * e : on ? 0.4 : 0.05);
@@ -298,3 +312,5 @@ export class Stage {
 }
 
 const _y = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3();
+/** The glow cone round a beam: this much wider. */
+const HALO = 2.2;

@@ -153,6 +153,8 @@ export class CrowdRenderer {
    * the stands (game/concert). Each is a synthetic citizen's looks at a place with a clip.
    */
   figures: CrowdFigure[] = [];
+  /** Brightness of the figures' clothes (the concert raises it at night: the stands read in the dark). */
+  figureGain = 1;
   /** The concert's beat (cycles of GROOVE_PERIOD) for everyone grooving, or null (their own clocks). */
   groovePhase: (() => number) | null = null;
 
@@ -449,7 +451,8 @@ export class CrowdRenderer {
       const clip = t.clips[f.clip];
       const phase = f.clip === 'groove' ? this.groove(time, f.cit.seed) : clip.cycleDist > 0 ? f.phase / (clip.cycleDist * look.scale) : (time + (f.cit.seed % 97)) / clip.cycleTime;
       this.anim[ti].setXYZW(k, clip.start, clip.frames, phase, 0);
-      for (let c = 0; c < 6; c++) this.cols[ti][c].setXYZ(k, look.colors[c * 3], look.colors[c * 3 + 1], look.colors[c * 3 + 2]);
+      const fg = this.figureGain;
+      for (let c = 0; c < 6; c++) this.cols[ti][c].setXYZ(k, look.colors[c * 3] * fg, look.colors[c * 3 + 1] * fg, look.colors[c * 3 + 2] * fg);
       this.q.setFromAxisAngle(_up, f.heading);
       this.mat4.compose(this.p.set(f.x, f.y, f.z), this.q, this.s.setScalar(look.scale));
       this.meshes[ti].setMatrixAt(k, this.mat4);

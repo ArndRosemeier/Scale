@@ -82,6 +82,8 @@ export class CharacterGeometry {
   readonly position: THREE.BufferAttribute;
   readonly normal: THREE.BufferAttribute;
   refs = 0;
+  /** Last time a character took or released it (performance.now()): BodyService.collect keeps recent ones. */
+  lastUsed = performance.now();
 
   constructor(readonly st: HumanStatic, readonly build: CharacterBuild) {
     this.position = new THREE.BufferAttribute(build.renderPos, 3);
@@ -418,6 +420,7 @@ export class Character {
     for (const g of this.ownGeometries) g.dispose();
     this.skeleton.dispose();
     this.geo.refs--;
+    this.geo.lastUsed = performance.now();
     this.object.removeFromParent();
   }
 }

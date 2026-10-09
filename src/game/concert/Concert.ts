@@ -55,6 +55,9 @@ const PEDS_ROOM = 2560;
 const INTRO_GAP = 9, GAP = 16;
 /** Music level (the songs are mastered loud) and the distance it is heard at full level (m). */
 const LEVEL = 0.9, REF = 38;
+/** Most phone lights up at once. */
+const PHONES_MAX = 900;
+const _m = new THREE.Matrix4();
 /** The wash on the band (candela; it hangs ~16 m from them). */
 const WASH = 420;
 
@@ -73,6 +76,10 @@ export class Concert {
    * material's shader (a recompile of the whole city).
    */
   private wash: THREE.SpotLight | null = null;
+  /** Phone lights held up in the stands during the songs at night (drawn, not lights). */
+  private phones: THREE.InstancedMesh | null = null;
+  /** Dev: no show this day (dev.concert.stop() during the evening). */
+  private skipDay = NaN;
   private live: ReturnType<typeof parseLive> | null = null;
   private liveState: 'idle' | 'loading' | 'ready' = 'idle';
   /** The show tonight: its running order and clock (s), the day it is for. */
@@ -149,7 +156,7 @@ export class Concert {
     const focus = g.freeCam ? cam : g.player.pos;
     const d = Math.hypot(focus.x - P.stage.x, focus.z - P.stage.z);
     // Tonight's show: made when the doors open (or on arrival mid-evening).
-    if (at.phase !== 'none' && (!this.show || this.show.day !== at.day) && this.live) this.newShow(at.day);
+    if (at.phase !== 'none' && (!this.show || this.show.day !== at.day) && this.live && at.day !== this.skipDay) this.newShow(at.day);
     if (at.phase === 'none' && this.show && !this.forced) this.endShow();
     const S = this.show;
     // The show's clock runs while it is on (heard or not); the last song finishes after the hour.
@@ -179,6 +186,7 @@ export class Concert {
     g.crowd.groovePhase = song && Number.isFinite(this.beat) ? this.groove : null;
     // People.
     this.stepFigures(dt, at, !!S && !S.cancelled, !!song);
+    this.stepPhones(!!S && !S.cancelled && !!song, song?.song.bpm ?? 120);
     this.stepFans(dt, at, d, !!song);
     this.stepBand(dt, at, d, song);
     this.stats.fans = this.fans.length;
@@ -351,6 +359,8 @@ export class Concert {
   private takeDown(): void {
     this.stage?.dispose();
     this.stage = null;
+    if (this.phones) { this.phones.removeFromParent(); this.phones.geometry.dispose(); (this.phones.material as THREE.Material).dispose(); this.phones = null; }
+    this.g.crowd.figureGain = 1;
     for (const f of this.figures) f.on = false;
     for (const fan of [...this.fans]) this.dropFan(fan, true);
     for (const b of [...this.band]) { if (b.a.actor?.owner === CONCERT_OWNER) b.a.alive = false; }
@@ -403,6 +413,40 @@ export class Concert {
       f.clip = song && hash32(i * 13) % 10 < 8 ? 'groove' : 'idle';
     }
     this.stats.figures = n;
+  }
+
+  /**
+   * Phone lights in the stands: held up and swaying during the songs after dusk (more of them in a
+   * slow song). The stands' people get a little brighter at night too, so the bowl reads as full.
+   */
+  private stepPhones(song: boolean, bpm: number): void {
+    const night = clamp(G.uNight.value, 0, 1);
+    this.g.crowd.figureGain = this.stage ? 1 + 1.4 * night : 1;
+    const F = this.figures;
+    if (!this.stage || !F.length) return;
+    if (!this.phones) {
+      const m = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }), PHONES_MAX);
+      m.frustumCulled = false;
+      m.count = 0;
+      const c = new THREE.Color();
+      for (let i = 0; i < PHONES_MAX; i++) m.setColorAt(i, c.setHex(i % 3 ? 0xcfe2ff : 0xfff1d6));
+      this.g.renderer.scene.add(m);
+      this.phones = m;
+    }
+    const m = this.phones;
+    const share = !song || night < 0.25 ? 0 : (bpm < 90 ? 0.6 : 0.22) * smoothstep(0.25, 0.7, night);
+    let n = 0;
+    for (let i = 0; i < F.length && n < PHONES_MAX; i++) {
+      const f = F[i];
+      if (!f.on || f.clip === 'run' || hash32(i * 31 + 5) % 1000 >= share * 1000) continue;
+      const sway = Math.sin(this.time * 1.3 + (i % 17)) * 0.25;
+      // Held up at arm's length, towards the stage.
+      _m.makeRotationY(f.heading);
+      _m.setPosition(f.x - Math.sin(f.heading) * 0.3 + Math.cos(f.heading) * sway, f.y + 1.75, f.z - Math.cos(f.heading) * 0.3 - Math.sin(f.heading) * sway);
+      m.setMatrixAt(n++, _m);
+    }
+    m.count = n;
+    m.instanceMatrix.needsUpdate = true;
   }
 
   // ================================================================== the pit
@@ -678,8 +722,8 @@ export class Concert {
         cancelled: this.show?.cancelled, ended: this.show?.ended, song: this.stream?.song.title, beat: this.beat, energy: this.energy, ...this.stats, band: this.band.length,
         stadium: P.lm.name, at: [Math.round(P.lm.x), Math.round(P.lm.z)],
       }),
-      start: () => { this.forced = true; this.loadLive(); if (this.show) this.show = null; return 'show now'; },
-      stop: () => { this.forced = false; this.endShow(); this.takeDown(); return 'stopped'; },
+      start: () => { this.forced = true; this.skipDay = NaN; this.loadLive(); if (this.show) this.show = null; return 'show now'; },
+      stop: () => { this.forced = false; this.skipDay = concertAt(this.g.sky.hoursAbs).day; this.endShow(); this.takeDown(); return 'stopped (no show tonight; start() for one now)'; },
       next: () => { const S = this.show; if (!S) return null; const i = this.itemAt(S.clock); if (i >= 0) S.clock = this.itemStart(i + 1) + 0.01; return this.itemAt(S.clock); },
       panic: () => { this.panic(P.lm.x, P.lm.z); return 'panic'; },
       go: (where: 'pit' | 'stand' | 'stage' | 'far' = 'pit') => {
