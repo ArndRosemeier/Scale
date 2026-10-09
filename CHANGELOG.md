@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.177 — 2026-10-09
+
+- **Less memory: the game's tab holds about 1 GB less after a while of travelling.** Building meshes, the crowd's baked animation and the facade and street texture sets used to stay in the tab's memory a second time after they had been handed to the graphics card. Now each is kept once, on the graphics card. Buildings that start hidden (the detailed version of far blocks, the simple version of near ones) are handed over within a few frames of arriving, one per frame. Measured in a headless run (size 1, four minutes of travel): the page's memory fell from 1.9 GB to 0.8 GB. Nothing looks different.
+- A building that comes down now rebuilds just its own outer walls to cut the falling part from (a self-test checks that this gives exactly the same pieces as the block's mesh).
+
 ## 0.176 — 2026-10-09
 
 - **The museum can be walked into.** Climb the steps, go through the big door in the middle of the front and you're in a great hall that runs to the back, the full height of the building in the classical museum. A big statue stands in the middle with benches round it, and there are display cases, plants, large paintings and a reception desk just inside the door. Either side, a gallery corridor leads to exhibition rooms with paintings round the walls, display cases, statues and a bench, plus a museum shop, a café and a store room. The modern glass museum gets the same inside under its glazed walls.
