@@ -12,13 +12,16 @@ const DS: Opt = { detail: true, solid: true, map: 0 };
 const leaves = () => mat(GREEN_ROOF, [0.55, 0.85, 0.5]);
 const bark = () => mat(PLASTER, [0.45, 0.35, 0.25]);
 
-/** `h`: the piece's height where it varies (plants). */
+/**
+ * `h`: the piece's height where it varies (plants). Glass stands half a centimetre above what it
+ * rests on: a see-through bottom level with the top beneath fights it for every pixel (flicker).
+ */
 export function buildProp(k: Kit, name: PropName, u: number, v: number, y: number, rot: number, T: Theme, r: Rng, h = 0): void {
   k.sub(u, v, rot, () => {
     switch (name) {
       case 'pod': // A sleep capsule: a base, a glass hood, a light strip along its foot.
         k.box(0, 0, 0.55, 1.1, y, y + 0.55, T.furniture, DS);
-        k.box(0, 0.05, 0.5, 1.0, y + 0.55, y + 1.15, T.glass, { ...D, clear: true });
+        k.box(0, 0.05, 0.5, 1.0, y + 0.555, y + 1.15, T.glass, { ...D, clear: true });
         k.box(0, -1.08, 0.5, 0.03, y + 0.2, y + 0.3, T.glow, D);
         break;
       case 'locker':
@@ -33,7 +36,7 @@ export function buildProp(k: Kit, name: PropName, u: number, v: number, y: numbe
       case 'holo': // A round table projecting a glowing column.
         k.cyl(0, 0, 0.75, 0.6, y, y + 0.9, T.furniture, { ...DS, seg: 16 });
         k.cyl(0, 0, 0.6, 0.6, y + 0.9, y + 0.93, T.glow, { ...D, seg: 16 });
-        k.cyl(0, 0, 0.45, 0.25, y + 0.93, y + 1.9, T.glass, { ...D, clear: true, seg: 12 });
+        k.cyl(0, 0, 0.45, 0.25, y + 0.935, y + 1.9, T.glass, { ...D, clear: true, seg: 12 });
         break;
       case 'table':
         k.box(0, 0, 0.12, 0.12, y, y + 0.72, T.trim, DS);
@@ -53,7 +56,7 @@ export function buildProp(k: Kit, name: PropName, u: number, v: number, y: numbe
         break;
       case 'case': // A display case: a plinth, a glass box, something in it.
         k.box(0, 0, 0.6, 0.4, y, y + 0.9, T.furniture, DS);
-        k.box(0, 0, 0.58, 0.38, y + 0.9, y + 1.5, T.glass, { ...D, clear: true });
+        k.box(0, 0, 0.58, 0.38, y + 0.905, y + 1.5, T.glass, { ...D, clear: true });
         k.box(r.range(-0.25, 0.25), 0, r.range(0.08, 0.2), r.range(0.08, 0.15), y + 0.9, y + 0.9 + r.range(0.15, 0.45), T.trim, D);
         break;
       case 'statue': { // A figure on a plinth.
@@ -208,7 +211,7 @@ export function buildProp(k: Kit, name: PropName, u: number, v: number, y: numbe
       }
       case 'lens': // The great lens on its pedestal, ringed in brass.
         k.cyl(0, 0, 0.7, 0.55, y, y + 1.0, T.furniture, { ...DS, seg: 12 });
-        k.cyl(0, 0, 0.75, 0.75, y + 1.0, y + 2.1, mat(GLASS, [1.4, 1.3, 1.0]), { ...D, clear: true, seg: 12 });
+        k.cyl(0, 0, 0.75, 0.75, y + 1.005, y + 2.1, mat(GLASS, [1.4, 1.3, 1.0]), { ...D, clear: true, seg: 12 });
         for (const yy of [1.0, 1.35, 1.7, 2.05]) k.cyl(0, 0, 0.78, 0.78, y + yy, y + yy + 0.05, T.trim, { ...D, seg: 12 });
         k.cyl(0, 0, 0.22, 0.22, y + 1.4, y + 1.7, T.glow, { ...D, seg: 8 });
         k.dome(0, 0, 0.6, 0.6, y + 2.1, y + 2.4, T.trim, { ...D, seg: 10 });

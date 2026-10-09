@@ -28,9 +28,10 @@ export function emitDesign(k: Kit, D: Design, T: Theme): void {
     for (const [d0, d1] of w.doors) {
       seg(t, d0, w.y0, w.y1);
       seg(d0, d1, Math.min(w.y1, w.y0 + DOOR_H), w.y1);
-      // A light frame round the door.
-      slab(k, lerp(w.a, w.b, d0 - 0.06 / L), lerp(w.a, w.b, d0), w.y0, w.y0 + DOOR_H, w.th + 0.06, T.glow, true);
-      slab(k, lerp(w.a, w.b, d1), lerp(w.a, w.b, d1 + 0.06 / L), w.y0, w.y0 + DOOR_H, w.th + 0.06, T.glow, true);
+      // A light frame round the door, a centimetre into the doorway: level with the wall's jamb,
+      // the two faces would fight over every pixel (flicker).
+      slab(k, lerp(w.a, w.b, d0 - 0.06 / L), lerp(w.a, w.b, d0 + 0.01 / L), w.y0, w.y0 + DOOR_H, w.th + 0.06, T.glow, true);
+      slab(k, lerp(w.a, w.b, d1 - 0.01 / L), lerp(w.a, w.b, d1 + 0.06 / L), w.y0, w.y0 + DOOR_H, w.th + 0.06, T.glow, true);
       t = d1;
     }
     seg(t, 1, w.y0, w.y1);

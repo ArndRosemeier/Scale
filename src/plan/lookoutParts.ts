@@ -116,7 +116,7 @@ export function tower(k: Kit, lm: Landmark, r: Rng): void {
       const yd = py + pr - 1.8, top = yd + 3.6, roofM = mat(METAL_ROOF, [0.85, 0.86, 0.9], ROOF);
       k.dome(0, 0, pr, pr, yd, py, roofM, { seg: 24 });
       k.dome(0, 0, pr, pr, top, top + pr, roofM, { seg: 24 });
-      k.cyl(0, 0, pr + 2.2, pr + 2.2, yd - 0.3, yd, conc, { seg: 24, top: floorM });
+      k.cyl(0, 0, pr + 2.2, pr + 2.2, yd - 0.3, yd, conc, { seg: 24, top: floorM, deck: true });
       ringWalls(k, ring(pr, 24), yd, top, 0.15, glass, 1.8, 2.4);
       railing(k, pr + 2.1, 24, yd, clear);
       k.cyl(0, 0, P.r * 0.7, P.r * 0.7, yd, top, conc, { seg: 12 });
@@ -200,7 +200,7 @@ export function tower(k: Kit, lm: Landmark, r: Rng): void {
     k.box(0, 0, w + 0.4, 0.4, B + LH, oy, mat(PANEL, WHITE), { solid: false, rot: Math.PI / 4, detail: true });
     // The observation box: the deck in its lower part behind the glass, a gallery round it.
     const DH = 4.2, a = w + 5 - 0.15, clr = mat(GLASS, [0.85, 0.95, 1.0]);
-    k.box(0, 0, w + 6.8, w + 6.8, oy - 0.5, oy, mat(PANEL, WHITE), { map: 0, top: mat(GRANITE, [0.85, 0.85, 0.86]) });
+    k.box(0, 0, w + 6.8, w + 6.8, oy - 0.5, oy, mat(PANEL, WHITE), { map: 0, deck: true, top: mat(GRANITE, [0.85, 0.85, 0.86]) });
     const deck = square(a);
     ringWalls(k, deck, oy, oy + DH, 0.3, glass, 1.8, 2.4);
     k.box(0, 0, w + 5, w + 5, oy + DH, oy + 12, glass, { top: mat(GRAVEL, WHITE, ROOF) });
@@ -232,7 +232,7 @@ export function lighthouse(k: Kit, lm: Landmark, r: Rng): void {
   }
   // The gallery, the lantern room on it (glass round the lens, a door out), the cap.
   const lr = P.r * 0.75, lan = ring(lr, 10);
-  k.cyl(0, 0, P.r + 1.3, P.r + 1.3, H, H + 0.5, mat(METAL, [0.2, 0.2, 0.22]), { seg: 18 });
+  k.cyl(0, 0, P.r + 1.3, P.r + 1.3, H, H + 0.5, mat(METAL, [0.2, 0.2, 0.22]), { seg: 18, deck: true });
   railing(k, P.r + 1.2, 18, H + 0.5, mat(GLASS, [0.85, 0.95, 1.0]));
   ringWalls(k, lan, H + 0.5, H + 3.8, 0.12, mat(GLASS, [1.3, 1.25, 1.1], WIN | CURTAIN, 1.2, 3.3, 3.3), 1.2, 2.3);
   k.cyl(0, 0, lr + 0.1, lr + 0.1, H + 3.8, H + 4.0, mat(METAL, [0.2, 0.2, 0.22]), { seg: 10 });

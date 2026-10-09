@@ -1,5 +1,6 @@
 /**
- * Hidden admin console (Ctrl+Shift+F12): buttons for the things worth trying out — spawn the
+ * Hidden admin console (Ctrl+Shift+F12): "Go to" buttons for every place worth a look in this city
+ * (debug/goTo: landmarks and their insides, shops, cemeteries, the underground, what is going on), buttons for the things worth trying out — spawn the
  * Strider or a robot malfunction, set the city response level, start crimes and small deeds, call up street characters,
  * karma, health, size, time of day, the slime colonies — and a command line that runs any
  * JavaScript with `game` and `dev` in scope (Up / Down for history).
@@ -21,6 +22,8 @@ export class AdminConsole {
   private input: HTMLInputElement;
   private history: string[] = [];
   private hi = -1;
+  /** The "Go to" sections: made from the city each time the console opens (debug/goTo). */
+  private places: HTMLDivElement;
   open = false;
 
   constructor(private game: Game) {
@@ -33,6 +36,8 @@ export class AdminConsole {
     this.input = this.el.querySelector('.adm-cmd')!;
     try { this.history = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]'); } catch { /* storage unavailable */ }
     const body = this.el.querySelector('.adm-body')!;
+    this.places = document.createElement('div');
+    body.appendChild(this.places);
     for (const [title, btns] of SECTIONS) {
       const sec = document.createElement('div');
       sec.className = 'adm-sec';
@@ -70,8 +75,31 @@ export class AdminConsole {
       g.input.keys.clear();
       g.input.buttons = 0;
       if (document.pointerLockElement) document.exitPointerLock();
+      this.fillPlaces();
       setTimeout(() => this.input.focus(), 0);
     } else this.input.blur();
+  }
+
+  /** One section per group of places (landmarks, city, underground, now); several of a kind step on. */
+  private fillPlaces(): void {
+    this.places.textContent = '';
+    const list = this.dev().goto?.places?.() as { group: string; label: string; go: () => unknown }[] | undefined;
+    if (!list) return;
+    const groups = new Map<string, HTMLDivElement>();
+    for (const p of list) {
+      let sec = groups.get(p.group);
+      if (!sec) {
+        sec = document.createElement('div');
+        sec.className = 'adm-sec';
+        sec.innerHTML = `<h4>Go to: ${p.group}</h4>`;
+        groups.set(p.group, sec);
+        this.places.appendChild(sec);
+      }
+      const e = document.createElement('button');
+      e.textContent = p.label;
+      e.onclick = () => this.exec('Go to ' + p.label, () => p.go());
+      sec.appendChild(e);
+    }
   }
 
   private dev(): Dev {

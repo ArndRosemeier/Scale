@@ -52,6 +52,9 @@ export function fillStorey(D: Design, b: StoreyBrief): Split {
   for (const sp of split.spaces) {
     if (sp.fixed && !b.furnishFixed) continue;
     const A = roomArea(sp.poly, [...split.walls, ...(b.entrances ?? [])], b.outline, facade, b.keepOut ?? []);
+    // (Pieces stand off a wall's centre line as from a 20 cm wall: in thicker ones the museum's
+    // paintings sank in, their canvas level with the wall's face, and flickered.)
+    A.innerGap = Math.max(0, (b.wallTh ?? 0.2) / 2 - 0.1);
     const furniture = new Filler(A, r, b.cell).fill(b.items(sp.type, A, r));
     const poly: P2[] = [];
     for (let k = 0; k < sp.poly.length; k += 2) poly.push([sp.poly[k], sp.poly[k + 1]]);

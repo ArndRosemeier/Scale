@@ -140,10 +140,10 @@ export function twistInside(k: Kit, lm: Landmark, S: TwistShell): number {
     k.sub(0, 0, tw, () => {
       // The floor plate (the lobby's on a foundation), the glass walls, the ceiling under the
       // next plate (its corners out of the next block are the ledges one sees from outside).
-      plate(k, a, b, i === 0 ? y - 0.3 : y - 0.25, y, well, S.plain, { top: floorM, map: 0, foot: i === 0 ? true : undefined });
+      plate(k, a, b, i === 0 ? y - 0.3 : y - 0.25, y, well, S.plain, { top: floorM, map: 0, deck: true, foot: i === 0 ? true : undefined });
       ringWalls(k, rect(a - TH / 2, b - TH / 2), y, y1 - CEIL, TH, S.wall, i === 0 ? 3.0 : 0, 3.0, { map: 0, foot: i === 0 ? true : undefined });
       const f = st && !top ? flight(i) : null;
-      plate(k, a, b, y1 - CEIL, top ? y1 : y1 - 0.05, f ? [f[0][0] - 0.05, f[1][0] + 0.05, f[0][1] - 0.05, f[2][1] + 0.05] : null, S.plain, { top: S.roof, map: 0 });
+      plate(k, a, b, y1 - CEIL, top ? y1 : y1 - 0.05, f ? [f[0][0] - 0.05, f[1][0] + 0.05, f[0][1] - 0.05, f[2][1] + 0.05] : null, S.plain, { top: S.roof, map: 0, deck: true });
       if (i % 2 === 1) ringWalls(k, rect(a + 0.3, b + 0.3), y1 - 0.4, y1, 0.6, S.plain, 0, 0, { detail: true, solid: false });
     });
     if (i === 0) {

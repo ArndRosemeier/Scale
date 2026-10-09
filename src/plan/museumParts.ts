@@ -107,8 +107,8 @@ function inside(k: Kit, lm: Landmark, vb: number, hw: number, hd: number, top: n
   });
   k.inner(() => emitDesign(k, Ds, Th));
   setDesign(lm, Ds);
-  // The great hall's light from high up.
-  for (let v = iv0 + 4; v < iv1 - 2; v += 7) for (const u of [-hu / 2, hu / 2]) k.light(u, v, top - 1.5);
+  // The great hall's light from high up (but in reach of the floor: the lamps reach 11 m).
+  for (let v = iv0 + 4; v < iv1 - 2; v += 7) for (const u of [-hu / 2, hu / 2]) k.light(u, v, Math.min(top - 1.5, B + gh + 1.5));
   const door = k.node(0, iv0 + 1.4, B);
   k.exit(door, [[0, iv0 - 0.7, B], [0, stepV, B]], 0, stepsFoot);
 }

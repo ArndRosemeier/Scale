@@ -3463,6 +3463,8 @@ section('front doors in real cities', async () => { for (const [seed, size] of [
 // The museum (plan/museumParts, interior core): in from the square up the steps through the door
 // into the great hall; into every room through its door; every room furnished for what it is.
 section('walk-in landmarks', async () => {
+  // (world/Collision: a hero's step is 0.5 m, slabs under 1.4 steps are ground only as decks.)
+  const WALK_MIN_H = 0.7;
   const t0 = performance.now();
   const count: Record<string, number> = { museum: 0, glasshouse: 0, airport: 0, tower: 0, lighthouse: 0, fortress: 0, twist: 0 };
   const styles: Record<string, Set<number>> = Object.fromEntries(Object.keys(count).map((k) => [k, new Set<number>()]));
@@ -3494,7 +3496,8 @@ section('walk-in landmarks', async () => {
           for (let s = 0; s <= L; s += 0.1) {
             const x = pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / L, z = pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / L;
             // (A hair either side: the seam between two step boxes belongs to neither.)
-            const ny = Math.max(terrain.height(x, z), S.topAt(x + 0.01, z + 0.01, y, 0.5), S.topAt(x - 0.01, z - 0.01, y, 0.5));
+            // (Slabs as the player's collision counts them: thinner than 0.7 m only as decks.)
+            const ny = Math.max(terrain.height(x, z), S.topAt(x + 0.01, z + 0.01, y, 0.5, WALK_MIN_H), S.topAt(x - 0.01, z - 0.01, y, 0.5, WALK_MIN_H));
             up = Math.max(up, ny - y); down = Math.max(down, y - ny); y = ny;
             if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
           }
@@ -3563,7 +3566,7 @@ section('walk-in landmarks', async () => {
       let off = 0;
       for (const [i, [pu, pv]] of probes.entries()) {
         const [x, z] = siteToWorld(lm, pu, pv);
-        y = Math.max(terrain.height(x, z), S.topAt(x, z, y, 0.5));
+        y = Math.max(terrain.height(x, z), S.topAt(x, z, y, 0.5, WALK_MIN_H));
         if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
         if (room.fn === 'security' || i < 3) off = Math.max(off, Math.abs(y - room.y));
       }
