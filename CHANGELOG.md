@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.238 — 2026-10-09
+
+- **You can walk into the stadium, and you land on its pitch.** The pitch sits a few metres above the street, but nothing held it up, so landing on it dropped you to the ground underneath, and a hero thrown onto it by a fall sank through. Now the grass is solid, so you stand on it after a jump, a flight or a hard fall. The two gates at the ends of the pitch have steps down to the street, so you can walk in and out. Four flights of stairs lead from the pitch up into the stands, and the stands can be climbed row by row.
+
 ## 0.237 — 2026-10-09
 
 - **Type to people.** Under the talk menu there is now a text box: write whatever you like and press Enter. The world keeps running while you type, and the hero stands still. People understand plain English, with slang, short forms and typos ("whats ur name", "wher do u live", "r u ok"): their name, job, home, family and friends ("tell me about your sister", then "and your brother?"), what they like and think (music, food, sports, the police, the gangs, the aliens, the city), the news, who runs the street, whether it is safe, where the nearest metro or landmark is (with a map marker), and about you. Tell them your name or what you like and they remember it next time. They ask things back, ask "why?" and "tell me more", and change the subject when you repeat yourself. Each answers in their own way: cheerful, grumpy, shy or chatty, children like children, and some lie or won't say. Insults make them like you less and they lose patience; threats also cost reputation and can send them running. Being nice helps a little.

@@ -1206,6 +1206,7 @@ function stadium(k: Kit, lm: Landmark, r: Rng): void {
     k.box(s * 52.6, 3.66, 0.06, 0.06, gy, gy + 2.44, post, { detail: true });
     k.box(s * 52.6, 0, 0.06, 3.72, gy + 2.38, gy + 2.5, post, { detail: true });
   }
+  stadiumWays(k, lm, bowl);
   if (P.track) {
     const tr = mat(TAR, [0.78, 0.36, 0.26]);
     for (let i = 0; i < N; i++) {
@@ -1216,6 +1217,56 @@ function stadium(k: Kit, lm: Landmark, r: Rng): void {
       const q = [...W(a0, b0), ...W(a1, b1), ...W(c1, d1), ...W(c0, d0)];
       k.quad([q[0], gy + 0.025, q[1], q[2], gy + 0.025, q[3], q[4], gy + 0.025, q[5], q[6], gy + 0.025, q[7]], tr, { map: 4 });
     }
+  }
+}
+
+/**
+ * Ways onto the stadium's pitch: the site is levelled to its highest ground, so the field stands
+ * up to ~4.6 m over the lowest. A solid floor under the grass (it holds anyone landing on it),
+ * stepped floors down through both gates to the apron, and flights from the pitch up to the
+ * first seat row of the lower tier.
+ */
+function stadiumWays(k: Kit, lm: Landmark, bowl: StadiumBowl): void {
+  const P = lm.p, gy = bowl.field, F = k.F;
+  // The floor: strips across the long axis, each as wide as the ring at its inner edge (the
+  // corners reach in under the stands, which stand from the foundation up anyway).
+  const K = 32, w = (2 * P.ia) / K;
+  const vAt = (u: number) => P.ib * Math.pow(Math.max(0, 1 - Math.pow(Math.min(1, Math.abs(u) / P.ia), bowl.n)), 1 / bowl.n);
+  for (let i = 0; i < K; i++) {
+    const u0 = -P.ia + i * w, u1 = u0 + w;
+    const vin = vAt(u0 < 0 && u1 > 0 ? 0 : Math.min(Math.abs(u0), Math.abs(u1)));
+    const p = k.box((u0 + u1) / 2, 0, w / 2 + 0.02, vin, F, gy, mat(CONC), { solid: true, deck: true, map: 0 });
+    p.hidden = true;
+  }
+  // Gates (the ends of the long axis): from the pitch's end down to the apron outside, the drop
+  // spread evenly over the way through the stands, at most 28 cm a step. They run on 60 cm under
+  // the natural ground: outside the city's cells the walked ground is drawn lower (world/WorldIndex
+  // surfaceOffset), and steps under the ground are simply buried.
+  const pave = mat(CONC, [0.78, 0.77, 0.74]);
+  const out = P.tiers * P.depth;
+  const e = bowl.ring[1];
+  for (const s of [-1, 1]) {
+    const uIn = P.ia, uOut = e.u + e.nu * out + 1.5;
+    const drop = Math.max(0, gy - (k.ground(s * uOut, 0) - 0.6));
+    const n = Math.max(1, Math.ceil(drop / 0.28 - 1e-6)), rise = drop / n, tread = (uOut - uIn) / n;
+    // Half width of the gap between the stands at u (it opens outwards along the ring's normals).
+    const half = (u: number) => e.v + (e.nu > 1e-3 ? Math.max(0, (u - e.u) * (e.nv / e.nu)) : 0);
+    for (let i = 0; i < n; i++) {
+      const a = uIn + i * tread, b = a + tread;
+      k.box(s * (a + b) / 2, 0, tread / 2 + 0.01, half(b), Math.min(F, gy - i * rise - 1), gy - i * rise, pave, { solid: true, map: 2 });
+    }
+  }
+  // Flights up to the first seat row, two on each long side.
+  const t0 = bowl.tierY(0), rowTop = t0 + bowl.rise;
+  const steps = Math.ceil((rowTop - gy) / 0.28), rise = (rowTop - gy) / steps, tread = 0.4;
+  for (const i of [Math.round(bowl.N * 0.17), Math.round(bowl.N * 0.33), Math.round(bowl.N * 0.67), Math.round(bowl.N * 0.83)]) {
+    if (bowl.gate(i)) continue;
+    const p0 = bowl.ring[i], p1 = bowl.ring[i + 1];
+    const nu = (p0.nu + p1.nu) / 2, nv = (p0.nv + p1.nv) / 2, nl = Math.hypot(nu, nv);
+    // (Local +v points into the field.)
+    k.sub((p0.u + p1.u) / 2, (p0.v + p1.v) / 2, Math.atan2(nu / nl, -nv / nl), () => {
+      for (let j = 1; j < steps; j++) k.box(0, (j - 0.5) * tread - 0.05, 1.4, tread / 2 + 0.05, F, rowTop - j * rise, pave, { solid: true, map: 2 });
+    });
   }
 }
 
@@ -1496,8 +1547,26 @@ function obstaclesOf(p: LmPart, out: PartObstacle[]): void {
       case PK.Prism: prismObstacles(p, out); break;
       case PK.Perf: perfObstacles(p, out); break;
       default:
+        if (p.k === PK.Ramp && (p.rows ?? 0) >= 2 && p.q) { rampRowObstacles(p, y0, out); break; }
         out.push({ cyl: false, x: p.x, z: p.z, r: 0, hx: Math.max(p.hx, p.hx2 ?? 0), hz: p.hz, ux, uz, y0, y1: p.y1, ...(p.pane ? { pane: true } : {}) });
     }
+}
+
+/** A stand's seat rows (a ramp on a quadrilateral): one box per row up to its tread, climbable row by row. */
+function rampRowObstacles(p: LmPart, y0: number, out: PartObstacle[]): void {
+  const q = p.q!, rows = p.rows!, yLo = p.yLo ?? p.y1, dy = (p.y1 - yLo) / rows;
+  // Corners: front left, front right, back right, back left.
+  const at = (s: number, t: number): [number, number] => {
+    const fx = q[0] + (q[2] - q[0]) * s, fz = q[1] + (q[3] - q[1]) * s, kx = q[6] + (q[4] - q[6]) * s, kz = q[7] + (q[5] - q[7]) * s;
+    return [fx + (kx - fx) * t, fz + (kz - fz) * t];
+  };
+  const wF = Math.hypot(q[2] - q[0], q[3] - q[1]) || 1, ux = (q[2] - q[0]) / wF, uz = (q[3] - q[1]) / wF;
+  const [fx, fz] = at(0.5, 0), [bx, bz] = at(0.5, 1), dl = Math.hypot(bx - fx, bz - fz);
+  for (let i = 0; i < rows; i++) {
+    const t0 = i / rows, t1 = (i + 1) / rows, [cx, cz] = at(0.5, (t0 + t1) / 2);
+    const w = Math.max(Math.hypot(at(1, t1)[0] - at(0, t1)[0], at(1, t1)[1] - at(0, t1)[1]), Math.hypot(at(1, t0)[0] - at(0, t0)[0], at(1, t0)[1] - at(0, t0)[1]));
+    out.push({ cyl: false, x: cx, z: cz, r: 0, hx: w / 2, hz: dl / rows / 2 + 0.02, ux, uz, y0, y1: yLo + (i + 1) * dy });
+  }
 }
 
 /** Is a lathe profile closed (a ring)? */

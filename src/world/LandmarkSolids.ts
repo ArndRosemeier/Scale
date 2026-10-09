@@ -183,6 +183,14 @@ export class LandmarkSolids {
       }
   }
 
+  /**
+   * The solid boxes and cylinders overlapping the box (each once; no helix walkways): the same
+   * objects every time while they stand (world/LocalGround keys its physics colliders by them).
+   */
+  solidsIn(x0: number, z0: number, x1: number, z1: number, fn: (o: PartObstacle) => void): void {
+    this.each(x0, z0, x1, z1, fn);
+  }
+
   /** Obstacle provider for world/Collision. */
   provider: ObstacleProvider = (x0, z0, x1, z1, out) => {
     this.each(x0, z0, x1, z1, out);

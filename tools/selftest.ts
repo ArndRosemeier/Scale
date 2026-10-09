@@ -3462,6 +3462,65 @@ section('front doors in real cities', async () => { for (const [seed, size] of [
 
 // The museum (plan/museumParts, interior core): in from the square up the steps through the door
 // into the great hall; into every room through its door; every room furnished for what it is.
+section('stadium access', async () => {
+  // The pitch stands up to ~4.6 m over the site's lowest ground: it must hold the hero, and both
+  // gates must lead onto it on foot; flights climb from the pitch into the lower stand's rows.
+  const { stadiumBowl } = await import('../src/plan/landmarkParts');
+  let n = 0;
+  for (const [seed, size] of [[1, 0.8], [2, 0.8], [3, 0.8], [4, 0.8], [6, 0.8], [9, 0.8], [12, 0.8], [5, 0.35]] as const) {
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const macro = buildMacroPlan(terrain);
+    const S = new LandmarkSolids(macro, terrain);
+    for (const lm of macro.landmarks.filter((l) => l.kind === 'stadium')) {
+      n++;
+      const bowl = stadiumBowl(lm), gy = bowl.field, P = lm.p;
+      // (sink: outside the loaded city cells the walked ground is drawn lower, world/WorldIndex surfaceOffset.)
+      let sink = 0;
+      const ground = (x: number, z: number, y: number) => Math.max(terrain.height(x, z) - sink, S.topAt(x, z, y, 0.5, 0.7));
+      // Landing from above anywhere on the grass inside the ring.
+      let off = 0, probes = 0;
+      for (let a = -0.95; a <= 0.95; a += 0.1) for (let b = -0.95; b <= 0.95; b += 0.1) {
+        if (Math.pow(Math.abs(a), bowl.n) + Math.pow(Math.abs(b), bowl.n) > 0.9) continue;
+        const [x, z] = siteToWorld(lm, a * P.ia, b * P.ib);
+        probes++;
+        if (Math.abs(ground(x, z, gy + 30) - gy) > 0.05) off++;
+      }
+      check(off === 0, `seed ${seed}: landing on the stadium pitch stands on the grass (${off} of ${probes} spots off, field ${(gy - lm.low).toFixed(1)} m over the lowest ground)`);
+      // Walk in through each gate from the apron to the centre spot.
+      const walk = (pts: [number, number][], y: number) => {
+        let up = 0, down = 0, blocked = 0;
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+          for (let t = 0; t <= L; t += 0.1) {
+            const x = pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * t) / L, z = pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * t) / L;
+            const ny = ground(x, z, y);
+            up = Math.max(up, ny - y); down = Math.max(down, y - ny); y = ny;
+            if (S.hit(x, y + 0.6, z) || S.hit(x, y + 1.5, z)) blocked++;
+          }
+        }
+        return { up, down, blocked, y };
+      };
+      const out = P.ia + P.tiers * P.depth + 6;
+      for (const sk of [0, 0.35]) for (const s of [-1, 1]) {
+        sink = sk;
+        const pts = [siteToWorld(lm, s * out, 0), siteToWorld(lm, s * P.ia * 0.5, 0), siteToWorld(lm, 0, 1)] as [number, number][];
+        const w = walk(pts, terrain.height(pts[0][0], pts[0][1]) - sk);
+        check(w.up <= 0.31 && w.down <= 0.31 && w.blocked === 0 && Math.abs(w.y - gy) < 0.05,
+          `seed ${seed}: walk in through the stadium's ${s < 0 ? 'west' : 'east'} gate onto the pitch${sk ? ` from ground drawn ${sk} m lower` : ''} (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, ends ${(w.y - gy).toFixed(2)} m off the grass)`);
+      }
+      sink = 0;
+      // From the halfway line up a flight into the long side's lower stand, a few rows up.
+      const i = Math.round(bowl.N * 0.33), p0 = bowl.ring[i], p1 = bowl.ring[i + 1];
+      const mu = (p0.u + p1.u) / 2, mv = (p0.v + p1.v) / 2, nu = (p0.nu + p1.nu) / 2, nv = (p0.nv + p1.nv) / 2, nl = Math.hypot(nu, nv);
+      const pts = [siteToWorld(lm, mu - (nu / nl) * 8, mv - (nv / nl) * 8), siteToWorld(lm, mu + (nu / nl) * 4 * bowl.rowD, mv + (nv / nl) * 4 * bowl.rowD)] as [number, number][];
+      const w = walk(pts, gy);
+      check(w.up <= 0.5 && w.blocked === 0 && w.y > bowl.tierY(0) + 2 * bowl.rise,
+        `seed ${seed}: up the steps from the pitch into the stand (steps up to ${w.up.toFixed(2)} m, ${w.blocked} blocked, ends ${(w.y - gy).toFixed(2)} m over the grass)`);
+    }
+  }
+  check(n >= 6, `stadiums checked (${n})`);
+});
+
 section('walk-in landmarks', async () => {
   // (world/Collision: a hero's step is 0.5 m, slabs under 1.4 steps are ground only as decks.)
   const WALK_MIN_H = 0.7;

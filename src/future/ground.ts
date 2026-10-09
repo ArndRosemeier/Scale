@@ -7,7 +7,9 @@
  *   - street-level heightfield patches (terrain + kerb, low bridge decks; 1 m resolution), and
  *   - building prisms: each footprint as a closed trimesh from below the ground to its roof
  *     (walls stop them, flat roofs catch falling drones), plus its entrance steps (stoop boxes:
- *     someone knocked onto a stoop lies on the steps, not at street level inside them).
+ *     someone knocked onto a stoop lies on the steps, not at street level inside them), and
+ *   - the landmarks' solids (world/LandmarkSolids: a stadium's pitch and stands, halls' floors
+ *     and walls), as boxes and cylinders.
  * Both are created on demand around a body and dropped when unused; prisms follow damage
  * (a building that collapsed or got shorter is rebuilt / removed). Last resort for anything
  * that still ends up in a footprint: `resolve` pushes a point out through the nearest wall.
@@ -19,6 +21,7 @@ import { pointInPoly } from '../core/geom2';
 import { buildingEntrance } from '../build/buildingLayout';
 import type { BuildingRef } from '../world/WorldIndex';
 import type { FutureCtx } from './ctx';
+import type { PartObstacle } from '../plan/landmarkParts';
 
 const PATCH = 32;
 const RES = 32;
@@ -26,6 +29,7 @@ const RES = 32;
 export class LocalGround {
   private patches = new Map<number, { c: RAPIER.Collider; used: number }>();
   private prisms = new Map<BuildingRef, { c: RAPIER.Collider; steps: RAPIER.Collider[]; used: number; top: number }>();
+  private solids = new Map<PartObstacle, { c: RAPIER.Collider; used: number }>();
   private t = 0;
   stats = { patches: 0, prisms: 0 };
 
@@ -64,6 +68,18 @@ export class LocalGround {
       const c = this.prism(b);
       if (c) this.prisms.set(b, { c, steps: this.steps(b), used: this.t, top: b.top });
     }
+    this.ctx.world.landmarks?.solidsIn(x - r, z - r, x + r, z + r, (o) => {
+      const s = this.solids.get(o);
+      if (s) { s.used = this.t; return; }
+      const hy = (o.y1 - o.y0) / 2;
+      if (hy < 0.01) return;
+      const desc = o.cyl ? R.ColliderDesc.cylinder(hy, o.r) : R.ColliderDesc.cuboid(o.hx, hy, o.hz);
+      // (Box axes: local x along (ux, uz).)
+      const th = Math.atan2(-o.uz, o.ux);
+      desc.setTranslation(o.x, o.y0 + hy, o.z).setRotation({ x: 0, y: Math.sin(th / 2), z: 0, w: Math.cos(th / 2) })
+        .setFriction(0.8).setCollisionGroups(GROUPS.localGround);
+      this.solids.set(o, { c: P.world.createCollider(desc), used: this.t });
+    });
     this.stats.patches = this.patches.size;
     this.stats.prisms = this.prisms.size;
   }
@@ -152,6 +168,7 @@ export class LocalGround {
     const W = this.ctx.physics.world;
     for (const [k, p] of this.patches) if (this.t - p.used > 30) { W.removeCollider(p.c, false); this.patches.delete(k); }
     for (const [b, p] of this.prisms) if (this.t - p.used > 30 || !b.alive) { this.drop(p); this.prisms.delete(b); }
+    for (const [o, s] of this.solids) if (this.t - s.used > 30 || o.dead) { W.removeCollider(s.c, false); this.solids.delete(o); }
     this.stats.patches = this.patches.size;
     this.stats.prisms = this.prisms.size;
   }
