@@ -129,13 +129,14 @@ const CLAW: V3 = [0.022, 0.02, 0.018], BONE: V3 = [0.11, 0.1, 0.085], EYE: V3 = 
 /** Scale-texture tiles round the body and round limbs (10 scales a tile). */
 const SC_BODY = 15, SC_LIMB = 9;
 
-type Weights = number[]; // [bone, w, bone, w, …]
-type Glow = [number, number, number, number];
+export type Weights = number[]; // [bone, w, bone, w, …]
+export type Glow = [number, number, number, number];
 const NO_GLOW: Glow = [0, 0, 0, 0];
 
 // ------------------------------------------------------------------ builder
 
-class Builder {
+/** Collects the skin's vertices, closed parts and triangles (the Burrower's skin builds with it too). */
+export class Builder {
   pos: number[] = []; uv: number[] = []; col: number[] = []; glow: number[] = []; si: number[] = []; sw: number[] = []; idx: number[] = [];
   parts: SkinPart[] = [];
   private v0 = 0; private i0 = 0;

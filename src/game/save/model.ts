@@ -72,6 +72,8 @@ export interface SaveThreats {
   setting: string;
   remains: SaveBody[];
   strider: SaveStrider | null;
+  /** Holes in the street (threats/burrower/Sinkholes): [x, z, r, depth, until (game hours), small, seed]. */
+  sinkholes?: number[][];
 }
 
 /**
@@ -291,6 +293,7 @@ export function parseSave(input: string | unknown): SaveData {
         downAt: num(b.downAt, -1, -1), cleared: num(b.cleared, 0, 0, 1),
       })),
       strider: thr.strider ? (() => { const s = obj(thr.strider); return { s: num(s.s, 0, 0), hp: num(s.hp, 1, 0), mode: str(s.mode, 'advance', 20), ...(s.level !== undefined ? { level: Math.min(4, Math.round(num(s.level, 0, 0))) } : {}) }; })() : null,
+      ...(Array.isArray(thr.sinkholes) ? { sinkholes: (thr.sinkholes as unknown[]).filter((r): r is number[] => Array.isArray(r) && r.length >= 6 && r.length <= 7 && r.every(Number.isFinite)).slice(0, 12).map((r) => r.slice()) } : {}),
     },
     waypoint: wp && Number.isFinite(wp.x) && Number.isFinite(wp.z) ? { x: wp.x as number, z: wp.z as number } : null,
     settings: { crime: oneOf(set.crime, CRIME_SETTINGS, 'normal'), events: oneOf(set.events ?? thr.setting, EVENT_SETTINGS, 'normal') },

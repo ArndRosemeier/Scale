@@ -17,7 +17,7 @@
  * are spread over the lead, and the event never fires before the lead has passed — omens always
  * come first. The archetype table is where threats plug in, never the same one twice in a row.
  *
- * Major events (the Strider; THREATS_PLAN §3): none before ~3 h of play (× the setting's scale)
+ * Major events (the Strider, the Burrower; THREATS_PLAN §3 — the first one always the Strider): none before ~3 h of play (× the setting's scale)
  * and only once the karma earned in this city has reached a milestone (150, then +250 per major);
  * then 1.5–3 h apart. When one is due the next planned event is a major one: its lead is longer
  * (10–16 min) with 3–4 omens of its own, and it never comes before its floor.
@@ -61,7 +61,12 @@ export const ARCHETYPES: readonly ArchetypeDef[] = [
   // The runaway teens (ALIENS_PLAN §5, game/aliens): a saucer zipping past low, a fresh glyph on a facade.
   { id: 'teens', tier: 'minor', weight: 1, omens: ['zip', 'glyph', 'zip'] },
   { id: 'strider', tier: 'major', weight: 1, omens: ['tremor', 'wake', 'tremor'] },
+  // The Burrower (game/threats/burrower): a rumble under the street, a pothole opening up.
+  { id: 'burrower', tier: 'major', weight: 1, omens: ['rumble', 'pothole', 'rumble'] },
 ];
+
+/** The city's first major event is always this one (the Strider: the first monster one meets). */
+export const FIRST_MAJOR = 'strider';
 
 export const isMajor = (id: string | null) => !!id && ARCHETYPES.some((a) => a.id === id && a.tier === 'major');
 
@@ -127,7 +132,7 @@ export class ThreatClock {
     const floor = major ? this.majorFloor() : 0;
     const key = `${S.n}:${this.setting}:${S.lastAt}:${S.lastP}:${S.last}:${major}:${floor}`;
     if (this.cache?.key === key) return this.cache.plan;
-    const plan = planEvent(this.seed, S.n, this.setting, S.lastAt, S.lastP, S.last, major, floor);
+    const plan = planEvent(this.seed, S.n, this.setting, S.lastAt, S.lastP, S.last, major, floor, S.majors === 0);
     this.cache = { key, plan };
     return plan;
   }
@@ -200,13 +205,13 @@ export class ThreatClock {
 }
 
 /** Event n's plan (pure). `major`: a major event is due, not before `majorFloor` (played s). */
-export function planEvent(seed: number, n: number, setting: CityEvents, lastAt: number, lastP: number, last: string | null, major = false, majorFloor = 0): PlannedEvent {
+export function planEvent(seed: number, n: number, setting: CityEvents, lastAt: number, lastP: number, last: string | null, major = false, majorFloor = 0, firstMajor = false): PlannedEvent {
   const rng = new Rng(deriveSeed(seed, 'threat', n));
   const scale = EVENT_SCALE[setting];
   const gap = (n === 0 ? CLOCK.firstMinor : rng.range(CLOCK.gapMin, CLOCK.gapMax)) * scale;
   if (n === 0) rng.float(); // (same stream position for every n)
   const tier = ARCHETYPES.filter((a) => a.tier === (major ? 'major' : 'minor'));
-  const pool = tier.length > 1 ? tier.filter((a) => a.id !== last) : tier;
+  const pool = major && firstMajor ? tier.filter((a) => a.id === FIRST_MAJOR) : tier.length > 1 ? tier.filter((a) => a.id !== last) : tier;
   const arch = rng.weighted(pool, (a) => a.weight);
   const lead = major ? rng.range(CLOCK.majorLeadMin, CLOCK.majorLeadMax) * Math.min(1, scale) : Math.min(rng.range(CLOCK.leadMin, CLOCK.leadMax), gap * 0.5);
   const count = major ? rng.int(CLOCK.majorOmensMin, CLOCK.majorOmensMax) : rng.int(CLOCK.omensMin, CLOCK.omensMax);

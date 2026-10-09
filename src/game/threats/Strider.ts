@@ -36,7 +36,8 @@ import { BeamStyle, DecalKind } from '../powers/ElementFx';
 import { bodyMass, stepEnergy, walkSpeed } from '../GiantBody';
 import { CreatureRig, capsuleDist, type RigDef, type Capsule } from './rig/CreatureRig';
 import type { CreatureMesh } from './rig/CreatureMesh';
-import { planStriderRoute, routeAt, type StriderRoute } from './StriderRoute';
+import { planStriderRoute, routeAt, nearestS, type StriderRoute } from './StriderRoute';
+import { closestOnPoly } from '../../core/geom2';
 import type { ThreatActor, ThreatEvent, ThreatOutcome, ThreatTarget, ThreatZone, DamageSource, DamageResult } from './ThreatEvent';
 import { DAMAGE_PER_IMPULSE } from './ThreatEvent';
 import type { Cause } from '../Stimuli';
@@ -435,7 +436,7 @@ export class Strider implements ThreatEvent, ThreatActor {
         if (R.seekT <= 0) {
           R.seekT = 2.5;
           R.ref = this.pickTower(R.done);
-          if (R.ref) { const c = nearestOnPoly(R.ref.poly, this.x, this.z); R.x = c.x; R.z = c.z; }
+          if (R.ref) { const c = closestOnPoly(R.ref.poly, this.x, this.z); R.x = c.x; R.z = c.z; }
         }
         if (!R.ref) this.roam(R, dt);
       }
@@ -907,7 +908,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       if (!ref.alive) continue;
       const H = ref.top - ref.base;
       if (H < bh) continue;
-      const c = nearestOnPoly(ref.poly, hx, hz);
+      const c = closestOnPoly(ref.poly, hx, hz);
       const dx = c.x - hx, dz = c.z - hz, d = Math.hypot(dx, dz);
       if (d > r || d < 12) continue;
       if ((dx * rig.fx + dz * rig.fz) / d < 0.34) continue;
@@ -947,7 +948,7 @@ export class Strider implements ThreatEvent, ThreatActor {
       if (!ref.alive || done.has(ref)) continue;
       const H = ref.top - ref.base;
       if (H < minH) continue;
-      const c = nearestOnPoly(ref.poly, this.x, this.z);
+      const c = closestOnPoly(ref.poly, this.x, this.z);
       const s = H - Math.hypot(c.x - this.x, c.z - this.z) * 0.25;
       if (s > bs) { bs = s; best = ref; }
     }
@@ -961,7 +962,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     let best: { ref: BuildingRef; x: number; y: number; z: number } | null = null, bd = R;
     for (const ref of g.world.buildingsIn(cx - R, cz - R, cx + R, cz + R)) {
       if (!ref.alive || ref.top - ref.base < 12) continue;
-      const c = nearestOnPoly(ref.poly, cx, cz);
+      const c = closestOnPoly(ref.poly, cx, cz);
       const d = Math.hypot(c.x - cx, c.z - cz);
       if (d < bd) { bd = d; best = { ref, x: c.x, y: Math.min(ref.top - 2, ref.base + 14), z: c.z }; }
     }
@@ -980,7 +981,7 @@ export class Strider implements ThreatEvent, ThreatActor {
     if (Math.hypot(p.x - tx, p.z - tz) < 30) return side(p.x, p.z);
     let l = 0, r = 0;
     for (const v of g.traffic.vehicles) if (Math.hypot(v.x - tx, v.z - tz) < 26) { if (side(v.x, v.z) > 0) r++; else l++; }
-    for (const ref of g.world.buildingsIn(tx - 22, tz - 22, tx + 22, tz + 22)) { const c = nearestOnPoly(ref.poly, tx, tz); if (Math.hypot(c.x - tx, c.z - tz) < 18) { if (side(c.x, c.z) > 0) r += 2; else l += 2; } }
+    for (const ref of g.world.buildingsIn(tx - 22, tz - 22, tx + 22, tz + 22)) { const c = closestOnPoly(ref.poly, tx, tz); if (Math.hypot(c.x - tx, c.z - tz) < 18) { if (side(c.x, c.z) > 0) r += 2; else l += 2; } }
     if (l + r < 2 && this.rng.float() < 0.6) return 0;
     return r >= l ? 1 : -1;
   }
@@ -1397,29 +1398,3 @@ function segDist(px: number, py: number, pz: number, ax: number, ay: number, az:
   return capsuleDist(px, py, pz, { ax, ay, az, bx, by, bz, r: 0, zone: '' });
 }
 
-/** Closest point on a polygon's outline. */
-function nearestOnPoly(poly: number[], x: number, z: number): { x: number; z: number } {
-  let best = Infinity, bx = x, bz = z;
-  const n = poly.length >> 1;
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const ax = poly[j * 2], az = poly[j * 2 + 1], cx = poly[i * 2], cz = poly[i * 2 + 1];
-    const dx = cx - ax, dz = cz - az, l2 = dx * dx + dz * dz;
-    let t = l2 > 0 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    const qx = ax + dx * t, qz = az + dz * t, d = (qx - x) ** 2 + (qz - z) ** 2;
-    if (d < best) { best = d; bx = qx; bz = qz; }
-  }
-  return { x: bx, z: bz };
-}
-
-/** Arc length of the route point nearest (x, z), searched around s0 (± window m). */
-function nearestS(r: StriderRoute, x: number, z: number, s0: number, win = 60): number {
-  const S = r.s, P = r.pts;
-  let best = Infinity, bs = s0;
-  for (let i = 0; i < S.length; i++) {
-    if (S[i] < s0 - win || S[i] > s0 + win) continue;
-    const d = (P[i * 2] - x) ** 2 + (P[i * 2 + 1] - z) ** 2;
-    if (d < best) { best = d; bs = S[i]; }
-  }
-  return bs;
-}

@@ -46,6 +46,7 @@ import type { MapMarker } from '../../../ui/map/GameMap';
 import type { EquipmentVisuals } from '../../../items/types';
 import { Strider, STRIDER, STRIDER_ZONES, type AirProvider, type StriderBlow } from '../../threats/Strider';
 import { PlayerRampage } from '../../threats/PlayerRampage';
+import { Burrower } from '../../threats/burrower/Burrower';
 import { RAMPAGE } from '../../threats/rampageRules';
 import type { DamageResult, DamageSource, ThreatEvent, ThreatOutcome, ThreatZone } from '../../threats/ThreatEvent';
 import type { Incident } from '../ResponseDirector';
@@ -68,7 +69,7 @@ interface Body {
   stuckT: number;
 }
 
-/** What the army fights: the Strider, or a rampaging giant player (threats/PlayerRampage). */
+/** What the army fights: the Strider, the Burrower, or a rampaging giant player (threats/PlayerRampage). */
 export interface ArmyFoe {
   readonly x: number; readonly y: number; readonly z: number;
   /** Progress along its route (m) and what it is doing ('advance', 'rampage' at the route's end …). */
@@ -92,11 +93,13 @@ export interface ArmyFoe {
   batteryAt?(): { x: number; z: number };
   /** It goes where it likes (the player): units holding out of reach go again. */
   readonly chased?: boolean;
+  /** Out of reach and out of sight (the Burrower under the street): units hold their fire. */
+  readonly hidden?: boolean;
 }
 
 /** The army's foe in an incident (a major threat with a body), or null. */
 export function armyFoe(ev: ThreatEvent): ArmyFoe | null {
-  return ev.tier === 'major' && (ev instanceof Strider || ev instanceof PlayerRampage) ? ev : null;
+  return ev.tier === 'major' && (ev instanceof Strider || ev instanceof PlayerRampage || ev instanceof Burrower) ? ev : null;
 }
 
 const VEHICLE_KIND: Partial<Record<ForceKind, VKind>> = { truck: 'army_truck', apc: 'apc', tank: 'tank' };
@@ -275,7 +278,7 @@ export class Forces {
     return {
       slot: (u, x, z) => (this.mon?.chased || this.reslot.has(u.id) ? this.sightSlot(u, x, z) : u.kind === 'rifles' ? this.street(x, z, 90, 4) : this.street(x, z, 140)),
       move: (u, x, z, dt) => this.move(u, x, z, dt),
-      fire: (u, q, d) => (fighting ? this.fire(u, q, d) : true),
+      fire: (u, q, d) => (fighting && !this.mon?.hidden ? this.fire(u, q, d) : true),
       event: (q, what, u) => this.event(q, what, u),
     };
   }
