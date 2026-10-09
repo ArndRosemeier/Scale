@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.178 — 2026-10-09
+
+- Tests only: the "room splitting" speed check times each office, shop or café storey three times and counts the fastest, so other test workers sharing the CPU no longer make it fail.
+
 ## 0.177 — 2026-10-09
 
 - **UFOs over the start screen.** Three flying saucers circle high over the city with running lights round their rims and a glowing dome. Every half minute or so one sinks a little and sweeps a green scanning beam over the roofs.
