@@ -44,6 +44,8 @@ import { splitChecks } from './splitTest';
 import { sidekickChecks } from './sidekickTest';
 import { aliensChecks } from './aliensTest';
 import { burrowerChecks } from './burrowerTest';
+import { leviathanChecks } from './leviathanTest';
+import { bridgeGapChecks } from './bridgeGapTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
 import { PlayerHealth } from '../src/game/PlayerHealth';
@@ -4042,6 +4044,8 @@ section('sidekick', async () => { sidekickChecks(check); });
 // The Wardens (ALIENS_PLAN phase 1): the disc schedule, walkers, stares, what people say (tools/aliensTest.ts).
 section('aliens', async () => { aliensChecks(check); });
 section('burrower', async () => { burrowerChecks(check); });
+section('leviathan', async () => { leviathanChecks(check); });
+section('fallen bridge spans', async () => { bridgeGapChecks(check); });
 
 // Nothing hurts through the pavement: every blow names where it came from (the type makes the
 // height a required argument), and the health refuses one from the other side of the street.

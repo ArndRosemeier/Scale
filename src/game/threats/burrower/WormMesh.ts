@@ -23,9 +23,11 @@ export class WormMesh {
   private used = 0;
   readonly stats: { vertices: number; triangles: number; parts: number };
 
-  constructor(material: THREE.Material, count = 2) {
-    this.group.name = 'burrower';
+  /** `tint`: the hide's vertex colours scaled per channel (the Leviathan's sea-green; same program). */
+  constructor(material: THREE.Material, count = 2, tint?: [number, number, number], name = 'burrower') {
+    this.group.name = name;
     const sk = buildWormSkin();
+    if (tint) for (let i = 0; i < sk.color.length; i++) sk.color[i] *= tint[i % 3];
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(sk.position, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(sk.normal, 3));
@@ -47,7 +49,7 @@ export class WormMesh {
       skeleton.update = () => { if (skeleton.boneTexture) skeleton.boneTexture.needsUpdate = true; };
       const mesh = new THREE.SkinnedMesh(geo, material);
       mesh.bind(skeleton, new THREE.Matrix4());
-      mesh.name = `burrower:${i}`;
+      mesh.name = `${name}:${i}`;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.visible = false;

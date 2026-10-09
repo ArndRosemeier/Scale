@@ -11,7 +11,7 @@
 import { SIDEKICK_OWNER } from '../sim/actors/Actor';
 import type { Cause } from './Stimuli';
 
-export type HarmTarget = 'person' | 'car' | 'robot' | 'drone' | 'prop' | 'building' | 'ground';
+export type HarmTarget = 'person' | 'car' | 'robot' | 'drone' | 'prop' | 'building' | 'ground' | 'bridge';
 /** Same vocabulary as the stimuli's `Cause` ('world': nobody's own doing). */
 export type HarmCause = Cause;
 export type HarmEffect = 'knockdown' | 'burn' | 'freeze' | 'shrink' | 'stun' | 'wet' | 'wreck' | 'damage' | 'break' | 'topple' | 'stall' | 'lift' | 'facade' | 'collapse';

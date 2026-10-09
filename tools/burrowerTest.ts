@@ -11,7 +11,7 @@ import { buildWormSkin } from '../src/game/threats/burrower/wormSkin';
 import { WormRig, WORM_BONES, WORM_LENGTH } from '../src/game/threats/burrower/wormRig';
 import { planBurrowerRoute, BURROW_ROUTE } from '../src/game/threats/burrower/burrowerRoute';
 import { craterDepth, buildCrater, SINK } from '../src/game/threats/burrower/Sinkholes';
-import { ThreatClock, CLOCK, FIRST_MAJOR } from '../src/game/threats/ThreatClock';
+import { ThreatClock, CLOCK, FIRST_MAJOR, isMajor } from '../src/game/threats/ThreatClock';
 import { makeProfile } from '../src/world/settings';
 import { Terrain } from '../src/world/terrain';
 import { buildMacroPlan } from '../src/plan/macro';
@@ -150,7 +150,7 @@ function clockChecks(check: Check): void {
     const c = new ThreatClock(seed);
     const out: Sig[] = [];
     for (let t = 0; t < 14 * 3600; t++) for (const s of c.tick(1, t % 15 === 0 ? 1 : 0, 0)) out.push({ t, type: s.type, arch: s.archetype, kind: s.type === 'omen' ? s.kind : undefined });
-    const majors = out.filter((s) => s.type === 'event' && (s.arch === 'strider' || s.arch === 'burrower'));
+    const majors = out.filter((s) => s.type === 'event' && isMajor(s.arch));
     if (majors.length && majors[0].arch === FIRST_MAJOR) firstOk++;
     if (majors.some((m) => m.arch === 'burrower')) wormSeen++;
     for (const o of out) if (o.type === 'omen' && o.arch === 'burrower' && o.kind !== 'rumble' && o.kind !== 'pothole') omensOk = false;
