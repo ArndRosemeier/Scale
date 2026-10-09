@@ -59,13 +59,16 @@ export function homeChecks(check: Check): void {
           for (let k = 0; k < 8; k += 2) if (!room || !pointInPoly(room.poly, q[k], q[k + 1])) { stats.outside++; break; }
         }
         for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) if (overlap(foot(solids[i]), foot(solids[j]))) stats.overlaps++;
-        // Doorways: 60 cm either side of every door opening kept free.
+        // Doorways: 60 cm either side of every door opening kept free (by pieces in the two rooms it
+        // joins: near a slanted corner the box reaches past a wall into a third room).
+        const roomOf = (x: number, z: number) => plan.rooms.findIndex((r) => pointInPoly(r.poly, x, z));
         for (const w of plan.walls) {
           const L2 = Math.hypot(w.bx - w.ax, w.bz - w.az), ux = (w.bx - w.ax) / L2, uz = (w.bz - w.az) / L2;
           for (const [t0d, t1d] of w.doors) {
             const p = (t: number, s: number): [number, number] => [w.ax + (w.bx - w.ax) * t - uz * s, w.az + (w.bz - w.az) * t + ux * s];
             const zone = [...p(t0d, -0.6), ...p(t1d, -0.6), ...p(t1d, 0.6), ...p(t0d, 0.6)];
-            for (const f of solids) if (overlap(foot(f), zone)) stats.doorways++;
+            const sides = [roomOf(...p((t0d + t1d) / 2, -0.3)), roomOf(...p((t0d + t1d) / 2, 0.3))];
+            for (const f of solids) if (overlap(foot(f), zone) && sides.includes(roomOf(f.x, f.z))) stats.doorways++;
           }
         }
         for (const r of plan.rooms) {

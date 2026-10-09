@@ -3,7 +3,7 @@
  * GPU: rooms (tinted by type), walls with their doors, windows (blue facade), furniture boxes with
  * a tick on their front side and their name. Also prints timing per storey.
  *
- *   npx tsx tools/interiorPlans.ts [seed=42] [size=0.4] [count=8] [outDir=reports/interiors] [floor=1]
+ *   npx tsx tools/interiorPlans.ts [seed=42] [size=0.4] [count=8] [outDir=reports/interiors] [floor=1] [kind=home|office|shop|all]
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { makeProfile } from '../src/world/settings';
@@ -67,12 +67,15 @@ function main(): void {
   const c0 = macro.centres[0];
   const cells = macro.cells.slice().sort((a, b) => Math.hypot(a.centroid[0] - c0.x, a.centroid[1] - c0.z) - Math.hypot(b.centroid[0] - c0.x, b.centroid[1] - c0.z));
   let n = 0, ms = 0, storeys = 0;
-  const homes = (b: BuildingDesc) => b.use !== 'office' && b.use !== 'industrial' && b.use !== 'parking' && b.style !== 'church';
+  const kind = process.argv[7] ?? 'home';
+  const shop = (b: BuildingDesc) => floorWanted === 0 && (b.shopfront || b.use === 'retail');
+  const wanted = (b: BuildingDesc) => b.use !== 'industrial' && b.use !== 'parking' && b.style !== 'church'
+    && (kind === 'all' || (kind === 'office' ? b.use === 'office' : kind === 'shop' ? shop(b) : b.use !== 'office' && !shop(b)));
   for (const c of cells) {
     if (n >= count) break;
     for (const b of planCell(macro, c, terrain).buildings) {
       if (n >= count) break;
-      if (!homes(b) || b.floors <= floorWanted) continue;
+      if (!wanted(b) || b.floors <= floorWanted) continue;
       const L = buildingLayout(b, terrain, 0);
       const fl = L.floors.find((q) => q.f === floorWanted);
       if (!fl) continue;

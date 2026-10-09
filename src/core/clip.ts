@@ -60,6 +60,20 @@ export function difference(subj: Poly[], clip: Poly[]): Shape[] {
 export function intersection(subj: Poly[], clip: Poly[]): Shape[] {
   return run(ClipperLib.ClipType.ctIntersection, subj, clip);
 }
+/**
+ * Booleans with the positive fill rule: only area wound counter-clockwise (positive polyArea)
+ * counts. For rings that may touch themselves (a room wrapped round the stairs), where non-zero
+ * would also fill the loop wound the other way.
+ */
+export function differencePos(subj: Poly[], clip: Poly[]): Shape[] {
+  return run(ClipperLib.ClipType.ctDifference, subj, clip, ClipperLib.PolyFillType.pftPositive);
+}
+export function intersectionPos(subj: Poly[], clip: Poly[]): Shape[] {
+  return run(ClipperLib.ClipType.ctIntersection, subj, clip, ClipperLib.PolyFillType.pftPositive);
+}
+export function unionPos(polys: Poly[]): Shape[] {
+  return run(ClipperLib.ClipType.ctUnion, polys, [], ClipperLib.PolyFillType.pftPositive);
+}
 
 export function shapesToPolys(shapes: Shape[]): Poly[] {
   const out: Poly[] = [];

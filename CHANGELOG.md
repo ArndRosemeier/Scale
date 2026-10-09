@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.172 — 2026-10-09
+
+- **Offices, shops and cafés are laid out and furnished for real.** Every floor of a flat, office or shop is now divided by one shared room splitter that works for any outline (an L, a triangle, a round end, a skewed block). The theme claims its big space first: a shop's sales floor along the street front, an office's open plan, a café's guest room, a lobby on an office's ground floor. Only the rest becomes rooms. Open-plan offices get rows of paired desks with monitors and chairs, plus meeting rooms with their table, single offices, a tea kitchen, a WC and a store. Grocery shops get a checkout by the door, aisles and wall shelves; clothes shops their fitting mirror (E still changes your look there), display tables and shelves; cafés a counter and table sets by the windows, with a kitchen behind.
+- **Every room can be reached.** Doors are placed so every room opens onto the stairs, a hall or a corridor; you only walk through a bedroom, bathroom or meeting room when nothing else reaches it, never through a closet. Rooms too small to use join the room next to them.
+- Interior core, step 2 of 6 (`docs/INTERIORS_PLAN.md`). The old wing and split floor layouts are gone.
+
 ## 0.170 — 2026-10-08
 
 - **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts and contrast trims showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, at an even depth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line. Cloth smoothing now only lifts the fabric off the body and no longer slides it sideways, which had bent the cut line.
