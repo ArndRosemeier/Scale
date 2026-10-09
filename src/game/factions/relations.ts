@@ -92,6 +92,10 @@ export function defaultRelations(): Relations {
   // Everything that preys on the city, and the city's forces, are enemies of each other and of the hero.
   const preys: FactionId[] = ['crooks', ...VILLAINS, 'murk', 'monsters', 'machines'];
   for (const p of preys) for (const s of [...city, 'hero', 'sidekick'] as FactionId[]) R.setBoth(p, s, REL.enemy);
+  // The beasts (monsters, the Murk, machines gone rogue) go for every person, crooks included, and the
+  // crooks want nothing to do with them (they run: Crime.lookRound).
+  const beasts: FactionId[] = ['murk', 'monsters', 'machines'];
+  for (const b of beasts) for (const c of ['crooks', ...VILLAINS] as FactionId[]) R.setBoth(b, c, REL.enemy);
   // The villain groups: rivals at war (archetypes' `rivals`, either way round), the rest wary.
   for (const a of VILLAINS) for (const b of VILLAINS) {
     if (a === b) continue;
@@ -199,7 +203,7 @@ export const SCATTER = {
 };
 
 /** Something to run from: a threat body (ThreatActor). */
-export interface Menace { x: number; y: number; z: number; height: number; faction?: FactionId }
+export interface Menace { x: number; y: number; z: number; height: number; faction?: FactionId; self?: boolean }
 
 /** How close a menace of this height has to come before a crew runs. */
 export function scatterReach(height: number): number {
@@ -215,9 +219,23 @@ export function menaceNear(R: Relations, from: FactionId, x: number, y: number, 
   for (const m of list) {
     const d = Math.hypot(m.x - x, m.z - z);
     if (d > scatterReach(m.height) || d >= bd || Math.abs(m.y - y) > m.height + SCATTER.vertical) continue;
-    if (!R.hostile(from, m.faction ?? 'monsters')) continue;
+    if (!R.hostile(from, bodyFaction(m))) continue;
     if (sameSide && !sameSide(m)) continue;
     best = m; bd = d;
   }
   return best;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Threat bodies and events: whose side they are on.
+
+/** A threat body's faction: the player's own (rampaging) body is the hero's, else its own, else a monster. */
+export function bodyFaction(a: { readonly self?: boolean; readonly faction?: FactionId }): FactionId {
+  return a.self ? 'hero' : a.faction ?? 'monsters';
+}
+
+/** A threat event's faction, from its bodies (none: a monster). */
+export function eventFaction(ev: { readonly actors?: readonly { readonly self?: boolean; readonly faction?: FactionId }[] }): FactionId {
+  const a = ev.actors?.[0];
+  return a ? bodyFaction(a) : 'monsters';
 }

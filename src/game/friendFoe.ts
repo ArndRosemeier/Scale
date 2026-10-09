@@ -16,7 +16,7 @@
 import type { Target } from './Targeting';
 import type { Actor } from '../sim/actors/Actor';
 import { subdued, SIDEKICK_OWNER } from '../sim/actors/Actor';
-import { defaultRelations, type FactionId, type Relations } from './factions/relations';
+import { bodyFaction, defaultRelations, type FactionId, type Relations } from './factions/relations';
 
 export interface FoeWorld {
   /** A machine (robot, service bot, drone) gone rogue (ThreatDirector.isHostile). */
@@ -49,7 +49,7 @@ export function actorFaction(act: Actor | null | undefined, group?: (id: number)
 /** The faction a target belongs to. */
 export function factionOf(t: Target, w: FoeWorld): FactionId {
   switch (t.kind) {
-    case 'threat': return t.obj.self ? 'hero' : t.obj.faction ?? 'monsters';
+    case 'threat': return bodyFaction(t.obj);
     case 'person': return actorFaction(t.obj.actor, w.group);
     case 'robot': case 'bot': case 'drone': return w.hostileThing(t.obj) ? 'machines' : 'civilians';
     case 'car': case 'prop': return 'civilians';

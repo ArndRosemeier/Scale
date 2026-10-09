@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.197 — 2026-10-09
+
+- **Fix: crooks really run from monsters now.** In 0.195 the faction table had no entry between crews and the monsters or the Murk, so crews never actually scattered. Now monsters, the Murk and rogue machines are enemies of every crew, and a new test checks the real table.
+- **Factions, step 3b: the army asks the table too.** The army now goes after a big threat only if it is hostile to that threat's faction. Today that means the same two foes as before: the Strider, and you while you rampage as a giant. Changing one number would now be enough to keep the army out of a fight.
+
 ## 0.196 — 2026-10-09
 
 - **Click a marker to target it.** Clicking a dot or "!" on the minimap or the compass now makes what it stands for your target, the same as Tab or clicking it in the world: a criminal, a getaway car, a rogue machine, a monster, a police car, someone you met. It works for anything within targeting range, even if it is out of sight or behind you; as with Tab, a target that stays out of view is let go after 5 seconds. Markers for places (a grave, a memorial, the spot the loot goes back to, someone trapped under rubble, someone only known to be "somewhere around here") never target whoever happens to stand there. Clicking anywhere else on the minimap still opens the full map.
