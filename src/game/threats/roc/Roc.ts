@@ -670,6 +670,7 @@ export class Roc implements ThreatEvent, ThreatActor {
     // Tries the wings now and then.
     this.gustT -= dt;
     if (this.gustT > 0) { R.mantle = 0.1; R.beat = 1; R.flap += dt * Math.PI * 2; }
+    else { R.beat = 0; R.flap = 0; R.fold = 0.3; } // (half folded, drooping; not the wings left mid-beat from the fall)
     if (this.cool.gust <= 0) this.gust(R.x, y, R.z);
     if (this.actT > ROC_T.groundT) { this.perchAt = null; this.startTakeoff(); }
   }
@@ -805,9 +806,9 @@ export class Roc implements ThreatEvent, ThreatActor {
     // Down off the roof and out over the street in front of it.
     const gx = x + f.x * 14, gz = z + f.z * 14, gy = g.world.groundHeight(gx, gz);
     for (const [px, py, pz] of [[x, y, z], [gx, gy, gz]] as [number, number, number][]) {
-      for (let i = 0; i < 10; i++) {
-        const a = (i / 10) * Math.PI * 2;
-        g.dust.burst(px + Math.cos(a) * 6, py + 0.5, pz + Math.sin(a) * 6, 6, 3, 9, 2.5, 2.5, DUST, 0.15, 0.4);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        g.dust.burst(px + Math.cos(a) * 6, py + 0.5, pz + Math.sin(a) * 6, 4, 3, 9, 2.5, 2, DUST, 0.15, 0.3);
       }
       g.debris.vortex(px, py, pz, R * 0.6, 2, 6);
       g.props.hit(px, py + 1, pz, R * 0.5, f.x * 2.5e4, 1e4, f.z * 2.5e4);
