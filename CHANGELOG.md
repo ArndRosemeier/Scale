@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.200 — 2026-10-09
+
+- **Factions, step 4: the villain groups' feelings for each other change by themselves.** Each street fight between two groups deepens their feud. When two rival groups are both hunting you, they draw closer every game hour, and after about six hours they call a truce. A toast tells you: "… have called a truce — against you". During a truce they stop brawling and stop pushing into each other's turf. Once one of them stops hunting you, old habits come back within a few hours ("The truce is over"). Every pair also drifts slowly back towards its usual feelings. Truces and feuds are kept in save files.
+
 ## 0.199 — 2026-10-09
 
 - **Factions, step 3d: rogue machines ask the table.** Robots, service bots and drones gone rogue go for you and for people only if they are hostile to that faction. The seeded table makes that everyone, as before, so nothing plays differently. This finishes phase 3: crews, the army, the Murk and rogue machines all decide who to fight or run from through the one table.
