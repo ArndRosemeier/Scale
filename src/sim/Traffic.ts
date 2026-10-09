@@ -20,6 +20,7 @@ import { Rng, hash32 } from '../core/rng';
 import type { Citizen } from './Population';
 import type { Obstacle, ObstacleProvider } from '../world/Collision';
 import { statusOf } from '../shared/status';
+import { CAR_CRUSH_H } from '../shared/cause';
 
 export type VKind = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'van' | 'pickup' | 'taxi' | 'police' | 'sports' | 'bus' | 'truck' | 'delivery' | 'shuttle' | 'swat'
   | 'army_truck' | 'apc' | 'tank'
@@ -249,7 +250,7 @@ export class Traffic {
         if (d > s.radius) continue;
         // A roar: drivers panic (turn round or leave the car); a tremor only unsettles them.
         v.fear = Math.min(2, v.fear + (1 - d / s.radius) * (s.kind === 'giant' || s.kind === 'tremor' ? 0.3 : s.kind === 'roar' ? 2 : 1.2));
-        if (s.kind === 'stomp' && d < Math.max(3, s.intensity)) this.crush(v);
+        if (s.kind === 'stomp' && (s.size ?? 0) > CAR_CRUSH_H && d < Math.max(3, s.intensity)) this.crush(v);
       }
     }
     for (let i = this.vehicles.length - 1; i >= 0; i--) {
