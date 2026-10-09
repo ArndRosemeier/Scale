@@ -34,7 +34,7 @@ export type FurnKind =
   | 'diningTable' | 'chair' | 'kitchenRow' | 'fridge' | 'stove' | 'toilet' | 'bathtub' | 'sink' | 'shower'
   | 'desk' | 'officeChair' | 'monitor' | 'meetingTable' | 'shelf' | 'bookshelf' | 'plant' | 'floorLamp' | 'painting'
   | 'counter' | 'shopShelf' | 'rack' | 'cafeTable' | 'barCounter' | 'palletRack' | 'crate' | 'pew' | 'altar' | 'reception' | 'column' | 'clothesStack'
-  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror' | 'arcade'
+  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror' | 'arcade' | 'clothesRail' | 'mannequin'
   // A starship's props (built as landmark parts by interior/design/props).
   | 'pod' | 'locker' | 'console' | 'holo' | 'stool' | 'bench' | 'planter' | 'table'
   // A museum's.
@@ -325,6 +325,13 @@ class Frame {
  */
 /** Ground-floor shop layout of a building: 0 café (eateries), 1 clothes shop, 2 grocery (see planFloor). */
 export function shopKindOf(b: BuildingDesc): number {
+  const k = baseShopKind(b);
+  // Clothes shops: one in three of the shops that would be one (the rest general stores).
+  return k % 3 === 1 && hash32(b.seed ^ 0x51c7e3) % 3 !== 0 ? k + 1 : k;
+}
+
+/** (The layout before clothes shops were thinned out: arcades are picked from its general stores.) */
+function baseShopKind(b: BuildingDesc): number {
   const sk = (b.seed >>> 7) % 9;
   return b.eatery ? 0 : sk % 3 === 0 ? sk + 1 : sk;
 }
@@ -350,7 +357,7 @@ export function isArcade(b: BuildingDesc): boolean {
   let v = arcadeCache.get(b);
   if (v === undefined) {
     v = (b.shopfront || b.use === 'retail') && !b.eatery && b.style !== 'church' && b.use !== 'industrial' && b.use !== 'parking'
-      && b.groundH >= 3.6 && shopKindOf(b) % 3 === 2 && hash32(b.seed ^ 0x3a7c11d) % ARCADE_ONE_IN === 0 && b.poly.length <= 12;
+      && b.groundH >= 3.6 && baseShopKind(b) % 3 === 2 && hash32(b.seed ^ 0x3a7c11d) % ARCADE_ONE_IN === 0 && b.poly.length <= 12;
     if (v) {
       const r = minAreaRect(b.poly);
       v = Math.min(r.hu, r.hv) >= ARCADE_MIN.hv && Math.max(r.hu, r.hv) >= ARCADE_MIN.hu && Math.abs(polyArea(b.poly)) >= 4 * r.hu * r.hv * 0.93;

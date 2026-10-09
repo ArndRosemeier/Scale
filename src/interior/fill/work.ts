@@ -242,13 +242,16 @@ function clothes(A: Area, r: Rng): Item[] {
     { kind: 'tallMirror', at: 'wall', w: 0.7, d: 0.08, h: 1.85, color: [0.3, 0.21, 0.14], use: 'dress', front: 1.2, tall: false, tag: 'mirror', score: (c, f) => plainWall(c) * 3 + Math.min(f.doorDist(c.x, c.z), 4) * 0.4 },
     { kind: 'tallMirror', at: 'free', w: 0.7, d: 0.3, h: 1.85, color: [0.3, 0.21, 0.14], use: 'dress', front: 1.2, tag: 'mirror', score: (c, f) => (f.get('mirror') ? -100 : 0), min: -50 },
     checkout(),
-    ...many(Math.min(10, area / 12), {
+    // Rails of clothes down the floor and along the walls, dummies in the window.
+    ...many(Math.min(14, area / 6), { kind: 'clothesRail', at: 'free', sym: true, w: 1.6, d: 0.6, h: 1.5, color: r.pick(FABRIC), front: 0.7, score: (c, f) => Math.min(f.doorDist(c.x, c.z), 4) * 0.3 }),
+    ...many(Math.min(8, area / 10), { kind: 'clothesRail', at: 'wall', w: 1.8, d: 0.55, h: 1.6, color: r.pick(FABRIC), front: 0.8, score: plainWall }),
+    ...many(Math.min(2, area / 25), { kind: 'mannequin', at: 'free', sym: true, w: 0.55, d: 0.45, h: 1.85, color: r.pick(FABRIC), score: (c, f) => -Math.min(f.windowDist(c.x, c.z), 6) }),
+    ...many(Math.min(3, area / 25), {
       kind: 'coffeeTable', at: 'free', sym: true, w: 1.4, d: 0.8, h: 0.8, color: r.pick(WOOD), front: 0.6,
       kids: [{ kind: 'clothesStack', du: 0, dv: 0, w: 1.2, d: 0.6, h: 0.8, color: r.pick(FABRIC), onTop: true }],
       score: (c, f) => Math.min(f.doorDist(c.x, c.z), 4) * 0.3,
     }),
-    ...many(Math.min(12, area / 12), { kind: 'shopShelf', at: 'wall', w: 1.8, d: 0.5, h: 2.1, color: fixture, front: 0.9, score: plainWall }),
-    { kind: 'rug', at: 'free', flat: true, w: 3.0, d: 2.2, h: 0.01, color: r.pick(FABRIC), score: (c, f) => Math.min(f.doorDist(c.x, c.z), 4) },
+    ...many(Math.min(6, area / 16), { kind: 'shopShelf', at: 'wall', w: 1.8, d: 0.5, h: 2.1, color: fixture, front: 0.9, score: plainWall }),
     plant(1.3), plant(1.1),
     picture([0.75, 0.8, 0.85], 0.7), picture(r.pick(FABRIC), 0.7),
   ];
