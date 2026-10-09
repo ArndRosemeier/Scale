@@ -2,9 +2,17 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.199 — 2026-10-09
+## 0.201 — 2026-10-09
 
 - **A new big threat: the giant worm.** After the first Strider, a 95 m worm can come instead of a strider or a swarm. It is heralded by a rumble underfoot with cracks running along the street, or a pothole that suddenly caves in. It tunnels under the main roads from your side of town towards downtown: cracks, dust and a rumble run along the street above it, drivers stop and the metro waits. Now and then the street bulges and caves in, and the worm rears 30 m out of the sinkhole. It roars, slams down on whatever is near, snatches cars and people, bites and swats, then dives back in an arc and opens a new hole further on. It comes up beside you when you are close, and a heavy super-jump landing above its head brings it up stunned. Its maw is the weak spot (four times the damage). The army fights it only while it is up. Hurt badly it flees underground; beaten, it topples across the street and lies there for a few hours. The sinkholes stay a while and are filled once you are far away. Cars drive around them and people walk around them. They are saved with the game. The admin console has a "Giant worm" section, and `dev.threat.burrower` has tools for testing.
+
+## 0.200 — 2026-10-09
+
+- **Factions, step 4: the villain groups' feelings for each other change by themselves.** Each street fight between two groups deepens their feud. When two rival groups are both hunting you, they draw closer every game hour, and after about six hours they call a truce. A toast tells you: "… have called a truce — against you". During a truce they stop brawling and stop pushing into each other's turf. Once one of them stops hunting you, old habits come back within a few hours ("The truce is over"). Every pair also drifts slowly back towards its usual feelings. Truces and feuds are kept in save files.
+
+## 0.199 — 2026-10-09
+
+- **Factions, step 3d: rogue machines ask the table.** Robots, service bots and drones gone rogue go for you and for people only if they are hostile to that faction. The seeded table makes that everyone, as before, so nothing plays differently. This finishes phase 3: crews, the army, the Murk and rogue machines all decide who to fight or run from through the one table.
 
 ## 0.198 — 2026-10-09
 
