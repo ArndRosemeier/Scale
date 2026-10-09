@@ -152,6 +152,11 @@ export class ShaderGate {
     const d = this.shadersBefore < 0 ? 0 : n - this.shadersBefore;
     this.shadersBefore = n;
     shaderCap.book(d);
+    if (d > 0) {
+      const now = performance.now();
+      this.recent.push([now, d]);
+      while (this.recent.length && this.recent[0][0] < now - 10000) this.recent.shift();
+    }
     return d > 0;
   }
 
@@ -254,6 +259,23 @@ export class ShaderGate {
       if (m.isMesh && m.castShadow) this.compileShadow(m, Array.isArray(m.material) ? m.material : [m.material]);
     });
     this.warm.push({ o, t0: performance.now() });
+  }
+
+  /** New shaders (whoever started them) in the last 10 s: [time, count]. */
+  private recent: [number, number][] = [];
+
+  /** Has this object been checked with the material it has now? (freeze log) */
+  knows(o: THREE.Object3D): boolean {
+    return this.seen.get(o) === (o as THREE.Mesh).material;
+  }
+
+  /** One line for the freeze log: what the gate waits for and how many shaders started lately. */
+  stateLine(): string {
+    const now = performance.now();
+    let n2 = 0, n10 = 0;
+    for (const [t, d] of this.recent) { if (t > now - 10000) n10 += d; if (t > now - 2000) n2 += d; }
+    const oldest = this.pending.reduce((a, p) => Math.max(a, now - p.t0), 0);
+    return `gate: ${this.pending.length} waiting${this.pending.length ? ` (oldest ${(oldest / 1000).toFixed(1)} s: ${describe(this.pending[0].mesh, this.pending[0].real)})` : ''}, ${this.shadowWait.length} shadow, ${this.warm.length} precompiles, ${this.backlog.length} under cap; shaders started last 2 s: ${n2}, last 10 s: ${n10}`;
   }
 
   get busy(): number { return this.pending.length + this.warm.length + this.gpuPending; }
