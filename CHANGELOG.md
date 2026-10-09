@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.193 — 2026-10-09
+
+- **Factions, step 3: crooks run from monsters.** Until now a mugger kept mugging and a gang kept brawling with a Strider right next to them. Now every crew at work, from a street thief to a boss operation, looks round twice a second. When a threat their faction is hostile to comes near (a monster, a swarm, the Murk), they drop what they stole and scatter away from it. The bigger it is, the farther off they run: about 20 m for the Murk, 110 m for a Strider. A crime that had not started yet is called off. One that had started ends without the group gaining turf. If you had already knocked someone down, it still counts as stopped. Runaway saucers don't scare them. The friend/foe table decides who runs from whom, so a group could later be made fearless or loyal to a monster by changing one number.
+
 ## 0.192 — 2026-10-09
 
 - **Area powers hit people harder as they rank up, not only wider.** Before, a fireball, fire wave, laser, chain lightning or water jet did the same to a person at every rank. Now the damage grows with the rank, from rank 1 to rank 5:

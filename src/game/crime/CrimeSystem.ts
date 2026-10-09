@@ -11,6 +11,7 @@
  *                                      bystander hurt), its reputation, the crowd cheers
  *   returning the stolen bag / wallet  8 karma, +2 rep
  */
+import { menaceNear, type Menace } from '../factions/relations';
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import { aimDir } from '../aimRay';
@@ -359,6 +360,7 @@ export class CrimeSystem {
       combat: this.combat,
       hurtPlayer: (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy),
       callPolice: (c, delay) => this.police.call(c, delay * responseFactor(g.city.presenceAt(c.x, c.z))),
+      menace: (c, x, y, z) => this.menace(c, x, y, z),
       random: Math.random,
       shops: (rMin, rMax) => this.shops(rMin, rMax),
       walls: (rMin, rMax) => this.shops(rMin, rMax, true),
@@ -669,6 +671,15 @@ export class CrimeSystem {
 
   /** The group behind a crime, or null. */
   factionOf(c: Crime): Faction | null { return c.faction < 0 ? null : this.factions.factions[c.faction] ?? null; }
+
+  /** A threat the crime's faction (its group, or the street's crooks) is hostile to, near enough to run from. */
+  private menace(c: Crime, x: number, y: number, z: number): Menace | null {
+    const g = this.g;
+    const a = g.threats?.actors() ?? [], b = g.slimeRealm?.actors() ?? [];
+    if (!a.length && !b.length) return null;
+    const from = this.factionOf(c)?.archetype ?? 'crooks';
+    return menaceNear(g.relations, from, x, y, z, b.length ? [...a, ...b] : a, (m) => g.underground.sameSide(x, y + 1, z, m.x, m.y, m.z));
+  }
 
   /** Delivery robots standing free on the pavement near the player: a point beside one (hack it there). */
   private machines(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number }[] {

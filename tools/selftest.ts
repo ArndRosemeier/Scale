@@ -841,6 +841,28 @@ section('street crime', async () => {
     check(racket.phase === 'escape' && racket.loot?.carrier === racket.criminals[0] && racket.criminals[0].actor?.held === 'envelope', `racket: they take the envelope and walk off (${racket.phase}, events ${rEv.join(',')})`);
     check(racket.victim!.actor?.state !== 'cower' && racket.victim!.state !== 5, `racket: the shopkeeper pays up, not cowering or shoved down (${racket.victim!.actor?.state})`);
 
+    // Factions phase 3: a monster their faction is hostile to comes near and the crew scatters (or never starts).
+    {
+      let monster: { x: number; z: number; height: number } | null = null;
+      const wM = Object.assign(Object.create(w2) as typeof w2, { menace: () => monster });
+      const early = new Racket(wM, 778);
+      check(early.setup(), 'scatter: a second racket');
+      drive(early, () => early.phase !== 'approach', 10, []);
+      monster = { x: early.criminals[0].x + 30, z: early.criminals[0].z, height: 12 };
+      drive(early, () => !early.active, 40, []);
+      check(early.phase === 'aborted' && !early.committed, `scatter: a monster near before it began: off (${early.phase})`);
+      monster = null;
+      const late = new Racket(wM, 777);
+      late.setup();
+      drive(late, () => late.phase === 'escape' || late.phase === 'aborted', 2400, []);
+      const lead = late.criminals[0];
+      check(late.phase === 'escape' && late.loot?.carrier === lead, `scatter: the racket came off (${late.phase})`);
+      monster = { x: lead.x + 20, z: lead.z, height: 12 };
+      const sEv: string[] = [];
+      drive(late, () => !late.active, 1200, sEv);
+      check(late.outcome === 'aborted' && late.loot?.carrier === null && !!lead.actor?.memo.scattered && lead.x < monster.x - 40, `scatter: they drop the envelope and run from it, the crime is off with no turf gained (${late.outcome}, ${sEv.join(',')}, ${(monster.x - lead.x).toFixed(0)} m away)`);
+    }
+
     const tag = new Tagging(w2, 4242);
     check(tag.setup() && !!tag.spot && tag.kind === 'tagging', 'tagging: setup finds a wall beside a door and a tagger');
     const tEv: string[] = [];
