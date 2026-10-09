@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.189 — 2026-10-09
+
+- **Autorun keeps your pace.** Press R while holding Shift and the hero keeps sprinting (in flight: keeps boosting) after you let go of Shift. Started with Alt held, autorun stays at a slow walk; started plain, it runs at the normal pace. Holding Shift or Alt during autorun still changes the pace while held.
+
 ## 0.188 — 2026-10-09
 
 - **Less memory used by the people of the city.** Until now, every building you passed queued its residents' trips for the next six game hours (about 18 real minutes) and kept them after you left. Driving or flying around the city piled them up and pushed the browser toward its memory limit. Now trips are queued two game hours ahead and are dropped when you move away from a building or its block unloads. The same number of people walk the streets.
