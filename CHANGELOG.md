@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.225 — 2026-10-09
+
+- **Helping the Lumen gets you somewhere again.** Each colony's war goes on while you are away, and left alone the Murk win it within a day or two of game time: they take the Lumen's trench and then their Hall. From then on nothing you did there counted. Murk killed with no Lumen within sight gave no trust, there were no sentries left in the trench to see them, and the line only moved back after a won raid. Raids come hours apart on the game clock, which runs at real speed by default, so in practice they never came. Now every Murk you kill below ground earns trust. Clearing the Murk out of the Hall wins it back (+10 trust), and clearing them out of the trench, or off the gallery's lip, gives the trench back to the Lumen (+8): their sentries return and the trench war starts again. If you stay at the Front, the Murk storm it within a few minutes, so you can help hold the line (+8). Small gains no longer pass silently: they are added up and shown with your trust and the next step, for example "The Lumen trust you more (+2.4) — you fought the Murk · trust 14, welcome at 30".
+
 ## 0.224 — 2026-10-09
 
 - **The player's manual is up to date again (0.224).** New in it: the animated title and title music, first person view, autorun pace, clicking minimap and compass markers to target, speech bubbles, the freeze log (Shift+F9), how ranks change the powers (area damage, shockwave reach, held-back punches), the new focus beam and seeker orb looks, the VELA concert at the stadium every evening, street bands, the landmarks you can now walk into (museum, glasshouse, airport terminal, observation decks, lighthouse, castle keep), furnished homes, offices, shops and cafés, crooks running from monsters, truces between rival organisations, the new big threats (giant worm, Leviathan, Roc, giant mech), and the new music. New pictures of the concert, the glasshouse, the airport terminal and the Roc. Help > Manual, the start screen's Manual button and the PDF all show the new version.
