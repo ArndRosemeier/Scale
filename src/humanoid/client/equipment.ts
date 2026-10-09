@@ -572,6 +572,36 @@ function shellCutField(tris: number[], remap: Map<number, number>, n: number, po
   return cut;
 }
 
+/** How far a shell stands off the skin (m), by its nominal offset and its place in the stack. */
+function shellOff(l: ShellLayer, order: number): number {
+  return l.faceCut ? 0.008 : Math.max(0.002, l.offset) * 1.25 + 0.004 + order * 0.002;
+}
+
+/**
+ * Where a top and trousers (or a skirt) meet at the waist, the inner one reaches well under the
+ * outer one. Each hem is cut a few centimetres inside its ragged edge (shellCutField), so two
+ * garments that only met there left a band of bare skin between them. A shirt tucked into
+ * trousers takes in their pelvis and seat (and the hip ends of the thighs); trousers under a
+ * sweater or jacket reach up the belly and back. The extra part is hidden under the outer one.
+ * `layers` is in drawing order (the outer of two is the one standing further off the skin).
+ */
+function tuckWaist(layers: { layer: ShellLayer; slot?: string }[]): void {
+  const has = (l: ShellLayer, r: BodyRegion) => l.regions.some((x) => x.region === r);
+  const tops = layers.map((e, i) => ({ e, i })).filter(({ e }) => (e.slot === 'chest' || e.slot === 'back') && has(e.layer, 'belly') && !has(e.layer, 'pelvis'));
+  const bottom = layers.findIndex((e) => e.slot === 'legs' && has(e.layer, 'pelvis'));
+  if (bottom < 0 || !tops.length) return;
+  const b = layers[bottom];
+  const bOff = shellOff(b.layer, bottom);
+  const inner = tops.filter(({ e, i }) => shellOff(e.layer, i) < bOff);
+  for (const { e } of inner) {
+    const add = b.layer.regions.filter((x) => x.region === 'pelvis' || x.region === 'buttocks' || x.region.startsWith('thigh'))
+      .map((x) => (x.region.startsWith('thigh') ? { region: x.region, to: Math.min(x.to ?? 1, 0.2) } : x));
+    e.layer = { ...e.layer, regions: [...e.layer.regions, ...add] };
+  }
+  // (Only with nothing tucked in: trousers reaching up over a tucked shirt would show as a high waistband.)
+  if (!inner.length) b.layer = { ...b.layer, regions: [...b.layer.regions, { region: 'belly', to: 0.12 }, { region: 'back', to: 0.1 }] };
+}
+
 export class EquipmentRig {
   /** Bumped by every set(): staged jobs of an outdated outfit skip themselves. */
   private gen = 0;
@@ -645,7 +675,8 @@ export class EquipmentRig {
       }
     }
     // Modest default underclothes where nothing covers hips (and chest for women).
-    const covers = (r: BodyRegion) => layers.some((l) => l.layer.regions.some((x) => x.region === r));
+    // (A top's hem reaching over the hips doesn't count: the lower pelvis is still bare.)
+    const covers = (r: BodyRegion) => layers.some((l) => l.layer.regions.some((x) => x.region === r && (x.from ?? 0) <= 0.5));
     // Dyed cloth colours chosen per individual so underclothes never read as skin.
     const dyes: [number, number, number][] = [[0.2, 0.14, 0.1], [0.16, 0.2, 0.3], [0.34, 0.11, 0.09], [0.86, 0.83, 0.75], [0.17, 0.23, 0.14], [0.1, 0.1, 0.11]];
     const dye = dyes[(this.ch.app.seed >>> 4) % dyes.length];
@@ -655,6 +686,7 @@ export class EquipmentRig {
     if (!bare && !covers('pelvis')) layers.push({ seed: 7, layer: { kind: 'shell', regions: [{ region: 'pelvis', to: 0.75 }, { region: 'buttocks' }, { region: 'thigh.L', to: 0.12 }, { region: 'thigh.R', to: 0.12 }], offset: 0.004, layer: 0, material: under, trim: { width: 0.008, color: [dye[0] * 0.45, dye[1] * 0.45, dye[2] * 0.45] } } });
     if (!bare && this.ch.app.gender < 0.5 && !covers('chest')) layers.push({ seed: 8, layer: { kind: 'shell', regions: [{ region: 'chest', from: 0.42, to: 0.78 }, { region: 'back', from: 0.5, to: 0.72 }], offset: 0.004, layer: 0, material: under, trim: { width: 0.008, color: [dye[0] * 0.45, dye[1] * 0.45, dye[2] * 0.45] } } });
     layers.sort((a, b) => a.layer.layer - b.layer.layer);
+    tuckWaist(layers);
     let order = 0;
     for (const { layer, seed, slot } of layers) {
       const o = order++;
@@ -688,7 +720,7 @@ export class EquipmentRig {
     // where skinning bends body and shell slightly differently), and between stacked layers.
     // (A head covering stays thin whatever lies under it elsewhere: thick, it folds over itself in
     // the creases under the chin and at the eye corners.)
-    const off = l.faceCut ? 0.008 : Math.max(0.002, l.offset) * 1.25 + 0.004 + order * 0.002;
+    const off = shellOff(l, order);
     const P = new Float32Array(n * 3), N = new Float32Array(n * 3);
     // A mask hugs the skin towards its openings (eye holes, the cowl's jaw): standing off there,
     // its inner side and the gap under it showed as a dark rim and grey slivers.
