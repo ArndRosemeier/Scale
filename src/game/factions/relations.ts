@@ -239,3 +239,68 @@ export function eventFaction(ev: { readonly actors?: readonly { readonly self?: 
   const a = ev.actors?.[0];
   return a ? bodyFaction(a) : 'monsters';
 }
+
+// ---------------------------------------------------------------------------------------------
+// Phase 4: relations between the villain groups move by themselves, once per game hour.
+//
+//   a feud deepens    each turf brawl between two groups (FEUD.brawl, both ways)
+//   a common enemy    while both are hunting the hero, they draw together (FEUD.united a game hour):
+//                     rivals can end up in a truce (no more brawls or border clashes) — against you
+//   time heals        every game hour each pair moves FEUD.back of the way back to its seeded value
+//                     (a truce wears off once they stop hunting you; an old feud cools)
+//
+// Saved with the villain groups (only the pairs that differ from the seeded table).
+
+export const FEUD = { brawl: -8, united: 6, back: 0.05 };
+
+/** A pair of groups that crossed the hostile line (`war`: now at war; else a truce). */
+export interface GroupShift { a: ArchetypeId; b: ArchetypeId; war: boolean }
+
+/** Both groups' feelings for each other move by `d` (clamped). */
+export function feud(R: Relations, a: ArchetypeId, b: ArchetypeId, d: number): void {
+  if (a === b) return;
+  R.shift(a, b, d); R.shift(b, a, d);
+}
+
+/**
+ * Game hours passing for the groups in this city: a common enemy draws them together, time pulls
+ * every pair back to the seeded value. Returns the pairs that crossed the hostile line.
+ */
+export function driftGroups(R: Relations, base: Relations, groups: readonly ArchetypeId[], hunting: (a: ArchetypeId) => boolean, hours: number): GroupShift[] {
+  const out: GroupShift[] = [];
+  for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length; j++) {
+    const a = groups[i], b = groups[j];
+    const was = R.hostile(a, b) || R.hostile(b, a);
+    const together = hunting(a) && hunting(b);
+    for (let h = 0; h < hours; h++) for (const [x, y] of [[a, b], [b, a]] as const) {
+      let v = R.get(x, y);
+      v += (base.get(x, y) - v) * FEUD.back;
+      if (together) v += FEUD.united;
+      R.set(x, y, v);
+    }
+    const now = R.hostile(a, b) || R.hostile(b, a);
+    if (now !== was) out.push({ a, b, war: now });
+  }
+  return out;
+}
+
+/** The group pairs whose feelings differ from the seeded table (a save). */
+export function saveGroupRelations(R: Relations, base: Relations): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const a of VILLAINS) for (const b of VILLAINS) {
+    if (a === b) continue;
+    const v = R.get(a, b);
+    if (Math.abs(v - base.get(a, b)) > 0.05) out[`${a}>${b}`] = Math.round(v * 10) / 10;
+  }
+  return out;
+}
+
+/** Put saved group feelings back (anything else, or null: the seeded table). */
+export function restoreGroupRelations(R: Relations, base: Relations, raw: unknown): void {
+  for (const a of VILLAINS) for (const b of VILLAINS) if (a !== b) R.set(a, b, base.get(a, b));
+  if (!raw || typeof raw !== 'object') return;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const [a, b] = k.split('>') as [ArchetypeId, ArchetypeId];
+    if (a !== b && VILLAINS.includes(a) && VILLAINS.includes(b) && typeof v === 'number' && Number.isFinite(v)) R.set(a, b, v);
+  }
+}

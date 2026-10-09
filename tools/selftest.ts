@@ -728,6 +728,30 @@ section('faction relations', async () => {
   check(!calm.hostile('murk', actorFaction({ role: 'police', owner: 1 } as never)) && calm.hostile('murk', actorFaction(undefined)), 'murk: follows the table (made wary of the police, they leave officers alone)');
   // Phase 3d: machines gone rogue go for every person and the hero (RogueMachines.hates).
   check(people.every((a) => M.hostile('machines', actorFaction(a, () => 'techno'))) && M.hostile('machines', 'hero'), 'machines: rogue ones are hostile to every person and the hero');
+  // Phase 4: the groups' feelings for each other move by themselves (driftGroups, feud), and are saved.
+  const { driftGroups, feud, FEUD, saveGroupRelations, restoreGroupRelations } = await import('../src/game/factions/relations');
+  const base = defaultRelations(), D = defaultRelations();
+  const groups = ['gang', 'syndicate', 'cult'] as const;
+  let hunt = new Set<string>(['gang', 'syndicate']);
+  let shifts: { a: string; b: string; war: boolean }[] = [];
+  let hours = 0;
+  while (D.hostile('gang', 'syndicate') && hours < 48) { shifts.push(...driftGroups(D, base, groups, (a) => hunt.has(a), 1)); hours++; }
+  check(!D.hostile('gang', 'syndicate') && hours >= 4 && hours <= 12 && shifts.length === 1 && shifts[0].a === 'gang' && shifts[0].b === 'syndicate' && !shifts[0].war, `drift: rivals both hunting the hero call a truce after ${hours} game hours`);
+  check(D.get('gang', 'cult') === base.get('gang', 'cult') && D.hostile('syndicate', 'cult') === base.hostile('syndicate', 'cult'), 'drift: a group not hunting the hero is left out of it');
+  const saved = saveGroupRelations(D, base);
+  check(Object.keys(saved).sort().join() === 'gang>syndicate,syndicate>gang', `drift: only the changed pairs are saved (${Object.keys(saved).join(', ')})`);
+  hunt = new Set();
+  hours = 0; shifts = [];
+  while (!D.hostile('gang', 'syndicate') && hours < 48) { shifts.push(...driftGroups(D, base, groups, (a) => hunt.has(a), 1)); hours++; }
+  check(D.hostile('gang', 'syndicate') && shifts.length === 1 && shifts[0].war && hours <= 24, `drift: once they stop hunting the hero the truce wears off (${hours} h)`);
+  const before = D.get('gang', 'syndicate');
+  feud(D, 'gang', 'syndicate', FEUD.brawl);
+  check(D.get('gang', 'syndicate') === Math.max(REL.min, before + FEUD.brawl) && D.get('syndicate', 'gang') <= before, 'drift: a brawl deepens the feud both ways');
+  const L = defaultRelations();
+  restoreGroupRelations(L, base, saved);
+  check(!L.hostile('gang', 'syndicate') && L.get('gang', 'cult') === base.get('gang', 'cult'), 'drift: a saved truce comes back with the save');
+  restoreGroupRelations(L, base, { 'gang>syndicate': 'x', 'hero>gang': 50, 'nope>gang': 1 });
+  check(L.get('gang', 'syndicate') === base.get('gang', 'syndicate') && L.get('hero', 'gang') === base.get('hero', 'gang'), 'drift: a bad save restores the seeded table (only group pairs, only numbers)');
 });
 
 // ---- departure boards: the next train they announce really pulls in then (same timetable as the trains).
@@ -2337,7 +2361,7 @@ section('saves', async () => {
       memorials: [[398.25, -190.5, 1.5, 99]], news: { kind: 'lost', until: 104.5 },
     },
     slimes: { trust: { v: 42.5, gifts: [0, 2], marks: ['heart'] }, war: { v: 1, murk: 0.5, lumen: 0.625, front: 0.25, at: 130.5, nextRaid: 133, mawBack: 0, raid: null, captives: [2, 4, 0], nextBreach: 150, stats: { won: 3, lost: 1, kills: 12, freed: 4, maw: 0, breaches: 0 } } },
-    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }] },
+    factions: { turf: { v: 1, groups: [{ archetype: 'gang', cells: [[4, -14], [5, -7]] }], stats: { stopped: 1, tags: 2 } }, tags: [{ x: 10.5, y: 1.45, z: -3.25, nx: 0, nz: 1, archetype: 'gang', seed: 77 }], hideouts: [{ archetype: 'gang', door: [12.5, -4, 0, 1], cell: 4, found: true, bustedUntil: 80.5, moves: 1 }], bosses: [{ archetype: 'gang', name: 'Rook Malone', jailedUntil: 90, beaten: 2, escapes: 1, jailed: 1, notoriety: 40 }], relations: { 'gang>syndicate': -42.5, 'syndicate>gang': -44 } },
   };
   const back = parseSave(serializeSave(full));
   {
