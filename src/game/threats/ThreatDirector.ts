@@ -45,6 +45,8 @@ import { DecalKind } from '../powers/ElementFx';
 import { Roc, ROC_T } from './roc/Roc';
 import { RocMesh } from './roc/RocMesh';
 import { RocRig } from './roc/rocRig';
+import { Mech, MECH_T } from './mech/Mech';
+import { MechMesh } from './mech/MechMesh';
 
 /** How an archetype shows itself before it comes (omens) and how it starts. */
 interface ArchetypeImpl {
@@ -108,6 +110,19 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
       return r;
     },
     fallback: ['cry'],
+  },
+  // The giant mech: strides in along the arterials from the hero's side; omens far-off footfalls, a news bulletin.
+  mech: {
+    omen: (d, _site, kind, rng) => d.mechOmen(kind, rng),
+    start: (d, _site, seed, opts) => {
+      try {
+        const m = new Mech(d.g, seed);
+        // (dev: { near: true } — already in town, walking towards the hero.)
+        if (opts.near) m.devNear();
+        return m;
+      } catch (err) { console.warn('[threats]', err); return null; }
+    },
+    fallback: ['stomps'],
   },
   // A rampaging giant player (started by HostilePlayer after its warnings, never by the clock).
   rampage: {
@@ -217,6 +232,10 @@ export class ThreatDirector {
   readonly rocRemains: Roc[] = [];
   /** A roc omen crossing the sky high up. */
   private rocFly: { rig: RocRig; t: number; dx: number; dz: number }[] = [];
+  /** The giant mech's bodies (a live one, a wreck), in the creatures' material. */
+  readonly mechMesh: MechMesh;
+  /** Wrecked mechs lying where they fell (gone after MECH_T.wreckHours game hours, when nobody is looking). */
+  readonly mechRemains: Mech[] = [];
   /** Broken bridge spans (the Leviathan's work), kept LEVIATHAN-side until mended. */
   readonly bridgeBreaks: BridgeBreaks;
   /** Every brood swarm's creatures (one instanced mesh). */
@@ -264,6 +283,8 @@ export class ThreatDirector {
     this.bridgeBreaks = new BridgeBreaks(g);
     this.rocMesh = new RocMesh(this.mesh.material, 3);
     g.renderer.scene.add(this.rocMesh.group);
+    this.mechMesh = new MechMesh(this.mesh.material, 2);
+    g.renderer.scene.add(this.mechMesh.group);
     this.broodMesh = new BroodMesh();
     g.renderer.scene.add(this.broodMesh.mesh);
     this.fires = new FacadeFires(g.elements.fx, g.destruction, g.renderer.camera);
@@ -283,6 +304,7 @@ export class ThreatDirector {
     if (ref instanceof Burrower) return !ref.defeated;
     if (ref instanceof Leviathan) return !ref.defeated;
     if (ref instanceof Roc) return !ref.defeated;
+    if (ref instanceof Mech) return !ref.defeated;
     if (ref instanceof AwakenedTree) return !ref.defeated;
     const m = (ref as { mal?: { mode: string } }).mal;
     return !!m && m.mode === 'hostile';
@@ -343,9 +365,10 @@ export class ThreatDirector {
   }
 
   private obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
-    for (const ev of this.events) if (ev instanceof Strider || ev instanceof Burrower || ev instanceof Leviathan || ev instanceof Roc) ev.obstacles(x0, z0, x1, z1, out);
+    for (const ev of this.events) if (ev instanceof Strider || ev instanceof Burrower || ev instanceof Leviathan || ev instanceof Roc || ev instanceof Mech) ev.obstacles(x0, z0, x1, z1, out);
     for (const w of this.wormRemains) w.obstacles(x0, z0, x1, z1, out);
     for (const r of this.rocRemains) r.obstacles(x0, z0, x1, z1, out);
+    for (const m of this.mechRemains) m.obstacles(x0, z0, x1, z1, out);
     for (const r of this.remains) r.obstacles(x0, z0, x1, z1, out);
     // Awakened trees, walking or rooted where they were beaten.
     for (const ev of this.events) if (ev instanceof AwakenedTree) ev.obstacles(x0, z0, x1, z1, out);
@@ -376,6 +399,7 @@ export class ThreatDirector {
         if (ev instanceof Strider && ev.defeated) this.remains.push(ev);
         if (ev instanceof Burrower && ev.mode === 'dead') this.wormRemains.push(ev);
         if (ev instanceof Roc && ev.mode === 'dead') this.rocRemains.push(ev);
+        if (ev instanceof Mech && ev.mode === 'dead') this.mechRemains.push(ev);
         ev.dispose(); this.ended.delete(ev); this.events.splice(i, 1);
       }
     }
@@ -384,6 +408,7 @@ export class ThreatDirector {
     this.bridgeBreaks.update(dt);
     this.wormsAfter(dt);
     this.rocsAfter(dt);
+    this.mechsAfter(dt);
     // Trains held while a worm tunnels under the city.
     g.underground.metroHold = this.events.some((e) => e instanceof Burrower && e.active);
     for (let i = this.glimpses.length - 1; i >= 0; i--) { const gl = this.glimpses[i]; gl.update(dt); if (gl.done) this.glimpses.splice(i, 1); }
@@ -493,10 +518,12 @@ export class ThreatDirector {
     for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', place: true, title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
     for (const w of this.wormRemains) list.push({ x: w.x, z: w.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen worm — cordoned off' });
     for (const r of this.rocRemains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen roc — cordoned off' });
+    for (const m of this.mechRemains) list.push({ x: m.x, z: m.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Wrecked mech — cordoned off' });
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen creature' });
       if (ev instanceof Burrower && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen worm' });
       if (ev instanceof Roc && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen roc' });
+      if (ev instanceof Mech && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Wrecked mech' });
       if (ev instanceof AwakenedTree && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#5a7d3a', kind: 'dot', place: true, title: 'A gnarled old tree — it walked here' });
       // (A rampaging player is the incident: no alert marker on themselves.)
       if (!ev.active || ev.archetype === 'rampage') continue;
@@ -549,6 +576,13 @@ export class ThreatDirector {
     for (const f of this.rocFly) RM.draw(f.rig);
     if (!this.g.gate.enabled) { const p = this.g.player.pos; RM.warm(p.x, p.y - 2, p.z); }
     RM.end();
+    // Mechs (a live one, a wreck).
+    const MM = this.mechMesh;
+    MM.begin();
+    for (const ev of this.events) if (ev instanceof Mech) ev.draw(MM);
+    for (const m of this.mechRemains) m.draw(MM);
+    if (!this.g.gate.enabled) { const p = this.g.player.pos; MM.warm(p.x, p.y - 2, p.z); }
+    MM.end();
     // The brood's creatures (and those of an omen).
     const B = this.broodMesh;
     B.begin();
@@ -719,6 +753,79 @@ export class ThreatDirector {
     };
   }
 
+  // ================================================================== the giant mech
+
+  /** Wrecked mechs: gone after their hours when the camera is far; their missiles still fly meanwhile. */
+  private mechsAfter(dt: number): void {
+    for (const m of this.mechRemains) m.update(dt);
+    // An omen's far-off footfalls, one after another.
+    for (let i = this.mechSteps.length - 1; i >= 0; i--) {
+      const st = this.mechSteps[i];
+      st.t -= dt;
+      if (st.t > 0) continue;
+      this.g.audio.play('mech_step', st.x, st.y, st.z, 0.7, 0.9, 600, this.g.renderer.camera.position);
+      this.g.camRig.addShake(0.04);
+      this.mechSteps.splice(i, 1);
+    }
+    this.mechT -= dt;
+    if (this.mechT > 0 || !this.mechRemains.length) return;
+    this.mechT = 4;
+    const c = this.g.renderer.camera.position, now = this.g.sky.hoursAbs;
+    for (let i = this.mechRemains.length - 1; i >= 0; i--) {
+      const m = this.mechRemains[i];
+      if (now - m.downAt > MECH_T.wreckHours && Math.hypot(m.x - c.x, m.z - c.z) > 320) { this.mechRemains.splice(i, 1); this.note('mech wreck gone'); }
+    }
+  }
+  private mechT = 0;
+  private mechSteps: { t: number; x: number; y: number; z: number }[] = [];
+
+  /**
+   * An omen of the mech: 'stomps' — far-off heavy metal footfalls, the ground trembling a little,
+   * people looking round; 'bulletin' — on the news: contact lost with a walking weapons prototype
+   * at the test grounds outside town, and a siren far off.
+   */
+  mechOmen(kind: string, rng: Rng): boolean {
+    const g = this.g, p = g.player.pos, cam = g.renderer.camera.position;
+    if (kind === 'bulletin') {
+      g.powerHud.toast('<b>On the news:</b> contact lost with a <b>walking weapons prototype</b> at the test grounds outside town. The army asks people to stay calm', 'warn', 9000);
+      const a = rng.range(0, Math.PI * 2);
+      g.audio.play('mech_alarm', p.x + Math.cos(a) * 500, p.y + 30, p.z + Math.sin(a) * 500, 0.5, 0.9, 500, cam);
+      return true;
+    }
+    const a = rng.range(0, Math.PI * 2), d = 600;
+    const x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d, y = g.world.groundHeight(p.x, p.z);
+    for (let i = 0; i < 4; i++) this.mechSteps.push({ t: i * 1.6, x: x + Math.cos(a) * i * -9, y, z: z + Math.sin(a) * i * -9 });
+    g.stimuli.emit('tremor', p.x, y, p.z, 3, 120, { cause: 'threat' });
+    return true;
+  }
+
+  /** The running (or latest) mech. */
+  mech(): Mech | null {
+    for (let i = this.events.length - 1; i >= 0; i--) { const e = this.events[i]; if (e instanceof Mech) return e; }
+    return null;
+  }
+
+  private mechDev(): Record<string, unknown> {
+    const M = () => this.mech();
+    const no = 'no mech';
+    return {
+      status: () => M()?.snapshot() ?? no,
+      near: () => M()?.devNear() ?? no,
+      downtown: () => M()?.devDowntown() ?? no,
+      salvo: () => M()?.devSalvo() ?? no,
+      cannon: () => M()?.devCannon() ?? no,
+      smash: () => M()?.devSmash() ?? no,
+      vent: () => M()?.devVent() ?? no,
+      freeze: () => M()?.devFreeze() ?? no,
+      kneel: () => M()?.devKneel() ?? no,
+      leave: () => M()?.devLeave() ?? no,
+      damage: (zone: string | null = 'body', amount = 300) => { const m = M(); return m ? m.damage(zone, amount, { cause: 'player' }) : no; },
+      die: () => { const m = M(); if (!m) return no; m.damage('body', 1e6, { cause: 'player' }); m.hp = 0; return m.mode; },
+      omen: (kind = 'stomps') => this.mechOmen(kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
+      tuning: MECH_T,
+    };
+  }
+
   // ================================================================== the Leviathan
 
   /** Where this city's Leviathan would come up the river (seeded per city), cached. */
@@ -871,6 +978,7 @@ export class ThreatDirector {
     for (const r of this.remains.splice(0)) r.dispose();
     this.wormRemains.length = 0;
     this.rocRemains.length = 0;
+    this.mechRemains.length = 0;
     this.sinkholes.restoreState(o.sinkholes ?? []);
     this.bridgeBreaks.restoreState(o.bridges ?? []);
     o.remains.forEach((b, i) => {
@@ -1017,6 +1125,12 @@ export class ThreatDirector {
        * .dive() · .ground() (tumbles out of the sky) · .damage(zone, amount) · .die() · .leave() · .omen('cry' | 'flyover')
        */
       roc: this.rocDev(),
+      /**
+       * The giant mech: dev.threat.mech.status() · .near() (in town, walking towards the player) · .downtown() · .salvo() ·
+       * .cannon() · .smash() · .vent() · .freeze() (frost on open vents: shut down) · .kneel() · .damage(zone, amount) ·
+       * .die() · .leave() · .omen('stomps' | 'bulletin')
+       */
+      mech: this.mechDev(),
       setting: (s?: CityEvents) => { if (s) this.setting = s; return this.setting; },
       log: () => this.log,
       stats: () => ({ ...this.stats, rogue: this.rogue.stats, machines: this.rogue.list.length }),

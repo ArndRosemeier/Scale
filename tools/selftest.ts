@@ -32,7 +32,7 @@ import { auditLines, auditPassages } from './metroAuditCore';
 import { LandUse, newLandSample, parcelAt, type Parcel } from '../src/world/landuse';
 import { ForestGen, FOREST_KINDS, FOREST_STRIDE } from '../src/build/forest';
 import { RuralPlan, SettleKind, BOX_STRIDE } from '../src/world/rural';
-import { buildRuralTile, ruralSurfaceAt } from '../src/build/rural';
+import { buildRuralTile, ruralSurfaceAt, indexRuralSurfaces, ruralSurfaceAtIndexed } from '../src/build/rural';
 import { WorldIndex } from '../src/world/WorldIndex';
 import { TERRAIN_DROP } from '../src/build/terrainMesh';
 import { terrainExtent } from '../src/world/boundary';
@@ -46,6 +46,7 @@ import { aliensChecks } from './aliensTest';
 import { burrowerChecks } from './burrowerTest';
 import { leviathanChecks } from './leviathanTest';
 import { rocChecks } from './rocTest';
+import { mechChecks } from './mechTest';
 import { bridgeGapChecks } from './bridgeGapTest';
 import { doorChecks } from './doorsweep';
 import { Reputation } from '../src/game/Reputation';
@@ -599,6 +600,21 @@ section('countryside settlements', async () => { for (const [seed, size] of [[1,
   {
     const W = new WorldIndex(T, () => []);
     W.rural = { onSurface: (x, z) => ruralSurfaceAt(tile.surfaces, x, z) };
+    // The grid index (stream/Rural: onSurface for every physics ground sample) answers the same, fast.
+    {
+      const I = indexRuralSurfaces(tile.surfaces), tx0 = Math.floor(town.x / 1024) * 1024, tz0 = Math.floor(town.z / 1024) * 1024;
+      let same = 0, n = 0, tLin = 0, tIdx = 0;
+      for (let i = 0; i < 3000; i++) {
+        const x = tx0 - 40 + ((i * 7919) % 1100), z = tz0 - 40 + ((i * 104729) % 1100);
+        let t1 = performance.now();
+        const a = ruralSurfaceAt(tile.surfaces, x, z);
+        tLin += performance.now() - t1; t1 = performance.now();
+        const b = ruralSurfaceAtIndexed(tile.surfaces, I, x, z);
+        tIdx += performance.now() - t1;
+        n++; if (a === b) same++;
+      }
+      check(same === n && tIdx < tLin, `rural seed ${seed}: the surface grid agrees with the full scan (${same}/${n}) and is faster (${tIdx.toFixed(1)} vs ${tLin.toFixed(1)} ms)`);
+    }
     const tx = Math.floor(town.x / 1024) * 1024, tz = Math.floor(town.z / 1024) * 1024;
     let road = 0, roadOk = 0, open = 0, openOk = 0;
     for (let i = 0; i < 4000 && (road < 50 || open < 50); i++) {
@@ -4047,7 +4063,67 @@ section('aliens', async () => { aliensChecks(check); });
 section('burrower', async () => { burrowerChecks(check); });
 section('leviathan', async () => { leviathanChecks(check); });
 section('roc', async () => { rocChecks(check); });
+section('mech', async () => { mechChecks(check); });
 section('fallen bridge spans', async () => { bridgeGapChecks(check); });
+
+// Nobody crosses a fallen span: routes go round a cut (RoadNet.setCuts), a car stopped at the broken
+// end turns round, someone walking up to the gap stops and walks back (BridgeBreaks keeps the cuts).
+section('fallen spans: nobody crosses', async () => {
+  const { RoadNet } = await import('../src/sim/RoadNet');
+  const { Traffic, VState } = await import('../src/sim/Traffic');
+  const { Pedestrians, PState } = await import('../src/sim/Pedestrians');
+  const { Stimuli } = await import('../src/game/Stimuli');
+  const terrain = new Terrain(makeProfile({ seed: 42, size: 0.2 }));
+  const macro = buildMacroPlan(terrain);
+  // Two banks: a bridge straight across (A–B, 200 m) and a detour round (A–C–D–B, 600 m).
+  const net = new RoadNet(macro);
+  const P = [[0, 0], [200, 0], [0, 200], [200, 200]];
+  net.nodes = P.map(([x, z]) => ({ x, z, edges: [] as number[], signal: false, macro: -1 }));
+  const link = (a: number, b: number) => {
+    const [ax, az] = P[a], [bx, bz] = P[b], len = Math.hypot(bx - ax, bz - az), id = net.edges.length;
+    net.edges.push({ a, b, pts: [ax, az, (ax + bx) / 2, (az + bz) / 2, bx, bz], len, width: 14, sidewalk: 3, lanes: 2, cls: 1, cum: [0, len / 2, len] });
+    net.nodes[a].edges.push(id); net.nodes[b].edges.push(id);
+  };
+  link(0, 1); link(0, 2); link(2, 3); link(3, 1);
+  net.version = 1;
+  const direct = net.route(0, 1, true)?.edges.join(',');
+  net.setCuts([{ x: 100, z: 0, r: 10 }]);
+  const round = net.route(0, 1, true)?.edges.join(','), walk = net.route(0, 1, false)?.edges.join(',');
+  check(direct === '0' && round === '1,2,3' && walk === '1,2,3' && net.closed(0) && !net.closed(2), `fallen span: cars and walkers route round a cut street (before ${direct}, after cars ${round}, walkers ${walk})`);
+  // A car on the bridge stopped at the broken end turns round and drives off the other way.
+  const stimuli = new Stimuli();
+  const pedsStub = { neighbours: (_x: number, _z: number, _r: number, out: unknown[]) => { out.length = 0; return out; }, crossCheck: null };
+  const tr = new Traffic(net, pedsStub as never, stimuli, { height: () => 0 } as never, true, 42);
+  tr.update(1 / 30, 3, 100, 0);
+  tr.vehicles.length = 0;
+  const v = (tr as unknown as { makeVehicle(k: string, e: number, f: boolean, s: number, d: null): import('../src/sim/Traffic').Vehicle }).makeVehicle('sedan', 0, true, 60, null);
+  v.route = { edges: [0], fwd: [true] };
+  tr.vehicles.push(v);
+  tr.holds.push({ x: 88, z: 0, r: 7, bridge: true } as { x: number; z: number; r: number });
+  let minGap = Infinity;
+  for (let i = 0; i < 30 * 20; i++) { tr.update(1 / 30, 3, 100, 0); minGap = Math.min(minGap, 88 - v.x); }
+  const stopped = v.alive && v.x < 88 && v.speed < 0.5;
+  tr.turnBack(v);
+  for (let i = 0; i < 30 * 15; i++) tr.update(1 / 30, 3, 100, 0);
+  check(stopped && v.state === VState.Drive && v.x < 40, `fallen span: a car stops short of the broken end (${minGap.toFixed(1)} m), turns round and drives back (now at x ${v.x.toFixed(0)})`);
+  // Someone walking over the bridge stops at the gap, looks, and walks back; never into the water.
+  const world = { buildingsIn: () => [], bridgeDeck: () => -Infinity, wet: (x: number, z: number) => Math.abs(x - 100) < 10 && Math.abs(z) < 8 } as never;
+  const pop = new Population(macro, 42);
+  const peds = new Pedestrians(pop, new RoadNet(macro), world, terrain, macro, {} as never);
+  peds.cuts = [{ x: 100, z: 0, r: 10 }];
+  const a = peds.spawnAt(pop.synthetic(7), 60, 5, -Math.PI / 2)!;
+  a.route = Float32Array.from([60, 5, 0, 80, 5, 0, 120, 5, 0, 160, 5, 0]);
+  a.wp = 1; a.state = PState.Walk; a.dest = null;
+  let wetT = 0, maxX = 0, looked = false;
+  for (let t = 0; t < 60; t += 1 / 30) {
+    peds.update(1 / 30, 12 + t / 3600, 60, 5, 1 / 30);
+    if (!a.alive) break;
+    if (Math.abs(a.x - 100) < 10) wetT += 1 / 30;
+    maxX = Math.max(maxX, a.x);
+    if ((a.state as number) === PState.Gawk) looked = true;
+  }
+  check(wetT === 0 && maxX < 91 && looked && (!a.alive || a.x < 75), `fallen span: someone walking over stops at the gap, looks and turns back (furthest x ${maxX.toFixed(1)}, ${wetT.toFixed(1)} s in the water, now ${a.alive ? 'at x ' + a.x.toFixed(0) : 'gone'})`);
+});
 
 // Nothing hurts through the pavement: every blow names where it came from (the type makes the
 // height a required argument), and the health refuses one from the other side of the street.

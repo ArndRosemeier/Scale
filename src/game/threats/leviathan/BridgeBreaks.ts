@@ -120,6 +120,7 @@ export class BridgeBreaks {
   update(dt: number): void {
     if ((this.checkT -= dt) > 0 || !this.gaps.length) return;
     this.checkT = 1;
+    this.turnCars();
     const now = this.g.sky.hoursAbs, cam = this.g.renderer.camera.position;
     let changed = false;
     for (let i = this.gaps.length - 1; i >= 0; i--) {
@@ -132,6 +133,18 @@ export class BridgeBreaks {
       changed = true;
     }
     if (changed) this.sync();
+  }
+
+  /** Cars stopped at a broken end on the cut street itself turn round (they would wait there for a day). */
+  private turnCars(): void {
+    const T = this.g.traffic, holds = T.holds.filter((h) => (h as { bridge?: boolean }).bridge);
+    if (!holds.length) return;
+    for (const v of T.vehicles) {
+      if (v.state !== VState.Drive || v.task || v.speed > 0.5 || !this.g.net.closed(v.edge)) continue;
+      const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+      // (Facing the broken end, close to it.)
+      if (holds.some((h) => { const dx = h.x - v.x, dz = h.z - v.z; return Math.hypot(dx, dz) < 30 && dx * fx + dz * fz > 0; })) T.turnBack(v);
+    }
   }
 
   /** Saves: [edge, s0, s1, until, seed] per gap. */
@@ -156,7 +169,7 @@ export class BridgeBreaks {
     return this.gaps.map((q) => `edge ${q.edge} ${q.s0.toFixed(0)}–${q.s1.toFixed(0)} m, ${(q.until - now).toFixed(1)} h left`).join(' · ') || 'no gaps';
   }
 
-  /** Gaps onto the profiles, the traffic holds and the mesh. */
+  /** Gaps onto the profiles, the traffic holds, the road network's cuts and the mesh. */
   private sync(): void {
     const g = this.g;
     for (const b of g.world.bridges) {
@@ -164,6 +177,16 @@ export class BridgeBreaks {
       b.gaps = mine.length ? mine.map((q) => [q.s0, q.s1]) : undefined;
     }
     this.syncHolds();
+    // Nobody routes over a gap any more; people walking up to one turn back (Pedestrians.cuts).
+    const cuts = this.gaps.flatMap((q) => {
+      const p = this.prof(q.edge);
+      if (!p) return [];
+      const sm = (q.s0 + q.s1) / 2;
+      return [{ x: p.ax + p.dx * sm, z: p.az + p.dz * sm, r: Math.max((q.s1 - q.s0) / 2, 3) + 0.5 }];
+    });
+    g.net.setCuts(cuts);
+    g.peds.cuts = cuts;
+    g.traffic.rerouteCuts();
     const specs: BridgeGapSpec[] = this.gaps.map((q) => ({ edge: q.edge, s0: q.s0, s1: q.s1, seed: q.seed }));
     g.streamer.rebuildBridges(specs).catch((e) => console.warn('bridge rebuild failed', e));
   }

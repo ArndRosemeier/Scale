@@ -742,6 +742,31 @@ every frame (`prof.threats`).
   (`tools/synthRoc.mjs`): `roc_screech`, `roc_cry_far`, `roc_flap`. Dev: `dev.threat.spawn('roc', { near })`,
   `dev.threat.roc.status() / .near() / .perch() / .snatch() / .swoop() / .dive() / .ground() / .leave() /
   .damage(zone, n) / .die() / .omen(kind)`; admin console "Roc".
+* **The giant mech** (`mech/Mech.ts`, archetype `mech`, major; Phase E part 3): a walking war machine. Frame:
+  `mech/mechRig.ts` (pure, 18 rigid bones: pelvis, hull (twists to `aim`), cockpit, two shoulder pods, a cannon arm
+  and a hammer arm, reverse-jointed legs solved by two-bone IK to world foot targets (soles flat), two heat vents
+  that slide out; 18 hit capsules), `mech/mechSkin.ts` (84 closed hard-surface parts: slanted blocks and cylinders,
+  each on one bone, flat normals; the visor on the `eyes` glow channel, the vents on `ridge`; uv stretched so the
+  creature material's scale texture only weathers the paint) and `mech/MechMesh.ts` (a 2-slot SkinnedMesh pool in
+  the creature material: no new program). Way: `planBurrowerRoute` (from the hero's side over the arterials to
+  downtown), walked at 3.6 m/s (`walk`); downtown (`mode` 'rampage') it paces the last `patrol` 160 m. Gait: a foot
+  steps when it lags a stride behind its spot under the hip, one at a time (swing 1.2 s, lifted 3.5 m); a footfall
+  is `steps.land` without impact plus cars within 4.9 m wrecked flat, knock-downs, `onBlow('step')`. Acts: `salvo`
+  (hull on the target — top aggro within 280 m, else a facade 40–280 m ahead — pods up, 12 missiles 0.14 s apart on
+  arcs at 85 m/s; a blast: fire and smoke on the shared particles, a destruction impact from a token bucket (4,
+  +1.5/s), cars within 4.5 m wrecked, knock-downs in 7 m, the player hurt, `onBlow('slam')`), `cannon` (fliers within
+  220 m from `airTargets` or drones, or the flying hero at the top of its aggro: tracers, hits), `smash` (the hammer
+  on whoever is within 15 m in front on the ground), `vent` (heat ≥ 1 after two salvos: 7 s, steam, the `vents` zone
+  exposed ×3.5), `shutdown` (frost on open vents: 6 s sagging, visor dark), `kneel` (320 recent damage on a knee:
+  5 s low), `topple`. Elements: frost cools it (or shuts it down when venting), fire ×0.6, shock ×1.6, wind ×0.3. A
+  ThreatActor (2600 hp; zones cockpit 0.55 (weak ×2, always), vents 0.3 (weak while open), knees 0.5, hull 0.85, arms
+  0.75, legs 0.8, pods 0.6). Ends walking back out at 25 % hp (70 karma + 6 rep), after `visitMax` 720 s, or destroyed
+  (sparks, topples forward, the wreck in `mechRemains` for `wreckHours` 8, smoking; 140 karma + 12 rep). An ArmyFoe on
+  its route. Not saved. Omens (`ThreatDirector.mechOmen`): `bulletin` — a news toast about a lost prototype, a klaxon
+  far off; `stomps` — four heavy footfalls 600 m away, a `tremor`. Sounds (`tools/synthMech.mjs`): `mech_step`,
+  `mech_launch`, `mech_cannon`, `mech_vent`, `mech_alarm`. Dev: `dev.threat.spawn('mech', { near })`,
+  `dev.threat.mech.status() / .near() / .downtown() / .salvo() / .cannon() / .smash() / .vent() / .freeze() / .kneel() /
+  .damage(zone, n) / .die() / .leave() / .omen(kind)`; admin console "Giant mech".
 * **City response** (`ResponseDirector`, levels 0–2 of the ladder, per incident): 0 — three patrol cars with sirens
   (`Police.respond(IncidentJob)`: the job says where, how many get out, what they do there, when to go), a police
   drone; officers hold a line facing it and wave people back. 1 (after 30 s with > 45 % of it still in action, or 8

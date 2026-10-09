@@ -126,10 +126,14 @@ export class NewsFeed {
     const g = this.g;
     const H = this.hidden;
     H.length = 0;
-    H.push(g.crowd.group, g.props.group, g.future.group, g.birds.mesh, g.interiors.group, g.underground.group, g.crime.group, g.flightFx.group, g.player.rig.object, g.countryside.group, g.debris.group, g.vehicles.group);
-    for (const r of (g.crowd as unknown as { rigs: Map<number, { rig: { object: THREE.Object3D } }> }).rigs.values()) H.push(r.rig.object);
-    this.flags.length = H.length;
-    for (let i = 0; i < H.length; i++) { this.flags[i] = H[i].visible; H[i].visible = false; }
+    this.flags.length = 0;
+    // Their lights stay on (only what they draw is left out): the lights are part of every program's
+    // key, so a picture with fewer lights would compile its own copy of every program it draws, on
+    // the spot (the freeze at a giant's first appearance on the feed).
+    if (this.lightsT-- <= 0) this.findLights();
+    const R: THREE.Object3D[] = [g.crowd.group, g.props.group, g.future.group, g.birds.mesh, g.interiors.group, g.underground.group, g.crime.group, g.flightFx.group, g.player.rig.object, g.countryside.group, g.debris.group, g.vehicles.group];
+    for (const r of (g.crowd as unknown as { rigs: Map<number, { rig: { object: THREE.Object3D } }> }).rigs.values()) R.push(r.rig.object);
+    for (const o of R) this.leaveOut(o);
     // Every cell's facades at the simple LOD (a 256 × 144 picture shows no more; the detailed ones
     // cost far more to draw, and to upload the first time they are seen from up there).
     // Cells far from what it films are left out (the skyline stands in for them); cells the feed has
@@ -155,6 +159,29 @@ export class NewsFeed {
       this.drawn.add(o);
     }
   }
+
+  /** Hide `o`, or (when lights hang below it) everything below it but the lights. */
+  private leaveOut(o: THREE.Object3D): void {
+    if ((o as THREE.Light).isLight) return;
+    if (!this.lightAncestors.has(o)) {
+      if (o.visible) { this.hidden.push(o); this.flags.push(true); o.visible = false; }
+      return;
+    }
+    for (const c of o.children) this.leaveOut(c);
+  }
+
+  /** Every object with a light below it (the scene's lights change rarely: looked up every couple of seconds). */
+  private findLights(): void {
+    this.lightsT = 10;
+    const A = this.lightAncestors;
+    A.clear();
+    this.g.renderer.scene.traverse((o) => {
+      if (!(o as THREE.Light).isLight) return;
+      for (let p = o.parent; p && !A.has(p); p = p.parent) A.add(p);
+    });
+  }
+  private lightAncestors = new Set<THREE.Object3D>();
+  private lightsT = 0;
 
   private show(): void {
     for (let i = 0; i < this.hidden.length; i++) this.hidden[i].visible = this.flags[i];

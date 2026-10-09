@@ -105,3 +105,8 @@ Voices are not synthesized: cries, shouts, falls and animal calls are speech bub
 | roc_screech | roc_screech.wav | 1.9 | `tools/synthRoc.mjs`: a saturated harmonic tone rising briefly at ~1.35 kHz then falling to ~760 Hz ("kee-eeer"), rough amplitude flutter, breath noise, town echoes. The Roc's scream (perching, grounded, diving). |
 | roc_cry_far | roc_cry_far.wav | 2.2 | `tools/synthRoc.mjs`: the same scream low-passed to 1.3 kHz with long echoes. Far off and high up: the Roc's omen. |
 | roc_flap | roc_flap.wav | 1.1 | `tools/synthRoc.mjs`: brown-noise rush and a falling 68→38 Hz thump under a closing low-pass. One great wingbeat. |
+| mech_step | mech_step.wav | 1.6 | `tools/synthMech.mjs`: a falling 102→32 Hz sine thud with a low noise body, an inharmonic 118 Hz steel clang, a band-passed hydraulic hiss, two echoes. A giant mech's footfall. |
+| mech_launch | mech_launch.wav | 1.5 | `tools/synthMech.mjs`: a short noise pop and a rough rocket rush band-passed falling 2.2→0.9 kHz over a low roar, echoes. A missile leaving its pod. |
+| mech_cannon | mech_cannon.wav | 0.6 | `tools/synthMech.mjs`: eight hard pops 45 ms apart (sine chirp + noise) over a 420 Hz motor whine. A burst of the rotary cannon (played every 0.35 s while it fires). |
+| mech_vent | mech_vent.wav | 3.0 | `tools/synthMech.mjs`: a metal clunk and a long hiss (band-passed and low-passed noise). The heat vents opening. |
+| mech_alarm | mech_alarm.wav | 2.2 | `tools/synthMech.mjs`: a buzzy two-tone horn (392 / 311 Hz, half a second each) with town echoes. Its warning klaxon (salvos, shutdown, destroyed; the bulletin omen far off). |
