@@ -63,6 +63,8 @@ export const ARCHETYPES: readonly ArchetypeDef[] = [
   { id: 'strider', tier: 'major', weight: 1, omens: ['tremor', 'wake', 'tremor'] },
   // The Burrower (game/threats/burrower): a rumble under the street, a pothole opening up.
   { id: 'burrower', tier: 'major', weight: 1, omens: ['rumble', 'pothole', 'rumble'] },
+  // The Leviathan (game/threats/leviathan): a wake moving up the river, the water heaving at a bridge.
+  { id: 'leviathan', tier: 'major', weight: 1, omens: ['wake', 'surge', 'wake'] },
 ];
 
 /** The city's first major event is always this one (the Strider: the first monster one meets). */

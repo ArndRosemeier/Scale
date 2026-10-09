@@ -47,6 +47,7 @@ import type { EquipmentVisuals } from '../../../items/types';
 import { Strider, STRIDER, STRIDER_ZONES, type AirProvider, type StriderBlow } from '../../threats/Strider';
 import { PlayerRampage } from '../../threats/PlayerRampage';
 import { Burrower } from '../../threats/burrower/Burrower';
+import { Leviathan } from '../../threats/leviathan/Leviathan';
 import { RAMPAGE } from '../../threats/rampageRules';
 import type { DamageResult, DamageSource, ThreatEvent, ThreatOutcome, ThreatZone } from '../../threats/ThreatEvent';
 import type { Incident } from '../ResponseDirector';
@@ -70,7 +71,7 @@ interface Body {
   stuckT: number;
 }
 
-/** What the army fights: the Strider, the Burrower, or a rampaging giant player (threats/PlayerRampage). */
+/** What the army fights: the Strider, the Burrower, the Leviathan, or a rampaging giant player (threats/PlayerRampage). */
 export interface ArmyFoe {
   readonly x: number; readonly y: number; readonly z: number;
   /** Progress along its route (m) and what it is doing ('advance', 'rampage' at the route's end …). */
@@ -94,17 +95,17 @@ export interface ArmyFoe {
   batteryAt?(): { x: number; z: number };
   /** It goes where it likes (the player): units holding out of reach go again. */
   readonly chased?: boolean;
-  /** Out of reach and out of sight (the Burrower under the street): units hold their fire. */
+  /** Out of reach and out of sight (the Burrower under the street, the Leviathan under the water): units hold their fire. */
   readonly hidden?: boolean;
 }
 
 /**
  * The army's foe in an incident, or null: a major threat it can fight (a body on a route: the Strider,
- * the Burrower, a rampaging giant player) whose faction the army is hostile to (factions/relations.ts; a rampaging
+ * the Burrower, the Leviathan, a rampaging giant player) whose faction the army is hostile to (factions/relations.ts; a rampaging
  * hero only while the rampage lasts).
  */
 export function armyFoe(ev: ThreatEvent, R?: Relations): ArmyFoe | null {
-  if (ev.tier !== 'major' || !(ev instanceof Strider || ev instanceof PlayerRampage || ev instanceof Burrower)) return null;
+  if (ev.tier !== 'major' || !(ev instanceof Strider || ev instanceof PlayerRampage || ev instanceof Burrower || ev instanceof Leviathan)) return null;
   return !R || R.hostile('army', eventFaction(ev)) ? ev : null;
 }
 

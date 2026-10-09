@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.209 — 2026-10-09
+## 0.210 — 2026-10-09
 
 - **Street accidents twice as often.** Someone near you trips and falls every 1.5 to 3 minutes instead of every 3 to 6, so a young hero who cannot fight yet has a steady source of karma from helping people up. They still only happen where you can see them.
+
+## 0.209 — 2026-10-09
+
+- **A new big threat: the Leviathan.** After the first Strider, a river monster can come up the river with the most bridges. It is heralded by a long V of foam moving up the river, or the water heaving and boiling beside a bridge with a deep surge. Under the surface it shows as a long V of foam with a low surge you hear from the banks, and drivers on the bridges ahead stop. At up to three bridges, and the quays between them, the water heaves and it rears its head 12 m out of the river with six tentacles round it. The tentacles pull cars off the deck and fling them into the river, hammer the deck until a span falls in (two per visit at most), sweep people off the promenade and swat helicopters and drones. The head roars and snaps at whoever fights it; its open maw is the weak spot (four times the damage). Frost freezes it fast for a few seconds, icy mist smoking off it. Hurt badly it goes back down the river; beaten, it slumps and sinks. You can only hurt it while it is up, and the army fights it from the banks. Fallen spans stay open for a game day and are rebuilt once you are far away; they are saved with the game. The admin console has a "Leviathan" section, and `dev.threat.leviathan` has tools for testing.
 
 ## 0.208 — 2026-10-09
 

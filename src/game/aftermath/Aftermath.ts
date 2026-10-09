@@ -35,6 +35,7 @@ import type { SaveAftermath } from '../save/model';
 import type { ThreatEvent } from '../threats/ThreatEvent';
 import { Strider } from '../threats/Strider';
 import { Burrower } from '../threats/burrower/Burrower';
+import { Leviathan } from '../threats/leviathan/Leviathan';
 import { PlayerRampage } from '../threats/PlayerRampage';
 import { RESPONSE } from '../response/ResponseDirector';
 import { CasualtyLedger } from './Casualties';
@@ -177,7 +178,7 @@ export class Aftermath {
 
   /** Too dangerous for the medics: near a live monster, inside a strike zone before the strike. */
   danger(x: number, z: number): boolean {
-    for (const ev of this.g.threats.events) if ((ev instanceof Strider || ev instanceof PlayerRampage || ev instanceof Burrower) && ev.targetable && Math.hypot(ev.x - x, ev.z - z) < 170) return true;
+    for (const ev of this.g.threats.events) if ((ev instanceof Strider || ev instanceof PlayerRampage || ev instanceof Burrower || ev instanceof Leviathan) && ev.targetable && Math.hypot(ev.x - x, ev.z - z) < 170) return true;
     const L = this.lastResort;
     return L.state === 'countdown' && Math.hypot(L.x - x, L.z - z) < L.r * 1.1;
   }
@@ -442,7 +443,7 @@ export class Aftermath {
     else {
       for (const ev of g.threats.events) if (ev instanceof Strider && ev.targetable) { T = { x: ev.x, y: ev.y + 6, z: ev.z, dist: FEED.dist, alt: Math.max(FEED.alt, this.skyClear(ev.x, ev.z) - ev.y + 20) }; break; }
       // (The worm while it is up, a rampaging giant player: on the news too.)
-      if (!T) for (const ev of g.threats.events) if (ev instanceof Burrower && ev.targetable && ev.surfaced) { T = { x: ev.x, y: ev.y + 6, z: ev.z, dist: FEED.dist, alt: Math.max(FEED.alt, this.skyClear(ev.x, ev.z) - ev.y + 20) }; break; }
+      if (!T) for (const ev of g.threats.events) if ((ev instanceof Burrower || ev instanceof Leviathan) && ev.targetable && ev.surfaced) { T = { x: ev.x, y: ev.y + 6, z: ev.z, dist: FEED.dist, alt: Math.max(FEED.alt, this.skyClear(ev.x, ev.z) - ev.y + 20) }; break; }
       if (!T) for (const ev of g.threats.events) if (ev instanceof PlayerRampage && ev.targetable) { T = { x: ev.x, y: ev.y, z: ev.z, dist: FEED.dist, alt: Math.max(FEED.alt, this.skyClear(ev.x, ev.z) - ev.y + 20) }; break; }
       if (!T) for (const b of g.threats.remains) if (this.hours - b.downAt < 1) { T = { x: b.x, y: b.y + 2, z: b.z, dist: 150, alt: 70 }; break; }
     }
@@ -465,7 +466,7 @@ export class Aftermath {
     const g = this.g, p = g.player.pos;
     let look: { x: number; y: number; z: number } | null = null;
     for (const ev of g.threats.events) if (ev instanceof Strider && ev.targetable) { const h = ev.rig.headPos; look = { x: h.x, y: h.y, z: h.z }; break; }
-    if (!look) for (const ev of g.threats.events) if (ev instanceof Burrower && ev.targetable && ev.surfaced) { const h = ev.rig.head; look = { x: h.x, y: h.y, z: h.z }; break; }
+    if (!look) for (const ev of g.threats.events) if ((ev instanceof Burrower || ev instanceof Leviathan) && ev.targetable && ev.surfaced) { const h = ev.headPos; look = { x: h.x, y: h.y, z: h.z }; break; }
     if (!look && this.lastResort.state === 'strike') look = { x: this.lastResort.x, y: g.terrain.height(this.lastResort.x, this.lastResort.z) + 500, z: this.lastResort.z };
     this.showT -= dt;
     if (look && this.showT <= 0) {

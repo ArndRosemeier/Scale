@@ -10,7 +10,7 @@ import type { Shape } from '../core/clip';
 import { pointInPoly, polyBounds } from '../core/geom2';
 import { CURB_H } from '../build/ground';
 import { TERRAIN_DROP } from '../build/terrainMesh';
-import type { BridgeProfile } from '../build/bridges';
+import { inGap, type BridgeProfile } from '../build/bridges';
 import { BINFO_STRIDE } from '../stream/protocol';
 import type { LandmarkSolids } from './LandmarkSolids';
 
@@ -178,13 +178,14 @@ export class WorldIndex {
 
   /**
    * Bridge deck height at (x,z) or -Infinity. With a heading (hx, hz) only decks running
-   * that way count (a car on the bank road under a bridge stays on the bank road).
+   * that way count (a car on the bank road under a bridge stays on the bank road). A fallen
+   * span (`gaps`) is no deck.
    */
   bridgeDeck(x: number, z: number, hx = 0, hz = 0): number {
     for (const b of this.bridges) {
       const dx = x - b.ax, dz = z - b.az;
       const s = dx * b.dx + dz * b.dz;
-      if (s < b.s0 || s > b.s1) continue;
+      if (s < b.s0 || s > b.s1 || (b.gaps && inGap(b.gaps, s))) continue;
       if ((hx || hz) && Math.abs(hx * b.dx + hz * b.dz) < 0.5) continue;
       const o = -dx * b.dz + dz * b.dx;
       if (Math.abs(o) > b.width / 2) continue;

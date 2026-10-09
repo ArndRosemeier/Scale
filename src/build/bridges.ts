@@ -4,9 +4,11 @@
  * suspension). Built in the facade material family (same shader).
  */
 import type { Terrain } from '../world/terrain';
-import type { MacroPlan } from '../plan/types';
+import type { Bridge, MacroPlan } from '../plan/types';
 import { MeshBuilder } from './meshBuilder';
 import { facadeSpecs, FF } from './buildingShell';
+import { Rng } from '../core/rng';
+import { v3cross, v3madd, v3norm, v3scale, type Vec3 } from '../core/math';
 
 export interface BridgeProfile {
   /** start/end of the deck along the edge (arc-length), deck height function. */
@@ -15,6 +17,43 @@ export interface BridgeProfile {
   s0: number; s1: number;
   y: (s: number) => number;
   width: number;
+  style: Bridge['style'];
+  waterLevel: number;
+  /** Deck arc-length ranges that have fallen into the river (BridgeBreaks): no deck there. */
+  gaps?: [number, number][];
+}
+
+/** A fallen span for the mesh: deck arc-length range on an edge's bridge, seed of its wreckage. */
+export interface BridgeGapSpec { edge: number; s0: number; s1: number; seed: number }
+
+/**
+ * Pier stations (arc length) of a stone or girder bridge between its deck ends; none for the
+ * other styles. The one home for the mesh and the span breaks (a span falls between piers).
+ */
+export function bridgePiers(style: Bridge['style'], s0: number, s1: number): number[] {
+  if (style !== 'stone' && style !== 'girder') return [];
+  const span = s1 - s0, n = Math.max(1, Math.round(span / (style === 'stone' ? 28 : 45))), sl = span / n;
+  const out: number[] = [];
+  for (let k = 1; k < n; k++) out.push(s0 + k * sl);
+  return out;
+}
+
+/** Does [a, b] (a point when b is left out) reach into one of the gaps? */
+export function inGap(gaps: readonly (readonly [number, number])[] | undefined, a: number, b = a): boolean {
+  if (gaps) for (const g of gaps) if (a < g[1] && b > g[0]) return true;
+  return false;
+}
+
+/** The deck runs left of s0..s1 once the gaps are cut out. */
+function deckRuns(s0: number, s1: number, gaps: [number, number][]): [number, number][] {
+  const out: [number, number][] = [];
+  let a = s0;
+  for (const g of [...gaps].sort((p, q) => p[0] - q[0])) {
+    if (g[0] > a) out.push([a, Math.min(g[0], s1)]);
+    a = Math.max(a, g[1]);
+  }
+  if (a < s1) out.push([a, s1]);
+  return out.filter((r) => r[1] - r[0] > 0.05);
 }
 
 /** Deck geometry parameters shared with ground queries. */
@@ -39,12 +78,13 @@ export function bridgeProfiles(macro: MacroPlan, terrain: Terrain): BridgeProfil
       const t = Math.max(0, Math.min(1, (s - s0) / span));
       return h0 + (h1 - h0) * t + Math.max(0, arch) * Math.sin(Math.PI * t);
     };
-    out.push({ edge: br.edge, ax, az, dx, dz, s0, s1, y, width: br.width });
+    out.push({ edge: br.edge, ax, az, dx, dz, s0, s1, y, width: br.width, style: br.style, waterLevel: br.waterLevel });
   }
   return out;
 }
 
-export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
+/** All bridges in one mesh; `gaps` leaves fallen spans out (broken ends and wreckage in the river instead). */
+export function buildBridges(macro: MacroPlan, terrain: Terrain, gaps: readonly BridgeGapSpec[] = []): MeshBuilder {
   const mb = new MeshBuilder(facadeSpecs());
   const profiles = bridgeProfiles(macro, terrain);
   let elem = 0;
@@ -56,16 +96,21 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
     const carr = e.width / 2;
     const nx = -pr.dz, nz = pr.dx;
     const P = (s: number, o: number, y: number): [number, number, number] => [pr.ax + pr.dx * s + nx * o, y, pr.az + pr.dz * s + nz * o];
-    const seg = Math.max(8, Math.ceil((pr.s1 - pr.s0) / 4));
-    const ds = (pr.s1 - pr.s0) / seg;
+    const mine = gaps.filter((g) => g.edge === pr.edge && g.s1 > pr.s0 && g.s0 < pr.s1);
+    const cut: [number, number][] = mine.map((g) => [g.s0, g.s1]);
+    // Deck pieces of ~4 m per run between gaps (the whole deck: at least 8, as before).
+    const pieces: [number, number][] = [];
+    for (const [ra, rb] of deckRuns(pr.s0, pr.s1, cut)) {
+      const n = Math.max(cut.length ? 1 : 8, Math.ceil((rb - ra) / 4)), d = (rb - ra) / n;
+      for (let k = 0; k < n; k++) pieces.push([ra + k * d, ra + (k + 1) * d]);
+    }
     const stone = br.style === 'stone';
     const structLayer = stone ? 4 : br.style === 'girder' ? 8 : 11;
     const structTint: [number, number, number] = stone ? [0.85, 0.8, 0.72] : br.style === 'girder' ? [0.75, 0.75, 0.74] : br.style === 'truss' ? [0.32, 0.42, 0.38] : [0.45, 0.48, 0.5];
     const thick = br.style === 'girder' ? 2.4 : stone ? 1.6 : 1.3;
     mb.set('aSeed', 0.5).set('aElem', elem++);
     // --- Deck surfaces: carriageway (tar), sidewalks (raised), deck underside and sides.
-    for (let k = 0; k < seg; k++) {
-      const sa = pr.s0 + k * ds, sb = sa + ds;
+    for (const [sa, sb] of pieces) {
       const ya = pr.y(sa), yb = pr.y(sb);
       mb.set('aLayer', 16).set('aTint', 0.75, 0.75, 0.75).set('aFacade', 1, 1, 1, FF.Roof);
       quadUp(mb, P(sa, -carr, ya), P(sb, -carr, yb), P(sb, carr, yb), P(sa, carr, ya));
@@ -84,8 +129,8 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
     }
     // --- Parapets / railings.
     for (const sgn of [-1, 1]) {
-      for (let k = 0; k < seg; k++) {
-        const sa = pr.s0 + k * ds, sb = sa + ds;
+      for (const [sa, sb] of pieces) {
+        const ds = sb - sa;
         const ya = pr.y(sa) + 0.15, yb = pr.y(sb) + 0.15;
         const o = sgn * (half - 0.15);
         if (stone) {
@@ -108,6 +153,7 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
     }
     // --- Lamp posts every ~25 m.
     for (let s = pr.s0 + 8; s < pr.s1 - 4; s += 25) {
+      if (inGap(cut, s - 0.5, s + 0.5)) continue;
       for (const sgn of [-1, 1]) {
         const y = pr.y(s) + 0.15;
         const p = P(s, sgn * (half - 0.4), y);
@@ -122,10 +168,11 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
     const yaw = -Math.atan2(pr.dz, pr.dx);
     if (stone || br.style === 'girder') {
       // Piers in the water + arches (stone) or straight girders on piers.
-      const nSpan = Math.max(1, Math.round(span / (stone ? 28 : 45)));
+      const piers = bridgePiers(br.style, pr.s0, pr.s1);
+      const nSpan = piers.length + 1;
       const sl = span / nSpan;
-      for (let k = 1; k < nSpan; k++) {
-        const s = pr.s0 + k * sl;
+      for (const s of piers) {
+        if (inGap(cut, s)) continue;
         const y = pr.y(s) - thick;
         const bottom = wl - 4;
         const p = P(s, 0, (y + bottom) / 2);
@@ -151,6 +198,7 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
             for (let i = 0; i < archSeg; i++) {
               const t0 = i / archSeg, t1 = (i + 1) / archSeg;
               const s0 = sa + 1.1 + (sl - 2.2) * t0, s1 = sa + 1.1 + (sl - 2.2) * t1;
+              if (inGap(cut, s0, s1)) continue;
               const a0 = springY + rise * Math.sin(Math.PI * t0), a1 = springY + rise * Math.sin(Math.PI * t1);
               const d0 = pr.y(s0) - thick, d1 = pr.y(s1) - thick;
               // spandrel face from arch curve up to the deck underside
@@ -175,6 +223,7 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
         for (let i = 0; i < n; i++) {
           const t0 = i / n, t1 = (i + 1) / n;
           const s0 = pr.s0 + span * t0, s1 = pr.s0 + span * t1;
+          if (inGap(cut, s0, s1)) continue;
           const y0 = springY + rise * Math.sin(Math.PI * t0), y1 = springY + rise * Math.sin(Math.PI * t1);
           const a = P(s0, o, y0), b = P(s1, o, y1);
           mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.45, 0.6);
@@ -196,8 +245,8 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
           const s = pr.s0 + k * pl;
           const y = pr.y(s);
           const a = P(s, o, y), b = P(s, o, y + th);
-          mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.18, 0.18);
-          if (k < panels) {
+          if (!inGap(cut, s)) mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.18, 0.18);
+          if (k < panels && !inGap(cut, s, s + pl)) {
             const s2 = s + pl, y2 = pr.y(s2);
             const c = P(s2, o, y2 + th);
             mb.beam(b[0], b[1], b[2], c[0], c[1], c[2], 0.25, 0.25);
@@ -213,6 +262,7 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
       // Portal bracing across the top.
       for (let k = 0; k <= panels; k += 2) {
         const s = pr.s0 + k * pl, y = pr.y(s) + th;
+        if (inGap(cut, s)) continue;
         const a = P(s, -half - 0.2, y), b = P(s, half + 0.2, y);
         mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.15, 0.15);
       }
@@ -222,6 +272,7 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
       const sT0 = pr.s0 + span * 0.18, sT1 = pr.s1 - span * 0.18;
       mb.set('aLayer', 8).set('aTint', 0.8, 0.8, 0.78);
       for (const sT of [sT0, sT1]) {
+        if (inGap(cut, sT - 1.4, sT + 1.4)) continue;
         for (const sgn of [-1, 1]) {
           const y0 = wl - 4, y1 = pr.y(sT) + tH;
           const p = P(sT, sgn * (half + 0.6), (y0 + y1) / 2);
@@ -251,7 +302,7 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
           const a = P(s0, o, cableY(s0)), b = P(s1, o, cableY(s1));
           mb.beam(a[0], a[1], a[2], b[0], b[1], b[2], 0.35, 0.35);
           const d = pr.y(s0);
-          if (cableY(s0) - d > 1.5) {
+          if (cableY(s0) - d > 1.5 && !inGap(cut, s0)) {
             const c = P(s0, o, (cableY(s0) + d) / 2);
             mb.box(c[0], c[1], c[2], 0.04, (cableY(s0) - d) / 2, 0.04);
           }
@@ -265,8 +316,73 @@ export function buildBridges(macro: MacroPlan, terrain: Terrain): MeshBuilder {
       const p = P(s, 0, (y + bottom) / 2);
       mb.box(p[0], p[1], p[2], 3, (y - bottom) / 2, half + 0.5, yaw);
     }
+    for (const g of mine) gapWreckage(mb, pr, g, thick, P);
   }
   return mb;
+}
+
+/**
+ * A fallen span's leftovers, all from the gap's seed: at each broken end deck slabs hanging down
+ * from the edge and bent rebar, and 2–3 big deck slabs lying tilted in the river, half under.
+ */
+function gapWreckage(mb: MeshBuilder, pr: BridgeProfile, g: BridgeGapSpec, thick: number, P: (s: number, o: number, y: number) => Vec3): void {
+  const half = pr.width / 2;
+  const ends: [number, number][] = [];
+  if (g.s0 > pr.s0 + 0.5) ends.push([g.s0, 1]);
+  if (g.s1 < pr.s1 - 0.5) ends.push([g.s1, -1]);
+  for (const [e, dir] of ends) {
+    const rng = Rng.from('bridgeGap', g.seed, dir);
+    const y = pr.y(e);
+    // Slabs hinged at the edge, hanging into the gap: three across the deck, each its own droop.
+    for (let k = 0; k < 3; k++) {
+      if (rng.chance(0.2)) continue;
+      const oc = -half + (k + 0.5) * (pr.width / 3) + rng.range(-0.4, 0.4);
+      const a = rng.range(0.45, 1.25), L = rng.range(2.5, 6);
+      const u: Vec3 = [pr.dx * dir * Math.cos(a), -Math.sin(a), pr.dz * dir * Math.cos(a)];
+      const v: Vec3 = [pr.dx * dir * Math.sin(a), Math.cos(a), pr.dz * dir * Math.sin(a)];
+      mb.set('aLayer', 8).set('aTint', 0.82, 0.81, 0.78).set('aFacade', 1, 1, 1, 0);
+      slab(mb, v3madd(P(e, oc, y - thick * 0.45), u, L / 2), u, v, L / 2, thick * 0.4, (pr.width / 6) * rng.range(0.7, 0.95));
+    }
+    // Rebar sticking out of the torn edge, bent down.
+    mb.set('aLayer', 11).set('aTint', 0.36, 0.22, 0.15);
+    const nBar = rng.int(6, 10);
+    for (let i = 0; i < nBar; i++) {
+      const o = rng.range(-half + 0.3, half - 0.3), L = rng.range(0.8, 2.4), a = rng.range(0.1, 1.1);
+      const u: Vec3 = [pr.dx * dir * Math.cos(a), -Math.sin(a), pr.dz * dir * Math.cos(a)];
+      slab(mb, v3madd(P(e, o, y - rng.range(0.15, thick * 0.8)), u, L / 2), u, v3norm([-u[0] * u[1], 1 - u[1] * u[1], -u[2] * u[1]]), L / 2, 0.035, 0.035);
+    }
+  }
+  // Big pieces of the deck in the river, tilted and partly under water.
+  const rng = Rng.from('bridgeGap', g.seed, 0);
+  const G = g.s1 - g.s0, n = G > 14 ? rng.int(2, 3) : 2;
+  for (let k = 0; k < n; k++) {
+    const s = g.s0 + (G * (k + 0.5)) / n + rng.range(-1, 1);
+    const yaw = rng.range(-0.35, 0.35), a = rng.range(0.2, 0.65) * rng.sign(), roll = rng.range(-0.25, 0.25);
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    const h: Vec3 = [pr.dx * c - pr.dz * sn, 0, pr.dz * c + pr.dx * sn];
+    const w0: Vec3 = [-h[2], 0, h[0]];
+    const u: Vec3 = [h[0] * Math.cos(a), Math.sin(a), h[2] * Math.cos(a)];
+    const v0 = v3cross(w0, u);
+    const v = v3norm(v3madd(v3scale(v0, Math.cos(roll)), w0, Math.sin(roll)));
+    const L = Math.min((G / n) * 1.15, rng.range(6, 10));
+    const ctr = P(s, rng.range(-half * 0.4, half * 0.4), pr.waterLevel + rng.range(-0.4, 0.5));
+    mb.set('aLayer', 8).set('aTint', 0.8, 0.79, 0.76).set('aFacade', 1, 1, 1, 0);
+    slab(mb, ctr, u, v, L / 2, thick * 0.45, half * rng.range(0.55, 0.9));
+  }
+}
+
+/** A box of half extents (hu, hv, hw) on the unit axes u, v (at right angles) and u×v round c: a tilted slab or a bent bar. */
+function slab(mb: MeshBuilder, c: Vec3, u: Vec3, v: Vec3, hu: number, hv: number, hw: number): void {
+  const A = [u, v, v3cross(u, v)], H = [hu, hv, hw];
+  for (let i = 0; i < 3; i++) {
+    const n = A[i], a = A[(i + 1) % 3], b = A[(i + 2) % 3], ha = H[(i + 1) % 3], hb = H[(i + 2) % 3];
+    for (const sg of [1, -1]) {
+      const f = v3madd(c, n, sg * H[i]);
+      const q = (x: number, y: number) => v3madd(v3madd(f, a, x * ha), b, y * hb);
+      const cs = sg > 0 ? [q(-1, -1), q(1, -1), q(1, 1), q(-1, 1)] : [q(-1, -1), q(-1, 1), q(1, 1), q(1, -1)];
+      mb.quadP(cs.flat(), [0, 0, ha * 2, 0, ha * 2, hb * 2, 0, hb * 2]);
+    }
+  }
 }
 
 function quadUp(mb: MeshBuilder, a: number[], b: number[], c: number[], d: number[]): void {

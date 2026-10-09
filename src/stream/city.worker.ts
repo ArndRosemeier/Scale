@@ -155,7 +155,7 @@ self.onmessage = (ev: MessageEvent<ToWorker>) => {
       return;
     }
     if (m.type === 'bridges') {
-      const mb = buildBridges(macro, terrain);
+      const mb = buildBridges(macro, terrain, m.gaps);
       const mesh = mb.empty ? null : mb.build();
       post({ type: 'bridges', job: m.job, mesh }, mesh ? meshTransferables(mesh) : []);
       return;

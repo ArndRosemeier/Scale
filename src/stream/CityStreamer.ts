@@ -14,6 +14,7 @@ import { createFacadeMaterial, createElemDepthMaterial } from '../render/materia
 import { clearGlassMaterial, clearGlassElemMaterial } from '../render/materials/clearGlass';
 import type { WreckGrid } from '../build/landmarkDice';
 import type { Landmark } from '../plan/landmarks';
+import type { BridgeGapSpec } from '../build/bridges';
 import { createGroundMaterial, createTerrainMaterial, createWaterMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
 import { releaseAfterUpload, UploadPrimer } from '../render/gpuOnly';
@@ -110,6 +111,11 @@ export class CityStreamer {
   onCellEvicted?: (c: CellState) => void;
   /** Breakable landmarks (filled by loadLandmarks). */
   readonly wrecks: LandmarkWreckData[] = [];
+  /** The one mesh of all bridges (loadBridges), its geometry swapped by rebuildBridges. */
+  private bridgeMesh: THREE.Mesh | null = null;
+  private bridgeTicket = 0;
+  /** Fallen spans the bridge mesh leaves out (also for a load still to come). */
+  private bridgeGaps: BridgeGapSpec[] = [];
 
   constructor(readonly macro: MacroPlan, readonly pool: WorkerPool, readonly tex: TextureLibrary) {
     this.groundMat = createGroundMaterial(tex.ground);
@@ -119,7 +125,7 @@ export class CityStreamer {
   }
 
   async loadBridges(): Promise<void> {
-    const r = await this.pool.run<Extract<FromWorker, { type: 'bridges' }>>({ type: 'bridges', job: 0 }, -1);
+    const r = await this.pool.run<Extract<FromWorker, { type: 'bridges' }>>({ type: 'bridges', job: 0, gaps: this.bridgeGaps }, -1);
     if (!r.mesh) return;
     const mat = createFacadeMaterial(this.tex.facade, null);
     const mesh = new THREE.Mesh(toGeometry(r.mesh), mat);
@@ -127,6 +133,23 @@ export class CityStreamer {
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.name = 'bridges';
     this.root.add(mesh);
+    this.bridgeMesh = mesh;
+  }
+
+  /**
+   * Builds the bridges again with fallen spans left out (BridgeBreaks) and swaps the geometry of
+   * the loaded mesh: same material, so no shader compiles. The newest request wins.
+   */
+  async rebuildBridges(gaps: BridgeGapSpec[]): Promise<void> {
+    const ticket = ++this.bridgeTicket;
+    this.bridgeGaps = gaps.map((g) => ({ edge: g.edge, s0: g.s0, s1: g.s1, seed: g.seed }));
+    const r = await this.pool.run<Extract<FromWorker, { type: 'bridges' }>>({ type: 'bridges', job: 0, gaps: this.bridgeGaps }, -1);
+    const mesh = this.bridgeMesh;
+    if (ticket !== this.bridgeTicket || !mesh || !r.mesh) return;
+    const old = mesh.geometry;
+    mesh.geometry = toGeometry(r.mesh);
+    mesh.position.set(...r.mesh.origin);
+    old.dispose();
   }
 
   /**
