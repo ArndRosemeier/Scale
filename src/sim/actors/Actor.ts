@@ -30,6 +30,8 @@ export const METRO_OWNER = -5;
 export const PEOPLE_OWNER = -6;
 /** Owner id of game/sidekick's actors (the person taking the shard, the sidekick): their own budget. */
 export const SIDEKICK_OWNER = -7;
+/** Owner id of the stadium concert's people (src/game/concert: the band, the audience in the pit): their own budget. */
+export const CONCERT_OWNER = -8;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';
@@ -79,6 +81,8 @@ export interface Actor {
   title?: string;
   /** Not despawned by distance while set. */
   pinned: boolean;
+  /** One of a crowd (a concert's audience): no priority for a full rig over ordinary people. */
+  crowd?: boolean;
   /** Owner id (crime / deed / police) for bookkeeping. */
   owner: number;
   /** Knocked down (not out): seconds until they get up again. */

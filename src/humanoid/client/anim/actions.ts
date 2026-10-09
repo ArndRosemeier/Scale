@@ -661,6 +661,65 @@ function heroPose(p: Pose) {
   p.neck(0.3, -0.15);
 }
 
+/** One cycle of the concert crowd's groove (s): two beats at 120 bpm. The crowd's baked clip (sim/CrowdBaker) is exactly one. */
+export const GROOVE_PERIOD = 1;
+
+/** A fan at a concert: bouncing on the beat, one fist pumping up high, the other hand at the chest. */
+function groove(p: Pose, _t: number, c: ActionCtx) {
+  const e = (c.elapsed / GROOVE_PERIOD) * 2 * PI, beat = Math.abs(Math.sin(e));
+  p.root.y -= (1 - beat) * 0.045;
+  p.leg('L', (1 - beat) * 0.16, 0.05, 0, (1 - beat) * 0.3, (1 - beat) * 0.12);
+  p.leg('R', (1 - beat) * 0.16, 0.05, 0, (1 - beat) * 0.3, (1 - beat) * 0.12);
+  const pump = Math.sin(e * 2);
+  p.arm('R', 2.55 + pump * 0.2, 0.3, 0, 0.55 - pump * 0.35, 1.0);
+  p.arm('L', 1.0 + Math.sin(e) * 0.15, 0.25, 0.3, 1.5, 0.6);
+  p.spine(0.04 * beat, Math.sin(e * 0.5) * 0.08, 0);
+  p.neck(0.12 + (1 - beat) * 0.12, 0, Math.sin(e * 0.5) * 0.08);
+}
+
+/** The singer: the microphone at the mouth, the other hand reaching out to the crowd, moving to the music. */
+function sing(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed, u = (e % 8) / 8;
+  const reach = kf(u, [[0, 0.2], [0.15, 1], [0.45, 1], [0.55, 0.3], [0.8, 0.9], [1, 0.2]]);
+  const sway = Math.sin(e * PI);
+  p.arm('R', 1.45, 0.1, -0.5, 2.15, 0.4, -0.4);
+  p.arm('L', 0.6 + reach * 1.2, 0.5 + reach * 0.4, 0.2, 0.5 + (1 - reach) * 0.6, -0.6, 0.2);
+  p.spine(0.05 + Math.abs(sway) * 0.05, sway * 0.12, sway * 0.05);
+  p.neck(0.12, -sway * 0.15, 0);
+  p.root.y -= Math.abs(Math.sin(e * PI * 2)) * 0.03;
+}
+
+/** At the keyboard: both hands on the keys, the shoulders and head moving with the music. */
+function playKeys(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed;
+  const l = Math.sin(e * PI * 3.1), r = Math.sin(e * PI * 4.3 + 1);
+  p.arm('L', 0.95 + l * 0.05, 0.35 + l * 0.08, 0.3, 1.25, 1.2, -0.25);
+  p.arm('R', 0.95 + r * 0.05, 0.35 - r * 0.08, 0.3, 1.25, 1.2, -0.25);
+  p.spine(0.18, Math.sin(e * 1.2) * 0.08, 0);
+  p.neck(-0.2 + Math.abs(Math.sin(e * PI * 2)) * 0.08, 0, 0);
+}
+
+/** Behind the drum kit (seated: the owner sets move 'sit'): sticks on the snare and the hi-hat, a crash now and then. */
+function playDrums(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed;
+  const hit = (ph: number) => Math.max(0, Math.sin(e * PI * 4 + ph));
+  const crash = (e % 4) < 0.35 ? 1 : 0;
+  p.arm('R', 1.0 + hit(0) * 0.35 + crash * 0.9, 0.3 + crash * 0.4, 0.2, 1.2 - hit(0) * 0.4, 0.8);
+  p.arm('L', 0.9 + hit(PI) * 0.3, 0.2, 0.3, 1.35 - hit(PI) * 0.35, 0.8);
+  p.spine(0.1, 0, 0);
+  p.neck(0.05 + hit(0) * 0.06, 0, 0);
+}
+
+/** Sitting on a cajón (a box drum; the owner sets move 'sit'), slapping its front face between the knees. */
+function playCajon(p: Pose, _t: number, c: ActionCtx) {
+  const e = c.elapsed;
+  const l = Math.max(0, Math.sin(e * PI * 3.2)), r = Math.max(0, Math.sin(e * PI * 3.2 + PI * 0.7));
+  p.arm('L', 0.35 + l * 0.25, 0.25, 0.3, 0.7 + l * 0.4, 1.0, 0.3);
+  p.arm('R', 0.35 + r * 0.25, 0.25, 0.3, 0.7 + r * 0.4, 1.0, 0.3);
+  p.spine(0.25, 0, 0);
+  p.neck(-0.25, Math.sin(e * 0.9) * 0.2, 0);
+}
+
 export const ACTIONS: Record<string, ActionDef> = {
   hands_up: { mask: 'upper', blendIn: 0.15, blendOut: 0.2, pose: handsUp, mood: 'afraid' },
   cower: { mask: 'full', blendIn: 0.2, blendOut: 0.25, pose: cower, mood: 'afraid' },
@@ -720,4 +779,10 @@ export const ACTIONS: Record<string, ActionDef> = {
   interview: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: interview, mood: 'happy', loop: true },
   chant: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: chant, mood: 'angry', loop: true },
   hero_pose: { mask: 'full', blendIn: 0.1, blendOut: 0.1, pose: heroPose, mood: 'happy', loop: true },
+  // The stadium concert (game/concert) and the street bands (game/street).
+  groove: { mask: 'full', blendIn: 0.15, blendOut: 0.15, pose: groove, mood: 'happy', loop: true },
+  sing: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: sing, mood: 'happy', loop: true },
+  play_keys: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: playKeys, mood: 'focused', loop: true, curl: { L: 0.4, R: 0.4 } },
+  play_drums: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: playDrums, mood: 'focused', loop: true, curl: { L: 1.2, R: 1.2 } },
+  play_cajon: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: playCajon, mood: 'happy', loop: true, curl: { L: 0.1, R: 0.1 } },
 };

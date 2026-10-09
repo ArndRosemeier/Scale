@@ -92,6 +92,29 @@ export function boombox(): Gear {
   return { object: g, setCoins: () => {} };
 }
 
+/** A cajón: a wooden box drum to sit on, its sound hole at the back. Origin on the ground. */
+export function cajon(): THREE.Group {
+  const g = new THREE.Group();
+  const wood = mat(0xb07a45, 0.6), face = mat(0x3a2414, 0.5), dark = mat(0x0b0b0c, 0.95);
+  g.add(part(geo.box, wood, 0.3, 0.47, 0.3, 0, 0.235, 0));
+  g.add(part(geo.box, face, 0.29, 0.45, 0.01, 0, 0.235, -0.151));
+  const hole = part(geo.cyl, dark, 0.055, 0.01, 0.055, 0, 0.26, 0.151);
+  hole.rotation.x = Math.PI / 2;
+  g.add(hole);
+  return g;
+}
+
+/** A street band's things: the open guitar case in front of the leader, the cajón behind to the left (local: forward −z). */
+export function bandGear(): Gear {
+  const g = new THREE.Group();
+  const gc = guitarCase();
+  gc.object.position.set(0, 0, -1.3);
+  const box = cajon();
+  box.position.set(-1.45, 0, 0.65);
+  g.add(gc.object, box);
+  return { object: g, setCoins: gc.setCoins };
+}
+
 const BALL_COLORS = [0xd8342c, 0xf2c230, 0x2f7fd6, 0x3fb04a, 0xee7a1f];
 
 /** n juggling balls (separate meshes, placed by the juggler every frame). */

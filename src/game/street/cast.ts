@@ -17,7 +17,7 @@ import { RoadClass, type District } from '../../plan/types';
 import type { CellPlan } from '../../plan/cell';
 
 export type StreetKind =
-  | 'preacher' | 'busker' | 'statue' | 'mime' | 'juggler' | 'dancer' | 'mascot' | 'conspiracy'
+  | 'preacher' | 'busker' | 'band' | 'statue' | 'mime' | 'juggler' | 'dancer' | 'mascot' | 'conspiracy'
   | 'pigeons' | 'sleepwalker' | 'tourist' | 'jogger';
 
 export const enum SiteKind { Plaza = 0, Park = 1, Metro = 2, Sidewalk = 3 }
@@ -46,6 +46,7 @@ export interface KindSpec {
 export const STREET_KINDS: Record<StreetKind, KindSpec> = {
   preacher: { title: 'Doomsayer', sites: [SiteKind.Plaza, SiteKind.Metro, SiteKind.Sidewalk], hours: [[9, 20.5]], weight: 1, rainproof: true },
   busker: { title: 'Busker', sites: [SiteKind.Plaza, SiteKind.Metro, SiteKind.Park, SiteKind.Sidewalk], hours: [[10, 23]], weight: 1.6 },
+  band: { title: 'Street band', sites: [SiteKind.Plaza, SiteKind.Park, SiteKind.Metro], hours: [[11, 22.5]], weight: 0.8 },
   statue: { title: 'Living statue', sites: [SiteKind.Plaza, SiteKind.Sidewalk], hours: [[10, 18.5]], weight: 0.9 },
   mime: { title: 'Mime', sites: [SiteKind.Plaza, SiteKind.Sidewalk], hours: [[10, 18]], weight: 0.8 },
   juggler: { title: 'Juggler', sites: [SiteKind.Plaza, SiteKind.Park], hours: [[11, 19]], weight: 0.9 },

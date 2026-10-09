@@ -1079,22 +1079,41 @@ function compactHall(k: Kit, sh: Shell, C: Palette, r: Rng, flagC: RGB, door: nu
 }
 
 /** Point on a superellipse |x/a|^n + |z/b|^n = 1 at angle t. */
-function superE(a: number, b: number, n: number, t: number): [number, number] {
+export function superE(a: number, b: number, n: number, t: number): [number, number] {
   const c = Math.cos(t), s = Math.sin(t);
   return [a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n)];
 }
 
-function stadium(k: Kit, lm: Landmark, r: Rng): void {
-  const P = lm.p, B = k.B;
+/** One vertex of the stadium's inner ring (site u, v) with its outward normal. */
+export interface BowlVertex { u: number; v: number; nu: number; nv: number }
+
+/**
+ * The stadium's bowl in site coordinates (plan/landmarks p of a 'stadium'): the inner ring around
+ * the field (N segments, vertex N = vertex 0), the tiers' front heights and seat rows. Shared by the
+ * stands built here and whatever stages things in the bowl (game/concert).
+ */
+export interface StadiumBowl {
+  /** Superellipse exponent of the ring (2 oval, 6 rounded rectangle). */
+  n: number;
+  N: number;
+  ring: BowlVertex[];
+  /** Seat rows per tier and their depth along the normal (m). */
+  rows: number;
+  rowD: number;
+  /** Floor height of the field. */
+  field: number;
+  /** Front (lowest) height of tier t; each row climbs `rise` m. */
+  tierY(t: number): number;
+  rise: number;
+  /** Segment i is a gate (the players' tunnel, the marathon gate at the ends of the long axis): no stand. */
+  gate(i: number): boolean;
+}
+
+export function stadiumBowl(lm: Pick<Landmark, 'p' | 'base'>): StadiumBowl {
+  const P = lm.p, B = lm.base;
   const n = P.shape ? 6 : 2, N = 48;
-  const wallL = [CONC, METAL, BRICK][P.wall % 3];
-  const facade = mat(wallL, wallL === METAL ? r.pick<RGB>([[0.9, 0.9, 0.92], [0.55, 0.6, 0.68], PAINT[P.seatA]]) : WHITE, WIN, 5, 4.5, 6);
-  const under = mat(CONC, [0.8, 0.8, 0.8]);
-  const seatA = mat(PANEL, PAINT[P.seatA]), seatB = mat(PANEL, PAINT[P.seatB === P.seatA ? (P.seatB + 3) % 8 : P.seatB]);
-  // Bowl: tiers of sloped stands around the field, stepped seat rows near.
   const rise = 0.52;
-  const tierY = (t: number) => B + 1.4 + t * (P.depth * rise + 3.2);
-  const ring: { u: number; v: number; nu: number; nv: number }[] = [];
+  const ring: BowlVertex[] = [];
   for (let i = 0; i <= N; i++) {
     const t = (i / N) * Math.PI * 2;
     const [u, v] = superE(P.ia, P.ib, n, t);
@@ -1102,12 +1121,30 @@ function stadium(k: Kit, lm: Landmark, r: Rng): void {
     const tu = u1 - u0, tv = v1 - v0, tl = Math.hypot(tu, tv) || 1;
     ring.push({ u, v, nu: tv / tl, nv: -tu / tl });
   }
+  const rows = Math.round(P.depth / 0.85);
+  return {
+    n, N, ring, rows, rowD: P.depth / rows, field: B + 0.02, rise: (P.depth * rise) / rows,
+    tierY: (t: number) => B + 1.4 + t * (P.depth * rise + 3.2),
+    gate: (i: number) => Math.abs(Math.sin(((i + 0.5) / N) * Math.PI * 2)) < 0.07,
+  };
+}
+
+function stadium(k: Kit, lm: Landmark, r: Rng): void {
+  const P = lm.p, B = k.B;
+  const bowl = stadiumBowl(lm);
+  const { n, N, ring } = bowl;
+  const wallL = [CONC, METAL, BRICK][P.wall % 3];
+  const facade = mat(wallL, wallL === METAL ? r.pick<RGB>([[0.9, 0.9, 0.92], [0.55, 0.6, 0.68], PAINT[P.seatA]]) : WHITE, WIN, 5, 4.5, 6);
+  const under = mat(CONC, [0.8, 0.8, 0.8]);
+  const seatA = mat(PANEL, PAINT[P.seatA]), seatB = mat(PANEL, PAINT[P.seatB === P.seatA ? (P.seatB + 3) % 8 : P.seatB]);
+  // Bowl: tiers of sloped stands around the field, stepped seat rows near.
+  const rise = 0.52;
+  const tierY = bowl.tierY;
   let topY = B;
   for (let i = 0; i < N; i++) {
     const p0 = ring[i], p1 = ring[i + 1];
     // Gates at the ends of the long axis (the players' tunnel, the marathon gate).
-    const t = ((i + 0.5) / N) * Math.PI * 2;
-    if (Math.abs(Math.sin(t)) < 0.07) continue;
+    if (bowl.gate(i)) continue;
     const seat = (Math.floor(i / 4) % 3 === 2) ? seatB : seatA;
     // Offsets along each ring vertex's own normal: tiers and segments meet without gaps.
     const at = (q: typeof p0, o: number): [number, number] => [q.u + q.nu * o, q.v + q.nv * o];
@@ -1115,7 +1152,7 @@ function stadium(k: Kit, lm: Landmark, r: Rng): void {
       const o0 = tr * P.depth, o1 = o0 + P.depth;
       const y0 = tierY(tr), y1 = y0 + P.depth * rise;
       topY = Math.max(topY, y1);
-      k.rampQ([at(p1, o0), at(p0, o0), at(p0, o1), at(p1, o1)], B, y0, y1, Math.round(P.depth / 0.85), under,
+      k.rampQ([at(p1, o0), at(p0, o0), at(p0, o1), at(p1, o1)], B, y0, y1, bowl.rows, under,
         { top: seat, back: tr === P.tiers - 1 ? facade : under, noSides: true, foot: true });
     }
   }
