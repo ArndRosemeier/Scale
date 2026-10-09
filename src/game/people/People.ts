@@ -17,6 +17,11 @@
  * people who like you may ask a favour: look in on a friend or relative (their dot goes on the
  * map) or clear the gang off their street. The one who asked remembers it; nothing else does.
  *
+ * Typed chat (Chat.ts, chat/): type anything in the talk panel; the line is understood (patterns,
+ * a small sentence model in a worker, word overlap) and answered from what they know, in their own
+ * voice. Words have weight: kind ones and insults move their opinion (Known.chat), a threat costs
+ * reputation and sends them running, and they remember your name and what you like.
+ *
  * Behaviour from personality (phase 2, behaviour.ts and Manners.ts): pace, how long a scare or a
  * spectacle holds someone, people who dislike you keeping away and refusing to talk, kind people
  * helping others up and pointing after thieves, people who like you waving, and what everyone
@@ -38,6 +43,8 @@ import { Manners } from './Manners';
 import { paceOf, refuses, waves, type Moment } from './behaviour';
 import { hashCombine, hashToFloat, deriveSeed } from '../../core/rng';
 import { SOCIAL, hearsay, needsOf, needsMood, pressing, visitTarget, asksFavour, type Told, type Favour } from './social';
+import { Chat, type ChatSession } from './Chat';
+import type { Effects } from './chat/respond';
 
 /** Roles and actor states of people other systems drive who will still talk to you. */
 const TALK_ROLES = new Set<string>(['bystander', 'shopkeeper', 'owner', 'police', 'medic', 'worker', 'soldier', 'victim']);
@@ -110,6 +117,10 @@ interface Session {
   asker: string | null;
   /** Asked the favour topic this conversation (the answer stays the same). */
   askedFavour: boolean;
+  /** Typed chat (made on the first typed line). */
+  chat?: ChatSession;
+  /** They run off when the talk ends (threatened, or told to run). */
+  flee?: boolean;
 }
 
 const STORE = (g: Game) => `scale.people.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
@@ -133,6 +144,8 @@ export class People {
   readonly city: string;
   /** Behaviour from personality around the hero (phase 2). */
   readonly manners: Manners;
+  /** Typed chat: understanding, what people know, the conversation. */
+  readonly chat: Chat;
   /** Saves already counted (per person, game seconds): stopping the crime and handing the bag back are one rescue. */
   private savedAt = new Map<number, number>();
   /** Someone you were asked to look in on, waiting at their door (People keeps them there till you come or go). */
@@ -145,7 +158,10 @@ export class People {
   constructor(private g: Game) {
     this.city = cityName(g.settings.seed);
     this.manners = new Manners(g, this);
+    this.chat = new Chat(g);
     this.ui = new TalkUi({
+      typed: (text) => { void this.typed(text); },
+      typing: () => { if (this.session) this.session.idle = 0; },
       choose: (topic) => this.ask(topic),
       way: (d) => this.showWay(d),
       close: () => this.end(),
@@ -469,6 +485,7 @@ export class People {
     if (act) act.mood = actorMood(f);
     this.ui.showOpen(this.header(f), this.say('hello'));
     this.g.input.keys.clear();
+    this.chat.warm();
   }
 
   /** End the talk now (they walk on). */
@@ -477,6 +494,12 @@ export class People {
     if (!s) return;
     this.session = null;
     if (s.act && s.a.actor === s.act) release(s.a);
+    // Threatened (or told to run): off they go, away from you.
+    if (s.flee && s.a.alive && s.a.state !== PState.Down && !s.foreign) {
+      const P = this.g.player.pos, a = s.a;
+      a.fear = Math.max(a.fear, 1.2); a.fearX = P.x; a.fearZ = P.z;
+      a.state = PState.Flee; a.stateT = 0;
+    }
     this.ui.close();
     this.persist();
   }
@@ -488,6 +511,66 @@ export class People {
     const text = this.say(topic);
     this.ui.line(text);
     if (topic === 'bye') { s.closing = 1.8; this.ui.closing(); }
+  }
+
+  /** Say a line to the one you talk to as if typed (dev.chat.say; headless checks). */
+  sayTyped(text: string): Promise<void> {
+    return this.typed(text);
+  }
+
+  /** A typed line (the text box): understood, answered in their words, its effects applied. */
+  private async typed(text: string): Promise<void> {
+    const s = this.session;
+    if (!s || s.closing > 0) return;
+    s.idle = 0;
+    this.ui.youSaid(text);
+    this.ui.thinking();
+    s.chat ??= this.chat.begin(s.a.cit, this.troubleAt(s.a.x, s.a.z) > 0.3);
+    let res;
+    try {
+      res = await this.chat.reply(s.chat, text, this.facts(s), s.k, s.a.x, s.a.z);
+    } catch (err) {
+      console.warn('[chat]', err);
+      if (this.session === s) this.ui.line('Sorry, what?');
+      return;
+    }
+    if (this.session !== s) return;
+    const r = res.r;
+    let line = r.text;
+    if (r.topic) {
+      let extra = r.extra ?? {};
+      const d = r.effects.waypoint;
+      if (r.topic === 'way' && d) {
+        extra = { ...extra, place: d.label, dir: dirWord(d.x - s.a.x, d.z - s.a.z), dist: Math.hypot(d.x - s.a.x, d.z - s.a.z) };
+        this.g.map.setWaypoint({ x: d.x, z: d.z });
+      }
+      const t = this.say(r.topic, extra);
+      s.chat.conv.heard(t);
+      line = line ? `${t} ${line}` : t;
+    }
+    if (r.after) line = `${line} ${r.after}`;
+    this.ui.line(line);
+    this.chatEffects(s, r.effects);
+    if (r.topic === 'bye' || r.effects.end) { s.closing = r.topic === 'bye' ? 1.8 : 2.6; this.ui.closing(); }
+  }
+
+  /** What words did: opinion, reputation, what they remember of you, a calmer (or fleeing) person. */
+  private chatEffects(s: Session, e: Effects): void {
+    const k = s.k, now = this.g.sky.hoursAbs, when = gameTimeLabel(Math.floor(now / 24), now % 24);
+    if (e.opinion) k.chat = Math.max(PEOPLE.chatMin, Math.min(PEOPLE.chatMax, (k.chat ?? 0) + e.opinion));
+    if (e.rep) this.g.crime?.reward({ rep: e.rep, why: 'threatened a citizen' });
+    if (e.heroName && e.heroName !== k.heroName) { k.heroName = e.heroName; addNote(k, now, `${when}: the hero said their name is ${e.heroName}`); }
+    if (e.heroLike) {
+      const likes = (k.heroLikes ??= []);
+      if (!likes.includes(e.heroLike)) { likes.push(e.heroLike); if (likes.length > PEOPLE.likes) likes.shift(); }
+    }
+    if (e.opinion !== undefined && e.opinion <= -8) addNote(k, now, `${when}: the hero ${e.rep ? 'threatened them' : 'was rude to them'}`);
+    if (e.calm) s.a.fear = Math.min(s.a.fear, 0.1);
+    if (e.flee) s.flee = true;
+    const f = this.facts(s);
+    if (s.act) s.act.mood = actorMood(f);
+    this.ui.head(this.header(f));
+    this.persist();
   }
 
   private showWay(d: Destination): void {
@@ -735,6 +818,7 @@ export class People {
       else if (lost || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) > TALK.leave || s.idle > TALK.idle || !this.canTalk() || this.harmSince(a.x, a.z, s.since)) this.end();
     }
     this.greet();
+    this.chat.update(dt);
     this.keepWaiting();
     this.manners.update(dt);
     this.markT -= dt;

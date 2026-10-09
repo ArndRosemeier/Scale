@@ -8,5 +8,8 @@ export default defineConfig(({ mode }) => ({
   base: process.env.SCALE_BASE?.trim() || (mode === 'publish' ? '/scale/' : '/'),
   server: { host: true, port: 5180 },
   worker: { format: 'es' },
+  // The chat's sentence-model worker: pre-bundled up front, else the dev server reloads the page
+  // the first time someone talks.
+  optimizeDeps: { include: ['onnxruntime-web/wasm'] },
   build: { target: 'es2022', chunkSizeWarningLimit: 6000 },
 }));

@@ -9,6 +9,7 @@
  * scan pages or scripts find nothing.
  */
 import { VERSION } from '../version';
+import { missedReport, readMissed } from '../game/people/chat/log';
 
 /** The scrambled recipient (byte i XOR key i; the key steps k → 31·k + 7 mod 256 from 0x5c). */
 const TO = [47, 72, 93, 39, 121, 43, 154, 254, 168, 222, 206, 174, 241, 138, 27, 98, 63, 5, 88, 46];
@@ -37,6 +38,11 @@ export function showFeedback(): void {
   if (!overlay) build();
   overlay!.classList.add('open');
   overlay!.querySelector<HTMLElement>('.fb-status')!.textContent = '';
+  // Typed chat lines nobody understood (game/people/chat/log.ts): offered when there are any.
+  const n = readMissed().length;
+  const chat = overlay!.querySelector<HTMLElement>('.fb-chat-row')!;
+  chat.style.display = n ? '' : 'none';
+  chat.querySelector<HTMLElement>('.fb-chat-n')!.textContent = String(Math.min(n, 25));
   if (document.pointerLockElement) document.exitPointerLock();
   setTimeout(() => overlay?.querySelector<HTMLTextAreaElement>('.fb-text')?.focus(), 0);
 }
@@ -55,6 +61,7 @@ function build(): void {
       <div class="fb-kinds">${KINDS.map((k, i) => `<label><input type="radio" name="fbKind" value="${k}"${i === 0 ? ' checked' : ''}> ${k}</label>`).join('')}</div>
       <textarea class="fb-text" rows="8" maxlength="1500" placeholder="What happened, or what would you like to see?"></textarea>
       <label class="fb-info"><input type="checkbox" class="fb-env" checked> Add game version, city seed and browser (helps with bugs)</label>
+      <label class="fb-info fb-chat-row"><input type="checkbox" class="fb-chat" checked> Add the last <span class="fb-chat-n">0</span> chat lines people didn't understand (helps them understand more)</label>
       <div class="fb-buttons"><button type="button" class="fb-send">Send…</button><button type="button" class="fb-copy">Copy text</button></div>
       <p class="fb-status"></p>
     </div>`;
@@ -72,6 +79,8 @@ function build(): void {
   const body = () => {
     let s = text.value.trim();
     if (o.querySelector<HTMLInputElement>('.fb-env')!.checked) s += `\n\n--\n${environment()}`;
+    const chat = o.querySelector<HTMLInputElement>('.fb-chat')!;
+    if (chat.checked && chat.offsetParent) { const m = missedReport(25); if (m) s += `\n\n-- chat lines not understood --\n${m}`; }
     return s;
   };
   o.querySelector<HTMLButtonElement>('.fb-send')!.onclick = () => {

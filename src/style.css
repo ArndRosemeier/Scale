@@ -656,6 +656,13 @@ body.looking #crosshair { display: block; }
 #talk .tk-said { margin: 9px 0 8px; padding: 8px 11px; background: rgba(252, 251, 247, 0.95); color: #1d242b; border-radius: 10px; font-size: 14px; font-weight: 500; }
 #talk .tk-said.new { animation: talkIn 0.25s ease-out; }
 @keyframes talkIn { from { opacity: 0; transform: translateY(4px); } }
+#talk .tk-you { margin-top: 8px; text-align: right; font-size: 13px; color: #9fd8ff; font-style: italic; }
+#talk .tk-you:empty { display: none; }
+#talk .tk-you:not(:empty) + .tk-said { margin-top: 4px; }
+#talk .tk-in { width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 6px 10px; border: 1px solid rgba(127, 211, 255, 0.35); border-radius: 8px; background: rgba(255,255,255,0.06); color: #e8ecf0; font: 13px system-ui, sans-serif; outline: none; }
+#talk .tk-in:focus { border-color: rgba(127, 211, 255, 0.8); background: rgba(255,255,255,0.1); }
+#talk .tk-in::placeholder { color: #8fa3b5; }
+#talk .tk-in:disabled { opacity: 0.5; }
 #talk .tk-opts { display: flex; flex-direction: column; gap: 3px; }
 #talk .tk-opts button { display: flex; align-items: center; gap: 9px; text-align: left; padding: 5px 9px; border: 1px solid transparent; border-radius: 7px; background: rgba(255,255,255,0.04); color: #e8ecf0; font: 13px system-ui, sans-serif; cursor: pointer; }
 #talk .tk-opts button:hover { background: rgba(127, 211, 255, 0.12); border-color: rgba(127, 211, 255, 0.35); }

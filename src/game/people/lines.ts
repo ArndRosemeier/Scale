@@ -70,6 +70,8 @@ export interface When {
   sent?: boolean;
   /** The Wardens about now (game/aliens): a swarm overhead, a walker close by, a disc hanging or scanning near. */
   nannies?: readonly ('swarm' | 'walker' | 'disc')[];
+  /** Every one of these flags is set in the facts (typed chat: what the answer is about, chat/answers.ts). */
+  flag?: readonly string[];
 }
 
 export interface LineEntry { id: string; when: When; say: readonly string[] }
