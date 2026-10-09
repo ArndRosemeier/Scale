@@ -12,7 +12,11 @@ import * as THREE from 'three';
 import type { Player } from '../../player/Player';
 import type { Dust } from '../../destruction/Dust';
 
-interface Ghost { group: THREE.Group; mats: THREE.MeshBasicMaterial[]; skels: THREE.Skeleton[]; t: number; life: number; a0: number }
+/** An afterimage: a copy of the rig's meshes with its own material and frozen skeletons (pooled, see spawnGhost). */
+interface Ghost { group: THREE.Group; mat: THREE.MeshBasicMaterial; skels: THREE.Skeleton[]; t: number; life: number; a0: number; on: boolean }
+
+/** Afterimages kept ready (super speed leaves one every 70 ms for 0.3 s; a dash up to 5). */
+const GHOST_POOL = 8;
 
 const GHOST_COLOR = new THREE.Color(0.55, 0.78, 1.0);
 const ENERGY = new THREE.Color(0.6, 0.82, 1.0).multiplyScalar(2.2);
@@ -21,6 +25,9 @@ const SPRAY = new THREE.Color(0.85, 0.9, 0.95);
 
 export class PowerFx {
   private ghosts: Ghost[] = [];
+  /** The rig meshes the pooled afterimages copy (rebuilt when they change: an outfit, a new avatar). */
+  private ghostSrc: THREE.Mesh[] = [];
+  private readonly srcScratch: THREE.Mesh[] = [];
   private dashLeft = 0;
   private dashEvery = 0;
   private dashNext = 0;
@@ -75,13 +82,12 @@ export class PowerFx {
         this.dust.burst(p.pos.x, p.pos.y + 0.05 * h, p.pos.z, 2, 0.2 * h, 0.5 * h, 0.12 * h + 0.05, 0.9, GROUND, 0.1, 0.3);
       }
     }
-    for (let i = this.ghosts.length - 1; i >= 0; i--) {
-      const g = this.ghosts[i];
+    for (const g of this.ghosts) {
+      if (!g.on) continue;
       g.t += dt;
       const u = g.t / g.life;
-      if (u >= 1) { this.dispose(g); this.ghosts.splice(i, 1); continue; }
-      const a = g.a0 * (1 - u) * (1 - u);
-      for (const m of g.mats) m.opacity = a;
+      if (u >= 1) { g.on = false; g.group.visible = false; continue; }
+      g.mat.opacity = g.a0 * (1 - u) * (1 - u);
     }
     // ---- super jump charge
     if (charge >= 0 && jumpRank >= 3 && !p.flying) {
@@ -96,53 +102,87 @@ export class PowerFx {
     } else this.chargeT = 0;
   }
 
-  /** Freeze the body's current pose as a fading, glowing copy. */
+  /**
+   * Freeze the body's current pose as a fading, glowing copy. The copies are pooled: made once
+   * (meshes sharing the rig's geometry, one material and one frozen skeleton each) and posed
+   * again on reuse. (A new copy every 70 ms, with its materials, skinned meshes and bone
+   * textures, made super speed render at 20–30 fps with stops of up to 300 ms on a PC that
+   * draws the same street at 60 fps without them.)
+   */
   private spawnGhost(life: number, alpha: number, back = 0): void {
     const root = this.player.rig.object;
     root.updateMatrixWorld(true);
-    const group = new THREE.Group();
-    // (One material for the whole copy: super speed leaves one every 70 ms.)
-    const mat = new THREE.MeshBasicMaterial({ color: GHOST_COLOR, transparent: true, opacity: alpha, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
-    const g: Ghost = { group, mats: [mat], skels: [], t: 0, life, a0: alpha };
-    // The body and everything worn share one skeleton: so does the copy. (A frozen skeleton per
-    // part meant a bone texture made and uploaded for each of ~20 parts, every 70 ms.)
-    const frozen = new Map<THREE.Skeleton, THREE.Skeleton>();
+    const src = this.srcScratch;
+    src.length = 0;
     root.traverseVisible((o) => {
-      const src = o as THREE.SkinnedMesh;
-      if (!(o as THREE.Mesh).isMesh || (o as THREE.InstancedMesh).isInstancedMesh) return;
-      let m: THREE.Mesh;
-      if (src.isSkinnedMesh && src.skeleton) {
-        // Same geometry, a frozen copy of the bone matrices (Skeleton.update made a no-op).
-        let skel = frozen.get(src.skeleton);
-        if (!skel) {
-          skel = new THREE.Skeleton(src.skeleton.bones, src.skeleton.boneInverses);
-          skel.update();
-          skel.update = () => {};
-          frozen.set(src.skeleton, skel);
-          g.skels.push(skel);
-        }
-        const sm = new THREE.SkinnedMesh(src.geometry, mat);
-        // Attached binding with the source's world matrix reproduces its bind inverse exactly.
-        sm.bind(skel, src.bindMatrix);
-        sm.bindMode = src.bindMode;
-        m = sm;
-      } else m = new THREE.Mesh(src.geometry, mat);
-      m.matrixAutoUpdate = false;
-      m.matrix.copy(src.matrixWorld);
-      m.frustumCulled = false;
-      m.renderOrder = 9;
-      group.add(m);
+      if ((o as THREE.Mesh).isMesh && !(o as THREE.InstancedMesh).isInstancedMesh) src.push(o as THREE.Mesh);
     });
-    if (!group.children.length) { mat.dispose(); return; }
+    if (!src.length) return;
+    if (src.length !== this.ghostSrc.length || src.some((m, i) => m !== this.ghostSrc[i] || m.geometry !== this.ghosts[0]?.group.children[i]?.userData.geo)) this.rebuildGhosts(src);
+    // A free copy, else the oldest one.
+    let g = this.ghosts.find((q) => !q.on);
+    if (!g) g = this.ghosts.reduce((a, q) => (q.t > a.t ? q : a));
+    // The pose now: each frozen skeleton recomputed from the rig's bones (three's own update; the
+    // copy's per-frame update is a no-op so it holds the pose).
+    for (const sk of g.skels) THREE.Skeleton.prototype.update.call(sk);
+    src.forEach((m, i) => {
+      const c = g.group.children[i];
+      c.matrix.copy(m.matrixWorld);
+      c.matrixWorldNeedsUpdate = true;
+    });
     // Shifted back toward where the body was `back` (0..1) of a frame ago.
-    group.position.subVectors(this.last, this.player.pos).multiplyScalar(back);
-    this.scene.add(group);
-    this.ghosts.push(g);
+    g.group.position.subVectors(this.last, this.player.pos).multiplyScalar(back);
+    g.group.visible = true;
+    g.on = true;
+    g.t = 0;
+    g.life = life;
+    g.a0 = alpha;
+    g.mat.opacity = alpha;
+  }
+
+  /** New pooled copies of these rig meshes. */
+  private rebuildGhosts(src: THREE.Mesh[]): void {
+    for (const g of this.ghosts) this.dispose(g);
+    this.ghosts = [];
+    this.ghostSrc = src.slice();
+    for (let n = 0; n < GHOST_POOL; n++) {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({ color: GHOST_COLOR, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: true });
+      const g: Ghost = { group, mat, skels: [], t: 0, life: 1, a0: 0, on: false };
+      // The body and everything worn share one skeleton: so does the copy.
+      const frozen = new Map<THREE.Skeleton, THREE.Skeleton>();
+      for (const s of src) {
+        const ss = s as THREE.SkinnedMesh;
+        let m: THREE.Mesh;
+        if (ss.isSkinnedMesh && ss.skeleton) {
+          let skel = frozen.get(ss.skeleton);
+          if (!skel) {
+            skel = new THREE.Skeleton(ss.skeleton.bones, ss.skeleton.boneInverses);
+            skel.update = () => {};
+            frozen.set(ss.skeleton, skel);
+            g.skels.push(skel);
+          }
+          const sm = new THREE.SkinnedMesh(ss.geometry, mat);
+          // Attached binding with the source's world matrix reproduces its bind inverse exactly.
+          sm.bind(skel, ss.bindMatrix);
+          sm.bindMode = ss.bindMode;
+          m = sm;
+        } else m = new THREE.Mesh(s.geometry, mat);
+        m.userData.geo = s.geometry;
+        m.matrixAutoUpdate = false;
+        m.frustumCulled = false;
+        m.renderOrder = 9;
+        group.add(m);
+      }
+      group.visible = false;
+      this.scene.add(group);
+      this.ghosts.push(g);
+    }
   }
 
   private dispose(g: Ghost): void {
     this.scene.remove(g.group);
-    for (const m of g.mats) m.dispose();
+    g.mat.dispose();
     for (const s of g.skels) s.dispose();
   }
 }

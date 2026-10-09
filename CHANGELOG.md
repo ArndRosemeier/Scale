@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.232 — 2026-10-09
+
+- **Super speed is smooth now.** Most of what was left of the stutter came from the glowing afterimages the runner leaves behind: a new copy of the whole hero every 70 ms, each with its own materials, skinned meshes and about twenty bone textures for the graphics card. On a PC that draws the same street at a steady 60 fps without them, racing ran at 20 to 30 fps with stops of up to 300 ms. Now a few copies are made once and reused, so racing costs hardly more to draw than standing. They look the same.
+
 ## 0.231 — 2026-10-09
 
 - **Clothes shops' wall shelves hold folded clothes**, not books. The shelves along the walls of a clothes shop now carry stacks of folded clothes in many colours instead of the general store's goods, which looked like rows of books.
