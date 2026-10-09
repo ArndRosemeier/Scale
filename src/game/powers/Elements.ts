@@ -1700,8 +1700,8 @@ export class Elements {
    */
   private focusImpact(x: number, y: number, z: number, dx: number, dy: number, dz: number, nx: number, ny: number, nz: number, f: number): void {
     const sk = this.reachK, s = (0.8 + 1.2 * f) * sk;
-    this.fx.glow(x, y, z, 0, 0, 0, 0.14, s * 2.2, s * 4.5, FOCUS_HOT, FOCUS_C, 1, 1, 0);
-    this.fx.glow(x, y, z, 0, 0, 0, 0.4, s * 1.6, s * 3.2, FOCUS_C, FOCUS_END, 0.6, 1, 0);
+    this.fx.glow(x, y, z, 0, 0, 0, 0.25, s * 3.5, s * 6, FOCUS_HOT, FOCUS_C, 1, 1, 0);
+    this.fx.glow(x, y, z, 0, 0, 0, 0.7, s * 2.5, s * 4.5, FOCUS_C, FOCUS_END, 0.6, 1, 0);
     this.shockRing(x, y, z, nx, ny, nz, 32, (12 + 14 * f) * sk, 0.4, 0.3 * s, 0.08 * s, FOCUS_C, FOCUS_END, 1);
     this.shockRing(x, y, z, nx, ny, nz, 18, (5 + 6 * f) * sk, 0.5, 0.4 * s, 0.12 * s, FOCUS_WHITE, FOCUS_END, 0.7);
     // The blow carries on past what it hit: a spray of light out the far side.
@@ -1720,6 +1720,8 @@ export class Elements {
     }
     this.w.debris.chipBurst(x, y, z, Math.round(4 + 10 * f), 5 + 6 * f, rx, ry + 0.4, rz, DUST_C, 0.05, 1.4);
     const g = this.w.collision.groundAt(x, z, y + 1, 2);
+    // Near the ground a slower ring rolls out across it.
+    if (y - g < 2.5 * sk) this.shockRing(x, g + 0.3 * sk, z, 0, 1, 0, 28, (6 + 6 * f) * sk, 0.8, 0.5 * s, 0.25 * s, FOCUS_WHITE, FOCUS_END, 0.55);
     if (y - g < 2.5 * sk) this.w.dust.burst(x, g + 0.2, z, Math.round(6 + 10 * f), s * 1.2, 3 + 4 * f, s * 0.9, 2, DUST_C, 0.3, 0.45);
     if (f > 0.5) this.w.sound('land_thud', x, y, z, 0.3 + 0.5 * f, 0.8, 6 * sk);
   }
@@ -1822,9 +1824,9 @@ export class Elements {
     // The shot: a white-gold haze round a white-hot core, and a slower afterglow. The air it
     // punches through ripples away in rings along the line, densest at the eyes.
     const w = (0.1 + 0.16 * f) * sk;
-    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 1.8, w: w * 5, c: FOCUS_C, style: BeamStyle.Ring, I: 0.55 });
-    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash, w: w * 3, c: FOCUS_C, style: BeamStyle.Laser, I: 1.6 });
-    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 0.8, w, c: FOCUS_WHITE, style: BeamStyle.Laser, I: 4 });
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 2.2, w: w * 5, c: FOCUS_C, style: BeamStyle.Ring, I: 0.55 });
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 1.4, w: w * 3, c: FOCUS_C, style: BeamStyle.Laser, I: 1.6 });
+    this.beams.push({ ax: A.ox, ay: A.oy, az: A.oz, bx: ex, by: ey, bz: ez, t: 0, life: FOCUS.flash * 1.1, w, c: FOCUS_WHITE, style: BeamStyle.Laser, I: 4 });
     const L = A.t, rings = Math.min(9, Math.max(2, Math.floor(L / (2.5 * sk))));
     for (let i = 0; i < rings; i++) {
       const u = (i + 0.3) / rings, d = L * u * u;
@@ -1957,10 +1959,12 @@ export class Elements {
       if (s.tail.length > 30) s.tail.length = 30;
     }
     // (Each piece spans two steps, so they overlap by half and the joints don't bead.)
-    const T = s.tail, nT = T.length / 3;
+    // A piece right at the camera would be seen edge-on as a band across the screen: skipped.
+    const T = s.tail, nT = T.length / 3, cp = this.w.camera.position, near = Math.max(2.5, size * 4);
     for (let j = -1; j < nT - 1; j++) {
       const f = 1 - (j + 1) / nT, o = j * 3, q = Math.min(nT - 1, j + 2) * 3;
       const ax = j < 0 ? s.x : T[o], ay = j < 0 ? s.y : T[o + 1], az = j < 0 ? s.z : T[o + 2];
+      if (Math.hypot(ax - cp.x, ay - cp.y, az - cp.z) < near || Math.hypot(T[q] - cp.x, T[q + 1] - cp.y, T[q + 2] - cp.z) < near) continue;
       this.fx.seg(ax, ay, az, T[q], T[q + 1], T[q + 2], size * (0.3 + 1.1 * f), SEEK_C.r, SEEK_C.g, SEEK_C.b, 0.5 * f, BeamStyle.Ring);
     }
     s.trailT -= dt;
