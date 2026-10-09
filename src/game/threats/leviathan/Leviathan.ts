@@ -97,6 +97,7 @@ interface Tentacle {
 
 let EVENT_ID = 5000;
 const FOAM = new THREE.Color(0.86, 0.9, 0.92);
+const ICE_MIST = new THREE.Color(0.82, 0.92, 1.0);
 const WATER_A = new THREE.Color(0.55, 0.66, 0.7);
 const WATER_B = new THREE.Color(0.8, 0.86, 0.88);
 const _rp = { x: 0, z: 0, dx: 0, dz: 1 };
@@ -279,6 +280,20 @@ export class Leviathan implements ThreatEvent, ThreatActor {
     return this.damage(this.zoneOfHit(n.rig, n.i, x, y, z), Math.hypot(jx, jy, jz) * DAMAGE_PER_IMPULSE, { ...src, x: src.x ?? x, y: src.y ?? y, z: src.z ?? z });
   }
 
+  private mistT = 0;
+  /** Frozen: icy mist smoking off the head and the raised tentacles (the hide itself keeps its colour). */
+  private frostMist(dt: number): void {
+    this.mistT -= dt;
+    if (this.mistT > 0) return;
+    this.mistT = 0.3;
+    const g = this.g, rigs = [this.body, ...this.tents.filter((t) => t.up > 0.5).map((t) => t.rig)];
+    for (const r of rigs) {
+      const i = this.rng.int(0, Math.min(r.n - 1, 8)) * 3;
+      if (r.j[i + 1] < this.wl) continue;
+      g.dust.burst(r.j[i], r.j[i + 1], r.j[i + 2], 6, 1.5, 1.2, 1.5, 2.2, ICE_MIST, 0.15, 0.5);
+    }
+  }
+
   /** Frost on it while it is up: the water round it ices over and holds it fast. */
   onElement(el: 'fire' | 'frost' | 'shock', dur: number): number {
     if (el === 'fire') return 0.5; // (wet through)
@@ -291,7 +306,7 @@ export class Leviathan implements ThreatEvent, ThreatActor {
       const g = this.g;
       for (let i = 0; i < 5; i++) {
         const a = (i / 5) * Math.PI * 2 + this.rng.range(0, 1), d = i === 0 ? 0 : this.rng.range(5, 11);
-        g.elements.fx.decal(DecalKind.Ice, this.cx + Math.cos(a) * d, this.wl + 0.04, this.cz + Math.sin(a) * d, 0, 1, 0, 16, 16, this.rng.range(0, 6), this.frozenT + 4);
+        g.elements.fx.decal(DecalKind.Ice, this.cx + Math.cos(a) * d, this.wl + 0.12, this.cz + Math.sin(a) * d, 0, 1, 0, 16, 16, this.rng.range(0, 6), this.frozenT + 4);
       }
       for (const t of this.tents) if (t.act !== 'limp') this.tentAct(t, 'idle', 0);
     }
@@ -334,7 +349,7 @@ export class Leviathan implements ThreatEvent, ThreatActor {
     else {
       if (this.hp <= 0) { this.startDying(); return; }
       this.watch();
-      if (this.frozenT > 0) this.frozenT -= dt;
+      if (this.frozenT > 0) { this.frozenT -= dt; this.frostMist(dt); }
       else this.phaseT += dt;
       switch (this.phase) {
         case 'travel': this.travel(dt); break;
