@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.194 — 2026-10-09
+
+- **The aliens have their own music.** When a Warden's disc hovers, watches or stares over you, or a walker comes down close by, "Visitors Overhead" plays: shimmering glass, a soft choir and a quiet hint of the hero's horn. It's wondering rather than threatening, and it plays once like the other calm pieces. It starts a few seconds after a disc settles over you and stays a little while after it leaves. The runaway teens' saucer is still a chase, with the tension music.
+
 ## 0.193 — 2026-10-09
 
 - **Memory no longer creeps up over long trips through the city.** Trips the city's people had planned near a place you left were dropped, but their empty places in the queue stayed until the trip's time came, game hours later. When you travel fast, these piled up. The queue now packs itself once more than half of it is empty, and trips far away are dropped every second, even while game time stands still.

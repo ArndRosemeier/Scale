@@ -178,6 +178,7 @@ export class Music {
     try {
       s.under = !!g.camRig?.underground;
       s.halls = !!g.world?.landmarks?.insideAt(p.x, p.y + 1, p.z);
+      s.aliens = !!g.wardens?.visitingNear(p.x, p.z);
       if (g.macro) {
         const out = Math.hypot(p.x, p.z) - boundaryAt(g.macro.boundary, p.x, p.z);
         this.country = this.country ? out > COUNTRY_OFF : out > COUNTRY_ON;
