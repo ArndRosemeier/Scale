@@ -3844,6 +3844,37 @@ section('landings and screams', async () => {
   console.log(`landings: screams in 20 s of leaps through a crowd: hero ${hero}, giant ${giant}`);
 });
 
+// Voices are bubbles (src/ui/voices.ts): no synthesized words or animal calls in the sound set or
+// played from src; an alert (a cry for help) out of sight still shows, low on the screen.
+section('voices are bubbles', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { voice, setVoiceSink } = await import('../src/ui/voices');
+  const GONE = /^(cry_|shout_|trapped_call|crowd_boo|protest_chant|terrace_murmur|cat_|dog_|pigeon_|gull_|crow_|rat_)/;
+  const ids = Object.keys(JSON.parse(readFileSync('public/sounds/manifest.json', 'utf8')));
+  check(!ids.some((k) => GONE.test(k)), `voices: no voice or animal-call sounds in the manifest (${ids.filter((k) => GONE.test(k)).join(', ')})`);
+  const played: string[] = [];
+  const walk = (dir: string): void => {
+    for (const f of readdirSync(dir, { withFileTypes: true })) {
+      const p = `${dir}/${f.name}`;
+      if (f.isDirectory()) walk(p);
+      else if (p.endsWith('.ts')) for (const m of readFileSync(p, 'utf8').matchAll(/'((?:cry_|shout_|cat_|dog_|pigeon_|gull_|crow_|rat_|trapped_call|crowd_boo|protest_chant|terrace_murmur)\w*)'/g)) played.push(`${p}: ${m[1]}`);
+    }
+  };
+  walk('src');
+  check(played.length === 0, `voices: src plays no voice sounds, use voice() (${played.join('; ')})`);
+  const shown: string[] = [], heard: string[] = [];
+  let seen = true;
+  setVoiceSink({ sayAt: (_a, text, o) => { if (!seen) return false; shown.push(`${o.animal ? 'animal' : 'person'}:${text}`); return true; }, sees: () => seen, heard: (_x, _z, t) => { heard.push(t); } });
+  const a = { x: 0, y: 0, z: 0 };
+  voice(a, 'help'); voice(a, 'dog');
+  seen = false;
+  voice(a, 'help'); voice(a, 'cat');
+  setVoiceSink(null);
+  check(shown.length === 2 && shown[0].startsWith('person:') && shown[1].startsWith('animal:'), `voices: a cry over the person, a bark as an animal bubble (${shown.join(', ')})`);
+  check(heard.length === 1, `voices: a cry out of sight is heard low on the screen, a meow is not (${heard.length})`);
+  check(!voice(a, 'help'), 'voices: no sink (headless), nothing shown');
+});
+
 // One test for "can someone stand here" and one for open water (world/WorldIndex standable / wet):
 // no building, no landmark, no river, but a bridge is fine. No system keeps its own copy.
 section('standable and water: one test', async () => {

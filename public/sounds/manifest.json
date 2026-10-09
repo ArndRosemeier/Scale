@@ -390,30 +390,6 @@
     "gain": 0.45,
     "description": "a few pigeons flushing, wing claps (procedural, tools/synthBirds.mjs)"
   },
-  "pigeon_coo": {
-    "files": [
-      "pigeon_coo.wav"
-    ],
-    "loop": false,
-    "gain": 0.3,
-    "description": "soft pigeon coo (procedural, tools/synthBirds.mjs)"
-  },
-  "gull_call": {
-    "files": [
-      "gull_call.wav"
-    ],
-    "loop": false,
-    "gain": 0.35,
-    "description": "gull call kyow-kyow (procedural, tools/synthBirds.mjs)"
-  },
-  "crow_caw": {
-    "files": [
-      "crow_caw.wav"
-    ],
-    "loop": false,
-    "gain": 0.35,
-    "description": "crow caw twice (procedural, tools/synthBirds.mjs)"
-  },
   "siren_loop": {
     "files": [
       "siren_loop.wav"
@@ -446,22 +422,6 @@
     "gain": 0.8,
     "description": "handcuffs ratcheting shut (procedural, tools/synthCrime.mjs)"
   },
-  "cat_meow": {
-    "files": [
-      "cat_meow.wav"
-    ],
-    "loop": false,
-    "gain": 0.7,
-    "description": "cat meow (procedural, tools/synthCrime.mjs)"
-  },
-  "dog_bark": {
-    "files": [
-      "dog_bark.wav"
-    ],
-    "loop": false,
-    "gain": 0.75,
-    "description": "dog barking twice (procedural, tools/synthCrime.mjs)"
-  },
   "crowd_cheer": {
     "files": [
       "crowd_cheer.wav"
@@ -469,22 +429,6 @@
     "loop": false,
     "gain": 0.7,
     "description": "small crowd cheering and clapping (procedural, tools/synthCrime.mjs)"
-  },
-  "shout_hey": {
-    "files": [
-      "shout_hey.wav"
-    ],
-    "loop": false,
-    "gain": 0.8,
-    "description": "man shouting hey (procedural, tools/synthCrime.mjs)"
-  },
-  "cry_help": {
-    "files": [
-      "cry_help.wav"
-    ],
-    "loop": false,
-    "gain": 0.8,
-    "description": "woman crying help (procedural, tools/synthCrime.mjs)"
   },
   "metro_run": {
     "files": [
@@ -575,13 +519,13 @@
     "gain": 0.6,
     "description": "omen: a car alarm going off, whoop then warble (procedural, tools/synthStrider.mjs)"
   },
-  "terrace_murmur": {
+  "terrace_clatter": {
     "files": [
-      "terrace_murmur.wav"
+      "terrace_clatter.wav"
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "busy café terrace: indistinct talk at the tables, a laugh, cups and cutlery clinking (procedural loop, tools/synthTerrace.mjs)"
+    "description": "busy café terrace: cups set on saucers, spoons and cutlery clinking over a soft room tone, no voices (procedural loop, tools/synthTerrace.mjs)"
   },
   "under_drip": {
     "files": [
@@ -790,14 +734,6 @@
     "gain": 1,
     "description": "a huge blast far off: a dull flat crack, then a deep rumble rolling on for seconds (procedural, tools/synthAftermath.mjs)"
   },
-  "trapped_call": {
-    "files": [
-      "trapped_call.wav"
-    ],
-    "loop": false,
-    "gain": 0.8,
-    "description": "a muffled call for help from under rubble, two voice-like syllables, dull and boxed in, no words (procedural, tools/synthAftermath.mjs)"
-  },
   "dig_rubble": {
     "files": [
       "dig_rubble.wav"
@@ -992,16 +928,6 @@
     "gain": 0.6,
     "description": "a quick snap of mandibles with a crunch (procedural, tools/synthBrood.mjs)"
   },
-  "rat_squeak": {
-    "files": [
-      "rat_squeak_1.wav",
-      "rat_squeak_2.wav",
-      "rat_squeak_3.wav"
-    ],
-    "loop": false,
-    "gain": 0.4,
-    "description": "a rat squeaking in a tunnel, one to three short high chirps (procedural, tools/synthSewer.mjs)"
-  },
   "under_engine": {
     "files": [
       "under_engine.wav"
@@ -1034,21 +960,13 @@
     "gain": 0.55,
     "description": "a press camera: mirror slap and shutter, the flash recharging (procedural, tools/synthFame.mjs)"
   },
-  "crowd_boo": {
+  "protest_drum": {
     "files": [
-      "crowd_boo.wav"
-    ],
-    "loop": false,
-    "gain": 0.6,
-    "description": "a small crowd booing, a whistle (procedural, tools/synthFame.mjs)"
-  },
-  "protest_chant": {
-    "files": [
-      "protest_chant.wav"
+      "protest_drum.wav"
     ],
     "loop": true,
     "gain": 0.55,
-    "description": "protesters chanting 'Go home!' to a drum (procedural loop, tools/synthFame.mjs)"
+    "description": "a protest's drum on the beat over a murmur bed, the chant itself is in bubbles (procedural loop, tools/synthFame.mjs)"
   },
   "fanfare": {
     "files": [
@@ -1057,32 +975,6 @@
     "loop": false,
     "gain": 0.6,
     "description": "a short brass fanfare: the hero's statue unveiled (procedural, tools/synthFame.mjs)"
-  },
-  "cry_fall_m": {
-    "files": [
-      "fall_oof_m.wav",
-      "fall_ow_m.wav",
-      "fall_whoa_m.wav",
-      "fall_ugh_m.wav",
-      "fall_ah_m.wav",
-      "fall_whoops_m.wav"
-    ],
-    "loop": false,
-    "gain": 0.8,
-    "description": "a man tripping and falling: mild startled or hurt cries (oof, ow, whoa, ugh, ah, whoops) (procedural, tools/synthFalls.mjs)"
-  },
-  "cry_fall_f": {
-    "files": [
-      "fall_oof_f.wav",
-      "fall_ow_f.wav",
-      "fall_whoa_f.wav",
-      "fall_ugh_f.wav",
-      "fall_ah_f.wav",
-      "fall_whoops_f.wav"
-    ],
-    "loop": false,
-    "gain": 0.8,
-    "description": "a woman tripping and falling: mild startled or hurt cries (oof, ow, whoa, ugh, ah, whoops) (procedural, tools/synthFalls.mjs)"
   },
   "ufo_hum": {
     "files": [

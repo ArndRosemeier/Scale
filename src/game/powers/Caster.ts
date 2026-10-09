@@ -13,6 +13,7 @@
  * lieutenant alone cannot knock out a hero who keeps moving). Pure (no three.js, no DOM).
  */
 import type { Rng } from '../../core/rng';
+import type { Voice } from '../../ui/voices';
 
 export type VillainPower = 'bolt' | 'fireball' | 'frost' | 'gust' | 'quake' | 'dash' | 'shield' | 'stun' | 'smoke' | 'emp' | 'whistle' | 'drain' | 'wail' | 'curse';
 
@@ -33,8 +34,11 @@ export interface PowerDef {
   pose: string;
   /** Glow on the hands during the tell (linear RGB, >1 glows). */
   tell: [number, number, number];
-  /** Sound of the tell and of the release (public/sounds ids), and the release's pitch. */
-  tellSound: string; sound: string; pitch?: number;
+  /**
+   * Sound of the tell and of the release (public/sounds ids), and the release's pitch; a tell that
+   * is a shout is a bubble over the caster instead (`tellVoice`, src/ui/voices).
+   */
+  tellSound?: string; tellVoice?: Voice; sound: string; pitch?: number;
 }
 
 export const VILLAIN_POWERS: Record<VillainPower, PowerDef> = {
@@ -49,7 +53,7 @@ export const VILLAIN_POWERS: Record<VillainPower, PowerDef> = {
   /** A stomp: a crack runs along the ground to the target, knocking down whoever stands on it. */
   quake: { windup: 0.95, cooldown: 9, min: 2, max: 13, dmg: 15, radius: 1.5, hold: 0, pose: 'slam', tell: [2, 1.3, 0.5], tellSound: 'grow_rumble', sound: 'murk_slam' },
   /** A shoulder charge: a brace, then a rush at where the target stood. */
-  dash: { windup: 0.6, cooldown: 7, min: 4, max: 14, dmg: 20, radius: 1.3, hold: 0.85, pose: 'block', tell: [1.8, 1.4, 1.0], tellSound: 'shout_hey', sound: 'dash_whoosh' },
+  dash: { windup: 0.6, cooldown: 7, min: 4, max: 14, dmg: 20, radius: 1.3, hold: 0.85, pose: 'block', tell: [1.8, 1.4, 1.0], tellVoice: 'charge', sound: 'dash_whoosh' },
   /** A shimmering bubble: blows barely hurt for a few seconds. */
   shield: { windup: 0.35, cooldown: 14, min: 0, max: 12, dmg: 0, radius: 1.1, hold: 4, pose: 'cast_self', tell: [1.4, 1.8, 2.4], tellSound: 'deep_glow', sound: 'membrane' },
   /** A stun grenade: lobbed, a short fuse, a white flash that knocks the target down for a moment. */
@@ -59,7 +63,7 @@ export const VILLAIN_POWERS: Record<VillainPower, PowerDef> = {
   /** A smoke bomb at their own feet: a cloud to slip away in. */
   smoke: { windup: 0.3, cooldown: 40, min: 0, max: 60, dmg: 0, radius: 6, hold: 0, pose: 'throw', tell: [1, 1, 1], tellSound: 'cuffs', sound: 'spray_hiss', pitch: 0.55 },
   /** Two fingers to the mouth, a shrill whistle: the caster's dog pack lunges at where the target stood. */
-  whistle: { windup: 0.7, cooldown: 9, min: 3, max: 30, dmg: 0, radius: 2.5, hold: 0, pose: 'cast_self', tell: [0.6, 1.4, 0.4], tellSound: 'dog_bark', sound: 'army_whistle', pitch: 1.5 },
+  whistle: { windup: 0.7, cooldown: 9, min: 3, max: 30, dmg: 0, radius: 2.5, hold: 0, pose: 'cast_self', tell: [0.6, 1.4, 0.4], tellVoice: 'sic', sound: 'army_whistle', pitch: 1.5 },
   /** A green beam that locks on and drains life into the caster while it holds (break the line or get out of reach). */
   drain: { windup: 0.85, cooldown: 10, min: 3, max: 16, dmg: 7, radius: 1, hold: 2.2, pose: 'cast_forward', tell: [0.5, 2.6, 0.9], tellSound: 'deep_glow', sound: 'heart_pulse', pitch: 0.7 },
   /** A wail: the street flees, whoever stands close is shaken (a jolt, slowed for a moment). */

@@ -27,12 +27,12 @@ export const SOUND_CATEGORIES: { id: SoundCategory; name: string }[] = [
 ];
 const CATEGORY_RULES: [RegExp, SoundCategory][] = [
   [/^(siren_|civil_siren|alarm_bell|car_alarm)/, 'alarms'],
-  [/^(scream_|cry_|shout_|crowd_|terrace_murmur|amb_crowd|street_)/, 'voices'],
+  [/^(scream_|crowd_|protest_|terrace_|amb_crowd|street_)/, 'voices'],
   [/^(amb_|thunder_|under_|deep_|heart_pulse)/, 'ambience'],
   [/^(strider_|robot_|tremor_|step_giant|murk_|maw_|ufo_|teen_)/, 'monsters'],
   [/^(car_|bus_|tire_|metro_|drone_)/, 'traffic'],
   [/^(explosion|collapse_|concrete_|glass_|debris_|dust_|metal_|tree_|splash_)/, 'destruction'],
-  [/^(cat_|dog_|bird_|crow_|gull_|pigeon_|slime_|lumen_|membrane|rat_)/, 'animals'],
+  [/^(bird_|slime_|lumen_|membrane)/, 'animals'],
   [/^(step_|door_)/, 'steps'],
 ];
 /** The level a category starts at (and goes back to on reset): the background music sits lower than the rest. */
