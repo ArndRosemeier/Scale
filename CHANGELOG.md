@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.183 — 2026-10-09
+
+- **The title music starts as soon as the start screen shows.** It no longer waits for a click wherever the browser lets a page play sound by itself. Chrome and Edge allow that on sites you have played on before, so it will usually start right away on apps.futuremagic.de. On a first visit, and always in Safari and Firefox by default, browsers block sound until the first click, tap or key press (moving the mouse doesn't count), and the music then starts with that first input.
+
 ## 0.182 — 2026-10-09
 
 - **New music throughout the game: Arnd's Lyria pieces, in the style of the title theme.** The old background music, built from short AI layers, is gone. Every mood now plays a real piece:

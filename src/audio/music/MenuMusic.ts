@@ -1,6 +1,8 @@
 /**
- * The start screen's theme ("Dusk Awakening", public/music/title): starts after the first click
- * or key on the menu (browsers block audio before a gesture), loops, plays on through the
+ * The start screen's theme ("Dusk Awakening", public/music/title): starts as soon as the start
+ * screen shows where the browser allows it (Chrome does on a site you have played on before),
+ * otherwise on the first click, tap or key (browsers block sound before one; moving the mouse
+ * does not count), loops, plays on through the
  * loading screen and fades out when the game begins (the game's own music takes over later).
  * Streamed from an audio element, so nothing is downloaded before it plays and the page loads
  * no slower. Respects the stored volume, mute, music switch and music level, and `?mute` (tests).
@@ -20,40 +22,49 @@ export class MenuMusic {
   private ctx: AudioContext | null = null;
   private audio: HTMLAudioElement | null = null;
   private out: GainNode | null = null;
+  private playing = false;
   private stopped = false;
   private readonly onGesture = () => this.begin();
 
   constructor() {
     if (storedMusicLevel() <= 0) return;
     for (const ev of GESTURES) window.addEventListener(ev, this.onGesture, { passive: true });
+    this.begin();
   }
 
   private begin(): void {
-    // A context made on a touch's start stays suspended on iPad Safari: resume it (and the
-    // track) on the next gesture (the touch's end counts there) and stop listening once it plays.
-    if (this.ctx) {
-      if (this.ctx.state === 'running' && !this.audio?.paused) this.unlisten();
-      else {
-        void this.ctx.resume().then(() => this.audio?.play()).then(() => { if (this.ctx?.state === 'running') this.unlisten(); }).catch(() => {});
-      }
+    if (this.stopped) { this.unlisten(); return; }
+    if (!this.ctx) {
+      const level = storedMusicLevel();
+      if (level <= 0) return;
+      try { this.ctx = new AudioContext(); } catch { this.unlisten(); return; }
+      const audio = new Audio();
+      audio.src = TRACK;
+      audio.loop = true;
+      audio.preload = 'auto';
+      this.audio = audio;
+      this.out = this.ctx.createGain();
+      this.out.gain.value = 0.0001;
+      this.ctx.createMediaElementSource(audio).connect(this.out).connect(this.ctx.destination);
+    }
+    // Without a gesture yet the context may stay suspended: then wait for one rather than let the
+    // track run on silently (it would start in the middle). A context made on a touch's start
+    // stays suspended on iPad Safari; the touch's end then resumes it.
+    const ctx = this.ctx, audio = this.audio!;
+    void ctx.resume().catch(() => {});
+    if (ctx.state !== 'running') {
+      void new Promise((r) => setTimeout(r, 50)).then(() => { if (ctx.state === 'running' && !this.playing) this.begin(); });
       return;
     }
-    if (this.stopped) { this.unlisten(); return; }
-    const level = storedMusicLevel();
-    if (level <= 0) return;
-    try { this.ctx = new AudioContext(); } catch { this.unlisten(); return; }
-    const audio = new Audio();
-    audio.src = TRACK;
-    audio.loop = true;
-    audio.preload = 'auto';
-    this.audio = audio;
-    const out = this.ctx.createGain();
-    const t = this.ctx.currentTime;
-    out.gain.setValueAtTime(0.0001, t);
-    out.gain.exponentialRampToValueAtTime(level * MENU_LEVEL, t + FADE_IN);
-    this.ctx.createMediaElementSource(audio).connect(out).connect(this.ctx.destination);
-    this.out = out;
-    void audio.play().then(() => { if (this.ctx?.state === 'running') this.unlisten(); }).catch(() => { /* next gesture */ });
+    if (this.playing) { this.unlisten(); return; }
+    void audio.play().then(() => {
+      if (this.playing || this.stopped) return;
+      this.playing = true;
+      this.unlisten();
+      const t = ctx.currentTime, g = this.out!.gain;
+      g.setValueAtTime(0.0001, t);
+      g.exponentialRampToValueAtTime(storedMusicLevel() * MENU_LEVEL, t + FADE_IN);
+    }).catch(() => { /* blocked: the next gesture tries again */ });
   }
 
   private unlisten(): void {
