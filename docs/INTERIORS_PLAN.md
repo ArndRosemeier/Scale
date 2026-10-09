@@ -183,6 +183,6 @@ storey in 3D (`?n=<building>&floor=<f>&room=<k>&top=1&type=living&still=1`).
 1. Filler + home theme for flats (v0.169, PR #139).
 2. Room splitting for any shape with reserve-first programs; offices, shops and cafés themes (v0.172).
 3. The starship hall (design step 1) as one reserve strategy on the core (v0.173).
-4. The museum (great hall + galleries) on the core (v0.176); glasshouse and airport terminal (v0.181); tower deck, lighthouse and fortress keep (v0.183); the twisted tower (v0.229).
+4. The museum (great hall + galleries) on the core (v0.176); glasshouse and airport terminal (v0.181); tower deck, lighthouse and fortress keep (v0.183); the twisted tower (v0.230).
 5. Town hall, cathedral and sewer side rooms on the core.
 6. Delete the old builders.

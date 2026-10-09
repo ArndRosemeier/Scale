@@ -41,8 +41,12 @@ export interface Road {
   pts: number[];
   /** Where the neck leaves the chamber (the colony's way into the realm): centre, facing (out of the chamber), radius. */
   gate: { x: number; y: number; z: number; nx: number; nz: number; r: number };
-  /** The opening cut into the chamber wall (chamber frame): which wall ('u+', 'v+', 'v-'), centre along it (v on u+, u on the side walls), half width, height. */
-  hole: { wall: 'u+' | 'v+' | 'v-'; c: number; hw: number; h: number };
+  /**
+   * The opening cut into the chamber wall (chamber frame): which wall ('u+', 'v+', 'v-'), centre along
+   * it (v on u+, u on the side walls), half width, height; a round arch (radius hw, centre cy above the
+   * floor) inside the neck's rock, so no corner of it looks past the tunnel.
+   */
+  hole: { wall: 'u+' | 'v+' | 'v-'; c: number; hw: number; h: number; cy: number };
   /** Spiral section (the Spiral Road): centre and radius, or null. */
   spiral: { x: number; z: number; r: number } | null;
 }
@@ -129,6 +133,8 @@ export const GLOW_DEPTH = 64, DEEP_DROP = 52;
 /** Road gallery: radius, share of the radius the floor lies under the axis, steepest grade. */
 const ROAD_R = 5.2, ROAD_FLAT = 0.5, ROAD_GRADE = 0.16;
 const NECK_R = 2.3, NECK_FLAT = 0.42, NECK_GRADE = 0.3;
+/** How far the chamber's arch keeps inside the neck's rock (its roughness reaches about 0.25 m). */
+const ARCH_IN = 0.4;
 /** Rock kept between two realms (m). */
 const REALM_GAP = 14;
 
@@ -1061,7 +1067,9 @@ function planRoad(inp: PlanInput, c: Colony, ox: number, oz: number, ux: number,
         cap(wide * 3, NECK_R, ROAD_R, NECK_FLAT, ROAD_FLAT, 1.2, 0.4);
         for (let i = (wide + 1) * 3; i < pts.length; i += 3) cap(i, ROAD_R, ROAD_R, ROAD_FLAT, ROAD_FLAT, 2.5, 0.85);
         const gate = { x: (p0.x + p1.x) / 2 + dx * 0.2, y: yc + NECK_R * NECK_FLAT, z: (p0.z + p1.z) / 2 + dz * 0.2, nx: dx, nz: dz, r: NECK_R + 0.25 };
-        const hole = { wall: w, c: w === 'v+' ? -off : off, hw: NECK_R * 0.92, h: NECK_R * (1 + NECK_FLAT) * 0.97 };
+        // The arch keeps inside the neck's (rough) rock by ARCH_IN all round.
+        const ar = NECK_R - ARCH_IN, acy = NECK_R * NECK_FLAT;
+        const hole = { wall: w, c: w === 'v+' ? -off : off, hw: ar, h: acy + ar, cy: acy };
         void hub;
         return { colony: c.id, pts: pts.slice(), gate, hole, spiral };
       }
