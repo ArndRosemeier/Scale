@@ -781,8 +781,8 @@ export class People {
       if (f && f.done === undefined && !f.lost) {
         if (f.kind === 'visit') {
           const w = this.visitSpot(k, f, now, dt);
-          if (w) list.push({ x: w.x, z: w.z, color: '#ffd166', kind: 'faint', title: `${f.whoName}, ${k.name.split(' ')[0]}'s ${f.word} — ${k.name.split(' ')[0]} asked you to look in on them${w.exact ? '' : ' · somewhere around here'}` });
-        } else list.push({ x: f.x ?? k.x, z: f.z ?? k.z, color: '#ffd166', kind: 'faint', title: `${k.name} asked you to deal with ${f.group ?? 'the trouble'} around here (stop a crime nearby)` });
+          if (w) list.push({ x: w.x, z: w.z, color: '#ffd166', kind: 'faint', place: !w.exact, title: `${f.whoName}, ${k.name.split(' ')[0]}'s ${f.word} — ${k.name.split(' ')[0]} asked you to look in on them${w.exact ? '' : ' · somewhere around here'}` });
+        } else list.push({ x: f.x ?? k.x, z: f.z ?? k.z, color: '#ffd166', kind: 'faint', place: true, title: `${k.name} asked you to deal with ${f.group ?? 'the trouble'} around here (stop a crime nearby)` });
       }
       const spot = this.whereNow(k, now, dt);
       if (!spot) continue;
@@ -793,8 +793,8 @@ export class People {
       const times = k.met === 1 ? 'met once' : `met ${k.met} times`;
       const at = spot.exact ? '' : ' · somewhere around here';
       const asked = f && f.done === undefined && !f.lost ? ` · asked you a favour` : '';
-      if (k.sidekick) { list.push({ x: spot.x, z: spot.z, color, kind: 'dot', title: `${p.full} — your sidekick${at}` }); continue; }
-      list.push({ x: spot.x, z: spot.z, color, kind: 'faint', title: `${p.full}, ${k.title ?? p.job.title} — ${times}, last on ${gameTimeLabel(Math.floor(k.last / 24), k.last % 24)} · ${opinionWord(op)}${asked}${at}` });
+      if (k.sidekick) { list.push({ x: spot.x, z: spot.z, color, kind: 'dot', place: !spot.exact, title: `${p.full} — your sidekick${at}` }); continue; }
+      list.push({ x: spot.x, z: spot.z, color, kind: 'faint', place: !spot.exact, title: `${p.full}, ${k.title ?? p.job.title} — ${times}, last on ${gameTimeLabel(Math.floor(k.last / 24), k.last % 24)} · ${opinionWord(op)}${asked}${at}` });
     }
     const key = list.map((m) => `${m.x.toFixed(0)},${m.z.toFixed(0)},${m.color}`).join(';');
     if (key !== this.markKey) { this.markKey = key; g.map.setMarkers('people', list); }

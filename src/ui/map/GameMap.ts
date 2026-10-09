@@ -48,7 +48,18 @@ export interface MapMarker {
   always?: boolean;
   /** A zone's radius (m, world). */
   r?: number;
+  /** A place, not someone or something: a click on it (minimap, compass) never targets whoever stands there. */
+  place?: boolean;
 }
+
+/** Can a click on this marker target what it stands for (GameMap.targetAt)? */
+export const targetsSomething = (m: MapMarker): boolean => !m.place && (m.kind === 'alert' || m.kind === 'dot' || m.kind === 'faint');
+
+/** A described marker where it was drawn (canvas px), for the hover tooltip and minimap clicks. */
+interface MarkerHit { x: number; y: number; t: string; m: MapMarker }
+
+/** How far from a marker (m, × √size) what it stands for may be: markers trail their subject a little. */
+const MARK_PICK_R = 12;
 
 const DISTRICT_LABEL: Record<string, string> = {
   downtown: 'Downtown', commercial: 'Commercial district', oldtown: 'Old town', apartments: 'Apartment blocks', rowhouses: 'Row houses',
@@ -99,8 +110,8 @@ export class GameMap {
   /** Marker layers from game systems (power cores, people needing help, …). */
   private markerSets = new Map<string, MapMarker[]>();
   /** Where the described markers were drawn last (canvas px), for the hover tooltip. */
-  private hitsFull: { x: number; y: number; t: string }[] = [];
-  private hitsMini: { x: number; y: number; t: string }[] = [];
+  private hitsFull: MarkerHit[] = [];
+  private hitsMini: MarkerHit[] = [];
   private tip: HTMLDivElement;
   private markerT = 0;
 
@@ -115,6 +126,18 @@ export class GameMap {
   setWaypoint(p: { x: number; z: number } | null): void {
     this.waypoint = p;
     this.setMarkers('waypoint', p ? [{ x: p.x, z: p.z, color: '#e8483b', kind: 'pin', title: 'Your marker — the compass points to it' }] : []);
+  }
+
+  /**
+   * Target what a marker at (x, z) stands for (the minimap, the compass): the nearest person,
+   * machine, car or big threat there within targeting range. False: nothing to target.
+   */
+  targetAt(x: number, z: number): boolean {
+    const g = this.game;
+    if (!g.abilities?.enabled || !g.targeting) return false;
+    const t = g.targeting.pickNear(x, z, MARK_PICK_R * Math.max(1, Math.sqrt(g.player?.k ?? 1)));
+    if (t) g.targeting.set(t);
+    return !!t;
   }
 
   /** Every marker of every layer (the compass shows the nearby ones). */
@@ -227,7 +250,17 @@ export class GameMap {
     this.mini.title = 'Minimap (N) — M for the full map';
     document.body.appendChild(this.mini);
     this.mg = this.mini.getContext('2d')!;
-    this.mini.addEventListener('click', () => this.toggle(true));
+    // A click on a marker of something targetable targets it (game/Targeting); anywhere else opens the full map.
+    this.mini.addEventListener('click', (e) => {
+      const k = MINI_PX / (this.mini.clientWidth || MINI_PX);
+      const x = e.offsetX * k, y = e.offsetY * k;
+      let best: MarkerHit | null = null, bd = 12;
+      for (const h of this.hitsMini) {
+        const d = Math.hypot(h.x - x, h.y - y);
+        if (d < bd && targetsSomething(h.m)) { bd = d; best = h; }
+      }
+      if (!best || !this.targetAt(best.m.x, best.m.z)) this.toggle(true);
+    });
     this.tip = document.createElement('div');
     this.tip.className = 'map-tip';
     document.body.appendChild(this.tip);
@@ -811,7 +844,7 @@ export class GameMap {
           g.fillStyle = m.color; g.globalAlpha = 0.12 + 0.06 * pulse; g.fill();
           g.globalAlpha = 0.9; g.setLineDash([6, 5]); g.lineWidth = full ? 2.5 : 2; g.strokeStyle = m.color; g.stroke();
           g.restore();
-          if (m.title && (!full || (x > -12 && y > -12 && x < W + 12 && y < H + 12))) hits.push({ x, y, t: m.title });
+          if (m.title && (!full || (x > -12 && y > -12 && x < W + 12 && y < H + 12))) hits.push({ x, y, t: m.title, m });
           continue;
         }
         if (!full) {
@@ -822,7 +855,7 @@ export class GameMap {
         const r = full ? 8 : 5;
         g.save();
         g.translate(x, y);
-        if (m.title) hits.push({ x, y: m.kind === 'pin' ? y - (full ? 14 : 10) : y, t: m.title });
+        if (m.title) hits.push({ x, y: m.kind === 'pin' ? y - (full ? 14 : 10) : y, t: m.title, m });
         if (m.kind === 'pin') {
           if (!full) g.scale(0.7, 0.7);
           drawPin(g, 0, 0);
@@ -892,7 +925,7 @@ export class GameMap {
   }
 
   /** Hovering a described marker (or a metro station on the full map): a short tooltip by the cursor. */
-  private hover(hits: { x: number; y: number; t: string }[], x: number, y: number, cx: number, cy: number, station: number): void {
+  private hover(hits: MarkerHit[], x: number, y: number, cx: number, cy: number, station: number): void {
     let best: string | null = null, bd = 12;
     for (const h of hits) {
       const d = Math.hypot(h.x - x, h.y - y);

@@ -2005,7 +2005,7 @@ export class CrimeSystem {
     for (const L of this.loots) {
       if (L.loot.carrier !== 'player') continue;
       const T = this.returnTarget(L);
-      list.push({ x: T.x, z: T.z, color: '#4cd964', kind: 'alert', title: 'The stolen goods go back here (E)', always: true });
+      list.push({ x: T.x, z: T.z, color: '#4cd964', kind: 'alert', place: true, title: 'The stolen goods go back here (E)', always: true });
     }
     const key = list.map((m) => `${m.kind[0]}${Math.round(m.x / 2)},${Math.round(m.z / 2)}`).join(';');
     if (key !== this.markKey) { this.markKey = key; this.g.map.setMarkers('crime', list); }
