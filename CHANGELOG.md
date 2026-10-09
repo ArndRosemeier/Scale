@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.228 — 2026-10-09
+
+- **No bare skin between top and trousers.** Since the smooth hems (0.170), every garment's edge is cut a few centimetres inside the body's ragged triangle edge, so a T-shirt and jeans that used to meet exactly at the waist left a band of skin between them (front, sides and back, down to the top of the seat). Now the inner of the two reaches well under the outer one: a shirt or T-shirt tucked into trousers, shorts or a skirt continues down inside them, and trousers under a sweater, jacket or coat reach up under it. The extra part is hidden, so nothing else changes in the look.
+
 ## 0.227 — 2026-10-09
 
 - **The city rebuilds.** Buildings damaged by monsters, villains or you no longer stay broken forever. A couple of game hours after the damage round them stops (and with no big monster nearby), building crews move in: scaffolding with safety netting goes up round each damaged building, collapsed plots get a site fence, there is a site board, and a tower crane stands over the worst-hit building, its jib slowly turning. Round a collapsed building the scaffolding climbs as the work goes on. After 10 to 60 game hours (longer for more and worse damage) each building is whole again: walls, windows, floors, upper storeys, and its rubble cleared. That only happens while you are not looking: off screen or far away. A few broken windows are just mended quietly. A district levelled by the last resort becomes one big fenced site with cranes once its cordon is lifted, and stands again after three game days. Saves keep it all. The scaffolding leaves room for lamp posts, traffic lights and trees on the pavement.
