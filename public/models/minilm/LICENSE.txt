@@ -1,0 +1,9 @@
+all-MiniLM-L6-v2 sentence model (sentence-transformers), Apache License 2.0.
+https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+
+model_q8.onnx: the ONNX export of all-MiniLM-L6-v2 (as distributed by Chroma), quantized to int8
+for Scale's typed NPC chat (src/game/people/chat/). vocab.txt: the model's WordPiece vocabulary.
+Changes: int8 per-channel dynamic quantization only; weights otherwise unchanged.
+
+Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+Distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
