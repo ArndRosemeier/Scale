@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.223 — 2026-10-09
+
+- **Super speed runs smoothly.** Racing through the city at super speed looked like a string of small jumps with brief stops in between, even at a good frame rate. The running itself was even; the hitches came from work the game did for the places raced past: every building door passed opened its interior (a storey or two furnished each time, for a fraction of a second nobody saw), and every 40 m the sewer tunnels ahead were built in one go. Now, while you race, interiors only open for a building you are inside (doors open up again as soon as you slow down), and the sewers are built after you slow down, one piece per frame, nearest first (still at once when you are down there). The same goes for a fast low flight. Frame times also follow the screen's own clock instead of the moment the code happened to run, which removes a small jitter that was most visible at high speed. Afterimages share one material per copy instead of one per body part.
+
 ## 0.222 — 2026-10-09
 
 - **No long freeze right after loading.** Your hero is dressed piece by piece over the first frames, and on a fresh browser the shaders for their clothes were still compiling when play began, so the first frame stalled until they were done (9 seconds in one freeze log). The loading screen now waits until the hero is dressed and every shader still compiling is ready, up to 20 seconds. The freeze log also missed that freeze, because it skipped the very first frame of play; it no longer does, and a long frame right after switching back to the game's tab now counts too.
