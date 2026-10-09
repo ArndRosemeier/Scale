@@ -136,6 +136,24 @@ Takeaways for Scale:
   door as you get near; talking to them does it) or clear the trouble on their street (stop a crime within 300 m).
   Two game days; done: +15 opinion and thanks, let down: −8 and a remark. Kept on the asker's record (saved).
 
+### 3.7 Typed chat (`src/game/people/Chat.ts` + `chat/`, no LLM)
+- A text box under the talk menu. The world keeps running while you type; the hero stands still. English only.
+- Understanding, in order: `normalise.ts` (contractions, slang, misspellings) → `lexicon.ts` (names of kin, people,
+  places, streets, hoods, gangs, bosses, threats, factions, things; typo-tolerant) → `intents.ts` (about 64 intents):
+  patterns first, then the **sentence model** (all-MiniLM-L6-v2, Apache-2.0, int8 ONNX in `public/models/minilm/`,
+  run by onnxruntime-web in `embed.worker.ts`; nearest examples with proper names masked), then word overlap if the
+  model is not loaded yet or failed. Thresholds in `understand.ts` (`UNDERSTAND`).
+- Answers: `answers.ts` line tables with the same `When` criteria as `lines.ts` (plus `flag`), filled with facts
+  (`respond.ts`), coloured by temperament (`voice.ts`). Menu topics are delegated to the menu's lines. Each person has
+  seeded tastes and stances (`prefs.ts`) and a seeded family and friends circle. People may lie or refuse.
+- Dialogue state (`Conversation`): who we are talking about ("and your brother?"), questions they ask back, patience
+  (rudeness and repeats wear it out), why/more.
+- Effects: insults lower opinion (`Known.chat`, −40…+15), threats also cost reputation and can make them flee; the
+  hero's name and likes they were told are remembered and saved.
+- What nobody understood goes into a local log (`dev.chat.log()`), which the feedback form can attach.
+- Tests: `tools/chatTest.ts` (corpus of typed lines, ≥ 94% with the model) in the selftest; `npx tsx tools/chatTest.ts
+  demo` prints sample conversations.
+
 ## 4. LLM hook (phase 3, optional)
 - Settings: an OpenRouter API key (stored only in this browser) and a model id; off by default. The game never sends
   anything without a key.

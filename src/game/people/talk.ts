@@ -67,6 +67,8 @@ export interface TalkFacts {
   place?: string;
   dir?: string;
   dist?: number;
+  /** Flags a line can ask for (typed chat: what the answer is about, chat/answers.ts). */
+  flags?: ReadonlySet<string>;
 }
 
 const WET = new Set(['drizzle', 'rain', 'storm']);
@@ -102,6 +104,7 @@ export function matches(w: When, f: TalkFacts): boolean {
   if (w.need && w.need !== f.need) return false;
   if (w.favour && !w.favour.includes(f.favour ?? 'none')) return false;
   if (w.sent !== undefined && w.sent !== !!f.asker) return false;
+  if (w.flag && !w.flag.every((x) => f.flags?.has(x))) return false;
   if (w.nannies && (!f.nannies || f.nannies === 'sky' || !w.nannies.includes(f.nannies))) return false;
   return true;
 }
@@ -112,7 +115,7 @@ export function specificity(w: When): number {
   // (A line for a special character — the mime, the officer — beats any temperament or memory line;
   // being sent by a friend, or having heard of the hero from one, beats a temperament's usual hello.)
   const weight: Record<string, number> = { title: 6, sent: 4, told: 2 };
-  for (const k in w) if ((w as Record<string, unknown>)[k] !== undefined) n += weight[k] ?? 1;
+  for (const k in w) if ((w as Record<string, unknown>)[k] !== undefined) n += k === 'flag' ? w.flag!.length : weight[k] ?? 1;
   return n;
 }
 
