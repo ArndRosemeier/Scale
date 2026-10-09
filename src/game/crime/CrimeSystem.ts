@@ -323,7 +323,8 @@ export class CrimeSystem {
     g.progress.onKarma((amount, reason) => { if (amount < 0 && !/turned yourself in|arrested|bystander|car|officer|gave up/.test(reason)) g.powerHud.toast(`<b>${amount} karma</b> — ${reason}`, 'warn'); });
     // Targeting: con colours, health, actor names, hostiles first; punches lock onto a close target.
     g.targeting.describe = (t) => this.describe(t);
-    g.targeting.priority = (t) => (t.kind === 'threat' ? -1 : t.kind === 'person' && t.obj.actor ? (t.obj.actor.hostile ? -0.6 : -0.08) : 0);
+    // Big threats first, then swarm creatures, then hostile people.
+    g.targeting.priority = (t) => (t.kind === 'threat' ? (t.obj.swarm ? -0.8 : -1) : t.kind === 'person' && t.obj.actor ? (t.obj.actor.hostile ? -0.6 : -0.08) : 0);
     g.interactions.aimYaw = () => this.punchAim();
     // P screen: reputation.
     const info = g.powers.info;
@@ -1821,6 +1822,8 @@ export class CrimeSystem {
     let tgt: PedAgent | null = null;
     const cur = g.targeting.current;
     if (cur?.kind === 'person' && Math.hypot(cur.obj.x - p.x, cur.obj.z - p.z) < 2.8) tgt = cur.obj;
+    // A targeted swarm creature within reach: turn to it (the punch lands where it is).
+    if (!tgt && cur?.kind === 'threat' && cur.obj.swarm && Math.hypot(cur.obj.x - p.x, cur.obj.z - p.z) < 2.8 + cur.obj.height) return Math.atan2(-(cur.obj.x - p.x), -(cur.obj.z - p.z));
     if (!tgt) {
       const d = aimDir(g.renderer.camera, new THREE.Vector3());
       const fy = Math.hypot(d.x, d.z) > 0.05 ? Math.atan2(-d.x, -d.z) : g.camRig.forwardYaw, fx = -Math.sin(fy), fz = -Math.cos(fy);

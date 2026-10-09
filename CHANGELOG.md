@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.223 — 2026-10-09
+
+- **Swarm creatures can be targeted.** The brood's creatures (the swarm that pours out of the manholes) were never offered as targets, so Tab, clicking on one, clicking the swarm's marker on the minimap or compass, and the phase pulse, focus beam and seeker orb all passed them by. Each creature is now a target like a monster: Tab steps through the ones nearest your crosshair (a big threat still comes first, then the creatures, then hostile people), a click picks the one under the cursor, the swarm's map marker picks a creature near it, and the single-target powers hit the one you picked (a small one dies to any of them; frost freezes it so the next hit shatters it). The friend/foe sense counts them as foes. When the creature you target dies, the target moves on to the nearest one still close by, so you can keep firing. They are not big threats: no body parts to pick with Tab, the normal targeting range, and no airstrike on them.
+
 ## 0.222 — 2026-10-09
 
 - **No long freeze right after loading.** Your hero is dressed piece by piece over the first frames, and on a fresh browser the shaders for their clothes were still compiling when play began, so the first frame stalled until they were done (9 seconds in one freeze log). The loading screen now waits until the hero is dressed and every shader still compiling is ready, up to 20 seconds. The freeze log also missed that freeze, because it skipped the very first frame of play; it no longer does, and a long frame right after switching back to the game's tab now counts too.
