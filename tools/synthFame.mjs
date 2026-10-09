@@ -2,7 +2,6 @@
 //   camera_shutter  a press camera: the mirror slap and shutter, then the flash's short charging whine
 //   protest_drum    a seamless loop: a protest's drum, two beats a bar, over a crowd's murmur bed (the
 //                   chant itself is in the protesters' bubbles: procedural voices never made words)
-//   fanfare         the statue's unveiling: a short brass fanfare (rising triad, a held chord)
 // Run: node tools/synthFame.mjs [names…]   (only the named sounds when given)
 import { writeFileSync } from 'node:fs';
 
@@ -103,27 +102,4 @@ function click(mix, t, gain, decay, f) {
   const m = band(bed, 500, 500);
   for (let i = 0; i < out.length; i++) out[i] += m[i];
   write('protest_drum', loopify(highpass(out, 60), XF));
-}
-
-// ---------------------------------------------------------------- fanfare
-{
-  const D = 3.4, out = new Float32Array(Math.round(D * SR));
-  /** A brass note: harmonics with a slow attack and brightness that follows the loudness. */
-  const brass = (t0, dur, f, gain) => {
-    const i0 = Math.round(t0 * SR), n = Math.round(dur * SR);
-    for (let k = 0; k < n && i0 + k < out.length; k++) {
-      const t = k / SR, env = Math.min(1, t * 18) * Math.min(1, (dur - t) * 6) * (0.85 + 0.15 * Math.exp(-t * 6));
-      let v = 0;
-      for (let h = 1; h <= 9; h++) v += Math.sin(2 * Math.PI * f * h * t * (1 + 0.003 * Math.sin(t * 30))) * Math.pow(0.62 + 0.25 * env, h) / h;
-      out[i0 + k] += v * env * gain;
-    }
-  };
-  // G4 C5 E5 — G5 held over a C major chord.
-  const G4 = 392, C5 = 523.25, E5 = 659.25, G5 = 783.99, C4 = 261.63, E4 = 329.63;
-  brass(0.0, 0.22, G4, 0.5); brass(0.24, 0.22, C5, 0.5); brass(0.48, 0.22, E5, 0.5);
-  brass(0.74, 0.18, C5, 0.45); brass(0.94, 0.4, E5, 0.5);
-  brass(1.4, 1.9, G5, 0.5); brass(1.4, 1.9, E5, 0.35); brass(1.4, 1.9, C5, 0.35); brass(1.4, 1.9, C4, 0.4); brass(1.4, 1.9, E4, 0.25);
-  // A cymbal on the held chord.
-  for (let i = Math.round(1.4 * SR); i < out.length; i++) { const t = i / SR - 1.4; out[i] += rnd() * 0.12 * Math.exp(-t * 2.2); }
-  write('fanfare', highpass(out, 80));
 }

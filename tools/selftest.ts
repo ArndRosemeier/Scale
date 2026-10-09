@@ -54,8 +54,8 @@ import { makeActor, watchProgress, pursue, STUCK } from '../src/sim/actors/Actor
 import { GUNS, DRONE_PLATING, hitRate } from '../src/game/crime/Firearms';
 import { LineOfSight, LOS, type LosCar, type LosWorld } from '../src/game/combat/los';
 import { resolveShot, newShot, type ShotTrace } from '../src/game/combat/shot';
-import { MoodDirector, MOODS, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
-import { parseStemManifest } from '../src/audio/music/StemPlayer';
+import { MoodDirector, MOODS, LOOPED, CALM_SIGNALS, MOOD_TUNING, type MusicSignals } from '../src/audio/music/mood';
+import { MOOD_TRACKS, CUES, TENSION_HIGH, parseTracks } from '../src/audio/music/tracks';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
@@ -2413,7 +2413,7 @@ section('stuck actors and small arms', async () => {
   console.log(`actors & guns: stuck after ${STUCK.window} s, drone ${droneS.toFixed(1)} s, robot ${robotS.toFixed(1)} s, robber ${playerHp.toFixed(2)} hp/s`);
 });
 
-// Background music: mood selection (src/audio/music/mood.ts) and the stem manifest (public/music).
+// Background music: mood selection (src/audio/music/mood.ts) and the pieces (tracks.ts, public/music/tracks.json).
 section('music', async () => {
   let seed = 12345;
   const rng = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
@@ -2449,16 +2449,35 @@ section('music', async () => {
   const hour = run(h, 3600, (t) => ({ night: t > 1800 ? 1 : 0 }));
   const share = hour.filter((m) => m !== null).length / hour.length;
   check(share > 0.3 && share < 0.75, `music: calm music plays ${Math.round(share * 100)} % of the time`);
-  // Manifest: every mood has a set, every file exists.
-  const man = parseStemManifest(JSON.parse(readFileSync('public/music/manifest.json', 'utf8')));
-  check(!!man && man.lead > 0, 'music: manifest parses');
+  // The new places and the villains' and slimes' own fights.
+  const v = new MoodDirector(rng);
+  v.play();
+  check(run(v, 3, { halls: true }).at(-1) === 'halls' && run(v, 3, {}).at(-1) === 'day', 'music: a landmark\'s halls, then the street again');
+  check(run(v, 1, { country: true }).at(-1) === 'country' && run(v, 1, { country: true, night: 1 }).at(-1) === 'night', 'music: out of town by day (night stays night)');
+  check(run(v, 3, { danger: 1, villain: true }).at(-1) === 'villain', 'music: a boss near plays the villain\'s theme');
+  check(run(v, 2, { battle: 1, villain: true }).at(-1) === 'battle', 'music: a monster beats the villain\'s theme');
+  check(run(v, 2, { battle: 1, slime: true, under: true }).at(-1) === 'slime', 'music: the slime war under the city');
+  v.settle({ ...CALM_SIGNALS });
+  check(run(v, 1, {}).at(-1) !== 'battle' && v.level === 0, 'music: a won fight settles at once (the victory cue)');
+  const e = new MoodDirector(rng);
+  e.play();
+  e.endEpisode();
+  check(run(e, 1, {}).at(-1) === null && e.left > 60, 'music: a calm piece ending starts the rest');
+  // Pieces: every mood and cue has its pieces, loops where the mood loops, every file exists.
+  const tracks = parseTracks(JSON.parse(readFileSync('public/music/tracks.json', 'utf8')));
+  check(!!tracks, 'music: track list parses');
   let files = 0;
-  for (const m of MOODS) {
-    const set = man?.sets[m];
-    check(!!set, `music: a set for ${m}`);
-    for (const list of Object.values(set?.layers ?? {})) for (const f of list ?? []) { files++; check(existsSync(`public/music/${f}`), `music: ${f} exists`); }
-  }
-  console.log(`music: ${MOODS.length} moods, ${files} stems, calm share ${Math.round(share * 100)} %`);
+  const need = (id: string, kind: 'stream' | 'loop', what: string) => {
+    const tr = tracks?.[id];
+    check(!!tr && tr.kind === kind, `music: ${what} has ${id} (${kind})`);
+    if (tr) { files++; check(existsSync(`public/music/${tr.file}`), `music: ${tr.file} exists`); }
+  };
+  for (const m of MOODS) for (const id of MOOD_TRACKS[m]) need(id, LOOPED.has(m) ? 'loop' : 'stream', m);
+  need(TENSION_HIGH, 'loop', 'tension (high)');
+  for (const [c, cue] of Object.entries(CUES)) need(cue.track, 'stream', c);
+  const vic = tracks?.victory?.seconds ?? 0;
+  check(vic > 5 && vic < 15, `music: the victory sting is short (${vic} s)`);
+  console.log(`music: ${MOODS.length} moods, ${files} pieces, calm share ${Math.round(share * 100)} %`);
 });
 
 // ------------------------------------------------------------------ line of sight and shots (combat/los, combat/shot)

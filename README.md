@@ -230,5 +230,6 @@ identically.
   pipeline.
 * Animation clips: Quaternius Universal Animation Library (CC0).
 * Sounds: generated locally with Stable Audio 3 (see `docs/SOUNDS.md`).
+* Music: Arnd's pieces made with Google Lyria 3 Pro, built into the game by `tools/music/build_tracks.py` (prompts in the project files, `music/lyria-prompts.md`).
 * Everything else (textures, buildings, vehicles, trees, furniture, layouts)
   is procedural code in this repository.

@@ -874,19 +874,19 @@
   },
   "street_guitar": {
     "files": [
-      "street_guitar.wav"
+      "street_guitar.ogg"
     ],
     "loop": true,
     "gain": 0.55,
-    "description": "a busker's acoustic guitar, strummed chords (procedural loop, tools/synthStreet.mjs)"
+    "description": "a busker's acoustic guitar, fingerpicked and strummed folk-pop (Lyria 3 Pro, bar-true loop: tools/music/build_tracks.py)"
   },
   "street_beat": {
     "files": [
-      "street_beat.wav"
+      "street_beat.ogg"
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "a boombox playing a boom-bap beat, small-speaker lo-fi (procedural loop, tools/synthStreet.mjs)"
+    "description": "a boombox playing a boom-bap beat, lo-fi (Lyria 3 Pro, bar-true loop: tools/music/build_tracks.py)"
   },
   "street_coin": {
     "files": [
@@ -970,11 +970,11 @@
   },
   "fanfare": {
     "files": [
-      "fanfare.wav"
+      "fanfare.ogg"
     ],
     "loop": false,
     "gain": 0.6,
-    "description": "a short brass fanfare: the hero's statue unveiled (procedural, tools/synthFame.mjs)"
+    "description": "a ceremonial brass fanfare: the hero's statue unveiled (Lyria 3 Pro, its first phrase: tools/music/build_tracks.py)"
   },
   "ufo_hum": {
     "files": [

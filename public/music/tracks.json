@@ -1,0 +1,120 @@
+{
+ "version": 1,
+ "tracks": {
+  "battle-1": {
+   "file": "tracks/battle-1.ogg",
+   "kind": "loop",
+   "seconds": 60.0
+  },
+  "battle-2": {
+   "file": "tracks/battle-2.ogg",
+   "kind": "loop",
+   "seconds": 61.714
+  },
+  "country": {
+   "file": "tracks/country.mp3",
+   "kind": "stream",
+   "seconds": 148.456
+  },
+  "day-1": {
+   "file": "tracks/day-1.mp3",
+   "kind": "stream",
+   "seconds": 159.083
+  },
+  "day-2": {
+   "file": "tracks/day-2.mp3",
+   "kind": "stream",
+   "seconds": 152.304
+  },
+  "elegy-1": {
+   "file": "tracks/elegy-1.mp3",
+   "kind": "stream",
+   "seconds": 134.295
+  },
+  "elegy-2": {
+   "file": "tracks/elegy-2.mp3",
+   "kind": "stream",
+   "seconds": 132.746
+  },
+  "gameover": {
+   "file": "tracks/gameover.mp3",
+   "kind": "stream",
+   "seconds": 64.297
+  },
+  "halls": {
+   "file": "tracks/halls.mp3",
+   "kind": "stream",
+   "seconds": 118.764
+  },
+  "hero-1": {
+   "file": "tracks/hero-1.mp3",
+   "kind": "stream",
+   "seconds": 101.453
+  },
+  "hero-2": {
+   "file": "tracks/hero-2.mp3",
+   "kind": "stream",
+   "seconds": 103.353
+  },
+  "night-1": {
+   "file": "tracks/night-1.mp3",
+   "kind": "stream",
+   "seconds": 168.097
+  },
+  "night-2": {
+   "file": "tracks/night-2.mp3",
+   "kind": "stream",
+   "seconds": 162.215
+  },
+  "origin": {
+   "file": "tracks/origin.mp3",
+   "kind": "stream",
+   "seconds": 60.256
+  },
+  "rescue": {
+   "file": "tracks/rescue.mp3",
+   "kind": "stream",
+   "seconds": 58.83
+  },
+  "slime": {
+   "file": "tracks/slime.ogg",
+   "kind": "loop",
+   "seconds": 72.0
+  },
+  "tension-1": {
+   "file": "tracks/tension-1.ogg",
+   "kind": "loop",
+   "seconds": 60.0
+  },
+  "tension-2": {
+   "file": "tracks/tension-2.ogg",
+   "kind": "loop",
+   "seconds": 56.471
+  },
+  "tension-high": {
+   "file": "tracks/tension-high.ogg",
+   "kind": "loop",
+   "seconds": 48.0
+  },
+  "under-1": {
+   "file": "tracks/under-1.mp3",
+   "kind": "stream",
+   "seconds": 132.223
+  },
+  "under-2": {
+   "file": "tracks/under-2.mp3",
+   "kind": "stream",
+   "seconds": 132.819
+  },
+  "victory": {
+   "file": "tracks/victory.mp3",
+   "kind": "stream",
+   "seconds": 9.587
+  },
+  "villain": {
+   "file": "tracks/villain.ogg",
+   "kind": "loop",
+   "seconds": 50.639
+  }
+ }
+}
