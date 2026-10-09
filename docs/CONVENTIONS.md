@@ -76,6 +76,7 @@ Its open items are consolidated here one PR at a time.
 | Is one side hostile to another (the hero, a villain group, police, Murk, monsters …)? | `game/factions/relations.ts`: `g.relations.get(a, b)` (a number, −100 … 100) / `.hostile(a, b)`; `factionOf(target, world)` / `actorFaction(actor)` in `game/friendFoe.ts` say which faction something belongs to | A new `role === …` / `rivals.includes(…)` rule of your own |
 | A faction's feeling about the hero | `g.relations.get(f, 'hero')`: bound live (`bindHero`) to the system that keeps it (civilians: reputation; police: wanted/suspect; army: a rampage; villain groups: notoriety; Lumen: trust; Wardens: regard). `dev.factions()` shows them | A second standing number |
 | Two villain groups at war | `hostileGroups(F, a, b)` in `game/factions/Factions.ts` | Comparing archetype `rivals` lists |
+| Should someone run from a threat? | `menaceNear(R, from, x, y, z, threats, sameSide?)` + `scatterReach(height)` in `game/factions/relations.ts` (crimes: `CrimeWorld.menace`, the crew scatters in `Crime.lookRound`) | A distance check of your own against `threats.actors()` |
 
 ## Threats
 
