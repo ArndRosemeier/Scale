@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.180 — 2026-10-09
+
+- **Less memory: the game's tab holds about 1 GB less after a while of travelling.** Building meshes, the crowd's baked animation and the facade and street texture sets used to stay in the tab's memory a second time after they had been handed to the graphics card. Now each is kept once, on the graphics card. Buildings that start hidden (the detailed version of far blocks, the simple version of near ones) are handed over within a few frames of arriving, one per frame. Measured on a real PC (size 1, four minutes of travel): the tab's JavaScript heap fell from 3.7 GB to 2.8 GB (Chrome's limit is 4.2 GB) and the tab's process from 6.0 to 5.0 GB; the graphics process grew by 0.3 GB. Frame rate unchanged, fewer long frames. Nothing looks different.
+- **Sounds are decoded when first heard.** All thirteen ambience beds (sea, sewer, metro, rain, …) used to be decoded at start and kept, about 85 MB, even where you never hear them. Now each is loaded when it first becomes audible (it fades in as before), and any sound or bed not wanted for 90 seconds is dropped and loaded again when next needed. Headless after four minutes of travel: 11 MB of decoded sound instead of 85 MB.
+- A building that comes down now rebuilds just its own outer walls to cut the falling part from (a self-test checks that this gives exactly the same pieces as the block's mesh).
+
 ## 0.179 — 2026-10-09
 
 - **New title music: "Dusk Awakening", Arnd's heroic main theme.** It starts with a soft fade-in after your first click or key on the start screen and loops while you choose a city. It plays on through the loading screen and fades out as the game begins. It streams in only when it starts, so the page doesn't load any slower. It follows the volume, mute, music switch and music level from the settings (and `?mute`).

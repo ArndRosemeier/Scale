@@ -3,6 +3,7 @@
  * in parallel workers and cached in IndexedDB between sessions.
  */
 import * as THREE from 'three';
+import { releaseTextureAfterUpload } from './gpuOnly';
 import { FACADE_LAYER_COUNT, GROUND_LAYER_COUNT, TEX_SIZE, FACADE_TILE_METERS, GROUND_TILE_METERS } from './texgen';
 
 const CACHE_VERSION = 'tex-v3';
@@ -25,6 +26,8 @@ function makeArray(data: Uint8Array, size: number, layers: number, srgb: boolean
   t.generateMipmaps = true;
   t.anisotropy = 8;
   t.needsUpdate = true;
+  // Only the shaders sample it (facade ≈ 24 MB a family): no CPU copy after the upload.
+  releaseTextureAfterUpload(t);
   return t;
 }
 

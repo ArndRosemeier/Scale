@@ -11,6 +11,7 @@ import type { EquipmentVisuals, ItemVisual } from '../items/types';
 import { frameWork } from '../core/frameWork';
 import { BODY_REGIONS } from '../humanoid/client/staticData';
 import { clipLibraryReady } from '../humanoid/client/anim/clips';
+import { releaseTextureAfterUpload } from '../render/gpuOnly';
 
 export const enum Slot { Skin = 0, Hair = 1, Top = 2, Bottom = 3, Shoes = 4, Outer = 5 }
 
@@ -245,6 +246,8 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     const t = new THREE.DataTexture(d, nv, totalFrames, THREE.RGBAFormat, THREE.FloatType);
     t.minFilter = t.magFilter = THREE.NearestFilter;
     t.needsUpdate = true;
+    // Only the shaders read it (≈ 13 MB per template): no CPU copy after the upload.
+    releaseTextureAfterUpload(t);
     return t;
   };
   const height = rig.height;
