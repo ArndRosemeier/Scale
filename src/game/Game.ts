@@ -88,7 +88,8 @@ import { PowersScreen } from '../ui/PowersScreen';
 import { TouchControls } from '../ui/TouchControls';
 import { isTouch } from '../ui/touch';
 import { Targeting, type Target } from './Targeting';
-import { spared } from './friendFoe';
+import { spared, type FoeWorld } from './friendFoe';
+import { defaultRelations } from './factions/relations';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { Sight } from './combat/sight';
@@ -157,6 +158,8 @@ export class Game {
   stimuli = new Stimuli();
   /** Game-time callbacks (instead of setTimeout for anything that changes the game). */
   readonly later = new Later();
+  /** Who is hostile to whom (factions/relations.ts); the civilians' feeling about the hero is the reputation. */
+  readonly relations = defaultRelations();
   audio = new Audio();
   /** Background music (src/audio/music): moods from the game state, stems loaded on first need. */
   music = new Music(this);
@@ -1147,6 +1150,7 @@ export class Game {
     this.city = new CityNews(this);
     if (this.startCell >= 0) this.city.freshStart(this.startCell);
     this.crime = new CrimeSystem(this);
+    this.relations.bind('civilians', 'hero', () => this.crime.rep.value);
     // Anyone the hero only made stumble (a super speed runner brushing past, a super jump coming
     // down beside them) calls after them: no harm, no reputation, a stern word.
     const knocked = this.reactions.onKnockDown;
@@ -1226,7 +1230,11 @@ export class Game {
   spares(t: Target): boolean {
     return spared(t, this.foeWorld);
   }
-  private readonly foeWorld = { hostileThing: (ref: object) => this.threats?.isHostile(ref) ?? false };
+  private readonly foeWorld: FoeWorld = {
+    hostileThing: (ref: object) => this.threats?.isHostile(ref) ?? false,
+    relations: this.relations,
+    group: (id: number) => this.crime?.factions.factions[id]?.archetype,
+  };
 
   /** A physical strike at a point hits cars, people and props. `spare` (a power's friend/foe sense):
    *  only foes are hit, no car or prop. */

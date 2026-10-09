@@ -69,6 +69,14 @@ Its open items are consolidated here one PR at a time.
 | A crook decides again after a blow: fight, flee or surrender | `this.rethink(c, pick?)` in `game/crime/Crime.ts` (sets `memo.choice` 0/1/2, announces a fight; `pick` holds the crime's own rule) | A local `if (act.memo.decHp !== act.hp) { … }` block (**guarded**) |
 | Then the usual follow-through | `this.actOnChoice(c, dt, reach?)`: give up, fight within `reach`, or run | Copying the three lines |
 
+## Factions
+
+| Need | Use | Not |
+|---|---|---|
+| Is one side hostile to another (the hero, a villain group, police, Murk, monsters …)? | `game/factions/relations.ts`: `g.relations.get(a, b)` (a number, −100 … 100) / `.hostile(a, b)`; `factionOf(target, world)` / `actorFaction(actor)` in `game/friendFoe.ts` say which faction something belongs to | A new `role === …` / `rivals.includes(…)` rule of your own |
+| The civilians' feeling about the hero | It is the reputation (`relations.get('civilians', 'hero')` is bound to `crime.rep.value`) | A second standing number |
+| Two villain groups at war | `hostileGroups(F, a, b)` in `game/factions/Factions.ts` | Comparing archetype `rivals` lists |
+
 ## Threats
 
 | Need | Use | Not |
