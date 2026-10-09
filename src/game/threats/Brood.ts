@@ -30,6 +30,7 @@ import { RState, type Robot } from '../../future/Robots';
 import type { Cause } from '../Stimuli';
 import type { ThreatEvent, ThreatOutcome, ThreatTarget } from './ThreatEvent';
 import { BroodSim, BROOD, BROOD_KINDS, CMode, type BroodWorld, type Critter, type HitEffect, type Prey } from './brood/BroodSim';
+import { CritterActor } from './brood/CritterActor';
 
 export interface BroodOpts {
   /** Creatures (≤ 150) and how many of them are big ones. */
@@ -92,6 +93,8 @@ export class Brood implements ThreatEvent {
   private preyOf = new WeakMap<object, Prey>();
   private gnaw = new WeakMap<object, number>();
   private targets = new Map<Critter, CritterTarget>();
+  /** Each creature as something to target (one per critter, so the target stays the same object). */
+  private actorsOf = new Map<Critter, CritterActor>();
   private nb: PedAgent[] = [];
   private ground = new Map<number, number>();
 
@@ -240,6 +243,29 @@ export class Brood implements ThreatEvent {
     const res = this.sim.hit(x, y, z, r, effect, dmg, fromX, fromZ, fling, cause);
     if (res.hit.length && effect !== 'frost') this.splat(res.hit, effect);
     return res.hit;
+  }
+
+  /** One creature takes a hit (a targeted power, a punch on it): the sim's damage, chitin bits. */
+  hitOne(c: Critter, effect: HitEffect, dmg: number, fling: number, cause: string, fromX: number, fromZ: number): void {
+    if (!this.active && !this.sim.leaving) return;
+    this.sim.damage(c, effect, dmg, fromX, fromZ, fling, cause);
+    if (effect !== 'frost') this.splat([c], effect);
+  }
+
+  /** The creature as a target (Targeting: kind 'threat', `swarm`). */
+  actorOf(c: Critter): CritterActor {
+    let a = this.actorsOf.get(c);
+    if (!a) { a = new CritterActor(this, c); this.actorsOf.set(c, a); }
+    return a;
+  }
+
+  /** The creatures out and alive within r of (x, z), as targets. */
+  critters(x: number, z: number, r: number, fn: (a: CritterActor) => void): void {
+    for (const c of this.sim.list) {
+      if (c.mode !== CMode.Run && c.mode !== CMode.Wall && c.mode !== CMode.Frozen && c.mode !== CMode.Leave) continue;
+      if (Math.abs(c.x - x) > r || Math.abs(c.z - z) > r) continue;
+      fn(this.actorOf(c));
+    }
   }
 
   /** Feedback where creatures were hit (bits of chitin, sparks, frost). */
@@ -395,6 +421,7 @@ export class Brood implements ThreatEvent {
     this.loop = null;
     for (const c of this.sim.list) c.mode = CMode.Gone;
     this.targets.clear();
+    this.actorsOf.clear();
   }
 
   snapshot(): Record<string, unknown> {

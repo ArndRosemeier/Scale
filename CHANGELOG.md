@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.222 — 2026-10-09
+
+- **Swarm creatures can be targeted.** The brood's creatures (the swarm that pours out of the manholes) were never offered as targets, so Tab, clicking on one, clicking the swarm's marker on the minimap or compass, and the phase pulse, focus beam and seeker orb all passed them by. Each creature is now a target like a monster: Tab steps through the ones nearest your crosshair (a big threat still comes first, then the creatures, then hostile people), a click picks the one under the cursor, the swarm's map marker picks a creature near it, and the single-target powers hit the one you picked (a small one dies to any of them; frost freezes it so the next hit shatters it). The friend/foe sense counts them as foes. When the creature you target dies, the target moves on to the nearest one still close by, so you can keep firing. They are not big threats: no body parts to pick with Tab, the normal targeting range, and no airstrike on them.
+
 ## 0.221 — 2026-10-09
 
 - **No freeze when a giant first shows up on the news screens.** The news drone's picture for the billboards left out the sewers, and with them the sewer lights, so the game had to prepare every shader in the picture a second time, all at once: about a second and a half the first time the mech fired its missiles. The lights now stay in the picture (only what the drone can't see is left out), so it reuses the shaders already prepared.
