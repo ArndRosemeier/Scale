@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.226 — 2026-10-09
+## 0.227 — 2026-10-09
 
 - **The city rebuilds.** Buildings damaged by monsters, villains or you no longer stay broken forever. A couple of game hours after the damage round them stops (and with no big monster nearby), building crews move in: scaffolding with safety netting goes up round each damaged building, collapsed plots get a site fence, there is a site board, and a tower crane stands over the worst-hit building, its jib slowly turning. Round a collapsed building the scaffolding climbs as the work goes on. After 10 to 60 game hours (longer for more and worse damage) each building is whole again: walls, windows, floors, upper storeys, and its rubble cleared. That only happens while you are not looking: off screen or far away. A few broken windows are just mended quietly. A district levelled by the last resort becomes one big fenced site with cranes once its cordon is lifted, and stands again after three game days. Saves keep it all. The scaffolding leaves room for lamp posts, traffic lights and trees on the pavement.
+
+## 0.226 — 2026-10-09
+
+- **Super speed runs more smoothly.** Racing through the city at super speed looked like a string of small jumps with brief stops in between, even at a good frame rate. The running itself was even; the hitches came from work the game did for the places raced past: every building door passed opened its interior (a storey or two furnished each time, for a fraction of a second nobody saw), and every 40 m the sewer tunnels ahead were built in one go. Now, while you race, interiors only open for a building you are inside (doors open up again as soon as you slow down), and the sewers are built after you slow down, one piece per frame, nearest first (still at once when you are down there). The same goes for a fast low flight. Frame times also follow the screen's own clock instead of the moment the code happened to run, which removes a small jitter that was most visible at high speed. Afterimages share one material per copy instead of one per body part.
 
 ## 0.225 — 2026-10-09
 

@@ -108,7 +108,8 @@ export class Interiors {
     return null;
   }
 
-  update(dt: number, px: number, py: number, pz: number, ph: number, hours: number): void {
+  /** `passing`: the player races by (super speed, a low flight): only the building they are in opens up. */
+  update(dt: number, px: number, py: number, pz: number, ph: number, hours: number, passing = false): void {
     this.t += dt;
     if (this.t - this.lastCheck > 0.25) {
       this.lastCheck = this.t;
@@ -116,8 +117,13 @@ export class Interiors {
       const cands = this.world.buildingsIn(px - 14, pz - 14, px + 14, pz + 14);
       for (const ref of cands) {
         if (!ref.alive || ph > 6) continue;
+        const over = pointInPoly(ref.poly, px, pz);
+        // (Gone again a moment later: a runner at super speed passed a door every few frames, and
+        // each one furnished a storey or two nobody saw, a hitch every time.)
+        if (passing && !over) continue;
         const L = this.destruction.layoutOf(ref);
-        const inside = pointInPoly(ref.poly, px, pz) && py > L.base - 1 && py < L.base + L.height;
+        const inside = over && py > L.base - 1 && py < L.base + L.height;
+        if (passing && !inside) continue;
         const nearDoor = Math.hypot(L.door.x - px, L.door.z - pz) < 9 && py < L.base + 4;
         let nearHole = false;
         if (!inside && !nearDoor) {
