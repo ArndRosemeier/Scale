@@ -881,7 +881,7 @@ every frame (`prof.threats`).
   * **Rescues and triage** (`Rescues.ts`): new rubble mounds in a rescue area (a major incident's 650 m, a recent scene, a
     struck district — whose trapped are planned by the strike instead) may hold one or two people (65 %): drawn within
     220 m of the player (≤ 10; dust-covered, crouched at the foot of the mound with slabs over their legs, waving, a
-    muffled call `trapped_call` every few seconds, a "Help!" bark up close), abstract farther off. Hold E beside them
+    a call for help every few seconds as a bubble, `voice('trapped')`: out of sight low on the screen with its direction), abstract farther off. Hold E beside them
     (3.5 s, faster with super strength): the dig action, dust, stones, `dig_rubble` — out they climb, thank the player and
     walk off (12 karma, 1.5 reputation). Crews reach the rest 0.3–1.5 game hours after it is over. People the monster or a
     collapse knocks down in a rescue area are injured: once they lie still they stay down (`RagdollSystem.keepDown`, an
@@ -998,8 +998,8 @@ Part of the cell plan (pure, in the workers, checked in `selftest.ts`), lived in
   pedestrians for `Reactions`: they run (knocking a chair over now and then), stand up to stare and sit
   down again, get knocked down; a scared table is taken by new guests once it is calm (20 s). Budget:
   ≤ 170 people, within the street population (`PEDS_ROOM`: a full street gives up its farthest walkers).
-  Awnings fall when the wall behind them breaks. Ambience: one positional loop `terrace_murmur` at the
-  nearest busy terrace (`tools/synthTerrace.mjs`). ≈ 0.02 ms/frame.
+  Awnings fall when the wall behind them breaks. Ambience: one positional loop `terrace_clatter` (cups and
+  cutlery, no voices) at the nearest busy terrace (`tools/synthTerrace.mjs`). ≈ 0.02 ms/frame.
 
 ### People inside the landmarks (`src/sim/LandmarkCrowds.ts`, `game.halls`)
 The town hall and the cathedral (the landmarks one walks into) are lived in near the player (150 m in,
@@ -1229,7 +1229,7 @@ as distance LOD).
   DENS.turf` off the group's cell above, notoriety.
 * Sewer life (`underground/SewerLife.ts`, around the player only, not deterministic): up to 12 rats on the
   walkways (`tube`, arc, lateral) and in nearby sewer rooms (room-local u, v; more in hideouts and halls): sit,
-  sniff, rear, scurry; bolt (squeak, `rat_squeak`) from a close or fast player or a stimulus and vanish. One
+  sniff, rear, scurry; bolt (a "Squeak!" bubble, `voice('rat')`) from a close or fast player or a stimulus and vanish. One
   instanced mesh (`ratGeometry`) plus their eyes. Every few minutes a lone slime oozing along a walkway (drawn with
   the colonies' blobs: `Slimes.blob`): freezes, flees and squeezes into the wall; a hit splatters it.
   `dev.sewerLife(calm)`.
@@ -1336,8 +1336,8 @@ screen flash up close, `camera_shutter`), sooner after a crime stopped (Reputati
 (`mic` + `interview`, `tvcam` + `shoulder_cam`); **fans** from 50 (phone, golden bubble, a flash, a cheer); passers-by
 within 7 m hail the hero (≥ 30) or grumble (< 0) once each. Below 0 **protesters** (3 + |rep|/9, up to 12) with placards
 (`placard_<i>` held items, texts in `humanoid/client/placards.ts`, the raised torch grip; `chant` action) gather on the
-camera's side 8–15 m from the hero, chant in red bubbles (Barks `tone`) to the `protest_chant` loop, boo
-(`crowd_boo`) when the hero walks up, and follow. Danger (blast, gunfire, a giant) makes any of them run; hitting
+camera's side 8–15 m from the hero, chant in red bubbles (Barks `tone`) to the `protest_drum` loop, boo
+(a red bubble) when the hero walks up, and follow. Danger (blast, gunfire, a giant) makes any of them run; hitting
 one is hurting a bystander. Sounds: `tools/synthFame.mjs`.
 `PressPhoto`: a photographer's first flash of a visit (at most every 75 s) renders the scene once from their camera into
 a small HDR target, reads it back, composes a news page on a canvas (tone mapped, a vignette, a news bar with a headline

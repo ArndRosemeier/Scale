@@ -69,7 +69,8 @@ const WALL_GAP = 0.09;
 /** Hung pieces sit on the wall face. */
 const HUNG_GAP = 0.065;
 const WALKER = 0.22;
-const CELL = 0.2;
+/** Walk grid cell (m); big rooms get coarser cells, at most about MAX_CELLS of them. */
+const CELL = 0.2, MAX_CELLS = 4000;
 const MAX_TESTS = 700;
 /** Walkway checks per item: a piece that keeps cutting the room in two is left out. */
 const MAX_WALKS = 12;
@@ -78,16 +79,21 @@ export class Filler {
   readonly placed: Placed[] = [];
   private readonly doorZones: Poly[] = [];
   private readonly seeds: [number, number][] = [];
+  /** The doors the walkway checks keep joined (see joinedSeeds). */
+  private walkSeeds: [number, number][] | null = null;
   private readonly frame: { cx: number; cz: number; ux: number; uz: number; hu: number; hv: number };
   /** The room's walk grid: the bare room's walkable cells, less the floor of the pieces placed so far. */
   private readonly convex: boolean;
   private readonly changed: number[] = [];
   private seen: Uint32Array | null = null;
+  private want: Uint32Array | null = null;
   private stack: Int32Array | null = null;
   private stamp = 0;
   private grid: { x0: number; z0: number; nx: number; nz: number; walk: Uint8Array } | null = null;
+  private readonly cell: number;
 
-  constructor(readonly A: Area, readonly r: Rng) {
+  /** `cell`: the walk grid's cell (m) at least (big plain rooms can do with a coarser one). */
+  constructor(readonly A: Area, readonly r: Rng, cell = CELL) {
     for (const e of A.edges) {
       const spans: [number, number, number][] = e.kind === 'open' ? [[0, e.len, 0.6]] : e.doors.map(([s0, s1]) => [s0, s1, 1.0]);
       for (const [s0, s1, depth] of spans) {
@@ -100,6 +106,8 @@ export class Filler {
     this.convex = isConvex(A.poly);
     const o = minAreaRect(A.poly);
     this.frame = { cx: o.cx, cz: o.cz, ux: o.ux, uz: o.uz, hu: o.hu, hv: o.hv };
+    const [x0, z0, x1, z1] = polyBounds(A.poly);
+    this.cell = Math.max(cell, Math.sqrt(((x1 - x0) * (z1 - z0)) / MAX_CELLS));
   }
 
   /** The furniture placed so far. */
@@ -150,6 +158,20 @@ export class Filler {
   /** How far the candidate stands from the nearest end of its wall (corners score high with a minus). */
   cornerGap(c: Cand): number {
     return c.edge ? Math.min(c.s - c.w / 2, c.edge.len - c.s - c.w / 2) : 10;
+  }
+
+  /** How straight the candidate's front points at the nearest door (1 straight at it, -1 away). */
+  facesDoor(c: Cand): number {
+    let best = Infinity, dx = 0, dz = 0;
+    for (const [sx, sz] of this.seeds) { const d = Math.hypot(sx - c.x, sz - c.z); if (d < best) { best = d; dx = sx - c.x; dz = sz - c.z; } }
+    return best === Infinity || best < 1e-6 ? 0 : (dx * Math.sin(c.yaw) + dz * Math.cos(c.yaw)) / best;
+  }
+
+  /** Distance from (x, z) to the nearest window (20 if the room has none). */
+  windowDist(x: number, z: number): number {
+    let d = 400;
+    for (const e of this.A.edges) if (e.kind === 'window') d = Math.min(d, distSqPointSeg(x, z, e.ax, e.az, e.bx, e.bz));
+    return Math.min(20, Math.sqrt(d));
   }
 
   /**
@@ -245,7 +267,8 @@ export class Filler {
     const f: Furn = { kind: p.kind, x, z, yaw, w: p.w, d: p.d, h: p.h, color: p.color, use: p.use, game: p.game };
     const q = quad(x, z, yaw, p.w, -p.d / 2, p.d / 2);
     const rec: Placed = { f, q, clear: null, solid: false, flat: !!p.flat, hung: !!p.hung, tag: p.tag, reach: null };
-    if (p.onTop) return rec;
+    // On top of a piece placed before it (a monitor on its desk), else nowhere.
+    if (p.onTop) return this.placed.some((o) => o.solid && pointInPoly(o.q, x, z)) ? rec : null;
     if (!this.inside(q, 0.02)) return null;
     if (p.hung) {
       // A plain stretch of inner or blind wall right behind it, clear of doors and of tall pieces.
@@ -328,6 +351,7 @@ export class Filler {
   private walkable(from: number): boolean {
     if (!this.seeds.length) return true;
     const G = this.baseGrid();
+    this.walkSeeds ??= this.joinedSeeds(G);
     const cells = G.walk, changed = this.changed;
     changed.length = 0;
     for (let k = from; k < this.placed.length; k++) this.block(this.placed[k], changed);
@@ -337,38 +361,82 @@ export class Filler {
     return ok;
   }
 
+  /** The walkable grid cell nearest (x, z), within two cells, or -1. */
+  private cellOf(G: NonNullable<Filler['grid']>, x: number, z: number): number {
+    const cells = G.walk;
+    const i = Math.floor((x - G.x0) / this.cell), j = Math.floor((z - G.z0) / this.cell);
+    let best = -1, bd = Infinity;
+    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+      const ii = i + di, jj = j + dj;
+      if (ii < 0 || jj < 0 || ii >= G.nx || jj >= G.nz || !cells[jj * G.nx + ii]) continue;
+      const d = di * di + dj * dj;
+      if (d < bd) { bd = d; best = jj * G.nx + ii; }
+    }
+    return best;
+  }
+
+  /**
+   * The doors that open onto the room's main stretch of walkable floor (in the bare room): a
+   * door into a pocket too narrow to walk (an odd corner of the floor) cannot be kept reachable by
+   * any arrangement and is left out of the walkway checks.
+   */
+  private joinedSeeds(G: NonNullable<Filler['grid']>): [number, number][] {
+    const cells = G.walk, label = new Int32Array(cells.length).fill(-1), stack: number[] = [];
+    const size = new Map<number, number>(), of: number[] = [];
+    for (const [x, z] of this.seeds) {
+      const c = this.cellOf(G, x, z);
+      if (c >= 0 && label[c] < 0) {
+        const id = c;
+        label[c] = id; stack.push(c);
+        let n = 0;
+        while (stack.length) {
+          const q = stack.pop()!, i = q % G.nx;
+          n++;
+          for (const m of [i > 0 ? q - 1 : -1, i < G.nx - 1 ? q + 1 : -1, q - G.nx, q + G.nx]) {
+            if (m >= 0 && m < cells.length && cells[m] && label[m] < 0) { label[m] = id; stack.push(m); }
+          }
+        }
+        size.set(id, n);
+      }
+      of.push(c >= 0 ? label[c] : -1);
+    }
+    // The biggest stretch of floor that a door opens onto.
+    let main = -1, mc = 0;
+    for (const [id, n] of size) if (n > mc) { mc = n; main = id; }
+    return this.seeds.filter((_, k) => of[k] === main);
+  }
+
   private flood(G: NonNullable<Filler['grid']>): boolean {
     const cells = G.walk;
-    const cellOf = (x: number, z: number): number => {
-      const i = Math.floor((x - G.x0) / CELL), j = Math.floor((z - G.z0) / CELL);
-      let best = -1, bd = Infinity;
-      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
-        const ii = i + di, jj = j + dj;
-        if (ii < 0 || jj < 0 || ii >= G.nx || jj >= G.nz || !cells[jj * G.nx + ii]) continue;
-        const d = di * di + dj * dj;
-        if (d < bd) { bd = d; best = jj * G.nx + ii; }
-      }
-      return best;
-    };
-    const start = cellOf(this.seeds[0][0], this.seeds[0][1]);
+    const seeds = this.walkSeeds!;
+    if (!seeds.length) return true;
+    const cellOf = (x: number, z: number) => this.cellOf(G, x, z);
+    const start = cellOf(seeds[0][0], seeds[0][1]);
     if (start < 0) return false;
+    // The cells to reach: stop as soon as all are reached.
+    const targets: number[] = [];
+    for (let k = 1; k < seeds.length; k++) targets.push(cellOf(seeds[k][0], seeds[k][1]));
+    for (const o of this.placed) if (o.reach) targets.push(cellOf(o.reach[0], o.reach[1]));
+    if (targets.some((t) => t < 0)) return false;
     if (!this.seen || this.seen.length !== cells.length) { this.seen = new Uint32Array(cells.length); this.stack = new Int32Array(cells.length); }
     const seen = this.seen, stack = this.stack!, mark = ++this.stamp;
     let top = 0;
     seen[start] = mark;
     stack[top++] = start;
     const W = G.nx;
-    while (top) {
+    if (!this.want || this.want.length !== cells.length) this.want = new Uint32Array(cells.length);
+    const wanted = this.want;
+    let left = 0;
+    for (const t of targets) if (t !== start && wanted[t] !== mark) { wanted[t] = mark; left++; }
+    while (top && left) {
       const c = stack[--top], i = c % W;
+      if (wanted[c] === mark && c !== start) left--;
       if (i > 0 && cells[c - 1] && seen[c - 1] !== mark) { seen[c - 1] = mark; stack[top++] = c - 1; }
       if (i < W - 1 && cells[c + 1] && seen[c + 1] !== mark) { seen[c + 1] = mark; stack[top++] = c + 1; }
       if (c >= W && cells[c - W] && seen[c - W] !== mark) { seen[c - W] = mark; stack[top++] = c - W; }
       if (c + W < cells.length && cells[c + W] && seen[c + W] !== mark) { seen[c + W] = mark; stack[top++] = c + W; }
     }
-    const reached = (x: number, z: number) => { const c = cellOf(x, z); return c >= 0 && seen[c] === mark; };
-    for (let k = 1; k < this.seeds.length; k++) if (!reached(this.seeds[k][0], this.seeds[k][1])) return false;
-    for (const o of this.placed) if (o.reach && !reached(o.reach[0], o.reach[1])) return false;
-    return true;
+    return targets.every((t) => seen[t] === mark);
   }
 
   /** Marks the floor a solid piece takes (grown by a walker's half width) as not walkable. */
@@ -377,10 +445,10 @@ export class Filler {
     const G = this.baseGrid(), cells = G.walk;
     const g = quad(o.f.x, o.f.z, o.f.yaw, o.f.w + WALKER * 2, -o.f.d / 2 - WALKER, o.f.d / 2 + WALKER);
     const [x0, z0, x1, z1] = polyBounds(g);
-    const i0 = Math.max(0, Math.floor((x0 - G.x0) / CELL)), i1 = Math.min(G.nx - 1, Math.ceil((x1 - G.x0) / CELL));
-    const j0 = Math.max(0, Math.floor((z0 - G.z0) / CELL)), j1 = Math.min(G.nz - 1, Math.ceil((z1 - G.z0) / CELL));
+    const i0 = Math.max(0, Math.floor((x0 - G.x0) / this.cell)), i1 = Math.min(G.nx - 1, Math.ceil((x1 - G.x0) / this.cell));
+    const j0 = Math.max(0, Math.floor((z0 - G.z0) / this.cell)), j1 = Math.min(G.nz - 1, Math.ceil((z1 - G.z0) / this.cell));
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-      if (cells[j * G.nx + i] && pointInPoly(g, G.x0 + (i + 0.5) * CELL, G.z0 + (j + 0.5) * CELL)) { cells[j * G.nx + i] = 0; changed.push(j * G.nx + i); }
+      if (cells[j * G.nx + i] && pointInPoly(g, G.x0 + (i + 0.5) * this.cell, G.z0 + (j + 0.5) * this.cell)) { cells[j * G.nx + i] = 0; changed.push(j * G.nx + i); }
     }
   }
 
@@ -389,12 +457,12 @@ export class Filler {
     if (this.grid) return this.grid;
     const P = this.A.poly;
     const [x0, z0, x1, z1] = polyBounds(P);
-    const nx = Math.max(1, Math.ceil((x1 - x0) / CELL)), nz = Math.max(1, Math.ceil((z1 - z0) / CELL));
+    const nx = Math.max(1, Math.ceil((x1 - x0) / this.cell)), nz = Math.max(1, Math.ceil((z1 - z0) / this.cell));
     const walk = new Uint8Array(nx * nz);
     // Inside the outline: row by row between the outline's crossings.
     const n = P.length >> 1, xs: number[] = [];
     for (let j = 0; j < nz; j++) {
-      const z = z0 + (j + 0.5) * CELL;
+      const z = z0 + (j + 0.5) * this.cell;
       xs.length = 0;
       for (let i = 0; i < n; i++) {
         const k = (i + 1) % n, az = P[i * 2 + 1], bz = P[k * 2 + 1];
@@ -402,17 +470,18 @@ export class Filler {
       }
       xs.sort((a, b) => a - b);
       for (let k = 0; k + 1 < xs.length; k += 2) {
-        const i0 = Math.max(0, Math.ceil((xs[k] - x0) / CELL - 0.5)), i1 = Math.min(nx - 1, Math.floor((xs[k + 1] - x0) / CELL - 0.5));
+        const i0 = Math.max(0, Math.ceil((xs[k] - x0) / this.cell - 0.5)), i1 = Math.min(nx - 1, Math.floor((xs[k + 1] - x0) / this.cell - 0.5));
         for (let i = i0; i <= i1; i++) walk[j * nx + i] = 1;
       }
     }
     const cells = (q: Poly, fn: (k: number, x: number, z: number) => void) => {
       const [qx0, qz0, qx1, qz1] = polyBounds(q);
-      const i0 = Math.max(0, Math.floor((qx0 - x0) / CELL)), i1 = Math.min(nx - 1, Math.floor((qx1 - x0) / CELL));
-      const j0 = Math.max(0, Math.floor((qz0 - z0) / CELL)), j1 = Math.min(nz - 1, Math.floor((qz1 - z0) / CELL));
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) fn(j * nx + i, x0 + (i + 0.5) * CELL, z0 + (j + 0.5) * CELL);
+      const i0 = Math.max(0, Math.floor((qx0 - x0) / this.cell)), i1 = Math.min(nx - 1, Math.floor((qx1 - x0) / this.cell));
+      const j0 = Math.max(0, Math.floor((qz0 - z0) / this.cell)), j1 = Math.min(nz - 1, Math.floor((qz1 - z0) / this.cell));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) fn(j * nx + i, x0 + (i + 0.5) * this.cell, z0 + (j + 0.5) * this.cell);
     };
-    // A walker's width off the walls (open edges excepted), but free again in the doorways.
+    // A walker's width off the walls (open edges excepted), but free again in the doorways. (Kept-out
+    // floor is walkable: nothing may stand there, but people walk over it.)
     const off = new Uint8Array(nx * nz);
     for (const e of this.A.edges) {
       if (e.kind === 'open') continue;
@@ -421,7 +490,6 @@ export class Filler {
       cells(box, (k, x, z) => { if (distSqPointSeg(x, z, e.ax, e.az, e.bx, e.bz) < WALKER * WALKER) off[k] = 1; });
     }
     for (const dz of this.doorZones) cells(dz, (k, x, z) => { if (pointInPoly(dz, x, z)) off[k] = 0; });
-    for (const ko of this.A.keepOut) cells(ko, (k, x, z) => { if (pointInPoly(ko, x, z)) off[k] = 1; });
     for (let k = 0; k < walk.length; k++) if (off[k]) walk[k] = 0;
     this.grid = { x0, z0, nx, nz, walk };
     return this.grid;

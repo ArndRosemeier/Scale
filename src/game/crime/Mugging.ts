@@ -11,6 +11,7 @@ import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
 import { release, hold } from '../../sim/actors/Actor';
 import { dealtBy } from '../../shared/status';
+import { voice } from '../../ui/voices';
 
 export const MUGGING = { ringMin: 120, ringMax: 320, quietR: 22, quietMax: 3, approachTimeout: 50, hp: 55, strength: 1.05, threatenFor: 7, robFor: 13, gunShare: 0.3 };
 
@@ -213,7 +214,7 @@ export class Mugging extends Crime {
     this.shoutT -= dt;
     if (this.shoutT <= 0 && (this.distToPlayer(v) < 60 || this.phase === 'commit') && this.t < 60) {
       this.shoutT = 3.5 + this.rng.float() * 2.5;
-      this.w.sound('cry_help', v.x, v.y + 1.6, v.z, 0.75, v.cit.gender < 0.5 ? 1.05 : 0.8);
+      voice(v, 'help');
       this.w.emit('cry', v.x, v.y + 1.6, v.z, 1, 26);
     }
   }

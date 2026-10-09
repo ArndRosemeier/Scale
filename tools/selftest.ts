@@ -40,6 +40,7 @@ import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
 import { arcadeChecks } from './arcadeTest';
 import { homeChecks } from './homeTest';
+import { splitChecks } from './splitTest';
 import { sidekickChecks } from './sidekickTest';
 import { aliensChecks } from './aliensTest';
 import { doorChecks } from './doorsweep';
@@ -3117,6 +3118,11 @@ section('starship great hall', async () => {
     check(badRing === 0, `starship ${seed}: round every gallery unhindered (${badRing} of ${hall.levels.length} blocked)`);
     check(badFlights === 0, `starship ${seed}: every one of the ${hall.design.stairs.length} flights climbs clear to its level (${badFlights} bad)`);
     check(badRooms === 0, `starship ${seed}: every one of the ${hall.design.rooms.length} rooms is walkable in through its door (${badRooms} bad)`);
+    // Furnished by the interior core (fill/starship): each room has what makes it what it is.
+    const KEY: Record<string, string> = { quarters: 'pod', lab: 'console', mess: 'counter', lounge: 'bench', control: 'console', storage: 'rack' };
+    const kinds = new Set(hall.design.rooms.map((q) => q.fn));
+    const bare = hall.design.rooms.filter((q) => KEY[q.fn] && !q.furniture.some((f) => f.kind === KEY[q.fn]));
+    check(bare.length <= hall.design.rooms.length * 0.03 && kinds.size >= 5, `starship ${seed}: rooms furnished for what they are (${bare.length} of ${hall.design.rooms.length} without their key piece: ${[...new Set(bare.map((q) => q.fn))].join(', ') || 'none'}; ${kinds.size} kinds)`);
   }
   console.log(`starship halls in ${(performance.now() - t0).toFixed(0)} ms ${results.join('; ')}`);
 });
@@ -3146,6 +3152,72 @@ section('front doors in real cities', async () => { for (const [seed, size] of [
   }
 } });
 
+
+// The museum (plan/museumParts, interior core): in from the square up the steps through the door
+// into the great hall; into every room through its door; every room furnished for what it is.
+section('museum', async () => {
+  const t0 = performance.now();
+  let museums = 0;
+  const built: { lm: Landmark; terrain: Terrain; S: LandmarkSolids }[] = [];
+  for (const [seed, size] of [[1, 0.8], [7, 0.8], [11, 0.8]] as const) {
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const macro = buildMacroPlan(terrain);
+    const S = new LandmarkSolids(macro, terrain);
+    for (const lm of macro.landmarks.filter((l) => l.kind === 'museum')) {
+      museums++;
+      built.push({ lm, terrain, S });
+      const ins = landmarkInterior(lm, terrain)!;
+      const exit = ins.exits[0];
+      // Walk a polyline of world points from height y: biggest step up and down, blocked samples.
+      const walk = (pts: [number, number][], y: number) => {
+        let up = 0, down = 0, blocked = 0;
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+          for (let s = 0; s <= L; s += 0.1) {
+            const x = pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / L, z = pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / L;
+            // (A hair either side: the seam between two step boxes belongs to neither.)
+            const ny = Math.max(terrain.height(x, z), S.topAt(x + 0.01, z + 0.01, y, 0.5), S.topAt(x - 0.01, z - 0.01, y, 0.5));
+            up = Math.max(up, ny - y); down = Math.max(down, y - ny); y = ny;
+            if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
+          }
+        }
+        return { up, down, blocked, y };
+      };
+      // From the square in front of the steps (the exit's last point) to 4 m inside the door.
+      const n = exit.pts.length;
+      const from: [number, number] = [exit.pts[n - 3], exit.pts[n - 1]];
+      const [dx, dz] = [exit.pts[0] - from[0], exit.pts[2] - from[1]], dl = Math.hypot(dx, dz);
+      const start: [number, number] = [from[0] - (dx / dl) * 1.5, from[1] - (dz / dl) * 1.5];
+      const end: [number, number] = [exit.pts[0] + (dx / dl) * 4, exit.pts[2] + (dz / dl) * 4];
+      const w = walk([start, [exit.pts[0], exit.pts[2]], end], terrain.height(start[0], start[1]));
+      check(w.up <= 0.31 && w.down < 0.31 && w.blocked === 0 && Math.abs(w.y - lm.base) < 0.05 && !!S.insideAt(end[0], w.y + 1, end[1]),
+        `seed ${seed}: walk in to the ${lm.style ? 'modern' : 'classical'} museum (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, floor ${(w.y - lm.base).toFixed(2)} m)`);
+    }
+  }
+  check(museums >= 3, `museums checked (${museums})`);
+  // Rooms: through each door, furnished (from the design the museum was built from).
+  const { museumRooms } = await import('../src/plan/museumParts');
+  let rooms = 0, bad = 0, bare = 0;
+  const KEY: Record<string, string> = { lobby: 'bigStatue', exhibit: 'painting', cafe: 'counter', shop: 'counter', storage: 'rack' };
+  for (const { lm, terrain, S } of built) {
+    {
+      for (const room of museumRooms(lm) ?? []) {
+        rooms++;
+        if (KEY[room.fn] && !room.furniture.some((f) => f.kind === KEY[room.fn])) bare++;
+        let blocked = 0, y = lm.base;
+        for (const t of [-1.6, -0.8, 0, 0.6, 1.2]) {
+          const [x, z] = siteToWorld(lm, room.door[0] - room.facing[0] * t, room.door[1] - room.facing[1] * t);
+          y = Math.max(terrain.height(x, z), S.topAt(x, z, y, 0.5));
+          if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
+        }
+        if (blocked || Math.abs(y - lm.base) > 0.05) bad++;
+      }
+    }
+  }
+  check(bad === 0, `museum rooms: every one of the ${rooms} is walkable in through its door (${bad} bad)`);
+  check(bare === 0, `museum rooms furnished for what they are (${bare} of ${rooms} without their key piece)`);
+  console.log(`museums in ${(performance.now() - t0).toFixed(0)} ms`);
+});
 
 // People in the landmarks (sim/LandmarkCrowds): who is there by the hour, nobody inside a wall or
 // floating, they walk their ways, a scare empties the building, at night the town hall's porter.
@@ -3746,6 +3818,8 @@ section('villains phase 4', async () => { await villainChecks(check); });
 // Arcades: halls of video game cabinets on shopping streets, and their games (tools/arcadeTest.ts).
 section('arcades', async () => { arcadeChecks(check); });
 section('furnished homes', async () => { homeChecks(check); });
+// Room splitting for any outline, themes reserving first; offices, shops, cafés (tools/splitTest.ts).
+section('room splitting', async () => { splitChecks(check); });
 section('doors', async () => { doorChecks(check); });
 
 // The second shard (SIDEKICK_PLAN phase 1): where it turns up, who takes it (tools/sidekickTest.ts).
@@ -3815,6 +3889,37 @@ section('landings and screams', async () => {
   check(hero === 0, `landings: the hero leaping through a crowd for 20 s raises no screams (${hero})`);
   check(giant > 0, `landings: a giant coming down among people still does (${giant})`);
   console.log(`landings: screams in 20 s of leaps through a crowd: hero ${hero}, giant ${giant}`);
+});
+
+// Voices are bubbles (src/ui/voices.ts): no synthesized words or animal calls in the sound set or
+// played from src; an alert (a cry for help) out of sight still shows, low on the screen.
+section('voices are bubbles', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { voice, setVoiceSink } = await import('../src/ui/voices');
+  const GONE = /^(cry_|shout_|trapped_call|crowd_boo|protest_chant|terrace_murmur|cat_|dog_|pigeon_|gull_|crow_|rat_)/;
+  const ids = Object.keys(JSON.parse(readFileSync('public/sounds/manifest.json', 'utf8')));
+  check(!ids.some((k) => GONE.test(k)), `voices: no voice or animal-call sounds in the manifest (${ids.filter((k) => GONE.test(k)).join(', ')})`);
+  const played: string[] = [];
+  const walk = (dir: string): void => {
+    for (const f of readdirSync(dir, { withFileTypes: true })) {
+      const p = `${dir}/${f.name}`;
+      if (f.isDirectory()) walk(p);
+      else if (p.endsWith('.ts')) for (const m of readFileSync(p, 'utf8').matchAll(/'((?:cry_|shout_|cat_|dog_|pigeon_|gull_|crow_|rat_|trapped_call|crowd_boo|protest_chant|terrace_murmur)\w*)'/g)) played.push(`${p}: ${m[1]}`);
+    }
+  };
+  walk('src');
+  check(played.length === 0, `voices: src plays no voice sounds, use voice() (${played.join('; ')})`);
+  const shown: string[] = [], heard: string[] = [];
+  let seen = true;
+  setVoiceSink({ sayAt: (_a, text, o) => { if (!seen) return false; shown.push(`${o.animal ? 'animal' : 'person'}:${text}`); return true; }, sees: () => seen, heard: (_x, _z, t) => { heard.push(t); } });
+  const a = { x: 0, y: 0, z: 0 };
+  voice(a, 'help'); voice(a, 'dog');
+  seen = false;
+  voice(a, 'help'); voice(a, 'cat');
+  setVoiceSink(null);
+  check(shown.length === 2 && shown[0].startsWith('person:') && shown[1].startsWith('animal:'), `voices: a cry over the person, a bark as an animal bubble (${shown.join(', ')})`);
+  check(heard.length === 1, `voices: a cry out of sight is heard low on the screen, a meow is not (${heard.length})`);
+  check(!voice(a, 'help'), 'voices: no sink (headless), nothing shown');
 });
 
 // One test for "can someone stand here" and one for open water (world/WorldIndex standable / wet):

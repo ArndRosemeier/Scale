@@ -23,6 +23,7 @@ import { type Actor, type ActorRole, makeActor, attach, release, setState, play,
 import { personStrength } from '../Consider';
 import { Caster, VILLAIN_POWERS, CASTERS, type VillainPower, type Cast } from '../powers/Caster';
 import { dealtBy } from '../../shared/status';
+import { voice } from '../../ui/voices';
 
 export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den' | 'sabotage' | 'raising' | 'procession' | BossOpKind;
 /** A boss operation (crime/BossOp): the group's boss and a big crew, a threat event with the city response. */
@@ -598,7 +599,8 @@ export abstract class Crime {
     stand(act);
     lookAt(act, tx, ty, tz);
     play(act, P.pose, P.windup + 0.25);
-    this.w.sound(P.tellSound, c.x, c.y + 1.4, c.z, 0.75, 1);
+    if (P.tellSound) this.w.sound(P.tellSound, c.x, c.y + 1.4, c.z, 0.75, 1);
+    if (P.tellVoice) voice(c, P.tellVoice);
     this.emit('cast', c);
     return true;
   }

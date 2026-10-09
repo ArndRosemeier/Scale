@@ -9,6 +9,7 @@
 import { Crime, type CrimeWorld, play, setState, stand, lookAt, goTo, subdued } from './Crime';
 import { type PedAgent, isBystander } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
+import { voice } from '../../ui/voices';
 
 export const BOMBER = {
   ringMin: 110, ringMax: 300,
@@ -112,7 +113,7 @@ export class Bomber extends Crime {
     const c = this.bomber!, act = c.actor!;
     act.hostile = true;
     act.mood = 'angry';
-    this.w.sound('shout_hey', c.x, c.y + 1.6, c.z, 0.9, 0.8);
+    voice(c, 'bomber');
     if (!this.policeCalled) { this.policeCalled = true; this.w.callPolice(this, 14); }
     this.go('commit');
     this.emit('commit');

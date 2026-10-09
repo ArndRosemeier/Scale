@@ -13,11 +13,10 @@ import type { Player } from '../player/Player';
 import type { Progress } from './abilities/Progress';
 import type { MapMarker } from '../ui/map/GameMap';
 import { ACCIDENTS, KARMA } from './abilities/tuning';
-import { isFemale } from './people/identity';
+import { voice } from '../ui/voices';
 
 export interface DeedHooks {
   toast?: (html: string, kind?: 'karma' | 'info' | 'warn') => void;
-  sound?: (id: string, x: number, y: number, z: number, gain: number, pitch?: number) => void;
   /** Can the player see someone standing here (on screen, in sight, the camera not indoors)? */
   inView?: (x: number, feet: number, z: number) => boolean;
   markers?: (m: MapMarker[]) => void;
@@ -102,8 +101,8 @@ export class Deeds {
         if (a) {
           this.reactions.knockDown(a, a.x + Math.sin(a.heading), a.z + Math.cos(a.heading), 1.2, 'accident');
           a.fear = 0;
-          // A mild "oof" / "whoa" in their own voice, not a scream: this happens often.
-          this.hooks.sound?.(isFemale(a.cit) ? 'cry_fall_f' : 'cry_fall_m', a.x, a.y + 1.5, a.z, 0.4, fallPitch(a));
+          // A mild "oof" / "whoa" (a bubble, src/ui/voices), not a scream: this happens often.
+          voice(a, 'fall', { head: 1.1 });
           this.hooks.toast?.('Someone fell nearby — find them and help them up', 'warn');
         } else this.accidentT = 5;
       }
@@ -129,13 +128,6 @@ export class Deeds {
 function inRing(a: PedAgent, x: number, z: number): boolean {
   const d = Math.hypot(a.x - x, a.z - z);
   return d > ACCIDENTS.near && d < ACCIDENTS.far;
-}
-
-/** Voice pitch of someone's fall cry: steady per person, higher for children, a bit lower when old. */
-function fallPitch(a: PedAgent): number {
-  const y = a.cit.age * 100;
-  const age = y < 14 ? 1.3 : y < 19 ? 1.1 : y > 65 ? 0.93 : 1;
-  return age * (0.92 + ((Math.abs(a.look) * 7919) % 1000) / 1000 * 0.16);
 }
 
 /** A random one of `list` the player can see (any, without a sight test), or null; at most 24 sight tests. */

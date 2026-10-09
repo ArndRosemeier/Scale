@@ -12,6 +12,7 @@ import { Crime, CRIME_DEV, type CrimeWorld, type GetawayCar, play, setState, sta
 import type { Armed } from '../../sim/actors/Actor';
 import type { PedAgent } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
+import { voice } from '../../ui/voices';
 
 export const ROBBERY = { ringMin: 120, ringMax: 450, hp: 80, strength: 1.25, carChance: 0.55, alarmFor: 45, insideFor: 2.2, gunChance: 0.35 };
 
@@ -218,7 +219,7 @@ export class Robbery extends Crime {
       this.shoutT -= dt;
       if (this.shoutT <= 0 && this.t < 40) {
         this.shoutT = 2.6 + this.rng.float() * 1.8;
-        this.w.sound('shout_hey', s.x, s.y + 1.6, s.z, 0.9, 0.85 + this.rng.float() * 0.2);
+        voice(s, 'stop');
         this.w.emit('cry', s.x, s.y + 1.6, s.z, 1.2, 35);
       }
     } else {

@@ -9,8 +9,8 @@ export const KARMA_COST = {
   /** Everyone can punch: free and always unlocked (Progress.rank). */
   punch: [0],
   strength: [20, 30, 45, 70, 100],
-  superJump: [20, 30, 45, 70, 100],
-  speed: [40, 50, 75, 105, 150],
+  superJump: [40, 50, 75, 105, 150],
+  speed: [20, 30, 45, 70, 100],
   shockwave: [50, 60, 85, 120, 160],
   flight: [80, 70, 100, 140, 190],
   size: [100, 80, 110, 150, 200],

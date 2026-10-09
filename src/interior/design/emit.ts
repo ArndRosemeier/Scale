@@ -1,13 +1,13 @@
 /**
  * A design (design/types) as landmark parts: floor plates as flat quads, walls as boxes round
  * their doors (a lintel over each), glass rails with a hidden solid behind, flights as stacked
- * step boxes, the rooms' props from the theme, and the walkable rooms and lights for the inside.
+ * step boxes, the rooms' furniture as props of the theme, and the walkable rooms and lights for the inside.
  * Everything is close detail (left out of the far mesh) but solid.
  */
 import { Kit, mat, CONC, type PartMat, type Opt } from '../../plan/landmarkParts';
 import { Rng } from '../../core/rng';
 import type { Design, DRoom, P2 } from './types';
-import type { PropAt, Theme } from './theme';
+import type { PropName, Theme } from './theme';
 import { buildProp } from './props';
 import { lerp2 as lerp } from '../../core/geom2';
 
@@ -66,29 +66,17 @@ function rail(k: Kit, a: P2, b: P2, y0: number, y1: number, T: Theme): void {
   s.hidden = true;
 }
 
-/** The room's props from its theme recipe, placed in the room's quad (door side first). */
+/** Props whose front (where one stands or sits) is their local -v: turned round. */
+const BACKWARDS = new Set<PropName>(['bench', 'rack', 'counter', 'pod']);
+
+/** The room's furniture (placed by fill/place: x/z are u/v, front to +z) as props of the theme. */
 function furnish(k: Kit, room: DRoom, T: Theme): void {
-  const recipes = T.rooms[room.fn];
-  if (!recipes?.length || room.poly.length !== 4) return;
   const r = new Rng(room.seed);
-  const recipe = recipes[r.int(0, recipes.length - 1)];
-  const mirror = r.chance(0.5) ? -1 : 1;
-  // Quad corners: front left, front right (along the gallery), back right, back left.
-  const [F0, F1, K1, K0] = room.poly;
-  const at = (s: number, t: number): P2 => {
-    const a = lerp(F0, F1, 0.5 + s), b = lerp(K0, K1, 0.5 + s);
-    return lerp(a, b, t);
-  };
-  const back = norm([(K0[0] + K1[0] - F0[0] - F1[0]) / 2, (K0[1] + K1[1] - F0[1] - F1[1]) / 2]);
-  const across = norm([F1[0] - F0[0], F1[1] - F0[1]]);
-  const dirOf = (f: PropAt['face']): P2 => f === 'door' ? [-back[0], -back[1]] : f === 'back' ? back : f === 'left' ? [-across[0] * mirror, -across[1] * mirror] : [across[0] * mirror, across[1] * mirror];
-  for (const it of recipe) {
-    const s = it.s * mirror;
-    // Keep in from the walls by a margin that grows where the wedge narrows.
-    const [u, v] = at(Math.max(-0.42, Math.min(0.42, s)), Math.max(0.08, Math.min(0.97, it.t)));
-    const d = dirOf(it.face);
-    buildProp(k, it.prop, u, v, room.y, Math.atan2(d[1], d[0]) - Math.PI / 2, T, r);
+  for (const f of room.furniture) {
+    const name = f.kind as PropName;
+    // (A prop's front faces +v after turning by rot; the piece's front is (sin yaw, cos yaw).)
+    const rot = Math.atan2(Math.cos(f.yaw), Math.sin(f.yaw)) - Math.PI / 2 + (BACKWARDS.has(name) ? Math.PI : 0);
+    buildProp(k, name, f.x, f.z, room.y, rot, T, r);
   }
 }
 
-const norm = (v: P2): P2 => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };

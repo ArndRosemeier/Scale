@@ -327,7 +327,7 @@ function ecoNecroChecks(check: Check): void {
   {
     const player = { x: 30, y: 0, z: 0, height: 1.8, down: false };
     let hurt = 0, fighting = false, beaten = false;
-    const W: PackWorld = { player, ground: () => 0, hurtPlayer: (d) => { hurt += d; }, sound: () => {}, random: Math.random };
+    const W: PackWorld = { player, ground: () => 0, hurtPlayer: (d) => { hurt += d; }, random: Math.random };
     const H = { x: 0, z: 0, fighting: () => fighting, beaten: () => beaten };
     const P = new DogPack(W, H, 3, 4);
     const step = (sec: number) => { for (let t = 0; t < sec; t += 0.05) P.update(0.05); };

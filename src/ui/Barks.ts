@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { markerOnScreen, pxX, pxY, screenPoint } from '../render/screen';
 import type { Game } from '../game/Game';
 import { PState, type PedAgent } from '../sim/Pedestrians';
+import { setVoiceSink, type VoiceAnchor, type VoiceSink } from './voices';
 
 const RANGE = 25;
 const MAX_SHOWN = 3;
@@ -48,11 +49,12 @@ const L = {
 
 interface Seen { st: PState; act: string | null; helped: boolean }
 
-export class Barks {
+export class Barks implements VoiceSink {
   private els: HTMLDivElement[] = [];
-  private shown: { a: PedAgent; el: HTMLDivElement; t: number }[] = [];
+  /** `head`: how far above the anchor's feet the bubble sits (people 2.05 m, a cat much less). */
+  private shown: { a: VoiceAnchor; el: HTMLDivElement; t: number; head: number }[] = [];
   private seen = new WeakMap<PedAgent, Seen>();
-  private quiet = new WeakMap<PedAgent, number>();
+  private quiet = new WeakMap<object, number>();
   private time = 0;
   private gapT = 0;
   private chatT = CHAT_MIN;
@@ -68,6 +70,7 @@ export class Barks {
       document.body.appendChild(el);
       this.els.push(el);
     }
+    setVoiceSink(this);
   }
 
   update(dt: number): void {
@@ -146,21 +149,52 @@ export class Barks {
    * protesters and booing passers-by, fans). False when it was not shown.
    */
   say(a: PedAgent, text: string, pause = PERSON_PAUSE, tone?: 'angry' | 'cheer'): boolean {
-    if (this.gapT > 0 || this.shown.some((s) => s.a === a)) return false;
+    return this.sayAt(a, text, { pause, tone });
+  }
+
+  /**
+   * A bubble over anything that has a position (a person, the hero, a cat, a gull, a rat): what
+   * src/ui/voices.ts shows instead of synthesized voices and animal calls. `head`: height above
+   * the anchor's y; `voice`: an event (a cry, a bark) that skips the gap between bubbles; `animal`:
+   * the italic sound-word style; `pause`: before this anchor speaks again.
+   */
+  sayAt(a: VoiceAnchor, text: string, o: { head?: number; pause?: number; tone?: 'angry' | 'cheer'; voice?: boolean; animal?: boolean } = {}): boolean {
+    const head = o.head ?? 2.05;
+    if ((!o.voice && this.gapT > 0) || this.shown.some((s) => s.a === a)) return false;
     if (this.time < (this.quiet.get(a) ?? -Infinity)) return false;
     // Only where it can be seen.
     const cam = this.game.renderer.camera;
-    if (!markerOnScreen(a.x, a.y + 2.05, a.z, a.y, cam, this.p, 0.95)) return false;
+    if (!markerOnScreen(a.x, a.y + head, a.z, a.y, cam, this.p, 0.95)) return false;
     if (this.shown.length >= MAX_SHOWN) return false;
     const el = this.els.find((e) => !this.shown.some((s) => s.el === e))!;
     el.textContent = text;
     el.classList.remove('out');
-    el.classList.toggle('angry', tone === 'angry');
-    el.classList.toggle('cheer', tone === 'cheer');
-    this.shown.push({ a, el, t: 0 });
-    this.quiet.set(a, this.time + pause);
-    this.gapT = GAP;
+    el.classList.toggle('angry', o.tone === 'angry');
+    el.classList.toggle('cheer', o.tone === 'cheer');
+    el.classList.toggle('animal', !!o.animal);
+    this.shown.push({ a, el, t: 0, head });
+    this.quiet.set(a, this.time + (o.pause ?? PERSON_PAUSE));
+    if (!o.voice) this.gapT = GAP;
     return true;
+  }
+
+  sees(a: VoiceAnchor, head: number): boolean {
+    return markerOnScreen(a.x, a.y + head, a.z, a.y, this.game.renderer.camera, this.p, 0.95);
+  }
+
+  /**
+   * A call from someone off screen (a mugging victim behind the camera, someone under rubble): a
+   * bubble low on the screen saying where it came from, as the cry's sound used to tell.
+   */
+  heard(x: number, z: number, text: string): void {
+    if (this.game.map.open || this.game.menu?.paused === true || this.game.freeCam) return;
+    const cam = this.game.renderer.camera;
+    cam.getWorldDirection(_v);
+    const fx = _v.x, fz = _v.z, dx = x - cam.position.x, dz = z - cam.position.z;
+    // (The camera's right is forward × up = (−fz, fx).)
+    const ahead = fx * dx + fz * dz, right = -fz * dx + fx * dz;
+    const side = Math.abs(ahead) > Math.abs(right) ? (ahead > 0 ? 'ahead' : 'behind you') : right > 0 ? 'your right' : 'your left';
+    this.low(`“${text}” (from ${side})`, false);
   }
 
   /**
@@ -188,13 +222,19 @@ export class Barks {
    */
   shout(a: PedAgent, text: string, who: string | null): void {
     this.quiet.set(a, this.time + PERSON_PAUSE);
+    this.low(who ? `${who}, behind you: “${text}”` : `Behind you: “${text}”`, true);
+  }
+
+  /** The bubble pinned low on the screen; `angry`: the stern red one. */
+  private low(text: string, angry: boolean): void {
     if (!this.behind) {
       this.behind = document.createElement('div');
-      this.behind.className = 'bark angry behind';
+      this.behind.className = 'bark behind';
       document.body.appendChild(this.behind);
     }
     const el = this.behind;
-    el.textContent = who ? `${who}, behind you: “${text}”` : `Behind you: “${text}”`;
+    el.classList.toggle('angry', angry);
+    el.textContent = text;
     el.classList.remove('out');
     el.style.display = 'block';
     this.behindT = showFor(text) + 0.6;
@@ -211,13 +251,13 @@ export class Barks {
       const s = this.shown[i];
       s.t += dt;
       const show = showFor(s.el.textContent ?? '');
-      const gone = !s.a.alive || s.t > show;
-      const off = hidden || !markerOnScreen(s.a.x, s.a.y + 2.05, s.a.z, s.a.y, cam, this.p, 1.05);
+      const gone = s.a.alive === false || s.t > show;
+      const off = hidden || !markerOnScreen(s.a.x, s.a.y + s.head, s.a.z, s.a.y, cam, this.p, 1.05);
       if (gone) { s.el.style.display = 'none'; this.shown.splice(i, 1); continue; }
       s.el.style.display = off ? 'none' : 'block';
       if (off) continue;
       if (s.t > show - 0.35) s.el.classList.add('out');
-      const d = cam.position.distanceTo(_v.set(s.a.x, s.a.y + 1.8, s.a.z));
+      const d = cam.position.distanceTo(_v.set(s.a.x, s.a.y + s.head - 0.25, s.a.z));
       const k = Math.max(0.7, Math.min(1.1, 9 / Math.max(1, d)));
       s.el.style.transform = `translate(${pxX(this.p, W).toFixed(1)}px, ${pxY(this.p, H).toFixed(1)}px) translate(-50%, -100%) scale(${k.toFixed(2)})`;
     }

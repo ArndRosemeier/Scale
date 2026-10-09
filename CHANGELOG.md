@@ -2,6 +2,36 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.176 — 2026-10-09
+
+- **The museum can be walked into.** Climb the steps, go through the big door in the middle of the front and you're in a great hall that runs to the back, the full height of the building in the classical museum. A big statue stands in the middle with benches round it, and there are display cases, plants, large paintings and a reception desk just inside the door. Either side, a gallery corridor leads to exhibition rooms with paintings round the walls, display cases, statues and a bench, plus a museum shop, a café and a store room. The modern glass museum gets the same inside under its glazed walls.
+- Interior core, step 4 of 6 (`docs/INTERIORS_PLAN.md`). The room splitter can now keep a hall down the middle of a building, and one shared storey helper fills the starship's decks and the museum alike.
+
+## 0.175 — 2026-10-09
+
+- **Voices are speech bubbles now, not synthesized sounds.** A mugging or bag-snatch victim shows "Help!" in a bubble over their head instead of the robotic cry. If they are out of sight, the cry appears low on the screen with the direction it came from ("Help me!" (from behind you)). The same goes for people trapped under rubble, a shopkeeper shouting after a robber, officers warning a gunman or you, the mad bomber, a lost dog's owner calling, people stumbling ("Oof!", "Whoops!"), a villain's charge yell and the beast master's whistle, and the call to your sidekick.
+- **Animals speak in small italic bubbles.** Cats ("Meow!"), dogs and attack dogs ("Woof!", "Grrr!", "Yip!"), pigeons, gulls, crows and sewer rats show their call as a bubble instead of a sound. Bird calls come less often so the sky doesn't fill with bubbles.
+- Protesters keep their drum, but the chanting is only in their red bubbles. Booing is in their bubbles too. The café terrace loop keeps its cups and cutlery, without the babble.
+- Kept as sounds: screams, crowd cheers, crowd murmur ambience, monsters, slimes and the alien teens' robot giggle, since none of these try to be words.
+## 0.174 — 2026-10-09
+
+- **An animated title.** On the start screen the letters of SCALE rise from the street like towers going up. Their faces are lit facades glowing warm towards the bottom, like the sunset city behind them, and a red beacon blinks on the L. Every 16 seconds a golden glint runs across the word and it swells for a moment, like the size power, with a flash of light along its base. Plain CSS, no shaders. With reduced motion switched on, the title stands still.
+
+## 0.173 — 2026-10-09
+
+- **The starship's rooms are planned and furnished like every other interior.** Round the great hall the rooms are no longer one wedge each with props at fixed spots. The ring behind each gallery is divided by the shared room splitter: quarters and labs one wedge wide, messes and lounges two, one control room per deck. Each room is furnished by the shared filler: sleep pods head to a wall, lockers and racks along the walls, consoles with their stools, holo tables and mess tables with stools in the free floor. Doorways and the way in from the gallery stay clear.
+- Interior core, step 3 of 6 (`docs/INTERIORS_PLAN.md`). The starship's old room recipes are gone.
+
+## 0.172 — 2026-10-09
+
+- **Offices, shops and cafés are laid out and furnished for real.** Every floor of a flat, office or shop is now divided by one shared room splitter that works for any outline (an L, a triangle, a round end, a skewed block). The theme claims its big space first: a shop's sales floor along the street front, an office's open plan, a café's guest room, a lobby on an office's ground floor. Only the rest becomes rooms. Open-plan offices get rows of paired desks with monitors and chairs, plus meeting rooms with their table, single offices, a tea kitchen, a WC and a store. Grocery shops get a checkout by the door, aisles and wall shelves; clothes shops their fitting mirror (E still changes your look there), display tables and shelves; cafés a counter and table sets by the windows, with a kitchen behind.
+- **Every room can be reached.** Doors are placed so every room opens onto the stairs, a hall or a corridor; you only walk through a bedroom, bathroom or meeting room when nothing else reaches it, never through a closet. Rooms too small to use join the room next to them.
+- Interior core, step 2 of 6 (`docs/INTERIORS_PLAN.md`). The old wing and split floor layouts are gone.
+
+## 0.171 — 2026-10-09
+
+- **Super jump and super speed swap karma prices.** Since super jump became a travel power it is worth more than super speed, so it now costs what super speed cost (40 / 50 / 75 / 105 / 150 karma per rank) and super speed costs what super jump cost (20 / 30 / 45 / 70 / 100). The help's Powers tab shows the new prices.
+
 ## 0.170 — 2026-10-08
 
 - **Clean shirt necklines and sleeve edges.** Garments ended exactly on the body's triangles, so necklines, sleeves and hems ran out in jagged teeth (in close-up, light shirts and contrast trims showed a white sawtooth fringe), in WebGL and WebGPU alike. Each hem is now cut along a smooth line just inside those teeth, at an even depth, and the skin under the hem stays drawn so the cut never opens a gap. Trims follow the same smooth line. Cloth smoothing now only lifts the fabric off the body and no longer slides it sideways, which had bent the cut line.

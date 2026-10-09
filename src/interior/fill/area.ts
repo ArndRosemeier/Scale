@@ -68,6 +68,8 @@ export function roomArea(poly: Poly, walls: WallSeg[], outline: Poly, facade: (a
     }
     if (covered > len * 0.5) e.kind = 'inner';
     else if (onOutline(outline, ax, az, bx, bz)) e.kind = facade(ax, az, bx, bz);
+    // Too short to walk through: a corner of wall, not an opening.
+    else if (len < 0.7) e.kind = 'inner';
     // A wall that covers only part of the edge leaves the rest open: treat the gap as a doorway.
     if (e.kind === 'inner' && covered < len - 0.3) e.doors.push(...gaps(e, walls));
     e.doors.sort((p, q) => p[0] - q[0]);

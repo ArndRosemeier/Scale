@@ -19,6 +19,21 @@ import type { Item, Cand, Filler, Kid } from './place';
 import type { Area } from './area';
 import { minAreaRect } from '../../core/geom2';
 import { FABRIC, WOOD, LEAF, WHITE_WARE, type C3 } from './palette';
+import type { Program } from './split';
+
+/**
+ * How a home storey is divided (fill/split): nothing reserved beyond the stairs; deep parts get a
+ * corridor (the entrance hall on the ground floor) with rooms on both sides, each with its own
+ * door; the rooms come in turn: living room, bedroom, kitchen, bathroom, bedroom.
+ */
+export function homeProgram(ground: boolean): Program {
+  return {
+    reserve: [],
+    rooms: [{ type: 'living', len: [4.5, 6.5] }, { type: 'bedroom', len: [3.4, 4.5] }, { type: 'kitchen', len: [3, 4] }, { type: 'bath', len: [2.2, 3] }, { type: 'bedroom', len: [3.4, 4.5] }],
+    corridor: 1.6, corridorType: ground ? 'hall' : 'corridor',
+    leaf: ['bath', 'bedroom'],
+  };
+}
 
 export type HomeRoom = 'living' | 'bedroom' | 'kitchen' | 'bath' | 'hall' | 'corridor';
 

@@ -4,25 +4,35 @@
  * deterministic per (building seed, floor). Coordinates are world x/z.
  */
 import { Rng } from '../core/rng';
-import { minAreaRect, polyArea, pointInPoly, type Poly, polyBounds } from '../core/geom2';
+import { minAreaRect, polyArea, pointInPoly, polyCentroid, type Poly, polyBounds } from '../core/geom2';
 import { hash32 } from '../core/rng';
 import { intersection } from '../core/clip';
 import type { BuildingDesc } from '../plan/building';
 import { WALLS, FABRIC, WOOD } from './fill/palette';
 import { roomArea, type EdgeKind } from './fill/area';
-import { Filler } from './fill/place';
-import { homeItems, type HomeRoom } from './fill/home';
+import { Filler, type Item } from './fill/place';
+import { homeItems, homeProgram, type HomeRoom } from './fill/home';
+import { workItems, workProgram, type Work } from './fill/work';
+import { splitStorey, type Program } from './fill/split';
 
 export type RoomType =
   | 'living' | 'bedroom' | 'kitchen' | 'bath' | 'hall' | 'office' | 'meeting' | 'shop' | 'cafe' | 'storage'
-  | 'warehouse' | 'nave' | 'lobby' | 'corridor' | 'stairs' | 'parking' | 'arcade';
+  | 'warehouse' | 'nave' | 'lobby' | 'corridor' | 'stairs' | 'parking' | 'arcade'
+  // A starship's (fill/starship): round its great hall.
+  | 'quarters' | 'lab' | 'mess' | 'lounge' | 'control' | 'gallery'
+  // A museum's (fill/museum): galleries round its great hall.
+  | 'exhibit';
 
 export type FurnKind =
   | 'bed' | 'bedDouble' | 'wardrobe' | 'nightstand' | 'sofa' | 'armchair' | 'coffeeTable' | 'tvStand' | 'tv' | 'rug'
   | 'diningTable' | 'chair' | 'kitchenRow' | 'fridge' | 'stove' | 'toilet' | 'bathtub' | 'sink' | 'shower'
   | 'desk' | 'officeChair' | 'monitor' | 'meetingTable' | 'shelf' | 'bookshelf' | 'plant' | 'floorLamp' | 'painting'
   | 'counter' | 'shopShelf' | 'rack' | 'cafeTable' | 'barCounter' | 'palletRack' | 'crate' | 'pew' | 'altar' | 'reception' | 'column' | 'clothesStack'
-  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror' | 'arcade';
+  | 'screen' | 'cooler' | 'mirror' | 'pendant' | 'coatRack' | 'mailboxes' | 'curtain' | 'tallMirror' | 'arcade'
+  // A starship's props (built as landmark parts by interior/design/props).
+  | 'pod' | 'locker' | 'console' | 'holo' | 'stool' | 'bench' | 'planter' | 'table'
+  // A museum's.
+  | 'case' | 'statue' | 'bigStatue' | 'seat';
 
 export interface Room {
   type: RoomType;
@@ -355,6 +365,16 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
   };
   const multi = b.floors > 1;
   const { hu, hv } = F;
+  // Walls between the stair hall / lift lobby and the rest: a theme that splits the floor itself
+  // (fill/split) makes its own; the older layouts below use these.
+  const coreWalls: IWall[] = [];
+  const ground = floor === 0;
+  const use = b.use;
+  const style = b.style;
+  // Floors divided by the splitter with a theme (fill/split, fill/home, fill/work).
+  const work: Work | null = ground && (b.shopfront || use === 'retail') ? (shopKind % 3 === 0 ? 'cafe' : shopKind % 3 === 1 ? 'clothes' : 'grocery') : use === 'office' ? 'office' : null;
+  const split: Program | null = style === 'church' || use === 'industrial' || use === 'parking' || (ground && isArcade(b)) ? null
+    : work ? workProgram(work, ground) : homeProgram(ground);
   // --- elevator core (multi-storey): shaft + landing at one end of the long axis
   let coreU0 = hu, coreU1 = hu;
   const serves = !!lift && liftRect(lift, 0.05).every((_, k, a) => k % 2 === 1 || pointInPoly(poly, a[k], a[k + 1]));
@@ -376,16 +396,13 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     const lobby = clipRoom([...L(-lu - 0.6, -lob), ...L(front, -lob), ...L(front, lob), ...L(-lu - 0.6, lob)]);
     if (lobby) plan.rooms.push({ type: 'hall', poly: lobby, floorMat: floor === 0 ? 'marble' : 'tile', wallColor: [0.86, 0.85, 0.82] });
     const [la, lb] = [L(front, -lob), L(front, lob)];
-    plan.walls.push({ ax: la[0], az: la[1], bx: lb[0], bz: lb[1], doors: [[0.55, 0.85]] });
+    coreWalls.push({ ax: la[0], az: la[1], bx: lb[0], bz: lb[1], doors: [[0.55, 0.85]] });
     // Rooms start beyond the lobby (in this floor's frame).
     const e = L(front, 0);
     coreU1 = (e[0] - F.cx) * F.ux + (e[1] - F.cz) * F.uz;
     coreU0 = -hu;
     if (Math.abs(lift.ux * F.ux + lift.uz * F.uz) < 0.95) coreU1 = -hu; // rotated frame (setback tier)
   }
-  const ground = floor === 0;
-  const use = b.use;
-  const style = b.style;
   let u0 = plan.lift ? coreU1 : -hu;
   // --- stair core: a stair hall across the end of the floor that holds it
   let uE = hu;
@@ -414,24 +431,47 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     const proj: number[] = [];
     for (let k = 0; k < r.length; k += 2) proj.push((r[k] - F.cx) * F.ux + (r[k + 1] - F.cz) * F.uz);
     const hallFloor: Room['floorMat'] = ground ? 'stone' : 'tile';
-    if (proj.reduce((a, q) => a + q, 0) > 0) {
+    if (split) {
+      // Only the core and a landing strip along its open side: the theme gets the rest of the floor.
+      const bw = st.w + st.g / 2, v0 = st.open > 0 ? -bw : -bw - 1.2, v1 = st.open > 0 ? bw + 1.2 : bw;
+      const hq = clipRoom([...coreP(st, -1.4, v0), ...coreP(st, st.len, v0), ...coreP(st, st.len, v1), ...coreP(st, -1.4, v1)]);
+      if (hq) plan.rooms.push({ type: 'stairs', poly: hq, floorMat: hallFloor, wallColor: [0.88, 0.87, 0.83] });
+    } else if (proj.reduce((a, q) => a + q, 0) > 0) {
       uE = Math.max(u0 + 3, Math.min(...proj));
       const hq = clipRoom(F.rect(uE, -hv, hu, hv));
       if (hq) plan.rooms.push({ type: 'stairs', poly: hq, floorMat: hallFloor, wallColor: [0.88, 0.87, 0.83] });
-      wallLine(plan, F, uE, -hv, uE, hv, [[0.42, 0.58]]);
+      coreWalls.push(lineWall(F, uE, -hv, uE, hv, [[0.42, 0.58]]));
     } else {
       const uS = Math.min(uE - 3, Math.max(...proj));
       const hq = clipRoom(F.rect(-hu, -hv, uS, hv));
       if (hq) plan.rooms.push({ type: 'stairs', poly: hq, floorMat: hallFloor, wallColor: [0.88, 0.87, 0.83] });
-      wallLine(plan, F, uS, -hv, uS, hv, [[0.42, 0.58]]);
+      coreWalls.push(lineWall(F, uS, -hv, uS, hv, [[0.42, 0.58]]));
       u0 = Math.max(u0, uS);
     }
     stairsOf(plan, st, y, height, up, below);
   }
-  // Home rooms, furnished once the walls and doors are final (fill/home).
-  const homes: Room[] = [];
+  // Rooms furnished by a theme once the walls and doors are final (fill/place).
+  const furnish: Room[] = [];
+  // (The older layouts below place things against the walls already standing.)
+  if (!split) plan.walls.push(...coreWalls);
   // --- choose layout
-  if (style === 'church') {
+  if (split) {
+    // The theme reserves its big spaces, the rest is cut into rooms (fill/split); stair hall and
+    // lift lobby stay as they are.
+    const front = frontNormal(b);
+    const fixed = plan.rooms.map((q) => ({ type: q.type, poly: q.poly, hub: true }));
+    const kept = plan.rooms;
+    const S = splitStorey({ poly, fixed, front, solid: plan.walls.filter((w) => w.solid) }, split, r);
+    plan.rooms = [];
+    for (const [k, sp] of S.spaces.entries()) {
+      // The fixed spaces come first, in order (the stair hall may have taken in a scrap of floor).
+      if (k < kept.length) { plan.rooms.push({ ...kept[k], poly: sp.poly }); continue; }
+      const room: Room = { type: sp.type, poly: sp.poly, ...lookOf(sp.type, ground, r) };
+      plan.rooms.push(room);
+      furnish.push(room);
+    }
+    plan.walls.push(...S.walls);
+  } else if (style === 'church') {
     plan.rooms.push({ type: 'nave', poly, floorMat: 'stone', wallColor: [0.9, 0.87, 0.8] });
     for (let u = -hu + 3; u < hu - 4; u += 1.1) {
       for (const side of [-1, 1]) {
@@ -494,192 +534,6 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
         cab(u, vc + CD / 2 + 0.02, 0, 1);
       }
     }
-  } else if (ground && (b.shopfront || use === 'retail')) {
-    // Shop or cafe on the ground floor: front part public, back storage.
-    const cafe = shopKind % 3 === 0;
-    const split = hv * 0.25;
-    const front = clipRoom(F.rect(u0, -hv, uE, hv - split * 1.0));
-    const back = clipRoom(F.rect(u0, hv - split, uE, hv));
-    if (front) plan.rooms.push({ type: cafe ? 'cafe' : 'shop', poly: front, floorMat: cafe ? 'wood' : 'tile', wallColor: r.pick(WALLS) });
-    if (back) plan.rooms.push({ type: 'storage', poly: back, floorMat: 'concrete', wallColor: [0.8, 0.8, 0.78] });
-    wallLine(plan, F, u0, hv - split, uE, hv - split, [[0.8, 0.9]]);
-    if (cafe) {
-      for (let u = u0 + 1.5; u < uE - 1.2; u += 2.2) for (let v = -hv + 1.4; v < hv - split - 1.2; v += 2.2) {
-        const p = F.P(u, v);
-        plan.furniture.push({ kind: 'cafeTable', x: p[0], z: p[1], yaw: 0, w: 0.75, d: 0.75, h: 0.75, color: WOOD[1] });
-        for (const [cu, cv] of [[0.65, 0], [-0.65, 0]]) {
-          const c = F.P(u + cu, v + cv);
-          plan.furniture.push({ kind: 'chair', x: c[0], z: c[1], yaw: F.yaw + (cu > 0 ? -Math.PI / 2 : Math.PI / 2), w: 0.45, d: 0.45, h: 0.9, color: WOOD[2], use: 'sit' });
-        }
-      }
-      const bc = F.P((u0 + uE) / 2, hv - split - 0.8);
-      plan.furniture.push({ kind: 'barCounter', x: bc[0], z: bc[1], yaw: F.yaw, w: Math.min(5, uE), d: 0.7, h: 1.1, color: WOOD[0], use: 'stand' });
-    } else {
-      // Along the long axis: yaw + π/2 puts a piece's width along u.
-      const along = F.yaw + Math.PI / 2;
-      const put = (kind: FurnKind, u: number, v: number, yaw: number, w: number, d: number, h: number, color: [number, number, number], use?: Furn['use']) => {
-        const p = F.P(u, v);
-        plan.furniture.push({ kind, x: p[0], z: p[1], yaw, w, d, h, color, use });
-      };
-      const vBack = hv - split, vFront = -hv;
-      const fixture: [number, number, number] = r.pick([[0.86, 0.86, 0.84], [0.32, 0.33, 0.35], [0.62, 0.5, 0.36]]);
-      const clothing = shopKind % 3 === 1;
-      if (!clothing) {
-        // Grocery / general store: back-to-back shelving aisles across the room.
-        for (let v = vFront + 2.6; v < vBack - 1.9; v += 2.5) {
-          for (let u = u0 + 1.4; u + 1.9 < uE - 2.6; u += 2.0) {
-            put('shopShelf', u + 0.9, v - 0.31, along, 1.8, 0.55, 1.7, fixture);
-            put('shopShelf', u + 0.9, v + 0.31, along + Math.PI, 1.8, 0.55, 1.7, fixture);
-          }
-        }
-      } else {
-        // Clothing / boutique: display tables, a rug and mirrors (paintings) on the walls.
-        for (let v = vFront + 2.4; v < vBack - 1.6; v += 2.6) for (let u = u0 + 1.8; u < uE - 2.8; u += 2.8) {
-          put('coffeeTable', u, v, along, 1.4, 0.8, 0.8, r.pick(WOOD));
-          put('clothesStack', u, v, along, 1.2, 0.6, 0.8, r.pick(FABRIC));
-        }
-        put('rug', (u0 + uE) / 2, (vFront + vBack) / 2, along, Math.min(4, uE - u0 - 2), Math.min(3, vBack - vFront - 2), 0.01, r.pick(FABRIC));
-      }
-      // Clothes shop: a full-length fitting mirror flat against a wall, facing into the shop
-      // (change your look there). The first spot that fits: along the back wall, else the side
-      // walls (not mid-wall, where a stair hall has its door); the back wall's shelves and
-      // pictures leave its stretch free.
-      let mirrorU: number | null = null;
-      if (clothing) {
-        const spots: [number, number, number, number][] = [];
-        // (Not across the storage room's door, at 0.8–0.9 of the back wall: see wallLine above.)
-        for (let u = u0 + 0.55; u < uE - 0.5; u += 0.5) { const t = (u - u0) / (uE - u0); if (t < 0.74 || t > 0.96) spots.push([u, vBack - 0.1, 0, -1]); }
-        for (const v of [vBack - 0.9, vBack - 1.6, vFront + 2.2, vFront + 2.9]) spots.push([uE - 0.15, v, -1, 0], [u0 + 0.15, v, 1, 0]);
-        for (const [u, v, du, dv] of spots) {
-          const a = F.P(u, v), b2 = F.P(u + du, v + dv);
-          const m: Furn = { kind: 'tallMirror', x: a[0], z: a[1], yaw: Math.atan2(b2[0] - a[0], b2[1] - a[1]), w: 0.7, d: 0.08, h: 1.85, color: [0.3, 0.21, 0.14], use: 'dress' };
-          // (Interiors keeps the way in from the street door clear: see buildFloor.)
-          if (!fitsStorey(m) || (door && Math.hypot(m.x - door.x, m.z - door.z) < 3)) continue;
-          plan.furniture.push(m);
-          if (dv) mirrorU = u;
-          break;
-        }
-      }
-      const clearOfMirror = (u: number, half: number) => mirrorU === null || Math.abs(u - mirrorU) > half + 0.45;
-      if (clothing) for (let u = u0 + 2; u < uE - 2; u += 3) if (clearOfMirror(u, 0.35)) put('painting', u, vBack - 0.06, along, 0.7, 0.04, 1.6, [0.75, 0.8, 0.85]);
-      // Wall shelving along the back wall, facing the shop.
-      for (let u = u0 + 1.1; u + 1.9 < uE - 0.4; u += 2.0) if (clearOfMirror(u + 0.9, 0.9)) put('shopShelf', u + 0.9, vBack - 0.32, along, 1.8, 0.5, 2.1, fixture);
-      // Checkout by the entrance with a register, a display table and plants in the window.
-      put('counter', uE - 1.6, vFront + 1.5, F.yaw, 1.8, 0.7, 1.0, WOOD[1], 'stand');
-      put('monitor', uE - 1.6, vFront + 1.5, F.yaw + Math.PI, 0.5, 0.3, 0.3, [0.1, 0.1, 0.1]);
-      put('coffeeTable', (u0 + uE) / 2, vFront + 1.1, along, 1.6, 0.7, 0.8, r.pick(WOOD));
-      put('plant', u0 + 0.6, vFront + 0.6, 0, 0.5, 0.5, 1.3, [0.2, 0.45, 0.2]);
-      put('plant', uE - 0.6, vFront + 0.6, 0, 0.5, 0.5, 1.1, [0.2, 0.45, 0.2]);
-    }
-    // Storage behind: pallet racks along the walls, crates in between.
-    if (back) {
-      const along = F.yaw + Math.PI / 2;
-      for (let u = u0 + 1.6; u < uE - 1.4; u += 2.9) {
-        const p = F.P(u, hv - 0.6);
-        plan.furniture.push({ kind: 'palletRack', x: p[0], z: p[1], yaw: along, w: 1.3, d: 0.5, h: Math.min(2.6, height - 0.5), color: [0.35, 0.4, 0.5] });
-        if (r.chance(0.6)) { const q = F.P(u + 1.4, hv - split + 0.7); plan.furniture.push({ kind: 'crate', x: q[0], z: q[1], yaw: along + r.range(-0.3, 0.3), w: 0.8, d: 0.6, h: 0.55, color: [0.6, 0.48, 0.3] }); }
-      }
-    }
-    if (cafe) {
-      // Cafe dressing: plants by the window, art on the walls.
-      for (const u of [u0 + 0.7, uE - 0.7]) { const p = F.P(u, -hv + 0.7); plan.furniture.push({ kind: 'plant', x: p[0], z: p[1], yaw: 0, w: 0.5, d: 0.5, h: 1.4, color: [0.2, 0.45, 0.2] }); }
-      for (let u = u0 + 2; u < uE - 1.5; u += 3.2) { const p = F.P(u, hv - split - 0.06); plan.furniture.push({ kind: 'painting', x: p[0], z: p[1], yaw: F.yaw + Math.PI / 2, w: 0.8, d: 0.04, h: 0.6, color: r.pick(FABRIC) }); }
-    }
-  } else if (use === 'office') {
-    // Open-plan office; on the ground floor a lobby at the front with offices behind it.
-    let du0 = u0;
-    if (ground) {
-      const lobEnd = uE - u0 > 14 ? u0 + Math.max(9, (uE - u0) * 0.5) : uE;
-      const lq = clipRoom(F.rect(u0, -hv, lobEnd, hv));
-      if (lq) plan.rooms.push({ type: 'lobby', poly: lq, floorMat: 'marble', wallColor: [0.92, 0.9, 0.86] });
-      const lm = (u0 + lobEnd) / 2, at = (u: number, v: number) => F.P(u, v);
-      let q = at(lm, -hv * 0.4);
-      plan.furniture.push({ kind: 'reception', x: q[0], z: q[1], yaw: F.yaw, w: Math.min(3, lobEnd - u0 - 2), d: 0.9, h: 1.1, color: [0.25, 0.25, 0.27], use: 'stand' });
-      for (const u of [u0 + 0.9, lobEnd - 0.9]) { q = at(u, hv - 0.9); plan.furniture.push({ kind: 'plant', x: q[0], z: q[1], yaw: 0, w: 0.6, d: 0.6, h: 1.6, color: [0.2, 0.45, 0.2] }); }
-      // Waiting area: two sofas facing over a low table on a rug, art on the walls.
-      const wu = lm, fab = r.pick(FABRIC);
-      q = at(wu, hv * 0.25); plan.furniture.push({ kind: 'rug', x: q[0], z: q[1], yaw: F.yaw, w: 2.6, d: 3.2, h: 0.01, color: r.pick(FABRIC) });
-      plan.furniture.push({ kind: 'coffeeTable', x: q[0], z: q[1], yaw: F.yaw, w: 1.1, d: 0.6, h: 0.42, color: WOOD[2] });
-      for (const sd of [-1, 1]) { q = at(wu + sd * 1.2, hv * 0.25); plan.furniture.push({ kind: 'sofa', x: q[0], z: q[1], yaw: F.yaw + (sd > 0 ? Math.PI : 0), w: 2.0, d: 0.9, h: 0.85, color: fab, use: 'sit' }); }
-      for (let u = u0 + 2; u < lobEnd - 1.5; u += 4) { q = at(u, hv - 0.06); plan.furniture.push({ kind: 'painting', x: q[0], z: q[1], yaw: F.yaw + Math.PI, w: 1.2, d: 0.04, h: 0.8, color: r.pick(FABRIC) }); }
-      if (lobEnd < uE - 1) wallLine(plan, F, lobEnd, -hv, lobEnd, hv, [[0.44, 0.58]]);
-      du0 = lobEnd;
-    }
-    if (du0 < uE - 2.5) {
-      const oq = clipRoom(F.rect(du0, -hv, uE, hv));
-      if (oq) plan.rooms.push({ type: 'office', poly: oq, floorMat: 'carpet', wallColor: [0.9, 0.9, 0.88] });
-      // Meeting room at the far end.
-      const meet = uE - du0 > 11;
-      if (meet) {
-        const mr = clipRoom(F.rect(uE - 4.5, -hv, uE, hv * 0.2));
-        if (mr) plan.rooms.push({ type: 'meeting', poly: mr, floorMat: 'carpet', wallColor: [0.85, 0.88, 0.9] });
-        wallLine(plan, F, uE - 4.5, -hv, uE - 4.5, hv * 0.2, [[0.7, 0.85]]);
-        wallLine(plan, F, uE - 4.5, hv * 0.2, uE, hv * 0.2, []);
-        const mu = uE - 2.25, mv = (-hv + hv * 0.2) / 2;
-        const t = F.P(mu, mv);
-        plan.furniture.push({ kind: 'meetingTable', x: t[0], z: t[1], yaw: F.yaw + Math.PI / 2, w: 2.8, d: 1.2, h: 0.75, color: WOOD[3] });
-        for (const du of [-0.9, 0, 0.9]) for (const sv of [-1, 1]) {
-          const c = F.P(mu + du, mv + sv * 0.95);
-          plan.furniture.push({ kind: 'officeChair', x: c[0], z: c[1], yaw: F.yaw + (sv > 0 ? Math.PI : 0), w: 0.6, d: 0.6, h: 1.1, color: [0.15, 0.15, 0.17], use: 'sit' });
-        }
-        const sc = F.P(uE - 0.12, mv);
-        plan.furniture.push({ kind: 'screen', x: sc[0], z: sc[1], yaw: F.yaw - Math.PI / 2, w: 1.6, d: 0.06, h: 0.95, color: [0.08, 0.08, 0.09] });
-      }
-      for (let u = du0 + 2; u < (meet ? uE - 5.5 : uE - 1.5); u += 2.6) {
-        for (let v = -hv + 1.8; v < hv - 1.4; v += 3.2) {
-          const p = F.P(u, v);
-          if (!pointInPoly(poly, p[0], p[1])) continue;
-          plan.furniture.push({ kind: 'desk', x: p[0], z: p[1], yaw: F.yaw, w: 1.6, d: 0.8, h: 0.74, color: [0.85, 0.84, 0.8] });
-          const m = F.P(u, v - 0.2);
-          plan.furniture.push({ kind: 'monitor', x: m[0], z: m[1], yaw: F.yaw + Math.PI, w: 0.6, d: 0.05, h: 0.4, color: [0.08, 0.08, 0.09] });
-          const c = F.P(u, v + 0.7);
-          plan.furniture.push({ kind: 'officeChair', x: c[0], z: c[1], yaw: F.yaw + Math.PI, w: 0.6, d: 0.6, h: 1.1, color: [0.15, 0.15, 0.17], use: 'work' });
-        }
-      }
-      // Filing cabinets along a wall, plants in the corners, a water cooler.
-      for (let u = du0 + 1.2; u < (meet ? uE - 5 : uE - 1); u += 3.5) { const p = F.P(u, hv - 0.3); plan.furniture.push({ kind: 'shelf', x: p[0], z: p[1], yaw: F.yaw + Math.PI, w: 0.9, d: 0.45, h: 1.3, color: [0.55, 0.57, 0.6] }); }
-      for (const [u, v] of [[du0 + 0.6, -hv + 0.6], [uE - 0.6, hv - 0.6]] as const) { const p = F.P(u, v); plan.furniture.push({ kind: 'plant', x: p[0], z: p[1], yaw: 0, w: 0.55, d: 0.55, h: 1.5, color: [0.2, 0.45, 0.2] }); }
-      const wc = F.P(du0 + 0.5, hv - 0.5);
-      plan.furniture.push({ kind: 'cooler', x: wc[0], z: wc[1], yaw: F.yaw, w: 0.35, d: 0.35, h: 1.2, color: [0.9, 0.9, 0.92] });
-    }
-  } else {
-    // Residential: corridor along the spine, apartments either side, rooms in sequence.
-    const corridor = hv > 5;
-    const cw = 0.8;
-    if (corridor) {
-      const cq = clipRoom(F.rect(u0, -cw, uE, cw));
-      if (cq) plan.rooms.push({ type: ground ? 'hall' : 'corridor', poly: cq, floorMat: 'tile', wallColor: [0.9, 0.89, 0.85] });
-    }
-    const sides: [number, number][] = corridor ? [[-hv, -cw], [cw, hv]] : [[-hv, hv]];
-    const cycle: RoomType[] = ['living', 'bedroom', 'kitchen', 'bath', 'bedroom'];
-    for (const [v0, v1] of sides) {
-      let u = u0;
-      let k = r.int(0, 3);
-      const doors: [number, number][] = [];
-      while (u < uE - 1.5) {
-        const type = cycle[k % cycle.length];
-        const len = type === 'bath' ? r.range(2.2, 3) : type === 'kitchen' ? r.range(3, 4) : type === 'living' ? r.range(4.5, 6.5) : r.range(3.4, 4.5);
-        // A sliver too narrow for a room of its own goes to this one.
-        let u1 = Math.min(uE, u + len);
-        if (uE - u1 < 2.4) u1 = uE;
-        const q = clipRoom(F.rect(u, v0, u1, v1));
-        if (q) {
-          const room: Room = { type, poly: q, floorMat: type === 'bath' || type === 'kitchen' ? 'tile' : r.chance(0.7) ? 'wood' : 'carpet', wallColor: type === 'bath' ? [0.9, 0.92, 0.93] : r.pick(WALLS) };
-          plan.rooms.push(room);
-          homes.push(room);
-        }
-        // Each room opens onto the corridor near one end; without a corridor the rooms open into each other.
-        if (corridor) { const d0 = u1 - u > 2.6 ? u + 0.35 : (u + u1) / 2 - 0.45; doors.push([d0, d0 + 0.9]); }
-        if (u1 < uE - 0.5) wallLine(plan, F, u1, v0, u1, v1, corridor ? [] : [[0.4, 0.62]]);
-        u = u1;
-        k++;
-      }
-      // Wall between rooms and corridor with a door per room.
-      if (corridor) {
-        const vv = v0 < 0 ? -cw : cw, span = uE - u0;
-        wallLine(plan, F, u0, vv, uE, vv, doors.map(([a, b2]) => [(a - u0) / span, (b2 - u0) / span]));
-      }
-    }
   }
   // Interior walls are laid out on the storey's rectangle: keep only their parts inside the
   // real outline (cut or irregular footprints had walls standing out in the street).
@@ -693,7 +547,10 @@ export function planFloor(b: BuildingDesc, poly: Poly, floor: number, y: number,
     plan.walls = plan.walls.filter((w) => !(w.doors.length === 1 && w.doors[0][0] <= 0 && w.doors[0][1] >= 1));
     plan.furniture = plan.furniture.filter((f) => f.kind === 'rug' || f.kind === 'painting' || f.use === 'dress' || f.h < 0.3 || !overlaps(furnRect(f), way));
   }
-  if (homes.length) furnishHomes(plan, homes, poly, b, r, [...(way ? [way] : []), ...(st ? [coreRect(st, 0, 0.3)] : [])]);
+  if (furnish.length) {
+    const keepOut = [...(way ? [way] : []), ...(st ? [coreRect(st, 0, 0.1)] : []), ...(plan.lift ? [liftRect(plan.lift, 0.1), landingOf(plan.lift)] : [])];
+    furnishRooms(plan, furnish, poly, b, r, keepOut, (type, A) => (work ? workItems(work, type, A, r) : homeItems(type as HomeRoom, A, r) ?? []));
+  }
   // Ceiling lights per room: one in the middle of a small room, a grid in big ones; homes and
   // cafés get pendant lamps (over the table where there is one), offices and shops panels.
   for (const room of plan.rooms) {
@@ -800,17 +657,53 @@ function furnRect(f: Furn): Poly {
   return out;
 }
 
-function wallLine(plan: FloorPlan, F: Frame, u0: number, v0: number, u1: number, v1: number, doors: [number, number][]): void {
+function lineWall(F: Frame, u0: number, v0: number, u1: number, v1: number, doors: [number, number][]): IWall {
   const a = F.P(u0, v0), b = F.P(u1, v1);
-  plan.walls.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], doors });
+  return { ax: a[0], az: a[1], bx: b[0], bz: b[1], doors };
+}
+
+/** Inward normal of the building's street front (its front edge), or null. */
+function frontNormal(b: BuildingDesc): [number, number] | null {
+  const n = b.poly.length >> 1;
+  if (n < 3) return null;
+  const i = b.front % n, j = (i + 1) % n;
+  const ax = b.poly[i * 2], az = b.poly[i * 2 + 1], dx = b.poly[j * 2] - ax, dz = b.poly[j * 2 + 1] - az, l = Math.hypot(dx, dz);
+  if (l < 1e-6) return null;
+  let nx = -dz / l, nz = dx / l;
+  const [cx, cz] = polyCentroid(b.poly);
+  if ((cx - ax) * nx + (cz - az) * nz < 0) { nx = -nx; nz = -nz; }
+  return [nx, nz];
+}
+
+/** The floor in front of the lift doors that must stay free. */
+function landingOf(l: LiftShaft): Poly {
+  const vx = -l.uz, vz = l.ux;
+  const P = (u: number, v: number) => [l.cx + l.ux * u + vx * v, l.cz + l.uz * u + vz * v];
+  return [...P(l.hu, -l.hv), ...P(l.hu + LANDING, -l.hv), ...P(l.hu + LANDING, l.hv), ...P(l.hu, l.hv)];
+}
+
+/** Floor and wall finish of a room the splitter made. */
+function lookOf(type: RoomType, ground: boolean, r: Rng): Pick<Room, 'floorMat' | 'wallColor'> {
+  switch (type) {
+    case 'bath': return { floorMat: 'tile', wallColor: [0.9, 0.92, 0.93] };
+    case 'kitchen': return { floorMat: 'tile', wallColor: r.pick(WALLS) };
+    case 'hall': case 'corridor': return { floorMat: 'tile', wallColor: [0.9, 0.89, 0.85] };
+    case 'lobby': return { floorMat: 'marble', wallColor: [0.92, 0.9, 0.86] };
+    case 'office': return { floorMat: 'carpet', wallColor: [0.9, 0.9, 0.88] };
+    case 'meeting': return { floorMat: 'carpet', wallColor: [0.85, 0.88, 0.9] };
+    case 'storage': return { floorMat: 'concrete', wallColor: [0.8, 0.8, 0.78] };
+    case 'shop': return { floorMat: 'tile', wallColor: r.pick(WALLS) };
+    case 'cafe': return { floorMat: 'wood', wallColor: r.pick(WALLS) };
+    default: return { floorMat: ground && r.chance(0.3) ? 'tile' : r.chance(0.7) ? 'wood' : 'carpet', wallColor: r.pick(WALLS) };
+  }
 }
 
 /**
- * Furnishes the rooms of a home storey (fill/home theme, placed by fill/place), once the storey's
- * walls and doors are final. Side walls of attached houses are blind party walls, every other
- * stretch of the outline has windows.
+ * Furnishes rooms with a theme's items (placed by fill/place), once the storey's walls and doors
+ * are final. Side walls of attached houses are blind party walls, every other stretch of the
+ * outline has windows.
  */
-function furnishHomes(plan: FloorPlan, rooms: Room[], poly: Poly, b: BuildingDesc, r: Rng, keepOut: Poly[]): void {
+function furnishRooms(plan: FloorPlan, rooms: Room[], poly: Poly, b: BuildingDesc, r: Rng, keepOut: Poly[], items: (type: RoomType, A: ReturnType<typeof roomArea>) => Item[]): void {
   const n = b.poly.length >> 1, fi = b.front % n, fj = (fi + 1) % n;
   const fdx = b.poly[fj * 2] - b.poly[fi * 2], fdz = b.poly[fj * 2 + 1] - b.poly[fi * 2 + 1], fl = Math.hypot(fdx, fdz) || 1;
   const facade = (ax: number, az: number, bx: number, bz: number): EdgeKind => {
@@ -820,7 +713,7 @@ function furnishHomes(plan: FloorPlan, rooms: Room[], poly: Poly, b: BuildingDes
   };
   for (const room of rooms) {
     const A = roomArea(room.poly, plan.walls, poly, facade, keepOut);
-    plan.furniture.push(...new Filler(A, r).fill(homeItems(room.type as HomeRoom, A, r)));
+    plan.furniture.push(...new Filler(A, r).fill(items(room.type, A)));
   }
 }
 

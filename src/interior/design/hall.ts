@@ -1,14 +1,21 @@
 /**
- * Section plan and ring layout for a great hall: a void rising through the middle of a volume,
- * ringed on every level by a gallery walkway (glass rail on the void side) and, behind it, wedge
- * rooms out to the outer wall. Two stair columns climb level by level in neighbouring wedges,
- * alternating, so each flight arrives beside the hole of the one above. Works for any star-shaped
- * section (round, oval, polygonal) and follows the outline as it tapers: the hall ends where the
- * rooms would get too shallow for a flight of stairs.
+ * Section plan for a great hall: a void rising through the middle of a volume, ringed on every
+ * level by a gallery walkway (glass rail on the void side), with two stair columns climbing level
+ * by level in neighbouring wedges, alternating, so each flight arrives beside the hole of the one
+ * above. That is what the hall reserves; the ring behind the gallery is then divided and
+ * furnished by the interior core (fill/split along rays from the axis, fill/place with the
+ * caller's theme), level by level. Works for any star-shaped section (round, oval, polygonal) and
+ * follows the outline as it tapers: the hall ends where the rooms would get too shallow for a
+ * flight of stairs.
  */
 import { Rng } from '../../core/rng';
 import { emptyDesign, type Design, type DFloor, type P2, type RoomFn, type Volume } from './types';
-import { lerp2 } from '../../core/geom2';
+import { lerp2, type Poly } from '../../core/geom2';
+import type { Program, Space } from '../fill/split';
+import type { Area } from '../fill/area';
+import type { Item } from '../fill/place';
+import type { RoomType } from '../InteriorGen';
+import { fillStorey } from './storey';
 
 export interface HallProgram {
   /** Ground floor level (the hall's floor; the host builds that plate). */
@@ -22,10 +29,11 @@ export interface HallProgram {
   walk: number;
   depth: number;
   minDepth: number;
-  /** Target room width at the outer wall. */
+  /** Wedge width at the outer wall (rooms are one wedge or more). */
   roomW: number;
-  /** Room functions to deal out (a seeded shuffle of this mix). */
-  mix: RoomFn[];
+  /** The theme: how the ring is divided (given the axis and the wedges' rays) and what each room holds. */
+  rooms: (cx: number, cz: number, angles: number[]) => Program;
+  items: (type: RoomType, A: Area, r: Rng) => Item[];
   seed: number;
   /** Bridges across the void: on every this many levels (0: none), from two wedges between the stairs. */
   bridgeEvery?: number;
@@ -64,7 +72,6 @@ export function designHall(vol: Volume, P: HallProgram): HallPlan | null {
   const D = emptyDesign();
   const n = Math.max(8, 2 * Math.round((Math.PI * R0) / P.roomW));
   const th = (i: number) => (i / n) * Math.PI * 2;
-  const r = new Rng(P.seed);
   // Stair wedges: two columns opposite each other, each two wedges wide (flight and hole alternate).
   const sA = [0, n >> 1];
   const isStair = (i: number) => sA.some((s) => i === s || i === s + 1);
@@ -89,20 +96,20 @@ export function designHall(vol: Volume, P: HallProgram): HallPlan | null {
 
   const bridges: Record<number, number[]> = {};
   if (P.bridgeEvery) levels.forEach((_, li) => { if (li % P.bridgeEvery! === 1 % P.bridgeEvery!) bridges[li] = [n >> 2, (3 * n) >> 2]; });
-  const fns = shuffle(P.mix, r);
-  let fi = 0, seed = P.seed;
+  let seed = P.seed;
   levels.forEach((y, li) => {
     const sec = vol.section(y), lvHoles = holes.get(li) ?? [];
-    const yTop = y + P.levelH - P.slab;
+    const yTop = y + P.levelH - P.slab, rw = voidR + P.walk;
+    const e = (i: number) => sec.edge(th(i)) - 0.25;
     for (let i = 0; i < n; i++) {
       const t0 = th(i), t1 = th(i + 1);
-      const e0 = sec.edge(t0) - 0.25, e1 = sec.edge(t1) - 0.25, rw = voidR + P.walk;
+      const e0 = e(i), e1 = e(i + 1);
       const P0 = (rr: number) => sec.at(t0, rr), P1 = (rr: number) => sec.at(t1, rr);
       // Gallery walkway and its glass rail at the void.
       D.floors.push(plate(P0(voidR), P1(voidR), P1(rw), P0(rw), y, P.slab, 'gallery'));
       const isHole = lvHoles.find((h) => h.w === i);
       if (!bridges[li]?.includes(i)) D.walls.push({ a: P0(voidR + 0.06), b: P1(voidR + 0.06), y0: y, y1: y + 1.1, th: 0.08, kind: 'rail', doors: [] });
-      // The room behind: its floor (with the stair hole where a flight comes up).
+      // The floor behind (with the stair hole where a flight comes up).
       if (isHole) {
         const f = 0.5 - (STAIR_W / 2 + 0.15) / chord(P0(rw), P1(rw)), g = 1 - f;
         const at = (s: number, rr: number) => lerp2(P0(rr), P1(rr), s);
@@ -113,19 +120,20 @@ export function designHall(vol: Volume, P: HallProgram): HallPlan | null {
       } else {
         D.floors.push(plate(P0(rw), P1(rw), P1(e1), P0(e0), y, P.slab, isStair(i) ? 'stairs' : 'quarters'));
       }
-      // Wall between this wedge and the next (none inside a stair pair).
-      if (!(isStair(i) && isStair(i + 1) && sA.includes(i))) D.walls.push({ a: P1(rw), b: P1(e1), y0: y, y1: yTop, th: 0.2, kind: 'wall', doors: [] });
-      // Front wall onto the gallery, a door in the middle (stair wedges stand open).
-      const wF = chord(P0(rw), P1(rw)), dw = Math.min(0.45, 0.75 / wF);
-      if (isStair(i)) continue;
-      D.walls.push({ a: P0(rw), b: P1(rw), y0: y, y1: yTop, th: 0.15, kind: 'wall', doors: [[0.5 - dw, 0.5 + dw]] });
-      const fn = fns[fi++ % fns.length];
-      const poly: P2[] = [P0(rw), P1(rw), P1(e1), P0(e0)];
-      const mid = mean(poly), door = sec.at((t0 + t1) / 2, rw);
-      D.rooms.push({ fn, poly, y, h: yTop - y, door, facing: norm([door[0] - mid[0], door[1] - mid[1]]), seed: seed++ });
-      D.lights.push([mid[0], mid[1], yTop - 0.25]);
       if (i % 2 === 0) { const g = sec.at((t0 + t1) / 2, voidR + P.walk / 2); D.lights.push([g[0], g[1], yTop - 0.25]); }
     }
+    // The hall reserves the gallery (open all round) and the stair wells (open to it); the core
+    // divides the rest of the ring into rooms and furnishes them.
+    const ring = (rr: (i: number) => number) => Array.from({ length: n }, (_, i) => sec.at(th(i), rr(i))).flat();
+    const fixed: Space[] = [];
+    for (let i = 0; i < n; i++) fixed.push({ type: 'gallery', poly: [...sec.at(th(i), voidR), ...sec.at(th(i + 1), voidR), ...sec.at(th(i + 1), rw), ...sec.at(th(i), rw)], hub: true, open: true });
+    for (const s0 of sA) fixed.push({ type: 'stairs', poly: [...sec.at(th(s0), rw), ...sec.at(th(s0 + 1), rw), ...sec.at(th(s0 + 2), rw), ...sec.at(th(s0 + 2), e(s0 + 2)), ...sec.at(th(s0 + 1), e(s0 + 1)), ...sec.at(th(s0), e(s0))], hub: true, open: true });
+    const outline: Poly = ring(e), c = sec.at(0, 0);
+    const angles = Array.from({ length: n }, (_, i) => { const q = sec.at(th(i), 1); return Math.atan2(q[1] - c[1], q[0] - c[0]); });
+    // (Rising from the first ray, once round.)
+    for (let i = 1; i < n; i++) while (angles[i] <= angles[i - 1]) angles[i] += Math.PI * 2;
+    fillStorey(D, { outline, fixed, holes: [ring(() => voidR)], front: null, program: P.rooms(c[0], c[1], angles), items: P.items, y, top: yTop, seed, cell: 0.35 });
+    seed += 1000;
   });
   // The hall's ceiling: a plate over the whole section at the top.
   const sT = vol.section(top);
@@ -138,18 +146,10 @@ export function designHall(vol: Volume, P: HallProgram): HallPlan | null {
 
 function plate(a: P2, b: P2, c: P2, d: P2, y: number, th: number, fn: RoomFn): DFloor { return { q: [a, b, c, d], y, th, fn }; }
 const chord = (a: P2, b: P2) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-const mean = (p: P2[]): P2 => [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length];
-const norm = (v: P2): P2 => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
 
 /** Smallest outline radius round the section (sampled). */
 function minEdge(edge: (t: number) => number): number {
   let m = Infinity;
   for (let i = 0; i < 24; i++) m = Math.min(m, edge((i / 24) * Math.PI * 2));
   return m;
-}
-
-function shuffle<T>(a: T[], r: Rng): T[] {
-  const o = a.slice();
-  for (let i = o.length - 1; i > 0; i--) { const j = r.int(0, i); [o[i], o[j]] = [o[j], o[i]]; }
-  return o;
 }
