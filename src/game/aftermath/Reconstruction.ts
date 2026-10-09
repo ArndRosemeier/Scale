@@ -333,6 +333,17 @@ export class Reconstruction {
   private progress(s: Site, now: number): number { return Math.max(0, Math.min(1, (now - s.start) / Math.max(0.01, s.done - s.start))); }
 
   /** Scaffolding round one building, along each footprint edge, a little out from the wall; nets on the outer face. */
+  /** A lamp post, signal, sign or tree standing where this bay (corner x, z; along u, out n) would go. */
+  private poleIn(x: number, z: number, ux: number, uz: number, nx: number, nz: number): boolean {
+    let hit = false;
+    this.g.props.query(x + ux * BAY.w / 2 + nx * 0.9, z + uz * BAY.w / 2 + nz * 0.9, 1.6, (p) => {
+      if (hit || p.broken || p.height < 2) return;
+      const a = (p.x - x) * ux + (p.z - z) * uz, o = (p.x - x) * nx + (p.z - z) * nz;
+      if (a > -p.radius && a < BAY.w + p.radius && o > -p.radius && o < 0.3 + BAY.d + 0.4 + p.radius) hit = true;
+    });
+    return hit;
+  }
+
   private buildingProps(r: Rec, s: Site, out: StaticProp[], now: number): void {
     const W = this.g.world, k = this.progress(s, now);
     // Standing: to above the highest damage (all of it for a collapse); a collapsed one's frame climbs with the work.
@@ -354,7 +365,7 @@ export class Reconstruction {
       for (let b = 0; b < bays; b++) {
         const x = ax + ux * (off + b * BAY.w) + nx * 0.05, z = az + uz * (off + b * BAY.w) + nz * 0.05;
         const mx = x + ux * BAY.w / 2 + nx * 0.9, mz = z + uz * BAY.w / 2 + nz * 0.9;
-        if (W.wet(mx, mz)) continue;
+        if (W.wet(mx, mz) || this.poleIn(x, z, ux, uz, nx, nz)) continue;
         const y0 = Math.max(r.base, W.groundHeight(mx, mz));
         for (let l = 0; l < lifts; l++) {
           out.push({ kind: 'scaffold', x, y: y0 + l * BAY.h, z, yaw, paint: STEEL });
