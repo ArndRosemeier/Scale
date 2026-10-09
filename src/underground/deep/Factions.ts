@@ -845,6 +845,7 @@ export class Factions {
 
 /** A Murk as the game's threat actor: one round body; brutes and the Maw have a weak core that shows when they strike. */
 export class MurkActor implements ThreatActor {
+  readonly faction = 'murk' as const;
   readonly zones: ThreatZone[];
   readonly aggro = new Map<string, number>();
   /** Full-size radius (the shrink ray scales `b.r`, which body, hits and reach all use). */

@@ -17,7 +17,7 @@
  * tag) gains it some. The difference from the seeded influence is saved per city
  * (`saveFactions` / `restoreFactions`).
  *
- * Phase 2: rivals (`relation`) fight over shared borders, and the turf drifts by itself once per
+ * Phase 2: rivals (`hostileGroups`, from the faction table factions/relations.ts) fight over shared borders, and the turf drifts by itself once per
  * game hour (`drift`, deterministic per seed and hour): every group grows back towards its seeded
  * hold scaled by how much of its turf it still has (a group the player has hurt regrows to less),
  * pushes into the cells next to its own where it could hold them, eats into a rival's hold there,
@@ -28,6 +28,7 @@ import { Rng, deriveSeed } from '../../core/rng';
 import { valueNoise2 } from '../crime/CrimeIndex';
 import { hashToFloat } from '../../core/rng';
 import { ARCHETYPES, PHASE1, type Archetype, type ArchetypeId, type Palette } from './archetypes';
+import { defaultRelations, REL, type Relations } from './relations';
 
 /** Influence a group needs to hold a cell. */
 export const HOLD = 0.3;
@@ -57,10 +58,12 @@ export interface FactionMap {
   can: Uint8Array[];
   /** Cells each faction held at the start (how strong it still is: `strength`). */
   baseHeld: number[];
+  /** The faction table the groups' feelings for each other come from (Game.relations in a game). */
+  rel: Relations;
 }
 
 /** The city's groups and turf for a seed (crime index: CrimeIndex.crimeIndex of the same plan). */
-export function planFactions(macro: MacroPlan, seed: number, index: Float32Array, archetypes: readonly ArchetypeId[] = PHASE1): FactionMap {
+export function planFactions(macro: MacroPlan, seed: number, index: Float32Array, archetypes: readonly ArchetypeId[] = PHASE1, rel: Relations = defaultRelations()): FactionMap {
   const cells = macro.cells;
   const c0 = macro.centres[0];
   let R = 0;
@@ -109,7 +112,7 @@ export function planFactions(macro: MacroPlan, seed: number, index: Float32Array
   const near: number[][] = cells.map(() => []);
   for (const l of byEdge.values()) for (const a of l) for (const b of l) if (a !== b && !near[a].includes(b)) near[a].push(b);
   const baseHeld = factions.map((f) => holder.reduce((n, h) => n + (h === f.id ? 1 : 0), 0));
-  return { factions, influence, holder, base: influence.map((f) => f.slice()), near, can, baseHeld };
+  return { factions, influence, holder, base: influence.map((f) => f.slice()), near, can, baseHeld, rel };
 }
 
 /** The group with the most influence in a cell if it reaches HOLD, else -1. */
@@ -240,11 +243,17 @@ export function inSentence(f: Faction): string {
 }
 
 /** How two groups get on: rivals fight (turf brawls, pressure on shared borders); others are wary. */
-export function relation(F: FactionMap, a: number, b: number): 'self' | 'hostile' | 'wary' {
-  if (a === b) return 'self';
+/** How group `a` feels about group `b` (REL.min … REL.max; itself: REL.max), from the faction table. */
+export function relation(F: FactionMap, a: number, b: number): number {
   const A = F.factions[a], B = F.factions[b];
-  if (!A || !B) return 'wary';
-  return ARCHETYPES[A.archetype].rivals.includes(B.archetype) || ARCHETYPES[B.archetype].rivals.includes(A.archetype) ? 'hostile' : 'wary';
+  if (a === b) return REL.max;
+  if (!A || !B) return REL.neutral;
+  return F.rel.get(A.archetype, B.archetype);
+}
+
+/** Are groups `a` and `b` at war (a fights over shared borders, turf brawls)? */
+export function hostileGroups(F: FactionMap, a: number, b: number): boolean {
+  return a !== b && relation(F, a, b) <= REL.hostile;
 }
 
 /** How much of its starting turf a group still holds (1: all of it; more after gains). */
@@ -293,7 +302,7 @@ export function drift(F: FactionMap, seed: number, hour: number): { cell: number
       for (const j of F.near[i]) {
         const h = F.holder[j];
         if (h === f) border = true;
-        else if (h >= 0 && F.holder[i] === f && relation(F, f, h) === 'hostile') press = Math.max(press, str[h]);
+        else if (h >= 0 && F.holder[i] === f && hostileGroups(F, f, h)) press = Math.max(press, str[h]);
       }
       if (border && F.holder[i] !== f && F.can[f][i]) target += D.push * s;
       if (press > 0) target -= D.clash * press;
@@ -327,7 +336,7 @@ export function rivalsAt(F: FactionMap, cell: number, f: number): number[] {
   const score = new Map<number, number>();
   for (const i of [cell, ...F.near[cell]]) {
     for (let g = 0; g < F.factions.length; g++) {
-      if (relation(F, f, g) !== 'hostile') continue;
+      if (!hostileGroups(F, f, g)) continue;
       const v = F.influence[g][i] * (i === cell ? 1.5 : 1);
       if (F.holder[i] === g || (i === cell && v >= 0.12 * 1.5)) score.set(g, Math.max(score.get(g) ?? 0, v));
     }

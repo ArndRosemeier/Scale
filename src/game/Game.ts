@@ -88,7 +88,9 @@ import { PowersScreen } from '../ui/PowersScreen';
 import { TouchControls } from '../ui/TouchControls';
 import { isTouch } from '../ui/touch';
 import { Targeting, type Target } from './Targeting';
-import { spared } from './friendFoe';
+import { spared, type FoeWorld } from './friendFoe';
+import { defaultRelations, bindHero } from './factions/relations';
+import { REP } from './Reputation';
 import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { Sight } from './combat/sight';
@@ -157,6 +159,8 @@ export class Game {
   stimuli = new Stimuli();
   /** Game-time callbacks (instead of setTimeout for anything that changes the game). */
   readonly later = new Later();
+  /** Who is hostile to whom (factions/relations.ts); the civilians' feeling about the hero is the reputation. */
+  readonly relations = defaultRelations();
   audio = new Audio();
   /** Background music (src/audio/music): moods from the game state, stems loaded on first need. */
   music = new Music(this);
@@ -1171,6 +1175,16 @@ export class Game {
     this.sidekick = new Sidekick(this);
     this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
     this.wardens = new Wardens(this);
+    // Every faction's feeling about the hero, read live from the system that keeps it (factions/relations.ts).
+    bindHero(this.relations, {
+      rep: () => this.crime.rep.value,
+      wanted: () => this.crime.justice.wanted,
+      suspect: () => this.crime.rep.value <= REP.suspectAt,
+      rampage: () => !!this.hostile.ev?.active,
+      notoriety: (a) => { const f = this.crime.factions.factions.find((x) => x.archetype === a); return f ? this.crime.notoriety[f.id] ?? 0 : undefined; },
+      lumenTrust: () => this.slimeRealm.trust.value,
+      wardenRegard: () => this.wardens.regard.regard,
+    });
     this.targeting.personLabel = (a) => this.people.label(a);
     // (Not when a save is loaded: the player has been here before.)
     // (Nor after the origin scene: it tells the story and gives the hint itself.)
@@ -1226,7 +1240,11 @@ export class Game {
   spares(t: Target): boolean {
     return spared(t, this.foeWorld);
   }
-  private readonly foeWorld = { hostileThing: (ref: object) => this.threats?.isHostile(ref) ?? false };
+  private readonly foeWorld: FoeWorld = {
+    hostileThing: (ref: object) => this.threats?.isHostile(ref) ?? false,
+    relations: this.relations,
+    group: (id: number) => this.crime?.factions.factions[id]?.archetype,
+  };
 
   /** A physical strike at a point hits cars, people and props. `spare` (a power's friend/foe sense):
    *  only foes are hit, no car or prop. */

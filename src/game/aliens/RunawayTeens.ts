@@ -776,6 +776,7 @@ const SMOKE_A = new THREE.Color(0.25, 0.25, 0.27), SMOKE_B = new THREE.Color(0.4
 /** The saucer as a body one can target and hit: the hull (it shrugs most of that off) and three pods. */
 class SaucerActor implements ThreatActor {
   readonly name = 'Runaway saucer';
+  readonly faction = 'teens' as const;
   readonly zones: ThreatZone[];
   readonly aggro = new Map<string, number>();
   readonly height = 2.4;

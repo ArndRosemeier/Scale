@@ -2,6 +2,30 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.192 — 2026-10-09
+
+- **Area powers hit people harder as they rank up, not only wider.** Before, a fireball, fire wave, laser, chain lightning or water jet did the same to a person at every rank. Now the damage grows with the rank, from rank 1 to rank 5:
+  - Fireball: 28 to 58 at the centre, half that at the rim. It used to be 53 at the centre at every rank, so rank 1 is weaker now and rank 5 a bit stronger.
+  - Fire wave: 20 to 38, up close.
+  - Laser eyes: 18 to 35 each time someone falls.
+  - Chain lightning: 14 to 25 for each person it strikes.
+  - Hydrokinesis: 21 to 41 when the jet knocks someone down.
+  - The shockwave (27 to 60), seismic stomp (26 to 53), whirlwind (22 to 50), super speed and punches already grew with rank.
+- Higher ranks also throw people a little farther. Slipping on an ice path still hurts the same at every rank, as it depends on how fast the person was walking.
+- The Powers table in the help shows the new numbers.
+
+## 0.191 — 2026-10-09
+
+- **Factions, step 2: every faction's feeling about the hero is in the table.** Each value is read live from the system that already keeps it, so nothing is stored twice and nothing plays differently: civilians = reputation; police = friendly, wary of a suspect, hostile while you are wanted (more at higher levels) or rampaging; army = hostile only against a rampaging giant; each villain group = its notoriety (hunting you is the hostile line); Lumen = their trust; Wardens = their regard (10 per problem handed over). Your own feelings, which the friend/foe sense uses, stay as they were. In the dev console, `dev.factions()` lists every faction's feeling about the hero and `dev.factions(true)` the whole table.
+
+## 0.190 — 2026-10-09
+
+- **Autorun keeps your pace.** Press R while holding Shift and the hero keeps sprinting (in flight: keeps boosting) after you let go of Shift. Started with Alt held, autorun stays at a slow walk; started plain, it runs at the normal pace. Holding Shift or Alt during autorun still changes the pace while held.
+
+## 0.189 — 2026-10-09
+
+- **Factions, step 1: one table of who is hostile to whom.** Every side in the game (civilians, police, army, the hero, the sidekick, street crooks, each villain group, Lumen, Murk, Wardens, runaway teens, monsters, rogue machines) now has a relation to every other one, as a number from −100 to +100; −50 or lower is hostile. The civilians' feeling about the hero is the reputation itself. For now the numbers repeat today's rules, so nothing plays differently: the friend/foe sense and the villain groups' turf wars ask the table instead of their own lists. Later steps will move the hero's other standings into it and let the numbers change.
+
 ## 0.188 — 2026-10-09
 
 - **Less memory used by the people of the city.** Until now, every building you passed queued its residents' trips for the next six game hours (about 18 real minutes) and kept them after you left. Driving or flying around the city piled them up and pushed the browser toward its memory limit. Now trips are queued two game hours ahead and are dropped when you move away from a building or its block unloads. The same number of people walk the streets.

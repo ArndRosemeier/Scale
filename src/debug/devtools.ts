@@ -1,6 +1,7 @@
 /**
  * Console helpers for testing (window.dev).
  */
+import { FACTIONS, relationTable } from '../game/factions/relations';
 import type { Game } from '../game/Game';
 import type { BuildingRef } from '../world/WorldIndex';
 import { isClothesShop, isArcade } from '../interior/InteriorGen';
@@ -158,6 +159,15 @@ export function installDevtools(game: Game): void {
         game.camRig.yaw = Math.atan2(b.uz * side, -b.ux * side);
         return { station: b.station ?? -1, x: Math.round(x), z: Math.round(z) };
       },
+    },
+    /**
+     * The faction table (factions/relations.ts): factions() every faction's feeling about the hero;
+     * factions(true) the whole table (rows feel about columns, −100 … 100, hostile at −50 or lower).
+     */
+    factions: (all = false) => {
+      const R = game.relations;
+      if (all) return relationTable(R);
+      return Object.fromEntries(FACTIONS.filter((f) => f !== 'hero').map((f) => [f, { toHero: Math.round(R.get(f, 'hero')), heroTo: Math.round(R.get('hero', f)), hostile: R.hostile(f, 'hero') }]));
     },
     /** Rats and the wandering slime around the player (calm: they stay put). */
     sewerLife: (calm?: boolean) => { if (calm !== undefined) game.underground.life.calm = calm; return game.underground.life.stats; },

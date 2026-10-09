@@ -44,18 +44,18 @@ export function powerDamage(id: AbilityId, r: number): PowerDamage | null {
       const p = Math.min(H.dashKnockMax, H.dashKnock + H.dashKnockPerRank * r);
       return { people: `dash: ${n(fall(p))} · running past: none (they stumble)`, creatures: 'none' };
     }
-    case 'laser': return { people: `${n(fall(H.laserKnock))} each time they fall`, creatures: `${n(creature(LASER_DOSE[r]))} / s` };
+    case 'laser': return { people: `${n(fall(H.laserKnock[r]))} each time they fall`, creatures: `${n(creature(LASER_DOSE[r]))} / s` };
     case 'fireWave': return {
-      people: `${n(fall(H.fireKnock))} within ${n(FIRE_RANGE[r] * H.fireKnockReach)} m; farther: they burn and run`,
+      people: `${n(fall(H.fireKnock[r]))} within ${n(FIRE_RANGE[r] * H.fireKnockReach)} m; farther: they burn and run`,
       creatures: `${n(creature(FIRE_HEAT[r]) * H.fireCreatureMul)}`,
     };
     case 'fireball': return {
-      people: `${n(fall(H.fireballKnock))} at the rim … ${n(fall(H.fireballKnock + H.fireballKnockCentre))} at the centre`,
+      people: `${n(fall(H.fireballKnock[r] * 0.5))} at the rim … ${n(fall(H.fireballKnock[r]))} at the centre`,
       creatures: `${n(creature(FIREBALL_BLAST[r]) * H.fireballCreatureMul)}`,
     };
     case 'frostNova': return { people: 'none: frozen solid (the next blow breaks the ice)', creatures: `${n(NOVA_FREEZE[r] * H.frostCreature)} at a leg` };
     case 'icePath': return { people: `${n(fall(H.iceSlipKnock + WALK * H.iceSlipPerSpeed))} when someone walking slips, more at a run`, creatures: 'none' };
-    case 'lightning': return { people: `${n(fall(H.boltKnock))} each; the bolt strikes up to ${1 + BOLT_JUMPS[r]} targets`, creatures: `${n(BOLT_STUN[r] * H.boltCreature)}` };
+    case 'lightning': return { people: `${n(fall(H.boltKnock[r]))} each; the bolt strikes up to ${1 + BOLT_JUMPS[r]} targets`, creatures: `${n(BOLT_STUN[r] * H.boltCreature)}` };
     case 'stomp': {
       const J = QUAKE_IMPULSE[r];
       return { people: `${n(fall(Math.min(H.quakeKnockMax, H.quakeKnock + J * H.quakeKnockPerNs)))}`, creatures: `${n(creature(J) * H.quakeCreatureMul)} at the legs` };
@@ -64,7 +64,7 @@ export function powerDamage(id: AbilityId, r: number): PowerDamage | null {
     case 'hydro': {
       const tick = HYDRO_FORCE[r] * H.hydroTick;
       const acc = Math.floor(H.hydroKnockAt / tick + 1) * tick;
-      const p = Math.min(H.hydroKnockMax, H.hydroKnock + acc * H.hydroKnockPerNs);
+      const p = Math.min(H.hydroKnockMax, H.hydroKnock[r] + acc * H.hydroKnockPerNs);
       return { people: `${n(fall(p))} when they fall (after ${n(acc / HYDRO_FORCE[r])} s)`, creatures: `${n(creature(HYDRO_FORCE[r]) * H.hydroCreatureMul)} / s` };
     }
     case 'shrink': return {
