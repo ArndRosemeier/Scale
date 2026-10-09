@@ -2,9 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.185 — 2026-10-09
+## 0.186 — 2026-10-09
 
 - Tests only: the "room splitting" speed check allows 60 ms per office, shop or café storey (about 21 ms alone), and the brood's speed check takes the fastest of three runs against 1.5 ms. Under a full parallel test run, other workers sharing the CPU no longer make them fail.
+
+## 0.185 — 2026-10-09
+
+- **The shockwave no longer flattens everyone in it.** Until now, every person in the blast took the full force that breaks walls: 900 to 15 000 damage, a sure knockout for anyone, bosses included. Now a person takes 27 to 60 at the centre, depending on rank, and half that at the rim. That still knocks people down, about as hard as a fireball does. Walls, cars and monsters still take the full blast.
+- **The shockwave's reach is shorter**: 45, 60, 80, 100 and 130 m by rank, down from 80 m up to 800 m, so you can no longer blow up a building from across the city.
+- **Chain lightning does less to monsters**: 22 points per second of stun instead of 40. At low ranks it used to do several times more damage per energy against monsters than any other power.
+- The Powers table in the help shows the shockwave's new damage.
 
 ## 0.184 — 2026-10-09
 
