@@ -175,7 +175,7 @@ export class Population {
     const key = `${c.id}:${day}`;
     const cached = this.planCache.get(key);
     if (cached) return cached;
-    if (this.planCache.size > 60000) this.planCache.clear();
+    if (this.planCache.size > 20000) this.planCache.clear();
     const r = new Rng(hashCombine(c.seed, day * 977 + 1));
     const weekend = day % 7 >= 5;
     const T0 = day * 24;

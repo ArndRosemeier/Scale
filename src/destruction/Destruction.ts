@@ -159,6 +159,14 @@ export class Destruction {
     this.group.add(this.moundMesh);
   }
 
+  /**
+   * The layout for a one-off look (signs placed over a whole cell): the cached one if there is
+   * one, else computed and not kept. (Signs alone kept ~100 MB of layouts of every shop front.)
+   */
+  layoutOnce(ref: BuildingRef): BuildingLayout {
+    return this.layouts.get(`${ref.cell.id}:${ref.index}`) ?? buildingLayout(ref.desc, this.terrain, ref.elemBase);
+  }
+
   layoutOf(ref: BuildingRef): BuildingLayout {
     const key = `${ref.cell.id}:${ref.index}`;
     let L = this.layouts.get(key);

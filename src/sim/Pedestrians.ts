@@ -159,13 +159,22 @@ const PIN_R = 40;
 const UNDER_DROP = 0.6;
 const HASH = 1 << 14;
 
-interface Pending { cit: Citizen; trip: Trip }
+interface Pending { cit: Citizen; trip: Trip; ref: BuildingRef }
+/**
+ * Departures are queued this far ahead (game hours); a building is scanned again shortly before
+ * its window runs out. (Six hours ahead, every building ever passed held thousands of waiting
+ * citizens with their plans: on a PC, over a gigabyte after a few minutes of travel.)
+ */
+const AHEAD_H = 2;
+/** Waiting departures from buildings this far from the player are dropped (m): rescanned on return. */
+const FORGET_R = DESPAWN_R + 80;
 
 export class Pedestrians {
   readonly agents: PedAgent[] = [];
   private byId = new Map<number, PedAgent>();
-  // Building → day scanned. Weak: refs die with their cell (a strong map kept every unloaded
-  // cell - meshes, CPU geometry, plan - alive and ran big cities out of memory).
+  // Building → game hour up to which its departures are queued. Weak: refs die with their cell (a
+  // strong map kept every unloaded cell - meshes, CPU geometry, plan - alive and ran big cities out
+  // of memory).
   private scanned = new WeakMap<BuildingRef, number>();
   private events = new MinHeap();
   private pending: Pending[] = [];
@@ -198,9 +207,9 @@ export class Pedestrians {
     // ---- scanning buildings (nearest first, budgeted)
     if (hours - this.lastScan > 0.02 || this.scanQueue.length === 0) {
       this.lastScan = hours;
-      const day = Math.floor(hours / 24);
       const refs = this.world.buildingsIn(px - SCAN_R, pz - SCAN_R, px + SCAN_R, pz + SCAN_R);
-      this.scanQueue = refs.filter((r) => this.scanned.get(r) !== day);
+      this.scanQueue = refs.filter((r) => (this.scanned.get(r) ?? -Infinity) - hours < 0.25);
+      this.forgetFar(px, pz);
       this.scanQueue.sort((a, b) => dist2(a, px, pz) - dist2(b, px, pz));
     }
     // Budgeted per citizen (a tower can house hundreds), then spawning (path finding) per agent.
@@ -244,24 +253,42 @@ export class Pedestrians {
     }
   }
 
-  private citQueue: { c: Citizen; ref: BuildingRef }[] = [];
+  private citQueue: { c: Citizen; ref: BuildingRef; from: number | null }[] = [];
   private spawnQueue: { cit: Citizen; trip: Trip; progress: number }[] = [];
   /** Citizens never seen in the streets again (a sidekick who died: game/sidekick). */
   readonly absent = new Set<number>();
 
-  private queueBuilding(ref: BuildingRef, day: number): void {
-    this.scanned.set(ref, day);
+  private queueBuilding(ref: BuildingRef, _day: number): void {
+    // (From the end of the last window on; a first scan also puts out whoever is on their way now.)
+    const from = this.scanned.get(ref);
+    this.scanned.set(ref, this.hours + AHEAD_H);
     this.stats.scannedBuildings++;
     const cits = [...this.pop.residentsOf(ref.cell.id, ref.index, ref.desc), ...this.pop.workersOf(ref.cell.id, ref.index, ref.desc)];
     this.stats.citizens += cits.length;
-    for (let i = cits.length - 1; i >= 0; i--) this.citQueue.push({ c: cits[i], ref });
+    for (let i = cits.length - 1; i >= 0; i--) this.citQueue.push({ c: cits[i], ref, from: from ?? null });
   }
 
-  private scanCitizen(q: { c: Citizen; ref: BuildingRef }, day: number): void {
-    const { c, ref } = q;
+  /** Drops waiting departures from buildings far away (or unloaded); they are scanned afresh on return. */
+  private forgetFar(px: number, pz: number): void {
+    for (let i = 0; i < this.pending.length; i++) {
+      const p = this.pending[i];
+      if (!p) continue;
+      const b = p.ref.bounds;
+      const far = Math.hypot((b[0] + b[2]) / 2 - px, (b[1] + b[3]) / 2 - pz) > FORGET_R;
+      if (!far && this.streamer.cells.get(p.ref.cell.id) === p.ref.cell) continue;
+      // (Its heap entry stays and frees the slot when it comes due.)
+      this.pending[i] = undefined as unknown as Pending;
+      this.scanned.delete(p.ref);
+    }
+  }
+
+  private scanCitizen(q: { c: Citizen; ref: BuildingRef; from: number | null }, day: number): void {
+    const { c, ref, from } = q;
     const h = this.hours;
     {
-      // Trips of today and the next 6 hours of tomorrow.
+      // Trips under way now (first scan only) and departures in the next AHEAD_H hours (today's and
+      // tomorrow's plan: the window can cross midnight).
+      const t0 = from ?? h;
       for (const d of [day, day + 1]) {
         const plan = this.pop.dayPlan(c, d);
         for (let i = 0; i < plan.trips.length; i++) {
@@ -269,10 +296,10 @@ export class Pedestrians {
           if (tr.mode !== Mode.Walk && tr.mode !== Mode.Metro && tr.mode !== Mode.Car) continue;
           const end = plan.stays[i + 1]?.from ?? tr.depart + 0.3;
           if (h >= tr.depart && h < end) {
-            if (this.agents.length < MAX_AGENTS && !this.taken(c.id)) this.spawnQueue.push({ cit: c, trip: tr, progress: (h - tr.depart) / Math.max(1e-6, end - tr.depart) });
-          } else if (tr.depart > h && tr.depart < h + 6) {
+            if ((from === null || tr.depart > from) && this.agents.length < MAX_AGENTS && !this.taken(c.id)) this.spawnQueue.push({ cit: c, trip: tr, progress: (h - tr.depart) / Math.max(1e-6, end - tr.depart) });
+          } else if (tr.depart > t0 && tr.depart > h && tr.depart <= h + AHEAD_H) {
             const idx = this.freePending.length ? this.freePending.pop()! : this.pending.length;
-            this.pending[idx] = { cit: c, trip: tr };
+            this.pending[idx] = { cit: c, trip: tr, ref };
             this.events.push(tr.depart, idx);
           }
         }
