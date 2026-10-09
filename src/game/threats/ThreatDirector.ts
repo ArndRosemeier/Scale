@@ -38,6 +38,9 @@ import { RunawayTeens, type TeenOpts } from '../aliens/RunawayTeens';
 import { Burrower, BURROWER } from './burrower/Burrower';
 import { WormMesh } from './burrower/WormMesh';
 import { Sinkholes } from './burrower/Sinkholes';
+import { Leviathan, LEVIATHAN } from './leviathan/Leviathan';
+import { BridgeBreaks } from './leviathan/BridgeBreaks';
+import { planLeviathanRoute } from './leviathan/leviRoute';
 import { DecalKind } from '../powers/ElementFx';
 
 /** How an archetype shows itself before it comes (omens) and how it starts. */
@@ -77,6 +80,19 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
       } catch (err) { console.warn('[threats]', err); return null; }
     },
     fallback: ['rumble'],
+  },
+  // The Leviathan: up the river to its bridges; omens a wake on the river and a surge at a bridge.
+  leviathan: {
+    omen: (d, _site, kind, rng) => d.leviathanOmen(kind, rng),
+    start: (d, _site, seed, opts) => {
+      try {
+        const l = new Leviathan(d.g, d.bridgeBreaks, seed);
+        // (dev: { near: true } — on to the stop nearest the hero.)
+        if (opts.near) l.devNear(d.g.player.pos.x, d.g.player.pos.z);
+        return l;
+      } catch (err) { console.warn('[threats]', err); return null; }
+    },
+    fallback: ['wake'],
   },
   // A rampaging giant player (started by HostilePlayer after its warnings, never by the clock).
   rampage: {
@@ -178,6 +194,10 @@ export class ThreatDirector {
   readonly sinkholes: Sinkholes;
   /** Dead worms lying in the city (gone after BURROWER.bodyHours game hours, when nobody is looking). */
   readonly wormRemains: Burrower[] = [];
+  /** The Leviathan's bodies (its head and six tentacles), sea-green, in the creatures' material. */
+  readonly leviMesh: WormMesh;
+  /** Broken bridge spans (the Leviathan's work), kept LEVIATHAN-side until mended. */
+  readonly bridgeBreaks: BridgeBreaks;
   /** Every brood swarm's creatures (one instanced mesh). */
   readonly broodMesh: BroodMesh;
   /** The few creatures of a brood omen darting between manholes. */
@@ -218,6 +238,9 @@ export class ThreatDirector {
     this.wormMesh = new WormMesh(this.mesh.material, 2);
     g.renderer.scene.add(this.wormMesh.group);
     this.sinkholes = new Sinkholes(g);
+    this.leviMesh = new WormMesh(this.mesh.material, 1 + LEVIATHAN.tentacles, LEVIATHAN.tint, 'leviathan');
+    g.renderer.scene.add(this.leviMesh.group);
+    this.bridgeBreaks = new BridgeBreaks(g);
     this.broodMesh = new BroodMesh();
     g.renderer.scene.add(this.broodMesh.mesh);
     this.fires = new FacadeFires(g.elements.fx, g.destruction, g.renderer.camera);
@@ -235,6 +258,7 @@ export class ThreatDirector {
   isHostile(ref: object): boolean {
     if (ref instanceof Strider) return true;
     if (ref instanceof Burrower) return !ref.defeated;
+    if (ref instanceof Leviathan) return !ref.defeated;
     if (ref instanceof AwakenedTree) return !ref.defeated;
     const m = (ref as { mal?: { mode: string } }).mal;
     return !!m && m.mode === 'hostile';
@@ -295,7 +319,7 @@ export class ThreatDirector {
   }
 
   private obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
-    for (const ev of this.events) if (ev instanceof Strider || ev instanceof Burrower) ev.obstacles(x0, z0, x1, z1, out);
+    for (const ev of this.events) if (ev instanceof Strider || ev instanceof Burrower || ev instanceof Leviathan) ev.obstacles(x0, z0, x1, z1, out);
     for (const w of this.wormRemains) w.obstacles(x0, z0, x1, z1, out);
     for (const r of this.remains) r.obstacles(x0, z0, x1, z1, out);
     // Awakened trees, walking or rooted where they were beaten.
@@ -331,6 +355,7 @@ export class ThreatDirector {
     }
     this.fires.update(dt);
     this.sinkholes.update(dt);
+    this.bridgeBreaks.update(dt);
     this.wormsAfter(dt);
     // Trains held while a worm tunnels under the city.
     g.underground.metroHold = this.events.some((e) => e instanceof Burrower && e.active);
@@ -481,6 +506,12 @@ export class ThreatDirector {
     for (const w of this.wormRemains) w.draw(W);
     if (!this.g.gate.enabled) { const p = this.g.player.pos; W.warm(p.x, p.y - 2, p.z); }
     W.end();
+    // The Leviathan (head and tentacles out of the water).
+    const LM = this.leviMesh;
+    LM.begin();
+    for (const ev of this.events) if (ev instanceof Leviathan) ev.draw(LM);
+    if (!this.g.gate.enabled) { const p = this.g.player.pos; LM.warm(p.x, p.y - 2, p.z); }
+    LM.end();
     // The brood's creatures (and those of an omen).
     const B = this.broodMesh;
     B.begin();
@@ -578,6 +609,68 @@ export class ThreatDirector {
     };
   }
 
+  // ================================================================== the Leviathan
+
+  /** Where this city's Leviathan would come up the river (seeded per city), cached. */
+  private leviRoute(): ReturnType<typeof planLeviathanRoute> {
+    if (this.leviPlan === undefined) this.leviPlan = planLeviathanRoute(this.g.macro, this.g.terrain, this.g.settings.seed);
+    return this.leviPlan;
+  }
+  private leviPlan: ReturnType<typeof planLeviathanRoute> | undefined;
+
+  /**
+   * An omen of the Leviathan: 'wake' — a long V of foam moving up the river where it will come;
+   * 'surge' — the water heaves and boils beside a bridge on its way, a deep surge heard on the deck,
+   * drivers on it stopping.
+   */
+  leviathanOmen(kind: string, rng: Rng): boolean {
+    const g = this.g, R = this.leviRoute(), cam = g.renderer.camera.position;
+    if (!R) return false;
+    if (kind === 'surge') {
+      const S = R.stops[rng.int(0, R.stops.length - 1)];
+      const wl = g.terrain.waterLevel(S.x, S.z);
+      if (!isFinite(wl)) return false;
+      g.audio.play('leviathan_surface', S.x, wl, S.z, 0.8, 0.7, 120, cam);
+      for (let i = 0; i < 10; i++) {
+        const a = rng.range(0, Math.PI * 2), r = rng.range(2, 10);
+        g.later.after(i * 0.25, () => g.dust.burst(S.x + Math.cos(a) * r, wl + 0.3, S.z + Math.sin(a) * r, 8, 3, 4, 3, 2.5, WAKE_A, -0.2, 0.6));
+      }
+      g.stimuli.emit('threat', S.x, wl, S.z, 5, 160, { cause: 'threat' });
+      for (const v of g.traffic.vehicles) if (Math.hypot(v.x - S.tx, v.z - S.tz) < 70) v.fear = Math.max(v.fear, 1);
+      return true;
+    }
+    // Wake: from the entry up towards the first stop.
+    const dx = R.pts[2] - R.pts[0], dz = R.pts[3] - R.pts[1], l = Math.hypot(dx, dz) || 1;
+    this.wakes.push({ x: R.start.x, z: R.start.z, dx: dx / l, dz: dz / l, t: 30 });
+    g.audio.play('leviathan_surface', R.start.x, g.terrain.waterLevel(R.start.x, R.start.z), R.start.z, 0.5, 0.6, 90, cam);
+    return true;
+  }
+
+  /** The running (or latest) Leviathan. */
+  leviathan(): Leviathan | null {
+    for (let i = this.events.length - 1; i >= 0; i--) { const e = this.events[i]; if (e instanceof Leviathan) return e; }
+    return null;
+  }
+
+  private leviathanDev(): Record<string, unknown> {
+    const L = () => this.leviathan();
+    return {
+      status: () => L()?.snapshot() ?? 'no leviathan',
+      surface: () => L()?.devSurface() ?? 'no leviathan',
+      near: () => { const P = this.g.player.pos; return L()?.devNear(P.x, P.z) ?? 'no leviathan'; },
+      sink: () => L()?.devSink() ?? 'no leviathan',
+      breakSpan: () => L()?.devBreak() ?? 'no leviathan',
+      damage: (zone: string | null = 'neck', amount = 300) => { const l = L(); return l ? l.damage(zone, amount, { cause: 'player' }) : 'no leviathan'; },
+      freeze: (s = 3) => { const l = L(); return l ? (l.onElement('frost', s), l.frozen) : 'no leviathan'; },
+      die: () => { const l = L(); if (!l) return 'no leviathan'; if (!l.surfaced) return 'not up'; l.damage('maw', 1e6, { cause: 'player' }); l.hp = 0; return l.mode; },
+      retreat: () => { const l = L(); if (!l) return 'no leviathan'; l.shutdown(); return l.mode; },
+      route: () => { const R = L()?.route ?? this.leviRoute(); return R ? { river: R.river, start: R.start, end: R.end, length: Math.round(R.length), stops: R.stops.map((s) => ({ kind: s.kind, s: Math.round(s.s), x: Math.round(s.x), z: Math.round(s.z), edge: s.edge })) } : null; },
+      omen: (kind = 'wake') => this.leviathanOmen(kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
+      bridges: () => this.bridgeBreaks.status(),
+      tuning: LEVIATHAN,
+    };
+  }
+
   // ================================================================== the Strider's omens
 
   /** Where this city's Strider would rise (the seed's river spot), cached. */
@@ -648,7 +741,7 @@ export class ThreatDirector {
    * the street. Robot malfunctions, a Burrower (alive or dead) and omens are not kept: they end
    * with the session.
    */
-  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level: number } | null; sinkholes: number[][] } {
+  saveState(): { clock: Record<string, unknown>; setting: CityEvents; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level: number } | null; sinkholes: number[][]; bridges: number[][] } {
     const remains: SavedBody[] = [];
     let strider: { s: number; hp: number; mode: string; level: number } | null = null;
     for (const b of [...this.remains, ...this.events.filter((e): e is Strider => e instanceof Strider && e.defeated)]) {
@@ -656,11 +749,11 @@ export class ThreatDirector {
       remains.push({ kind: 'strider', x: st.x, z: st.z, yaw: st.yaw, side: st.side, s: st.s, downAt: Math.round(b.downAt * 1000) / 1000, cleared: Math.round(b.cleared * 1000) / 1000 });
     }
     for (const e of this.events) if (e instanceof Strider && e.active && (e.mode === 'emerge' || e.mode === 'advance' || e.mode === 'rampage')) { const st = e.saveState(); strider = { s: st.s, hp: st.hp, mode: st.mode, level: this.g.response.incidents.find((i) => i.ev === e)?.level ?? 0 }; }
-    return { clock: { ...this.clock.state }, setting: this.setting, remains, strider, sinkholes: this.sinkholes.saveState() };
+    return { clock: { ...this.clock.state }, setting: this.setting, remains, strider, sinkholes: this.sinkholes.saveState(), bridges: this.bridgeBreaks.saveState() };
   }
 
   /** Saves: restore what `saveState` kept (on a fresh city: no events running yet). */
-  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level?: number } | null; sinkholes?: number[][] }): void {
+  restoreState(o: { clock: Record<string, unknown> | null; setting: string; remains: SavedBody[]; strider: { s: number; hp: number; mode: string; level?: number } | null; sinkholes?: number[][]; bridges?: number[][] }): void {
     const S = this.clock.state as unknown as Record<string, unknown>;
     if (o.clock && o.clock.v === 1) for (const k of Object.keys(S)) if (k in o.clock && (typeof o.clock[k] === typeof S[k] || o.clock[k] === null || S[k] === null)) S[k] = o.clock[k];
     if (o.setting === 'off' || o.setting === 'rare' || o.setting === 'normal' || o.setting === 'frequent') this.setting = o.setting;
@@ -668,6 +761,7 @@ export class ThreatDirector {
     for (const r of this.remains.splice(0)) r.dispose();
     this.wormRemains.length = 0;
     this.sinkholes.restoreState(o.sinkholes ?? []);
+    this.bridgeBreaks.restoreState(o.bridges ?? []);
     o.remains.forEach((b, i) => {
       if (b.kind !== 'strider') return;
       try {
@@ -801,6 +895,12 @@ export class ThreatDirector {
        * .die() · .retreat() · .route() · .omen('rumble' | 'pothole') · .hole(dist, r) · .holes()
        */
       burrower: this.burrowerDev(),
+      /**
+       * The Leviathan: dev.threat.leviathan.status() · .surface() (up at its next stop now) · .near() (on to the stop
+       * nearest the player) · .sink() · .breakSpan() · .damage(zone, amount) · .freeze(s) · .die() · .retreat() ·
+       * .route() · .omen('wake' | 'surge') · .bridges()
+       */
+      leviathan: this.leviathanDev(),
       setting: (s?: CityEvents) => { if (s) this.setting = s; return this.setting; },
       log: () => this.log,
       stats: () => ({ ...this.stats, rogue: this.rogue.stats, machines: this.rogue.list.length }),

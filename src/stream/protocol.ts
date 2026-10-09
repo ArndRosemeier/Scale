@@ -6,6 +6,7 @@ import type { MeshData } from '../build/meshBuilder';
 import type { CitySettings } from '../world/settings';
 import type { MacroPlan } from '../plan/types';
 import type { CellPlan } from '../plan/cell';
+import type { BridgeGapSpec } from '../build/bridges';
 
 export type ToWorker =
   | { type: 'init'; settings: CitySettings; sendMacro: boolean }
@@ -14,7 +15,8 @@ export type ToWorker =
   | { type: 'water'; job: number; x0: number; z0: number; size: number }
   | { type: 'forest'; job: number; x0: number; z0: number; size: number }
   | { type: 'rural'; job: number; x0: number; z0: number; size: number }
-  | { type: 'bridges'; job: number }
+  /** All bridges; `gaps` are fallen spans to leave out (BridgeBreaks). */
+  | { type: 'bridges'; job: number; gaps?: BridgeGapSpec[] }
   | { type: 'landmarks'; job: number }
   | { type: 'skyline'; job: number; cells: number[] };
 
