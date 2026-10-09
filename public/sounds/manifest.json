@@ -1103,5 +1103,29 @@
     "loop": false,
     "gain": 1,
     "description": "a Leviathan tentacle slapping down on a deck or quay: a heavy wet thud (procedural, tools/synthLeviathan.mjs)"
+  },
+  "roc_screech": {
+    "files": [
+      "roc_screech.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the Roc's scream: a harsh, rough descending raptor 'kee-eeer', echoing off the town (procedural, tools/synthRoc.mjs)"
+  },
+  "roc_cry_far": {
+    "files": [
+      "roc_cry_far.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "the Roc's cry far off and high up (its omen): duller, with more of the sky's echo (procedural, tools/synthRoc.mjs)"
+  },
+  "roc_flap": {
+    "files": [
+      "roc_flap.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "a Roc wingbeat: a great whoomp of air with a low thump (procedural, tools/synthRoc.mjs)"
   }
 }

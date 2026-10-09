@@ -42,6 +42,9 @@ import { Leviathan, LEVIATHAN } from './leviathan/Leviathan';
 import { BridgeBreaks } from './leviathan/BridgeBreaks';
 import { planLeviathanRoute } from './leviathan/leviRoute';
 import { DecalKind } from '../powers/ElementFx';
+import { Roc, ROC_T } from './roc/Roc';
+import { RocMesh } from './roc/RocMesh';
+import { RocRig } from './roc/rocRig';
 
 /** How an archetype shows itself before it comes (omens) and how it starts. */
 interface ArchetypeImpl {
@@ -93,6 +96,17 @@ const ARCHETYPE_IMPL: Record<string, ArchetypeImpl> = {
       } catch (err) { console.warn('[threats]', err); return null; }
     },
     fallback: ['wake'],
+  },
+  // The Roc: a giant bird of prey over the hero's part of town; omens a cry from the sky, a fly-over.
+  roc: {
+    omen: (d, _site, kind, rng) => d.rocOmen(kind, rng),
+    start: (d, _site, seed, opts) => {
+      const r = new Roc(d.g, seed);
+      // (dev: { near: true } — already circling over the hero.)
+      if (opts.near) r.devNear();
+      return r;
+    },
+    fallback: ['cry'],
   },
   // A rampaging giant player (started by HostilePlayer after its warnings, never by the clock).
   rampage: {
@@ -196,6 +210,12 @@ export class ThreatDirector {
   readonly wormRemains: Burrower[] = [];
   /** The Leviathan's bodies (its head and six tentacles), sea-green, in the creatures' material. */
   readonly leviMesh: WormMesh;
+  /** The Roc's bodies (a live one, one lying dead, an omen's fly-over), in the creatures' material. */
+  readonly rocMesh: RocMesh;
+  /** Dead rocs lying where they fell (gone after ROC_T.bodyHours game hours, when nobody is looking). */
+  readonly rocRemains: Roc[] = [];
+  /** A roc omen crossing the sky high up. */
+  private rocFly: { rig: RocRig; t: number; dx: number; dz: number }[] = [];
   /** Broken bridge spans (the Leviathan's work), kept LEVIATHAN-side until mended. */
   readonly bridgeBreaks: BridgeBreaks;
   /** Every brood swarm's creatures (one instanced mesh). */
@@ -241,6 +261,8 @@ export class ThreatDirector {
     this.leviMesh = new WormMesh(this.mesh.material, 1 + LEVIATHAN.tentacles, LEVIATHAN.tint, 'leviathan');
     g.renderer.scene.add(this.leviMesh.group);
     this.bridgeBreaks = new BridgeBreaks(g);
+    this.rocMesh = new RocMesh(this.mesh.material, 3);
+    g.renderer.scene.add(this.rocMesh.group);
     this.broodMesh = new BroodMesh();
     g.renderer.scene.add(this.broodMesh.mesh);
     this.fires = new FacadeFires(g.elements.fx, g.destruction, g.renderer.camera);
@@ -259,6 +281,7 @@ export class ThreatDirector {
     if (ref instanceof Strider) return true;
     if (ref instanceof Burrower) return !ref.defeated;
     if (ref instanceof Leviathan) return !ref.defeated;
+    if (ref instanceof Roc) return !ref.defeated;
     if (ref instanceof AwakenedTree) return !ref.defeated;
     const m = (ref as { mal?: { mode: string } }).mal;
     return !!m && m.mode === 'hostile';
@@ -319,8 +342,9 @@ export class ThreatDirector {
   }
 
   private obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
-    for (const ev of this.events) if (ev instanceof Strider || ev instanceof Burrower || ev instanceof Leviathan) ev.obstacles(x0, z0, x1, z1, out);
+    for (const ev of this.events) if (ev instanceof Strider || ev instanceof Burrower || ev instanceof Leviathan || ev instanceof Roc) ev.obstacles(x0, z0, x1, z1, out);
     for (const w of this.wormRemains) w.obstacles(x0, z0, x1, z1, out);
+    for (const r of this.rocRemains) r.obstacles(x0, z0, x1, z1, out);
     for (const r of this.remains) r.obstacles(x0, z0, x1, z1, out);
     // Awakened trees, walking or rooted where they were beaten.
     for (const ev of this.events) if (ev instanceof AwakenedTree) ev.obstacles(x0, z0, x1, z1, out);
@@ -350,6 +374,7 @@ export class ThreatDirector {
         // A defeated monster's body stays in the city.
         if (ev instanceof Strider && ev.defeated) this.remains.push(ev);
         if (ev instanceof Burrower && ev.mode === 'dead') this.wormRemains.push(ev);
+        if (ev instanceof Roc && ev.mode === 'dead') this.rocRemains.push(ev);
         ev.dispose(); this.ended.delete(ev); this.events.splice(i, 1);
       }
     }
@@ -357,6 +382,7 @@ export class ThreatDirector {
     this.sinkholes.update(dt);
     this.bridgeBreaks.update(dt);
     this.wormsAfter(dt);
+    this.rocsAfter(dt);
     // Trains held while a worm tunnels under the city.
     g.underground.metroHold = this.events.some((e) => e instanceof Burrower && e.active);
     for (let i = this.glimpses.length - 1; i >= 0; i--) { const gl = this.glimpses[i]; gl.update(dt); if (gl.done) this.glimpses.splice(i, 1); }
@@ -465,9 +491,11 @@ export class ThreatDirector {
     for (const t of AwakenedTree.grove()) list.push({ x: t.x, z: t.z, color: '#5a7d3a', kind: 'dot', place: true, title: 'A gnarled old tree — it walked here' });
     for (const r of this.remains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', place: true, title: r.cleared > 0 ? 'Fallen creature — being cleared away' : 'Fallen creature — cordoned off' });
     for (const w of this.wormRemains) list.push({ x: w.x, z: w.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen worm — cordoned off' });
+    for (const r of this.rocRemains) list.push({ x: r.x, z: r.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen roc — cordoned off' });
     for (const ev of this.events) {
       if (ev instanceof Strider && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen creature' });
       if (ev instanceof Burrower && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen worm' });
+      if (ev instanceof Roc && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#8e8e93', kind: 'dot', place: true, title: 'Fallen roc' });
       if (ev instanceof AwakenedTree && ev.defeated) list.push({ x: ev.x, z: ev.z, color: '#5a7d3a', kind: 'dot', place: true, title: 'A gnarled old tree — it walked here' });
       // (A rampaging player is the incident: no alert marker on themselves.)
       if (!ev.active || ev.archetype === 'rampage') continue;
@@ -512,6 +540,14 @@ export class ThreatDirector {
     for (const ev of this.events) if (ev instanceof Leviathan) ev.draw(LM);
     if (!this.g.gate.enabled) { const p = this.g.player.pos; LM.warm(p.x, p.y - 2, p.z); }
     LM.end();
+    // Rocs (a live one, a body lying where it fell, an omen's fly-over).
+    const RM = this.rocMesh;
+    RM.begin();
+    for (const ev of this.events) if (ev instanceof Roc) ev.draw(RM);
+    for (const r of this.rocRemains) r.draw(RM);
+    for (const f of this.rocFly) RM.draw(f.rig);
+    if (!this.g.gate.enabled) { const p = this.g.player.pos; RM.warm(p.x, p.y - 2, p.z); }
+    RM.end();
     // The brood's creatures (and those of an omen).
     const B = this.broodMesh;
     B.begin();
@@ -606,6 +642,79 @@ export class ThreatDirector {
       },
       holes: () => this.sinkholes.status(),
       tuning: BURROWER,
+    };
+  }
+
+  // ================================================================== the Roc
+
+  /** Dead rocs lying where they fell: gone after their hours when the camera is far. */
+  private rocsAfter(dt: number): void {
+    for (let i = this.rocFly.length - 1; i >= 0; i--) {
+      const f = this.rocFly[i], R = f.rig;
+      f.t += dt;
+      R.x += f.dx * 30 * dt; R.z += f.dz * 30 * dt; R.t += dt;
+      R.flap += dt * Math.PI * 2 * 0.6; R.beat = f.t % 6 < 2 ? 0.8 : 0.1;
+      R.place();
+      if (f.t > 20) this.rocFly.splice(i, 1);
+    }
+    this.rocT -= dt;
+    if (this.rocT > 0 || !this.rocRemains.length) return;
+    this.rocT = 4;
+    const c = this.g.renderer.camera.position, now = this.g.sky.hoursAbs;
+    for (let i = this.rocRemains.length - 1; i >= 0; i--) {
+      const r = this.rocRemains[i];
+      if (now - r.downAt > ROC_T.bodyHours && Math.hypot(r.x - c.x, r.z - c.z) > 320) { this.rocRemains.splice(i, 1); this.note('roc body gone'); }
+    }
+  }
+  private rocT = 0;
+
+  /**
+   * An omen of the Roc: 'cry' — a raptor's scream from high over the town, people looking up, birds
+   * lifting off the roofs; 'flyover' — the bird itself crossing the sky far up, its shadow sweeping
+   * over the streets, gone beyond the roofs.
+   */
+  rocOmen(kind: string, rng: Rng): boolean {
+    const g = this.g, p = g.player.pos, cam = g.renderer.camera.position;
+    const a = rng.range(0, Math.PI * 2);
+    if (kind === 'flyover') {
+      const R = new RocRig(1), d = 330, alt = 190 + rng.range(0, 40);
+      const dx = -Math.cos(a), dz = -Math.sin(a);
+      R.x = p.x + Math.cos(a) * d + dz * rng.range(-60, 60); R.z = p.z + Math.sin(a) * d - dx * rng.range(-60, 60); R.y = g.world.groundHeight(p.x, p.z) + alt;
+      R.yaw = Math.atan2(dx, dz);
+      R.place();
+      this.rocFly.push({ rig: R, t: 0, dx, dz });
+      g.audio.play('roc_cry_far', p.x, R.y, p.z, 0.6, 1, 400, cam);
+      g.stimuli.emit('threat', p.x, p.y, p.z, 3, 140, { cause: 'threat' });
+      return true;
+    }
+    const x = p.x + Math.cos(a) * 250, z = p.z + Math.sin(a) * 250, y = g.world.groundHeight(p.x, p.z) + 160;
+    g.audio.play('roc_cry_far', x, y, z, 0.9, 0.95 + rng.range(0, 0.1), 500, cam);
+    g.stimuli.emit('roar', x, y, z, 4, 300, { cause: 'threat' });
+    return true;
+  }
+
+  /** The running (or latest) Roc. */
+  roc(): Roc | null {
+    for (let i = this.events.length - 1; i >= 0; i--) { const e = this.events[i]; if (e instanceof Roc) return e; }
+    return null;
+  }
+
+  private rocDev(): Record<string, unknown> {
+    const R = () => this.roc();
+    const no = 'no roc';
+    return {
+      status: () => R()?.snapshot() ?? no,
+      near: () => R()?.devNear() ?? no,
+      perch: () => R()?.devPerch() ?? no,
+      snatch: () => R()?.devSnatch() ?? no,
+      swoop: () => R()?.devSwoop() ?? no,
+      dive: () => R()?.devDive() ?? no,
+      ground: () => R()?.devGround() ?? no,
+      leave: () => R()?.devLeave() ?? no,
+      damage: (zone: string | null = 'body', amount = 300) => { const r = R(); return r ? r.damage(zone, amount, { cause: 'player' }) : no; },
+      die: () => { const r = R(); if (!r) return no; r.damage('body', 1e6, { cause: 'player' }); r.hp = 0; return r.mode; },
+      omen: (kind = 'cry') => this.rocOmen(kind, new Rng((Math.random() * 2 ** 32) >>> 0)),
+      tuning: ROC_T,
     };
   }
 
@@ -760,6 +869,7 @@ export class ThreatDirector {
     this.earned = this.chaos = -1;
     for (const r of this.remains.splice(0)) r.dispose();
     this.wormRemains.length = 0;
+    this.rocRemains.length = 0;
     this.sinkholes.restoreState(o.sinkholes ?? []);
     this.bridgeBreaks.restoreState(o.bridges ?? []);
     o.remains.forEach((b, i) => {
@@ -901,6 +1011,11 @@ export class ThreatDirector {
        * .route() · .omen('wake' | 'surge') · .bridges()
        */
       leviathan: this.leviathanDev(),
+      /**
+       * The Roc: dev.threat.roc.status() · .near() (circling over the player now) · .perch() · .snatch() · .swoop() ·
+       * .dive() · .ground() (tumbles out of the sky) · .damage(zone, amount) · .die() · .leave() · .omen('cry' | 'flyover')
+       */
+      roc: this.rocDev(),
       setting: (s?: CityEvents) => { if (s) this.setting = s; return this.setting; },
       log: () => this.log,
       stats: () => ({ ...this.stats, rogue: this.rogue.stats, machines: this.rogue.list.length }),

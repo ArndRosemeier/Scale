@@ -77,10 +77,11 @@ export interface ThreatActor {
   /** Its faction (factions/relations.ts); unset: 'monsters'. */
   readonly faction?: FactionId;
   /**
-   * An element from the powers lands on it (fire, frost, lightning): its own reaction (an awakened
-   * tree catches fire) and the multiplier on the power's damage. Absent: 1.
+   * An element from the powers lands on it (fire, frost, lightning, a whirlwind's wind): its own
+   * reaction (an awakened tree catches fire, a roc tumbles out of the sky) and the multiplier on the
+   * power's damage. Absent: 1.
    */
-  onElement?(el: 'fire' | 'frost' | 'shock', dur: number): number;
+  onElement?(el: 'fire' | 'frost' | 'shock' | 'wind', dur: number): number;
   /** Biggest dimension at full size (m), for the shrink ray. Absent: `height`. */
   readonly size?: number;
   /**
