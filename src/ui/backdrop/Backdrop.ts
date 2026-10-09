@@ -7,6 +7,7 @@
  */
 import { buildSkyline, BOX_FLOATS, LIGHT_FLOATS, PITCH, BLOCK_HALF, REACH, ORBIT_R, type Skyline } from './layout';
 import * as S from './shaders';
+import { Ufos, UFO_MAX, saucerMesh, beamMesh, diveSound } from './ufos';
 import { v3cross as cross, v3norm as norm, v3sub as sub, type Vec3 } from '../../core/math';
 
 /** The sun just under the western horizon. */
@@ -49,7 +50,7 @@ export function stopBackdrop(): void {
 class Backdrop {
   private canvas = document.createElement('canvas');
   private gl: WebGL2RenderingContext | null;
-  private progs: Record<'sky' | 'ground' | 'bld' | 'light', { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> }> | null = null;
+  private progs: Record<'sky' | 'ground' | 'bld' | 'light' | 'ufo' | 'beam', { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> }> | null = null;
   private vaos: WebGLVertexArrayObject[] = [];
   private bufs: WebGLBuffer[] = [];
   private boxBuf: WebGLBuffer | null = null;
@@ -61,7 +62,7 @@ class Backdrop {
   private raf = 0;
   private held = false;
   private last = 0;
-  private time: number;
+  time: number;
   private fade = 0;
   private fadeTo = 1;
   private scale = 1;
@@ -72,19 +73,37 @@ class Backdrop {
   private still = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   private onMove = (e: PointerEvent): void => { this.mouse = [e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1]; };
   private onResize = (): void => { if (this.still) this.draw(); };
+  private ufos: Ufos;
+  private saucerVerts = 0;
+  private beamVerts = 0;
+  private shake = 0;
+  private flash = document.createElement('div');
+  private audio: AudioContext | null = null;
+  // Sound only after the page has heard a click or key (browsers allow it then) and not with ?mute.
+  private onGesture = (): void => {
+    removeEventListener('pointerdown', this.onGesture);
+    removeEventListener('keydown', this.onGesture);
+    if (new URLSearchParams(location.search).has('mute') || this.audio) return;
+    try { this.audio = new AudioContext(); } catch { /* no sound then */ }
+  };
 
   constructor(private host: HTMLElement, seed: number) {
     this.seed = seed;
     this.time = 40 + (seed % 1000) * 0.37;
     this.sky = buildSkyline(seed);
+    this.ufos = new Ufos(seed, this.time, !this.still);
     this.canvas.className = 'menu-3d';
+    this.flash.className = 'menu-flash';
     this.gl = this.canvas.getContext('webgl2', { antialias: true, alpha: false, depth: true, powerPreference: 'default' });
     if (!this.gl || !this.init()) { this.fallback(); return; }
-    host.appendChild(this.canvas);
+    host.append(this.canvas, this.flash);
+    addEventListener('pointerdown', this.onGesture);
+    addEventListener('keydown', this.onGesture);
     this.canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.fallback(); });
     addEventListener('pointermove', this.onMove);
     addEventListener('resize', this.onResize);
     this.raf = requestAnimationFrame(this.frame);
+    if (import.meta.env.DEV) (window as unknown as { backdrop: Backdrop }).backdrop = this;
   }
 
   private fallback(): void {
@@ -100,10 +119,12 @@ class Backdrop {
     const ground = program(gl, S.GROUND_VS, S.GROUND_FS(PITCH, BLOCK_HALF, REACH));
     const bld = program(gl, S.BUILDING_VS, S.BUILDING_FS);
     const light = program(gl, S.LIGHT_VS, S.LIGHT_FS);
-    if (!sky || !ground || !bld || !light) return false;
-    const names = ['u_time', 'u_cam', 'u_sun', 'u_fade', 'u_viewProj', 'u_fwd', 'u_right', 'u_up', 'u_pxScale'];
+    const ufo = program(gl, S.UFO_VS(UFO_MAX), S.UFO_FS);
+    const beam = program(gl, S.UFO_VS(UFO_MAX), S.BEAM_FS);
+    if (!sky || !ground || !bld || !light || !ufo || !beam) return false;
+    const names = ['u_time', 'u_cam', 'u_sun', 'u_fade', 'u_viewProj', 'u_fwd', 'u_right', 'u_up', 'u_pxScale', 'u_ufo', 'u_ufo2', 'u_mode'];
     const wrap = (p: WebGLProgram) => ({ p, u: Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(p, n)])) });
-    this.progs = { sky: wrap(sky), ground: wrap(ground), bld: wrap(bld), light: wrap(light) };
+    this.progs = { sky: wrap(sky), ground: wrap(ground), bld: wrap(bld), light: wrap(light), ufo: wrap(ufo), beam: wrap(beam) };
 
     // Sky: no vertex data (the shader makes its triangle from the vertex index).
     this.vaos.push(gl.createVertexArray()!);
@@ -131,6 +152,17 @@ class Backdrop {
     this.attrib(light, 'a_p', 4, LIGHT_FLOATS * 4, 0);
     this.attrib(light, 'a_q', 4, LIGHT_FLOATS * 4, 16);
     this.vaos.push(lv);
+    // UFOs: the saucer and its beam, one instance per saucer.
+    for (const [mesh, prog] of [[saucerMesh(), ufo], [beamMesh(), beam]] as const) {
+      const v = gl.createVertexArray()!;
+      gl.bindVertexArray(v);
+      this.buffer(mesh);
+      this.attrib(prog, 'a_pos', 3, 24, 0);
+      this.attrib(prog, 'a_norm', 3, 24, 12);
+      this.vaos.push(v);
+    }
+    this.saucerVerts = saucerMesh().length / 6;
+    this.beamVerts = beamMesh().length / 6;
     gl.bindVertexArray(null);
     return true;
   }
@@ -195,12 +227,14 @@ class Backdrop {
       this.slow = this.slow * 0.95 + (dt > 1 / 40 ? 1 : 0) * 0.05;
       if (this.slow > 0.6 && this.scale > 0.5) { this.scale *= 0.8; this.slow = 0; }
     }
+    this.shake = Math.max(0, this.shake - dt);
     this.draw();
     if (this.frames === 2) this.canvas.classList.add('shown');
     if (!this.still || this.fade !== this.fadeTo) this.raf = requestAnimationFrame(this.frame);
   };
 
-  private draw(): void {
+  /** Draw one frame now (also for tests: set `time` first). */
+  draw(): void {
     const gl = this.gl!;
     const P = this.progs!;
     const dpr = Math.min(devicePixelRatio || 1, 1.5) * this.scale;
@@ -215,6 +249,11 @@ class Backdrop {
     const r = ORBIT_R + Math.sin(t * 0.031) * 40;
     const eye: Vec3 = [Math.cos(a) * r, 150 + Math.sin(t * 0.047) * 30 - this.lean[1] * 10, Math.sin(a) * r];
     const look: Vec3 = [Math.cos(a + 2.5) * 90, 55 + Math.sin(t * 0.06) * 12 - this.lean[1] * 30, Math.sin(a + 2.5) * 90];
+    // The diving saucer's pass shakes the camera for a moment.
+    if (this.shake > 0) {
+      const k = this.shake * this.shake * 6;
+      for (let i = 0; i < 3; i++) { eye[i] += (Math.random() - 0.5) * k; look[i] += (Math.random() - 0.5) * k * 4; }
+    }
     const aspect = w / h;
     // Portrait screens see a wider angle so the towers still fit.
     const fovY = (aspect < 1 ? 62 : 48) * Math.PI / 180;
@@ -255,6 +294,21 @@ class Backdrop {
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 30, this.sky.boxCount);
 
     gl.disable(gl.CULL_FACE);
+    this.ufos.update(t, eye, fwd);
+    if (this.ufos.started && this.audio) { void this.audio.resume(); diveSound(this.audio); }
+    if (this.ufos.hit) this.boo();
+    const setUfo = (p: { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> }, mode: number): void => {
+      set(p);
+      gl.uniform4fv(p.u.u_ufo, this.ufos.pos);
+      gl.uniform4fv(p.u.u_ufo2, this.ufos.pose);
+      gl.uniform1f(p.u.u_mode, mode);
+    };
+    if (this.ufos.count) {
+      setUfo(P.ufo, 0);
+      gl.bindVertexArray(this.vaos[4]);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, this.saucerVerts, this.ufos.count);
+    }
+
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.depthMask(false);
@@ -262,12 +316,29 @@ class Backdrop {
     gl.uniform1f(P.light.u.u_pxScale, h / (2 * ty));
     gl.bindVertexArray(this.vaos[3]);
     gl.drawArrays(gl.POINTS, 0, this.sky.lightCount);
+    if (this.ufos.count) {
+      setUfo(P.beam, 1);
+      gl.bindVertexArray(this.vaos[5]);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, this.beamVerts, this.ufos.count);
+    }
     gl.depthMask(true);
     gl.bindVertexArray(null);
   }
 
+  /** The diving saucer is in your face: a flash and a jolt. */
+  private boo(): void {
+    this.shake = 0.6;
+    this.flash.classList.remove('go');
+    void this.flash.offsetWidth;
+    this.flash.classList.add('go');
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.raf);
+    removeEventListener('pointerdown', this.onGesture);
+    removeEventListener('keydown', this.onGesture);
+    void this.audio?.close();
+    this.flash.remove();
     clearTimeout(this.seedTimer);
     removeEventListener('pointermove', this.onMove);
     removeEventListener('resize', this.onResize);

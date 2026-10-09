@@ -2,11 +2,24 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.177 — 2026-10-09
+## 0.180 — 2026-10-09
 
 - **Less memory: the game's tab holds about 1 GB less after a while of travelling.** Building meshes, the crowd's baked animation and the facade and street texture sets used to stay in the tab's memory a second time after they had been handed to the graphics card. Now each is kept once, on the graphics card. Buildings that start hidden (the detailed version of far blocks, the simple version of near ones) are handed over within a few frames of arriving, one per frame. Measured in a headless run (size 1, four minutes of travel): the page's memory fell from 1.9 GB to 0.8 GB. Nothing looks different.
 - **Sounds are decoded when first heard.** All thirteen ambience beds (sea, sewer, metro, rain, …) used to be decoded at start and kept, about 85 MB, even where you never hear them. Now each is loaded when it first becomes audible (it fades in as before), and any sound or bed not wanted for 90 seconds is dropped and loaded again when next needed. Headless after four minutes of travel: 11 MB of decoded sound instead of 85 MB.
 - A building that comes down now rebuilds just its own outer walls to cut the falling part from (a self-test checks that this gives exactly the same pieces as the block's mesh).
+
+## 0.179 — 2026-10-09
+
+- **New title music: "Dusk Awakening", Arnd's heroic main theme.** It starts with a soft fade-in after your first click or key on the start screen and loops while you choose a city. It plays on through the loading screen and fades out as the game begins. It streams in only when it starts, so the page doesn't load any slower. It follows the volume, mute, music switch and music level from the settings (and `?mute`).
+
+## 0.178 — 2026-10-09
+
+- Tests only: the "room splitting" speed check times each office, shop or café storey three times and counts the fastest, so other test workers sharing the CPU no longer make it fail.
+
+## 0.177 — 2026-10-09
+
+- **UFOs over the start screen.** Three flying saucers circle high over the city with running lights round their rims and a glowing dome. Every half minute or so one sinks a little and sweeps a green scanning beam over the roofs.
+- **Watch out.** Every 40 to 75 seconds (the first time about 12 seconds in) a saucer comes in from far over the skyline, picks up speed and dives straight at you, its glowing belly filling the screen. Then there is a green flash and the camera jolts. Once you have clicked or pressed a key on the page, you also hear it: a wobbling hum rising to a shriek, then a whoosh as it passes. There is no sound with `?mute`, and no dive with reduced motion switched on.
 
 ## 0.176 — 2026-10-09
 
