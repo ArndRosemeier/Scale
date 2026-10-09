@@ -1710,6 +1710,11 @@ section('deep realm', async () => {
   const lost = freshWar(0, 3, seeded(7)); lost.front = 1; lost.murk = 1; lost.lumen = 0;
   for (let h = 1; h <= 72; h++) stepWar(lost, h, false, true, { breach: () => { breaches++; } }, seeded(8 + h));
   check(breaches >= 2, `war: the Murk holding the Hall break out at night (${breaches} in three nights)`);
+  // A lost war can be won back by the player: clearing the Hall, then the trench, moves the line back (never forward).
+  const { retake } = await import('../src/underground/deep/War');
+  const hall = retake(lost, WAR.retakeHall), f1 = lost.front, trench = retake(lost, WAR.retakeTrench), f2 = lost.front, again = retake(lost, WAR.retakeHall);
+  check(hall && trench && !again && f1 === WAR.retakeHall && f2 === WAR.retakeTrench && f2 < 0.5 && lost.murk < 1 && lost.lumen > 0.2, `war: a lost war is won back by clearing the Hall and the trench (front 1 → ${f1} → ${f2}, Murk ${lost.murk.toFixed(2)}, Lumen ${lost.lumen.toFixed(2)})`);
+  check(WAR.liveRaid[1] < WAR.raidGap[0] * 3600, 'war: a player at the Front sees a raid within minutes, not game hours (time runs at real speed by default)');
   const pw = parseWar({ ...JSON.parse(JSON.stringify(wa)), murk: 7, captives: [9, 'x'] }, 3, 0);
   check(!!pw && pw.murk === 1 && pw.captives.length === 3 && pw.captives[0] === WAR.penMax && pw.captives[1] === 0, 'war: a saved state is sanitised');
   const { tierOf, callRank, parseTrust, TRUST } = await import('../src/underground/deep/Trust');

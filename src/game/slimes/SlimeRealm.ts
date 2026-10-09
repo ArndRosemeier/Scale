@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import type { Game } from '../Game';
 import { Factions, MurkActor, type Blob, type FactionHost, type Role } from '../../underground/deep/Factions';
 import { Trust, TRUST, callRank, tierOf, type TrustTier, type TrustData } from '../../underground/deep/Trust';
-import { freshWar, stepWar, raiderDown, murkDown, endRaid, freePen, mawDown, parseWar, type WarState } from '../../underground/deep/War';
+import { WAR, freshWar, stepWar, raiderDown, murkDown, endRaid, freePen, mawDown, parseWar, retake, type WarState } from '../../underground/deep/War';
 import type { DeepPlan } from '../../underground/deep/plan';
 import type { DeepField } from '../../underground/deep/field';
 import { MurkBreach } from './MurkBreach';
@@ -55,6 +55,11 @@ export class SlimeRealm {
   private hurtT = 0;
   private live = false;
   private raidT = 0;
+  /** Real seconds the player has been at the Front since the last raid, and how long until the Murk storm it. */
+  private liveT = 0;
+  private liveRaid: number = WAR.liveRaid[0];
+  /** Small trust gains (a Murk here, a Murk there) gathered into one message. */
+  private gain = { sum: 0, t: 0, reason: '' };
   private pebble: { mesh: THREE.Mesh; x: number; y: number; z: number; t: number } | null = null;
   private pebbleT = 120;
   private heartLoop: ReturnType<Game['audio']['loop']> = null;
@@ -202,6 +207,7 @@ export class SlimeRealm {
       g.progress.grantedChanged('slimeCall');
     }
     this.hurtT = Math.max(0, this.hurtT - dt);
+    this.gainTick(dt);
   }
 
   // ------------------------------------------------------------------ the war
@@ -217,6 +223,10 @@ export class SlimeRealm {
     const night = G.uNight.value > 0.5;
     // The clock set back (the hour changed, an older save): the war goes on from now.
     const w = this.war;
+    // Raids are hours apart on the game clock; a player who stays at the Front sees one within minutes.
+    if (this.live && !w.raid) {
+      if ((this.liveT += 1) >= this.liveRaid) w.nextRaid = Math.min(w.nextRaid, w.at);
+    }
     if (w.at > now) { const d = w.at - now; w.at = now; w.nextRaid -= d; w.nextBreach -= d; if (w.mawBack > 0) w.mawBack -= d; }
     stepWar(this.war, now, this.live, night, {
       raid: () => this.raidStart(),
@@ -284,6 +294,7 @@ export class SlimeRealm {
       if (hall) b.path.push(...F.route(target.id, hall.id));
     }
     this.raidT = 0;
+    this.liveT = 0; this.liveRaid = WAR.liveRaid[0] + Math.random() * (WAR.liveRaid[1] - WAR.liveRaid[0]);
     this.g.audio.play('murk_growl', start.x, start.y, start.z, 1, 0.6, 30, this.g.renderer.camera.position);
     if (this.where !== 'none') this.g.powerHud.toast('The Murk are storming out of the Warrens — the Lumen are holding their trenches', 'deny', 7000);
   }
@@ -323,6 +334,7 @@ export class SlimeRealm {
       // The trench war's endless pushes leave the war as it is (only the player's kills count).
       if (b.area === 'push' && !byPlayer) return;
       if (b.area === 'raid') raiderDown(this.war, byPlayer); else murkDown(this.war, byPlayer);
+      if (!b.surface && b.role !== 'maw' && this.where !== 'none') this.retakeCheck(b);
       if (b.role === 'maw') {
         mawDown(this.war);
         if (byPlayer) {
@@ -336,14 +348,33 @@ export class SlimeRealm {
         return;
       }
       if (byPlayer) {
-        // The Lumen see it: a little trust when it happens in their sight.
-        const near = this.F!.nearest(b, 'lumen', 25);
-        if (near || b.surface) this.trust.add(b.role === 'brute' ? 2 : 0.6, 'fought the Murk');
+        // Every Murk the player kills counts (the Lumen hear of it, even where none of them are left to see it).
+        this.trust.add(b.role === 'brute' ? 2 : 0.6, 'fought the Murk');
         if (b.surface) g.crime.reward({ karma: b.role === 'brute' ? 8 : 3, why: 'Stopped a creature from below', rep: b.role === 'brute' ? 0.5 : 0, news: 'creature from below' });
       }
     } else if (byPlayer) {
       this.trust.add(-8, 'killed one of them');
     }
+  }
+
+  /**
+   * A Murk killed where the Murk hold the Lumen's ground, with the player down there fighting: once
+   * none are left in the Hall, or in the trench (or up at the gallery's lip), the Lumen take it back.
+   */
+  private retakeCheck(dead: Blob): void {
+    const w = this.war, F = this.F!;
+    if (w.front < 0.5 || w.raid) return;
+    const left = (areas: string[]) => F.blobs.some((o) => o !== dead && o.fac === 'murk' && o.mode !== 'dead' && areas.includes(o.area));
+    let to = -1, msg = '';
+    if (dead.area === 'hall' && F.areas.has('hall') && w.front >= 0.95 && !left(['hall'])) { to = WAR.retakeHall; msg = 'The Murk are driven out of the Hall — the Lumen take back their home'; }
+    else if ((dead.area === 'trench' || dead.area === 'front') && F.areas.has(dead.area) && !left([dead.area])) { to = WAR.retakeTrench; msg = 'The Lumen retake their trench — the Murk fall back into the Warrens'; }
+    if (to < 0 || !retake(w, to)) return;
+    this.g.powerHud.toast(msg, 'karma', 7000);
+    this.g.audio.chime('core', 0.6);
+    this.trust.add(to === WAR.retakeHall ? 10 : 8, to === WAR.retakeHall ? 'drove the Murk out of their Hall' : 'won back their trench');
+    this.respawnFront();
+    this.saveLocal();
+    this.g.saves?.notable();
   }
 
   private lumenHurt(_b: Blob | null, byPlayer: boolean): void {
@@ -727,7 +758,8 @@ export class SlimeRealm {
   private trustChanged(d: number, v: number, reason: string, up: TrustTier | null): void {
     const g = this.g;
     if (g.mode === 'sandbox') return;
-    if (Math.abs(d) >= 2) g.powerHud.toast(`${d > 0 ? 'The Lumen trust you more' : 'The Lumen trust you less'} — you ${reason}`, d > 0 ? 'karma' : 'deny', 4500);
+    if (d > 0 && d < 2 && !up) { this.gain.sum += d; this.gain.t = 0; this.gain.reason = reason; }
+    else if (Math.abs(d) >= 2 || up) this.trustToast(d, reason);
     if (up) {
       const msg: Partial<Record<TrustTier, string>> = {
         Noticed: 'The Lumen have <b>noticed</b> you — they no longer hide from you',
@@ -739,6 +771,24 @@ export class SlimeRealm {
     }
     g.saves?.notable();
     void v;
+  }
+
+  /** "The Lumen trust you more (+2.4) — you fought the Murk · trust 14, welcome at 30". */
+  private trustToast(d: number, reason: string): void {
+    const v = this.trust.value;
+    const next = ([['noticed', TRUST.noticed], ['welcome', TRUST.welcome], ['an ally', TRUST.ally], ['kin', TRUST.kin]] as const).find(([, t]) => v < t);
+    const where = `trust ${Math.round(v)}${next ? `, ${next[0]} at ${next[1]}` : ''}`;
+    this.g.powerHud.toast(`${d > 0 ? 'The Lumen trust you more' : 'The Lumen trust you less'} (${d > 0 ? '+' : ''}${Math.round(d * 10) / 10}) — you ${reason} · ${where}`, d > 0 ? 'karma' : 'deny', 4500);
+  }
+
+  /** Small gains add up: shown once there are 2 points or after a few quiet seconds. */
+  private gainTick(dt: number): void {
+    const G0 = this.gain;
+    if (G0.sum <= 0) return;
+    G0.t += dt;
+    if (G0.sum < 2 && G0.t < 10) return;
+    if (this.g.mode !== 'sandbox') this.trustToast(G0.sum, G0.reason);
+    G0.sum = 0; G0.t = 0;
   }
 
   /** The powers screen's line: trust now and what the next rank needs. */
