@@ -130,7 +130,7 @@ export class Sinkholes {
       x = o.x; z = o.z;
     } else if (!small) return this.refuse('no street');
     if (!W.loaded(x, z)) return this.refuse('not loaded');
-    if (g.terrain.isWater(x, z, r + 3)) return this.refuse('water');
+    if (W.wet(x, z, r + 3)) return this.refuse('water'); // (on a bridge: refused just below)
     for (let i = 0; i < 9; i++) {
       const a = (i / 8) * Math.PI * 2, rr = i === 8 ? 0 : r + 1;
       if (W.bridgeDeck(x + Math.cos(a) * rr, z + Math.sin(a) * rr) > -Infinity) return this.refuse('bridge');

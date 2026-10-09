@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.199 — 2026-10-09
+
+- **A new big threat: the giant worm.** After the first Strider, a 95 m worm can come instead of a strider or a swarm. It is heralded by a rumble underfoot with cracks running along the street, or a pothole that suddenly caves in. It tunnels under the main roads from your side of town towards downtown: cracks, dust and a rumble run along the street above it, drivers stop and the metro waits. Now and then the street bulges and caves in, and the worm rears 30 m out of the sinkhole. It roars, slams down on whatever is near, snatches cars and people, bites and swats, then dives back in an arc and opens a new hole further on. It comes up beside you when you are close, and a heavy super-jump landing above its head brings it up stunned. Its maw is the weak spot (four times the damage). The army fights it only while it is up. Hurt badly it flees underground; beaten, it topples across the street and lies there for a few hours. The sinkholes stay a while and are filled once you are far away. Cars drive around them and people walk around them. They are saved with the game. The admin console has a "Giant worm" section, and `dev.threat.burrower` has tools for testing.
+
 ## 0.198 — 2026-10-09
 
 - **Factions, step 3c: the Murk ask the table.** Murk breaking out into the street go only for people whose faction they are hostile to. Below ground they go for you and for the Lumen the same way. In the seeded table that is still everyone, so nothing plays differently yet. Changing one number would make them leave a whole faction alone (police, for example).
