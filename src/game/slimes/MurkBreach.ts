@@ -10,6 +10,7 @@ import type { Cause } from '../Stimuli';
 import type { ThreatEvent, ThreatOutcome, ThreatTarget } from '../threats/ThreatEvent';
 import type { Blob, Factions } from '../../underground/deep/Factions';
 import { type PedAgent, isUp } from '../../sim/Pedestrians';
+import { actorFaction } from '../friendFoe';
 
 /** How long they stay up (s) before going back under. */
 const STAY = 300;
@@ -108,7 +109,7 @@ export class MurkBreach implements ThreatEvent {
       if (b.mode === 'fight' || b.mode === 'go') continue;
       const c = (this.cool.get(b) ?? 0) - dt;
       this.cool.set(b, c);
-      const ps = this.g.peds.neighbours(b.x, b.z, 14, _nb).filter(isUp);
+      const ps = this.g.peds.neighbours(b.x, b.z, 14, _nb).filter(this.prey);
       if (!ps.length) { if (b.mode === 'idle' && Math.random() < dt) { const a = Math.random() * 6.28; b.tx = b.x + Math.cos(a) * 12; b.tz = b.z + Math.sin(a) * 12; b.mode = 'move'; } continue; }
       ps.sort((p, q) => Math.hypot(p.x - b.x, p.z - b.z) - Math.hypot(q.x - b.x, q.z - b.z));
       const a = ps[0];
@@ -126,6 +127,9 @@ export class MurkBreach implements ThreatEvent {
       this.g.stimuli.emit('threat', b.x, b.y, b.z, 2.5, 40, { cause: 'threat' });
     }
   }
+
+  /** Someone the Murk go for: on their feet, of a faction the Murk are hostile to (factions/relations.ts). */
+  private readonly prey = (p: PedAgent): boolean => isUp(p) && this.g.relations.hostile('murk', actorFaction(p.actor));
 
   private end(o: ThreatOutcome): void {
     this.active = false;
