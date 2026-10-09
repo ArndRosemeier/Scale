@@ -804,7 +804,7 @@ export class Pedestrians {
       }
     }
     // Things people give a wide berth (a Warden walker on a square).
-    for (const o of this.extraObstacles) {
+    for (const O of [this.extraObstacles, this.pits]) for (const o of O) {
       const ox = a.x - o.x, oz = a.z - o.z;
       const d = Math.hypot(ox, oz);
       if (d < o.r * 2 && d > 1e-3) {
@@ -870,6 +870,8 @@ export class Pedestrians {
 
   /** More places people keep their distance from (a radius round each): set by the game each frame. */
   extraObstacles: { x: number; z: number; r: number }[] = [];
+  /** Holes in the street people keep out of (sinkholes), kept by their owner. */
+  pits: { x: number; z: number; r: number }[] = [];
 
   /** Underground floor at a point (inside a tunnel, room or cave), else null: for `under` agents (set by the game). */
   underFloor: ((x: number, y: number, z: number) => number | null) | null = null;

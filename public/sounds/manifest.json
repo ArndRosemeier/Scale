@@ -1031,5 +1031,53 @@
     "loop": false,
     "gain": 0.7,
     "description": "Parent Warden disc: deep stern two-note tone over the block (procedural, tools/synthWardens.mjs)"
+  },
+  "burrower_rumble": {
+    "files": [
+      "burrower_rumble.wav"
+    ],
+    "loop": true,
+    "gain": 0.9,
+    "description": "the Burrower tunnelling under the street: a deep grinding rumble, rock crunching, a slow surge (loop; procedural, tools/synthBurrower.mjs)"
+  },
+  "burrower_rumble_far": {
+    "files": [
+      "burrower_rumble_far.wav"
+    ],
+    "loop": false,
+    "gain": 0.8,
+    "description": "an omen of the Burrower: a long low rumble from under the street, faint grinding (procedural, tools/synthBurrower.mjs)"
+  },
+  "burrower_breach": {
+    "files": [
+      "burrower_breach.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the street caving in under the Burrower: asphalt cracking, a deep collapse boom, debris raining (procedural, tools/synthBurrower.mjs)"
+  },
+  "burrower_roar": {
+    "files": [
+      "burrower_roar.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the Burrower's call: a chorus of shrieking, grinding voices over a wet low gurgle, ending in a clicking rattle (procedural, tools/synthBurrower.mjs)"
+  },
+  "burrower_slam": {
+    "files": [
+      "burrower_slam.wav"
+    ],
+    "loop": false,
+    "gain": 1,
+    "description": "the Burrower's head coming down on the street: a heavy thud, a crunch, a rumbling tail (procedural, tools/synthBurrower.mjs)"
+  },
+  "burrower_dive": {
+    "files": [
+      "burrower_dive.wav"
+    ],
+    "loop": false,
+    "gain": 0.9,
+    "description": "the Burrower diving back into the street: a rush of air, soil torn up, grinding away below (procedural, tools/synthBurrower.mjs)"
   }
 }

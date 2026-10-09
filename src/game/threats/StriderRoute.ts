@@ -180,6 +180,18 @@ export function routeAt(r: { pts: number[]; s: number[] }, s: number, out: { x: 
   return out;
 }
 
+/** Arc length of the route point nearest (x, z), searched around s0 (± window m). */
+export function nearestS(r: { pts: number[]; s: number[] }, x: number, z: number, s0: number, win = 60): number {
+  const S = r.s, P = r.pts;
+  let best = Infinity, bs = s0;
+  for (let i = 0; i < S.length; i++) {
+    if (S[i] < s0 - win || S[i] > s0 + win) continue;
+    const d = (P[i * 2] - x) ** 2 + (P[i * 2 + 1] - z) ** 2;
+    if (d < best) { best = d; bs = S[i]; }
+  }
+  return bs;
+}
+
 function setDir(P: number[], i: number, out: { dx: number; dz: number }): void {
   const dx = P[i * 2 + 2] - P[i * 2], dz = P[i * 2 + 3] - P[i * 2 + 1], l = Math.hypot(dx, dz) || 1;
   out.dx = dx / l; out.dz = dz / l;

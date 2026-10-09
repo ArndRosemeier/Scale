@@ -308,6 +308,8 @@ export class Traffic {
       if (!this.clearAt(v, 8)) continue;
       // Not on top of a robot on the road.
       if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 12 && Math.abs(o.z - v.z) < 12)) continue;
+      // Not in (or right by) a hole in the street.
+      if (this.holds.some((o) => Math.hypot(o.x - v.x, o.z - v.z) < o.r + 10)) continue;
       // Route: random walk of a few edges ahead, preferring straight on.
       v.route = this.randomRoute(ei, fwd, 12);
       this.vehicles.push(v);
@@ -324,6 +326,7 @@ export class Traffic {
     const fwd = ea.side * this.hand > 0;
     const v = this.makeVehicle(driver.seed % 5 === 0 ? 'suv' : driver.seed % 7 === 0 ? 'hatch' : 'sedan', ea.e, fwd, ea.s, driver);
     if (this.obstacles.some((o) => Math.abs(o.x - v.x) < 8 && Math.abs(o.z - v.z) < 8)) return false;
+    if (this.holds.some((o) => Math.hypot(o.x - v.x, o.z - v.z) < o.r + 8)) return false;
     if (!this.placeFree(v)) return false;
     v.dest = { x: bx, z: bz };
     if (eb) {
