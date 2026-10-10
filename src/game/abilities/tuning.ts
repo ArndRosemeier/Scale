@@ -58,11 +58,11 @@ export const ENERGY = {
 };
 
 /** Upkeep of a giant body (energy / s by height). Below 1.8 m it is free; it climbs to the base
- *  regeneration at 10 m (a 10 m giant just holds even) and on to `top` at 100 m, where a full
- *  pool lasts about 20 s. Out of energy, the body shrinks back to `fallback`, pays only
- *  `exhaustedUpkeep` of its upkeep (so it refills at 10 m) and may grow again once the pool is
- *  back to `recover` of max. Flight costs nothing but stops regeneration. */
-export const GIANT = { even: 10, top: 100, drainTop: 14, fallback: 10, recover: 0.25, exhaustedUpkeep: 0.5, shrinkRate: 1.2 };
+ *  regeneration at 8 m (an 8 m giant just holds even) and on to `top` at 25 m (the size power's
+ *  top rank), where a full pool lasts about 30 s. Out of energy, the body shrinks back to
+ *  `fallback`, pays only `exhaustedUpkeep` of its upkeep (so it refills at 8 m) and may grow again
+ *  once the pool is back to `recover` of max. Flight costs nothing but stops regeneration. */
+export const GIANT = { even: 8, top: 25, drainTop: 12.4, fallback: 8, recover: 0.25, exhaustedUpkeep: 0.5, shrinkRate: 1.2 };
 
 /** Energy per second it takes to keep a body of height h (m). */
 export function sizeUpkeep(h: number): number {
@@ -128,8 +128,13 @@ export const flightBoost = (r: number): number => FLIGHT_CRUISE * FLIGHT_SPEED[r
  */
 export const SPEED_TOP = [0, 40, 50, 62, 78, 100];
 
-/** Size shift: allowed body height range in m. */
-export const SIZE_RANGE: [number, number][] = [[1.8, 1.8], [0.5, 4], [0.3, 10], [0.2, 25], [0.12, 50], [0.1, 100]];
+/** Any body's height limits in m (also the admin console's and a loaded save's). Bigger than
+ *  25 m is more than the streaming city and the physics handle well. */
+export const MIN_HEIGHT = 0.1;
+export const MAX_HEIGHT = 25;
+
+/** Size shift: allowed body height range in m at each rank, up to MAX_HEIGHT. */
+export const SIZE_RANGE: [number, number][] = [[1.8, 1.8], [0.5, 4], [0.3, 8], [0.2, 12], [0.12, 18], [0.1, 25]];
 
 // ---------------------------------------------------------------- elemental powers
 // Ranges and radii are at 1.8 m and scale with √k (a giant's powers reach farther); impulses

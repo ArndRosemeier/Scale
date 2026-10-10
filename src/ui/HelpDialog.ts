@@ -222,7 +222,7 @@ export class HelpDialog {
       <div class="hp-facts">
         <div><b>Energy</b> ${ENERGY.max} at the start, refills ${ENERGY.regen} / s. Each power core: +${ENERGY.coreMax} max, +${ENERGY.coreRegen} / s.</div>
         <div><b>Flight</b> costs nothing, but energy does not refill in the air.</div>
-        <div><b>Giant body</b> upkeep: free up to 1.8 m · ${up(5)} / s at 5 m · ${up(GIANT.even)} / s at ${GIANT.even} m · ${up(50)} / s at 50 m · ${up(GIANT.top)} / s at ${GIANT.top} m. Out of energy, you shrink back to ${GIANT.fallback} m.</div>
+        <div><b>Giant body</b> upkeep: free up to 1.8 m · ${up(5)} / s at 5 m · ${up(GIANT.even)} / s at ${GIANT.even} m · ${up(15)} / s at 15 m · ${up(GIANT.top)} / s at ${GIANT.top} m. Out of energy, you shrink back to ${GIANT.fallback} m.</div>
         <div><b>Damage</b> to <b>people</b> is the health they lose: a passer-by has ${COMBAT.civilianHp}, a mugger ${MUGGING.hp}, a robber ${ROBBERY.hp}; a lieutenant ×${LIEUTENANT.hp}, a boss ×${fmt(LIEUTENANT.hp * BOSS.hp)}. Most powers floor a person only once until they are back on their feet; punches on someone who is down do half. To <b>giant creatures</b> it is points before their armour: the Strider has ${STRIDER.hp} (an open weak spot takes ×${STRIDER.weakMul}), the awakened tree ${TREE.hp} (its heart ×${TREE.heartMul}; fire ×${TREE.fire}, lightning ×${TREE.shock}).</div>
         <div><b>Karma</b> ${KARMA.start} at the start · +${KARMA.helpUp} for helping someone up (+${KARMA.helpUpCollapse} after a collapse, nothing for someone you knocked down) · +${KARMA.coreKarma} from a karma core. Prices below are for reaching that rank.</div>
         ${sandbox ? '<div><b>Sandbox:</b> energy is unlimited and ranks are set freely in the powers screen.</div>' : ''}

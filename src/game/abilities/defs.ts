@@ -161,7 +161,7 @@ export const ABILITIES: AbilityDef[] = [
   },
   {
     id: 'size', name: 'Size shift', kind: 'passive', group: 'body', trigger: 'none', maxRank: MAX_RANK, key: 'Numpad + / −',
-    desc: 'Grow into a giant or shrink to the size of a mouse. A giant body costs energy, more the bigger it is: at 10 m it eats all your regeneration, at 100 m a full pool lasts about 20 seconds. Run dry and you shrink back to 10 m.',
+    desc: 'Grow into a giant or shrink to the size of a mouse. A giant body costs energy, more the bigger it is: at 8 m it eats all your regeneration, at 25 m (the biggest you can get) a full pool lasts about 30 seconds. Run dry and you shrink back to 8 m.',
     icon: svg('<path d="M14 4h6v6"/><path d="M20 4l-6.5 6.5"/><path d="M10 20H4v-6"/><path d="M4 20l6.5-6.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1" opacity="0.55"/>'),
     rankText: (r) => `Size ${fmtH(SIZE_RANGE[r][0])} … ${fmtH(SIZE_RANGE[r][1])}`,
   },
