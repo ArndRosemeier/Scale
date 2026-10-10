@@ -98,6 +98,11 @@ export interface PedAgent {
   airborne?: boolean;
   fly?: { tilt: number; bank: number; boost: number };
   /**
+   * Moved by its owner every frame on the ground (the soccer players: game/soccer): walks and runs
+   * as its speed says, but no routes, no avoiding, no ground here.
+   */
+  puppet?: boolean;
+  /**
    * A raised floor its owner knows of (the stadium's field and the concert stage, game/concert):
    * the height to stand at here, or null where it ends (the street's ground again).
    */
@@ -676,7 +681,7 @@ export class Pedestrians {
   private step(a: PedAgent, dt: number, _gameDt: number): void {
     a.stateT += dt;
     if (a.ragdoll) return;
-    if (a.airborne) { a.phase += a.speed * dt; return; }
+    if (a.airborne || a.puppet) { a.phase += a.speed * dt; return; }
     if (a.inside) {
       // Indoors: stay put; frightened people stand up and look towards the danger.
       if (a.fear > 0.5 && (a.state === PState.Sit || a.state === PState.Sleep)) { a.state = PState.Idle; a.stateT = -1e9; }
