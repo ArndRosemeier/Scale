@@ -1010,8 +1010,9 @@ export class GameMap {
     this.tiles.ensure(0, 0, 0);
     g.imageSmoothingEnabled = true;
     this.tiles.drawView(g, this.tiles.levelFor(s * dpr), s, ox, oy, MINI_PX, MINI_PX, this.queue);
-    // One tile per frame at most: the minimap must never cost a frame.
-    if (this.tiles.renderQueue(this.queue, 2, 1)) this.miniKey = '';
+    // A few ms of tile drawing per frame (tiles in 4 × 4 parts): the minimap must never cost a frame.
+    // Redraw next frame while anything is queued (a tile shows once its last part is drawn).
+    if (this.queue.length) { this.tiles.renderQueue(this.queue, 3, 1, 4); this.miniKey = ''; }
     this.drawMarkers(g, MINI_PX, MINI_PX, s, ox, oy, false);
     this.drawCustom(g, MINI_PX, MINI_PX, s, ox, oy, false);
     if (this.game.camRig?.underground) {

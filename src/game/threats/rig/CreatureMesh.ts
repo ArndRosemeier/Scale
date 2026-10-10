@@ -14,6 +14,7 @@
  * and its skinned shadow-depth variant compile behind the loading screen.
  */
 import * as THREE from 'three';
+import { skinIndexAttribute } from '../../../render/skinIndex';
 import { WEBGPU, gpuKit } from '../../../render/gpuMode';
 import { CreatureRig, type RigDef } from './CreatureRig';
 import { boneLayout, buildCreatureSkin, type BoneLayout } from './skin';
@@ -142,7 +143,7 @@ export class CreatureMesh {
     geo.setAttribute('uv', new THREE.BufferAttribute(sk.uv, 2));
     geo.setAttribute('color', new THREE.BufferAttribute(sk.color, 3));
     geo.setAttribute('glow', new THREE.BufferAttribute(sk.glow, 4));
-    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(sk.skinIndex, 4));
+    geo.setAttribute('skinIndex', skinIndexAttribute(sk.skinIndex));
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(sk.skinWeight, 4));
     geo.setIndex(new THREE.BufferAttribute(sk.index, 1));
     geo.computeBoundingSphere();

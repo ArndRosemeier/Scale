@@ -9,6 +9,7 @@
  * so they are uploaded to the GPU once no matter how many characters exist.
  */
 import * as THREE from 'three';
+import { skinIndexAttribute } from '../../render/skinIndex';
 import type { HumanAssets } from '../assets';
 import { targetMask } from '../bodyBuild';
 import type { BodyRegion } from '../../items/wearable';
@@ -264,7 +265,7 @@ export function getHumanStatic(as: HumanAssets): HumanStatic {
     renderVerts: RV,
     bodyVerts,
     uv: new THREE.BufferAttribute(as.renderUV, 2),
-    skinIndex: new THREE.Uint16BufferAttribute(si, 4),
+    skinIndex: skinIndexAttribute(si),
     skinWeight: new THREE.Uint8BufferAttribute(sw, 4, true),
     maskA: new THREE.Uint8BufferAttribute(maskA, 4, true),
     maskB: new THREE.Uint8BufferAttribute(maskB, 4, true),

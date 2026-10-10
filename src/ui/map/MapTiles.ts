@@ -88,6 +88,9 @@ interface Tile {
   ready: boolean;
   stale: boolean;
   used: number;
+  /** A drawing in progress (split into parts over several frames): its canvas and the next part. */
+  next: HTMLCanvasElement | null;
+  part: number;
 }
 
 export function boxOf(pts: ArrayLike<number>, i0 = 0, i1 = pts.length): [number, number, number, number] {
@@ -349,15 +352,33 @@ export class MapTiles {
     }
   }
 
-  /** Render queued tiles (missing first, nearest first) within a time budget. Returns how many were drawn. */
-  renderQueue(queue: { L: number; tx: number; ty: number; d: number; stale: boolean }[], budgetMs: number, maxTiles = Infinity): number {
+  /**
+   * Render queued tiles (missing first, nearest first) within a time budget. Returns how many were
+   * finished. With `split` > 1 a tile is drawn in split × split parts, as many per call as fit the
+   * budget (at least one), and shows when its last part is drawn (a stale tile keeps its old
+   * picture until then): a whole 512 px tile of dense city took 50-70 ms on a fast PC, a visible
+   * hitch every time the minimap reached new ground.
+   */
+  renderQueue(queue: { L: number; tx: number; ty: number; d: number; stale: boolean }[], budgetMs: number, maxTiles = Infinity, split = 1): number {
     if (!queue.length) return 0;
     queue.sort((a, b) => (a.stale === b.stale ? a.d - b.d : a.stale ? 1 : -1));
     const t0 = performance.now();
-    let done = 0;
+    let done = 0, drew = false;
     for (const q of queue) {
-      if (done >= maxTiles || (done > 0 && performance.now() - t0 > budgetMs)) break;
-      this.render(q.L, q.tx, q.ty);
+      if (done >= maxTiles) break;
+      if (split <= 1) {
+        if (drew && performance.now() - t0 > budgetMs) break;
+        this.render(q.L, q.tx, q.ty);
+        drew = true;
+        done++;
+        continue;
+      }
+      let finished = false;
+      while (!finished && !(drew && performance.now() - t0 > budgetMs)) {
+        finished = this.renderPart(q.L, q.tx, q.ty, split);
+        drew = true;
+      }
+      if (!finished) break;
       done++;
     }
     queue.length = 0;
@@ -372,34 +393,70 @@ export class MapTiles {
   /** Mark tiles stale (redrawn when next seen). With a box only detailed tiles inside it. */
   invalidate(box?: [number, number, number, number]): void {
     for (const t of this.tiles.values()) {
-      if (!box) { t.stale = true; continue; }
+      if (!box) { t.stale = true; t.part = 0; continue; }
       const ts = this.tileSize(t.L);
       if (ts / TILE_PX > DETAIL_MPP) continue; // coarse tiles show no per-cell items
       const x0 = -this.world.half + t.tx * ts, z0 = -this.world.half + t.ty * ts;
       if (x0 > box[2] || x0 + ts < box[0] || z0 > box[3] || z0 + ts < box[1]) continue;
       t.stale = true;
+      t.part = 0; // parts drawn so far are out of date
     }
+  }
+
+  private tile(L: number, tx: number, ty: number): Tile {
+    const key = this.key(L, tx, ty);
+    let t = this.tiles.get(key);
+    if (!t) {
+      t = { L, tx, ty, canvas: newTileCanvas(), ready: false, stale: false, used: this.frame, next: null, part: 0 };
+      this.tiles.set(key, t);
+      this.evict();
+    }
+    return t;
   }
 
   private render(L: number, tx: number, ty: number): void {
     const t0 = performance.now();
-    const key = this.key(L, tx, ty);
-    let t = this.tiles.get(key);
-    if (!t) {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = TILE_PX;
-      t = { L, tx, ty, canvas, ready: false, stale: false, used: this.frame };
-      this.tiles.set(key, t);
-      this.evict();
-    }
-    const g = t.canvas.getContext('2d')!;
+    const t = this.tile(L, tx, ty);
     const ts = this.tileSize(L);
-    drawTile(g, this.world, this.layers, -this.world.half + tx * ts, -this.world.half + ty * ts, ts);
+    drawTile(t.canvas.getContext('2d')!, this.world, this.layers, -this.world.half + tx * ts, -this.world.half + ty * ts, ts);
+    if (t.next && t.next !== t.canvas) this.spare = t.next;
+    t.next = null;
+    t.part = 0;
     t.ready = true;
     t.stale = false;
     t.used = this.frame;
     this.stats.ms += performance.now() - t0;
     this.stats.tiles++;
+  }
+
+  /** A canvas left over from a finished redraw, reused for the next one. */
+  private spare: HTMLCanvasElement | null = null;
+
+  /** Draw the next of a tile's split × split parts; true when that finished the tile. */
+  private renderPart(L: number, tx: number, ty: number, split: number): boolean {
+    const t0 = performance.now();
+    const t = this.tile(L, tx, ty);
+    if (t.ready && !t.stale) return true;
+    // A new tile is drawn in place (an ancestor stands in meanwhile); a stale one into a second
+    // canvas, so the old picture stays up until the new one is whole.
+    if (!t.next || t.part === 0) {
+      if (!t.ready) t.next = t.canvas;
+      else if (!t.next || t.next === t.canvas) { t.next = this.spare ?? newTileCanvas(); this.spare = null; }
+      t.part = 0;
+    }
+    const ts = this.tileSize(L);
+    drawTile(t.next.getContext('2d')!, this.world, this.layers, -this.world.half + tx * ts, -this.world.half + ty * ts, ts, { i: t.part, n: split });
+    t.part++;
+    t.used = this.frame;
+    this.stats.ms += performance.now() - t0;
+    if (t.part < split * split) return false;
+    if (t.next !== t.canvas) { this.spare = t.canvas; t.canvas = t.next; }
+    t.next = null;
+    t.part = 0;
+    t.ready = true;
+    t.stale = false;
+    this.stats.tiles++;
+    return true;
   }
 
   private evict(): void {
@@ -412,18 +469,32 @@ export class MapTiles {
 /** Tiles at or below this many metres per pixel show per-cell detail (streets, parks, buildings). */
 const DETAIL_MPP = 8;
 
-/** Draw one tile: world square [x0, x0+ts] × [z0, z0+ts] into a TILE_PX canvas. */
-function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x0: number, z0: number, ts: number): void {
+function newTileCanvas(): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = c.height = TILE_PX;
+  return c;
+}
+
+/**
+ * Draw one tile: world square [x0, x0+ts] × [z0, z0+ts] into a TILE_PX canvas. With `part`, only
+ * square i of an n × n grid over the tile (clipped; culling against that square).
+ */
+function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x0: number, z0: number, ts: number, part?: { i: number; n: number }): void {
   const k = TILE_PX / ts, mpp = 1 / k;
   const macro = w.macro;
+  const n = part?.n ?? 1, pp = TILE_PX / n;
+  const pxL = part ? (part.i % n) * pp : 0, pyT = part ? Math.floor(part.i / n) * pp : 0;
   g.setTransform(1, 0, 0, 1, 0, 0);
+  g.save();
+  if (part) { g.beginPath(); g.rect(pxL, pyT, pp, pp); g.clip(); }
   g.fillStyle = MAP_COLORS.land;
-  g.fillRect(0, 0, TILE_PX, TILE_PX);
+  g.fillRect(pxL, pyT, pp, pp);
   g.setTransform(k, 0, 0, k, -x0 * k, -z0 * k);
   g.lineCap = 'round';
   g.lineJoin = 'round';
   const pad = 40 + 16 * mpp;
-  const bx0 = x0 - pad, bz0 = z0 - pad, bx1 = x0 + ts + pad, bz1 = z0 + ts + pad;
+  const sx0 = x0 + pxL * mpp, sz0 = z0 + pyT * mpp, ss = ts / n;
+  const bx0 = sx0 - pad, bz0 = sz0 - pad, bx1 = sx0 + ss + pad, bz1 = sz0 + ss + pad;
   const vis = (b: ArrayLike<number>, o = 0) => !(b[o] > bx1 || b[o + 2] < bx0 || b[o + 1] > bz1 || b[o + 3] < bz0);
   const px = (p: number) => p * mpp;
 
@@ -685,6 +756,7 @@ function drawTile(g: CanvasRenderingContext2D, w: MapWorld, layers: MapLayers, x
       g.stroke(p);
     }
   }
+  g.restore();
   g.setTransform(1, 0, 0, 1, 0, 0);
 }
 

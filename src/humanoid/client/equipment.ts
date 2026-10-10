@@ -18,6 +18,7 @@
  * Rebuilt only when the equipment set changes (keyed by def ids + seeds).
  */
 import * as THREE from 'three';
+import { skinIndexAttribute } from '../../render/skinIndex';
 import type { EquipmentVisuals, EquipSlot } from '../../items/types';
 import type { BodyRegion, ShellLayer, ShellMaterial, RigidPart, WearableSpec, BodyFit } from '../../items/wearable';
 import type { ItemVisual } from '../../items/types';
@@ -201,7 +202,7 @@ function shapeShoe(st: HumanStatic, topo: ShellTopo, P: Float32Array, N: Float32
 function buildToeCap(cap: ToeCap, st: HumanStatic, src: number[], P: Float32Array, out: ShellParts, base: number) {
   const rows = 10, cols = 28, k = 1.025, band = 0.03;
   const v0 = base + out.P.length / 3, first = out.P.length;
-  const ssi = st.skinIndex.array as Uint16Array, ssw = st.skinWeight.array as Uint8Array;
+  const ssi = st.skinIndex.array as ArrayLike<number>, ssw = st.skinWeight.array as Uint8Array;
   const put = (s: number, lx: number, y: number, u: number, v: number) => {
     const px = cap.back[0] + s * cap.dx + lx * cap.dz, pz = cap.back[1] + s * cap.dz - lx * cap.dx;
     out.P.push(px, y, pz);
@@ -303,7 +304,7 @@ interface ShellTopo {
  */
 function skirtClearance(ch: Character, cx: number, cz: number, topY: number, len: number, rows: number, cols: number): Float32Array {
   const st = ch.geo.st, pos = ch.geo.build.renderPos;
-  const si = st.skinIndex.array as Uint16Array, sw = st.skinWeight.array as Uint8Array;
+  const si = st.skinIndex.array as ArrayLike<number>, sw = st.skinWeight.array as Uint8Array;
   const bodyBones = new Set<number>();
   for (const [name, i] of ch.boneIndex) if (!/(clavicle|shoulder|arm|wrist|hand|finger|metacarpal|thumb)/.test(name)) bodyBones.add(i);
   const ext = new Float32Array((rows + 1) * cols);
@@ -794,7 +795,7 @@ export class EquipmentRig {
     }
     const g = new THREE.BufferGeometry();
     const uv = new Float32Array(n * 2), si = new Uint16Array(n * 4), sw = new Uint8Array(n * 4);
-    const suv = st.uv.array as Float32Array, ssi = st.skinIndex.array as Uint16Array, ssw = st.skinWeight.array as Uint8Array;
+    const suv = st.uv.array as Float32Array, ssi = st.skinIndex.array as ArrayLike<number>, ssw = st.skinWeight.array as Uint8Array;
     for (let i = 0; i < n; i++) {
       const v = src[i];
       uv[i * 2] = suv[v * 2]; uv[i * 2 + 1] = suv[v * 2 + 1];
@@ -831,7 +832,7 @@ export class EquipmentRig {
     g.setAttribute('position', new THREE.BufferAttribute(fP, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(fN, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(fUV, 2));
-    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(fSI, 4));
+    g.setAttribute('skinIndex', skinIndexAttribute(fSI));
     g.setAttribute('skinWeight', new THREE.Uint8BufferAttribute(fSW, 4, true));
     g.setAttribute('aEdge', new THREE.BufferAttribute(fE, 1));
     if (l.faceCut) {
