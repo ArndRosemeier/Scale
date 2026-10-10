@@ -5,6 +5,7 @@
  * and places the citizens who are in that building right now.
  */
 import * as THREE from 'three';
+import { lightPool } from '../render/lightPool';
 import type { WorldIndex, BuildingRef } from '../world/WorldIndex';
 import type { Destruction } from '../destruction/Destruction';
 import type { CityStreamer, CellState } from '../stream/CityStreamer';
@@ -60,6 +61,9 @@ interface EntranceDoor {
 
 const DOOR_COLORS = [0x47291a, 0x14332a, 0x721410, 0x2a2420, 0x1c2433];
 
+/** Room lights lit at once (the nearest, fading at the edge). */
+const ROOM_LIGHTS = 4;
+
 export class Interiors {
   readonly group = new THREE.Group();
   /** Clickable world panels (elevators); the game routes the crosshair through it. */
@@ -67,7 +71,6 @@ export class Interiors {
   private active = new Map<BuildingRef, ActiveBuilding>();
   /** Storeys waiting to be built (nearest first). */
   private queue: { a: ActiveBuilding; f: number; d: number }[] = [];
-  private lights: THREE.PointLight[] = [];
   private t = 0;
   private lastCheck = -1;
 
@@ -79,11 +82,6 @@ export class Interiors {
     private pop: Population,
     private peds: Pedestrians,
   ) {
-    for (let i = 0; i < 4; i++) {
-      const l = new THREE.PointLight(0xffe4c0, 0, 11, 2);
-      this.lights.push(l);
-      this.group.add(l);
-    }
     collision.interiorGround = (x, z, yRef, step) => this.ground(x, z, yRef, step);
     // Slabs hidden by an open interior still carry load (destruction asks).
     destruction.interiorHidden = (cs, e) => {
@@ -436,15 +434,14 @@ export class Interiors {
     // Only the nearest few are lit. Each fades out as it nears the edge (14 m, or the next one in
     // line), so a light gives way at zero brightness: switched hard, rooms with many lights (the
     // museum) blinked as one walked.
-    const level = 2.2 + 7 * G.uNight.value, n = this.lights.length;
+    const level = 2.2 + 7 * G.uNight.value, n = ROOM_LIGHTS;
     const edge = Math.min(14, cand[n]?.d ?? Infinity);
-    this.lights.forEach((l, i) => {
+    for (let i = 0; i < n; i++) {
       const c = cand[i];
       const f = c ? Math.min(1, (edge - c.d) / 2) : 0;
-      if (!c || f <= 0) { l.intensity = 0; return; }
-      l.position.set(c.x, c.y, c.z);
-      l.intensity = level * f;
-    });
+      // (Room lights come before street lamps in the shared pool: render/lightPool.)
+      if (c && f > 0) lightPool.want(c.x, c.y, c.z, 0xffe4c0, level * f, 11, 2, -30);
+    }
   }
 
   /** Camera solidity while inside an active building: outside the shell, near interior walls, below the floor or above the ceiling. */

@@ -4648,6 +4648,22 @@ section('skinIndex: one helper', async () => {
   check(hand.length === 0, `skinIndex: attributes made by skinIndexAttribute (${hand.join(', ') || 'none'})`);
 });
 
+// Point and spot lights come from the shared pool (render/lightPool.ts): every light in the scene is
+// written out in every lit shader, and 15 private lamps made clothing shaders take seconds to compile.
+section('lights: one pool', async () => {
+  const hand: string[] = [];
+  const walkL = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkL(full); continue; }
+      if (!f.endsWith('.ts') || full.endsWith('render/lightPool.ts') || full.startsWith('src/debug/') || /\/preview\w*\.ts$/.test(full)) continue;
+      if (/new THREE\.(PointLight|SpotLight|RectAreaLight)\(/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkL('src');
+  check(hand.length === 0, `lights: point and spot lights only from lightPool (${hand.join(', ') || 'none'})`);
+});
+
 // Causes cross vocabularies (Stimuli Cause, DownCause, DamageCause) only in shared/cause.ts: inline
 // conversions used to book police and army stomps as the player's knock-downs.
 section('cause vocabularies', async () => {
