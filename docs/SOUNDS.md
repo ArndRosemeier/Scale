@@ -88,6 +88,10 @@ These ids used to be synthesized by `tools/synth*.mjs`; they are now Stable Audi
 - Do not re-run the old synth tool for these ids: it would overwrite the new clips.
 - OpenRouter has no sound-effect model: Lyria (music) slides into a beat within seconds, video models' soundtracks (`tools/sfx/generate.py`) were hit and miss.
 
+## Seed Audio clips (v0.254)
+
+ByteDance Seed Audio (`bytedance-seed/seed-audio-1-0`, OpenRouter's text-to-speech endpoint) renders a sound effect instead of speech when the input starts with "The sound of …" (Arnd's find). `tools/sfx/seed.py` made 4 takes for each of the 62 ids that were still procedural after v0.253; screened, cut and put to the same old-against-new vote (`compare.py`, 3 of 4 votes). These won and replaced the procedural clip: `army_autocannon`, `army_jet`, `army_rocket`, `army_whistle`, `bird_flutter`, `brood_bite`, `burrower_dive`, `burrower_roar`, `burrower_rumble_far`, `burrower_slam`, `civil_siren`, `deep_glow`, `drone_buzz`, `heart_pulse`, `mech_alarm`, `mech_launch`, `mech_step`, `mech_vent`, `membrane`, `metro_pass`, `metro_run`, `murk_growl` (one variant), `roc_cry_far`, `strider_breath`, `strider_roar`, `terrace_clatter`, `thunder_far`, `ufo_stern`, `under_engine`, `under_falls`. About 1.2 cents per take; raw takes in `/mnt/project-files/sounds/seed/`, verdicts in `sounds/seed-verdicts.json`.
+
 ## Procedural clips
 
 Voices are not synthesized: cries, shouts, falls and animal calls are speech bubbles (`src/ui/voices.ts`; procedural speech never sounded like words). Screams and crowds stay recorded clips.
@@ -95,7 +99,6 @@ Voices are not synthesized: cries, shouts, falls and animal calls are speech bub
 | id | file | dur (s) | how |
 |---|---|---|---|
 | ufo_hum | ufo_hum.wav | 4.0 | `tools/synthWardens.mjs`: a soft open chord on A (55, 82.5, 110, 131, 164.75 Hz) with twins 0.25–0.5 Hz apart beating slowly, two glassy partials (880, 1320 Hz) swelling, a breath of low-passed air; whole-cycle partials and a crossfaded noise tail loop seamlessly. One positional loop at the nearest Warden disc. |
-| ufo_stern | ufo_stern.wav | 2.6 | `tools/synthWardens.mjs`: a deep, slightly brassy two-note fall (A2 → E2, seven harmonics plus the octave below), slow swell, long tail. The parent disc catching the runaway teens' saucer; heard over the block. |
 | teen_whine | teen_whine.wav | 3.0 | `tools/synthWardens.mjs`: a reedy warble (220 / 221.33 / 330 / 440 Hz soft squares, 4 Hz vibrato) with a chirpy three-note arpeggio every half second; whole cycles in 3 s, loops seamlessly. The runaway saucer's positional loop (pitch rises with speed and pods lost). |
 | teen_giggle | teen_giggle.wav | 1.0 | `tools/synthWardens.mjs`: eight quick falling chirps (1–1.5 kHz), crushed to 5 bits at half the rate: a toy robot's giggle. After a prank; the omen's flyby. |
 | teen_pod | teen_pod.wav | 0.6 | `tools/synthWardens.mjs`: a noise pop, a fizzing crackle and a whir falling two octaves from 600 Hz. A hover pod of the runaway saucer knocked out. |
@@ -103,12 +106,5 @@ Voices are not synthesized: cries, shouts, falls and animal calls are speech bub
 | robot_hostile | robot_hostile.wav | 1.05 | `tools/synthThreats.mjs`: a buzzy servo whine winding up 180 → 1080 Hz, then a harsh two-tone chirp (1250 / 830 Hz) over a 95 Hz electric buzz. A machine turning hostile, a drone starting its dive. |
 | burrower_rumble | burrower_rumble.wav | 6.0 | `tools/synthBurrower.mjs`: brown noise low-passed at 90 Hz surging every 3 s, sparse rock crunches band-passed at 700 Hz, a grinding band at 240 Hz; the tail crossfaded over the start for a seamless loop. The Burrower tunnelling under the street (one positional loop at its head, loudest while it is under). |
 | burrower_breach | burrower_breach.wav | 3.4 | `tools/synthBurrower.mjs`: half a second of asphalt cracks (band-passed at 2.2 kHz), the drop's boom (a sine falling 66 → 26 Hz with a noise thud) and debris raining, echoes off facades. A sinkhole opening. |
-| burrower_roar | burrower_roar.wav | 3.8 | `tools/synthBurrower.mjs`: five shrieking triangle/pulse voices (310–655 Hz) sliding up and down, each wobbling against the others, a wet 58 Hz gurgle amplitude-modulated at 17 Hz, a clicking petal rattle at the end; throat formants, echoes. The Burrower's call. |
-| burrower_slam | burrower_slam.wav | 2.6 | `tools/synthBurrower.mjs`: a sine boom falling 84 → 34 Hz with a hard noise attack, a low rumbling tail and a crunch of debris. Its head coming down on the street. |
-| burrower_dive | burrower_dive.wav | 3.0 | `tools/synthBurrower.mjs`: a rush of air (band-passed noise sweeping 300 → 1200 → 500 Hz), soil and stone torn up, a grinding rumble going away below. Diving back into the street. |
 | leviathan_surface | leviathan_surface.wav | 3.2 | `tools/synthLeviathan.mjs`: brown-noise surge under a sweeping band-passed wash and a spray of short noise bursts, two echoes. The river heaving as the Leviathan comes up or goes under (quieter: its surge while it travels, the omen). |
-| roc_cry_far | roc_cry_far.wav | 2.2 | `tools/synthRoc.mjs`: the same scream low-passed to 1.3 kHz with long echoes. Far off and high up: the Roc's omen. |
 | roc_flap | roc_flap.wav | 1.1 | `tools/synthRoc.mjs`: brown-noise rush and a falling 68→38 Hz thump under a closing low-pass. One great wingbeat. |
-| mech_launch | mech_launch.wav | 1.5 | `tools/synthMech.mjs`: a short noise pop and a rough rocket rush band-passed falling 2.2→0.9 kHz over a low roar, echoes. A missile leaving its pod. |
-| mech_vent | mech_vent.wav | 3.0 | `tools/synthMech.mjs`: a metal clunk and a long hiss (band-passed and low-passed noise). The heat vents opening. |
-| mech_alarm | mech_alarm.wav | 2.2 | `tools/synthMech.mjs`: a buzzy two-tone horn (392 / 311 Hz, half a second each) with town echoes. Its warning klaxon (salvos, shutdown, destroyed; the bulletin omen far off). |

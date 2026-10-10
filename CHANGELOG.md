@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.254 — 2026-10-10
+
+- **32 more synthesized sounds replaced, this time by Seed Audio.** ByteDance's Seed Audio renders a real sound when its prompt starts with "The sound of …". It matched the hard sounds much better than Sound Studio did. Every take went through the same old-against-new vote, and a new sound stays only if it wins. New now: the civil-defence siren, the Strider's roar and fire breath, the Burrower's call, slam, dive and far rumble, the Roc's far cry, the mech's steps, missiles, steam vents and klaxon, the swarm's bite, the autocannon, the jet flyby, rockets, the shell whistle, all far thunder, the police drone, pigeons taking off, the metro running and passing, the café terrace, the underground waterfall, pump engine and cave glow, the shard's heartbeat, a Murk growl, the membrane and the Wardens' stern horn. The other 30 kept their old sound because it won.
 ## 0.253 — 2026-10-10
 
 - **Generated sounds kept only where they beat the old ones.** Each of the 99 synthesized sounds was played next to its best generated replacement to two listening models, in both orders. A new sound stays only if it wins at least 3 of the 4 votes. New now: explosions, bombs, artillery, the tank, rifles, the helicopter, heavy rain, wind gusts, close thunder (two of three), the short siren, the kaiju's steps, the Roc's screech, the Leviathan's roar and slap, the maw roar, the Burrower's rumble and cave-in, the earth tremor, the swarm, slime burbling, splats and spit, cheering, referee whistles, the coin, the crane, fire, fans, hum and gears underground. Back to the old synthesized sound: the sirens and alarms, far thunder, light rain, the metro, the jet, rockets, the drone, the café terrace and others where the old one won.
