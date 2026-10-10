@@ -52,6 +52,8 @@ export class ShaderGate {
   private lights: THREE.Light[] = [];
   private lightCount = -1;
   private lightsAt = -1e9;
+  /** A light was added since the last refresh. */
+  lightsDirty = true;
   private standins = new Map<string, THREE.MeshLambertMaterial>();
   private props: { get(o: object): { currentProgram?: { isReady(): boolean } } };
   private warm: { o: THREE.Object3D; t0: number }[] = [];
@@ -77,6 +79,9 @@ export class ShaderGate {
     THREE.Object3D.prototype.add = function (this: THREE.Object3D, ...objs: THREE.Object3D[]) {
       const r = add.apply(this, objs);
       if (gate.enabled) for (const o of objs) gate.queue.push(o);
+      // A light (or a group holding lights) joining: programs depend on the light count, so the
+      // next compile must use the new set (a stale one compiled programs nobody draws with).
+      for (const o of objs) if ((o as THREE.Light).isLight || o.children.some((c) => (c as THREE.Light).isLight)) gate.lightsDirty = true;
       return r;
     };
   }
@@ -194,7 +199,7 @@ export class ShaderGate {
     // The cap starts once the start-up compiles (warm-up and the background precompiles) are done.
     if (!shaderCap.active && this.enabled && this.busy === 0) shaderCap.active = true;
     if (WEBGPU) { this.updateWebGPU(); return; }
-    if (this.queue.length && performance.now() - this.lightsAt > 2000) this.refreshLights();
+    if (this.queue.length && (this.lightsDirty || performance.now() - this.lightsAt > 2000)) this.refreshLights();
     // New objects, one by one while there is room under the cap.
     if (this.queue.length || this.backlog.length) {
       for (const o of this.newMeshes()) {
@@ -473,6 +478,7 @@ export class ShaderGate {
   private refreshLights(): void {
     // The light set is constant by design; re-collect only when the count changes.
     this.lightsAt = performance.now();
+    this.lightsDirty = false;
     let n = 0;
     this.scene.traverseVisible((o) => { if ((o as THREE.Light).isLight) n++; });
     if (n === this.lightCount) return;
