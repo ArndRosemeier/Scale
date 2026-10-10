@@ -81,6 +81,8 @@ export interface FreezeRecord {
    * (ANGLE on Direct3D does), inside the draw: a stall the game does not measure.
    */
   firstDraws?: string;
+  /** Estimated GPU memory held and uploaded around the freeze (see watchMemory). */
+  gpuMemory?: string;
 }
 
 interface Perf { memory?: { usedJSHeapSize: number } }
@@ -185,6 +187,115 @@ class HitchLogImpl {
     this.scene = scene ?? null;
     this.snapshotRenderer();
     this.watchDraws(renderer);
+    this.watchMemory(renderer);
+  }
+
+  /** Estimated GPU memory (bytes) in buffers, textures and render targets, and uploads per frame. */
+  private gpu = { buffers: 0, textures: 0, targets: 0, upload: 0, prevUpload: 0 };
+
+  /**
+   * Keeps a running estimate of what the game holds in GPU memory and how much it uploads per
+   * frame, from the WebGL calls that allocate and fill it. When graphics memory runs over, the
+   * driver pages it in and out: seconds where the GPU process is busy and the game waits.
+   */
+  private watchMemory(renderer: THREE.WebGLRenderer): void {
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    if (typeof WebGL2RenderingContext === 'undefined' || !(gl instanceof WebGL2RenderingContext)) return;
+    const G = this.gpu;
+    const bound = new Map<number, WebGLBuffer | null>();
+    const bufSize = new WeakMap<WebGLBuffer, number>();
+    const texSize = new WeakMap<WebGLTexture, number>();
+    const rbSize = new WeakMap<WebGLRenderbuffer, number>();
+    const texBound = new Map<number, WebGLTexture | null>();
+    let rb: WebGLRenderbuffer | null = null;
+    const bpp = (fmt: number): number => {
+      switch (fmt) {
+        case gl.R8: case gl.ALPHA: case gl.LUMINANCE: case gl.R8UI: return 1;
+        case gl.RG8: case gl.R16F: case gl.LUMINANCE_ALPHA: case gl.DEPTH_COMPONENT16: return 2;
+        case gl.RGBA16F: case gl.RG32F: return 8;
+        case gl.RGBA32F: return 16;
+        case gl.RGB16F: return 6;
+        case gl.RGB32F: return 12;
+        default: return 4;
+      }
+    };
+    const setTex = (target: number, bytes: number, add = false) => {
+      const key = target >= gl.TEXTURE_CUBE_MAP_POSITIVE_X && target <= gl.TEXTURE_CUBE_MAP_NEGATIVE_Z ? gl.TEXTURE_CUBE_MAP : target;
+      const t = texBound.get(key);
+      if (!t) return;
+      const old = texSize.get(t) ?? 0, now = add ? old + bytes : bytes;
+      texSize.set(t, now);
+      G.textures += now - old;
+    };
+    const srcSize = (src: unknown): [number, number] => {
+      const o = src as { width?: number; height?: number; videoWidth?: number; videoHeight?: number } | null;
+      return o ? [o.videoWidth || o.width || 0, o.videoHeight || o.height || 0] : [0, 0];
+    };
+    const wrap = <K extends keyof WebGL2RenderingContext>(name: K, before: (...a: never[]) => void) => {
+      const orig = (gl[name] as unknown as (...a: unknown[]) => unknown).bind(gl);
+      (gl as unknown as Record<string, unknown>)[name] = (...a: unknown[]) => { try { (before as (...x: unknown[]) => void)(...a); } catch { /* diagnostics only */ } return orig(...a); };
+    };
+    wrap('bindBuffer', (target: number, b: WebGLBuffer | null) => { bound.set(target, b); });
+    wrap('bufferData', (target: number, data: number | ArrayBufferView | ArrayBuffer | null, _usage: number, srcOffset?: number, length?: number) => {
+      const b = bound.get(target);
+      if (!b) return;
+      let n = typeof data === 'number' ? data : data ? data.byteLength : 0;
+      if (data && typeof data !== 'number' && ArrayBuffer.isView(data) && length) n = length * ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1);
+      else if (data && typeof data !== 'number' && ArrayBuffer.isView(data) && srcOffset) n -= srcOffset * ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1);
+      G.buffers += n - (bufSize.get(b) ?? 0);
+      bufSize.set(b, n);
+      if (typeof data !== 'number') G.upload += n;
+    });
+    wrap('bufferSubData', (_t: number, _o: number, data: ArrayBufferView, _so?: number, length?: number) => {
+      G.upload += length ? length * ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1) : data.byteLength;
+    });
+    wrap('deleteBuffer', (b: WebGLBuffer | null) => { if (b) { G.buffers -= bufSize.get(b) ?? 0; bufSize.delete(b); } });
+    wrap('bindTexture', (target: number, t: WebGLTexture | null) => { texBound.set(target, t); });
+    wrap('texStorage2D', (target: number, levels: number, fmt: number, w: number, h: number) => {
+      const faces = target === gl.TEXTURE_CUBE_MAP ? 6 : 1;
+      setTex(target, w * h * bpp(fmt) * faces * (levels > 1 ? 4 / 3 : 1));
+    });
+    wrap('texStorage3D', (target: number, levels: number, fmt: number, w: number, h: number, d: number) => {
+      setTex(target, w * h * d * bpp(fmt) * (levels > 1 ? 4 / 3 : 1));
+    });
+    wrap('texImage2D', (target: number, level: number, fmt: number, ...rest: unknown[]) => {
+      if (level !== 0) return;
+      const [w, h] = typeof rest[0] === 'number' && typeof rest[1] === 'number' ? [rest[0] as number, rest[1] as number] : srcSize(rest[2]);
+      const cube = target >= gl.TEXTURE_CUBE_MAP_POSITIVE_X && target <= gl.TEXTURE_CUBE_MAP_NEGATIVE_Z;
+      const bytes = w * h * bpp(fmt);
+      setTex(target, bytes, cube && target !== gl.TEXTURE_CUBE_MAP_POSITIVE_X); // (cube faces add up)
+      if (!(typeof rest[0] === 'number' && rest[5] == null)) G.upload += bytes; // (no pixels: a render target)
+    });
+    wrap('texImage3D', (target: number, level: number, fmt: number, w: number, h: number, d: number) => {
+      if (level !== 0) return;
+      setTex(target, w * h * d * bpp(fmt));
+      G.upload += w * h * d * bpp(fmt);
+    });
+    wrap('texSubImage2D', (_t: number, _l: number, _x: number, _y: number, ...rest: unknown[]) => {
+      const [w, h] = typeof rest[0] === 'number' && typeof rest[1] === 'number' ? [rest[0] as number, rest[1] as number] : srcSize(rest[2]);
+      G.upload += w * h * 4;
+    });
+    wrap('texSubImage3D', (_t: number, _l: number, _x: number, _y: number, _z: number, w: number, h: number, d: number) => { G.upload += w * h * d * 4; });
+    wrap('deleteTexture', (t: WebGLTexture | null) => { if (t) { G.textures -= texSize.get(t) ?? 0; texSize.delete(t); } });
+    wrap('bindRenderbuffer', (_t: number, r: WebGLRenderbuffer | null) => { rb = r; });
+    const rbStore = (samples: number, fmt: number, w: number, h: number) => {
+      if (!rb) return;
+      const n = w * h * bpp(fmt) * Math.max(1, samples);
+      G.targets += n - (rbSize.get(rb) ?? 0);
+      rbSize.set(rb, n);
+    };
+    wrap('renderbufferStorage', (_t: number, fmt: number, w: number, h: number) => rbStore(1, fmt, w, h));
+    wrap('renderbufferStorageMultisample', (_t: number, samples: number, fmt: number, w: number, h: number) => rbStore(samples, fmt, w, h));
+    wrap('deleteRenderbuffer', (r: WebGLRenderbuffer | null) => { if (r) { G.targets -= rbSize.get(r) ?? 0; rbSize.delete(r); } });
+  }
+
+  /** The GPU memory line for a freeze record; starts the next frame's upload count. */
+  private takeMemory(): string {
+    const G = this.gpu, MB = 1048576;
+    const text = `GPU memory ≈ ${Math.round((G.buffers + G.textures + G.targets) / MB)} MB (buffers ${Math.round(G.buffers / MB)}, textures ${Math.round(G.textures / MB)}, render targets ${Math.round(G.targets / MB)}); uploaded ${(G.upload / MB).toFixed(1)} MB this frame, ${(G.prevUpload / MB).toFixed(1)} MB the frame before`;
+    G.prevUpload = G.upload;
+    G.upload = 0;
+    return text;
   }
 
   /** First draws of this frame: [new program × vertex data, new program × target, draws, programs]. */
@@ -362,14 +473,15 @@ class HitchLogImpl {
     }
     // A stall in the GPU process shows as a late next frame, so the frame before counts too.
     const draws = this.takeDraws();
-    this.checkFreeze(now, work, all, dp, dg, dt, `this frame: ${draws || 'none'} · frame before: ${this.prevDraws || 'none'}`);
+    const memory = this.takeMemory();
+    this.checkFreeze(now, work, all, dp, dg, dt, `this frame: ${draws || 'none'} · frame before: ${this.prevDraws || 'none'}`, memory);
     this.prevDraws = draws;
     this.sections = {};
     this.outside = {};
     this.notes.length = 0;
   }
 
-  private checkFreeze(now: number, work: number, all: Record<string, number>, dp: number, dg: number, dt: number, draws: string): void {
+  private checkFreeze(now: number, work: number, all: Record<string, number>, dp: number, dg: number, dt: number, draws: string, memory: string): void {
     const heap = (performance as unknown as Perf).memory?.usedJSHeapSize ?? 0;
     const prevEnd = this.lastFrameEnd, prevHeap = this.lastHeap;
     this.lastFrameEnd = now;
@@ -401,7 +513,7 @@ class HitchLogImpl {
       unmeasured: Math.max(0, Math.round(ms - work)), sections: top(sections, 8), outside: top(outside, 6), notes: this.notes.slice(0, 12),
       programs: dp, newPrograms: this.programNames.slice(0, 6), geometries: dg, textures: dt,
       heapMB: heap && prevHeap ? [Math.round(prevHeap / 1048576), Math.round(heap / 1048576)] : null,
-      longTasks: [], loaf: [], context, version: this.version, firstDraws: draws,
+      longTasks: [], loaf: [], context, version: this.version, firstDraws: draws, gpuMemory: memory,
     };
     // Entries that arrived already (an observer can run before this frame ends).
     for (const e of this.longTasks) if (e.t * 1000 < now && (e.t * 1000 + e.ms) > prevEnd) f.longTasks.push([+e.t.toFixed(2), Math.round(e.ms)]);
