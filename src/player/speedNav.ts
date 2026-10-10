@@ -84,6 +84,7 @@ export class SpeedNav {
     const r0 = r + 0.45 * sk;
     const under = c.under;
     const street = !c.underground(x, y, z);
+    if (!street && under) return this.clearBelow(c, under, x, y, z, h, r, r0, dx, dz, L);
     // (The first probe is close: a wall the body already touches must not be stepped over.)
     let d = -r0, px = x, pz = z;
     while (d < L) {
@@ -97,6 +98,32 @@ export class SpeedNav {
       }
       if (street && under && under.inHole(qx, qz)) return Math.max(0, d - pr);
       px = qx; pz = qz;
+    }
+    return L;
+  }
+
+  /**
+   * Below the street (the slime realm's caves, tunnels, halls): the probe walks the floor, rising
+   * and falling with it, and keeps the body's own wall margin. Probed at the feet' height with a
+   * cone, as on the street, it ran into the first rise of a cave floor at once (and a fat probe
+   * never fit the body's air test there), so the runner braked to a walk in the realm.
+   * A wall, rock ahead or a drop of more than a few metres (a chasm, a ledge) ends the free run.
+   */
+  private clearBelow(c: Collision, under: NonNullable<Collision['under']>, x: number, y: number, z: number, h: number, r: number, r0: number, dx: number, dz: number, L: number): number {
+    const st = r0 * 1.6, drop = Math.max(3, h * 1.6);
+    let d = 0, px = x, pz = z, py = y;
+    while (d < L) {
+      d = Math.min(L, d + st);
+      const qx = x + dx * d, qz = z + dz * d;
+      // Floor ahead: no higher than a 45° climb over the step, no deeper than a short drop.
+      const fy = under.floorAt(qx, py + st, qz);
+      if (fy === null || fy < py - drop) return Math.max(0, d - st);
+      const res = c.collide(qx, qz, Math.max(fy, py), h, r, px, pz);
+      if (res.hit) {
+        const ex = res.x - qx, ez = res.z - qz, back = -(ex * dx + ez * dz);
+        if (back > 0.05 * r && back > 0.25 * Math.hypot(ex, ez)) return Math.max(0, d - st);
+      }
+      px = qx; pz = qz; py = fy;
     }
     return L;
   }

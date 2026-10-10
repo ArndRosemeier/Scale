@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.249 — 2026-10-10
+
+- **Super speed works in the slime realms.** Its look-ahead (which steers you around walls and brakes before them) tested the way ahead at a fixed height, so in the caves every rise of the floor counted as a wall and the runner slowed to a walk almost everywhere. Below the street the look-ahead now follows the floor; walls and rock still stop it, and on the streets nothing changes. In a headless run through both realms of a city the runner now reaches 17–90 m/s (median 42) instead of 6 m/s.
+
 ## 0.248 — 2026-10-10
 
 - **Video clips are saved as MP4** where the browser can record H.264 (current Chrome and Edge, Safari), so they play in any video player and can be uploaded anywhere. Other browsers still record WebM. Export names the file .mp4 or .webm to match.
