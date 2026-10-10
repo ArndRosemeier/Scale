@@ -372,7 +372,7 @@
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "quadcopter rotor buzz loop (procedural, tools/synthDroneBuzz.mjs)"
+    "description": "quadcopter rotor buzz loop (Stable Audio SFX via tools/sfx)"
   },
   "dash_whoosh": {
     "files": [
@@ -380,7 +380,7 @@
     ],
     "loop": false,
     "gain": 0.7,
-    "description": "dash burst of air (procedural, tools/synthDashWhoosh.mjs)"
+    "description": "dash burst of air (Stable Audio SFX via tools/sfx)"
   },
   "bird_flutter": {
     "files": [
@@ -395,16 +395,16 @@
       "siren_loop.wav"
     ],
     "loop": true,
-    "gain": 0.8,
-    "description": "police siren wail, seamless loop (procedural, tools/synthCrime.mjs)"
+    "gain": 1.328,
+    "description": "police siren wail, seamless loop (Stable Audio SFX via tools/sfx)"
   },
   "siren_short": {
     "files": [
       "siren_short.wav"
     ],
     "loop": false,
-    "gain": 0.6,
-    "description": "single siren whoop (procedural, tools/synthCrime.mjs)"
+    "gain": 0.945,
+    "description": "single siren whoop (Stable Audio SFX via tools/sfx)"
   },
   "alarm_bell": {
     "files": [
@@ -412,7 +412,7 @@
     ],
     "loop": true,
     "gain": 0.7,
-    "description": "shop alarm bell ringing, loop (procedural, tools/synthCrime.mjs)"
+    "description": "shop alarm bell ringing, loop (Stable Audio SFX via tools/sfx)"
   },
   "cuffs": {
     "files": [
@@ -420,7 +420,7 @@
     ],
     "loop": false,
     "gain": 0.8,
-    "description": "handcuffs ratcheting shut (procedural, tools/synthCrime.mjs)"
+    "description": "handcuffs ratcheting shut (Stable Audio SFX via tools/sfx)"
   },
   "crowd_cheer": {
     "files": [
@@ -428,7 +428,7 @@
     ],
     "loop": false,
     "gain": 0.7,
-    "description": "small crowd cheering and clapping (procedural, tools/synthCrime.mjs)"
+    "description": "small crowd cheering and clapping (Stable Audio SFX via tools/sfx)"
   },
   "metro_run": {
     "files": [
@@ -436,7 +436,7 @@
     ],
     "loop": true,
     "gain": 0.7,
-    "description": "inside a running metro carriage: rumble, wheel hiss, clack-clack over rail joints (procedural, tools/synthMetro.mjs)"
+    "description": "inside a running metro carriage: rumble, wheel hiss, clack-clack over rail joints (Stable Audio SFX via tools/sfx)"
   },
   "metro_pass": {
     "files": [
@@ -444,7 +444,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "oncoming metro train rushing past in the tunnel (procedural, tools/synthMetro.mjs)"
+    "description": "oncoming metro train rushing past in the tunnel (Stable Audio SFX via tools/sfx)"
   },
   "civil_siren": {
     "files": [
@@ -452,7 +452,7 @@
     ],
     "loop": true,
     "gain": 0.8,
-    "description": "civil-defence / evacuation siren, two-tone motor siren winding up and down with city echo, seamless loop (procedural, tools/synthThreats.mjs)"
+    "description": "civil-defence / evacuation siren, two-tone motor siren winding up and down with city echo, seamless loop (Stable Audio SFX via tools/sfx)"
   },
   "robot_glitch": {
     "files": [
@@ -516,8 +516,8 @@
       "car_alarm.wav"
     ],
     "loop": false,
-    "gain": 0.6,
-    "description": "omen: a car alarm going off, whoop then warble (procedural, tools/synthStrider.mjs)"
+    "gain": 0.984,
+    "description": "omen: a car alarm going off, whoop then warble (Stable Audio SFX via tools/sfx)"
   },
   "terrace_clatter": {
     "files": [
@@ -525,7 +525,7 @@
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "busy café terrace: cups set on saucers, spoons and cutlery clinking over a soft room tone, no voices (procedural loop, tools/synthTerrace.mjs)"
+    "description": "busy café terrace: cups set on saucers, spoons and cutlery clinking over a soft room tone, no voices (Stable Audio SFX via tools/sfx)"
   },
   "under_drip": {
     "files": [
@@ -542,8 +542,8 @@
       "under_falls.wav"
     ],
     "loop": true,
-    "gain": 0.55,
-    "description": "water falling through a street grate into a basin underground, gurgles and splashes (procedural, tools/synthUnder.mjs)"
+    "gain": 0.691,
+    "description": "water falling through a street grate into a basin underground, gurgles and splashes (Stable Audio SFX via tools/sfx)"
   },
   "under_hum": {
     "files": [
@@ -559,7 +559,7 @@
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "a big ventilation fan turning slowly: whooshing blade pulses over a low rumble (procedural, tools/synthUnder.mjs)"
+    "description": "a big ventilation fan turning slowly: whooshing blade pulses over a low rumble (Stable Audio SFX via tools/sfx)"
   },
   "slime_burble": {
     "files": [
@@ -584,7 +584,7 @@
     ],
     "loop": false,
     "gain": 0.45,
-    "description": "a small soft glassy chime (procedural, tools/synthUnder.mjs)"
+    "description": "a small soft glassy chime (Stable Audio SFX via tools/sfx)"
   },
   "amb_rain_light": {
     "files": [
@@ -600,7 +600,7 @@
     ],
     "loop": true,
     "gain": 0.7,
-    "description": "a downpour: dense roar, splashing, gurgling gutters, low drumming (procedural loop, tools/synthWeather.mjs)"
+    "description": "a downpour: dense roar, splashing, gurgling gutters, low drumming (Stable Audio SFX via tools/sfx)"
   },
   "amb_wind_gust": {
     "files": [
@@ -618,7 +618,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a close lightning strike: the crack, then a rolling rumble (procedural, tools/synthWeather.mjs)"
+    "description": "a close lightning strike: the crack, then a rolling rumble (Stable Audio SFX via tools/sfx)"
   },
   "thunder_far": {
     "files": [
@@ -627,8 +627,8 @@
       "thunder_far_3.wav"
     ],
     "loop": false,
-    "gain": 0.9,
-    "description": "distant thunder: a low roll, no crack (procedural, tools/synthWeather.mjs)"
+    "gain": 1.023,
+    "description": "distant thunder: a low roll, no crack (Stable Audio SFX via tools/sfx)"
   },
   "army_rifle": {
     "files": [
@@ -644,23 +644,23 @@
     ],
     "loop": false,
     "gain": 0.85,
-    "description": "an APC autocannon: four heavy thuds with a metallic ring and street echo (procedural, tools/synthArmy.mjs)"
+    "description": "an APC autocannon: four heavy thuds with a metallic ring and street echo (Stable Audio SFX via tools/sfx)"
   },
   "army_tank": {
     "files": [
       "army_tank.wav"
     ],
     "loop": false,
-    "gain": 1,
-    "description": "a tank gun firing: a hard crack, a deep boom rolling through the streets (procedural, tools/synthArmy.mjs)"
+    "gain": 1.088,
+    "description": "a tank gun firing: a hard crack, a deep boom rolling through the streets (Stable Audio SFX via tools/sfx)"
   },
   "army_rotor": {
     "files": [
       "army_rotor.wav"
     ],
     "loop": true,
-    "gain": 0.8,
-    "description": "attack helicopter rotor loop: blade slap over turbine whine (procedural, tools/synthArmy.mjs)"
+    "gain": 1.16,
+    "description": "attack helicopter rotor loop: blade slap over turbine whine (Stable Audio SFX via tools/sfx)"
   },
   "army_jet": {
     "files": [
@@ -668,7 +668,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a jet flyby: rising roar, a crack overhead, falling rumble (procedural, tools/synthArmy.mjs)"
+    "description": "a jet flyby: rising roar, a crack overhead, falling rumble (Stable Audio SFX via tools/sfx)"
   },
   "army_rocket": {
     "files": [
@@ -676,7 +676,7 @@
     ],
     "loop": false,
     "gain": 0.85,
-    "description": "a rocket salvo leaving the pods: a string of whooshes and hiss (procedural, tools/synthArmy.mjs)"
+    "description": "a rocket salvo leaving the pods: a string of whooshes and hiss (Stable Audio SFX via tools/sfx)"
   },
   "army_explosion": {
     "files": [
@@ -684,7 +684,7 @@
     ],
     "loop": false,
     "gain": 0.95,
-    "description": "a shell or rocket exploding: crack, boom, debris rattle (procedural, tools/synthArmy.mjs)"
+    "description": "a shell or rocket exploding: crack, boom, debris rattle (Stable Audio SFX via tools/sfx)"
   },
   "army_bomb": {
     "files": [
@@ -692,15 +692,15 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a bomb: a big deep explosion with a long rumble (procedural, tools/synthArmy.mjs)"
+    "description": "a bomb: a big deep explosion with a long rumble (Stable Audio SFX via tools/sfx)"
   },
   "army_hit": {
     "files": [
       "army_hit.wav"
     ],
     "loop": false,
-    "gain": 0.9,
-    "description": "a shell striking the monster hide: a dull thud and a ringing crack (procedural, tools/synthArmy.mjs)"
+    "gain": 1.013,
+    "description": "a shell striking the monster hide: a dull thud and a ringing crack (Stable Audio SFX via tools/sfx)"
   },
   "army_artillery": {
     "files": [
@@ -708,7 +708,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "artillery far off: a deep muffled thump rolling over the city (procedural, tools/synthArmy.mjs)"
+    "description": "artillery far off: a deep muffled thump rolling over the city (Stable Audio SFX via tools/sfx)"
   },
   "army_whistle": {
     "files": [
@@ -724,15 +724,15 @@
     ],
     "loop": true,
     "gain": 0.85,
-    "description": "civil-defence attack warning: a motor siren wailing up and down fast with a second rotor a fifth above, echoing over the city, seamless loop (procedural, tools/synthAftermath.mjs)"
+    "description": "civil-defence attack warning: a motor siren wailing up and down fast with a second rotor a fifth above, echoing over the city, seamless loop (Stable Audio SFX via tools/sfx)"
   },
   "blast_rumble": {
     "files": [
       "blast_rumble.wav"
     ],
     "loop": false,
-    "gain": 1,
-    "description": "a huge blast far off: a dull flat crack, then a deep rumble rolling on for seconds (procedural, tools/synthAftermath.mjs)"
+    "gain": 1.084,
+    "description": "a huge blast far off: a dull flat crack, then a deep rumble rolling on for seconds (Stable Audio SFX via tools/sfx)"
   },
   "dig_rubble": {
     "files": [
@@ -756,7 +756,7 @@
     ],
     "loop": true,
     "gain": 0.7,
-    "description": "a mobile crane at work: diesel idle, hydraulic whine, a chain clinking, seamless loop (procedural, tools/synthAftermath.mjs)"
+    "description": "a mobile crane at work: diesel idle, hydraulic whine, a chain clinking, seamless loop (Stable Audio SFX via tools/sfx)"
   },
   "gun_pistol": {
     "files": [
@@ -764,7 +764,7 @@
     ],
     "loop": false,
     "gain": 0.7,
-    "description": "a single pistol shot: a sharp crack and a short slap off the facades (procedural, tools/synthGuns.mjs)"
+    "description": "a single pistol shot: a sharp crack and a short slap off the facades (Stable Audio SFX via tools/sfx)"
   },
   "gun_rifle": {
     "files": [
@@ -772,7 +772,7 @@
     ],
     "loop": false,
     "gain": 0.72,
-    "description": "a rifle's three-round burst (procedural, tools/synthGuns.mjs)"
+    "description": "a rifle's three-round burst (Stable Audio SFX via tools/sfx)"
   },
   "gun_ricochet": {
     "files": [
@@ -796,7 +796,7 @@
     ],
     "loop": true,
     "gain": 0.55,
-    "description": "the depths of the Murk: a low rumble, wet movements, a distant beat (procedural, tools/synthDeep.mjs)"
+    "description": "the depths of the Murk: a low rumble, wet movements, a distant beat (Stable Audio SFX via tools/sfx)"
   },
   "heart_pulse": {
     "files": [
@@ -804,7 +804,7 @@
     ],
     "loop": true,
     "gain": 0.6,
-    "description": "a star shard deep underground: a slow heavy throb under a shimmering crystal hum (procedural, tools/synthDeep.mjs)"
+    "description": "a star shard deep underground: a slow heavy throb under a shimmering crystal hum (Stable Audio SFX via tools/sfx)"
   },
   "murk_growl": {
     "files": [
@@ -813,7 +813,7 @@
     ],
     "loop": false,
     "gain": 0.6,
-    "description": "a wet gurgling growl (procedural, tools/synthDeep.mjs)"
+    "description": "a wet gurgling growl (Stable Audio SFX via tools/sfx)"
   },
   "murk_spit": {
     "files": [
@@ -894,7 +894,7 @@
     ],
     "loop": false,
     "gain": 0.6,
-    "description": "a coin dropped into a hat or guitar case (procedural, tools/synthStreet.mjs)"
+    "description": "a coin dropped into a hat or guitar case (Stable Audio SFX via tools/sfx)"
   },
   "spray_hiss": {
     "files": [
@@ -950,7 +950,7 @@
     ],
     "loop": true,
     "gain": 0.4,
-    "description": "a fire in an oil drum: crackles and pops over a soft roar (procedural, tools/synthSewer.mjs)"
+    "description": "a fire in an oil drum: crackles and pops over a soft roar (Stable Audio SFX via tools/sfx)"
   },
   "camera_shutter": {
     "files": [
@@ -990,7 +990,7 @@
     ],
     "loop": false,
     "gain": 0.5,
-    "description": "Warden disc: soft rising tone when a scan cone comes on (procedural, tools/synthWardens.mjs)"
+    "description": "Warden disc: soft rising tone when a scan cone comes on (Stable Audio SFX via tools/sfx)"
   },
   "teen_whine": {
     "files": [
@@ -1094,7 +1094,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "the Leviathan's call: a deep wet bellow with a whale-like moan and a gurgle (procedural, tools/synthLeviathan.mjs)"
+    "description": "the Leviathan's call: a deep wet bellow with a whale-like moan and a gurgle (Stable Audio SFX via tools/sfx)"
   },
   "leviathan_slap": {
     "files": [
@@ -1102,7 +1102,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a Leviathan tentacle slapping down on a deck or quay: a heavy wet thud (procedural, tools/synthLeviathan.mjs)"
+    "description": "a Leviathan tentacle slapping down on a deck or quay: a heavy wet thud (Stable Audio SFX via tools/sfx)"
   },
   "roc_screech": {
     "files": [
@@ -1110,7 +1110,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "the Roc's scream: a harsh, rough descending raptor 'kee-eeer', echoing off the town (procedural, tools/synthRoc.mjs)"
+    "description": "the Roc's scream: a harsh, rough descending raptor 'kee-eeer', echoing off the town (Stable Audio SFX via tools/sfx)"
   },
   "roc_cry_far": {
     "files": [
@@ -1134,7 +1134,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a giant mech's footfall: a deep thud, steel clanging on steel, a hydraulic hiss (procedural, tools/synthMech.mjs)"
+    "description": "a giant mech's footfall: a deep thud, steel clanging on steel, a hydraulic hiss (Stable Audio SFX via tools/sfx)"
   },
   "mech_launch": {
     "files": [
@@ -1174,7 +1174,7 @@
     ],
     "loop": false,
     "gain": 0.6,
-    "description": "referee's pea whistle, one short blast (tools/synthSoccer.mjs)"
+    "description": "referee's pea whistle, one short blast (Stable Audio SFX via tools/sfx)"
   },
   "ref_whistle_long": {
     "files": [
@@ -1182,7 +1182,7 @@
     ],
     "loop": false,
     "gain": 0.6,
-    "description": "referee's pea whistle, one long blast (tools/synthSoccer.mjs)"
+    "description": "referee's pea whistle, one long blast (Stable Audio SFX via tools/sfx)"
   },
   "ball_kick": {
     "files": [

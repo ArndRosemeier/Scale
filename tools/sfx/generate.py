@@ -74,7 +74,7 @@ def chat(content, timeout=300):
 
 def listen(wav, spec):
     """Blind listening first (the target would bias it), then a text-only match against the target."""
-    mp3 = wav[:-4] + '.listen.mp3'
+    mp3 = wav.rsplit('.', 1)[0] + '.listen.mp3'
     subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-i', wav, '-b:a', '160k', mp3], check=True)
     b = base64.b64encode(open(mp3, 'rb').read()).decode()
     os.remove(mp3)

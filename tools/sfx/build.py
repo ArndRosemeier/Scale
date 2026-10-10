@@ -14,7 +14,7 @@ crossfaded (equal power) into the head so it loops seamlessly.
 --samples DIR also writes <id>_before.mp3 / <id>_after.mp3 and one all.mp3 (before, after, before,
 after …) with an index, for listening.
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 import numpy as np
 import soundfile as sf
 
@@ -133,6 +133,11 @@ def mp3(wav_y, path, sr=SR):
     os.remove(tmp)
 
 
+def audio_of(d, verdict):
+    base = verdict[:-5]
+    return next(os.path.join(d, base + e) for e in ('.wav', '.flac') if os.path.exists(os.path.join(d, base + e)))
+
+
 def build(sid, spec, files, raw, ref):
     d = os.path.join(raw, sid)
     clips = sorted(f for f in os.listdir(d) if f.endswith('.json'))
@@ -153,13 +158,13 @@ def build(sid, spec, files, raw, ref):
         cands.sort(key=lambda k: (-k[0], -k[1]))
         for k in range(len(files)):
             sc, _, c, t = cands[min(k, len(cands) - 1)]
-            y = highpass(load(os.path.join(d, c[:-5] + '.wav')))
+            y = highpass(load(audio_of(d, c)))
             outs.append((cut_loop(y, (float(t['start']), float(t['end'])), max(old_len, spec.get('loop_s', 6))), sc, c))
     else:
         cands = []
         for c in clips:
             v = json.load(open(os.path.join(d, c)))
-            y = highpass(load(os.path.join(d, c[:-5] + '.wav')))
+            y = highpass(load(audio_of(d, c)))
             segs = segments(y)
             if single and segs:  # one long take per clip: from its onset to the clip's end
                 segs = [(segs[0][0], len(y) / SR)]
@@ -171,13 +176,17 @@ def build(sid, spec, files, raw, ref):
         for k in range(len(files)):
             sc, seg, c, y = cands[min(k, len(cands) - 1)]
             outs.append((cut_shot(y, seg, max(old_len * 1.25, old_len + 0.3)), sc, c))
-    res = []
+    res, short = [], []
     for (y, sc, c), f in zip(outs, files):
-        y = y * (target / max(active_rms(y), 1e-9))
-        y = soft_limit(y)
+        g = target / max(active_rms(y), 1e-9)
+        # match the old level, but never push more than 1% of the samples into the limiter
+        # (the old synth sirens were near-square waves at full scale; a recording can't be that dense)
+        g = min(g, 0.8 / max(np.percentile(np.abs(y), 99), 1e-9))
+        y = soft_limit(y * g)
+        short.append(target / max(active_rms(y), 1e-9))
         sf.write(os.path.join(SOUNDS, f), y, SR, subtype='PCM_16')
         res.append((f, sc, c, len(y) / SR))
-    return res, olds
+    return res, olds, float(np.mean(short))
 
 
 def main():
@@ -191,6 +200,8 @@ def main():
     prompts = load_prompts(ref)
     manifest = json.load(open(os.path.join(SOUNDS, 'manifest.json')))
     ids = ids or list(prompts)
+    main_manifest = json.loads(subprocess.run(['git', 'show', 'origin/main:public/sounds/manifest.json'], cwd=ROOT,
+                                              capture_output=True, text=True, check=True).stdout)
     reel, index, t = [], [], 0.0
     gap = np.zeros(int(0.6 * SR))
     for sid in ids:
@@ -199,7 +210,12 @@ def main():
         if not r:
             print(sid, 'no candidates')
             continue
-        res, olds = r
+        res, olds, short = r
+        # what the limiter cost comes back through the manifest gain (from main's value: reruns stay put)
+        base = main_manifest.get(sid, manifest[sid])
+        manifest[sid]['gain'] = round(base.get('gain', 1) * min(2.0, short), 3) if short > 1.06 else base.get('gain', 1)
+        manifest[sid]['description'] = re.sub(r'\((procedural[^)]*, )?tools/synth\w+\.mjs\)', '(Stable Audio SFX via tools/sfx)',
+                                              base['description'])
         for f, sc, c, dur in res:
             print(f'{sid}: {f} <- {c} score {sc:g}, {dur:.2f} s')
         if samples:
@@ -215,6 +231,8 @@ def main():
                 reel += [o2, gap]; t += (len(o2) + len(gap)) / SR
                 index.append(f'{int(t // 60)}:{t % 60:04.1f}  {sid} after')
                 reel += [n2, gap, gap]; t += (len(n2) + 2 * len(gap)) / SR
+    with open(os.path.join(SOUNDS, 'manifest.json'), 'w') as fh:
+        fh.write(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n')
     if samples and reel:
         mp3(np.concatenate(reel), os.path.join(samples, 'all.mp3'))
         open(os.path.join(samples, 'all-index.txt'), 'w').write('\n'.join(index) + '\n')

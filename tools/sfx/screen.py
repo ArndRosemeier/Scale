@@ -17,8 +17,8 @@ if '--jobs' in args:
 raw, ref, ids = args[0], args[1], args[2:]
 prompts = load_prompts(ref)
 work = [(sid, os.path.join(raw, sid, f)) for sid in (ids or sorted(os.listdir(raw))) if sid in prompts
-        for f in sorted(os.listdir(os.path.join(raw, sid))) if f.endswith('.wav')
-        and not os.path.exists(os.path.join(raw, sid, f[:-4] + '.json'))]
+        for f in sorted(os.listdir(os.path.join(raw, sid))) if f.endswith(('.wav', '.flac'))
+        and not os.path.exists(os.path.join(raw, sid, f.rsplit('.', 1)[0] + '.json'))]
 
 
 def one(job):
@@ -26,7 +26,7 @@ def one(job):
     for _ in range(3):
         try:
             v = listen(wav, prompts[sid])
-            json.dump(v, open(wav[:-4] + '.json', 'w'), indent=1)
+            json.dump(v, open(wav.rsplit('.', 1)[0] + '.json', 'w'), indent=1)
             print(f"{sid} {os.path.basename(wav)}: best {best(v)} | " + '; '.join(
                 f"{t.get('score')} {t.get('what', '')[:50]}" for t in v.get('takes', [])[:3]), flush=True)
             return
