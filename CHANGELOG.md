@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.251 — 2026-10-10
+
+- **No more multi-second freeze when a press photo goes up.** The photo of the hero for the billboards was read back from the graphics card in a way that waits for everything the card still has to do, shader compiles included: 3.5 s in the latest freeze log. It now arrives in the background and the front page goes up a moment later.
+- **New passers-by prepare their shaders within the shader limit.** A person walking into view with a new outfit used to start all their shaders at once, past the five-per-second limit. Now they wait for room like everything else (the simple distant figure shows meanwhile).
+- The freeze log (Shift+F9) now names the biggest graphics uploads of a frame: which object, which data, how many MB. The last log showed 250 MB uploaded in each of the two frames before a 6.8 s freeze; the next one will say what it was.
+- Shader compile times in the freeze log now say how many other shaders were still compiling when one started, so a shader's own time can be told apart from waiting in line.
+
 ## 0.250 — 2026-10-10
 
 - **Super speed works in the slime realms.** Its look-ahead (which steers you around walls and brakes before them) tested the way ahead at a fixed height, so in the caves every rise of the floor counted as a wall and the runner slowed to a walk almost everywhere. Below the street the look-ahead now follows the floor; walls and rock still stop it, and on the streets nothing changes. In a headless run through both realms of a city the runner now reaches 17–90 m/s (median 42) instead of 6 m/s.

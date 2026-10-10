@@ -587,7 +587,7 @@ export class Game {
     this.barks = new Barks(this);
     this.admin = new AdminConsole(this);
     new ShaderCounter(this.renderer.gl as unknown as THREE.WebGLRenderer, this.renderer.webgpu);
-    hitch.gateKnows = (o) => this.gate?.knows(o) ?? false;
+    hitch.gateOf = (o) => this.gate?.stateOf(o) ?? '?';
     hitch.gateState = () => this.gate?.stateLine() ?? '';
     installFreezeLog({
       context: () => this.freezeContext(),

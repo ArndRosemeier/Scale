@@ -120,7 +120,7 @@ class HitchLogImpl {
   /** What the game is doing, for a freeze record (set by Game). */
   context: (() => string) | null = null;
   /** Has the shader gate checked this object with its current material? (set by Game) */
-  gateKnows: ((o: THREE.Object3D) => boolean) | null = null;
+  gateOf: ((o: THREE.Object3D) => string) | null = null;
   /** The shader gate's state for a freeze record: what it waits for, what it asked for lately. */
   gateState: (() => string) | null = null;
   /** Called after a freeze is recorded (the HUD hint). */
@@ -191,7 +191,7 @@ class HitchLogImpl {
   }
 
   /** Estimated GPU memory (bytes) in buffers, textures and render targets, and uploads per frame. */
-  private gpu = { buffers: 0, textures: 0, targets: 0, upload: 0, prevUpload: 0 };
+  private gpu = { buffers: 0, textures: 0, targets: 0, upload: 0, prevUpload: 0, big: [] as { mb: number; what: string }[], prevBig: '' };
 
   /**
    * Keeps a running estimate of what the game holds in GPU memory and how much it uploads per
@@ -202,6 +202,18 @@ class HitchLogImpl {
     const gl = renderer.getContext() as WebGL2RenderingContext;
     if (typeof WebGL2RenderingContext === 'undefined' || !(gl instanceof WebGL2RenderingContext)) return;
     const G = this.gpu;
+    // Big uploads (≥ 2 MB) are named with the call, the size and who made it (the first stack
+    // frame outside three and this file): rare, so the stack trace costs nothing.
+    const up = (bytes: number, call: string, dims: string, data?: object) => {
+      G.upload += bytes;
+      if (bytes < 2 * 1048576) return;
+      // (Who called: the function names on the stack past this wrapper, three's own included;
+      // method names survive the minified build.)
+      const at = (new Error().stack ?? '').split('\n').slice(4).map((l) => /^\s*at (?:async )?([^\s(]+) \(/.exec(l)?.[1]).filter(Boolean).slice(0, 8).join(' < ') || '?';
+      const who = data && G.big.length < 8 ? this.ownerOf(data) : '';
+      G.big.push({ mb: bytes / 1048576, what: `${who ? who + ' ' : ''}${call} ${dims} ${(bytes / 1048576).toFixed(1)} MB at ${at}` });
+      if (G.big.length > 12) { G.big.sort((a, b) => b.mb - a.mb); G.big.length = 6; }
+    };
     const bound = new Map<number, WebGLBuffer | null>();
     const bufSize = new WeakMap<WebGLBuffer, number>();
     const texSize = new WeakMap<WebGLTexture, number>();
@@ -244,10 +256,10 @@ class HitchLogImpl {
       else if (data && typeof data !== 'number' && ArrayBuffer.isView(data) && srcOffset) n -= srcOffset * ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1);
       G.buffers += n - (bufSize.get(b) ?? 0);
       bufSize.set(b, n);
-      if (typeof data !== 'number') G.upload += n;
+      if (typeof data !== 'number') up(n, 'bufferData', '', data ?? undefined);
     });
     wrap('bufferSubData', (_t: number, _o: number, data: ArrayBufferView, _so?: number, length?: number) => {
-      G.upload += length ? length * ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1) : data.byteLength;
+      up(length ? length * ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1) : data.byteLength, 'bufferSubData', '', data);
     });
     wrap('deleteBuffer', (b: WebGLBuffer | null) => { if (b) { G.buffers -= bufSize.get(b) ?? 0; bufSize.delete(b); } });
     wrap('bindTexture', (target: number, t: WebGLTexture | null) => { texBound.set(target, t); });
@@ -264,18 +276,18 @@ class HitchLogImpl {
       const cube = target >= gl.TEXTURE_CUBE_MAP_POSITIVE_X && target <= gl.TEXTURE_CUBE_MAP_NEGATIVE_Z;
       const bytes = w * h * bpp(fmt);
       setTex(target, bytes, cube && target !== gl.TEXTURE_CUBE_MAP_POSITIVE_X); // (cube faces add up)
-      if (!(typeof rest[0] === 'number' && rest[5] == null)) G.upload += bytes; // (no pixels: a render target)
+      if (!(typeof rest[0] === 'number' && rest[5] == null)) up(bytes, 'texImage2D', `${w}×${h}`); // (no pixels: a render target)
     });
-    wrap('texImage3D', (target: number, level: number, fmt: number, w: number, h: number, d: number) => {
+    wrap('texImage3D', (target: number, level: number, fmt: number, w: number, h: number, d: number, _b: number, _f: number, _ty: number, pixels?: unknown) => {
       if (level !== 0) return;
       setTex(target, w * h * d * bpp(fmt));
-      G.upload += w * h * d * bpp(fmt);
+      if (pixels != null) up(w * h * d * bpp(fmt), 'texImage3D', `${w}×${h}×${d}`); // (no pixels: storage only)
     });
     wrap('texSubImage2D', (_t: number, _l: number, _x: number, _y: number, ...rest: unknown[]) => {
       const [w, h] = typeof rest[0] === 'number' && typeof rest[1] === 'number' ? [rest[0] as number, rest[1] as number] : srcSize(rest[2]);
-      G.upload += w * h * 4;
+      up(w * h * 4, 'texSubImage2D', `${w}×${h}`);
     });
-    wrap('texSubImage3D', (_t: number, _l: number, _x: number, _y: number, _z: number, w: number, h: number, d: number) => { G.upload += w * h * d * 4; });
+    wrap('texSubImage3D', (_t: number, _l: number, _x: number, _y: number, _z: number, w: number, h: number, d: number) => { up(w * h * d * 4, 'texSubImage3D', `${w}×${h}×${d}`); });
     wrap('deleteTexture', (t: WebGLTexture | null) => { if (t) { G.textures -= texSize.get(t) ?? 0; texSize.delete(t); } });
     wrap('bindRenderbuffer', (_t: number, r: WebGLRenderbuffer | null) => { rb = r; });
     const rbStore = (samples: number, fmt: number, w: number, h: number) => {
@@ -292,9 +304,9 @@ class HitchLogImpl {
   /** Shader budget (Arnd's rule): no shader may take longer than this to compile (ms). */
   static readonly COMPILE_BUDGET_MS = 100;
   /** Programs still compiling: when they were created. */
-  private compiling = new Map<WebGLProgram, { name: string; t0: number; key: string }>();
+  private compiling = new Map<WebGLProgram, { name: string; t0: number; key: string; ahead: number }>();
   /** Compile times measured in play (ms), slowest kept. */
-  readonly compiles: { name: string; ms: number; key: string }[] = [];
+  readonly compiles: { name: string; ms: number; key: string; ahead: number }[] = [];
   compileCount = 0;
   compileOver = 0;
   private parallel: { COMPLETION_STATUS_KHR: number } | null | undefined;
@@ -308,7 +320,9 @@ class HitchLogImpl {
     if (!this.armed || !pr.program || !this.renderer) return;
     if (this.parallel === undefined) this.parallel = this.renderer.getContext().getExtension('KHR_parallel_shader_compile') as { COMPLETION_STATUS_KHR: number } | null;
     if (!this.parallel) return;
-    this.compiling.set(pr.program, { name: pr.name || this.whoUses(pr), t0: performance.now(), key: pr.cacheKey });
+    // (`ahead`: programs still compiling when this one started. The time then includes waiting
+    // for them, so only a compile with nothing ahead measures the shader itself.)
+    this.compiling.set(pr.program, { name: pr.name || this.whoUses(pr), t0: performance.now(), key: pr.cacheKey, ahead: this.compiling.size });
   }
 
   private pollCompiles(): void {
@@ -323,7 +337,7 @@ class HitchLogImpl {
       const ms = Math.round(now - c.t0);
       this.compileCount++;
       if (ms > HitchLogImpl.COMPILE_BUDGET_MS) this.compileOver++;
-      this.compiles.push({ name: c.name, ms, key: c.key.slice(0, 160) });
+      this.compiles.push({ name: c.name, ms, key: c.key.slice(0, 160), ahead: c.ahead });
       this.compiles.sort((a, b) => b.ms - a.ms);
       if (this.compiles.length > 25) this.compiles.length = 25;
     }
@@ -332,17 +346,49 @@ class HitchLogImpl {
   /** One line on the shader budget: how many compiles in play went over 0.1 s, the slowest. */
   compileLine(): string {
     if (!this.compileCount) return 'shader compiles in play: none measured yet';
-    const top = this.compiles[0];
-    return `shader compiles in play: ${this.compileCount}, over 0.1 s: ${this.compileOver}${top ? `, slowest ${top.ms} ms (${top.name})` : ''}`;
+    const top = this.compiles[0], alone = this.compiles.find((c) => c.ahead === 0);
+    return `shader compiles in play: ${this.compileCount}, over 0.1 s: ${this.compileOver}${top ? `, slowest ${top.ms} ms (${top.name}${top.ahead ? `, ${top.ahead} ahead of it` : ''})` : ''}${alone && alone !== top ? `, slowest with none ahead ${alone.ms} ms (${alone.name})` : ''}`;
+  }
+
+  /**
+   * Which mesh holds this vertex array (path, attribute name). Looked up at the upload itself:
+   * GPU-only geometry drops its arrays right after. Rare (uploads of 2 MB or more).
+   */
+  private ownerOf(arr: object): string {
+    let found = '';
+    this.scene?.traverse((o) => {
+      if (found) return;
+      const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+      if (!g?.attributes) return;
+      const im = o as THREE.InstancedMesh;
+      const attrs: [string, THREE.BufferAttribute | THREE.InterleavedBufferAttribute | null | undefined][] = [...Object.entries(g.attributes), ['index', g.index]];
+      if (im.isInstancedMesh) attrs.push(['instanceMatrix', im.instanceMatrix], ['instanceColor', im.instanceColor]);
+      for (const [name, a] of attrs) {
+        if (!a) continue;
+        const x = (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute ? (a as THREE.InterleavedBufferAttribute).data.array : (a as THREE.BufferAttribute).array;
+        if (x !== arr) continue;
+        let path = o.name || o.type, q = o.parent;
+        for (let k = 0; k < 3 && q; k++, q = q.parent) if (q.name) path = q.name + '/' + path;
+        found = `${path}.${name}${im.isInstancedMesh ? ` (${im.count} instances)` : ''}`;
+        return;
+      }
+    });
+    return found;
   }
 
   /** The GPU memory line for a freeze record; starts the next frame's upload count. */
   private takeMemory(): string {
     const G = this.gpu, MB = 1048576;
     const text = `GPU memory ≈ ${Math.round((G.buffers + G.textures + G.targets) / MB)} MB (buffers ${Math.round(G.buffers / MB)}, textures ${Math.round(G.textures / MB)}, render targets ${Math.round(G.targets / MB)}); uploaded ${(G.upload / MB).toFixed(1)} MB this frame, ${(G.prevUpload / MB).toFixed(1)} MB the frame before`;
+    G.big.sort((a, b) => b.mb - a.mb);
+    const top = G.big.slice(0, 4);
+    const big = top.map((b) => b.what).join('; ');
+    const text2 = text + (big ? `; biggest this frame: ${big}` : '') + (G.prevBig ? `; frame before: ${G.prevBig}` : '');
+    G.prevBig = big;
+    G.big.length = 0;
     G.prevUpload = G.upload;
     G.upload = 0;
-    return text;
+    return text2;
   }
 
   /** First draws of this frame: [new program × vertex data, new program × target, draws, programs]. */
@@ -449,7 +495,7 @@ class HitchLogImpl {
         for (let k = 0; k < 4 && q; k++, q = q.parent) if (q.name) path = q.name + '/' + path;
         // (Whether the shader gate had looked at this mesh: a program it never asked for was
         // compiled while drawing.)
-        const gate = this.gateKnows ? (this.gateKnows(o) ? ' gate:seen' : ' gate:NEVER') : '';
+        const gate = this.gateOf ? ` gate:${this.gateOf(o)}` : '';
         found.push(`${path}:${mat.type}${extra.includes(mat) ? '(depth)' : ''}${mat.side === 2 ? ' double' : mat.side === 1 ? ' back' : ''}${gate}`);
         break;
       }
