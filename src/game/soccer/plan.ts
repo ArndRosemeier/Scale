@@ -73,7 +73,7 @@ export function clubs(seed: number): Club[] {
     for (let k = 0; k < 10 && near(trim, shirt); k++) trim = r.pick(COLOURS);
     const pattern = r.weighted(['plain', 'stripes', 'checks'] as const, (p) => (p === 'plain' ? 3 : p === 'stripes' ? 1.4 : 0.4));
     const shorts: C3 = r.chance(0.5) ? [0.94, 0.94, 0.92] : r.chance(0.5) ? [0.08, 0.08, 0.1] : shirt;
-    const keeper: C3 = r.pick([[0.2, 0.85, 0.3], [0.95, 0.85, 0.1], [0.95, 0.4, 0.75], [0.15, 0.15, 0.15], [0.4, 0.9, 0.9]] as C3[]);
+    const keeper: C3 = r.pick([[0.2, 0.85, 0.3], [0.95, 0.85, 0.1], [0.95, 0.4, 0.75], [0.55, 0.25, 0.75], [0.4, 0.9, 0.9]] as C3[]);
     const awayShirt: C3 = near(shirt, [0.92, 0.92, 0.9]) ? [0.1, 0.1, 0.12] : [0.94, 0.94, 0.92];
     out.push({
       name, short: root.slice(0, 3).toUpperCase(),
