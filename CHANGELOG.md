@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.247 — 2026-10-10
+
+- **The big city map no longer stutters while it fills in.** Like the minimap since 0.242, it now draws each new piece in small parts over several frames instead of up to 80 ms at once.
+- The freeze log (Shift+F9) now also estimates, for each freeze, how much graphics memory the game holds (buffers, textures, render targets) and how much it uploaded in that frame and the one before. The latest log showed long waits for the graphics driver with no new shaders involved. If graphics memory runs over, the driver swaps it in and out, and this shows whether that is happening.
+
 ## 0.246 — 2026-10-10
 
 - **The title screen names the official subreddit.** Under the version line it now says "Official subreddit: r/Scale_The_Game". Clicking it opens https://www.reddit.com/r/Scale_The_Game/ in a new tab.

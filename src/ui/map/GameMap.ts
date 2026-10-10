@@ -695,7 +695,7 @@ export class GameMap {
     g.imageSmoothingEnabled = true;
     g.imageSmoothingQuality = 'high';
     this.tiles.drawView(g, this.tiles.levelFor(s * dpr), s, ox, oy, W, H, this.queue);
-    this.tiles.renderQueue(this.queue, 9);
+    this.tiles.renderQueue(this.queue, 9, Infinity, 4);
     if (this.layers.crime && this.layers.labels) this.drawHoods(g, W, H, s, ox, oy);
     this.drawMarkers(g, W, H, s, ox, oy, true);
     this.drawCustom(g, W, H, s, ox, oy, true);
