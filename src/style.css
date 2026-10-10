@@ -85,6 +85,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 #pause select, #pause button { background: #0f141a; color: #e8ecf0; border: 1px solid #34414f; border-radius: 6px; padding: 6px 10px; font-size: 14px; }
 #pause button { cursor: pointer; }
 #pause button:hover { border-color: #d8b56a; }
+#pause button:disabled { opacity: 0.45; cursor: default; border-color: #34414f; }
+#pause #pClip { flex: 1; }
+#recDot { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 30; display: none; padding: 4px 10px 4px 26px; border-radius: 14px; background: rgba(10, 12, 16, 0.7); color: #ffd9d4; font: 600 13px system-ui, sans-serif; letter-spacing: 0.04em; pointer-events: none; }
+#recDot.on { display: block; }
+#recDot::before { content: ''; position: absolute; left: 10px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: #ff3b30; animation: rec-blink 1s steps(2) infinite; }
+@keyframes rec-blink { 50% { opacity: 0.25; } }
 #pause .buttons { display: flex; gap: 10px; margin-top: 18px; }
 #pause #pResume { background: #d8b56a; color: #1a1408; border: 0; font-weight: 600; }
 /* Above the origin intro (#cine, 60): H during the intro gives a usable dialog. */
