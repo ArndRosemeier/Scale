@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.240 — 2026-10-10
+
+- **No more flickering at the stadium gates.** Through each gate you could look into the open ends of the stands, where inner walls lie on top of each other and flicker. The stands are now closed at the gates by a solid end wall that follows the seat rows. The steps down through the gates also ended a few centimetres from the ground and flickered against it; they now stay clear of it. The sides of the flights from the pitch up into the stands no longer overlap and flicker either.
+- The landmark preview draws its ground as low as the game does, and no longer stops with an error for a landmark without rooms (the stadium).
+
 ## 0.239 — 2026-10-09
 
 - **Soccer in the stadium.** By day (10:00 until a little after 17:00, game time) the city's six clubs play match after match on the stadium's pitch. The sides walk out of the tunnel, kick off, pass, dribble, tackle, shoot, head, take throw-ins, corners and free kicks, and score now and then (about one or two goals a match). Keepers catch, parry and dive. There is half time, then full time, and the players walk off. Each player has one strength and one weakness, such as a deadly finisher who is slow, or a rock in the tackle with a wayward pass. Target a player to see theirs. The clubs have their own names and kits and play in a change kit when the colours clash. Women's sides play women's sides. The referee in black follows play and whistles. The scoreboard over one of the gates shows the score, the minute and the last scorer. The stands fill, the crowd murmurs, groans at a near miss and jumps up for a goal. Walk onto the pitch and play stops until you leave it. Hit a player, or bring danger to the stadium, and the match is abandoned while everyone runs.

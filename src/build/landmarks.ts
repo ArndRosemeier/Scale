@@ -562,16 +562,25 @@ class Emitter {
     if (yLo > p.y0 + 0.01) this.poly([at(0, 0, p.y0), at(1, 0, p.y0), at(1, 0, yLo), at(0, 0, yLo)], [[0, 0], [wF, 0], [wF, yLo - p.y0], [0, yLo - p.y0]], nf);
     this.use(p.back ?? p.m);
     this.poly([at(0, 1, p.y0), at(1, 1, p.y0), at(1, 1, p.y1), at(0, 1, p.y1)], [[0, 0], [wK, 0], [wK, p.y1 - p.y0], [0, p.y1 - p.y0]], nb);
+    const rows = this.lod > 0 ? 0 : p.rows ?? 0;
     if (!p.noSides) {
-      this.use(p.m);
       for (const s of [0, 1]) {
         const ex = (s ? F1[0] - F0[0] : F0[0] - F1[0]) / (wF || 1), ez = (s ? F1[1] - F0[1] : F0[1] - F1[1]) / (wF || 1);
+        if (p.foot !== undefined && p.foot < p.y0 - 0.05) {
+          this.usePlinth(p);
+          this.poly([at(s, 0, p.foot), at(s, 1, p.foot), at(s, 1, p.y0), at(s, 0, p.y0)], [[0, 0], [dl, 0], [dl, p.y0 - p.foot], [0, p.y0 - p.foot]], [ex, 0, ez]);
+        }
+        this.use(p.m);
         this.poly([at(s, 0, p.y0), at(s, 1, p.y0), at(s, 1, p.y1), at(s, 0, yLo)], [[0, 0], [dl, 0], [dl, p.y1 - p.y0], [0, yLo - p.y0]], [ex, 0, ez]);
+        // The seat rows' steps over the slope.
+        for (let i = 0; i < (rows < 2 ? 0 : rows); i++) {
+          const t0 = i / rows, t1 = (i + 1) / rows, y = yLo + ((p.y1 - yLo) * i) / rows, y2 = yLo + ((p.y1 - yLo) * (i + 1)) / rows;
+          this.poly([at(s, t0, y), at(s, t1, y2), at(s, t0, y2)], [[dl * t0, y - p.y0], [dl * t1, y2 - p.y0], [dl * t0, y2 - p.y0]], [ex, 0, ez]);
+        }
       }
     }
     if (p.foot === undefined) { this.use(p.m); this.poly([at(0, 0, p.y0), at(1, 0, p.y0), at(1, 1, p.y0), at(0, 1, p.y0)], [[0, 0], [1, 0], [1, 1], [0, 1]], [0, -1, 0]); }
     this.useTop(p);
-    const rows = this.lod > 0 ? 0 : p.rows ?? 0;
     if (rows < 2) {
       const L = Math.hypot(dl, p.y1 - yLo);
       const n = norm([nf[0] * (p.y1 - yLo), dl, nf[2] * (p.y1 - yLo)]);
