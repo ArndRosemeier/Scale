@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.253 — 2026-10-10
+
+- **Generated sounds kept only where they beat the old ones.** Each of the 99 synthesized sounds was played next to its best generated replacement to two listening models, in both orders. A new sound stays only if it wins at least 3 of the 4 votes. New now: explosions, bombs, artillery, the tank, rifles, the helicopter, heavy rain, wind gusts, close thunder (two of three), the short siren, the kaiju's steps, the Roc's screech, the Leviathan's roar and slap, the maw roar, the Burrower's rumble and cave-in, the earth tremor, the swarm, slime burbling, splats and spit, cheering, referee whistles, the coin, the crane, fire, fans, hum and gears underground. Back to the old synthesized sound: the sirens and alarms, far thunder, light rain, the metro, the jet, rockets, the drone, the café terrace and others where the old one won.
 ## 0.252 — 2026-10-10
 
 - **61 synthesized sounds replaced by real-sounding ones.** Sirens, the car alarm, army fire (rifles, tank, autocannon, jet, rockets, bombs, artillery, shell whistle), thunder, light and heavy rain, wind gusts, the metro, the helicopter, the police drone, alarms, cuffs, cheering, whistles and the ball kick, fire, fans, hum and dripping water underground, the kaiju's roar, steps and charge, the giant maw, the minigun, laser zap and slime burbling all used to be made by little synth scripts. They are now Stable Audio clips made in Sound Studio. Each is set to the loudness of the sound it replaces, so the mix stays the same. Two different listening models had to agree on every pick. The other 38 (splats, rubble, alien tones, robot glitches and the like) keep their old sounds for now.
