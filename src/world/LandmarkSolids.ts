@@ -47,6 +47,8 @@ export class LandmarkSolids {
   readonly helices: LmPart[] = [];
   /** Landmark (index) of each helix. */
   private helixLm: number[] = [];
+  /** Walking surface of each helix's floor pieces (its floor at the point, not the piece's top). */
+  private helixFloor: ((x: number, z: number, top: number) => number)[] = [];
   private pool: PartObstacle[] = [];
   private floors: number[] = [];
   /** Obstacles of each landmark: [first, end). */
@@ -59,7 +61,18 @@ export class LandmarkSolids {
       const first = this.obs.length;
       for (const o of partObstacles(parts)) this.obs.push(o);
       this.lmObs.push([first, this.obs.length]);
-      for (const p of parts) if (p.k === PK.Helix && !p.clear) { this.helices.push(p); this.helixLm.push(li); }
+      for (const p of parts) if (p.k === PK.Helix && !p.clear) {
+        this.helices.push(p); this.helixLm.push(li);
+        // (The turn passing there nearest the piece's top, never above it: beyond the piece's
+        // upper end its top; before the walkway's start, the start's floor.)
+        const fl: number[] = [];
+        const lap = ((p.y1 - p.y0) * Math.PI * 2) / (Math.abs(p.turns!) * Math.PI * 2);
+        this.helixFloor.push((x, z, top) => {
+          let best = Infinity;
+          for (const f of helixFloorsAt(p, x, z, 0.5, fl)) for (const g of [f, Math.max(p.y0, f - lap)]) if (Math.abs(g - top) < Math.abs(best - top)) best = g;
+          return Math.min(top, best);
+        });
+      }
       const ins = landmarkInterior(lm, terrain);
       if (ins) this.insides.push(ins);
     });
@@ -194,19 +207,21 @@ export class LandmarkSolids {
   /** Obstacle provider for world/Collision. */
   provider: ObstacleProvider = (x0, z0, x1, z1, out) => {
     this.each(x0, z0, x1, z1, out);
-    this.helices.forEach((p, i) => this.helixPieces(p, this.helixLm[i], x0, z0, x1, z1, out));
+    this.helices.forEach((p, i) => this.helixPieces(p, i, x0, z0, x1, z1, out));
   };
 
   /**
    * The pieces of a helix walkway over the box: per turn passing there, a slab under each short
    * stretch of floor (its top the floor at the stretch's upper end, so one walks up without
-   * sinking) and the outer wall beside it.
+   * sinking; walkers stand on the floor at the point, floorAt, so the climb is smooth) and the
+   * outer wall beside it.
    */
-  private helixPieces(p: LmPart, lm: number, x0: number, z0: number, x1: number, z1: number, out: (o: PartObstacle) => void): void {
+  private helixPieces(p: LmPart, h: number, x0: number, z0: number, x1: number, z1: number, out: (o: PartObstacle) => void): void {
     const R2 = p.r2!, R1 = p.r!, cx = p.x, cz = p.z, T = Math.PI * 2;
     if (x1 < cx - R2 - 1 || x0 > cx + R2 + 1 || z1 < cz - R2 - 1 || z0 > cz + R2 + 1) return;
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, ext = Math.hypot(x1 - x0, z1 - z0) / 2 + 1, d = Math.hypot(mx - cx, mz - cz);
     if (d - ext > R2) return;
+    const lm = this.helixLm[h], floorAt = this.helixFloor[h];
     const turns = Math.abs(p.turns!), sg = p.turns! < 0 ? -1 : 1, full = turns * T;
     const rise = Math.abs(p.y1 - p.y0);
     const n = Math.max(8, Math.ceil(Math.max(full / 0.1, rise / RISE))), dphi = full / n;
@@ -236,6 +251,7 @@ export class LandmarkSolids {
           o.x = cx + c * rr; o.z = cz + s * rr; o.ux = -s; o.uz = c; o.hx = chord;
           o.hz = wall ? WALL : (R2 - R1) / 2;
           o.y0 = top - SLAB; o.y1 = wall ? top + p.hh! : top;
+          o.deck = !wall; o.floorAt = wall ? undefined : floorAt;
           if (this.wrecks.has(lm) && !this.standing(lm, o.x, top - 0.2, o.z)) continue;
           out(o);
         }

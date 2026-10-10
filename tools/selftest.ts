@@ -3581,17 +3581,17 @@ section('walk-in landmarks', async () => {
   // (world/Collision: a hero's step is 0.5 m, slabs under 1.4 steps are ground only as decks.)
   const WALK_MIN_H = 0.7;
   const t0 = performance.now();
-  const count: Record<string, number> = { museum: 0, glasshouse: 0, airport: 0, tower: 0, lighthouse: 0, fortress: 0, twist: 0 };
+  const count: Record<string, number> = { museum: 0, glasshouse: 0, airport: 0, tower: 0, lighthouse: 0, fortress: 0, twist: 0, helix: 0 };
   const styles: Record<string, Set<number>> = Object.fromEntries(Object.keys(count).map((k) => [k, new Set<number>()]));
   const built: { lm: Landmark; terrain: Terrain; S: LandmarkSolids }[] = [];
   const NAME: Record<string, string[]> = { museum: ['classical museum', 'modern museum'], glasshouse: ['palm house', 'domed glasshouse', 'triple glasshouse'], airport: ['airport terminal', 'vaulted terminal', 'saw-tooth terminal'],
     tower: ['TV tower', 'lattice tower', 'glass tower'], lighthouse: ['lighthouse', 'lighthouse', 'lighthouse'], fortress: ['fortress keep', 'ruined keep'],
-    twist: ['', '', '', 'twisted tower'] };
-  // (The twisted tower is a marvel of style 3.)
-  const kindOf = (l: Landmark) => (l.kind === 'marvel' && l.style === 3 ? 'twist' : l.kind);
+    twist: ['', '', '', 'twisted tower'], helix: ['', 'helix tower'] };
+  // (The twisted tower is a marvel of style 3, the helix tower of style 1.)
+  const kindOf = (l: Landmark) => (l.kind === 'marvel' && l.style === 3 ? 'twist' : l.kind === 'marvel' && l.style === 1 ? 'helix' : l.kind);
   const { landmarkDesign } = await import('../src/plan/designs');
-  let climbs = 0;
-  for (const [seed, size] of [[1, 0.8], [7, 0.8], [11, 0.8], [2, 0.8], [10, 0.8], [6, 0.8], [9, 0.8], [5, 0.8]] as const) {
+  let climbs = 0, helices = 0;
+  for (const [seed, size] of [[1, 0.8], [7, 0.8], [11, 0.8], [2, 0.8], [10, 0.8], [6, 0.8], [9, 0.8], [5, 0.8], [1, 1]] as const) {
     const terrain = new Terrain(makeProfile({ seed, size }));
     const macro = buildMacroPlan(terrain);
     const S = new LandmarkSolids(macro, terrain);
@@ -3650,9 +3650,50 @@ section('walk-in landmarks', async () => {
         check(st.length >= 1 && w.up <= 0.31 && w.down < 0.31 && w.blocked === 0 && Math.abs(w.y - topY) < 0.05 && !!S.insideAt(pts[pts.length - 1][0], w.y + 1, pts[pts.length - 1][1]),
           `seed ${seed}: up the stairs of the twisted tower, ${st.length} flights (steps up to ${w.up.toFixed(2)} m, drops ${w.down.toFixed(2)} m, ${w.blocked} blocked, ends ${(w.y - topY).toFixed(2)} m off the top storey)`);
       }
+      // The helix tower: from the ground at the start of each walkway up it, as world/Collision
+      // stands a walker on its pieces (smoothly, no steps), past each storey's door, then in
+      // through the door of the highest one it passes.
+      if (kind === 'helix') {
+        const D = landmarkDesign(lm)!;
+        const floors = [...new Set(D.rooms.map((r) => r.y))].sort((a, b) => a - b);
+        for (const p of landmarkParts(lm, terrain).filter((q) => q.k === PK.Helix && !q.clear)) {
+          const rm = (p.r! + p.r2!) / 2, sg = p.turns! < 0 ? -1 : 1, full = Math.abs(p.turns!) * Math.PI * 2;
+          const P = (phi: number): [number, number] => [p.x + Math.cos(p.a + sg * phi) * rm, p.z + Math.sin(p.a + sg * phi) * rm];
+          // The highest storey this walkway has a door to (doors are where its floor passes a storey's).
+          // (The second walkway of a pair has its door to the lobby only, not always in a side's middle.)
+          const first = Math.abs(p.a - landmarkParts(lm, terrain).find((q) => q.k === PK.Helix && !q.clear)!.a) < 1e-9;
+          const toDoor = floors.filter((y) => y > p.y0).map((y) => ((y - p.y0) / (p.y1 - p.y0)) * full).filter((f) => f < full && first);
+          const ground = (x: number, z: number, y: number) => {
+            let g = terrain.height(x, z);
+            S.provider(x - 0.01, z - 0.01, x + 0.01, z + 0.01, (o) => {
+              if ((o.y1 - o.y0 < WALK_MIN_H && !o.deck) || o.y1 <= g || Math.hypot(x - o.x, z - o.z) > 50) return;
+              const dx = x - o.x, dz = z - o.z;
+              const ins = o.cyl ? dx * dx + dz * dz < o.r * o.r : Math.abs(dx * o.ux + dz * o.uz) < o.hx && Math.abs(-dx * o.uz + dz * o.ux) < o.hz;
+              if (!ins) return;
+              const top = o.floorAt ? o.floorAt(x, z, o.y1) : o.y1;
+              if (top <= y + 0.5 && top > g) g = top;
+            });
+            return g;
+          };
+          let y = terrain.height(...P(-1.5 / rm)), up = 0, down = 0, blocked = 0;
+          const last = toDoor[toDoor.length - 1] ?? full * 0.3;
+          for (let s = -1.5; s <= last * rm; s += 0.1) {
+            const [x, z] = P(s / rm), ny = ground(x, z, y);
+            up = Math.max(up, ny - y); down = Math.max(down, y - ny); y = ny;
+            if (S.hit(x, y + 0.3, z) || S.hit(x, y + 1.5, z)) blocked++;
+          }
+          // In through the door: towards the middle.
+          const [dx, dz] = P(last), w = walk([[dx, dz], [p.x + (dx - p.x) * 0.6, p.z + (dz - p.z) * 0.6]], y);
+          const yd = floors.find((f) => Math.abs(((f - p.y0) / (p.y1 - p.y0)) * full - last) < 1e-6) ?? NaN;
+          helices++;
+          check((toDoor.length >= 1 || !first) && up <= 0.12 && down < 0.05 && blocked === 0 && (!first || w.up <= 0.31 && w.down < 0.31 && w.blocked === 0 && Math.abs(w.y - yd) < 0.05 && !!S.insideAt(p.x + (dx - p.x) * 0.6, w.y + 1, p.z + (dz - p.z) * 0.6)),
+            `seed ${seed}: up the walkway of the helix tower past ${toDoor.length} doors (steps up to ${up.toFixed(2)} m, drops ${down.toFixed(2)} m, ${blocked} blocked) and in (steps up to ${w.up.toFixed(2)} m, ${w.blocked} blocked, ends ${(w.y - yd).toFixed(2)} m off the floor)`);
+        }
+      }
     }
   }
   check(climbs >= 3, `twisted towers climbed (${climbs})`);
+  check(helices >= 2, `helix towers climbed (${helices})`);
   check(count.museum >= 3 && styles.museum.size === 2, `museums checked (${count.museum}, both styles)`);
   check(count.glasshouse >= 3 && styles.glasshouse.size === 3, `glasshouses checked (${count.glasshouse}, styles ${[...styles.glasshouse].join(', ')})`);
   check(count.airport >= 2, `airport terminals checked (${count.airport})`);
@@ -3669,8 +3710,8 @@ section('walk-in landmarks', async () => {
   for (const { lm, terrain, S } of built) {
     for (const room of landmarkRooms(lm) ?? []) {
       rooms++;
-      // (The twisted tower's lobby has no lift: its desk and the lounge's holo table.)
-      const key = kindOf(lm) === 'twist' && room.fn === 'foyer' ? ['counter', 'holo'] : KEY[room.fn];
+      // (The twisted and the helix tower's lobby has no lift: its desk and the lounge's holo table.)
+      const key = (kindOf(lm) === 'twist' || kindOf(lm) === 'helix') && room.fn === 'foyer' ? ['counter', 'holo'] : KEY[room.fn];
       if (key && !key.every((k) => room.furniture.some((f) => f.kind === k)) && !(room.fn === 'garden' && key.some((k) => room.furniture.filter((f) => f.kind === k).length >= 3))) bare++;
       let blocked = 0, y = room.y;
       // (A security lane has no door: walk through each scanner arch from the check-in side.)

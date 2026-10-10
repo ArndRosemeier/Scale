@@ -172,6 +172,31 @@ only) when nothing fits.
 The walk-in test also climbs every flight of each Twist it finds (seeds 1, 5, 9) to the top
 storey with an inside.
 
+## The helix tower (phase 4e, `plan/helixParts.ts`)
+
+The helix tower (marvel style 1) is a round core with a glazed walkway winding up round it. The
+walkway is the way up; the core has no stairs. Its storeys are discs inside a ring of walls
+with as many sides as the solid core above (36, or 24 when the core is too small for a door in
+each side).
+
+- Lobby: one open foyer at the square's level, the way in from the square across from where
+  the walkway starts (a quarter round with two walkways), and a door onto each walkway where
+  it passes the lobby floor. The walkway starts on the ground at its own start, not at the
+  landmark's floor level, which is the square's highest point.
+- Up to five storeys above it, and a sky lounge under the roof. Each storey's floor is moved a
+  little up or down from an even 4.5 m so that the first walkway passes it in the middle of a
+  side; that is where the door is. Between the lowest storeys and the sky lounge the core is
+  solid.
+- Inside a storey above the lobby: a fixed hall from the walkway door to a small octagon in the
+  middle, rooms in sectors round it (`storeyProgram` from the Twist: café, lounge and capsule
+  hotel, studios), sci-fi theme in the tower's accent colour.
+- Walking up the walkway is smooth: world/Collision stands a walker on the floor at the point
+  (`Obstacle.floorAt`), not on the collision piece's top, which is the floor at the piece's
+  upper end and made a 0.3 m staircase.
+
+The walk-in test walks each walkway from the ground up past every door (no step over 0.12 m per
+10 cm, as Collision stands a walker) and in through the highest door of the first walkway.
+
 Checks: `tools/homeTest.ts` (selftest section "furnished homes"), `tools/splitTest.ts` (section
 "room splitting": odd outlines and real storeys, coverage, overlap, room size, reachability,
 reservation first, desks, tables, checkouts, mirrors, counters, timing), `npx tsx tools/interiorPlans.ts
