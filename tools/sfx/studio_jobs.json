@@ -1,0 +1,596 @@
+[
+ {
+  "id": "strider_step",
+  "prompt": "TrackType: SFX, the footfall of a 40 metre tall monster on a city street: a huge sub-bass boom, the ground thumping, debris and windows rattling, a long rolling rumble, no music, no voice",
+  "seconds": 4,
+  "candidates": 4
+ },
+ {
+  "id": "strider_roar",
+  "prompt": "TrackType: SFX, a colossal monster roaring over a city like a giant kaiju: a deep bellow sliding up into a rasping, screeching upper tone, then a guttural fall, echoing off tall buildings, no music, no voice",
+  "seconds": 5,
+  "candidates": 3
+ },
+ {
+  "id": "strider_charge",
+  "prompt": "TrackType: SFX, a giant monster charging its energy breath: a rising electric hum that swells and builds with crackling static and sparks, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "strider_breath",
+  "prompt": "TrackType: SFX, a giant monster's plasma breath attack: a roaring, tearing jet of fire and plasma rushing out with a sizzling, crackling top, no music, no voice",
+  "seconds": 5,
+  "candidates": 3
+ },
+ {
+  "id": "tremor_rumble",
+  "prompt": "TrackType: SFX, an earth tremor far away: the ground trembling with a low deep rumble, windows and loose things faintly rattling, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "car_alarm",
+  "prompt": "TrackType: SFX, a parked car's alarm going off on a city street: an electronic whoop followed by a warbling siren pattern, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "civil_siren",
+  "prompt": "TrackType: SFX, a civil defence evacuation siren, a mechanical motor siren winding up and down slowly over a whole city, echoing between buildings, steady and continuous, no fade, no music, no voice",
+  "seconds": 14,
+  "candidates": 2
+ },
+ {
+  "id": "nuke_siren",
+  "prompt": "TrackType: SFX, an air raid attack warning, a mechanical motor siren wailing up and down quickly, a second rotor a fifth higher, echoing over a whole city, steady and continuous, no fade, no music, no voice",
+  "seconds": 14,
+  "candidates": 2
+ },
+ {
+  "id": "robot_glitch",
+  "prompt": "TrackType: SFX, a robot malfunctioning: stuttering electronic bleeps at jumping pitches, bit-crushed digital buzz, a falling boop, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "robot_hostile",
+  "prompt": "TrackType: SFX, a robot turning hostile: a servo motor whine winding up, then a harsh aggressive two-tone electronic chirp over an electric buzz, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "burrower_rumble",
+  "prompt": "TrackType: SFX, a giant worm tunnelling right under a city street: deep earth rumble, rock grinding and crunching, slow surging, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "burrower_rumble_far",
+  "prompt": "TrackType: SFX, a long low rumble from deep under a street, faint grinding of rock, swelling and fading away, no music, no voice",
+  "seconds": 5,
+  "candidates": 3
+ },
+ {
+  "id": "burrower_breach",
+  "prompt": "TrackType: SFX, a city street caving in: asphalt cracking and splitting, a deep collapse boom, then debris and rubble raining down, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "burrower_roar",
+  "prompt": "TrackType: SFX, a giant sandworm monster's call: a chorus of shrieking grinding creature voices over a wet low gurgle, ending in a clicking rattle, no music, no voice",
+  "seconds": 5,
+  "candidates": 3
+ },
+ {
+  "id": "burrower_slam",
+  "prompt": "TrackType: SFX, a giant monster's head slamming down onto a street: a heavy ground thud, asphalt crunching, a rumbling tail, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "burrower_dive",
+  "prompt": "TrackType: SFX, a giant worm diving back into the ground: a rush of air, soil and stones torn up, grinding rumble going away below, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "leviathan_surface",
+  "prompt": "TrackType: SFX, a huge sea monster surfacing in a river: a deep surge of water heaving up, a big wash and spray splashing down, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "leviathan_roar",
+  "prompt": "TrackType: SFX, a gigantic sea monster's call: a deep wet bellow with a whale-like moan and a gurgle, echoing over water, no music, no voice",
+  "seconds": 5,
+  "candidates": 3
+ },
+ {
+  "id": "leviathan_slap",
+  "prompt": "TrackType: SFX, a giant wet tentacle slapping down hard on a wooden deck: a heavy wet thud and splatter, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "roc_screech",
+  "prompt": "TrackType: SFX, a gigantic eagle screaming: a harsh, rough raptor cry 'kee-eeer' falling in pitch, echoing off buildings, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "roc_cry_far",
+  "prompt": "TrackType: SFX, a giant eagle's cry far away high in the sky, distant and dull, with a long echo, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "roc_flap",
+  "prompt": "TrackType: SFX, a single beat of enormous wings: a great whoomp of air with a low thump, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "mech_step",
+  "prompt": "TrackType: SFX, a giant robot mech's footstep: a deep heavy thud, steel clanging on steel, a hydraulic hiss, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "mech_launch",
+  "prompt": "TrackType: SFX, a missile launching from a pod: a sharp pop and a tearing rush of rocket exhaust flying away, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "mech_cannon",
+  "prompt": "TrackType: SFX, a short burst of a rotary cannon: rapid hard gunshots over a spinning motor whine, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "mech_vent",
+  "prompt": "TrackType: SFX, a giant machine's heat vents opening: a heavy metal clunk and a long roaring hiss of steam, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "mech_alarm",
+  "prompt": "TrackType: SFX, a giant war machine's warning klaxon: a blaring two-tone horn, echoing off buildings, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "brood_chitter",
+  "prompt": "TrackType: SFX, a swarm of insect-like creatures: dry clicking, rasping and chirping from many small bodies, claws scrabbling on stone, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "brood_screech",
+  "prompt": "TrackType: SFX, a small insect monster shrieking: a short rasping squeal, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "brood_bite",
+  "prompt": "TrackType: SFX, a quick snap of insect mandibles with a crunch, very short, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "army_rifle",
+  "prompt": "TrackType: SFX, a squad of soldiers firing assault rifles: a ragged burst of sharp gunshot cracks slapping off city walls, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "army_autocannon",
+  "prompt": "TrackType: SFX, an armoured vehicle's autocannon firing four heavy shots: deep thuds with a metallic ring and street echo, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "army_tank",
+  "prompt": "TrackType: SFX, a tank cannon firing: a hard crack and a deep boom rolling through city streets, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "army_rotor",
+  "prompt": "TrackType: SFX, an attack helicopter hovering close: steady rotor blade slap over a turbine whine, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "army_jet",
+  "prompt": "TrackType: SFX, a fighter jet flying low overhead: a rising roar, a loud crack overhead, a falling rumble going away, no music, no voice",
+  "seconds": 7,
+  "candidates": 3
+ },
+ {
+  "id": "army_rocket",
+  "prompt": "TrackType: SFX, a salvo of rockets launching: a fast string of whooshes and hissing exhaust, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "army_explosion",
+  "prompt": "TrackType: SFX, an artillery shell exploding in a street: a crack, a boom, debris rattling down, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "army_bomb",
+  "prompt": "TrackType: SFX, a big bomb exploding: a huge deep blast with a long rolling rumble, no music, no voice",
+  "seconds": 5,
+  "candidates": 3
+ },
+ {
+  "id": "army_hit",
+  "prompt": "TrackType: SFX, a tank shell striking the thick armoured hide of a giant monster: a dull heavy thud and a ringing crack, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "army_artillery",
+  "prompt": "TrackType: SFX, artillery firing far away: a deep muffled thump rolling over a city, no music, no voice",
+  "seconds": 5,
+  "candidates": 3
+ },
+ {
+  "id": "army_whistle",
+  "prompt": "TrackType: SFX, an incoming artillery shell whistling through the air, falling in pitch, no explosion, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "amb_rain_light",
+  "prompt": "TrackType: SFX, light rain and drizzle on a city street: soft hiss with fine pattering drops, steady and continuous, no fade, no music, no voice",
+  "seconds": 11,
+  "candidates": 2
+ },
+ {
+  "id": "amb_rain_heavy",
+  "prompt": "TrackType: SFX, a heavy downpour in a city: dense roar of rain, splashing, gurgling gutters, steady and continuous, no fade, no music, no voice",
+  "seconds": 12,
+  "candidates": 2
+ },
+ {
+  "id": "amb_wind_gust",
+  "prompt": "TrackType: SFX, wind at street level between buildings: gusts swelling and dying away, a faint whistle, steady and continuous, no fade, no music, no voice",
+  "seconds": 18,
+  "candidates": 2
+ },
+ {
+  "id": "thunder_near",
+  "prompt": "TrackType: SFX, a lightning strike very close: a sharp crack of thunder, then a long rolling rumble, no music, no voice",
+  "seconds": 9,
+  "candidates": 5
+ },
+ {
+  "id": "thunder_far",
+  "prompt": "TrackType: SFX, distant thunder: a low long roll of thunder far away, no crack, no music, no voice",
+  "seconds": 10,
+  "candidates": 5
+ },
+ {
+  "id": "drone_buzz",
+  "prompt": "TrackType: SFX, a small quadcopter drone hovering close: buzzing rotors, steady, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "dash_whoosh",
+  "prompt": "TrackType: SFX, a fast short burst of air, a person dashing past at super speed, sharp whoosh, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "bird_flutter",
+  "prompt": "TrackType: SFX, a few pigeons suddenly taking off, flapping wings clattering, no bird calls, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "siren_loop",
+  "prompt": "TrackType: SFX, an American police car siren wailing up and down, steady, steady and continuous, no fade, no music, no voice",
+  "seconds": 9,
+  "candidates": 2
+ },
+ {
+  "id": "siren_short",
+  "prompt": "TrackType: SFX, a single short police siren whoop, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "alarm_bell",
+  "prompt": "TrackType: SFX, a shop burglar alarm bell ringing continuously, electric bell, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "cuffs",
+  "prompt": "TrackType: SFX, metal handcuffs ratcheting shut, clicking, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "crowd_cheer",
+  "prompt": "TrackType: SFX, a small crowd on a street cheering and clapping, no words, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "metro_run",
+  "prompt": "TrackType: SFX, inside a running subway carriage: steady rumble, wheel hiss, clack-clack over rail joints, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "metro_pass",
+  "prompt": "TrackType: SFX, a subway train rushing past in a tunnel, loud roar approaching and receding, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "terrace_clatter",
+  "prompt": "TrackType: SFX, a busy cafe terrace: cups set on saucers, spoons and cutlery clinking, soft room tone, no voices, steady and continuous, no fade, no music, no voice",
+  "seconds": 14,
+  "candidates": 2
+ },
+ {
+  "id": "under_drip",
+  "prompt": "TrackType: SFX, a single water drop falling into a puddle in a tunnel, reverberant, no music, no voice",
+  "seconds": 3,
+  "candidates": 5
+ },
+ {
+  "id": "under_falls",
+  "prompt": "TrackType: SFX, water pouring through a street grate into a basin underground, gurgles and splashes, reverberant, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "under_hum",
+  "prompt": "TrackType: SFX, electrical cabinets humming in a basement, mains hum with a faint buzz, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "under_fan",
+  "prompt": "TrackType: SFX, a big ventilation fan turning slowly, whooshing blade pulses over a low rumble, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "slime_burble",
+  "prompt": "TrackType: SFX, soft wet bubbling and gurgling murmurs in a cave, like small slimy creatures, steady and continuous, no fade, no music, no voice",
+  "seconds": 11,
+  "candidates": 2
+ },
+ {
+  "id": "slime_squish",
+  "prompt": "TrackType: SFX, a soft wet squelch of slime, no music, no voice",
+  "seconds": 3,
+  "candidates": 4
+ },
+ {
+  "id": "slime_gift",
+  "prompt": "TrackType: SFX, a small soft glassy magical chime, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "deep_glow",
+  "prompt": "TrackType: SFX, a glowing crystal cave: a soft airy hum, distant water drips, faint glassy tones, steady and continuous, no fade, no music, no voice",
+  "seconds": 22,
+  "candidates": 2
+ },
+ {
+  "id": "deep_murk",
+  "prompt": "TrackType: SFX, a dark wet underground cavern: a low rumble, wet slimy movements, a distant slow throb, steady and continuous, no fade, no music, no voice",
+  "seconds": 22,
+  "candidates": 2
+ },
+ {
+  "id": "heart_pulse",
+  "prompt": "TrackType: SFX, a magical crystal deep underground: a slow heavy throbbing pulse under a shimmering crystal hum, steady and continuous, no fade, no music, no voice",
+  "seconds": 12,
+  "candidates": 2
+ },
+ {
+  "id": "murk_growl",
+  "prompt": "TrackType: SFX, a wet gurgling creature growl, no music, no voice",
+  "seconds": 3,
+  "candidates": 4
+ },
+ {
+  "id": "murk_spit",
+  "prompt": "TrackType: SFX, a wet spit of slime launched through the air, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "murk_slam",
+  "prompt": "TrackType: SFX, a heavy wet slimy blow, a thick squelching impact, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "maw_roar",
+  "prompt": "TrackType: SFX, a huge gurgling monster roar from a wet throat, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "lumen_chime",
+  "prompt": "TrackType: SFX, a soft bubbly magical chime, a tiny friendly creature greeting, no music, no voice",
+  "seconds": 3,
+  "candidates": 4
+ },
+ {
+  "id": "slime_battle",
+  "prompt": "TrackType: SFX, a skirmish of many slime creatures: squelches, wet slaps, gurgling growls, steady and continuous, no fade, no music, no voice",
+  "seconds": 10,
+  "candidates": 2
+ },
+ {
+  "id": "slime_call",
+  "prompt": "TrackType: SFX, a rising swirl of bubbles ending in a bright magical chime, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "membrane",
+  "prompt": "TrackType: SFX, a wobbling, stretching wet membrane tearing open and parting, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "street_coin",
+  "prompt": "TrackType: SFX, a coin dropped into an open guitar case, small clink, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "spray_hiss",
+  "prompt": "TrackType: SFX, a spray paint can: a rattle shake, then three bursts of spray hiss, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "under_engine",
+  "prompt": "TrackType: SFX, an old pump engine running in an underground machine hall: heavy rhythmic thumping and hiss, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "under_gears",
+  "prompt": "TrackType: SFX, a big iron gear wheel turning slowly: clanking teeth, a ratchet, low hum, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "under_fire",
+  "prompt": "TrackType: SFX, a fire burning in an oil drum: crackles and pops over a soft roar, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "camera_shutter",
+  "prompt": "TrackType: SFX, a press photographer's camera: mirror slap and shutter click, then a flash recharging whine, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "protest_drum",
+  "prompt": "TrackType: SFX, a street protest: a single bass drum beaten steadily on the beat over an indistinct crowd murmur, no words, steady and continuous, no fade, no music, no voice",
+  "seconds": 9,
+  "candidates": 2
+ },
+ {
+  "id": "ufo_hum",
+  "prompt": "TrackType: SFX, an alien flying saucer hovering: a deep soft pulsing electric hum with a glassy shimmer, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "ufo_scan",
+  "prompt": "TrackType: SFX, a sci-fi scanner beam switching on: a soft glassy tone rising in pitch, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "teen_whine",
+  "prompt": "TrackType: SFX, a small alien saucer zipping around: a reedy warbling sci-fi engine whine, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "teen_zap",
+  "prompt": "TrackType: SFX, a sci-fi ray beam switching on: a buzzy electric zap sweeping up, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "teen_giggle",
+  "prompt": "TrackType: SFX, a toy robot's glitchy electronic giggle, quick falling bleeps, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "teen_pod",
+  "prompt": "TrackType: SFX, a small hovering machine knocked out: an electric pop, fizzing sparks, a whir winding down, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "ufo_stern",
+  "prompt": "TrackType: SFX, a huge alien mothership's deep stern horn: a low brassy two-note fall, no music, no voice",
+  "seconds": 4,
+  "candidates": 3
+ },
+ {
+  "id": "ref_whistle",
+  "prompt": "TrackType: SFX, a referee's pea whistle, one short sharp blast, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "ref_whistle_long",
+  "prompt": "TrackType: SFX, a referee's pea whistle, one long blast, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "ball_kick",
+  "prompt": "TrackType: SFX, a boot kicking a leather football, a solid thump, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "blast_rumble",
+  "prompt": "TrackType: SFX, a huge explosion far away: a dull flat crack, then a deep rumble rolling on for seconds, no music, no voice",
+  "seconds": 10,
+  "candidates": 3
+ },
+ {
+  "id": "dig_rubble",
+  "prompt": "TrackType: SFX, digging through rubble by hand: scraping, a concrete slab shifting, stones clattering, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "ambulance_siren",
+  "prompt": "TrackType: SFX, a European ambulance two-tone siren, hi-lo, steady, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "crane_machinery",
+  "prompt": "TrackType: SFX, a mobile crane working: diesel engine idling, hydraulic whine, a chain clinking, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 2
+ },
+ {
+  "id": "gun_pistol",
+  "prompt": "TrackType: SFX, a single pistol shot outdoors, sharp crack with a short slap off building walls, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "gun_rifle",
+  "prompt": "TrackType: SFX, a rifle firing a quick three-round burst outdoors, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ },
+ {
+  "id": "gun_ricochet",
+  "prompt": "TrackType: SFX, a bullet striking metal, a bright metallic ping, no music, no voice",
+  "seconds": 3,
+  "candidates": 3
+ }
+]

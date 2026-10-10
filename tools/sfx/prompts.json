@@ -185,5 +185,217 @@
  "thunder_far": {
   "kind": "shot",
   "sound": "distant thunder: a low long roll of thunder far away, no crack"
+ },
+ "drone_buzz": {
+  "kind": "loop",
+  "sound": "a small quadcopter drone hovering close: buzzing rotors, steady"
+ },
+ "dash_whoosh": {
+  "kind": "shot",
+  "sound": "a fast short burst of air, a person dashing past at super speed, sharp whoosh"
+ },
+ "bird_flutter": {
+  "kind": "shot",
+  "sound": "a few pigeons suddenly taking off, flapping wings clattering, no bird calls"
+ },
+ "siren_loop": {
+  "kind": "loop",
+  "sound": "an American police car siren wailing up and down, steady"
+ },
+ "siren_short": {
+  "kind": "shot",
+  "sound": "a single short police siren whoop"
+ },
+ "alarm_bell": {
+  "kind": "loop",
+  "sound": "a shop burglar alarm bell ringing continuously, electric bell"
+ },
+ "cuffs": {
+  "kind": "shot",
+  "sound": "metal handcuffs ratcheting shut, clicking"
+ },
+ "crowd_cheer": {
+  "kind": "shot",
+  "sound": "a small crowd on a street cheering and clapping, no words"
+ },
+ "metro_run": {
+  "kind": "loop",
+  "sound": "inside a running subway carriage: steady rumble, wheel hiss, clack-clack over rail joints"
+ },
+ "metro_pass": {
+  "kind": "shot",
+  "sound": "a subway train rushing past in a tunnel, loud roar approaching and receding"
+ },
+ "terrace_clatter": {
+  "kind": "loop",
+  "sound": "a busy cafe terrace: cups set on saucers, spoons and cutlery clinking, soft room tone, no voices"
+ },
+ "under_drip": {
+  "kind": "shot",
+  "sound": "a single water drop falling into a puddle in a tunnel, reverberant"
+ },
+ "under_falls": {
+  "kind": "loop",
+  "sound": "water pouring through a street grate into a basin underground, gurgles and splashes, reverberant"
+ },
+ "under_hum": {
+  "kind": "loop",
+  "sound": "electrical cabinets humming in a basement, mains hum with a faint buzz"
+ },
+ "under_fan": {
+  "kind": "loop",
+  "sound": "a big ventilation fan turning slowly, whooshing blade pulses over a low rumble"
+ },
+ "slime_burble": {
+  "kind": "loop",
+  "sound": "soft wet bubbling and gurgling murmurs in a cave, like small slimy creatures"
+ },
+ "slime_squish": {
+  "kind": "shot",
+  "sound": "a soft wet squelch of slime"
+ },
+ "slime_gift": {
+  "kind": "shot",
+  "sound": "a small soft glassy magical chime"
+ },
+ "deep_glow": {
+  "kind": "loop",
+  "sound": "a glowing crystal cave: a soft airy hum, distant water drips, faint glassy tones"
+ },
+ "deep_murk": {
+  "kind": "loop",
+  "sound": "a dark wet underground cavern: a low rumble, wet slimy movements, a distant slow throb"
+ },
+ "heart_pulse": {
+  "kind": "loop",
+  "sound": "a magical crystal deep underground: a slow heavy throbbing pulse under a shimmering crystal hum"
+ },
+ "murk_growl": {
+  "kind": "shot",
+  "sound": "a wet gurgling creature growl"
+ },
+ "murk_spit": {
+  "kind": "shot",
+  "sound": "a wet spit of slime launched through the air"
+ },
+ "murk_slam": {
+  "kind": "shot",
+  "sound": "a heavy wet slimy blow, a thick squelching impact"
+ },
+ "maw_roar": {
+  "kind": "shot",
+  "sound": "a huge gurgling monster roar from a wet throat"
+ },
+ "lumen_chime": {
+  "kind": "shot",
+  "sound": "a soft bubbly magical chime, a tiny friendly creature greeting"
+ },
+ "slime_battle": {
+  "kind": "loop",
+  "sound": "a skirmish of many slime creatures: squelches, wet slaps, gurgling growls"
+ },
+ "slime_call": {
+  "kind": "shot",
+  "sound": "a rising swirl of bubbles ending in a bright magical chime"
+ },
+ "membrane": {
+  "kind": "shot",
+  "sound": "a wobbling, stretching wet membrane tearing open and parting"
+ },
+ "street_coin": {
+  "kind": "shot",
+  "sound": "a coin dropped into an open guitar case, small clink"
+ },
+ "spray_hiss": {
+  "kind": "shot",
+  "sound": "a spray paint can: a rattle shake, then three bursts of spray hiss"
+ },
+ "under_engine": {
+  "kind": "loop",
+  "sound": "an old pump engine running in an underground machine hall: heavy rhythmic thumping and hiss"
+ },
+ "under_gears": {
+  "kind": "loop",
+  "sound": "a big iron gear wheel turning slowly: clanking teeth, a ratchet, low hum"
+ },
+ "under_fire": {
+  "kind": "loop",
+  "sound": "a fire burning in an oil drum: crackles and pops over a soft roar"
+ },
+ "camera_shutter": {
+  "kind": "shot",
+  "sound": "a press photographer's camera: mirror slap and shutter click, then a flash recharging whine"
+ },
+ "protest_drum": {
+  "kind": "loop",
+  "sound": "a street protest: a single bass drum beaten steadily on the beat over an indistinct crowd murmur, no words"
+ },
+ "ufo_hum": {
+  "kind": "loop",
+  "sound": "an alien flying saucer hovering: a deep soft pulsing electric hum with a glassy shimmer"
+ },
+ "ufo_scan": {
+  "kind": "shot",
+  "sound": "a sci-fi scanner beam switching on: a soft glassy tone rising in pitch"
+ },
+ "teen_whine": {
+  "kind": "loop",
+  "sound": "a small alien saucer zipping around: a reedy warbling sci-fi engine whine"
+ },
+ "teen_zap": {
+  "kind": "shot",
+  "sound": "a sci-fi ray beam switching on: a buzzy electric zap sweeping up"
+ },
+ "teen_giggle": {
+  "kind": "shot",
+  "sound": "a toy robot's glitchy electronic giggle, quick falling bleeps"
+ },
+ "teen_pod": {
+  "kind": "shot",
+  "sound": "a small hovering machine knocked out: an electric pop, fizzing sparks, a whir winding down"
+ },
+ "ufo_stern": {
+  "kind": "shot",
+  "sound": "a huge alien mothership's deep stern horn: a low brassy two-note fall"
+ },
+ "ref_whistle": {
+  "kind": "shot",
+  "sound": "a referee's pea whistle, one short sharp blast"
+ },
+ "ref_whistle_long": {
+  "kind": "shot",
+  "sound": "a referee's pea whistle, one long blast"
+ },
+ "ball_kick": {
+  "kind": "shot",
+  "sound": "a boot kicking a leather football, a solid thump"
+ },
+ "blast_rumble": {
+  "kind": "shot",
+  "sound": "a huge explosion far away: a dull flat crack, then a deep rumble rolling on for seconds"
+ },
+ "dig_rubble": {
+  "kind": "shot",
+  "sound": "digging through rubble by hand: scraping, a concrete slab shifting, stones clattering"
+ },
+ "ambulance_siren": {
+  "kind": "loop",
+  "sound": "a European ambulance two-tone siren, hi-lo, steady"
+ },
+ "crane_machinery": {
+  "kind": "loop",
+  "sound": "a mobile crane working: diesel engine idling, hydraulic whine, a chain clinking"
+ },
+ "gun_pistol": {
+  "kind": "shot",
+  "sound": "a single pistol shot outdoors, sharp crack with a short slap off building walls"
+ },
+ "gun_rifle": {
+  "kind": "shot",
+  "sound": "a rifle firing a quick three-round burst outdoors"
+ },
+ "gun_ricochet": {
+  "kind": "shot",
+  "sound": "a bullet striking metal, a bright metallic ping"
  }
 }
