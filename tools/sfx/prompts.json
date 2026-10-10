@@ -1,0 +1,456 @@
+{
+ "_doc": "Lyria prompts for the procedural sounds (tools/sfx/generate.py). kind: shot = separate takes cut apart, loop = one steady recording looped. Ids are public/sounds/manifest.json ids; files keep their names.",
+ "strider_step": {
+  "kind": "shot",
+  "sound": "the footfall of a 40 metre tall monster on a city street: a huge sub-bass boom, the ground thumping, debris and windows rattling, a long rolling rumble",
+  "studio": "giant footstep, huge monster stomp, heavy earth-shaking boom"
+ },
+ "strider_roar": {
+  "kind": "shot",
+  "sound": "a colossal monster roaring over a city like a giant kaiju: a deep bellow sliding up into a rasping, screeching upper tone, then a guttural fall, echoing off tall buildings",
+  "studio": "kaiju roar, giant monster roar, Godzilla style roar"
+ },
+ "strider_charge": {
+  "kind": "shot",
+  "sound": "a giant monster charging its energy breath: a rising electric hum that swells and builds with crackling static and sparks",
+  "studio": "energy charge up, sci-fi power charging electric hum"
+ },
+ "strider_breath": {
+  "kind": "shot",
+  "sound": "a giant monster's plasma breath attack: a roaring, tearing jet of fire and plasma rushing out with a sizzling, crackling top",
+  "studio": "dragon fire breath, flamethrower blast"
+ },
+ "tremor_rumble": {
+  "kind": "shot",
+  "sound": "an earth tremor far away: the ground trembling with a low deep rumble, windows and loose things faintly rattling",
+  "studio": "distant earthquake tremor, low rumble with rattling objects"
+ },
+ "car_alarm": {
+  "kind": "shot",
+  "sound": "a parked car's alarm going off on a city street: an electronic whoop followed by a warbling siren pattern"
+ },
+ "civil_siren": {
+  "kind": "loop",
+  "sound": "a civil defence evacuation siren, a mechanical motor siren winding up and down slowly over a whole city, echoing between buildings"
+ },
+ "nuke_siren": {
+  "kind": "loop",
+  "sound": "an air raid attack warning, a mechanical motor siren wailing up and down quickly, a second rotor a fifth higher, echoing over a whole city"
+ },
+ "robot_glitch": {
+  "kind": "shot",
+  "sound": "a robot malfunctioning: stuttering electronic bleeps at jumping pitches, bit-crushed digital buzz, a falling boop",
+  "studio": "robot malfunction glitch, electronic glitch beeps, computer error sound"
+ },
+ "robot_hostile": {
+  "kind": "shot",
+  "sound": "a robot turning hostile: a servo motor whine winding up, then a harsh aggressive two-tone electronic chirp over an electric buzz",
+  "studio": "robot servo motor whine, sci-fi robot power up"
+ },
+ "burrower_rumble": {
+  "kind": "loop",
+  "sound": "a giant worm tunnelling right under a city street: deep earth rumble, rock grinding and crunching, slow surging",
+  "studio": "earthquake rumble, continuous deep ground rumbling, rocks grinding"
+ },
+ "burrower_rumble_far": {
+  "kind": "shot",
+  "sound": "a long low rumble from deep under a street, faint grinding of rock, swelling and fading away",
+  "studio": "distant earthquake rumble, low deep rumble"
+ },
+ "burrower_breach": {
+  "kind": "shot",
+  "sound": "a city street caving in: asphalt cracking and splitting, a deep collapse boom, then debris and rubble raining down",
+  "studio": "ground collapse, earthquake rubble falling, concrete breaking and crumbling"
+ },
+ "burrower_roar": {
+  "kind": "shot",
+  "sound": "a giant sandworm monster's call: a chorus of shrieking grinding creature voices over a wet low gurgle, ending in a clicking rattle",
+  "studio": "giant worm monster roar, creature roar, monster growl"
+ },
+ "burrower_slam": {
+  "kind": "shot",
+  "sound": "a giant monster's head slamming down onto a street: a heavy ground thud, asphalt crunching, a rumbling tail",
+  "studio": "heavy impact on ground, huge boulder falling on asphalt, ground slam"
+ },
+ "burrower_dive": {
+  "kind": "shot",
+  "sound": "a giant worm diving back into the ground: a rush of air, soil and stones torn up, grinding rumble going away below",
+  "studio": "earth digging rumble, large rocks and soil rumbling, landslide"
+ },
+ "leviathan_surface": {
+  "kind": "shot",
+  "sound": "a huge sea monster surfacing in a river: a deep surge of water heaving up, a big wash and spray splashing down",
+  "studio": "huge water splash, large wave crashing, whale breaching the surface"
+ },
+ "leviathan_roar": {
+  "kind": "shot",
+  "sound": "a gigantic sea monster's call: a deep wet bellow with a whale-like moan and a gurgle, echoing over water"
+ },
+ "leviathan_slap": {
+  "kind": "shot",
+  "sound": "a giant wet tentacle slapping down hard on a wooden deck: a heavy wet thud and splatter"
+ },
+ "roc_screech": {
+  "kind": "shot",
+  "sound": "a gigantic eagle screaming: a harsh, rough raptor cry 'kee-eeer' falling in pitch, echoing off buildings",
+  "scene": "Low angle shot of a gigantic eagle, as big as an airplane, swooping between skyscrapers and screaming"
+ },
+ "roc_cry_far": {
+  "kind": "shot",
+  "sound": "a giant eagle's cry far away high in the sky, distant and dull, with a long echo",
+  "scene": "Wide shot of a city skyline, a gigantic eagle circling far away high in the sky and crying",
+  "studio": "distant eagle cry, hawk scream far away"
+ },
+ "roc_flap": {
+  "kind": "shot",
+  "sound": "a single beat of enormous wings: a great whoomp of air with a low thump",
+  "studio": "large wings flapping, giant bird wing flap whoosh"
+ },
+ "mech_step": {
+  "kind": "shot",
+  "sound": "a giant robot mech's footstep: a deep heavy thud, steel clanging on steel, a hydraulic hiss"
+ },
+ "mech_launch": {
+  "kind": "shot",
+  "sound": "a missile launching from a pod: a sharp pop and a tearing rush of rocket exhaust flying away",
+  "studio": "missile launch, rocket launch whoosh"
+ },
+ "mech_cannon": {
+  "kind": "shot",
+  "sound": "a short burst of a rotary cannon: rapid hard gunshots over a spinning motor whine",
+  "studio": "minigun firing, gatling gun burst"
+ },
+ "mech_vent": {
+  "kind": "shot",
+  "sound": "a giant machine's heat vents opening: a heavy metal clunk and a long roaring hiss of steam",
+  "studio": "steam release hiss, pressure valve venting steam"
+ },
+ "mech_alarm": {
+  "kind": "shot",
+  "sound": "a giant war machine's warning klaxon: a blaring two-tone horn, echoing off buildings",
+  "studio": "loud alarm klaxon, warning horn, emergency alarm"
+ },
+ "brood_chitter": {
+  "kind": "loop",
+  "sound": "a swarm of insect-like creatures: dry clicking, rasping and chirping from many small bodies, claws scrabbling on stone",
+  "studio": "swarm of insects, many crickets and beetles clicking and chittering, cockroach swarm"
+ },
+ "brood_screech": {
+  "kind": "shot",
+  "sound": "a small insect monster shrieking: a short rasping squeal",
+  "studio": "small creature screech, monster hiss, alien creature squeal"
+ },
+ "brood_bite": {
+  "kind": "shot",
+  "sound": "a quick snap of insect mandibles with a crunch, very short",
+  "studio": "insect bite, crunchy snap, bug mandible click"
+ },
+ "army_rifle": {
+  "kind": "shot",
+  "sound": "a squad of soldiers firing assault rifles: a ragged burst of sharp gunshot cracks slapping off city walls",
+  "studio": "assault rifle burst fire outdoors, automatic gunfire, several gunshots"
+ },
+ "army_autocannon": {
+  "kind": "shot",
+  "sound": "an armoured vehicle's autocannon firing four heavy shots: deep thuds with a metallic ring and street echo"
+ },
+ "army_tank": {
+  "kind": "shot",
+  "sound": "a tank cannon firing: a hard crack and a deep boom rolling through city streets"
+ },
+ "army_rotor": {
+  "kind": "loop",
+  "sound": "an attack helicopter hovering close: steady rotor blade slap over a turbine whine"
+ },
+ "army_jet": {
+  "kind": "shot",
+  "sound": "a fighter jet flying low overhead: a rising roar, a loud crack overhead, a falling rumble going away"
+ },
+ "army_rocket": {
+  "kind": "shot",
+  "sound": "a salvo of rockets launching: a fast string of whooshes and hissing exhaust"
+ },
+ "army_explosion": {
+  "kind": "shot",
+  "sound": "an artillery shell exploding in a street: a crack, a boom, debris rattling down"
+ },
+ "army_bomb": {
+  "kind": "shot",
+  "sound": "a big bomb exploding: a huge deep blast with a long rolling rumble"
+ },
+ "army_hit": {
+  "kind": "shot",
+  "sound": "a tank shell striking the thick armoured hide of a giant monster: a dull heavy thud and a ringing crack"
+ },
+ "army_artillery": {
+  "kind": "shot",
+  "sound": "artillery firing far away: a deep muffled thump rolling over a city"
+ },
+ "army_whistle": {
+  "kind": "shot",
+  "sound": "an incoming artillery shell whistling through the air, falling in pitch, no explosion",
+  "studio": "falling bomb whistle, descending whistling shell, cartoon bomb drop whistle without explosion"
+ },
+ "amb_rain_light": {
+  "kind": "loop",
+  "sound": "light rain and drizzle on a city street: soft hiss with fine pattering drops",
+  "studio": "light rain falling on pavement, soft drizzle, gentle rain ambience"
+ },
+ "amb_rain_heavy": {
+  "kind": "loop",
+  "sound": "a heavy downpour in a city: dense roar of rain, splashing, gurgling gutters"
+ },
+ "amb_wind_gust": {
+  "kind": "loop",
+  "sound": "wind at street level between buildings: gusts swelling and dying away, a faint whistle",
+  "studio": "strong wind gusts blowing outdoors, howling wind ambience"
+ },
+ "thunder_near": {
+  "kind": "shot",
+  "sound": "a lightning strike very close: a sharp crack of thunder, then a long rolling rumble"
+ },
+ "thunder_far": {
+  "kind": "shot",
+  "sound": "distant thunder: a low long roll of thunder far away, no crack"
+ },
+ "drone_buzz": {
+  "kind": "loop",
+  "sound": "a small quadcopter drone hovering close: buzzing rotors, steady"
+ },
+ "dash_whoosh": {
+  "kind": "shot",
+  "sound": "a fast short burst of air, a person dashing past at super speed, sharp whoosh"
+ },
+ "bird_flutter": {
+  "kind": "shot",
+  "sound": "a few pigeons suddenly taking off, flapping wings clattering, no bird calls",
+  "studio": "pigeons flying away, birds wings flapping takeoff, flock of doves"
+ },
+ "siren_loop": {
+  "kind": "loop",
+  "sound": "an American police car siren wailing up and down, steady"
+ },
+ "siren_short": {
+  "kind": "shot",
+  "sound": "a single short police siren whoop"
+ },
+ "alarm_bell": {
+  "kind": "loop",
+  "sound": "a shop burglar alarm bell ringing continuously, electric bell"
+ },
+ "cuffs": {
+  "kind": "shot",
+  "sound": "metal handcuffs ratcheting shut, clicking"
+ },
+ "crowd_cheer": {
+  "kind": "shot",
+  "sound": "a small crowd on a street cheering and clapping, no words"
+ },
+ "metro_run": {
+  "kind": "loop",
+  "sound": "inside a running subway carriage: steady rumble, wheel hiss, clack-clack over rail joints"
+ },
+ "metro_pass": {
+  "kind": "shot",
+  "sound": "a subway train rushing past in a tunnel, loud roar approaching and receding"
+ },
+ "terrace_clatter": {
+  "kind": "loop",
+  "sound": "a busy cafe terrace: cups set on saucers, spoons and cutlery clinking, soft room tone, no voices"
+ },
+ "under_drip": {
+  "kind": "shot",
+  "sound": "a single water drop falling into a puddle in a tunnel, reverberant",
+  "studio": "water drop drip, single droplet in a cave, plink"
+ },
+ "under_falls": {
+  "kind": "loop",
+  "sound": "water pouring through a street grate into a basin underground, gurgles and splashes, reverberant"
+ },
+ "under_hum": {
+  "kind": "loop",
+  "sound": "electrical cabinets humming in a basement, mains hum with a faint buzz",
+  "studio": "electrical hum, transformer buzz, power box humming"
+ },
+ "under_fan": {
+  "kind": "loop",
+  "sound": "a big ventilation fan turning slowly, whooshing blade pulses over a low rumble"
+ },
+ "slime_burble": {
+  "kind": "loop",
+  "sound": "soft wet bubbling and gurgling murmurs in a cave, like small slimy creatures",
+  "studio": "bubbling mud, gurgling swamp bubbles, boiling goo"
+ },
+ "slime_squish": {
+  "kind": "shot",
+  "sound": "a soft wet squelch of slime",
+  "studio": "slime squish, wet squelch"
+ },
+ "slime_gift": {
+  "kind": "shot",
+  "sound": "a small soft glassy magical chime"
+ },
+ "deep_glow": {
+  "kind": "loop",
+  "sound": "a glowing crystal cave: a soft airy hum, distant water drips, faint glassy tones",
+  "studio": "mysterious cave ambience, soft drone, water drips in a cave"
+ },
+ "deep_murk": {
+  "kind": "loop",
+  "sound": "a dark wet underground cavern: a low rumble, wet slimy movements, a distant slow throb"
+ },
+ "heart_pulse": {
+  "kind": "loop",
+  "sound": "a magical crystal deep underground: a slow heavy throbbing pulse under a shimmering crystal hum"
+ },
+ "murk_growl": {
+  "kind": "shot",
+  "sound": "a wet gurgling creature growl"
+ },
+ "murk_spit": {
+  "kind": "shot",
+  "sound": "a wet spit of slime launched through the air",
+  "studio": "slime spit, wet splat projectile, gooey spit"
+ },
+ "murk_slam": {
+  "kind": "shot",
+  "sound": "a heavy wet slimy blow, a thick squelching impact",
+  "studio": "wet slimy impact, mud splat, squelch hit"
+ },
+ "maw_roar": {
+  "kind": "shot",
+  "sound": "a huge gurgling monster roar from a wet throat",
+  "studio": "monster roar, huge creature roar, dragon roar"
+ },
+ "lumen_chime": {
+  "kind": "shot",
+  "sound": "a soft bubbly magical chime, a tiny friendly creature greeting",
+  "studio": "magic chime, sparkle sound, fairy twinkle"
+ },
+ "slime_battle": {
+  "kind": "loop",
+  "sound": "a skirmish of many slime creatures: squelches, wet slaps, gurgling growls",
+  "studio": "slime creatures fighting, squishy wet splats and gurgles"
+ },
+ "slime_call": {
+  "kind": "shot",
+  "sound": "a rising swirl of bubbles ending in a bright magical chime",
+  "studio": "magic bubbles rising, bubbly magical spell sound"
+ },
+ "membrane": {
+  "kind": "shot",
+  "sound": "a wobbling, stretching wet membrane tearing open and parting",
+  "studio": "slime stretching and tearing, gooey squelch, wet flesh tearing"
+ },
+ "street_coin": {
+  "kind": "shot",
+  "sound": "a coin dropped into an open guitar case, small clink"
+ },
+ "spray_hiss": {
+  "kind": "shot",
+  "sound": "a spray paint can: a rattle shake, then three bursts of spray hiss",
+  "studio": "spray paint can shake and spray, aerosol can"
+ },
+ "under_engine": {
+  "kind": "loop",
+  "sound": "an old pump engine running in an underground machine hall: heavy rhythmic thumping and hiss",
+  "studio": "old machine engine running, diesel pump thumping"
+ },
+ "under_gears": {
+  "kind": "loop",
+  "sound": "a big iron gear wheel turning slowly: clanking teeth, a ratchet, low hum",
+  "studio": "large mechanical gears turning, clockwork machinery clanking"
+ },
+ "under_fire": {
+  "kind": "loop",
+  "sound": "a fire burning in an oil drum: crackles and pops over a soft roar"
+ },
+ "camera_shutter": {
+  "kind": "shot",
+  "sound": "a press photographer's camera: mirror slap and shutter click, then a flash recharging whine",
+  "studio": "DSLR camera shutter click, photo camera shot"
+ },
+ "protest_drum": {
+  "kind": "loop",
+  "sound": "a street protest: a single bass drum beaten steadily on the beat over an indistinct crowd murmur, no words",
+  "studio": "bass drum beaten slowly at a street protest, marching drum"
+ },
+ "ufo_hum": {
+  "kind": "loop",
+  "sound": "an alien flying saucer hovering: a deep soft pulsing electric hum with a glassy shimmer",
+  "studio": "UFO hum, spaceship engine hum, sci-fi hover drone"
+ },
+ "ufo_scan": {
+  "kind": "shot",
+  "sound": "a sci-fi scanner beam switching on: a soft glassy tone rising in pitch"
+ },
+ "teen_whine": {
+  "kind": "loop",
+  "sound": "a small alien saucer zipping around: a reedy warbling sci-fi engine whine",
+  "studio": "UFO flying, sci-fi spaceship hover hum, alien craft"
+ },
+ "teen_zap": {
+  "kind": "shot",
+  "sound": "a sci-fi ray beam switching on: a buzzy electric zap sweeping up",
+  "studio": "laser zap, sci-fi ray gun beam"
+ },
+ "teen_giggle": {
+  "kind": "shot",
+  "sound": "a toy robot's glitchy electronic giggle, quick falling bleeps",
+  "studio": "cute robot giggle, cartoon robot laugh beeps"
+ },
+ "teen_pod": {
+  "kind": "shot",
+  "sound": "a small hovering machine knocked out: an electric pop, fizzing sparks, a whir winding down",
+  "studio": "electric short circuit, sparks fizzing, machine powering down"
+ },
+ "ufo_stern": {
+  "kind": "shot",
+  "sound": "a huge alien mothership's deep stern horn: a low brassy two-note fall",
+  "studio": "deep spaceship horn, low sci-fi foghorn blast"
+ },
+ "ref_whistle": {
+  "kind": "shot",
+  "sound": "a referee's pea whistle, one short sharp blast"
+ },
+ "ref_whistle_long": {
+  "kind": "shot",
+  "sound": "a referee's pea whistle, one long blast"
+ },
+ "ball_kick": {
+  "kind": "shot",
+  "sound": "a boot kicking a leather football, a solid thump",
+  "studio": "soccer ball kick, foot kicking a football, single thump"
+ },
+ "blast_rumble": {
+  "kind": "shot",
+  "sound": "a huge explosion far away: a dull flat crack, then a deep rumble rolling on for seconds"
+ },
+ "dig_rubble": {
+  "kind": "shot",
+  "sound": "digging through rubble by hand: scraping, a concrete slab shifting, stones clattering",
+  "studio": "digging through rubble, moving rocks and stones, debris shifting"
+ },
+ "ambulance_siren": {
+  "kind": "loop",
+  "sound": "a European ambulance two-tone siren, hi-lo, steady",
+  "studio": "European ambulance siren, two-tone hi-lo siren, emergency vehicle"
+ },
+ "crane_machinery": {
+  "kind": "loop",
+  "sound": "a mobile crane working: diesel engine idling, hydraulic whine, a chain clinking"
+ },
+ "gun_pistol": {
+  "kind": "shot",
+  "sound": "a single pistol shot outdoors, sharp crack with a short slap off building walls"
+ },
+ "gun_rifle": {
+  "kind": "shot",
+  "sound": "a rifle firing a quick three-round burst outdoors"
+ },
+ "gun_ricochet": {
+  "kind": "shot",
+  "sound": "a bullet striking metal, a bright metallic ping",
+  "studio": "bullet ricochet off metal, metallic ping"
+ }
+}

@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.252 — 2026-10-10
+
+- **61 synthesized sounds replaced by real-sounding ones.** Sirens, the car alarm, army fire (rifles, tank, autocannon, jet, rockets, bombs, artillery, shell whistle), thunder, light and heavy rain, wind gusts, the metro, the helicopter, the police drone, alarms, cuffs, cheering, whistles and the ball kick, fire, fans, hum and dripping water underground, the kaiju's roar, steps and charge, the giant maw, the minigun, laser zap and slime burbling all used to be made by little synth scripts. They are now Stable Audio clips made in Sound Studio. Each is set to the loudness of the sound it replaces, so the mix stays the same. Two different listening models had to agree on every pick. The other 38 (splats, rubble, alien tones, robot glitches and the like) keep their old sounds for now.
 ## 0.251 — 2026-10-10
 
 - **No more multi-second freeze when a press photo goes up.** The photo of the hero for the billboards was read back from the graphics card in a way that waits for everything the card still has to do, shader compiles included: 3.5 s in the latest freeze log. It now arrives in the background and the front page goes up a moment later.

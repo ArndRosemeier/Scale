@@ -10,3 +10,4 @@ public/avatars/
 # Agent worktrees
 .claude/worktrees/
 reports/
+__pycache__/
