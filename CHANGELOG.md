@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.244 — 2026-10-10
+
+- **No 10-second freeze on the first frame after loading a save.** The shader preparation behind the loading screen could still be using the city's lights from before the last few lamps were added (the hospital ward's and the stadium stage's). Programs depend on how many lights there are, so the first frame of play had to build several of them while drawing. The preparation now picks up every new light right away.
+- The freeze log (Shift+F9) now also notes, for each freeze, how many draws used a shader with new geometry or a new render target, in that frame and the one before. This tells apart freezes from the graphics driver building shader variants and freezes with another cause.
+
 ## 0.243 — 2026-10-10
 
 - **Giants top out at 25 m.** A 100 m body was more than the city and the physics handle well, so the size shift power now grows in five ranks to 4, 8, 12, 18 and 25 m (shrinking is unchanged, down to 10 cm). Karma prices stay the same. Being big still costs energy, scaled to the new top: an 8 m giant now just holds even, a full pool lasts about 30 seconds at 25 m, and running dry shrinks you back to 8 m. A saved game with a bigger body loads at 25 m, and the admin console's size buttons stop at 25 m. Help › Powers and the manual are updated.

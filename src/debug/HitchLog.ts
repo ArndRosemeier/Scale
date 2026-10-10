@@ -75,6 +75,12 @@ export interface FreezeRecord {
   loaf: string[];
   context: string;
   version: string;
+  /**
+   * Draws in this frame that used a program with vertex data or a render target it had never been
+   * drawn with. The graphics driver may build a shader variant for such a first combination
+   * (ANGLE on Direct3D does), inside the draw: a stall the game does not measure.
+   */
+  firstDraws?: string;
 }
 
 interface Perf { memory?: { usedJSHeapSize: number } }
@@ -178,6 +184,57 @@ class HitchLogImpl {
     this.renderer = renderer;
     this.scene = scene ?? null;
     this.snapshotRenderer();
+    this.watchDraws(renderer);
+  }
+
+  /** First draws of this frame: [new program × vertex data, new program × target, draws, programs]. */
+  private prevDraws = '';
+  private draws = { pairs: 0, targets: 0, calls: 0, progs: new Set<WebGLProgram>() };
+
+  /**
+   * Counts draws that use a program with vertex data (VAO) or a render target for the first time
+   * (see FreezeRecord.firstDraws). A map lookup per draw call.
+   */
+  private watchDraws(renderer: THREE.WebGLRenderer): void {
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    if (typeof WebGL2RenderingContext === 'undefined' || !(gl instanceof WebGL2RenderingContext)) return;
+    let prog: WebGLProgram | null = null, vao: WebGLVertexArrayObject | null = null, fb: WebGLFramebuffer | null = null;
+    const seen = new WeakMap<WebGLProgram, { vaos: WeakSet<object>; fbs: WeakSet<object>; screen: boolean; n: number }>();
+    const SCREEN = {};
+    const D = this.draws;
+    const note = () => {
+      D.calls++;
+      if (!prog) return;
+      let e = seen.get(prog);
+      if (!e) seen.set(prog, (e = { vaos: new WeakSet(), fbs: new WeakSet(), screen: false, n: 0 }));
+      const v = vao ?? SCREEN;
+      // (A program drawn with fresh vertex data all the time, e.g. a geometry rebuilt every frame,
+      // stops counting after 50: it would hide the rare first draws.)
+      if (e.n < 50 && !e.vaos.has(v)) { e.vaos.add(v); e.n++; D.pairs++; D.progs.add(prog); }
+      if (fb ? !e.fbs.has(fb) : !e.screen) { if (fb) e.fbs.add(fb); else e.screen = true; D.targets++; D.progs.add(prog); }
+    };
+    const use = gl.useProgram.bind(gl), bindVao = gl.bindVertexArray.bind(gl), bindFb = gl.bindFramebuffer.bind(gl);
+    gl.useProgram = (p) => { prog = p; use(p); };
+    gl.bindVertexArray = (a) => { vao = a; bindVao(a); };
+    gl.bindFramebuffer = (t, f) => { if (t === gl.FRAMEBUFFER || t === gl.DRAW_FRAMEBUFFER) fb = f; bindFb(t, f); };
+    for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced', 'drawRangeElements'] as const) {
+      const orig = (gl[name] as (...a: unknown[]) => void).bind(gl);
+      (gl as unknown as Record<string, unknown>)[name] = (...a: unknown[]) => { note(); orig(...a); };
+    }
+  }
+
+  /** The first-draw line for a freeze record, and reset for the next frame. */
+  private takeDraws(): string {
+    const D = this.draws;
+    let text = '';
+    if (D.calls) {
+      const names: string[] = [];
+      const progs = (this.renderer?.info.programs ?? []) as unknown as { name: string; program: WebGLProgram }[];
+      for (const p of progs) if (D.progs.has(p.program) && names.length < 6) names.push(p.name || this.whoUses(p as never) || '?');
+      text = `${D.pairs} new program×geometry, ${D.targets} new program×target, ${D.calls} draws${names.length ? ': ' + names.join(', ') : ''}`;
+    }
+    D.pairs = 0; D.targets = 0; D.calls = 0; D.progs.clear();
+    return text;
   }
 
   private snapshotRenderer(): [number, number, number] {
@@ -303,13 +360,16 @@ class HitchLogImpl {
       });
       if (this.list.length > this.max) this.list.shift();
     }
-    this.checkFreeze(now, work, all, dp, dg, dt);
+    // A stall in the GPU process shows as a late next frame, so the frame before counts too.
+    const draws = this.takeDraws();
+    this.checkFreeze(now, work, all, dp, dg, dt, `this frame: ${draws || 'none'} · frame before: ${this.prevDraws || 'none'}`);
+    this.prevDraws = draws;
     this.sections = {};
     this.outside = {};
     this.notes.length = 0;
   }
 
-  private checkFreeze(now: number, work: number, all: Record<string, number>, dp: number, dg: number, dt: number): void {
+  private checkFreeze(now: number, work: number, all: Record<string, number>, dp: number, dg: number, dt: number, draws: string): void {
     const heap = (performance as unknown as Perf).memory?.usedJSHeapSize ?? 0;
     const prevEnd = this.lastFrameEnd, prevHeap = this.lastHeap;
     this.lastFrameEnd = now;
@@ -341,7 +401,7 @@ class HitchLogImpl {
       unmeasured: Math.max(0, Math.round(ms - work)), sections: top(sections, 8), outside: top(outside, 6), notes: this.notes.slice(0, 12),
       programs: dp, newPrograms: this.programNames.slice(0, 6), geometries: dg, textures: dt,
       heapMB: heap && prevHeap ? [Math.round(prevHeap / 1048576), Math.round(heap / 1048576)] : null,
-      longTasks: [], loaf: [], context, version: this.version,
+      longTasks: [], loaf: [], context, version: this.version, firstDraws: draws,
     };
     // Entries that arrived already (an observer can run before this frame ends).
     for (const e of this.longTasks) if (e.t * 1000 < now && (e.t * 1000 + e.ms) > prevEnd) f.longTasks.push([+e.t.toFixed(2), Math.round(e.ms)]);
