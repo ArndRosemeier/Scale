@@ -310,7 +310,7 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Heal', run: (g) => { g.crime.health.hp = g.crime.health.max; return 'healed'; } },
     { label: 'Invulnerable on/off', run: (g) => (g.crime.health.invulnerable = !g.crime.health.invulnerable) },
     // Sizes beyond what the size power's rank allows stay until "Size: normal" (Player.sizeOverride).
-    ...[0.3, 10, 50, 100].map((h) => ({ label: `Size ${h} m`, run: (g: Game) => { g.player.sizeOverride = true; g.player.height = h; return h; } })),
+    ...[0.3, 10, 25].map((h) => ({ label: `Size ${h} m`, run: (g: Game) => { g.player.sizeOverride = true; g.player.height = h; return h; } })),
     { label: 'Size: normal', run: (g) => { g.player.sizeOverride = false; g.player.height = 1.8; return 1.8; } },
     { label: 'Go to map marker', run: (g, d) => { const w = g.map.waypoint; if (!w) return 'set a marker on the map first'; return call(d, 'teleport', w.x, w.z); } },
   ]],

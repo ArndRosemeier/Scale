@@ -10,6 +10,7 @@
  * the open interior (the player is put outside the door).
  */
 import type { GameMode } from '../mode';
+import { MIN_HEIGHT, MAX_HEIGHT } from '../abilities/tuning';
 
 export const SAVE_VERSION = 4;
 
@@ -279,7 +280,7 @@ export function parseSave(input: string | unknown): SaveData {
     character: { id: typeof ch.id === 'string' ? ch.id : null, look: ch.look && typeof ch.look === 'object' ? ch.look : null },
     player: {
       x: num(p.x, 0), y: num(p.y, 0), z: num(p.z, 0), yaw: num(p.yaw, 0),
-      height: num(p.height, 1.8, 0.1, 100), sizeOverride: bool(p.sizeOverride), flying: bool(p.flying),
+      height: num(p.height, 1.8, MIN_HEIGHT, MAX_HEIGHT), sizeOverride: bool(p.sizeOverride), flying: bool(p.flying),
       under: bool(p.under), indoors: bool(p.indoors), hp: num(p.hp, 100, 0), invulnerable: bool(p.invulnerable),
       energy: num(p.energy, -1), slot: Math.floor(num(p.slot, 0, 0, 9)),
     },

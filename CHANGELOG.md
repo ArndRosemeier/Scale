@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.243 — 2026-10-10
+
+- **Giants top out at 25 m.** A 100 m body was more than the city and the physics handle well, so the size shift power now grows in five ranks to 4, 8, 12, 18 and 25 m (shrinking is unchanged, down to 10 cm). Karma prices stay the same. Being big still costs energy, scaled to the new top: an 8 m giant now just holds even, a full pool lasts about 30 seconds at 25 m, and running dry shrinks you back to 8 m. A saved game with a bigger body loads at 25 m, and the admin console's size buttons stop at 25 m. Help › Powers and the manual are updated.
+
 ## 0.242 — 2026-10-10
 
 - **Fewer multi-second freezes in Chrome on Windows.** The freeze logs showed stalls of 1 to 7 seconds where the game itself did almost nothing and waited for the graphics driver. The likely cause: the bone numbers of every animated character (people, worm, roc, mech, creatures) were stored as whole numbers, which Chrome on Windows cannot feed to the shaders directly. It then quietly built a second version of the character's shader the first time it was drawn, and for clothing that took seconds. They are now stored the way the shaders read them, so nothing is built while drawing. (WebGPU mode is unchanged.)

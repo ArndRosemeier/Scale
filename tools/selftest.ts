@@ -4221,30 +4221,30 @@ section('super jump travel', async () => {
   check(up.avg < 0.01 && Math.abs(up.peak - JUMP_HEIGHT[5]) < 1, `super jump: straight up without W, to the full height (drift ${(up.avg * 4).toFixed(2)} m, peak ${up.peak.toFixed(1)} m)`);
 });
 
-// Energy: no regeneration in flight; a giant body costs upkeep (even at 10 m, ~20 s at 100 m) and an
+// Energy: no regeneration in flight; a giant body costs upkeep (even at 8 m, ~30 s at 25 m) and an
 // empty pool shrinks it back to 10 m.
 section('energy', async () => {
   const { AbilitySystem } = await import('../src/game/abilities/AbilitySystem');
   const { ENERGY, GIANT, sizeUpkeep } = await import('../src/game/abilities/tuning');
   const prog = { sandbox: false, bonusMax: 0, bonusRegen: 0, rank: () => 0 } as any;
-  const pl = { flying: false, height: 1.8, maxHeight: 100, sizeOverride: false, events: {} } as any;
+  const pl = { flying: false, height: 1.8, maxHeight: 25, sizeOverride: false, events: {} } as any;
   const ab = new AbilitySystem(prog, pl, {} as any, {} as any);
-  const run = (sec: number) => { for (let t = 0; t < sec; t += 0.05) { pl.maxHeight = 100; (ab as any).updateEnergy(0.05); } };
+  const run = (sec: number) => { for (let t = 0; t < sec; t += 0.05) { pl.maxHeight = 25; (ab as any).updateEnergy(0.05); } };
   ab.energy = 50; pl.flying = true; run(5);
   check(Math.abs(ab.energy - 50) < 1e-6, `energy: no regeneration in flight (${ab.energy.toFixed(1)})`);
   pl.flying = false; run(2);
   check(ab.energy > 60, `energy: regenerates on the ground (${ab.energy.toFixed(1)})`);
-  check(Math.abs(sizeUpkeep(GIANT.even) - ENERGY.regen) < 1e-6 && sizeUpkeep(1.8) === 0 && sizeUpkeep(4) < ENERGY.regen / 2, 'energy: size upkeep free at 1.8 m, eats regen at 10 m');
-  ab.energy = ab.maxEnergy; pl.height = 100;
+  check(Math.abs(sizeUpkeep(GIANT.even) - ENERGY.regen) < 1e-6 && sizeUpkeep(1.8) === 0 && sizeUpkeep(4) < ENERGY.regen / 2, 'energy: size upkeep free at 1.8 m, eats regen at 8 m');
+  ab.energy = ab.maxEnergy; pl.height = 25;
   let t = 0; while (!ab.exhausted && t < 60) { (ab as any).updateEnergy(0.05); t += 0.05; }
-  check(t > 17 && t < 23, `energy: a full pool holds 100 m for about 20 s (${t.toFixed(1)} s)`);
+  check(t > 26 && t < 34, `energy: a full pool holds 25 m for about 30 s (${t.toFixed(1)} s)`);
   check(ab.exhausted, 'energy: running dry as a giant exhausts');
   run(3);
-  check(Math.abs(pl.height - GIANT.fallback) < 1e-6 && pl.maxHeight <= GIANT.fallback, `energy: exhausted giant shrinks to 10 m and is capped there (${pl.height.toFixed(2)} m)`);
+  check(Math.abs(pl.height - GIANT.fallback) < 1e-6 && pl.maxHeight <= GIANT.fallback, `energy: exhausted giant shrinks to 8 m and is capped there (${pl.height.toFixed(2)} m)`);
   let tr = 0; while (ab.exhausted && tr < 30) { (ab as any).updateEnergy(0.05); tr += 0.05; }
-  check(!ab.exhausted && tr > 1 && tr < 10, `energy: an exhausted giant at 10 m refills and the cap lifts (${tr.toFixed(1)} s)`);
+  check(!ab.exhausted && tr > 1 && tr < 10, `energy: an exhausted giant at 8 m refills and the cap lifts (${tr.toFixed(1)} s)`);
   run(10);
-  check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 10 m holds the recovered pool (${ab.energy.toFixed(1)})`);
+  check(ab.energy >= ab.maxEnergy * GIANT.recover - 1e-6, `energy: 8 m holds the recovered pool (${ab.energy.toFixed(1)})`);
 });
 
 // Shrink ray: the rank's factor, capped by metres off the biggest dimension (a person halves, a car

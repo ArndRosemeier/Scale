@@ -1,5 +1,5 @@
 /**
- * The player: a Norgo human with physically scaled size (10 cm … 100 m),
+ * The player: a Norgo human with physically scaled size (10 cm … 25 m),
  * walking/running/jumping with Froude-similar gait, and a flight mode.
  *
  * Scaling laws (k = height / 1.8 m):
@@ -22,13 +22,12 @@ import { outfitVisuals, plainAppearance, type CharacterLook } from '../avatar/lo
 import { stepEnergy } from '../game/GiantBody';
 import { SpeedNav } from './speedNav';
 import { planHop } from './speedHop';
-import { LEAP_RAMP } from '../game/abilities/tuning';
+import { LEAP_RAMP, MIN_HEIGHT, MAX_HEIGHT } from '../game/abilities/tuning';
 
 export const BASE_HEIGHT = 1.8;
 /** Super speed carries the runner over water above this speed (m/s at 1.8 m, × √k). */
 export const SPEED_WATER = 16;
-export const MIN_HEIGHT = 0.1;
-export const MAX_HEIGHT = 100;
+export { MIN_HEIGHT, MAX_HEIGHT } from '../game/abilities/tuning';
 
 export interface PlayerEvents {
   onFootstep?: (x: number, y: number, z: number, energy: number, height: number) => void;
