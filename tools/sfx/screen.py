@@ -2,7 +2,10 @@
 """Screen generated candidates with a listening model (see generate.listen): every RAW_DIR/<id>/*.wav
 without a verdict gets one (<name>.json). Needs OPEN_ROUTER_KEY in the environment.
 
-    python3 tools/sfx/screen.py RAW_DIR REF_DIR [id ...] [--jobs N]
+    python3 tools/sfx/screen.py RAW_DIR REF_DIR [id ...] [--jobs N] [--second]
+
+--second: a second opinion from another model (SFX_LISTENER2, default google/gemini-3.5-flash) into
+<name>.b.json; build.py then counts the lower of the two scores, so only takes both agree on rank high.
 """
 import json, os, sys
 from concurrent.futures import ThreadPoolExecutor
@@ -12,13 +15,19 @@ from generate import listen, load_prompts, best
 
 args = sys.argv[1:]
 jobs = 8
+second = '--second' in args
+if second:
+    args.remove('--second')
+    import generate
+    generate.LISTENER = os.environ.get('SFX_LISTENER2', 'google/gemini-3.5-flash')
+suffix = '.b.json' if second else '.json'
 if '--jobs' in args:
     i = args.index('--jobs'); jobs = int(args[i + 1]); del args[i:i + 2]
 raw, ref, ids = args[0], args[1], args[2:]
 prompts = load_prompts(ref)
 work = [(sid, os.path.join(raw, sid, f)) for sid in (ids or sorted(os.listdir(raw))) if sid in prompts
         for f in sorted(os.listdir(os.path.join(raw, sid))) if f.endswith(('.wav', '.flac'))
-        and not os.path.exists(os.path.join(raw, sid, f.rsplit('.', 1)[0] + '.json'))]
+        and not os.path.exists(os.path.join(raw, sid, f.rsplit('.', 1)[0] + suffix))]
 
 
 def one(job):
@@ -26,7 +35,7 @@ def one(job):
     for _ in range(3):
         try:
             v = listen(wav, prompts[sid])
-            json.dump(v, open(wav.rsplit('.', 1)[0] + '.json', 'w'), indent=1)
+            json.dump(v, open(wav.rsplit('.', 1)[0] + suffix, 'w'), indent=1)
             print(f"{sid} {os.path.basename(wav)}: best {best(v)} | " + '; '.join(
                 f"{t.get('score')} {t.get('what', '')[:50]}" for t in v.get('takes', [])[:3]), flush=True)
             return

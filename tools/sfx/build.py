@@ -133,14 +133,25 @@ def mp3(wav_y, path, sr=SR):
     os.remove(tmp)
 
 
-def audio_of(d, verdict):
-    base = verdict[:-5]
+def verdict(d, c):
+    """The listener's verdict; with a second opinion (.b.json) every score is capped at its best."""
+    v = json.load(open(os.path.join(d, c)))
+    b = os.path.join(d, c[:-5] + '.b.json')
+    if os.path.exists(b):
+        cap = max([float(t.get('score', 0)) for t in json.load(open(b)).get('takes', [])] or [0])
+        for t in v.get('takes', []):
+            t['score'] = min(float(t.get('score', 0)), cap)
+    return v
+
+
+def audio_of(d, name):
+    base = name[:-5]
     return next(os.path.join(d, base + e) for e in ('.wav', '.flac') if os.path.exists(os.path.join(d, base + e)))
 
 
 def build(sid, spec, files, raw, ref):
     d = os.path.join(raw, sid)
-    clips = sorted(f for f in os.listdir(d) if f.endswith('.json'))
+    clips = sorted(f for f in os.listdir(d) if f.endswith('.json') and not f.endswith('.b.json'))
     # Sound Studio candidates (candN) are one take each; video clips (clipN) hold three
     single = spec['single'] or any(c.startswith('cand') for c in clips)
     if not clips:
@@ -152,7 +163,7 @@ def build(sid, spec, files, raw, ref):
     if spec['kind'] == 'loop':
         cands = []
         for c in clips:
-            v = json.load(open(os.path.join(d, c)))
+            v = verdict(d, c)
             for t in v.get('takes', []):
                 cands.append((float(t.get('score', 0)), float(t.get('end', 0)) - float(t.get('start', 0)), c, t))
         cands.sort(key=lambda k: (-k[0], -k[1]))
@@ -163,7 +174,7 @@ def build(sid, spec, files, raw, ref):
     else:
         cands = []
         for c in clips:
-            v = json.load(open(os.path.join(d, c)))
+            v = verdict(d, c)
             y = highpass(load(audio_of(d, c)))
             segs = segments(y)
             if single and segs:  # one long take per clip: from its onset to the clip's end
