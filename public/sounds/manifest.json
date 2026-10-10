@@ -388,7 +388,7 @@
     ],
     "loop": false,
     "gain": 0.45,
-    "description": "a few pigeons flushing, wing claps (procedural, tools/synthBirds.mjs)"
+    "description": "a few pigeons flushing, wing claps (Stable Audio SFX via tools/sfx)"
   },
   "siren_loop": {
     "files": [
@@ -477,7 +477,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a 40 m creature's footfall: sub-bass boom, ground thump, debris rattle, long rumble (procedural, tools/synthStrider.mjs)"
+    "description": "a 40 m creature's footfall: sub-bass boom, ground thump, debris rattle, long rumble (Stable Audio SFX via tools/sfx)"
   },
   "strider_roar": {
     "files": [
@@ -485,7 +485,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "the Strider’s two-tone roar: a bellow sliding into a rasping upper tone, guttural fall, city echo (procedural, tools/synthStrider.mjs)"
+    "description": "the Strider’s two-tone roar: a bellow sliding into a rasping upper tone, guttural fall, city echo (Stable Audio SFX via tools/sfx)"
   },
   "strider_charge": {
     "files": [
@@ -493,7 +493,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "breath charging: rising electric hum with building crackle (procedural, tools/synthStrider.mjs)"
+    "description": "breath charging: rising electric hum with building crackle (Stable Audio SFX via tools/sfx)"
   },
   "strider_breath": {
     "files": [
@@ -551,7 +551,7 @@
     ],
     "loop": true,
     "gain": 0.35,
-    "description": "electrical cabinets or a pump: mains hum with a faint buzz (procedural, tools/synthUnder.mjs)"
+    "description": "electrical cabinets or a pump: mains hum with a faint buzz (Stable Audio SFX via tools/sfx)"
   },
   "under_fan": {
     "files": [
@@ -567,7 +567,7 @@
     ],
     "loop": true,
     "gain": 0.3,
-    "description": "soft wet bubbling murmurs, small creatures talking in a cave (procedural, tools/synthUnder.mjs)"
+    "description": "soft wet bubbling murmurs, small creatures talking in a cave (Stable Audio SFX via tools/sfx)"
   },
   "slime_squish": {
     "files": [
@@ -592,7 +592,7 @@
     ],
     "loop": true,
     "gain": 0.55,
-    "description": "light rain / drizzle: soft hiss with fine pattering drops (procedural loop, tools/synthWeather.mjs)"
+    "description": "light rain / drizzle: soft hiss with fine pattering drops (Stable Audio SFX via tools/sfx)"
   },
   "amb_rain_heavy": {
     "files": [
@@ -608,7 +608,7 @@
     ],
     "loop": true,
     "gain": 0.45,
-    "description": "wind at street level: gusts swelling and dying away, a faint whistle (procedural loop, tools/synthWeather.mjs)"
+    "description": "wind at street level: gusts swelling and dying away, a faint whistle (Stable Audio SFX via tools/sfx)"
   },
   "thunder_near": {
     "files": [
@@ -636,7 +636,7 @@
     ],
     "loop": false,
     "gain": 0.75,
-    "description": "a rifle squad firing: a ragged burst of sharp cracks with a short slap off the facades (procedural, tools/synthArmy.mjs)"
+    "description": "a rifle squad firing: a ragged burst of sharp cracks with a short slap off the facades (Stable Audio SFX via tools/sfx)"
   },
   "army_autocannon": {
     "files": [
@@ -715,8 +715,8 @@
       "army_whistle.wav"
     ],
     "loop": false,
-    "gain": 0.7,
-    "description": "an incoming shell whistle falling in pitch (procedural, tools/synthArmy.mjs)"
+    "gain": 0.944,
+    "description": "an incoming shell whistle falling in pitch (Stable Audio SFX via tools/sfx)"
   },
   "nuke_siren": {
     "files": [
@@ -788,7 +788,7 @@
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "the glowing caverns of the Lumen: a soft airy hum, far drips, glassy tones (procedural, tools/synthDeep.mjs)"
+    "description": "the glowing caverns of the Lumen: a soft airy hum, far drips, glassy tones (Stable Audio SFX via tools/sfx)"
   },
   "deep_murk": {
     "files": [
@@ -837,7 +837,7 @@
     ],
     "loop": false,
     "gain": 0.85,
-    "description": "a huge gurgling roar (procedural, tools/synthDeep.mjs)"
+    "description": "a huge gurgling roar (Stable Audio SFX via tools/sfx)"
   },
   "lumen_chime": {
     "files": [
@@ -854,7 +854,7 @@
     ],
     "loop": true,
     "gain": 0.55,
-    "description": "a skirmish of many slimes: squelches, slaps, growls (procedural, tools/synthDeep.mjs)"
+    "description": "a skirmish of many slimes: squelches, slaps, growls (Stable Audio SFX via tools/sfx)"
   },
   "slime_call": {
     "files": [
@@ -1006,7 +1006,7 @@
     ],
     "loop": false,
     "gain": 0.55,
-    "description": "Runaway teens' saucer: buzzy beam coming on (procedural, tools/synthWardens.mjs)"
+    "description": "Runaway teens' saucer: buzzy beam coming on (Stable Audio SFX via tools/sfx)"
   },
   "teen_giggle": {
     "files": [
@@ -1046,7 +1046,7 @@
     ],
     "loop": false,
     "gain": 0.8,
-    "description": "an omen of the Burrower: a long low rumble from under the street, faint grinding (procedural, tools/synthBurrower.mjs)"
+    "description": "an omen of the Burrower: a long low rumble from under the street, faint grinding (Stable Audio SFX via tools/sfx)"
   },
   "burrower_breach": {
     "files": [
@@ -1150,7 +1150,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "a short burst of the mech's rotary cannon: rapid hard pops over a motor whine (procedural, tools/synthMech.mjs)"
+    "description": "a short burst of the mech's rotary cannon: rapid hard pops over a motor whine (Stable Audio SFX via tools/sfx)"
   },
   "mech_vent": {
     "files": [
@@ -1190,6 +1190,6 @@
     ],
     "loop": false,
     "gain": 0.7,
-    "description": "a boot kicking a leather ball (tools/synthSoccer.mjs)"
+    "description": "a boot kicking a leather ball (Stable Audio SFX via tools/sfx)"
   }
 }
