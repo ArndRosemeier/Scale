@@ -44,6 +44,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 #menu .menu-head .sub { margin: 14px 0 6px; max-width: 30em; color: #d6dde4; font-size: clamp(15px, 1.25vw, 19px); text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8); }
 #menu .menu-head .ver-link { margin: 0; width: auto; padding: 0; background: none; font: 13px system-ui, sans-serif; font-weight: 400; color: #b8c4d0; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); }
 #menu .menu-head .ver-link:hover { color: #f0d898; }
+#menu .menu-head .community { margin: 8px 0 0; font: 13px system-ui, sans-serif; color: #b8c4d0; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); }
+#menu .menu-head .community a { color: #ff8b5e; text-decoration: none; font-weight: 600; }
+#menu .menu-head .community a:hover { color: #f0d898; text-decoration: underline; }
 #menu .menu-resume { max-width: 460px; }
 #menu .menu-resume:empty { display: none; }
 #menu .menu-resume .sv-or { display: none; }
