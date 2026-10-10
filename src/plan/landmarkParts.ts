@@ -15,6 +15,7 @@
 import { Rng, deriveSeed } from '../core/rng';
 import type { Poly } from '../core/geom2';
 import type { Terrain } from '../world/terrain';
+import { TERRAIN_DROP } from '../build/terrainMesh';
 import type { Landmark } from './landmarks';
 import { marvel } from './marvelParts';
 import { cathedral } from './cathedralParts';
@@ -1146,6 +1147,8 @@ function stadium(k: Kit, lm: Landmark, r: Rng): void {
     // Gates at the ends of the long axis (the players' tunnel, the marathon gate).
     if (bowl.gate(i)) continue;
     const seat = (Math.floor(i / 4) % 3 === 2) ? seatB : seatA;
+    // The stands' ends at a gate are closed (inside, the tiers' fronts and backs lie in one plane).
+    const open = bowl.gate(i - 1) || bowl.gate(i + 1);
     // Offsets along each ring vertex's own normal: tiers and segments meet without gaps.
     const at = (q: typeof p0, o: number): [number, number] => [q.u + q.nu * o, q.v + q.nv * o];
     for (let tr = 0; tr < P.tiers; tr++) {
@@ -1153,7 +1156,7 @@ function stadium(k: Kit, lm: Landmark, r: Rng): void {
       const y0 = tierY(tr), y1 = y0 + P.depth * rise;
       topY = Math.max(topY, y1);
       k.rampQ([at(p1, o0), at(p0, o0), at(p0, o1), at(p1, o1)], B, y0, y1, bowl.rows, under,
-        { top: seat, back: tr === P.tiers - 1 ? facade : under, noSides: true, foot: true });
+        { top: seat, back: tr === P.tiers - 1 ? facade : under, noSides: !open, foot: true });
     }
   }
   // Roof: a canopy over the long sides, over the whole ring, or closed over the field too.
@@ -1239,22 +1242,42 @@ function stadiumWays(k: Kit, lm: Landmark, bowl: StadiumBowl): void {
     p.hidden = true;
   }
   // Gates (the ends of the long axis): from the pitch's end down to the apron outside, the drop
-  // spread evenly over the way through the stands, at most 28 cm a step. They run on 60 cm under
-  // the natural ground: outside the city's cells the walked ground is drawn lower (world/WorldIndex
-  // surfaceOffset), and steps under the ground are simply buried.
+  // spread evenly over the way through the stands, at most 28 cm a step. They run on under the
+  // ground drawn there (outside the city's cells the walked ground is drawn lower, world/WorldIndex
+  // surfaceOffset), and steps under the ground are simply buried. That ground is the terrain mesh,
+  // TERRAIN_DROP under the natural ground (the site's square keeps clear of the steps): where they
+  // end is chosen so that no step's top lies in it (two surfaces in one plane flicker).
   const pave = mat(CONC, [0.78, 0.77, 0.74]);
   const out = P.tiers * P.depth;
   const e = bowl.ring[1];
+  // Half width of the gap between the stands at u (it opens outwards along the ring's normals), the
+  // steps' sides kept off the stands' end walls.
+  const half = (u: number) => e.v - 0.03 + (e.nu > 1e-3 ? Math.max(0, (u - e.u) * (e.nv / e.nu)) : 0);
   for (const s of [-1, 1]) {
     const uIn = P.ia, uOut = e.u + e.nu * out + 1.5;
-    const drop = Math.max(0, gy - (k.ground(s * uOut, 0) - 0.6));
-    const n = Math.max(1, Math.ceil(drop / 0.28 - 1e-6)), rise = drop / n, tread = (uOut - uIn) / n;
-    // Half width of the gap between the stands at u (it opens outwards along the ring's normals).
-    const half = (u: number) => e.v + (e.nu > 1e-3 ? Math.max(0, (u - e.u) * (e.nv / e.nu)) : 0);
-    for (let i = 0; i < n; i++) {
-      const a = uIn + i * tread, b = a + tread;
-      k.box(s * (a + b) / 2, 0, tread / 2 + 0.01, half(b), Math.min(F, gy - i * rise - 1), gy - i * rise, pave, { solid: true, map: 2 });
+    const flight = (end: number) => {
+      const drop = Math.max(0, gy - end);
+      const n = Math.max(1, Math.ceil(drop / 0.28 - 1e-6)), rise = drop / n, tread = (uOut - uIn) / n;
+      const steps: { c: number; hv: number; top: number }[] = [];
+      // (How badly the tops fight the drawn ground: a top inside the ground's span under it, the
+      // more so the flatter that ground.)
+      let fight = 0;
+      for (let i = 0; i < n; i++) {
+        const a = uIn + i * tread, b = a + tread, c = s * (a + b) / 2, hv = half(b), top = gy - i * rise;
+        steps.push({ c, hv, top });
+        const g0 = k.groundMin(c, 0, tread / 2, hv) - TERRAIN_DROP, g1 = k.groundMax(c, 0, tread / 2, hv) - TERRAIN_DROP;
+        if (top > g0 - 0.05 && top < g1 + 0.05) fight += 1 / Math.max(0.05, g1 - g0);
+      }
+      return { steps, tread, fight };
+    };
+    // At least 60 cm under the natural ground (5 cm under the drawn one) where they end.
+    const deep = k.ground(s * uOut, 0) - 0.6;
+    let best = flight(deep);
+    for (let j = 1; j < 8 && best.fight > 0; j++) {
+      const f = flight(deep + j * 0.025);
+      if (f.fight < best.fight) best = f;
     }
+    for (const st of best.steps) k.box(st.c, 0, best.tread / 2 + 0.01, st.hv, Math.min(F, st.top - 1), st.top, pave, { solid: true, map: 2 });
   }
   // Flights up to the first seat row, two on each long side.
   const t0 = bowl.tierY(0), rowTop = t0 + bowl.rise;
@@ -1265,7 +1288,9 @@ function stadiumWays(k: Kit, lm: Landmark, bowl: StadiumBowl): void {
     const nu = (p0.nu + p1.nu) / 2, nv = (p0.nv + p1.nv) / 2, nl = Math.hypot(nu, nv);
     // (Local +v points into the field.)
     k.sub((p0.u + p1.u) / 2, (p0.v + p1.v) / 2, Math.atan2(nu / nl, -nv / nl), () => {
-      for (let j = 1; j < steps; j++) k.box(0, (j - 0.5) * tread - 0.05, 1.4, tread / 2 + 0.05, F, rowTop - j * rise, pave, { solid: true, map: 2 });
+      // (Each step reaches under the one above it; every other one a little narrower, so their
+      // sides never lie in one plane where they overlap.)
+      for (let j = 1; j < steps; j++) k.box(0, (j - 0.5) * tread - 0.05, 1.4 - (j % 2) * 0.03, tread / 2 + 0.05, F, rowTop - j * rise, pave, { solid: true, map: 2 });
     });
   }
 }

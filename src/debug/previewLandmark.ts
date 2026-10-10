@@ -21,6 +21,7 @@ import { siteRect, siteToWorld, type Landmark } from '../plan/landmarks';
 import { Terrain } from '../world/terrain';
 import { makeProfile } from '../world/settings';
 import type { MeshBuilder } from '../build/meshBuilder';
+import { TERRAIN_DROP } from '../build/terrainMesh';
 
 const q = new URLSearchParams(location.search);
 const seed = Number(q.get('seed') ?? 7), size = Number(q.get('size') ?? 0.8), kind = q.get('kind') ?? 'glasshouse';
@@ -45,6 +46,8 @@ const hemi = new THREE.HemisphereLight(0xbcd4ff, 0x4a4535, 0.7);
 scene.add(hemi);
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), new THREE.MeshStandardMaterial({ color: 0x5b6050, roughness: 0.95 }));
 ground.rotation.x = -Math.PI / 2;
+// (Drawn as the game draws the bare terrain: TERRAIN_DROP under the natural ground.)
+ground.position.y = -TERRAIN_DROP;
 ground.receiveShadow = true;
 scene.add(ground);
 const lights = Array.from({ length: 6 }, () => new THREE.PointLight(0xffe4c0, 0, 16, 2));
@@ -79,8 +82,9 @@ const inside = at.length === 6;
 if (inside) {
   camera.position.copy(W3(at[0], at[1], at[2]));
   controls.target.copy(W3(at[3], at[4], at[5]));
-  const ins = landmarkInterior(lm, flat)!, p = camera.position, c: { x: number; y: number; z: number; d: number }[] = [];
-  for (let i = 0; i < ins.lights.length; i += 3) c.push({ x: ins.lights[i], y: ins.lights[i + 1], z: ins.lights[i + 2], d: Math.hypot(ins.lights[i] - p.x, ins.lights[i + 2] - p.z) });
+  // (A landmark with no rooms, the stadium: no lights.)
+  const L = landmarkInterior(lm, flat)?.lights ?? [], p = camera.position, c: { x: number; y: number; z: number; d: number }[] = [];
+  for (let i = 0; i < L.length; i += 3) c.push({ x: L[i], y: L[i + 1], z: L[i + 2], d: Math.hypot(L[i] - p.x, L[i + 2] - p.z) });
   c.sort((a1, a2) => a1.d - a2.d);
   c.slice(0, lights.length).forEach((l, i) => { lights[i].position.set(l.x, l.y, l.z); lights[i].intensity = 3 + 8 * (night ? 1 : 0); });
 } else {
