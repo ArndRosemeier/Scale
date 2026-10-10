@@ -149,10 +149,11 @@ export class CrowdRenderer {
   outfit: ((a: PedAgent) => EquipmentVisuals | null) | null = null;
   stats = { crowd: 0, rigs: 0 };
   /**
-   * Figures that are only drawn (never simulated, never a rig): the stadium concert's audience in
-   * the stands (game/concert). Each is a synthetic citizen's looks at a place with a clip.
+   * Figures that are only drawn (never simulated, never a rig), one list per owner: the stadium
+   * concert's audience in the stands (game/concert), the soccer crowd (game/soccer). Each is a
+   * synthetic citizen's looks at a place with a clip.
    */
-  figures: CrowdFigure[] = [];
+  figureLists: CrowdFigure[][] = [];
   /** Brightness of the figures' clothes (the concert raises it at night: the stands read in the dark). */
   figureGain = 1;
   /** The concert's beat (cycles of GROOVE_PERIOD) for everyone grooving, or null (their own clocks). */
@@ -250,7 +251,7 @@ export class CrowdRenderer {
 
   private makeLook(c: Citizen, eq: EquipmentVisuals, app: HumanoidAppearance): Look {
     const female = c.gender < 0.5;
-    const kind = eq.back?.defId === 'suitjacket' ? 'suit' : eq.back?.defId === 'coat' ? 'coat' : eq.chest?.defId === 'dress' ? 'dress' : eq.legs?.defId === 'skirt' ? 'skirt' : eq.back?.defId === 'jacket' ? 'jacket' : 'casual';
+    const kind = eq.back?.defId === 'suitjacket' ? 'suit' : eq.back?.defId === 'coat' ? 'coat' : eq.chest?.defId === 'dress' ? 'dress' : eq.legs?.defId === 'skirt' ? 'skirt' : eq.back?.defId === 'jacket' ? 'jacket' : eq.legs?.defId === 'shorts' ? 'shorts' : 'casual';
     let ti = this.templates.findIndex((t) => t.female === female && t.outfit === kind);
     if (ti < 0) ti = this.templates.findIndex((t) => t.female === female && t.outfit === 'casual');
     if (ti < 0) ti = Math.max(0, this.templates.findIndex((t) => t.female === female));
@@ -434,8 +435,8 @@ export class CrowdRenderer {
       this.mat4.compose(this.p.set(a.x, a.y, a.z), this.q, this.s.setScalar(look.scale * (st ? st.scale : 1)));
       this.meshes[ti].setMatrixAt(k, this.mat4);
     }
-    // Drawn-only figures (the concert's stands).
-    for (const f of this.figures) {
+    // Drawn-only figures (the stadium's stands).
+    for (const list of this.figureLists) for (const f of list) {
       if (!f.on) continue;
       const d = Math.hypot(f.x - cx, f.y - cy, f.z - cz);
       if (d > FIGURE_RANGE) continue;
@@ -486,7 +487,7 @@ const _up = new THREE.Vector3(0, 1, 0);
 /** Drawn-only figures are drawn out to here (m): a stadium's stands read from across the district. */
 const FIGURE_RANGE = 650;
 
-/** A figure that is only drawn (CrowdRenderer.figures): a synthetic citizen's looks, a place and a clip. */
+/** A figure that is only drawn (CrowdRenderer.figureLists): a synthetic citizen's looks, a place and a clip. */
 export interface CrowdFigure {
   cit: Citizen;
   x: number; y: number; z: number;

@@ -32,6 +32,8 @@ export const PEOPLE_OWNER = -6;
 export const SIDEKICK_OWNER = -7;
 /** Owner id of the stadium concert's people (src/game/concert: the band, the audience in the pit): their own budget. */
 export const CONCERT_OWNER = -8;
+/** Owner id of the stadium's soccer players and referee (src/game/soccer): their own budget. */
+export const SOCCER_OWNER = -9;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';

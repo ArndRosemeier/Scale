@@ -8,7 +8,7 @@
  *    the band bows at the end.
  *  - The audience: the pit in front of the stage is people (actors, `crowd`: bouncing on the beat
  *    with the 'groove' action, cheering between songs) near the player; the stands are drawn-only
- *    figures (CrowdRenderer.figures) that groove on the beat too, out to 650 m.
+ *    figures (CrowdRenderer.figureLists) that groove on the beat too, out to 650 m.
  *  - The music: the night's set list (public/music/live.json: Arnd's Lyria songs; until they come,
  *    pieces of the score stand in) is streamed from the stage (Audio.stream) and heard across the
  *    district, duller and quieter with distance. The show keeps its own clock: it goes on unheard
@@ -110,7 +110,7 @@ export class Concert {
     if (!this.plan) return;
     g.stimuli.on((s) => this.onStimulus(s));
     g.collision.obstacleProviders.push(this.provider);
-    g.crowd.figures = this.figures;
+    g.crowd.figureLists.push(this.figures);
     const P = this.plan, [wx, wz] = P.onStage(STAGE.d + 9, 0), [tx, tz] = P.onStage(STAGE.d * 0.55, 0);
     this.wash = new THREE.SpotLight(0xfff0e2, 0, 45, 0.72, 0.55, 2);
     this.wash.position.set(wx, P.stage.deckY + 9, wz);
@@ -123,6 +123,9 @@ export class Concert {
     this.loadLive();
     return this.live?.bands[style] ?? null;
   }
+
+  /** The stage is up in the stadium (game/soccer: no match then). */
+  get busy(): boolean { return !!this.stage; }
 
   /** The score's music keeps quiet here: the show's music is heard. */
   hushes(x: number, z: number): boolean {

@@ -1167,5 +1167,29 @@
     "loop": false,
     "gain": 0.9,
     "description": "the mech's warning klaxon: a two-tone blaring horn echoing off the town (procedural, tools/synthMech.mjs)"
+  },
+  "ref_whistle": {
+    "files": [
+      "ref_whistle.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "referee's pea whistle, one short blast (tools/synthSoccer.mjs)"
+  },
+  "ref_whistle_long": {
+    "files": [
+      "ref_whistle_long.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "referee's pea whistle, one long blast (tools/synthSoccer.mjs)"
+  },
+  "ball_kick": {
+    "files": [
+      "ball_kick.wav"
+    ],
+    "loop": false,
+    "gain": 0.7,
+    "description": "a boot kicking a leather ball (tools/synthSoccer.mjs)"
   }
 }
