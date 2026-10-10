@@ -1,0 +1,332 @@
+[
+ {
+  "id": "strider_step",
+  "prompt": "TrackType: SFX, giant footstep, huge monster stomp, heavy earth-shaking boom, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "strider_roar",
+  "prompt": "TrackType: SFX, kaiju roar, giant monster roar, Godzilla style roar, no music, no voice",
+  "seconds": 5,
+  "candidates": 10
+ },
+ {
+  "id": "strider_charge",
+  "prompt": "TrackType: SFX, energy charge up, sci-fi power charging electric hum, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "strider_breath",
+  "prompt": "TrackType: SFX, dragon fire breath, flamethrower blast, no music, no voice",
+  "seconds": 5,
+  "candidates": 10
+ },
+ {
+  "id": "tremor_rumble",
+  "prompt": "TrackType: SFX, distant earthquake tremor, low rumble with rattling objects, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "robot_glitch",
+  "prompt": "TrackType: SFX, robot malfunction glitch, electronic glitch beeps, computer error sound, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "robot_hostile",
+  "prompt": "TrackType: SFX, robot servo motor whine, sci-fi robot power up, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "burrower_rumble",
+  "prompt": "TrackType: SFX, earthquake rumble, continuous deep ground rumbling, rocks grinding, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "burrower_rumble_far",
+  "prompt": "TrackType: SFX, distant earthquake rumble, low deep rumble, no music, no voice",
+  "seconds": 5,
+  "candidates": 10
+ },
+ {
+  "id": "burrower_breach",
+  "prompt": "TrackType: SFX, ground collapse, earthquake rubble falling, concrete breaking and crumbling, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "burrower_roar",
+  "prompt": "TrackType: SFX, giant worm monster roar, creature roar, monster growl, no music, no voice",
+  "seconds": 5,
+  "candidates": 10
+ },
+ {
+  "id": "burrower_slam",
+  "prompt": "TrackType: SFX, heavy impact on ground, huge boulder falling on asphalt, ground slam, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "burrower_dive",
+  "prompt": "TrackType: SFX, earth digging rumble, large rocks and soil rumbling, landslide, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "leviathan_surface",
+  "prompt": "TrackType: SFX, huge water splash, large wave crashing, whale breaching the surface, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "roc_cry_far",
+  "prompt": "TrackType: SFX, distant eagle cry, hawk scream far away, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "roc_flap",
+  "prompt": "TrackType: SFX, large wings flapping, giant bird wing flap whoosh, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "mech_launch",
+  "prompt": "TrackType: SFX, missile launch, rocket launch whoosh, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "mech_cannon",
+  "prompt": "TrackType: SFX, minigun firing, gatling gun burst, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "mech_vent",
+  "prompt": "TrackType: SFX, steam release hiss, pressure valve venting steam, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "mech_alarm",
+  "prompt": "TrackType: SFX, loud alarm klaxon, warning horn, emergency alarm, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "brood_chitter",
+  "prompt": "TrackType: SFX, swarm of insects, many crickets and beetles clicking and chittering, cockroach swarm, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "brood_screech",
+  "prompt": "TrackType: SFX, small creature screech, monster hiss, alien creature squeal, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "brood_bite",
+  "prompt": "TrackType: SFX, insect bite, crunchy snap, bug mandible click, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "army_rifle",
+  "prompt": "TrackType: SFX, assault rifle burst fire outdoors, automatic gunfire, several gunshots, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "army_whistle",
+  "prompt": "TrackType: SFX, falling bomb whistle, descending whistling shell, cartoon bomb drop whistle without explosion, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "amb_rain_light",
+  "prompt": "TrackType: SFX, light rain falling on pavement, soft drizzle, gentle rain ambience, steady and continuous, no fade, no music, no voice",
+  "seconds": 11,
+  "candidates": 10
+ },
+ {
+  "id": "amb_wind_gust",
+  "prompt": "TrackType: SFX, strong wind gusts blowing outdoors, howling wind ambience, steady and continuous, no fade, no music, no voice",
+  "seconds": 18,
+  "candidates": 10
+ },
+ {
+  "id": "bird_flutter",
+  "prompt": "TrackType: SFX, pigeons flying away, birds wings flapping takeoff, flock of doves, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "under_drip",
+  "prompt": "TrackType: SFX, water drop drip, single droplet in a cave, plink, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "under_hum",
+  "prompt": "TrackType: SFX, electrical hum, transformer buzz, power box humming, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "slime_burble",
+  "prompt": "TrackType: SFX, bubbling mud, gurgling swamp bubbles, boiling goo, steady and continuous, no fade, no music, no voice",
+  "seconds": 11,
+  "candidates": 10
+ },
+ {
+  "id": "slime_squish",
+  "prompt": "TrackType: SFX, slime squish, wet squelch, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "deep_glow",
+  "prompt": "TrackType: SFX, mysterious cave ambience, soft drone, water drips in a cave, steady and continuous, no fade, no music, no voice",
+  "seconds": 22,
+  "candidates": 10
+ },
+ {
+  "id": "murk_spit",
+  "prompt": "TrackType: SFX, slime spit, wet splat projectile, gooey spit, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "murk_slam",
+  "prompt": "TrackType: SFX, wet slimy impact, mud splat, squelch hit, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "maw_roar",
+  "prompt": "TrackType: SFX, monster roar, huge creature roar, dragon roar, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "lumen_chime",
+  "prompt": "TrackType: SFX, magic chime, sparkle sound, fairy twinkle, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "slime_battle",
+  "prompt": "TrackType: SFX, slime creatures fighting, squishy wet splats and gurgles, steady and continuous, no fade, no music, no voice",
+  "seconds": 10,
+  "candidates": 10
+ },
+ {
+  "id": "slime_call",
+  "prompt": "TrackType: SFX, magic bubbles rising, bubbly magical spell sound, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "membrane",
+  "prompt": "TrackType: SFX, slime stretching and tearing, gooey squelch, wet flesh tearing, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "spray_hiss",
+  "prompt": "TrackType: SFX, spray paint can shake and spray, aerosol can, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "under_engine",
+  "prompt": "TrackType: SFX, old machine engine running, diesel pump thumping, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "under_gears",
+  "prompt": "TrackType: SFX, large mechanical gears turning, clockwork machinery clanking, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "camera_shutter",
+  "prompt": "TrackType: SFX, DSLR camera shutter click, photo camera shot, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "protest_drum",
+  "prompt": "TrackType: SFX, bass drum beaten slowly at a street protest, marching drum, steady and continuous, no fade, no music, no voice",
+  "seconds": 9,
+  "candidates": 10
+ },
+ {
+  "id": "ufo_hum",
+  "prompt": "TrackType: SFX, UFO hum, spaceship engine hum, sci-fi hover drone, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "teen_whine",
+  "prompt": "TrackType: SFX, UFO flying, sci-fi spaceship hover hum, alien craft, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "teen_zap",
+  "prompt": "TrackType: SFX, laser zap, sci-fi ray gun beam, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "teen_giggle",
+  "prompt": "TrackType: SFX, cute robot giggle, cartoon robot laugh beeps, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "teen_pod",
+  "prompt": "TrackType: SFX, electric short circuit, sparks fizzing, machine powering down, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "ufo_stern",
+  "prompt": "TrackType: SFX, deep spaceship horn, low sci-fi foghorn blast, no music, no voice",
+  "seconds": 4,
+  "candidates": 10
+ },
+ {
+  "id": "ball_kick",
+  "prompt": "TrackType: SFX, soccer ball kick, foot kicking a football, single thump, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "dig_rubble",
+  "prompt": "TrackType: SFX, digging through rubble, moving rocks and stones, debris shifting, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ },
+ {
+  "id": "ambulance_siren",
+  "prompt": "TrackType: SFX, European ambulance siren, two-tone hi-lo siren, emergency vehicle, steady and continuous, no fade, no music, no voice",
+  "seconds": 8,
+  "candidates": 10
+ },
+ {
+  "id": "gun_ricochet",
+  "prompt": "TrackType: SFX, bullet ricochet off metal, metallic ping, no music, no voice",
+  "seconds": 3,
+  "candidates": 10
+ }
+]
