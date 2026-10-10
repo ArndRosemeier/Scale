@@ -15,6 +15,7 @@ import { Role, type Citizen } from './Population';
 import { GROOVE_PERIOD } from '../humanoid/client/anim/actions';
 import { statusOf } from '../shared/status';
 import { WEBGPU, gpuKit } from '../render/gpuMode';
+import { shaderCap } from '../render/shaderCap';
 
 const _fq = new THREE.Quaternion(), _fe = new THREE.Euler(), _fv = new THREE.Vector3();
 
@@ -327,8 +328,9 @@ export class CrowdRenderer {
       rigSet.add(id);
       r.used = this.rigTime;
       r.agent = a;
-      // New outfits can need new shader variants: compile them asynchronously first.
-      if (r.ready === 0 && r.rig.char) {
+      // New outfits can need new shader variants: compile them asynchronously first, only while
+      // the shader cap has room (it counts what this starts; the impostor shows meanwhile).
+      if (r.ready === 0 && r.rig.char && shaderCap.room()) {
         r.ready = 1;
         const rr = r;
         if (this.prepare) this.prepare(r.rig.object).then(() => { rr.ready = 2; }, () => { rr.ready = 2; });

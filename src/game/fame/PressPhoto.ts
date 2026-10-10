@@ -68,11 +68,12 @@ export class PressPhoto {
       gl.setRenderTarget(rt);
       gl.clear();
       gl.render(scene, cam);
-      if (px) gl.readRenderTargetPixels(rt, 0, 0, PHOTO.w, PHOTO.h, px);
-      else {
-        // WebGPU reads back asynchronously: the page goes up when the pixels arrive.
-        gpuKit().readPixels(gl as never, rt as never, PHOTO.w, PHOTO.h).then((d) => { this.compose(d, rep, street); }, (e) => console.warn('[fame] press photo failed', e));
-      }
+      // Read back asynchronously: the page goes up when the pixels arrive. (A synchronous read
+      // waits for the GPU to finish everything queued, shader compiles included: 3.5 s on Arnd's PC.)
+      const done = (d: Uint16Array) => { this.compose(d, rep, street); this.t = 0; };
+      const fail = (e: unknown) => console.warn('[fame] press photo failed', e);
+      if (px) gl.readRenderTargetPixelsAsync(rt, 0, 0, PHOTO.w, PHOTO.h, px).then(() => done(px), fail);
+      else gpuKit().readPixels(gl as never, rt as never, PHOTO.w, PHOTO.h).then(done, fail);
     } catch (e) {
       console.warn('[fame] press photo failed', e);
       return false;
@@ -80,8 +81,6 @@ export class PressPhoto {
       gl.setRenderTarget(prev);
       gl.shadowMap.autoUpdate = auto;
     }
-    if (px) this.compose(px, rep, street);
-    this.t = 0;
     this.lastT = this.time;
     this.stats.photos++;
     this.stats.ms = Math.round(performance.now() - t0);

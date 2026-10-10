@@ -269,9 +269,14 @@ export class ShaderGate {
   /** New shaders (whoever started them) in the last 10 s: [time, count]. */
   private recent: [number, number][] = [];
 
-  /** Has this object been checked with the material it has now? (freeze log) */
-  knows(o: THREE.Object3D): boolean {
-    return this.seen.get(o) === (o as THREE.Mesh).material;
+  /**
+   * For the freeze log: 'seen' (checked with the material it has now), 'waiting' (new, hidden until
+   * there is room under the shader cap: its programs came from a background compile, not a draw) or
+   * 'NEVER' (drawn without a check: its program compiled while drawing).
+   */
+  stateOf(o: THREE.Object3D): string {
+    if (this.seen.get(o) === (o as THREE.Mesh).material) return 'seen';
+    return this.parked.has(o) || this.queue.includes(o) ? 'waiting' : 'NEVER';
   }
 
   /** One line for the freeze log: what the gate waits for and how many shaders started lately. */
