@@ -56,8 +56,9 @@ for (const l of lights) scene.add(l);
 const tex = new TextureLibrary();
 await tex.load();
 // The landmark as planned in that city, moved to the origin on flat ground.
-const real = buildMacroPlan(new Terrain(makeProfile({ seed, size }))).landmarks.find((l) => l.kind === kind && (style === null || l.style === Number(style)));
-if (!real) throw new Error(`no ${kind} in seed ${seed} size ${size}`);
+const all = buildMacroPlan(new Terrain(makeProfile({ seed, size }))).landmarks;
+const real = all.find((l) => l.kind === kind && (style === null || l.style === Number(style)));
+if (!real) throw new Error(`no ${kind}${style === null ? '' : ' of style ' + style} in seed ${seed} size ${size} (there: ${all.map((l) => l.kind + (l.kind === 'marvel' ? ' ' + l.style : '')).join(', ')})`);
 const flat = { height: () => 0, isWater: () => false } as unknown as Terrain;
 const lm: Landmark = { ...real, x: 0, z: 0, angle: 0, base: 0.15, low: 0, site: [] };
 lm.site = siteRect(lm, -lm.hu, -lm.hv, lm.hu, lm.hv);

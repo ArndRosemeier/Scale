@@ -83,7 +83,7 @@ const ALL = (type: RoomType): Program => ({ reserve: [{ type, at: 'all' }], room
  * the café storey (a café, a lounge, a store room), the capsule hotel (sleeping pods and
  * lounges), the studios (labs, a control room, a store room).
  */
-function storeyProgram(type: RoomType, cx: number, cz: number, angles: number[]): Program {
+export function storeyProgram(type: RoomType, cx: number, cz: number, angles: number[]): Program {
   const rooms: Program['rooms'] = type === 'mess'
     ? [{ type: 'mess', len: [14, 20], max: 2 }, { type: 'lounge', len: [12, 18], max: 1 }, { type: 'storage', len: [6, 9], max: 1 }]
     : type === 'lounge'

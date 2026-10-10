@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.245 — 2026-10-10
+
+- **The helix tower's walkway reaches the ground.** It began at the square's highest point, so on a sloping square its lower end hung up to a few metres above the ground. It now starts on the ground where it begins.
+- **Walking up the helix walkway is smooth.** The walkway's floor counted as a staircase of 30 cm steps underneath, so your hero bobbed up and down all the way up. You now walk on the ramp itself.
+- **The helix tower has rooms inside.** At its foot is a round lobby with a desk, lounge seats and café tables. The way in is from the square, or through a door off the walkway. Above it are five storeys and a sky lounge under the roof. Each has its own door off the walkway, where the walkway passes the storey's floor. Inside each storey a hall leads from that door to the middle, with rooms all round it: a café, lounges, a capsule hotel, studios. The core between the lower storeys and the sky lounge stays closed.
+
 ## 0.244 — 2026-10-10
 
 - **No 10-second freeze on the first frame after loading a save.** The shader preparation behind the loading screen could still be using the city's lights from before the last few lamps were added (the hospital ward's and the stadium stage's). Programs depend on how many lights there are, so the first frame of play had to build several of them while drawing. The preparation now picks up every new light right away.

@@ -25,6 +25,7 @@ import { scifiTheme } from '../interior/design/theme';
 import { starshipProgram, starshipItems } from '../interior/fill/starship';
 import { ellipseStar, type Volume } from '../interior/design/types';
 import { twistInside } from './twistParts';
+import { helixCore } from './helixParts';
 
 export const MARVEL_STYLES = 8;
 export const enum MS { Starship = 0, Helix = 1, Porous = 2, Twist = 3, Skyship = 4, Halo = 5, Orbs = 6, Stack = 7 }
@@ -302,16 +303,24 @@ function helixTower(k: Kit, lm: Landmark, r: Rng, L: Look): void {
   const P = lm.p, B = k.B, H = P.h, R = P.coreR;
   const core = r.chance(0.5) ? L.glass : L.hull;
   const yTop = B + H;
-  k.cyl(0, 0, R, R, B, yTop, core, { foot: true, top: L.roof, seg: 36 });
+  // (Sides: as many as leave room for a door in each.)
+  const n = (Math.PI * 2 * R) / 36 >= 1.9 ? 36 : 24;
   // The walkway(s): from the ground to the roof, glazed all round; its floor a light stone.
   const floorM = mat(GRANITE, [0.92, 0.9, 0.86]);
   const frame = { ...L.accent, flags: 0 };
   const sense = r.chance(0.5) ? 1 : -1, a0 = r.range(0, Math.PI * 2);
-  const inner = R * Math.cos(Math.PI / 36) - 0.05;
-  const walks = P.double ? 2 : 1;
-  for (let w = 0; w < walks; w++) {
-    k.helix(0, 0, inner, R + P.w, B, yTop, sense * P.turns, a0 + w * Math.PI, P.hh, frame, L.clear, { top: floorM });
-  }
+  const inner = R * Math.cos(Math.PI / n) - 0.05, rm = (inner + R + P.w) / 2, full = P.turns * Math.PI * 2;
+  const walks = Array.from({ length: P.double ? 2 : 1 }, (_, w) => {
+    // It starts on the ground where it begins (the floor level B is the square's highest point,
+    // on a slope metres above the ground on the low side), low enough to pass the lobby's floor
+    // a little way up, where its door is.
+    const a = a0 + w * Math.PI, slope = (yTop - B) / (full * rm);
+    return { a, sg: sense, y0: Math.min(B - 1.5 * slope, k.ground(Math.cos(a) * rm, Math.sin(a) * rm) - 0.1), full, rm };
+  });
+  // The core: storeys at its foot and under the roof, solid between (plan/helixParts).
+  const [, acc] = PALETTES[P.col % PALETTES.length];
+  helixCore(k, lm, { R, n, yTop, wall: core, plain: L.hullPlain, roof: L.roof, accent: acc, walks });
+  for (const w of walks) k.helix(0, 0, inner, R + P.w, w.y0, yTop, sense * P.turns, w.a, P.hh, frame, L.clear, { top: floorM });
   // Roof: a parapet ring of glass (clear) and the crown.
   const par = k.lathe(0, 0, [R - 0.2, yTop, R - 0.2, yTop + 1.2], 1, 1, L.clear, { clear: true, detail: true });
   par.noSides = true;

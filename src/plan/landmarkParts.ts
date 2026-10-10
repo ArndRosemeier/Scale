@@ -164,6 +164,8 @@ export interface PartObstacle {
   pane?: boolean;
   /** Walkable however thin (world/Collision: ground for any walker). */
   deck?: boolean;
+  /** A ramp's walking surface (world/Collision Obstacle.floorAt). */
+  floorAt?: (x: number, z: number, top: number) => number;
 }
 
 // Facade flags (build/buildingShell FF): windows, curtain wall, arched, roof, front, stained glass.
