@@ -135,7 +135,9 @@ def mp3(wav_y, path, sr=SR):
 
 def build(sid, spec, files, raw, ref):
     d = os.path.join(raw, sid)
-    clips = sorted(f for f in os.listdir(d) if f.startswith('clip') and f.endswith('.json'))
+    clips = sorted(f for f in os.listdir(d) if f.endswith('.json'))
+    # Sound Studio candidates (candN) are one take each; video clips (clipN) hold three
+    single = spec['single'] or any(c.startswith('cand') for c in clips)
     if not clips:
         return None
     olds = [load(os.path.join(ref, f)) for f in files]
@@ -159,7 +161,7 @@ def build(sid, spec, files, raw, ref):
             v = json.load(open(os.path.join(d, c)))
             y = highpass(load(os.path.join(d, c[:-5] + '.wav')))
             segs = segments(y)
-            if spec['single'] and segs:  # one long take per clip: from its onset to the clip's end
+            if single and segs:  # one long take per clip: from its onset to the clip's end
                 segs = [(segs[0][0], len(y) / SR)]
                 cands.append((max([float(t.get('score', 0)) for t in v.get('takes', [])] or [0]), segs[0], c, y))
                 continue
