@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.246 — 2026-10-10
+
+- **The title screen names the official subreddit.** Under the version line it now says "Official subreddit: r/Scale_The_Game". Clicking it opens https://www.reddit.com/r/Scale_The_Game/ in a new tab.
+
 ## 0.245 — 2026-10-10
 
 - **The helix tower's walkway reaches the ground.** It began at the square's highest point, so on a sloping square its lower end hung up to a few metres above the ground. It now starts on the ground where it begins.
