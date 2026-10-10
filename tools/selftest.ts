@@ -4243,6 +4243,43 @@ section('super speed hops', async () => {
   check(!!e && feet(e, 50, 43 + 0.75 - e.at) > 1.85, `speed hop: one hop over two people in a row (feet ${e ? feet(e, 50, 43 + 0.75 - e.at).toFixed(2) : '-'} m over the second)`);
 });
 
+// Super speed below the street (Arnd 2026-10-10: "superspeed does not work in the slime colony"):
+// the autopilot's look-ahead must follow the realm's cave floor, or it reads the first rise of the
+// floor as a wall and brakes the runner to a walk. Straight walkable runs between the realm's
+// waypoints must look clear, and runs into solid rock must still stop at the rock.
+section('super speed in the deep realm', async () => {
+  const { deepFor } = await import('./deepsweep');
+  const { DeepField } = await import('../src/underground/deep/field');
+  const { Collision } = await import('../src/world/Collision');
+  const { SpeedNav } = await import('../src/player/speedNav');
+  const plan = deepFor(42, 0.6).plans[0];
+  const F = new DeepField(plan.prims, plan.seed);
+  // The game's collision with the realm as its only underground volume (the street far above).
+  const c = Object.assign(Object.create(Collision.prototype), {
+    world: { terrain: { height: () => 1000 }, surfaceOffset: () => 0, buildingsIn: () => [] }, obstacleProviders: [], room: null,
+    under: { contains: (x: number, y: number, z: number, m: number) => F.contains(x, y, z, m), floorAt: (x: number, y: number, z: number) => F.floorAt(x, y + 0.6, z), inHole: () => false, ceilingAt: (x: number, y: number, z: number) => F.ceilingAt(x, y, z) },
+  }) as import('../src/world/Collision').Collision;
+  const nav = new SpeedNav() as unknown as { clear(c: unknown, x: number, y: number, z: number, h: number, r: number, sk: number, dx: number, dz: number, L: number): number };
+  let walk = 0, braked = 0, rock = 0, through = 0;
+  for (const n of plan.nodes) for (const t of plan.nodes) {
+    const dx = t.x - n.x, dz = t.z - n.z, L = Math.hypot(dx, dz);
+    if (L < 15 || L > 60 || Math.abs(t.y - n.y) > 2) continue;
+    const at = (s: number) => ({ x: n.x + (dx * s) / L, y: n.y + ((t.y - n.y) * s) / L, z: n.z + (dz * s) / L });
+    // Walkable: the floor stays near the straight line with head room all the way.
+    let ok = L <= 40;
+    for (let s = 0; s <= L && ok; s += 0.5) { const p = at(s), f = F.floorAt(p.x, p.y + 1.2, p.z, 2.5); ok = f !== null && Math.abs(f - p.y) < 0.6 && F.air(p.x, f + 1.8, p.z, 0.2); }
+    if (ok) { walk++; if (nav.clear(c, n.x, n.y, n.z, 1.8, 0.35, 1, dx / L, dz / L, L - 2) < (L - 2) * 0.5) braked++; continue; }
+    // Into rock: a stretch of the line solid from below the feet to well over the head.
+    let solid = -1;
+    for (let s = 1; s <= L - 1 && solid < 0; s += 0.5) { const p = at(s); if ([-3, -1.5, 0, 1, 2.5, 4, 6].every((o) => F.sdf(p.x, p.y + o, p.z) > 0.3)) solid = s; }
+    if (solid < 0) continue;
+    rock++;
+    if (nav.clear(c, n.x, n.y, n.z, 1.8, 0.35, 1, dx / L, dz / L, L) > solid + 1) through++;
+  }
+  check(walk >= 50 && braked === 0, `deep speed: the look-ahead sees walkable cave runs as clear (${braked} of ${walk} braked)`);
+  check(rock >= 30 && through === 0, `deep speed: the look-ahead still stops at rock (${through} of ${rock} ran through)`);
+});
+
 // Super jump as travel (tools/travelsim.ts): leaping on from landing to landing with W held covers
 // ground nearly as fast as a boosted flight at every rank (the forward speed builds up through each
 // leap, so it ends up a little slower: 75 % to 110 % of flight, pressing Space a little late on each
