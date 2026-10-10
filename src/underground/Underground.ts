@@ -12,6 +12,7 @@
  *  - Geometry is built lazily near the player; volumes give collision.
  */
 import * as THREE from 'three';
+import { lightPool } from '../render/lightPool';
 import type { MacroPlan, MetroLine } from '../plan/types';
 import type { Terrain } from '../world/terrain';
 import type { CellState } from '../stream/CityStreamer';
@@ -92,8 +93,6 @@ export class Underground {
   private trainEv = new Map<string, { open: boolean; dwell: boolean; arriving: boolean; near: boolean }>();
   private flicker = 0;
   private trainColor: THREE.InstancedBufferAttribute;
-  private headlamp = new THREE.SpotLight(0xfff2dd, 0, 30, 0.7, 0.8, 1.5);
-  private stationLights: THREE.PointLight[] = [];
   private sewerTubes: Tube[] = [];
   private lastBuildPos = new THREE.Vector3(1e9, 0, 0);
   /** Wanted pieces not built yet (see BUILD_NOW), by key: where they are and how to build them. */
@@ -109,12 +108,6 @@ export class Underground {
 
   constructor(private macro: MacroPlan, private terrain: Terrain, tex: TextureLibrary, private ground: (x: number, z: number) => number) {
     this.mat = createFacadeMaterial(tex.facade, null, 1, false);
-    this.group.add(this.headlamp, this.headlamp.target);
-    for (let i = 0; i < 2; i++) {
-      const l = new THREE.PointLight(0xfff4e8, 0, 45, 1.2);
-      this.stationLights.push(l);
-      this.group.add(l);
-    }
     // Metro tunnels and stations.
     for (const line of macro.metroLines) this.tubes.push(metroTube(line));
     this.boxes.push(...stationHalls(macro));
@@ -787,12 +780,11 @@ export class Underground {
       for (const d of this.deeps) d.meshes.update(dt, c, camUnder, this.deepState);
     }
     if (under && !inStation) {
-      this.headlamp.intensity = 3;
-      this.headlamp.position.copy(cam.position);
-      const d = new THREE.Vector3();
+      // The headlamp: the shared spot light (render/lightPool), ahead of any other wish.
+      const d = new THREE.Vector3(), p = cam.position;
       cam.getWorldDirection(d);
-      this.headlamp.target.position.copy(cam.position).addScaledVector(d, 10);
-    } else this.headlamp.intensity = 0;
+      lightPool.wantSpot(p.x, p.y, p.z, p.x + d.x * 10, p.y + d.y * 10, p.z + d.z * 10, 0xfff2dd, 3, 30, 0.7, 0.8, 1.5, -1000);
+    }
     // Station pool lights: the nearest station within reach gets both.
     let near: Box | null = null, nd = 160;
     for (const b of this.boxes) {
@@ -800,12 +792,7 @@ export class Underground {
       const d = Math.hypot(b.cx - cam.position.x, b.cz - cam.position.z);
       if (d < nd) { nd = d; near = b; }
     }
-    this.stationLights.forEach((l, i) => {
-      if (!near) { l.intensity = 0; return; }
-      const u = (i === 0 ? -0.5 : 0.5) * near.hu;
-      l.position.set(near.cx + near.ux * u, near.y1 - 1, near.cz + near.uz * u);
-      l.intensity = 6;
-    });
+    if (near) for (const u of [-0.5 * near.hu, 0.5 * near.hu]) lightPool.want(near.cx + near.ux * u, near.y1 - 1, near.cz + near.uz * u, 0xfff4e8, 6, 45, 1.2);
     // Trains held (something big tunnelling under the city): they ease to a stop where they are and
     // ease off again after; the timetable just runs that much later.
     this.metroRate += (this.metroHold ? -1 : 1) * dt / 6;
@@ -1753,15 +1740,13 @@ export class Underground {
       b.vel.y = 0;
       b.grounded = true;
       this.rideFrame = { x: car.x, z: car.z, fx: car.dx, fz: car.dz };
-      // The car's ceiling light (one of the pooled station lights: the light count never changes);
-      // now and then it flickers at speed.
+      // The car's ceiling light (from the shared pool, ahead of the station's); now and then it
+      // flickers at speed.
       const speed = Math.hypot(car.vx, car.vz);
       this.riding = { speed, accel: 0, x: car.x, y: car.y, z: car.z };
       if (this.flicker > 0) this.flicker--;
       else if (speed > 10 && Math.random() < 0.004) this.flicker = 3 + Math.floor(Math.random() * 6);
-      const l = this.stationLights[1];
-      l.position.set(car.x, car.y + CAR_H - 0.4, car.z);
-      l.intensity = this.flicker > 0 && this.flicker % 2 === 0 ? 0.6 : 2.5;
+      lightPool.want(car.x, car.y + CAR_H - 0.4, car.z, 0xfff4e8, this.flicker > 0 && this.flicker % 2 === 0 ? 0.6 : 2.5, 45, 1.2, -1000);
       return;
     }
     // A train runs into anyone on its track (below its floor): shoved aside, thrown if it is moving.

@@ -72,6 +72,7 @@ import { AdminConsole } from '../ui/AdminConsole';
 import { ShaderCounter } from '../debug/ShaderCounter';
 import { installFreezeLog } from '../debug/FreezeLog';
 import { Recorder } from '../ui/Recorder';
+import { lightPool } from '../render/lightPool';
 import { warmRigs } from '../humanoid/client/warmRigs';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
@@ -311,6 +312,8 @@ export class Game {
     this.macro = macro;
     progress('Building streets', 0.6);
     this.sky = new SkySystem(this.renderer.gl, this.renderer.scene, this.renderer.reversed);
+    // The only point / spot lights, shared by every system (a fixed, small count keeps shaders small).
+    lightPool.attach(this.renderer.scene);
     this.streamer = new CityStreamer(macro, this.pool, tex);
     this.renderer.scene.add(this.streamer.root);
     this.streamer.prepare = (o) => this.renderer.compileAsync(o);
@@ -909,6 +912,7 @@ export class Game {
       this.T('vehicles', () => this.vehicles.update(dt, this.traffic.vehicles, this.parkedList, this.renderer.camera));
       this.T('props', () => this.props.update(dt, this.renderer.camera));
       this.T('elementFx', () => this.elements.render(dt));
+      lightPool.assign(this.renderer.camera.position);
       this.T('gate', () => this.gate.update());
       this.T('render', () => { const t = performance.now(); this.graphics.render(() => this.renderer.render()); this.renderMs = performance.now() - t; });
       this.hud.update(dt);

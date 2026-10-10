@@ -4,6 +4,7 @@
  * lights at night; props can be toppled / crushed and fall as rigid bodies.
  */
 import * as THREE from 'three';
+import { lightPool } from '../render/lightPool';
 import { treeModel, shrubModel, createBarkMaterial, createLeafMaterial, createFarTreeMaterial, applyVegetationShadow, batchCap, vegetationUniforms, vegetationWarmup, TREE_SPECIES, type TreeSpecies } from './vegetation';
 import { furnitureModel, createFurnitureMaterial, furnitureUniforms, type FurnitureKind } from './furniture';
 import { PropType } from '../plan/cell';
@@ -70,7 +71,6 @@ export class PropRenderer {
   private lastFarPos = new THREE.Vector3(1e9, 0, 0);
   private grid = new Map<number, Prop[]>();
   private dirty = true;
-  private lights: THREE.PointLight[] = [];
   private falling: { prop: Prop; obj: THREE.Object3D; body: RAPIER.RigidBody; t: number }[] = [];
   private t = 0;
   private signals: Prop[] = [];
@@ -78,12 +78,6 @@ export class PropRenderer {
   stats = { props: 0, drawn: 0 };
 
   constructor(private terrain: Terrain, private warmth: number, private physics: Physics, private net: RoadNet, private signalGreen: (node: number, edge: number, offset: number) => boolean) {
-    for (let i = 0; i < 6; i++) {
-      const l = new THREE.PointLight(0xffd9a0, 0, 28, 1.6);
-      l.castShadow = false;
-      this.lights.push(l);
-      this.group.add(l);
-    }
   }
 
   addCell(cs: CellState, district: District): void {
@@ -449,7 +443,7 @@ export class PropRenderer {
   /** Real point lights from the nearest street lamps at night. */
   private updateLights(cp: THREE.Vector3): void {
     const on = G.uLampOn.value;
-    if (on < 0.05) { for (const l of this.lights) l.intensity = 0; return; }
+    if (on < 0.05) return;
     const lamps: { p: Prop; d: number }[] = [];
     this.near(cp.x, cp.z, 90, (p) => {
       if (p.broken || p.dark || !p.kind.includes('lamp')) return;
@@ -457,15 +451,13 @@ export class PropRenderer {
       if (d < 90) lamps.push({ p, d });
     });
     lamps.sort((a, b) => a.d - b.d);
-    this.lights.forEach((l, i) => {
-      const e = lamps[i];
-      if (!e) { l.intensity = 0; return; }
+    // (The shared pool lights the nearest few of all wishes: render/lightPool.)
+    for (const e of lamps.slice(0, 6)) {
       const m = furnitureModel(e.p.kind.split(':')[1] as FurnitureKind, Number(e.p.kind.split(':')[2]));
       const lp = m.lights[0]?.pos ?? [0, e.p.height * 0.95, 0];
       const c = Math.cos(e.p.yaw), s = Math.sin(e.p.yaw);
-      l.position.set(e.p.x + lp[0] * c + lp[2] * s, e.p.y + lp[1] - 0.3, e.p.z - lp[0] * s + lp[2] * c);
-      l.intensity = 60 * on;
-    });
+      lightPool.want(e.p.x + lp[0] * c + lp[2] * s, e.p.y + lp[1] - 0.3, e.p.z - lp[0] * s + lp[2] * c, 0xffd9a0, 60 * on, 28, 1.6);
+    }
   }
 
   /** Strike props near a point; impulse J (N·s). Returns number affected. */

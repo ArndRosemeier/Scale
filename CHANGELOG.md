@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.249 — 2026-10-10
+
+- **Smaller, faster shaders: one shared set of lamps.** Every lit surface's shader contains the lighting maths once for each lamp in the scene. Street lamps, room lights, the hospital ward, the metro stations and the train cars each kept their own lamps, 15 point lights and 2 spotlights in all, though only a few are lit at once. Clothing shaders grew so big that Windows took seconds to compile them. Now there is one shared set of 6 lamps and 1 spotlight, and the nearest lamps that should shine get them (room lights before street lamps; the headlamp underground before the stage light). Rule from now on: no shader may take longer than 0.1 s to compile.
+- **New shaders are spaced out.** At most five new shaders per second as before, but now at least 0.2 s apart, never several back to back.
+- **The game measures shader compile times while you play.** Shift+F11 shows how many took longer than 0.1 s and the slowest; the freeze log (Shift+F9) lists the slowest ones.
+
 ## 0.248 — 2026-10-10
 
 - **Video clips are saved as MP4** where the browser can record H.264 (current Chrome and Edge, Safari), so they play in any video player and can be uploaded anywhere. Other browsers still record WebM. Export names the file .mp4 or .webm to match.

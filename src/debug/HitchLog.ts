@@ -289,6 +289,53 @@ class HitchLogImpl {
     wrap('deleteRenderbuffer', (r: WebGLRenderbuffer | null) => { if (r) { G.targets -= rbSize.get(r) ?? 0; rbSize.delete(r); } });
   }
 
+  /** Shader budget (Arnd's rule): no shader may take longer than this to compile (ms). */
+  static readonly COMPILE_BUDGET_MS = 100;
+  /** Programs still compiling: when they were created. */
+  private compiling = new Map<WebGLProgram, { name: string; t0: number; key: string }>();
+  /** Compile times measured in play (ms), slowest kept. */
+  readonly compiles: { name: string; ms: number; key: string }[] = [];
+  compileCount = 0;
+  compileOver = 0;
+  private parallel: { COMPLETION_STATUS_KHR: number } | null | undefined;
+
+  /**
+   * Starts timing a new program's compile (in play only: at loading a hundred compile at once and
+   * each one's time is mostly waiting). Finished when the driver reports it complete
+   * (KHR_parallel_shader_compile, polled once a frame) or when a draw had to wait for it.
+   */
+  private startCompileTimer(pr: { name: string; cacheKey: string; program?: WebGLProgram }): void {
+    if (!this.armed || !pr.program || !this.renderer) return;
+    if (this.parallel === undefined) this.parallel = this.renderer.getContext().getExtension('KHR_parallel_shader_compile') as { COMPLETION_STATUS_KHR: number } | null;
+    if (!this.parallel) return;
+    this.compiling.set(pr.program, { name: pr.name || this.whoUses(pr), t0: performance.now(), key: pr.cacheKey });
+  }
+
+  private pollCompiles(): void {
+    if (!this.compiling.size || !this.renderer || !this.parallel) return;
+    const gl = this.renderer.getContext(), now = performance.now();
+    for (const [p, c] of this.compiling) {
+      if (!gl.getProgramParameter(p, this.parallel.COMPLETION_STATUS_KHR)) {
+        if (now - c.t0 > 60000) this.compiling.delete(p); // (deleted, or never coming)
+        continue;
+      }
+      this.compiling.delete(p);
+      const ms = Math.round(now - c.t0);
+      this.compileCount++;
+      if (ms > HitchLogImpl.COMPILE_BUDGET_MS) this.compileOver++;
+      this.compiles.push({ name: c.name, ms, key: c.key.slice(0, 160) });
+      this.compiles.sort((a, b) => b.ms - a.ms);
+      if (this.compiles.length > 25) this.compiles.length = 25;
+    }
+  }
+
+  /** One line on the shader budget: how many compiles in play went over 0.1 s, the slowest. */
+  compileLine(): string {
+    if (!this.compileCount) return 'shader compiles in play: none measured yet';
+    const top = this.compiles[0];
+    return `shader compiles in play: ${this.compileCount}, over 0.1 s: ${this.compileOver}${top ? `, slowest ${top.ms} ms (${top.name})` : ''}`;
+  }
+
   /** The GPU memory line for a freeze record; starts the next frame's upload count. */
   private takeMemory(): string {
     const G = this.gpu, MB = 1048576;
@@ -373,6 +420,7 @@ class HitchLogImpl {
         why = d.join(' ');
       }
       this.seenPrograms.add(pr);
+      this.startCompileTimer(pr);
       this.programNames.push(`${pr.name || this.whoUses(pr)}#${pr.id} ${why}`);
     }
     const p = progs.length, g = r.info.memory.geometries, tx = r.info.memory.textures;
@@ -472,6 +520,7 @@ class HitchLogImpl {
       if (this.list.length > this.max) this.list.shift();
     }
     // A stall in the GPU process shows as a late next frame, so the frame before counts too.
+    this.pollCompiles();
     const draws = this.takeDraws();
     const memory = this.takeMemory();
     this.checkFreeze(now, work, all, dp, dg, dt, `this frame: ${draws || 'none'} · frame before: ${this.prevDraws || 'none'}`, memory);
@@ -540,6 +589,7 @@ class HitchLogImpl {
       thisSession: this.freezes, earlierSessions: this.earlier,
       worstHitches: this.list.slice().sort((a, b) => b.work - a.work).slice(0, 15),
       frames: this.frames, avgWorkMs: +(this.workSum / Math.max(1, this.frames)).toFixed(1), totals,
+      shaderCompiles: { measured: this.compileCount, overBudget: this.compileOver, budgetMs: HitchLogImpl.COMPILE_BUDGET_MS, slowest: this.compiles },
     }, null, 1);
   }
 
