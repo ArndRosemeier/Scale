@@ -23,6 +23,7 @@
  * dev.concert.panic(), dev.concert.stop().
  */
 import * as THREE from 'three';
+import { lightPool } from '../../render/lightPool';
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role, type Citizen } from '../../sim/Population';
@@ -75,7 +76,8 @@ export class Concert {
    * Always in the scene, dark outside the show: a light coming and going would change every lit
    * material's shader (a recompile of the whole city).
    */
-  private wash: THREE.SpotLight | null = null;
+  /** The stage's wash light (position, target): drawn from the shared pool's spot (render/lightPool). */
+  private wash: { x: number; y: number; z: number; tx: number; ty: number; tz: number } | null = null;
   /** Phone lights held up in the stands during the songs at night (drawn, not lights). */
   private phones: THREE.InstancedMesh | null = null;
   /** Dev: no show this day (dev.concert.stop() during the evening). */
@@ -112,10 +114,7 @@ export class Concert {
     g.collision.obstacleProviders.push(this.provider);
     g.crowd.figureLists.push(this.figures);
     const P = this.plan, [wx, wz] = P.onStage(STAGE.d + 9, 0), [tx, tz] = P.onStage(STAGE.d * 0.55, 0);
-    this.wash = new THREE.SpotLight(0xfff0e2, 0, 45, 0.72, 0.55, 2);
-    this.wash.position.set(wx, P.stage.deckY + 9, wz);
-    this.wash.target.position.set(tx, P.stage.deckY + 1, tz);
-    g.renderer.scene.add(this.wash, this.wash.target);
+    this.wash = { x: wx, y: P.stage.deckY + 9, z: wz, tx, ty: P.stage.deckY + 1, tz };
   }
 
   /** A street band's piece for a style (public/music/live.json `bands`), or null (none yet). */
@@ -184,7 +183,8 @@ export class Concert {
       const spec = (lo: number, hi: number) => (this.stream ? this.stream.s.level(lo, hi) : 0);
       this.stage.update(dt, this.time, this.energy, song ? this.beat : NaN, night, live, spec);
     }
-    if (this.wash) this.wash.intensity = this.stage && S && !S.cancelled ? WASH * (0.25 + 0.75 * clamp(G.uNight.value, 0, 1)) * (song ? 1 : 0.6) : 0;
+    const W = this.wash;
+    if (W && this.stage && S && !S.cancelled) lightPool.wantSpot(W.x, W.y, W.z, W.tx, W.ty, W.tz, 0xfff0e2, WASH * (0.25 + 0.75 * clamp(G.uNight.value, 0, 1)) * (song ? 1 : 0.6), 45, 0.72, 0.55, 2);
     // The beat for everyone grooving (CrowdRenderer): cycles of GROOVE_PERIOD (two beats each).
     g.crowd.groovePhase = song && Number.isFinite(this.beat) ? this.groove : null;
     // People.

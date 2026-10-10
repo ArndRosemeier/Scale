@@ -18,6 +18,7 @@
  * Dev: dev.defeat.down(), dev.defeat.status().
  */
 import * as THREE from 'three';
+import { lightPool } from '../../render/lightPool';
 import type { Game } from '../Game';
 import type { HurtKind } from '../PlayerHealth';
 import type { BuildingRef } from '../../world/WorldIndex';
@@ -73,7 +74,6 @@ export class Defeat {
   private cuffed = false;
   /** The roof pad's size (smaller on a cramped roof). */
   private padScale = 1;
-  private lights: THREE.PointLight[] = [];
   stats = { defeats: 0, rescues: 0, gameOvers: 0, arrests: 0, skips: 0, last: '' };
 
   constructor(private g: Game) {
@@ -81,13 +81,6 @@ export class Defeat {
     this.ward = new HospitalWard(this.name);
     this.ui = new DefeatUi(g);
     g.renderer.scene.add(this.fleet.group, this.ward.group);
-    // The ward's lights live in the scene from the start, off (a light appearing later would
-    // recompile every material).
-    for (let i = 0; i < 3; i++) {
-      const l = new THREE.PointLight(0xeef6ff, 0, 18, 1.2);
-      this.lights.push(l);
-      g.renderer.scene.add(l);
-    }
     g.collision.room = this.ward.room;
     g.collision.obstacleProviders.push(this.ward.provider);
   }
@@ -244,10 +237,8 @@ export class Defeat {
     this.fleet.update(dt);
     this.ward.update(dt, this.inWard ? g.player.pos : null);
     const o = this.ward.origin, lit = this.ward.open;
-    this.lights.forEach((l, i) => {
-      l.intensity = lit ? 4 : 0;
-      if (lit) l.position.set(o.x, o.y + (i === 2 ? 2.6 : 3.9), o.z + [WARD.pod.z + 1, 4, WARD.hz + 1.6][i]);
-    });
+    // The ward's three ceiling lights (from the shared pool: render/lightPool).
+    if (lit) for (let i = 0; i < 3; i++) lightPool.want(o.x, o.y + (i === 2 ? 2.6 : 3.9), o.z + [WARD.pod.z + 1, 4, WARD.hz + 1.6][i], 0xeef6ff, 4, 18, 1.2, -30);
     if (this.ward.doorsMoved) g.audio.play('door_open', this.ward.origin.x, this.ward.origin.y + 1.5, this.ward.origin.z + WARD.hz, 0.6, 1.3, 5, g.renderer.camera.position);
     if (this.phase === 'idle') return;
     this.t += dt;

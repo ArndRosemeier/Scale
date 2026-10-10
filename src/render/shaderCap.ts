@@ -1,8 +1,8 @@
 /**
- * Hard cap on new shaders: at most `maxPerSecond` per second, and at most one new-shader start per
- * frame, once the game runs (the start-up warm-up compiles at full speed). Content that would need
- * a new shader past the cap stays hidden until there is room: looking odd for a moment beats a
- * hitch.
+ * Hard cap on new shaders: at most `maxPerSecond` per second, spaced evenly (one start at most
+ * every 1/maxPerSecond s, so five never come back to back), once the game runs (the start-up
+ * warm-up compiles at full speed). Content that would need a new shader past the cap stays hidden
+ * until there is room: looking odd for a moment beats a hitch.
  *
  * WebGL: the shader gate hands new meshes to the compiler only while there is room. WebGPU: every
  * background node build waits for room (webgpu/index.ts, oneNodeBuildAtATime). Shaders that start
@@ -25,7 +25,7 @@ class ShaderCap {
 
   /** Book new shaders (whoever started them). */
   book(n: number): void {
-    if (n > 0) this.spent.push([performance.now(), n]);
+    if (n > 0) { this.spent.push([performance.now(), n]); this.lastAt = performance.now(); }
   }
 
   /** Once per frame, before anything is started. */
@@ -39,8 +39,14 @@ class ShaderCap {
     return n;
   }
 
+  /** When the last new shader was booked. */
+  private lastAt = -1e9;
+
   room(): boolean {
-    return !this.active || this.maxPerSecond <= 0 || (!this.frameTaken && this.lastSecond < this.maxPerSecond);
+    if (!this.active || this.maxPerSecond <= 0) return true;
+    // Spaced, not bunched (Arnd: "no 0.5 second hitch"): with each compile under 0.1 s, at most
+    // half of any stretch of time goes to shaders.
+    return !this.frameTaken && performance.now() - this.lastAt >= 1000 / this.maxPerSecond && this.lastSecond < this.maxPerSecond;
   }
 
   /** Something that will build new shaders starts in this frame. */

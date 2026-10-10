@@ -127,3 +127,7 @@ change one, change the other. The twin's header comment names the GLSL file it m
 Bone indices (`skinIndex`) are made with `skinIndexAttribute` (`src/render/skinIndex.ts`): floats on
 WebGL. Any vertex input the shader declares as float but that is fed integers makes ANGLE on Windows
 compile a second shader variant at the first draw (seconds, no three.js program shows it).
+
+Point and spot lights come from the shared pool (`lightPool.want` / `wantSpot` in
+`src/render/lightPool.ts`), never `new THREE.PointLight` in game code: every light is written out
+in every lit shader, and Arnd's rule is that no shader may take more than 0.1 s to compile on his PC.
