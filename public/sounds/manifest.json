@@ -372,7 +372,7 @@
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "quadcopter rotor buzz loop (procedural, tools/synthDroneBuzz.mjs)"
+    "description": "quadcopter rotor buzz loop (Seed Audio via tools/sfx)"
   },
   "dash_whoosh": {
     "files": [
@@ -388,7 +388,7 @@
     ],
     "loop": false,
     "gain": 0.45,
-    "description": "a few pigeons flushing, wing claps (procedural, tools/synthBirds.mjs)"
+    "description": "a few pigeons flushing, wing claps (Seed Audio via tools/sfx)"
   },
   "siren_loop": {
     "files": [
@@ -436,7 +436,7 @@
     ],
     "loop": true,
     "gain": 0.7,
-    "description": "inside a running metro carriage: rumble, wheel hiss, clack-clack over rail joints (procedural, tools/synthMetro.mjs)"
+    "description": "inside a running metro carriage: rumble, wheel hiss, clack-clack over rail joints (Seed Audio via tools/sfx)"
   },
   "metro_pass": {
     "files": [
@@ -444,7 +444,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "oncoming metro train rushing past in the tunnel (procedural, tools/synthMetro.mjs)"
+    "description": "oncoming metro train rushing past in the tunnel (Seed Audio via tools/sfx)"
   },
   "civil_siren": {
     "files": [
@@ -452,7 +452,7 @@
     ],
     "loop": true,
     "gain": 0.8,
-    "description": "civil-defence / evacuation siren, two-tone motor siren winding up and down with city echo, seamless loop (procedural, tools/synthThreats.mjs)"
+    "description": "civil-defence / evacuation siren, two-tone motor siren winding up and down with city echo, seamless loop (Seed Audio via tools/sfx)"
   },
   "robot_glitch": {
     "files": [
@@ -485,7 +485,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "the Strider’s two-tone roar: a bellow sliding into a rasping upper tone, guttural fall, city echo (procedural, tools/synthStrider.mjs)"
+    "description": "the Strider’s two-tone roar: a bellow sliding into a rasping upper tone, guttural fall, city echo (Seed Audio via tools/sfx)"
   },
   "strider_charge": {
     "files": [
@@ -501,7 +501,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "breath attack: roaring, tearing plasma rush with a sizzling top (procedural, tools/synthStrider.mjs)"
+    "description": "breath attack: roaring, tearing plasma rush with a sizzling top (Seed Audio via tools/sfx)"
   },
   "tremor_rumble": {
     "files": [
@@ -524,8 +524,8 @@
       "terrace_clatter.wav"
     ],
     "loop": true,
-    "gain": 0.5,
-    "description": "busy café terrace: cups set on saucers, spoons and cutlery clinking over a soft room tone, no voices (procedural loop, tools/synthTerrace.mjs)"
+    "gain": 0.541,
+    "description": "busy café terrace: cups set on saucers, spoons and cutlery clinking over a soft room tone, no voices (Seed Audio via tools/sfx)"
   },
   "under_drip": {
     "files": [
@@ -543,7 +543,7 @@
     ],
     "loop": true,
     "gain": 0.55,
-    "description": "water falling through a street grate into a basin underground, gurgles and splashes (procedural, tools/synthUnder.mjs)"
+    "description": "water falling through a street grate into a basin underground, gurgles and splashes (Seed Audio via tools/sfx)"
   },
   "under_hum": {
     "files": [
@@ -628,7 +628,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "distant thunder: a low roll, no crack (procedural, tools/synthWeather.mjs)"
+    "description": "distant thunder: a low roll, no crack (Seed Audio via tools/sfx)"
   },
   "army_rifle": {
     "files": [
@@ -644,7 +644,7 @@
     ],
     "loop": false,
     "gain": 0.85,
-    "description": "an APC autocannon: four heavy thuds with a metallic ring and street echo (procedural, tools/synthArmy.mjs)"
+    "description": "an APC autocannon: four heavy thuds with a metallic ring and street echo (Seed Audio via tools/sfx)"
   },
   "army_tank": {
     "files": [
@@ -668,7 +668,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a jet flyby: rising roar, a crack overhead, falling rumble (procedural, tools/synthArmy.mjs)"
+    "description": "a jet flyby: rising roar, a crack overhead, falling rumble (Seed Audio via tools/sfx)"
   },
   "army_rocket": {
     "files": [
@@ -676,7 +676,7 @@
     ],
     "loop": false,
     "gain": 0.85,
-    "description": "a rocket salvo leaving the pods: a string of whooshes and hiss (procedural, tools/synthArmy.mjs)"
+    "description": "a rocket salvo leaving the pods: a string of whooshes and hiss (Seed Audio via tools/sfx)"
   },
   "army_explosion": {
     "files": [
@@ -715,8 +715,8 @@
       "army_whistle.wav"
     ],
     "loop": false,
-    "gain": 0.7,
-    "description": "an incoming shell whistle falling in pitch (procedural, tools/synthArmy.mjs)"
+    "gain": 1.333,
+    "description": "an incoming shell whistle falling in pitch (Seed Audio via tools/sfx)"
   },
   "nuke_siren": {
     "files": [
@@ -788,7 +788,7 @@
     ],
     "loop": true,
     "gain": 0.5,
-    "description": "the glowing caverns of the Lumen: a soft airy hum, far drips, glassy tones (procedural, tools/synthDeep.mjs)"
+    "description": "the glowing caverns of the Lumen: a soft airy hum, far drips, glassy tones (Seed Audio via tools/sfx)"
   },
   "deep_murk": {
     "files": [
@@ -804,7 +804,7 @@
     ],
     "loop": true,
     "gain": 0.6,
-    "description": "a star shard deep underground: a slow heavy throb under a shimmering crystal hum (procedural, tools/synthDeep.mjs)"
+    "description": "a star shard deep underground: a slow heavy throb under a shimmering crystal hum (Seed Audio via tools/sfx)"
   },
   "murk_growl": {
     "files": [
@@ -813,7 +813,7 @@
     ],
     "loop": false,
     "gain": 0.6,
-    "description": "a wet gurgling growl (procedural, tools/synthDeep.mjs)"
+    "description": "a wet gurgling growl (mix of Seed Audio and procedural takes, tools/sfx)"
   },
   "murk_spit": {
     "files": [
@@ -870,7 +870,7 @@
     ],
     "loop": false,
     "gain": 0.5,
-    "description": "a wobbling, stretching membrane parting (procedural, tools/synthDeep.mjs)"
+    "description": "a wobbling, stretching membrane parting (Seed Audio via tools/sfx)"
   },
   "street_guitar": {
     "files": [
@@ -926,7 +926,7 @@
     ],
     "loop": false,
     "gain": 0.6,
-    "description": "a quick snap of mandibles with a crunch (procedural, tools/synthBrood.mjs)"
+    "description": "a quick snap of mandibles with a crunch (Seed Audio via tools/sfx)"
   },
   "under_engine": {
     "files": [
@@ -934,7 +934,7 @@
     ],
     "loop": true,
     "gain": 0.45,
-    "description": "a pump engine running in an underground machine hall: heavy rhythmic thump, hiss (procedural, tools/synthSewer.mjs)"
+    "description": "a pump engine running in an underground machine hall: heavy rhythmic thump, hiss (Seed Audio via tools/sfx)"
   },
   "under_gears": {
     "files": [
@@ -1030,7 +1030,7 @@
     ],
     "loop": false,
     "gain": 0.7,
-    "description": "Parent Warden disc: deep stern two-note tone over the block (procedural, tools/synthWardens.mjs)"
+    "description": "Parent Warden disc: deep stern two-note tone over the block (Seed Audio via tools/sfx)"
   },
   "burrower_rumble": {
     "files": [
@@ -1046,7 +1046,7 @@
     ],
     "loop": false,
     "gain": 0.8,
-    "description": "an omen of the Burrower: a long low rumble from under the street, faint grinding (procedural, tools/synthBurrower.mjs)"
+    "description": "an omen of the Burrower: a long low rumble from under the street, faint grinding (Seed Audio via tools/sfx)"
   },
   "burrower_breach": {
     "files": [
@@ -1062,7 +1062,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "the Burrower's call: a chorus of shrieking, grinding voices over a wet low gurgle, ending in a clicking rattle (procedural, tools/synthBurrower.mjs)"
+    "description": "the Burrower's call: a chorus of shrieking, grinding voices over a wet low gurgle, ending in a clicking rattle (Seed Audio via tools/sfx)"
   },
   "burrower_slam": {
     "files": [
@@ -1070,7 +1070,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "the Burrower's head coming down on the street: a heavy thud, a crunch, a rumbling tail (procedural, tools/synthBurrower.mjs)"
+    "description": "the Burrower's head coming down on the street: a heavy thud, a crunch, a rumbling tail (Seed Audio via tools/sfx)"
   },
   "burrower_dive": {
     "files": [
@@ -1078,7 +1078,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "the Burrower diving back into the street: a rush of air, soil torn up, grinding away below (procedural, tools/synthBurrower.mjs)"
+    "description": "the Burrower diving back into the street: a rush of air, soil torn up, grinding away below (Seed Audio via tools/sfx)"
   },
   "leviathan_surface": {
     "files": [
@@ -1118,7 +1118,7 @@
     ],
     "loop": false,
     "gain": 0.9,
-    "description": "the Roc's cry far off and high up (its omen): duller, with more of the sky's echo (procedural, tools/synthRoc.mjs)"
+    "description": "the Roc's cry far off and high up (Seed Audio via tools/sfx)"
   },
   "roc_flap": {
     "files": [
@@ -1134,7 +1134,7 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "a giant mech's footfall: a deep thud, steel clanging on steel, a hydraulic hiss (procedural, tools/synthMech.mjs)"
+    "description": "a giant mech's footfall: a deep thud, steel clanging on steel, a hydraulic hiss (Seed Audio via tools/sfx)"
   },
   "mech_launch": {
     "files": [
@@ -1142,7 +1142,7 @@
     ],
     "loop": false,
     "gain": 0.8,
-    "description": "a missile leaving the mech's pod: a sharp pop and a tearing rush of rocket exhaust (procedural, tools/synthMech.mjs)"
+    "description": "a missile leaving the mech's pod: a sharp pop and a tearing rush of rocket exhaust (Seed Audio via tools/sfx)"
   },
   "mech_cannon": {
     "files": [
@@ -1158,15 +1158,15 @@
     ],
     "loop": false,
     "gain": 1,
-    "description": "the mech's heat vents opening: a clunk and a long roaring hiss of steam (procedural, tools/synthMech.mjs)"
+    "description": "the mech's heat vents opening: a clunk and a long roaring hiss of steam (Seed Audio via tools/sfx)"
   },
   "mech_alarm": {
     "files": [
       "mech_alarm.wav"
     ],
     "loop": false,
-    "gain": 0.9,
-    "description": "the mech's warning klaxon: a two-tone blaring horn echoing off the town (procedural, tools/synthMech.mjs)"
+    "gain": 1.407,
+    "description": "the mech's warning klaxon: a two-tone blaring horn echoing off the town (Seed Audio via tools/sfx)"
   },
   "ref_whistle": {
     "files": [

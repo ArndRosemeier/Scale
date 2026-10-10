@@ -152,8 +152,8 @@ def audio_of(d, name):
 def build(sid, spec, files, raw, ref):
     d = os.path.join(raw, sid)
     clips = sorted(f for f in os.listdir(d) if f.endswith('.json') and not f.endswith('.b.json'))
-    # Sound Studio candidates (candN) are one take each; video clips (clipN) hold three
-    single = spec['single'] or any(c.startswith('cand') for c in clips)
+    # Sound Studio (candN) and Seed (seedN) takes are one sound each; video clips (clipN) hold three
+    single = spec['single'] or any(c.startswith(('cand', 'r1cand', 'seed')) for c in clips)
     if not clips:
         return None
     olds = [load(os.path.join(ref, f)) for f in files]
