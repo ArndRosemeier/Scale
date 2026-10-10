@@ -13,6 +13,7 @@ import { probeGpu, maybeShowGpuHint } from './GpuHint';
 import { isTouch } from './touch';
 import { HelpDialog, type HelpTab } from './HelpDialog';
 import { isAction, keyLabel } from '../game/keybinds';
+import { clipStore, clipTime, exportClip, CLIP_MAX_S } from './Recorder';
 
 export class Menu {
   private el: HTMLDivElement;
@@ -50,6 +51,7 @@ export class Menu {
         <div class="row"><label>City events</label><select id="pEvents" title="How often the city is hit by events (rogue robots and, later, worse); they are heralded by strange signs first">
           <option value="off">Off</option><option value="rare">Rare</option><option value="normal">Normal</option><option value="frequent">Frequent</option>
         </select></div>
+        <div class="row"><label>Video clip</label><span id="pClip" class="sub"></span><button type="button" id="pClipExport" title="Save the last recorded clip as a file">Export</button></div>
         <div class="row" id="pInvRow"><label>Invulnerable</label><input id="pInv" type="checkbox"></div>
         <div class="buttons"><button id="pResume">Resume</button><button id="pHelp">Help</button><button id="pNew">New city…</button></div>
       </div>`;
@@ -92,6 +94,7 @@ export class Menu {
     $<HTMLSelectElement>('pCrime').onchange = (e) => { if (game.crime) game.crime.setting = (e.target as HTMLSelectElement).value as typeof game.crime.setting; };
     $<HTMLSelectElement>('pEvents').onchange = (e) => { if (game.threats) game.threats.setting = (e.target as HTMLSelectElement).value as typeof game.threats.setting; };
     $<HTMLInputElement>('pInv').onchange = (e) => { if (game.crime) { game.crime.health.invulnerable = (e.target as HTMLInputElement).checked; if (game.crime.health.invulnerable) game.crime.health.reset(); } };
+    $<HTMLButtonElement>('pClipExport').onclick = () => void exportClip().then((ok) => { if (!ok) this.syncClip(); });
     $<HTMLButtonElement>('pResume').onclick = () => this.close();
     $<HTMLButtonElement>('pHelp').onclick = () => this.toggleHelp(true);
     $<HTMLButtonElement>('pNew').onclick = () => { location.href = location.pathname; };
@@ -141,9 +144,25 @@ export class Menu {
     document.getElementById('pSize')!.textContent = `${g.player.height < 1 ? (g.player.height * 100).toFixed(0) + ' cm' : g.player.height.toFixed(1) + ' m'}`;
   }
 
+  /** The pause menu's clip row: the stored clip, or how to record one. */
+  syncClip(): void {
+    const info = document.getElementById('pClip')!, btn = document.getElementById('pClipExport') as HTMLButtonElement;
+    const none = () => {
+      info.textContent = `None yet: ${keyLabel('record') || 'the Record key'} records up to ${CLIP_MAX_S} s`;
+      btn.disabled = true;
+    };
+    void clipStore.get().then((c) => {
+      if (!c) { none(); return; }
+      const d = new Date(c.at);
+      info.textContent = `${clipTime(c.ms)}, ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      btn.disabled = false;
+    }, none);
+  }
+
   show(): void {
     this.open = true;
     this.sync();
+    this.syncClip();
     this.el.classList.add('open');
     if (document.pointerLockElement) document.exitPointerLock();
   }

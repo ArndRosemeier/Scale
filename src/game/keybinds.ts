@@ -66,6 +66,7 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'minimap', group: 'view', label: 'Minimap on / off', defaults: ['KeyN'] },
   { id: 'hourDown', group: 'view', label: 'Time of day −1 h', defaults: ['BracketLeft'] },
   { id: 'hourUp', group: 'view', label: 'Time of day +1 h', defaults: ['BracketRight'] },
+  { id: 'record', group: 'view', label: 'Record a clip', info: 'Start / stop recording the game picture with its sound (no HUD), up to 30 s. A new clip replaces the last one; export it from the Esc menu', defaults: ['PrintScreen', 'F9'] },
   { id: 'freeCam', group: 'view', label: 'Free camera', defaults: ['F8'] },
   { id: 'help', group: 'view', label: 'Help', info: 'This dialog', defaults: ['KeyH'] },
 ];
@@ -187,7 +188,7 @@ const NAMES: Record<string, string> = {
   Backslash: '\\', IntlBackslash: '<', Comma: ',', Period: '.', Slash: '/',
   ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
   NumpadAdd: 'Num +', NumpadSubtract: 'Num −', NumpadMultiply: 'Num *', NumpadDivide: 'Num /',
-  NumpadEnter: 'Num Enter', NumpadDecimal: 'Num ,', Insert: 'Ins', Delete: 'Del', PageUp: 'Page Up', PageDown: 'Page Down',
+  NumpadEnter: 'Num Enter', NumpadDecimal: 'Num ,', PrintScreen: 'Print', Insert: 'Ins', Delete: 'Del', PageUp: 'Page Up', PageDown: 'Page Down',
 };
 
 /** Display name of a key code. */

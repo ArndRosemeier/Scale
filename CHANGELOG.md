@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.241 — 2026-10-10
+
+- **Record video clips.** Press **Print** (or **F9**) to record the game, and press it again to stop; a recording stops on its own after 30 seconds. A red REC counter at the top shows it is running. The clip has the game's sound but not the HUD. Only the last clip is kept in the browser, and a new one replaces it. Open the **Esc** menu to export it as a .webm file. The key can be changed in Help › Keys. Windows often keeps the Print key for its own screenshots: if Print opens the Snipping Tool instead, use F9. While recording, automatic graphics quality keeps its level, so the picture size doesn't change mid-clip.
 ## 0.240 — 2026-10-10
 
 - **No more flickering at the stadium gates.** Through each gate you could look into the open ends of the stands, where inner walls lie on top of each other and flicker. The stands are now closed at the gates by a solid end wall that follows the seat rows. The steps down through the gates also ended a few centimetres from the ground and flickered against it; they now stay clear of it. The sides of the flights from the pitch up into the stands no longer overlap and flicker either.

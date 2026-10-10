@@ -62,6 +62,8 @@ export function categoryOf(id: string): SoundCategory {
 export class Audio {
   ctx: AudioContext | null = null;
   private master!: GainNode;
+  /** The last node before the speakers (after the limiter): what the clip recorder taps. */
+  private out: AudioNode | null = null;
   private sfxBus!: GainNode;
   private ambBus!: GainNode;
   /** One gain per category between the sources and the buses (the sound mix). */
@@ -97,6 +99,7 @@ export class Audio {
       const comp = this.ctx.createDynamicsCompressor();
       comp.threshold.value = -10; comp.ratio.value = 6; comp.attack.value = 0.003; comp.release.value = 0.25;
       this.master.connect(comp).connect(this.ctx.destination);
+      this.out = comp;
       this.sfxBus = this.ctx.createGain();
       this.ambBus = this.ctx.createGain();
       this.sfxBus.connect(this.master);
@@ -417,6 +420,19 @@ export class Audio {
     this.volume = v;
     if (v > 0) this.muted = false;
     this.apply();
+  }
+
+  /** A live copy of everything the game plays, as heard (for the clip recorder); null before
+   *  the first sound. Hand it back to `untap` when done. */
+  tap(): MediaStreamAudioDestinationNode | null {
+    if (!this.ctx || !this.out) return null;
+    const d = this.ctx.createMediaStreamDestination();
+    this.out.connect(d);
+    return d;
+  }
+
+  untap(d: MediaStreamAudioDestinationNode): void {
+    try { this.out?.disconnect(d); } catch { /* already gone */ }
   }
 
   setMuted(m: boolean): void {

@@ -4736,4 +4736,24 @@ section('start screen skyline', async () => {
   }
 });
 
+section('clip duration', async () => {
+  // A recorder-style WebM head: EBML header, Segment of unknown size, Info (scale 1 ms), a Cluster.
+  const { withWebmDuration } = await import('../src/ui/webmDuration');
+  const head = [0x1a, 0x45, 0xdf, 0xa3, 0x84, 0x42, 0x82, 0x81, 0x77];
+  const seg = [0x18, 0x53, 0x80, 0x67, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+  const info = [0x15, 0x49, 0xa9, 0x66, 0x87, 0x2a, 0xd7, 0xb1, 0x83, 0x0f, 0x42, 0x40];
+  const cluster = [0x1f, 0x43, 0xb6, 0x75, 0x81, 0x00];
+  const read = async (b: Blob): Promise<number | null> => {
+    const u = new Uint8Array(await b.arrayBuffer());
+    for (let i = 0; i + 11 <= u.length; i++) if (u[i] === 0x44 && u[i + 1] === 0x89 && u[i + 2] === 0x88) return new DataView(u.buffer).getFloat64(i + 3);
+    return null;
+  };
+  const a = await withWebmDuration(new Blob([new Uint8Array([...head, ...seg, ...info, ...cluster])]), 12345);
+  check(await read(a) === 12345, `duration written into the clip (${await read(a)})`);
+  const b = await withWebmDuration(a, 678);
+  check(await read(b) === 678 && b.size === a.size, 'an existing duration is overwritten in place');
+  const junk = new Blob([new Uint8Array([1, 2, 3, 4])]);
+  check(await withWebmDuration(junk, 1) === junk, 'not a WebM: left as it is');
+});
+
 await runSections(import.meta.url);

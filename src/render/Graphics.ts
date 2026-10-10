@@ -82,6 +82,9 @@ export class Graphics {
   private settle = SETTLE_S;
   private slowWins = 0;
   private fastWins = 0;
+  /** Auto keeps the level it is on while this is set (a clip is being recorded: no mid-clip
+   *  resolution changes). */
+  hold = false;
   /** Called after auto changed the level (the pause menu shows it). */
   onChange: ((level: GraphicsLevel, why: string) => void) | null = null;
 
@@ -148,6 +151,7 @@ export class Graphics {
   frame(frameMs: number, simMs: number, paused: boolean): void {
     if (!this.auto || !this.targets) return;
     const g = this.timer?.poll();
+    if (this.hold) { this.gpus.length = 0; return; }
     if (g !== undefined && g !== null) this.gpus.push(g);
     // Hidden tabs, hitches (streaming, compiles), the pause menu and background shader compiles
     // (`paused`) are no measure of the GPU.

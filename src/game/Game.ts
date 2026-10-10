@@ -71,6 +71,7 @@ import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { ShaderCounter } from '../debug/ShaderCounter';
 import { installFreezeLog } from '../debug/FreezeLog';
+import { Recorder } from '../ui/Recorder';
 import { warmRigs } from '../humanoid/client/warmRigs';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
@@ -195,6 +196,8 @@ export class Game {
   rural!: RuralStreamer;
   flightFx!: FlightFX;
   menu!: Menu;
+  /** The Record key's clip recorder (src/ui/Recorder.ts). */
+  recorder!: Recorder;
   /** On-screen controls for touch screens (shown in touch mode). */
   touch!: TouchControls;
   map!: GameMap;
@@ -593,6 +596,8 @@ export class Game {
     this.renderer.scene.add(this.flightFx.group);
     this.hud = new Hud(this);
     this.menu = new Menu(this);
+    this.recorder = new Recorder(this, this.renderer.gl.domElement);
+    this.recorder.onSaved = () => this.menu.syncClip();
     this.setupPowers();
     this.touch = new TouchControls(this);
     installDevtools(this);
