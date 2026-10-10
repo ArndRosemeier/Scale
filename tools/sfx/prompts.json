@@ -1,0 +1,189 @@
+{
+ "_doc": "Lyria prompts for the procedural sounds (tools/sfx/generate.py). kind: shot = separate takes cut apart, loop = one steady recording looped. Ids are public/sounds/manifest.json ids; files keep their names.",
+ "strider_step": {
+  "kind": "shot",
+  "sound": "the footfall of a 40 metre tall monster on a city street: a huge sub-bass boom, the ground thumping, debris and windows rattling, a long rolling rumble"
+ },
+ "strider_roar": {
+  "kind": "shot",
+  "sound": "a colossal monster roaring over a city like a giant kaiju: a deep bellow sliding up into a rasping, screeching upper tone, then a guttural fall, echoing off tall buildings"
+ },
+ "strider_charge": {
+  "kind": "shot",
+  "sound": "a giant monster charging its energy breath: a rising electric hum that swells and builds with crackling static and sparks"
+ },
+ "strider_breath": {
+  "kind": "shot",
+  "sound": "a giant monster's plasma breath attack: a roaring, tearing jet of fire and plasma rushing out with a sizzling, crackling top"
+ },
+ "tremor_rumble": {
+  "kind": "shot",
+  "sound": "an earth tremor far away: the ground trembling with a low deep rumble, windows and loose things faintly rattling"
+ },
+ "car_alarm": {
+  "kind": "shot",
+  "sound": "a parked car's alarm going off on a city street: an electronic whoop followed by a warbling siren pattern"
+ },
+ "civil_siren": {
+  "kind": "loop",
+  "sound": "a civil defence evacuation siren, a mechanical motor siren winding up and down slowly over a whole city, echoing between buildings"
+ },
+ "nuke_siren": {
+  "kind": "loop",
+  "sound": "an air raid attack warning, a mechanical motor siren wailing up and down quickly, a second rotor a fifth higher, echoing over a whole city"
+ },
+ "robot_glitch": {
+  "kind": "shot",
+  "sound": "a robot malfunctioning: stuttering electronic bleeps at jumping pitches, bit-crushed digital buzz, a falling boop"
+ },
+ "robot_hostile": {
+  "kind": "shot",
+  "sound": "a robot turning hostile: a servo motor whine winding up, then a harsh aggressive two-tone electronic chirp over an electric buzz"
+ },
+ "burrower_rumble": {
+  "kind": "loop",
+  "sound": "a giant worm tunnelling right under a city street: deep earth rumble, rock grinding and crunching, slow surging"
+ },
+ "burrower_rumble_far": {
+  "kind": "shot",
+  "sound": "a long low rumble from deep under a street, faint grinding of rock, swelling and fading away"
+ },
+ "burrower_breach": {
+  "kind": "shot",
+  "sound": "a city street caving in: asphalt cracking and splitting, a deep collapse boom, then debris and rubble raining down"
+ },
+ "burrower_roar": {
+  "kind": "shot",
+  "sound": "a giant sandworm monster's call: a chorus of shrieking grinding creature voices over a wet low gurgle, ending in a clicking rattle"
+ },
+ "burrower_slam": {
+  "kind": "shot",
+  "sound": "a giant monster's head slamming down onto a street: a heavy ground thud, asphalt crunching, a rumbling tail"
+ },
+ "burrower_dive": {
+  "kind": "shot",
+  "sound": "a giant worm diving back into the ground: a rush of air, soil and stones torn up, grinding rumble going away below"
+ },
+ "leviathan_surface": {
+  "kind": "shot",
+  "sound": "a huge sea monster surfacing in a river: a deep surge of water heaving up, a big wash and spray splashing down"
+ },
+ "leviathan_roar": {
+  "kind": "shot",
+  "sound": "a gigantic sea monster's call: a deep wet bellow with a whale-like moan and a gurgle, echoing over water"
+ },
+ "leviathan_slap": {
+  "kind": "shot",
+  "sound": "a giant wet tentacle slapping down hard on a wooden deck: a heavy wet thud and splatter"
+ },
+ "roc_screech": {
+  "kind": "shot",
+  "sound": "a gigantic eagle screaming: a harsh, rough raptor cry 'kee-eeer' falling in pitch, echoing off buildings",
+  "scene": "Low angle shot of a gigantic eagle, as big as an airplane, swooping between skyscrapers and screaming"
+ },
+ "roc_cry_far": {
+  "kind": "shot",
+  "sound": "a giant eagle's cry far away high in the sky, distant and dull, with a long echo",
+  "scene": "Wide shot of a city skyline, a gigantic eagle circling far away high in the sky and crying"
+ },
+ "roc_flap": {
+  "kind": "shot",
+  "sound": "a single beat of enormous wings: a great whoomp of air with a low thump"
+ },
+ "mech_step": {
+  "kind": "shot",
+  "sound": "a giant robot mech's footstep: a deep heavy thud, steel clanging on steel, a hydraulic hiss"
+ },
+ "mech_launch": {
+  "kind": "shot",
+  "sound": "a missile launching from a pod: a sharp pop and a tearing rush of rocket exhaust flying away"
+ },
+ "mech_cannon": {
+  "kind": "shot",
+  "sound": "a short burst of a rotary cannon: rapid hard gunshots over a spinning motor whine"
+ },
+ "mech_vent": {
+  "kind": "shot",
+  "sound": "a giant machine's heat vents opening: a heavy metal clunk and a long roaring hiss of steam"
+ },
+ "mech_alarm": {
+  "kind": "shot",
+  "sound": "a giant war machine's warning klaxon: a blaring two-tone horn, echoing off buildings"
+ },
+ "brood_chitter": {
+  "kind": "loop",
+  "sound": "a swarm of insect-like creatures: dry clicking, rasping and chirping from many small bodies, claws scrabbling on stone"
+ },
+ "brood_screech": {
+  "kind": "shot",
+  "sound": "a small insect monster shrieking: a short rasping squeal"
+ },
+ "brood_bite": {
+  "kind": "shot",
+  "sound": "a quick snap of insect mandibles with a crunch, very short"
+ },
+ "army_rifle": {
+  "kind": "shot",
+  "sound": "a squad of soldiers firing assault rifles: a ragged burst of sharp gunshot cracks slapping off city walls"
+ },
+ "army_autocannon": {
+  "kind": "shot",
+  "sound": "an armoured vehicle's autocannon firing four heavy shots: deep thuds with a metallic ring and street echo"
+ },
+ "army_tank": {
+  "kind": "shot",
+  "sound": "a tank cannon firing: a hard crack and a deep boom rolling through city streets"
+ },
+ "army_rotor": {
+  "kind": "loop",
+  "sound": "an attack helicopter hovering close: steady rotor blade slap over a turbine whine"
+ },
+ "army_jet": {
+  "kind": "shot",
+  "sound": "a fighter jet flying low overhead: a rising roar, a loud crack overhead, a falling rumble going away"
+ },
+ "army_rocket": {
+  "kind": "shot",
+  "sound": "a salvo of rockets launching: a fast string of whooshes and hissing exhaust"
+ },
+ "army_explosion": {
+  "kind": "shot",
+  "sound": "an artillery shell exploding in a street: a crack, a boom, debris rattling down"
+ },
+ "army_bomb": {
+  "kind": "shot",
+  "sound": "a big bomb exploding: a huge deep blast with a long rolling rumble"
+ },
+ "army_hit": {
+  "kind": "shot",
+  "sound": "a tank shell striking the thick armoured hide of a giant monster: a dull heavy thud and a ringing crack"
+ },
+ "army_artillery": {
+  "kind": "shot",
+  "sound": "artillery firing far away: a deep muffled thump rolling over a city"
+ },
+ "army_whistle": {
+  "kind": "shot",
+  "sound": "an incoming artillery shell whistling through the air, falling in pitch, no explosion"
+ },
+ "amb_rain_light": {
+  "kind": "loop",
+  "sound": "light rain and drizzle on a city street: soft hiss with fine pattering drops"
+ },
+ "amb_rain_heavy": {
+  "kind": "loop",
+  "sound": "a heavy downpour in a city: dense roar of rain, splashing, gurgling gutters"
+ },
+ "amb_wind_gust": {
+  "kind": "loop",
+  "sound": "wind at street level between buildings: gusts swelling and dying away, a faint whistle"
+ },
+ "thunder_near": {
+  "kind": "shot",
+  "sound": "a lightning strike very close: a sharp crack of thunder, then a long rolling rumble"
+ },
+ "thunder_far": {
+  "kind": "shot",
+  "sound": "distant thunder: a low long roll of thunder far away, no crack"
+ }
+}
