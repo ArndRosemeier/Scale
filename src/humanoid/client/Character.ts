@@ -13,6 +13,7 @@
  * makes procedural animation and IK straightforward.
  */
 import * as THREE from 'three';
+import { skinIndexAttribute } from '../../render/skinIndex';
 import type { HumanoidAppearance } from '../types';
 import type { CharacterBuild } from '../characterBuild';
 import type { PartGeo } from '../parts';
@@ -44,7 +45,7 @@ function partGeometry(p: PartGeo): THREE.BufferGeometry {
     for (let i = 0; i < n; i++) { t4[i * 4] = p.tangent[i * 3]; t4[i * 4 + 1] = p.tangent[i * 3 + 1]; t4[i * 4 + 2] = p.tangent[i * 3 + 2]; t4[i * 4 + 3] = 1; }
     g.setAttribute('tangent', new THREE.BufferAttribute(t4, 4));
   }
-  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(p.skinIndex, 4));
+  g.setAttribute('skinIndex', skinIndexAttribute(p.skinIndex));
   g.setAttribute('skinWeight', new THREE.BufferAttribute(p.skinWeight, 4));
   if (p.material === 'tail') {
     // The tail uses the skin shader: neutral masks, face coords far from the face.

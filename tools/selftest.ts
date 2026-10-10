@@ -4591,6 +4591,22 @@ section('bodies underground: one test', async () => {
   check(hand.length === 0, `underground: bodies use feetUnder (${hand.join(', ') || 'none'})`);
 });
 
+// Bone indices go to the GPU through render/skinIndex.ts (floats on WebGL): Uint16 skinIndex made
+// ANGLE (Chrome on Windows) compile a second vertex shader on the first draw of each skinned program,
+// freezing the game for seconds.
+section('skinIndex: one helper', async () => {
+  const hand: string[] = [];
+  const walkS = (dir: string): void => {
+    for (const f of readdirSync(dir)) {
+      const full = `${dir}/${f}`;
+      if (statSync(full).isDirectory()) { walkS(full); continue; }
+      if (f.endsWith('.ts') && !full.endsWith('render/skinIndex.ts') && /skinIndex['"]?\s*[:,]\s*new THREE\.\w*BufferAttribute/.test(readFileSync(full, 'utf8'))) hand.push(full);
+    }
+  };
+  walkS('src');
+  check(hand.length === 0, `skinIndex: attributes made by skinIndexAttribute (${hand.join(', ') || 'none'})`);
+});
+
 // Causes cross vocabularies (Stimuli Cause, DownCause, DamageCause) only in shared/cause.ts: inline
 // conversions used to book police and army stomps as the player's knock-downs.
 section('cause vocabularies', async () => {

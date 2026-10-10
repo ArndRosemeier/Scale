@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.242 — 2026-10-10
+
+- **Fewer multi-second freezes in Chrome on Windows.** The freeze logs showed stalls of 1 to 7 seconds where the game itself did almost nothing and waited for the graphics driver. The likely cause: the bone numbers of every animated character (people, worm, roc, mech, creatures) were stored as whole numbers, which Chrome on Windows cannot feed to the shaders directly. It then quietly built a second version of the character's shader the first time it was drawn, and for clothing that took seconds. They are now stored the way the shaders read them, so nothing is built while drawing. (WebGPU mode is unchanged.)
+- **The minimap no longer stutters while you fly.** Each new piece of the minimap took 50 to 70 ms to draw at once, a visible hitch every time it reached new ground or a new part of the city loaded. It is now drawn in 16 small pieces over several frames, and the old picture stays up until the new one is complete.
+
 ## 0.241 — 2026-10-10
 
 - **Record video clips.** Press **Print** (or **F9**) to record the game, and press it again to stop; a recording stops on its own after 30 seconds. A red REC counter at the top shows it is running. The clip has the game's sound but not the HUD. Only the last clip is kept in the browser, and a new one replaces it. Open the **Esc** menu to export it as a .webm file. The key can be changed in Help › Keys. Windows often keeps the Print key for its own screenshots: if Print opens the Snipping Tool instead, use F9. While recording, automatic graphics quality keeps its level, so the picture size doesn't change mid-clip.
