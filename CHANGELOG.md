@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.248 — 2026-10-10
+
+- **Video clips are saved as MP4** where the browser can record H.264 (current Chrome and Edge, Safari), so they play in any video player and can be uploaded anywhere. Other browsers still record WebM. Export names the file .mp4 or .webm to match.
+
 ## 0.247 — 2026-10-10
 
 - **The big city map no longer stutters while it fills in.** Like the minimap since 0.242, it now draws each new piece in small parts over several frames instead of up to 80 ms at once.

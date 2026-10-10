@@ -14,6 +14,7 @@ import { withWebmDuration } from './webmDuration';
 export const CLIP_MAX_S = 30;
 const FPS = 60;
 const BITRATE = 12_000_000;
+const SLICE_MS = 5000;
 const DB = 'scale-clip';
 const STORE = 'clip';
 const KEY = 'last';
@@ -54,12 +55,14 @@ export const clipStore = {
   put: (c: StoredClip): Promise<unknown> => tx('readwrite', (s) => s.put(c, KEY)),
 };
 
-const MIMES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
-
-function pickMime(): string {
-  for (const m of MIMES) if (MediaRecorder.isTypeSupported(m)) return m;
-  return '';
-}
+/** MP4 (H.264 with AAC or Opus) plays everywhere: first choice where the browser can record it
+ *  (Chrome / Edge with H.264 encoding, Safari). Otherwise WebM. MP4 with VP9 is skipped: it is not
+ *  what an .mp4 is expected to hold, and many players reject it. */
+const MIMES = [
+  'video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.4d0028,mp4a.40.2', 'video/mp4;codecs=avc1.42e01f,mp4a.40.2',
+  'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1,opus', 'video/mp4;codecs=avc1',
+  'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm',
+];
 
 /** "0:07" */
 export function clipTime(ms: number): string {
@@ -133,11 +136,19 @@ export class Recorder {
     const stream = this.canvas.captureStream(FPS);
     this.tap = this.game.audio.tap();
     for (const t of this.tap?.stream.getAudioTracks() ?? []) stream.addTrack(t);
-    const mime = pickMime();
-    let rec: MediaRecorder;
-    try {
-      rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: BITRATE, audioBitsPerSecond: 160_000 });
-    } catch {
+    // The first format the browser both lists and accepts (a listed one can still fail to start).
+    let rec: MediaRecorder | null = null, mime = '';
+    for (const m of [...MIMES.filter((x) => MediaRecorder.isTypeSupported(x)), '']) {
+      try {
+        rec = new MediaRecorder(stream, { ...(m ? { mimeType: m } : {}), videoBitsPerSecond: BITRATE, audioBitsPerSecond: 160_000 });
+        mime = m;
+        // Long slices: a slice that ends before the first video frame is encoded (slow software
+        // encoders) closes the MP4 header with sound only, and the clip has no picture.
+        rec.start(SLICE_MS);
+        break;
+      } catch { rec = null; }
+    }
+    if (!rec) {
       this.release(stream);
       toast('This browser cannot record the game.', 'warn');
       return;
@@ -145,9 +156,9 @@ export class Recorder {
     this.stream = stream;
     this.chunks = [];
     rec.ondataavailable = (e) => { if (e.data.size) this.chunks.push(e.data); };
-    rec.onstop = () => void this.finish(rec.mimeType || mime || 'video/webm');
-    rec.start(1000);
-    this.rec = rec;
+    const r = rec;
+    r.onstop = () => void this.finish(r.mimeType || mime || 'video/webm');
+    this.rec = r;
     this.t0 = performance.now();
     // Auto graphics would change the resolution mid-clip.
     this.game.graphics.hold = true;
