@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.255 — 2026-10-11
+
+- **No more 4.6 s freeze when your statue appears.** The bronze statue of the hero is the hero's own figure with every material turned to bronze, and bronze is a new shader for each of them (skin, eyes, lashes, clothes, hair). They used to be built the moment the statue was first drawn, all in one frame. Now they are prepared in the background and the statue appears once they are ready, a moment later.
+- The freeze log (Shift+F9) now records how long the graphics card itself worked on the frames around a freeze (where the browser can measure it). That tells a card busy drawing apart from a stall in the driver or the browser, which is what the remaining 3 to 5 s freezes with no game work look like.
+
 ## 0.254 — 2026-10-10
 
 - **32 more synthesized sounds replaced, this time by Seed Audio.** ByteDance's Seed Audio renders a real sound when its prompt starts with "The sound of …". It matched the hard sounds much better than Sound Studio did. Every take went through the same old-against-new vote, and a new sound stays only if it wins. New now: the civil-defence siren, the Strider's roar and fire breath, the Burrower's call, slam, dive and far rumble, the Roc's far cry, the mech's steps, missiles, steam vents and klaxon, the swarm's bite, the autocannon, the jet flyby, rockets, the shell whistle, all far thunder, the police drone, pigeons taking off, the metro running and passing, the café terrace, the underground waterfall, pump engine and cave glow, the shard's heartbeat, a Murk growl, the membrane and the Wardens' stern horn. The other 30 kept their old sound because it won.

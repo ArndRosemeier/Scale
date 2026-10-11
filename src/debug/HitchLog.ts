@@ -83,6 +83,12 @@ export interface FreezeRecord {
   firstDraws?: string;
   /** Estimated GPU memory held and uploaded around the freeze (see watchMemory). */
   gpuMemory?: string;
+  /**
+   * How long the graphics card itself worked on the frames around the freeze (timer queries,
+   * where the browser offers them). Seconds here: the card was busy drawing; near zero while the
+   * game waited: the stall was elsewhere (driver, shader compiler, browser's GPU process).
+   */
+  gpuTime?: string[];
 }
 
 interface Perf { memory?: { usedJSHeapSize: number } }
@@ -188,6 +194,45 @@ class HitchLogImpl {
     this.snapshotRenderer();
     this.watchDraws(renderer);
     this.watchMemory(renderer);
+    const gl = renderer.getContext();
+    if (typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext) {
+      const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
+      if (ext) this.timer = { gl, ext, queries: [], active: null };
+    }
+  }
+
+  /** GPU time per frame (EXT_disjoint_timer_query_webgl2): queries waiting for their result. */
+  private timer: { gl: WebGL2RenderingContext; ext: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }; queries: { q: WebGLQuery; start: number }[]; active: WebGLQuery | null } | null = null;
+
+  private timerBegin(): void {
+    const T = this.timer;
+    if (!T || T.active || T.queries.length > 30) return;
+    const q = T.gl.createQuery();
+    if (!q) return;
+    T.gl.beginQuery(T.ext.TIME_ELAPSED_EXT, q);
+    T.active = q;
+    T.queries.push({ q, start: this.frameStart });
+  }
+
+  private timerEnd(): void {
+    const T = this.timer;
+    if (!T) return;
+    if (T.active) { T.gl.endQuery(T.ext.TIME_ELAPSED_EXT); T.active = null; }
+    const gl = T.gl;
+    const disjoint = gl.getParameter(T.ext.GPU_DISJOINT_EXT) as boolean;
+    while (T.queries.length) {
+      const { q, start } = T.queries[0];
+      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+      T.queries.shift();
+      const ms = disjoint ? -1 : (gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6;
+      gl.deleteQuery(q);
+      if (ms < 0) continue;
+      // (A frame whose GPU work overlaps a freeze, or that began just before it.)
+      this.attachEntry(start, Math.max(ms, 50), (f) => {
+        (f.gpuTime ??= []);
+        if (f.gpuTime.length < 6) f.gpuTime.push(`frame at ${(start / 1000).toFixed(2)} s: GPU ${ms.toFixed(1)} ms`);
+      });
+    }
   }
 
   /** Estimated GPU memory (bytes) in buffers, textures and render targets, and uploads per frame. */
@@ -508,6 +553,7 @@ class HitchLogImpl {
     this.lastFrameStart = this.frameStart;
     this.frameStart = performance.now();
     this.inFrame = true;
+    this.timerBegin();
   }
 
   /** Time of a named section inside the frame (Game.T). */
@@ -531,6 +577,7 @@ class HitchLogImpl {
 
   endFrame(): void {
     this.inFrame = false;
+    this.timerEnd();
     const now = performance.now();
     const inside = now - this.frameStart;
     let out = 0;
