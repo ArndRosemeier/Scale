@@ -444,7 +444,9 @@ body.looking #crosshair { display: block; }
 #tmark i:nth-child(4) { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
 #tmark b { position: absolute; left: 50%; top: -11px; width: 0; height: 0; margin-left: -5px; border: 5px solid transparent; border-top-color: rgba(255, 236, 196, 0.92); filter: drop-shadow(0 0 2px rgba(0,0,0,0.7)); }
 #tmark.edge i { display: none; }
-#tframe { position: fixed; left: 16px; bottom: 16px; min-width: 190px; max-width: 260px; padding: 8px 12px 9px 14px; background: rgba(15, 20, 26, 0.8); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.3); color: #e8ecf0; font: 13px/1.3 system-ui, sans-serif; z-index: 6; pointer-events: none; display: none; }
+#tframe { position: fixed; left: 50%; top: calc(25% - 30px); transform: translateX(-50%); min-width: 190px; max-width: 260px; padding: 8px 12px 9px 14px; background: rgba(15, 20, 26, 0.8); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.3); color: #e8ecf0; font: 13px/1.3 system-ui, sans-serif; z-index: 6; pointer-events: auto; cursor: grab; user-select: none; touch-action: none; display: none; }
+#tframe.moved { transform: none; }
+#tframe.drag { cursor: grabbing; border-color: rgba(255,255,255,0.35); }
 #tframe .con { position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: rgba(255,255,255,0.25); }
 #tframe .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #tframe .sub { margin-top: 2px; font-size: 11px; color: #9aa8b6; display: flex; justify-content: space-between; gap: 12px; }

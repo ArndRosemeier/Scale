@@ -55,7 +55,7 @@ body.touch #touch.on { display: block; }
 body.touch #crosshair { display: block; }
 body.touch .pslot { width: 56px; height: 56px; }
 body.touch #powerbar { bottom: max(14px, env(safe-area-inset-bottom)); }
-body.touch #tframe { top: calc(max(10px, env(safe-area-inset-top)) + 46px); bottom: auto; left: max(12px, env(safe-area-inset-left)); }
+body.touch #tframe:not(.moved) { top: calc(max(10px, env(safe-area-inset-top)) + 46px); bottom: auto; left: max(12px, env(safe-area-inset-left)); transform: none; }
 body.touch #minimap { top: calc(max(10px, env(safe-area-inset-top)) + 50px); bottom: auto; right: max(12px, env(safe-area-inset-right)); width: 150px; height: 150px; }
 body.touch #compass { width: min(560px, 46vw); }
 body.touch #pause .panel { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -65,7 +65,7 @@ body.touch #hint { bottom: 170px; }
 @media (max-width: 900px) {
   /* The compass below the top-right buttons and the status text; the target frame below it. */
   body.touch #compass { top: calc(max(10px, env(safe-area-inset-top)) + 50px); width: min(560px, calc(100vw - 2 * (max(12px, env(safe-area-inset-right)) + 162px))); }
-  body.touch #tframe { top: calc(max(10px, env(safe-area-inset-top)) + 106px); }
+  body.touch #tframe:not(.moved) { top: calc(max(10px, env(safe-area-inset-top)) + 106px); }
   body.touch #casualties { top: calc(max(10px, env(safe-area-inset-top)) + 102px); }
   body.touch #toasts { top: calc(max(10px, env(safe-area-inset-top)) + 136px); }
   body.touch #powerbar { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 250px); }
