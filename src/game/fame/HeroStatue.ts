@@ -15,6 +15,7 @@
  */
 import * as THREE from 'three';
 import { WEBGPU, gpuKit } from '../../render/gpuMode';
+import { shaderCap } from '../../render/shaderCap';
 import type { Game } from '../Game';
 import type { Landmark } from '../../plan/landmarks';
 import type { Obstacle } from '../../world/Collision';
@@ -159,14 +160,30 @@ export class HeroStatue {
   /** Pose the rig once it is dressed (a few frames of the hero pose), then bronze it and leave it be. */
   private pose(dt: number): void {
     const r = this.rig;
+    if (r && this.bronzed && this.shadersReady) r.object.visible = true;
     if (!r || this.posed > 0.6 || !r.dressed) return;
     this.posed += Math.max(dt, 0.05);
     const yaw = 0;
     r.update({ pos: [0, 0, 0], vel: [0, 0, 0], yaw, anim: { move: 'idle', action: { id: 'hero_pose', t0: -30, dur: 60 }, mood: 'happy' }, flags: 0 }, 0.1, 30 + this.posed, this.g.renderer.camera.position);
     this.layRig();
-    if (!this.bronzed) { bronze(r.object); this.bronzed = true; }
-    r.object.visible = true;
+    if (!this.bronzed) {
+      bronze(r.object);
+      this.bronzed = true;
+      // Bronze is a new shader variant of every material of the rig (skin, eyes, clothes, hair). Drawn
+      // straight away they all compiled inside one frame: a 4.6 s freeze on Arnd's PC. Compile them in
+      // the background (when the shader cap has room) and show the statue once they are ready.
+      this.shadersReady = false;
+      const rig = r;
+      void shaderCap.slot()
+        .then(() => (this.rig === rig ? this.g.renderer.compileAsync(rig.object) : null))
+        .catch((e) => console.warn('[statue] compile', e))
+        .then(() => { if (this.rig === rig) this.shadersReady = true; });
+    }
+    r.object.visible = this.bronzed && this.shadersReady;
   }
+
+  /** The bronze shaders are compiled (the statue may be shown). */
+  private shadersReady = false;
 
   private confetti(): void {
     const S = this.site!, D = this.g.dust;
