@@ -263,6 +263,12 @@ export class Station {
     push: (x: number, z: number, y: number, h: number, r: number) => stationPush(this.body, x, z, y, h, r, Math.max(0.35, h * 0.28)),
   };
 
+  /** Is (x, y, z) on or right by the hull (no physics ground there: ragdolls must not start)? */
+  onHull(x: number, y: number, z: number): boolean {
+    const b = this.body;
+    return Math.abs(y - b.y) < b.R && Math.hypot(x - b.x, z - b.z) < b.R * 1.45;
+  }
+
   /** Solid things on the hull overlapping the box (x0,z0)-(x1,z1). */
   obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
     const b = this.body, m = b.R * 1.4;
