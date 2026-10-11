@@ -458,12 +458,12 @@ function hullTextures(r: Rng): { plain: THREE.Texture; windows: THREE.Texture; g
   const rgb = (k: number): string => `rgb(${Math.round(k * 0.93)},${Math.round(k * 0.96)},${Math.round(k)})`;
   const windowRows: [number, number, number, number][] = [];
   for (const [x, y, ww, hh] of leaves) {
-    p.fillStyle = rgb(r.range(132, 176)); p.fillRect(x, y, ww, hh);
+    p.fillStyle = rgb(r.range(140, 164)); p.fillRect(x, y, ww, hh);
     // Grime towards the lower edge.
     if (r.chance(0.35)) { const gr = p.createLinearGradient(0, y, 0, y + hh); gr.addColorStop(0, 'rgba(40,40,45,0)'); gr.addColorStop(1, 'rgba(40,40,45,0.18)'); p.fillStyle = gr; p.fillRect(x, y, ww, hh); }
     // Seams: a light edge on top/left, a dark one below/right.
-    p.fillStyle = 'rgba(255,255,255,0.18)'; p.fillRect(x, y, ww, 2); p.fillRect(x, y, 2, hh);
-    p.fillStyle = 'rgba(25,28,34,0.75)'; p.fillRect(x, y + hh - 3, ww, 3); p.fillRect(x + ww - 3, y, 3, hh);
+    p.fillStyle = 'rgba(255,255,255,0.12)'; p.fillRect(x, y, ww, 2); p.fillRect(x, y, 2, hh);
+    p.fillStyle = 'rgba(25,28,34,0.5)'; p.fillRect(x, y + hh - 3, ww, 3); p.fillRect(x + ww - 3, y, 3, hh);
     const roll = r.float();
     if (roll < 0.12 && ww > 80 && hh > 60) {
       // A vent grille.
