@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.256 — 2026-10-11
+
+- **The Wardens' station can be reached.** It used to be painted onto the sky: however high you flew, it stayed the same distance away. Now it hangs at a fixed spot about 2.6 km up, a little over a kilometre across, and gets bigger as you fly towards it. From the streets it still looks like the pale ghost by day and the dark shape with crawling lights at night. A couple of kilometres out it turns into a detailed hull: plated, with rows of lit windows, decks of blocks and radiator fins on top, a bridge tower and masts on the crown, ribs, glowing rings and hangar bays underneath, and the spindle and the outer ring on its spokes. It is solid: you can land on its decks and walk about, and flying up into its belly or into its rim stops you. It cannot be entered yet.
+
 ## 0.255 — 2026-10-11
 
 - **No more 4.6 s freeze when your statue appears.** The bronze statue of the hero is the hero's own figure with every material turned to bronze, and bronze is a new shader for each of them (skin, eyes, lashes, clothes, hair). They used to be built the moment the statue was first drawn, all in one frame. Now they are prepared in the background and the statue appears once they are ready, a moment later.

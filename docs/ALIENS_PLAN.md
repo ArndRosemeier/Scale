@@ -5,6 +5,10 @@ people, news, sounds; 2: the runaway teens on the threat clock, their pranks, ho
 disc, regard; see ARCHITECTURE.md, "The Wardens"). Phases 3–4 not built. Phase 2 left out the cow in the countryside
 (there are no cows yet) and stacking cars (parked cars are not physical bodies to land on).
 
+2026-10-11 (v0.256): the station is a real place: it hangs at a fixed spot ~2.6 km over the land (game/aliens/
+stationShape, Station), a hero can fly to it, land and walk on its decks; a sky version far off, a detailed hull up
+close. Entering it is still for later (§8).
+
 Original status: **plan, nothing built** (Arnd, 2026-10-07: "In this close future, aliens have actually landed and made
 contact. They are not hostile and also not really friendly, more like upset parents watching over toddlers. They are
 also mostly robotic. UFOs in the sky are not an uncommon thing. The normal kind of aliens is no problem. But then
