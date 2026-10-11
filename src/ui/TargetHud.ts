@@ -1,7 +1,7 @@
 /**
  * Target marker and frame (Tab targeting): four corner brackets round the target on screen
- * (a small caret at the screen edge when it is out of view), and a frame at the bottom left
- * with its name, kind, distance and state, the threat colour ("con", also a tint on the brackets)
+ * (a small caret at the screen edge when it is out of view), and a frame (top centre, a quarter
+ * down the screen; drag it anywhere, double-click puts it back, the spot is remembered) with its name, kind, distance and state, the threat colour ("con", also a tint on the brackets)
  * and a health bar (TargetInfo.con / .health, filled in by the crime layer). A big threat's weak
  * spots are rings on its body (bright and pulsing while exposed) and named in the frame.
  */
@@ -11,6 +11,18 @@ import type { Targeting } from '../game/Targeting';
 import { statusOf } from '../shared/status';
 
 const _c = new THREE.Vector3();
+const POS_KEY = 'scale.tframePos';
+
+/** Saved frame spot: its centre x and top edge as fractions of the window (null: default). */
+function loadPos(): { x: number; y: number } | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(POS_KEY) ?? 'null');
+    return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null;
+  } catch { return null; }
+}
+function savePos(p: { x: number; y: number } | null): void {
+  try { if (p) localStorage.setItem(POS_KEY, JSON.stringify(p)); else localStorage.removeItem(POS_KEY); } catch { /* storage off */ }
+}
 const _t = screenPoint();
 
 export class TargetHud {
@@ -49,7 +61,57 @@ export class TargetHud {
     this.con = this.frame.querySelector('.con')!;
     this.hp = this.frame.querySelector('.hp')!;
     this.hpFill = this.hp.firstElementChild as HTMLDivElement;
+    this.initDrag();
   }
+
+  /** Drag the frame with the left button (or a finger); double-click returns it to its default spot. */
+  private initDrag(): void {
+    const f = this.frame;
+    f.title = 'Drag to move · double-click to reset';
+    let pos = loadPos();
+    const place = (): void => {
+      if (!pos) { f.classList.remove('moved'); f.style.left = f.style.top = ''; return; }
+      f.classList.add('moved');
+      const W = window.innerWidth, H = window.innerHeight, w = f.offsetWidth || 220, h = f.offsetHeight || 60;
+      const left = Math.min(Math.max(0, pos.x * W - w / 2), Math.max(0, W - w));
+      const top = Math.min(Math.max(0, pos.y * H), Math.max(0, H - h));
+      f.style.left = `${left}px`;
+      f.style.top = `${top}px`;
+    };
+    this.place = place;
+    place();
+    window.addEventListener('resize', place);
+    let grab: { id: number; dx: number; dy: number } | null = null;
+    f.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const r = f.getBoundingClientRect();
+      grab = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+      f.setPointerCapture(e.pointerId);
+      f.classList.add('drag');
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    f.addEventListener('pointermove', (e) => {
+      if (!grab || e.pointerId !== grab.id) return;
+      const W = window.innerWidth, H = window.innerHeight;
+      pos = { x: (e.clientX - grab.dx + f.offsetWidth / 2) / W, y: (e.clientY - grab.dy) / H };
+      place();
+    });
+    const drop = (e: PointerEvent): void => {
+      if (!grab || e.pointerId !== grab.id) return;
+      grab = null;
+      f.classList.remove('drag');
+      // Store where it ended up (clamped on screen).
+      const r = f.getBoundingClientRect();
+      pos = { x: (r.left + r.width / 2) / window.innerWidth, y: r.top / window.innerHeight };
+      savePos(pos);
+    };
+    f.addEventListener('pointerup', drop);
+    f.addEventListener('pointercancel', drop);
+    f.addEventListener('dblclick', (e) => { e.stopPropagation(); pos = null; savePos(null); place(); });
+  }
+
+  private place: () => void = () => {};
 
   setVisible(v: boolean): void {
     if (!v) { this.mark.style.display = 'none'; this.frame.style.display = 'none'; this.shown = false; this.hideZones(); }
@@ -63,7 +125,7 @@ export class TargetHud {
       if (this.shown) { this.mark.style.display = 'none'; this.frame.style.display = 'none'; this.shown = false; this.last = ''; this.hideZones(); }
       return;
     }
-    if (!this.shown) { this.mark.style.display = 'block'; this.frame.style.display = 'block'; this.shown = true; }
+    if (!this.shown) { this.mark.style.display = 'block'; this.frame.style.display = 'block'; this.shown = true; this.place(); }
     const W = window.innerWidth, H = window.innerHeight;
     // Brackets: project the body's bottom and top.
     const c = T.centre(t, _c);
