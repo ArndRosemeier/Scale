@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.256 — 2026-10-11
+
+- **Target info front and centre.** The frame with the target's name, distance and health now sits in the middle of the screen, a quarter of the way down, instead of the bottom left. Drag it with the mouse to wherever you like it; the game remembers the spot. Double-click it to put it back in the middle.
 ## 0.255 — 2026-10-11
 
 - **No more 4.6 s freeze when your statue appears.** The bronze statue of the hero is the hero's own figure with every material turned to bronze, and bronze is a new shader for each of them (skin, eyes, lashes, clothes, hair). They used to be built the moment the statue was first drawn, all in one frame. Now they are prepared in the background and the statue appears once they are ready, a moment later.
