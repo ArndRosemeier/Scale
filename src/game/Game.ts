@@ -676,7 +676,7 @@ export class Game {
     const shadersAt = performance.now();
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
       staging: [interiorWarmup(), this.gate.warmStandins()],
-      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), Wardens.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
+      later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), this.wardens.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
       views: this.intro?.warmViews(),
       waitFor: [this.player.rig.whenDressed, warmRigs(this.renderer.scene, this.player.pos)],
     });
@@ -695,7 +695,7 @@ export class Game {
     this.gate.precompile(this.rural.warmupObject());
     this.gate.precompile(MedFleet.warmupObject());
     this.gate.precompile(this.defeat.ward.warmupObject());
-    this.gate.precompile(Wardens.warmupObject());
+    this.gate.precompile(this.wardens.warmupObject());
     void this.intro?.play();
   }
 

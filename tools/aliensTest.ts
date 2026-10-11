@@ -12,6 +12,7 @@ import { LINES } from '../src/game/people/lines';
 import { matches } from '../src/game/people/talk';
 import { TEENS, teenHeight, inOpen, seeStep, teenReward, freshRegard, handOver, readRegard, teenLine, allTeenLines, type TeenMoment } from '../src/game/aliens/teenRules';
 import { ARCHETYPES, planEvent } from '../src/game/threats/ThreatClock';
+import { STATION_R, DECKS, stationSpot, stationGround, stationCeiling, stationPush, hullSpan } from '../src/game/aliens/stationShape';
 
 type Check = (ok: boolean, msg: string) => void;
 
@@ -109,6 +110,25 @@ export function aliensChecks(check: Check): void {
   let teensPlanned = 0;
   for (let n = 1; n < 60; n++) if (planEvent(42, n, 'normal', 0, 0, 'robots').archetype === 'teens') teensPlanned++;
   check(!!arch && arch.tier === 'minor' && arch.omens.includes('zip') && arch.omens.includes('glyph') && teensPlanned > 8, `teens: a minor event on the threat clock (${teensPlanned} of 59 planned events after a robot one)`);
+
+  // The station: a real place over the city, solid for the hero.
+  const spot = stationSpot(42), again = stationSpot(42);
+  const el = Math.atan2(2600, Math.hypot(spot.x, spot.z));
+  check(spot.x === again.x && Math.hypot(spot.x, spot.z) > 1500 && Math.hypot(spot.x, spot.z) < 3500 && el > 0.6 && el < 0.88, `station: seeded spot ${Math.round(Math.hypot(spot.x, spot.z))} m out, ${((el * 180) / Math.PI).toFixed(0)}° up from the centre`);
+  const S = { x: 1000, y: 3000, z: -500, R: STATION_R };
+  let solidOk = true;
+  for (let rho = 0; rho <= 1; rho += 0.01) { const sp = hullSpan(rho); if (!sp || sp[0] > sp[1]) solidOk = false; }
+  check(solidOk && hullSpan(1.01) === null, 'station: the hull has a span at every radius out to the rim, none beyond');
+  const [ri, ro, dy] = DECKS[0];
+  const deckX = S.x + ((ri + ro) / 2) * S.R, deckY = S.y + dy * S.R;
+  const g = stationGround(S, deckX, S.z, deckY + 0.2, 0.4);
+  check(Math.abs(g - deckY) < 1.5, `station: one lands on the outer deck (${(g - S.y).toFixed(1)} m over the rim, deck at ${(deckY - S.y).toFixed(1)})`);
+  check(stationGround(S, deckX, S.z, S.y - 400, 0.4) === -Infinity && stationGround(S, S.x + 2 * S.R, S.z, S.y + 100, 0.4) === -Infinity, 'station: no deck under someone below the belly or beside the hull');
+  const ceil = stationCeiling(S, S.x + 0.5 * S.R, S.z, S.y - 300, 0.4);
+  check(ceil > S.y - 0.12 * S.R && ceil < S.y - 0.05 * S.R && stationCeiling(S, S.x, S.z, S.y + 200, 0.4) === Infinity, `station: the belly is a ceiling (${(ceil - S.y).toFixed(0)} m under the rim) only from below`);
+  const side = stationPush(S, S.x + S.R - 1, S.z, S.y - 2, 1.8, 0.4, 0.5);
+  check(!!side && side.x - S.x > S.R && side.nx > 0.99, 'station: flying into the rim pushes one back out');
+  check(stationPush(S, S.x + S.R + 5, S.z, S.y, 1.8, 0.4, 0.5) === null && stationPush(S, deckX, S.z, deckY, 1.8, 0.4, 0.5) === null && stationPush(S, S.x + 0.5 * S.R, S.z, ceil - 1.9, 1.8, 0.4, 0.5) === null, 'station: no push beside it, standing on a deck, or under the belly');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -57,6 +57,15 @@ export class Collision {
   obstacleProviders: ObstacleProvider[] = [];
   /** Extra walkable surfaces (ice-path sheets): top height at (x, z) not above yRef + step, or -Infinity. */
   extraGround: ((x: number, z: number, yRef: number, step: number) => number) | null = null;
+  /**
+   * Something solid hanging in the air (the Wardens' station): its top to land on, its underside
+   * as a ceiling, its flanks as walls. Null: none.
+   */
+  floating: {
+    ground(x: number, z: number, yRef: number, step: number): number;
+    ceiling(x: number, z: number, y: number): number;
+    push(x: number, z: number, y: number, h: number, r: number): { x: number; z: number; nx: number; nz: number } | null;
+  } | null = null;
 
   /**
    * A sealed room off the map (the hospital's revival ward, game/defeat/HospitalWard): inside it
@@ -132,6 +141,7 @@ export class Collision {
   /** Ceiling over (x, z) for a body at y (underground halls and tunnels; Infinity in the open). */
   ceilingAt(x: number, z: number, y: number): number {
     if (this.room?.inside(x, y, z)) return this.room.ceiling;
+    if (this.floating) { const c = this.floating.ceiling(x, z, y); if (c < Infinity) return c; }
     if (!this.under || y > this.world.terrain.height(x, z) - 1.0) return Infinity;
     return this.under.ceilingAt(x, y + 0.3, z);
   }
@@ -155,6 +165,7 @@ export class Collision {
     const deck = this.world.bridgeDeck(x, z);
     if (deck > -Infinity && deck <= yRef + step) g = Math.max(g, deck);
     if (this.extraGround) { const e = this.extraGround(x, z, yRef, step); if (e > g) g = e; }
+    if (this.floating) { const e = this.floating.ground(x, z, yRef, step); if (e > g) g = e; }
     const rub = this.destruction.rubbleHeight(x, z);
     if (rub > g && rub <= yRef + step + 1) g = rub;
     if (this.interiorGround) g = Math.max(g, this.interiorGround(x, z, yRef, step));
@@ -326,6 +337,10 @@ export class Collision {
       });
     }
     if (this.obstacleProviders.length) this.collideObstacles(y, h, r, px, pz, best);
+    if (this.floating) {
+      const f = this.floating.push(res.x, res.z, y, h, r);
+      if (f) { res.x = f.x; res.z = f.z; res.nx = f.nx; res.nz = f.nz; res.cx = f.x - f.nx * r; res.cz = f.z - f.nz * r; res.building = null; res.hit = true; }
+    }
     return res;
   }
 
