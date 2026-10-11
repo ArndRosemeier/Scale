@@ -35,9 +35,10 @@ export class Station {
   private far = new THREE.Group();
   private near = new THREE.Group();
   private farMat: THREE.MeshLambertMaterial;
-  private nearMats: THREE.MeshStandardMaterial[] = [];
-  private litMat!: THREE.MeshStandardMaterial;
-  private glowMat!: THREE.MeshStandardMaterial;
+  private nearMats: THREE.MeshLambertMaterial[] = [];
+  private plainMat!: THREE.MeshLambertMaterial;
+  private litMat!: THREE.MeshLambertMaterial;
+  private glowMat!: THREE.MeshLambertMaterial;
   private lightsMat: THREE.PointsMaterial;
   private lights: THREE.Points;
   private spin = 0;
@@ -54,7 +55,7 @@ export class Station {
     this.group.position.set(this.body.x, this.body.y, this.body.z);
 
     // ---- the sky version: the lathe shape, banded, the ring on its spokes, as one ghostly material
-    this.farMat = new THREE.MeshLambertMaterial({ vertexColors: true, fog: false, transparent: true, depthWrite: false, emissive: new THREE.Color(0.012, 0.016, 0.026) });
+    this.farMat = new THREE.MeshLambertMaterial({ vertexColors: true, fog: false, transparent: true, depthWrite: true, emissive: new THREE.Color(0.012, 0.016, 0.026) });
     const fm = new Mesher();
     for (let i = 0; i + 1 < PROFILE.length; i++) {
       const [r0, y0] = PROFILE[i], [r1, y1] = PROFILE[i + 1];
@@ -82,15 +83,17 @@ export class Station {
     // ---- the near version
     const tex = hullTextures(r);
     this.textures.push(tex.plain, tex.windows, tex.glow, tex.white);
-    const mat = (map: THREE.Texture, emissive: THREE.ColorRepresentation, metal: number, rough: number): THREE.MeshStandardMaterial => {
-      const m = new THREE.MeshStandardMaterial({ map, emissiveMap: emissive === 0 ? tex.glow : map === tex.windows ? tex.glow : tex.white, emissive, vertexColors: true, metalness: metal, roughness: rough, fog: false });
+    // Lambert, not PBR: the Standard program took 0.15 s to compile on Arnd's PC (budget 0.1 s).
+    const mat = (map: THREE.Texture, emissiveMap: THREE.Texture, emissive: THREE.ColorRepresentation): THREE.MeshLambertMaterial => {
+      const m = new THREE.MeshLambertMaterial({ map, emissiveMap, emissive, vertexColors: true, fog: false });
       this.nearMats.push(m);
       return m;
     };
-    // One program for all three (the same maps and flags): plain plates, plates with lit windows, glow strips.
-    const plainMat = mat(tex.plain, 0x000000, 0.5, 0.52);
-    this.litMat = mat(tex.windows, 0xffffff, 0.5, 0.48);
-    this.glowMat = mat(tex.plain, 0x9fe6ff, 0.2, 0.6);
+    // One program for all three (the same maps and flags): plain plates (a faint glow of their own
+    // at night, so the belly is not pure black), plates with lit windows, glow strips.
+    const plainMat = this.plainMat = mat(tex.plain, tex.white, 0x5a6878);
+    this.litMat = mat(tex.windows, tex.glow, 0xffffff);
+    this.glowMat = mat(tex.plain, tex.white, 0x9fe6ff);
     const plain = new Mesher(), lit = new Mesher(), glow = new Mesher();
     const R = STATION_R;
     // The hull: one band per profile segment, steep ones (the rim, terrace walls, the spindle's
@@ -253,7 +256,9 @@ export class Station {
 
   /** A small mesh with the near hull's material (for the warm-up to compile its program). */
   warmupObject(): THREE.Object3D {
-    return new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.litMat);
+    const m = new Mesher();
+    m.box(0, 0, 0, 1, 0, 0.5, 0.5, 0.5, 1);
+    return new THREE.Mesh(m.build(), this.litMat);
   }
 
   /** The hull as a solid for Collision.floating. */
@@ -305,12 +310,13 @@ export class Station {
     const close = 1 - smoothstep(NEAR_IN, 4600, d);
     const fade = smoothstep(FAR_OUT, NEAR_IN, d);
     this.far.visible = fade > 0.01;
-    this.farMat.opacity = lerp(lerp(0.97, 0.62, day), 1, close) * veil * fade;
+    this.farMat.opacity = lerp(lerp(1, 0.62, day), 1, close) * veil * fade;
     this.farMat.color.setScalar(lerp(0.55, 1.1, day));
     this.near.visible = d < NEAR_IN && veil > 0.01;
     for (const m of this.nearMats) m.color.setScalar(lerp(0.7, 1, day));
     this.litMat.emissiveIntensity = lerp(1.4, 0.35, day);
     this.glowMat.emissiveIntensity = lerp(2.2, 0.8, day);
+    this.plainMat.emissiveIntensity = lerp(0.09, 0, day);
     this.lightsMat.opacity = lerp(1, 0.15, day) * veil;
     // The lights crawl round slowly (once in ten minutes) and the tip blinks.
     this.spin += dt;
@@ -453,7 +459,8 @@ function hullTextures(r: Rng): { plain: THREE.Texture; windows: THREE.Texture; g
   };
   const [pc, p] = mk(S), [wc, w] = mk(S), [gc, g] = mk(G);
   p.fillStyle = '#7f858c'; p.fillRect(0, 0, S, S);
-  g.fillStyle = '#000'; g.fillRect(0, 0, G, G);
+  // A faint base, so walls between the windows are not pure black at night.
+  g.fillStyle = '#0b0d11'; g.fillRect(0, 0, G, G);
   const leaves: [number, number, number, number][] = [];
   const split = (x: number, y: number, ww: number, hh: number, depth: number): void => {
     if (ww <= 64 || hh <= 64 || (depth > 2 && r.chance(0.28))) { leaves.push([x, y, ww, hh]); return; }
