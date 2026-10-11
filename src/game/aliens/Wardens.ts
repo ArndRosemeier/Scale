@@ -90,7 +90,9 @@ export class Wardens {
   stats = { spawned: 0, left: 0, hovers: 0, looks: 0, watches: 0, walkers: 0, remarks: 0, scans: 0, stares: 0 };
 
   constructor(private g: Game) {
-    this.station = new Station(g.settings.seed);
+    this.station = new Station(g.settings.seed, (x, z) => g.terrain.height(x, z));
+    // The station is solid: its decks to land on, its belly overhead, its flanks; the blocks on it.
+    g.collision.floating = this.station.solidHull;
     this.discs = new Discs({
       ground: (x, z) => g.terrain.height(x, z),
       top: (x, z) => g.world.groundHeight(x, z),
@@ -103,10 +105,10 @@ export class Wardens {
     g.collision.obstacleProviders.push((x0, z0, x1, z1, out) => this.obstacles(x0, z0, x1, z1, out));
   }
 
-  /** A walker (staged by the warm-up so its materials are compiled before it first comes down). */
-  static warmupObject(): THREE.Object3D {
+  /** A walker (staged by the warm-up so its materials are compiled before it first comes down), the station's near hull. */
+  warmupObject(): THREE.Object3D {
     const o = new THREE.Group();
-    o.add(new Walker(0, 0, 0, 1, 0).root, new TeenSaucer().root);
+    o.add(new Walker(0, 0, 0, 1, 0).root, new TeenSaucer().root, this.station.warmupObject());
     return o;
   }
 
@@ -390,6 +392,7 @@ export class Wardens {
   }
 
   private obstacles(x0: number, z0: number, x1: number, z1: number, out: (o: Obstacle) => void): void {
+    this.station.obstacles(x0, z0, x1, z1, out);
     for (const v of this.visits) {
       const w = v.w;
       if (!w.grounded || w.x < x0 - 1 || w.x > x1 + 1 || w.z < z0 - 1 || w.z > z1 + 1) continue;
@@ -585,7 +588,7 @@ export class Wardens {
     return {
       plan: { count: this.plan.count, swarm: this.plan.swarm }, discs: this.discs.list.length, modes, moment: this.momentNow,
       walkers: this.visits.map((v) => ({ x: Math.round(v.w.x), z: Math.round(v.w.z), phase: v.w.phase, until: +v.w.until.toFixed(2), courier: !!v.courier })),
-      station: { dir: this.station.dir.toArray().map((v) => +v.toFixed(3)) }, stats: this.stats, regard: this.regard, glyphs: this.glyphs.count,
+      station: { dir: this.station.dir.toArray().map((v) => +v.toFixed(3)), at: [this.station.body.x, this.station.body.y, this.station.body.z].map(Math.round), dist: Math.round(this.station.dist) }, stats: this.stats, regard: this.regard, glyphs: this.glyphs.count,
     };
   }
 
