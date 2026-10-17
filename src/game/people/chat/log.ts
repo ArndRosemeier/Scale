@@ -1,7 +1,7 @@
 /**
  * The misunderstanding log (typed NPC chat): every typed line the chat did not understand, or
  * understood only by its last fallback, is kept in this browser (newest last, bounded) with what
- * it guessed. dev.chat.log() shows it; the feedback form attaches it, so lines players really
+ * it guessed. dev.chat.log() shows it (players can paste it on the board), so lines players really
  * type end up as patterns, examples and test lines (corpus.ts).
  */
 import type { Parse } from './understand';
@@ -40,7 +40,7 @@ export function clearMissed(): void {
   try { localStorage.removeItem(KEY); } catch { /* storage unavailable */ }
 }
 
-/** The last lines, for the feedback form ("text → guess (score)"). */
+/** The last lines as text ("text → guess (score)"). */
 export function missedReport(n = 40): string {
   const list = readMissed().slice(-n);
   if (!list.length) return '';
