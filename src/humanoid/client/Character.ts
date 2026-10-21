@@ -57,10 +57,12 @@ const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
  * offset loses fragments of thin seam triangles (pinholes through which the street shows). The
  * garment is instead pulled toward the camera in view space by a fixed distance at the same
  * screen position: `LAYER_PULL` metres per rank of `garmentRank` (underwear lowest, then socks,
- * shoes, trousers, tops, then hats and glasses). The rank follows what the garment covers, not
- * Actors' layer number (which put trousers above T-shirts, so waistbands poked through shirt
- * hems), and the pull is a fixed distance, not a fraction of it (that grew to centimetres for
- * people a few dozen metres away).
+ * shoes, tops, gloves, trousers, then hats and glasses). The rank follows what the garment
+ * covers. Trousers sit well above tops (a tucked-in shirt): the fitted shirt and trouser
+ * waist cross each other by up to about a centimetre, and with a small gap the waistband tore
+ * through the hem in front and the hem through the waistband at the back. The pull is a fixed
+ * distance, not a fraction of it (that grew to centimetres for people a few dozen metres away
+ * and let socks show through shoes).
  */
 const LAYER_PULL = 0.001;
 const RANK: Record<string, number> = { briefs: 1, bra: 1, legwear: 1, socks: 2, shoes: 3, top: 4, gloves: 5, bottom: 14, hat: 15, glasses: 15, mask: 15 };
