@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.260 — 2026-10-21
+
+- **Plan: people fully on Actors.** docs/ACTORS_PLAN.md: Actors' own animation (its retargeted clips, untouched) poses every person, and what Scale's animation does beyond that (walk/run blending, foot placement, look-at, grips, actions, flight, ragdolls, crowds, imported avatars) moves into the Actors library, in six phases.
+
 ## 0.259 — 2026-10-21
 
 - **Every person is now an Actors character.** The hero, the people in the streets, the far crowds, the hero's statue and the character creator all use the Actors character generator (github.com/ArndRosemeier/Actors): MakeHuman bodies with photographic skin for the hero, real fitted clothes from its CC0 wardrobe (T-shirts, polos, sweaters, jeans, suits, dresses, skirts, sneakers, boots, caps…) recoloured to each outfit, its hairstyles, beards and fantasy-race features, and its own three detail levels (full, medium, crowd). City people keep their seeded looks: the same age, ancestry, colouring, hairstyle and clothes per citizen, now drawn by Actors. Everything that moves people stays as it was: the walk and run cycles, foot placement on slopes, flight poses, punches and every action, ragdolls and getting up, the manhole climb and first person; the motion clips themselves now come from the Actors pack too.
