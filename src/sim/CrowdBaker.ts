@@ -1,7 +1,7 @@
 /**
- * Bakes Norgo characters into vertex-animation textures (VAT) for instanced
- * crowds: per template the far-LOD body + garment shells are compacted into
- * one mesh; walk / run / idle / film / down / sit are sampled from the real
+ * Bakes Actors characters into vertex-animation textures (VAT) for instanced crowds: per
+ * template the character's crowd level (Actors' merged body + garments mesh) becomes one mesh
+ * with a colour slot per vertex; walk / run / idle / film / down / sit are sampled from the real
  * animator into position + normal float textures.
  */
 import * as THREE from 'three';
@@ -9,7 +9,6 @@ import { HumanoidRig } from '../humanoid/client/HumanoidRig';
 import { randomAppearance } from '../humanoid/appearance';
 import type { EquipmentVisuals, ItemVisual } from '../items/types';
 import { frameWork } from '../core/frameWork';
-import { BODY_REGIONS } from '../humanoid/client/staticData';
 import { clipLibraryReady } from '../humanoid/client/anim/clips';
 import { GROOVE_PERIOD } from '../humanoid/client/anim/actions';
 import { releaseTextureAfterUpload } from '../render/gpuOnly';
@@ -49,7 +48,6 @@ export const TEMPLATE_DEFS: { female: boolean; outfit: string; eq: EquipmentVisu
   { female: true, outfit: 'coat', eq: { chest: { defId: 'sweater', visual: vis(C3(1, 1, 1)) }, back: { defId: 'coat', visual: vis(C3(1, 1, 1)) }, legs: { defId: 'trousers', visual: vis(C3(1, 1, 1)) }, feet: { defId: 'boots', visual: vis(C3(1, 1, 1)) } } },
 ];
 
-const SLOT_OF: Record<string, Slot> = { chest: Slot.Top, legs: Slot.Bottom, feet: Slot.Shoes, back: Slot.Outer, under: Slot.Bottom };
 
 /** Yield to the event loop without timer throttling (works in background tabs). */
 function yieldNow(): Promise<void> {
@@ -92,51 +90,47 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   root.position.set(0, 0, 0);
   root.rotation.set(0, 0, 0);
   root.updateMatrixWorld(true);
-  // Collect LOD2 skinned meshes and their referenced vertices.
-  const meshes: { mesh: THREE.SkinnedMesh; verts: number[]; slot: Slot | -1 }[] = [];
-  ch.lods[2].traverse((o) => {
-    const m = o as THREE.SkinnedMesh;
-    if (!m.isSkinnedMesh || !m.visible) return;
-    const idx = m.geometry.getIndex();
-    if (!idx) return;
-    const set = new Set<number>();
-    for (let k = 0; k < idx.count; k++) set.add(idx.getX(k));
-    const slotName = m.userData.slot as string | undefined;
-    meshes.push({ mesh: m, verts: [...set].sort((a, b) => a - b), slot: slotName ? (SLOT_OF[slotName] ?? Slot.Top) : -1 });
-  });
-  // Body vertices under a garment take its slot (the outermost one wins): the decimated far-LOD
-  // shells have gaps where large triangles cross a garment edge, and the body showed through
-  // as skin — crowds looked half naked.
-  const st = ch.geo.st;
-  const coverSlot = new Map<number, { slot: Slot; order: number }>();
-  for (const M of meshes) {
-    const covers = M.mesh.userData.covers as number[] | undefined;
-    if (M.slot < 0 || !covers) continue;
-    const order = (M.mesh.userData.order as number | undefined) ?? 0;
-    for (const v of covers) {
-      const c = coverSlot.get(v);
-      if (!c || c.order < order) coverSlot.set(v, { slot: M.slot as Slot, order });
-    }
+  const crowd = ch.actor.actor.crowdMesh();
+  if (!crowd) { rig.dispose(); return null; }
+  const cm = crowd.mesh;
+  // Colour slot per garment: by the body layers it takes. Where Actors has no separate outer
+  // layer, the coat or jacket stands in for the top (actors/outfit.ts) and takes the outer slot.
+  const info = new Map(ch.actor.catalog.garments.map((g) => [g.id, g]));
+  const slotOf = (name: string, role: string): Slot => {
+    if (role === 'body') return Slot.Skin;
+    const occ = info.get(name)?.occupies ?? [];
+    if (occ.includes('top')) return def.eq.back ? Slot.Outer : Slot.Top;
+    if (occ.includes('shoes') || occ.includes('socks')) return Slot.Shoes;
+    if (occ.includes('hat')) return Slot.Hair;
+    return Slot.Bottom;
+  };
+  const partSlot = new Uint8Array(cm.geometry.getAttribute('position').count);
+  for (const p of crowd.parts) partSlot.fill(slotOf(p.name, p.role), p.offset, p.offset + p.count);
+  // Scalp (the far crowd draws no hair cards): skin above the brow and round the back of the head.
+  const rest = cm.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const ground = ch.actor.object.position.y;
+  const eyeY = (ch.body.eyes[1] + ch.body.eyes[5]) / 2, eyeZ = (ch.body.eyes[2] + ch.body.eyes[6]) / 2;
+  const hs = ch.body.headSphere;
+  for (let v = 0; v < partSlot.length; v++) {
+    if (partSlot[v] !== Slot.Skin) continue;
+    const x = -rest.getX(v), y = rest.getY(v) + ground, z = -rest.getZ(v);
+    const inHead = Math.hypot(x - hs[0], y - hs[1], z - hs[2]) < hs[3] * 1.35;
+    if (inHead && (y > eyeY + 0.035 * ch.body.faceScale || (y > eyeY - 0.07 && z > eyeZ + hs[3] * 0.9))) partSlot[v] = Slot.Hair;
   }
-  // Compact vertex table.
-  const scalp = BODY_REGIONS.indexOf('scalp');
-  const vertRefs: { m: number; v: number; slot: Slot }[] = [];
-  const remap: Map<number, number>[] = [];
-  meshes.forEach((M, mi) => {
-    const map = new Map<number, number>();
-    for (const v of M.verts) {
-      map.set(v, vertRefs.length);
-      const slot = M.slot >= 0 ? (M.slot as Slot) : coverSlot.get(v)?.slot ?? (st.region[v] === scalp ? Slot.Hair : Slot.Skin);
-      vertRefs.push({ m: mi, v, slot });
-    }
-    remap.push(map);
-  });
+  const idx = cm.geometry.getIndex()!;
+  const cut = cm.geometry.getAttribute('crowdClip') as THREE.BufferAttribute | undefined;
+  // Triangles a hem cuts away completely are left out (the VAT material does not cut per pixel).
+  const tris: number[] = [];
+  for (let k = 0; k < idx.count; k += 3) {
+    const a = idx.getX(k), b = idx.getX(k + 1), c = idx.getX(k + 2);
+    if (cut && cut.getX(a) < 0 && cut.getX(b) < 0 && cut.getX(c) < 0) continue;
+    tris.push(a, b, c);
+  }
+  const used = [...new Set(tris)].sort((a, b) => a - b);
+  const remap = new Map<number, number>(used.map((v, k) => [v, k]));
+  const vertRefs = used.map((v) => ({ v, slot: partSlot[v] as Slot }));
   const nv = vertRefs.length;
-  const index: number[] = [];
-  meshes.forEach((M, mi) => {
-    const idx = M.mesh.geometry.getIndex()!;
-    for (let k = 0; k < idx.count; k++) index.push(remap[mi].get(idx.getX(k))!);
-  });
+  const index = tris.map((v) => remap.get(v)!);
   // The standing idle is a motion-captured loop of several seconds (Animator.idleCycle, picked by
   // seed): idle and film bake one whole cycle of it, so the texture loops seamlessly.
   await clipLibraryReady();
@@ -183,14 +177,14 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
       set('lowerarm01.L', 1.5, 0, 0);
       set('neck01', -0.1, 0, 0);
     }
+    // (The model's matrix update also poses the actor's skeleton: see Character.sync.)
     root.updateMatrixWorld(true);
   };
   const capture = (r: number) => {
+    cm.skeleton.update();
     for (let k = 0; k < nv; k++) {
-      const ref = vertRefs[k];
-      const m = meshes[ref.m].mesh;
-      m.getVertexPosition(ref.v, tmp);
-      tmp.applyMatrix4(m.matrixWorld);
+      cm.getVertexPosition(vertRefs[k].v, tmp);
+      tmp.applyMatrix4(cm.matrixWorld);
       posArr[k * 3] = tmp.x; posArr[k * 3 + 1] = tmp.y; posArr[k * 3 + 2] = tmp.z;
       const o = (r * nv + k) * 4;
       posData[o] = tmp.x; posData[o + 1] = tmp.y; posData[o + 2] = tmp.z; posData[o + 3] = 1;
@@ -236,16 +230,16 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   }
   // Instance geometry: rest positions (frame 0 of idle) + vertex id + slot.
   const g = new THREE.BufferGeometry();
-  const rest = new Float32Array(nv * 3);
+  const restPos = new Float32Array(nv * 3);
   const vid = new Float32Array(nv);
   const slot = new Float32Array(nv);
   for (let k = 0; k < nv; k++) {
     const o = (clips.idle.start * nv + k) * 4;
-    rest[k * 3] = posData[o]; rest[k * 3 + 1] = posData[o + 1]; rest[k * 3 + 2] = posData[o + 2];
+    restPos[k * 3] = posData[o]; restPos[k * 3 + 1] = posData[o + 1]; restPos[k * 3 + 2] = posData[o + 2];
     vid[k] = k;
     slot[k] = vertRefs[k].slot;
   }
-  g.setAttribute('position', new THREE.BufferAttribute(rest, 3));
+  g.setAttribute('position', new THREE.BufferAttribute(restPos, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nv * 3).fill(0), 3));
   g.setAttribute('aVid', new THREE.BufferAttribute(vid, 1));
   g.setAttribute('aSlot', new THREE.BufferAttribute(slot, 1));

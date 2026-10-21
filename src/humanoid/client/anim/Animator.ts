@@ -19,7 +19,7 @@
  *     saccades, plus finger curl for grips.
  */
 import * as THREE from 'three';
-import type { Character } from '../Character';
+import { MOODS, type Character } from '../Character';
 import type { AnimState, MoveState, ActionAnim, PowerAnim, Vec3 } from '../../../shared/types';
 import { Pose, makeBoneMap, kf, clamp, smooth, approach, wrapPi, type BoneMap, type Side } from './pose';
 import { ACTIONS, sitPose, type ActionCtx, type GripClass, type ActionDef } from './actions';
@@ -75,17 +75,6 @@ function familyOf(m: MoveState): Family {
   }
 }
 
-const MOODS: Record<string, [string, number][]> = {
-  neutral: [],
-  happy: [['mouth-corner-puller', 0.75], ['mouth-upward-retraction', 0.15], ['eye-left-slit', 0.25], ['eye-right-slit', 0.25], ['eyebrows-left-up', 0.1], ['eyebrows-right-up', 0.1]],
-  angry: [['eyebrows-left-down', 0.9], ['eyebrows-right-down', 0.9], ['nose-left-elevation', 0.35], ['nose-right-elevation', 0.35], ['mouth-compression', 0.45], ['eye-left-slit', 0.25], ['eye-right-slit', 0.25], ['neck-platysma', 0.2]],
-  sad: [['eyebrows-left-inner-up', 0.9], ['eyebrows-right-inner-up', 0.9], ['mouth-depression', 0.6], ['eye-left-slit', 0.15], ['eye-right-slit', 0.15], ['mouth-pursing', 0.1]],
-  afraid: [['eyebrows-left-inner-up', 0.7], ['eyebrows-right-inner-up', 0.7], ['eyebrows-left-up', 0.45], ['eyebrows-right-up', 0.45], ['eye-left-opened-up', 0.7], ['eye-right-opened-up', 0.7], ['mouth-retraction', 0.45], ['mouth-open', 0.15], ['neck-platysma', 0.35]],
-  surprised: [['eyebrows-left-up', 1], ['eyebrows-right-up', 1], ['eye-left-opened-up', 0.85], ['eye-right-opened-up', 0.85], ['mouth-open', 0.45]],
-  disgusted: [['nose-left-elevation', 0.8], ['nose-right-elevation', 0.8], ['mouth-upward-retraction', 0.5], ['eyebrows-left-down', 0.4], ['eyebrows-right-down', 0.4], ['eye-left-slit', 0.3], ['eye-right-slit', 0.3], ['mouth-depression', 0.2]],
-  focused: [['eyebrows-left-down', 0.35], ['eyebrows-right-down', 0.35], ['eye-left-slit', 0.2], ['eye-right-slit', 0.2], ['mouth-compression', 0.2]],
-  pain: [['eye-left-closure', 0.55], ['eye-right-closure', 0.55], ['eyebrows-left-down', 0.5], ['eyebrows-right-down', 0.5], ['eyebrows-left-inner-up', 0.4], ['eyebrows-right-inner-up', 0.4], ['mouth-retraction', 0.7], ['mouth-open', 0.2], ['nose-left-elevation', 0.4], ['nose-right-elevation', 0.4], ['neck-platysma', 0.5]],
-};
 
 const _e = new THREE.Euler();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
@@ -144,9 +133,9 @@ export class Animator {
   private hipH = 0.9;
   private legLen = 0.85;
   private fingers: Record<Side, FingerRig[]> = { L: [], R: [] };
-  private exprIdx = new Map<string, number>();
-  private expr: Float32Array;
-  private exprTarget: Float32Array;
+  /** Shown mood and its smoothed weight. */
+  private mood = 'neutral';
+  private moodW = 0;
   // Look-at state
   private look = new THREE.Vector2();
   private eyeLook = new THREE.Vector2();
@@ -245,7 +234,7 @@ export class Animator {
     this.clipPose = new Pose(this.map);
     this.pw = new Pose(this.map);
     this.pwTmp = new Pose(this.map);
-    this.seed = ch.app.seed >>> 0;
+    this.seed = ch.traits.seed >>> 0;
     // Idle clips start somewhere into their loop (crowds out of step).
     this.idleClipT = (hash32(this.seed ^ 0x5bd1) % 10000) / 100;
     this.computeNeutral();
@@ -269,7 +258,7 @@ export class Animator {
     };
     // Finger rigs: curl axis = fingerDir × palmNormal (rest, model axes = local axes).
     for (const s of ['L', 'R'] as const) {
-      const hb = ch.geo.build.body.sockets[`hand.${s}`].basis;
+      const hb = ch.body.sockets[`hand.${s}`].basis;
       const palm = new THREE.Vector3(-hb[6], -hb[7], -hb[8]);
       for (let f = 1; f <= 5; f++) {
         const bones: THREE.Bone[] = [], axis: THREE.Vector3[] = [];
@@ -297,11 +286,6 @@ export class Animator {
         this.fingers[s][f - 1].close.setFromAxisAngle(palm, ang * (f === 5 ? 0.5 : 0.4));
       }
     }
-    // Expression unit indices.
-    const names = ch.geo.st.exprNames;
-    names.forEach((n, i) => this.exprIdx.set(n, i));
-    this.expr = new Float32Array(names.length);
-    this.exprTarget = new Float32Array(names.length);
   }
 
   /** Damage/hit impulse in world space (direction the hit pushes the body). */
@@ -451,7 +435,7 @@ export class Animator {
     if (lod === 0) {
       this.face(inp, actionMood, fam, dt);
       this.eyes(inp, dt);
-    } else this.ch.exprW.fill(0);
+    } else this.ch.setFace('neutral', 0, false, 0, 0);
   }
 
   // ------------------------------------------------------------------ superpowers
@@ -817,7 +801,7 @@ export class Animator {
       this.applyClipGait(p, gait.w);
       // The walk clip swings the forward hand in towards the midline (in front of the crotch
       // seen head-on): carry the arms a little out from the body while moving.
-      const room = moving * (1 - run) * (0.1 + 0.06 * this.ch.app.weight);
+      const room = moving * (1 - run) * (0.1 + 0.06 * this.ch.traits.weight);
       if (room > 0.002) for (const s of ['L', 'R'] as const) p.arm(s, 0, room * this.armClip[s]);
       this.landing(p, gait.w);
     }
@@ -845,7 +829,7 @@ export class Animator {
       if (inp.main === 'none' && inp.off === 'none' && !crouch && calm > 0.01) this.idleArms(p, calm);
       // The captured arms hang close to a slim actor's thighs: give the hands room past broader
       // hips, thighs and clothes.
-      const room = this.mocapW * this.clipOn * (0.09 + 0.1 * this.ch.app.weight);
+      const room = this.mocapW * this.clipOn * (0.09 + 0.1 * this.ch.traits.weight);
       if (room > 0.002) for (const s of ['L', 'R'] as const) p.arm(s, 0, room * this.armClip[s]);
     }
     this.carryPose(p, inp, moving, run, crouch);
@@ -1331,7 +1315,7 @@ export class Animator {
       const Wi = W.clone().invert();
       this.neutral[this.map.idx(`lowerarm01.${s}`)] = Wi.clone().multiply(qB).multiply(W);
       // Twist so the palm faces the thigh (thumb forward).
-      const hb = ch.geo.build.body.sockets[`hand.${s}`].basis;
+      const hb = ch.body.sockets[`hand.${s}`].basis;
       const qT = qB.clone().multiply(W);
       const n1 = new THREE.Vector3(-hb[6], -hb[7], -hb[8]).applyQuaternion(qT);
       const want = new THREE.Vector3(-sg, 0, 0.15);
@@ -1623,16 +1607,17 @@ export class Animator {
   // ------------------------------------------------------------------ face
 
   private face(inp: AnimInput, actionMood: string | undefined, fam: Family, dt: number) {
-    const tgt = this.exprTarget.fill(0);
-    const set = (n: string, w: number) => { const i = this.exprIdx.get(n); if (i !== undefined) tgt[i] = Math.max(tgt[i], w); };
-    const mood = this.pain > 0.3 ? 'pain' : actionMood ?? inp.anim.mood ?? 'neutral';
-    for (const [n, w] of MOODS[mood] ?? []) set(n, w);
-    // The character's resting expression (appearance.face.smile): a friendly face carries a
-    // little of the happy mood all the time, a stern one a slight frown.
-    const rest = this.ch.app.face.smile ?? 0;
-    if (rest > 0 && mood !== 'pain') for (const [n, w] of MOODS.happy) set(n, w * rest * 0.9);
-    else if (rest < 0 && mood === 'neutral') { set('mouth-depression', -rest * 0.35); set('eyebrows-left-down', -rest * 0.25); set('eyebrows-right-down', -rest * 0.25); }
-    if (this.pain > 0) for (const [n, w] of MOODS.pain) set(n, w * this.pain);
+    let mood = this.pain > 0.3 ? 'pain' : actionMood ?? inp.anim.mood ?? 'neutral';
+    if (!MOODS[mood]) mood = 'neutral';
+    let target = mood === 'neutral' ? 0 : mood === 'pain' ? Math.max(0.6, this.pain) : 1;
+    // The character's resting expression: a friendly face carries a little of the happy mood all the time.
+    const rest = this.ch.traits.smile;
+    if (mood === 'neutral' && rest > 0.15) { mood = 'happy'; target = rest * 0.9; }
+    if (mood !== this.mood) {
+      // A new mood fades in after the old one has faded out (one expression channel).
+      this.moodW = approach(this.moodW, 0, 10, dt);
+      if (this.moodW < 0.05) this.mood = mood;
+    } else this.moodW = approach(this.moodW, target, target > this.moodW ? 8 : 6, dt);
     const dead = fam === 'dead', asleep = fam === 'sleep';
     // Blinking.
     this.blinkT -= dt;
@@ -1642,35 +1627,19 @@ export class Animator {
     }
     this.blink = Math.max(0, this.blink - dt * 7);
     const lid = dead ? 0.8 : asleep ? 1 : Math.sin(Math.min(1, this.blink) * Math.PI);
-    set('eye-left-closure', lid);
-    set('eye-right-closure', lid);
-    // Talking: syllable envelope drives jaw & lip shapes.
-    let jawT = dead ? 0.25 : 0;
-    if (inp.anim.talking && !dead && !asleep) {
+    // Talking: a syllable envelope drives the jaw and the mouth.
+    let jawT = dead ? 0.25 : 0, syl = 0;
+    const talking = !!inp.anim.talking && !dead && !asleep;
+    if (talking) {
       this.talkPhase += dt * (9 + 3 * Math.sin(this.time * 1.7));
-      const syl = Math.max(0, Math.sin(this.talkPhase)) * (0.55 + 0.45 * Math.sin(this.talkPhase * 0.37 + 1));
+      syl = Math.max(0, Math.sin(this.talkPhase)) * (0.55 + 0.45 * Math.sin(this.talkPhase * 0.37 + 1));
       jawT = syl * 0.18;
-      const v = Math.sin(this.talkPhase * 0.53);
-      set('mouth-open', syl * 0.45);
-      set('mouth-pursing', Math.max(0, v) * 0.35 * syl);
-      set('mouth-retraction', Math.max(0, -v) * 0.35 * syl);
-      set('eyebrows-left-up', Math.max(0, Math.sin(this.talkPhase * 0.21)) * 0.25);
-      set('eyebrows-right-up', Math.max(0, Math.sin(this.talkPhase * 0.21)) * 0.25);
     }
     if (inp.anim.action?.id === 'eat' && this.actionW > 0.5) jawT = Math.max(0, Math.sin(this.time * 12)) * 0.12;
     this.jaw = approach(this.jaw, jawT, 18, dt);
     const jb = this.ch.bone('jaw');
     jb.quaternion.multiply(_q.setFromAxisAngle(_v.set(1, 0, 0), -this.jaw));
-    // Smooth toward targets (blinks fast).
-    const ew = this.ch.exprW;
-    for (let i = 0; i < tgt.length; i++) {
-      const rate = tgt[i] > this.expr[i] ? 14 : 8;
-      this.expr[i] = approach(this.expr[i], tgt[i], rate, dt);
-      ew[i] = this.expr[i];
-    }
-    const li = this.exprIdx.get('eye-left-closure'), ri = this.exprIdx.get('eye-right-closure');
-    if (li !== undefined) ew[li] = Math.max(this.expr[li], lid);
-    if (ri !== undefined) ew[ri] = Math.max(this.expr[ri], lid);
+    this.ch.setFace(this.mood, this.moodW, talking, syl, lid);
   }
 
   private eyes(inp: AnimInput, dt: number) {

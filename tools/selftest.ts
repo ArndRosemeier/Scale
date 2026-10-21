@@ -36,7 +36,6 @@ import { buildRuralTile, ruralSurfaceAt, indexRuralSurfaces, ruralSurfaceAtIndex
 import { WorldIndex } from '../src/world/WorldIndex';
 import { TERRAIN_DROP } from '../src/build/terrainMesh';
 import { terrainExtent } from '../src/world/boundary';
-import { cmuBvhChecks } from './cmuBvhTest';
 import { villainChecks } from './villainTest';
 import { arcadeChecks } from './arcadeTest';
 import { homeChecks } from './homeTest';
@@ -2498,10 +2497,14 @@ section('saves', async () => {
   const back = parseSave(serializeSave(full));
   {
     // The three costumes (F1–F3): kept through a save, junk sanitised.
-    const look = { appearance: { gender: 1, seed: 5 }, outfit: { top: 'sweater' } } as unknown as CharacterLook;
+    const look: CharacterLook = { actor: { body: { gender: 1 } as never, outfit: ['briefs', 'fisherman-sweater', 'jeans'], hair: 'hair-short02' } };
     const c = parseSave(serializeSave({ ...full, costumes: { active: 2, looks: [null, look, look] } })).costumes;
     const r = readCostumes(c);
-    check(!!r && r.active === 2 && r.looks[0] === null && !!r.looks[1] && r.looks[2]?.outfit.top === 'sweater', 'costumes: the three looks and the worn one survive a save');
+    check(!!r && r.active === 2 && r.looks[0] === null && !!r.looks[1] && r.looks[2]?.actor.outfit?.includes('fisherman-sweater') === true, 'costumes: the three looks and the worn one survive a save');
+    // Looks saved before the Actors characters (appearance + outfit spec) become Actors configurations.
+    const legacy = readCostumes({ active: 0, looks: [{ appearance: { gender: 1, seed: 5 }, outfit: { top: 'sweater', bottom: 'trousers', shoes: 'boots' } }] });
+    const l0 = legacy?.looks[0]?.actor;
+    check(!!l0 && (l0.body?.gender ?? 0) > 0.5 && !!l0.outfit?.includes('fisherman-sweater') && !!l0.outfit?.some((g) => /boots/.test(g)), `costumes: a look from an older version is converted (${JSON.stringify(l0?.outfit)})`);
     const bad = readCostumes({ active: 7, looks: ['x', { appearance: 1 }] });
     check(!!bad && bad.active === 0 && bad.looks.length === 3 && bad.looks.every((l) => l === null), 'costumes: a broken costume set loads as the starting look');
     check(readCostumes(null) === null && parseSave(serializeSave(full)).costumes === undefined, 'costumes: older saves have none');
@@ -4362,8 +4365,6 @@ section('shrink ray', async () => {
   check(Math.abs(rig.length / L0 - 0.875) < 1e-9 && Math.abs(len - want) < want * 0.08, `shrink: the Strider's body follows a live scale (spine ${len.toFixed(1)} m, want ${want.toFixed(1)} m)`);
 });
 
-// Motion capture: CMU BVH parsing and retargeting onto the clip library (tools/cmuBvh.ts).
-section('motion capture', async () => { cmuBvhChecks(check); });
 
 // Villain groups, Phase 4: boss operations as threat events, the eco-radicals, the necromancers (tools/villainTest.ts).
 section('villains phase 4', async () => { await villainChecks(check); });

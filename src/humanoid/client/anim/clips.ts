@@ -1,9 +1,9 @@
 /**
- * Motion-captured-style animation clips (Quaternius Universal Animation Library, CC0; built by
- * tools/build-anim-clips.ts) and motion capture (CMU_* clips: CMU Graphics Lab Motion Capture
- * Database, appended by tools/cmu-bvh.ts) retargeted onto MakeHuman characters.
+ * Motion-captured clips (the Quaternius Universal Animation Library, CC0, and standing idles cut
+ * from CMU motion capture), all from the Actors pack (see actors/clips.ts), retargeted onto each
+ * character's proxy skeleton.
  *
- * The library stores model-space bone rotations of a 22-bone Rigify body in Norgo axes. Each
+ * The library stores model-space bone rotation changes of a 22-bone body in Scale's axes. Each
  * character bakes the clips it uses into the animator's own pose space (Euler angles relative
  * to its neutral, see pose.ts), so clips blend with the procedural layers like any other pose:
  *
@@ -14,35 +14,15 @@
  * than source bones interpolate Δ; second segments of limbs share the twist of the first.
  */
 import * as THREE from 'three';
-import { humanAssetUrl } from '../../assets';
+import { actors, HEADLESS } from '../../actors/service';
+import { actorClipLibrary, type ClipLibraryData, type ClipMeta } from '../../actors/clips';
 import type { Character } from '../Character';
 import type { BoneMap } from './pose';
 import { Pose, wrapPi } from './pose';
 
-interface ClipMeta { name: string; frames: number; loop: boolean; dur: number; offset: number; speed: number; sync: number }
-interface LibraryJson {
-  version: number;
-  fps: number;
-  bones: string[];
-  rest: number[][];
-  restHead: number[][];
-  restTip: (number[] | null)[];
-  legLen: number;
-  stride: number;
-  clips: ClipMeta[];
-}
-
-export interface ClipLibrary {
-  fps: number;
-  bones: string[];
-  restQ: THREE.Quaternion[];
-  /** Rest limb segments (joint → next joint), null for torso bones. */
-  restSeg: (THREE.Vector3 | null)[];
-  legLen: number;
-  stride: number;
-  clips: Map<string, ClipMeta>;
-  data: Int16Array;
-}
+export type { ClipMeta } from '../../actors/clips';
+/** The clip library (see actors/clips.ts): Δ rotations of a 22-bone body per frame, limb rest segments, hips offsets. */
+export type ClipLibrary = ClipLibraryData;
 
 /**
  * Clips on/off (for comparing with the purely procedural animation): `?clips=0` in the URL or
@@ -67,20 +47,10 @@ export function clipLibraryReady(): Promise<ClipLibrary | null> {
 }
 
 async function loadLibrary(): Promise<ClipLibrary | null> {
+  if (HEADLESS) return null;
   try {
-    const url = (f: string) => humanAssetUrl(`../anim/${f}`);
-    const j = (await (await fetch(url('clips.json'))).json()) as LibraryJson;
-    const buf = await (await fetch(url('clips.bin'))).arrayBuffer();
-    lib = {
-      fps: j.fps,
-      bones: j.bones,
-      restQ: j.rest.map((q) => new THREE.Quaternion(q[0], q[1], q[2], q[3])),
-      restSeg: j.restTip.map((t, i) => (t ? new THREE.Vector3(t[0] - j.restHead[i][0], t[1] - j.restHead[i][1], t[2] - j.restHead[i][2]).normalize() : null)),
-      legLen: j.legLen,
-      stride: j.stride,
-      clips: new Map(j.clips.map((c) => [c.name, c])),
-      data: new Int16Array(buf),
-    };
+    const [lead] = await actors.ready();
+    lib = await actorClipLibrary(lead.human.runtime);
     return lib;
   } catch (e) {
     console.warn('[anim] clip library unavailable, procedural only', e);
@@ -168,7 +138,7 @@ export class ClipRig {
   ) {
     this.driven = new Float32Array(map.count);
     this.scale = legLen / lib.legLen;
-    const body = ch.geo.build.body;
+    const body = ch.body;
     const srcIdx = (n: string) => {
       const i = lib.bones.indexOf(n);
       if (i < 0) throw new Error('clip bone missing: ' + n);
