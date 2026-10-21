@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.261 — 2026-10-21
+
+- **Walking, running and standing look as they do in Actors.** People now play Actors' clips exactly as Actors' own character player does: Actors retargets each clip onto that person's skeleton, every bone included (fingers too), and Scale no longer bends anything on top. Gone are the old body's corrections (shoulders pushed forward and down on every clip, arms held out from the body while walking, hands moved off the thighs, toned-down arm and torso motion when standing), the three slowed-down motion-capture idles (everyone stands with Actors' idle at its own speed, each person at a different point of it) and the extra breathing over it. Walk, jog and sprint blend inside Actors as whole poses, in step with each other, and the legs cycle at the pace each clip's planted foot sets, so feet don't slide. Free hands keep the clip's own fingers. Still on Scale's side for now: turning the hips toward the direction of travel, leaning into speed changes, looking at things, foot placement on slopes and stairs, and everything not walking or standing (next phases of docs/ACTORS_PLAN.md).
+- Actors gained what this needs, for every Actors user: pose buffers, blending poses as rotations (never angles), a speed-driven locomotion blend that measures each gait's stride and footfall, and playing clips without per-frame allocations.
+
 ## 0.260 — 2026-10-21
 
 - **Plan: people fully on Actors.** docs/ACTORS_PLAN.md: Actors' own animation (its retargeted clips, untouched) poses every person, and what Scale's animation does beyond that (walk/run blending, foot placement, look-at, grips, actions, flight, ragdolls, crowds, imported avatars) moves into the Actors library, in six phases.

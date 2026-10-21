@@ -25,6 +25,7 @@ import { Pose, makeBoneMap, kf, clamp, smooth, approach, wrapPi, type BoneMap, t
 import { ACTIONS, sitPose, type ActionCtx, type GripClass, type ActionDef } from './actions';
 import { hash32 } from '../../../core/rng';
 import { ClipRig, clipLibrary, clipSettings } from './clips';
+import type { Pose as ActorPose } from '@actors/core';
 
 export type GroundFn = (x: number, y: number, z: number) => number | null;
 
@@ -77,7 +78,7 @@ function familyOf(m: MoveState): Family {
 
 
 const _e = new THREE.Euler();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion();
 const _rt = new THREE.Vector3(), _rw = new THREE.Vector3(), _rg = new THREE.Vector3(), _rp = new THREE.Vector3();
 const _ra = new THREE.Vector3(), _rb = new THREE.Vector3(), _rc = new THREE.Vector3(), _rd = new THREE.Vector3(), _re = new THREE.Vector3(), _rf = new THREE.Vector3();
 const _rq = new THREE.Quaternion();
@@ -96,17 +97,7 @@ interface FingerRig {
 /** Relaxed hand: curl factor per finger (thumb → little finger) and per joint (base → tip). */
 const RELAXED_FINGER = [1.1, 1.15, 1.35, 1.6, 1.85];
 const RELAXED_JOINT = [0.85, 1.45, 1.1];
-/** Upper-body bones whose captured idle sway is toned down when standing. */
-const UPPER_BODY = /^(root$|spine0|neck0|head)/;
 const TORCH_RAISED = [1.7, 0.5, -0.4, 0.45, 0.3, -0.9, -0.4] as const;
-/**
- * Motion-captured standing idles (CMU, tools/cmu-bvh.ts), one picked per character seed so a
- * crowd doesn't breathe and shift its weight in step. Characters fall back to the Quaternius
- * Idle_Loop (with the calmer procedural arms) when the library lacks them.
- */
-export const MOCAP_IDLES = ['CMU_Idle_1', 'CMU_Idle_2', 'CMU_Idle_3'];
-/** The motion-captured idles play slower than captured: calmer standing (the baked crowd follows, see idleCycle). */
-const MOCAP_IDLE_RATE = 0.5;
 
 export class Animator {
   readonly map: BoneMap;
@@ -179,17 +170,10 @@ export class Animator {
   private clipOn = 0;
   private crouchS = 0;
   private armClip = { L: 1, R: 1 };
-  /** Extra forward rotation of the collarbones over the motion-capture clips (rad). */
-  clipProtract = 0.7;
-  /** Share of the clips on the arms: full while walking, low when standing (see applyClipGait). */
-  private armClipW = 1;
-  /** Same for the upper body (spine, neck, head). */
-  private torsoClipW = 1;
   private idleClipT = 0;
-  /** The standing idle clip of this character (a MOCAP_IDLES entry, or the Quaternius Idle_Loop). */
-  private idleName = '';
-  /** Weight of the motion-captured idle in the current blend (it drives the arms and torso fully). */
-  private mocapW = 0;
+  /** Actors pose buffers for the locomotion blend (see clipGait). */
+  private aPoses: ActorPose[] = [];
+  private gaitW = new Float32Array(3);
   private talkS = 0;
   private swimU = 0;
   // Air and landing (clip families): time in the air, whether it began with a jump, landing.
@@ -792,17 +776,7 @@ export class Animator {
     p.neck(run * 0.12 + sprint * 0.12 + crouch * 0.4);
     // Clip locomotion replaces the procedural gait (arms holding something keep theirs).
     if (gait) {
-      // Standing: the Quaternius idle sways the hanging arms back and forth (the hands never
-      // settle); the calm procedural arms carry most of it. The motion-captured idles and
-      // walking keep the clip's arms and torso.
-      const full = Math.min(1, moving + this.mocapW);
-      this.armClipW = 0.25 + 0.75 * full;
-      this.torsoClipW = 0.3 + 0.7 * full;
       this.applyClipGait(p, gait.w);
-      // The walk clip swings the forward hand in towards the midline (in front of the crotch
-      // seen head-on): carry the arms a little out from the body while moving.
-      const room = moving * (1 - run) * (0.1 + 0.06 * this.ch.traits.weight);
-      if (room > 0.002) for (const s of ['L', 'R'] as const) p.arm(s, 0, room * this.armClip[s]);
       this.landing(p, gait.w);
     }
     // Hips toward movement direction, torso keeps facing forward.
@@ -821,16 +795,9 @@ export class Animator {
       p.spine(0, 0, shift * 0.04 * life);
       p.leg('L', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, -shift) * 0.12) * life);
       p.leg('R', 0, 0.03 * life, -0.05 * life, (0.06 + Math.max(0, shift) * 0.12) * life);
-      // (Not over a motion-captured idle: its arms already hang as captured. Its share without
-      // the 1 - moving that mocapW carries: idle·(1 - mocapW) peaked mid-stop and pulled the
-      // forearms straight, then let them bend again, a wobble on every stop from a run.)
-      const mocap = this.idleName.startsWith('CMU_') ? (1 - this.crouchS) * (1 - this.talkS) : 0;
-      const calm = idle * (1 - mocap * this.clipOn);
+      // (Procedural standing only: the idle clip's arms hang as Actors plays them.)
+      const calm = idle * (1 - this.clipOn);
       if (inp.main === 'none' && inp.off === 'none' && !crouch && calm > 0.01) this.idleArms(p, calm);
-      // The captured arms hang close to a slim actor's thighs: give the hands room past broader
-      // hips, thighs and clothes.
-      const room = this.mocapW * this.clipOn * (0.09 + 0.1 * this.ch.traits.weight);
-      if (room > 0.002) for (const s of ['L', 'R'] as const) p.arm(s, 0, room * this.armClip[s]);
     }
     this.carryPose(p, inp, moving, run, crouch);
   }
@@ -842,53 +809,44 @@ export class Animator {
    * while clips are off or not loaded.
    */
   private clipGait(inp: AnimInput, crouch: number, moving: number, dt: number): { cycle: number; w: number } | null {
+    // A shape change re-fits the skeleton: retarget onto the new one.
+    if (this.clipRig && this.clipRig.fitted !== this.ch.actor.actor.fittedSkeleton) { this.clipRig = null; this.aPoses = []; }
     if (!this.clipRig) {
       const lib = clipLibrary();
-      if (lib) this.clipRig = new ClipRig(this.ch, this.map, lib, this.neutral, this.parentNeutral, this.legLen);
+      if (lib && this.ch.actor.actor.fittedSkeleton) this.clipRig = new ClipRig(this.ch, this.map, lib, this.neutral, this.parentNeutral);
     }
     this.clipOn = approach(this.clipOn, this.clipRig && clipSettings.enabled ? 1 : 0, 4, dt);
     const rig = this.clipRig;
-    if (!rig || this.clipOn < 0.002) return null;
-    const idle = this.standingIdle(rig), walk = rig.clip('Walk_Loop'), jog = rig.clip('Jog_Fwd_Loop'), sprint = rig.clip('Sprint_Loop');
-    const cIdle = rig.clip('Crouch_Idle_Loop'), cWalk = rig.clip('Crouch_Fwd_Loop');
-    if (!idle || !walk || !jog || !sprint || !cIdle || !cWalk) return null;
+    if (!rig || this.clipOn < 0.002 || !rig.stand || !rig.crouch) return null;
+    const idle = rig.clip('Idle_Loop'), cIdle = rig.clip('Crouch_Idle_Loop');
+    if (!idle || !cIdle) return null;
     this.crouchS = approach(this.crouchS, crouch, 8, dt);
     this.talkS = approach(this.talkS, inp.anim.talking ? 1 : 0, 3, dt);
     const talkIdle = rig.clip('Idle_Talking_Loop');
-    const sp = this.speed, cr = this.crouchS;
-    const jogT = smooth(1.9, 3.6, sp), sprT = smooth(5.6, 7.6, sp);
-    const stand = 1 - cr;
+    const cr = this.crouchS, stand = 1 - cr;
     const talk = talkIdle ? this.talkS : 0;
-    this.mocapW = this.idleName.startsWith('CMU_') ? (1 - moving) * stand * (1 - talk) : 0;
-    const ws = [
-      [idle, (1 - moving) * stand * (1 - talk)],
-      [talkIdle ?? idle, (1 - moving) * stand * talk],
-      [walk, moving * (1 - jogT) * stand],
-      [jog, moving * jogT * (1 - sprT) * stand],
-      [sprint, moving * jogT * sprT * stand],
-      [cIdle, (1 - moving) * cr],
-      [cWalk, moving * cr],
-    ] as const;
-    // Stride of the blend (moving clips only): the phase advances by distance / stride.
-    let cyc = 0, cw = 0;
-    for (const [c, w] of ws) if (c.speed > 0.05 && w > 0) { cyc += c.cycle * w; cw += w; }
-    const cycle = cw > 1e-4 ? cyc / cw : walk.cycle;
-    // Accumulate (the phase is advanced by the caller with this cycle; one frame of lag is fine).
-    const out = this.clipPose.clear();
+    // Game decisions: standing, talking, crouching, moving. Actors blends the clips (as
+    // quaternions, gaits in step by their measured footfalls).
+    const gw = rig.stand.weights(this.speed, this.gaitW);
+    const sw = moving * stand, cw = moving * cr;
+    const sStride = rig.stand.stride(gw), cStride = rig.crouch.gaits[0].measure.stride;
+    const cycle = sw + cw > 1e-4 ? (sStride * sw + cStride * cw) / (sw + cw) : sStride;
+    if (!this.aPoses.length) this.aPoses = [rig.pose(), rig.pose(), rig.pose()];
+    const [tmp, mixed] = this.aPoses;
+    // Animator phase: left leg furthest forward at 0.25; Actors' gait phase: at 0.
+    const ph = this.phase - 0.25;
     this.idleClipT += dt;
-    let sum = 0;
-    for (const [c, w] of ws) {
-      if (w < 0.002) continue;
-      // Procedural phase: left leg furthest forward at 0.25. Clip: at its sync point.
-      const rate = MOCAP_IDLES.includes(c.meta.name) ? MOCAP_IDLE_RATE : 1;
-      const u = c.speed > 0.05 ? this.phase - 0.25 + c.meta.sync : (this.idleClipT * rate) / c.meta.dur;
-      rig.accumulate(c, u, w, out);
-      sum += w;
-    }
-    if (sum <= 0) return null;
-    const k = 1 / sum;
-    for (const b of rig.bones) { const i = b * 3; out.rot[i] *= k; out.rot[i + 1] *= k; out.rot[i + 2] *= k; }
-    out.root.multiplyScalar(k);
+    const m = rig.mixer.begin();
+    const one = (c: NonNullable<ReturnType<ClipRig['clip']>>, w: number) => {
+      if (w > 0.002) m.add(rig.sample(c, this.idleClipT / c.meta.dur, tmp), w);
+    };
+    one(idle, (1 - moving) * stand * (1 - talk));
+    if (talkIdle) one(talkIdle, (1 - moving) * stand * talk);
+    one(cIdle, (1 - moving) * cr);
+    if (sw > 0.002) m.add(rig.stand.sample(ph, gw, tmp), sw);
+    if (cw > 0.002) m.add(rig.crouch.sample(ph, [1], tmp), cw);
+    m.end(mixed);
+    rig.toPose(mixed, 1, this.clipPose.clear());
     // Arms holding something stay procedural (carry poses are authored over the neutral).
     const ready = inp.combat;
     const two = inp.main === 'twohand' || inp.main === 'polearm' || inp.main === 'staff';
@@ -900,19 +858,10 @@ export class Animator {
     return { cycle, w: this.clipOn };
   }
 
-  /** This character's standing idle clip (picked by seed among the motion-captured ones). */
-  private standingIdle(rig: ClipRig) {
-    if (!this.idleName) {
-      const have = MOCAP_IDLES.filter((n) => rig.clip(n));
-      this.idleName = have.length ? have[hash32(this.seed ^ 0x1d1e) % have.length] : 'Idle_Loop';
-    }
-    return rig.clip(this.idleName);
-  }
-
   /** Length of the standing idle loop (s): the crowd baker samples one whole cycle. */
   get idleCycle(): number {
-    const c = this.clipRig && this.idleName ? this.clipRig.clip(this.idleName) : null;
-    return c ? c.meta.dur / (MOCAP_IDLES.includes(c.meta.name) ? MOCAP_IDLE_RATE : 1) : 2.5;
+    const c = this.clipRig?.clip('Idle_Loop');
+    return c ? c.meta.dur : 2.5;
   }
 
   /** Landing from a jump or fall: the landing clip's knee bend, faded out when running on. */
@@ -934,28 +883,19 @@ export class Animator {
     p.root.lerp(src.root, k);
   }
 
+  /** The clip pose over the procedural gait: whole, except arms that hold something. */
   private applyClipGait(p: Pose, w: number) {
     const rig = this.clipRig!, src = this.clipPose, armM = this.masks.arms;
     for (const b of rig.bones) {
       let m = w;
-      if (armM[b] > 0) {
-        const n = this.ch.bones[b].name;
-        m *= (n.endsWith('.L') ? this.armClip.L : this.armClip.R) * this.armClipW;
-        // Forearm twist and wrist: barely any of the standing clip (it turned the palms back).
-        if (/^(lowerarm02|wrist)/.test(n)) m *= this.armClipW;
-      }
-      else if (UPPER_BODY.test(this.ch.bones[b].name)) m *= this.torsoClipW;
+      if (armM[b] > 0) m *= this.ch.bones[b].name.endsWith('.L') ? this.armClip.L : this.armClip.R;
       if (m <= 0) continue;
       const i = b * 3;
       p.rot[i] += wrapPi(src.rot[i] - p.rot[i]) * m;
       p.rot[i + 1] += wrapPi(src.rot[i + 1] - p.rot[i + 1]) * m;
       p.rot[i + 2] += wrapPi(src.rot[i + 2] - p.rot[i + 2]) * m;
     }
-    // Hips: the captured idle shifts them back and forth (the whole upper body and the hanging
-    // arms rocked with it); keep the height, tone the horizontal sway down when standing.
-    const y = p.root.y + (src.root.y - p.root.y) * w;
-    p.root.lerp(src.root, w * this.torsoClipW);
-    p.root.y = y;
+    p.root.lerp(src.root, w);
   }
 
   /**
@@ -1206,18 +1146,14 @@ export class Animator {
     const t = this.time;
     const alive = fam !== 'dead' && fam !== 'sleep';
     // Breathing (faster after running).
+    // (Not over the ground clips: Actors' idle breathes itself, and its bones stay as played.)
     const br = 1.4 + Math.min(1.5, this.speed * 0.2);
     this.breathPh = (this.breathPh + dt * br * 1.6) % (Math.PI * 2);
-    const b = Math.sin(this.breathPh);
+    const b = Math.sin(this.breathPh) * (1 - this.clipOn * this.famW.get('ground')!);
     p.add('spine02', 0.012 * b);
     p.add('spine01', 0.018 * b);
     p.addS('clavicle', 'L', 0, 0, -0.012 * b);
     p.addS('clavicle', 'R', 0, 0, -0.012 * b);
-    // Posture: the Quaternius clips hold the shoulders pulled back (the arms hung from behind the
-    // chest); bring the collarbones forward as the procedural neutral does. The motion-captured
-    // idles stand with relaxed shoulders already (protracted, their hands met in front).
-    const cw = this.clipRig && clipSettings.enabled ? this.clipOn * (1 - this.mocapW) : 0;
-    if (cw > 0.01) for (const s of ['L', 'R'] as const) p.addS('clavicle', s, 0, -this.clipProtract * cw * this.armClip[s] * this.armClipW, 0);
     // Acceleration lean.
     p.add('root', this.lean.x, 0, -this.lean.y);
     // Tail: travelling sway wave, livelier when moving; droops when dead or asleep.
@@ -1384,8 +1320,11 @@ export class Animator {
     const fw = inp.anim.move === 'fly' ? this.famW.get('glide')! : 0;
     if (fw > 0.01 && inp.main === 'none') cR += (this.flyCurl.R - cR) * fw;
     if (fw > 0.01 && inp.off === 'none') cL += (this.flyCurl.L - cL) * fw;
+    // Free hands on the ground clips keep the clip's own fingers (Actors plays every finger bone).
+    const clipHand = this.clipRig && !def && !lc && fw <= 0.01 ? this.clipOn * this.famW.get('ground')! * (1 - this.actionW) : 0;
     for (const s of ['L', 'R'] as const) {
       const c = s === 'L' ? cL : cR;
+      const keep = clipHand * this.armClip[s] * ((s === 'L' ? inp.off : inp.main) === 'none' ? 1 : 0);
       // An open hand (the relaxed curl or less) curls more toward the little finger and in the
       // middle joints, as a hanging hand does; grips and fists curl evenly.
       const open = 1 - smooth(relaxed, relaxed + 0.4, c);
@@ -1395,8 +1334,11 @@ export class Animator {
         f.bones.forEach((b, k) => {
           let amt = c * (k === 0 ? 0.75 : 1) * (f.thumb ? 0.45 + 0.4 * smooth(0.9, 1.45, c) : 1) * grade * (1 + open * (RELAXED_JOINT[k] - 1));
           if (def === ACTIONS.gesture_point && fi === 1) amt = 0.05;
+          if (keep >= 0.999) return;
+          if (keep > 0) _q4.copy(b.quaternion);
           b.quaternion.setFromAxisAngle(f.axis[k], amt + spread * (k === 0 ? 1 : 0));
           if (k === 0) b.quaternion.premultiply(f.close);
+          if (keep > 0) b.quaternion.slerp(_q4, keep);
         });
       });
     }
