@@ -1,19 +1,19 @@
 /**
- * A complete animated humanoid for one entity: asynchronous body build
- * (with a lightweight placeholder until ready), Character + Animator +
- * EquipmentRig, LOD switching by camera distance and update throttling for
- * distant characters. Used by HumanoidViews, HumanoidPreview and the sandbox.
+ * A complete animated person for one entity: asynchronous build of its Actors character (with a
+ * lightweight placeholder until it is dressed), Character + Animator + EquipmentRig, Actors'
+ * detail levels by camera distance and update throttling for distant characters. Used by the
+ * player, the crowd's near people, the hero statue and the shader warm-up.
  */
 import { frameWork } from '../../core/frameWork';
 import * as THREE from 'three';
-import type { HumanoidAppearance } from '../types';
 import type { AnimState, Vec3 } from '../../shared/types';
 import { EntFlag } from '../../shared/types';
 import type { EquipmentVisuals } from '../../items/types';
-import { BodyService, geometryKey } from './BodyService';
 import { Character } from './Character';
 import { Animator, type GroundFn } from './anim/Animator';
 import { EquipmentRig } from './equipment';
+import { isActorLook, lookTraits, type Look } from '../actors/config';
+import { HEADLESS } from '../actors/service';
 
 export interface RigSnap {
   pos: Vec3;
@@ -32,16 +32,25 @@ export interface RigOptions {
   ground?: GroundFn | null;
   /** Weapons always in hand (players, previews). */
   alwaysDrawn?: boolean;
-  /** Fixed LOD (previews); otherwise chosen from camera distance. */
+  /** Fixed detail level (previews, statues); otherwise chosen from camera distance. */
   fixedLod?: number;
+  /** Renderer for a photographic skin (the hero). */
+  renderer?: unknown;
 }
 
-const LOD_DIST = [11, 32];
-
 /** Cumulative main-thread cost of finishing characters, by step (diagnostics, ms). */
-export const rigBuildStats = { builds: 0, character: 0, rig: 0, add: 0, equipment: 0 };
-if (typeof window !== 'undefined') (window as unknown as { norgoRigStats?: typeof rigBuildStats }).norgoRigStats = rigBuildStats;
+export const rigBuildStats = { builds: 0, character: 0, rig: 0, equipment: 0 };
+if (typeof window !== 'undefined') (window as unknown as { scaleRigStats?: typeof rigBuildStats }).scaleRigStats = rigBuildStats;
 const _p = new THREE.Vector3();
+
+/** Key of a look's body (a change rebuilds the character; colours and outfit don't). */
+function lookKey(l: Look): string {
+  if (isActorLook(l)) {
+    const c = l.actor;
+    return JSON.stringify([c.body, c.details, c.robot, c.robotLook, c.race, c.race2, c.raceMix, c.raceSize, c.skin, c.skinColor, c.skinTone, c.skinPattern, c.patternColor, c.patternStrength, c.eyes, c.eyeColor, c.eyeGlow, c.pupil, c.hair, c.hairColor, c.beard, c.stubble, c.brows, c.horns, c.hornSize, c.hornColor, c.tusks, c.tail, c.tailLength, c.seed]);
+  }
+  return JSON.stringify(l);
+}
 
 export class HumanoidRig {
   readonly object = new THREE.Group();
@@ -60,66 +69,70 @@ export class HumanoidRig {
   private frame = 0;
   private lastCombat = -100;
   private disposed = false;
-  private geoKey: string;
+  private key: string;
   height = 1.8;
 
-  constructor(public app: HumanoidAppearance, private opts: RigOptions = {}) {
+  constructor(public app: Look, private opts: RigOptions = {}) {
     this.object.name = 'humanoid-rig';
-    this.geoKey = geometryKey(app);
+    this.key = lookKey(app);
     this.makePlaceholder();
     this.whenDressed = new Promise<void>((r) => { this.markDressed = r; });
     this.ready = this.build();
   }
 
   private makePlaceholder() {
-    const a = this.app;
-    const h = 1.72 * a.scale * (0.88 + a.height * 0.24) * (a.age < 0.3 ? 0.6 + a.age : 1);
+    const t = lookTraits(this.app);
+    const h = 1.72 * t.scale * (isActorLook(this.app) ? 0.88 + (this.app.actor.body?.height ?? 0.5) * 0.24 : 0.88 + this.app.height * 0.24);
     this.height = h;
-    const r = 0.17 * a.scale * (0.85 + a.weight * 0.4);
+    const r = 0.17 * t.scale * (0.85 + t.weight * 0.4);
     const geo = new THREE.CapsuleGeometry(r, Math.max(0.1, h - r * 2), 4, 10);
     geo.translate(0, h / 2, 0);
-    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(a.skinTone[0], a.skinTone[1], a.skinTone[2], THREE.SRGBColorSpace), roughness: 0.8, transparent: true, opacity: 0.55 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x8a7a6e, roughness: 0.8, transparent: true, opacity: 0.55 });
     this.placeholder = new THREE.Mesh(geo, mat);
     this.placeholder.castShadow = false;
     this.object.add(this.placeholder);
   }
 
   private async build() {
-    const svc = BodyService.get();
-    const geo = await svc.geometry(this.app, this.opts.priority ?? 0);
-    if (this.disposed) return;
-    // The expensive main-thread part runs in a frame-budgeted slot (see core/frameWork).
+    if (HEADLESS) return;
+    let ch: Character;
+    try {
+      ch = await Character.load(this.app, this.pendingEq, { castShadow: this.opts.castShadow, priority: this.opts.priority, renderer: this.opts.renderer });
+    } catch (e) {
+      console.warn('[humanoid] character build failed', e);
+      return;
+    }
+    if (this.disposed) { ch.dispose(); return; }
+    // Wiring the character up runs in a frame-budgeted slot (see core/frameWork).
     await new Promise<void>((done) => frameWork.run(() => {
       try {
-        this.finishBuild(geo);
+        this.finish(ch, this.key);
       } finally {
         done();
       }
     }, this.opts.priority ?? 1, 'character'));
   }
 
-  private finishBuild(geo: Awaited<ReturnType<BodyService['geometry']>>) {
-    if (this.disposed) return;
+  private finish(ch: Character, key: string) {
+    if (this.disposed || key !== this.key) { ch.dispose(); return; }
     const T = rigBuildStats;
     let t = performance.now();
-    const ch = new Character(geo, this.app, { castShadow: this.opts.castShadow });
-    T.character += performance.now() - t;
+    const old = this.char, oldEq = this.equipment;
+    oldEq?.dispose();
+    old?.dispose();
     this.char = ch;
-    t = performance.now();
     this.animator = new Animator(ch);
     this.equipment = new EquipmentRig(ch);
     T.rig += performance.now() - t;
-    this.height = geo.build.body.height;
-    t = performance.now();
-    // Hidden (placeholder stays) until dressed: the outfit is built piece by piece over the
-    // next frames (see EquipmentRig.set), and nobody should pop in undressed.
+    this.height = ch.height;
+    // Hidden (the placeholder stays) until dressed: nobody pops in undressed.
     ch.object.visible = false;
     this.object.add(ch.object);
-    T.add += performance.now() - t;
     ch.setSkyVis(this.skyVis);
     if (this.opts.fixedLod !== undefined) ch.setLod(this.opts.fixedLod);
     T.builds++;
     const prio = this.opts.priority ?? 1;
+    t = performance.now();
     this.equipment.set(this.pendingEq, (job, label) => frameWork.run(() => {
       const t0 = performance.now();
       job();
@@ -127,7 +140,7 @@ export class HumanoidRig {
     }, prio, label), () => {
       if (this.disposed || this.char !== ch) return;
       this.equipment?.setSkyVis(this.skyVis);
-      ch.object.visible = true;
+      ch.object.visible = this.visible;
       this.markDressed();
       if (this.placeholder) {
         this.placeholder.removeFromParent();
@@ -138,41 +151,21 @@ export class HumanoidRig {
     });
   }
 
-  /** Change appearance: recolours in place, rebuilds geometry if the shape changed. */
-  async setAppearance(app: HumanoidAppearance) {
-    const key = geometryKey(app);
+  /** Change the look: a new body is built (the old one stays until the new one is dressed). */
+  async setAppearance(app: Look) {
+    const key = lookKey(app);
     this.app = app;
-    if (key === this.geoKey && this.char) {
-      this.char.recolor(app);
+    if (key === this.key && this.char) return;
+    this.key = key;
+    if (HEADLESS) return;
+    let ch: Character;
+    try {
+      ch = await Character.load(app, this.pendingEq, { castShadow: this.opts.castShadow, priority: 0, renderer: this.opts.renderer });
+    } catch (e) {
+      console.warn('[humanoid] character build failed', e);
       return;
     }
-    this.geoKey = key;
-    const svc = BodyService.get();
-    const geo = await svc.geometry(app, 0);
-    if (this.disposed || this.geoKey !== key) return;
-    // Finishing a character (materials, skeleton, clothing) is the expensive main-thread
-    // part: run it in a frame-budgeted slot, so bodies arriving together don't freeze a frame.
-    frameWork.run(() => this.finish(geo, app, key), this.opts.priority ?? 1, 'character (new look)');
-  }
-
-  private finish(geo: Awaited<ReturnType<BodyService['geometry']>>, app: HumanoidAppearance, key: string) {
-    if (this.disposed || this.geoKey !== key) return;
-    const old = this.char, oldEq = this.equipment;
-    const svc = BodyService.get();
-    const ch = new Character(geo, app, { castShadow: this.opts.castShadow });
-    oldEq?.dispose();
-    old?.dispose();
-    this.char = ch;
-    this.animator = new Animator(ch);
-    this.equipment = new EquipmentRig(ch);
-    this.height = geo.build.body.height;
-    this.object.add(ch.object);
-    ch.object.visible = this.visible;
-    ch.setSkyVis(this.skyVis);
-    this.equipment.set(this.pendingEq);
-    this.equipment.setSkyVis(this.skyVis);
-    if (this.opts.fixedLod !== undefined) ch.setLod(this.opts.fixedLod);
-    svc.collect();
+    frameWork.run(() => this.finish(ch, key), this.opts.priority ?? 1, 'character (new look)');
   }
 
   /** What it wears now (the last setEquipment). */
@@ -187,8 +180,8 @@ export class HumanoidRig {
   }
 
   /**
-   * Per-frame update. `camPos` selects the LOD; distant characters animate at a
-   * reduced rate (their dt accumulates).
+   * Per-frame update. `camPos` picks the detail level (Actors' levels: full, medium, crowd);
+   * distant characters animate at a reduced rate (their dt accumulates).
    */
   update(s: RigSnap, dt: number, time: number, camPos?: THREE.Vector3) {
     this.object.position.set(s.pos[0], s.pos[1], s.pos[2]);
@@ -200,16 +193,18 @@ export class HumanoidRig {
     if (!ch || !an) return;
     let lod = this.opts.fixedLod ?? 0;
     if (this.opts.fixedLod === undefined && camPos) {
-      const d = _p.set(s.pos[0], s.pos[1] + 1, s.pos[2]).distanceTo(camPos) / Math.max(0.6, this.app.scale * sc);
+      const d = _p.set(s.pos[0], s.pos[1] + 1, s.pos[2]).distanceTo(camPos) / Math.max(0.6, ch.traits.scale * sc);
+      const levels = ch.actor.lods;
       const cur = ch.lod;
-      // Hysteresis avoids LOD flicker at the thresholds.
-      lod = d < LOD_DIST[0] - (cur === 0 ? -1 : 1) ? 0 : d < LOD_DIST[1] - (cur === 1 ? -2 : 2) ? 1 : 2;
+      // The pack's switch distances, with hysteresis against flicker at the thresholds.
+      lod = 0;
+      for (let l = 1; l < levels.length; l++) if (d > levels[l].distance + (l <= cur ? -1.5 : 1.5)) lod = l;
       if (lod !== cur) ch.setLod(lod);
     }
     // Throttle animation far away.
     this.frame++;
     this.accum += dt;
-    const every = lod === 2 ? 3 : lod === 1 ? 2 : 1;
+    const every = lod >= 2 ? 3 : lod === 1 ? 2 : 1;
     if (this.frame % every !== 0) return;
     const step = this.accum;
     this.accum = 0;
@@ -224,6 +219,8 @@ export class HumanoidRig {
       lod === 0 ? this.opts.ground ?? null : null,
     );
     eq.update(time);
+    ch.sync();
+    ch.update(step);
   }
 
   onHit(fromX: number, fromZ: number, amount: number) {

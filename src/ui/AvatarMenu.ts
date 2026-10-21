@@ -2,7 +2,7 @@
  * Start-screen character picker: the default (random) human, characters made in the
  * creator, or an imported model. Imports (GLB / glTF / VRM / FBX) are analysed immediately
  * (rig mapping, clips), get a thumbnail and are stored in the browser; created characters
- * store their look (appearance + outfit). The selection is remembered.
+ * store their look (an Actors character configuration). The selection is remembered.
  */
 import * as THREE from 'three';
 import { avatarStore, isGenerated, type StoredAvatar, type StoredImport, type StoredGenerated } from '../avatar/AvatarStore';
@@ -144,8 +144,9 @@ export class AvatarMenu {
 
 function describe(a: StoredAvatar): string {
   if (isGenerated(a)) {
-    const ap = a.look.appearance;
-    return `Created · ${ap.gender > 0.5 ? 'male' : 'female'}`;
+    const g = (a.look as { actor?: { body?: { gender?: number } }; appearance?: { gender: number } });
+    const gender = g.actor?.body?.gender ?? g.appearance?.gender ?? 0.5;
+    return `Created · ${gender > 0.5 ? 'male' : 'female'}`;
   }
   const i = a.info;
   if (!i) return a.file;

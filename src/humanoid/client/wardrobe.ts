@@ -1,76 +1,29 @@
 /**
- * Modern city clothing for the Norgo garment-shell system, plus simple held
- * items (phone, coffee, bag, umbrella). Replaces Norgo's medieval item module.
+ * The city wardrobe: deterministic city outfits (garment ids and colours per slot, worn as
+ * Actors garments), rigid pieces Scale builds itself, and simple held items (phone, coffee, bag,
+ * umbrella).
  */
 import * as THREE from 'three';
 import type { EquipmentVisuals, ItemVisual } from '../../items/types';
-import type { ShellLayer, ShellMaterial, WearableSpec, BodyFit, RigidPart } from '../../items/wearable';
+import type { WearableSpec, BodyFit, RigidPart } from '../../items/wearable';
 import { Rng } from '../../core/rng';
 import { streetWearable, streetHeld } from './streetwear';
 import { srgbColor } from '../../render/color';
 
 type C3 = [number, number, number];
 
-const mat = (color: C3, pattern: ShellMaterial['pattern'] = 'plain', o: Partial<ShellMaterial> = {}): ShellMaterial => ({
-  color,
-  color2: o.color2 ?? [color[0] * 0.75, color[1] * 0.75, color[2] * 0.75],
-  pattern,
-  patternScale: o.patternScale ?? 6,
-  roughness: o.roughness ?? 0.85,
-  metalness: 0,
-  sheen: o.sheen ?? 0.3,
-  glow: 0,
-  glowColor: [0, 0, 0],
-  wear: o.wear ?? 0.15,
-});
-
-/** Hero tights designs in shader order (garmentMaterial 'hero'). */
-const SUIT_DESIGN = ['plain', 'emblem', 'bolt', 'chevron', 'stripes', 'trunks'];
-
-const TORSO = [{ region: 'chest' as const }, { region: 'belly' as const }, { region: 'back' as const }];
-const ARMS = (to: number) => [
-  { region: 'upperarm.L' as const, to: Math.min(1, to * 2) }, { region: 'upperarm.R' as const, to: Math.min(1, to * 2) },
-  ...(to > 0.5 ? [{ region: 'forearm.L' as const, to: (to - 0.5) * 2 }, { region: 'forearm.R' as const, to: (to - 0.5) * 2 }] : []),
-];
-const LEGS = (to: number) => [
-  { region: 'pelvis' as const }, { region: 'buttocks' as const },
-  { region: 'thigh.L' as const, to: Math.min(1, to * 2) }, { region: 'thigh.R' as const, to: Math.min(1, to * 2) },
-  ...(to > 0.5 ? [{ region: 'shin.L' as const, to: (to - 0.5) * 2 }, { region: 'shin.R' as const, to: (to - 0.5) * 2 }] : []),
-];
-
+/**
+ * Scale's own pieces of an outfit: rigid parts on the body's sockets (a beanie; the street
+ * characters' and villains' costume pieces). Soft clothes (shirts, trousers, shoes, caps, helmets,
+ * gloves…) are Actors garments (humanoid/actors/outfit.ts) and never come here.
+ */
 export function resolveWearable(defId: string, v: ItemVisual): WearableSpec | null {
-  const c = v.primary, c2 = v.secondary;
-  const pat = (v.material as ShellMaterial['pattern']) || 'plain';
-  // An emissive accent (a villain lieutenant's lit trim): the item's glow in its glow colour (or accent).
-  const lit = (layer: ShellLayer): ShellLayer => (v.glow > 0 && 'material' in layer && layer.material ? { ...layer, material: { ...layer.material, glow: v.glow, glowColor: v.glowColor ?? v.accent } } as ShellLayer : layer);
-  const L = (layer: ShellLayer): WearableSpec => ({ layers: [lit(layer)] });
+  const c = v.primary;
   switch (defId) {
-    case 'tshirt': return L({ kind: 'shell', regions: [...TORSO, ...ARMS(0.22)], offset: 0.004, layer: 1, material: mat(c, pat, { color2: c2, roughness: 0.9 }), trim: { width: 0.006, color: c2 } });
-    case 'shirt': return L({ kind: 'shell', regions: [...TORSO, ...ARMS(0.97)], offset: 0.004, layer: 1, material: mat(c, pat, { color2: c2, roughness: 0.75, sheen: 0.2 }), trim: { width: 0.01, color: [c[0] * 0.9, c[1] * 0.9, c[2] * 0.9] } });
-    case 'sweater': return L({ kind: 'shell', regions: [...TORSO, { region: 'neck', to: 0.3 }, ...ARMS(0.95)], offset: 0.008, layer: 2, material: mat(c, pat === 'plain' ? 'quilted' : pat, { color2: c2, roughness: 0.95, patternScale: 14, sheen: 0.5 }), trim: { width: 0.015, color: c2 } });
-    case 'jacket': return L({ kind: 'shell', regions: [...TORSO, ...ARMS(0.95)], offset: 0.014, layer: 3, material: mat(c, pat, { color2: c2, roughness: pat === 'leather' ? 0.55 : 0.8 }), trim: { width: 0.02, color: c2 } });
-    case 'suitjacket': return L({ kind: 'shell', regions: [...TORSO, ...ARMS(0.97)], offset: 0.012, layer: 3, material: mat(c, 'plain', { roughness: 0.7, sheen: 0.35 }), skirt: { length: 0.22, flare: 0.05, slits: 1 }, trim: { width: 0.02, color: [c[0] * 0.7, c[1] * 0.7, c[2] * 0.7] } });
-    case 'coat': return L({ kind: 'shell', regions: [...TORSO, ...ARMS(0.97)], offset: 0.02, layer: 4, material: mat(c, pat, { color2: c2, roughness: 0.9, sheen: 0.4 }), skirt: { length: 0.72, flare: 0.25, slits: 1 }, trim: { width: 0.03, color: c2 } });
-    case 'jeans': return L({ kind: 'shell', regions: LEGS(0.97), offset: 0.006, layer: 1, material: mat(c, 'plain', { roughness: 0.92, wear: 0.4 }) });
-    case 'trousers': return L({ kind: 'shell', regions: LEGS(0.98), offset: 0.007, layer: 1, material: mat(c, pat, { color2: c2, roughness: 0.8 }) });
-    case 'shorts': return L({ kind: 'shell', regions: LEGS(0.4), offset: 0.006, layer: 1, material: mat(c, pat, { color2: c2 }) });
-    case 'skirt': return L({ kind: 'shell', regions: [{ region: 'pelvis', from: 0.5 }, { region: 'buttocks', from: 0.4 }], offset: 0.008, layer: 2, material: mat(c, pat, { color2: c2, roughness: 0.8 }), skirt: { length: 0.45 + (v.seed % 3) * 0.12, flare: 0.3 } });
-    case 'dress': return L({ kind: 'shell', regions: [...TORSO, { region: 'pelvis' }, { region: 'buttocks' }, ...ARMS(v.seed % 2 ? 0.2 : 0)], offset: 0.006, layer: 2, material: mat(c, pat, { color2: c2, roughness: 0.75, sheen: 0.5 }), skirt: { length: 0.55 + (v.seed % 3) * 0.1, flare: 0.35 } });
-    case 'sneakers': return L({ kind: 'shell', regions: [{ region: 'foot.L' }, { region: 'foot.R' }], offset: 0.012, layer: 1, material: mat(c, 'plain', { roughness: 0.7 }), trim: { width: 0.02, color: [0.95, 0.95, 0.95] } });
-    case 'shoes': return L({ kind: 'shell', regions: [{ region: 'foot.L' }, { region: 'foot.R' }], offset: 0.01, layer: 1, material: mat(c, 'leather', { roughness: 0.4 }) });
-    case 'boots': return L({ kind: 'shell', regions: [{ region: 'foot.L' }, { region: 'foot.R' }, { region: 'shin.L', from: 0.65 }, { region: 'shin.R', from: 0.65 }], offset: 0.012, layer: 2, material: mat(c, 'leather', { roughness: 0.5 }) });
     case 'cap': return { layers: [capPart(c)] };
     case 'helmet': return { layers: [helmetPart(c)] };
     case 'beanie': return { layers: [beaniePart(c)] };
-    // Hero tights and masks (the character creator's Hero tab).
-    case 'tights': return { layers: [{ kind: 'shell', regions: [...TORSO, { region: 'neck', to: 0.8 }, ...ARMS(1), ...LEGS(1)], offset: 0.002, layer: 0, design: Math.max(0, SUIT_DESIGN.indexOf(v.material)), material: mat(c, 'hero', { color2: c2, roughness: 0.42, sheen: 0.65, wear: 0.02 }) }] };
-    case 'gloves': return L({ kind: 'shell', regions: [{ region: 'hand.L' }, { region: 'hand.R' }, { region: 'forearm.L', from: 0.8 }, { region: 'forearm.R', from: 0.8 }], offset: 0.002, layer: 1, material: mat(c, 'leather', { roughness: 0.5, wear: 0.05 }) });
-    case 'mask_domino': return { layers: [], eyeMask: { color: c } };
-    case 'mask_cowl': case 'mask_full': return {
-      layers: [{ kind: 'shell', regions: [{ region: 'scalp' }, { region: 'face' }, { region: 'neck' }], faceCut: defId === 'mask_cowl' ? 'cowl' : 'full', offset: 0.003, layer: 5, material: mat(c, 'hero', { roughness: 0.45, sheen: 0.55, wear: 0.02 }), trim: { width: 0.004, color: [c[0] * 0.75, c[1] * 0.75, c[2] * 0.75] } }],
-      eyeMask: { color: c, under: true }, hideHair: true, hideBeard: true,
-    };
-    // Costumes of the street characters (game/street).
+    // Costumes of the street characters (game/street) and the villain groups.
     default: return streetWearable(defId, v);
   }
 }

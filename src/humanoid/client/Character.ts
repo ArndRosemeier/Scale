@@ -1,352 +1,235 @@
 /**
- * A renderable humanoid: skeleton (own bones per instance for independent
- * animation), skinned body with three LODs, eyes, lashes, teeth & tongue,
- * hair/beard/horn/tusk/tail parts, sockets for equipment, and the per-
- * character materials.
+ * A renderable person: an Actors character (body, skin, eyes, hair, beard, race add-ons and
+ * fitted garments, with its own detail levels) under Scale's proxy skeleton (see
+ * actors/rig.ts), with sockets for equipment and the hooks the game uses (sky visibility,
+ * face, hiding).
  *
- * Geometry is shared between characters with identical appearances
- * (`CharacterGeometry`, ref-counted by the BodyService); every character owns
- * its bones and materials (expression weights, sky visibility).
- *
- * Rest pose bones carry no rotation (translation-only frames aligned with
- * the model axes: +Y up, character faces −Z, character's left is −X), which
- * makes procedural animation and IK straightforward.
+ * The proxy's rest frames carry no rotation (translation only, aligned with the model axes:
+ * +Y up, the character faces −Z, its left is −X), which keeps procedural animation and IK
+ * simple; the Actors skeleton follows it every frame (`sync`).
  */
 import * as THREE from 'three';
-import { skinIndexAttribute } from '../../render/skinIndex';
-import type { HumanoidAppearance } from '../types';
-import type { CharacterBuild } from '../characterBuild';
-import type { PartGeo } from '../parts';
-import type { HumanStatic } from './staticData';
-import type { SkyVisPatch } from '../../render/skyOcclusion';
-import { createSkinMaterial, applySkinLook, type SkinMaterialHandle } from './skinMaterial';
-import {
-  createEyeMaterial, eyeGeometry, createHairMaterial, applyHairColor, createHornMaterial, simpleMaterial, createLashMaterial,
-  type PatchedMaterial, type EyeUniforms, type HairUniforms, type HornUniforms,
-} from './partMaterials';
-import { shellIndex, createShellMaterial, scalpShellFor, beardShellFor } from './hairShells';
-import { WEBGPU } from '../../render/gpuMode';
+import type { Character as ActorCharacter, CharacterPatch } from '@actors/generator';
+import { EXPRESSIONS } from '@actors/human';
+import { actors } from '../actors/service';
+import { RigBridge, SCALE_BONES, actorBind, proxyRest } from '../actors/rig';
+import { measureBody, type BodyData } from '../actors/body';
+import { GAME_PATCH, appearancePatch, isActorLook, lookTraits, type Look, type LookTraits } from '../actors/config';
+import { dressPlan, type DressPlan } from '../actors/outfit';
+import type { EquipmentVisuals } from '../../items/types';
+import { patchSkyOcclusion, type SkyVisPatch } from '../../render/skyOcclusion';
+import { WEBGPU, gpuKit } from '../../render/gpuMode';
 
-/** Shell triangle subsets per (style) spec — identical for every body. */
-const shellIndexCache = new Map<string, Uint16Array>();
+export type { BodyData };
 
-// ------------------------------------------------------------------ shared geometry
-
-function partGeometry(p: PartGeo): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(p.position, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(p.normal, 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(p.uv, 2));
-  g.setAttribute('hairTangent', new THREE.BufferAttribute(p.tangent, 3));
-  g.setAttribute('hairAux', new THREE.BufferAttribute(p.aux, 2));
-  if (WEBGPU && p.material === 'hair') {
-    // The node hair material reads the card tangent as `tangent` so three's skinning rotates it.
-    const n = p.tangent.length / 3, t4 = new Float32Array(n * 4);
-    for (let i = 0; i < n; i++) { t4[i * 4] = p.tangent[i * 3]; t4[i * 4 + 1] = p.tangent[i * 3 + 1]; t4[i * 4 + 2] = p.tangent[i * 3 + 2]; t4[i * 4 + 3] = 1; }
-    g.setAttribute('tangent', new THREE.BufferAttribute(t4, 4));
-  }
-  g.setAttribute('skinIndex', skinIndexAttribute(p.skinIndex));
-  g.setAttribute('skinWeight', new THREE.BufferAttribute(p.skinWeight, 4));
-  if (p.material === 'tail') {
-    // The tail uses the skin shader: neutral masks, face coords far from the face.
-    const n = p.position.length / 3;
-    g.setAttribute('aMaskA', new THREE.Uint8BufferAttribute(new Uint8Array(n * 4), 4, true));
-    g.setAttribute('aMaskB', new THREE.Uint8BufferAttribute(new Uint8Array(n * 4), 4, true));
-    g.setAttribute('aFace', new THREE.BufferAttribute(new Float32Array(n * 3).fill(-20), 3));
-    g.setAttribute('aExpr', new THREE.BufferAttribute(new Float32Array(n).fill(-1), 1));
-  }
-  g.setIndex(new THREE.BufferAttribute(p.index, 1));
-  g.computeBoundingSphere();
-  return g;
-}
-
-/**
- * Free a geometry's own GL buffers but not those of attributes it shares (three's dispose()
- * deletes the buffer of every attribute in the geometry: a shared one would be gone for every
- * other geometry using it too — draws from a stale vertex array, "no buffer is bound to enabled
- * attribute").
- */
-export function disposeOwn(g: THREE.BufferGeometry, shared: (a: THREE.BufferAttribute) => boolean): void {
-  for (const name of Object.keys(g.attributes)) if (shared(g.attributes[name] as THREE.BufferAttribute)) g.deleteAttribute(name);
-  if (g.index && shared(g.index)) g.setIndex(null);
-  g.dispose();
-}
-
-/** Geometry for one built appearance, shared by all characters using it. */
-export class CharacterGeometry {
-  /** Body geometries for LOD 0..2 (same vertex attributes, different index). */
-  readonly body: THREE.BufferGeometry[];
-  readonly lashes: THREE.BufferGeometry;
-  readonly teeth: THREE.BufferGeometry;
-  readonly tongue: THREE.BufferGeometry;
-  readonly parts: { geo: THREE.BufferGeometry; part: PartGeo }[][];
-  readonly position: THREE.BufferAttribute;
-  readonly normal: THREE.BufferAttribute;
-  refs = 0;
-  /** Last time a character took or released it (performance.now()): BodyService.collect keeps recent ones. */
-  lastUsed = performance.now();
-
-  constructor(readonly st: HumanStatic, readonly build: CharacterBuild) {
-    this.position = new THREE.BufferAttribute(build.renderPos, 3);
-    this.normal = new THREE.BufferAttribute(build.renderNormal, 3);
-    const mk = (index: THREE.BufferAttribute, uv = st.uv) => {
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', this.position);
-      g.setAttribute('normal', this.normal);
-      g.setAttribute('uv', uv);
-      g.setAttribute('skinIndex', st.skinIndex);
-      g.setAttribute('skinWeight', st.skinWeight);
-      g.setAttribute('aMaskA', st.maskA);
-      g.setAttribute('aMaskB', st.maskB);
-      g.setAttribute('aFace', st.face);
-      g.setAttribute('aExpr', st.expr);
-      g.setIndex(index);
-      return g;
-    };
-    this.body = st.bodyIndex.map((ix) => mk(ix));
-    const h = build.body.height;
-    const sphere = new THREE.Sphere(new THREE.Vector3(0, h * 0.5, 0), h * 0.75 + 0.3);
-    for (const g of this.body) g.boundingSphere = sphere;
-    this.lashes = mk(st.lashIndex, st.lashUv);
-    this.teeth = mk(st.teethIndex);
-    this.tongue = mk(st.tongueIndex);
-    for (const g of [this.lashes, this.teeth, this.tongue]) g.boundingSphere = sphere;
-    this.parts = build.parts.map((pr) => pr.parts.map((part) => ({ part, geo: partGeometry(part) })));
-    for (const lod of this.parts) for (const p of lod) p.geo.boundingSphere = sphere;
-  }
-
-  dispose() {
-    // The static attributes and indices belong to HumanStatic (every character uses them): keep them.
-    const st = this.st;
-    const shared = new Set<THREE.BufferAttribute>([st.uv, st.skinIndex, st.skinWeight, st.maskA, st.maskB, st.face, st.expr, st.lashUv, ...st.bodyIndex, st.tongueIndex, st.teethIndex, st.lashIndex]);
-    for (const g of [...this.body, this.lashes, this.teeth, this.tongue]) disposeOwn(g, (a) => shared.has(a));
-    for (const lod of this.parts) for (const p of lod) p.geo.dispose();
-  }
-}
-
-// ------------------------------------------------------------------ character
-
-const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
-
-/**
- * Bind a skinned mesh to the character's skeleton. three.js uploads bone matrices in world space
- * as 32-bit floats and lets the shader take the mesh's world transform back out; kilometres from
- * the origin (a large city spans ±24 km) that rounding made arms and hands shimmer, the more the
- * further out. Character's skeleton keeps them relative to its model instead (small numbers),
- * and the bind inverse here goes from the model into the mesh, both computed in double precision.
- */
-export function bindSkin(mesh: THREE.SkinnedMesh, ch: Character): void {
-  mesh.bind(ch.skeleton, new THREE.Matrix4());
-  mesh.updateMatrixWorld = function (force?: boolean) {
-    THREE.Mesh.prototype.updateMatrixWorld.call(this, force);
-    this.bindMatrixInverse.copy(this.matrixWorld).invert().multiply(ch.model.matrixWorld);
-  };
+/** Moods the animator shows (face units per mood; same unit names as Actors' expressions). */
+export const MOODS: Record<string, [string, number][]> = {
+  neutral: [],
+  happy: [['mouth-corner-puller', 0.75], ['mouth-upward-retraction', 0.15], ['eye-left-slit', 0.25], ['eye-right-slit', 0.25], ['eyebrows-left-up', 0.1], ['eyebrows-right-up', 0.1]],
+  angry: [['eyebrows-left-down', 0.9], ['eyebrows-right-down', 0.9], ['nose-left-elevation', 0.35], ['nose-right-elevation', 0.35], ['mouth-compression', 0.45], ['eye-left-slit', 0.25], ['eye-right-slit', 0.25], ['neck-platysma', 0.2]],
+  sad: [['eyebrows-left-inner-up', 0.9], ['eyebrows-right-inner-up', 0.9], ['mouth-depression', 0.6], ['eye-left-slit', 0.15], ['eye-right-slit', 0.15], ['mouth-pursing', 0.1]],
+  afraid: [['eyebrows-left-inner-up', 0.7], ['eyebrows-right-inner-up', 0.7], ['eyebrows-left-up', 0.45], ['eyebrows-right-up', 0.45], ['eye-left-opened-up', 0.7], ['eye-right-opened-up', 0.7], ['mouth-retraction', 0.45], ['mouth-open', 0.15], ['neck-platysma', 0.35]],
+  surprised: [['eyebrows-left-up', 1], ['eyebrows-right-up', 1], ['eye-left-opened-up', 0.85], ['eye-right-opened-up', 0.85], ['mouth-open', 0.45]],
+  disgusted: [['nose-left-elevation', 0.8], ['nose-right-elevation', 0.8], ['mouth-upward-retraction', 0.5], ['eyebrows-left-down', 0.4], ['eyebrows-right-down', 0.4], ['eye-left-slit', 0.3], ['eye-right-slit', 0.3], ['mouth-depression', 0.2]],
+  focused: [['eyebrows-left-down', 0.35], ['eyebrows-right-down', 0.35], ['eye-left-slit', 0.2], ['eye-right-slit', 0.2], ['mouth-compression', 0.2]],
+  pain: [['eye-left-closure', 0.55], ['eye-right-closure', 0.55], ['eyebrows-left-down', 0.5], ['eyebrows-right-down', 0.5], ['eyebrows-left-inner-up', 0.4], ['eyebrows-right-inner-up', 0.4], ['mouth-retraction', 0.7], ['mouth-open', 0.2], ['nose-left-elevation', 0.4], ['nose-right-elevation', 0.4], ['neck-platysma', 0.5]],
+};
+/** Mouth shape of a syllable (talking flaps the expression channel's weight). */
+const TALK: [string, number][] = [['mouth-open', 0.5], ['mouth-pursing', 0.1], ['eyebrows-left-up', 0.1], ['eyebrows-right-up', 0.1]];
+// Scale's faces as Actors expressions ("scale:<mood>" and "scale:<mood>:talk").
+for (const [m, units] of Object.entries(MOODS)) {
+  EXPRESSIONS[`scale:${m}`] = Object.fromEntries(units);
+  EXPRESSIONS[`scale:${m}:talk`] = Object.fromEntries([...units, ...TALK].map(([n, w]) => [n, Math.min(1, w + (units.find((u) => u[0] === n)?.[1] ?? 0))]));
 }
 
 export interface CharacterOptions {
-  /** Enable facial expressions (near LOD). */
-  expressions?: boolean;
   castShadow?: boolean;
+  /** Build priority (lower = sooner). */
+  priority?: number;
+  /** Renderer for the photographic skin (the hero; city people use a procedural skin). */
+  renderer?: unknown;
+}
+
+const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
+/**
+ * Garment layering on a reversed float depth buffer. Actors lifts each clothing layer above the
+ * one below with a polygon offset; with Scale's reversed-Z float depth the slope term of that
+ * offset loses fragments of thin seam triangles (pinholes through which the street shows). The
+ * garment is instead pulled toward the camera in view space by a fixed distance at the same
+ * screen position: `LAYER_PULL` metres per rank of `garmentRank` (underwear lowest, then socks,
+ * tops, gloves, shoes, trousers, then hats and glasses; shoes sit high so the foot's skin stays
+ * inside them). The rank follows what the garment
+ * covers. Trousers sit well above tops (a tucked-in shirt): the fitted shirt and trouser
+ * waist cross each other by up to about a centimetre, and with a small gap the waistband tore
+ * through the hem in front and the hem through the waistband at the back. The pull is a fixed
+ * distance, not a fraction of it (that grew to centimetres for people a few dozen metres away
+ * and let socks show through shoes).
+ */
+const LAYER_PULL = 0.001;
+const RANK: Record<string, number> = { briefs: 1, bra: 1, legwear: 1, socks: 2, top: 7, gloves: 8, shoes: 11, bottom: 18, hat: 19, glasses: 19, mask: 19 };
+
+/** Pull rank of a garment by what it covers (its highest layer); unknown meshes keep Actors' layer. */
+function garmentRank(occupies: string[] | undefined, actorsLayer: number): number {
+  if (!occupies?.length) return actorsLayer;
+  return Math.max(...occupies.map((o) => RANK[o] ?? actorsLayer));
+}
+
+/**
+ * Crowd level (one merged mesh, no per-garment depth lift): each garment vertex is pushed out
+ * along its normal by its rank's pull instead (a centimetre and a half at most, invisible at
+ * crowd distance), so trousers, shirts and shoes keep their order there too.
+ */
+export function crowdPushes(parts: { name: string; role: string; offset: number; count: number }[], vertices: number, occupies: Map<string, string[]>): Float32Array {
+  const push = new Float32Array(vertices);
+  for (const p of parts) if (p.role !== 'body') push.fill(garmentRank(occupies.get(p.name), 1) * LAYER_PULL, p.offset, p.offset + p.count);
+  return push;
+}
+
+const pushed = new WeakSet<THREE.Material>();
+
+/** Crowd material: vertices move out along their normal by the `crowdPush` attribute. */
+function crowdPush(m: THREE.Material): void {
+  if (pushed.has(m)) return;
+  pushed.add(m);
+  const prev = m.onBeforeCompile.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    prev(shader, renderer);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float crowdPush;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize( objectNormal ) * crowdPush;');
+  };
+  const prevKey = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${prevKey()}|push`;
+  m.needsUpdate = true;
+}
+
+const layered = new WeakSet<THREE.Material>();
+
+function viewSpaceLayer(m: THREE.Material, occupies: string[] | undefined): void {
+  if (layered.has(m) || !m.polygonOffset || m.polygonOffsetFactor >= 0) return;
+  layered.add(m);
+  const pull = (garmentRank(occupies, -m.polygonOffsetFactor / 2) * LAYER_PULL).toFixed(6);
+  // Node materials (WebGPU): the same through their clip-space output (webgpu/garmentLayers.ts).
+  if (WEBGPU && (m as { isNodeMaterial?: boolean }).isNodeMaterial) { gpuKit().viewSpaceLayerNode(m, +pull); return; }
+  m.polygonOffset = false;
+  const prev = m.onBeforeCompile.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    prev(shader, renderer);
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>\ngl_Position = projectionMatrix * vec4( mvPosition.xyz * max( 1.0 - ${pull} / max( length( mvPosition.xyz ), 1e-3 ), 0.5 ), 1.0 );`);
+  };
+  const prevKey = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${prevKey()}|pull${pull}`;
+  m.needsUpdate = true;
+}
+
+/** Skeletons whose bone matrices are already model-relative (see prepareMeshes). */
+const relativeSkeletons = new WeakSet<THREE.Skeleton>();
+
+/**
+ * The Actors settings for a look and an outfit. A look from the generator (the hero) keeps its
+ * own clothes unless the outfit brings clothes of its own (a costume); city people wear the outfit.
+ */
+export function lookPatch(look: Look, plan: DressPlan, hair: Set<string> | null, extra: { hideHair?: boolean; hideBeard?: boolean } = {}): CharacterPatch {
+  const own = isActorLook(look);
+  const base: CharacterPatch = own ? { ...look.actor } : appearancePatch(look, hair);
+  const keep = own && !plan.soft;
+  const p: CharacterPatch = {
+    ...base, ...GAME_PATCH,
+    outfit: keep ? base.outfit ?? [] : plan.garments,
+    garmentColors: keep ? base.garmentColors ?? {} : { ...(base.garmentColors ?? {}), ...plan.colors },
+  };
+  if (extra.hideHair) p.hair = null;
+  if (extra.hideBeard) p.beard = 'none';
+  return p;
 }
 
 export class Character {
   readonly object = new THREE.Group();
   /** Inner group: animation root offsets (lean, hit recoil) are applied here. */
   readonly model = new THREE.Group();
+  /** Scale's proxy skeleton (see actors/rig.ts). */
   readonly bones: THREE.Bone[] = [];
   readonly boneIndex = new Map<string, number>();
   readonly skeleton: THREE.Skeleton;
   readonly sockets = new Map<string, THREE.Object3D>();
+  /** Eye pivots (children of the head bone, at the eyeballs' centres). */
   readonly eyes: THREE.Object3D[] = [];
-  /** Rest-pose bone heads (model space, final scale). */
+  /** Rest-pose bone heads (model space). */
   readonly rest: THREE.Vector3[] = [];
-  readonly exprW: Float32Array;
-  readonly lods: THREE.Group[] = [new THREE.Group(), new THREE.Group(), new THREE.Group()];
-  readonly bodyMeshes: THREE.SkinnedMesh[] = [];
-  readonly skin: SkinMaterialHandle;
-  readonly skinLow: SkinMaterialHandle;
-  readonly eyeMat: PatchedMaterial<EyeUniforms>;
-  private hairMats: PatchedMaterial<HairUniforms>[] = [];
-  private hornMat: PatchedMaterial<HornUniforms> | null = null;
-  private skyPatches: SkyVisPatch[] = [];
-  private ownMaterials: THREE.Material[] = [];
-  private ownGeometries: THREE.BufferGeometry[] = [];
+  readonly body: BodyData;
+  readonly traits: LookTraits;
   lod = 0;
-  /** Painted scalp shading (shaved styles) — restored after helmets come off. */
-  readonly shavedScalp: number;
-  hairMeshes: THREE.Object3D[] = [];
-  beardMeshes: THREE.Object3D[] = [];
+  /** Half turn between Scale's facing (−Z) and the actor's (+Z). */
+  private readonly flip = new THREE.Group();
+  private bridge: RigBridge;
+  private readonly skyPatches: SkyVisPatch[] = [];
+  private readonly patched = new WeakSet<THREE.Material>();
+  private skyVis = 1;
+  private castShadow: boolean;
+  private face = { key: 'scale:neutral', pending: false };
+  private disposed = false;
 
-  constructor(readonly geo: CharacterGeometry, readonly app: HumanoidAppearance, opts: CharacterOptions = {}) {
-    const st = geo.st, build = geo.build, as = st.assets;
-    geo.refs++;
+  /** Builds a character for a look (and outfit); resolves once it is shaped and dressed. */
+  static async load(look: Look, eq: EquipmentVisuals | undefined, opts: CharacterOptions = {}): Promise<Character> {
+    const catalog = await actors.catalog();
+    const traits = lookTraits(look);
+    const avail = new Set(catalog.garments.map((g) => g.id));
+    const plan = dressPlan(eq, traits.gender < 0.5, avail);
+    const hair = new Set(catalog.hair.filter((h) => !h.credit).map((h) => h.id));
+    const patch = lookPatch(look, plan, hair);
+    const hero = isActorLook(look);
+    const actor = await actors.character(patch, opts.priority ?? 0, hero ? { renderer: opts.renderer, catalog: (c) => c } : {});
+    return new Character(actor, look, opts);
+  }
+
+  constructor(readonly actor: ActorCharacter, readonly look: Look, opts: CharacterOptions = {}) {
+    this.traits = lookTraits(look);
+    this.castShadow = opts.castShadow !== false;
     this.object.name = 'humanoid';
     this.object.add(this.model);
+    this.flip.rotation.y = Math.PI;
+    this.flip.add(actor.object);
+    this.model.add(this.flip);
+    actor.object.matrixWorldAutoUpdate = false;
 
-    // ---- skeleton (translation-only rest frames)
-    const defs = as.manifest.bones;
-    const heads = build.body.heads;
-    const allBones = [...defs.map((d, i) => ({ name: d.name, parent: d.parent, head: [heads[i * 3], heads[i * 3 + 1], heads[i * 3 + 2]] as [number, number, number] })), ...build.parts[0].extraBones];
-    allBones.forEach((d, i) => {
+    // ---- proxy skeleton on the actor's joints
+    const skel = actor.actor.skeleton!;
+    const ground = actor.object.position.y;
+    const bind = actorBind(skel);
+    const { heads, tails, extra } = proxyRest(skel, bind, ground);
+    const all = [...SCALE_BONES.map(([name, parent], i) => ({ name, parent, head: heads[i] })), ...extra];
+    all.forEach((d, i) => {
       const b = new THREE.Bone();
       b.name = d.name;
-      const p = d.parent;
-      const ph = p >= 0 ? allBones[p].head : [0, 0, 0];
-      b.position.set(d.head[0] - ph[0], d.head[1] - ph[1], d.head[2] - ph[2]);
+      const p = d.parent ? this.boneIndex.get(d.parent) ?? -1 : -1;
+      const ph = p >= 0 ? all[p].head : new THREE.Vector3();
+      b.position.copy(d.head).sub(ph);
       (p >= 0 ? this.bones[p] : this.model).add(b);
       this.bones.push(b);
       this.boneIndex.set(d.name, i);
-      this.rest.push(new THREE.Vector3(...d.head));
+      this.rest.push(d.head.clone());
     });
-    this.model.updateMatrixWorld(true);
     this.skeleton = new THREE.Skeleton(this.bones);
-    // Bone matrices relative to the model, not the world (see bindSkin).
-    const skel = this.skeleton, model = this.model;
-    skel.update = () => {
-      _inv.copy(model.matrixWorld).invert();
-      for (let i = 0; i < skel.bones.length; i++) {
-        _m.multiplyMatrices(_inv, skel.bones[i].matrixWorld).multiply(skel.boneInverses[i]);
-        _m.toArray(skel.boneMatrices!, i * 16);
-      }
-      if (skel.boneTexture) skel.boneTexture.needsUpdate = true;
-    };
+    this.bridge = new RigBridge(this.bones, this.rest, skel, bind, () => this.actor.object.position.y);
 
-    // ---- materials
-    const exprUnits = st.exprNames.length;
-    this.skin = createSkinMaterial({ expr: opts.expressions !== false, exprTex: st.exprTex, exprUnits, lod: 0 });
-    this.skinLow = createSkinMaterial({ expr: false, exprTex: null, exprUnits, lod: 1 });
-    this.exprW = this.skin.uniforms.uExprW.value;
-    this.shavedScalp = build.parts[0].shavedScalp;
-    for (const s of [this.skin, this.skinLow]) {
-      applySkinLook(s.uniforms, app, { shavedScalp: this.shavedScalp, hairCovered: false });
-      s.uniforms.uFaceScale.value = build.body.faceScale;
-      this.skyPatches.push(s.sky);
-      this.ownMaterials.push(s.material);
-    }
-    this.eyeMat = createEyeMaterial();
-    const eu = this.eyeMat.uniforms;
-    eu.uIris.value.setRGB(app.eyeColor[0], app.eyeColor[1], app.eyeColor[2], THREE.SRGBColorSpace);
-    eu.uPupil.value.set({ round: 0, slit: 1, goat: 2, none: 3 }[app.pupil] ?? 0, 0.5, app.eyeGlow, ((app.seed >>> 3) % 997) / 997);
-    if (app.race === 'umbral' && app.pupil === 'none') eu.uScleraTint.value.setRGB(0.55, 0.55, 0.62);
-    this.reg(this.eyeMat);
-    const lash = createLashMaterial();
-    // (uColor is the material's colour; also on WebGPU, where the material is a node material.)
-    lash.uniforms.uColor.value.setRGB(app.hairColor[0] * 0.3, app.hairColor[1] * 0.3, app.hairColor[2] * 0.3, THREE.SRGBColorSpace);
-    this.reg(lash);
-    const teeth = simpleMaterial(new THREE.Color().setRGB(0.86, 0.82, 0.72, THREE.SRGBColorSpace), { roughness: 0.28, clearcoat: 0.4 });
-    const tongue = simpleMaterial(new THREE.Color().setRGB(0.6, 0.28, 0.28, THREE.SRGBColorSpace), { roughness: 0.38, sheen: 0.3 });
-    this.reg(teeth);
-    this.reg(tongue);
-
-    // ---- meshes per LOD
-    const castShadow = opts.castShadow !== false;
-    const skinned = (g: THREE.BufferGeometry, m: THREE.Material, lod: number, shadow = castShadow) => {
-      const mesh = new THREE.SkinnedMesh(g, m);
-      bindSkin(mesh, this);
-      mesh.boundingSphere = g.boundingSphere!.clone();
-      mesh.castShadow = shadow;
-      mesh.receiveShadow = true;
-      this.lods[lod].add(mesh);
-      return mesh;
-    };
-    for (let l = 0; l < 3; l++) this.bodyMeshes.push(skinned(geo.body[l], l === 0 ? this.skin.material : this.skinLow.material, l));
-    skinned(geo.lashes, lash.material, 0, false);
-    skinned(geo.teeth, teeth.material, 0, false);
-    skinned(geo.tongue, tongue.material, 0, false);
-
-    for (let l = 0; l < 2; l++) {
-      for (const { geo: pg, part } of geo.parts[l]) {
-        let mat: THREE.Material;
-        if (part.material === 'hair' || part.material === 'leaf') {
-          const hm = createHairMaterial(part.material === 'leaf');
-          applyHairColor(hm.uniforms, app.hairColor, part.material === 'leaf', app.race === 'sylvan' ? app.skinAccent : undefined);
-          this.hairMats.push(hm);
-          this.reg(hm);
-          mat = hm.material;
-        } else if (part.material === 'horn' || part.material === 'tusk') {
-          if (part.material === 'tusk') {
-            // Ivory, smooth.
-            const tm = createHornMaterial();
-            tm.uniforms.uTipC.value.setRGB(0.9, 0.86, 0.74, THREE.SRGBColorSpace);
-            tm.uniforms.uBase.value.setRGB(0.7, 0.62, 0.48, THREE.SRGBColorSpace);
-            tm.uniforms.uRidge.value = 0.2;
-            this.reg(tm);
-            mat = tm.material;
-          } else {
-            if (!this.hornMat) {
-              this.hornMat = createHornMaterial();
-              const hc = app.horns.color;
-              this.hornMat.uniforms.uTipC.value.setRGB(hc[0], hc[1], hc[2], THREE.SRGBColorSpace);
-              this.hornMat.uniforms.uBase.value.setRGB(hc[0] * 0.55, hc[1] * 0.5, hc[2] * 0.45, THREE.SRGBColorSpace);
-              this.reg(this.hornMat);
-            }
-            mat = this.hornMat.material;
-          }
-        } else if (part.material === 'tail') {
-          mat = l === 0 ? this.skin.material : this.skinLow.material;
-        } else {
-          const fm = simpleMaterial(new THREE.Color().setRGB(app.skinAccent[0], app.skinAccent[1], app.skinAccent[2], THREE.SRGBColorSpace), { roughness: 0.5, side: THREE.DoubleSide, sheen: 0.3 });
-          this.reg(fm);
-          mat = fm.material;
-        }
-        const mesh = skinned(pg, mat, l, part.material !== 'tusk');
-        mesh.name = part.name;
-        if (part.name === 'hair' || part.name === 'crest') this.hairMeshes.push(mesh);
-        if (part.name === 'beard') this.beardMeshes.push(mesh);
-        // The tail and horns also show at the far LOD.
-        if (l === 1 && (part.name === 'tail' || part.name === 'horns')) {
-          const far = skinned(pg, part.name === 'tail' ? this.skinLow.material : mat, 2);
-          far.name = part.name;
-        }
-      }
-    }
-    // ---- fur shells: dense short hair / beard base layer (near LOD; 3 layers at mid LOD)
-    const recede = app.gender > 0.5 ? Math.max(0, app.age - 0.6) * 1.6 : 0;
-    const hairLin = new THREE.Color().setRGB(app.hairColor[0], app.hairColor[1], app.hairColor[2], THREE.SRGBColorSpace);
-    for (const spec of [scalpShellFor(app.hairStyle, recede), beardShellFor(app.beardStyle)]) {
-      if (!spec) continue;
-      const key = JSON.stringify(spec);
-      let idx = shellIndexCache.get(key);
-      if (!idx) { idx = shellIndex(st, spec); shellIndexCache.set(key, idx); }
-      if (!idx.length) continue;
-      const g = new THREE.BufferGeometry();
-      for (const [name, attr] of Object.entries(geo.body[0].attributes)) g.setAttribute(name, attr);
-      g.setIndex(new THREE.BufferAttribute(idx, 1));
-      g.boundingSphere = geo.body[0].boundingSphere;
-      this.ownGeometries.push(g);
-      for (const lod of [0, 1]) {
-        const layers = lod === 0 ? spec.layers : Math.min(3, spec.layers);
-        for (let k = 0; k < layers; k++) {
-          const sh = createShellMaterial({ ...spec, layers }, k, hairLin);
-          this.skyPatches.push(sh.sky);
-          this.ownMaterials.push(sh.material);
-          const m = skinned(g, sh.material, lod, false);
-          m.renderOrder = 2 + k;
-          (spec.kind === 'scalp' ? this.hairMeshes : this.beardMeshes).push(m);
-        }
-      }
-    }
-    for (const g of this.lods) this.model.add(g);
-    this.setLod(0);
-
-    // ---- eyes (children of the head bone, rotated for gaze)
+    // ---- measurements and sockets
+    const meshes = actor.actor.meshes;
+    const bodyMesh = meshes.get('body') ?? meshes.get('body-low');
+    if (!bodyMesh) throw new Error('actors: character has no body mesh');
+    const app = isActorLook(look) ? null : look;
+    this.body = measureBody(bodyMesh, meshes.get('eyes'), heads, tails, ground, {
+      earPoint: app ? Math.max(0, app.face.earPoint) : 0,
+      hasHorns: actor.config.horns !== 'none' && actor.config.hornSize > 0.05,
+    });
     const headI = this.boneIndex.get('head')!;
-    const headBone = this.bones[headI];
-    const e = build.body.eyes;
+    const e = this.body.eyes;
     for (let k = 0; k < 2; k++) {
       const pivot = new THREE.Object3D();
       pivot.position.set(e[k * 4] - this.rest[headI].x, e[k * 4 + 1] - this.rest[headI].y, e[k * 4 + 2] - this.rest[headI].z);
-      const ball = new THREE.Mesh(eyeGeometry(), this.eyeMat.material);
-      ball.scale.setScalar(e[k * 4 + 3] * 0.98);
-      ball.castShadow = false;
-      ball.receiveShadow = true;
-      pivot.add(ball);
-      headBone.add(pivot);
+      this.bones[headI].add(pivot);
       this.eyes.push(pivot);
     }
-
-    // ---- sockets
-    for (const [name, s] of Object.entries(build.body.sockets)) {
+    for (const [name, s] of Object.entries(this.body.sockets)) {
       const o = new THREE.Object3D();
       o.name = `socket:${name}`;
       const b = s.bone;
@@ -362,66 +245,183 @@ export class Character {
       this.bones[b].add(o);
       this.sockets.set(name, o);
     }
+    this.prepareMeshes();
+    // Whatever moved the proxy (animator, ragdoll, IK) reaches the actor whenever matrices update.
+    const model = this.model, self = this;
+    model.updateMatrixWorld = function (force?: boolean) {
+      THREE.Object3D.prototype.updateMatrixWorld.call(this, force);
+      self.sync();
+    };
+    this.model.updateMatrixWorld(true);
   }
 
-  private reg(p: PatchedMaterial<unknown>) {
-    this.skyPatches.push(p.sky);
-    this.ownMaterials.push(p.material);
-  }
-
+  /** Proxy bone by name. */
   bone(name: string): THREE.Bone {
     return this.bones[this.boneIndex.get(name)!];
   }
 
-  /** Apply colour-only appearance changes (skin, eyes, hair) without rebuilding geometry. */
-  recolor(app: HumanoidAppearance) {
-    for (const s of [this.skin, this.skinLow]) applySkinLook(s.uniforms, app, { shavedScalp: this.shavedScalp, hairCovered: false });
-    const eu = this.eyeMat.uniforms;
-    eu.uIris.value.setRGB(app.eyeColor[0], app.eyeColor[1], app.eyeColor[2], THREE.SRGBColorSpace);
-    eu.uPupil.value.x = { round: 0, slit: 1, goat: 2, none: 3 }[app.pupil] ?? 0;
-    eu.uPupil.value.z = app.eyeGlow;
-    for (const h of this.hairMats) applyHairColor(h.uniforms, app.hairColor, h.uniforms.uSpec.value.w > 0.5, app.race === 'sylvan' ? app.skinAccent : undefined);
+  /** The proxy pose onto the actor's bones (also run by every matrix update of the model). */
+  sync(): void {
+    if (this.disposed) return;
+    const skel = this.actor.actor.skeleton;
+    if (skel && skel !== this.bridge.skeleton) this.rebridge(skel);
+    this.bridge.sync();
+    const obj = this.actor.object;
+    obj.updateMatrix();
+    obj.matrixWorld.multiplyMatrices(this.flip.matrixWorld, obj.matrix);
+    for (const c of obj.children) c.updateMatrixWorld(true);
   }
 
-  setLod(l: number) {
+  /** Parts that add bones (a tail) replace the actor's skeleton: follow it. */
+  private rebridge(skel: THREE.Skeleton): void {
+    const bind = actorBind(skel);
+    this.bridge = new RigBridge(this.bones, this.rest, skel, bind, () => this.actor.object.position.y);
+    this.prepareMeshes();
+  }
+
+  /**
+   * Per-frame actor work after the pose: pending visibility, crowd mesh, skirt colliders, and
+   * newly made meshes (an outfit change) get the game's material patches.
+   */
+  update(dt: number): void {
+    this.actor.actor.update(dt);
+    this.prepareMeshes();
+  }
+
+  /**
+   * Every actor mesh: model-relative bone matrices (three uploads them as 32-bit floats;
+   * kilometres from the origin that made hands shimmer), sky visibility, shadows.
+   */
+  private occupiesBy: Map<string, string[]> | null = null;
+  /** What each garment covers (catalog), by garment id. */
+  occupies(): Map<string, string[]> {
+    return this.occupiesBy ??= new Map(this.actor.catalog.garments.map((g) => [g.id, g.occupies]));
+  }
+
+  private prepareMeshes(): void {
+    const actorObj = this.actor.object;
+    const skel = this.actor.actor.skeleton;
+    if (skel && !relativeSkeletons.has(skel)) {
+      relativeSkeletons.add(skel);
+      skel.update = () => {
+        _inv.copy(actorObj.matrixWorld).invert();
+        for (let i = 0; i < skel.bones.length; i++) {
+          _m.multiplyMatrices(_inv, skel.bones[i].matrixWorld).multiply(skel.boneInverses[i]);
+          _m.toArray(skel.boneMatrices!, i * 16);
+        }
+        if (skel.boneTexture) skel.boneTexture.needsUpdate = true;
+      };
+    }
+    for (const o of actorObj.children) {
+      const mesh = o as THREE.SkinnedMesh;
+      if (!mesh.isSkinnedMesh) continue;
+      if (!mesh.userData.modelRelative) {
+        mesh.userData.modelRelative = true;
+        mesh.updateMatrixWorld = function (force?: boolean) {
+          THREE.Mesh.prototype.updateMatrixWorld.call(this, force);
+          this.bindMatrixInverse.copy(this.matrixWorld).invert().multiply(actorObj.matrixWorld);
+        };
+        mesh.castShadow = this.castShadow && !(mesh.material as THREE.Material).transparent;
+      }
+      if (mesh.name === 'crowd' && !mesh.geometry.getAttribute('crowdPush')) {
+        const crowd = this.actor.actor.crowdMesh();
+        const n = mesh.geometry.getAttribute('position').count;
+        if (crowd?.mesh === mesh) mesh.geometry.setAttribute('crowdPush', new THREE.BufferAttribute(crowdPushes(crowd.parts, n, this.occupies()), 1));
+        for (const m of ([] as THREE.Material[]).concat(mesh.material)) crowdPush(m);
+      }
+      const occupies = this.occupies().get(mesh.name);
+      for (const m of ([] as THREE.Material[]).concat(mesh.material)) {
+        viewSpaceLayer(m, occupies);
+        if (this.patched.has(m)) continue;
+        this.patched.add(m);
+        const p = patchSkyOcclusion(m, 'uniform', this.skyVis);
+        this.skyPatches.push(p);
+        m.needsUpdate = true;
+      }
+    }
+  }
+
+  /** Detail level: 0 full, 1 medium, 2 crowd (Actors' levels). */
+  setLod(l: number): void {
+    if (l === this.lod) return;
     this.lod = l;
-    this.lods.forEach((g, i) => (g.visible = i === l));
+    this.actor.setLod(l);
     for (const e of this.eyes) e.visible = l === 0;
+    this.prepareMeshes();
   }
 
-  setSkyVis(v: number) {
+  setSkyVis(v: number): void {
+    this.skyVis = v;
     for (const p of this.skyPatches) if (p.uniform) p.uniform.value = v;
   }
 
-  /** Show/hide scalp hair & beard (helmets, hoods). */
-  setHairHidden(hair: boolean, beard: boolean) {
-    for (const m of this.hairMeshes) m.visible = !hair;
-    for (const m of this.beardMeshes) m.visible = !beard;
-    for (const s of [this.skin, this.skinLow]) s.uniforms.uLook.value.w = hair ? 0 : this.shavedScalp;
-  }
-
-  /** Paint a hero's eye mask round the eyes (sRGB colour), or take it off (null). `under`: the
-   *  skin left in a cowl's eye holes (all of it, not the domino's shape). */
-  setEyeMask(color: [number, number, number] | null, under = false) {
-    const c = color ? new THREE.Color().setRGB(color[0], color[1], color[2], THREE.SRGBColorSpace) : null;
-    for (const s of [this.skin, this.skinLow]) s.uniforms.uMask.value.set(c ? (under ? 2 : 1) : 0, c?.r ?? 0, c?.g ?? 0, c?.b ?? 0);
-  }
-
   /** Register an extra sky patch (equipment materials) so setSkyVis reaches it. */
-  addSkyPatch(p: SkyVisPatch) {
+  addSkyPatch(p: SkyVisPatch): void {
     this.skyPatches.push(p);
   }
-  removeSkyPatch(p: SkyVisPatch) {
+  removeSkyPatch(p: SkyVisPatch): void {
     const i = this.skyPatches.indexOf(p);
     if (i >= 0) this.skyPatches.splice(i, 1);
   }
 
-  dispose() {
-    for (const m of this.ownMaterials) m.dispose();
-    for (const g of this.ownGeometries) g.dispose();
-    this.skeleton.dispose();
-    this.geo.refs--;
-    this.geo.lastUsed = performance.now();
+  /** The body itself hidden (the raised dead show only their bones). */
+  setBodyHidden(hidden: boolean): void {
+    this.flip.visible = !hidden;
+  }
+
+  /** A hero's eye mask (sRGB colour) or none. Not drawn on Actors skins yet. */
+  setEyeMask(_color: [number, number, number] | null, _under = false): void {}
+
+  /**
+   * Puts on an outfit (Actors garments; see outfit.ts). Resolves once it shows. `hideHair`:
+   * a helmet or hood over the hair.
+   */
+  async dress(plan: DressPlan, hideHair = false, hideBeard = false): Promise<void> {
+    const catalog = this.actor.catalog;
+    const hair = new Set(catalog.hair.map((h) => h.id));
+    const p = lookPatch(this.look, plan, hair, { hideHair, hideBeard });
+    // Only what changed (a new shape is only made for garments the last one left out).
+    const cur = this.actor.config;
+    const patch: CharacterPatch = { outfit: p.outfit, garmentColors: p.garmentColors };
+    if ((p.hair ?? null) !== cur.hair) patch.hair = p.hair ?? null;
+    if (p.beard && p.beard !== cur.beard) patch.beard = p.beard;
+    await this.actor.set(patch);
+    this.prepareMeshes();
+  }
+
+  /**
+   * Face: a mood ("happy", "pain", …; see MOODS) at `w` (0..1), a talking syllable (0..1,
+   * flaps the mouth) and the eyelids (0 open … 1 shut). Moods and talking share the expression
+   * channel (each new combination is computed once, off the frame).
+   */
+  setFace(mood: string, w: number, talking: boolean, syllable: number, blink: number): void {
+    const a = this.actor.actor;
+    a.setMorphWeight('blink', blink);
+    const key = `scale:${MOODS[mood] ? mood : 'neutral'}${talking ? ':talk' : ''}`;
+    if (key !== this.face.key && !this.face.pending) {
+      this.face.pending = true;
+      void this.actor.set({ expression: key, expressionIntensity: 0 }).finally(() => {
+        this.face.key = key;
+        this.face.pending = false;
+      });
+    }
+    if (this.face.key !== key) {
+      a.setMorphWeight('expression', 0);
+      return;
+    }
+    const weight = talking ? (mood === 'neutral' ? syllable : 0.65 * w + 0.35 * syllable) : mood === 'neutral' ? 0 : w;
+    a.setMorphWeight('expression', weight);
+  }
+
+  /** Tallest point of the body above its feet (m). */
+  get height(): number {
+    return this.body.height;
+  }
+
+  dispose(): void {
+    this.disposed = true;
     this.object.removeFromParent();
+    this.actor.dispose();
+    this.skeleton.dispose();
   }
 }

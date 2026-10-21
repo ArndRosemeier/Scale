@@ -10,7 +10,7 @@
 import type { Game } from './Game';
 import { Player } from '../player/Player';
 import { CharacterCreator, disposeCreatorPreview } from '../ui/CharacterCreator';
-import { outfitFromVisuals, type CharacterLook } from '../avatar/look';
+import type { CharacterLook } from '../avatar/look';
 import { avatarStore, isGenerated, type StoredGenerated } from '../avatar/AvatarStore';
 import { isClothesShop } from '../interior/InteriorGen';
 import type { MapMarker } from '../ui/map/GameMap';
@@ -112,7 +112,7 @@ export class Wardrobe {
     g.input.suspended = true;
     if (document.pointerLockElement) document.exitPointerLock();
     if (this.changing) await this.changing;
-    const look: CharacterLook = this.looks[this.active] ?? Player.look ?? { appearance: structuredClone(P.app), outfit: outfitFromVisuals(P.rig.outfit ?? {}, P.app.seed) };
+    const look: CharacterLook = this.looks[this.active] ?? Player.look ?? { actor: structuredClone(P.app.actor) };
     let stored: StoredGenerated | null = null;
     try {
       const id = avatarStore.selected();

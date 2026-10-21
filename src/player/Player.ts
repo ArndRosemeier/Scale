@@ -1,5 +1,5 @@
 /**
- * The player: a Norgo human with physically scaled size (10 cm … 25 m),
+ * The player: an Actors human with physically scaled size (10 cm … 25 m),
  * walking/running/jumping with Froude-similar gait, and a flight mode.
  *
  * Scaling laws (k = height / 1.8 m):
@@ -18,7 +18,8 @@ import { clamp, lerp, damp } from '../core/math';
 import type { HumanoidAppearance } from '../humanoid/types';
 import type { Collision, ObstacleProvider } from '../world/Collision';
 import { ImportedAvatar, type LoadedModel } from '../avatar/ImportedAvatar';
-import { outfitVisuals, plainAppearance, type CharacterLook } from '../avatar/look';
+import { lookFromAppearance, type CharacterLook } from '../avatar/look';
+import type { ActorLook } from '../humanoid/actors/config';
 import { stepEnergy } from '../game/GiantBody';
 import { SpeedNav } from './speedNav';
 import { planHop } from './speedHop';
@@ -53,7 +54,8 @@ export class Player {
   private autoPace: 'fast' | 'slow' | 'normal' = 'normal';
   grounded = false;
   readonly rig: HumanoidRig;
-  app: HumanoidAppearance;
+  /** The hero's look (an Actors character configuration, outfit included). */
+  app: ActorLook;
   /** Animation clock (runs at 1/√k). */
   private animTime = 0;
   private rigBaseHeight = 1.75;
@@ -148,9 +150,11 @@ export class Player {
 
   constructor(seed: number, private world: WorldIndex) {
     const look = Player.look;
-    this.app = look ? structuredClone(look.appearance) : plainAppearance(randomAppearance('human', seed, {}));
+    // Without a created character: a city person from the seed (in everyday clothes).
+    const app = randomAppearance('human', seed, {});
+    this.app = look ? { actor: structuredClone(look.actor) } : lookFromAppearance(app, cityOutfit(seed, app.gender, app.age, 0.2, 0.3));
     this.rig = new HumanoidRig(this.app, { castShadow: true, priority: -10, ground: (x, y, z) => this.collision ? this.collision.groundAt(x, z, y + 0.4, 0.3) : this.world.groundHeight(x, z, y + 0.4) });
-    this.rig.setEquipment(look ? outfitVisuals(look.outfit) : cityOutfit(seed, this.app.gender, this.app.age, 0.2, 0.3));
+    this.rig.setEquipment({});
     // The random human is normalised to the 1.8 m base height; a created character keeps
     // its own height relative to it (size mechanics still run on `height`, k = height / 1.8).
     if (look) this.rigBaseHeight = BASE_HEIGHT;
@@ -160,10 +164,10 @@ export class Player {
   /** Change the hero's look on the spot (the clothes shop mirror): body, face, hair and outfit. */
   async applyLook(look: CharacterLook): Promise<void> {
     Player.look = look;
-    this.app = structuredClone(look.appearance);
+    this.app = { actor: structuredClone(look.actor) };
     this.rigBaseHeight = BASE_HEIGHT;
     if (this.avatar) await this.setAvatar(null);
-    this.rig.setEquipment(outfitVisuals(look.outfit));
+    this.rig.setEquipment({});
     await this.rig.setAppearance(this.app);
   }
 

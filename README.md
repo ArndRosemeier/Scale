@@ -9,7 +9,7 @@ sewers. Everything you do has physical consequences that the citizens notice.
 ## Run
 
 ```bash
-npm install
+npm install          # installs the Actors packages from vendor/actors and fetches their character pack into public/packs (npm run packs)
 npm run dev          # http://localhost:5180
 npm test             # headless determinism / invariant checks (all sections, parallel)
 npm run test:quick   # only the sections touching what changed against origin/main
@@ -226,9 +226,7 @@ identically.
 
 ## Credits
 
-* Human body, morphs and skeleton: MakeHuman 1.1 (CC0), via the Norgo humanoid
-  pipeline.
-* Animation clips: Quaternius Universal Animation Library (CC0).
+* People: [Actors](https://github.com/ArndRosemeier/Actors) characters (MakeHuman CC0 bodies, wardrobe and hair; Quaternius CC0 animations, CMU motion capture). Their asset pack is fetched by `npm run packs` (runs after `npm install`) into `public/packs`.
 * Sounds: generated locally with Stable Audio 3 (see `docs/SOUNDS.md`).
 * Music: Arnd's pieces made with Google Lyria 3 Pro, built into the game by `tools/music/build_tracks.py` (prompts in the project files, `music/lyria-prompts.md`).
 * Everything else (textures, buildings, vehicles, trees, furniture, layouts)

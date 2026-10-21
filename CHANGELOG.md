@@ -2,6 +2,16 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.259 — 2026-10-21
+
+- **Every person is now an Actors character.** The hero, the people in the streets, the far crowds, the hero's statue and the character creator all use the Actors character generator (github.com/ArndRosemeier/Actors): MakeHuman bodies with photographic skin for the hero, real fitted clothes from its CC0 wardrobe (T-shirts, polos, sweaters, jeans, suits, dresses, skirts, sneakers, boots, caps…) recoloured to each outfit, its hairstyles, beards and fantasy-race features, and its own three detail levels (full, medium, crowd). City people keep their seeded looks: the same age, ancestry, colouring, hairstyle and clothes per citizen, now drawn by Actors. Everything that moves people stays as it was: the walk and run cycles, foot placement on slopes, flight poses, punches and every action, ragdolls and getting up, the manhole climb and first person; the motion clips themselves now come from the Actors pack too.
+- **The character creator is the Actors generator.** Create character (and the clothes shop mirror) opens Actors' editor: race, body, face details, skin, eyes, hair and beard, and the whole wardrobe garment by garment with any colour. Characters saved with the old creator are converted when loaded. The hero masks and the patterned tights of the old Hero tab are gone; hosiery, gloves and long sleeves in bold colours cover the costume look for now.
+- The character pack is no longer part of the repository: `npm install` fetches it (`npm run packs`) into `public/packs`.
+- **Clothes sit right.** Garments are layered by what they cover (underwear, socks, shoes, tops, trousers, then hats and glasses) and lifted a fixed few millimetres toward the camera instead of a share of the distance, which had grown to centimetres for people a little way off. Trouser waistbands no longer tear through shirt hems (shirts are worn tucked in), and people no longer wear socks, which showed through their shoes as white patches.
+- `npm install` can unpack the character pack from Git Bash on Windows too.
+- **No more red sparks on sunlit skin.** The skin's soft, reddish wrap-around light (its stand-in for light scattering under the skin) also fed the shiny highlight, which then lit up red along edges facing away from the sun: wrists, fingertips, the beard. It now only softens the shading. Far crowds keep their clothes in order too (trousers over shirts, shoes over feet).
+- The Actors code packages are now kept in the repository (vendor/actors), so `npm install` works everywhere. The first upload of this version only half reached the server (the start page asked for a game file that was missing, so the title music and Enter the city failed); the site went back to 0.258 until this fix. Note for uploading: the build now carries the character pack (dist/packs, about 310 MB), so the whole dist folder has to be uploaded, packs included.
+
 ## 0.258 — 2026-10-17
 
 - **Feedback goes to the Scale board.** The Feedback link next to the version number (start screen and pause menu) now opens the community board at https://board.futuremagic.de/ in a new tab, where you can report bugs, share ideas and talk to the developer. The old mail form is gone. The manual says so too.

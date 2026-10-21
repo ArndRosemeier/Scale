@@ -17,9 +17,10 @@ export function readCostumes(raw: unknown): SavedCostumes | null {
   if (!Array.isArray(o.looks)) return null;
   const looks: (CharacterLook | null)[] = [];
   for (let i = 0; i < COSTUME_COUNT; i++) {
-    const l = o.looks[i] as CharacterLook | null | undefined;
+    const l = o.looks[i];
     let ok: CharacterLook | null = null;
-    if (l && typeof l === 'object' && l.appearance && typeof l.appearance === 'object' && l.outfit && typeof l.outfit === 'object') {
+    // (Looks saved before the Actors characters are converted.)
+    if (l && typeof l === 'object') {
       try { ok = normalizeLook(l); } catch { ok = null; }
     }
     looks.push(ok);

@@ -27,9 +27,9 @@ import { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMateri
 export { createRainNodeMaterial, createDustNodeMaterial, createBeamNodeMaterial, createPowerParticleNodeMaterial, createDecalNodeMaterial, createSmokeColumnNodeMaterial, createStarFxNodeMaterial, createStarParticlesNode, createHaloNodeMaterial };
 export { createBroodNodeMaterial, createBirdNodeMaterial, createCreatureNodeMaterial, createDebrisNodeMaterial, bronzeNodeMaterial };
 export { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMaterial };
-export { createSkinNodeMaterial, createGarmentNodeMaterial, createShellNodeMaterial, createEyeNodeMaterial, createHairNodeMaterial, createHornNodeMaterial, simpleNodeMaterial, createLashNodeMaterial } from './people';
 export { createCrowdNodeMaterial } from './crowd';
 export { patchSkyOcclusionNode } from './skyOcclusion';
+export { viewSpaceLayerNode } from './garmentLayers';
 export { makeStarsNode };
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 

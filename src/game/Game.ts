@@ -21,7 +21,7 @@ import { bridgeProfiles } from '../build/bridges';
 import { LandmarkSolids } from '../world/LandmarkSolids';
 import { LandmarkWrecks } from '../destruction/LandmarkWreck';
 import { ENTRANCE_L } from '../plan/metroDims';
-import { BodyService } from '../humanoid/client/BodyService';
+import { actors } from '../humanoid/actors/service';
 import { clipLibraryReady } from '../humanoid/client/anim/clips';
 import { frameWork } from '../core/frameWork';
 import { Physics } from '../physics/Physics';
@@ -330,7 +330,8 @@ export class Game {
     this.tex = tex;
     progress('Waking up the people', 0.62);
     this.physics = new Physics(this.terrain, (x, z) => this.world.groundHeight(x, z));
-    await Promise.all([BodyService.get().ready(), clipLibraryReady(), this.physics.init(), this.audio.init()]);
+    actors.renderer = this.renderer.gl;
+    await Promise.all([actors.ready(), clipLibraryReady(), this.physics.init(), this.audio.init()]);
     this.debris = new Debris(this.physics, tex.facade, (x, z, y = 1e9) => this.collision ? this.collision.groundAt(x, z, y, 0) : this.world.groundHeight(x, z, y, 0));
     this.dust = new Dust();
     this.renderer.scene.add(this.debris.group, this.dust.mesh);
@@ -769,10 +770,9 @@ export class Game {
   private freezeContext(): string {
     const P = this.player, p = P.pos, v = P.vel;
     const where = this.underground.feetUnder(p.x, p.y, p.z) ? 'underground' : this.interiors.insideAt(p.x, p.y + 0.5, p.z) ? 'indoors' : P.flying ? 'flying' : 'outside';
-    const B = BodyService.get();
     const events = this.threats?.events.filter((e) => e.active).map((e) => e.archetype).join('+') || 'none';
     return `at ${p.x.toFixed(0)},${p.y.toFixed(0)},${p.z.toFixed(0)} ${where}, height ${P.height.toFixed(1)} m, speed ${Math.hypot(v.x, v.y, v.z).toFixed(0)} m/s`
-      + ` · peds ${this.peds.agents.length}, city jobs ${this.streamer.pool.queued}+${this.streamer.pool.inFlight}, bodies ${B.pending}${B.onMainThread ? ' (MAIN THREAD)' : ''}`
+      + ` · peds ${this.peds.agents.length}, city jobs ${this.streamer.pool.queued}+${this.streamer.pool.inFlight}, bodies ${actors.pending}`
       + ` · events ${events} · ${this.intro?.active ? 'intro · ' : ''}${this.menu?.paused ? 'paused · ' : ''}day ${this.sky.day + 1} ${this.sky.hour.toFixed(1)} h`;
   }
 

@@ -1,12 +1,11 @@
 /**
- * Characters for the start-up warm-up: two dressed rigs that between them wear every kind of
- * garment shader the city's people and the hero use (one-sided shells, double-sided skirts and
- * coats, cowl and full masks), hair and hats, all casting shadows. Added to the scene unseen
+ * Characters for the start-up warm-up: dressed rigs that between them wear every kind of
+ * material the city's people and the hero use (Actors' skin, eyes, hair, beards, garments with
+ * cut hems, skirts with leg colliders, the merged crowd mesh; costume pieces), all casting shadows. Added to the scene unseen
  * while loading, so the shader gate compiles these programs behind the loading screen.
  *
- * Without them the first coat, dress or masked hero met in play compiled its skinned
- * MeshPhysical garment shader (and the hair's shadow variant) while drawing: up to 10 s on a
- * Windows PC with a cold shader cache.
+ * Without them the first skirt or masked hero met in play compiled its skinned garment shader
+ * (and the hair's shadow variant) while drawing: up to 10 s on a Windows PC with a cold shader cache.
  */
 import * as THREE from 'three';
 import { HumanoidRig } from './HumanoidRig';
@@ -23,23 +22,21 @@ const OUTFITS: { gender: number; eq: EquipmentVisuals }[] = [
   {
     gender: 0.1,
     eq: {
-      chest: { defId: 'dress', visual: cloth(11, [0.55, 0.12, 0.12], [0.2, 0.22, 0.3], 'stripes') },
-      back: { defId: 'coat', visual: cloth(12, [0.35, 0.3, 0.25]) },
+      chest: { defId: 'shirt', visual: cloth(11, [0.55, 0.12, 0.12], [0.2, 0.22, 0.3], 'stripes') },
+      legs: { defId: 'skirt', visual: cloth(12, [0.35, 0.3, 0.25]) },
       feet: { defId: 'boots', visual: cloth(13, [0.25, 0.15, 0.08], [1, 1, 1]) },
       head: { defId: 'cap', visual: cloth(14, [0.2, 0.35, 0.55]) },
-      face: { defId: 'mask_cowl', visual: cloth(15, [0.05, 0.05, 0.06]) },
+      hands: { defId: 'gloves', visual: cloth(15, [0.05, 0.05, 0.06]) },
     },
   },
   {
     gender: 0.9,
     eq: {
-      shoulders: { defId: 'tights', visual: cloth(21, [0.2, 0.3, 0.7], [0.8, 0.1, 0.1]) },
       chest: { defId: 'sweater', visual: cloth(22, [0.15, 0.3, 0.2], [0.7, 0.6, 0.2], 'checks') },
       legs: { defId: 'jeans', visual: cloth(23, [0.18, 0.25, 0.42]) },
       back: { defId: 'jacket', visual: cloth(24, [0.12, 0.13, 0.16], [0.12, 0.13, 0.16], 'leather') },
       feet: { defId: 'sneakers', visual: cloth(25, [0.9, 0.9, 0.9], [1, 1, 1]) },
       head: { defId: 'beanie', visual: cloth(26, [0.3, 0.2, 0.35]) },
-      face: { defId: 'mask_full', visual: cloth(27, [0.05, 0.05, 0.06]) },
     },
   },
 ];
@@ -51,8 +48,9 @@ const OUTFITS: { gender: number; eq: EquipmentVisuals }[] = [
  * again.
  */
 export function warmRigs(parent: THREE.Object3D, at: THREE.Vector3): Promise<unknown> {
-  const rigs = OUTFITS.map((o, i) => {
-    const rig = new HumanoidRig(randomAppearance('human', 9100 + i, { gender: o.gender, age: 0.4 }), { castShadow: true, priority: -5 });
+  // Each outfit at every Actors detail level (full, medium, crowd): each level draws with its own materials.
+  const rigs = [0, 1, 2].flatMap((lod) => OUTFITS.map((o, i) => {
+    const rig = new HumanoidRig(randomAppearance('human', 9100 + i, { gender: o.gender, age: 0.4 }), { castShadow: true, priority: -5, fixedLod: lod });
     rig.setEquipment(o.eq);
     rig.object.name = 'warm-rig';
     rig.object.position.copy(at);
@@ -60,6 +58,6 @@ export function warmRigs(parent: THREE.Object3D, at: THREE.Vector3): Promise<unk
     rig.object.visible = false;
     parent.add(rig.object);
     return rig;
-  });
+  }));
   return Promise.all(rigs.map((r) => r.whenDressed));
 }

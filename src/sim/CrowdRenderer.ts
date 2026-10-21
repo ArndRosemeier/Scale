@@ -1,6 +1,6 @@
 /**
  * Draws pedestrians: GPU-instanced vertex-animation crowds at mid range and
- * full Norgo rigs (with the citizen's own appearance and outfit) up close.
+ * full Actors characters (with the citizen's own appearance and outfit) up close.
  */
 import * as THREE from 'three';
 import type { CrowdTemplate } from './CrowdBaker';

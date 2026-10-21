@@ -141,19 +141,45 @@ Styles (facade grammar plus roof plus massing):
   * roads: crack decals and craters
   * people and the player: physical ragdolls (see Ragdolls)
 
+### People (`src/humanoid`, Actors)
+Every person — the hero, the city's people up close, the far crowd's templates, the hero's statue, the
+creator — is an [Actors](https://github.com/ArndRosemeier/Actors) character (`@actors/generator`, release
+tarballs in package.json; MakeHuman CC0 body, wardrobe and hair). The pack is a static folder,
+`public/packs/human` (git-ignored; `npm run packs`, also after `npm install`, fetches the one matching the
+installed version and keeps only the two CMU takes the idles use).
+* `actors/service.ts`: loads the pack once and shapes bodies in a pool of Web Workers (`budgets.bodyWorkers`
+  leads, characters share a lead's loaded pack); at most two characters load at once, highest priority first.
+  City people use only CC0 assets (no credit needed wherever they are seen) and a procedural skin; the hero
+  the photographic one.
+* `actors/config.ts`: city people keep Scale's seeded generator (`randomAppearance`: race, age, ancestry,
+  colouring, hair and beard per citizen) and are translated into an Actors configuration (macro sliders, face
+  and body details as MakeHuman modifiers, hair and brows by style). Adults only: Actors never builds a body
+  under 18, children in the citizen tables show as young adults.
+* `actors/outfit.ts`: the wardrobe's outfits (`EquipmentVisuals`: city clothes, faction and costume pieces)
+  become Actors garments recoloured to the outfit's colours (a suit or a jacket over jeans is one garment, a coat
+  stands in for the top). Rigid pieces (caps, helmets, masks, costume heads, the raised dead's bones) and held
+  items stay Scale's own on the rig's sockets (`equipment.ts`).
+* `actors/rig.ts`: the proxy skeleton. Scale's animation code (animator, IK, ragdolls, get-up, manhole climb,
+  first person, imported avatars) works on MakeHuman's "default" bone names with rotation-free rest frames
+  facing −Z; each character has such a skeleton with its joints on the Actors joints, and `RigBridge.sync`
+  turns its pose into the Actors game-engine rig every frame (Δ of the driving bone conjugated by the half
+  turn between the facings, then swung onto the proxy joints), from the model's matrix update, so whatever
+  moved the proxy shows. `actors/body.ts` measures the body for sockets and `BodyFit`.
+* Detail levels are Actors' (full, medium, crowd: `HumanoidRig.update` by camera distance with hysteresis);
+  bone matrices are model-relative (precision kilometres from the origin). Faces: moods and talking are
+  Actors expressions (`scale:<mood>[:talk]`, the expression channel's weight flaps the mouth), blinking the
+  blink channel.
+
 ### Humanoid animation (`src/humanoid/client/anim`)
 * `Animator`: locomotion families (ground, swim, climb, air, glide/fly, sit, sleep, dead, stunned) cross-faded by
   weight, carry poses, actions, the superpower layer, additive breathing / look-at / hit springs, foot IK, face and
   fingers. Poses are Euler angles over a neutral (arms hanging, palms to the thighs; `pose.ts`).
-* Clips (`clips.ts`, `public/assets/anim/clips.{json,bin}`): model-space rotations of a 22-bone Rigify body,
-  retargeted per character at runtime. Quaternius clips (CC0, `tools/build-anim-clips.ts`) for walk / jog / sprint,
-  crouch, swim, sit, jump, actions; motion capture for standing (`CMU_*`, below). `LICENSE.txt` holds the credits.
-* **Standing idle = CMU motion capture** (`tools/cmu-bvh.ts` + `tools/cmuBvh.ts`): BVH takes of the CMU Graphics
-  Lab database are retargeted onto the library skeleton (torso and collarbones by rotation from rest, long limb
-  bones by matching the rest segments — the CMU rest stands with spread legs —, feet and toes against their
-  parent, hands rigid with the forearm, which takes the wrist's pronation), smoothed, resampled to 30 fps, turned
-  to face −Z, the head's motion centred and damped, the upper body set to a relaxed upright, hips sway kept
-  (weight shifts) around the mean, and looped by cross-fading the end into the frames before the cut.
+* Clips (`clips.ts`, from the Actors pack by `actors/clips.ts`): model-space rotation changes of a 22-bone body,
+  retargeted per character at runtime. Quaternius clips (CC0) for walk / jog / sprint, crouch, swim, sit, jump,
+  actions; motion capture for standing (`CMU_*`, below).
+* **Standing idle = CMU motion capture** (the CMU takes Actors retargeted onto its rig): cut, turned to face −Z,
+  the head's motion centred and damped, hips sway kept (weight shifts) around the mean, and looped by
+  cross-fading the end into the frames before the cut.
   Clips: `CMU_Idle_1` (113_21 "Standing Still", 1–10.8 s), `CMU_Idle_2` (the same, mirrored), `CMU_Idle_3`
   (77_02 "standing", 1–7.5 s). Each character picks one by seed (`MOCAP_IDLES`) and starts at a seeded point in
   it. Over a mocap idle the clip drives arms and torso fully (no collarbone protraction or procedural calm arms,
@@ -161,7 +187,7 @@ Styles (facade grammar plus roof plus massing):
   clear hips and skirts. Talking blends to `Idle_Talking_Loop`; walking, carry poses, look-at, moods and sitting
   work as before. Relaxed hands curl more toward the little finger, fingers drawn together; fists wrap the thumb.
   `CrowdBaker` bakes one whole idle cycle (`Animator.idleCycle`, sub-stepped, eyes fixed ahead) so baked crowds
-  loop without a seam. `npm test` checks the parser and retarget math (`tools/cmuBvhTest.ts`).
+  loop without a seam.
 * **Flight** (`Animator.flight`, move `fly`): the player pitches and banks the body (`Player.updateRig`) and passes
   `PowerAnim.fly` (tilt 0–1, bank, boost); the animator poses the limbs for it — hover (upright, arms a little out,
   legs together with one knee bent, toes pointed, slow drift), slow flight (arms along the body, head up), cruise
@@ -171,7 +197,7 @@ Styles (facade grammar plus roof plus massing):
 ### Ragdolls (`src/physics/ragdoll`)
 People and the player knocked flying, tumbling, lying, getting up — or staying down.
 * `skeleton.ts`: 14 parts (pelvis, abdomen, chest, head, upper/fore arms, thighs, shins,
-  feet) mapped onto the MakeHuman bones, shapes sized from the rig's rest bone heads (or a
+  feet) mapped onto the proxy skeleton's MakeHuman bones, shapes sized from the rig's rest bone heads (or a
   default 1.76 m plan for crowd people without a rig), mass shares, joint limits (ball joints
   with per-axis limits for spine, neck, shoulders, hips, ankles; limited hinges for elbows and
   knees) and a relaxed pose. Body frames are the rig's model axes at rest (rest bones carry no
@@ -230,16 +256,16 @@ and car ownership.
   cover, help, abandon the car, honk, swerve and reverse. People walk on bridge decks when
   walking along a bridge (or already on it), like cars; paths passing under a bridge stay below.
 * Rendering tiers:
-  * < 35 m: full Norgo skinned humans (LOD0/1); at most 2 new rigs a frame (a ragdoll is never
+  * < 35 m: full Actors characters (their own detail levels); at most 2 new rigs a frame (a ragdoll is never
     held back; the rest stay crowd instances a few frames longer), rig shadows only within
     24 m, foot-IK ground queries cached for 0.25 s on a 0.2 m grid, no per-frame garbage;
     instanced crowd and vehicle attributes upload only the instances in use
   * walking people cache the terrain height under them while they stay within 0.4 m (it was
     the largest cost of stepping 2600 people and most of their garbage); people fleeing more
     than 160 m from the focus step at half rate (the rest of the far ones at a quarter)
-  * < 300 m: GPU-instanced crowd with baked vertex-animation textures (`CrowdBaker`: body
-    vertices under a garment take its colour slot, so gaps in the decimated far-LOD garment
-    shells never show skin)
+  * < 300 m: GPU-instanced crowd with baked vertex-animation textures (`CrowdBaker`: the Actors
+    crowd level's merged body + garments mesh, a colour slot per garment by the body layer it takes,
+    the scalp coloured as hair)
   * farther: none
   * cars: instanced procedural models with wheel animation and lights
 
@@ -1604,7 +1630,8 @@ A session can be saved and continued: `game.saves` (`SaveSystem`), stored by `Sa
 |---|---|
 | main | render, input, player, Rapier, mesh assembly, audio |
 | plan workers (pool) | macro plan, cell plans |
-| mesh workers (pool) | cell geometry (LOD0/1/2), interiors, human bodies (Norgo `body.worker`) |
+| mesh workers (pool) | cell geometry (LOD0/1/2), interiors |
+| Actors workers (pool) | human body shapes (`@actors/human/worker`) |
 | sim worker | citizens, traffic, transit |
 
 ## Directory map
@@ -1622,7 +1649,7 @@ src/sim        citizens, traffic, transit (worker) and the client-side crowd ren
 src/future     near-future layer: delivery robots, drones, animated signage, holo kiosks
 src/fauna      birds: ground groups, flocks, gulls, crows (instanced, around the camera)
 src/underground metro, sewers, trains, side rooms, hidden colonies, their slimes and the deep realm (deep/)
-src/humanoid   Norgo human pipeline (bodies, animator) plus modern clothing
+src/humanoid   people: Actors characters (actors/), the animator, equipment, the wardrobe's outfits
 src/audio      audio engine
 src/ui         HUD, menu, map
 src/game/street street characters: sites and cast (pure), performers, costumes, their lines

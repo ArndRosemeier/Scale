@@ -11,3 +11,5 @@ public/avatars/
 .claude/worktrees/
 reports/
 __pycache__/
+# Actors asset pack (npm run packs)
+public/packs/
