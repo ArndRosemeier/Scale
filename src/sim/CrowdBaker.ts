@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import { HumanoidRig } from '../humanoid/client/HumanoidRig';
+import { crowdPushes } from '../humanoid/client/Character';
 import { randomAppearance } from '../humanoid/appearance';
 import type { EquipmentVisuals, ItemVisual } from '../items/types';
 import { frameWork } from '../core/frameWork';
@@ -128,7 +129,9 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   }
   const used = [...new Set(tris)].sort((a, b) => a - b);
   const remap = new Map<number, number>(used.map((v, k) => [v, k]));
-  const vertRefs = used.map((v) => ({ v, slot: partSlot[v] as Slot }));
+  // Garments pushed out along their normals by layer (see crowdPushes): the merged mesh has no depth lift per garment.
+  const pushAll = crowdPushes(crowd.parts, partSlot.length, ch.occupies());
+  const vertRefs = used.map((v) => ({ v, slot: partSlot[v] as Slot, push: pushAll[v] }));
   const nv = vertRefs.length;
   const index = tris.map((v) => remap.get(v)!);
   // The standing idle is a motion-captured loop of several seconds (Animator.idleCycle, picked by
@@ -195,6 +198,8 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     for (let k = 0; k < nv; k++) {
       const o = (r * nv + k) * 4;
       nrmData[o] = na.getX(k); nrmData[o + 1] = na.getY(k); nrmData[o + 2] = na.getZ(k); nrmData[o + 3] = 0;
+      const push = vertRefs[k].push;
+      if (push) { posData[o] += na.getX(k) * push; posData[o + 1] += na.getY(k) * push; posData[o + 2] += na.getZ(k) * push; }
     }
   };
   for (const c of clipsSpec) {

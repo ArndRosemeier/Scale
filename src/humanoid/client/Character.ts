@@ -57,7 +57,8 @@ const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
  * offset loses fragments of thin seam triangles (pinholes through which the street shows). The
  * garment is instead pulled toward the camera in view space by a fixed distance at the same
  * screen position: `LAYER_PULL` metres per rank of `garmentRank` (underwear lowest, then socks,
- * shoes, tops, gloves, trousers, then hats and glasses). The rank follows what the garment
+ * tops, gloves, shoes, trousers, then hats and glasses; shoes sit high so the foot's skin stays
+ * inside them). The rank follows what the garment
  * covers. Trousers sit well above tops (a tucked-in shirt): the fitted shirt and trouser
  * waist cross each other by up to about a centimetre, and with a small gap the waistband tore
  * through the hem in front and the hem through the waistband at the back. The pull is a fixed
@@ -65,12 +66,41 @@ const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
  * and let socks show through shoes).
  */
 const LAYER_PULL = 0.001;
-const RANK: Record<string, number> = { briefs: 1, bra: 1, legwear: 1, socks: 2, shoes: 3, top: 4, gloves: 5, bottom: 14, hat: 15, glasses: 15, mask: 15 };
+const RANK: Record<string, number> = { briefs: 1, bra: 1, legwear: 1, socks: 2, top: 7, gloves: 8, shoes: 11, bottom: 18, hat: 19, glasses: 19, mask: 19 };
 
 /** Pull rank of a garment by what it covers (its highest layer); unknown meshes keep Actors' layer. */
 function garmentRank(occupies: string[] | undefined, actorsLayer: number): number {
   if (!occupies?.length) return actorsLayer;
   return Math.max(...occupies.map((o) => RANK[o] ?? actorsLayer));
+}
+
+/**
+ * Crowd level (one merged mesh, no per-garment depth lift): each garment vertex is pushed out
+ * along its normal by its rank's pull instead (a centimetre and a half at most, invisible at
+ * crowd distance), so trousers, shirts and shoes keep their order there too.
+ */
+export function crowdPushes(parts: { name: string; role: string; offset: number; count: number }[], vertices: number, occupies: Map<string, string[]>): Float32Array {
+  const push = new Float32Array(vertices);
+  for (const p of parts) if (p.role !== 'body') push.fill(garmentRank(occupies.get(p.name), 1) * LAYER_PULL, p.offset, p.offset + p.count);
+  return push;
+}
+
+const pushed = new WeakSet<THREE.Material>();
+
+/** Crowd material: vertices move out along their normal by the `crowdPush` attribute. */
+function crowdPush(m: THREE.Material): void {
+  if (pushed.has(m)) return;
+  pushed.add(m);
+  const prev = m.onBeforeCompile.bind(m);
+  m.onBeforeCompile = (shader, renderer) => {
+    prev(shader, renderer);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float crowdPush;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize( objectNormal ) * crowdPush;');
+  };
+  const prevKey = m.customProgramCacheKey.bind(m);
+  m.customProgramCacheKey = () => `${prevKey()}|push`;
+  m.needsUpdate = true;
 }
 
 const layered = new WeakSet<THREE.Material>();
@@ -264,7 +294,7 @@ export class Character {
    */
   private occupiesBy: Map<string, string[]> | null = null;
   /** What each garment covers (catalog), by garment id. */
-  private occupies(): Map<string, string[]> {
+  occupies(): Map<string, string[]> {
     return this.occupiesBy ??= new Map(this.actor.catalog.garments.map((g) => [g.id, g.occupies]));
   }
 
@@ -292,6 +322,12 @@ export class Character {
           this.bindMatrixInverse.copy(this.matrixWorld).invert().multiply(actorObj.matrixWorld);
         };
         mesh.castShadow = this.castShadow && !(mesh.material as THREE.Material).transparent;
+      }
+      if (mesh.name === 'crowd' && !mesh.geometry.getAttribute('crowdPush')) {
+        const crowd = this.actor.actor.crowdMesh();
+        const n = mesh.geometry.getAttribute('position').count;
+        if (crowd?.mesh === mesh) mesh.geometry.setAttribute('crowdPush', new THREE.BufferAttribute(crowdPushes(crowd.parts, n, this.occupies()), 1));
+        for (const m of ([] as THREE.Material[]).concat(mesh.material)) crowdPush(m);
       }
       const occupies = this.occupies().get(mesh.name);
       for (const m of ([] as THREE.Material[]).concat(mesh.material)) {

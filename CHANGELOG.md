@@ -9,6 +9,7 @@ Every push raises the version by 0.001. Newest first.
 - The character pack is no longer part of the repository: `npm install` fetches it (`npm run packs`) into `public/packs`.
 - **Clothes sit right.** Garments are layered by what they cover (underwear, socks, shoes, tops, trousers, then hats and glasses) and lifted a fixed few millimetres toward the camera instead of a share of the distance, which had grown to centimetres for people a little way off. Trouser waistbands no longer tear through shirt hems (shirts are worn tucked in), and people no longer wear socks, which showed through their shoes as white patches.
 - `npm install` can unpack the character pack from Git Bash on Windows too.
+- **No more red sparks on sunlit skin.** The skin's soft, reddish wrap-around light (its stand-in for light scattering under the skin) also fed the shiny highlight, which then lit up red along edges facing away from the sun: wrists, fingertips, the beard. It now only softens the shading. Far crowds keep their clothes in order too (trousers over shirts, shoes over feet).
 - The Actors code packages are now kept in the repository (vendor/actors), so `npm install` works everywhere. The first upload of this version only half reached the server (the start page asked for a game file that was missing, so the title music and Enter the city failed); the site went back to 0.258 until this fix. Note for uploading: the build now carries the character pack (dist/packs, about 310 MB), so the whole dist folder has to be uploaded, packs included.
 
 ## 0.258 — 2026-10-17
