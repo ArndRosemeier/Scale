@@ -55,26 +55,38 @@ const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
  * Garment layering on a reversed float depth buffer. Actors lifts each clothing layer above the
  * one below with a polygon offset; with Scale's reversed-Z float depth the slope term of that
  * offset loses fragments of thin seam triangles (pinholes through which the street shows). The
- * layer is instead pulled toward the camera in view space: the same screen position, a depth
- * nearer by a fixed fraction of the distance (`LAYER_PULL` per layer).
+ * garment is instead pulled toward the camera in view space by a fixed distance at the same
+ * screen position: `LAYER_PULL` metres per rank of `garmentRank` (underwear lowest, then socks,
+ * shoes, trousers, tops, then hats and glasses). The rank follows what the garment covers, not
+ * Actors' layer number (which put trousers above T-shirts, so waistbands poked through shirt
+ * hems), and the pull is a fixed distance, not a fraction of it (that grew to centimetres for
+ * people a few dozen metres away).
  */
-const LAYER_PULL = 0.0008;
+const LAYER_PULL = 0.001;
+const RANK: Record<string, number> = { briefs: 1, bra: 1, legwear: 1, socks: 2, shoes: 3, top: 4, gloves: 5, bottom: 14, hat: 15, glasses: 15, mask: 15 };
+
+/** Pull rank of a garment by what it covers (its highest layer); unknown meshes keep Actors' layer. */
+function garmentRank(occupies: string[] | undefined, actorsLayer: number): number {
+  if (!occupies?.length) return actorsLayer;
+  return Math.max(...occupies.map((o) => RANK[o] ?? actorsLayer));
+}
+
 const layered = new WeakSet<THREE.Material>();
 
-function viewSpaceLayer(m: THREE.Material): void {
+function viewSpaceLayer(m: THREE.Material, occupies: string[] | undefined): void {
   if (layered.has(m) || !m.polygonOffset || m.polygonOffsetFactor >= 0) return;
   layered.add(m);
-  const scale = (1 - (-m.polygonOffsetFactor / 2) * LAYER_PULL).toFixed(6);
+  const pull = (garmentRank(occupies, -m.polygonOffsetFactor / 2) * LAYER_PULL).toFixed(6);
   // Node materials (WebGPU): the same through their clip-space output (webgpu/garmentLayers.ts).
-  if (WEBGPU && (m as { isNodeMaterial?: boolean }).isNodeMaterial) { gpuKit().viewSpaceLayerNode(m, +scale); return; }
+  if (WEBGPU && (m as { isNodeMaterial?: boolean }).isNodeMaterial) { gpuKit().viewSpaceLayerNode(m, +pull); return; }
   m.polygonOffset = false;
   const prev = m.onBeforeCompile.bind(m);
   m.onBeforeCompile = (shader, renderer) => {
     prev(shader, renderer);
-    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>\ngl_Position = projectionMatrix * vec4( mvPosition.xyz * ${scale}, 1.0 );`);
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>\ngl_Position = projectionMatrix * vec4( mvPosition.xyz * max( 1.0 - ${pull} / max( length( mvPosition.xyz ), 1e-3 ), 0.5 ), 1.0 );`);
   };
   const prevKey = m.customProgramCacheKey.bind(m);
-  m.customProgramCacheKey = () => `${prevKey()}|layer${scale}`;
+  m.customProgramCacheKey = () => `${prevKey()}|pull${pull}`;
   m.needsUpdate = true;
 }
 
@@ -248,6 +260,12 @@ export class Character {
    * Every actor mesh: model-relative bone matrices (three uploads them as 32-bit floats;
    * kilometres from the origin that made hands shimmer), sky visibility, shadows.
    */
+  private occupiesBy: Map<string, string[]> | null = null;
+  /** What each garment covers (catalog), by garment id. */
+  private occupies(): Map<string, string[]> {
+    return this.occupiesBy ??= new Map(this.actor.catalog.garments.map((g) => [g.id, g.occupies]));
+  }
+
   private prepareMeshes(): void {
     const actorObj = this.actor.object;
     const skel = this.actor.actor.skeleton;
@@ -273,8 +291,9 @@ export class Character {
         };
         mesh.castShadow = this.castShadow && !(mesh.material as THREE.Material).transparent;
       }
+      const occupies = this.occupies().get(mesh.name);
       for (const m of ([] as THREE.Material[]).concat(mesh.material)) {
-        viewSpaceLayer(m);
+        viewSpaceLayer(m, occupies);
         if (this.patched.has(m)) continue;
         this.patched.add(m);
         const p = patchSkyOcclusion(m, 'uniform', this.skyVis);

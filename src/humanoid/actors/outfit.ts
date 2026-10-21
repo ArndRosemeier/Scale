@@ -105,7 +105,8 @@ export function dressPlan(eq: EquipmentVisuals | undefined, female: boolean, ava
       : feet.defId === 'shoes' ? first(female ? [pick(['ballet-flats', 't-bar-shoes', 'black-shoes'], s), 'black-shoes'] : [pick(['leather-shoes', 'black-shoes'], s), 'leather-shoes'])
       : feet.defId === 'boots' ? first([pick(['work-boots', 'ankle-boots', 'biker-boots'], s), 'work-boots'])
       : undefined;
-    if (wear(id, v(feet)) && !/flats|t-bar/.test(id!)) wear(first(['socks', 'low-socks']));
+    // No socks: Actors fits them to the foot independently of the shoe, and they showed through it as white patches.
+    wear(id, v(feet));
   }
   // Caps and helmets from the wardrobe when it has them (else Scale's own rigid ones stay in `rest`).
   if (head?.defId === 'cap' && wear(first(['newsboy-cap']), v(head))) delete rest.head;
