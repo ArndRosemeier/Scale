@@ -9,7 +9,7 @@ sewers. Everything you do has physical consequences that the citizens notice.
 ## Run
 
 ```bash
-npm install          # also fetches the Actors character pack into public/packs (npm run packs)
+npm install          # installs the Actors packages from vendor/actors and fetches their character pack into public/packs (npm run packs)
 npm run dev          # http://localhost:5180
 npm test             # headless determinism / invariant checks (all sections, parallel)
 npm run test:quick   # only the sections touching what changed against origin/main
