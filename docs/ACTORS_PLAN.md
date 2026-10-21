@@ -1,6 +1,6 @@
 # Actors — full adaptation plan
 
-Status: **plan** (2026-10-21). Brief (Arnd, project thread "Game won't start after model import"): "The actors lib
+Status: **phase 1 done in v0.261** (2026-10-21). Brief (Arnd, project thread "Game won't start after model import"): "The actors lib
 is the future. Instead of this zombie half and half what we have now I want a FULL adaptation, and where Actors is
 missing something, bring it over. New capabilities are always welcome to have there."
 
@@ -67,7 +67,9 @@ visual changes, after a GPU look on Arnd's PC.
    Scale: ground locomotion and standing idle pose Actors' skeleton directly; the proxy skeleton follows the Actors
    pose (reverse bridge) so everything not ported yet keeps working. The old collarbone and arm corrections, the
    half-speed CMU idles and the Euler blending are gone. Check: Scale's walk and idle side by side with the same body
-   in Actors' creator.
+   in Actors' creator. *Done in v0.261:* `ClipRig` samples Actors' `Retargeter` / `Locomotion` and hands the pose to
+   the proxy exactly (`PROXY_FROM_ACTOR` in actors/rig.ts); a headless check found arms, hands, fingers and the free
+   leg within 0.03° of Actors' own sample. Look-at and breathing stay in Scale for now (phase 2/3).
 2. **Feet and hands.** Actors: two-bone IK, hand poses with real fingers. Scale: foot placement on slopes and stairs,
    hands on goals (reach, ledges, the manhole), grips for held items.
 3. **Everything else that moves.** Actors: authored poses, action layer. Scale: swim, jump, sit, sleep, stunned,

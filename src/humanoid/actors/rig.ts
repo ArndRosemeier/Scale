@@ -65,6 +65,27 @@ for (const [s, a] of [['L', 'l'], ['R', 'r']]) {
   });
 }
 
+/**
+ * Proxy bone → the Actors bone whose rotation it carries when a pose comes from Actors (the
+ * reverse of DRIVE): every proxy bone standing for part of one Actors bone takes that bone's
+ * rotation, so the proxy joints land on the Actors joints and `RigBridge.sync` hands the pose
+ * back unchanged. 'follow': rigid with its parent.
+ */
+export const PROXY_FROM_ACTOR: Record<string, string> = {
+  root: 'pelvis', spine05: 'spine_01', spine04: 'spine_01', spine03: 'spine_02', spine02: 'spine_02', spine01: 'spine_03',
+  neck01: 'neck_01', neck02: 'neck_01', neck03: 'neck_01', head: 'head',
+};
+for (const [s, a] of [['L', 'l'], ['R', 'r']]) {
+  Object.assign(PROXY_FROM_ACTOR, {
+    [`clavicle.${s}`]: `clavicle_${a}`, [`shoulder01.${s}`]: `clavicle_${a}`,
+    [`upperarm01.${s}`]: `upperarm_${a}`, [`upperarm02.${s}`]: `upperarm_${a}`,
+    [`lowerarm01.${s}`]: `lowerarm_${a}`, [`lowerarm02.${s}`]: `lowerarm_${a}`, [`wrist.${s}`]: `hand_${a}`,
+    [`pelvis.${s}`]: 'follow', [`upperleg01.${s}`]: `thigh_${a}`, [`upperleg02.${s}`]: `thigh_${a}`,
+    [`lowerleg01.${s}`]: `calf_${a}`, [`lowerleg02.${s}`]: `calf_${a}`, [`foot.${s}`]: `foot_${a}`, [`toes.${s}`]: `ball_${a}`,
+  });
+  FINGERS.forEach((f, i) => { for (let k = 1; k <= 3; k++) PROXY_FROM_ACTOR[`finger${i + 1}-${k}.${s}`] = `${f}_0${k}_${a}`; });
+}
+
 /** Actors space ↔ Scale model space: a half turn about +Y (x and z flip sign). */
 const flipV = (v: THREE.Vector3) => v.set(-v.x, v.y, -v.z);
 const flipQ = (q: THREE.Quaternion) => q.set(-q.x, q.y, -q.z, q.w);
