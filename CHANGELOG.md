@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.264 — 2026-10-22
+
+- **Actors 0.6.6.** People draw again on the WebGPU renderer (`?gpu=webgpu`) on real WebGPU. 0.6.5 gave every face mesh one vertex buffer too many, and WebGPU refuses those draws. Races with a tail no longer break WebGPU's bone upload. The normal WebGL game is unchanged.
+
 ## 0.263 — 2026-10-22
 
 - **Actors 0.6.5.** Scale now runs on the Actors release instead of private builds. Since 0.5, Actors loads the pack once per page and no longer re-cuts the skin for every catalog garment when dressing a character, and on the WebGPU renderer (`?gpu=webgpu`) all characters share one shader per material kind instead of building their own. It also carries what Scale needed from Actors: crowds that fit and draw only what people wear, the garment and skin fixes, poses and the locomotion blend. The packs come from the 0.6.5 release, keeping only the human pack.
