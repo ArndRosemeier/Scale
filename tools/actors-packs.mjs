@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Fetches the Actors asset pack that matches the installed @actors/generator version into
- * public/packs (git-ignored; the build copies it into dist). Of the pack's CMU motion capture
- * library (about 200 MB) only the takes Scale's standing idles are cut from are kept
- * (src/humanoid/actors/clips.ts).
+ * public/packs (git-ignored; the build copies it into dist). Only the human pack is kept, and of
+ * its CMU motion capture library (about 200 MB) only the index: Scale plays the pack's own
+ * clips (src/humanoid/actors/clips.ts).
  *
  *   npm run packs            (also runs after npm install)
  *   npm run packs -- --force
@@ -21,6 +21,7 @@ if (!existsSync(bin)) {
 }
 const dest = join(root, 'public/packs');
 execFileSync(process.execPath, [bin, dest, ...process.argv.slice(2)], { stdio: 'inherit' });
-const KEEP = new Set(['index.json', '113_21.bin', '77_02.bin']);
+for (const d of readdirSync(dest, { withFileTypes: true })) if (d.isDirectory() && d.name !== 'human') rmSync(join(dest, d.name), { recursive: true, force: true });
+const KEEP = new Set(['index.json']);
 const cmu = join(dest, 'human/clips/cmu');
 if (existsSync(cmu)) for (const f of readdirSync(cmu)) if (!KEEP.has(f)) rmSync(join(cmu, f), { force: true });

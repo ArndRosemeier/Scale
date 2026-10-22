@@ -1,6 +1,5 @@
 # Actors packages
 
-Built from github.com/ArndRosemeier/Actors, branch `claude/keen-noether-m9qfni` (commit 753f690) plus the Git Bash tar fix, the skin specular fix, pose buffers/blending and the locomotion blend (branch `claude/fix-startup-after-models-fbcc7t`, commit 5b81f8e),
-with `node scripts/release/build.mjs`. They live here so `npm install` works on any machine.
-Replace them with the release download URLs once an Actors release includes these changes.
-The asset pack itself (public/packs, about 310 MB) still comes from the v0.5.0 release via `npm run packs`.
+The Actors 0.6.5 release packages (github.com/ArndRosemeier/Actors, release v0.6.5), built with `node scripts/release/build.mjs`.
+They live here so `npm install` works on any machine without GitHub access.
+The asset pack (public/packs, about 310 MB) comes from the same release via `npm run packs`, which keeps only the human pack.

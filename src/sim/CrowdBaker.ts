@@ -183,15 +183,22 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     // (The model's matrix update also poses the actor's skeleton: see Character.sync.)
     root.updateMatrixWorld(true);
   };
+  // Skinned in world space (the rig stands at the origin facing -Z): world bone matrices and no
+  // bind inverse. (The game makes this skeleton's matrices model-relative and the mesh's bind
+  // inverse follows it once the character has run a frame, which the baker's rig may or may not
+  // have done; applying the mesh's world matrix on top turned people round and lifted them.)
+  const worldBind = new THREE.Matrix4();
   const capture = (r: number) => {
-    cm.skeleton.update();
+    THREE.Skeleton.prototype.update.call(cm.skeleton);
+    const bindInv = cm.bindMatrixInverse;
+    cm.bindMatrixInverse = worldBind;
     for (let k = 0; k < nv; k++) {
       cm.getVertexPosition(vertRefs[k].v, tmp);
-      tmp.applyMatrix4(cm.matrixWorld);
       posArr[k * 3] = tmp.x; posArr[k * 3 + 1] = tmp.y; posArr[k * 3 + 2] = tmp.z;
       const o = (r * nv + k) * 4;
       posData[o] = tmp.x; posData[o + 1] = tmp.y; posData[o + 2] = tmp.z; posData[o + 3] = 1;
     }
+    cm.bindMatrixInverse = bindInv;
     geoTmp.getAttribute('position').needsUpdate = true;
     geoTmp.computeVertexNormals();
     const na = geoTmp.getAttribute('normal');
