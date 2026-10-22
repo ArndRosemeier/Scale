@@ -5,6 +5,7 @@ Every push raises the version by 0.001. Newest first.
 ## 0.263 — 2026-10-22
 
 - **Actors 0.6.5.** Scale now runs on the Actors release instead of private builds. Since 0.5, Actors loads the pack once per page and no longer re-cuts the skin for every catalog garment when dressing a character, and on the WebGPU renderer (`?gpu=webgpu`) all characters share one shader per material kind instead of building their own. It also carries what Scale needed from Actors: crowds that fit and draw only what people wear, the garment and skin fixes, poses and the locomotion blend. The packs come from the 0.6.5 release, keeping only the human pack.
+- **Distant crowds walk forwards again.** The far crowd's baked walk loops faced backwards and stood about 0.8 m above the ground. The baker had turned the skinned mesh round a second time: once the game makes a character's bone matrices model-relative, the mesh's world matrix no longer belongs on top. It now skins in world space directly.
 
 ## 0.262 — 2026-10-21
 
