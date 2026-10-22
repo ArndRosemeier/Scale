@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.263 — 2026-10-22
+
+- **Actors 0.6.4.** Scale now runs on the Actors release instead of private builds. 0.6.4 brings Actors' own speed-ups since 0.5 (the pack is loaded once per page, and dressing a character no longer re-cuts the skin for every catalog garment) on top of what Scale needed from Actors (crowds that fit and draw only what people wear, the garment and skin fixes, poses and the locomotion blend). The packs come from the 0.6.4 release, keeping only the human pack.
+
 ## 0.262 — 2026-10-21
 
 - The character creator no longer shows the genital shape sliders (and the crotch bulge) while anatomical detail is off, which it always is in Scale.
