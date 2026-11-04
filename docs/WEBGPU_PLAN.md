@@ -46,6 +46,20 @@ Steps, each its own PR:
    `navigator.gpu` falls back to WebGL automatically; a Graphics setting to pick it. The GLSL twins
    are deleted only later, once Arnd agrees.
 
+Log:
+
+- v0.266 Actors 0.33.3. v0.267 / v0.268: freezes, broken people, pale hero, skin through clothes
+  fixed on WebGPU; `@futuremagic/stage` hooks vendored (texture rebind, shared shadow nodes).
+- PC CPU profile (seed=test street): WebGPU 20 ms vs WebGL 8 ms of main-thread render, GPU ~3 ms.
+  Render bundles for the city cells (stage `StaticBundle`, PR #231) gave nothing measurable (the
+  cells are few draws) and lost newly streamed cells: dropped.
+- v0.269: three bumped the shared shadow material's version on every alphaTest flip, so ~250
+  shadow draws a frame rebuilt their material keys; a shadow draw now keeps its key (18.9 → 15.9 ms).
+- v0.270: ~370 of ~600 draws a frame were empty prop batches, fully processed by WebGPU; skipped
+  (13.2 → 8.6 ms, 60 fps street and concert; WebGL 4.1 / 5.3 ms).
+- v0.271: step 5, the default flip (adapter check, menu choice, `?gpu=webgl`). Step 3 (instances,
+  vegetation) still open: WebGPU is at 60 fps without it, so it waits for a measured need.
+
 ## Part 1 (2026-10-06 – 10-22): the port
 
 Status: started 2026-10-06 (Arnd: "this is now your task in a branch, as a long running project").

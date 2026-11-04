@@ -109,7 +109,7 @@ async function start(save: SaveData | null = null): Promise<void> {
     console.error('[avatar] could not load the selected character', e);
   }
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  await loadGpuKit();
+  await loadGpuKit(true);
   const game = new Game(canvas, settings, mode);
   (window as unknown as { game: Game }).game = game;
   if (save) { game.pendingSave = save; game.startAt = { x: save.player.x, z: save.player.z }; }

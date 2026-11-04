@@ -10,6 +10,7 @@ import { saveTimeScale } from '../render/SkySystem';
 import type { WeatherSetting } from '../render/Weather';
 import type { QualitySetting } from '../render/Graphics';
 import { probeGpu, maybeShowGpuHint } from './GpuHint';
+import { WEBGPU, rendererChoice, setRendererChoice, rendererWhy, type RendererChoice } from '../render/gpuMode';
 import { isTouch } from './touch';
 import { HelpDialog, type HelpTab } from './HelpDialog';
 import { isAction, keyLabel } from '../game/keybinds';
@@ -41,6 +42,9 @@ export class Menu {
         <div class="row"><label>Graphics</label><select id="pGfx" title="Auto: adapts to your graphics card while you play (remembered per card)">
           <option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option>
         </select><span id="pGfxV" class="sub"></span></div>
+        <div class="row"><label>Renderer</label><select id="pRenderer" title="WebGPU is the default where the browser has it; WebGL is the older path. Applies after a restart.">
+          <option value="webgpu">WebGPU</option><option value="webgl">WebGL</option>
+        </select><span id="pRendererV" class="sub"></span></div>
         <div class="row"><label>Render scale</label><select id="pScale" title="Auto: as the graphics level sets it">
           <option value="auto">Auto</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option>
         </select></div>
@@ -84,6 +88,11 @@ export class Menu {
     mix.querySelector<HTMLButtonElement>('.mix-reset')!.onclick = () => { for (const c of SOUND_CATEGORIES) game.audio.setMix(c.id, defaultMix(c.id)); syncMix(); };
     $<HTMLButtonElement>('pMixBtn').onclick = () => { syncMix(); mix.classList.toggle('open'); };
     $<HTMLSelectElement>('pGfx').onchange = (e) => { game.graphics.set((e.target as HTMLSelectElement).value as QualitySetting); this.sync(); };
+    $<HTMLSelectElement>('pRenderer').onchange = (e) => {
+      setRendererChoice((e.target as HTMLSelectElement).value as RendererChoice);
+      this.sync();
+      if (confirm('The renderer changes when the game starts again. Restart now? (Unsaved progress is lost.)')) location.reload();
+    };
     $<HTMLSelectElement>('pScale').onchange = (e) => { const v = (e.target as HTMLSelectElement).value; game.graphics.setScale(v === 'auto' ? null : Number(v)); };
     game.graphics.onChange = (level) => {
       if (this.open) this.sync();
@@ -133,6 +142,11 @@ export class Menu {
     (document.getElementById('pGfx') as HTMLSelectElement).value = gfx.setting;
     document.getElementById('pGfxV')!.textContent = gfx.auto ? gfx.level.name : '';
     document.getElementById('pGfxV')!.title = gfx.gpu;
+    (document.getElementById('pRenderer') as HTMLSelectElement).value = rendererChoice();
+    const running = WEBGPU ? 'WebGPU' : 'WebGL', chosen = rendererChoice() === 'webgpu' ? 'WebGPU' : 'WebGL';
+    const rv = document.getElementById('pRendererV')!;
+    rv.textContent = running === chosen ? '' : `now ${running}`;
+    rv.title = `Running on ${running} (${rendererWhy})`;
     (document.getElementById('pScale') as HTMLSelectElement).value = gfx.scaleOverride === null ? 'auto' : String(gfx.scaleOverride);
     if (g.crime) {
       (document.getElementById('pCrime') as HTMLSelectElement).value = g.crime.setting;
