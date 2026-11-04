@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.271 — 2026-11-04
+
+- **WebGPU is the default renderer.** The game starts on WebGPU wherever the browser has it (on Arnd's PC now 60 fps on the street and at the concert, like WebGL), and on WebGL where it doesn't (no WebGPU, a blocked graphics card). The pause menu has a **Renderer** choice (WebGPU / WebGL, remembered, applies after a restart); `?gpu=webgl` in the address runs WebGL once. The preview pages stay on WebGL.
+
 ## 0.270 — 2026-11-04
 
 - **WebGPU (`?gpu=webgpu`): half the draws.** Street props are drawn in one batch per kind, and most batches are empty at any moment (kinds no nearby cell uses, the aftermath props before any disaster). WebGL skips an empty batch almost for free, but WebGPU did all of its per-object work, in the view and the shadow pass: about 370 of ~600 draws a frame at the start street. Empty batches are now left out.
