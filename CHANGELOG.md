@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.270 — 2026-11-04
+
+- **WebGPU (`?gpu=webgpu`): half the draws.** Street props are drawn in one batch per kind, and most batches are empty at any moment (kinds no nearby cell uses, the aftermath props before any disaster). WebGL skips an empty batch almost for free, but WebGPU did all of its per-object work, in the view and the shadow pass: about 370 of ~600 draws a frame at the start street. Empty batches are now left out.
+
 ## 0.269 — 2026-11-04
 
 - **WebGPU (`?gpu=webgpu`): cheaper shadow pass.** All shadow casters share one shadow material, and three marked it changed whenever it went from a caster with alpha test (trees, hair) to one without, so most shadow draws rebuilt their whole material key every frame (about 250 per frame, the biggest single cost in a CPU profile on the PC). A shadow draw now keeps its key while what it copies from its caster stays the same.
