@@ -60,6 +60,7 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   countNodeBuilds(renderer);
   guardDraws(renderer);
   quickShadowKeys(renderer);
+  skipEmptyInstances(renderer);
   timeSlowPipelines();
   shareInstancedShaders(renderer);
   noPerFrameUploads();
@@ -302,6 +303,25 @@ function guardDraws(renderer: THREE.WebGPURenderer): void {
       const g = object.geometry;
       console.error(`[webgpu] draw failed, skipped from now on: ${object.type} "${object.name}" (parent "${object.parent?.name ?? ''}", ${object.isSkinnedMesh ? `skinned, ${object.skeleton?.bones.length} bones, ` : ''}geometry ${g?.uuid?.slice(0, 8)} [${Object.keys(g?.attributes ?? {}).join(',')}]) material ${material?.type} "${material?.name}"`, err);
     }
+  };
+}
+
+/**
+ * Instanced meshes with no instances (prop batches of kinds no loaded cell uses right now, most of
+ * the aftermath props): three's WebGL renderer drops them cheaply, the WebGPU one does all the
+ * per-object work (render object, uniforms, bindings) before finding nothing to draw: about 370 of
+ * ~600 draws a frame at the start street, view and shadow pass (headless count 2026-11-04). They are
+ * left out when the scene is gathered. Internal: `_projectObject` (r186).
+ */
+function skipEmptyInstances(renderer: THREE.WebGPURenderer): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = renderer as any;
+  const project = r._projectObject;
+  if (typeof project !== 'function') { console.warn('[webgpu] three internals renamed, not installed: skip empty instances'); return; }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  r._projectObject = function (this: unknown, object: any, ...rest: unknown[]) {
+    if (object.isInstancedMesh === true && object.count === 0 && object.children.length === 0) return;
+    return project.call(this, object, ...rest);
   };
 }
 
