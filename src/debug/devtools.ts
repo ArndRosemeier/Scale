@@ -117,6 +117,35 @@ export function installDevtools(game: Game): void {
       return out;
     },
     setSize(h: number): void { game.player.height = h; },
+    /**
+     * Where a frame's time goes, averaged over `seconds` of play: fps, the main thread's sections (ms,
+     * `render` = CPU time submitting the frame), draws and triangles per frame. For renderer comparisons.
+     */
+    async perf(seconds = 10): Promise<Record<string, unknown>> {
+      const g = game as unknown as { prof: Record<string, number>; renderer: { gl: { info: { autoReset: boolean; reset(): void; render: { drawCalls?: number; calls?: number; triangles: number } } } } };
+      const info = g.renderer.gl.info, auto = info.autoReset;
+      // (Counted over the whole frame: the scene pass and the post passes are separate render calls.)
+      info.autoReset = false;
+      info.reset();
+      const sums: Record<string, number> = {};
+      let frames = 0, draws = 0, tris = 0;
+      const t0 = performance.now();
+      await new Promise<void>((done) => {
+        const step = (): void => {
+          frames++;
+          for (const [k, v] of Object.entries(g.prof)) sums[k] = (sums[k] ?? 0) + v;
+          const r = info.render;
+          draws += r.drawCalls ?? r.calls ?? 0;
+          tris += r.triangles;
+          info.reset();
+          if (performance.now() - t0 < seconds * 1000) requestAnimationFrame(step); else done();
+        };
+        requestAnimationFrame(step);
+      });
+      info.autoReset = auto;
+      const ms = Object.fromEntries(Object.entries(sums).map(([k, v]) => [k, +(v / frames).toFixed(2)]).sort((a, b) => +b[1] - +a[1]).slice(0, 12));
+      return { fps: +(frames / ((performance.now() - t0) / 1000)).toFixed(1), draws: Math.round(draws / frames), triangles: Math.round(tris / frames), ms };
+    },
     teleport(x: number, z: number): void { game.player.pos.set(x, game.world.groundHeight(x, z) + 0.1, z); },
     /** Put the player in the side room with the gap to hidden colony i (no hint in the game itself). */
     colony(i = 0): { room: number; kind: string; x: number; z: number } | null {
