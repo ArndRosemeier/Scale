@@ -59,6 +59,7 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   watchVertexBuffers(renderer);
   countNodeBuilds(renderer);
   guardDraws(renderer);
+  quickShadowKeys(renderer);
   timeSlowPipelines();
   shareInstancedShaders(renderer);
   noPerFrameUploads();
@@ -301,6 +302,44 @@ function guardDraws(renderer: THREE.WebGPURenderer): void {
       const g = object.geometry;
       console.error(`[webgpu] draw failed, skipped from now on: ${object.type} "${object.name}" (parent "${object.parent?.name ?? ''}", ${object.isSkinnedMesh ? `skinned, ${object.skeleton?.bones.length} bones, ` : ''}geometry ${g?.uuid?.slice(0, 8)} [${Object.keys(g?.attributes ?? {}).join(',')}]) material ${material?.type} "${material?.name}"`, err);
     }
+  };
+}
+
+/**
+ * The shadow pass draws every caster with one shared override material, and three copies each
+ * caster's `alphaTest` onto it: switching between casters with and without alpha test (trees, hair
+ * vs buildings) bumps its version, so every shadow draw after such a switch rebuilt its full
+ * material cache key (a walk over all its properties and node graphs), ~250 keys per frame, about
+ * a third of the per-draw time on the PC (CPU profile 2026-11-04). For the shadow pass material the
+ * key only depends on what is copied from the caster, so a draw whose copied values (alpha test on
+ * or off, maps, side, transparency, nodes) match those it was last checked with reuses its key.
+ * Internal: RenderObject.getCacheKey (r186), reached through `_objects.createRenderObject`.
+ */
+function quickShadowKeys(renderer: THREE.WebGPURenderer): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const objects = (renderer as any)._objects;
+  const create = objects?.createRenderObject;
+  if (typeof create !== 'function') { console.warn('[webgpu] three internals renamed, not installed: quick shadow keys'); return; }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sig = (m: any): string => `${m.side}|${m.alphaTest > 0}|${m.alphaMap?.id}|${m.displacementMap?.id}|${m.displacementScale !== 0}|${m.displacementBias !== 0}|${m.transparent}|${m.colorNode?.id}|${m.depthNode?.id}|${m.positionNode?.id}`;
+  let patched = false;
+  objects.createRenderObject = function (this: unknown, ...a: unknown[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ro = create.apply(this, a) as any;
+    if (!patched) {
+      patched = true;
+      const P = Object.getPrototypeOf(ro), getCacheKey = P.getCacheKey;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      P.getCacheKey = function (this: any) {
+        if (this.material?.isShadowPassMaterial !== true || this.initialCacheKey === undefined) return getCacheKey.call(this);
+        const s = sig(this.material);
+        if (this.shadowSig === s && !this.needsUpdate) return this.initialCacheKey;
+        const key = getCacheKey.call(this);
+        this.shadowSig = key === this.initialCacheKey ? s : undefined;
+        return key;
+      };
+    }
+    return ro;
   };
 }
 
