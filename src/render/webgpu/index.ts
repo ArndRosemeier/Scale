@@ -449,8 +449,15 @@ export function offscreen(renderer: THREE.WebGPURenderer): void {
  * as before). Attributes that change after creation (dynamic usage, instanced) stay as they are.
  */
 const MAX_OWN_BUFFERS = 5;
-function packGeometry(geometry: THREE.BufferGeometry | undefined): void {
+function packGeometry(object: THREE.Object3D): void {
+  const geometry = (object as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
   if (!geometry || geometry.userData.vbPacked) return;
+  // Never skinned meshes (people, creatures). Their owners keep writing attributes in place
+  // through `.array` as tightly packed data (Actors rewrites normals and clip values when a person
+  // is re-tucked); once interleaved, those writes landed on the skin weights and uvs, and the person
+  // burst into a cloud of triangles until the next rebuild. They are not instanced, so they have
+  // all 8 vertex buffers to themselves, and Actors keeps its meshes within that.
+  if ((object as THREE.SkinnedMesh).isSkinnedMesh) return;
   geometry.userData.vbPacked = true;
   const attrs = geometry.attributes as Record<string, THREE.BufferAttribute | THREE.InterleavedBufferAttribute>;
   const buffers = new Set<unknown>();
@@ -483,7 +490,7 @@ function packBeforeRender(renderer: THREE.WebGPURenderer): void {
   const objects = (renderer as any)._objects;
   if (!objects?.get) { console.warn('[webgpu] cannot pack vertex buffers: renderer internals changed'); return; }
   const get = objects.get.bind(objects);
-  objects.get = (object: THREE.Mesh, ...rest: unknown[]) => { packGeometry(object.geometry); return get(object, ...rest); };
+  objects.get = (object: THREE.Mesh, ...rest: unknown[]) => { packGeometry(object); return get(object, ...rest); };
 }
 
 export function createPMREM(renderer: unknown): THREE.PMREMGenerator {

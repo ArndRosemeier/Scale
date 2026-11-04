@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.275 — 2026-11-04
+
+- **People no longer burst into a cloud of triangles on WebGPU.** To stay under WebGPU's vertex buffer limit the renderer repacked a mesh's vertex data into one buffer on its first draw, people's bodies included. Actors keeps rewriting a person's normals in place (when clothes are re-tucked or the detail level changes), and after the repack those writes landed on the skin weights and texture coordinates, so the body flew apart until it was rebuilt. Skinned meshes (people, creatures) are no longer repacked; they are not instanced and fit the limit as they are.
+
 ## 0.274 — 2026-11-04
 
 - **Character creator: shows its download.** The first time it opens (and after an update) the creator downloads about 20 MB of character data, which on a slow line took a minute or two behind a plain "Loading the character generator…" and looked like a hang. It now counts the megabytes as they arrive, and the console logs how long it took (`[creator] ready after …`).
