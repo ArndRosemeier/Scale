@@ -22,7 +22,7 @@ import { createFacadeMaterial } from '../render/materials/facade';
 import { createWaterMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
 import { toGeometry } from '../stream/CityStreamer';
-import { makeTube, tubeAt, tubeInterior, boxAt, type Tube, type Box } from './Volumes';
+import { makeTube, tubeAt, tubeAtAnyY, tubeInterior, boxAt, type Tube, type Box } from './Volumes';
 import { ENTRANCE_L, ENTRANCE_W } from '../plan/metroDims';
 import { pointInPoly, polyBounds, distPointPolyEdge } from '../core/geom2';
 import { G } from '../render/materials/globals';
@@ -587,7 +587,7 @@ export class Underground {
   private planManholes(): void {
     // (Spatial look-ups, same answers as checking every shaft and every trunk: with ~40,000 shafts
     // in a large city that took ~10 s of the loading screen.)
-    const sewers = new Set(this.sewerTubes);
+    const sewers = new Set(this.sewerTubes), stations = this.boxes.filter((b) => b.kind === 'station');
     const SPACING = 10, placed = new Map<number, ManholeSpot[]>();
     const keyOf = (i: number, j: number) => (i + 32768) * 65536 + (j + 32768);
     const tooClose = (x: number, z: number): boolean => {
@@ -615,7 +615,7 @@ export class Underground {
           if (this.near(x, z).tubes.some((o) => o !== t && sewers.has(o) && !!tubeAt(o, x, q.y + 1, z, 1.2))) continue;
           if (tooClose(x, z)) break;
           // Not up through a metro tunnel, a hall or a room, nor where a station's entrance stairs go.
-          if (this.shaftBlocked(x, z, q.y)) continue;
+          if (this.shaftBlocked(x, z, q.y, stations)) continue;
           spot = { tube: t, s, x, z, dx: q.dx, dz: q.dz, side, floor: q.y };
           break;
         }
@@ -673,19 +673,21 @@ export class Underground {
    * entrance passages are only laid out once their cell loads, so the ground around every station
    * hall (as far as entrance passages reach) is kept clear of shafts as a whole.
    */
-  private shaftBlocked(x: number, z: number, floor: number): boolean {
-    for (const b of this.boxes) {
-      if (b.kind !== 'station') continue;
+  private shaftBlocked(x: number, z: number, floor: number, stations: readonly Box[]): boolean {
+    for (const b of stations) {
       const u = Math.abs((x - b.cx) * b.ux + (z - b.cz) * b.uz), v = Math.abs(-(x - b.cx) * b.uz + (z - b.cz) * b.ux);
       if (u < b.hu + SHAFT_CLEAR_U && v < b.hv + SHAFT_CLEAR_V) return true;
     }
+    // (Every 0.8 m from the floor up to the street, at the shaft's middle and corners: the heights
+    // are tried together per volume, which gives the same answer as one height after the other.)
     const top = this.ground(x, z), r = SHAFT_HS + 0.3;
-    for (let y = floor + 1; y < top; y += 0.8) {
-      for (const [ox, oz] of [[0, 0], [r, r], [r, -r], [-r, r], [-r, -r]]) {
-        const px = x + ox, pz = z + oz, n = this.near(px, pz);
-        if (n.tubes.some((t) => t.kind !== 'sewer' && !!tubeAt(t, px, y, pz, 0.3))) return true;
-        if (n.boxes.some((b) => !!boxAt(b, px, y, pz, 0.3))) return true;
-      }
+    const ys: number[] = [];
+    for (let y = floor + 1; y < top; y += 0.8) ys.push(y);
+    if (!ys.length) return false;
+    for (const [ox, oz] of [[0, 0], [r, r], [r, -r], [-r, r], [-r, -r]]) {
+      const px = x + ox, pz = z + oz, n = this.near(px, pz);
+      if (n.tubes.some((t) => t.kind !== 'sewer' && tubeAtAnyY(t, px, ys, pz, 0.3))) return true;
+      if (n.boxes.some((b) => ys.some((y) => !!boxAt(b, px, y, pz, 0.3)))) return true;
     }
     return false;
   }

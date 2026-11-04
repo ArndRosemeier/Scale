@@ -523,15 +523,18 @@ export class Terrain {
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
         const x = -this.extent + i * RASTER_CELL, z = -this.extent + j * RASTER_CELL;
-        let best = Infinity, bl = 0, bw = 0;
+        // (Level and width only for the nearest point, once: the width's noise for every closer
+        // point found on the way was most of the start-up's terrain time.)
+        let best = Infinity, br = -1, bk = 0;
         for (let r = 0; r < this.baseRivers; r++) {
-          const R = this.rivers[r];
-          const pts = R.pts;
+          const pts = this.rivers[r].pts;
           for (let k = 0; k < pts.length; k += 2 * step) {
             const d = (pts[k] - x) * (pts[k] - x) + (pts[k + 1] - z) * (pts[k + 1] - z);
-            if (d < best) { best = d; bl = this.riverLevelAt(r, R.s[k >> 1]); bw = this.riverHalfWidthAt(r, R.s[k >> 1]); }
+            if (d < best) { best = d; br = r; bk = k; }
           }
         }
+        const bl = br < 0 ? 0 : this.riverLevelAt(br, this.rivers[br].s[bk >> 1]);
+        const bw = br < 0 ? 0 : this.riverHalfWidthAt(br, this.rivers[br].s[bk >> 1]);
         const o = (j * N + i) * 3;
         this.raster[o] = Math.sqrt(best);
         this.raster[o + 1] = bl;

@@ -84,6 +84,27 @@ export function tubeAt(t: Tube, x: number, y: number, z: number, margin = 0, any
 }
 
 /**
+ * Is `tubeAt(t, x, y, z, margin)` non-null for any of the heights `ys`? The same test, with the
+ * part that does not depend on y done once (manhole planning asks this for ~10 heights a spot).
+ */
+export function tubeAtAnyY(t: Tube, x: number, ys: readonly number[], z: number, margin = 0): boolean {
+  if (x < t.bounds[0] || x > t.bounds[2] || z < t.bounds[1] || z > t.bounds[3]) return false;
+  const P = t.pts;
+  for (let i = 0; i + 5 < P.length; i += 3) {
+    const ax = P[i], ay = P[i + 1], az = P[i + 2], bx = P[i + 3], by = P[i + 4], bz = P[i + 5];
+    const dx = bx - ax, dz = bz - az;
+    const l2 = dx * dx + dz * dz;
+    let u = l2 > 0 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
+    u = Math.max(0, Math.min(1, u));
+    const qx = ax + dx * u, qz = az + dz * u;
+    if (Math.hypot(x - qx, z - qz) > t.halfWidth + margin) continue;
+    const floor = ay + (by - ay) * u;
+    for (const y of ys) if (!(y < floor - 1.5 || y > floor + t.height)) return true;
+  }
+  return false;
+}
+
+/**
  * Strict interior test for cameras: margin applies on all sides and sewer
  * tubes follow their arched vault (springing at 1.6 m).
  */
