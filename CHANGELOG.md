@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.266 — 2026-11-04
+
+- **Actors 0.33.3** (was 0.6.6). What Scale gets from it: steady people far from the city's centre done inside Actors now (its root-relative skeleton replaces Scale's own fix), dressing a new person no longer stalls the main thread for a beard or face morphs, cheaper crowds (hair merged into a far person's one mesh, eyes, teeth and brows cast no shadow, people behind the camera not drawn, far and off-screen people animate every 2nd / 4th frame), hair and beards as solid masses instead of single strands, clothes that keep their colour and stop poking through each other, loose skirts and coats that swing, skin with flush, pores, oily shine, backlit ears and darker creases, and memory fixes. The far baked crowd leaves the merged hair cards out (it paints the scalp as before), and the speed afterimage copies follow the new skinning.
+
 ## 0.265 — 2026-11-04
 
 - **Plan: WebGPU as the default.** docs/WEBGPU_PLAN.md part 2: move to Actors 0.33, measure both renderers again on a real PC, take AssetGenerator's faster drawing (GPU-culled instances for trees and props, cheaper leaves, distant woods), close the gap, then make WebGPU the default with WebGL kept as a switch.
