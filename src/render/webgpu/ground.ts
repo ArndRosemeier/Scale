@@ -7,7 +7,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, float, int, uint, bool, vec2, vec3, vec4, mix, normalize, min, max, abs, fract, floor, fwidth, length, smoothstep, sub, add, mul,
   dot, sin, clamp, pow, select, If, Loop, Break, attribute, texture, uniformArray, uniform, positionWorld, positionView, cameraPosition,
-  normalView, normalWorldGeometry, Discard, diffuseColor, cameraViewMatrix, struct,
+  normalView, normalWorldGeometry, Discard, diffuseColor, cameraViewMatrix, struct, renderGroup,
 } from 'three/tsl';
 import type { MaterialArrays } from '../TextureLibrary';
 import { terrainHoles } from '../materials/ground';
@@ -29,7 +29,7 @@ let fogCol: ReturnType<typeof uniform> | null = null;
 function fogColor() {
   if (!fogCol) {
     const c = new THREE.Color();
-    fogCol = uniform(c).onRenderUpdate((frame) => { const f = frame.scene?.fog; if (f) c.copy(f.color); return c; });
+    fogCol = uniform(c).setGroup(renderGroup).onRenderUpdate((frame) => { const f = frame.scene?.fog; if (f) c.copy(f.color); return c; });
   }
   return fogCol;
 }
@@ -44,8 +44,8 @@ function tiles(arrays: MaterialArrays) {
 let holes: { A: unknown; B: unknown; N: unknown; under: unknown } | null = null;
 function holeNodes() {
   if (!holes) holes = {
-    A: uniformArray(terrainHoles.uHoleA.value, 'vec4').setName('uHoleA'),
-    B: uniformArray(terrainHoles.uHoleB.value, 'vec4').setName('uHoleB'),
+    A: uniformArray(terrainHoles.uHoleA.value, 'vec4').setName('uHoleA').setGroup(renderGroup),
+    B: uniformArray(terrainHoles.uHoleB.value, 'vec4').setName('uHoleB').setGroup(renderGroup),
     N: shared(terrainHoles.uHoleN),
     under: shared(terrainHoles.uUnder),
   };

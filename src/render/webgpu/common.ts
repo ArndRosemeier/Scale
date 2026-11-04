@@ -5,7 +5,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, int, ivec2, vec2, vec3, fract, sin, dot, floor, mix, mul, sub, dFdx, dFdy, cross, max, inverseSqrt, select, sqrt,
-  normalize, uniform, attribute, textureLoad, textureSize, varying, Loop,
+  normalize, uniform, renderGroup, attribute, textureLoad, textureSize, varying, Loop,
 } from 'three/tsl';
 import { G } from '../materials/globals';
 import { ownValues } from './sharedGraph';
@@ -54,8 +54,10 @@ export function shared(u: { value: unknown }): ReturnType<typeof uniform> {
   let n = follow.get(u);
   if (!n) {
     const v = u.value;
-    if (typeof v === 'number') n = uniform(v).onRenderUpdate(() => u.value as number);
-    else n = uniform(v as THREE.Vector3); // (objects are held by reference)
+    // In the render group: one upload per render for all objects, and objects in a render bundle
+    // (bundles.ts) see the new value without their own refresh.
+    if (typeof v === 'number') n = uniform(v).setGroup(renderGroup).onRenderUpdate(() => u.value as number);
+    else n = uniform(v as THREE.Vector3).setGroup(renderGroup); // (objects are held by reference)
     follow.set(u, n);
   }
   return n;

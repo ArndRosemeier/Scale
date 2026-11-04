@@ -18,6 +18,7 @@ import type { BridgeGapSpec } from '../build/bridges';
 import { createGroundMaterial, createTerrainMaterial, createWaterMaterial } from '../render/materials/ground';
 import type { TextureLibrary } from '../render/TextureLibrary';
 import { releaseAfterUpload, UploadPrimer } from '../render/gpuOnly';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export function toGeometry(m: MeshData): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
@@ -42,7 +43,8 @@ function geoBytes(g: THREE.BufferGeometry): number {
 export class CellState {
   id: number;
   status: 'loading' | 'ready' = 'loading';
-  group = new THREE.Group();
+  /** On WebGPU a render bundle (render/webgpu/bundles.ts): recorded once, replayed every frame. */
+  group: THREE.Group = WEBGPU ? (gpuKit().staticGroup('cell') as unknown as THREE.Group) : new THREE.Group();
   plan: CellPlan | null = null;
   binfo: Float32Array | null = null;
   elemCount = 0;
@@ -321,6 +323,8 @@ export class CityStreamer {
     tex.needsUpdate = true;
     cs.elemData = data;
     cs.elemTex = tex;
+    // (A bundle's objects refresh their own bindings only when this texture changed: destruction.)
+    cs.group.userData.watch = tex;
     cs.elemW = w;
     const ground = new THREE.Mesh(toGeometry(r.ground), this.groundMat);
     ground.position.set(...r.ground.origin);

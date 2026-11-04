@@ -8,6 +8,7 @@ import { renderOutput, texture } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { shaderCap } from '../shaderCap';
+import { installStaticBundles, pipelineFinished } from './bundles';
 import { makeSkyNode, makeStarsNode } from './sky';
 import { createFacadeNodeMaterial } from './facade';
 import { createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial } from './ground';
@@ -29,6 +30,7 @@ export { createRainNodeMaterial, createDustNodeMaterial, createBeamNodeMaterial,
 export { createBroodNodeMaterial, createBirdNodeMaterial, createCreatureNodeMaterial, createDebrisNodeMaterial, bronzeNodeMaterial };
 export { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMaterial };
 export { createCrowdNodeMaterial } from './crowd';
+export { staticGroup, bundleStats, BUNDLES } from './bundles';
 export { patchSkyOcclusionNode } from './skyOcclusion';
 export { viewSpaceLayerNode } from './garmentLayers';
 export { makeStarsNode };
@@ -70,6 +72,7 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
     rebindSwitchedTextures(renderer) ? '' : 'texture rebind',
     keepTextureUpdates() ? '' : 'texture node updates',
     shareShadowNodes(renderer) ? '' : 'shared shadow nodes',
+    ...installStaticBundles(renderer, () => nodeBuilds.count),
   ].filter(Boolean);
   if (missing.length) console.warn(`[webgpu] three internals renamed, not installed: ${missing.join(', ')}`);
 }
@@ -269,6 +272,7 @@ function timeSlowPipelines(): void {
     D[name] = function (this: unknown, ...a: unknown[]) {
       const t0 = performance.now(), what = building || '?', { vertex, fragment } = buildingCode ?? { vertex: '', fragment: '' };
       const done = () => {
+        pipelineFinished();
         const ms = performance.now() - t0;
         if (ms < 100) return;
         slow.push({ ms, what, vertex, fragment });

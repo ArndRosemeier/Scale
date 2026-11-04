@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.269 — 2026-11-04
+
+- **WebGPU (`?gpu=webgpu`): the city's cells are drawn as render bundles.** Each loaded city cell (ground, facades, slabs) is recorded once and replayed every frame (AssetGenerator's `StaticBundle`), so the main thread no longer walks, culls and submits every cell mesh one by one. A cell records again only when it changes (its far model switching, slabs added, a wall destroyed), and a cell off screen is skipped as a whole. The city's shared values (time, night, sun, wet streets, fog, open manholes) now go to the GPU once per frame for all objects instead of once per object. `&bundles=0` turns bundles off for comparison; `dev.perf()` reports how many cells were recorded, skipped and replayed per frame.
+
 ## 0.268 — 2026-11-04
 
 - **WebGPU (`?gpu=webgpu`): clothes cover the skin again.** On a reversed depth buffer Actors gives a garment's "nearer" offset the other sign, so Scale's garment layering skipped every garment and the skin showed through T-shirts and trousers in patches. Both signs now count.

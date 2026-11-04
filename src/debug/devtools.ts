@@ -10,6 +10,7 @@ import type { WeatherSetting } from '../render/Weather';
 import { LandUse } from '../world/landuse';
 import { RuralPlan } from '../world/rural';
 import { GoTo } from './goTo';
+import { WEBGPU, gpuKit } from '../render/gpuMode';
 
 export function installDevtools(game: Game): void {
   let rural: RuralPlan | null = null;
@@ -127,6 +128,8 @@ export function installDevtools(game: Game): void {
       // (Counted over the whole frame: the scene pass and the post passes are separate render calls.)
       info.autoReset = false;
       info.reset();
+      const bs = WEBGPU ? gpuKit().bundleStats : null;
+      if (bs) bs.records = bs.culled = bs.replays = 0;
       const sums: Record<string, number> = {};
       let frames = 0, draws = 0, tris = 0;
       const t0 = performance.now();
@@ -144,7 +147,9 @@ export function installDevtools(game: Game): void {
       });
       info.autoReset = auto;
       const ms = Object.fromEntries(Object.entries(sums).map(([k, v]) => [k, +(v / frames).toFixed(2)]).sort((a, b) => +b[1] - +a[1]).slice(0, 12));
-      return { fps: +(frames / ((performance.now() - t0) / 1000)).toFixed(1), draws: Math.round(draws / frames), triangles: Math.round(tris / frames), ms };
+      // Render bundles (WebGPU city cells) per frame: recorded again, culled, replayed (per camera).
+      const bundles = bs && gpuKit().BUNDLES ? Object.fromEntries(Object.entries(bs).map(([k, v]) => [k, +(v / frames).toFixed(1)])) : 'off';
+      return { fps: +(frames / ((performance.now() - t0) / 1000)).toFixed(1), draws: Math.round(draws / frames), triangles: Math.round(tris / frames), ms, ...(WEBGPU ? { bundles } : {}) };
     },
     teleport(x: number, z: number): void { game.player.pos.set(x, game.world.groundHeight(x, z) + 0.1, z); },
     /** Put the player in the side room with the gap to hidden colony i (no hint in the game itself). */
