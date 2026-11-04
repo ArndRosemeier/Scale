@@ -105,9 +105,12 @@ function crowdPush(m: THREE.Material): void {
 const layered = new WeakSet<THREE.Material>();
 
 function viewSpaceLayer(m: THREE.Material, occupies: string[] | undefined): void {
-  if (layered.has(m) || !m.polygonOffset || m.polygonOffsetFactor >= 0) return;
+  // (Actors gives "nearer" a positive factor when its renderer has a reversed depth buffer, i.e. on
+  // WebGPU; on WebGL it is negative. Either way the size is the layer.)
+  if (layered.has(m) || !m.polygonOffset || m.polygonOffsetFactor === 0) return;
+  if (!WEBGPU && m.polygonOffsetFactor > 0) return;
   layered.add(m);
-  const pull = (garmentRank(occupies, -m.polygonOffsetFactor / 2) * LAYER_PULL).toFixed(6);
+  const pull = (garmentRank(occupies, Math.abs(m.polygonOffsetFactor) / 2) * LAYER_PULL).toFixed(6);
   // Node materials (WebGPU): the same through their clip-space output (webgpu/garmentLayers.ts).
   if (WEBGPU && (m as { isNodeMaterial?: boolean }).isNodeMaterial) { gpuKit().viewSpaceLayerNode(m, +pull); return; }
   m.polygonOffset = false;

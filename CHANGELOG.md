@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.268 — 2026-11-04
+
+- **WebGPU (`?gpu=webgpu`): clothes cover the skin again.** On a reversed depth buffer Actors gives a garment's "nearer" offset the other sign, so Scale's garment layering skipped every garment and the skin showed through T-shirts and trousers in patches. Both signs now count.
+- `dev.perf(seconds)` in the console: fps, the main thread's time per section, draws and triangles per frame, to compare the renderers.
+
 ## 0.267 — 2026-11-04
 
 - **WebGPU (`?gpu=webgpu`): people share their shaders again.** Scale's garment layering and sky shading gave every person's materials nodes of their own, so each person built new shaders although Actors shares one per material kind. They now use one node per layer distance and per mode.
