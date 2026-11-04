@@ -82,7 +82,11 @@ export class Renderer {
     if (!this.webgpu) return;
     await (this.gl as unknown as { init(): Promise<unknown> }).init();
     gpuKit().afterInit(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['afterInit']>[0]);
-    this.parallelCompiles = gpuKit().oneNodeBuildAtATime(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['afterInit']>[0]) ? 4 : 1;
+    // (8: the browser compiles their GPU pipelines on its own threads, and one slow pipeline (a
+    // glass or skin shader, several seconds on the PC) held up one in four. `&compiles=n` to compare.)
+    const url = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.name ?? location.href;
+    const n = Number(/[?&]compiles=(\d+)/.exec(url)?.[1]) || 8;
+    this.parallelCompiles = gpuKit().oneNodeBuildAtATime(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['afterInit']>[0]) ? n : 1;
     if (new URLSearchParams(location.search).has('offscreen')) gpuKit().offscreen(this.gl as unknown as Parameters<ReturnType<typeof gpuKit>['offscreen']>[0]);
   }
 

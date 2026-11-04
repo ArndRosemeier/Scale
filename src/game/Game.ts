@@ -691,6 +691,7 @@ export class Game {
     // From now on nothing new may stall a frame on a shader compile.
     this.gate.adoptScene();
     this.gate.enabled = true;
+    this.gate.warmedUp = true;
     // Background: compile what appears later (all tree species, furniture, …) on driver threads.
     this.gate.precompile(this.props.warmupObject());
     this.gate.precompile(this.countryside.warmupObject());

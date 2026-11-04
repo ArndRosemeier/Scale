@@ -58,6 +58,8 @@ export class ShaderGate {
   private props: { get(o: object): { currentProgram?: { isReady(): boolean } } };
   private warm: { o: THREE.Object3D; t0: number }[] = [];
   enabled = true;
+  /** Set when the start-up warm-up has finished; the shader cap starts after that. */
+  warmedUp = false;
 
   private shadersBefore = -1;
   /** New meshes waiting for room under the shader cap (hidden meanwhile). */
@@ -100,6 +102,9 @@ export class ShaderGate {
    */
   gpuCompile: ((o: THREE.Object3D) => Promise<unknown>) | null = null;
   private gpuPending = 0;
+  /** WebGPU: what each background compile still running was started for (for the warm-up report). */
+  private gpuWhat = new Map<number, string>();
+  private gpuIds = 0;
   private idleLogAt = -1e9;
 
   private updateWebGPU(): void {
@@ -123,8 +128,11 @@ export class ShaderGate {
       for (const o of fresh) { o.layers.disable(0); o.layers.enable(HIDDEN_LAYER); }
       this.stats.hidden += fresh.length;
       this.gpuPending++;
+      const id = ++this.gpuIds;
+      this.gpuWhat.set(id, `${root.name || root.type} (${fresh.length}): ${describe(fresh[0] as THREE.Mesh, (fresh[0] as THREE.Mesh).material as THREE.Material)}`);
       const show = (): void => {
         this.gpuPending--;
+        this.gpuWhat.delete(id);
         if (this.gpuPending === 0 && performance.now() - this.idleLogAt > 30000) {
           this.idleLogAt = performance.now();
           const longest = this.stats.late.reduce((a, l) => Math.max(a, l.ms), 0);
@@ -197,7 +205,9 @@ export class ShaderGate {
     this.account();
     shaderCap.newFrame();
     // The cap starts once the start-up compiles (warm-up and the background precompiles) are done.
-    if (!shaderCap.active && this.enabled && this.busy === 0) shaderCap.active = true;
+    // (Not during the warm-up: its first frame comes before the gate has looked at what that frame
+    // added, so `busy` read 0 there and the cap held the rest of the warm-up to 5 builds a second.)
+    if (!shaderCap.active && this.warmedUp && this.enabled && this.busy === 0) shaderCap.active = true;
     if (WEBGPU) { this.updateWebGPU(); return; }
     if (this.queue.length && (this.lightsDirty || performance.now() - this.lightsAt > 2000)) this.refreshLights();
     // New objects, one by one while there is room under the cap.
@@ -292,7 +302,9 @@ export class ShaderGate {
 
   /** What is still waiting for its shader (for the warm-up report). */
   waiting(): string[] {
-    return [...this.pending.map((p) => describe(p.mesh, p.real)), ...this.warm.map((w) => `precompile ${w.o.name || w.o.type}`)];
+    const gpu = new Map<string, number>();
+    for (const w of this.gpuWhat.values()) gpu.set(w, (gpu.get(w) ?? 0) + 1);
+    return [...this.pending.map((p) => describe(p.mesh, p.real)), ...this.warm.map((w) => `precompile ${w.o.name || w.o.type}`), ...[...gpu].sort((a, b) => b[1] - a[1]).map(([w, n]) => `${n}× ${w}`)];
   }
 
   // ------------------------------------------------------------------
