@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.267 — 2026-11-04
+
+- **WebGPU (`?gpu=webgpu`): people share their shaders again.** Scale's garment layering and sky shading gave every person's materials nodes of their own, so each person built new shaders although Actors shares one per material kind. They now use one node per layer distance and per mode.
+- **WebGPU: one broken object no longer freezes the picture.** A draw that throws is skipped from then on and reported once (what it was), instead of stopping every following frame.
+- **WebGPU: the hero's skin is no longer white.** Photo skins and eyes switch their texture per person inside a shared shader, and three r186 kept the first texture bound when the next one had the same version. Fixed with the renderer hooks from AssetGenerator's shared shader policy (`@futuremagic/stage`, now vendored in vendor/futuremagic at a pinned commit, `node tools/futuremagic.mjs` refreshes it), which also give casters alike one shared shadow shader instead of one per person.
+- **WebGPU: slow GPU pipelines are reported.** Every pipeline over 100 ms logs what it was for and the size of its shader code (`window.slowPipelines` keeps the code).
+
 ## 0.266 — 2026-11-04
 
 - **Actors 0.33.3** (was 0.6.6). What Scale gets from it: steady people far from the city's centre done inside Actors now (its root-relative skeleton replaces Scale's own fix), dressing a new person no longer stalls the main thread for a beard or face morphs, cheaper crowds (hair merged into a far person's one mesh, eyes, teeth and brows cast no shadow, people behind the camera not drawn, far and off-screen people animate every 2nd / 4th frame), hair and beards as solid masses instead of single strands, clothes that keep their colour and stop poking through each other, loose skirts and coats that swing, skin with flush, pores, oily shine, backlit ears and darker creases, and memory fixes. The far baked crowd leaves the merged hair cards out (it paints the scalp as before), and the speed afterimage copies follow the new skinning.

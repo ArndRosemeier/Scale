@@ -49,18 +49,22 @@ export function ownSkyPatch(clone, source): SkyVisPatch {
  * Node-material version of `patchSkyOcclusion`. Modes as in the GLSL version; for 'varying' the
  * material provides the node as `material.skyVisNode` (else the varying `vSkyVis` is read).
  */
+let uniformVis = null, attributeVis = null, varyingVis = null;
+
 export function patchSkyOcclusionNode(material, mode: SkyVisMode, init = 1): SkyVisPatch {
   const patch: SkyVisPatch = {};
   let vis;
+  // One node per mode for every material: three keys shader builds by node identity, so a node of
+  // its own per material (every person's garments) built a shader per material.
   if (mode === 'uniform') {
     patch.uniform = { value: init };
     material[SKY] = patch;
-    // The drawn material's own value, so clones sharing this graph keep theirs (`ownSkyPatch`).
-    vis = uniform(init).onObjectUpdate(({ material: m }) => (m?.[SKY] ?? patch).uniform.value);
+    // The drawn material's own value, so materials sharing this node keep theirs (`ownSkyPatch`).
+    vis = uniformVis ??= uniform(1).onObjectUpdate(({ material: m }) => m?.[SKY]?.uniform?.value ?? 1);
   } else if (mode === 'attribute') {
-    vis = attribute('skyVis', 'float');
+    vis = attributeVis ??= attribute('skyVis', 'float');
   } else {
-    vis = material.skyVisNode ?? varyingProperty('float', 'vSkyVis');
+    vis = material.skyVisNode ?? (varyingVis ??= varyingProperty('float', 'vSkyVis'));
   }
   const cave = shared(caveAmbient);
   onLightingModel(material, (lm) => {

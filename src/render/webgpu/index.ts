@@ -3,6 +3,7 @@
  * default WebGL build does not carry three's node system. See docs/WEBGPU_PLAN.md.
  */
 import * as THREE from 'three/webgpu';
+import { keepTextureUpdates, rebindSwitchedTextures, shareShadowNodes } from '@futuremagic/stage/patches';
 import { renderOutput, texture } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
@@ -57,10 +58,20 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   packBeforeRender(renderer);
   watchVertexBuffers(renderer);
   countNodeBuilds(renderer);
+  guardDraws(renderer);
+  timeSlowPipelines();
   shareInstancedShaders(renderer);
   noPerFrameUploads();
   oneNodeBuildAtATime(renderer);
   asyncDrawPipelines(renderer);
+  // From AssetGenerator's shared shader policy (vendor/futuremagic/stage): per-object textures of
+  // shared graphs (Actors' skin photos and eyes) really switch, and casters alike share one shadow shader.
+  const missing = [
+    rebindSwitchedTextures(renderer) ? '' : 'texture rebind',
+    keepTextureUpdates() ? '' : 'texture node updates',
+    shareShadowNodes(renderer) ? '' : 'shared shadow nodes',
+  ].filter(Boolean);
+  if (missing.length) console.warn(`[webgpu] three internals renamed, not installed: ${missing.join(', ')}`);
 }
 
 /** Draw-time pipelines compiling at most at once, see asyncDrawPipelines. */
@@ -239,6 +250,60 @@ function timeGpuCompiles(): () => string {
   return () => `gpu: ${t.mods} modules ${t.modMs.toFixed(0)} ms, ${t.sync} pipelines blocking ${t.syncMs.toFixed(0)} ms, ${t.async} async ${t.asyncMs.toFixed(0)} ms (busy ${t.busyMs.toFixed(0)} ms, peak ${t.peak})`;
 }
 
+/** What the backend is creating a pipeline for right now (see watchVertexBuffers). */
+let building = '';
+/** Its WGSL (three's node build result). */
+let buildingCode: { vertex: string; fragment: string } | null = null;
+
+/**
+ * Every GPU pipeline that takes over 100 ms (the shader budget) is reported with what it was for and
+ * how big its WGSL is; `window.slowPipelines` keeps them with their code (for a look at the source).
+ */
+function timeSlowPipelines(): void {
+  const D = (globalThis as unknown as { GPUDevice?: { prototype: Record<string, (...a: unknown[]) => unknown> } }).GPUDevice?.prototype;
+  if (!D) return;
+  const slow: { ms: number; what: string; vertex: string; fragment: string }[] = [];
+  (window as unknown as { slowPipelines: typeof slow }).slowPipelines = slow;
+  const time = (name: string, isAsync: boolean) => {
+    const f = D[name];
+    D[name] = function (this: unknown, ...a: unknown[]) {
+      const t0 = performance.now(), what = building || '?', { vertex, fragment } = buildingCode ?? { vertex: '', fragment: '' };
+      const done = () => {
+        const ms = performance.now() - t0;
+        if (ms < 100) return;
+        slow.push({ ms, what, vertex, fragment });
+        console.warn(`[webgpu] pipeline ${ms.toFixed(0)} ms${isAsync ? ' (async)' : ' (blocking)'}: ${what}, WGSL vertex ${(vertex.length / 1024).toFixed(0)} KB, fragment ${(fragment.length / 1024).toFixed(0)} KB`);
+      };
+      const r = f.apply(this, a);
+      if (isAsync) (r as Promise<unknown>).then(done, done); else done();
+      return r;
+    };
+  };
+  time('createRenderPipeline', false);
+  time('createRenderPipelineAsync', true);
+}
+
+/**
+ * One object whose draw throws (a binding without its GPU buffer) used to abort the whole frame,
+ * every frame, so the picture froze. Its draw is skipped instead, and the first failure of each
+ * object is reported with what it was, to find the cause.
+ */
+function guardDraws(renderer: THREE.WebGPURenderer): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = renderer as any;
+  const draw = r._renderObjectDirect;
+  const failed = new WeakSet<object>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  r._renderObjectDirect = function (object: any, material: any, ...rest: unknown[]) {
+    if (failed.has(object)) return;
+    try { return draw.call(this, object, material, ...rest); } catch (err) {
+      failed.add(object);
+      const g = object.geometry;
+      console.error(`[webgpu] draw failed, skipped from now on: ${object.type} "${object.name}" (parent "${object.parent?.name ?? ''}", ${object.isSkinnedMesh ? `skinned, ${object.skeleton?.bones.length} bones, ` : ''}geometry ${g?.uuid?.slice(0, 8)} [${Object.keys(g?.attributes ?? {}).join(',')}]) material ${material?.type} "${material?.name}"`, err);
+    }
+  };
+}
+
 /** Warns about pipelines over WebGPU's vertex buffer limit, also on the WebGL2 backend (where they would work). */
 function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -253,7 +318,11 @@ function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
       console.warn(`[webgpu] ${n} vertex buffers (WebGPU allows 8): ${o.type} "${o.name}" ${renderObject.material.type} attributes ${Object.keys(g.attributes).join(',')}`);
     }
     if (promises && promises !== drawSink) nodeBuilds.asyncPipes++; else nodeBuilds.syncPipes++;
-    return create(renderObject, promises);
+    const o = renderObject.object, m = renderObject.material;
+    building = `${o.type} "${o.name}" (parent "${o.parent?.name ?? ''}") ${m.type} "${m.name}"`;
+    const state = renderObject.getNodeBuilderState?.();
+    buildingCode = { vertex: state?.vertexShader ?? '', fragment: state?.fragmentShader ?? '' };
+    try { return create(renderObject, promises); } finally { building = ''; buildingCode = null; }
   };
 }
 

@@ -1,0 +1,15 @@
+{
+  "name": "@futuremagic/stage",
+  "version": "0.1.0",
+  "description": "The shader policy for three.js WebGPURenderer games: the one renderer, the Stage (warm-up, add, prepare, warmLater), the compile cap, the renderer hooks and the build monitor. From Dunfinity.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "peerDependencies": {
+    "three": ">=0.186.0"
+  },
+  "license": "MIT"
+}
