@@ -129,7 +129,7 @@ export function installDevtools(game: Game): void {
       info.autoReset = false;
       info.reset();
       const bs = WEBGPU ? gpuKit().bundleStats : null;
-      if (bs) bs.records = bs.culled = bs.replays = 0;
+      if (bs) bs.records = bs.culled = bs.replays = bs.recordedDraws = bs.missed = 0;
       const sums: Record<string, number> = {};
       let frames = 0, draws = 0, tris = 0;
       const t0 = performance.now();

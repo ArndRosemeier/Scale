@@ -22,7 +22,7 @@ const url = typeof location === 'undefined' ? '' : (performance.getEntriesByType
 export const BUNDLES = !/[?&]bundles=0\b/.test(url);
 
 /** Counters for dev.perf (reset by it). */
-export const bundleStats = { records: 0, culled: 0, replays: 0 };
+export const bundleStats = { records: 0, culled: 0, replays: 0, recordedDraws: 0, missed: 0 };
 
 interface BundleData {
   incomplete?: number;
@@ -117,10 +117,38 @@ export function installStaticBundles(renderer: THREE.WebGPURenderer, nodeBuildCo
     pipelines.isReady = function (this: Any, ro: Any) {
       const ok = isReady.call(this, ro);
       const cur = r._currentRenderBundle?.bundleGroup;
-      if (!ok && cur?.isStaticBundle) data(cur).incomplete = builds();
+      if (!ok && cur?.isStaticBundle) { data(cur).incomplete = builds(); bundleStats.missed++; }
       return ok;
     };
   } else missing.push('bundle pipeline check');
+
+  // A render nested inside a recording (the shadow map, drawn by the first shadow receiver's
+  // updateBefore) ends with three setting the current bundle to null, so every later draw of the
+  // outer recording was left out of its object list: those objects never refreshed on replay, not
+  // even the camera (render group) uniforms, and the cells were drawn with the camera of the frame
+  // they were recorded in. The outer recording's bundle is restored after a nested render.
+  const renderScene = r._renderScene;
+  if (typeof renderScene === 'function') {
+    r._renderScene = function (this: Any, ...a: unknown[]) {
+      const outer = this._currentRenderBundle;
+      this._currentRenderBundle = null;
+      try { return renderScene.apply(this, a); } finally { this._currentRenderBundle = outer; }
+    };
+  } else missing.push('nested bundle renders');
+
+  // Counted for dev.perf: draws that went into recordings. GPU validation errors are logged.
+  const backend = r.backend;
+  const draw = backend?.draw;
+  if (typeof draw === 'function') {
+    backend.draw = function (this: Any, ro: Any, info: unknown) {
+      const cur = r._currentRenderBundle;
+      if (cur?.bundleGroup?.isStaticBundle) {
+        bundleStats.recordedDraws++;
+      }
+      return draw.call(this, ro, info);
+    };
+  }
+  backend?.device?.addEventListener?.('uncapturederror', (e: Any) => console.error('[webgpu] GPU error:', e.error?.message ?? e));
 
   // A replay keeps the shaders it was recorded with: a different set of lights (one switched on or
   // off, a shadow added) records again, so the cell's shaders get the new set.
