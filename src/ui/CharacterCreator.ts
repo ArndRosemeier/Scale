@@ -171,6 +171,29 @@ export class CharacterCreator {
   }
 
   private async init(): Promise<void> {
+    // The first time (or after an update) the generator downloads its data, about 20 MB: say how
+    // far it has got, so a slow line does not look like a hang. (Counts what this page fetched; the
+    // body worker's own downloads come on top.)
+    const t0 = performance.now();
+    performance.setResourceTimingBufferSize(Math.max(2000, performance.getEntriesByType('resource').length + 500));
+    const loaded = (): number => {
+      let b = 0;
+      for (const e of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) if (e.startTime >= t0 - 1 && e.name.includes('/packs/')) b += e.transferSize;
+      return b;
+    };
+    const tick = window.setInterval(() => {
+      const mb = loaded() / 1e6;
+      if (mb >= 0.5) this.stageMsg.textContent = `Loading the character generator… downloading its data (first time only): ${mb.toFixed(0)} MB so far`;
+    }, 500);
+    try {
+      await this.load();
+    } finally {
+      window.clearInterval(tick);
+      console.log(`[creator] ready after ${((performance.now() - t0) / 1000).toFixed(1)} s, ${(loaded() / 1e6).toFixed(1)} MB downloaded`);
+    }
+  }
+
+  private async load(): Promise<void> {
     let s: Studio;
     try {
       s = await sharedStudio();

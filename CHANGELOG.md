@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.274 — 2026-11-04
+
+- **Character creator: shows its download.** The first time it opens (and after an update) the creator downloads about 20 MB of character data, which on a slow line took a minute or two behind a plain "Loading the character generator…" and looked like a hang. It now counts the megabytes as they arrive, and the console logs how long it took (`[creator] ready after …`).
+
 ## 0.273 — 2026-11-04
 
 - **Start a few seconds faster again** (both renderers, same city). The manhole check that keeps shafts out of metro tunnels and halls tested every 0.8 m height step against every tunnel one by one; now all heights at once per tunnel (on Arnd's PC ~4 s of the loading screen). The terrain's river raster looked up a river's width (a noise sample) for every closer point it passed on the way to the nearest one; now only for the nearest (city and workers). Manholes and the river raster checked identical on two seeds.
