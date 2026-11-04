@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.273 — 2026-11-04
+
+- **Start a few seconds faster again** (both renderers, same city). The manhole check that keeps shafts out of metro tunnels and halls tested every 0.8 m height step against every tunnel one by one; now all heights at once per tunnel (on Arnd's PC ~4 s of the loading screen). The terrain's river raster looked up a river's width (a noise sample) for every closer point it passed on the way to the nearest one; now only for the nearest (city and workers). Manholes and the river raster checked identical on two seeds.
+
 ## 0.272 — 2026-11-04
 
 - **Faster start, mostly on WebGPU.** The shader rate cap (at most 5 new shaders a second while playing) switched itself on in the first frame of the loading screen's warm-up, so on WebGPU the last part of "Preparing shaders" ran at 5 shaders a second: ~150 countryside and roadside pieces still waited after 20 s, when the game started anyway (on Arnd's PC 35 s "Preparing shaders" on WebGPU vs 7 s on WebGL). The cap now starts after the warm-up. WebGPU also builds 8 GPU pipelines at once instead of 4 (the browser compiles them on its own threads; one slow glass or skin pipeline used to hold up a quarter of the work; `&compiles=n` to compare).
