@@ -57,6 +57,8 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   packBeforeRender(renderer);
   watchVertexBuffers(renderer);
   countNodeBuilds(renderer);
+  guardDraws(renderer);
+  timeSlowPipelines();
   shareInstancedShaders(renderer);
   noPerFrameUploads();
   oneNodeBuildAtATime(renderer);
@@ -239,6 +241,67 @@ function timeGpuCompiles(): () => string {
   return () => `gpu: ${t.mods} modules ${t.modMs.toFixed(0)} ms, ${t.sync} pipelines blocking ${t.syncMs.toFixed(0)} ms, ${t.async} async ${t.asyncMs.toFixed(0)} ms (busy ${t.busyMs.toFixed(0)} ms, peak ${t.peak})`;
 }
 
+/** What the backend is creating a pipeline for right now (see watchVertexBuffers). */
+let building = '';
+
+/**
+ * Every GPU pipeline that takes over 100 ms (the shader budget) is reported with what it was for and
+ * how big its WGSL is; `window.slowPipelines` keeps them with their code (for a look at the source).
+ */
+function timeSlowPipelines(): void {
+  const D = (globalThis as unknown as { GPUDevice?: { prototype: Record<string, (...a: unknown[]) => unknown> } }).GPUDevice?.prototype;
+  if (!D) return;
+  const code = new WeakMap<object, string>();
+  const mod = D.createShaderModule;
+  D.createShaderModule = function (this: unknown, ...a: unknown[]) {
+    const m = mod.apply(this, a) as object;
+    code.set(m, (a[0] as { code?: string })?.code ?? '');
+    return m;
+  };
+  const slow: { ms: number; what: string; vertex: string; fragment: string }[] = [];
+  (window as unknown as { slowPipelines: typeof slow }).slowPipelines = slow;
+  const time = (name: string, isAsync: boolean) => {
+    const f = D[name];
+    D[name] = function (this: unknown, ...a: unknown[]) {
+      const t0 = performance.now(), what = building || '?';
+      const desc = a[0] as { vertex?: { module?: object }; fragment?: { module?: object } };
+      const done = () => {
+        const ms = performance.now() - t0;
+        if (ms < 100) return;
+        const vertex = (desc?.vertex?.module && code.get(desc.vertex.module)) || '', fragment = (desc?.fragment?.module && code.get(desc.fragment.module)) || '';
+        slow.push({ ms, what, vertex, fragment });
+        console.warn(`[webgpu] pipeline ${ms.toFixed(0)} ms${isAsync ? ' (async)' : ' (blocking)'}: ${what}, WGSL vertex ${(vertex.length / 1024).toFixed(0)} KB, fragment ${(fragment.length / 1024).toFixed(0)} KB`);
+      };
+      const r = f.apply(this, a);
+      if (isAsync) (r as Promise<unknown>).then(done, done); else done();
+      return r;
+    };
+  };
+  time('createRenderPipeline', false);
+  time('createRenderPipelineAsync', true);
+}
+
+/**
+ * One object whose draw throws (a binding without its GPU buffer) used to abort the whole frame,
+ * every frame, so the picture froze. Its draw is skipped instead, and the first failure of each
+ * object is reported with what it was, to find the cause.
+ */
+function guardDraws(renderer: THREE.WebGPURenderer): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const r = renderer as any;
+  const draw = r._renderObjectDirect;
+  const failed = new WeakSet<object>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  r._renderObjectDirect = function (object: any, material: any, ...rest: unknown[]) {
+    if (failed.has(object)) return;
+    try { return draw.call(this, object, material, ...rest); } catch (err) {
+      failed.add(object);
+      const g = object.geometry;
+      console.error(`[webgpu] draw failed, skipped from now on: ${object.type} "${object.name}" (parent "${object.parent?.name ?? ''}", ${object.isSkinnedMesh ? `skinned, ${object.skeleton?.bones.length} bones, ` : ''}geometry ${g?.uuid?.slice(0, 8)} [${Object.keys(g?.attributes ?? {}).join(',')}]) material ${material?.type} "${material?.name}"`, err);
+    }
+  };
+}
+
 /** Warns about pipelines over WebGPU's vertex buffer limit, also on the WebGL2 backend (where they would work). */
 function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -253,7 +316,9 @@ function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
       console.warn(`[webgpu] ${n} vertex buffers (WebGPU allows 8): ${o.type} "${o.name}" ${renderObject.material.type} attributes ${Object.keys(g.attributes).join(',')}`);
     }
     if (promises && promises !== drawSink) nodeBuilds.asyncPipes++; else nodeBuilds.syncPipes++;
-    return create(renderObject, promises);
+    const o = renderObject.object, m = renderObject.material;
+    building = `${o.type} "${o.name}" (parent "${o.parent?.name ?? ''}") ${m.type} "${m.name}"`;
+    try { return create(renderObject, promises); } finally { building = ''; }
   };
 }
 

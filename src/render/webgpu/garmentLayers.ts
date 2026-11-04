@@ -10,9 +10,17 @@
  */
 import { cameraProjectionMatrix, float, length, max, positionView, vec4 } from 'three/tsl';
 
+/** One node per pull distance: three keys shader builds by node identity, so materials (every
+ * person's garments) that got their own node each built their own shader. */
+const byPull = new Map<number, unknown>();
+
 export function viewSpaceLayerNode(material, pull: number): void {
   material.polygonOffset = false;
-  const k = max(float(1).sub(float(pull).div(max(length(positionView), 1e-3))), 0.5);
-  material.vertexNode = cameraProjectionMatrix.mul(vec4(positionView.mul(k), 1));
+  let node = byPull.get(pull);
+  if (!node) {
+    const k = max(float(1).sub(float(pull).div(max(length(positionView), 1e-3))), 0.5);
+    byPull.set(pull, (node = cameraProjectionMatrix.mul(vec4(positionView.mul(k), 1))));
+  }
+  material.vertexNode = node;
   material.needsUpdate = true;
 }

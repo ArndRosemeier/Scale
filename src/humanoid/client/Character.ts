@@ -121,8 +121,6 @@ function viewSpaceLayer(m: THREE.Material, occupies: string[] | undefined): void
   m.needsUpdate = true;
 }
 
-/** Skeletons whose bone matrices are already model-relative (see prepareMeshes). */
-
 /**
  * The Actors settings for a look and an outfit. A look from the generator (the hero) keeps its
  * own clothes unless the outfit brings clothes of its own (a costume); city people wear the outfit.
