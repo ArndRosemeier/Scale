@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.269 — 2026-11-04
+
+- **WebGPU (`?gpu=webgpu`): cheaper shadow pass.** All shadow casters share one shadow material, and three marked it changed whenever it went from a caster with alpha test (trees, hair) to one without, so most shadow draws rebuilt their whole material key every frame (about 250 per frame, the biggest single cost in a CPU profile on the PC). A shadow draw now keeps its key while what it copies from its caster stays the same.
+
 ## 0.268 — 2026-11-04
 
 - **WebGPU (`?gpu=webgpu`): clothes cover the skin again.** On a reversed depth buffer Actors gives a garment's "nearer" offset the other sign, so Scale's garment layering skipped every garment and the skin showed through T-shirts and trousers in patches. Both signs now count.
