@@ -59,6 +59,12 @@ Log:
   (13.2 → 8.6 ms, 60 fps street and concert; WebGL 4.1 / 5.3 ms).
 - v0.271: step 5, the default flip (adapter check, menu choice, `?gpu=webgl`). Step 3 (instances,
   vegetation) still open: WebGPU is at 60 fps without it, so it waits for a measured need.
+- v0.272: load time. PC profile (size=1, fresh browser profile): WebGPU 83 s vs WebGL 50 s, the whole
+  gap in "Preparing shaders" (35 vs 7 s). The shader cap turned on in the warm-up's first frame (gate
+  `busy` read 0 before it had looked at that frame's new meshes) and held the calm phase to 5 node
+  builds/s until its 20 s limit. Cap now starts after the warm-up; 8 compileAsync at once instead of 4.
+  Three's node builds stay on the main thread (JS over three's own objects, no worker path); the GPU
+  pipeline compiles already run on the browser's threads. Also manhole planning O(n²) → grid (~10 s).
 
 ## Part 1 (2026-10-06 – 10-22): the port
 

@@ -585,6 +585,18 @@ export class Underground {
    * culvert, none within 10 m of another (crossing trunks).
    */
   private planManholes(): void {
+    // (Spatial look-ups, same answers as checking every shaft and every trunk: with ~40,000 shafts
+    // in a large city that took ~10 s of the loading screen.)
+    const sewers = new Set(this.sewerTubes);
+    const SPACING = 10, placed = new Map<number, ManholeSpot[]>();
+    const keyOf = (i: number, j: number) => (i + 32768) * 65536 + (j + 32768);
+    const tooClose = (x: number, z: number): boolean => {
+      const i0 = Math.floor(x / SPACING), j0 = Math.floor(z / SPACING);
+      for (let i = i0 - 1; i <= i0 + 1; i++) for (let j = j0 - 1; j <= j0 + 1; j++) {
+        for (const m of placed.get(keyOf(i, j)) ?? []) if (Math.hypot(m.x - x, m.z - z) < SPACING) return true;
+      }
+      return false;
+    };
     this.sewerTubes.forEach((t, ti) => {
       const total = t.cum[t.cum.length - 1];
       const cuts = this.roomCuts.get(t) ?? [];
@@ -599,8 +611,9 @@ export class Underground {
           const x = q.x - q.dz * LID_LAT * side, z = q.z + q.dx * LID_LAT * side;
           if (this.terrain.isWater(x, z, 3)) break;
           // A crossing trunk (a junction) under the shaft or the ladder.
-          if (this.sewerTubes.some((o) => o !== t && !!tubeAt(o, x, q.y + 1, z, 1.2))) continue;
-          if (this.allShafts.some((m) => Math.hypot(m.x - x, m.z - z) < 10)) break;
+          // (The index files a tube in every cell within its half width + 2 m of it, which covers this 1.2 m margin.)
+          if (this.near(x, z).tubes.some((o) => o !== t && sewers.has(o) && !!tubeAt(o, x, q.y + 1, z, 1.2))) continue;
+          if (tooClose(x, z)) break;
           // Not up through a metro tunnel, a hall or a room, nor where a station's entrance stairs go.
           if (this.shaftBlocked(x, z, q.y)) continue;
           spot = { tube: t, s, x, z, dx: q.dx, dz: q.dz, side, floor: q.y };
@@ -609,6 +622,10 @@ export class Underground {
         if (!spot) continue;
         list.push(spot);
         this.allShafts.push(spot);
+        const ck = keyOf(Math.floor(spot.x / SPACING), Math.floor(spot.z / SPACING));
+        let cell = placed.get(ck);
+        if (!cell) placed.set(ck, (cell = []));
+        cell.push(spot);
       }
       this.shafts.set(t, list);
     });

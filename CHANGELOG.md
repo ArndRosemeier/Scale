@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.272 — 2026-11-04
+
+- **Faster start, mostly on WebGPU.** The shader rate cap (at most 5 new shaders a second while playing) switched itself on in the first frame of the loading screen's warm-up, so on WebGPU the last part of "Preparing shaders" ran at 5 shaders a second: ~150 countryside and roadside pieces still waited after 20 s, when the game started anyway (on Arnd's PC 35 s "Preparing shaders" on WebGPU vs 7 s on WebGL). The cap now starts after the warm-up. WebGPU also builds 8 GPU pipelines at once instead of 4 (the browser compiles them on its own threads; one slow glass or skin pipeline used to hold up a quarter of the work; `&compiles=n` to compare).
+- **Manhole planning ~10 s faster on every start** (both renderers): each of the ~40,000 manholes of a large city was checked against every other one. Now it checks only its neighbours, with the same result.
+- Loading log: when the warm-up ends with shaders still compiling, it says what they are for.
+
 ## 0.271 — 2026-11-04
 
 - **WebGPU is the default renderer.** The game starts on WebGPU wherever the browser has it (on Arnd's PC now 60 fps on the street and at the concert, like WebGL), and on WebGL where it doesn't (no WebGPU, a blocked graphics card). The pause menu has a **Renderer** choice (WebGPU / WebGL, remembered, applies after a restart); `?gpu=webgl` in the address runs WebGL once. The preview pages stay on WebGL.
