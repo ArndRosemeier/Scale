@@ -1,5 +1,53 @@
 # WebGPU port — plan
 
+## Part 2 (2026-11-04): WebGPU as the default, Actors 0.33, AssetGenerator's renderer packages
+
+Brief (Arnd, 2026-11-04): "move to webgpu as a default and adopt the new actors lib. AssetGenerator
+is also updated a lot, having more efficient rendering."
+
+Where we start (v0.264): every material has a node twin, `?gpu=webgpu` runs the whole game. Last PC
+numbers: WebGPU 44 fps vs WebGL 60, load 33 s vs 15–20 s, 7–20 hitches a minute (worst 150 ms), park
+crowd 24 vs 33 fps, people looked flat before Actors 0.6.6 (not re-checked). Actors is at 0.33.3
+(Scale on 0.6.6). AssetGenerator's `packages/` now holds shared three/webgpu code for the
+futuremagic games, several pieces of it extracted from Scale and grown since.
+
+What AssetGenerator offers Scale (all three r186, `three/webgpu`, TypeScript source):
+
+| Package | What it gives | Scale today |
+|---|---|---|
+| `@futuremagic/instances` | trees, rocks, props, crowds culled and LOD-picked by compute shaders, drawn with indirect draws, shadows swept along the sun; CPU path on WebGL 2 | `render/geoInstances.ts`, `batchCap`: whole batches drawn, no culling |
+| `@futuremagic/vegetation` | Scale's trees grown on: leaves depth first then lit once per pixel (~2× faster under a canopy), `woodsFromAfar` forests per pixel past the last trees | `props/vegetation.ts` + `webgpu/vegetation.ts` (v0.264 copy) |
+| `@futuremagic/stage` | Dunfinity's shader policy: `createRenderer` (WebGPU, WebGL 2 backend fallback), warm-up / compile cap / build monitor, r186 renderer hooks, post, `FloatingOrigin` | `render/Renderer.ts`, `WarmUp.ts`, `ShaderGate.ts`, `shaderCap.ts` |
+| `@futuremagic/sky` | Scale's sky as a package (sun/moon path, clouds, weather, stars) | `SkySystem.ts` + `webgpu/sky.ts` |
+
+Rules that hold throughout: Actors bones and clips untouched; no shader over 0.1 s compile on
+Arnd's PC (make shaders cheaper, don't hide compiles); WebGL stays reachable with `?gpu=webgl`
+until WebGPU has been the default for a while without complaints.
+
+Steps, each its own PR:
+
+1. **Actors 0.6.6 → 0.33.3.** New release tgz + packs. Worth having for Scale: shared wardrobes and
+   reversed depth on WebGPU (0.11.1), no shimmer far from the origin (RootSkeleton, 0.17.1),
+   dressing without main-thread stalls (0.19.3), cheaper crowds (one draw per far person, fewer
+   shadow draws, slower far animation, 0.29), memory fixes (0.32.1), hair as masses (0.20).
+   New optional looks that cost shader work (clothTuck, clothMotion, skinDetail, ears/creases/wet
+   skin, face rig, wrinkles) are judged one by one against the shader budget; off where they
+   don't fit. GPU check: people look, crowd fps, compile times, on both renderers.
+2. **Fresh measurement** on Arnd's PC, WebGL vs WebGPU on the same build (fps street / park crowd /
+   aerial / night, load, hitches, slowest shader compiles). Decides what step 4 must fix first.
+3. **AssetGenerator packages in Scale.** Vendored as source at a pinned commit
+   (`vendor/futuremagic/`, `npm run futuremagic` refreshes it), like Actors' tgz. Order by
+   expected gain: `instances` for street trees, props and countryside clumps (GPU culling instead of
+   whole batches), then `vegetation` (leaf passes, woods from afar), then `stage` pieces Scale
+   lacks (compile monitor, FloatingOrigin if the far city shimmers), `sky` last (Scale's is the
+   source; only if it brings something). WebGPU first; the WebGL path keeps today's code.
+4. **Close the gap** found in step 2 until WebGPU is at least as good as WebGL on the PC.
+5. **Flip the default.** No `?gpu` = WebGPU; `?gpu=webgl` = the old renderer; a browser without
+   `navigator.gpu` falls back to WebGL automatically; a Graphics setting to pick it. The GLSL twins
+   are deleted only later, once Arnd agrees.
+
+## Part 1 (2026-10-06 – 10-22): the port
+
 Status: started 2026-10-06 (Arnd: "this is now your task in a branch, as a long running project").
 
 ## Why

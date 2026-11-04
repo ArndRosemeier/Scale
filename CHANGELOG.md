@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.265 — 2026-11-04
+
+- **Plan: WebGPU as the default.** docs/WEBGPU_PLAN.md part 2: move to Actors 0.33, measure both renderers again on a real PC, take AssetGenerator's faster drawing (GPU-culled instances for trees and props, cheaper leaves, distant woods), close the gap, then make WebGPU the default with WebGL kept as a switch.
+
 ## 0.264 — 2026-10-22
 
 - **Actors 0.6.6.** People draw again on the WebGPU renderer (`?gpu=webgpu`) on real WebGPU. 0.6.5 gave every face mesh one vertex buffer too many, and WebGPU refuses those draws. Races with a tail no longer break WebGPU's bone upload. The normal WebGL game is unchanged.
