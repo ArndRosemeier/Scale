@@ -3,6 +3,7 @@
  * default WebGL build does not carry three's node system. See docs/WEBGPU_PLAN.md.
  */
 import * as THREE from 'three/webgpu';
+import { keepTextureUpdates, rebindSwitchedTextures, shareShadowNodes } from '@futuremagic/stage/patches';
 import { renderOutput, texture } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
@@ -63,6 +64,14 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   noPerFrameUploads();
   oneNodeBuildAtATime(renderer);
   asyncDrawPipelines(renderer);
+  // From AssetGenerator's shared shader policy (vendor/futuremagic/stage): per-object textures of
+  // shared graphs (Actors' skin photos and eyes) really switch, and casters alike share one shadow shader.
+  const missing = [
+    rebindSwitchedTextures(renderer) ? '' : 'texture rebind',
+    keepTextureUpdates() ? '' : 'texture node updates',
+    shareShadowNodes(renderer) ? '' : 'shared shadow nodes',
+  ].filter(Boolean);
+  if (missing.length) console.warn(`[webgpu] three internals renamed, not installed: ${missing.join(', ')}`);
 }
 
 /** Draw-time pipelines compiling at most at once, see asyncDrawPipelines. */
@@ -243,6 +252,8 @@ function timeGpuCompiles(): () => string {
 
 /** What the backend is creating a pipeline for right now (see watchVertexBuffers). */
 let building = '';
+/** Its WGSL (three's node build result). */
+let buildingCode: { vertex: string; fragment: string } | null = null;
 
 /**
  * Every GPU pipeline that takes over 100 ms (the shader budget) is reported with what it was for and
@@ -251,24 +262,15 @@ let building = '';
 function timeSlowPipelines(): void {
   const D = (globalThis as unknown as { GPUDevice?: { prototype: Record<string, (...a: unknown[]) => unknown> } }).GPUDevice?.prototype;
   if (!D) return;
-  const code = new WeakMap<object, string>();
-  const mod = D.createShaderModule;
-  D.createShaderModule = function (this: unknown, ...a: unknown[]) {
-    const m = mod.apply(this, a) as object;
-    code.set(m, (a[0] as { code?: string })?.code ?? '');
-    return m;
-  };
   const slow: { ms: number; what: string; vertex: string; fragment: string }[] = [];
   (window as unknown as { slowPipelines: typeof slow }).slowPipelines = slow;
   const time = (name: string, isAsync: boolean) => {
     const f = D[name];
     D[name] = function (this: unknown, ...a: unknown[]) {
-      const t0 = performance.now(), what = building || '?';
-      const desc = a[0] as { vertex?: { module?: object }; fragment?: { module?: object } };
+      const t0 = performance.now(), what = building || '?', { vertex, fragment } = buildingCode ?? { vertex: '', fragment: '' };
       const done = () => {
         const ms = performance.now() - t0;
         if (ms < 100) return;
-        const vertex = (desc?.vertex?.module && code.get(desc.vertex.module)) || '', fragment = (desc?.fragment?.module && code.get(desc.fragment.module)) || '';
         slow.push({ ms, what, vertex, fragment });
         console.warn(`[webgpu] pipeline ${ms.toFixed(0)} ms${isAsync ? ' (async)' : ' (blocking)'}: ${what}, WGSL vertex ${(vertex.length / 1024).toFixed(0)} KB, fragment ${(fragment.length / 1024).toFixed(0)} KB`);
       };
@@ -318,7 +320,9 @@ function watchVertexBuffers(renderer: THREE.WebGPURenderer): void {
     if (promises && promises !== drawSink) nodeBuilds.asyncPipes++; else nodeBuilds.syncPipes++;
     const o = renderObject.object, m = renderObject.material;
     building = `${o.type} "${o.name}" (parent "${o.parent?.name ?? ''}") ${m.type} "${m.name}"`;
-    try { return create(renderObject, promises); } finally { building = ''; }
+    const state = renderObject.getNodeBuilderState?.();
+    buildingCode = { vertex: state?.vertexShader ?? '', fragment: state?.fragmentShader ?? '' };
+    try { return create(renderObject, promises); } finally { building = ''; buildingCode = null; }
   };
 }
 

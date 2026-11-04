@@ -28,7 +28,8 @@
     "three": "^0.186.1",
     "@actors/core": "file:vendor/actors/actors-core-0.33.3.tgz",
     "@actors/human": "file:vendor/actors/actors-human-0.33.3.tgz",
-    "@actors/three": "file:vendor/actors/actors-three-0.33.3.tgz"
+    "@actors/three": "file:vendor/actors/actors-three-0.33.3.tgz",
+    "@futuremagic/stage": "file:vendor/futuremagic/stage"
   },
   "devDependencies": {
     "@types/clipper-lib": "^6.4.0",

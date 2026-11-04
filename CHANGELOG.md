@@ -6,6 +6,7 @@ Every push raises the version by 0.001. Newest first.
 
 - **WebGPU (`?gpu=webgpu`): people share their shaders again.** Scale's garment layering and sky shading gave every person's materials nodes of their own, so each person built new shaders although Actors shares one per material kind. They now use one node per layer distance and per mode.
 - **WebGPU: one broken object no longer freezes the picture.** A draw that throws is skipped from then on and reported once (what it was), instead of stopping every following frame.
+- **WebGPU: the hero's skin is no longer white.** Photo skins and eyes switch their texture per person inside a shared shader, and three r186 kept the first texture bound when the next one had the same version. Fixed with the renderer hooks from AssetGenerator's shared shader policy (`@futuremagic/stage`, now vendored in vendor/futuremagic at a pinned commit, `node tools/futuremagic.mjs` refreshes it), which also give casters alike one shared shadow shader instead of one per person.
 - **WebGPU: slow GPU pipelines are reported.** Every pipeline over 100 ms logs what it was for and the size of its shader code (`window.slowPipelines` keeps the code).
 
 ## 0.266 — 2026-11-04
