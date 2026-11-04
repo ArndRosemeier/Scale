@@ -163,9 +163,9 @@ export class PowerFx {
             g.skels.push(skel);
           }
           const sm = new THREE.SkinnedMesh(ss.geometry, mat);
-          // Attached binding with the source's world matrix reproduces its bind inverse exactly.
+          // Attached binding (the copy's bind inverse follows its world matrix): the frozen
+          // skeleton holds world bone matrices, also for Actors' root-bound (detached) meshes.
           sm.bind(skel, ss.bindMatrix);
-          sm.bindMode = ss.bindMode;
           m = sm;
         } else m = new THREE.Mesh(s.geometry, mat);
         m.userData.geo = s.geometry;

@@ -107,6 +107,10 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   };
   const partSlot = new Uint8Array(cm.geometry.getAttribute('position').count);
   for (const p of crowd.parts) partSlot.fill(slotOf(p.name, p.role), p.offset, p.offset + p.count);
+  // Hair cards merged into the crowd mesh (Actors 0.29) need their texture's alpha: the far crowd
+  // paints the scalp instead (below), so their triangles are left out.
+  const hairCard = new Uint8Array(partSlot.length);
+  for (const p of crowd.parts) if (p.role === 'hair') hairCard.fill(1, p.offset, p.offset + p.count);
   // Scalp (the far crowd draws no hair cards): skin above the brow and round the back of the head.
   const rest = cm.geometry.getAttribute('position') as THREE.BufferAttribute;
   const ground = ch.actor.object.position.y;
@@ -125,6 +129,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   for (let k = 0; k < idx.count; k += 3) {
     const a = idx.getX(k), b = idx.getX(k + 1), c = idx.getX(k + 2);
     if (cut && cut.getX(a) < 0 && cut.getX(b) < 0 && cut.getX(c) < 0) continue;
+    if (hairCard[a] || hairCard[b] || hairCard[c]) continue;
     tris.push(a, b, c);
   }
   const used = [...new Set(tris)].sort((a, b) => a - b);
@@ -190,8 +195,10 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   const worldBind = new THREE.Matrix4();
   const capture = (r: number) => {
     THREE.Skeleton.prototype.update.call(cm.skeleton);
-    const bindInv = cm.bindMatrixInverse;
+    const bindInv = cm.bindMatrixInverse, boneTransform = cm.applyBoneTransform;
     cm.bindMatrixInverse = worldBind;
+    // three's own CPU skinning (Actors' root binding would take the mesh's world matrix back out).
+    cm.applyBoneTransform = THREE.SkinnedMesh.prototype.applyBoneTransform;
     for (let k = 0; k < nv; k++) {
       cm.getVertexPosition(vertRefs[k].v, tmp);
       posArr[k * 3] = tmp.x; posArr[k * 3 + 1] = tmp.y; posArr[k * 3 + 2] = tmp.z;
@@ -199,6 +206,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
       posData[o] = tmp.x; posData[o + 1] = tmp.y; posData[o + 2] = tmp.z; posData[o + 3] = 1;
     }
     cm.bindMatrixInverse = bindInv;
+    cm.applyBoneTransform = boneTransform;
     geoTmp.getAttribute('position').needsUpdate = true;
     geoTmp.computeVertexNormals();
     const na = geoTmp.getAttribute('normal');

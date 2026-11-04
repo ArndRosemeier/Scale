@@ -50,7 +50,6 @@ export interface CharacterOptions {
   renderer?: unknown;
 }
 
-const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4();
 /**
  * Garment layering on a reversed float depth buffer. Actors lifts each clothing layer above the
  * one below with a polygon offset; with Scale's reversed-Z float depth the slope term of that
@@ -123,7 +122,6 @@ function viewSpaceLayer(m: THREE.Material, occupies: string[] | undefined): void
 }
 
 /** Skeletons whose bone matrices are already model-relative (see prepareMeshes). */
-const relativeSkeletons = new WeakSet<THREE.Skeleton>();
 
 /**
  * The Actors settings for a look and an outfit. A look from the generator (the hero) keeps its
@@ -288,39 +286,22 @@ export class Character {
     this.prepareMeshes();
   }
 
-  /**
-   * Every actor mesh: model-relative bone matrices (three uploads them as 32-bit floats;
-   * kilometres from the origin that made hands shimmer), sky visibility, shadows.
-   */
   private occupiesBy: Map<string, string[]> | null = null;
   /** What each garment covers (catalog), by garment id. */
   occupies(): Map<string, string[]> {
     return this.occupiesBy ??= new Map(this.actor.catalog.garments.map((g) => [g.id, g.occupies]));
   }
 
+  /** Every actor mesh: shadows, sky visibility, crowd push, garment layers. */
   private prepareMeshes(): void {
+    // Model-relative bone matrices (kilometres from the origin, 32-bit floats made hands shimmer)
+    // are Actors' own since 0.17.1: its skeleton is a RootSkeleton and the meshes are bound to it.
     const actorObj = this.actor.object;
-    const skel = this.actor.actor.skeleton;
-    if (skel && !relativeSkeletons.has(skel)) {
-      relativeSkeletons.add(skel);
-      skel.update = () => {
-        _inv.copy(actorObj.matrixWorld).invert();
-        for (let i = 0; i < skel.bones.length; i++) {
-          _m.multiplyMatrices(_inv, skel.bones[i].matrixWorld).multiply(skel.boneInverses[i]);
-          _m.toArray(skel.boneMatrices!, i * 16);
-        }
-        if (skel.boneTexture) skel.boneTexture.needsUpdate = true;
-      };
-    }
     for (const o of actorObj.children) {
       const mesh = o as THREE.SkinnedMesh;
       if (!mesh.isSkinnedMesh) continue;
-      if (!mesh.userData.modelRelative) {
-        mesh.userData.modelRelative = true;
-        mesh.updateMatrixWorld = function (force?: boolean) {
-          THREE.Mesh.prototype.updateMatrixWorld.call(this, force);
-          this.bindMatrixInverse.copy(this.matrixWorld).invert().multiply(actorObj.matrixWorld);
-        };
+      if (!mesh.userData.prepared) {
+        mesh.userData.prepared = true;
         mesh.castShadow = this.castShadow && !(mesh.material as THREE.Material).transparent;
       }
       if (mesh.name === 'crowd' && !mesh.geometry.getAttribute('crowdPush')) {
