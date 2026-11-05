@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.283 — 2026-11-05
+
+- **A tracker keeps your story so far** (Normal mode; the game master plan, phase 1). A small strip above the minimap shows a round chip for every open story: a gang in its colour and emblem, a threat, a favour, your sidekick. A chip pulses when something new comes in. Click a chip, the ☰ button or press **J** to open the panel. It has tabs for **Villains**, **Threats** and **People**, and under each story what you know about it, newest first, with the day and time and how it ended (a gang collapsed, a monster brought down, a favour done or let down). Anything with a place has a ⌖ button that opens the map there and points the compass to it, such as a hideout you found, a favour's street, or where something happened. Only what you saw or heard goes in. In the sandbox there is no tracker.
+- **What goes in:** what you did to a gang (crimes stopped, bosses knocked out, jailed or escaped, stashes and dens busted), what the gangs did near you (blocks taken, street fights, operations, truces, breakouts), the hideouts you found, the strange signs before a threat (quietly, no toast), the threat itself and how it ended, favours people ask of you, and the second shard and your sidekick.
+- **Story toasts have a coloured edge** in their story's colour, so you can tell them apart from the rest.
+- **Important lines stand out from street chatter.** When a cuffed gang member gives up their hideout, they say it in a dark bubble with a glowing edge and the gang's emblem. A soft two-note chime plays, they turn to you, and they say it again if you walk off and come back. If you can't see them, it comes as a toast instead. Either way the line goes into the tracker.
+
 ## 0.282 — 2026-11-05
 
 - Behind the scenes: a plan for a game master and a tracker for the hero (docs/GAME_MASTER_PLAN.md). The game master decides what of the city's villains, threats and people reaches the player, and the tracker is an always-visible, clickable strip by the minimap with tabs, details and map markers. No change in the game yet.

@@ -103,6 +103,8 @@ import { CarEngines } from '../audio/CarEngines';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { SidekickPanel } from '../ui/SidekickPanel';
+import { Story } from './story/Story';
+import { Tracker } from '../ui/Tracker';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { CityNews } from './news/CityNews';
 import { crimeIndex } from './crime/CrimeIndex';
@@ -219,6 +221,9 @@ export class Game {
   readonly sight = new Sight(this);
   targetHud!: TargetHud;
   matePanel!: SidekickPanel;
+  /** What the hero knows (game/story) and its tracker on the HUD. */
+  story!: Story;
+  tracker!: Tracker;
   synth!: PowerSynth;
   /** Quiet engine loops on the cars nearest the camera. */
   engines!: CarEngines;
@@ -862,7 +867,7 @@ export class Game {
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
-    this.T('people', () => { this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
+    this.T('people', () => { this.story?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
@@ -924,6 +929,7 @@ export class Game {
       this.powerHud.update();
       this.targetHud.update();
       this.matePanel?.update();
+      if (this.tracker) { this.tracker.setVisible(!this.freeCam && !this.intro); this.tracker.update(dt); }
       this.touch.update();
       this.T('map', () => { this.map.update(dt); this.compass.update(); this.barks.update(dt); });
       this.input.endFrame();
@@ -1210,6 +1216,8 @@ export class Game {
       this.powers.info = () => `Power cores found: <b>${this.progress.coresCollected}</b> of ${cores.total} (rare glowing loot — rooftops, parks, metro, sewers).`;
     }
     // Street crime, police, justice, health and reputation (needs the map, HUD and targeting).
+    this.story = new Story(this);
+    this.tracker = new Tracker(this, this.story);
     this.city = new CityNews(this);
     if (this.startCell >= 0) this.city.freshStart(this.startCell);
     this.crime = new CrimeSystem(this);

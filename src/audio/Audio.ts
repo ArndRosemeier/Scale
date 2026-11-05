@@ -208,16 +208,18 @@ export class Audio {
    * Short synthesized UI tones (no clip needed): a power core pickup, karma, buying a
    * power, a refused action.
    */
-  chime(kind: 'core' | 'karma' | 'buy' | 'deny', gain = 0.5): void {
+  chime(kind: 'core' | 'karma' | 'buy' | 'deny' | 'story', gain = 0.5): void {
     if (!this.ctx || !this.enabled) return;
     const ctx = this.ctx, t0 = ctx.currentTime + 0.01;
     const notes: [number, number, number][] = kind === 'core' ? [[660, 0, 0.5], [990, 0.07, 0.55], [1320, 0.14, 0.7], [1980, 0.22, 0.9]]
       : kind === 'karma' ? [[784, 0, 0.35], [1175, 0.09, 0.5]]
       : kind === 'buy' ? [[523, 0, 0.4], [659, 0.06, 0.4], [784, 0.12, 0.45], [1047, 0.18, 0.7]]
+      // An important line for the tracker (game/story): two soft low notes, unlike any other.
+      : kind === 'story' ? [[392, 0, 0.55], [587, 0.16, 0.8]]
       : [[220, 0, 0.18], [185, 0.08, 0.22]];
     for (const [f, dt, dur] of notes) {
       const o = ctx.createOscillator();
-      o.type = kind === 'deny' ? 'square' : 'sine';
+      o.type = kind === 'deny' ? 'square' : kind === 'story' ? 'triangle' : 'sine';
       o.frequency.setValueAtTime(f, t0 + dt);
       if (kind === 'core') o.frequency.exponentialRampToValueAtTime(f * 1.01, t0 + dt + dur);
       const g = ctx.createGain();

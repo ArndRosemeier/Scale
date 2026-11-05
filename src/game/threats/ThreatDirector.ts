@@ -13,6 +13,7 @@
  * obstacles, and keeps the body of a defeated monster in the city (`remains`, for the aftermath).
  * Burning facades (FacadeFires) live here too.
  */
+import { omenSeen, threatStarted, threatEnded } from '../story/threatStory';
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import { Rng, deriveSeed } from '../../core/rng';
@@ -262,6 +263,8 @@ export class ThreatDirector {
   private now = 0;
   readonly log: { t: number; what: string }[] = [];
   stats = { omens: 0, omensShown: 0, events: 0, msAvg: 0 };
+  /** The clock's event number while it starts its event (the tracker closes that event's signs). */
+  private clockN: number | null = null;
 
   constructor(readonly g: Game) {
     this.key = `scale.threat.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
@@ -394,14 +397,14 @@ export class ThreatDirector {
     this.earned = earned; this.chaos = chaos;
     for (const s of this.clock.tick(dt, dk, dc, this.ready())) {
       if (s.type === 'omen') { this.stats.omens++; this.omens.push({ s, t: 0, tries: 0 }); }
-      else this.start(s.archetype, s.seed, {}, null);
+      else { this.clockN = s.n; this.start(s.archetype, s.seed, {}, null); this.clockN = null; }
     }
     this.showOmens(dt);
     for (let i = this.events.length - 1; i >= 0; i--) {
       const ev = this.events[i];
       const was = ev.active;
       ev.update(dt);
-      if (was && !ev.active) { this.note(`${ev.archetype} #${ev.id} ${ev.outcome}`); this.ended.set(ev, ev.t); }
+      if (was && !ev.active) { this.note(`${ev.archetype} #${ev.id} ${ev.outcome}`); this.ended.set(ev, ev.t); threatEnded(this.g, ev); }
       if (!ev.active && ev.t > (this.ended.get(ev) ?? ev.t) + LINGER) {
         // A defeated monster's body stays in the city.
         if (ev instanceof Strider && ev.defeated) this.remains.push(ev);
@@ -452,7 +455,7 @@ export class ThreatDirector {
       const rng = new Rng(o.s.seed);
       const kinds = [o.s.kind, ...impl.fallback];
       let shown = false;
-      for (const k of kinds) if (impl.omen(this, site, k, rng)) { shown = true; this.note(`omen ${o.s.archetype}:${k}`); break; }
+      for (const k of kinds) if (impl.omen(this, site, k, rng)) { shown = true; this.note(`omen ${o.s.archetype}:${k}`); omenSeen(this.g, o.s.n, o.s.archetype, k); break; }
       // Nothing to show it on (an empty street): try again for a while, then let it pass.
       if (shown) { this.stats.omensShown++; this.omens.splice(i, 1); }
       else if (++o.tries > 20) this.omens.splice(i, 1);
@@ -505,6 +508,7 @@ export class ThreatDirector {
     this.omens.length = 0;
     this.stats.events++;
     this.g.response.open(ev);
+    threatStarted(this.g, ev, this.clockN);
     this.note(`${archetype} #${ev.id} at ${Math.round(site.x)},${Math.round(site.z)}`);
     this.save();
     return ev;

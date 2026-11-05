@@ -62,7 +62,8 @@ export class PowerHud {
     abilities.progress.onChange.push(() => { this.shown = ''; });
   }
 
-  toast(html: string, kind: ToastKind = 'info', ms = 4200): void {
+  /** `accent`: a story toast (game/story) with an edge in its thread's colour. */
+  toast(html: string, kind: ToastKind = 'info', ms = 4200, accent?: string): void {
     if (kind === 'deny') {
       // Refusals repeat quickly (holding a key): one at a time.
       const now = performance.now();
@@ -70,7 +71,8 @@ export class PowerHud {
       this.lastDeny = html; this.lastDenyT = now;
     }
     const d = document.createElement('div');
-    d.className = `toast ${kind}`;
+    d.className = `toast ${kind}${accent ? ' story' : ''}`;
+    if (accent) d.style.setProperty('--accent', accent);
     d.innerHTML = html;
     this.toasts.appendChild(d);
     while (this.toasts.children.length > 4) this.toasts.firstElementChild!.remove();

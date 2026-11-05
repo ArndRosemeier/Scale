@@ -52,7 +52,7 @@ interface Seen { st: PState; act: string | null; helped: boolean }
 export class Barks implements VoiceSink {
   private els: HTMLDivElement[] = [];
   /** `head`: how far above the anchor's feet the bubble sits (people 2.05 m, a cat much less). */
-  private shown: { a: VoiceAnchor; el: HTMLDivElement; t: number; head: number }[] = [];
+  private shown: { a: VoiceAnchor; el: HTMLDivElement; t: number; head: number; life?: number }[] = [];
   private seen = new WeakMap<PedAgent, Seen>();
   private quiet = new WeakMap<object, number>();
   private time = 0;
@@ -168,13 +168,36 @@ export class Barks implements VoiceSink {
     if (this.shown.length >= MAX_SHOWN) return false;
     const el = this.els.find((e) => !this.shown.some((s) => s.el === e))!;
     el.textContent = text;
-    el.classList.remove('out');
+    el.classList.remove('out', 'story');
     el.classList.toggle('angry', o.tone === 'angry');
     el.classList.toggle('cheer', o.tone === 'cheer');
     el.classList.toggle('animal', !!o.animal);
     this.shown.push({ a, el, t: 0, head });
     this.quiet.set(a, this.time + (o.pause ?? PERSON_PAUSE));
     if (!o.voice) this.gapT = GAP;
+    return true;
+  }
+
+  /**
+   * An important line for the hero's tracker (game/story): a bubble with an edge in the thread's
+   * colour and its emblem, up longer than a bark, shown past the gaps (it gives the oldest bubble's
+   * place when all are taken). False when it is off screen.
+   */
+  story(a: VoiceAnchor, text: string, color: string, glyph: string, head = 2.05): boolean {
+    if (this.game.map.open || this.game.menu?.paused === true || this.game.freeCam) return false;
+    if (!markerOnScreen(a.x, a.y + head, a.z, a.y, this.game.renderer.camera, this.p, 0.95)) return false;
+    const mine = this.shown.findIndex((s) => s.a === a);
+    if (mine >= 0) { this.shown[mine].el.style.display = 'none'; this.shown.splice(mine, 1); }
+    if (this.shown.length >= MAX_SHOWN) { this.shown[0].el.style.display = 'none'; this.shown.shift(); }
+    const el = this.els.find((e) => !this.shown.some((s) => s.el === e))!;
+    el.textContent = '';
+    if (glyph) { const g = document.createElement('span'); g.className = 'glyph'; g.textContent = glyph; el.appendChild(g); }
+    el.appendChild(document.createTextNode(text));
+    el.classList.remove('out', 'angry', 'cheer', 'animal');
+    el.classList.add('story');
+    el.style.setProperty('--story', color);
+    this.shown.push({ a, el, t: 0, head, life: Math.min(10, showFor(text) * 1.7 + 1) });
+    this.quiet.set(a, this.time + PERSON_PAUSE);
     return true;
   }
 
@@ -250,7 +273,7 @@ export class Barks implements VoiceSink {
     for (let i = this.shown.length - 1; i >= 0; i--) {
       const s = this.shown[i];
       s.t += dt;
-      const show = showFor(s.el.textContent ?? '');
+      const show = s.life ?? showFor(s.el.textContent ?? '');
       const gone = s.a.alive === false || s.t > show;
       const off = hidden || !markerOnScreen(s.a.x, s.a.y + s.head, s.a.z, s.a.y, cam, this.p, 1.05);
       if (gone) { s.el.style.display = 'none'; this.shown.splice(i, 1); continue; }
