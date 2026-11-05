@@ -34,6 +34,8 @@ export const SIDEKICK_OWNER = -7;
 export const CONCERT_OWNER = -8;
 /** Owner id of the stadium's soccer players and referee (src/game/soccer): their own budget. */
 export const SOCCER_OWNER = -9;
+/** Owner id of Leo Lightly, the man who can't land, his kids and the firefighters who fetch him off roofs (src/game/citizens/floater). */
+export const FLOATER_OWNER = -12;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';
