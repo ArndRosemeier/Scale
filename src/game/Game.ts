@@ -70,6 +70,8 @@ import { setSight, markerOnScreen, screenPoint } from '../render/screen';
 import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { ShaderCounter } from '../debug/ShaderCounter';
+import { SoundLog } from '../debug/SoundLog';
+import { listenerDist } from '../audio/hearing';
 import { installFreezeLog } from '../debug/FreezeLog';
 import { Recorder } from '../ui/Recorder';
 import { lightPool } from '../render/lightPool';
@@ -1112,6 +1114,8 @@ export class Game {
     this.powers = new PowersScreen(this, this.abilities);
     // Targeting and the elemental powers.
     this.synth = new PowerSynth(() => this.audio.synthOut());
+    this.synth.onPlay = (kind, x, y, z) => this.audio.note(`synth_${kind}`, listenerDist(x, y, z));
+    new SoundLog(this.audio);
     this.engines = new CarEngines(this.audio);
     this.targeting = new Targeting({
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
