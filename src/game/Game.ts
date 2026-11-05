@@ -391,8 +391,8 @@ export class Game {
     };
     this.streamer.onCellEvicted = (c) => hitch.measure('cell:evict', () => { this.world.removeCell(c); this.destruction.forgetCell(c); this.net.markDirty(); this.parked.delete(c.id); this.parkedList = [...this.parked.values()].flat(); this.props?.removeCell(c); setTimeout(syncSky, 0); });
     progress('Teaching people to walk', 0.64);
-    const templates = await untilDone(pre.templates, () => progress('Teaching people to walk', 0.64 + pre.progress.bake * 0.1));
-    this.crowd = new CrowdRenderer(templates, this.renderer.scene);
+    await untilDone(pre.templates, () => progress('Teaching people to walk', 0.64 + pre.progress.bake * 0.1));
+    this.crowd = await pre.crowd;
     this.renderer.scene.add(this.crowd.group);
     this.crowd.prepare = (o) => this.renderer.compileAsync(o);
     this.population = new Population(macro, this.settings.seed);

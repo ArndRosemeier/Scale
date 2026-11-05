@@ -60,6 +60,15 @@ function yieldNow(): Promise<void> {
   return new Promise((r) => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
 }
 
+/** Yields once this slice of the bake has run SLICE_MS (the start screen's backdrop keeps drawing meanwhile). */
+const SLICE_MS = 8;
+let sliceT0 = 0;
+async function slice(): Promise<void> {
+  if (performance.now() - sliceT0 < SLICE_MS) return;
+  await yieldNow();
+  sliceT0 = performance.now();
+}
+
 export async function bakeCrowdTemplates(onProgress?: (f: number) => void): Promise<CrowdTemplate[]> {
   const out: CrowdTemplate[] = [];
   let i = 0;
@@ -164,6 +173,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     }
   }
   const nv = vertRefs.length;
+  await slice();
   // The standing idle is a motion-captured loop of several seconds (Animator.idleCycle, picked by
   // seed): idle and film bake one whole cycle of it, so the texture loops seamlessly.
   await clipLibraryReady();
@@ -249,13 +259,13 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
     // Warm up the gait / settle the pose (an action from its start, blended fully in: 3 whole
     // cycles, so the first frame captured is the start of one).
     actionT0 = time;
-    for (let k = 0; k < (c.action ? 180 : 150); k++) step(c.move, c.speed, 1 / 60, !!c.film, c.action);
+    for (let k = 0; k < (c.action ? 180 : 150); k++) { step(c.move, c.speed, 1 / 60, !!c.film, c.action); await slice(); }
     let period = c.action ? GROOVE_PERIOD : c.move === 'idle' ? idleCycle : 2.5;
     if (c.speed > 0) {
       // Detect the gait period from the left thigh swing (autocorrelation).
       const thigh = ch.bones[ch.boneIndex.get('upperleg01.L')!];
       const samples: number[] = [];
-      for (let k = 0; k < 240; k++) { step(c.move, c.speed, 1 / 120, false); samples.push(thigh.quaternion.x); }
+      for (let k = 0; k < 240; k++) { step(c.move, c.speed, 1 / 120, false); samples.push(thigh.quaternion.x); await slice(); }
       let best = 0, bestLag = 120;
       for (let lag = 40; lag < 230; lag++) {
         let s = 0;
@@ -265,7 +275,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
       }
       period = bestLag / 120;
     } else if (c.still) {
-      for (let k = 0; k < 240; k++) step(c.move, 0, 1 / 60, false);
+      for (let k = 0; k < 240; k++) { step(c.move, 0, 1 / 60, false); await slice(); }
     }
     const start = row;
     for (let f = 0; f < c.frames; f++) {
@@ -273,6 +283,7 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
       const sub = Math.ceil(period / c.frames / 0.05);
       if (f > 0 && !c.still) for (let k = 0; k < sub; k++) step(c.move, c.speed, period / c.frames / sub, !!c.film, c.action);
       capture(row++);
+      await slice();
     }
     clips[c.name] = { start, frames: c.frames, cycleDist: c.speed * period, cycleTime: period };
   }

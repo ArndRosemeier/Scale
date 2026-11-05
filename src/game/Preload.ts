@@ -3,7 +3,8 @@
  * started while the start screen is showing instead of after Start: the renderer and its GPU
  * device, the procedural textures, the Actors bodies and clips, the physics engine, the sky and
  * the shared lights, the crowd templates (fixed seeds), the hidden stand-in people that warm up
- * the clothing shaders, and the shaders of those stand-ins and of the interiors.
+ * the clothing shaders, and the shaders of those stand-ins, the crowd, the interiors and the
+ * city's own materials (render/cityWarmup).
  *
  * Every city uses the same materials; the seed only decides where things stand. So what is built
  * here is exactly what the game would build after Start, just earlier. Start (main.ts) awaits
@@ -27,6 +28,8 @@ import { warmRigs } from '../humanoid/client/warmRigs';
 import { interiorWarmup } from '../interior/InteriorBuilder';
 import { bakeCrowdTemplates, type CrowdTemplate } from '../sim/CrowdBaker';
 import { frameWork } from '../core/frameWork';
+import { CrowdRenderer } from '../sim/CrowdRenderer';
+import { cityWarmup } from '../render/cityWarmup';
 
 export const PRELOAD_OFF = new URLSearchParams(location.search).get('preload') === '0';
 
@@ -42,6 +45,10 @@ export class Preload {
   readonly peopleReady: Promise<unknown>;
   /** The crowd's baked templates. */
   readonly templates: Promise<CrowdTemplate[]>;
+  /** The crowd's renderer (built from the templates; the game adds its group to the scene). */
+  readonly crowd: Promise<CrowdRenderer>;
+  /** The city's materials on small meshes, kept so their programs stay (render/cityWarmup). */
+  private city: THREE.Group | null = null;
   /** Interior materials on small meshes (staged by the warm-up; compiled here first). */
   readonly interior: THREE.Group;
   /** The hidden stand-in people dressed (and, where possible, their shaders compiled). */
@@ -70,29 +77,33 @@ export class Preload {
     this.templates = Promise.all([this.texReady, this.peopleReady])
       .then(() => bakeCrowdTemplates((f) => { this.progress.bake = f; }))
       .then((t) => { mark('crowd'); return t; });
-    this.warm = this.templates.then(() => this.warmShaders()).then(() => { mark('shaders'); }, (e) => console.warn('[preload] shaders', e));
+    this.crowd = this.templates.then((t) => new CrowdRenderer(t, renderer.scene));
+    this.warm = this.crowd.then((c) => this.warmShaders(c)).then(() => { mark('shaders'); }, (e) => console.warn('[preload] shaders', e));
     this.pump();
   }
 
   /** Stand-in people dressed, then their shaders and the interiors' compiled, one part at a time. */
-  private async warmShaders(): Promise<void> {
+  private async warmShaders(crowd: CrowdRenderer): Promise<void> {
     const R = this.renderer;
     const holder = new THREE.Group();
     holder.name = 'warm-rigs';
     R.scene.add(holder);
     await warmRigs(holder, new THREE.Vector3());
     const stage = new THREE.Group();
-    stage.add(this.interior);
+    this.city = cityWarmup(this.tex);
+    stage.add(this.interior, this.city, crowd.group);
     R.scene.add(stage);
+    const parts = [...holder.children, ...this.interior.children, ...crowd.group.children];
+    this.city.traverse((o) => { if ((o as THREE.Mesh).isMesh) parts.push(o); });
     try {
-      for (const part of [...holder.children, ...this.interior.children]) {
+      for (const part of parts) {
         await R.compileAsync(part);
         await nextFrame();
       }
     } finally {
       // (The interior pieces go back to the warm-up's staging; the stand-ins stay all game.)
       R.scene.remove(stage);
-      stage.remove(this.interior);
+      stage.remove(this.interior, crowd.group);
     }
   }
 
@@ -123,7 +134,9 @@ export class Preload {
       await loadGpuKit(true);
       const r = new Renderer(canvas);
       await r.init();
-      return new Preload(r);
+      const pre = new Preload(r);
+      (window as unknown as { preload: Preload }).preload = pre;
+      return pre;
     })());
   }
 
