@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.289 — 2026-11-05
+
+- **The magnetic grandma.** Every city has one: a cheerful old lady who was made magnetic by one of the crystals years ago. She is no hero and no villain. In the day (8:30 to 12:30 and 14:00 to 18:30) she does her rounds of the shops in her part of town, and anything made of metal near her flies over and sticks to her coat: forks and teaspoons off café tables, tins from the shop doors, a spanner off the street, keys out of passers-by's pockets (she hands those back) and now and then a whole bicycle, which she carries on her back for a while. When she clanks too much she stops and shakes it all off onto the pavement with a great clatter. People stop to watch and take photos, and she has a word for everyone, the hero included. Anything dangerous nearby ends her day: everything drops and she runs. She's back the next day. The first time you meet her, she goes into the People tab of the tracker with her part of town on the map.
+
 ## 0.288 — 2026-11-05
 
 - **Old enemies come back** (Normal mode). A gang boss who breaks out of jail turns up in their old turf near you before long, leading one of the gang's crimes. A gang that had collapsed comes back: the news says so in its story in the tracker, and one of its crimes comes up near you.

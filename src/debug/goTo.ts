@@ -273,6 +273,9 @@ export class GoTo {
     out.push({ group: 'City', label: 'Fitting mirror (nearest clothes shop)', count: 1, go: () => call(this.dev(), 'mirror') });
     const d = this.dev();
     if (d.concert) for (const w of ['stage', 'pit', 'stand'] as const) out.push({ group: 'City', label: `Concert: ${w === 'stand' ? 'stands' : w}`, count: 1, go: () => call(this.dev(), 'concert.go', w) });
+    // The magnetic grandma: to her if she is out, else to her neighbourhood (she comes out in the day).
+    const gm = this.g.grandma;
+    if (gm?.home) out.push({ group: 'City', label: 'Magnetic grandma', count: 1, go: () => { const a = gm.her?.a; return a ? this.near(a.x, a.z, 6) : this.near(gm.home!.x, gm.home!.z, 0); } });
     // Villages, towns and farms out in the countryside.
     const rural = d.rural?.list?.(-1, 200) as { id: number; kind: number; name: string; x: number; z: number }[] | undefined;
     if (rural?.length) {

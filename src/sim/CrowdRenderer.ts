@@ -160,6 +160,15 @@ export class CrowdRenderer {
   /** The concert's beat (cycles of GROOVE_PERIOD) for everyone grooving, or null (their own clocks). */
   groovePhase: (() => number) | null = null;
 
+  /**
+   * The full rig drawing someone right now (dressed and shown), or null (too far: a crowd figure).
+   * For things that ride on a person's sockets (game/citizens/grandma: what sticks to her).
+   */
+  rigOf(a: PedAgent): HumanoidRig | null {
+    const r = this.rigs.get(a.id);
+    return r && r.agent === a && r.ready === 2 && r.rig.char ? r.rig : null;
+  }
+
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
     templates.forEach((t) => {
       const g = t.geometry.clone();
