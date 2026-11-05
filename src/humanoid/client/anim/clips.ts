@@ -67,7 +67,8 @@ export interface RigClip {
 /** Ground speed bands (m/s) of the standing gaits: full weight inside, cross-faded between. */
 const GAITS: [string, number, number][] = [['Walk_Loop', 0, 1.9], ['Jog_Fwd_Loop', 3.6, 5.6], ['Sprint_Loop', 7.6, 1e9]];
 
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _lv = new THREE.Quaternion();
+const _x = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 const _e = new THREE.Euler();
 
 /** Per-character clip playback through Actors, handed to one animator's pose space. */
@@ -165,7 +166,7 @@ export class ClipRig {
   /** out += w · clip at u, in the animator's pose space (driven bones only; the caller normalizes). */
   accumulate(c: RigClip, u: number, w: number, out: Pose) {
     if (w <= 0) return;
-    this.toPose(this.sample(c, u, this.scratch), w, out);
+    this.toPose(this.sample(c, u, this.scratch), w, out, c.meta.level === true);
   }
 
   /**
@@ -173,15 +174,26 @@ export class ClipRig {
    * the driven bones. Exact: the proxy takes each Actors bone's model-space turn from its bind,
    * and the animator's apply() and RigBridge.sync() undo this conversion step by step.
    */
-  toPose(src: ActorPose, w: number, out: Pose) {
+  toPose(src: ActorPose, w: number, out: Pose, level = false) {
     const R = this.worldR, H = this.worldH, f = this.fitted;
     poseWorld(f, src, R, H);
     const Q = this.model, r = out.rot, order = this.map.order;
+    // Level (ClipMeta.level): the pelvis's heading (from its sideways axis, steady lying or sitting)
+    // comes off the whole body, a turn about the vertical; bones keep their pose relative to each other.
+    const pv = this.pelvis;
+    let turn = 0;
+    if (level && pv >= 0) {
+      _q.set(R[pv * 4], R[pv * 4 + 1], R[pv * 4 + 2], R[pv * 4 + 3]).multiply(this.bindInv[pv]);
+      _x.set(1, 0, 0).applyQuaternion(_q);
+      turn = Math.atan2(-_x.z, _x.x);
+      _lv.setFromAxisAngle(_up, -turn);
+    }
     for (const b of this.bones) {
       const a = this.from[b], p = this.parentOf[b];
       if (a >= 0) {
         // Turn since bind, in Actors object space, then flipped into Scale's (half turn about Y).
         _q.set(R[a * 4], R[a * 4 + 1], R[a * 4 + 2], R[a * 4 + 3]).multiply(this.bindInv[a]);
+        if (turn) _q.premultiply(_lv);
         Q[b].set(-_q.x, _q.y, -_q.z, _q.w);
       } else Q[b].copy(Q[p]);
       // Local rotation, then into pose space: E = pn · q · n⁻¹ · pn⁻¹ (inverse of Animator.apply).
@@ -197,9 +209,11 @@ export class ClipRig {
     }
     if (this.pelvis >= 0) {
       const h = f.heads[this.pelvis], o = this.pelvis * 3;
-      out.root.x += -(H[o] - h[0]) * w;
-      out.root.y += (H[o + 1] - h[1]) * w;
-      out.root.z += -(H[o + 2] - h[2]) * w;
+      _x.set(H[o] - h[0], H[o + 1] - h[1], H[o + 2] - h[2]);
+      if (turn) _x.applyQuaternion(_lv);
+      out.root.x += -_x.x * w;
+      out.root.y += _x.y * w;
+      out.root.z += -_x.z * w;
     }
   }
 }

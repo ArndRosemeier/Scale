@@ -2,6 +2,15 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.291 — 2026-11-05
+
+- **The gentle giant of the stadium.** Earlier this year one of the city's crystals made someone grow to about ten metres, and that's all it did: no powers, no side in anything. Now they live with being a walking attraction, a friendly, slightly awkward local celebrity. You'll meet them around the stadium. They walk slowly and carefully round it (they wait when someone is right in front of their feet and say sorry), wave and smile at people, and greet the hero by name. Their steps are soft thuds, so nobody panics. Clothes don't come in their size, so they wear improvised underwear.
+- **They sit on the ground a lot**, so as not to loom, and get up again slowly. The sitting down, sitting and getting up are motion-captured moves from the Actors library's own clips.
+- **Lifts for photos.** Now and then they kneel, let a fan step onto their palm and hold them up, while the fan's friend takes pictures. Then they set the fan down gently.
+- **A press magnet.** Photographers come by every so often, flashes going off, shouting questions. People stop to watch and film, and call out their name.
+- **Their day:** they sleep on the pitch after the concert, leave before the first match, spend the day round the stadium, and sit outside the gate while the concert plays. Explosions, gunfire or monsters nearby give them a fright.
+- Admin console: "Go to" has an entry that takes you to the gentle giant.
+
 ## 0.290 — 2026-11-05
 
 - **Leo Lightly, the man who can't land.** A crystal earlier this year left Leo, a friendly accountant, floating about a metre off the ground for good. He's not a hero or a villain, just someone the whole town knows. By day his kids Mia and Ben tow him round the park nearest the city centre on a string tied to his ankle, like a balloon. He waves at people, chats in speech bubbles, and passers-by stop to film him. He isn't out at night, in the rain, or on the odd day the family stays home.
