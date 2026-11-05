@@ -19,6 +19,7 @@ import { BossOperation, BOSS_OP_TITLE } from './BossOp';
 import { Sabotage } from './Sabotage';
 import { Raising } from './Raising';
 import { Procession } from './Procession';
+import { Lookout } from './Lookout';
 
 export interface KindSpec {
   make(w: CrimeWorld, seed: number, near: { x: number; z: number } | null): Crime;
@@ -52,6 +53,9 @@ export const KINDS: Record<CrimeKind, KindSpec> = {
   // (A den's crew is posted in a sewer hideout by CrimeSystem; `make` without a site puts them at the point.)
   den: { make: (w, s, n) => { const x = n?.x ?? w.player.x, z = n?.z ?? w.player.z, y = w.player.y; return new SewerDen(w, s, { room: -1, spots: [0, 1, 2].map((i) => ({ x: x + i, y, z, fx: x, fz: z + 3, sit: false })), stash: { x, y, z }, cx: x, cy: y, cz: z }); }, ko: 9, resolved: 14, rep: 4, title: 'A den in the sewers', criminal: 'Crook', stopped: 'a sewer den' },
   bomber: { make: (w, s, n) => new Bomber(w, s, n), ko: 18, resolved: 32, rep: 8, title: 'A mad bomber — explosions in the street', criminal: 'Mad bomber', stopped: 'a mad bomber' },
+  // Lookouts (crime/Lookout): started by the game master's signs, never rolled.
+  casing: { make: (w, s, n) => new Lookout(w, s, 'casing', n ? { x: n.x, z: n.z, nx: 0, nz: 1 } : null), ko: 5, resolved: 8, rep: 2, title: 'Suspicious people watching a place', criminal: 'Lookout', stopped: 'some lookouts' },
+  taunt: { make: (w, s) => new Lookout(w, s, 'taunt'), ko: 5, resolved: 6, rep: 1, title: 'A gang member out to warn you', criminal: 'Messenger', stopped: 'a gang messenger' },
   // Boss operations (crime/BossOp): started by CrimeSystem when a group's boss comes out, never rolled.
   heist: { make: (w, s, n) => new BossOperation(w, s, 'heist', n), ko: 14, resolved: 60, rep: 12, title: BOSS_OP_TITLE.heist, criminal: 'Heister', stopped: 'a bank heist' },
   takeover: { make: (w, s, n) => new BossOperation(w, s, 'takeover', n), ko: 12, resolved: 50, rep: 10, title: BOSS_OP_TITLE.takeover, criminal: 'Wrecker', stopped: 'a gang takeover' },

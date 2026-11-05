@@ -96,6 +96,9 @@ export const BOSS_OP_TITLE: Record<BossOpKind, string> = {
   deadrise: 'The dead rise — skeletons clawing out of the ground',
 };
 
+/** A boss operation's site: the work's spot, the way out, the landmark (or tree, cemetery) it is at. */
+export interface BossSite { x: number; z: number; nx: number; nz: number; kind?: string }
+
 export class BossOperation extends Crime {
   readonly tier = 3;
   /** Where the work happens (the vault door, the circle's centre, the robot's port) and the way out. */
@@ -117,7 +120,7 @@ export class BossOperation extends Crime {
   /** Skeletons raised so far (deadrise). */
   risen = 0;
 
-  constructor(w: CrimeWorld, seed: number, readonly kind: BossOpKind, private near: { x: number; z: number } | null = null) {
+  constructor(w: CrimeWorld, seed: number, readonly kind: BossOpKind, private near: { x: number; z: number } | null = null, private fixed: BossSite | null = null) {
     super(w, seed);
     this.spec = BOSS_OP_SPECS[kind];
   }
@@ -182,7 +185,9 @@ export class BossOperation extends Crime {
     return this.criminals.length >= 3 && this.criminals.some((c) => c.actor?.memo.work);
   }
 
-  private pickSite(): { x: number; z: number; nx: number; nz: number; kind?: string } | null {
+  /** Where it would take place now (round the player), or the site it was planned for (`fixed`). */
+  pickSite(): BossSite | null {
+    if (this.fixed) return this.fixed;
     const w = this.w, rMin = this.near ? 0 : BOSS_OP.ringMin, rMax = this.near ? 120 : BOSS_OP.ringMax;
     const pick = <T>(l: T[]): T | null => (l.length ? l[this.rng.int(0, Math.min(l.length, 3) - 1)] : null);
     const shops = () => (w.shops?.(rMin, rMax) ?? []).map((s) => ({ x: s.x + s.nx * 0.8, z: s.z + s.nz * 0.8, nx: s.nx, nz: s.nz }));

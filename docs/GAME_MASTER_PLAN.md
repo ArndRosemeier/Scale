@@ -4,7 +4,10 @@ Status: accepted (2026-11-05, Arnd, thread "Explore supervillain ideas"). **Phas
 (Knowledge, Story, threatStory, storyVoice) and `ui/Tracker`. **Phase 2 is built** (v0.284): `game/gm` (director.ts:
 needs story/challenge/people, calm after a fight won, a 2-minute gap between moves, the log; GameMaster.ts: tools
 `rumour` (talk that knows: the followed group's hideout area, via People's news lines) and `group-crime` (the followed
-group's own crime near the hero through `CrimeSystem.startFor`, same budget and rules), the dev panel). Not in the sandbox (Arnd: the sandbox is not for real
+group's own crime near the hero through `CrimeSystem.startFor`, same budget and rules), the dev panel). **Phase 3 is built** (v0.286):
+`gm/Signs.ts` + `crime/Lookout.ts`: boss operations planned ahead and cased (lookouts seen, a caught one tells when),
+calling cards (a messenger after an operation stopped or a stash busted, notoriety wary+), witnesses (a crime that got
+away near the hero: a bystander tells where the group goes in). Plans are not saved (they last minutes). Not in the sandbox (Arnd: the sandbox is not for real
 challenges).
 
 Scale already simulates a lot that the player hardly sees: six kinds of villain groups with turf, hideouts,
