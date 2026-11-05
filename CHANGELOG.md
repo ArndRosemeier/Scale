@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.291 — 2026-11-05
+
+- **No more half-naked passers-by.** People a bit further off (and anyone close by for the moment it takes to get their clothes ready) are drawn as light-weight crowd copies. Those copies lost dresses and skirts completely, so women in a dress walked about in nothing but their shoes, and trousers and shorts came out in shreds. Dresses and skirts are now part of the copies, and their trousers and shorts are cuts that hold up at that distance.
+
 ## 0.290 — 2026-11-05
 
 - **Leo Lightly, the man who can't land.** A crystal earlier this year left Leo, a friendly accountant, floating about a metre off the ground for good. He's not a hero or a villain, just someone the whole town knows. By day his kids Mia and Ben tow him round the park nearest the city centre on a string tied to his ankle, like a balloon. He waves at people, chats in speech bubbles, and passers-by stop to film him. He isn't out at night, in the rain, or on the odd day the family stays home.
