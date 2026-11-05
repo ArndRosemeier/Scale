@@ -1,10 +1,12 @@
 /**
- * Help dialog (H, or "Help" in the pause menu) with three tabs:
+ * Help dialog (H, or "Help" in the pause menu) with four tabs:
  *  - Keys: the controls in groups, every game key reassignable (keybinds.ts), reset to defaults;
  *    on a touch screen the on-screen controls come first.
  *  - Powers: every power with its exact numbers per rank, read from the same tables the game
  *    uses (defs.ts rankText / costText, tuning.ts), so they cannot drift from the code.
  *  - Manual: the player's manual (public/manual/manual.html), loaded when the tab is first opened.
+ *  - Credits: the character assets' authors; every CC-BY garment and hairstyle the character
+ *    creator offers is listed with its author (read from the Actors catalog, so it cannot drift).
  */
 import type { Game } from '../game/Game';
 import {
@@ -20,10 +22,11 @@ import { BOSS } from '../game/factions/Bosses';
 import { STRIDER } from '../game/threats/Strider';
 import { TREE } from '../game/threats/AwakenedTree';
 import { ENERGY, GIANT, KARMA, KARMA_COST, sizeUpkeep } from '../game/abilities/tuning';
+import { actors } from '../humanoid/actors/service';
 import { isTouch } from './touch';
 import { esc } from './esc';
 
-export type HelpTab = 'keys' | 'powers' | 'manual';
+export type HelpTab = 'keys' | 'powers' | 'manual' | 'credits';
 
 /** On a touch screen (iPad): the on-screen controls (TouchControls). */
 const TOUCH_CONTROLS: [string, string][] = [
@@ -62,6 +65,7 @@ export class HelpDialog {
   private notice = '';
   private waiting: { id: string; i: number } | null = null;
   private manualLoaded = false;
+  private creditsShown = false;
 
   constructor(private game: Game) {
     this.el = document.createElement('div');
@@ -73,16 +77,18 @@ export class HelpDialog {
             <button type="button" role="tab" data-tab="keys">Keys</button>
             <button type="button" role="tab" data-tab="powers">Powers</button>
             <button type="button" role="tab" data-tab="manual">Manual</button>
+            <button type="button" role="tab" data-tab="credits">Credits</button>
           </div>
           <button type="button" class="help-x" title="Close (H)">✕</button>
         </div>
         <div class="help-body" data-tab="keys"></div>
         <div class="help-body" data-tab="powers"></div>
         <div class="help-body help-manual" data-tab="manual"></div>
+        <div class="help-body help-credits" data-tab="credits"></div>
       </div>`;
     document.body.appendChild(this.el);
     const q = (t: HelpTab) => this.el.querySelector<HTMLElement>(`.help-body[data-tab="${t}"]`)!;
-    this.body = { keys: q('keys'), powers: q('powers'), manual: q('manual') };
+    this.body = { keys: q('keys'), powers: q('powers'), manual: q('manual'), credits: q('credits') };
     for (const b of this.el.querySelectorAll<HTMLButtonElement>('.help-tabs button')) b.onclick = () => this.show(b.dataset.tab as HelpTab);
     this.el.querySelector<HTMLButtonElement>('.help-x')!.onclick = () => this.toggle(false);
     // A click on the dimmed backdrop closes; clicks inside are not clicks in the game.
@@ -110,7 +116,8 @@ export class HelpDialog {
     for (const [t, el] of Object.entries(this.body)) el.classList.toggle('on', t === tab);
     if (tab === 'keys') this.renderKeys();
     else if (tab === 'powers') this.renderPowers();
-    else this.loadManual();
+    else if (tab === 'manual') this.loadManual();
+    else this.renderCredits();
   }
 
   // ------------------------------------------------------------------ keys
@@ -251,4 +258,38 @@ export class HelpDialog {
       } catch { /* not reachable: the close button still works */ }
     });
   }
+
+  // ------------------------------------------------------------------ credits
+
+  private renderCredits(): void {
+    if (this.creditsShown) return;
+    this.creditsShown = true;
+    const el = this.body.credits;
+    el.innerHTML = `
+      <div class="hc-group"><h3>Characters</h3>
+        <p>People, clothes and hair: the <a href="https://github.com/ArndRosemeier/Actors" target="_blank" rel="noopener">Actors</a> character library, built on <a href="http://www.makehumancommunity.org/" target="_blank" rel="noopener">MakeHuman</a> assets (CC0 unless listed below).</p>
+        <p>Animations: Quaternius Universal Animation Library (CC0).</p>
+      </div>
+      <div class="hc-group hc-ccby"><h3>Clothes and hairstyles under CC BY</h3><p class="sub">Loading the list…</p></div>`;
+    const box = el.querySelector<HTMLElement>('.hc-ccby')!;
+    actors.catalog().then((cat) => {
+      const rows = [...cat.garments, ...cat.hair].filter((x) => x.credit).map((x) => ({ label: x.label, ...creditParts(x.credit!) }));
+      rows.sort((a, b) => a.author.localeCompare(b.author) || a.label.localeCompare(b.label));
+      box.innerHTML = `<h3>Clothes and hairstyles under CC BY</h3>
+        <p class="sub">These are licensed under Creative Commons Attribution; their authors made them for the MakeHuman community. Thank you!</p>
+        <table>${rows.map((r) => `<tr><td class="k">${esc(r.label)}</td><td>${esc(r.author)}</td><td class="sub">${esc(r.source)}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">source</a>` : ''}</td></tr>`).join('')}</table>`;
+    }, () => {
+      this.creditsShown = false;
+      box.innerHTML = '<h3>Clothes and hairstyles under CC BY</h3><p class="sub">The list comes with the character data, which has not loaded yet. Open this tab again later.</p>';
+    });
+  }
+}
+
+/** "elvs_hazel_hair by Elvaerwyn (MakeHuman hair02 pack, CC-BY, http://…)" → its parts. */
+export function creditParts(credit: string): { author: string; source: string; url: string } {
+  const m = credit.match(/^(.*?) by (.+?) \((.*)\)$/);
+  if (!m) return { author: credit, source: '', url: '' };
+  const bits = m[3].split(',').map((b) => b.trim());
+  const url = bits.find((b) => /^https?:\/\//.test(b)) ?? '';
+  return { author: m[2], source: [m[1], ...bits.filter((b) => b !== url)].join(', '), url };
 }

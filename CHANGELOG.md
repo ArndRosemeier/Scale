@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.276 — 2026-11-05
+
+- **Character creator: the new Actors generator (0.34.2).** Every section (race, body, face & hair, clothes) now has its own Simple tab with presets and a Detailed tab with every control. Players make people only: no other races, robots or skeletons, and no horns, tails, tusks, glowing eyes or scales either (Actors' new `allow` option; the race-feature part was added to Actors for this). Randomize stays human too. The whole wardrobe is on offer, today's clothes as well as vintage, medieval, futuristic and fantasy ones, now including the 29 garments and 31 hairstyles whose licence (CC BY) asks for their author to be named: the creator marks them, and the new **Help › Credits** tab lists every one with its author. Stand/Walk, Body/Face views, saving and the download counter stay as they were.
+
 ## 0.275 — 2026-11-04
 
 - **People no longer burst into a cloud of triangles on WebGPU.** To stay under WebGPU's vertex buffer limit the renderer repacked a mesh's vertex data into one buffer on its first draw, people's bodies included. Actors keeps rewriting a person's normals in place (when clothes are re-tucked or the detail level changes), and after the repack those writes landed on the skin weights and texture coordinates, so the body flew apart until it was rebuilt. Skinned meshes (people, creatures) are no longer repacked; they are not instanced and fit the limit as they are.

@@ -115,6 +115,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e12; fon
 #help td { padding: 5px 4px; border-bottom: 1px solid #222b36; color: #c8d2dc; vertical-align: top; }
 #help td.k { color: #d8b56a; white-space: nowrap; width: 34%; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 .hk-touch { margin-bottom: 14px; }
+.hc-group { margin: 0 0 16px; padding: 12px 14px 10px; background: rgba(12, 16, 22, 0.55); border: 1px solid #243040; border-radius: 9px; color: #c8d2dc; font-size: 14px; }
+.hc-group p { margin: 0 0 6px; }
+.hc-group a { color: #d8b56a; }
+#help .hc-group td.k { font-family: inherit; font-size: 14px; white-space: normal; width: 30%; }
+#help .hc-group td.sub { font-size: 12.5px; }
 .help-body[data-tab="keys"] > .help-foot { position: sticky; top: -16px; z-index: 1; margin: -16px -20px 14px; padding: 10px 20px; background: rgba(20, 26, 34, 0.98); border-bottom: 1px solid #243040; }
 .hk-touch h3 + table { margin-bottom: 18px; }
 .hk-grid { columns: 2 380px; column-gap: 18px; }
