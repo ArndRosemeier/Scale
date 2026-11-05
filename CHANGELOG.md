@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.278 — 2026-11-05
+
+- **The real cause of the hero losing parts is fixed, and the v0.277 stopgap is gone.** It is a bug in three.js (still present in the newest release, r187): when the renderer threw away a draw entry it had prepared but never drawn (one queued for background shader compiling whose person changed in the meantime), it still counted down the users of the GPU data shared by every mesh with that shader. The count reached zero while other meshes, such as the hero's hair, were still drawing with it, and the data was freed. Scale now only counts down entries that really were counted up, so shared GPU data is never freed while in use. The rebuild-and-retry patchwork from v0.277 is removed again; a draw that fails is skipped as before, with its error in the console.
+
 ## 0.277 — 2026-11-05
 
 - **The hero no longer loses hair, body or shoes for good on WebGPU.** Now and then three.js freed a piece's GPU data while that piece was still being drawn (its count of who uses the data reached zero too early, for example when Actors rebuilt the mesh mid-frame). The draw then failed with "writeBuffer … not of type 'GPUBuffer'", and Scale's safety guard skipped that piece for the rest of the session, so hair, skin, teeth or shoes vanished or hung in the air. Freed data is now rebuilt before it is used, and a piece whose draw fails is tried again half a second later instead of being dropped (only one that keeps failing 20 times is given up on).

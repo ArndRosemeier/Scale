@@ -59,7 +59,7 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   watchVertexBuffers(renderer);
   countNodeBuilds(renderer);
   guardDraws(renderer);
-  if (!repairLostBindings(renderer)) console.warn('[webgpu] three internals renamed, not installed: repair lost bindings');
+  if (!balancedBindingRelease(renderer)) console.warn('[webgpu] three internals renamed, not installed: balanced binding release');
   quickShadowKeys(renderer);
   skipEmptyInstances(renderer);
   timeSlowPipelines();
@@ -289,68 +289,44 @@ function timeSlowPipelines(): void {
 /**
  * One object whose draw throws (a binding without its GPU buffer) used to abort the whole frame,
  * every frame, so the picture froze. Its draw is skipped instead, and the first failure of each
- * object is reported with what it was, to find the cause. A failure is usually passing (see
- * repairLostBindings), so the object is tried again half a second later; only one that keeps
- * failing is dropped for good. (Dropping on the first failure made the hero lose its hair, body or
- * shoes for the rest of the session.)
+ * object is reported with what it was, to find the cause.
  */
-const DRAW_RETRY_MS = 500;
-const DRAW_MAX_FAILS = 20;
 function guardDraws(renderer: THREE.WebGPURenderer): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const r = renderer as any;
   const draw = r._renderObjectDirect;
-  const failed = new WeakMap<object, { fails: number; until: number }>();
+  const failed = new WeakSet<object>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   r._renderObjectDirect = function (object: any, material: any, ...rest: unknown[]) {
-    const f = failed.get(object);
-    if (f && (f.fails >= DRAW_MAX_FAILS || performance.now() < f.until)) return;
-    try {
-      const out = draw.call(this, object, material, ...rest);
-      if (f) failed.delete(object);
-      return out;
-    } catch (err) {
-      const fails = (f?.fails ?? 0) + 1;
-      failed.set(object, { fails, until: performance.now() + DRAW_RETRY_MS });
-      if (fails > 1 && fails < DRAW_MAX_FAILS) return;
+    if (failed.has(object)) return;
+    try { return draw.call(this, object, material, ...rest); } catch (err) {
+      failed.add(object);
       const g = object.geometry;
-      console.error(`[webgpu] draw failed${fails >= DRAW_MAX_FAILS ? ` ${fails} times, skipped from now on` : ', retried shortly'}: ${object.type} "${object.name}" (parent "${object.parent?.name ?? ''}", ${object.isSkinnedMesh ? `skinned, ${object.skeleton?.bones.length} bones, ` : ''}geometry ${g?.uuid?.slice(0, 8)} [${Object.keys(g?.attributes ?? {}).join(',')}]) material ${material?.type} "${material?.name}"`, err);
+      console.error(`[webgpu] draw failed, skipped from now on: ${object.type} "${object.name}" (parent "${object.parent?.name ?? ''}", ${object.isSkinnedMesh ? `skinned, ${object.skeleton?.bones.length} bones, ` : ''}geometry ${g?.uuid?.slice(0, 8)} [${Object.keys(g?.attributes ?? {}).join(',')}]) material ${material?.type} "${material?.name}"`, err);
     }
   };
 }
 
 /**
- * A bind group whose uniform buffers were already freed is rebuilt before it is used. three counts
- * the users of each bind group and frees its GPU buffers when the count reaches zero; a render
- * object disposed while it is being drawn (Actors disposes and rebuilds a person's geometry when
- * it changes it) or a miscount leaves a group in use with no buffer, and the draw then throws
- * "writeBuffer: parameter 1 is not of type 'GPUBuffer'". The group gets new buffers holding its
- * current uniform values and a new GPU bind group. Internal: Bindings._update / _createBindings (r186).
+ * three.js bug (r186, still in r187): disposing a render object releases its bind groups, counting
+ * each group's users down, even when the render object never had its bind groups set up (it was
+ * only queued for compileAsync, or disposed while its async node build was still pending, e.g.
+ * because Actors changed the person's geometry or material in between). Groups shared by every
+ * render object of one shader (their `shared` uniform groups) were then counted down for a user
+ * they never counted up, reached zero while still drawn, and lost their GPU buffers: the next draw
+ * of another mesh with that shader threw "writeBuffer: parameter 1 is not of type 'GPUBuffer'" and
+ * the hero lost its hair, body or shoes. Only bind groups that were set up are released.
+ * Internal: Bindings.deleteForRender / getForRender's `initialized` flag (r186).
  */
-function repairLostBindings(renderer: THREE.WebGPURenderer): boolean {
+function balancedBindingRelease(renderer: THREE.WebGPURenderer): boolean {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const r = renderer as any, bindings = r._bindings, backend = r.backend;
-  if (!backend?.isWebGPUBackend) return true; // the WebGL 2 backend keeps its buffers differently
-  const update = bindings?._update, create = bindings?._createBindings;
-  if (typeof update !== 'function' || typeof create !== 'function' || typeof bindings.delete !== 'function') return false;
-  let reported = 0;
+  const bindings = (renderer as any)._bindings;
+  const release = bindings?.deleteForRender;
+  if (typeof release !== 'function' || typeof bindings.has !== 'function' || typeof bindings.get !== 'function') return false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  bindings._update = function (this: any, group: any, all: any) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const list: any[] = group?.bindings ?? [];
-    if (list.some((b) => b.isUniformBuffer && backend.get(b).buffer === undefined)) {
-      try {
-        // Freed samplers and textures forgot their texture: take it from the node again.
-        for (const b of list) if ((b.isSampler || b.isSampledTexture) && !b.texture && b.textureNode) b.texture = b.textureNode.value;
-        this.delete(group);
-        create.call(this, [group]);
-        for (const b of list) if (b.isUniformBuffer) { b.update(); backend.updateBinding(b); }
-        if (reported++ < 5) console.warn(`[webgpu] rebuilt a bind group whose buffers were freed while in use: "${group.name}"`);
-      } catch (err) {
-        if (reported++ < 5) console.warn('[webgpu] could not rebuild a freed bind group', err);
-      }
-    }
-    return update.call(this, group, all);
+  bindings.deleteForRender = function (this: any, renderObject: any) {
+    if (this.has(renderObject) && this.get(renderObject).initialized === true) return release.call(this, renderObject);
+    this.delete(renderObject);
   };
   return true;
 }
