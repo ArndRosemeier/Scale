@@ -70,6 +70,7 @@ import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, 
 import { planBosses, bossLabel, bossPowers, heatOf, raise, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, bossOpChance, NOTORIETY, BOSS, BOSS_OP, BOSS_KINDS, type Boss, type Heat } from '../factions/Bosses';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
 import { Graffiti, type Tag } from '../factions/Graffiti';
+import { PoliceRadio, RADIO } from './PoliceRadio';
 import { ARCHETYPES, CITY_GROUPS, type ArchetypeId } from '../factions/archetypes';
 import { siteToWorld } from '../../plan/landmarks';
 import { RState } from '../../future/Robots';
@@ -127,6 +128,8 @@ export class CrimeSystem {
   readonly rep: Reputation;
   readonly director: CrimeDirector;
   readonly police: Police;
+  /** The police radio a trusted hero carries (+100 reputation): their calls on the HUD, map and compass. */
+  readonly radio: PoliceRadio;
   /** Officers walking the beat where the crime index is low (crime/Beat). */
   readonly beat: Beat;
   readonly justice: Justice;
@@ -313,6 +316,18 @@ export class CrimeSystem {
       busy: () => this.crimes.some((c) => c.active && c.committed),
     });
     this.deeds.enabled = this.director.setting !== 'off';
+    this.radio = new PoliceRadio({
+      rep: () => this.rep.value,
+      saved: { get: () => this.rep.radio, set: (v) => this.rep.setRadio(v) },
+      player: () => g.player.pos,
+      where: (x, z) => g.story?.where(x, z) ?? '',
+      toast: (html, kind, ms) => g.powerHud?.toast(html, kind, ms, RADIO.color),
+      squelch: () => g.audio.chime('radio', 0.5),
+      markers: (m) => g.map.setMarkers('radio', m),
+      clue: (fid, text, x, z) => { const f = this.factions.factions[fid], S = g.story; if (f && S) S.note(S.group(f), text, { src: 'heard', x, z }); },
+      time: () => this.time,
+      random: Math.random,
+    });
     g.renderer.scene.add(this.group);
     // Health: falls, cars, collapses.
     const land = g.player.events.onLand;
@@ -372,7 +387,11 @@ export class CrimeSystem {
       loop: (id, x, y, z, gain) => { const h = g.audio.loop(id, 12); if (!h) return null; h.set(x, g.world.groundHeight(x, z) + y, z, gain); return h; },
       combat: this.combat,
       hurtPlayer: (d, k, fx, fz, fy) => this.hurtPlayer(d, k, fx, fz, fy),
-      callPolice: (c, delay) => this.police.call(c, delay * responseFactor(g.city.presenceAt(c.x, c.z))),
+      callPolice: (c, delay) => {
+        this.police.call(c, delay * responseFactor(g.city.presenceAt(c.x, c.z)));
+        const f = this.factionOf(c);
+        this.radio?.call(c, KINDS[c.kind].stopped, f ? `${f.emblem} ${f.name}` : null, f?.id ?? -1);
+      },
       menace: (c, x, y, z) => this.menace(c, x, y, z),
       random: Math.random,
       shops: (rMin, rMax) => this.shops(rMin, rMax),
@@ -1266,6 +1285,7 @@ export class CrimeSystem {
     this.updateLoot(dt);
     this.crowdAttitude(dt);
     this.markers(dt);
+    this.radio.update(dt);
     this.hud.update(dt);
     // Sounds load on first use: ask for the loops early (once audio runs).
     this.warmT -= dt;
@@ -1782,6 +1802,7 @@ export class CrimeSystem {
     const who = by ? ` by ${inSentence(by)}${rival ? ` and ${inSentence(rival)}` : ''}` : '';
     this.reward({ karma: k, why: `stopped ${KINDS[c.kind].stopped}${who}${clean ? ' — nobody else hurt' : ''}`, rep: KINDS[c.kind].rep, news: 'crime stopped', stopped: true });
     this.onStopped?.(c);
+    this.radio.stopped(c);
     g.gm?.met('challenge');
     if (c instanceof BossOperation && by) g.gm?.hurt(by, 'op');
     // The tracker: what the hero did to the group (quiet: the karma toast tells it).
@@ -2271,6 +2292,8 @@ export class CrimeSystem {
         return n;
       },
       crimes: () => this.crimes.map((c) => c.snapshot()),
+      /** The police radio: held?, its counts and the calls on it. */
+      radio: () => ({ held: this.radio.held, ...this.radio.stats, calls: this.radio.open.map((k) => ({ label: k.label, x: Math.round(k.x), z: Math.round(k.z) })) }),
       crimeStats: () => ({ ...this.stats, actors: this.actorCount, director: this.director.stats, police: this.police.summary(), wanted: this.justice.wanted, heat: +this.justice.heat.toFixed(2), rep: this.rep.value, hp: Math.round(this.health.hp), combat: this.combat.stats }),
       deed: (kind: SmallDeedKind = 'cat') => this.deeds.start(kind),
       /**
