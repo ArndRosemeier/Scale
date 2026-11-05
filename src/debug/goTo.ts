@@ -273,6 +273,11 @@ export class GoTo {
     out.push({ group: 'City', label: 'Fitting mirror (nearest clothes shop)', count: 1, go: () => call(this.dev(), 'mirror') });
     const d = this.dev();
     if (d.concert) for (const w of ['stage', 'pit', 'stand'] as const) out.push({ group: 'City', label: `Concert: ${w === 'stand' ? 'stands' : w}`, count: 1, go: () => call(this.dev(), 'concert.go', w) });
+    // The well-known citizens (game/citizens): the weather-moody baker …
+    for (const c of this.g.citizens?.list ?? []) {
+      if (!c.where) continue;
+      out.push({ group: 'City', label: c.label ?? c.id, count: 1, go: () => { const w = c.where!(); return w ? this.near(w.x, w.z, 6) : 'not found yet'; } });
+    }
     // Villages, towns and farms out in the countryside.
     const rural = d.rural?.list?.(-1, 200) as { id: number; kind: number; name: string; x: number; z: number }[] | undefined;
     if (rural?.length) {

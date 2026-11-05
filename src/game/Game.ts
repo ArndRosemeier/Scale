@@ -113,6 +113,8 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { Citizens } from './citizens/Citizens';
+import { Baker } from './citizens/baker/Baker';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
 import { StationLife } from './metro/StationLife';
@@ -238,6 +240,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** The city's well-known citizens: the weather-moody baker … (src/game/citizens). */
+  citizens: Citizens | null = null;
   /** The stadium's evening concert (src/game/concert). */
   concert: Concert | null = null;
   /** The stadium's daytime soccer matches (src/game/soccer). */
@@ -637,6 +641,12 @@ export class Game {
         this.manhole.start(m, dir);
         return { x: m.x, z: m.z, floor: m.floor, side: m.side };
       };
+      if (dev) dev.citizens = () => this.citizens?.status();
+      if (dev) dev.baker = {
+        status: () => (this.citizens?.get('baker') as Baker | undefined)?.status(),
+        mood: (m: number, anger = 0) => (this.citizens?.get('baker') as Baker | undefined)?.devMood(m, anger),
+        find: () => (this.citizens?.get('baker') as Baker | undefined)?.devFind(),
+      };
       if (dev) dev.people = { list: () => this.people.report(), forget: () => this.people.forget(), talk: () => this.people.use() };
       // Typed chat: the lines nobody understood (chat/log.ts), and saying something to the one you talk to.
       if (dev) dev.chat = { log: () => readMissed(), clear: () => clearMissed(), say: (t: string) => this.people.sayTyped(t), model: () => this.people.chat.understand.modelReady };
@@ -870,7 +880,7 @@ export class Game {
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
-    this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
+    this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); this.citizens?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
@@ -1250,6 +1260,8 @@ export class Game {
     this.fame = new Fame(this);
     this.sidekick = new Sidekick(this);
     this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
+    this.citizens = new Citizens();
+    this.citizens.add(new Baker(this));
     this.wardens = new Wardens(this);
     // Every faction's feeling about the hero, read live from the system that keeps it (factions/relations.ts).
     bindHero(this.relations, {

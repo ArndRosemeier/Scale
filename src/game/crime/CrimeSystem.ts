@@ -1827,7 +1827,11 @@ export class CrimeSystem {
    * `stopped`: a crime, a den, a monster or a whole event is over: it counts as stopped, the police cool off
    * (`atone`, default 1.5) and people near the hero cheer. Otherwise only karma, reputation and `count`.
    */
+  /** Told of every reward (the well-known citizens: a crime stopped on the baker's street). */
+  readonly onReward: ((d: { karma?: number; rep?: number; why: string; stopped?: boolean }) => void)[] = [];
+
   reward(d: { karma?: number; rep?: number; why: string; news?: string; stopped?: boolean; count?: keyof Reputation['stats']; atone?: number }): void {
+    for (const f of this.onReward) f(d);
     if (d.karma) this.g.progress.addKarma(d.karma, d.why);
     if (d.rep) this.rep.add(d.rep, d.news ?? d.why);
     if (d.count) this.rep.count(d.count);

@@ -180,6 +180,11 @@ export interface SaveData {
    */
   sidekick?: unknown;
   /**
+   * The city's well-known citizens (game/citizens Citizens.save: their states by id, each sanitised
+   * by its own `restore`); older saves have none (they start from the day's mood).
+   */
+  citizens?: unknown;
+  /**
    * The Wardens' regard (game/aliens teenRules Regard, sanitised by `readRegard`); older saves have
    * none (the browser's own record for the city stays).
    */
@@ -340,6 +345,7 @@ export function parseSave(input: string | unknown): SaveData {
     ...(o.fame && typeof o.fame === 'object' ? { fame: o.fame } : {}),
     ...(o.cityLife && typeof o.cityLife === 'object' ? { cityLife: o.cityLife } : {}),
     ...(o.sidekick && typeof o.sidekick === 'object' ? { sidekick: o.sidekick } : {}),
+    ...(o.citizens && typeof o.citizens === 'object' ? { citizens: o.citizens } : {}),
     ...(o.wardens && typeof o.wardens === 'object' ? { wardens: o.wardens } : {}),
     ...(o.costumes && typeof o.costumes === 'object' ? { costumes: o.costumes } : {}),
     ...(o.story && typeof o.story === 'object' ? { story: o.story } : {}),

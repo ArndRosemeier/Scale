@@ -61,6 +61,11 @@ export class Weather {
   private umbCount = 0;
   private ug = 0;
   private cullT = 0;
+  /**
+   * Local weather over a spot (the weather-moody baker's street): each one may pull the target
+   * towards its own weather while the camera is near it. Called every frame after the schedule.
+   */
+  readonly locals: ((target: WeatherParams) => void)[] = [];
 
   constructor(private g: Game) {
     this.schedule = new WeatherSchedule(g.settings.seed, climateOf(g.profile));
@@ -121,6 +126,7 @@ export class Weather {
     this.now += dt;
     const h = sky.hoursAbs + this.skipH;
     if (this.override) Object.assign(this.target, WEATHER[this.override]); else this.schedule.at(h, this.target);
+    for (const f of this.locals) f(this.target);
     // Follow the target: the schedule is smooth already (this only softens jumps of the clock);
     // a manual change blends over ~20 s, the rain coming after the clouds.
     if (this.first) { Object.assign(this.p, this.target); this.wet = this.p.rain > 0.05 ? clamp(0.35 + this.p.rain * 1.2, 0, 1) : 0; this.first = false; }
