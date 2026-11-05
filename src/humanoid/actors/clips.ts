@@ -15,7 +15,8 @@ export interface ClipMeta {
   /**
    * Turn the whole body back to facing forward, whatever way the take faced (motion capture walks
    * about the studio): the pelvis's heading is taken off every bone alike, so the pose itself is
-   * untouched. Set for the CMU takes, which face any way.
+   * untouched. The body is also set on the floor (its lowest bone where the toes stand), as the
+   * takes' heights start from their own first frame. Set for the CMU takes, which face any way.
    */
   level?: boolean;
 }

@@ -91,6 +91,9 @@ export class ClipRig {
   private pelvis: number;
   private worldR: Float64Array;
   private worldH: Float64Array;
+  /** The lowest bone head in the bind pose (standing: the toes), the floor for levelled takes. */
+  private bindLow: number;
+  private body: number[];
   private model: THREE.Quaternion[];
   private scratch: ActorPose;
 
@@ -130,6 +133,10 @@ export class ClipRig {
     this.pelvis = names.indexOf('pelvis');
     this.worldR = new Float64Array(n * 4);
     this.worldH = new Float64Array(n * 3);
+    // (The body: the pelvis and the bones under it, not a root bone left standing at the origin.)
+    const pel = names.indexOf('pelvis'), under = (i: number): boolean => i === pel || (i >= 0 && under(fitted.parents[i]));
+    this.body = fitted.heads.map((_, i) => i).filter(under);
+    this.bindLow = Math.min(...this.body.map((i) => fitted.heads[i][1]));
     this.model = Array.from({ length: map.count }, () => new THREE.Quaternion());
     this.scratch = createPose(n, Math.max(0, this.pelvis));
     this.mixer = new PoseMixer(n);
@@ -211,6 +218,13 @@ export class ClipRig {
       const h = f.heads[this.pelvis], o = this.pelvis * 3;
       _x.set(H[o] - h[0], H[o + 1] - h[1], H[o + 2] - h[2]);
       if (turn) _x.applyQuaternion(_lv);
+      if (level) {
+        // Levelled takes are also set on the floor: their root height is measured from the take's
+        // own first frame (a T-pose, or lying down), so the lowest bone goes where the toes stand.
+        let low = Infinity;
+        for (const i of this.body) if (H[i * 3 + 1] < low) low = H[i * 3 + 1];
+        _x.y += this.bindLow - low;
+      }
       out.root.x += -_x.x * w;
       out.root.y += _x.y * w;
       out.root.z += -_x.z * w;
