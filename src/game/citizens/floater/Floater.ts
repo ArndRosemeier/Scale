@@ -561,13 +561,13 @@ export class Floater {
         if (!this.roof || this.mode !== 'stuck') { this.packUp(E, true); return; }
         if (!parked(car, dt, 30)) return;
         car.siren = false; car.fear = 0.5;
-        this.crewOut(E);
-        if (!E.crew.length) { this.packUp(E, true); return; }
         const R = this.roof;
         // The ladder stands in the street below the edge, leaning on the façade.
         const lean = clamp((R.y - R.ground) * 0.22, 1.2, 4.5);
         E.base.set(R.edgeX + R.nx * lean, R.ground, R.edgeZ + R.nz * lean);
         E.top.set(R.edgeX + R.nx * 0.3, R.y + 0.5, R.edgeZ + R.nz * 0.3);
+        this.crewOut(E);
+        if (!E.crew.length) { this.packUp(E, true); return; }
         E.ladder = makeLadder(E.base.distanceTo(E.top));
         E.ladder.position.copy(E.base);
         E.ladder.lookAt(E.top);
@@ -644,7 +644,10 @@ export class Floater {
     const g = this.g, car = E.car;
     for (let i = 0; i < 2; i++) {
       const c = g.population.synthetic(hash32(car.id * 977 + i * 31 + 23) || 1);
-      const a = g.peds.spawnAt(c, car.x + Math.cos(car.yaw) * (i ? 1.6 : -1.6), car.z - Math.sin(car.yaw) * (i ? 1.6 : -1.6), car.yaw, false);
+      // (Parked far off, out of sight: they are simply at the ladder's spot already.)
+      const far = Math.hypot(car.x - E.base.x, car.z - E.base.z) > 45 && !g.crime.visible(car.x, car.y + 1, car.z) && !g.crime.visible(E.base.x, E.base.y + 1, E.base.z);
+      const ox = far ? E.base.x : car.x, oz = far ? E.base.z : car.z;
+      const a = g.peds.spawnAt(c, ox + Math.cos(car.yaw) * (i ? 1.6 : -1.6), oz - Math.sin(car.yaw) * (i ? 1.6 : -1.6), car.yaw, false);
       if (!a) break;
       attach(a, makeActor('worker', FLOATER_OWNER, { outfit: firefighterOutfit(c.seed), mood: 'happy', held: null, title: 'Firefighter' }));
       E.crew.push(a);
@@ -853,7 +856,7 @@ export class Floater {
     const N = this.pts.length / 3, P = this.pts;
     if (H) {
       // From the hand to the ankle, sagging a little when slack.
-      const d = H.distanceTo(A), sag = Math.max(0, FLOATER.string - d) * 0.45 + 0.03;
+      const d = H.distanceTo(A), sag = Math.min(0.22, Math.max(0, FLOATER.string - d) * 0.12) + 0.02;
       for (let i = 0; i < N; i++) {
         const t = i / (N - 1);
         P[i * 3] = lerp(H.x, A.x, t); P[i * 3 + 1] = lerp(H.y, A.y, t) - Math.sin(t * Math.PI) * sag; P[i * 3 + 2] = lerp(H.z, A.z, t);
@@ -885,10 +888,17 @@ export class Floater {
   /** The family `dist` m ahead of the player (out, whatever the hour). */
   here(dist = 9): string {
     const g = this.g, p = g.player.pos, fy = g.camRig.forwardYaw;
-    if (this.leo) this.despawn();
     this.force = true;
     let x = p.x - Math.sin(fy) * dist, z = p.z - Math.cos(fy) * dist;
     for (let k = 0; k < 8 && !g.world.standable(x, z); k++) { const a = fy + (k + 1) * 0.7; x = p.x - Math.sin(a) * dist; z = p.z - Math.cos(a) * dist; }
+    if (this.leo && this.mia && this.ben) {
+      // Already out: bring them here.
+      const gy = g.world.groundHeight(x, z);
+      for (const [a, ox] of [[this.mia, 0], [this.ben, 0.9]] as [PedAgent, number][]) { a.x = x + ox; a.z = z; a.y = gy; if (a.actor) { a.actor.route = null; stand(a.actor); } }
+      this.body = { x: x - 1.8, y: gy + FLOATER.hover, z, vx: 0, vy: 0, vz: 0 };
+      this.leo.x = x - 1.8; this.leo.z = z; this.leo.y = gy + FLOATER.hover;
+      return `the Lightlys moved to ${x.toFixed(0)}, ${z.toFixed(0)}`;
+    }
     return this.spawn(x, z, -1, Math.atan2(-(p.x - x), -(p.z - z)) + Math.PI / 2) ? `the Lightlys at ${x.toFixed(0)}, ${z.toFixed(0)}` : 'no room';
   }
 
