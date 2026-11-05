@@ -12,6 +12,13 @@ export interface ClipMeta {
   loop: boolean;
   /** Loop or clip length (s). */
   dur: number;
+  /**
+   * Turn the whole body back to facing forward, whatever way the take faced (motion capture walks
+   * about the studio): the pelvis's heading is taken off every bone alike, so the pose itself is
+   * untouched. The body is also set on the floor (its lowest bone where the toes stand), as the
+   * takes' heights start from their own first frame. Set for the CMU takes, which face any way.
+   */
+  level?: boolean;
 }
 
 export interface ClipLibraryData {
@@ -32,6 +39,19 @@ const CLIPS: Record<string, string> = {
   Walk_Formal_Loop: 'walk formal', Walk_Loop: 'walk',
 };
 
+/**
+ * Takes from the pack's CMU motion-capture library (Actors' `cmu` clip library, CMU Graphics Lab, free
+ * to use), by the animator's names. Only these files are kept from the library (tools/actors-packs.mjs).
+ */
+export const CMU_CLIPS: Record<string, string> = {
+  /** Sitting on the ground, legs out, leaning back on the hands (subject 82, "sitting on ground relaxing"). */
+  Sit_Floor_Loop: 'cmu 82_05',
+  /** Getting up from sitting on the floor (played backwards: sitting down onto it). */
+  Floor_Get_Up: 'cmu 111_06',
+  /** A friendly wave hello (right hand up, waving). */
+  Wave_Hello: 'cmu 111_37',
+};
+
 /** Loads the animator's clips from an Actors runtime (the human pack). */
 export async function actorClipLibrary(runtime: ActorRuntime): Promise<ClipLibraryData> {
   const have = new Set(runtime.manifest.clips?.map((c) => c.name) ?? []);
@@ -42,5 +62,22 @@ export async function actorClipLibrary(runtime: ActorRuntime): Promise<ClipLibra
     const d = clip.def;
     clips.set(name, { meta: { name, loop: d.loop, dur: (d.frameCount - 1) / d.fps }, clip });
   }));
+  // The few CMU takes the game uses (missing files only lose those moves: their authored poses stand in).
+  if (runtime.manifest.clipLibraries?.some((l) => l.name === 'cmu')) {
+    try {
+      await runtime.loadClipLibrary('cmu');
+      await Promise.all(Object.entries(CMU_CLIPS).map(async ([name, a]) => {
+        try {
+          const clip = await runtime.loadClip(a);
+          const d = clip.def;
+          clips.set(name, { meta: { name, loop: d.loop, dur: (d.frameCount - 1) / d.fps, level: true }, clip });
+        } catch (e) {
+          console.warn(`[anim] CMU clip ${a} unavailable (npm run packs -- --force)`, e);
+        }
+      }));
+    } catch (e) {
+      console.warn('[anim] CMU clip library unavailable', e);
+    }
+  }
   return { clips };
 }
