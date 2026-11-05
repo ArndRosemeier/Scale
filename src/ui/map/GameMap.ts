@@ -391,6 +391,18 @@ export class GameMap {
     }
   }
 
+  /**
+   * Open the full map on a point (the tracker's "show on the map") and put the compass marker
+   * there.
+   */
+  showAt(x: number, z: number): void {
+    this.setWaypoint({ x, z });
+    this.toggle(true);
+    this.cx = x; this.cz = z;
+    this.s = Math.max(this.s, Math.min(window.innerWidth, window.innerHeight) / 700);
+    this.clampView();
+  }
+
   private setMinimap(on: boolean): void {
     this.miniOn = on;
     this.mini.style.display = on ? '' : 'none';

@@ -64,6 +64,7 @@ import type { Target } from '../Targeting';
 import type { StreetProp } from '../../props/PropRenderer';
 import { CrimeHud } from '../../ui/CrimeHud';
 import { ABILITIES } from '../abilities/defs';
+import type { ToastKind } from '../../ui/PowerHud';
 import { planFactions, inSentence, shift, saveFactions, restoreFactions, drift, rivalsAt, hostileGroups, SHIFT, DRIFT, HOLD, type Faction, type FactionMap } from '../factions/Factions';
 import { planBosses, bossLabel, bossPowers, heatOf, raise, fade, ltChance, bossChance, jail, saveBosses, restoreBosses, bossOpChance, NOTORIETY, BOSS, BOSS_OP, BOSS_KINDS, type Boss, type Heat } from '../factions/Bosses';
 import { planHideouts, hideoutCell, pickDoor, saveHideouts, restoreHideouts, HIDEOUTS, type Hideout } from '../factions/Hideouts';
@@ -95,6 +96,16 @@ export const DENS = { postR: 45, leaveR: 80, clearedFor: 24, bustedFor: 48, useR
 
 /** Dev console placement: [distance factor, turn from the view] — ahead, nearer, farther, the sides, behind. */
 const DEV_TRIES: [number, number][] = [[1, 0], [0.5, 0], [2, 0], [1, Math.PI / 2], [1, -Math.PI / 2], [1, Math.PI], [2, Math.PI / 2], [2, -Math.PI / 2]];
+
+/** A cuffed member giving the hideout away to the hero's face (an important bubble, game/story). */
+const HIDEOUT_TOLD = [
+  'Alright, alright! Our place is the back door {where}!',
+  'Fine! The hideout is {where}. Happy now?',
+  'You want the boss? Try the back room {where}.',
+  'Okay! The stash is behind a door {where}. Don\'t say I told you!',
+];
+
+const pickLine = (l: readonly string[]): string => l[Math.floor(Math.random() * l.length)];
 
 export class CrimeSystem {
   readonly combat: Combat;
@@ -650,7 +661,7 @@ export class CrimeSystem {
         a.actor!.outfit = bossOutfit(by, a.cit.seed);
         a.actor!.title = `${by.emblem} ${bossLabel(this.factions, B)} · ${by.name}`;
         this.bossOf.set(c, a);
-        if (!(c instanceof BossOperation) && Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.g.powerHud.toast(`<b style="color:${by.palette.map}">${by.emblem} ${bossLabel(this.factions, B)}</b> of ${inSentence(by)} is out on the street`, 'warn');
+        if (!(c instanceof BossOperation) && Math.hypot(c.x - this.g.player.pos.x, c.z - this.g.player.pos.z) < 260) this.tellGroup(by, `<b style="color:${by.palette.map}">${by.emblem} ${bossLabel(this.factions, B)}</b> of ${inSentence(by)} is out on the street ${this.g.story?.where(c.x, c.z) ?? ''}`, 'warn', c);
         return;
       }
       if (!this.devLieutenant && !roll.chance(ltChance(L.chance[c.kind] ?? 0, heat))) return;
@@ -816,8 +827,8 @@ export class CrimeSystem {
     this.factionStats.lost += lost;
     this.factionStats.gained += won;
     const who = `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>`;
-    if (lost) this.g.powerHud.toast(`${who} lost their grip on ${lost > 1 ? `${lost} blocks` : 'a block'}`, 'info');
-    else if (won) this.g.powerHud.toast(`${who} took over ${won > 1 ? `${won} more blocks` : 'another block'}`, 'warn');
+    if (lost) this.tellGroup(f, `${who} lost their grip on ${lost > 1 ? `${lost} blocks` : 'a block'}`, 'info', c);
+    else if (won) this.tellGroup(f, `${who} took over ${won > 1 ? `${won} more blocks` : 'another block'}`, 'warn', c);
   }
 
   /** Turf, tags and hideouts for a save (SaveData.factions). */
@@ -871,19 +882,25 @@ export class CrimeSystem {
     // Told only when it is the street the player stands in.
     if (hereNow) {
       const F = this.factions.factions, to = hereNow.to >= 0 ? F[hereNow.to] : null, was = hereNow.from >= 0 ? F[hereNow.from] : null;
-      if (to) this.g.powerHud.toast(`<b style="color:${to.palette.map}">${to.emblem} ${to.name}</b> ${was ? `pushed ${inSentence(was)} out of` : 'moved into'} this block`, 'warn');
-      else if (was) this.g.powerHud.toast(`<b style="color:${was.palette.map}">${was.emblem} ${was.name}</b> lost their hold on this block`, 'info');
+      const where = this.g.story?.where(p.x, p.z) ?? '';
+      if (to) { this.tellGroup(to, `<b style="color:${to.palette.map}">${to.emblem} ${to.name}</b> ${was ? `pushed ${inSentence(was)} out of` : 'moved into'} this block`, 'warn', p); if (was) this.g.story?.note(this.g.story.group(was), `${to.name} pushed them out of a block ${where}`, { x: p.x, z: p.z }); }
+      else if (was) this.tellGroup(was, `<b style="color:${was.palette.map}">${was.emblem} ${was.name}</b> lost their hold on this block`, 'info', p);
     }
   }
 
   /** The player learns where a group's hideout is (spotted, or a cuffed member told). */
-  private reveal(f: number, how: 'seen' | 'told'): void {
+  private reveal(f: number, how: 'seen' | 'told', by?: PedAgent): void {
     const h = this.hideouts[f], F = this.factions.factions[f];
     if (!h || !F || h.found || !h.door || h.bustedUntil > this.g.sky.hoursAbs) return;
     h.found = true;
     this.hideKey = '';
     const who = `<b style="color:${F.palette.map}">${F.emblem} ${F.name}</b>`;
-    this.g.powerHud.toast(how === 'seen' ? `You found the hideout of ${who} — marked on your map` : `A cuffed member of ${who} gave up their hideout — marked on your map`, 'info');
+    const S = this.g.story, D = h.door, where = S?.where(D.x, D.z) ?? '';
+    S?.place(`group:${F.archetype}`, null);
+    // A cuffed member says it to the hero's face (an important bubble); else a toast.
+    if (how === 'told' && by && S) S.say(by, S.group(F), pickLine(HIDEOUT_TOLD).replace('{where}', where || 'round the corner'), { x: D.x, z: D.z, src: 'told' });
+    else this.tellGroup(F, how === 'seen' ? `You found the hideout of ${who} ${where} — marked on your map` : `A cuffed member of ${who} gave up their hideout ${where} — marked on your map`, 'info', D);
+    S?.place(`group:${F.archetype}`, { x: D.x, z: D.z, label: `Their hideout ${where}`.trim() });
   }
 
   /**
@@ -1030,7 +1047,8 @@ export class CrimeSystem {
       this.heat(f.id, NOTORIETY.bust * DENS.turf);
       this.checkCollapse(f.id);
     }
-    g.powerHud.toast(f ? `You busted a sewer den of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>` : 'You busted a den in the sewers', 'info');
+    if (f) this.tellGroup(f, `You busted a sewer den of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>`, 'info', { x: d.site.cx, z: d.site.cz });
+    else g.powerHud.toast('You busted a den in the sewers', 'info');
   }
 
   /** The hideout at the player's feet that can be busted now (guards out of the way), or null. */
@@ -1064,7 +1082,9 @@ export class CrimeSystem {
     }
     this.factionStats.lost += changed.filter((x) => x.from === f.id).length;
     g.map.setTurf(this.factions);
-    g.powerHud.toast(`You busted the stash of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>${changed.length ? ` — they lost ${changed.filter((x) => x.from === f.id).length || 'some'} ${changed.length === 1 ? 'block' : 'blocks'}` : ''}. They will lie low for a while.`, 'info');
+    this.tellGroup(f, `You busted the stash of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>${changed.length ? ` — they lost ${changed.filter((x) => x.from === f.id).length || 'some'} ${changed.length === 1 ? 'block' : 'blocks'}` : ''}. They will lie low for a while.`, 'info', h.door!);
+    // (They move house: the old door is no use any more.)
+    g.story?.place(`group:${f.archetype}`, null);
     this.hideKey = '';
     this.heat(f.id, NOTORIETY.bust);
     this.checkCollapse(f.id);
@@ -1233,7 +1253,20 @@ export class CrimeSystem {
     const F = this.factions.factions[f];
     if (!to || !F) return;
     const who = `<b style="color:${F.palette.map}">${F.emblem} ${F.name}</b>`;
-    this.g.powerHud.toast(to === 'hunted' ? `${who} are out for you — their people will stand and fight` : `${who} have noticed you — expect their lieutenants`, 'warn');
+    this.tellGroup(F, to === 'hunted' ? `${who} are out for you — their people will stand and fight` : `${who} have noticed you — expect their lieutenants`, 'warn');
+  }
+
+  /** Tell the hero something about a group: a toast and a clue in its tracker thread (game/story). */
+  private tellGroup(f: Faction, html: string, kind: ToastKind = 'info', at?: { x: number; z: number }, ms?: number): void {
+    const S = this.g.story;
+    if (!S) { this.g.powerHud.toast(html, kind, ms); return; }
+    S.tell(S.group(f), html, { kind, ms, ...(at ? { x: at.x, z: at.z } : {}) });
+  }
+
+  /** A boss operation's result, seen near by (bossOpDone). */
+  private tellOp(f: Faction | null, html: string, x: number, z: number): void {
+    if (f) this.tellGroup(f, html, 'warn', { x, z });
+    else this.g.powerHud.toast(html, 'warn');
   }
 
   /** Busted and the boss behind bars: the group collapses until one of the two is over. */
@@ -1247,7 +1280,9 @@ export class CrimeSystem {
     this.collapsedTold.add(f);
     const F = this.factions.factions[f];
     this.g.progress.addKarma(30, `broke ${inSentence(F)}`);
-    this.g.powerHud.toast(`<b style="color:${F.palette.map}">${F.emblem} ${F.name}</b> have collapsed: their boss is behind bars and their stash is gone. Their streets are quiet for now.`, 'info');
+    const html = `<b style="color:${F.palette.map}">${F.emblem} ${F.name}</b> have collapsed: their boss is behind bars and their stash is gone. Their streets are quiet for now.`;
+    if (this.g.story) this.g.story.close(this.g.story.group(F), 'Collapsed: their boss is behind bars and their stash is gone', html);
+    else this.g.powerHud.toast(html, 'info');
   }
 
   /** The boss is cuffed: behind bars for a few days. */
@@ -1258,7 +1293,7 @@ export class CrimeSystem {
     this.g.city.bossJailed(f.id);
     const until = jail(B, this.g.sky.hoursAbs);
     const days = Math.max(1, Math.round((until - this.g.sky.hoursAbs) / 24));
-    this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> is behind bars — for ${days} days, if the walls hold`, 'info');
+    this.tellGroup(f, `<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> is behind bars — for ${days} days, if the walls hold`, 'info');
     this.checkCollapse(f.id);
   }
 
@@ -1272,7 +1307,7 @@ export class CrimeSystem {
     if (!f || !B || a.actor?.state === 'arrested' || B.jailedUntil > this.g.sky.hoursAbs || a.actor?.memo.down || !(c.playerInvolved || a.actor?.hitByPlayer)) return;
     B.escapes++;
     this.heat(f.id, NOTORIETY.escaped);
-    this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> got away — and will remember you`, 'warn');
+    this.tellGroup(f, `<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> got away — and will remember you`, 'warn', c);
   }
 
   /** The seeded faction table: where the groups' feelings for each other drift back to. */
@@ -1290,7 +1325,8 @@ export class CrimeSystem {
     for (const x of driftGroups(this.g.relations, this.relBase, F.map((f) => f.archetype), hunting, hours)) {
       const A = byArch.get(x.a)!, B = byArch.get(x.b)!;
       const name = (f: Faction) => `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>`;
-      this.g.powerHud.toast(x.war ? `The truce is over: ${name(A)} and ${name(B)} are at war again` : `${name(A)} and ${name(B)} have called a truce — against you`, 'warn', 6000);
+      this.tellGroup(A, x.war ? `The truce is over: ${name(A)} and ${name(B)} are at war again` : `${name(A)} and ${name(B)} have called a truce — against you`, 'warn', undefined, 6000);
+      this.g.story?.note(this.g.story.group(B), x.war ? `The truce with ${A.name} is over` : `Called a truce with ${A.name} — against you`);
     }
   }
 
@@ -1309,7 +1345,7 @@ export class CrimeSystem {
         B.jailedUntil = -1;
         // Out again, and not in a forgiving mood.
         this.notoriety[B.faction] = Math.max(this.notoriety[B.faction], NOTORIETY.wary);
-        this.g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> broke out of jail`, 'warn');
+        this.tellGroup(f, `<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> broke out of jail`, 'warn');
       }
       if (this.collapsedTold.has(B.faction) && !this.collapsed(B.faction)) this.collapsedTold.delete(B.faction);
     }
@@ -1354,7 +1390,7 @@ export class CrimeSystem {
     this.bossOps.set(c, null);
     const who = `<b style="color:${f.palette.map}">${f.emblem} ${bossLabel(this.factions, B)}</b>`;
     const what = c.kind === 'heist' ? 'is taking a bank' : c.kind === 'takeover' ? 'is coming to take a street' : c.kind === 'uprising' ? 'is going to turn the city\'s robots' : c.landmark === 'cemetery' ? 'is gathering a great circle in the cemetery' : c.landmark === 'cathedral' ? 'is gathering a great circle before the cathedral' : 'is gathering a great circle';
-    this.g.powerHud.toast(`${who} of ${inSentence(f)} ${what} — marked on your map`, 'warn');
+    this.tellGroup(f, `${who} of ${inSentence(f)} ${what} ${this.g.story?.where(c.x, c.z) ?? ''} — marked on your map`, 'warn', c);
     return c;
   }
 
@@ -1374,19 +1410,19 @@ export class CrimeSystem {
     const who = f ? `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>` : 'The crew';
     switch (c.kind) {
       case 'heist':
-        if (near) g.powerHud.toast(`${who} cracked the vault — their boss is making off with the money`, 'warn');
+        if (near) this.tellOp(f, `${who} cracked the vault — their boss is making off with the money`, x, z);
         break;
       case 'takeover': {
         // Cars round the street set alight.
         const cars = [...g.traffic.vehicles, ...g.parkedCars].filter((v) => v.state !== VState.Wreck && v.state !== VState.Crushed && Math.hypot(v.x - x, v.z - z) < 22).slice(0, 3);
         for (const v of cars) g.elements.ignite({ kind: 'car', obj: v }, 30);
         g.stimuli.emit('gunfire', x, g.world.groundHeight(x, z) + 1, z, 4, 80);
-        if (near) g.powerHud.toast(`${who} have taken the street — cars are burning`, 'warn');
+        if (near) this.tellOp(f, `${who} have taken the street — cars are burning`, x, z);
         break;
       }
       case 'uprising':
         if (g.threats) this.fleets.push(new HijackedFleet(g, g.threats.rogue, c, x, z, 12));
-        if (near) g.powerHud.toast(`${who} have turned the robots — machines are attacking people`, 'warn');
+        if (near) this.tellOp(f, `${who} have turned the robots — machines are attacking people`, x, z);
         break;
       case 'awakening': {
         // The great burst (three rings of it) and something stirs: the city's next event comes sooner.
@@ -1394,7 +1430,7 @@ export class CrimeSystem {
         g.later.after(0.6, () => this.casts.ritualBurst(c.criminals, x, z, c.element));
         if (g.threats) g.threats.clock.state.pressure += 600;
         g.camRig.addShake(0.35);
-        if (near) g.powerHud.toast(`${who} completed their great ritual — something stirs beneath the city`, 'warn');
+        if (near) this.tellOp(f, `${who} completed their great ritual — something stirs beneath the city`, x, z);
         break;
       }
       case 'treewake': {
@@ -1402,14 +1438,14 @@ export class CrimeSystem {
         let tree: StreetProp | null = null, bd = 14;
         g.props.query(x, z, 14, (p) => { const d = Math.hypot(p.x - x, p.z - z); if (p.tree && !p.broken && d < bd) { bd = d; tree = p; } });
         const ev = tree && g.threats ? g.threats.start('tree', (Math.random() * 2 ** 32) >>> 0, { prop: tree }, { x, z }) : null;
-        if (near) g.powerHud.toast(ev ? `${who} sang a tree awake — it is tearing itself out of the ground` : `${who} finished their song — the trees round about stir`, 'warn');
+        if (near) this.tellOp(f, ev ? `${who} sang a tree awake — it is tearing itself out of the ground` : `${who} finished their song — the trees round about stir`, x, z);
         if (!ev) this.casts.rewild(x, z, 14);
         break;
       }
       case 'deadrise': {
         // A last burst of bones: two more of the dead stand up, and the band roams the streets.
         this.casts.boneBurst(c.criminals, x, z);
-        if (near) g.powerHud.toast(`${who} raised the dead — skeletons are walking the streets`, 'warn');
+        if (near) this.tellOp(f, `${who} raised the dead — skeletons are walking the streets`, x, z);
         break;
       }
     }
@@ -1548,7 +1584,7 @@ export class CrimeSystem {
           if (B && f) {
             B.beaten++;
             g.progress.addKarma(KINDS[c.kind].ko * 4, `knocked out ${bossLabel(this.factions, B)} of ${inSentence(f)}`);
-            g.powerHud.toast(`You knocked out <b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> — the police will take them in`, 'info');
+            this.tellGroup(f, `You knocked out <b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> — the police will take them in`, 'info', who);
           } else { const name = (lt ?? KINDS[c.kind].criminal).toLowerCase(); g.progress.addKarma(KINDS[c.kind].ko * (lt ? 2 : 1), `knocked out ${/^[aeiou]/.test(name) ? 'an' : 'a'} ${name}${f ? ` of ${inSentence(f)}` : ''}`); }
           this.rep.add(B ? 8 : lt ? 4 : 2, 'ko');
           if (fid >= 0) this.heat(fid, B ? NOTORIETY.boss : lt ? NOTORIETY.lieutenant : NOTORIETY.ko);
@@ -1565,7 +1601,7 @@ export class CrimeSystem {
         this.rep.count('arrests');
         if (who && this.bossOf.get(c) === who) this.jailBoss(c, who);
         // A cuffed group member may give the hideout away.
-        if (who?.actor?.faction !== undefined && Math.random() < HIDEOUTS.tellChance) this.reveal(who.actor.faction, 'told');
+        if (who?.actor?.faction !== undefined && Math.random() < HIDEOUTS.tellChance) this.reveal(who.actor.faction, 'told', who);
         break;
       case 'tagged': {
         const f = this.factionOf(c);
@@ -1609,7 +1645,7 @@ export class CrimeSystem {
         break;
       case 'broken': {
         const f = this.factionOf(c);
-        if (f && Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 260) g.powerHud.toast(`With their boss down, the crew of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> breaks and runs`, 'info');
+        if (f && Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 260) this.tellGroup(f, `With their boss down, the crew of <b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> breaks and runs`, 'info', c);
         break;
       }
       case 'done': {
@@ -1622,7 +1658,7 @@ export class CrimeSystem {
         this.turf(c, f, SHIFT.ritual);
         if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 220) {
           const what = c instanceof Ritual ? 'completed a ritual' : c instanceof Sabotage ? 'wrecked the machines' : c instanceof Raising ? 'raised the dead' : c instanceof Procession ? `led ${c.taken} people away into the dark` : 'hijacked the robots';
-          g.powerHud.toast(`<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> ${what} here`, 'warn');
+          this.tellGroup(f, `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> ${what} ${g.story?.where(c.x, c.z) || 'here'}`, 'warn', c);
         }
         break;
       }
@@ -1638,7 +1674,10 @@ export class CrimeSystem {
         if (!(c instanceof TurfBrawl) || c.winner < 0) break;
         const F = this.factions.factions, win = F[c.winner], lose = F[c.winner === c.faction ? c.rival : c.faction];
         this.factionStats.brawls++;
-        if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 140) g.powerHud.toast(`<b style="color:${win.palette.map}">${win.emblem} ${win.name}</b> beat ${lose ? inSentence(lose) : 'their rivals'} in a street fight`, 'warn');
+        if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 140) {
+          this.tellGroup(win, `<b style="color:${win.palette.map}">${win.emblem} ${win.name}</b> beat ${lose ? inSentence(lose) : 'their rivals'} in a street fight ${g.story?.where(c.x, c.z) ?? ''}`, 'warn', c);
+          if (lose) g.story?.note(g.story.group(lose), `Lost a street fight to ${win.name} ${g.story.where(c.x, c.z)}`.trim(), { x: c.x, z: c.z });
+        }
         this.turf(c, win, SHIFT.brawlWon);
         if (lose) { this.turf(c, lose, SHIFT.brawlLost); feud(g.relations, win.archetype, lose.archetype, FEUD.brawl); }
         break;
@@ -1678,6 +1717,9 @@ export class CrimeSystem {
     const who = by ? ` by ${inSentence(by)}${rival ? ` and ${inSentence(rival)}` : ''}` : '';
     this.reward({ karma: k, why: `stopped ${KINDS[c.kind].stopped}${who}${clean ? ' — nobody else hurt' : ''}`, rep: KINDS[c.kind].rep, news: 'crime stopped', stopped: true });
     this.onStopped?.(c);
+    // The tracker: what the hero did to the group (quiet: the karma toast tells it).
+    const S = g.story;
+    if (S && by) for (const f of rival ? [by, rival] : [by]) S.note(S.group(f), `You stopped ${KINDS[c.kind].stopped} ${S.where(c.x, c.z)}`.trim(), { x: c.x, z: c.z });
     if (by) { this.factionStats.stopped++; this.turf(c, by, c instanceof BossOperation ? -SHIFT.bossOp : SHIFT.stopped); this.heat(by.id, NOTORIETY.stopped * (c instanceof BossOperation ? 2 : 1)); }
     // Breaking up a brawl: both groups lose face on that street.
     if (rival) this.turf(c, rival, SHIFT.stopped * 0.7);

@@ -27,6 +27,7 @@
  * helping others up and pointing after thieves, people who like you waving, and what everyone
  * shouts in the moment in their own temperament (ui/Barks asks reactLine).
  */
+import type { ThreadInfo } from '../story/knowledge';
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role, type Citizen } from '../../sim/Population';
@@ -124,6 +125,9 @@ interface Session {
 }
 
 const STORE = (g: Game) => `scale.people.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
+
+/** A favour someone asked of the hero, as a thread in the tracker's People tab. */
+const favourThread = (k: Known): ThreadInfo => ({ id: `favour:${k.cit.id}`, tab: 'people', title: `A favour for ${k.name}`, glyph: '●', color: '#7fc8ff' });
 
 export class People {
   readonly known: Known[] = [];
@@ -709,6 +713,18 @@ export class People {
       if (at) { f.wx = at.x; f.wz = at.z; g.map.setWaypoint({ x: at.x, z: at.z }); }
     }
     k.favour = f;
+    // The tracker (game/story, People tab): what was asked, and where.
+    const S = g.story;
+    if (S) {
+      const info = favourThread(k);
+      if (f.kind === 'visit') {
+        S.note(info, `Asked you to look in on their ${f.word} ${f.whoName} within two days`, { src: 'told', x: s.a.x, z: s.a.z });
+        if (f.wx !== undefined && f.wz !== undefined) S.place(info.id, { x: f.wx, z: f.wz, label: `${f.whoName} was last seen ${S.where(f.wx, f.wz)}`.trim() });
+      } else {
+        S.note(info, `Asked you to deal with the trouble on their street${f.group ? ` (${f.group})` : ''} within two days`, { src: 'told', x: s.a.x, z: s.a.z });
+        S.place(info.id, { x: s.a.x, z: s.a.z, label: `Their street ${S.where(s.a.x, s.a.z)}`.trim() });
+      }
+    }
     const d = gameTimeLabel(day, now % 24);
     addNote(k, now, f.kind === 'visit' ? `${d}: asked the hero to look in on their ${f.word} ${f.whoName}` : `${d}: asked the hero to deal with the trouble on their street`);
     this.markKey = '#stale';
@@ -722,7 +738,9 @@ export class People {
     f.done = now;
     k.favours++;
     addNote(k, now, `${gameTimeLabel(Math.floor(now / 24), now % 24)}: the hero ${f.kind === 'visit' ? `looked in on their ${f.word} ${f.whoName}` : 'cleared the trouble on their street'}`);
-    this.g.powerHud?.toast(f.kind === 'visit' ? `You looked in on <b>${f.whoName}</b> for ${k.name}` : `You dealt with the trouble on <b>${k.name}</b>'s street`, 'info');
+    const html = f.kind === 'visit' ? `You looked in on <b>${f.whoName}</b> for ${k.name}` : `You dealt with the trouble on <b>${k.name}</b>'s street`;
+    if (this.g.story) this.g.story.close(favourThread(k), 'Done', html);
+    else this.g.powerHud?.toast(html, 'info');
     this.markKey = '#stale';
     this.persist();
   }
@@ -734,6 +752,7 @@ export class People {
       if (!f || f.done !== undefined || f.lost || now < f.until) continue;
       f.lost = true;
       k.letDown++;
+      this.g.story?.close(favourThread(k), 'Let down: the time ran out');
       addNote(k, now, `${gameTimeLabel(Math.floor(now / 24), now % 24)}: the hero never did what they asked`);
       this.markKey = '#stale';
     }

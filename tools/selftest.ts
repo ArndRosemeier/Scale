@@ -4084,6 +4084,46 @@ section('people phase 4', async () => {
 
 // ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live
 // crime index, police presence, the fresh start, off-screen crime and the news in words
+section('story knowledge', async () => {
+  const { Knowledge, KNOWLEDGE, plainText, clueTime } = await import('../src/game/story/knowledge');
+  const K = new Knowledge();
+  const A = { id: 'group:gang', tab: 'villains' as const, title: 'The Harbour Kings', color: '#e33', glyph: '♠' };
+  const r1 = K.note(A, { at: 10, text: 'You stopped a mugging on Elm Street', src: 'seen', x: 5, z: 7 });
+  const r2 = K.note(A, { at: 10.5, text: 'You stopped a mugging on Elm Street', src: 'seen' });
+  check(r1.created && r1.added && !r2.added && K.threads.get(A.id)!.clues.length === 1, 'story: a thread starts with its first clue; the same clue within an hour is not added twice');
+  for (let i = 0; i < 30; i++) K.note(A, { at: 11 + i, text: `clue ${i}`, src: 'heard' });
+  check(K.threads.get(A.id)!.clues.length === KNOWLEDGE.clues && K.threads.get(A.id)!.clues[KNOWLEDGE.clues - 1].text === 'clue 29', 'story: a thread keeps its newest clues');
+  K.setPlace(A.id, { x: 1, z: 2, label: 'Their hideout on Pike Street' });
+  K.close(A.id, 'Collapsed', 50);
+  check(!K.open().length && K.list('villains')[0].ending === 'Collapsed', 'story: a closed thread says how it ended');
+  K.note(A, { at: 60, text: 'Their boss broke out of jail', src: 'news' });
+  check(K.threads.get(A.id)!.open && K.threads.get(A.id)!.ending === undefined, 'story: news of a closed thread opens it again (a boss breaking out)');
+  const B = { id: 'favour:7', tab: 'people' as const, title: 'A favour for Mara' };
+  K.note(B, { at: 61, text: 'Asked you to look in on their sister', src: 'told' });
+  check(K.fresh() === 2 && K.fresh('people') === 1, 'story: new threads are fresh until looked at');
+  K.read([B.id]);
+  check(K.fresh('people') === 0 && K.fresh('villains') === 1, 'story: looking at a tab reads its threads');
+  check(K.list()[0].id === B.id && K.list('people').length === 1, 'story: open threads newest first, per tab');
+  const saved = JSON.parse(JSON.stringify(K.save()));
+  const K2 = new Knowledge();
+  K2.restore(saved);
+  const sum = (k: InstanceType<typeof Knowledge>) => JSON.stringify(k.list().map((t) => [t.id, t.tab, t.title, t.color, t.glyph, t.open, t.ending, t.fresh, t.t, t.place, t.clues]));
+  check(sum(K2) === sum(K) && K2.threads.get(A.id)!.place?.label === 'Their hideout on Pike Street', 'story: what the hero knows survives a save');
+  K2.restore({ v: 1, threads: [null, { id: 'x' }, { id: 'y', tab: 'nope', title: 't', clues: [] }, { id: 'z', tab: 'threats', title: 'Signs', clues: [{ at: 'x', text: 1 }, { at: 3, text: 'ok', src: 'seen', x: NaN }] }] });
+  check(K2.threads.size === 1 && K2.threads.get('z')!.clues.length === 1 && K2.threads.get('z')!.clues[0].x === undefined, 'story: a damaged save keeps only what is sound');
+  K2.restore('junk');
+  check(K2.threads.size === 0, 'story: junk loads as nothing known');
+  const K3 = new Knowledge();
+  for (let i = 0; i < 80; i++) { const id = `t${i}`; K3.note({ id, tab: 'threats', title: id }, { at: i, text: 'x', src: 'seen' }); if (i % 2) K3.close(id, 'over', i); }
+  check(K3.threads.size <= KNOWLEDGE.threads && K3.list().filter((t) => !t.open).length <= KNOWLEDGE.closed && K3.threads.has('t78'), 'story: old threads fold away, closed ones first');
+  check(plainText('<b style="color:#f00">♠ Kings</b> got away &amp; will remember you') === '♠ Kings got away & will remember you' && clueTime(24 * 2 + 14.5) === 'Day 3, 14:30', 'story: toasts become plain clues, times read as days');
+  // Every system tells the hero through the story, not through a toast of its own, for what goes into the tracker.
+  const src = (f: string) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
+  const crime = src('game/crime/CrimeSystem.ts');
+  check(!/powerHud\.toast\([^;]*(?:\.emblem|by\.palette|f\.palette|F\.palette)/.test(crime.replace(/private tellGroup[\s\S]*?\n  }\n/, '').replace(/private tellOp[\s\S]*?\n  }\n/, '').replace(/const html = [^\n]*\n[^\n]*\n\s*else this\.g\.powerHud\.toast\(html, 'info'\);/, '')),
+    'story: what a villain group does reaches the hero through the tracker (tellGroup), not a bare toast');
+});
+
 section('city pulse', async () => {
   const t0 = performance.now();
   const { crimeIndex } = await import('../src/game/crime/CrimeIndex');

@@ -64,6 +64,7 @@ export const KEY_ACTIONS: KeyAction[] = [
   { id: 'blast', group: 'act', label: 'Test blast', info: 'Sandbox only', defaults: ['KeyB'] },
   { id: 'map', group: 'view', label: 'City map', info: 'Click to set a marker the compass points to', defaults: ['KeyM'] },
   { id: 'minimap', group: 'view', label: 'Minimap on / off', defaults: ['KeyN'] },
+  { id: 'tracker', group: 'view', label: 'Your story so far', info: 'The tracker: what you know about the gangs, threats and people (also a click on the strip above the minimap)', defaults: ['KeyJ'] },
   { id: 'hourDown', group: 'view', label: 'Time of day −1 h', defaults: ['BracketLeft'] },
   { id: 'hourUp', group: 'view', label: 'Time of day +1 h', defaults: ['BracketRight'] },
   { id: 'record', group: 'view', label: 'Record a clip', info: 'Start / stop recording the game picture with its sound (no HUD), up to 30 s. A new clip replaces the last one; export it from the Esc menu', defaults: ['PrintScreen', 'F9'] },

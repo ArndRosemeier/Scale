@@ -1,6 +1,8 @@
 # Game master and the hero's tracker — plan (for approval)
 
-Status: **proposal** (2026-11-05, Arnd, thread "Explore supervillain ideas"). Nothing built yet.
+Status: accepted (2026-11-05, Arnd, thread "Explore supervillain ideas"). **Phase 1 is built** (v0.283): `game/story`
+(Knowledge, Story, threatStory, storyVoice) and `ui/Tracker`. Not in the sandbox (Arnd: the sandbox is not for real
+challenges).
 
 Scale already simulates a lot that the player hardly sees: six kinds of villain groups with turf, hideouts,
 lieutenants, named bosses with a record, notoriety, turf wars, truces and boss operations (VILLAINS_PLAN), the threat
@@ -165,6 +167,6 @@ strip and panel are plain DOM, updated only when something changes.
 
 ## 7. Questions
 
-1. Is the City tab wanted, or is the map enough for that?
-2. Should the tracker be on in Sandbox mode too?
+1. Is the City tab wanted, or is the map enough for that? (Phase 1 has Villains, Threats, People.)
+2. ~~Should the tracker be on in Sandbox mode too?~~ No (Arnd, 2026-11-05).
 3. Toasts: on by default with a setting to turn them off?

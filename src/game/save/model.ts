@@ -189,6 +189,11 @@ export interface SaveData {
    * saves have none (all three are the saved character's look).
    */
   costumes?: unknown;
+  /**
+   * What the hero knows: the tracker's threads and clues (game/story Knowledge, sanitised by
+   * `Knowledge.restore`); older saves and the sandbox have none (the browser's own record stays).
+   */
+  story?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -335,6 +340,7 @@ export function parseSave(input: string | unknown): SaveData {
     ...(o.sidekick && typeof o.sidekick === 'object' ? { sidekick: o.sidekick } : {}),
     ...(o.wardens && typeof o.wardens === 'object' ? { wardens: o.wardens } : {}),
     ...(o.costumes && typeof o.costumes === 'object' ? { costumes: o.costumes } : {}),
+    ...(o.story && typeof o.story === 'object' ? { story: o.story } : {}),
   };
 }
 

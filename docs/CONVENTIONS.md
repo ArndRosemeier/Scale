@@ -79,6 +79,13 @@ Its open items are consolidated here one PR at a time.
 | Change how two villain groups feel about each other | `feud(R, a, b, d)` (both ways); the hourly drift is `driftGroups` (CrimeSystem.groupHours); saved by `saveGroupRelations` | `R.set` on one direction only, or a flag of your own |
 | Should someone run from a threat? | `menaceNear(R, from, x, y, z, threats, sameSide?)` + `scatterReach(height)` in `game/factions/relations.ts` (crimes: `CrimeWorld.menace`, the crew scatters in `Crime.lookRound`) | A distance check of your own against `threats.actors()` |
 
+## Telling the hero (the tracker)
+
+| Need | Use | Not |
+|---|---|---|
+| Tell the hero something a villain group, a threat, a favour or the sidekick did (it belongs in the tracker) | `g.story.tell(info, html, { kind, x, z })` (a toast and a clue), `g.story.note(info, text)` (a clue, no toast), `g.story.close(info, ending, html?)` (the thread is over), `g.story.place(id, …)` (its place on the map). A group's thread: `g.story.group(f)`; in CrimeSystem `this.tellGroup(f, html, kind, at)`. In the sandbox nothing is recorded, the toast still shows. | A bare `powerHud.toast` for it (**guarded** in CrimeSystem): the tracker never hears of it |
+| Someone tells the hero something important (a cuffed crook, a witness) | `g.story.say(agent, info, line)`: the story bubble (coloured edge with the emblem, a chime, the speaker turns to the hero, said again when the hero walks up), a toast when it is off screen | A plain bark (`barks.say`): it drowns in the street's chatter |
+
 ## Threats
 
 | Need | Use | Not |

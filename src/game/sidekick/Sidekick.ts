@@ -21,6 +21,8 @@
  * Saved per city in the browser and in save games. The sidekick's own life (being around, joining
  * fights, powers, karma) is the plan's phase 2 and later.
  */
+import type { ThreadInfo } from '../story/knowledge';
+import type { ToastKind } from '../../ui/PowerHud';
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import { type PedAgent, isBystander } from '../../sim/Pedestrians';
@@ -90,6 +92,10 @@ interface Scene {
 
 const STORE = (g: Game) => `scale.sidekick.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
 const SHARD_COLOR = '#9fd0ff';
+
+/** The shard and the sidekick as one thread in the tracker's People tab (game/story). */
+const SHARD_THREAD = 'sidekick';
+const shardThread = (name?: string): ThreadInfo => ({ id: SHARD_THREAD, tab: 'people', title: name ? `Your sidekick, ${name}` : 'The second shard', glyph: '✦', color: '#8fe4ff' });
 
 export class Sidekick {
   phase: ShardPhase = 'locked';
@@ -235,7 +241,8 @@ export class Sidekick {
     const holder = F ? F.holder[site.cell] ?? -1 : -1;
     this.gang = holder >= 0 && !g.crime.collapsed(holder) && hashToFloat(deriveSeed(site.seed, 'gang')) < SHARD.gangChance ? holder : -1;
     const hood = g.city ? g.city.report('shard', site.x, site.z) : 'the city';
-    g.powerHud.toast(`<b>On the news:</b> a strange glowing stone was found ${site.kind === 'park' ? 'in a park' : 'on a square'} in <b>${hood}</b>. It looks like your shard. Its area is marked on your map`, 'core', 9000);
+    this.tell(`<b>On the news:</b> a strange glowing stone was found ${site.kind === 'park' ? 'in a park' : 'on a square'} in <b>${hood}</b>. It looks like your shard. Its area is marked on your map`, 'core', 9000, site);
+    g.story?.place(SHARD_THREAD, { x: site.x, z: site.z, label: `The stone was found in ${hood}` });
     g.audio.chime('core', 0.5);
     this.persist();
   }
@@ -320,7 +327,7 @@ export class Sidekick {
       if (gd.committed && !this.warned) {
         this.warned = true;
         const f = g.crime.factions.factions[this.gang];
-        g.powerHud.toast(`<b>${f ? f.name : 'A gang'}</b> got to the stone first. Take it from them`, 'warn', 6000);
+        this.tell(`<b>${f ? f.name : 'A gang'}</b> got to the stone first. Take it from them`, 'warn', 6000);
       }
       return;
     }
@@ -333,7 +340,7 @@ export class Sidekick {
   private clear(): void {
     this.cleared = true;
     this.guards = null;
-    this.g.powerHud.toast('The gang is out of the way. <b>The stone is free</b>', 'info', 5000);
+    this.tell('The gang is out of the way. <b>The stone is free</b>', 'info', 5000);
     this.persist();
   }
 
@@ -381,7 +388,8 @@ export class Sidekick {
     this.fx.shardGlow.set(this.v.set(0, -1e4, 0), 0);
     this.sound.stop(1.2);
     g.audio.chime('core', 0.7);
-    g.powerHud.toast('You have the <b>second shard</b>. Give it to someone you trust: talk to them (<b>E</b>) and offer it', 'core', 9000);
+    this.tell('You have the <b>second shard</b>. Give it to someone you trust: talk to them (<b>E</b>) and offer it', 'core', 9000);
+    g.story?.place(SHARD_THREAD, null);
     this.persist();
   }
 
@@ -488,7 +496,7 @@ export class Sidekick {
     P.setSidekick(this.who, true);
     // As they were: their powers, their karma, a little less trust.
     this.mate.start(this.who, this.name, this.mate.save());
-    this.g.powerHud.toast(`<b>${this.name}</b> is your sidekick again`, 'core', 6000);
+    this.tell(`<b>${this.name}</b> is your sidekick again`, 'core', 6000, undefined, this.name);
     this.persist();
   }
 
@@ -503,7 +511,9 @@ export class Sidekick {
     g.people.setSidekick(this.who, false);
     const k = g.people.find(this.who);
     if (k) addNote(k, g.sky.hoursAbs, `${gameTimeLabel(Math.floor(g.sky.hoursAbs / 24), g.sky.hoursAbs % 24)}: left the hero when the city turned against them`);
-    g.powerHud.toast(`<b>${this.name}</b> has left you. They can't stand by a hero the city has turned against`, 'warn', 8000);
+    const left = `<b>${this.name}</b> has left you. They can't stand by a hero the city has turned against`;
+    if (g.story) g.story.close(shardThread(this.name), 'They left you when the city turned against you', left, { kind: 'warn', ms: 8000 });
+    else g.powerHud.toast(left, 'warn', 8000);
     this.persist();
   }
 
@@ -580,7 +590,7 @@ export class Sidekick {
       const line = S.lines[S.said++];
       if (g.people.partner === a) g.people.speak(line, true);
       else g.barks?.line(a, line);
-      if (S.said === 3) g.powerHud.toast(`<b>${S.name}</b> has the shard's power now: your sidekick. They can fly, and the shard gave them <b>${MATE_POWERS[this.mate.power].name}</b>. Their gold dot on the map shows where they are`, 'core', 8000);
+      if (S.said === 3) this.tell(`<b>${S.name}</b> has the shard's power now: your sidekick. They can fly, and the shard gave them <b>${MATE_POWERS[this.mate.power].name}</b>. Their gold dot on the map shows where they are`, 'core', 8000, undefined, S.name);
     }
     if (t >= SCENE.end) this.endScene();
   }
@@ -618,6 +628,13 @@ export class Sidekick {
     }
   }
 
+  /** A toast that also goes into the tracker's sidekick thread (game/story, People tab). */
+  private tell(html: string, kind: ToastKind, ms: number, at?: { x: number; z: number }, name?: string): void {
+    const S = this.g.story;
+    if (!S) { this.g.powerHud.toast(html, kind, ms); return; }
+    S.tell(shardThread(name), html, { kind, ms, ...(at ? { x: at.x, z: at.z } : {}) });
+  }
+
   // ------------------------------------------------------------------ death and the grave
 
   /** The revival failed: they are gone. A grave in a cemetery, the news, and in time another shard. */
@@ -636,7 +653,7 @@ export class Sidekick {
     this.nextAt = g.sky.hoursAbs + MATE.nextShardHours;
     const p = g.player.pos;
     g.city?.report('mourn', p.x, p.z);
-    g.powerHud.toast(`<b>${name}</b> did not survive: the revival failed. They will be buried in a cemetery nearby. Somewhere, in time, another shard will turn up`, 'warn', 11000);
+    this.tell(`<b>${name}</b> did not survive: the revival failed. They will be buried in a cemetery nearby. Somewhere, in time, another shard will turn up`, 'warn', 11000, undefined, name);
     this.graveFor = name;
     this.startGraveSearch();
     this.persist();
@@ -677,7 +694,10 @@ export class Sidekick {
     this.graveFor = '';
     this.addGraveMesh(gr);
     this.markKey = '#stale';
-    this.g.powerHud.toast(`<b>${gr.name}</b> was laid to rest. The grave is marked on your map`, 'info', 6000);
+    const rest = `<b>${gr.name}</b> was laid to rest. The grave is marked on your map`;
+    const S = this.g.story;
+    if (S) { S.close(shardThread(gr.name), `Laid to rest. The grave is ${S.where(gr.x, gr.z) || 'in a cemetery'}`, rest, { ms: 6000, x: gr.x, z: gr.z }); S.place(SHARD_THREAD, { x: gr.x, z: gr.z, label: `The grave of ${gr.name}` }); }
+    else this.g.powerHud.toast(rest, 'info', 6000);
     this.persist();
   }
 

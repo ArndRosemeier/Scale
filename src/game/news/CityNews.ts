@@ -94,6 +94,12 @@ export class CityNews {
     return i < 0 ? -1 : this.hoods.of[i];
   }
 
+  /** The neighbourhood's name at a point, or null (water, outside the city). */
+  hoodNameAt(x: number, z: number): string | null {
+    const h = this.hoodAt(x, z);
+    return h < 0 ? null : this.hoods.list[h].name;
+  }
+
   /** The map's hover line for a point: "Mill Quarter — crime low · strong police presence". */
   hoodLine(x: number, z: number): string | null {
     const h = this.hoodAt(x, z);
