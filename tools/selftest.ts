@@ -47,6 +47,7 @@ import { leviathanChecks } from './leviathanTest';
 import { rocChecks } from './rocTest';
 import { mechChecks } from './mechTest';
 import { bridgeGapChecks } from './bridgeGapTest';
+import { ghostChecks } from './ghostTest';
 import { doorChecks } from './doorsweep';
 import { chatChecks } from './chatTest';
 import { Reputation } from '../src/game/Reputation';
@@ -4528,6 +4529,7 @@ section('leviathan', async () => { leviathanChecks(check); });
 section('roc', async () => { rocChecks(check); });
 section('mech', async () => { mechChecks(check); });
 section('fallen bridge spans', async () => { bridgeGapChecks(check); });
+section('ghost tour guide', async () => { ghostChecks(check); });
 
 // Nobody crosses a fallen span: routes go round a cut (RoadNet.setCuts), a car stopped at the broken
 // end turns round, someone walking up to the gap stops and walks back (BridgeBreaks keeps the cuts).

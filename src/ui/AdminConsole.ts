@@ -315,6 +315,11 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Sites near', run: (_g, d) => call(d, 'street.sites') },
     { label: 'Clear', run: (_g, d) => call(d, 'street.clear') },
   ]],
+  ['Ghost tour guide', [
+    { label: 'Start a tour here (any hour)', run: (_g, d) => call(d, 'ghost.tour') },
+    { label: 'Where is he', run: (_g, d) => call(d, 'ghost.state') },
+    { label: 'End the tour', run: (_g, d) => call(d, 'ghost.end') },
+  ]],
   ['Player', [
     { label: '+100 karma', run: (g) => { g.progress.addKarma(100, 'admin'); return g.progress.sandbox ? 'sandbox has no karma' : g.progress.karma; } },
     { label: 'Heal', run: (g) => { g.crime.health.hp = g.crime.health.max; return 'healed'; } },
