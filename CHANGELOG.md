@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.286 — 2026-11-05
+
+- **Big gang jobs are cased first** (Normal mode). A boss operation no longer comes out of the blue. The gang picks its target near you and a time an hour or three ahead. Until then, two or three of its members hang about the place looking it over: suits watching a bank, robes marking the ground before the cathedral, hackers poking at the robots. If you see them, a line goes into the gang's story in the tracker with a pin. Walk up and they break off and run. Catch one and they tell you what the job is and when ("The boss takes the bank on Lexington Avenue around 13:00"). When the time comes, the job starts if you're nearby. If you're elsewhere it happens without you, and you hear of it in the news if you knew about it.
+- **Gangs answer you.** After you stop a gang's boss operation or bust its stash, a gang that already has its eye on you sends someone. A member walks up to you, says their piece in a story bubble ("That was our stash. The Blockside Saints will be seeing you.") and runs. Catch them if you like.
+- **Witnesses.** When a gang's crime gets away near you, someone who saw it may stay at the scene. Walk up and they tell you where that lot go in ("That lot always go in at a door on Pike Street"). The spot goes into the tracker.
+
 ## 0.285 — 2026-11-05
 
 - Behind the scenes: the changelog and the admin console no longer name what runs the city's stories. Nothing changes in the game.

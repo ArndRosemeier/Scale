@@ -41,7 +41,8 @@ import { HideoutGuard } from './HideoutGuard';
 import { SewerDen, type DenSite } from './SewerDen';
 import { denLayout, roomW } from '../../underground/rooms';
 import { Ritual, type RitualElement } from './Ritual';
-import { BossOperation, BOSS_OP_TITLE } from './BossOp';
+import { BossOperation, BOSS_OP_TITLE, type BossSite } from './BossOp';
+import { Lookout, type LookoutSite } from './Lookout';
 import { BossEvent } from '../threats/BossEvent';
 import { Channeling } from './Channeling';
 import { HijackedFleet } from './HijackedFleet';
@@ -674,7 +675,7 @@ export class CrimeSystem {
       if (!a) return;
       // The boss leads it now and then (the hideout's door, when they are hunting the hero).
       const B = this.bosses[by.id], heat = this.notoriety[by.id] ?? 0;
-      const bossHere = !(c instanceof SewerDen) && (this.devBoss || c instanceof BossOperation || (c instanceof HideoutGuard ? heatOf(heat) === 'hunted' && bossChance(B, heat, this.g.sky.hoursAbs) > 0 : roll.chance(bossChance(B, heat, this.g.sky.hoursAbs))));
+      const bossHere = !(c instanceof SewerDen) && !(c instanceof Lookout) && (this.devBoss || c instanceof BossOperation || (c instanceof HideoutGuard ? heatOf(heat) === 'hunted' && bossChance(B, heat, this.g.sky.hoursAbs) > 0 : roll.chance(bossChance(B, heat, this.g.sky.hoursAbs))));
       if (bossHere && B && B.jailedUntil <= this.g.sky.hoursAbs && ![...this.bossOf.values()].some((x) => x.actor?.faction === by.id && x.alive)) {
         c.promote(a, bossPowers(L.powers, by.archetype), BOSS);
         a.actor!.outfit = bossOutfit(by, a.cit.seed);
@@ -1107,6 +1108,7 @@ export class CrimeSystem {
     this.hideKey = '';
     this.heat(f.id, NOTORIETY.bust);
     this.checkCollapse(f.id);
+    g.gm?.hurt(f, 'stash');
   }
 
   /** Found hideouts on the map (a diamond in the group's colour; grey while it lies low). */
@@ -1424,15 +1426,16 @@ export class CrimeSystem {
     for (const f of near) {
       if ([...this.bossOf.values()].some((a) => a.alive && a.actor?.faction === f)) continue;
       const ch = bossOpChance(this.bosses[f], this.notoriety[f] ?? 0, now, this.collapsed(f));
-      if (ch > 0 && Math.random() < ch && this.startBossOp(f)) return;
+      // (In Normal mode the game master plans it ahead and has it cased first: `planOp`.)
+      if (ch > 0 && Math.random() < ch && (g.gm?.planOp(F.factions[f]) || this.startBossOp(f))) return;
     }
   }
 
   /** A group's boss comes out for its set piece (near a point, or in a ring round the player). */
-  startBossOp(fid: number, near: { x: number; z: number } | null = null): BossOperation | null {
+  startBossOp(fid: number, near: { x: number; z: number } | null = null, site: BossSite | null = null): BossOperation | null {
     const f = this.factions.factions[fid], B = this.bosses[fid];
     if (!f || !B) return null;
-    const c = new BossOperation(this.world, (Math.random() * 2 ** 32) >>> 0, BOSS_KINDS[f.archetype].op, near);
+    const c = new BossOperation(this.world, (Math.random() * 2 ** 32) >>> 0, BOSS_KINDS[f.archetype].op, near, site);
     if (!this.begin(c, f)) return null;
     // (Not with a stand-in: enlist made the boss lead it, or it is called off.)
     if (this.bossOf.get(c) !== c.boss) { c.abort(); c.dispose(); this.crimes.splice(this.crimes.indexOf(c), 1); return null; }
@@ -1442,6 +1445,29 @@ export class CrimeSystem {
     const what = c.kind === 'heist' ? 'is taking a bank' : c.kind === 'takeover' ? 'is coming to take a street' : c.kind === 'uprising' ? 'is going to turn the city\'s robots' : c.landmark === 'cemetery' ? 'is gathering a great circle in the cemetery' : c.landmark === 'cathedral' ? 'is gathering a great circle before the cathedral' : 'is gathering a great circle';
     this.tellGroup(f, `${who} of ${inSentence(f)} ${what} ${this.g.story?.where(c.x, c.z) ?? ''} — marked on your map`, 'warn', c);
     return c;
+  }
+
+  /** Could a boss operation start now (the same checks as the roll in `updateBossOps`, without the hero's place)? */
+  bossOpRoom(fid: number): boolean {
+    const g = this.g, B = this.bosses[fid];
+    if (!B || this.collapsed(fid) || B.jailedUntil > g.sky.hoursAbs || this.director.setting === 'off' || this.bossOps.size || !g.threats?.canHost() || this.actorCount > ACTOR_BUDGET - BOSS_OP.room) return false;
+    return ![...this.bossOf.values()].some((a) => a.alive && a.actor?.faction === fid);
+  }
+
+  /** Where the group's boss operation would take place now (round the hero), its kind; null: no site. */
+  bossSite(fid: number): { kind: BossOperation['kind']; site: BossSite } | null {
+    const f = this.factions.factions[fid];
+    if (!f) return null;
+    const kind = BOSS_KINDS[f.archetype].op, site = new BossOperation(this.world, 1, kind).pickSite();
+    return site ? { kind, site: { ...site } } : null;
+  }
+
+  /** A group's lookouts (crime/Lookout): casing a site, or one sent to the hero with the group's answer. */
+  startLookout(fid: number, mode: 'casing' | 'taunt', site: LookoutSite | null, seed: number): Lookout | null {
+    const f = this.factions.factions[fid];
+    if (!f || this.collapsed(fid) || this.director.setting === 'off' || this.actorCount > ACTOR_BUDGET - 4) return null;
+    const c = new Lookout(this.world, seed, mode, site);
+    return this.begin(c, f) ? c : null;
   }
 
   /** The operation has begun: a threat event the city answers (perimeter, evacuation, SWAT). */
@@ -1640,7 +1666,11 @@ export class CrimeSystem {
           if (fid >= 0) this.heat(fid, B ? NOTORIETY.boss : lt ? NOTORIETY.lieutenant : NOTORIETY.ko);
         }
         break;
+      case 'taunt':
+        if (who && c instanceof Lookout) g.gm?.taunt(c, who);
+        break;
       case 'surrender':
+        if (who && c instanceof Lookout && near(who) < 8) g.gm?.caught(c, who);
         if (who && near(who) < 8) {
           c.playerInvolved = true;
           g.progress.addKarma(CRIME_KARMA.surrender, `a ${KINDS[c.kind].criminal.toLowerCase()} gave up`);
@@ -1650,6 +1680,8 @@ export class CrimeSystem {
       case 'arrest':
         this.rep.count('arrests');
         if (who && this.bossOf.get(c) === who) this.jailBoss(c, who);
+        // A caught lookout tells when the job is (the game master's casing).
+        if (who && c instanceof Lookout && g.gm?.caught(c, who)) break;
         // A cuffed group member may give the hideout away.
         if (who?.actor?.faction !== undefined && Math.random() < HIDEOUTS.tellChance) this.reveal(who.actor.faction, 'told', who);
         break;
@@ -1706,6 +1738,7 @@ export class CrimeSystem {
         if (c instanceof BossOperation) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.bossOp); break; }
         this.factionStats.succeeded++;
         this.turf(c, f, SHIFT.ritual);
+        g.gm?.escaped(c, f);
         if (Math.hypot(c.x - g.player.pos.x, c.z - g.player.pos.z) < 220) {
           const what = c instanceof Ritual ? 'completed a ritual' : c instanceof Sabotage ? 'wrecked the machines' : c instanceof Raising ? 'raised the dead' : c instanceof Procession ? `led ${c.taken} people away into the dark` : 'hijacked the robots';
           this.tellGroup(f, `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b> ${what} ${g.story?.where(c.x, c.z) || 'here'}`, 'warn', c);
@@ -1716,7 +1749,9 @@ export class CrimeSystem {
         // An operation came off: the group's hold on the street grows (a brawl's result is 'won', a
         // hack's or a ritual's is 'done').
         const f = this.factionOf(c);
-        if (f && c.outcome === 'escaped' && !(c instanceof TurfBrawl) && !(c instanceof HideoutGuard) && !(c instanceof Channeling) && !(c instanceof BossOperation)) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
+        if (f && c.outcome === 'escaped' && !(c instanceof TurfBrawl) && !(c instanceof HideoutGuard) && !(c instanceof Channeling) && !(c instanceof BossOperation) && !(c instanceof Lookout)) { this.factionStats.succeeded++; this.turf(c, f, SHIFT.succeeded); }
+        // Got away near the hero: someone may have seen where they went (the game master's witness).
+        if (f && c.outcome === 'escaped' && !(c instanceof Lookout) && !(c instanceof BossOperation)) g.gm?.escaped(c, f);
         break;
       }
       case 'won': {
@@ -1769,6 +1804,7 @@ export class CrimeSystem {
     this.onStopped?.(c);
     this.radio.stopped(c);
     g.gm?.met('challenge');
+    if (c instanceof BossOperation && by) g.gm?.hurt(by, 'op');
     // The tracker: what the hero did to the group (quiet: the karma toast tells it).
     const S = g.story;
     if (S && by) for (const f of rival ? [by, rival] : [by]) S.note(S.group(f), `You stopped ${KINDS[c.kind].stopped} ${S.where(c.x, c.z)}`.trim(), { x: c.x, z: c.z });

@@ -299,13 +299,15 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Wanted 3', run: (_g, d) => call(d, 'wanted', 3) },
     { label: 'Wanted 0', run: (_g, d) => call(d, 'wanted', 0) },
   ]],
-  ['Story pacing', [
+  ['Game master', [
     { label: 'Panel', run: (_g, d) => call(d, 'gm.panel') },
     { label: 'Status', run: (_g, d) => call(d, 'gm.status') },
     { label: 'Log', run: (_g, d) => call(d, 'gm.log') },
     { label: 'All needs overdue', run: (_g, d) => call(d, 'gm.starve') },
     { label: 'Act: story', run: (_g, d) => call(d, 'gm.act', 'story') },
     { label: 'Act: challenge', run: (_g, d) => call(d, 'gm.act', 'challenge') },
+    { label: 'Plan a boss job (cased first)', run: (_g, d) => call(d, 'gm.plan', 'syndicate') },
+    { label: 'Signs', run: (_g, d) => call(d, 'gm.signs') },
   ]],
   ['Street life', [
     ...(['preacher', 'busker', 'statue', 'mime', 'juggler', 'dancer', 'mascot', 'conspiracy', 'pigeons', 'sleepwalker', 'tourist', 'jogger'] as const).map((k) => ({ label: k[0].toUpperCase() + k.slice(1), run: (_g: Game, d: Dev) => call(d, 'street.spawn', k, 7) })),

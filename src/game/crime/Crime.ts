@@ -26,12 +26,12 @@ import { dealtBy } from '../../shared/status';
 import { voice } from '../../ui/voices';
 import { SCATTER, scatterReach } from '../factions/relations';
 
-export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den' | 'sabotage' | 'raising' | 'procession' | BossOpKind;
+export type CrimeKind = 'snatch' | 'mugging' | 'robbery' | 'racket' | 'tagging' | 'bomber' | 'brawl' | 'hideout' | 'hijack' | 'ritual' | 'den' | 'sabotage' | 'raising' | 'procession' | 'casing' | 'taunt' | BossOpKind;
 /** A boss operation (crime/BossOp): the group's boss and a big crew, a threat event with the city response. */
 export type BossOpKind = 'heist' | 'takeover' | 'uprising' | 'awakening' | 'treewake' | 'deadrise';
 export const BOSS_OP_KINDS: readonly BossOpKind[] = ['heist', 'takeover', 'uprising', 'awakening', 'treewake', 'deadrise'];
 /** Kinds only a villain group runs (factions): never rolled in nobody's turf. */
-export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual', 'sabotage', 'raising', 'procession', ...BOSS_OP_KINDS];
+export const GROUP_KINDS: readonly CrimeKind[] = ['racket', 'tagging', 'brawl', 'hideout', 'hijack', 'ritual', 'sabotage', 'raising', 'procession', 'casing', 'taunt', ...BOSS_OP_KINDS];
 export type CrimePhase = 'approach' | 'commit' | 'escape' | 'getaway' | 'subdued' | 'resolved' | 'failed' | 'aborted';
 export type CrimeOutcome = 'arrested' | 'stopped' | 'escaped' | 'aborted';
 
@@ -47,7 +47,7 @@ export interface Loot {
 }
 
 export interface CrimeEvent {
-  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast' | 'done' | 'broken' | 'risen' | 'crumble' | 'woken';
+  type: 'commit' | 'ko' | 'surrender' | 'arrest' | 'returned' | 'resolved' | 'failed' | 'fight' | 'tagged' | 'subdued' | 'won' | 'cast' | 'done' | 'broken' | 'risen' | 'crumble' | 'woken' | 'taunt';
   crime: Crime;
   who?: PedAgent;
 }
