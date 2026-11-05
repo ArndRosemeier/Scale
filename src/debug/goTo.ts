@@ -272,6 +272,7 @@ export class GoTo {
     out.push(scanned('Clothes shop, inside (next)', 'clothes', (s) => this.shop(s, isClothesShop)));
     out.push({ group: 'City', label: 'Fitting mirror (nearest clothes shop)', count: 1, go: () => call(this.dev(), 'mirror') });
     const d = this.dev();
+    if (d.floater) out.push({ group: 'City', label: 'Leo Lightly, the man who can\'t land', count: 1, go: () => call(this.dev(), 'floater.go') });
     if (d.concert) for (const w of ['stage', 'pit', 'stand'] as const) out.push({ group: 'City', label: `Concert: ${w === 'stand' ? 'stands' : w}`, count: 1, go: () => call(this.dev(), 'concert.go', w) });
     // Villages, towns and farms out in the countryside.
     const rural = d.rural?.list?.(-1, 200) as { id: number; kind: number; name: string; x: number; z: number }[] | undefined;

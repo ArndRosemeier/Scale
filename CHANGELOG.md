@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.290 — 2026-11-05
+
+- **Leo Lightly, the man who can't land.** A crystal earlier this year left Leo, a friendly accountant, floating about a metre off the ground for good. He's not a hero or a villain, just someone the whole town knows. By day his kids Mia and Ben tow him round the park nearest the city centre on a string tied to his ankle, like a balloon. He waves at people, chats in speech bubbles, and passers-by stop to film him. He isn't out at night, in the rain, or on the odd day the family stays home.
+- **Windy days.** A gust can tear the string out of Mia's hand and blow Leo onto a roof. The kids run to the street below, and a fire engine comes with its siren. A firefighter climbs the ladder, takes the string, brings him down and hands him back to Mia. You can beat them to it: touch Leo while he's loose and you hold the string. Bring him back to his kids for a little karma and reputation. Hit him and he spins loose too. Knock him down and he floats back up afterwards.
+- Admin console: "Go to" has an entry that takes you to Leo's park.
+
 ## 0.289 — 2026-11-05
 
 - **The odd short synthetic tone was the alien discs scanning.** When a Warden disc turns its scan cone on, it plays a soft rising tone. It was set to carry like a big event, so discs hanging high up and far away (often 300 m to over a kilometre) were heard all over town, roughly every 40 s and more often with several discs about, with nothing to see. Now you hear it only within about 180 m, when a disc is over your street.

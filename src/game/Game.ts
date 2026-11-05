@@ -115,6 +115,7 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { Floater } from './citizens/floater/Floater';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
 import { StationLife } from './metro/StationLife';
@@ -240,6 +241,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** Leo Lightly, the man who can't land (game/citizens/floater). */
+  floater: Floater | null = null;
   /** The stadium's evening concert (src/game/concert). */
   concert: Concert | null = null;
   /** The stadium's daytime soccer matches (src/game/soccer). */
@@ -871,7 +874,7 @@ export class Game {
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
-    this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('street', () => { this.street?.update(dt); this.floater?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
     this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1243,6 +1246,7 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.floater = new Floater(this);
     this.concert = new Concert(this);
     this.soccer = new Soccer(this);
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
