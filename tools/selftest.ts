@@ -5076,4 +5076,32 @@ section('floating man', async () => {
   check(FLOATER_TOPICS.every((t) => floaterLine(t, () => 0.5).length > 3), 'every topic has lines');
 });
 
+section('magnetic grandma: home, hours, spots', async () => {
+  const { grandmaHome, grandmaOut, freeSpot, spotFor, spotsClash } = await import('../src/game/citizens/grandma/plan');
+  type Spot = ReturnType<typeof spotFor>;
+  const { Rng } = await import('../src/core/rng');
+  for (const [seed, size] of [[42, 0.4], [7, 0.7], [10, 0.2]] as const) {
+    const macro = buildMacroPlan(new Terrain(makeProfile({ seed, size })));
+    const h = grandmaHome(macro, seed), h2 = grandmaHome(buildMacroPlan(new Terrain(makeProfile({ seed, size }))), seed);
+    check(!!h && JSON.stringify(h) === JSON.stringify(h2), `seed ${seed}: she has one home, the same every time (${h?.district} cell ${h?.cell})`);
+    check(!!h && ['oldtown', 'commercial', 'downtown', 'apartments', 'rowhouses'].includes(h.district), `seed ${seed}: in a shopping or living district`);
+  }
+  check(!grandmaOut(3) && grandmaOut(10) && !grandmaOut(13) && grandmaOut(16) && !grandmaOut(21) && grandmaOut(24 + 10), 'out in the morning and afternoon, home at lunch and night');
+  const fit = { height: 1.62, shoulderWidth: 0.4, chestDepth: 0.24, waistRadius: 0.15, upperArmRadius: 0.045, forearmRadius: 0.035, thighRadius: 0.075, shinRadius: 0.05 };
+  const r = new Rng(5);
+  let okN = true, near = true;
+  for (let k = 0; k < 400; k++) {
+    const s = spotFor(fit, r);
+    const n = Math.hypot(...s.normal);
+    if (Math.abs(n - 1) > 1e-6) okN = false;
+    if (Math.hypot(s.pos[0], s.pos[2]) > 0.4 || Math.abs(s.pos[1]) > 0.5) near = false;
+  }
+  check(okN, 'spots have unit outward normals');
+  check(near, 'spots lie on the body (within 0.4 m of the socket)');
+  const taken: Spot[] = [];
+  for (let k = 0; k < 14; k++) { const s = freeSpot(fit, r, taken); if (s) taken.push(s); }
+  check(taken.length >= 12, `room for a dozen things (${taken.length})`);
+  check(!taken.some((a, i) => taken.some((b, j) => i < j && spotsClash(a, b))), 'no two pieces on the same spot');
+});
+
 await runSections(import.meta.url);
