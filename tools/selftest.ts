@@ -70,6 +70,8 @@ import { worldToSite as siteOf } from '../src/plan/landmarks';
 import { CMU_CLIPS } from '../src/humanoid/actors/clips';
 import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP, SHOW, SHOW_END } from '../src/game/concert/plan';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
+import { floristCells, floristHome, floristDay, FLORIST_H, GARDENS } from '../src/game/citizens/florist/plan';
+import { floristLine, type FloristTopic } from '../src/game/citizens/florist/lines';
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
@@ -2921,6 +2923,47 @@ section('street characters', async () => {
   console.log(`street: ${n} sites in ${cells.length} cells (${(performance.now() - t0).toFixed(0)} ms), ${seen.size} kinds cast`);
 });
 
+// The shrunk florist (game/citizens/florist/plan.ts): her shop found in every city, the same each
+// time; the stand on the pavement beside the door, clear of the walking corridor and of footprints;
+// her gardens on flat roofs of the cell within reach; her hours; her lines.
+section('shrunk florist', async () => {
+  let found = 0, bad = 0, gardens = 0;
+  const notes: string[] = [];
+  for (const seed of [42, 7, 1234]) {
+    const terrain = new Terrain(makeProfile({ seed, size: 0.4 }));
+    const macro = buildMacroPlan(terrain);
+    const C = floristCells(macro, seed);
+    if (JSON.stringify(C) !== JSON.stringify(floristCells(macro, seed))) bad++;
+    for (const id of C) {
+      const p = planCell(macro, macro.cells[id], terrain);
+      const h = floristHome(p, seed), h2 = floristHome(p, seed);
+      if (JSON.stringify(h) !== JSON.stringify(h2)) bad++;
+      if (!h) continue;
+      found++;
+      const b = p.buildings[h.b];
+      if (!b.shopfront || b.eatery) bad++;
+      if (!clearOfWalk(p.streets, h.stand.x, h.stand.z, 0.35)) bad++;
+      if (p.buildings.some((o) => pointInPoly(o.poly, h.stand.x, h.stand.z))) bad++;
+      if (Math.hypot(h.stand.x - h.door.x, h.stand.z - h.door.z) > 2.5) bad++;
+      for (const gd of h.gardens) {
+        const gb = p.buildings[gd.b];
+        if (gb.roof !== 'flat' || !pointInPoly(gb.poly, gd.x, gd.z) || Math.hypot(gd.x - h.stand.x, gd.z - h.stand.z) > 175) bad++;
+      }
+      gardens += h.gardens.length;
+      notes.push(`${seed}: ${h.shop} in cell ${id} (${p.district}), ${h.gardens.length} gardens`);
+      break;
+    }
+  }
+  console.log(notes.join('\n'));
+  check(found === 3, `florist: a shop in every city (${found}/3: ${notes.join('; ')})`);
+  check(bad === 0, `florist: deterministic, the stand beside the door clear of the walk and of footprints, gardens on flat roofs nearby (${bad} faults)`);
+  check(gardens >= 3 && gardens <= 3 * GARDENS, `florist: roof gardens to fly to (${gardens})`);
+  check(floristDay(3) === 'asleep' && floristDay(10) === 'open' && floristDay(19.5) === 'evening' && floristDay(22) === 'asleep' && floristDay(34) === 'open', 'florist: asleep at night, open by day, no flights in the evening');
+  check(FLORIST_H > 0.1 && FLORIST_H < 0.2, 'florist: 15 cm tall');
+  const topics: FloristTopic[] = ['own', 'greet', 'stepped', 'stepped2', 'giant', 'tiny', 'fly', 'hero', 'villain', 'wanted', 'mount', 'garden', 'back', 'rain', 'scared', 'evening', 'morning', 'fan'];
+  check(topics.every((t) => { const l = floristLine(t, () => 0.99, 'Posy', "Posy's Petals"); return !!l && !/[{}]|undefined/.test(l); }), 'florist: a line for every moment, names filled in');
+});
+
 // The stadium concert (game/concert/plan.ts): the evening's hours, the stage on the pitch with the
 // band on its deck, the pit in front (nearest first, on the field, clear of the stage), seats in the
 // stands facing the stage, the set list (opener first, closer last, the same each night per seed),
@@ -5111,6 +5154,34 @@ section('floating man', async () => {
   for (let i = 0; i < 600; i++) tetherStep(free, null, FLOATER.string, FLOATER.hover, { x: 0, z: 0 }, 1 / 60);
   check(Math.abs(free.y - FLOATER.hover) < 0.1, 'loose and calm, he settles at his hover height (never lands)');
   check(FLOATER_TOPICS.every((t) => floaterLine(t, () => 0.5).length > 3), 'every topic has lines');
+});
+
+section('magnetic grandma: home, hours, spots', async () => {
+  const { grandmaHome, grandmaOut, freeSpot, spotFor, spotsClash } = await import('../src/game/citizens/grandma/plan');
+  type Spot = ReturnType<typeof spotFor>;
+  const { Rng } = await import('../src/core/rng');
+  for (const [seed, size] of [[42, 0.4], [7, 0.7], [10, 0.2]] as const) {
+    const macro = buildMacroPlan(new Terrain(makeProfile({ seed, size })));
+    const h = grandmaHome(macro, seed), h2 = grandmaHome(buildMacroPlan(new Terrain(makeProfile({ seed, size }))), seed);
+    check(!!h && JSON.stringify(h) === JSON.stringify(h2), `seed ${seed}: she has one home, the same every time (${h?.district} cell ${h?.cell})`);
+    check(!!h && ['oldtown', 'commercial', 'downtown', 'apartments', 'rowhouses'].includes(h.district), `seed ${seed}: in a shopping or living district`);
+  }
+  check(!grandmaOut(3) && grandmaOut(10) && !grandmaOut(13) && grandmaOut(16) && !grandmaOut(21) && grandmaOut(24 + 10), 'out in the morning and afternoon, home at lunch and night');
+  const fit = { height: 1.62, shoulderWidth: 0.4, chestDepth: 0.24, waistRadius: 0.15, upperArmRadius: 0.045, forearmRadius: 0.035, thighRadius: 0.075, shinRadius: 0.05 };
+  const r = new Rng(5);
+  let okN = true, near = true;
+  for (let k = 0; k < 400; k++) {
+    const s = spotFor(fit, r);
+    const n = Math.hypot(...s.normal);
+    if (Math.abs(n - 1) > 1e-6) okN = false;
+    if (Math.hypot(s.pos[0], s.pos[2]) > 0.4 || Math.abs(s.pos[1]) > 0.5) near = false;
+  }
+  check(okN, 'spots have unit outward normals');
+  check(near, 'spots lie on the body (within 0.4 m of the socket)');
+  const taken: Spot[] = [];
+  for (let k = 0; k < 14; k++) { const s = freeSpot(fit, r, taken); if (s) taken.push(s); }
+  check(taken.length >= 12, `room for a dozen things (${taken.length})`);
+  check(!taken.some((a, i) => taken.some((b, j) => i < j && spotsClash(a, b))), 'no two pieces on the same spot');
 });
 
 await runSections(import.meta.url);

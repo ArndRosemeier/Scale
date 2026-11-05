@@ -158,8 +158,14 @@ export class Barks implements VoiceSink {
    * the anchor's y; `voice`: an event (a cry, a bark) that skips the gap between bubbles; `animal`:
    * the italic sound-word style; `pause`: before this anchor speaks again.
    */
-  sayAt(a: VoiceAnchor, text: string, o: { head?: number; pause?: number; tone?: 'angry' | 'cheer'; voice?: boolean; animal?: boolean } = {}): boolean {
+  sayAt(a: VoiceAnchor, text: string, o: { head?: number; pause?: number; tone?: 'angry' | 'cheer'; voice?: boolean; animal?: boolean; now?: boolean } = {}): boolean {
     const head = o.head ?? 2.05;
+    // `now`: an outburst that must show (the florist stepped on): this anchor's own bubble and pause give way.
+    if (o.now) {
+      const mine = this.shown.findIndex((s) => s.a === a);
+      if (mine >= 0) { this.shown[mine].el.style.display = 'none'; this.shown.splice(mine, 1); }
+      this.quiet.delete(a);
+    }
     if ((!o.voice && this.gapT > 0) || this.shown.some((s) => s.a === a)) return false;
     if (this.time < (this.quiet.get(a) ?? -Infinity)) return false;
     // Only where it can be seen.

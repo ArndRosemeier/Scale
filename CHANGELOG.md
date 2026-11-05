@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.291 — 2026-11-05
+## 0.294 — 2026-11-05
 
 - **The gentle giant of the stadium.** Earlier this year one of the city's crystals made someone grow to about ten metres, and that's all it did: no powers, no side in anything. Now they live with being a walking attraction, a friendly, slightly awkward local celebrity. You'll meet them around the stadium. They walk slowly and carefully round it (they wait when someone is right in front of their feet and say sorry), wave and smile at people, and greet the hero by name. Their steps are soft thuds, so nobody panics. Clothes don't come in their size, so they wear improvised underwear.
 - **They sit on the ground a lot**, so as not to loom, and get up again slowly. The sitting down, sitting and getting up are motion-captured moves from the Actors library's own clips.
@@ -10,6 +10,18 @@ Every push raises the version by 0.001. Newest first.
 - **A press magnet.** Photographers come by every so often, flashes going off, shouting questions. People stop to watch and film, and call out their name.
 - **Their day:** they sleep on the pitch after the concert, leave before the first match, spend the day round the stadium, and sit outside the gate while the concert plays. Explosions, gunfire or monsters nearby give them a fright.
 - Admin console: "Go to" has an entry that takes you to the gentle giant.
+
+## 0.293 — 2026-11-05
+
+- **The shrunk florist.** Earlier this year a crystal made one of the city's florists 15 cm tall. She still runs her flower shop in town: a flower stand on the pavement by the shop door, her own little door in the wall with her sign over it, and a sandwich board asking people to mind their step. By day she waters the buckets, sits on the rim of a flower pot and waves at people. Every few minutes she climbs onto Captain, her big pigeon, and flies off to one of her roof gardens nearby to water the planters, then comes back with a bouquet. She stays home in the rain and goes in through her little door at night. Passers-by step round her, and the curious stop to look or take her picture. Walk onto her and she hops aside with a squeak. A giant, a blast or gunfire nearby sends her up and away on Captain until it is calm. She talks to you when you come close, and she is delighted to meet you if you shrink yourself. Admin console: Go to › The shrunk florist.
+
+## 0.292 — 2026-11-05
+
+- **No more half-naked passers-by.** People a bit further off (and anyone close by for the moment it takes to get their clothes ready) are drawn as light-weight crowd copies. Those copies lost dresses and skirts completely, so women in a dress walked about in nothing but their shoes, and trousers and shorts came out in shreds. Dresses and skirts are now part of the copies, and their trousers and shorts are cuts that hold up at that distance.
+
+## 0.291 — 2026-11-05
+
+- **The magnetic grandma.** Every city has one: a cheerful old lady who was made magnetic by one of the crystals years ago. She is no hero and no villain. In the day (8:30 to 12:30 and 14:00 to 18:30) she does her rounds of the shops in her part of town, and anything made of metal near her flies over and sticks to her coat: forks and teaspoons off café tables, tins from the shop doors, a spanner off the street, keys out of passers-by's pockets (she hands those back) and now and then a whole bicycle, which she carries on her back for a while. When she clanks too much she stops and shakes it all off onto the pavement with a great clatter. People stop to watch and take photos, and she has a word for everyone, the hero included. Anything dangerous nearby ends her day: everything drops and she runs. She's back the next day. The first time you meet her, she goes into the People tab of the tracker with her part of town on the map.
 
 ## 0.290 — 2026-11-05
 

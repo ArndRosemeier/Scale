@@ -32,6 +32,8 @@ export interface AnimState {
   talking?: boolean;
   /** Look-at target position. */
   lookAt?: Vec3;
+  /** Seat height (world m) for move 'sit'; default 0.47, a chair. A tiny sitter's chair is smaller (game/citizens/florist). */
+  seat?: number;
   /** Superpower body layer (the player): jump charge, leap, dash. */
   power?: PowerAnim;
   /**
