@@ -226,8 +226,9 @@ export class CharacterCreator {
     this.initial = character.config;
     this.editor = new CharacterEditor(character, this.panel, {
       title: 'Look',
-      // (Race keeps only its Detailed size and youth sliders for humans; Scale's own Stand/Walk replaces Animation.)
-      sections: ['race', 'body', 'face', 'outfit'],
+      // No Race section: with humans only it would hold just a lone Youth slider (heroes are adults).
+      // Scale's own Stand/Walk replaces Animation.
+      sections: ['body', 'face', 'outfit'],
       buttons: ['randomize'],
       // The game animates the face and keeps everyone decent.
       hide: ['anatomy', 'expression', 'expressionIntensity', 'blink', 'lod'],
