@@ -21,6 +21,7 @@ export function installShaderPolicy(renderer: WebGPURenderer, cap: ShaderCap, mo
   if (!keepTextureUpdates()) missing.push('texture node updates');
   if (!shareShadowNodes(renderer)) missing.push('shared shadow nodes');
   if (!fixedBundleUniforms(renderer)) missing.push('fixed bundle uniforms');
+  if (!balancedBindingRelease(renderer)) missing.push('balanced binding release');
   noPerFrameUploads();
   timeGpu(monitor);
   return missing;
@@ -119,6 +120,31 @@ function asyncDrawPipelines(renderer: WebGPURenderer): boolean {
     if (inFlight >= MAX_DRAW_PIPES && this.get(ro).pipeline === undefined) return;
     this.getForRender(ro, sink);
   };
+  return true;
+}
+
+/**
+ * three.js bug (r186, still in r187): disposing a render object releases its bind groups, counting
+ * each group's users down, even when the render object never had its bind groups set up (it was
+ * only queued for compileAsync, or disposed while its async node build was still pending, e.g.
+ * because its mesh's geometry or material changed in between). Groups shared by every render
+ * object of one shader (`shared` uniform groups) were then counted down for a user they never
+ * counted up, reached zero while still drawn, and lost their GPU buffers: the next draw of another
+ * mesh with that shader threw "writeBuffer: parameter 1 is not of type 'GPUBuffer'" (in Scale the
+ * hero lost its hair, body or shoes). Only bind groups that were set up are released.
+ * Internal: Bindings.deleteForRender and getForRender's `initialized` flag (r186).
+ */
+export function balancedBindingRelease(renderer: WebGPURenderer): boolean {
+  const bindings = (renderer as Any)._bindings;
+  const release = bindings?.deleteForRender;
+  if (typeof release !== 'function' || typeof bindings.has !== 'function' || typeof bindings.get !== 'function' || typeof bindings.delete !== 'function') return false;
+  if (release.balanced) return true;
+  const balanced = function (this: Any, renderObject: Any) {
+    if (this.has(renderObject) && this.get(renderObject).initialized === true) return release.call(this, renderObject);
+    this.delete(renderObject);
+  };
+  balanced.balanced = true;
+  bindings.deleteForRender = balanced;
   return true;
 }
 
