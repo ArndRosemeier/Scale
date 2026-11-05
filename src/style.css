@@ -713,3 +713,12 @@ body.looking #crosshair { display: block; }
 #shard-badge b { font-weight: 700; color: #e8f4ff; }
 #shard-badge i { flex: none; width: 12px; height: 18px; background: linear-gradient(160deg, #e8f4ff, #7fb8ff 55%, #5a3fd0); clip-path: polygon(50% 0, 100% 45%, 50% 100%, 0 45%); animation: shard-badge 2.2s ease-in-out infinite; }
 @keyframes shard-badge { 50% { filter: brightness(1.6) drop-shadow(0 0 3px #9fd0ff); } }
+
+/* Game master developer panel (game/gm, dev.gm.panel()). */
+#gm-panel { position: fixed; left: 12px; top: 120px; width: min(360px, calc(100vw - 24px)); max-height: 60vh; overflow: auto; background: rgba(10, 14, 20, 0.92); border: 1px solid #4a3d66; border-radius: 10px; color: #dfe4ea; font: 12px/1.35 ui-monospace, monospace; padding: 8px 10px; z-index: 30; }
+#gm-panel .gm-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+#gm-panel .gm-s { color: #aab4c0; margin-bottom: 6px; }
+#gm-panel button { background: #2a3442; color: #e3e8ee; border: 1px solid #435063; border-radius: 5px; font: inherit; padding: 1px 6px; margin: 0 3px 0 0; cursor: pointer; }
+#gm-panel ul { list-style: none; margin: 6px 0 0; padding: 0; }
+#gm-panel li { padding: 4px 0; border-top: 1px solid #263040; }
+#gm-panel li .w { display: block; color: #9a8fd0; }

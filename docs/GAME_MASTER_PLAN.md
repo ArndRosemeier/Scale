@@ -1,7 +1,10 @@
 # Game master and the hero's tracker — plan (for approval)
 
 Status: accepted (2026-11-05, Arnd, thread "Explore supervillain ideas"). **Phase 1 is built** (v0.283): `game/story`
-(Knowledge, Story, threatStory, storyVoice) and `ui/Tracker`. Not in the sandbox (Arnd: the sandbox is not for real
+(Knowledge, Story, threatStory, storyVoice) and `ui/Tracker`. **Phase 2 is built** (v0.284): `game/gm` (director.ts:
+needs story/challenge/people, calm after a fight won, a 2-minute gap between moves, the log; GameMaster.ts: tools
+`rumour` (talk that knows: the followed group's hideout area, via People's news lines) and `group-crime` (the followed
+group's own crime near the hero through `CrimeSystem.startFor`, same budget and rules), the dev panel). Not in the sandbox (Arnd: the sandbox is not for real
 challenges).
 
 Scale already simulates a lot that the player hardly sees: six kinds of villain groups with turf, hideouts,

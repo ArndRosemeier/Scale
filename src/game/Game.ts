@@ -104,6 +104,7 @@ import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { SidekickPanel } from '../ui/SidekickPanel';
 import { Story } from './story/Story';
+import { GameMaster } from './gm/GameMaster';
 import { Tracker } from '../ui/Tracker';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { CityNews } from './news/CityNews';
@@ -224,6 +225,8 @@ export class Game {
   /** What the hero knows (game/story) and its tracker on the HUD. */
   story!: Story;
   tracker!: Tracker;
+  /** The game master (game/gm): what of the city's life reaches the hero, when. */
+  gm!: GameMaster;
   synth!: PowerSynth;
   /** Quiet engine loops on the cars nearest the camera. */
   engines!: CarEngines;
@@ -867,7 +870,7 @@ export class Game {
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
-    this.T('people', () => { this.story?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
+    this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
@@ -1241,6 +1244,7 @@ export class Game {
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
+    this.gm = new GameMaster(this);
     this.wardrobe = new Wardrobe(this);
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);

@@ -4084,6 +4084,46 @@ section('people phase 4', async () => {
 
 // ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live
 // crime index, police presence, the fresh start, off-screen crime and the news in words
+section('game master', async () => {
+  const { Director, GM, NEEDS, followedGroup, hideoutRumour } = await import('../src/game/gm/director');
+  const D = new Director();
+  check(D.due().length === 0 && D.pacing() === 'build', 'gm: nothing is due at the start');
+  D.state.played = GM.overdue.challenge + 1;
+  check(D.due()[0] === 'challenge' && !D.due().includes('people'), 'gm: a need left unmet past its limit is due');
+  D.state.played = GM.overdue.people + 10;
+  check(D.due().length === 3 && D.due().join() === 'challenge,story,people', 'gm: the longest overdue need (by share of its limit) comes first');
+  D.met('challenge');
+  check(D.pacing() === 'calm' && D.due().length === 0, 'gm: a fight won brings a calm stretch');
+  D.state.played += GM.calmAfter + 1;
+  check(D.due().length === 2 && !D.due().includes('challenge'), 'gm: after the calm, the needs still unmet are due again');
+  const m = D.record({ at: 30, tool: 'rumour', need: 'story', why: 'test', x: 1, z: 2 });
+  check(m.t === Math.round(D.state.played) && D.state.n === 1 && D.due().length === 0, 'gm: a move is logged and keeps the next one away');
+  D.state.played += GM.minGap + 1;
+  check(D.due().length === 2, 'gm: the gap after a move passes');
+  for (let i = 0; i < GM.logKeep + 5; i++) D.record({ at: i, tool: 't', need: 'people', why: String(i) });
+  check(D.state.log.length === GM.logKeep && D.state.log[GM.logKeep - 1].why === String(GM.logKeep + 4), 'gm: the log keeps its newest moves');
+  D.state.rumour = { thread: 'group:gang', text: 'Word is', x: 3, z: 4, until: 50, heard: false };
+  const E = new Director();
+  E.restore(JSON.parse(JSON.stringify(D.save())));
+  const norm = (v: unknown): unknown => Array.isArray(v) ? v.map(norm) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, norm(x)])) : v;
+  check(JSON.stringify(norm(E.save())) === JSON.stringify(norm(D.save())), 'gm: a save comes back the same');
+  E.restore({ v: 1, played: 'x', met: { story: NaN }, n: -3, rumour: { thread: 1 }, log: [{ tool: 'a' }, null, { t: 1, at: 2, tool: 'b', need: 'story', why: 'ok', x: NaN }] });
+  check(E.state.played === 0 && NEEDS.every((n) => E.state.met[n] === 0) && E.state.n === 0 && E.state.rumour === null && E.state.log.length === 1 && E.state.log[0].x === undefined, 'gm: a damaged save comes back sane');
+  E.restore(null);
+  check(E.state.n === 0 && E.state.log.length === 0, 'gm: no save is a fresh start');
+  const T = [{ id: 'group:gang', t: 5, open: true }, { id: 'group:cult', t: 9, open: true }, { id: 'group:suits', t: 20, open: false }, { id: 'threat:1', t: 30, open: true }];
+  check(followedGroup(T, null, () => true) === 'group:cult', 'gm: it follows the open group thread with the newest news');
+  check(followedGroup(T, null, (id) => id !== 'group:cult') === 'group:gang', 'gm: a collapsed group is not followed');
+  check(followedGroup([], 'group:suits', () => true) === 'group:suits' && followedGroup([], null, () => true) === null, 'gm: with no thread, the group of the hero\'s turf');
+  const r = [0, 0.3, 0.6, 0.99].map((u) => hideoutRumour('The Harbour Kings', 'on Elm Street', u));
+  check(new Set(r).size === 4 && r.every((l) => l.includes('The Harbour Kings') && l.includes('on Elm Street')) && hideoutRumour('A', 'b', 0.3) === hideoutRumour('A', 'b', 0.3), 'gm: hideout rumours name the group and the place, the wording seeded');
+  // Wiring: the hero's deeds meet the needs, people pass the rumour on.
+  const fs = await import('node:fs');
+  const people = fs.readFileSync('src/game/people/People.ts', 'utf8'), crime = fs.readFileSync('src/game/crime/CrimeSystem.ts', 'utf8'), story = fs.readFileSync('src/game/story/Story.ts', 'utf8');
+  check(people.includes("gm?.met('people')") && crime.includes("gm?.met('challenge')") && story.includes("gm?.met('story')"), 'gm: talks, fights won and clues meet the needs');
+  check(people.includes('gm?.talkFacts(') && people.includes('gm.heard('), 'gm: people asked for the news pass the rumour on, and the hero remembers it');
+});
+
 section('story knowledge', async () => {
   const { Knowledge, KNOWLEDGE, plainText, clueTime } = await import('../src/game/story/knowledge');
   const K = new Knowledge();
