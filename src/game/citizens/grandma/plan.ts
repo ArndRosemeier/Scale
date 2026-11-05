@@ -88,9 +88,8 @@ export interface Spot {
 
 /** Sockets by how much room they offer (a few weighted picks: most land on the coat). */
 const SOCKETS: readonly [SpotSocket, number][] = [
-  ['chest', 3], ['spine', 3], ['pelvis', 3], ['back', 2],
+  ['chest', 3], ['spine', 3], ['pelvis', 2.5], ['back', 2],
   ['upperarm.L', 1], ['upperarm.R', 1], ['forearm.L', 1.2], ['forearm.R', 1.2],
-  ['thigh.L', 1], ['thigh.R', 1], ['shin.L', 0.5], ['shin.R', 0.5],
 ];
 
 /** Clothes and a coat over the skin (m). */
@@ -123,7 +122,7 @@ export function spotFor(fit: FitLike, rng: Rng, socket?: SpotSocket): Spot {
     case 'chest': return ell(d * 0.6, w, d * 0.8, -fit.height * 0.13, -0.01, -1.2, 1.2);
     case 'back': return ell(d * 0.6, w, d * 0.8, -fit.height * 0.13, -0.02, Math.PI - 0.9, Math.PI + 0.9);
     case 'spine': return ell(wr * 0.15, wr * 1.05, wr * 0.95, 0.0, B.spine * 0.8, -1.4, 1.4);
-    case 'pelvis': return ell(0, wr * 1.25, wr * 1.05, -0.08, 0.06, -2.4, 2.4);
+    case 'pelvis': return ell(0, wr * 1.45, wr * 1.2, -0.04, 0.08, -2.4, 2.4);
     case 'upperarm.L': case 'upperarm.R': return limb(fit.upperArmRadius, B.upperArm, 0.3, 0.8);
     case 'forearm.L': case 'forearm.R': return limb(fit.forearmRadius, B.forearm, 0.25, 0.8);
     case 'thigh.L': case 'thigh.R': return limb(fit.thighRadius, B.thigh, 0.25, 0.75);

@@ -166,7 +166,7 @@ export class CrowdRenderer {
    */
   rigOf(a: PedAgent): HumanoidRig | null {
     const r = this.rigs.get(a.id);
-    return r && r.agent === a && r.ready === 2 && r.rig.char ? r.rig : null;
+    return r && r.agent === a && r.ready === 2 && r.rig.char?.object.visible ? r.rig : null;
   }
 
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {

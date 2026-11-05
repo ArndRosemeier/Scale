@@ -181,6 +181,8 @@ function bicycle(v: number): THREE.Object3D {
   put(g, cyl(0.06, 0.06, 0.012, 14), S, bb[0], bb[1], 0.03, Math.PI / 2);
   // A basket on the front (it's that kind of bike).
   put(g, box(0.26, 0.18, 0.3), mat('wicker', [0.55, 0.4, 0.22], 0.9, 0), head[0] + 0.14, head[1] + 0.02, 0);
+  // (A small town bike: a little under full size, so it reads on her back.)
+  g.scale.setScalar(0.85);
   return g;
 }
 

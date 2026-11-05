@@ -213,8 +213,9 @@ export class MagneticGrandma {
     const act = attach(a, makeActor('bystander', GRANDMA_OWNER, {
       title: `${name} · ${grandmaTitle}`, hp: 40, maxHp: 40, held: 'bag',
       outfit: {
-        chest: { defId: 'dress', visual: vis(s(), rng.pick(pastel), [0.85, 0.82, 0.74], 'checks') },
-        back: { defId: 'coat', visual: vis(s(), [0.42, 0.3, 0.36], [0.3, 0.22, 0.26]) },
+        // A knitted cardigan (the coat stands in for it) over a plain mid-length skirt (seed % 4 = 0: Actors' 'skirt').
+        back: { defId: 'coat', visual: vis(s(), rng.pick(pastel), [0.3, 0.22, 0.26]) },
+        legs: { defId: 'skirt', visual: vis((s() >>> 3) * 4, [0.3, 0.26, 0.32]) },
         feet: { defId: 'shoes', visual: vis(s(), [0.16, 0.11, 0.08]) },
         head: { defId: 'beanie', visual: vis(s(), [0.72, 0.4, 0.45]) },
       },
@@ -355,7 +356,8 @@ export class MagneticGrandma {
     const bikeOk = !this.pieces.some((p) => p.kind === 'bicycle') && this.time - h.lastBike > 150 && this.pieces.length < h.full - 3;
     const ped = g.peds.nearest(a.x, a.z, 7, (o) => o !== a && isBystander(o) && !o.actor);
     const table = this.cafeTable(a.x, a.z, 10);
-    const pick = (src: 'table' | 'shop' | 'pocket' | 'street') => r.weighted(SMALL_JUNK.filter((k) => JUNK[k].from.includes(src)), (k) => JUNK[k].weight);
+    // (Anything can turn up in the street now and then: a lost spoon, dropped keys.)
+    const pick = (src: 'table' | 'shop' | 'pocket' | 'street') => r.weighted(SMALL_JUNK.filter((k) => src === 'street' || JUNK[k].from.includes(src)), (k) => JUNK[k].weight * (JUNK[k].from.includes(src) ? 1 : 0.4));
     if (bikeOk && r.chance(0.16)) {
       kind = 'bicycle';
       const side = r.sign(), ang = a.heading + side * (Math.PI / 2 + r.range(-0.4, 0.4));
@@ -381,7 +383,7 @@ export class MagneticGrandma {
     const spot = freeSpot(fit, r, this.pieces.map((p) => p.spot).concat(this.flights.map((f) => f.spot)), kind === 'bicycle' ? 'back' : undefined);
     if (!spot) { h.full = this.pieces.length; return; }
     // The bicycle flat across her back, a little askew (its tyres just behind the coat).
-    if (kind === 'bicycle') { spot.socket = 'chest'; spot.pos = [0, -0.14, -fit.chestDepth * 0.1 - 0.08]; spot.normal = [0, 0, -1]; spot.roll = r.range(-0.35, 0.35); }
+    if (kind === 'bicycle') { spot.socket = 'chest'; spot.pos = [0, -0.12, -fit.chestDepth * 0.1 - 0.13]; spot.normal = [0, 0, -1]; spot.roll = r.range(-0.35, 0.35); }
     const obj = junkMesh(kind, r.int(0, 7));
     obj.position.copy(from);
     obj.rotation.set(r.range(-1, 1), r.range(-3, 3), r.range(-1, 1));
