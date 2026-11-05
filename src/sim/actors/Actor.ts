@@ -42,6 +42,8 @@ export const GRANDMA_OWNER = -15;
 export const GARGOYLE_OWNER = -13;
 /** Owner id of the gentle giant's people (src/game/citizens/giant: someone lifted for a photo, their friend, the press about them): their own budget. */
 export const GIANT_OWNER = -16;
+/** Owner id of the ghost tour's tourists (src/game/ghost): their own budget. */
+export const GHOST_OWNER = -14;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';

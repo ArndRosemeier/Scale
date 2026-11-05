@@ -2,9 +2,15 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.298 — 2026-11-05
+
+- **Shorter loading after Start.** The part of loading that is the same for every city now starts while the title screen is showing: the game's graphics setup, textures, the people's bodies and moves, the physics, the sky, the crowd and its walking copies, and the shaders of the clothing, the interiors and the city itself (facades, streets, terrain, water, trees, street furniture). If you spend a little while on the title (choosing a city, a hero or a save), Start only has to build the city. `?preload=0` turns it off.
+
 ## 0.297 — 2026-11-05
 
-- **Shorter loading after Start.** The part of loading that is the same for every city (the game's graphics setup, textures, the people's bodies and moves, the physics, the sky, the crowd's walking copies and the clothing shaders) now starts while the title screen is showing. If you spend a little while on the title (choosing a city, a hero or a save), Start only has to build the city itself. `?preload=0` turns it off.
+- **A ghost gives night tours.** Ambrose Penhallow, the city's crier until 1887, is a friendly ghost who shows tourists round from dusk to the small hours. Near a cemetery he rises out of the main tomb and leads a small group from grave to grave, then to an old house or two outside the walls; in the old town his tours start at a fountain, a statue or an old lamp. At each stop he tells a short story, and the tourists gasp, laugh, clap and take photos. He glides straight to the next stop, through walls and houses, often mid-sentence, while his group has to walk round ("Oh! Sorry. I keep forgetting you need doors."). At the end he bows and fades away (or sinks back into his tomb).
+- He is see-through, glows faintly at the edges, floats a little off the ground and carries a lantern with a cold green flame. Punches and powers go straight through him, and so do you if you walk into him ("You're standing in my liver"). He invites you along, has a word for you if you fly, are a giant, tiny, famous or notorious, and thanks you if you stay for the whole tour. Anything dangerous nearby ends the tour: the tourists run and he fades away with a sigh.
+- Admin console: a "Ghost tour guide" section starts a tour where you stand, at any hour.
 
 ## 0.296 — 2026-11-05
 
