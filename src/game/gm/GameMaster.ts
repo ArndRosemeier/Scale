@@ -17,10 +17,13 @@
 import type { Game } from '../Game';
 import { Director, GM, NEEDS, followedGroup, hideoutRumour, type GmMove, type Need } from './director';
 import { hideoutCell } from '../factions/Hideouts';
+import { BOSS_KINDS } from '../factions/Bosses';
 import { deriveSeed, hashToFloat, hash32 } from '../../core/rng';
 import { clueTime } from '../story/knowledge';
 import { esc } from '../../ui/esc';
 import { Signs } from './Signs';
+import { Callbacks } from './Callbacks';
+import type { BossOpKind } from '../crime/Crime';
 import type { Faction } from '../factions/Factions';
 import type { Crime } from '../crime/Crime';
 import type { Lookout } from '../crime/Lookout';
@@ -31,6 +34,7 @@ const STORE = (g: Game) => `scale.gm.v1.${g.mode}.${g.settings.seed}.${g.setting
 export class GameMaster {
   readonly dir = new Director();
   readonly signs: Signs;
+  readonly callbacks: Callbacks;
   private acc = 0;
   private saveT = 20;
   private devDone = false;
@@ -39,6 +43,8 @@ export class GameMaster {
 
   constructor(private g: Game) {
     this.signs = new Signs(g, this.dir);
+    this.callbacks = new Callbacks(g, this.dir);
+    this.signs.onJobDone = (f, kind, x, z) => this.callbacks.jobDone(f, kind, x, z, false);
     if (!this.enabled) return;
     try { this.dir.restore(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null')); } catch { /* storage unavailable */ }
   }
@@ -56,10 +62,11 @@ export class GameMaster {
   update(dt: number): void {
     if (!this.devDone) this.installDev();
     if (!this.enabled || this.g.intro) return;
-    this.dir.state.played += dt;
+    this.dir.advance(dt);
     this.acc += dt;
     if (this.acc >= GM.tick) { this.acc = 0; this.think(); }
     this.signs.update(dt);
+    this.callbacks.update(dt);
     this.saveT -= dt;
     if (this.saveT <= 0) { this.saveT = 20; this.persist(); }
     if (this.panel) this.drawPanel();
@@ -153,6 +160,21 @@ export class GameMaster {
     if (this.enabled) this.signs.escaped(c, f);
   }
 
+  /** A group's boss broke out of jail (CrimeSystem.bossHours). */
+  brokeOut(f: Faction): void {
+    if (this.enabled) this.callbacks.brokeOut(f);
+  }
+
+  /** A collapsed group is back on its corners (CrimeSystem.bossHours). */
+  returned(f: Faction): void {
+    if (this.enabled) this.callbacks.returned(f);
+  }
+
+  /** A boss operation went through (CrimeSystem.bossOpDone); `seen`: the hero was near. */
+  jobDone(f: Faction, kind: BossOpKind, x: number, z: number, seen: boolean): void {
+    if (this.enabled) this.callbacks.jobDone(f, kind, x, z, seen);
+  }
+
   // ------------------------------------------------------------------ talk
 
   /**
@@ -218,16 +240,17 @@ export class GameMaster {
 
   private drawPanel(): void {
     const D = this.dir, S = D.state;
-    const needs = NEEDS.map((n) => `${n} ${Math.round(D.waited(n) / 60)}/${Math.round(GM.overdue[n] / 60)} min`).join(' · ');
+    const needs = NEEDS.map((n) => `${n} ${Math.round(D.waited(n) / 60)}/${Math.round(D.limit(n) / 60)} min (${Math.round(D.share(n) * 100)} %)`).join(' · ');
     const sg = this.signs.status();
-    const key = `${S.n}|${needs}|${D.pacing()}|${S.rumour?.heard}|${sg.plans.join()}|${sg.cards}|${sg.witness}`;
+    const cb = this.callbacks.status();
+    const key = `${S.n}|${needs}|${D.pacing()}|${S.rumour?.heard}|${sg.plans.join()}|${sg.cards}|${sg.witness}|${cb.comebacks}|${cb.scenes}`;
     if (key === this.panelKey) return;
     this.panelKey = key;
     const f = this.followed();
     const fname = f === null ? 'none' : this.g.crime.factions.factions[f].name;
     const moves = S.log.slice().reverse().slice(0, 14).map((m) => `<li><span class="w">${clueTime(m.at)} · ${m.tool} · ${m.need}</span>${m.x !== undefined ? `<button data-x="${m.x.toFixed(1)}" data-z="${m.z!.toFixed(1)}">⌖</button>` : ''}${esc(m.why)}</li>`).join('');
     this.panel!.innerHTML = `<div class="gm-h"><b>Game master</b><button class="gm-x">×</button></div>
-      <div class="gm-s">${D.pacing()} · following ${esc(fname)}<br>${needs}${S.rumour ? `<br>rumour${S.rumour.heard ? ' (heard)' : ''}: ${esc(S.rumour.text)}` : ''}${sg.plans.map((p) => `<br>planned: ${esc(p)}`).join('')}${sg.cards ? `<br>calling cards due: ${sg.cards}` : ''}${sg.witness ? '<br>a witness is waiting' : ''}</div>
+      <div class="gm-s">${D.pacing()} · following ${esc(fname)}<br>${needs}${S.rumour ? `<br>rumour${S.rumour.heard ? ' (heard)' : ''}: ${esc(S.rumour.text)}` : ''}${sg.plans.map((p) => `<br>planned: ${esc(p)}`).join('')}${sg.cards ? `<br>calling cards due: ${sg.cards}` : ''}${sg.witness ? '<br>a witness is waiting' : ''}${cb.comebacks ? `<br>comebacks due: ${cb.comebacks}` : ''}${cb.scenes ? `<br>taped-off scenes: ${cb.scenes}` : ''}</div>
       <div class="gm-b">Act now: ${NEEDS.map((n) => `<button data-act="${n}">${n}</button>`).join('')}</div>
       <ul>${moves || '<li>No moves yet.</li>'}</ul>`;
   }
@@ -247,7 +270,23 @@ export class GameMaster {
       /** Show / hide the developer panel. */
       panel: (on?: boolean) => this.togglePanel(on),
       /** Planned jobs, calling cards due, a waiting witness. */
-      signs: () => this.signs.status(),
+      signs: () => ({ ...this.signs.status(), ...this.callbacks.status() }),
+      /** A comeback now: a group's boss out of jail (boss) or the group back after a collapse. */
+      comeback: (group: string = 'gang', boss = true) => {
+        const f = this.g.crime.factions.factions.find((x) => x.archetype === group);
+        if (!f) return 'no such group';
+        if (boss) this.callbacks.brokeOut(f); else this.callbacks.returned(f);
+        const K = this.callbacks.comebacks.find((k) => k.fid === f.id);
+        if (K) K.at = this.g.sky.hoursAbs;
+        return this.callbacks.status();
+      },
+      /** A job done just here (tape and the scene for the tracker). */
+      scene: (group: string = 'syndicate') => {
+        const f = this.g.crime.factions.factions.find((x) => x.archetype === group), p = this.g.player.pos;
+        if (!f) return 'no such group';
+        this.callbacks.jobDone(f, BOSS_KINDS[f.archetype].op, p.x + 20, p.z, false);
+        return this.callbacks.status();
+      },
       /** Plan a group's boss operation now (archetype or id), cased first; `soon` h until it starts. */
       plan: (group: string | number = 'syndicate', soon?: number) => {
         const F = this.g.crime.factions.factions, f = typeof group === 'number' ? F[group] : F.find((x) => x.archetype === group);
@@ -266,7 +305,7 @@ export class GameMaster {
         return this.signs.status();
       },
       /** Make every need overdue now. */
-      starve: () => { for (const n of NEEDS) this.dir.state.met[n] = this.dir.state.played - GM.overdue[n] - 1; this.dir.state.calmUntil = 0; this.dir.state.lastMove = -1e9; return this.dir.due(); },
+      starve: () => { for (const n of NEEDS) this.dir.state.met[n] = this.dir.state.played - this.dir.limit(n) - 1; this.dir.state.calmUntil = 0; this.dir.state.lastMove = -1e9; return this.dir.due(); },
     };
   }
 }

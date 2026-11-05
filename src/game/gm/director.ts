@@ -10,6 +10,10 @@
  * master sends nothing; it acts only when a need is overdue, at most once per `minGap`. Every
  * move is logged with the tool, the need and why (the developer panel shows it).
  *
+ * A small player model (phase 4): what the hero keeps doing (decayed evidence per need) leans the
+ * limits, so a fighter gets clashes sooner and a talker people sooner (`limit`), never the other
+ * needs starved: a limit moves between 0.6× and 1.2× of its base.
+ *
  * Pure (no DOM, no three.js), saved; tested in selftest ("game master").
  */
 
@@ -29,6 +33,8 @@ export const GM = {
   rumourHours: 24,
   /** Moves kept in the log. */
   logKeep: 60,
+  /** The player model: evidence fades with this time constant (s of play); a limit is base × (1 − lean × (share − ⅓)), clamped. */
+  styleFade: 1800, lean: 0.6, limitRange: [0.6, 1.2] as [number, number],
 };
 
 export type Pacing = 'calm' | 'build';
@@ -68,9 +74,11 @@ export interface GmState {
   n: number;
   rumour: Rumour | null;
   log: GmMove[];
+  /** What the hero keeps doing: decayed evidence per need (the player model). */
+  style: Record<Need, number>;
 }
 
-export const freshState = (): GmState => ({ v: 1, played: 0, met: { story: 0, challenge: 0, people: 0 }, calmUntil: 0, lastMove: -1e9, n: 0, rumour: null, log: [] });
+export const freshState = (): GmState => ({ v: 1, played: 0, met: { story: 0, challenge: 0, people: 0 }, calmUntil: 0, lastMove: -1e9, n: 0, rumour: null, log: [], style: { story: 0, challenge: 0, people: 0 } });
 
 export class Director {
   state: GmState = freshState();
@@ -79,7 +87,27 @@ export class Director {
   met(need: Need): void {
     const S = this.state;
     S.met[need] = S.played;
+    S.style[need] += 1;
     if (need === 'challenge') S.calmUntil = Math.max(S.calmUntil, S.played + GM.calmAfter);
+  }
+
+  /** Play time goes on (seconds): the needs grow, the evidence fades. */
+  advance(dt: number): void {
+    const S = this.state, k = Math.exp(-dt / GM.styleFade);
+    S.played += dt;
+    for (const n of NEEDS) S.style[n] *= k;
+  }
+
+  /** The hero's share of each need in what they did lately (⅓ each with no evidence). */
+  share(need: Need): number {
+    const S = this.state.style, sum = NEEDS.reduce((a, n) => a + S[n], 0);
+    return sum < 0.5 ? 1 / 3 : S[need] / sum;
+  }
+
+  /** Seconds unmet before a need is overdue, leaned by the player model. */
+  limit(need: Need): number {
+    const f = 1 - GM.lean * (this.share(need) - 1 / 3);
+    return GM.overdue[need] * Math.max(GM.limitRange[0], Math.min(GM.limitRange[1], f));
   }
 
   /** Seconds a need has gone unmet. */
@@ -95,7 +123,7 @@ export class Director {
   due(): Need[] {
     const S = this.state;
     if (this.pacing() === 'calm' || S.played - S.lastMove < GM.minGap) return [];
-    return NEEDS.filter((n) => this.waited(n) >= GM.overdue[n]).sort((a, b) => this.waited(b) / GM.overdue[b] - this.waited(a) / GM.overdue[a]);
+    return NEEDS.filter((n) => this.waited(n) >= this.limit(n)).sort((a, b) => this.waited(b) / this.limit(b) - this.waited(a) / this.limit(a));
   }
 
   /** Book a move: the log, the gap to the next one. */
@@ -122,6 +150,7 @@ export class Director {
       S.calmUntil = fin(o.calmUntil, 0);
       S.lastMove = fin(o.lastMove, -1e9);
       S.n = Math.max(0, Math.floor(fin(o.n, 0)));
+      for (const n of NEEDS) S.style[n] = Math.max(0, Math.min(1e3, fin(o.style?.[n], 0)));
       const r = o.rumour;
       if (r && typeof r.thread === 'string' && typeof r.text === 'string' && [r.x, r.z, r.until].every(Number.isFinite)) S.rumour = { thread: r.thread, text: r.text, x: r.x, z: r.z, until: r.until, heard: !!r.heard };
       if (Array.isArray(o.log)) {

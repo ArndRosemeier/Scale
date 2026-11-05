@@ -51,6 +51,8 @@ export class Signs {
   readonly cards: Card[] = [];
   witness: Witness | null = null;
   private lastWitness = -1e9;
+  /** A job went through without the hero (the callbacks tape the site off). */
+  onJobDone: ((f: Faction, kind: BossOpKind, x: number, z: number) => void) | null = null;
   private acc = 0;
 
   constructor(private g: Game, private dir: Director) {}
@@ -112,6 +114,7 @@ export class Signs {
         if (now > P.at + SIGNS.wait) {
           this.plans.splice(i, 1);
           if (P.seen || P.told) S.note(S.group(f), offscreenNews(P.kind, f.name, where), { src: 'news', x: P.site.x, z: P.site.z });
+          this.onJobDone?.(f, P.kind, P.site.x, P.site.z);
           this.log('casing', 'story', `the ${P.kind} of ${f.name} happened without the hero (away ${Math.round(d)} m)`, P.site.x, P.site.z);
         }
         continue;

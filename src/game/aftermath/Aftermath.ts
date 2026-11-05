@@ -164,6 +164,14 @@ export class Aftermath {
   /** Absolute game hours. */
   get hours(): number { return this.g.sky.hoursAbs; }
 
+  /** A crime scene taped off for some game hours (game/gm: the site of a gang's job that went through). */
+  tapeOff(x: number, z: number, r: number, hours: number): void {
+    if (this.cordons.some((c) => Math.hypot(c.x - x, c.z - z) < c.r + r)) return;
+    this.cordons.push({ x, z, r, until: this.hours + hours, streets: false });
+    this.stats.cordons++;
+    this.cordonKey = '';
+  }
+
   /** Game hours after the strike that a levelled district's cordon stays (then the crews move in). */
   get zoneLiftH(): number { return AFTERMATH.zoneSmokeH; }
 
