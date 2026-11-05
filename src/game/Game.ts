@@ -115,6 +115,7 @@ import { StreetLife } from './street/StreetLife';
 import { Florist } from './citizens/florist/Florist';
 import { Floater } from './citizens/floater/Floater';
 import { MagneticGrandma } from './citizens/grandma/MagneticGrandma';
+import { Gargoyle } from './citizens/gargoyle/Gargoyle';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
 import { StationLife } from './metro/StationLife';
@@ -245,6 +246,8 @@ export class Game {
   /** Leo Lightly, the man who can't land (game/citizens/floater). */
   floater: Floater | null = null;
   grandma: MagneticGrandma | null = null;
+  /** The retired cathedral gargoyle: stone by day, down on the square at night (src/game/citizens/gargoyle). */
+  gargoyle: Gargoyle | null = null;
   /** The stadium's evening concert (src/game/concert). */
   concert: Concert | null = null;
   /** The stadium's daytime soccer matches (src/game/soccer). */
@@ -874,7 +877,7 @@ export class Game {
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
-    this.T('street', () => { this.street?.update(dt); this.florist?.update(dt); this.floater?.update(dt); this.grandma?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('street', () => { this.street?.update(dt); this.florist?.update(dt); this.floater?.update(dt); this.grandma?.update(dt); this.gargoyle?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
     this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1249,6 +1252,7 @@ export class Game {
     this.florist = new Florist(this);
     this.floater = new Floater(this);
     this.grandma = new MagneticGrandma(this);
+    this.gargoyle = new Gargoyle(this);
     this.concert = new Concert(this);
     this.soccer = new Soccer(this);
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
@@ -1436,6 +1440,8 @@ export class Game {
     if (dress) return dress;
     const shard = this.sidekick?.hint();
     if (shard) return shard;
+    const garg = this.gargoyle?.hint();
+    if (garg) return garg;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1491,6 +1497,8 @@ export class Game {
     if (this.arcade?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Take the glowing stone (the second shard).
     if (this.sidekick?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // Talk to the gargoyle (or look at it, by day).
+    if (this.gargoyle?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();
