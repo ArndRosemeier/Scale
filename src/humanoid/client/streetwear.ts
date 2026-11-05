@@ -457,15 +457,15 @@ function bakerHat(fit: BodyFit, c: C3): THREE.Object3D {
   const r = fit.headRadius * 1.04;
   const g = new THREE.Group();
   const m = std(c, 0.95);
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(r, r, r * 0.55, 18, 1, true), m);
-  band.material.side = THREE.DoubleSide;
-  band.position.set(0, fit.headRadius * 0.55, -0.005);
+  // (Closed and single-sided: the plain material every rigid part uses, no new shader variant.)
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r, r * 0.9, 18, 1), m);
+  band.position.set(0, fit.headRadius * 0.55 + r * 0.17, -0.005);
   band.rotation.x = -0.12;
   g.add(band);
   // The crown: a squashed ball on top, a little wider than the band, with soft pleats (ridged scale).
   const crown = new THREE.Mesh(new THREE.SphereGeometry(r * 1.2, 16, 10), m);
-  crown.scale.set(1, 0.85, 1);
-  crown.position.set(0, fit.headRadius * 0.55 + r * 0.75, -r * 0.08);
+  crown.scale.set(1, 0.95, 1);
+  crown.position.set(0, fit.headRadius * 0.55 + r * 1.25, -r * 0.08);
   g.add(crown);
   return g;
 }

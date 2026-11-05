@@ -504,11 +504,11 @@ export class Baker implements CityCitizen {
 const cloth = (seed: number, primary: [number, number, number], secondary = primary, material = 'plain'): ItemVisual =>
   ({ shape: 'cloth', seed, primary, secondary, accent: secondary, material, glow: 0, glowColor: [0, 0, 0], wear: 0.05, style: '' });
 
-/** Baker's whites: a white shirt, checked trousers, a tall white hat. */
+/** Baker's whites: a white shirt, pale trousers, a tall white hat. */
 export function bakerOutfit(seed: number): EquipmentVisuals {
   return {
     chest: { defId: 'shirt', visual: cloth(seed ^ 1, [0.94, 0.93, 0.9]) },
-    legs: { defId: 'trousers', visual: cloth(seed ^ 2, [0.16, 0.16, 0.18], [0.85, 0.85, 0.83], 'checks') },
+    legs: { defId: 'trousers', visual: cloth(seed ^ 2, [0.78, 0.77, 0.74]) },
     feet: { defId: 'shoes', visual: cloth(seed ^ 3, [0.12, 0.1, 0.09]) },
     head: { defId: 'bakerhat', visual: cloth(seed ^ 4, [0.97, 0.96, 0.94]) },
   };

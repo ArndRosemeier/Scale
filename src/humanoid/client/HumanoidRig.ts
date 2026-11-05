@@ -140,7 +140,9 @@ export class HumanoidRig {
     }, prio, label), () => {
       if (this.disposed || this.char !== ch) return;
       this.equipment?.setSkyVis(this.skyVis);
-      ch.object.visible = this.visible;
+      // (Shown under the rig's own object: `setVisible` hides that one. Copying the rig's flag here
+      // left the body hidden for good when it was dressed while the rig waited for its shaders.)
+      ch.object.visible = true;
       this.markDressed();
       if (this.placeholder) {
         this.placeholder.removeFromParent();
