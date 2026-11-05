@@ -53,8 +53,12 @@ export function ghostOutfit(seed: number): EquipmentVisuals {
 
 /** The ghost's fade, 0 (gone) … 1, shared by all its materials (GLSL and TSL). */
 const FADE = { value: 1 };
+/** Glowing parts that only go see-through (no shader patch): faded by their opacity. */
+const plain = new Set<THREE.Material>();
+const PLAIN_A = Math.min(1, BASE_A + RIM_A * 0.6);
 export function setGhostFade(f: number): void {
   FADE.value = f;
+  for (const m of plain) m.opacity = PLAIN_A * f;
   if (WEBGPU) gpuKit().setGhostFadeNode(f);
 }
 
@@ -76,6 +80,16 @@ export function ghostify(root: THREE.Object3D): number {
       if (ghosted.has(m)) continue;
       ghosted.add(m);
       n++;
+      // (A glowing part, the lantern's glass: keeps its own colour, only goes see-through, so
+      // its flame stays green on both renderers.)
+      const e = m as THREE.MeshStandardMaterial;
+      if (e.emissive && e.emissiveIntensity >= 1 && e.emissive.getHex() !== 0) {
+        m.transparent = true;
+        m.opacity = PLAIN_A * FADE.value;
+        m.needsUpdate = true;
+        plain.add(m);
+        continue;
+      }
       if (WEBGPU) { gpuKit().ghostNodeMaterial(m, GHOST_TINT, GHOST_GLOW, BASE_A, RIM_A); continue; }
       patchGlsl(m);
     }

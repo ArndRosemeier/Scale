@@ -12,6 +12,7 @@ import { planCell, PropType } from '../src/plan/cell';
 import { pointInPoly } from '../src/core/geom2';
 import { Rng } from '../src/core/rng';
 import { cemeteryStops, crossesBuilding, headingTo, nightLeft, tourHours, tourSlot, type GravePiece } from '../src/game/ghost/tour';
+import { ghostify, setGhostFade } from '../src/game/ghost/look';
 import { ghostLine, STORIES, TOURIST_LINES, GHOST_NAME, type GhostTopic } from '../src/game/ghost/lines';
 import { GHOST_OWNER, STREET_OWNER, AFTERMATH_OWNER, FAME_OWNER, METRO_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, CONCERT_OWNER, SOCCER_OWNER, FLOATER_OWNER, GRANDMA_OWNER, GARGOYLE_OWNER, GIANT_OWNER } from '../src/sim/actors/Actor';
 
@@ -70,6 +71,18 @@ export function ghostChecks(check: Check): void {
   // Owner ids: his tourists' own, no clash with another system's.
   const owners = [GHOST_OWNER, STREET_OWNER, AFTERMATH_OWNER, FAME_OWNER, METRO_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, CONCERT_OWNER, SOCCER_OWNER, FLOATER_OWNER, GRANDMA_OWNER, GARGOYLE_OWNER, GIANT_OWNER];
   check(new Set(owners).size === owners.length, 'ghost: the tourists have their own actor owner id');
+  // The lantern's glowing glass keeps its own colour (only see-through, faded by opacity); cloth is patched.
+  const glass = new THREE.MeshStandardMaterial({ color: 0x73ffcc, emissive: 0x73ffcc, emissiveIntensity: 2.4 });
+  const cloth = new THREE.MeshStandardMaterial({ color: 0x444444 });
+  const plainHook = THREE.Material.prototype.onBeforeCompile;
+  const rig = new THREE.Group();
+  rig.add(new THREE.Mesh(new THREE.BoxGeometry(), glass), new THREE.Mesh(new THREE.BoxGeometry(), cloth));
+  ghostify(rig);
+  const full = glass.opacity;
+  setGhostFade(0.5);
+  const half = glass.opacity;
+  setGhostFade(1);
+  check(glass.onBeforeCompile === plainHook && cloth.onBeforeCompile !== plainHook && glass.transparent && Math.abs(half - full / 2) < 1e-9, 'ghost: the lantern flame keeps its colour and fades with him');
   // The GLSL patch's anchors are in three's lit shaders (look.ts patchGlsl).
   for (const k of ['physical', 'standard'] as const) {
     const f = THREE.ShaderLib[k].fragmentShader;
