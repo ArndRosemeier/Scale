@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.279 — 2026-11-05
+
+- Behind the scenes: the v0.278 fix for the three.js bug that freed shared GPU data while still in use (the hero losing hair, body or shoes) now lives in AssetGenerator's shared WebGPU patches (`@futuremagic/stage`, AssetGenerator PR #176), so every futuremagic game gets it; Scale uses it from there. No change in the game.
+
 ## 0.278 — 2026-11-05
 
 - **The real cause of the hero losing parts is fixed, and the v0.277 stopgap is gone.** It is a bug in three.js (still present in the newest release, r187): when the renderer threw away a draw entry it had prepared but never drawn (one queued for background shader compiling whose person changed in the meantime), it still counted down the users of the GPU data shared by every mesh with that shader. The count reached zero while other meshes, such as the hero's hair, were still drawing with it, and the data was freed. Scale now only counts down entries that really were counted up, so shared GPU data is never freed while in use. The rebuild-and-retry patchwork from v0.277 is removed again; a draw that fails is skipped as before, with its error in the console.

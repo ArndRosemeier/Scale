@@ -3,7 +3,7 @@
  * default WebGL build does not carry three's node system. See docs/WEBGPU_PLAN.md.
  */
 import * as THREE from 'three/webgpu';
-import { keepTextureUpdates, rebindSwitchedTextures, shareShadowNodes } from '@futuremagic/stage/patches';
+import { balancedBindingRelease, keepTextureUpdates, rebindSwitchedTextures, shareShadowNodes } from '@futuremagic/stage/patches';
 import { renderOutput, texture } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
@@ -59,7 +59,6 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
   watchVertexBuffers(renderer);
   countNodeBuilds(renderer);
   guardDraws(renderer);
-  if (!balancedBindingRelease(renderer)) console.warn('[webgpu] three internals renamed, not installed: balanced binding release');
   quickShadowKeys(renderer);
   skipEmptyInstances(renderer);
   timeSlowPipelines();
@@ -73,6 +72,8 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
     rebindSwitchedTextures(renderer) ? '' : 'texture rebind',
     keepTextureUpdates() ? '' : 'texture node updates',
     shareShadowNodes(renderer) ? '' : 'shared shadow nodes',
+    // three.js bug: never-drawn render objects released shared bind groups (the hero lost hair, body or shoes).
+    balancedBindingRelease(renderer) ? '' : 'balanced binding release',
   ].filter(Boolean);
   if (missing.length) console.warn(`[webgpu] three internals renamed, not installed: ${missing.join(', ')}`);
 }
@@ -305,30 +306,6 @@ function guardDraws(renderer: THREE.WebGPURenderer): void {
       console.error(`[webgpu] draw failed, skipped from now on: ${object.type} "${object.name}" (parent "${object.parent?.name ?? ''}", ${object.isSkinnedMesh ? `skinned, ${object.skeleton?.bones.length} bones, ` : ''}geometry ${g?.uuid?.slice(0, 8)} [${Object.keys(g?.attributes ?? {}).join(',')}]) material ${material?.type} "${material?.name}"`, err);
     }
   };
-}
-
-/**
- * three.js bug (r186, still in r187): disposing a render object releases its bind groups, counting
- * each group's users down, even when the render object never had its bind groups set up (it was
- * only queued for compileAsync, or disposed while its async node build was still pending, e.g.
- * because Actors changed the person's geometry or material in between). Groups shared by every
- * render object of one shader (their `shared` uniform groups) were then counted down for a user
- * they never counted up, reached zero while still drawn, and lost their GPU buffers: the next draw
- * of another mesh with that shader threw "writeBuffer: parameter 1 is not of type 'GPUBuffer'" and
- * the hero lost its hair, body or shoes. Only bind groups that were set up are released.
- * Internal: Bindings.deleteForRender / getForRender's `initialized` flag (r186).
- */
-function balancedBindingRelease(renderer: THREE.WebGPURenderer): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const bindings = (renderer as any)._bindings;
-  const release = bindings?.deleteForRender;
-  if (typeof release !== 'function' || typeof bindings.has !== 'function' || typeof bindings.get !== 'function') return false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  bindings.deleteForRender = function (this: any, renderObject: any) {
-    if (this.has(renderObject) && this.get(renderObject).initialized === true) return release.call(this, renderObject);
-    this.delete(renderObject);
-  };
-  return true;
 }
 
 /**
