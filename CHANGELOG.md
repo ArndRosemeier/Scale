@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.297 — 2026-11-05
+
+- **A ghost gives night tours.** Ambrose Penhallow, the city's crier until 1887, is a friendly ghost who shows tourists round from dusk to the small hours. Near a cemetery he rises out of the main tomb and leads a small group from grave to grave, then to an old house or two outside the walls; in the old town his tours start at a fountain, a statue or an old lamp. At each stop he tells a short story, and the tourists gasp, laugh, clap and take photos. He glides straight to the next stop, through walls and houses, often mid-sentence, while his group has to walk round ("Oh! Sorry. I keep forgetting you need doors."). At the end he bows and fades away (or sinks back into his tomb).
+- He is see-through, glows faintly at the edges, floats a little off the ground and carries a lantern with a cold green flame. Punches and powers go straight through him, and so do you if you walk into him ("You're standing in my liver"). He invites you along, has a word for you if you fly, are a giant, tiny, famous or notorious, and thanks you if you stay for the whole tour. Anything dangerous nearby ends the tour: the tourists run and he fades away with a sigh.
+- Admin console: a "Ghost tour guide" section starts a tour where you stand, at any hour.
+
 ## 0.296 — 2026-11-05
 
 - **The gentle giant of the stadium.** Earlier this year one of the city's crystals made someone grow to about ten metres, and that's all it did: no powers, no side in anything. Now they live with being a walking attraction, a friendly, slightly awkward local celebrity. You'll meet them around the stadium. They walk slowly and carefully round it (they wait when someone is right in front of their feet and say sorry), wave and smile at people, and greet the hero by name. Their steps are soft thuds, so nobody panics. Clothes don't come in their size, so they wear improvised underwear.
