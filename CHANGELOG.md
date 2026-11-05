@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.289 — 2026-11-05
+
+- **A retired gargoyle lives on the cathedral.** For six hundred years it was a waterspout; since they put in a drainpipe it is retired, and very much alive. By day it squats on a buttress by the cathedral's front as still as stone (fly up to it and it may whisper, or wink). At dusk it wakes, stretches, its eyes light up, and it glides down to its spot on the square beside the steps. At night it gossips with the pigeons (they gather round it), strolls about the square, and passers-by stop to look and take photos. Walk up and press **E** to talk: who it is, the pigeons' gossip (when a rumour about a gang's hideout is going round, the pigeons know it, and it goes into the tracker), and its tours. At 22:00, midnight and 2:00 it gives a free night tour: a few passers-by follow it to the sights nearby while it points and tells stories, and you can tag along. Trouble nearby ("Statue! I'm a statue!") sends it flying back up to its ledge for a while, and it is back up there before dawn. In a city without a cathedral it lives on the town hall's roof. It goes into the People tab of the tracker when you meet it.
+
 ## 0.288 — 2026-11-05
 
 - **Old enemies come back** (Normal mode). A gang boss who breaks out of jail turns up in their old turf near you before long, leading one of the gang's crimes. A gang that had collapsed comes back: the news says so in its story in the tracker, and one of its crimes comes up near you.

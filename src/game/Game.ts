@@ -113,6 +113,7 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { Gargoyle } from './citizens/gargoyle/Gargoyle';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
 import { StationLife } from './metro/StationLife';
@@ -238,6 +239,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** The retired cathedral gargoyle: stone by day, down on the square at night (src/game/citizens/gargoyle). */
+  gargoyle: Gargoyle | null = null;
   /** The stadium's evening concert (src/game/concert). */
   concert: Concert | null = null;
   /** The stadium's daytime soccer matches (src/game/soccer). */
@@ -870,6 +873,7 @@ export class Game {
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('citizens', () => this.gargoyle?.update(dt));
     this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1239,6 +1243,7 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.gargoyle = new Gargoyle(this);
     this.concert = new Concert(this);
     this.soccer = new Soccer(this);
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
@@ -1426,6 +1431,8 @@ export class Game {
     if (dress) return dress;
     const shard = this.sidekick?.hint();
     if (shard) return shard;
+    const garg = this.gargoyle?.hint();
+    if (garg) return garg;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1481,6 +1488,8 @@ export class Game {
     if (this.arcade?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Take the glowing stone (the second shard).
     if (this.sidekick?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // Talk to the gargoyle (or look at it, by day).
+    if (this.gargoyle?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();
