@@ -483,6 +483,7 @@ export class People {
       const fv = o.favour;
       if (o !== k && fv?.kind === 'visit' && !fv.done && !fv.lost && fv.who?.id === a.cit.id) { asker = o.name.split(' ')[0]; this.favourDone(o); }
     }
+    this.g.gm?.met('people');
     this.session = { a, p, k, act, foreign, job, years, busy: 0, idle: 0, closing: 0, metBefore, lastBefore, n: 0, since: this.g.consequences.time, asker, askedFavour: false };
     // Opinion and mood before the menu: the header shows them.
     const f = this.facts(this.session);
@@ -599,6 +600,9 @@ export class People {
     const req = { topic, facts, seed, used: new Set(s.k.said), memory: s.k.notes.map((n) => n.text) };
     const rule: Picked = ruleAnswer(req);
     addSaid(s.k, rule.id);
+    // Told the game master's rumour: a clue in the group's thread.
+    const R = this.g.gm?.dir.state.rumour;
+    if (R && rule.text.includes(R.text)) this.g.gm.heard(R.text);
     // A favour done (or forgotten) is talked about once, then it is over.
     const fv = s.k.favour;
     if (fv && (fv.done !== undefined || fv.lost) && (facts.favour === 'done' || facts.favour === 'lost') && /^(h4[5-7]|f2[12])#/.test(rule.id)) delete s.k.favour;
@@ -651,6 +655,8 @@ export class People {
       favour, who: fv?.whoName?.split(' ')[0], word: fv?.word, asker: s.asker,
       nannies: g.wardens?.momentAt(a.x, a.z) ?? null,
       ...(g.city ? g.city.talkFacts(a.x, a.z, hashCombine(p.cit.seed, Math.floor(now))) : {}),
+      // The game master's rumour (game/gm), for some of the people asked, while it goes round.
+      ...(g.gm?.talkFacts(p.cit.seed) ?? {}),
     };
   }
 

@@ -32,7 +32,7 @@ import { CON_COLOR, conLevel, personStrength, playerStrength } from '../Consider
 import { SETTING_MAX, type CrimeSetting } from './CrimeIndex';
 import { Beat } from './Beat';
 import { responseFactor } from '../news/pulse';
-import { CrimeDirector, type CrimeRoll } from './CrimeDirector';
+import { CrimeDirector, kindWeights, groupWeights, pickKind, type CrimeRoll } from './CrimeDirector';
 import { Crime, CRIME_DEV, GROUP_KINDS, SKELETON, type CrimeKind, type CrimeWorld, type GetawayCar, type Loot, type PlayerView } from './Crime';
 import { Robbery } from './Robbery';
 import { Tagging, TAGGING } from './Tagging';
@@ -1113,6 +1113,36 @@ export class CrimeSystem {
     return this.begin(this.make(r.kind, r.seed, null));
   }
 
+  /**
+   * The game master brings a group's story back (game/gm): one of the group's own operations near
+   * the hero, in its turf (the hero's own street when it is theirs, else its nearest block within
+   * 450 m). Same budget and rules as the crime director's; null when it cannot happen now.
+   */
+  startFor(fid: number, u: number, seed: number): Crime | null {
+    const g = this.g, p = g.player.pos, f = this.factions.factions[fid];
+    if (!f || this.collapsed(fid) || this.director.setting === 'off') return null;
+    if (this.actorCount > ACTOR_BUDGET - 6 || this.crimes.filter((c) => c.active).length >= SETTING_MAX[this.director.setting]) return null;
+    if (g.player.height > 6 || g.underground.feetUnder(p.x, p.y, p.z) || g.indoorsAt(p.x, p.y + 0.5, p.z) || g.intro) return null;
+    const here = this.cellAt(p.x, p.z), F = this.factions, cells = g.macro.cells;
+    let near: { x: number; z: number } | null = null;
+    if (here < 0 || F.holder[here] !== fid) {
+      let bd = 450;
+      for (let i = 0; i < F.holder.length; i++) {
+        if (F.holder[i] !== fid) continue;
+        const [x, z] = cells[i].centroid, d = Math.hypot(x - p.x, z - p.z);
+        if (d < bd) { bd = d; near = { x, z }; }
+      }
+      if (!near) return null;
+    }
+    const district = cells[here >= 0 ? here : 0].district;
+    const ops = { ...ARCHETYPES[f.archetype].kinds, brawl: 0 };
+    const kind = pickKind(groupWeights(kindWeights(district, g.sky.hour), ops), u);
+    const c = this.make(kind, seed, near);
+    if (!this.begin(c, f)) return null;
+    this.director.ended();
+    return c;
+  }
+
   private begin(c: Crime, faction?: Faction | null): boolean {
     if (!c.setup()) { c.abort(); c.dispose(); return false; }
     // The group whose turf it is (a group-only kind just outside it: the player's cell's group).
@@ -1717,6 +1747,7 @@ export class CrimeSystem {
     const who = by ? ` by ${inSentence(by)}${rival ? ` and ${inSentence(rival)}` : ''}` : '';
     this.reward({ karma: k, why: `stopped ${KINDS[c.kind].stopped}${who}${clean ? ' — nobody else hurt' : ''}`, rep: KINDS[c.kind].rep, news: 'crime stopped', stopped: true });
     this.onStopped?.(c);
+    g.gm?.met('challenge');
     // The tracker: what the hero did to the group (quiet: the karma toast tells it).
     const S = g.story;
     if (S && by) for (const f of rival ? [by, rival] : [by]) S.note(S.group(f), `You stopped ${KINDS[c.kind].stopped} ${S.where(c.x, c.z)}`.trim(), { x: c.x, z: c.z });

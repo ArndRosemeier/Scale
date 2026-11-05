@@ -2,6 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.284 — 2026-11-05
+
+- **A quiet game master paces the city's stories** (Normal mode; the game master plan, phase 2). It tracks three needs: something new about a story, a fight, and a talk with someone. Each need grows while you go without it. When one has waited too long (6, 5 and 10 minutes of play), the game master answers it in a way that looks like the city's own life. (For now it answers only the first two. Moves for the talk need come in a later phase.) After you win a fight it holds back for a while, and it never makes two moves within two minutes. It follows one gang: the one whose story you've heard most recently, otherwise the one whose turf you're in.
+- **One gang's story keeps coming back where you play.** When you've gone without a fight, or without anything new, the gang you follow starts one of its own crimes near you in its turf: a mugging, a heist, a ritual, whatever that gang does. The crime system's usual rules and limits apply. Nothing happens if you're a giant, underground or indoors.
+- **People know things.** Ask someone for the news and about half of them may pass on a rumour about where that gang hides out ("Word is the Blockside Saints keep their stash somewhere in Clintonfield"). The rumour lasts a game day. Once you've heard it, it goes into the gang's story in the tracker with a ⌖ pin on the area. It is hearsay, so it points to the area, not the door.
+- Developers: `dev.gm.panel()` (admin console › Game master) shows the needs, the gang being followed, the rumour going round and every move with its reason. It has buttons to make the game master act now. The game master's state is saved per city and in save files.
+
 ## 0.283 — 2026-11-05
 
 - **A tracker keeps your story so far** (Normal mode; the game master plan, phase 1). A small strip above the minimap shows a round chip for every open story: a gang in its colour and emblem, a threat, a favour, your sidekick. A chip pulses when something new comes in. Click a chip, the ☰ button or press **J** to open the panel. It has tabs for **Villains**, **Threats** and **People**, and under each story what you know about it, newest first, with the day and time and how it ended (a gang collapsed, a monster brought down, a favour done or let down). Anything with a place has a ⌖ button that opens the map there and points the compass to it, such as a hideout you found, a favour's street, or where something happened. Only what you saw or heard goes in. In the sandbox there is no tracker.

@@ -133,6 +133,7 @@ export class SaveSystem {
       cityLife: g.city ? g.city.save() : null,
       costumes: g.wardrobe ? g.wardrobe.save() : null,
       story: g.story ? g.story.save() : null,
+      gm: g.gm ? g.gm.save() : null,
     };
   }
 
@@ -284,6 +285,7 @@ export class SaveSystem {
     step('the neighbourhoods', () => { g.city?.restore(d.cityLife ?? null); g.crime.beat.clear(); });
     step('your costumes', () => g.wardrobe?.restore(d.costumes ?? null));
     step('your story so far', () => { if (d.story) g.story?.restore(d.story); });
+    step('the city\'s pace', () => { if (d.gm) g.gm?.restore(d.gm); });
     step('the player', () => this.placePlayer(d.player));
     step('the camera', () => { g.camRig.yaw = d.camera.yaw; g.camRig.pitch = d.camera.pitch; g.camRig.zoom = d.camera.zoom; });
     step('health', () => {

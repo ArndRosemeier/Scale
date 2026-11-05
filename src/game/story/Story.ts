@@ -68,7 +68,7 @@ export class Story {
   note(info: ThreadInfo, text: string, o: TellOpts = {}): Thread | null {
     if (!this.enabled) return null;
     const r = this.know.note(info, { at: this.g.sky.hoursAbs, text, src: o.src ?? 'seen', ...(Number.isFinite(o.x) && Number.isFinite(o.z) ? { x: o.x, z: o.z } : {}) });
-    if (r.added) this.changed(r.thread.id);
+    if (r.added) { this.changed(r.thread.id); this.g.gm?.met('story'); }
     return r.thread;
   }
 
