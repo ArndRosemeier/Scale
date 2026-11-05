@@ -38,6 +38,8 @@ export const SOCCER_OWNER = -9;
 export const FLOATER_OWNER = -12;
 /** Owner id of the magnetic grandma (src/game/citizens/grandma): her own budget. */
 export const GRANDMA_OWNER = -15;
+/** Owner id of the people on the cathedral gargoyle's night tour (src/game/citizens/gargoyle): their own budget. */
+export const GARGOYLE_OWNER = -13;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';
 export type Armed = 'none' | 'knife' | 'bat' | 'gun';
 export type Mood = 'neutral' | 'happy' | 'angry' | 'sad' | 'afraid' | 'surprised' | 'pain' | 'focused';
