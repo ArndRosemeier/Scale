@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.291 — 2026-11-05
+
+- **A ghost gives night tours.** Ambrose Penhallow, the city's crier until 1887, is a friendly ghost who shows tourists round from dusk to the small hours. Near a cemetery he rises out of the main tomb and leads a small group from grave to grave, then to an old house or two outside the walls; in the old town his tours start at a fountain, a statue or an old lamp. At each stop he tells a short story, and the tourists gasp, laugh, clap and take photos. He glides straight to the next stop, through walls and houses, often mid-sentence, while his group has to walk round ("Oh! Sorry. I keep forgetting you need doors."). At the end he bows and fades away (or sinks back into his tomb).
+- He is see-through, glows faintly at the edges, floats a little off the ground and carries a lantern with a cold green flame. Punches and powers go straight through him, and so do you if you walk into him ("You're standing in my liver"). He invites you along, has a word for you if you fly, are a giant, tiny, famous or notorious, and thanks you if you stay for the whole tour. Anything dangerous nearby ends the tour: the tourists run and he fades away with a sigh.
+- Admin console: a "Ghost tour guide" section starts a tour where you stand, at any hour.
+
 ## 0.290 — 2026-11-05
 
 - **Leo Lightly, the man who can't land.** A crystal earlier this year left Leo, a friendly accountant, floating about a metre off the ground for good. He's not a hero or a villain, just someone the whole town knows. By day his kids Mia and Ben tow him round the park nearest the city centre on a string tied to his ankle, like a balloon. He waves at people, chats in speech bubbles, and passers-by stop to film him. He isn't out at night, in the rain, or on the odd day the family stays home.
