@@ -10,7 +10,7 @@
  *                             its turf, so one gang's story keeps coming back where the hero plays
  *
  * Normal mode only (like the tracker). Saved per city in the browser and in save files (SaveData.gm).
- * The developer panel (dev.gm.panel(), admin console "Game master") shows its moves and why.
+ * The developer panel (dev.gm.panel(), admin console "Story pacing") shows its moves and why.
  */
 import type { Game } from '../Game';
 import { Director, GM, NEEDS, followedGroup, hideoutRumour, type GmMove, type Need } from './director';
@@ -188,7 +188,7 @@ export class GameMaster {
     const f = this.followed();
     const fname = f === null ? 'none' : this.g.crime.factions.factions[f].name;
     const moves = S.log.slice().reverse().slice(0, 14).map((m) => `<li><span class="w">${clueTime(m.at)} · ${m.tool} · ${m.need}</span>${m.x !== undefined ? `<button data-x="${m.x.toFixed(1)}" data-z="${m.z!.toFixed(1)}">⌖</button>` : ''}${esc(m.why)}</li>`).join('');
-    this.panel!.innerHTML = `<div class="gm-h"><b>Game master</b><button class="gm-x">×</button></div>
+    this.panel!.innerHTML = `<div class="gm-h"><b>Story pacing</b><button class="gm-x">×</button></div>
       <div class="gm-s">${D.pacing()} · following ${esc(fname)}<br>${needs}${S.rumour ? `<br>rumour${S.rumour.heard ? ' (heard)' : ''}: ${esc(S.rumour.text)}` : ''}</div>
       <div class="gm-b">Act now: ${NEEDS.map((n) => `<button data-act="${n}">${n}</button>`).join('')}</div>
       <ul>${moves || '<li>No moves yet.</li>'}</ul>`;

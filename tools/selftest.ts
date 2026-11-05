@@ -4122,6 +4122,10 @@ section('game master', async () => {
   const people = fs.readFileSync('src/game/people/People.ts', 'utf8'), crime = fs.readFileSync('src/game/crime/CrimeSystem.ts', 'utf8'), story = fs.readFileSync('src/game/story/Story.ts', 'utf8');
   check(people.includes("gm?.met('people')") && crime.includes("gm?.met('challenge')") && story.includes("gm?.met('story')"), 'gm: talks, fights won and clues meet the needs');
   check(people.includes('gm?.talkFacts(') && people.includes('gm.heard('), 'gm: people asked for the news pass the rumour on, and the hero remembers it');
+  // Arnd: the player never learns there is a game master (the changelog, the manual, the admin console, the panel).
+  const shown = [readFileSync('CHANGELOG.md', 'utf8'), readFileSync('public/manual/manual.html', 'utf8'), readFileSync('src/ui/AdminConsole.ts', 'utf8'),
+    fs.readFileSync('src/game/gm/GameMaster.ts', 'utf8').split('\n').filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l)).join('\n')];
+  check(shown.every((t) => !/game[ -]master/i.test(t)), 'gm: nothing the player can see names a game master');
 });
 
 section('story knowledge', async () => {

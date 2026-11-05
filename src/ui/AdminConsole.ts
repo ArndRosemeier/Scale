@@ -299,7 +299,7 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Wanted 3', run: (_g, d) => call(d, 'wanted', 3) },
     { label: 'Wanted 0', run: (_g, d) => call(d, 'wanted', 0) },
   ]],
-  ['Game master', [
+  ['Story pacing', [
     { label: 'Panel', run: (_g, d) => call(d, 'gm.panel') },
     { label: 'Status', run: (_g, d) => call(d, 'gm.status') },
     { label: 'Log', run: (_g, d) => call(d, 'gm.log') },
