@@ -379,7 +379,7 @@ export class CrowdRenderer {
         obj.position.set(a.x - _fv.x, a.y + centre - _fv.y, a.z - _fv.z);
         r.flown = true;
       } else {
-        r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
+        r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, act?.move === 'climb' ? a.vy : 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
         // Landed after flying: no pitch or bank left over (the rig only sets the yaw).
         if (r.flown) { r.flown = false; r.rig.object.quaternion.setFromEuler(_fe.set(0, a.heading + twitch, 0, 'YXZ')); }
       }

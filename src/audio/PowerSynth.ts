@@ -21,6 +21,9 @@ export class PowerSynth {
   private noise: AudioBuffer | null = null;
   private voices = 0;
 
+  /** Each one-shot started (the sound log). */
+  onPlay: ((kind: SynthShot, x: number, y: number, z: number) => void) | null = null;
+
   constructor(private out: () => Out | null) {}
 
   private noiseBuf(ctx: AudioContext): AudioBuffer {
@@ -48,6 +51,7 @@ export class PowerSynth {
   play(kind: SynthShot, x: number, y: number, z: number, gain = 1, ref = 6, pitch = 1): void {
     const o = this.out();
     if (!o || this.voices > 24 || !heard(x, y, z, gain, ref)) return;
+    this.onPlay?.(kind, x, y, z);
     const { ctx } = o;
     const t = ctx.currentTime + 0.005;
     const pan = this.spot(ctx, o.out, x, y, z, ref, gain);

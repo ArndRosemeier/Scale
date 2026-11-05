@@ -611,6 +611,20 @@ function readMap(p: Pose, _t: number, c: ActionCtx) {
 }
 
 /** Holding something out to a passer-by (a flyer). */
+/** Holding a string (a kid towing her floating dad): the right arm back and up behind her while walking. */
+function towString(p: Pose, _t: number, c: ActionCtx) {
+  const s = Math.sin(c.elapsed * 3.1) * 0.05;
+  p.arm('R', -0.55 + s, 0.45, 0.2, 0.35, 0.3);
+  p.neck(0, -0.12, 0);
+}
+
+/** Holding a string up in front, towards someone floating above. */
+function holdString(p: Pose, _t: number, c: ActionCtx) {
+  const s = Math.sin(c.elapsed * 1.7) * 0.06;
+  p.arm('R', 1.75 + s, 0.25, 0, 0.35, 0.4);
+  p.neck(0.35);
+}
+
 function offer(p: Pose, t: number) {
   const u = kf(t, [[0, 0], [0.2, 1], [0.8, 1], [1, 0]]);
   p.arm('R', 1.25 * u, 0.15 * u, 0.4 * u, 0.3 * u, 0.4 * u);
@@ -883,6 +897,8 @@ export const ACTIONS: Record<string, ActionDef> = {
   feed_birds: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: feedBirds, mood: 'happy', loop: true },
   sleepwalk: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: sleepwalk, loop: true },
   read_map: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: readMap, loop: true },
+  tow_string: { mask: 'arms', blendIn: 0.2, blendOut: 0.2, pose: towString, loop: true, curl: { R: 1.3 } },
+  hold_string: { mask: 'arms', blendIn: 0.25, blendOut: 0.2, pose: holdString, loop: true, curl: { R: 1.3 } },
   offer: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: offer, mood: 'happy' },
   take_photo: { mask: 'upper', blendIn: 0.1, blendOut: 0.12, pose: takePhoto, mood: 'focused', loop: true },
   shoulder_cam: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: shoulderCam, mood: 'focused', loop: true },

@@ -2,9 +2,20 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.289 — 2026-11-05
+## 0.291 — 2026-11-05
 
 - **The magnetic grandma.** Every city has one: a cheerful old lady who was made magnetic by one of the crystals years ago. She is no hero and no villain. In the day (8:30 to 12:30 and 14:00 to 18:30) she does her rounds of the shops in her part of town, and anything made of metal near her flies over and sticks to her coat: forks and teaspoons off café tables, tins from the shop doors, a spanner off the street, keys out of passers-by's pockets (she hands those back) and now and then a whole bicycle, which she carries on her back for a while. When she clanks too much she stops and shakes it all off onto the pavement with a great clatter. People stop to watch and take photos, and she has a word for everyone, the hero included. Anything dangerous nearby ends her day: everything drops and she runs. She's back the next day. The first time you meet her, she goes into the People tab of the tracker with her part of town on the map.
+
+## 0.290 — 2026-11-05
+
+- **Leo Lightly, the man who can't land.** A crystal earlier this year left Leo, a friendly accountant, floating about a metre off the ground for good. He's not a hero or a villain, just someone the whole town knows. By day his kids Mia and Ben tow him round the park nearest the city centre on a string tied to his ankle, like a balloon. He waves at people, chats in speech bubbles, and passers-by stop to film him. He isn't out at night, in the rain, or on the odd day the family stays home.
+- **Windy days.** A gust can tear the string out of Mia's hand and blow Leo onto a roof. The kids run to the street below, and a fire engine comes with its siren. A firefighter climbs the ladder, takes the string, brings him down and hands him back to Mia. You can beat them to it: touch Leo while he's loose and you hold the string. Bring him back to his kids for a little karma and reputation. Hit him and he spins loose too. Knock him down and he floats back up afterwards.
+- Admin console: "Go to" has an entry that takes you to Leo's park.
+
+## 0.289 — 2026-11-05
+
+- **The odd short synthetic tone was the alien discs scanning.** When a Warden disc turns its scan cone on, it plays a soft rising tone. It was set to carry like a big event, so discs hanging high up and far away (often 300 m to over a kilometre) were heard all over town, roughly every 40 s and more often with several discs about, with nothing to see. Now you hear it only within about 180 m, when a disc is over your street.
+- **New: sound log (Shift+F7).** A small box lists the sounds of the last 20 seconds, newest on top, with how far away each one was and its volume category, so any sound you wonder about can be named on the spot. Also listed in Help › Keys.
 
 ## 0.288 — 2026-11-05
 

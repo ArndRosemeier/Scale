@@ -5044,6 +5044,38 @@ section('hearing: distance', async () => {
   for (const d of [10, 30, 80, 200, 500]) check(airCutoff(d) >= airCutoff(d * 2), `the lowpass closes with distance (${d} m)`);
 });
 
+section('floating man', async () => {
+  const { FLOATER, floaterHome, outingAt, slotOf, spotOf, gustChance, tetherStep } = await import('../src/game/citizens/floater/plan');
+  const { floaterLine, FLOATER_TOPICS } = await import('../src/game/citizens/floater/lines');
+  const macro = buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.4 })));
+  const h = floaterHome(macro), h2 = floaterHome(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.4 }))));
+  check(h.x === h2.x && h.z === h2.z && h.cell >= 0, 'his home park is the same for the same city');
+  const park = macro.cells.some((c) => c.district === 'park');
+  check(!park || macro.cells[h.cell].district === 'park', 'he lives by a park when the city has one');
+  let days = 0, nights = 0, wet = 0;
+  for (let d = 0; d < 60; d++) { if (outingAt(42, d * 24 + 13.5, 0)) days++; if (outingAt(42, d * 24 + 23, 0) || outingAt(42, d * 24 + 4, 0)) nights++; if (outingAt(42, d * 24 + 13.5, 0.6)) wet++; }
+  check(days > 35 && days < 60 && nights === 0 && wet === 0, `out on most afternoons (${days}/60), never at night (${nights}) or in the rain (${wet})`);
+  let rep = 0;
+  for (let s = 0; s < 500; s++) if (spotOf(42, s, 5) === spotOf(42, s - 1, 5)) rep++;
+  check(rep === 0 && spotOf(42, 7, 1) === 0, 'never the same spot two slots running');
+  check(slotOf(10) === Math.floor(600 / FLOATER.slotMin), 'slots by game minutes');
+  check(gustChance(0.2, 60) === 0 && gustChance(0.95, 60) > 0.25 && gustChance(0.6, 1) < gustChance(0.9, 1), 'gusts only on windy days, more in a gale');
+  // On the string: never farther than the string from the hand, hovering by the hover height.
+  const b = { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0 };
+  let far = 0;
+  for (let i = 0; i < 600; i++) {
+    const hand = { x: i * 0.02, y: 1.1, z: 0 };
+    tetherStep(b, hand, FLOATER.string, FLOATER.hover, { x: -0.8, z: 0.3 }, 1 / 60);
+    if (Math.hypot(b.x - hand.x, b.y - 0.1 - hand.y, b.z - hand.z) > FLOATER.string + 1e-3) far++;
+  }
+  check(far === 0, 'the string holds him at its length');
+  check(Math.abs(b.y - FLOATER.hover) < 0.3 && b.x < 12, `he trails behind the hand at hover height (y ${b.y.toFixed(2)})`);
+  const free = { x: 0, y: 3, z: 0, vx: 0, vy: 0, vz: 0 };
+  for (let i = 0; i < 600; i++) tetherStep(free, null, FLOATER.string, FLOATER.hover, { x: 0, z: 0 }, 1 / 60);
+  check(Math.abs(free.y - FLOATER.hover) < 0.1, 'loose and calm, he settles at his hover height (never lands)');
+  check(FLOATER_TOPICS.every((t) => floaterLine(t, () => 0.5).length > 3), 'every topic has lines');
+});
+
 section('magnetic grandma: home, hours, spots', async () => {
   const { grandmaHome, grandmaOut, freeSpot, spotFor, spotsClash } = await import('../src/game/citizens/grandma/plan');
   type Spot = ReturnType<typeof spotFor>;
