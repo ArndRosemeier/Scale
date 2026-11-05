@@ -2,6 +2,9 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.287 — 2026-11-05
+
+- **A police radio at reputation +100.** When the city trusts you that much, the police hand you a radio on their channel (a toast tells you). From then on you hear their calls: each crime they are called to comes as a short "📻 Dispatch" toast with a radio squelch, saying what happened and where ("A mugging reported on Stone Boulevard. Cars are on the way."). The call is on the map, and the newest one is on the compass with its distance, until the crime is over or you get there. Monsters, rogue machines and other threats the police turn out for are called too ("All units: …, keep civilians clear"). When you finish a job they called in, dispatch thanks you. A gang's crime heard on the radio also goes into that gang's story in the tracker. Fall below +70 and the police take the radio back; it comes back at +100. It is kept in saves.
 ## 0.286 — 2026-11-05
 
 - **Big gang jobs are cased first** (Normal mode). A boss operation no longer comes out of the blue. The gang picks its target near you and a time an hour or three ahead. Until then, two or three of its members hang about the place looking it over: suits watching a bank, robes marking the ground before the cathedral, hackers poking at the robots. If you see them, a line goes into the gang's story in the tracker with a pin. Walk up and they break off and run. Catch one and they tell you what the job is and when ("The boss takes the bank on Lexington Avenue around 13:00"). When the time comes, the job starts if you're nearby. If you're elsewhere it happens without you, and you hear of it in the news if you knew about it.

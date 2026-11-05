@@ -2515,7 +2515,7 @@ section('saves', async () => {
     sky: { day: 3, hour: 18.75, timeScale: 60 },
     weather: { setting: 'rain', wet: 0.62, skipH: 1.5 },
     progress: { v: 1, karma: 140, earned: 320, deeds: 17, ranks: { laser: 2, flight: 1 }, slots: ['punch', 'laser', null, null, null, null, null, null, null, null], cores: [3, 9], seen: [3, 9, 11], bonusMax: 20, bonusRegen: 1.5 },
-    reputation: { v: 37.5, stats: { stopped: 4, kos: 2, arrests: 1, returned: 3, deeds: 9, hurt: 1, busted: 0 } },
+    reputation: { v: 37.5, stats: { stopped: 4, kos: 2, arrests: 1, returned: 3, deeds: 9, hurt: 1, busted: 0 }, radio: true },
     justice: { heat: 3.2, wanted: 1, stats: { offences: 3, arrests: 0, turnIns: 1, escapes: 2 } },
     threats: {
       clock: { v: 1, played: 5400, pressure: 7300, n: 2, lastAt: 4100, lastP: 5000, last: 'robots', armedAt: null, omensDone: 0, karma: 320, majors: 0, lastMajorAt: 0, armedMajor: false },
