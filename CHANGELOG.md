@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.298 — 2026-11-05
+
+- Behind the scenes: a plan for supervillains (docs/SUPERVILLAINS_PLAN.md). Every city grows its own villains over time, each with their own name, origin, motive, style, powers and lair. They can be beaten for good, new ones can rise, and they can fight each other over turf. No change in the game yet.
+
 ## 0.297 — 2026-11-05
 
 - **A ghost gives night tours.** Ambrose Penhallow, the city's crier until 1887, is a friendly ghost who shows tourists round from dusk to the small hours. Near a cemetery he rises out of the main tomb and leads a small group from grave to grave, then to an old house or two outside the walls; in the old town his tours start at a fountain, a statue or an old lamp. At each stop he tells a short story, and the tourists gasp, laugh, clap and take photos. He glides straight to the next stop, through walls and houses, often mid-sentence, while his group has to walk round ("Oh! Sorry. I keep forgetting you need doors."). At the end he bows and fades away (or sinks back into his tomb).
