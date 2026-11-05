@@ -924,7 +924,7 @@ export class Game {
     this.T('weather', () => this.weather.update(dt));
     this.T('sky', () => this.sky.update(dt, focus, cam));
     this.T('wardens', () => this.wardens?.update(dt));
-    this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
+    { const b = this.sky.bloom; this.renderer.setBloom(b.strength, b.radius, b.threshold); }
     const P = this.player;
     this.T('future', () => this.future.update(dt, this.sky.hoursAbs, focus, { active: !this.freeCam, x: P.pos.x, y: P.pos.y, z: P.pos.z, vx: P.vel.x, vy: P.vel.y, vz: P.vel.z, height: P.height, radius: P.radius, mass: P.mass }, cam));
     this.elements.postFuture();

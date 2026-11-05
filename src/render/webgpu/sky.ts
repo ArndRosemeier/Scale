@@ -16,7 +16,8 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
-export function makeSkyNode(reversed: boolean, env: boolean, sunR: number, moonR: number): THREE.Mesh {
+/** `envGround`: the environment sky below the horizon, as a share of the horizon (SkySystem.ENV_GROUND). */
+export function makeSkyNode(reversed: boolean, env: boolean, sunR: number, moonR: number, envGround = 1): THREE.Mesh {
   const material = new THREE.NodeMaterial();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
   const U = {
@@ -188,6 +189,7 @@ export function makeSkyNode(reversed: boolean, env: boolean, sunR: number, moonR
     texColor.addAssign(vec3(0.7, 0.75, 0.9).mul(U.flash).mul(0.5).mul(add(0.3, pow(max(dot(direction, U.flashDir), 0.0), 4.0))));
     const hz = sub(1.0, smoothstep(-0.02, 0.4, direction.y));
     texColor.assign(mix(texColor, U.fogCol, clamp(U.skyFog.mul(mix(hz, 1.0, U.skyFog.mul(U.skyFog))), 0.0, 1.0)));
+    if (env && envGround !== 1) texColor.mulAssign(mix(envGround, 1.0, smoothstep(-0.12, 0.0, direction.y)));
     return vec4(texColor, 1.0);
   })();
 
