@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.288 — 2026-11-05
+
+- **Old enemies come back** (Normal mode). A gang boss who breaks out of jail turns up in their old turf near you before long, leading one of the gang's crimes. A gang that had collapsed comes back: the news says so in its story in the tracker, and one of its crimes comes up near you.
+- **Jobs leave a mark.** When a gang's big job goes through (a bank cracked, a street taken, a great ritual), whether you were there or not, the site stays taped off with police tape for a few hours. Walk past it later and a line goes into the gang's story ("Police tape round the bank on Lincoln Avenue: Gilt & Co. cracked the vault").
+- **The city leans to how you play.** If you keep fighting, gang trouble finds you a little sooner. If you keep talking to people, the moments for that come sooner. What you stopped doing fades again after a while.
+
 ## 0.287 — 2026-11-05
 
 - **A police radio at reputation +100.** When the city trusts you that much, the police hand you a radio on their channel (a toast tells you). From then on you hear their calls: each crime they are called to comes as a short "📻 Dispatch" toast with a radio squelch, saying what happened and where ("A mugging reported on Stone Boulevard. Cars are on the way."). The call is on the map, and the newest one is on the compass with its distance, until the crime is over or you get there. Monsters, rogue machines and other threats the police turn out for are called too ("All units: …, keep civilians clear"). When you finish a job they called in, dispatch thanks you. A gang's crime heard on the radio also goes into that gang's story in the tracker. Fall below +70 and the police take the radio back; it comes back at +100. It is kept in saves.

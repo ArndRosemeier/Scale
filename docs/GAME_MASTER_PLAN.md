@@ -7,7 +7,10 @@ needs story/challenge/people, calm after a fight won, a 2-minute gap between mov
 group's own crime near the hero through `CrimeSystem.startFor`, same budget and rules), the dev panel). **Phase 3 is built** (v0.286):
 `gm/Signs.ts` + `crime/Lookout.ts`: boss operations planned ahead and cased (lookouts seen, a caught one tells when),
 calling cards (a messenger after an operation stopped or a stash busted, notoriety wary+), witnesses (a crime that got
-away near the hero: a bystander tells where the group goes in). Plans are not saved (they last minutes). Not in the sandbox (Arnd: the sandbox is not for real
+away near the hero: a bystander tells where the group goes in). Plans are not saved (they last minutes). **Phase 4 is built** (v0.288): `gm/Callbacks.ts` (a boss out of jail
+leads a crime in their old turf near the hero, a collapsed group comes back; a boss operation that went through leaves
+its site taped off, `Aftermath.tapeOff`, and passing it adds a clue) and the player model in `director.ts` (decayed
+evidence per need leans each limit between 0.6× and 1.2×). Not in the sandbox (Arnd: the sandbox is not for real
 challenges).
 
 Scale already simulates a lot that the player hardly sees: six kinds of villain groups with turf, hideouts,

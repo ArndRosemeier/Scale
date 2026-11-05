@@ -4138,7 +4138,14 @@ section('game master', async () => {
   const m = D.record({ at: 30, tool: 'rumour', need: 'story', why: 'test', x: 1, z: 2 });
   check(m.t === Math.round(D.state.played) && D.state.n === 1 && D.due().length === 0, 'gm: a move is logged and keeps the next one away');
   D.state.played += GM.minGap + 1;
-  check(D.due().length === 2, 'gm: the gap after a move passes');
+  check(D.due().length === 3, 'gm: the gap after a move passes (and a fighter is due a fight sooner: the player model)');
+  // The player model (phase 4): what the hero keeps doing leans the limits, within 0.6x..1.2x.
+  const M = new Director();
+  check(NEEDS.every((n) => Math.abs(M.limit(n) - GM.overdue[n]) < 1e-9), 'gm: with no evidence the limits are the base');
+  for (let i = 0; i < 6; i++) M.met('challenge');
+  check(M.limit('challenge') < GM.overdue.challenge * 0.7 && M.limit('people') > GM.overdue.people && M.limit('people') <= GM.overdue.people * 1.2 + 1e-9, 'gm: a fighter gets clashes sooner, other needs a little later');
+  M.advance(GM.styleFade * 6);
+  check(Math.abs(M.limit('challenge') - GM.overdue.challenge) < 1, 'gm: the player model forgets over time');
   for (let i = 0; i < GM.logKeep + 5; i++) D.record({ at: i, tool: 't', need: 'people', why: String(i) });
   check(D.state.log.length === GM.logKeep && D.state.log[GM.logKeep - 1].why === String(GM.logKeep + 4), 'gm: the log keeps its newest moves');
   D.state.rumour = { thread: 'group:gang', text: 'Word is', x: 3, z: 4, until: 50, heard: false };
@@ -4171,6 +4178,10 @@ section('game master', async () => {
   check(ST.whenSaid(10.5, 10) === 'within the hour' && ST.whenSaid(20, 17) === 'tonight around 20:00' && ST.whenSaid(24 + 9, 22) === 'tomorrow around 9:00', 'gm signs: when a job is, in words');
   check(['op', 'stash'].every((w) => [0, 0.5, 0.99].every((u) => ST.tauntLine(w as 'op', 'The Blockside Saints', u).includes('The Blockside Saints'))) && ST.witnessLine('on Pike St', 0.2).includes('on Pike St'), 'gm signs: calling cards name the group, witnesses the street');
   check(fs.readFileSync('src/game/crime/CrimeSystem.ts', 'utf8').includes('g.gm?.planOp(') && kindsSrc().includes("casing:") , 'gm signs: boss operations are planned ahead (cased) in Normal mode');
+  // Phase 4, callbacks and aftermath.
+  check(BOSS_OP_KINDS.every((k) => ST.SCENE_SEEN[k]) && ST.sceneSeen('heist', 'Gilt & Co.', 'on Elm Street').includes('Gilt & Co.') && ST.backLine('Gilt & Co.', 0.4).startsWith('News: Gilt & Co.'), 'gm callbacks: scenes and returns in words');
+  const cs = readFileSync('src/game/crime/CrimeSystem.ts', 'utf8');
+  check(cs.includes('g.gm?.brokeOut(f)') && cs.includes('g.gm?.returned(f)') && cs.includes('g.gm?.jobDone(f, c.kind'), 'gm callbacks: breakouts, returns and jobs done reach the game master');
   // Arnd: the player never learns there is a game master (the changelog, the manual; the hidden admin console may say it).
   const shown = [readFileSync('CHANGELOG.md', 'utf8'), readFileSync('public/manual/manual.html', 'utf8')];
   check(shown.every((t) => !/game[ -]master/i.test(t)), 'gm: nothing the player sees names a game master');

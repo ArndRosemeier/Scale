@@ -78,3 +78,23 @@ export function tauntLine(why: 'op' | 'stash', group: string, u: number): string
 export function witnessLine(where: string, u: number): string {
   return fill(pick(WITNESS, u), { where });
 }
+
+/** Passing the taped-off site of a job that went through. */
+export const SCENE_SEEN: Record<BossOpKind, string> = {
+  heist: 'Police tape round the bank {where}: {group} cracked the vault',
+  takeover: 'Police tape {where}, cars burnt out: {group} took the street',
+  uprising: 'Police tape {where}: {group} turned the robots here',
+  awakening: 'Police tape {where}: {group} held their great ritual here',
+  treewake: 'Police tape {where}: {group} woke a tree here',
+  deadrise: 'Police tape {where}: {group} raised the dead here',
+};
+
+const BACK = ['News: {group} are back. New faces on their old corners.', 'News: {group} are back in business, people say.', 'News: {group} are on the streets again.'];
+
+export function sceneSeen(kind: BossOpKind, group: string, where: string): string {
+  return fill(SCENE_SEEN[kind], { group, where });
+}
+
+export function backLine(group: string, u: number): string {
+  return fill(pick(BACK, u), { group });
+}

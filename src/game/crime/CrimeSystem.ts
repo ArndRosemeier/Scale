@@ -1139,7 +1139,7 @@ export class CrimeSystem {
    * the hero, in its turf (the hero's own street when it is theirs, else its nearest block within
    * 450 m). Same budget and rules as the crime director's; null when it cannot happen now.
    */
-  startFor(fid: number, u: number, seed: number): Crime | null {
+  startFor(fid: number, u: number, seed: number, boss = false): Crime | null {
     const g = this.g, p = g.player.pos, f = this.factions.factions[fid];
     if (!f || this.collapsed(fid) || this.director.setting === 'off') return null;
     if (this.actorCount > ACTOR_BUDGET - 6 || this.crimes.filter((c) => c.active).length >= SETTING_MAX[this.director.setting]) return null;
@@ -1159,7 +1159,12 @@ export class CrimeSystem {
     const ops = { ...ARCHETYPES[f.archetype].kinds, brawl: 0 };
     const kind = pickKind(groupWeights(kindWeights(district, g.sky.hour), ops), u);
     const c = this.make(kind, seed, near);
-    if (!this.begin(c, f)) return null;
+    // (A boss back on the street leads it: the game master's comeback.)
+    const devBoss = this.devBoss;
+    if (boss) this.devBoss = true;
+    const ok = this.begin(c, f);
+    this.devBoss = devBoss;
+    if (!ok) return null;
     this.director.ended();
     return c;
   }
@@ -1398,8 +1403,9 @@ export class CrimeSystem {
         // Out again, and not in a forgiving mood.
         this.notoriety[B.faction] = Math.max(this.notoriety[B.faction], NOTORIETY.wary);
         this.tellGroup(f, `<b style="color:${f.palette.map}">${f.emblem} ${B.name}</b> broke out of jail`, 'warn');
+        this.g.gm?.brokeOut(f);
       }
-      if (this.collapsedTold.has(B.faction) && !this.collapsed(B.faction)) this.collapsedTold.delete(B.faction);
+      if (this.collapsedTold.has(B.faction) && !this.collapsed(B.faction)) { this.collapsedTold.delete(B.faction); this.g.gm?.returned(f); }
     }
   }
 
@@ -1483,6 +1489,8 @@ export class CrimeSystem {
   /** A boss operation's work is done: what it leaves behind (the turf and the news: onEvent 'done'). */
   private bossOpDone(c: BossOperation, x: number, z: number): void {
     const g = this.g, f = this.factionOf(c), near = Math.hypot(x - g.player.pos.x, z - g.player.pos.z) < 300;
+    // The site stays taped off a while (the game master's aftermath).
+    if (f) g.gm?.jobDone(f, c.kind, x, z, near);
     const who = f ? `<b style="color:${f.palette.map}">${f.emblem} ${f.name}</b>` : 'The crew';
     switch (c.kind) {
       case 'heist':
