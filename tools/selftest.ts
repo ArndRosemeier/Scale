@@ -66,6 +66,8 @@ import { Match, makeTeam, PITCH, STEP as SOCCER_STEP } from '../src/game/soccer/
 import { soccerAt, soccerPlan, clubs as soccerClubs, fixture as soccerFixture } from '../src/game/soccer/plan';
 import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP, SHOW, SHOW_END } from '../src/game/concert/plan';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
+import { floristCells, floristHome, floristDay, FLORIST_H, GARDENS } from '../src/game/citizens/florist/plan';
+import { floristLine, type FloristTopic } from '../src/game/citizens/florist/lines';
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
@@ -2915,6 +2917,47 @@ section('street characters', async () => {
   check(STREET_KIND_LIST.every((k) => (['own', 'greet', 'panic', 'hit', 'leave', 'fly', 'giant'] as const).every((t) => !!lineFor(k, t, () => 0.5, 'X'))), 'street: every character has a line for every common moment');
   check(lineFor('tourist', 'greet', () => 0, 'Linden station')!.includes('Linden station'), 'street: places filled into the lines');
   console.log(`street: ${n} sites in ${cells.length} cells (${(performance.now() - t0).toFixed(0)} ms), ${seen.size} kinds cast`);
+});
+
+// The shrunk florist (game/citizens/florist/plan.ts): her shop found in every city, the same each
+// time; the stand on the pavement beside the door, clear of the walking corridor and of footprints;
+// her gardens on flat roofs of the cell within reach; her hours; her lines.
+section('shrunk florist', async () => {
+  let found = 0, bad = 0, gardens = 0;
+  const notes: string[] = [];
+  for (const seed of [42, 7, 1234]) {
+    const terrain = new Terrain(makeProfile({ seed, size: 0.4 }));
+    const macro = buildMacroPlan(terrain);
+    const C = floristCells(macro, seed);
+    if (JSON.stringify(C) !== JSON.stringify(floristCells(macro, seed))) bad++;
+    for (const id of C) {
+      const p = planCell(macro, macro.cells[id], terrain);
+      const h = floristHome(p, seed), h2 = floristHome(p, seed);
+      if (JSON.stringify(h) !== JSON.stringify(h2)) bad++;
+      if (!h) continue;
+      found++;
+      const b = p.buildings[h.b];
+      if (!b.shopfront || b.eatery) bad++;
+      if (!clearOfWalk(p.streets, h.stand.x, h.stand.z, 0.35)) bad++;
+      if (p.buildings.some((o) => pointInPoly(o.poly, h.stand.x, h.stand.z))) bad++;
+      if (Math.hypot(h.stand.x - h.door.x, h.stand.z - h.door.z) > 2.5) bad++;
+      for (const gd of h.gardens) {
+        const gb = p.buildings[gd.b];
+        if (gb.roof !== 'flat' || !pointInPoly(gb.poly, gd.x, gd.z) || Math.hypot(gd.x - h.stand.x, gd.z - h.stand.z) > 175) bad++;
+      }
+      gardens += h.gardens.length;
+      notes.push(`${seed}: ${h.shop} in cell ${id} (${p.district}), ${h.gardens.length} gardens`);
+      break;
+    }
+  }
+  console.log(notes.join('\n'));
+  check(found === 3, `florist: a shop in every city (${found}/3: ${notes.join('; ')})`);
+  check(bad === 0, `florist: deterministic, the stand beside the door clear of the walk and of footprints, gardens on flat roofs nearby (${bad} faults)`);
+  check(gardens >= 3 && gardens <= 3 * GARDENS, `florist: roof gardens to fly to (${gardens})`);
+  check(floristDay(3) === 'asleep' && floristDay(10) === 'open' && floristDay(19.5) === 'evening' && floristDay(22) === 'asleep' && floristDay(34) === 'open', 'florist: asleep at night, open by day, no flights in the evening');
+  check(FLORIST_H > 0.1 && FLORIST_H < 0.2, 'florist: 15 cm tall');
+  const topics: FloristTopic[] = ['own', 'greet', 'stepped', 'stepped2', 'giant', 'tiny', 'fly', 'hero', 'villain', 'wanted', 'mount', 'garden', 'back', 'rain', 'scared', 'evening', 'morning', 'fan'];
+  check(topics.every((t) => { const l = floristLine(t, () => 0.99, 'Posy', "Posy's Petals"); return !!l && !/[{}]|undefined/.test(l); }), 'florist: a line for every moment, names filled in');
 });
 
 // The stadium concert (game/concert/plan.ts): the evening's hours, the stage on the pitch with the
