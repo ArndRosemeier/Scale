@@ -36,6 +36,12 @@ export const CONCERT_OWNER = -8;
 export const SOCCER_OWNER = -9;
 /** Owner id of Leo Lightly, the man who can't land, his kids and the firefighters who fetch him off roofs (src/game/citizens/floater). */
 export const FLOATER_OWNER = -12;
+/** Owner id of the magnetic grandma (src/game/citizens/grandma): her own budget. */
+export const GRANDMA_OWNER = -15;
+/** Owner id of the people on the cathedral gargoyle's night tour (src/game/citizens/gargoyle): their own budget. */
+export const GARGOYLE_OWNER = -13;
+/** Owner id of the gentle giant's people (src/game/citizens/giant: someone lifted for a photo, their friend, the press about them): their own budget. */
+export const GIANT_OWNER = -16;
 /** Owner id of the ghost tour's tourists (src/game/ghost): their own budget. */
 export const GHOST_OWNER = -14;
 export type ActorState = 'idle' | 'walk' | 'run' | 'fight' | 'cower' | 'surrender' | 'stagger' | 'down' | 'ko' | 'arrested' | 'point' | 'cheer' | 'gone';

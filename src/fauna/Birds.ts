@@ -44,6 +44,15 @@ export interface BirdCtx {
 
 interface BirdPed { x: number; z: number; y: number; speed: number; state: number; inside?: boolean }
 
+/** A bird posed by its owner (Birds.solo): (x, y, z) is the body centre; nose along +Z turned by yaw (atan2(dx, dz)). */
+export interface SoloBird {
+  readonly mesh: THREE.InstancedMesh;
+  readonly len: number;
+  /** Pose and wings: phase (rad), flap amplitude, fold (0 open … 1 tucked), dihedral bias. */
+  set(x: number, y: number, z: number, yaw: number, pitch: number, roll: number, phase: number, amp: number, fold: number, bias?: number): void;
+  dispose(): void;
+}
+
 /** The player's body (null in the free camera). */
 export interface BirdPlayer {
   pos: THREE.Vector3;
@@ -251,6 +260,42 @@ export class Birds {
     S.groups = 0; for (const g of this.groups) if (g.on) S.groups++;
     S.flocks = 0; for (const f of this.flocks) if (f.on) S.flocks++;
     S.ms = S.ms * 0.95 + (performance.now() - t0) * 0.05;
+  }
+
+  /**
+   * One bird driven by its owner (game/citizens/florist: the florist's pigeon): its own one-instance
+   * mesh on the flock's geometry and material (no new shader). The owner sets the pose each frame.
+   * `len`: body length (m); colours as the species table.
+   */
+  solo(len: number, body: number, wing: number, tip = 0.75): SoloBird {
+    const g = createBirdGeometry();
+    const att = (n: number, v: number[]) => new THREE.InstancedBufferAttribute(new Float32Array(v), n).setUsage(THREE.DynamicDrawUsage);
+    const cb = new THREE.Color(body), cw = new THREE.Color(wing);
+    const anim = att(4, [0, 0, 1, 0]);
+    g.setAttribute('iAnim', anim);
+    g.setAttribute('iColA', att(4, [cb.r, cb.g, cb.b, 1]));
+    g.setAttribute('iColB', att(4, [cw.r, cw.g, cw.b, tip]));
+    g.setAttribute('iSpan', att(2, [1, 0]));
+    const mesh = new THREE.InstancedMesh(g, this.mesh.material, 1);
+    mesh.name = 'solo-bird';
+    mesh.frustumCulled = false;
+    mesh.castShadow = false;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), p = new THREE.Vector3(), sc = new THREE.Vector3(len, len, len);
+    return {
+      mesh,
+      len,
+      set(x, y, z, yaw, pitch, roll, phase, amp, fold, bias = 0) {
+        e.set(pitch, yaw, roll);
+        q.setFromEuler(e);
+        m.compose(p.set(x, y, z), q, sc);
+        mesh.setMatrixAt(0, m);
+        mesh.instanceMatrix.needsUpdate = true;
+        const A = anim.array as Float32Array;
+        A[0] = phase; A[1] = amp; A[2] = fold; A[3] = bias;
+        anim.needsUpdate = true;
+      },
+      dispose() { mesh.removeFromParent(); g.dispose(); },
+    };
   }
 
   /**

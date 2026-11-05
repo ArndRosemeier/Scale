@@ -210,6 +210,20 @@ export class Reactions {
    * shout repeated every few seconds must not keep a crowd standing for ever); a full crowd
    * or someone bored of gawking walks on.
    */
+  /**
+   * Someone worth a look (the gentle giant, game/citizens/giant): stop and watch or film (the curious), outside
+   * the per-event budget. Returns whether they now watch.
+   */
+  watch(a: PedAgent, x: number, y: number, z: number): boolean {
+    if (a.state === PState.Flee || a.state === PState.Down || a.actor) return false;
+    if (a.state === PState.Gawk || a.state === PState.Film) { a.lookX = x; a.lookY = y; a.lookZ = z; return true; }
+    if (!canGawk(a)) return false;
+    a.state = a.cit.curiosity > 0.6 ? PState.Film : PState.Gawk;
+    a.stateT = 0;
+    a.lookX = x; a.lookY = y; a.lookZ = z;
+    return true;
+  }
+
   private gawk(a: PedAgent, x: number, y: number, z: number): void {
     if (a.state === PState.Flee || a.state === PState.Down) return;
     if (a.state === PState.Gawk || a.state === PState.Film) { a.lookX = x; a.lookY = y; a.lookZ = z; return; }

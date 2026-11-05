@@ -31,8 +31,13 @@ export interface CrowdTemplate {
 }
 
 const C3 = (r: number, g: number, b: number): [number, number, number] => [r, g, b];
+/**
+ * Seed 0 picks the first cut of each garment kind (outfit.ts): wool trousers and plain shorts. Seed 1
+ * picked cargo pants and denim shorts, whose crowd level keeps only ~80-100 triangles (the pack's
+ * simplified mesh of an already light garment): the far crowd walked in shreds of trousers.
+ */
 function vis(primary: [number, number, number], material = 'plain'): ItemVisual {
-  return { shape: 'cloth', seed: 1, primary, secondary: primary, accent: primary, material, glow: 0 } as unknown as ItemVisual;
+  return { shape: 'cloth', seed: 0, primary, secondary: primary, accent: primary, material, glow: 0 } as unknown as ItemVisual;
 }
 
 /** Template outfits (colours are irrelevant: instances recolour by slot). */
@@ -136,9 +141,29 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   const remap = new Map<number, number>(used.map((v, k) => [v, k]));
   // Garments pushed out along their normals by layer (see crowdPushes): the merged mesh has no depth lift per garment.
   const pushAll = crowdPushes(crowd.parts, partSlot.length, ch.occupies());
-  const vertRefs = used.map((v) => ({ v, slot: partSlot[v] as Slot, push: pushAll[v] }));
-  const nv = vertRefs.length;
+  const vertRefs: { mesh: THREE.SkinnedMesh; v: number; slot: Slot; push: number }[] = used.map((v) => ({ mesh: cm, v, slot: partSlot[v] as Slot, push: pushAll[v] }));
   const index = tris.map((v) => remap.get(v)!);
+  // Dresses and skirts are not in the merged mesh (Actors draws them on their own: they follow the
+  // legs by colliders), so the far crowd's women in a dress or skirt were bare. Their own meshes are
+  // added as they hang at this level (the skin weights alone, without the leg colliders).
+  const merged = new Set(crowd.parts.map((p) => p.name));
+  for (const [name, mesh] of ch.actor.actor.meshes) {
+    const sm = mesh as THREE.SkinnedMesh;
+    if (merged.has(name) || !sm.visible || !sm.isSkinnedMesh || !info.has(name)) continue;
+    const mi = sm.geometry.getIndex();
+    if (!mi) continue;
+    const slot = slotOf(name, 'garment');
+    // (Not pushed out like the merged garments: Actors already lifts a dress off the body, and the
+    // normals of a double-sided dress point either way, so a push crumpled it into the skin.)
+    const own = new Map<number, number>();
+    for (let k = 0; k < mi.count; k++) {
+      const v = mi.getX(k);
+      let r = own.get(v);
+      if (r === undefined) { own.set(v, (r = vertRefs.length)); vertRefs.push({ mesh: sm, v, slot, push: 0 }); }
+      index.push(r);
+    }
+  }
+  const nv = vertRefs.length;
   // The standing idle is a motion-captured loop of several seconds (Animator.idleCycle, picked by
   // seed): idle and film bake one whole cycle of it, so the texture loops seamlessly.
   await clipLibraryReady();
@@ -193,20 +218,23 @@ async function bakeOne(def: (typeof TEMPLATE_DEFS)[number], seed: number): Promi
   // inverse follows it once the character has run a frame, which the baker's rig may or may not
   // have done; applying the mesh's world matrix on top turned people round and lifted them.)
   const worldBind = new THREE.Matrix4();
+  const sources = [...new Set(vertRefs.map((x) => x.mesh))];
   const capture = (r: number) => {
-    THREE.Skeleton.prototype.update.call(cm.skeleton);
-    const bindInv = cm.bindMatrixInverse, boneTransform = cm.applyBoneTransform;
-    cm.bindMatrixInverse = worldBind;
-    // three's own CPU skinning (Actors' root binding would take the mesh's world matrix back out).
-    cm.applyBoneTransform = THREE.SkinnedMesh.prototype.applyBoneTransform;
+    const saved = sources.map((m) => {
+      THREE.Skeleton.prototype.update.call(m.skeleton);
+      const s = { bindInv: m.bindMatrixInverse, boneTransform: m.applyBoneTransform };
+      m.bindMatrixInverse = worldBind;
+      // three's own CPU skinning (Actors' root binding would take the mesh's world matrix back out).
+      m.applyBoneTransform = THREE.SkinnedMesh.prototype.applyBoneTransform;
+      return s;
+    });
     for (let k = 0; k < nv; k++) {
-      cm.getVertexPosition(vertRefs[k].v, tmp);
+      vertRefs[k].mesh.getVertexPosition(vertRefs[k].v, tmp);
       posArr[k * 3] = tmp.x; posArr[k * 3 + 1] = tmp.y; posArr[k * 3 + 2] = tmp.z;
       const o = (r * nv + k) * 4;
       posData[o] = tmp.x; posData[o + 1] = tmp.y; posData[o + 2] = tmp.z; posData[o + 3] = 1;
     }
-    cm.bindMatrixInverse = bindInv;
-    cm.applyBoneTransform = boneTransform;
+    sources.forEach((m, i) => { m.bindMatrixInverse = saved[i].bindInv; m.applyBoneTransform = saved[i].boneTransform; });
     geoTmp.getAttribute('position').needsUpdate = true;
     geoTmp.computeVertexNormals();
     const na = geoTmp.getAttribute('normal');

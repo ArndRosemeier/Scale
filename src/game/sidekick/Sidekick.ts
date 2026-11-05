@@ -27,7 +27,7 @@ import * as THREE from 'three';
 import type { Game } from '../Game';
 import { type PedAgent, isBystander } from '../../sim/Pedestrians';
 import { PState } from '../../sim/Pedestrians';
-import { makeActor, release, play, SIDEKICK_OWNER, PEOPLE_OWNER, STREET_OWNER, type Actor } from '../../sim/actors/Actor';
+import { makeActor, release, play, SIDEKICK_OWNER, PEOPLE_OWNER, STREET_OWNER, GRANDMA_OWNER, type Actor } from '../../sim/actors/Actor';
 import { planCell } from '../../plan/cell';
 import type { MapMarker } from '../../ui/map/GameMap';
 import type { HideoutGuard } from '../crime/HideoutGuard';
@@ -854,5 +854,5 @@ export class Sidekick {
 /** Working right now (an officer, a paramedic, a soldier, a shopkeeper, a cleanup worker, a street performer). */
 function onDuty(act: Actor | null): boolean {
   if (!act) return false;
-  return act.owner === STREET_OWNER || act.role === 'police' || act.role === 'medic' || act.role === 'soldier' || act.role === 'worker' || act.role === 'shopkeeper';
+  return act.owner === STREET_OWNER || act.owner === GRANDMA_OWNER || act.role === 'police' || act.role === 'medic' || act.role === 'soldier' || act.role === 'worker' || act.role === 'shopkeeper';
 }

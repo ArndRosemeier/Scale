@@ -96,6 +96,63 @@ export class Audio {
     if (this.recent.length > 60) this.recent.shift();
   }
 
+  /** Sounds switched off one by one (pause menu › Sound effects), remembered: they never play. */
+  private off: Set<string> = readOff();
+  /** Bypasses the switches while a sound is previewed. */
+  private previewing = false;
+
+  isOff(id: string): boolean { return !this.previewing && this.off.has(id); }
+
+  /** Switch one sound off or on (remembered across sessions). */
+  setOff(id: string, off: boolean): void {
+    if (off) this.off.add(id); else this.off.delete(id);
+    try { localStorage.setItem(OFF_KEY, JSON.stringify([...this.off])); } catch { /* storage unavailable */ }
+  }
+
+  /** Every clip sound and synthesized chime the game has (the Sound effects list). */
+  soundIds(): { id: string; description: string; loop: boolean }[] {
+    return [
+      ...Object.entries(this.manifest).map(([id, m]) => ({ id, description: m.description ?? '', loop: m.loop })),
+      ...CHIME_KINDS.map((k) => ({ id: `chime_${k}`, description: CHIME_TEXT[k], loop: false })),
+    ];
+  }
+
+  /**
+   * Play a sound once, here, whatever its switch says (the Sound effects list): a loop plays
+   * for a few seconds and fades. It goes through its category's level of the mix as in game.
+   */
+  preview(id: string): void {
+    this.wake();
+    if (!this.ctx) return;
+    if (id.startsWith('chime_')) {
+      this.previewing = true;
+      try { this.chime(id.slice(6) as ChimeKind); } finally { this.previewing = false; }
+      return;
+    }
+    const m = this.manifest[id];
+    if (!m) return;
+    const ctx = this.ctx;
+    const go = (bufs: AudioBuffer[]) => {
+      if (!bufs.length) return;
+      const src = ctx.createBufferSource();
+      src.buffer = bufs[(Math.random() * bufs.length) | 0];
+      const g = ctx.createGain();
+      g.gain.value = m.gain;
+      src.connect(g).connect(this.bus(id));
+      const t = ctx.currentTime;
+      src.start(t);
+      if (m.loop || src.buffer.duration > PREVIEW_S) {
+        src.loop = m.loop;
+        g.gain.setValueAtTime(m.gain, t + PREVIEW_S - 0.6);
+        g.gain.linearRampToValueAtTime(0, t + PREVIEW_S);
+        src.stop(t + PREVIEW_S + 0.05);
+      }
+      src.onended = () => g.disconnect();
+    };
+    const b = this.buffers.get(id);
+    if (b) { this.used.set(id, performance.now() / 1000); go(b); } else void this.load(id).then(go);
+  }
+
   /** Background music on/off (pause menu), remembered; its level is the 'music' category of the mix. */
   musicOn = readNum(MUSIC_KEY, 1) > 0;
 
@@ -174,7 +231,7 @@ export class Audio {
    * Out of its audible range (hearing.ts: by loudness and refDist) it is not played at all.
    */
   play(id: string, x: number, y: number, z: number, gain = 1, pitch = 1, refDist = 4, listener?: THREE.Vector3): void {
-    if (!this.ctx || !this.enabled || this.voices > 48) return;
+    if (!this.ctx || !this.enabled || this.voices > 48 || this.isOff(id)) return;
     const m = this.manifest[id];
     if (!m || !heard(x, y, z, gain * m.gain, refDist)) return;
     this.note(id, listenerDist(x, y, z));
@@ -200,7 +257,7 @@ export class Audio {
 
   /** Non-spatial one-shot (UI, the player's own body). */
   play2d(id: string, gain = 1, pitch = 1): void {
-    if (!this.ctx || !this.enabled) return;
+    if (!this.ctx || !this.enabled || this.isOff(id)) return;
     const m = this.manifest[id];
     if (!m) return;
     this.note(id, -1);
@@ -222,8 +279,8 @@ export class Audio {
    * Short synthesized UI tones (no clip needed): a power core pickup, karma, buying a
    * power, a refused action.
    */
-  chime(kind: 'core' | 'karma' | 'buy' | 'deny' | 'story' | 'radio', gain = 0.5): void {
-    if (!this.ctx || !this.enabled) return;
+  chime(kind: ChimeKind, gain = 0.5): void {
+    if (!this.ctx || !this.enabled || this.isOff(`chime_${kind}`)) return;
     this.note(`chime_${kind}`, -1);
     const ctx = this.ctx, t0 = ctx.currentTime + 0.01;
     if (kind === 'radio') { this.squelch(gain); return; }
@@ -305,8 +362,10 @@ export class Audio {
     return {
       set: (x, y, z, gain, rate = 1) => {
         const t = ctx.currentTime;
-        spot.place(x, y, z, gain * m.gain);
-        g.gain.setTargetAtTime(gain * m.gain, t, 0.15);
+        // (A sound switched off keeps running silent, so switching it on again brings it back.)
+        const v = this.off.has(id) ? 0 : gain * m.gain;
+        spot.place(x, y, z, v);
+        g.gain.setTargetAtTime(v, t, 0.15);
         src.playbackRate.setTargetAtTime(rate, t, 0.2);
       },
       stop: () => { try { src.stop(); } catch { /* not started */ } g.disconnect(); spot.disconnect(); },
@@ -407,7 +466,7 @@ export class Audio {
         a = { src, gain, target: 0 };
         this.amb.set(id, a);
       }
-      a.target = lvl * (this.manifest[id]?.gain ?? 1);
+      a.target = this.off.has(id) ? 0 : lvl * (this.manifest[id]?.gain ?? 1);
       a.gain.gain.setTargetAtTime(a.target, ctx.currentTime, 0.6);
       const r = rates[id];
       if (r !== undefined) a.src.playbackRate.setTargetAtTime(r, ctx.currentTime, 0.2);
@@ -489,9 +548,19 @@ export class Audio {
   }
 }
 
+/** The synthesized UI tones (Audio.chime). */
+export type ChimeKind = 'core' | 'karma' | 'buy' | 'deny' | 'story' | 'radio';
+const CHIME_KINDS: ChimeKind[] = ['core', 'karma', 'buy', 'deny', 'story', 'radio'];
+const CHIME_TEXT: Record<ChimeKind, string> = {
+  core: 'power core picked up', karma: 'karma earned', buy: 'a power bought', deny: 'action refused',
+  story: 'an important tracker line', radio: 'police radio squelch',
+};
+/** How long a looping or long sound plays when previewed (s). */
+const PREVIEW_S = 3.5;
+
 /** Seconds a decoded clip may go unwanted before it is dropped (Audio.dropIdle). */
 const IDLE_S = 90;
-const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted', MIX_KEY = 'scale.soundMix', MUSIC_KEY = 'scale.music';
+const VOL_KEY = 'scale.volume', MUTE_KEY = 'scale.muted', MIX_KEY = 'scale.soundMix', MUSIC_KEY = 'scale.music', OFF_KEY = 'scale.soundsOff';
 
 /** The stored master volume, mute, music switch and music level (the start screen's music reads them before the game's Audio exists). */
 export function storedMusicLevel(): number {
@@ -506,6 +575,12 @@ function readMix(): Record<SoundCategory, number> {
     for (const c of SOUND_CATEGORIES) { const v = Number(o[c.id]); if (Number.isFinite(v)) mix[c.id] = Math.max(0, Math.min(1.5, v)); }
   } catch { /* storage unavailable */ }
   return mix;
+}
+function readOff(): Set<string> {
+  try {
+    const a = JSON.parse(localStorage.getItem(OFF_KEY) ?? '[]') as unknown;
+    return new Set(Array.isArray(a) ? a.filter((x): x is string => typeof x === 'string') : []);
+  } catch { return new Set(); }
 }
 function readNum(key: string, def: number): number {
   try { const v = localStorage.getItem(key); return v === null || isNaN(Number(v)) ? def : Number(v); } catch { return def; }

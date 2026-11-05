@@ -115,10 +115,14 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { Florist } from './citizens/florist/Florist';
 import { Floater } from './citizens/floater/Floater';
+import { MagneticGrandma } from './citizens/grandma/MagneticGrandma';
+import { Gargoyle } from './citizens/gargoyle/Gargoyle';
 import { GhostGuide } from './ghost/GhostGuide';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
+import { GentleGiant } from './citizens/giant/GentleGiant';
 import { StationLife } from './metro/StationLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
@@ -242,14 +246,21 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** The shrunk florist (game/citizens/florist). */
+  florist: Florist | null = null;
   /** Leo Lightly, the man who can't land (game/citizens/floater). */
   floater: Floater | null = null;
+  grandma: MagneticGrandma | null = null;
+  /** The retired cathedral gargoyle: stone by day, down on the square at night (src/game/citizens/gargoyle). */
+  gargoyle: Gargoyle | null = null;
   /** The ghost tour guide's night tours (src/game/ghost). */
   ghost: GhostGuide | null = null;
   /** The stadium's evening concert (src/game/concert). */
   concert: Concert | null = null;
   /** The stadium's daytime soccer matches (src/game/soccer). */
   soccer: Soccer | null = null;
+  /** The gentle giant at the stadium (src/game/citizens/giant). */
+  gentle: GentleGiant | null = null;
   /** Commuters on the metro's stairs, platforms and trains near the player. */
   stationLife: StationLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
@@ -877,7 +888,8 @@ export class Game {
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
-    this.T('street', () => { this.street?.update(dt); this.ghost?.update(dt); this.floater?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('street', () => { this.street?.update(dt); this.florist?.update(dt); this.floater?.update(dt); this.grandma?.update(dt); this.gargoyle?.update(dt); this.ghost?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('gentle', () => this.gentle?.update(dt));
     this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1118,6 +1130,7 @@ export class Game {
     // Targeting and the elemental powers.
     this.synth = new PowerSynth(() => this.audio.synthOut());
     this.synth.onPlay = (kind, x, y, z) => this.audio.note(`synth_${kind}`, listenerDist(x, y, z));
+    this.synth.isOff = (id) => this.audio.isOff(id);
     new SoundLog(this.audio);
     this.engines = new CarEngines(this.audio);
     this.targeting = new Targeting({
@@ -1249,7 +1262,10 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.florist = new Florist(this);
     this.floater = new Floater(this);
+    this.grandma = new MagneticGrandma(this);
+    this.gargoyle = new Gargoyle(this);
     this.ghost = new GhostGuide(this);
     this.concert = new Concert(this);
     this.soccer = new Soccer(this);
@@ -1260,6 +1276,7 @@ export class Game {
     this.wardrobe = new Wardrobe(this);
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);
+    this.gentle = new GentleGiant(this);
     this.sidekick = new Sidekick(this);
     this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
     this.wardens = new Wardens(this);
@@ -1438,6 +1455,8 @@ export class Game {
     if (dress) return dress;
     const shard = this.sidekick?.hint();
     if (shard) return shard;
+    const garg = this.gargoyle?.hint();
+    if (garg) return garg;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1493,6 +1512,8 @@ export class Game {
     if (this.arcade?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Take the glowing stone (the second shard).
     if (this.sidekick?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // Talk to the gargoyle (or look at it, by day).
+    if (this.gargoyle?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();

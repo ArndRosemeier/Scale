@@ -13,7 +13,7 @@ import { pointInPoly } from '../src/core/geom2';
 import { Rng } from '../src/core/rng';
 import { cemeteryStops, crossesBuilding, headingTo, nightLeft, tourHours, tourSlot, type GravePiece } from '../src/game/ghost/tour';
 import { ghostLine, STORIES, TOURIST_LINES, GHOST_NAME, type GhostTopic } from '../src/game/ghost/lines';
-import { GHOST_OWNER, STREET_OWNER, AFTERMATH_OWNER, FAME_OWNER, METRO_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, CONCERT_OWNER, SOCCER_OWNER, FLOATER_OWNER } from '../src/sim/actors/Actor';
+import { GHOST_OWNER, STREET_OWNER, AFTERMATH_OWNER, FAME_OWNER, METRO_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, CONCERT_OWNER, SOCCER_OWNER, FLOATER_OWNER, GRANDMA_OWNER, GARGOYLE_OWNER, GIANT_OWNER } from '../src/sim/actors/Actor';
 
 type Check = (ok: boolean, msg: string) => void;
 
@@ -68,7 +68,7 @@ export function ghostChecks(check: Check): void {
   check(bad.length === 0, `ghost: a line for every moment (${bad.join(', ')})`);
   check(Object.values(TOURIST_LINES).every((L) => L.length >= 3) && GHOST_NAME.length > 3, 'ghost: the tourists have lines');
   // Owner ids: his tourists' own, no clash with another system's.
-  const owners = [GHOST_OWNER, STREET_OWNER, AFTERMATH_OWNER, FAME_OWNER, METRO_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, CONCERT_OWNER, SOCCER_OWNER, FLOATER_OWNER];
+  const owners = [GHOST_OWNER, STREET_OWNER, AFTERMATH_OWNER, FAME_OWNER, METRO_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, CONCERT_OWNER, SOCCER_OWNER, FLOATER_OWNER, GRANDMA_OWNER, GARGOYLE_OWNER, GIANT_OWNER];
   check(new Set(owners).size === owners.length, 'ghost: the tourists have their own actor owner id');
   // The GLSL patch's anchors are in three's lit shaders (look.ts patchGlsl).
   for (const k of ['physical', 'standard'] as const) {

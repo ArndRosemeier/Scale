@@ -13,12 +13,14 @@ import { probeGpu, maybeShowGpuHint } from './GpuHint';
 import { WEBGPU, rendererChoice, setRendererChoice, rendererWhy, type RendererChoice } from '../render/gpuMode';
 import { isTouch } from './touch';
 import { HelpDialog, type HelpTab } from './HelpDialog';
+import { SoundEffects } from './SoundEffects';
 import { isAction, keyLabel } from '../game/keybinds';
 import { clipStore, clipTime, exportClip, CLIP_MAX_S } from './Recorder';
 
 export class Menu {
   private el: HTMLDivElement;
   readonly help: HelpDialog;
+  readonly sfx: SoundEffects;
   private open = false;
 
   constructor(private game: Game) {
@@ -39,6 +41,7 @@ export class Menu {
         <div class="row"><label>Music</label><input id="pMusic" type="checkbox" title="Background music (its level is in the sound mix)"></div>
         <div class="row"><label>Sound mix</label><button type="button" id="pMixBtn" class="mix-btn">Adjust…</button></div>
         <div id="pMix" class="mix-panel"></div>
+        <div class="row"><label>Sound effects</label><button type="button" id="pSfxBtn" class="mix-btn" title="Every sound with an on/off box; ticking one plays it">Choose…</button></div>
         <div class="row"><label>Graphics</label><select id="pGfx" title="Auto: adapts to your graphics card while you play (remembered per card)">
           <option value="auto">Auto</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option>
         </select><span id="pGfxV" class="sub"></span></div>
@@ -66,6 +69,7 @@ export class Menu {
     fb.after(manualLink());
     document.body.appendChild(this.el);
     this.help = new HelpDialog(game);
+    this.sfx = new SoundEffects(game);
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
     $<HTMLSelectElement>('pTime').onchange = (e) => { game.sky.timeScale = Number((e.target as HTMLSelectElement).value); saveTimeScale(game.sky.timeScale); };
     $<HTMLInputElement>('pHour').oninput = (e) => { game.sky.hour = Number((e.target as HTMLInputElement).value) % 24; this.sync(); };
@@ -86,6 +90,7 @@ export class Menu {
     };
     for (const inp of mix.querySelectorAll<HTMLInputElement>('input[data-cat]')) inp.oninput = () => { game.audio.setMix(inp.dataset.cat as SoundCategory, Number(inp.value)); syncMix(); };
     mix.querySelector<HTMLButtonElement>('.mix-reset')!.onclick = () => { for (const c of SOUND_CATEGORIES) game.audio.setMix(c.id, defaultMix(c.id)); syncMix(); };
+    $<HTMLButtonElement>('pSfxBtn').onclick = () => this.sfx.show();
     $<HTMLButtonElement>('pMixBtn').onclick = () => { syncMix(); mix.classList.toggle('open'); };
     $<HTMLSelectElement>('pGfx').onchange = (e) => { game.graphics.set((e.target as HTMLSelectElement).value as QualitySetting); this.sync(); };
     $<HTMLSelectElement>('pRenderer').onchange = (e) => {
@@ -114,6 +119,7 @@ export class Menu {
       // (With a target, Esc first clears the target — Targeting — and opens the menu next time.)
       // Esc closes the help dialog first.
       if (e.code === 'Escape' && this.help.isOpen) { e.preventDefault(); this.toggleHelp(false); return; }
+      if (e.code === 'Escape' && this.sfx.isOpen) { e.preventDefault(); this.sfx.close(); return; }
       if (e.code === 'Escape' && !this.game.map?.holdsPointer && !this.game.powers?.holdsPointer && !this.game.people?.holdsPointer && !this.game.wardrobe?.holdsPointer) { if (this.open) this.close(); else if (!this.game.targeting?.current) this.show(); }
       if (isAction(e, 'help') && !e.repeat) this.toggleHelp();
     });
@@ -183,6 +189,7 @@ export class Menu {
 
   close(): void {
     this.open = false;
+    this.sfx.close();
     this.el.classList.remove('open');
   }
 

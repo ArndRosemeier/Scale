@@ -9,7 +9,7 @@ export type EntityKind = 'player' | 'npc' | 'creature' | 'item' | 'projectile' |
 /** Locomotion state, drives animation on clients. */
 export type MoveState =
   | 'idle' | 'walk' | 'run' | 'sprint' | 'crouch' | 'swim' | 'fly' | 'fall' | 'jump' | 'climb' | 'glide'
-  | 'sit' | 'sleep' | 'dead' | 'stunned' | 'knockdown';
+  | 'sit' | 'sit_floor' | 'sleep' | 'dead' | 'stunned' | 'knockdown';
 
 /** A one-shot action currently playing (attack, cast, gesture, work...). */
 export interface ActionAnim {
@@ -32,8 +32,15 @@ export interface AnimState {
   talking?: boolean;
   /** Look-at target position. */
   lookAt?: Vec3;
+  /** Seat height (world m) for move 'sit'; default 0.47, a chair. A tiny sitter's chair is smaller (game/citizens/florist). */
+  seat?: number;
   /** Superpower body layer (the player): jump charge, leap, dash. */
   power?: PowerAnim;
+  /**
+   * `sit_floor`: how far down onto the floor (0 standing … 1 sitting … 2 lying on the back). The owner
+   * moves it (up and down, slowly); the animator plays getting down and up from motion capture.
+   */
+  floor?: number;
 }
 
 /** Superpower poses layered over locomotion (see Animator.powerLayer). */

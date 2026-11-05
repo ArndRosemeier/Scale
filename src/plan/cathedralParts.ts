@@ -254,6 +254,8 @@ export function cathedral(k: Kit, lm: Landmark, r0: Rng): void {
       k.vault(s * ac, (lo + hi) / 2, (hi - lo) / 2, ahs, Sa, crownA, ceil, { rot: Math.PI / 2, solid: false }).inward = true;
       k.solidBox(s * (nw + aw), (v0 + v1) / 2, aw, (v1 - v0) / 2, crownA - 0.3, Ha);
       k.gable(s * (nw + aw), (v0 + v1) / 2, (v1 - v0) / 2, aw, Ha, Ha + aw * 0.6, plain, roofM, { rot: Math.PI / 2 });
+      // The westmost buttress tops: the gargoyles' ledges, looking out over the square.
+      if (v0 === segs[0][0]) k.perch(s * (ao + 0.75), v0, Ha + 0.6, s * 0.8, -0.6);
       for (const v of vs) {
         k.box(s * (ao + 0.7), v, 0.7, 0.9, B, Ha + 0.6, plain, { detail: true, solid: false });
         k.box(s * (nw - T - 0.15), v, 0.15, 0.3, apex, Sn, rib, D); // (shaft up to the vault)
