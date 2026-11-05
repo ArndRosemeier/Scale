@@ -32,6 +32,7 @@ import { walkSpeed, stepEnergy, bodyMass, HUMAN_HEIGHT } from '../../GiantBody';
 import { worldToSite } from '../../../plan/landmarks';
 import { hash32, deriveSeed, Rng } from '../../../core/rng';
 import { clamp } from '../../../core/math';
+import { shaderCap } from '../../../render/shaderCap';
 import type { Stimulus } from '../../Stimuli';
 import { GIANT, GIANT_LINES, CROWD_LINES, dayOf, giantPlan, ringWay, angDiff, headingTo, pickLine, type DayPart, type GiantPlan } from './plan';
 
@@ -88,6 +89,8 @@ export class GentleGiant {
   private carryT: number = rand(...GIANT.carryGap) * 0.4;
   private pressT: number = rand(...GIANT.pressGap) * 0.5;
   private lift: Lift | null = null;
+  /** The rig's shaders: 0 not started, 1 compiling, 2 ready (shown). */
+  private rigReady = 0;
   private press: { members: Snapper[]; t: number; stay: number } | null = null;
   private farT = 0;
   private scaredT = 0;
@@ -556,15 +559,21 @@ export class GentleGiant {
     for (let i = 0; i < n; i++) {
       const c = this.citizen(this.rng.int(1, 1e9));
       if (!c) continue;
-      const ang = this.heading + rand(-2.4, 2.4), r = rand(38, 48);
-      const x = this.pos.x - Math.sin(ang) * r, z = this.pos.z - Math.cos(ang) * r;
-      if (!g.world.standable(x, z)) continue;
+      // (Somewhere they can stand: the stands and buildings round the stadium are not.)
+      let x = 0, z = 0, ang = 0, ok = false;
+      for (let k = 0; k < 8 && !ok; k++) {
+        ang = this.heading + rand(-2.4, 2.4);
+        const r = rand(30, 48);
+        x = this.pos.x - Math.sin(ang) * r; z = this.pos.z - Math.cos(ang) * r;
+        ok = g.world.standable(x, z);
+      }
+      if (!ok) continue;
       const a = g.peds.spawnAt(c, x, z, ang + Math.PI);
       if (!a) continue;
       const act = attach(a, makeActor('bystander', GIANT_OWNER, { title: 'Press photographer', held: 'presscam' }));
       members.push({ a, act, slot: (i - (n - 1) / 2) * 0.5 + rand(-0.12, 0.12), flashT: rand(1, 3), talkT: rand(3, 8) });
     }
-    if (!members.length) return;
+    if (!members.length) { this.pressT = 15; return; }
     this.press = { members, t: 0, stay: rand(...GIANT.pressStay) };
     this.stats.press++;
   }
@@ -621,6 +630,7 @@ export class GentleGiant {
     if (!this.rig && d < GIANT.rigR) {
       this.rig = new HumanoidRig(this.look!, { castShadow: true, priority: 3, ground: (x, y, z) => this.groundAt(x, z, y + 0.4 * this.k) });
       this.rig.setEquipment({});
+      this.rigReady = 0;
       g.renderer.scene.add(this.rig.object);
     } else if (this.rig && d > GIANT.dropR) {
       this.rig.dispose();
@@ -628,6 +638,18 @@ export class GentleGiant {
     }
     const rig = this.rig;
     if (!rig) return;
+    // Her shaders compile in the background first (as the crowd's rigs), within the shader cap:
+    // compiled on first draw they stalled a frame (WebGL).
+    if (this.rigReady === 0 && rig.dressed) {
+      this.rigReady = 1;
+      const r = rig, done = (): void => { if (this.rig === r) this.rigReady = 2; };
+      void shaderCap.slot().then(() => {
+        if (this.rig !== r) return;
+        r.setVisible(true); // (compiling looks at what is visible)
+        return g.renderer.compileAsync(r.object);
+      }).then(done, done);
+    }
+    rig.setVisible(this.rigReady === 2);
     const sk = Math.sqrt(this.k);
     this.animTime += dt / sk;
     // (Scaled from the built body's own height to GIANT.height; the gait in slow motion, as the player's.)
