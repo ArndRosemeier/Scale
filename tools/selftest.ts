@@ -5046,4 +5046,64 @@ section('hearing: distance', async () => {
   for (const d of [10, 30, 80, 200, 500]) check(airCutoff(d) >= airCutoff(d * 2), `the lowpass closes with distance (${d} m)`);
 });
 
+section('floating man', async () => {
+  const { FLOATER, floaterHome, outingAt, slotOf, spotOf, gustChance, tetherStep } = await import('../src/game/citizens/floater/plan');
+  const { floaterLine, FLOATER_TOPICS } = await import('../src/game/citizens/floater/lines');
+  const macro = buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.4 })));
+  const h = floaterHome(macro), h2 = floaterHome(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.4 }))));
+  check(h.x === h2.x && h.z === h2.z && h.cell >= 0, 'his home park is the same for the same city');
+  const park = macro.cells.some((c) => c.district === 'park');
+  check(!park || macro.cells[h.cell].district === 'park', 'he lives by a park when the city has one');
+  let days = 0, nights = 0, wet = 0;
+  for (let d = 0; d < 60; d++) { if (outingAt(42, d * 24 + 13.5, 0)) days++; if (outingAt(42, d * 24 + 23, 0) || outingAt(42, d * 24 + 4, 0)) nights++; if (outingAt(42, d * 24 + 13.5, 0.6)) wet++; }
+  check(days > 35 && days < 60 && nights === 0 && wet === 0, `out on most afternoons (${days}/60), never at night (${nights}) or in the rain (${wet})`);
+  let rep = 0;
+  for (let s = 0; s < 500; s++) if (spotOf(42, s, 5) === spotOf(42, s - 1, 5)) rep++;
+  check(rep === 0 && spotOf(42, 7, 1) === 0, 'never the same spot two slots running');
+  check(slotOf(10) === Math.floor(600 / FLOATER.slotMin), 'slots by game minutes');
+  check(gustChance(0.2, 60) === 0 && gustChance(0.95, 60) > 0.25 && gustChance(0.6, 1) < gustChance(0.9, 1), 'gusts only on windy days, more in a gale');
+  // On the string: never farther than the string from the hand, hovering by the hover height.
+  const b = { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0 };
+  let far = 0;
+  for (let i = 0; i < 600; i++) {
+    const hand = { x: i * 0.02, y: 1.1, z: 0 };
+    tetherStep(b, hand, FLOATER.string, FLOATER.hover, { x: -0.8, z: 0.3 }, 1 / 60);
+    if (Math.hypot(b.x - hand.x, b.y - 0.1 - hand.y, b.z - hand.z) > FLOATER.string + 1e-3) far++;
+  }
+  check(far === 0, 'the string holds him at its length');
+  check(Math.abs(b.y - FLOATER.hover) < 0.3 && b.x < 12, `he trails behind the hand at hover height (y ${b.y.toFixed(2)})`);
+  const free = { x: 0, y: 3, z: 0, vx: 0, vy: 0, vz: 0 };
+  for (let i = 0; i < 600; i++) tetherStep(free, null, FLOATER.string, FLOATER.hover, { x: 0, z: 0 }, 1 / 60);
+  check(Math.abs(free.y - FLOATER.hover) < 0.1, 'loose and calm, he settles at his hover height (never lands)');
+  check(FLOATER_TOPICS.every((t) => floaterLine(t, () => 0.5).length > 3), 'every topic has lines');
+});
+
+section('magnetic grandma: home, hours, spots', async () => {
+  const { grandmaHome, grandmaOut, freeSpot, spotFor, spotsClash } = await import('../src/game/citizens/grandma/plan');
+  type Spot = ReturnType<typeof spotFor>;
+  const { Rng } = await import('../src/core/rng');
+  for (const [seed, size] of [[42, 0.4], [7, 0.7], [10, 0.2]] as const) {
+    const macro = buildMacroPlan(new Terrain(makeProfile({ seed, size })));
+    const h = grandmaHome(macro, seed), h2 = grandmaHome(buildMacroPlan(new Terrain(makeProfile({ seed, size }))), seed);
+    check(!!h && JSON.stringify(h) === JSON.stringify(h2), `seed ${seed}: she has one home, the same every time (${h?.district} cell ${h?.cell})`);
+    check(!!h && ['oldtown', 'commercial', 'downtown', 'apartments', 'rowhouses'].includes(h.district), `seed ${seed}: in a shopping or living district`);
+  }
+  check(!grandmaOut(3) && grandmaOut(10) && !grandmaOut(13) && grandmaOut(16) && !grandmaOut(21) && grandmaOut(24 + 10), 'out in the morning and afternoon, home at lunch and night');
+  const fit = { height: 1.62, shoulderWidth: 0.4, chestDepth: 0.24, waistRadius: 0.15, upperArmRadius: 0.045, forearmRadius: 0.035, thighRadius: 0.075, shinRadius: 0.05 };
+  const r = new Rng(5);
+  let okN = true, near = true;
+  for (let k = 0; k < 400; k++) {
+    const s = spotFor(fit, r);
+    const n = Math.hypot(...s.normal);
+    if (Math.abs(n - 1) > 1e-6) okN = false;
+    if (Math.hypot(s.pos[0], s.pos[2]) > 0.4 || Math.abs(s.pos[1]) > 0.5) near = false;
+  }
+  check(okN, 'spots have unit outward normals');
+  check(near, 'spots lie on the body (within 0.4 m of the socket)');
+  const taken: Spot[] = [];
+  for (let k = 0; k < 14; k++) { const s = freeSpot(fit, r, taken); if (s) taken.push(s); }
+  check(taken.length >= 12, `room for a dozen things (${taken.length})`);
+  check(!taken.some((a, i) => taken.some((b, j) => i < j && spotsClash(a, b))), 'no two pieces on the same spot');
+});
+
 await runSections(import.meta.url);

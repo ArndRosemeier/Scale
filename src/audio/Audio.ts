@@ -4,7 +4,7 @@
  * Audio starts on the first user gesture (browser autoplay rules).
  */
 import * as THREE from 'three';
-import { Spot, heard, listenerPos } from './hearing';
+import { Spot, heard, listenerDist, listenerPos } from './hearing';
 
 /** A streamed piece placed in the world (Audio.stream). */
 export interface LiveStream {
@@ -20,6 +20,9 @@ export interface LiveStream {
   fade(sec: number): void;
   stop(): void;
 }
+
+/** One entry of the sound log. */
+export interface SoundNote { t: number; id: string; d: number }
 
 interface ManifestEntry { files: string[]; loop: boolean; gain: number; description?: string }
 type Manifest = Record<string, ManifestEntry>;
@@ -84,6 +87,15 @@ export class Audio {
   /** Master volume 0…1 and mute, remembered across sessions; `?mute` in the URL forces silence (tests). */
   volume = readNum(VOL_KEY, 0.8);
   muted = readNum(MUTE_KEY, 0) > 0 || new URLSearchParams(location.search).has('mute');
+  /** The last sounds started (newest last): the sound log (debug/SoundLog, Shift+F7). */
+  readonly recent: SoundNote[] = [];
+
+  /** Note a sound for the sound log: `d` metres from the listener, -1 = not placed (UI, the hero's own). */
+  note(id: string, d: number): void {
+    this.recent.push({ t: performance.now() / 1000, id, d });
+    if (this.recent.length > 60) this.recent.shift();
+  }
+
   /** Background music on/off (pause menu), remembered; its level is the 'music' category of the mix. */
   musicOn = readNum(MUSIC_KEY, 1) > 0;
 
@@ -165,6 +177,7 @@ export class Audio {
     if (!this.ctx || !this.enabled || this.voices > 48) return;
     const m = this.manifest[id];
     if (!m || !heard(x, y, z, gain * m.gain, refDist)) return;
+    this.note(id, listenerDist(x, y, z));
     const ctx = this.ctx;
     const go = (bufs: AudioBuffer[]) => {
       if (!bufs.length) return;
@@ -190,6 +203,7 @@ export class Audio {
     if (!this.ctx || !this.enabled) return;
     const m = this.manifest[id];
     if (!m) return;
+    this.note(id, -1);
     const go = (bufs: AudioBuffer[]) => {
       if (!bufs.length || !this.ctx) return;
       const src = this.ctx.createBufferSource();
@@ -210,6 +224,7 @@ export class Audio {
    */
   chime(kind: 'core' | 'karma' | 'buy' | 'deny' | 'story' | 'radio', gain = 0.5): void {
     if (!this.ctx || !this.enabled) return;
+    this.note(`chime_${kind}`, -1);
     const ctx = this.ctx, t0 = ctx.currentTime + 0.01;
     if (kind === 'radio') { this.squelch(gain); return; }
     const notes: [number, number, number][] = kind === 'core' ? [[660, 0, 0.5], [990, 0.07, 0.55], [1320, 0.14, 0.7], [1980, 0.22, 0.9]]

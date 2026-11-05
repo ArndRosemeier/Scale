@@ -160,6 +160,15 @@ export class CrowdRenderer {
   /** The concert's beat (cycles of GROOVE_PERIOD) for everyone grooving, or null (their own clocks). */
   groovePhase: (() => number) | null = null;
 
+  /**
+   * The full rig built for someone right now (dressed, and in range), or null (too far: a crowd figure).
+   * For things that ride on a person's sockets (game/citizens/grandma: what sticks to her).
+   */
+  rigOf(a: PedAgent): HumanoidRig | null {
+    const r = this.rigs.get(a.id);
+    return r && r.agent === a && r.ready === 2 && r.rig.dressed ? r.rig : null;
+  }
+
   constructor(private templates: CrowdTemplate[], private scene: THREE.Object3D) {
     templates.forEach((t) => {
       const g = t.geometry.clone();
@@ -370,7 +379,7 @@ export class CrowdRenderer {
         obj.position.set(a.x - _fv.x, a.y + centre - _fv.y, a.z - _fv.z);
         r.flown = true;
       } else {
-        r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
+        r.rig.update({ pos: [a.x, a.y, a.z], vel: [vx, act?.move === 'climb' ? a.vy : 0, vz], yaw: a.heading + twitch, scale: st ? st.scale : undefined, anim: { move, action, mood, lookAt, talking }, flags: 0 }, dt, time, cam.position);
         // Landed after flying: no pitch or bank left over (the rig only sets the yaw).
         if (r.flown) { r.flown = false; r.rig.object.quaternion.setFromEuler(_fe.set(0, a.heading + twitch, 0, 'YXZ')); }
       }

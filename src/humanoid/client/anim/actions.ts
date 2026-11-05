@@ -611,6 +611,20 @@ function readMap(p: Pose, _t: number, c: ActionCtx) {
 }
 
 /** Holding something out to a passer-by (a flyer). */
+/** Holding a string (a kid towing her floating dad): the right arm back and up behind her while walking. */
+function towString(p: Pose, _t: number, c: ActionCtx) {
+  const s = Math.sin(c.elapsed * 3.1) * 0.05;
+  p.arm('R', -0.55 + s, 0.45, 0.2, 0.35, 0.3);
+  p.neck(0, -0.12, 0);
+}
+
+/** Holding a string up in front, towards someone floating above. */
+function holdString(p: Pose, _t: number, c: ActionCtx) {
+  const s = Math.sin(c.elapsed * 1.7) * 0.06;
+  p.arm('R', 1.75 + s, 0.25, 0, 0.35, 0.4);
+  p.neck(0.35);
+}
+
 function offer(p: Pose, t: number) {
   const u = kf(t, [[0, 0], [0.2, 1], [0.8, 1], [1, 0]]);
   p.arm('R', 1.25 * u, 0.15 * u, 0.4 * u, 0.3 * u, 0.4 * u);
@@ -818,6 +832,18 @@ function clap(p: Pose, t: number, c: ActionCtx) {
   for (const s of ['L', 'R'] as const) p.arm(s, 1.05 * u, (-0.18 + 0.4 * o) * u, 0.2 * u, 1.55 * u, 1.3 * u);
 }
 
+/** Shaking things off (the magnetic grandma): arms out a little, a quick shimmy of the shoulders and hips. */
+function shakeOff(p: Pose, t: number, c: ActionCtx) {
+  const u = kf(t, [[0, 0], [0.15, 1], [0.85, 1], [1, 0]]);
+  const w = Math.sin(c.elapsed * PI * 9) * u;
+  for (const s of ['L', 'R'] as const) {
+    const k = s === 'L' ? 1 : -1;
+    p.arm(s, 0.35 * u, (0.55 + 0.12 * w * k) * u, 0, 0.6 * u, 0, 0.25 * w, 0, 0.12 * u + 0.08 * w * k);
+  }
+  p.spine(0.04 * u, 0.22 * w, 0.06 * w);
+  p.neck(0.05 * u, -0.12 * w, 0);
+}
+
 export const ACTIONS: Record<string, ActionDef> = {
   hands_up: { mask: 'upper', blendIn: 0.15, blendOut: 0.2, pose: handsUp, mood: 'afraid' },
   cower: { mask: 'full', blendIn: 0.2, blendOut: 0.25, pose: cower, mood: 'afraid' },
@@ -871,12 +897,16 @@ export const ACTIONS: Record<string, ActionDef> = {
   feed_birds: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: feedBirds, mood: 'happy', loop: true },
   sleepwalk: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: sleepwalk, loop: true },
   read_map: { mask: 'upper', blendIn: 0.15, blendOut: 0.15, pose: readMap, loop: true },
+  tow_string: { mask: 'arms', blendIn: 0.2, blendOut: 0.2, pose: towString, loop: true, curl: { R: 1.3 } },
+  hold_string: { mask: 'arms', blendIn: 0.25, blendOut: 0.2, pose: holdString, loop: true, curl: { R: 1.3 } },
   offer: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: offer, mood: 'happy' },
   take_photo: { mask: 'upper', blendIn: 0.1, blendOut: 0.12, pose: takePhoto, mood: 'focused', loop: true },
   shoulder_cam: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: shoulderCam, mood: 'focused', loop: true },
   interview: { mask: 'arms', blendIn: 0.12, blendOut: 0.15, pose: interview, mood: 'happy', loop: true },
   chant: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: chant, mood: 'angry', loop: true },
   hero_pose: { mask: 'full', blendIn: 0.1, blendOut: 0.1, pose: heroPose, mood: 'happy', loop: true },
+  // The magnetic grandma (game/citizens/grandma).
+  shake_off: { mask: 'upper', blendIn: 0.1, blendOut: 0.2, pose: shakeOff, mood: 'happy' },
   // Soccer in the stadium (game/soccer).
   soccer_kick: { mask: 'full', blendIn: 0.06, blendOut: 0.15, pose: soccerKick, mood: 'focused' },
   soccer_header: { mask: 'full', blendIn: 0.08, blendOut: 0.15, pose: soccerHeader, mood: 'focused' },

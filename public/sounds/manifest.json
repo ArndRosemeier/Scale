@@ -1191,5 +1191,21 @@
     "loop": false,
     "gain": 0.7,
     "description": "a boot kicking a leather ball (tools/synthSoccer.mjs)"
+  },
+  "magnet_clink": {
+    "files": [
+      "magnet_clink.wav"
+    ],
+    "loop": false,
+    "gain": 0.55,
+    "description": "a small metal thing snapping onto a coat: a dull magnetic tock and a bright ring (tools/synthMagnet.mjs)"
+  },
+  "junk_clatter": {
+    "files": [
+      "junk_clatter.wav"
+    ],
+    "loop": false,
+    "gain": 0.6,
+    "description": "a dozen bits of metal cutlery, tins and a pan clattering onto the pavement (tools/synthMagnet.mjs)"
   }
 }
