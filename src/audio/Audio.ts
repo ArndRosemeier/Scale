@@ -208,9 +208,10 @@ export class Audio {
    * Short synthesized UI tones (no clip needed): a power core pickup, karma, buying a
    * power, a refused action.
    */
-  chime(kind: 'core' | 'karma' | 'buy' | 'deny' | 'story', gain = 0.5): void {
+  chime(kind: 'core' | 'karma' | 'buy' | 'deny' | 'story' | 'radio', gain = 0.5): void {
     if (!this.ctx || !this.enabled) return;
     const ctx = this.ctx, t0 = ctx.currentTime + 0.01;
+    if (kind === 'radio') { this.squelch(gain); return; }
     const notes: [number, number, number][] = kind === 'core' ? [[660, 0, 0.5], [990, 0.07, 0.55], [1320, 0.14, 0.7], [1980, 0.22, 0.9]]
       : kind === 'karma' ? [[784, 0, 0.35], [1175, 0.09, 0.5]]
       : kind === 'buy' ? [[523, 0, 0.4], [659, 0.06, 0.4], [784, 0.12, 0.45], [1047, 0.18, 0.7]]
@@ -230,6 +231,39 @@ export class Audio {
       o.connect(g).connect(this.cats.get('ui') ?? this.sfxBus);
       o.start(t0 + dt);
       o.stop(t0 + dt + dur + 0.05);
+      o.onended = () => g.disconnect();
+    }
+  }
+
+  /**
+   * The police radio (game/crime/PoliceRadio): a short burst of band-passed static, then the
+   * two-tone talk-permit chirp of a handheld radio. No voice: the words are a toast.
+   */
+  private squelch(gain: number): void {
+    const ctx = this.ctx!, t0 = ctx.currentTime + 0.01, out = this.cats.get('ui') ?? this.sfxBus;
+    const len = Math.floor(ctx.sampleRate * 0.16), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const n = ctx.createBufferSource();
+    n.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.9;
+    const ng = ctx.createGain();
+    ng.gain.value = gain * 0.16;
+    n.connect(bp).connect(ng).connect(out);
+    n.start(t0);
+    n.onended = () => { bp.disconnect(); ng.disconnect(); };
+    for (const [f, dt, dur] of [[1250, 0.17, 0.07], [1650, 0.245, 0.09]] as const) {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.setValueAtTime(f, t0 + dt);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0 + dt);
+      g.gain.exponentialRampToValueAtTime(gain * 0.045, t0 + dt + 0.006);
+      g.gain.setValueAtTime(gain * 0.045, t0 + dt + dur - 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + dur);
+      o.connect(g).connect(out);
+      o.start(t0 + dt);
+      o.stop(t0 + dt + dur + 0.03);
       o.onended = () => g.disconnect();
     }
   }

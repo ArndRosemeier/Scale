@@ -2077,6 +2077,44 @@ section('fame, rampage and the creature rig', async () => {
       'fame: a statue being built for a hero who falls from grace is called off; a pulled-down one is rebuilt when the city loves them again; bad saves are ignored');
   }
 
+  // The police radio (crime/PoliceRadio): given at +100, taken back below +70; calls toasted (at most
+  // one per gap), on the map with the newest as a compass goal, dropped when the crime ends or the hero
+  // is there; dispatch thanks the hero for a crime it called in; a group's call is a story clue.
+  {
+    const { PoliceRadio, RADIO, radioHeld, callLine } = await import('../src/game/crime/PoliceRadio');
+    check(!radioHeld(false, RADIO.giveAt - 1) && radioHeld(false, RADIO.giveAt) && radioHeld(true, RADIO.loseAt) && !radioHeld(true, RADIO.loseAt - 1) && !radioHeld(false, 85),
+      'police radio: given at +100, kept down to +70, taken back below, not given again before +100');
+    let rep = 50, saved = false, t = 0;
+    const toasts: string[] = [], marks: { always?: boolean; title?: string }[][] = [], clues: string[] = [];
+    const P = { x: 0, z: 0 };
+    const R = new PoliceRadio({
+      rep: () => rep, saved: { get: () => saved, set: (v) => { saved = v; } }, player: () => P,
+      where: () => 'on Elm Street', toast: (h) => toasts.push(h), squelch: () => {}, markers: (m) => marks.push(m),
+      clue: (_f, text) => clues.push(text), time: () => t, random: () => 0,
+    });
+    const crime = (id: number, x: number) => ({ id, active: true, hot: { x, z: 0 } });
+    const a = crime(1, 300), b = crime(2, 200), c = crime(3, 100);
+    R.call(a, 'a robbery', null);
+    R.update(0.6);
+    const before = toasts.length + marks.length;
+    rep = 100; R.update(0.6);
+    const given = R.held && saved && toasts.length === 1 && /gave you a radio/.test(toasts[0]);
+    t = 1; R.call(a, 'a robbery', null); R.update(0.6);
+    t = 3; R.call(b, 'a mugging', 'Gilt & Co.', 4); R.update(0.6);
+    const m1 = marks[marks.length - 1];
+    const folded = toasts.length === 2 && /robbery reported on Elm Street/.test(toasts[1]) && R.stats.calls === 2 && m1.length === 2 && m1[0].always === true && !m1[1].always && /mugging/.test(m1[0].title ?? '') && clues.length === 1 && /Police radio: a mugging reported on Elm Street/.test(clues[0]);
+    t = 20; R.call(c, 'a purse snatching', null); a.active = false; P.x = 190; R.update(0.6);
+    const m2 = marks[marks.length - 1];
+    R.stopped(c);
+    const thanked = /Dispatch:/.test(toasts[toasts.length - 1]) && R.stats.thanks === 1 && R.open.length === 0;
+    R.stopped(c); R.stopped(crime(99, 0));
+    rep = 69; R.update(0.6);
+    check(before === 0 && given && folded && m2.length === 1 && /snatching/.test(m2[0].title ?? '') && thanked && R.stats.thanks === 1 && !R.held && !saved && /took their radio back/.test(toasts[toasts.length - 1]),
+      `police radio: nothing without it; the hand-over is told and saved; calls toasted at most one per ${RADIO.toastGap} s, newest a compass goal, a group's call a story clue; gone when the crime ends or the hero is there; thanks once; taken back below +70 (${toasts.length} toasts, ${R.stats.calls} calls)`);
+    check(callLine('a robbery', 'on Elm Street', null, 0) === 'A robbery reported on Elm Street. Units responding.' && /Gilt & Co\. suspected/.test(callLine('a heist', '', 'Gilt & Co.', 0.99)),
+      'police radio: dispatch lines read well');
+  }
+
   // The army against a rampaging giant player (PLAYGROUND_PLAN decision 19): the warning sequence,
   // standing down, a relapse; the army ringing a giant, following one who walks off, wearing a
   // passive one down in a bounded time.

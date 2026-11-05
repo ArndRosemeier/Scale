@@ -36,6 +36,7 @@
  * Levels above 2 (National Guard, army and air, the last resort — THREATS_PLAN §2) plug in
  * through `registerLevel`.
  */
+import { THREAT_CALLS } from '../crime/PoliceRadio';
 import * as THREE from 'three';
 import type { Game } from '../Game';
 import type { PedAgent } from '../../sim/Pedestrians';
@@ -203,6 +204,8 @@ export class ResponseDirector {
     for (let k = 0; k < RESPONSE.patrol; k++) inc.pending.push('patrol');
     this.incidents.push(inc);
     this.stats.incidents++;
+    // A hero with the police radio hears the call.
+    this.g.crime?.radio.threat(ev, ev.title ?? THREAT_CALLS[ev.archetype] ?? 'a disturbance');
     // Sounds load on first use.
     this.g.audio.loop('civil_siren')?.stop();
   }

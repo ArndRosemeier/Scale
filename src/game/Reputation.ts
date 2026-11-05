@@ -8,6 +8,7 @@
  *   ≥ +30  people cheer when the player stops a crime, wave as they pass, film from closer
  *   ≤ −40  people step out of the player's way and flee when they come close
  *   ≤ −50  the police treat the player as a suspect: wanted at the first offence they see
+ *   ≥ +100 the police give the player a radio (crime/PoliceRadio; taken back below +70)
  */
 import type { GameMode } from './mode';
 
@@ -29,12 +30,15 @@ export class Reputation {
   private listeners: RepListener[] = [];
   /** Statistics: crimes stopped, criminals knocked out, arrests, items returned, small deeds, bystanders hurt. */
   stats = { stopped: 0, kos: 0, arrests: 0, returned: 0, deeds: 0, hurt: 0, busted: 0 };
+  /** The hero has the police radio (crime/PoliceRadio: given at +100, taken back below +70). */
+  radio = false;
 
   constructor(seed: number, size: number, readonly mode: GameMode) {
     this.key = `scale.rep.v1.${mode}.${seed}.${size.toFixed(2)}`;
     try {
-      const o = JSON.parse(localStorage.getItem(this.key) ?? 'null') as { v?: number; stats?: Partial<Reputation['stats']> } | null;
+      const o = JSON.parse(localStorage.getItem(this.key) ?? 'null') as { v?: number; stats?: Partial<Reputation['stats']>; radio?: boolean } | null;
       if (o && Number.isFinite(o.v)) this.v = Math.max(REP.min, Math.min(REP.max, Number(o.v)));
+      this.radio = o?.radio === true;
       if (o?.stats) for (const k of Object.keys(this.stats) as (keyof Reputation['stats'])[]) this.stats[k] = Number(o.stats[k]) || 0;
     } catch { /* storage unavailable */ }
   }
@@ -57,6 +61,13 @@ export class Reputation {
     this.save();
   }
 
+  /** The police radio given or taken back (kept with the reputation). */
+  setRadio(v: boolean): void {
+    if (this.radio === v) return;
+    this.radio = v;
+    this.save();
+  }
+
   /** −1 (feared) … +1 (loved): crowd attitude. */
   get attitude(): number { return Math.min(1, this.v / REP.scale); }
   get cheers(): boolean { return this.v >= REP.cheerAt; }
@@ -70,13 +81,14 @@ export class Reputation {
   }
 
   /** Saves: the value and the statistics. */
-  serialize(): { v: number; stats: Reputation['stats'] } {
-    return { v: this.v, stats: { ...this.stats } };
+  serialize(): { v: number; stats: Reputation['stats']; radio: boolean } {
+    return { v: this.v, stats: { ...this.stats }, radio: this.radio };
   }
 
   /** Saves: take a saved value (written back to the per-city store; no listeners fire). */
-  restore(o: { v?: number; stats?: Partial<Record<string, number>> } | null): void {
+  restore(o: { v?: number; stats?: Partial<Record<string, number>>; radio?: boolean } | null): void {
     if (!o) return;
+    this.radio = o.radio === true;
     if (Number.isFinite(o.v)) this.v = Math.max(REP.min, Math.min(REP.max, Number(o.v)));
     if (o.stats) for (const k of Object.keys(this.stats) as (keyof Reputation['stats'])[]) this.stats[k] = Number(o.stats[k]) || 0;
     this.save();
@@ -84,11 +96,12 @@ export class Reputation {
 
   reset(): void {
     this.v = 0;
+    this.radio = false;
     for (const k of Object.keys(this.stats) as (keyof Reputation['stats'])[]) this.stats[k] = 0;
     this.save();
   }
 
   private save(): void {
-    try { localStorage.setItem(this.key, JSON.stringify({ v: this.v, stats: this.stats })); } catch { /* storage unavailable */ }
+    try { localStorage.setItem(this.key, JSON.stringify({ v: this.v, stats: this.stats, radio: this.radio })); } catch { /* storage unavailable */ }
   }
 }
