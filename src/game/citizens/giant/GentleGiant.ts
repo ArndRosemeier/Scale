@@ -639,7 +639,7 @@ export class GentleGiant {
     if (!action) this.action = null;
     rig.update({
       pos: [this.pos.x, this.pos.y, this.pos.z], vel: [fx * v, 0, fz * v], yaw: this.heading, scale, flags: 0,
-      anim: { move, seat: this.seat, action, mood: this.mood, lookAt: this.lookAtP ?? undefined },
+      anim: { move, floor: this.seat, action, mood: this.mood, lookAt: this.lookAtP ?? undefined },
     }, dt / sk, this.animTime, g.renderer.camera.position);
     // Footsteps on the gait's heel strikes (as Player.updateRig).
     const ph = rig.animator?.gaitPhase ?? 0, prev = this.stepPhase;

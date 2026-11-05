@@ -40,7 +40,7 @@ export interface AnimState {
    * `sit_floor`: how far down onto the floor (0 standing … 1 sitting … 2 lying on the back). The owner
    * moves it (up and down, slowly); the animator plays getting down and up from motion capture.
    */
-  seat?: number;
+  floor?: number;
 }
 
 /** Superpower poses layered over locomotion (see Animator.powerLayer). */

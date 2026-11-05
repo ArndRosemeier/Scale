@@ -635,11 +635,11 @@ export class Animator {
         return true;
       }
       case 'floor': {
-        // Down onto the floor and up again: CMU "get up from floor" played by `seat` (backwards going
+        // Down onto the floor and up again: CMU "get up from floor" played by `floor` (backwards going
         // down), sitting a while: CMU "sitting on ground relaxing", rocking slowly through its calm part.
         const g = rig.clip('Floor_Get_Up'), loop = rig.clip('Sit_Floor_Loop');
         if (!g || !loop) return false;
-        const s = clamp(inp.anim.seat ?? 1, 0, 2);
+        const s = clamp(inp.anim.floor ?? 1, 0, 2);
         const wl = s <= 1 ? smooth(0.8, 1, s) : 1 - smooth(1, 1.25, s);
         const span = FLOOR_LOOP[1] - FLOOR_LOOP[0];
         this.floorU += dt / (loop.meta.dur * span);
@@ -715,7 +715,7 @@ export class Animator {
       }
       case 'floor': {
         // (No clips: sitting on the ground, knees up; lying down past 1.)
-        const s = clamp(inp.anim.seat ?? 1, 0, 2);
+        const s = clamp(inp.anim.floor ?? 1, 0, 2);
         if (s > 1) return this.lying(p, s - 1, false);
         sitPose(p, s);
         p.root.y -= this.hipH * 0.78 * s;
