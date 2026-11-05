@@ -2,7 +2,7 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.294 — 2026-11-05
+## 0.296 — 2026-11-05
 
 - **The gentle giant of the stadium.** Earlier this year one of the city's crystals made someone grow to about ten metres, and that's all it did: no powers, no side in anything. Now they live with being a walking attraction, a friendly, slightly awkward local celebrity. You'll meet them around the stadium. They walk slowly and carefully round it (they wait when someone is right in front of their feet and say sorry), wave and smile at people, and greet the hero by name. Their steps are soft thuds, so nobody panics. Clothes don't come in their size, so they wear improvised underwear.
 - **They sit on the ground a lot**, so as not to loom, and get up again slowly. The sitting down, sitting and getting up are motion-captured moves from the Actors library's own clips.
@@ -10,6 +10,14 @@ Every push raises the version by 0.001. Newest first.
 - **A press magnet.** Photographers come by every so often, flashes going off, shouting questions. People stop to watch and film, and call out their name.
 - **Their day:** they sleep on the pitch after the concert, leave before the first match, spend the day round the stadium, and sit outside the gate while the concert plays. Explosions, gunfire or monsters nearby give them a fright.
 - Admin console: "Go to" has an entry that takes you to the gentle giant.
+
+## 0.295 — 2026-11-05
+
+- **Switch single sounds off.** The pause menu has a new Sound effects row: Choose… opens a list of every sound in the game (about 170), grouped like the sound mix, each with a checkbox and a short description. Ticking or unticking a box plays that sound once, and ▶ plays it without changing it, so you can find an annoying sound by ear. Unticked sounds stay silent in the game and stay off the next time you play. There is a search box and an All on button.
+
+## 0.294 — 2026-11-05
+
+- **A retired gargoyle lives on the cathedral.** For six hundred years it was a waterspout; since they put in a drainpipe it is retired, and very much alive. By day it squats on a buttress by the cathedral's front as still as stone (fly up to it and it may whisper, or wink). At dusk it wakes, stretches, its eyes light up, and it glides down to its spot on the square beside the steps. At night it gossips with the pigeons (they gather round it), strolls about the square, and passers-by stop to look and take photos. Walk up and press **E** to talk: who it is, the pigeons' gossip (when a rumour about a gang's hideout is going round, the pigeons know it, and it goes into the tracker), and its tours. At 22:00, midnight and 2:00 it gives a free night tour: a few passers-by follow it to the sights nearby while it points and tells stories, and you can tag along. Trouble nearby ("Statue! I'm a statue!") sends it flying back up to its ledge for a while, and it is back up there before dawn. In a city without a cathedral it lives on the town hall's roof. It goes into the People tab of the tracker when you meet it.
 
 ## 0.293 — 2026-11-05
 
