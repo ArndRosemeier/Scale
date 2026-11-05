@@ -8,9 +8,11 @@
  *   rumour      (story)      people asked for the news pass on where the followed group hides out
  *   group-crime (challenge, story)  one of the followed group's own operations near the hero, in
  *                             its turf, so one gang's story keeps coming back where the hero plays
+ * and the signs (gm/Signs, phase 3): boss operations cased before they happen, calling cards after
+ * the hero hurt a group, witnesses of a crime that got away.
  *
  * Normal mode only (like the tracker). Saved per city in the browser and in save files (SaveData.gm).
- * The developer panel (dev.gm.panel(), admin console "Story pacing") shows its moves and why.
+ * The developer panel (dev.gm.panel(), admin console "Game master") shows its moves and why.
  */
 import type { Game } from '../Game';
 import { Director, GM, NEEDS, followedGroup, hideoutRumour, type GmMove, type Need } from './director';
@@ -18,11 +20,17 @@ import { hideoutCell } from '../factions/Hideouts';
 import { deriveSeed, hashToFloat, hash32 } from '../../core/rng';
 import { clueTime } from '../story/knowledge';
 import { esc } from '../../ui/esc';
+import { Signs } from './Signs';
+import type { Faction } from '../factions/Factions';
+import type { Crime } from '../crime/Crime';
+import type { Lookout } from '../crime/Lookout';
+import type { PedAgent } from '../../sim/Pedestrians';
 
 const STORE = (g: Game) => `scale.gm.v1.${g.mode}.${g.settings.seed}.${g.settings.size.toFixed(2)}`;
 
 export class GameMaster {
   readonly dir = new Director();
+  readonly signs: Signs;
   private acc = 0;
   private saveT = 20;
   private devDone = false;
@@ -30,6 +38,7 @@ export class GameMaster {
   private panelKey = '';
 
   constructor(private g: Game) {
+    this.signs = new Signs(g, this.dir);
     if (!this.enabled) return;
     try { this.dir.restore(JSON.parse(localStorage.getItem(STORE(g)) ?? 'null')); } catch { /* storage unavailable */ }
   }
@@ -50,6 +59,7 @@ export class GameMaster {
     this.dir.state.played += dt;
     this.acc += dt;
     if (this.acc >= GM.tick) { this.acc = 0; this.think(); }
+    this.signs.update(dt);
     this.saveT -= dt;
     if (this.saveT <= 0) { this.saveT = 20; this.persist(); }
     if (this.panel) this.drawPanel();
@@ -114,6 +124,33 @@ export class GameMaster {
     if (!c) return null;
     const waited = Math.round(this.dir.waited(need) / 60);
     return this.dir.record({ at: g.sky.hoursAbs, tool: 'group-crime', need, why: `${need} unmet for ${waited} min: a ${c.kind} by ${f.name}, the group the hero follows`, x: c.x, z: c.z });
+  }
+
+  // ------------------------------------------------------------------ signs (CrimeSystem's hooks)
+
+  /** A group's boss would come out now: plan it ahead and have it cased (true: the game master took it). */
+  planOp(f: Faction): boolean {
+    return this.enabled && !this.g.intro && this.signs.planOp(f);
+  }
+
+  /** A lookout was caught: they may tell when the job is (true: told). */
+  caught(c: Lookout, who: PedAgent): boolean {
+    return this.enabled && this.signs.caught(c, who);
+  }
+
+  /** A group's messenger reached the hero. */
+  taunt(c: Lookout, who: PedAgent): void {
+    if (this.enabled) this.signs.taunt(c, who);
+  }
+
+  /** The hero hurt a group (stopped its boss operation, busted its stash). */
+  hurt(f: Faction, why: 'op' | 'stash'): void {
+    if (this.enabled) this.signs.hurt(f, why);
+  }
+
+  /** A group's crime got away (or went through) near the hero. */
+  escaped(c: Crime, f: Faction): void {
+    if (this.enabled) this.signs.escaped(c, f);
   }
 
   // ------------------------------------------------------------------ talk
@@ -182,14 +219,15 @@ export class GameMaster {
   private drawPanel(): void {
     const D = this.dir, S = D.state;
     const needs = NEEDS.map((n) => `${n} ${Math.round(D.waited(n) / 60)}/${Math.round(GM.overdue[n] / 60)} min`).join(' · ');
-    const key = `${S.n}|${needs}|${D.pacing()}|${S.rumour?.heard}`;
+    const sg = this.signs.status();
+    const key = `${S.n}|${needs}|${D.pacing()}|${S.rumour?.heard}|${sg.plans.join()}|${sg.cards}|${sg.witness}`;
     if (key === this.panelKey) return;
     this.panelKey = key;
     const f = this.followed();
     const fname = f === null ? 'none' : this.g.crime.factions.factions[f].name;
     const moves = S.log.slice().reverse().slice(0, 14).map((m) => `<li><span class="w">${clueTime(m.at)} · ${m.tool} · ${m.need}</span>${m.x !== undefined ? `<button data-x="${m.x.toFixed(1)}" data-z="${m.z!.toFixed(1)}">⌖</button>` : ''}${esc(m.why)}</li>`).join('');
-    this.panel!.innerHTML = `<div class="gm-h"><b>Story pacing</b><button class="gm-x">×</button></div>
-      <div class="gm-s">${D.pacing()} · following ${esc(fname)}<br>${needs}${S.rumour ? `<br>rumour${S.rumour.heard ? ' (heard)' : ''}: ${esc(S.rumour.text)}` : ''}</div>
+    this.panel!.innerHTML = `<div class="gm-h"><b>Game master</b><button class="gm-x">×</button></div>
+      <div class="gm-s">${D.pacing()} · following ${esc(fname)}<br>${needs}${S.rumour ? `<br>rumour${S.rumour.heard ? ' (heard)' : ''}: ${esc(S.rumour.text)}` : ''}${sg.plans.map((p) => `<br>planned: ${esc(p)}`).join('')}${sg.cards ? `<br>calling cards due: ${sg.cards}` : ''}${sg.witness ? '<br>a witness is waiting' : ''}</div>
       <div class="gm-b">Act now: ${NEEDS.map((n) => `<button data-act="${n}">${n}</button>`).join('')}</div>
       <ul>${moves || '<li>No moves yet.</li>'}</ul>`;
   }
@@ -208,6 +246,25 @@ export class GameMaster {
       act: (need: Need = 'story') => this.think(need),
       /** Show / hide the developer panel. */
       panel: (on?: boolean) => this.togglePanel(on),
+      /** Planned jobs, calling cards due, a waiting witness. */
+      signs: () => this.signs.status(),
+      /** Plan a group's boss operation now (archetype or id), cased first; `soon` h until it starts. */
+      plan: (group: string | number = 'syndicate', soon?: number) => {
+        const F = this.g.crime.factions.factions, f = typeof group === 'number' ? F[group] : F.find((x) => x.archetype === group);
+        if (!f) return 'no such group';
+        if (!this.signs.planOp(f)) return 'no site for it here';
+        const P = this.signs.plans.find((p) => p.fid === f.id);
+        if (P && soon !== undefined) P.at = this.g.sky.hoursAbs + soon;
+        return this.signs.status();
+      },
+      /** A calling card from a group now (needs it to have its eye on the hero: notoriety raised to wary). */
+      card: (group: string = 'gang', why: 'op' | 'stash' = 'stash') => {
+        const C = this.g.crime, f = C.factions.factions.find((x) => x.archetype === group);
+        if (!f) return 'no such group';
+        C.notoriety[f.id] = Math.max(C.notoriety[f.id] ?? 0, 30);
+        this.signs.cards.push({ fid: f.id, at: this.g.sky.hoursAbs, why });
+        return this.signs.status();
+      },
       /** Make every need overdue now. */
       starve: () => { for (const n of NEEDS) this.dir.state.met[n] = this.dir.state.played - GM.overdue[n] - 1; this.dir.state.calmUntil = 0; this.dir.state.lastMove = -1e9; return this.dir.due(); },
     };

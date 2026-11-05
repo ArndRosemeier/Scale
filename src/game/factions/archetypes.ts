@@ -59,7 +59,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: 1,
     dense: 0,
     reach: 0.42,
-    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5, bomber: 1.5, brawl: 1.5, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    kinds: { snatch: 1, mugging: 1.7, robbery: 0.8, racket: 1.6, tagging: 1.5, bomber: 1.5, brawl: 1.5, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0, casing: 0, taunt: 0 },
     rivals: ['syndicate', 'techno'],
     // The Brute: a shoulder charge and a stomp that splits the pavement.
     lieutenant: { title: 'Brute', powers: ['dash', 'quake'], chance: { brawl: 0.4, hideout: 0.6, racket: 0.25, mugging: 0.12, robbery: 0.2 } },
@@ -82,7 +82,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     rough: -0.6,
     dense: 1.5,
     reach: 0.34,
-    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0, bomber: 0, brawl: 0.6, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    kinds: { snatch: 0.4, mugging: 0.35, robbery: 2.6, racket: 0, tagging: 0, bomber: 0, brawl: 0.6, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0, casing: 0, taunt: 0 },
     rivals: ['gang', 'cult'],
     // The Enforcer: gadgets — a stun grenade, a frost gun, a shield projector, smoke to get away in.
     lieutenant: { title: 'Enforcer', powers: ['stun', 'frost', 'shield', 'smoke'], chance: { robbery: 0.35, hideout: 0.6, brawl: 0.4, snatch: 0.05 } },
@@ -104,7 +104,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     dense: 0.4,
     reach: 0.3,
     // Free the machines: they hijack the city's robots and drones and turn them on the street.
-    kinds: { snatch: 0.5, mugging: 0.3, robbery: 0.6, racket: 0, tagging: 0, bomber: 0, brawl: 1, hideout: 0, den: 0, hijack: 2.4, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    kinds: { snatch: 0.5, mugging: 0.3, robbery: 0.6, racket: 0, tagging: 0, bomber: 0, brawl: 1, hideout: 0, den: 0, hijack: 2.4, ritual: 0, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0, casing: 0, taunt: 0 },
     rivals: ['cult', 'gang', 'eco'],
     // The Technomancer: lightning from the hands, an EMP that stalls cars and drops drones, a shield.
     lieutenant: { title: 'Technomancer', powers: ['bolt', 'emp', 'shield'], chance: { hijack: 0.7, hideout: 0.6, brawl: 0.4, robbery: 0.2 } },
@@ -127,7 +127,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     dense: 0.2,
     reach: 0.28,
     // Rituals at the city's old places (landmarks, squares): something is being woken.
-    kinds: { snatch: 0.4, mugging: 0.5, robbery: 0.2, racket: 0, tagging: 0, bomber: 0, brawl: 0.8, hideout: 0, den: 0, hijack: 0, ritual: 2.4, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    kinds: { snatch: 0.4, mugging: 0.5, robbery: 0.2, racket: 0, tagging: 0, bomber: 0, brawl: 0.8, hideout: 0, den: 0, hijack: 0, ritual: 2.4, sabotage: 0, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0, casing: 0, taunt: 0 },
     rivals: ['techno', 'syndicate', 'necro'],
     // The Invoker: fire and frost, and a blast of wind.
     lieutenant: { title: 'Invoker', powers: ['fireball', 'frost', 'gust'], chance: { ritual: 0.7, hideout: 0.6, brawl: 0.4, mugging: 0.1 } },
@@ -150,7 +150,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     dense: -0.4,
     reach: 0.3,
     // Drive the machines out: they wreck robots and cars and plant the street over.
-    kinds: { snatch: 0.15, mugging: 0.25, robbery: 0, racket: 0, tagging: 0.5, bomber: 0, brawl: 1, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 2.4, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    kinds: { snatch: 0.15, mugging: 0.25, robbery: 0, racket: 0, tagging: 0.5, bomber: 0, brawl: 1, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 2.4, raising: 0, procession: 0, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0, casing: 0, taunt: 0 },
     rivals: ['techno', 'necro'],
     // The Beast-master: a whistle that sets the dog pack on you, a rush, a blast of wind.
     lieutenant: { title: 'Beast-master', powers: ['whistle', 'dash', 'gust'], chance: { sabotage: 0.6, hideout: 0.6, brawl: 0.45, mugging: 0.12 } },
@@ -173,7 +173,7 @@ export const ARCHETYPES: Record<ArchetypeId, Archetype> = {
     dense: 0.1,
     reach: 0.26,
     // Power from the city's old dead: bones raised from the ground, the living led off in a trance.
-    kinds: { snatch: 0.2, mugging: 0.4, robbery: 0, racket: 0, tagging: 0, bomber: 0, brawl: 0.7, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 1.8, procession: 1.2, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0 },
+    kinds: { snatch: 0.2, mugging: 0.4, robbery: 0, racket: 0, tagging: 0, bomber: 0, brawl: 0.7, hideout: 0, den: 0, hijack: 0, ritual: 0, sabotage: 0, raising: 1.8, procession: 1.2, heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0, casing: 0, taunt: 0 },
     rivals: ['cult', 'eco'],
     // The Bone-caller: a beam that drains life into them, a wail that scatters the street, a bone shield.
     lieutenant: { title: 'Bone-caller', powers: ['drain', 'wail', 'shield'], chance: { raising: 0.6, procession: 0.5, hideout: 0.6, brawl: 0.4 } },

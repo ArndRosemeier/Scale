@@ -54,6 +54,8 @@ export function kindWeights(d: District, hour: number): Record<CrimeKind, number
     bomber: busy ? 0.09 : 0.05,
     // Never rolled: a boss operation is started by CrimeSystem when a group's boss comes out.
     heist: 0, takeover: 0, uprising: 0, awakening: 0, treewake: 0, deadrise: 0,
+    // Lookouts (crime/Lookout): only the game master's signs start them.
+    casing: 0, taunt: 0,
   };
 }
 

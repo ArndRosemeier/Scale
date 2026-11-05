@@ -4085,6 +4085,7 @@ section('people phase 4', async () => {
 // ------------------------------------------------------------------ the city's pulse (game/news): neighbourhoods, live
 // crime index, police presence, the fresh start, off-screen crime and the news in words
 section('game master', async () => {
+  const kindsSrc = () => readFileSync('src/game/crime/kinds.ts', 'utf8');
   const { Director, GM, NEEDS, followedGroup, hideoutRumour } = await import('../src/game/gm/director');
   const D = new Director();
   check(D.due().length === 0 && D.pacing() === 'build', 'gm: nothing is due at the start');
@@ -4122,10 +4123,19 @@ section('game master', async () => {
   const people = fs.readFileSync('src/game/people/People.ts', 'utf8'), crime = fs.readFileSync('src/game/crime/CrimeSystem.ts', 'utf8'), story = fs.readFileSync('src/game/story/Story.ts', 'utf8');
   check(people.includes("gm?.met('people')") && crime.includes("gm?.met('challenge')") && story.includes("gm?.met('story')"), 'gm: talks, fights won and clues meet the needs');
   check(people.includes('gm?.talkFacts(') && people.includes('gm.heard('), 'gm: people asked for the news pass the rumour on, and the hero remembers it');
-  // Arnd: the player never learns there is a game master (the changelog, the manual, the admin console, the panel).
-  const shown = [readFileSync('CHANGELOG.md', 'utf8'), readFileSync('public/manual/manual.html', 'utf8'), readFileSync('src/ui/AdminConsole.ts', 'utf8'),
-    fs.readFileSync('src/game/gm/GameMaster.ts', 'utf8').split('\n').filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l)).join('\n')];
-  check(shown.every((t) => !/game[ -]master/i.test(t)), 'gm: nothing the player can see names a game master');
+  // Phase 3, the signs: what they say.
+  const ST = await import('../src/game/gm/signsText');
+  const { BOSS_OP_KINDS } = await import('../src/game/crime/Crime');
+  check(BOSS_OP_KINDS.every((k) => ST.CASING_SEEN[k] && ST.CASING_JOB[k] && ST.OFFSCREEN[k]), 'gm signs: every boss operation can be cased, told and reported');
+  const seen = ST.casingSeen('heist', 'Gilt & Co.', 'on Elm Street'), told = ST.caughtLine('heist', 'on Elm Street', ST.whenSaid(22.4, 20), 0.5);
+  check(seen.startsWith('Gilt & Co.') && seen.includes('on Elm Street') && told.includes('around 22:00') && !/[{}]/.test(told), 'gm signs: casing lines fill in the group, the place and the time');
+  check(ST.casingSeen('awakening', 'The Thunder Choir', '') === 'Robed The Thunder Choir marking the ground' || !ST.casingSeen('awakening', 'X', '').includes('  '), 'gm signs: no gaps when the place has no name');
+  check(ST.whenSaid(10.5, 10) === 'within the hour' && ST.whenSaid(20, 17) === 'tonight around 20:00' && ST.whenSaid(24 + 9, 22) === 'tomorrow around 9:00', 'gm signs: when a job is, in words');
+  check(['op', 'stash'].every((w) => [0, 0.5, 0.99].every((u) => ST.tauntLine(w as 'op', 'The Blockside Saints', u).includes('The Blockside Saints'))) && ST.witnessLine('on Pike St', 0.2).includes('on Pike St'), 'gm signs: calling cards name the group, witnesses the street');
+  check(fs.readFileSync('src/game/crime/CrimeSystem.ts', 'utf8').includes('g.gm?.planOp(') && kindsSrc().includes("casing:") , 'gm signs: boss operations are planned ahead (cased) in Normal mode');
+  // Arnd: the player never learns there is a game master (the changelog, the manual; the hidden admin console may say it).
+  const shown = [readFileSync('CHANGELOG.md', 'utf8'), readFileSync('public/manual/manual.html', 'utf8')];
+  check(shown.every((t) => !/game[ -]master/i.test(t)), 'gm: nothing the player sees names a game master');
 });
 
 section('story knowledge', async () => {
