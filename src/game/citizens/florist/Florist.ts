@@ -602,7 +602,7 @@ export class Florist {
       this.stats.dodges++;
       this.stepped = this.steppedT > 0 ? this.stepped + 1 : 1;
       this.steppedT = 90;
-      this.g.barks.sayAt(this.anchor, floristLine(this.stepped >= 3 ? 'stepped2' : 'stepped', () => this.rng.float(), H.name, H.shop) ?? 'Eek!', { head: 0.3, pause: 2, voice: true, tone: this.stepped >= 3 ? 'angry' : undefined });
+      this.g.barks.sayAt(this.anchor, floristLine(this.stepped >= 3 ? 'stepped2' : 'stepped', () => this.rng.float(), H.name, H.shop) ?? 'Eek!', { head: 0.3, pause: 2, voice: true, now: true, tone: this.stepped >= 3 ? 'angry' : undefined });
     }
   }
 

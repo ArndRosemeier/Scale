@@ -2,6 +2,14 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.292 — 2026-11-05
+
+- **The shrunk florist.** Earlier this year a crystal made one of the city's florists 15 cm tall. She still runs her flower shop in town: a flower stand on the pavement by the shop door, her own little door in the wall with her sign over it, and a sandwich board asking people to mind their step. By day she waters the buckets, sits on the rim of a flower pot and waves at people. Every few minutes she climbs onto Captain, her big pigeon, and flies off to one of her roof gardens nearby to water the planters, then comes back with a bouquet. She stays home in the rain and goes in through her little door at night. Passers-by step round her, and the curious stop to look or take her picture. Walk onto her and she hops aside with a squeak. A giant, a blast or gunfire nearby sends her up and away on Captain until it is calm. She talks to you when you come close, and she is delighted to meet you if you shrink yourself. Admin console: Go to › The shrunk florist.
+
+## 0.291 — 2026-11-05
+
+- **The magnetic grandma.** Every city has one: a cheerful old lady who was made magnetic by one of the crystals years ago. She is no hero and no villain. In the day (8:30 to 12:30 and 14:00 to 18:30) she does her rounds of the shops in her part of town, and anything made of metal near her flies over and sticks to her coat: forks and teaspoons off café tables, tins from the shop doors, a spanner off the street, keys out of passers-by's pockets (she hands those back) and now and then a whole bicycle, which she carries on her back for a while. When she clanks too much she stops and shakes it all off onto the pavement with a great clatter. People stop to watch and take photos, and she has a word for everyone, the hero included. Anything dangerous nearby ends her day: everything drops and she runs. She's back the next day. The first time you meet her, she goes into the People tab of the tracker with her part of town on the map.
+
 ## 0.290 — 2026-11-05
 
 - **Leo Lightly, the man who can't land.** A crystal earlier this year left Leo, a friendly accountant, floating about a metre off the ground for good. He's not a hero or a villain, just someone the whole town knows. By day his kids Mia and Ben tow him round the park nearest the city centre on a string tied to his ankle, like a balloon. He waves at people, chats in speech bubbles, and passers-by stop to film him. He isn't out at night, in the rain, or on the odd day the family stays home.
