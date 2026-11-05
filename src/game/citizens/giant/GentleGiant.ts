@@ -645,11 +645,12 @@ export class GentleGiant {
       const r = rig, done = (): void => { if (this.rig === r) this.rigReady = 2; };
       void shaderCap.slot().then(() => {
         if (this.rig !== r) return;
-        r.setVisible(true); // (compiling looks at what is visible)
+        r.object.visible = true; // (compiling looks at what is visible)
         return g.renderer.compileAsync(r.object);
       }).then(done, done);
     }
-    rig.setVisible(this.rigReady === 2);
+    // (Only the rig's own node: setVisible before she is dressed would leave her body hidden.)
+    rig.object.visible = this.rigReady === 2;
     const sk = Math.sqrt(this.k);
     this.animTime += dt / sk;
     // (Scaled from the built body's own height to GIANT.height; the gait in slow motion, as the player's.)
