@@ -86,6 +86,7 @@ Its open items are consolidated here one PR at a time.
 | Tell the hero something a villain group, a threat, a favour or the sidekick did (it belongs in the tracker) | `g.story.tell(info, html, { kind, x, z })` (a toast and a clue), `g.story.note(info, text)` (a clue, no toast), `g.story.close(info, ending, html?)` (the thread is over), `g.story.place(id, …)` (its place on the map). A group's thread: `g.story.group(f)`; in CrimeSystem `this.tellGroup(f, html, kind, at)`. In the sandbox nothing is recorded, the toast still shows. | A bare `powerHud.toast` for it (**guarded** in CrimeSystem): the tracker never hears of it |
 | Someone tells the hero something important (a cuffed crook, a witness) | `g.story.say(agent, info, line)`: the story bubble (coloured edge with the emblem, a chime, the speaker turns to the hero, said again when the hero walks up), a toast when it is off screen | A plain bark (`barks.say`): it drowns in the street's chatter |
 | The game master starts something for the player (game/gm) | A tool in `GameMaster.ts` that goes through the existing system (`crime.startFor`, People's news facts), logged with `dir.record({ tool, need, why })` | Spawning people or events directly: the budgets and rules would be bypassed, and the dev panel would not know why |
+| Text the player can see (HUD, toasts, chat, the changelog, the manual, even dev panels) | Describe what happens in the city ("a gang turns up near you", "people pass on rumours") | Naming a game master (Arnd: it must look natural; **guarded**) |
 
 ## Threats
 
