@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.281 — 2026-11-05
+
+- **Every sound now has a distance where it stops being heard, and far sounds are muffled.** Sounds already got quieter with distance, but they never stopped, and they kept all their treble at any distance, so a car horn 700 m away still came through as a small, clean beep. Now each positioned sound (clips, loops, street music and concerts, the elemental powers) gets a hearing range from how loud it is: a footstep carries about 40 m, a horn about 200 m, an explosion a few kilometres. Over the last stretch of that range the sound fades out, and past it a one-shot isn't played at all. Far sounds also lose their high end (air and the city in between), so a far horn is a dull hoot. All of this is in one place (`src/audio/hearing.ts`), which replaces v0.280's horn-only 150 m rule. The alien discs' scanning tone, which carried well over a kilometre, now reaches about 550 m.
+
 ## 0.280 — 2026-11-05
 
 - **Cars have quiet engine sounds.** The four running cars nearest you each get a soft engine hum: an idle murmur at a light, a little louder and higher as the car speeds up, each car at its own pitch. Buses and trucks rumble lower, sports cars sit higher, electric shuttles stay silent. Nothing is heard beyond about 40 m, the hum is muffled indoors and gone underground, and it stays well below the city ambience. It belongs to the "Traffic & trains" slider in the sound mix.

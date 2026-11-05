@@ -4,6 +4,8 @@
  * Built from oscillators and one shared noise buffer, positioned with panners, routed into
  * the game's effects bus.
  */
+import { Spot, heard } from './hearing';
+
 export type SynthShot = 'thunder' | 'zap' | 'frost' | 'fire' | 'shrink' | 'squeak' | 'quake' | 'sizzle' | 'splash' | 'pop' | 'crackle' | 'phase' | 'beam' | 'orb';
 /** 'charge': a rising hum (param 0..1: how far it has gathered); the focus beam and the seeker orb. */
 export type SynthLoop = 'laser' | 'water' | 'wind' | 'run' | 'burn' | 'charge';
@@ -29,15 +31,10 @@ export class PowerSynth {
     return (this.noise = b);
   }
 
-  private panner(ctx: AudioContext, x: number, y: number, z: number, ref: number): PannerNode {
-    const p = ctx.createPanner();
-    p.panningModel = 'equalpower';
-    p.distanceModel = 'inverse';
-    p.refDistance = ref;
-    p.rolloffFactor = 1;
-    p.maxDistance = 5000;
-    p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z;
-    return p;
+  private spot(ctx: AudioContext, out: AudioNode, x: number, y: number, z: number, ref: number, level: number): Spot {
+    const s = new Spot(ctx, out, ref, 1, 'equalpower');
+    s.place(x, y, z, level, true);
+    return s;
   }
 
   private noiseSrc(ctx: AudioContext, loop = false): AudioBufferSourceNode {
@@ -50,13 +47,13 @@ export class PowerSynth {
   /** One-shot at a point (ref: distance of full loudness). */
   play(kind: SynthShot, x: number, y: number, z: number, gain = 1, ref = 6, pitch = 1): void {
     const o = this.out();
-    if (!o || this.voices > 24) return;
+    if (!o || this.voices > 24 || !heard(x, y, z, gain, ref)) return;
     const { ctx } = o;
     const t = ctx.currentTime + 0.005;
-    const pan = this.panner(ctx, x, y, z, ref);
+    const pan = this.spot(ctx, o.out, x, y, z, ref, gain);
     const master = ctx.createGain();
     master.gain.value = gain;
-    master.connect(pan).connect(o.out);
+    master.connect(pan.input);
     let end = t + 1;
     const env = (node: AudioNode, peak: number, a: number, d: number, at = t) => {
       const g = ctx.createGain();
@@ -176,10 +173,10 @@ export class PowerSynth {
     const o = this.out();
     if (!o) return null;
     const { ctx } = o;
-    const pan = this.panner(ctx, 0, 0, 0, ref);
+    const pan = this.spot(ctx, o.out, 0, 0, 0, ref, 0);
     const master = ctx.createGain();
     master.gain.value = 0;
-    master.connect(pan).connect(o.out);
+    master.connect(pan.input);
     const nodes: AudioScheduledSourceNode[] = [];
     const filters: BiquadFilterNode[] = [];
     const add = (src: AudioScheduledSourceNode, chain: AudioNode, g: number) => {
@@ -227,7 +224,7 @@ export class PowerSynth {
       set: (x, y, z, gain, param = 1) => {
         if (stopped) return;
         const t = ctx.currentTime;
-        pan.positionX.setTargetAtTime(x, t, 0.03); pan.positionY.setTargetAtTime(y, t, 0.03); pan.positionZ.setTargetAtTime(z, t, 0.03);
+        pan.place(x, y, z, gain, false, 0.03);
         master.gain.setTargetAtTime(gain, t, 0.06);
         if (kind === 'wind' || kind === 'run') for (const f of filters) f.frequency.setTargetAtTime((kind === 'run' ? 500 : 350) + 900 * param, t, 0.1);
         if (kind === 'laser') tuned.forEach((s, i) => s.frequency.setTargetAtTime([110, 220.7, 1760][i] * param, t, 0.05));

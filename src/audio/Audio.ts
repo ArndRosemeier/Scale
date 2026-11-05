@@ -4,6 +4,7 @@
  * Audio starts on the first user gesture (browser autoplay rules).
  */
 import * as THREE from 'three';
+import { Spot, heard, listenerPos } from './hearing';
 
 /** A streamed piece placed in the world (Audio.stream). */
 export interface LiveStream {
@@ -141,6 +142,7 @@ export class Audio {
     if (!this.ctx) return;
     const l = this.ctx.listener;
     const p = cam.position;
+    listenerPos.copy(p);
     const f = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
     const u = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
     const t = this.ctx.currentTime;
@@ -157,11 +159,12 @@ export class Audio {
   /**
    * Spatial one-shot. `refDist` is the distance at which the sound plays at full gain
    * (bigger for big events). Sound travels: a delay of distance / 343 m/s is applied.
+   * Out of its audible range (hearing.ts: by loudness and refDist) it is not played at all.
    */
   play(id: string, x: number, y: number, z: number, gain = 1, pitch = 1, refDist = 4, listener?: THREE.Vector3): void {
     if (!this.ctx || !this.enabled || this.voices > 48) return;
     const m = this.manifest[id];
-    if (!m) return;
+    if (!m || !heard(x, y, z, gain * m.gain, refDist)) return;
     const ctx = this.ctx;
     const go = (bufs: AudioBuffer[]) => {
       if (!bufs.length) return;
@@ -170,18 +173,13 @@ export class Audio {
       src.playbackRate.value = pitch * (0.94 + Math.random() * 0.12);
       const g = ctx.createGain();
       g.gain.value = gain * m.gain;
-      const pan = ctx.createPanner();
-      pan.panningModel = 'HRTF';
-      pan.distanceModel = 'inverse';
-      pan.refDistance = refDist;
-      pan.rolloffFactor = 1;
-      pan.maxDistance = 20000;
-      pan.positionX.value = x; pan.positionY.value = y; pan.positionZ.value = z;
-      src.connect(g).connect(pan).connect(this.bus(id));
+      const spot = new Spot(ctx, this.bus(id), refDist);
+      spot.place(x, y, z, gain * m.gain, true);
+      src.connect(g).connect(spot.input);
       const delay = listener ? Math.min(3, listener.distanceTo(new THREE.Vector3(x, y, z)) / 343) : 0;
       src.start(ctx.currentTime + delay);
       this.voices++;
-      src.onended = () => { this.voices--; g.disconnect(); pan.disconnect(); };
+      src.onended = () => { this.voices--; g.disconnect(); spot.disconnect(); };
     };
     const b = this.buffers.get(id);
     if (b) { this.used.set(id, performance.now() / 1000); go(b); } else void this.load(id).then(go);
@@ -250,21 +248,17 @@ export class Audio {
     src.loop = true;
     const g = ctx.createGain();
     g.gain.value = 0;
-    const pan = ctx.createPanner();
-    pan.panningModel = 'HRTF';
-    pan.distanceModel = 'inverse';
-    pan.refDistance = refDist;
-    pan.rolloffFactor = 1.2;
-    src.connect(g).connect(pan).connect(this.bus(id));
+    const spot = new Spot(ctx, this.bus(id), refDist, 1.2);
+    src.connect(g).connect(spot.input);
     src.start(0, Math.random() * bufs[0].duration);
     return {
       set: (x, y, z, gain, rate = 1) => {
         const t = ctx.currentTime;
-        pan.positionX.setTargetAtTime(x, t, 0.05); pan.positionY.setTargetAtTime(y, t, 0.05); pan.positionZ.setTargetAtTime(z, t, 0.05);
+        spot.place(x, y, z, gain * m.gain);
         g.gain.setTargetAtTime(gain * m.gain, t, 0.15);
         src.playbackRate.setTargetAtTime(rate, t, 0.2);
       },
-      stop: () => { try { src.stop(); } catch { /* not started */ } g.disconnect(); pan.disconnect(); },
+      stop: () => { try { src.stop(); } catch { /* not started */ } g.disconnect(); spot.disconnect(); },
     };
   }
 
@@ -290,18 +284,13 @@ export class Audio {
     lp.Q.value = 0.6;
     const g = ctx.createGain();
     g.gain.value = 0;
-    const pan = ctx.createPanner();
-    pan.panningModel = 'equalpower';
-    pan.distanceModel = 'inverse';
-    pan.refDistance = o.refDist ?? 5;
-    pan.rolloffFactor = o.rolloff ?? 1;
-    pan.maxDistance = 20000;
+    const spot = new Spot(ctx, this.cats.get(o.cat ?? 'music') ?? this.sfxBus, o.refDist ?? 5, o.rolloff ?? 1, 'equalpower');
     const an = ctx.createAnalyser();
     an.fftSize = 512;
     an.smoothingTimeConstant = 0.5;
     const bins = new Uint8Array(an.frequencyBinCount);
     node.connect(an);
-    node.connect(lp).connect(g).connect(pan).connect(this.cats.get(o.cat ?? 'music') ?? this.sfxBus);
+    node.connect(lp).connect(g).connect(spot.input);
     let started = false, retryAt = 0, stopped = false;
     const tryPlay = () => {
       if (started || stopped || performance.now() < retryAt) return;
@@ -315,7 +304,7 @@ export class Audio {
         if (stopped) return;
         tryPlay();
         const t = ctx.currentTime;
-        pan.positionX.setTargetAtTime(x, t, 0.05); pan.positionY.setTargetAtTime(y, t, 0.05); pan.positionZ.setTargetAtTime(z, t, 0.05);
+        spot.place(x, y, z, gain);
         g.gain.setTargetAtTime(gain, t, 0.25);
         lp.frequency.setTargetAtTime(cutoff, t, 0.3);
       },
@@ -335,7 +324,7 @@ export class Audio {
         el.pause();
         el.removeAttribute('src');
         el.load();
-        node.disconnect(); an.disconnect(); lp.disconnect(); g.disconnect(); pan.disconnect();
+        node.disconnect(); an.disconnect(); lp.disconnect(); g.disconnect(); spot.disconnect();
       },
     };
   }

@@ -23,9 +23,6 @@ export const ENGINE = {
   pickEvery: 0.3,
 };
 
-/** Metres: car horns farther from the camera are not played (Game: traffic.onHorn). */
-export const HORN_RANGE = 150;
-
 type Handle = NonNullable<ReturnType<Audio['loop']>>;
 interface Slot { h: Handle | null; car: Vehicle | null; level: number }
 
