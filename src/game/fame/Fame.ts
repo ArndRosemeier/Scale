@@ -551,7 +551,8 @@ export class Fame {
   }
 
   /** A camera flash at the person's camera (`up` m high, `fwd` m in front of them). */
-  private flash(a: PedAgent, up: number, fwd: number, size = 1): void {
+  /** A camera flash at someone's camera (`up` m over their feet, `fwd` m ahead) with the shutter; the gentle giant's press uses it too. */
+  flash(a: PedAgent, up: number, fwd: number, size = 1): void {
     const g = this.g;
     const x = a.x - Math.sin(a.heading) * fwd, y = a.y + up, z = a.z - Math.cos(a.heading) * fwd;
     let f = this.flashes.find((q) => q.t <= 0);

@@ -32,6 +32,7 @@ export { createNavGlowNodeMaterial, createSignNodeMaterial, createHoloNodeMateri
 export { createCrowdNodeMaterial } from './crowd';
 export { patchSkyOcclusionNode } from './skyOcclusion';
 export { viewSpaceLayerNode } from './garmentLayers';
+export { ghostNodeMaterial, setGhostFadeNode } from './ghost';
 export { makeStarsNode };
 export { makeSkyNode, createFacadeNodeMaterial, createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial };
 

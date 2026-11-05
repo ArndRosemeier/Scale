@@ -631,6 +631,31 @@ function offer(p: Pose, t: number) {
   p.spine(-0.05 * u, -0.1 * u);
 }
 
+/** Holding someone up on the right palm at chest height (the gentle giant), the left hand guarding beside them. */
+function palmUp(p: Pose, k: number) {
+  p.arm('R', 0.95 * k, 0.12 * k, 0.2 * k, 1.35 * k, -1.35 * k, -0.15 * k);
+  p.arm('L', 0.85 * k, -0.15 * k, -0.2 * k, 1.55 * k, -0.9 * k, 0.1 * k);
+  p.spine(0.04 * k);
+  p.neck(-0.3 * k);
+}
+
+/**
+ * The gentle giant's lift: down on one knee-ish, the right hand flat on the ground, a moment for the
+ * person to step on, then up to the chest (palm up). `palm_hold` keeps them up there.
+ */
+function scoop(p: Pose, t: number) {
+  const d = kf(t, [[0, 0], [0.38, 1], [0.58, 1], [1, 0]]);
+  const up = kf(t, [[0, 0], [0.58, 0], [1, 1]]);
+  p.spine(-0.75 * d);
+  p.neck(-0.35 * d);
+  p.leg('L', 1.3 * d, 0.05 * d, 0, 2.0 * d, 0.6 * d);
+  p.leg('R', 0.35 * d, 0.1 * d, 0, 1.9 * d, -0.4 * d, 0.6 * d);
+  p.root.y -= 0.55 * d;
+  p.arm('R', 1.25 * d, 0.15 * d, 0, 0.2 * d, -1.4 * d);
+  p.arm('L', 0.6 * d, 0.25 * d, 0, 0.6 * d);
+  palmUp(p, up);
+}
+
 /** A press photographer: the camera up at the eye in both hands (a 3 s cycle: down a moment, up, shoot). */
 function takePhoto(p: Pose, _t: number, c: ActionCtx) {
   const u = (c.elapsed % 3) / 3;
@@ -872,6 +897,12 @@ export const ACTIONS: Record<string, ActionDef> = {
   eat: { mask: 'arms', blendIn: 0.1, blendOut: 0.15, pose: (p, t) => eatDrink(p, t, false), mood: 'happy' },
   drink: { mask: 'upper', blendIn: 0.1, blendOut: 0.15, pose: (p, t) => eatDrink(p, t, true) },
   gesture_wave: { mask: 'arms', blendIn: 0.1, blendOut: 0.15, pose: wave, mood: 'happy' },
+  /** The gentle giant lifting someone onto the palm (t 0 → 1) or setting them down (played as `set_down`). */
+  scoop: { mask: 'full', blendIn: 0.08, blendOut: 0.02, pose: scoop, mood: 'happy' },
+  set_down: { mask: 'full', blendIn: 0.02, blendOut: 0.08, pose: (p, t) => scoop(p, 1 - t), mood: 'happy' },
+  palm_hold: { mask: 'upper', blendIn: 0.05, blendOut: 0.05, pose: (p) => palmUp(p, 1), mood: 'happy', loop: true },
+  /** A big friendly wave (CMU "wave"; the authored wave without clips). */
+  wave_hello: { mask: 'upper', blendIn: 0.15, blendOut: 0.2, pose: wave, mood: 'happy', clip: () => ({ name: 'Wave_Hello' }) },
   gesture_point: { mask: 'arms', blendIn: 0.1, blendOut: 0.15, pose: point },
   gesture_shrug: { mask: 'upper', blendIn: 0.12, blendOut: 0.15, pose: shrug, mood: 'surprised' },
   bow: { mask: 'full', blendIn: 0.12, blendOut: 0.15, pose: bowAct },

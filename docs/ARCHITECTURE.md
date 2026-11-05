@@ -1227,6 +1227,28 @@ night, a lost tourist with a huge map asking the way to a real station or café,
   Sounds: `tools/synthStreet.mjs` (guitar loop, boombox beat, coin). Dev: `dev.street.spawn(kind, dist)`,
   `.list()`, `.sites()`, `.clear()`, `.stats()`; admin console section "Street life".
 
+### The ghost tour guide (`src/game/ghost`)
+Ambrose Penhallow, the city's crier until 1887: a friendly ghost, neither hero nor villain, who gives night
+tours (19:00 to 03:30). One tour at a time, near the player only (`GhostGuide.ts`, `game.ghost`).
+* **Where**: at the nearest cemetery's main tomb within 240 m (he rises out of it and sinks back in at the end),
+  else in the old town from a fountain, statue or old lamp. Stops (`tour.ts`, pure, checked in
+  `tools/ghostTest.ts`): graves round the paths (`cemeteryStops`), then a house or two outside (their doors,
+  often one reached through another building), each told as a three-bubble story (`lines.ts`).
+* **Through walls**: he glides straight from stop to stop. When the line crosses a building (`crossesBuilding`)
+  he goes through it mid-sentence while his group walks round by the street (`peds.buildRoute`), and apologises
+  on the other side. Otherwise he leads at the group's pace.
+* **Him**: not a pedestrian. His own `HumanoidRig` (Actors bones and clips untouched, fixed LOD 0, no foot IK)
+  floats ~0.22 m up, no shadow, a lantern with a cold flame (no light). `look.ts ghostify` turns every material
+  of the rig see-through with a rim glow (GLSL patch at `opaque_fragment`; TSL twin `render/webgpu/ghost.ts`
+  through `setupOutput`), one shared fade; the variants compile in the background (`shaderCap.slot` +
+  `compileAsync`) before he is shown. Blows and powers pass through him; he says so.
+* **The group**: 4–7 synthetic citizens as actors (`GHOST_OWNER`, own budget), an arc in front of him at each
+  stop (`tourSlot`); they gasp, laugh, clap and take photos. Danger (blast, roar, gunfire, crash, a giant…) ends
+  the tour: they run as ordinary pedestrians, he fades away; tours rest 70–140 s between.
+* **The player**: an invitation, lines for flying, giant, tiny, wanted, hero and notorious; walking into him
+  ("you're standing in my liver"); a thank-you for staying the whole tour. Dev: `dev.ghost.tour()` (any hour),
+  `.state()`, `.end()`, `.on(false)`.
+
 ### Birds (`src/fauna`)
 `Birds` (constructed, updated and sent strikes by the game; it listens to stimuli itself) keeps at most 300 birds,
 only around the camera, in one instanced mesh (`birdMesh.ts`: 26 triangles, wing flap and fold in the vertex
@@ -1653,5 +1675,6 @@ src/humanoid   people: Actors characters (actors/), the animator, equipment, the
 src/audio      audio engine
 src/ui         HUD, menu, map
 src/game/street street characters: sites and cast (pure), performers, costumes, their lines
+src/game/ghost  the ghost tour guide: night tours, his see-through look, his lines
 src/game/aliens the Wardens: the station in the sky, discs, walkers, their schedule and what people say
 ```
