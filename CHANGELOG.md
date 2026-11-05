@@ -2,9 +2,22 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.295 — 2026-11-05
+## 0.297 — 2026-11-05
 
 - **Shorter loading after Start.** The part of loading that is the same for every city (the game's graphics setup, textures, the people's bodies and moves, the physics, the sky, the crowd's walking copies and the clothing shaders) now starts while the title screen is showing. If you spend a little while on the title (choosing a city, a hero or a save), Start only has to build the city itself. `?preload=0` turns it off.
+
+## 0.296 — 2026-11-05
+
+- **The gentle giant of the stadium.** Earlier this year one of the city's crystals made someone grow to about ten metres, and that's all it did: no powers, no side in anything. Now they live with being a walking attraction, a friendly, slightly awkward local celebrity. You'll meet them around the stadium. They walk slowly and carefully round it (they wait when someone is right in front of their feet and say sorry), wave and smile at people, and greet the hero by name. Their steps are soft thuds, so nobody panics. Clothes don't come in their size, so they wear improvised underwear.
+- **They sit on the ground a lot**, so as not to loom, and get up again slowly. The sitting down, sitting and getting up are motion-captured moves from the Actors library's own clips.
+- **Lifts for photos.** Now and then they kneel, let a fan step onto their palm and hold them up, while the fan's friend takes pictures. Then they set the fan down gently.
+- **A press magnet.** Photographers come by every so often, flashes going off, shouting questions. People stop to watch and film, and call out their name.
+- **Their day:** they sleep on the pitch after the concert, leave before the first match, spend the day round the stadium, and sit outside the gate while the concert plays. Explosions, gunfire or monsters nearby give them a fright.
+- Admin console: "Go to" has an entry that takes you to the gentle giant.
+
+## 0.295 — 2026-11-05
+
+- **Switch single sounds off.** The pause menu has a new Sound effects row: Choose… opens a list of every sound in the game (about 170), grouped like the sound mix, each with a checkbox and a short description. Ticking or unticking a box plays that sound once, and ▶ plays it without changing it, so you can find an annoying sound by ear. Unticked sounds stay silent in the game and stay off the next time you play. There is a search box and an All on button.
 
 ## 0.294 — 2026-11-05
 

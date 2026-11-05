@@ -65,6 +65,10 @@ import { MOOD_TRACKS, CUES, TENSION_HIGH, parseTracks } from '../src/audio/music
 import { angleDiff } from '../src/core/math';
 import { Match, makeTeam, PITCH, STEP as SOCCER_STEP } from '../src/game/soccer/match';
 import { soccerAt, soccerPlan, clubs as soccerClubs, fixture as soccerFixture } from '../src/game/soccer/plan';
+import { giantPlan, dayOf as giantDay, ringWay, GIANT, LEAVE_BY } from '../src/game/citizens/giant/plan';
+import { FIRST as SOCCER_FIRST } from '../src/game/soccer/plan';
+import { worldToSite as siteOf } from '../src/plan/landmarks';
+import { CMU_CLIPS } from '../src/humanoid/actors/clips';
 import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP, SHOW, SHOW_END } from '../src/game/concert/plan';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
 import { floristCells, floristHome, floristDay, FLORIST_H, GARDENS } from '../src/game/citizens/florist/plan';
@@ -3017,6 +3021,39 @@ section('soccer', async () => {
   const [cx, cz] = P.toWorld(0, 0), [px, pz] = P.toWorld(PITCH.L, PITCH.W), [pu, pv] = P.toPitch(px, pz);
   check(Math.hypot(cx - lm.x, cz - lm.z) < 1e-6 && Math.abs(pu - PITCH.L) < 1e-6 && Math.abs(pv - PITCH.W) < 1e-6 && P.onPitch(cx, cz) && !P.onPitch(...P.toWorld(PITCH.L + 5, 0)), 'soccer: pitch frame and site agree');
   check(PITCH.L + 2 < lm.p.ia && P.seats.length > 300 && P.seats.every((q) => q.y > P.field + 1), `soccer: the pitch fits the stadium, ${P.seats.length} seats up in the stands`);
+});
+
+section('gentle giant', async () => {
+  // The day: asleep after the concert until morning, out before the first match, about all day.
+  check(giantDay(2) === 'sleep' && giantDay(9) === 'wake' && giantDay(12) === 'roam' && giantDay(20) === 'concert' && giantDay(23.9) === 'bed', 'gentle giant: day parts');
+  check(LEAVE_BY < SOCCER_FIRST, 'gentle giant: out of the bowl before the first match');
+  for (const [seed, size] of [[42, 0.4], [7, 0.7], [3, 0.5]] as const) {
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const lm = buildMacroPlan(terrain).landmarks.find((l) => l.kind === 'stadium');
+    if (!lm) continue;
+    const P = giantPlan(lm);
+    const out = lm.p.tiers * lm.p.depth;
+    const site = (x: number, z: number) => siteOf(lm, x, z);
+    // The walk round: past the stands' backs (and the floodlight masts 6 m out), inside the site.
+    let bad = 0;
+    for (let i = 0; i < 64; i++) {
+      const [u, v] = site(...P.ring((i / 64) * Math.PI * 2));
+      const inStands = Math.abs(u) < lm.p.ia + out + 7 && Math.abs(v) < lm.p.ib + out + 7 && (Math.abs(u) / (lm.p.ia + out + 7)) ** 2 + (Math.abs(v) / (lm.p.ib + out + 7)) ** 2 < 1;
+      if (inStands || Math.abs(u) > lm.hu + 1 || Math.abs(v) > lm.hv + 1) bad++;
+    }
+    check(bad === 0, `gentle giant ${seed}: the walk round keeps clear of the stands and on the site (${bad} bad points)`);
+    const [bu, bv] = site(P.bed.x, P.bed.z), [gu] = site(...P.gateIn), [ou] = site(...P.gateOut);
+    check(Math.abs(bu) < lm.p.ia - 10 && Math.abs(bv) < lm.p.ib - 10 && gu > 0 && ou > lm.p.ia + out, `gentle giant ${seed}: the bed on the pitch, the gate at the +u end (no scoreboard over it)`);
+    const t0 = P.angleOf(...P.ring(1.1));
+    check(Math.abs(t0 - 1.1) < 0.02, `gentle giant ${seed}: ring angle round trip (${t0.toFixed(3)})`);
+    const way = ringWay(P, 0.2, -0.4);
+    check(way.length >= 5 && Math.hypot(way[way.length - 1][0] - P.ring(-0.4)[0], way[way.length - 1][1] - P.ring(-0.4)[1]) < 1e-6, `gentle giant ${seed}: ring way ends at its goal`);
+  }
+  check(GIANT.height === 10, 'gentle giant: ten metres');
+  // The CMU takes the animator plays are the files the pack script keeps.
+  const keep = /CMU_KEEP = \[([^\]]*)\]/.exec(readFileSync(new URL('./actors-packs.mjs', import.meta.url), 'utf8'))?.[1] ?? '';
+  const want = Object.values(CMU_CLIPS).map((n) => `'${n.replace('cmu ', '')}.bin'`).sort().join(', ');
+  check(keep.split(',').map((x) => x.trim()).sort().join(', ') === want, `CMU clips kept by tools/actors-packs.mjs match CMU_CLIPS (${keep} vs ${want})`);
 });
 
 section('concert', async () => {

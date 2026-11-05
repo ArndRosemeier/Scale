@@ -10,6 +10,30 @@ export type SynthShot = 'thunder' | 'zap' | 'frost' | 'fire' | 'shrink' | 'squea
 /** 'charge': a rising hum (param 0..1: how far it has gathered); the focus beam and the seeker orb. */
 export type SynthLoop = 'laser' | 'water' | 'wind' | 'run' | 'burn' | 'charge';
 
+/** Every synthesized sound, by its sound id (`synth_<kind>`), for the Sound effects list. */
+export const SYNTH_SOUNDS: { kind: SynthShot | SynthLoop; loop: boolean; description: string }[] = [
+  { kind: 'thunder', loop: false, description: 'lightning bolt thunder' },
+  { kind: 'zap', loop: false, description: 'electric zap' },
+  { kind: 'frost', loop: false, description: 'frost blast' },
+  { kind: 'fire', loop: false, description: 'fireball whoosh' },
+  { kind: 'shrink', loop: false, description: 'comedic shrink sweep' },
+  { kind: 'squeak', loop: false, description: 'tiny squeak' },
+  { kind: 'quake', loop: false, description: 'ground quake rumble' },
+  { kind: 'sizzle', loop: false, description: 'sizzle' },
+  { kind: 'splash', loop: false, description: 'water splash' },
+  { kind: 'pop', loop: false, description: 'pop' },
+  { kind: 'crackle', loop: false, description: 'electric crackle' },
+  { kind: 'phase', loop: false, description: 'phase pulse' },
+  { kind: 'beam', loop: false, description: 'focus beam shot' },
+  { kind: 'orb', loop: false, description: 'seeker orb' },
+  { kind: 'laser', loop: true, description: 'laser eyes hum (loop)' },
+  { kind: 'water', loop: true, description: 'water jet (loop)' },
+  { kind: 'wind', loop: true, description: 'wind gust power (loop)' },
+  { kind: 'run', loop: true, description: 'super speed rush (loop)' },
+  { kind: 'burn', loop: true, description: 'flames burning (loop)' },
+  { kind: 'charge', loop: true, description: 'charging hum (loop)' },
+];
+
 export interface SynthHandle {
   set(x: number, y: number, z: number, gain: number, param?: number): void;
   stop(): void;
@@ -24,7 +48,29 @@ export class PowerSynth {
   /** Each one-shot started (the sound log). */
   onPlay: ((kind: SynthShot, x: number, y: number, z: number) => void) | null = null;
 
+  /** Sounds switched off (Audio.isOff by sound id `synth_<kind>`). */
+  isOff: (id: string) => boolean = () => false;
+
   constructor(private out: () => Out | null) {}
+
+  /** Play a synthesized sound once at the listener, whatever its switch says (Sound effects list). */
+  preview(kind: SynthShot | SynthLoop, at: { x: number; y: number; z: number }): void {
+    if (!SYNTH_SOUNDS.find((s) => s.kind === kind)?.loop) {
+      const off = this.isOff;
+      this.isOff = () => false;
+      try { this.play(kind as SynthShot, at.x, at.y, at.z, 1, 6); } finally { this.isOff = off; }
+      return;
+    }
+    const h = this.loop(kind as SynthLoop, 6, true);
+    if (!h) return;
+    const t0 = performance.now();
+    // (A timer, not animation frames: the pause menu may sit in a background tab.)
+    const id = window.setInterval(() => {
+      const t = (performance.now() - t0) / 1000;
+      if (t > 3) { clearInterval(id); h.stop(); return; }
+      h.set(at.x, at.y, at.z, 0.8, Math.min(1, 0.3 + t / 2));
+    }, 30);
+  }
 
   private noiseBuf(ctx: AudioContext): AudioBuffer {
     if (this.noise) return this.noise;
@@ -50,7 +96,7 @@ export class PowerSynth {
   /** One-shot at a point (ref: distance of full loudness). */
   play(kind: SynthShot, x: number, y: number, z: number, gain = 1, ref = 6, pitch = 1): void {
     const o = this.out();
-    if (!o || this.voices > 24 || !heard(x, y, z, gain, ref)) return;
+    if (!o || this.voices > 24 || this.isOff(`synth_${kind}`) || !heard(x, y, z, gain, ref)) return;
     this.onPlay?.(kind, x, y, z);
     const { ctx } = o;
     const t = ctx.currentTime + 0.005;
@@ -173,7 +219,7 @@ export class PowerSynth {
   }
 
   /** A positioned loop its owner moves and fades every frame; null before audio started. */
-  loop(kind: SynthLoop, ref = 6): SynthHandle | null {
+  loop(kind: SynthLoop, ref = 6, always = false): SynthHandle | null {
     const o = this.out();
     if (!o) return null;
     const { ctx } = o;
@@ -227,7 +273,9 @@ export class PowerSynth {
     return {
       set: (x, y, z, gain, param = 1) => {
         if (stopped) return;
+        const muted = !always && this.isOff(`synth_${kind}`);
         const t = ctx.currentTime;
+        if (muted) gain = 0;
         pan.place(x, y, z, gain, false, 0.03);
         master.gain.setTargetAtTime(gain, t, 0.06);
         if (kind === 'wind' || kind === 'run') for (const f of filters) f.frequency.setTargetAtTime((kind === 'run' ? 500 : 350) + 900 * param, t, 0.1);

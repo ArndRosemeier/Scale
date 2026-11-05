@@ -118,6 +118,7 @@ import { MagneticGrandma } from './citizens/grandma/MagneticGrandma';
 import { Gargoyle } from './citizens/gargoyle/Gargoyle';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
+import { GentleGiant } from './citizens/giant/GentleGiant';
 import { StationLife } from './metro/StationLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
@@ -252,6 +253,8 @@ export class Game {
   concert: Concert | null = null;
   /** The stadium's daytime soccer matches (src/game/soccer). */
   soccer: Soccer | null = null;
+  /** The gentle giant at the stadium (src/game/citizens/giant). */
+  gentle: GentleGiant | null = null;
   /** Commuters on the metro's stairs, platforms and trains near the player. */
   stationLife: StationLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
@@ -878,6 +881,7 @@ export class Game {
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => { this.street?.update(dt); this.florist?.update(dt); this.floater?.update(dt); this.grandma?.update(dt); this.gargoyle?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('gentle', () => this.gentle?.update(dt));
     this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1118,6 +1122,7 @@ export class Game {
     // Targeting and the elemental powers.
     this.synth = new PowerSynth(() => this.audio.synthOut());
     this.synth.onPlay = (kind, x, y, z) => this.audio.note(`synth_${kind}`, listenerDist(x, y, z));
+    this.synth.isOff = (id) => this.audio.isOff(id);
     new SoundLog(this.audio);
     this.engines = new CarEngines(this.audio);
     this.targeting = new Targeting({
@@ -1262,6 +1267,7 @@ export class Game {
     this.wardrobe = new Wardrobe(this);
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);
+    this.gentle = new GentleGiant(this);
     this.sidekick = new Sidekick(this);
     this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
     this.wardens = new Wardens(this);

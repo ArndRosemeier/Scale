@@ -58,6 +58,11 @@ export interface StepOpts {
   foot?: number;
   /** Break what is under the foot (default true; a monster spends its own destruction budget instead). */
   impact?: boolean;
+  /**
+   * A careful walker (the gentle giant, game/citizens/giant): a soft thud and a little dust, no stomp
+   * stimulus (nobody panics at a step everyone knows) and nothing broken.
+   */
+  calm?: boolean;
 }
 
 export interface GiantWorld {
@@ -98,6 +103,12 @@ export class GiantSteps {
     if (h <= 4) {
       this.sound?.('step_concrete', x, y, z, Math.min(1, 0.25 + h * 0.15), Math.min(2.5, 1 / Math.pow(h / 1.8, 0.35)), o.ref);
       if (h > 2.5) W.stimuli.emit('giant', x, y, z, h, h * 30, { cause, size: h });
+      return 0;
+    }
+    if (o.calm) {
+      W.camRig.addShake(Math.min(0.12, this.shakeAt(x, y, z, energy, h) * 0.35));
+      W.dust.burst(x, y + 0.2, z, Math.min(6, Math.round(h * 0.25)), h * 0.05, h * 0.06, h * 0.03 + 0.3, 3, STEP_DUST, 0.06, 0.25);
+      this.sound?.(o.sound ?? 'step_giant', x, y, z, Math.min(0.6, h / 40), Math.max(0.5, 1.5 - h / 60), o.ref);
       return 0;
     }
     // Footsteps of a heavy body shake the ground and break what is under the foot.
