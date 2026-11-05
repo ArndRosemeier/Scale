@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.280 — 2026-11-05
+
+- **Cars have quiet engine sounds.** The four running cars nearest you each get a soft engine hum: an idle murmur at a light, a little louder and higher as the car speeds up, each car at its own pitch. Buses and trucks rumble lower, sports cars sit higher, electric shuttles stay silent. Nothing is heard beyond about 40 m, the hum is muffled indoors and gone underground, and it stays well below the city ambience. It belongs to the "Traffic & trains" slider in the sound mix.
+- **The odd recurring beep was distant car horns.** Cars stuck in a jam honk after 25 s of waiting, and every honk in town was played, up to 700 m away. With no air damping in the game's audio, a far honk came through as a small clean beep every few seconds that didn't sound like a horn. Horns are now only played within 150 m of you.
+
 ## 0.279 — 2026-11-05
 
 - Behind the scenes: the v0.278 fix for the three.js bug that freed shared GPU data while still in use (the hero losing hair, body or shoes) now lives in AssetGenerator's shared WebGPU patches (`@futuremagic/stage`, AssetGenerator PR #176), so every futuremagic game gets it; Scale uses it from there. No change in the game.
