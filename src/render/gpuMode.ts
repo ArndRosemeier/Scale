@@ -9,6 +9,12 @@ const param = typeof location === 'undefined' ? null : new URLSearchParams(locat
 /** Read at run time, not at import: the game settles it in `loadGpuKit` before anything is built. */
 export let WEBGPU = param === 'webgpu' || param === 'webgpu-gl';
 export const WEBGPU_FORCE_GL = param === 'webgpu-gl';
+/** What the URL alone asks for: the start screen's character creator keeps using this, whatever the
+ * game's preload (game/Preload) has settled meanwhile. */
+export const URL_WEBGPU = WEBGPU;
+/** Set once Start was pressed (the creator then runs on the game's renderer kind). */
+export let IN_GAME = false;
+export function enterGame(): void { IN_GAME = true; }
 
 const RENDERER_KEY = 'scale.renderer';
 export type RendererChoice = 'webgpu' | 'webgl';

@@ -4829,7 +4829,7 @@ section('game-time timers', async () => {
   L.update(0.1); L.update(0.5);
   check(got.join('') === 'ab' && L.pending === 1, `later: due callbacks run in order (${got.join('')}, ${L.pending} left)`);
   // UI, loading, the hidden-tab ticker and the autosave may use wall-clock timers.
-  const OK = /^src\/game\/(Game\.ts|intro\/|save\/)/;
+  const OK = /^src\/game\/(Game\.ts|Preload\.ts|intro\/|save\/)/;
   const timers: string[] = [];
   const walkT = (dir: string): void => {
     for (const f of readdirSync(dir)) {

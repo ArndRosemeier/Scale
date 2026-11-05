@@ -15,7 +15,7 @@ import { Character, CharacterEditor, CharacterStage, seededRandom, type AllowOpt
 import { holdBackdrop } from './backdrop/Backdrop';
 import { normalizeLook, type CharacterLook } from '../avatar/look';
 import { humanWorker, packUrl } from '../humanoid/actors/service';
-import { WEBGPU, WEBGPU_FORCE_GL } from '../render/gpuMode';
+import { WEBGPU, WEBGPU_FORCE_GL, URL_WEBGPU, IN_GAME } from '../render/gpuMode';
 
 const FIRST = ['Alex', 'Sam', 'Robin', 'Jamie', 'Charlie', 'Noa', 'Kim', 'Toni', 'Max', 'Lou', 'Mika', 'Jo', 'Ari', 'Remy', 'Sasha', 'Jules', 'Eli', 'Nico', 'Rio', 'Kai'];
 
@@ -48,7 +48,7 @@ function sharedStudio(): Promise<Studio> {
     // (Parked, hidden, until a dialog takes it: the stage sizes itself to its container.)
     host.style.cssText = 'position:absolute;inset:0;display:none';
     document.body.appendChild(host);
-    const stage = await CharacterStage.create(host, { renderer: WEBGPU ? (WEBGPU_FORCE_GL ? 'webgpu-gl' : 'webgpu') : 'webgl', background: 0x10161d });
+    const stage = await CharacterStage.create(host, { renderer: (IN_GAME ? WEBGPU : URL_WEBGPU) ? (WEBGPU_FORCE_GL ? 'webgpu-gl' : 'webgpu') : 'webgl', background: 0x10161d });
     // The dialog runs its own loop (paused while closed).
     stage.renderer.setAnimationLoop(null);
     const character = await Character.load({

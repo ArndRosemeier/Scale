@@ -1,8 +1,9 @@
 /**
  * The game's entry (loaded by boot.ts): start menu (seed, size), loading screen, game.
  */
-import { loadGpuKit } from './render/gpuMode';
 import { Game } from './game/Game';
+import { Preload, PRELOAD_OFF } from './game/Preload';
+import { enterGame } from './render/gpuMode';
 import { parseSeed } from './core/rng';
 import { cityRadius, cityClass } from './world/settings';
 import { cityName } from './plan/names';
@@ -88,6 +89,7 @@ async function start(save: SaveData | null = null): Promise<void> {
   // (The load flag is dropped: a reload later starts from the menu, not from that old save again.)
   history.replaceState(null, '', `?seed=${encodeURIComponent(seedIn.value)}&size=${sizeIn.value}${params.has('mode') || save ? `&mode=${mode}` : ''}${params.has('auto') ? '&auto' : ''}${params.has('mute') ? '&mute' : ''}${['intro', 'warm', 'gpu'].map((k) => (params.has(k) ? `&${k}${params.get(k) ? `=${params.get(k)}` : ''}` : '')).join('')}`);
   menu.style.display = 'none';
+  enterGame();
   stopBackdrop();
   loading.style.display = 'flex';
   disposeCreatorPreview();
@@ -109,8 +111,7 @@ async function start(save: SaveData | null = null): Promise<void> {
     console.error('[avatar] could not load the selected character', e);
   }
   const canvas = document.getElementById('view') as HTMLCanvasElement;
-  await loadGpuKit(true);
-  const game = new Game(canvas, settings, mode);
+  const game = new Game(canvas, settings, mode, await Preload.start(canvas));
   (window as unknown as { game: Game }).game = game;
   if (save) { game.pendingSave = save; game.startAt = { x: save.player.x, z: save.player.z }; }
   await game.start((msg, f) => {
@@ -157,5 +158,8 @@ async function startFromSave(id: string): Promise<void> {
 }
 
 startBtn.addEventListener('click', () => void start());
+// The loading that does not depend on the choices made here (game/Preload), while the menu shows;
+// a moment after it appears, so the start screen's first frames come first.
+if (!PRELOAD_OFF && !params.has('auto') && !params.get('load')) setTimeout(() => { if (!starting) void Preload.start(document.getElementById('view') as HTMLCanvasElement); }, 1500);
 if (params.get('load')) void startFromSave(params.get('load')!);
 else if (params.has('auto')) void start();

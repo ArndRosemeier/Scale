@@ -2,11 +2,12 @@
  * Game orchestrator: world setup, streaming, simulation and the frame loop.
  */
 import * as THREE from 'three';
-import { Renderer } from '../render/Renderer';
-import { Graphics } from '../render/Graphics';
+import type { Renderer } from '../render/Renderer';
+import type { Graphics } from '../render/Graphics';
 import { SkySystem } from '../render/SkySystem';
+import type { Preload } from './Preload';
 import { Weather } from '../render/Weather';
-import { TextureLibrary } from '../render/TextureLibrary';
+import type { TextureLibrary } from '../render/TextureLibrary';
 import { WorkerPool } from '../stream/WorkerPool';
 import { CityStreamer } from '../stream/CityStreamer';
 import { makeProfile, type CitySettings, type WorldProfile } from '../world/settings';
@@ -22,7 +23,6 @@ import { LandmarkSolids } from '../world/LandmarkSolids';
 import { LandmarkWrecks } from '../destruction/LandmarkWreck';
 import { ENTRANCE_L } from '../plan/metroDims';
 import { actors } from '../humanoid/actors/service';
-import { clipLibraryReady } from '../humanoid/client/anim/clips';
 import { frameWork } from '../core/frameWork';
 import { Physics } from '../physics/Physics';
 import { Debris } from '../destruction/Debris';
@@ -45,7 +45,6 @@ import { Population } from '../sim/Population';
 import { Pedestrians, PState, type PedAgent } from '../sim/Pedestrians';
 import { Reactions } from '../sim/Reactions';
 import { CrowdRenderer } from '../sim/CrowdRenderer';
-import { bakeCrowdTemplates } from '../sim/CrowdBaker';
 import { Traffic, VState, VehicleObstacles, dentCar, type Vehicle, type VKind } from '../sim/Traffic';
 import { VehicleRenderer } from '../sim/VehicleRenderer';
 import { PropRenderer } from '../props/PropRenderer';
@@ -55,7 +54,6 @@ import { Birds } from '../fauna/Birds';
 import { LandmarkCrowds, roomFor } from '../sim/LandmarkCrowds';
 import { Terraces } from '../sim/Terraces';
 import { Interiors } from '../interior/Interiors';
-import { interiorWarmup } from '../interior/InteriorBuilder';
 import { Underground } from '../underground/Underground';
 import { Skyline } from '../stream/Skyline';
 import { Countryside } from '../stream/Countryside';
@@ -75,7 +73,6 @@ import { listenerDist } from '../audio/hearing';
 import { installFreezeLog } from '../debug/FreezeLog';
 import { Recorder } from '../ui/Recorder';
 import { lightPool } from '../render/lightPool';
-import { warmRigs } from '../humanoid/client/warmRigs';
 import { terrainHoles } from '../render/materials/ground';
 import { PropType } from '../plan/cell';
 import { hash32 } from '../core/rng';
@@ -303,11 +300,10 @@ export class Game {
   private speed = 15;
   private running = false;
 
-  constructor(canvas: HTMLCanvasElement, readonly settings: CitySettings, readonly mode: GameMode = 'normal') {
-    this.renderer = new Renderer(canvas);
-    this.graphics = new Graphics(this.renderer.gl, this.renderer.webgpu);
-    // A start without shadows compiles the shaders without them (the cheapest for weak GPUs).
-    this.renderer.gl.shadowMap.enabled = this.graphics.startShadows;
+  /** `pre`: the loading that does not depend on the player's choices, begun on the start screen (game/Preload). */
+  constructor(canvas: HTMLCanvasElement, readonly settings: CitySettings, readonly mode: GameMode = 'normal', private readonly pre: Preload) {
+    this.renderer = pre.renderer;
+    this.graphics = pre.graphics;
     if (!this.renderer.webgpu) hitch.attach(this.renderer.gl, this.renderer.scene);
     this.gate = new ShaderGate(this.renderer.gl, this.renderer.scene, this.renderer.camera, (fn) => this.renderer.asScenePass(fn));
     this.gate.enabled = false; // the start-up warm-up compiles everything present
@@ -318,11 +314,12 @@ export class Game {
 
   async start(progress: (msg: string, f: number) => void): Promise<void> {
     const loadT0 = performance.now();
-    await this.renderer.init();
+    const pre = this.pre;
+    console.log(pre.report(loadT0));
     this.profile = makeProfile(this.settings);
     progress('Generating materials', 0);
-    const tex = new TextureLibrary();
-    const texP = tex.load((f) => progress('Generating materials', f * 0.5));
+    const tex = pre.tex;
+    const texP = untilDone(pre.texReady, () => progress('Generating materials', pre.progress.tex * 0.5));
     progress('Planning the city', 0.05);
     this.terrain = new Terrain(this.profile);
     // Each city worker holds the terrain and plan and builds whole cells: 4 keep streaming fast
@@ -332,9 +329,8 @@ export class Game {
     const [macro] = await Promise.all([macroP, texP]);
     this.macro = macro;
     progress('Building streets', 0.6);
-    this.sky = new SkySystem(this.renderer.gl, this.renderer.scene, this.renderer.reversed);
-    // The only point / spot lights, shared by every system (a fixed, small count keeps shaders small).
-    lightPool.attach(this.renderer.scene);
+    // (The sky and the shared point / spot lights were set up by the preload.)
+    this.sky = pre.sky;
     this.streamer = new CityStreamer(macro, this.pool, tex);
     this.renderer.scene.add(this.streamer.root);
     this.streamer.prepare = (o) => this.renderer.compileAsync(o);
@@ -351,8 +347,7 @@ export class Game {
     this.tex = tex;
     progress('Waking up the people', 0.62);
     this.physics = new Physics(this.terrain, (x, z) => this.world.groundHeight(x, z));
-    actors.renderer = this.renderer.gl;
-    await Promise.all([actors.ready(), clipLibraryReady(), this.physics.init(), this.audio.init()]);
+    await Promise.all([pre.peopleReady, this.physics.init(), this.audio.init()]);
     this.debris = new Debris(this.physics, tex.facade, (x, z, y = 1e9) => this.collision ? this.collision.groundAt(x, z, y, 0) : this.world.groundHeight(x, z, y, 0));
     this.dust = new Dust();
     this.renderer.scene.add(this.debris.group, this.dust.mesh);
@@ -390,7 +385,7 @@ export class Game {
     };
     this.streamer.onCellEvicted = (c) => hitch.measure('cell:evict', () => { this.world.removeCell(c); this.destruction.forgetCell(c); this.net.markDirty(); this.parked.delete(c.id); this.parkedList = [...this.parked.values()].flat(); this.props?.removeCell(c); setTimeout(syncSky, 0); });
     progress('Teaching people to walk', 0.64);
-    const templates = await bakeCrowdTemplates((f) => progress('Teaching people to walk', 0.64 + f * 0.1));
+    const templates = await untilDone(pre.templates, () => progress('Teaching people to walk', 0.64 + pre.progress.bake * 0.1));
     this.crowd = new CrowdRenderer(templates, this.renderer.scene);
     this.renderer.scene.add(this.crowd.group);
     this.crowd.prepare = (o) => this.renderer.compileAsync(o);
@@ -698,10 +693,10 @@ export class Game {
     progress('Preparing shaders', 0.97);
     const shadersAt = performance.now();
     const warm = await warmUp(this, (f) => progress('Preparing shaders', 0.97 + f * 0.03), {
-      staging: [interiorWarmup(), this.gate.warmStandins()],
+      staging: [pre.interior, this.gate.warmStandins()],
       later: [this.props.warmupObject(), this.countryside.warmupObject(), this.rural.warmupObject(), MedFleet.warmupObject(), this.defeat.ward.warmupObject(), this.wardens.warmupObject(), ...(this.intro?.stagingObjects() ?? [Sidekick.warmupObject()])],
       views: this.intro?.warmViews(),
-      waitFor: [this.player.rig.whenDressed, warmRigs(this.renderer.scene, this.player.pos)],
+      waitFor: [this.player.rig.whenDressed, pre.warm],
     });
     (window as unknown as { warmReport: unknown }).warmReport = warm;
     console.log(`[warm-up] ${warm.totalMs.toFixed(0)} ms: ${warm.textures} textures ${warm.texMs.toFixed(0)} ms, compile ${warm.compileMs.toFixed(0)} ms (${warm.programsCompiled} programs), ${warm.views} views ${warm.viewsMs.toFixed(0)} ms, calm ${warm.calmMs.toFixed(0)} ms, ${warm.programs} programs${warm.nodeBuilds ? `, node builds ${warm.nodeBuilds.join(' / ')} (pipelines ${(window as unknown as { nodeBuilds: { asyncPipes: number } }).nodeBuilds.asyncPipes} in advance, ${(window as unknown as { nodeBuilds: { syncPipes: number } }).nodeBuilds.syncPipes} while drawing)` : ''}`);
@@ -728,7 +723,7 @@ export class Game {
   /** Resolves after the next game frame (frames keep running in background tabs, page timers don't). */
   nextFrame(): Promise<void> { return new Promise<void>((r) => this.frameWaiters.push(r)); }
   /** Start the frame loop (the warm-up does, once the scene's shaders are compiled). */
-  startLoop(): void { if (!this.raf && !this.timerPending) this.loop(); }
+  startLoop(): void { this.pre.stopPump(); if (!this.raf && !this.timerPending) this.loop(); }
   private timerPending = false;
   /** Next frame: animation frames when visible, a worker timer when hidden (rAF stops there). */
   private schedule = () => {
@@ -1634,3 +1629,12 @@ function hiddenTimer(cb: () => void): void {
 }
 
 const _hand = new THREE.Vector3();
+
+/** Resolves with `p`, calling `tick` every 100 ms meanwhile (a loading bar for work begun earlier). */
+async function untilDone<T>(p: Promise<T>, tick: () => void): Promise<T> {
+  let done = false;
+  void p.then(() => { done = true; }, () => { done = true; });
+  while (!done) { tick(); await new Promise((r) => setTimeout(r, 100)); }
+  tick();
+  return p;
+}
