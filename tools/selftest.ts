@@ -4867,4 +4867,23 @@ section('clip duration', async () => {
   check(await withWebmDuration(junk, 1) === junk, 'not a WebM: left as it is');
 });
 
+section('car engines', async () => {
+  const { CarEngines, ENGINE } = await import('../src/audio/CarEngines');
+  const loops: { gain: number; x: number; rate: number; stopped: boolean }[] = [];
+  const audio = { loop: () => { const l = { gain: 0, x: 0, rate: 1, stopped: false }; loops.push(l); return { set: (x: number, _y: number, _z: number, g: number, r = 1) => { l.x = x; l.gain = g; l.rate = r; }, stop: () => { l.stopped = true; } }; } };
+  const car = (id: number, x: number, speed: number, kind = 'sedan', state = 0) => ({ id, x, y: 0, z: 0, speed, kind, state, alive: true }) as unknown as import('../src/sim/Traffic').Vehicle;
+  const e = new CarEngines(audio as never);
+  const cam = { x: 0, y: 1.7, z: 0 } as import('three').Vector3;
+  const cars = [car(1, 5, 12), car(2, 8, 0), car(3, 15, 10), car(4, 20, 8), car(5, 25, 9), car(6, 120, 14), car(7, 6, 10, 'shuttle'), car(8, 7, 10, 'sedan', 4)];
+  for (let i = 0; i < 5; i++) e.update(0.1, cam, [cars], 1);
+  check(loops.length === ENGINE.voices, `one loop per voice (${loops.length})`);
+  check(e.audible() === ENGINE.voices, `the ${ENGINE.voices} nearest running cars are heard (${e.audible()})`);
+  check(!loops.some((l) => l.x === 25 || l.x === 120 || l.x === 6 || l.x === 7), 'far cars, electric shuttles and wrecks stay silent');
+  const moving = loops.find((l) => l.x === 5)!, idle = loops.find((l) => l.x === 8)!;
+  check(moving.gain > idle.gain && moving.rate > idle.rate, 'a moving car hums louder and higher than an idling one');
+  check(Math.max(...loops.map((l) => l.gain)) <= 0.4, `quiet: no engine above 0.4 (${Math.max(...loops.map((l) => l.gain)).toFixed(2)})`);
+  e.update(0.1, cam, [cars], 0);
+  check(loops.every((l) => l.gain === 0), 'muffled to nothing indoors / underground');
+});
+
 await runSections(import.meta.url);

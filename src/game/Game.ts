@@ -99,6 +99,7 @@ import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { Sight } from './combat/sight';
 import { PowerSynth } from '../audio/PowerSynth';
+import { CarEngines, HORN_RANGE } from '../audio/CarEngines';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { SidekickPanel } from '../ui/SidekickPanel';
@@ -219,6 +220,8 @@ export class Game {
   targetHud!: TargetHud;
   matePanel!: SidekickPanel;
   synth!: PowerSynth;
+  /** Quiet engine loops on the cars nearest the camera. */
+  engines!: CarEngines;
   /** Street crime, police, justice, combat, the player's health, reputation, small deeds (src/game/crime). */
   crime!: CrimeSystem;
   /** The city's own life and its news: live crime index, neighbourhoods, police presence, off-screen crime (game/news). */
@@ -517,7 +520,9 @@ export class Game {
       this.stimuli.emit('crash', p.x, p.y, p.z, 3, 60);
       this.audio.play('tire_screech', v.x, v.y, v.z, 0.8, 1, 10, cam.position);
     };
-    this.traffic.onHorn = (v) => this.audio.play(Math.random() < 0.7 ? 'car_horn_short' : 'car_horn_long', v.x, v.y + 1, v.z, 0.7, 0.95 + Math.random() * 0.1, 8, cam.position);
+    // Horns only near the listener: honks from stuck cars all over town (up to ~700 m away)
+    // came through as clean, odd beeps every few seconds (the web audio has no air damping).
+    this.traffic.onHorn = (v) => Math.hypot(v.x - cam.position.x, v.z - cam.position.z) < HORN_RANGE && this.audio.play(Math.random() < 0.7 ? 'car_horn_short' : 'car_horn_long', v.x, v.y + 1, v.z, 0.7, 0.95 + Math.random() * 0.1, 8, cam.position);
     this.traffic.onCrash = (v, x, y, z) => { this.audio.play('car_crash', x, y, z, 0.9, 1, 10, cam.position); this.stimuli.emit('crash', x, y, z, 4, 80); };
     // Near-future city: delivery robots, drones, animated signage (src/future).
     this.future = new NearFuture({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, traffic: this.traffic, net: this.net, physics: this.physics, debris: this.debris, dust: this.dust, destruction: this.destruction, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);
@@ -1097,6 +1102,7 @@ export class Game {
     this.powers = new PowersScreen(this, this.abilities);
     // Targeting and the elemental powers.
     this.synth = new PowerSynth(() => this.audio.synthOut());
+    this.engines = new CarEngines(this.audio);
     this.targeting = new Targeting({
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
       destruction: this.destruction, streamer: this.streamer, player: this.player, camera: cam,
@@ -1563,6 +1569,7 @@ export class Game {
       amb_rain_heavy: smoothstep(0.25, 0.85, rain) * shut,
       amb_wind_gust: smoothstep(0.3, 0.9, W.wind) * 0.8 * shut,
     }, { amb_wind_flight: 0.8 + clamp(speed / 120, 0, 0.6) });
+    this.engines.update(_dt, cam.position, [this.traffic.vehicles], (1 - 0.85 * this.sky.indoor) * (ug ? 0.03 : ward ? 0 : 1));
     // Sonic boom when crossing Mach 1.
     const v = p.vel.length();
     if (p.flying && v > 343 && this.flightSpeedPrev <= 343) {
