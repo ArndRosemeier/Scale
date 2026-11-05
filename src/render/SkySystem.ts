@@ -18,11 +18,11 @@ import { LOOK, lookAt, sunTransmittance } from './look';
  */
 export const RIG = {
   /** The share of the old flat sky fill kept by day (the environment map gives the rest, with direction). */
-  skyHemi: 0.7,
+  skyHemi: 0.55,
   /** The environment map's strength on top of the old rig (it takes over part of the hemisphere's sky fill). */
-  skyEnv: 1.8,
+  skyEnv: 2.2,
   /** A high clear sun: the sun is stronger by this, the sky's fill (map and hemisphere) weaker by these shares. */
-  highSun: 0.4, highEnv: 0.5, highHemi: 0.35,
+  highSun: 0.4, highEnv: 0.6, highHemi: 0.5,
   /** How much of the low sun's dimming by the air the eye adapts away (0 none, 1 all), and the most it may add. */
   sunAdapt: 0.6, sunAdaptMax: 2.5,
   /** Ground albedo (paving, grass, earth): its share of the sunlight thrown back up. */

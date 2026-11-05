@@ -15,22 +15,22 @@ export const LOOK = {
   slope: [1, 1, 1] as [number, number, number],
   offset: [0, 0, 0] as [number, number, number],
   /** Above 1 deepens the darks and gives the mid-tones more bite (AgX alone reads washed out). */
-  power: 1.2,
-  saturation: 1.2,
+  power: 1.3,
+  saturation: 1.25,
   /**
    * The grade's power darkens the mid-tones: SkySystem raises the exposure by this to keep mid-grey near
    * where plain AgX had it (the shade still ends up deeper, which is the point).
    */
-  exposure: 1.3,
+  exposure: 1.4,
 };
 
 /** The colour key over the day, by sun height (sin of its elevation). */
 export const LOOK_KEYS: readonly GradeKey[] = [
   { at: -0.3, slope: [0.9, 0.96, 1.12], saturation: 0.95 },
   { at: -0.08, slope: [0.96, 0.97, 1.08], saturation: 1.1 },
-  { at: 0.04, slope: [1.06, 1.0, 0.94], saturation: 1.25 },
-  { at: 0.25, slope: [1.03, 1.0, 0.97], saturation: 1.22 },
-  { at: 0.6, slope: [1, 1, 1], saturation: 1.2 },
+  { at: 0.04, slope: [1.06, 1.0, 0.94], saturation: 1.3 },
+  { at: 0.25, slope: [1.03, 1.0, 0.97], saturation: 1.28 },
+  { at: 0.6, slope: [1, 1, 1], saturation: 1.25 },
 ];
 
 /** Set the grade for sun height `sunUp`; `neutral` 0..1 pulls it to the day key (underground, indoors: lamps set the colour). */
