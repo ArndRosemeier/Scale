@@ -1,23 +1,29 @@
 /**
  * Character creator: the Actors character generator (github.com/ArndRosemeier/Actors) in a
  * full-screen dialog over the start menu or the clothes shop mirror. Its studio stage shows the
- * character (drag to orbit, scroll to zoom), its editor sets race, body, face, skin, hair and the
- * outfit from MakeHuman's wardrobe; Save hands back the look (the Actors configuration) and a
- * thumbnail.
+ * character (drag to orbit, scroll to zoom), its editor (Simple and Detailed tabs per section) sets
+ * body, skin, face, hair and the outfit from the whole wardrobe (today's, vintage, medieval,
+ * futuristic, fantasy...); Save hands back the look (the Actors configuration) and a thumbnail.
+ *
+ * Players make people only: Actors' `allow` keeps out the other races, robots and skeletons (and
+ * with them horns, tails and scales), in the editor and in Randomize alike.
  *
  * The stage (one WebGL context) and its character are made once and reused for every opening;
  * the game start releases them (disposeCreatorPreview).
  */
-import { Character, CharacterEditor, CharacterStage, seededRandom, type CharacterPatch } from '@actors/generator';
+import { Character, CharacterEditor, CharacterStage, seededRandom, type AllowOptions, type CharacterPatch } from '@actors/generator';
 import { holdBackdrop } from './backdrop/Backdrop';
 import { normalizeLook, type CharacterLook } from '../avatar/look';
-import { cc0Catalog, humanWorker, packUrl } from '../humanoid/actors/service';
+import { humanWorker, packUrl } from '../humanoid/actors/service';
 import { WEBGPU, WEBGPU_FORCE_GL } from '../render/gpuMode';
 
 const FIRST = ['Alex', 'Sam', 'Robin', 'Jamie', 'Charlie', 'Noa', 'Kim', 'Toni', 'Max', 'Lou', 'Mika', 'Jo', 'Ari', 'Remy', 'Sasha', 'Jules', 'Eli', 'Nico', 'Rio', 'Kai'];
 
 /** Settings the game decides (it animates the hero; no anatomy in the city). */
 const GAME_ONLY: CharacterPatch = { anatomy: false, blink: true, expression: 'neutral' };
+
+/** What players may make: humans only (no other races, robots or skeletons), every clothing category. */
+export const CREATOR_ALLOW: AllowOptions = { races: ['human'] };
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -47,8 +53,8 @@ function sharedStudio(): Promise<Studio> {
     stage.renderer.setAnimationLoop(null);
     const character = await Character.load({
       pack: packUrl(), renderer: stage.renderer, materials: stage.materials, worker: new (await humanWorker())(), clipLibraries: false,
-      // City-safe choices only: CC0 assets (CC-BY ones would need a credit wherever the hero is seen).
-      catalog: cc0Catalog,
+      // The whole wardrobe and every hairstyle; the CC-BY ones name their author here and in Help › Credits.
+      allow: CREATOR_ALLOW,
       config: { ...GAME_ONLY, animation: 'idle' },
     });
     stage.scene.add(character.object);
@@ -159,7 +165,7 @@ export class CharacterCreator {
     const save = h('button', 'cc-btn primary', 'Save character');
     save.type = 'button';
     save.onclick = () => void this.save(save);
-    const credit = h('div', 'cc-credit', 'Characters: Actors (MakeHuman CC0 assets, Quaternius CC0 animations)');
+    const credit = h('div', 'cc-credit', 'Characters: Actors (MakeHuman assets, CC0 or CC BY as marked; authors in Help › Credits · Quaternius CC0 animations)');
     foot.append(reset, credit, h('div', 'cc-spacer'), cancel, save);
     side.append(head, this.panel, foot);
 
@@ -220,7 +226,8 @@ export class CharacterCreator {
     this.initial = character.config;
     this.editor = new CharacterEditor(character, this.panel, {
       title: 'Look',
-      sections: ['race', 'robot', 'body', 'look', 'outfit', 'details'],
+      // (Race keeps only its Detailed size and youth sliders for humans; Scale's own Stand/Walk replaces Animation.)
+      sections: ['race', 'body', 'face', 'outfit'],
       buttons: ['randomize'],
       // The game animates the face and keeps everyone decent.
       hide: ['anatomy', 'expression', 'expressionIntensity', 'blink', 'lod'],
