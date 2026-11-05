@@ -1123,6 +1123,7 @@ export class Game {
     // Targeting and the elemental powers.
     this.synth = new PowerSynth(() => this.audio.synthOut());
     this.synth.onPlay = (kind, x, y, z) => this.audio.note(`synth_${kind}`, listenerDist(x, y, z));
+    this.synth.isOff = (id) => this.audio.isOff(id);
     new SoundLog(this.audio);
     this.engines = new CarEngines(this.audio);
     this.targeting = new Targeting({
