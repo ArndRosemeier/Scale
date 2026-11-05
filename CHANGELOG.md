@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.289 — 2026-11-05
+
+- **The odd short synthetic tone was the alien discs scanning.** When a Warden disc turns its scan cone on, it plays a soft rising tone. It was set to carry like a big event, so discs hanging high up and far away (often 300 m to over a kilometre) were heard all over town, roughly every 40 s and more often with several discs about, with nothing to see. Now you hear it only within about 180 m, when a disc is over your street.
+- **New: sound log (Shift+F7).** A small box lists the sounds of the last 20 seconds, newest on top, with how far away each one was and its volume category, so any sound you wonder about can be named on the spot. Also listed in Help › Keys.
+
 ## 0.288 — 2026-11-05
 
 - **Old enemies come back** (Normal mode). A gang boss who breaks out of jail turns up in their old turf near you before long, leading one of the gang's crimes. A gang that had collapsed comes back: the news says so in its story in the tracker, and one of its crimes comes up near you.
