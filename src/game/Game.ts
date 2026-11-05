@@ -99,7 +99,7 @@ import { Elements } from './powers/Elements';
 import { Consequences } from './Consequences';
 import { Sight } from './combat/sight';
 import { PowerSynth } from '../audio/PowerSynth';
-import { CarEngines, HORN_RANGE } from '../audio/CarEngines';
+import { CarEngines } from '../audio/CarEngines';
 import { Music } from '../audio/music/Music';
 import { TargetHud } from '../ui/TargetHud';
 import { SidekickPanel } from '../ui/SidekickPanel';
@@ -520,9 +520,7 @@ export class Game {
       this.stimuli.emit('crash', p.x, p.y, p.z, 3, 60);
       this.audio.play('tire_screech', v.x, v.y, v.z, 0.8, 1, 10, cam.position);
     };
-    // Horns only near the listener: honks from stuck cars all over town (up to ~700 m away)
-    // came through as clean, odd beeps every few seconds (the web audio has no air damping).
-    this.traffic.onHorn = (v) => Math.hypot(v.x - cam.position.x, v.z - cam.position.z) < HORN_RANGE && this.audio.play(Math.random() < 0.7 ? 'car_horn_short' : 'car_horn_long', v.x, v.y + 1, v.z, 0.7, 0.95 + Math.random() * 0.1, 8, cam.position);
+    this.traffic.onHorn = (v) => this.audio.play(Math.random() < 0.7 ? 'car_horn_short' : 'car_horn_long', v.x, v.y + 1, v.z, 0.7, 0.95 + Math.random() * 0.1, 8, cam.position);
     this.traffic.onCrash = (v, x, y, z) => { this.audio.play('car_crash', x, y, z, 0.9, 1, 10, cam.position); this.stimuli.emit('crash', x, y, z, 4, 80); };
     // Near-future city: delivery robots, drones, animated signage (src/future).
     this.future = new NearFuture({ seed: this.settings.seed, macro, terrain: this.terrain, world: this.world, streamer: this.streamer, peds: this.peds, traffic: this.traffic, net: this.net, physics: this.physics, debris: this.debris, dust: this.dust, destruction: this.destruction, sound: (id, x, y, z, g, p, r) => this.audio.play(id, x, y, z, g, p, r, cam.position) }, this.stimuli);

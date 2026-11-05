@@ -297,7 +297,7 @@ export class Wardens {
   private scanned(d: Disc): void {
     this.stats.scans++;
     const cam = this.g.renderer.camera.position;
-    if (Math.hypot(d.x - cam.x, d.y - cam.y, d.z - cam.z) < 700) this.g.audio.play('ufo_scan', d.x, d.y, d.z, 0.9, 0.9 + Math.random() * 0.2, 60, cam);
+    this.g.audio.play('ufo_scan', d.x, d.y, d.z, 0.9, 0.9 + Math.random() * 0.2, 25, cam);
   }
 
   // ================================================================== walkers

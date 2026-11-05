@@ -4886,4 +4886,19 @@ section('car engines', async () => {
   check(loops.every((l) => l.gain === 0), 'muffled to nothing indoors / underground');
 });
 
+section('hearing: distance', async () => {
+  const { audibleRange, farGain, airCutoff, heard, listenerPos, HEARING } = await import('../src/audio/hearing');
+  listenerPos.set(0, 0, 0);
+  const horn = audibleRange(0.7 * 0.7, 8);
+  check(horn > 120 && horn < 260, `a car horn carries 120–260 m (${horn.toFixed(0)})`);
+  check(!heard(600, 0, 0, 0.49, 8), 'a horn 600 m away is not played');
+  check(heard(50, 0, 0, 0.49, 8), 'a horn 50 m away is');
+  check(audibleRange(1, 40) > 1500, `an explosion carries far (${audibleRange(1, 40).toFixed(0)} m)`);
+  check(audibleRange(0.45 * 0.45, 4) < 50, `a footstep only nearby (${audibleRange(0.2, 4).toFixed(0)} m)`);
+  const r = 200;
+  check(farGain(r * HEARING.fadeFrom - 1, r) === 1 && farGain(r, r) === 0 && farGain(r * 0.8, r) > 0 && farGain(r * 0.8, r) < 1, 'a soft fade over the end of the range');
+  check(airCutoff(5) === 20000 && airCutoff(200) < 6000 && airCutoff(5000) === HEARING.minCutoff, 'far sounds lose their high end');
+  for (const d of [10, 30, 80, 200, 500]) check(airCutoff(d) >= airCutoff(d * 2), `the lowpass closes with distance (${d} m)`);
+});
+
 await runSections(import.meta.url);
