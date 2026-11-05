@@ -48,7 +48,7 @@ const mat = (key: string, c: C3, rough: number, metal: number): THREE.MeshStanda
   if (!m) { m = new THREE.MeshStandardMaterial({ color: srgbColor(c), roughness: rough, metalness: metal }); mats.set(key, m); }
   return m;
 };
-const STEEL = () => mat('steel', [0.78, 0.79, 0.8], 0.28, 0.9);
+const STEEL = () => mat('steel', [0.74, 0.75, 0.76], 0.42, 0.85);
 const IRON = () => mat('iron', [0.16, 0.16, 0.17], 0.55, 0.7);
 const BRASS = () => mat('brass', [0.78, 0.6, 0.28], 0.35, 0.85);
 const RED = () => mat('red', [0.72, 0.1, 0.08], 0.5, 0.3);

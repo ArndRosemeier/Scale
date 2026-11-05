@@ -164,6 +164,9 @@ export class MagneticGrandma {
     }
     if (!home || !this.enabled || !out || dayOf(g.sky.hoursAbs) === this.goneDay || g.camRig.underground) return;
     if (Math.hypot(home.x - f.x, home.z - f.z) > ACTIVE_R) return;
+    // Still about from before (another system had her a while): she takes up her rounds where she is.
+    const cit = this.citizen(), was = cit ? g.peds.agentOf(cit.id) : null;
+    if (was) { if (Math.hypot(was.x - f.x, was.z - f.z) < DROP_R) this.spawn(was.x, was.z, was.heading); return; }
     // She comes out of one of the shops of her rounds (the one nearest the player).
     const doors = this.doors();
     if (!doors.length) return;
@@ -189,6 +192,13 @@ export class MagneticGrandma {
 
   /** The citizen she is: an old woman, the same one in every game of this city. */
   private citizen(): Citizen | null {
+    if (this.cit !== undefined) return this.cit;
+    this.cit = this.findCitizen();
+    return this.cit;
+  }
+  private cit: Citizen | null | undefined = undefined;
+
+  private findCitizen(): Citizen | null {
     const pop = this.g.population;
     let fallback: Citizen | null = null;
     for (let k = 0; k < 80; k++) {
@@ -203,7 +213,13 @@ export class MagneticGrandma {
   private spawn(x: number, z: number, heading: number, walk = true): Her | null {
     const g = this.g, cit = this.citizen();
     if (!cit) return null;
-    const a = g.peds.spawnAt(cit, x, z, heading);
+    // Already about (another system had her for a while, then let go): she carries on as herself.
+    let a = g.peds.agentOf(cit.id);
+    if (a) {
+      if (!a.alive || a.actor || a.inside || a.ragdoll || a.state === PState.Down) return null;
+      if (!walk) { a.x = x; a.z = z; a.heading = heading; a.route = Float32Array.from([x, z, 0]); a.wp = 1; }
+      a.state = PState.Idle; a.stateT = 0; a.fear = 0;
+    } else a = g.peds.spawnAt(cit, x, z, heading);
     if (!a) return null;
     const rng = new Rng(deriveSeed(cit.seed, 'grandma'));
     const s = () => rng.nextU32();
@@ -217,7 +233,6 @@ export class MagneticGrandma {
         back: { defId: 'coat', visual: vis(s(), rng.pick(pastel), [0.3, 0.22, 0.26]) },
         legs: { defId: 'skirt', visual: vis((s() >>> 3) * 4, [0.3, 0.26, 0.32]) },
         feet: { defId: 'shoes', visual: vis(s(), [0.16, 0.11, 0.08]) },
-        head: { defId: 'beanie', visual: vis(s(), [0.72, 0.4, 0.45]) },
       },
     }));
     a.pref = PACE;
@@ -317,7 +332,7 @@ export class MagneticGrandma {
     if (h.phase === 'walk' || h.phase === 'browse') {
       // Too much on her: a shake. A bicycle doesn't stay long either.
       const bike = this.pieces.find((p) => p.kind === 'bicycle');
-      if (this.pieces.length >= h.full || (bike && bike.t > BIKE_STAY)) this.startShake(h);
+      if (this.pieces.length >= h.full || (bike && bike.t > BIKE_STAY && h.full < 99)) this.startShake(h);
       else {
         const back = this.pieces.find((p) => p.owner && p.t > 4 && p.owner.alive && !p.owner.actor && Math.hypot(p.owner.x - a.x, p.owner.z - a.z) < 9);
         if (back) this.startGive(h, back);
@@ -592,6 +607,9 @@ export class MagneticGrandma {
   /** Keep what sticks on her current rig (a new rig is built when she comes back into range). */
   private bind(h: Her): void {
     const ch = this.rig(h)?.char ?? null;
+    // (A rig dressed while the crowd still held it back can stay hidden behind its crowd figure
+    // for good: hers is shown, or what sticks to her would never be seen.)
+    if (ch && !ch.object.visible) ch.object.visible = true;
     if (!ch || ch === this.bound) return;
     this.bound = ch;
     for (const p of this.pieces) {
@@ -697,10 +715,12 @@ export class MagneticGrandma {
     this.clear();
   }
 
-  /** Someone else has her now (a ragdoll owner): what sticks falls off, and she is not ours. */
+  /**
+   * Someone else has her now (a ragdoll, another system): what sticks falls off and she is not ours
+   * for now. Once she is free again (and unhurt) the next sync takes her back (spawn reuses her body).
+   */
   private letGo(): void {
     this.dropAll(0.3);
-    this.goneDay = dayOf(this.g.sky.hoursAbs);
     this.clear();
   }
 
