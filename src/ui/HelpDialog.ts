@@ -51,6 +51,7 @@ const FIXED: [string, string][] = [
   ['Esc', 'Clear the target · close a screen · pause & settings'],
   ['1 … 7 in a talk', 'Pick an answer'],
   ['F4', 'Detailed info line (frame rate, position, streaming)'],
+  ['Shift+F7', 'Sound log: the sounds of the last 20 s, with how far away they were'],
 ];
 
 /** While a key button waits for a key: this sees every keydown first. Registered when the module

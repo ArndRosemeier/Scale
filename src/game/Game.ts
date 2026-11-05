@@ -70,6 +70,8 @@ import { setSight, markerOnScreen, screenPoint } from '../render/screen';
 import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { ShaderCounter } from '../debug/ShaderCounter';
+import { SoundLog } from '../debug/SoundLog';
+import { listenerDist } from '../audio/hearing';
 import { installFreezeLog } from '../debug/FreezeLog';
 import { Recorder } from '../ui/Recorder';
 import { lightPool } from '../render/lightPool';
@@ -113,6 +115,7 @@ import { safeStart } from './news/pulse';
 import { planFactions } from './factions/Factions';
 import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
+import { Floater } from './citizens/floater/Floater';
 import { GhostGuide } from './ghost/GhostGuide';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
@@ -239,6 +242,8 @@ export class Game {
   private startCell = -1;
   /** Street characters: buskers, the doomsayer, living statues, mimes … (src/game/street). */
   street: StreetLife | null = null;
+  /** Leo Lightly, the man who can't land (game/citizens/floater). */
+  floater: Floater | null = null;
   /** The ghost tour guide's night tours (src/game/ghost). */
   ghost: GhostGuide | null = null;
   /** The stadium's evening concert (src/game/concert). */
@@ -872,7 +877,7 @@ export class Game {
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
-    this.T('street', () => { this.street?.update(dt); this.ghost?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('street', () => { this.street?.update(dt); this.ghost?.update(dt); this.floater?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
     this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
@@ -1112,6 +1117,8 @@ export class Game {
     this.powers = new PowersScreen(this, this.abilities);
     // Targeting and the elemental powers.
     this.synth = new PowerSynth(() => this.audio.synthOut());
+    this.synth.onPlay = (kind, x, y, z) => this.audio.note(`synth_${kind}`, listenerDist(x, y, z));
+    new SoundLog(this.audio);
     this.engines = new CarEngines(this.audio);
     this.targeting = new Targeting({
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
@@ -1242,6 +1249,7 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.floater = new Floater(this);
     this.ghost = new GhostGuide(this);
     this.concert = new Concert(this);
     this.soccer = new Soccer(this);

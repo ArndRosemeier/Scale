@@ -133,7 +133,7 @@ export class FireCrew {
 }
 
 /** Firefighters: dark turnout gear with yellow bands, a helmet. */
-function firefighterOutfit(seed: number): EquipmentVisuals {
+export function firefighterOutfit(seed: number): EquipmentVisuals {
   const navy: [number, number, number] = [0.08, 0.09, 0.12], band: [number, number, number] = [0.9, 0.85, 0.15];
   const v = (p: [number, number, number], s: [number, number, number], k: number) => ({ shape: 'cloth', seed: seed + k, primary: p, secondary: s, accent: band, material: 'plain', glow: 0 });
   return {

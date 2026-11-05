@@ -297,7 +297,8 @@ export class Wardens {
   private scanned(d: Disc): void {
     this.stats.scans++;
     const cam = this.g.renderer.camera.position;
-    this.g.audio.play('ufo_scan', d.x, d.y, d.z, 0.9, 0.9 + Math.random() * 0.2, 25, cam);
+    // refDist 8: heard within ~180 m (a disc hanging over your street), not from discs far off in the sky.
+    this.g.audio.play('ufo_scan', d.x, d.y, d.z, 0.9, 0.9 + Math.random() * 0.2, 8, cam);
   }
 
   // ================================================================== walkers
