@@ -206,7 +206,7 @@ export class Gargoyle {
     if (t < 0.05) g.audio?.play('dig_rubble', this.x, this.y + 0.6, this.z, 0.22, 1.7, 3, g.renderer.camera.position);
     // Stretch up (arms and wings), shake, settle.
     const up = smoothstep(0.3, 1.5, t) * (1 - smoothstep(2.6, 3.6, t));
-    Object.assign(r, { crouch: 1 - up * 0.8, rest: 1 - up, stretch: up, fold: 1 - up * 0.85, curl: 1 - up, eyes: smoothstep(0, 1.5, t) * 0.6 });
+    Object.assign(r, { crouch: 1 - up * 0.8, rest: 1 - up, stretch: up, fold: 1 - up * 0.85, curl: 1 - up, eyes: smoothstep(0, 1.5, t) * 0.9 });
     r.roll = Math.sin(t * 22) * 0.05 * smoothstep(3.0, 3.3, t) * (1 - smoothstep(3.6, 3.9, t));
     if (t > 1 && !this.said.has('wake')) { this.said.add('wake'); this.say('wake', 8); }
     if (t > 4.4) { r.roll = 0; this.startGlide(false); }
@@ -236,7 +236,7 @@ export class Gargoyle {
     const dx = G.bx - G.ax, dz = G.bz - G.az;
     if (Math.hypot(dx, dz) > 0.5) this.yaw = Math.atan2(dx, dz);
     const flare = smoothstep(0.8, 1, s);
-    Object.assign(r, { crouch: 0, rest: 0, stretch: 0, wave: 0, aim: 0, curl: 0, fold: flare * 0.6, eyes: 0.6, still: false, look: null });
+    Object.assign(r, { crouch: 0, rest: 0, stretch: 0, wave: 0, aim: 0, curl: 0, fold: flare * 0.6, eyes: 0.9, still: false, look: null });
     r.pitch = lerp(G.up ? 0.7 : 1.15, 0.1, flare);
     r.beat = G.up ? 1 : 0.35 + flare * 0.6;
     r.flap += dt * (G.up ? 11 : 7);
@@ -252,7 +252,7 @@ export class Gargoyle {
 
   private ground(dt: number, hour: number): void {
     const g = this.g, r = this.rig, P = g.player;
-    r.still = false; r.pitch = 0; r.beat = 0; r.eyes = 0.6;
+    r.still = false; r.pitch = 0; r.beat = 0; r.eyes = 0.9;
     const dp = Math.hypot(P.pos.x - this.x, P.pos.z - this.z);
     const heroNear = !g.freeCam && dp < 10 && Math.abs(P.pos.y - this.y) < 4;
     // Tours: announced, then started (it walks back to its spot first).
@@ -381,7 +381,7 @@ export class Gargoyle {
     const stops = tourStops(h, g.macro.landmarks ?? [], this.extraSights());
     this.tour = { stops, i: 0, phase: 'walk', lines: [], li: 0, lineT: 0, people: [], with: 0, t: 0 };
     this.doing = 'tour';
-    this.routeTo(h.spot.x, h.spot.z, true);
+    this.routeTo(stops[0].x, stops[0].z, true);
     this.stats.tours++;
     // A few passers-by come along (the curious ones).
     for (const a of g.peds.neighbours(this.x, this.z, 28, [])) {

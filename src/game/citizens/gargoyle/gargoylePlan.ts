@@ -16,6 +16,8 @@ export const GARGOYLE_PLAN = {
   stopR: 650, maxStops: 3,
   /** Its spot on the square: this far to the side of the steps' foot, and out onto the square (m). */
   aside: 5, out: 4,
+  /** The tour's first stop: this much further out on the square than its spot (m). */
+  churchOut: 7,
 };
 
 export interface GargoyleHome {
@@ -89,7 +91,9 @@ export interface TourStop { kind: string; name: string; x: number; z: number; lo
  */
 export function tourStops(home: GargoyleHome, landmarks: readonly Landmark[], extra: TourStop[] = []): TourStop[] {
   const P = GARGOYLE_PLAN, s = home.spot;
-  const out: TourStop[] = [{ kind: 'church', name: home.lm.name, x: s.x, z: s.z, look: { x: home.lm.x, z: home.lm.z } }];
+  // The church stop: further out on the square than its spot, so the group sees the front, not the wall.
+  const vx = -Math.sin(home.lm.angle), vz = Math.cos(home.lm.angle);
+  const out: TourStop[] = [{ kind: 'church', name: home.lm.name, x: s.x - vx * P.churchOut, z: s.z - vz * P.churchOut, look: { x: home.lm.x, z: home.lm.z } }];
   const cands: TourStop[] = [...extra];
   for (const lm of landmarks) {
     if (lm === home.lm || lm.kind === 'airport' || lm.cell < 0) continue;

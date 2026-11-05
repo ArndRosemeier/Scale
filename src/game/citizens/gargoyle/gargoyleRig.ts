@@ -207,14 +207,15 @@ export class GargoyleRig {
     for (const s of [1, -1]) {
       const w = B.wing(s);
       // Folded: swept back and up behind the shoulders, the outer half folded down along it (and narrowed).
-      let sweep = lerp(0.1, 1.15, f), elev = lerp(0.05, 0.85, f) + breathe, elbow = lerp(0.1, 1.7, f);
+      let sweep = lerp(0.1, 1.15, f), elev = lerp(0.05, 0.85, f) + breathe, elbow = lerp(0.1, 2.5, f);
       if (b > 0) {
         const cf = Math.cos(this.flap);
         elev += b * (0.1 + 0.65 * cf);
         elbow += b * 0.35 * Math.max(0, -Math.sin(this.flap));
       }
       this.bone(w, null, 0, s * sweep, s * elev, 1, 1, lerp(1, 0.75, f));
-      this.bone(w + 1, null, 0, s * elbow * 0.25, -s * elbow, 1, 1, lerp(1, 0.6, f));
+      // (Folded, the outer half is drawn in, its tips tucked behind the arm instead of poking out.)
+      this.bone(w + 1, null, 0, s * elbow * 0.25, -s * elbow, lerp(1, 0.45, f), 1, lerp(1, 0.6, f));
     }
   }
 

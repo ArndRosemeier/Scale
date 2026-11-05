@@ -108,6 +108,12 @@ export function buildGargoyleSkin(): SkinData {
     },
     (_i, _th, p) => [0, 0, 0, eyeD(p) < 0.03 && eyeD(p) >= 0.012 ? 1 : 0],
     () => [b.head, 1], 22, true, true, UV);
+  // The eyes: a small stone ball each, set into the face under the brow, that glow amber at night.
+  for (const s of [1, -1]) {
+    const ex = s * 0.074, ey = H[1] + 0.082, ez = H[2] + 0.19;
+    const ball = spline([[[ex, ey, ez - 0.026], 0.006, 0.006], [[ex, ey, ez - 0.014], 0.022, 0.02], [[ex, ey, ez], 0.027, 0.024], [[ex, ey, ez + 0.012], 0.021, 0.019], [[ex, ey, ez + 0.022], 0.006, 0.006]], 40);
+    loft(B, 'eye', ball, [0, 1, 0], () => EYE, () => [0, 0, 0, 1], () => [b.head, 1], 12, true, true, UV);
+  }
   // The brow: a heavy ridge over each eye.
   for (const s of [1, -1]) {
     const brow = spline([[[s * 0.02, H[1] + 0.13, H[2] + 0.15], 0.025, 0.02], [[s * 0.075, H[1] + 0.135, H[2] + 0.145], 0.035, 0.025], [[s * 0.125, H[1] + 0.125, H[2] + 0.1], 0.02, 0.018]], 40);
