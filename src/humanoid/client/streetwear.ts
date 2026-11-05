@@ -52,6 +52,8 @@ export function streetHeld(defId: string): THREE.Object3D | null {
   if (defId === 'mic') return microphone();
   if (defId === 'stagemic') return microphone(false);
   if (defId === 'tvcam') return turned(tvCamera());
+  if (defId === 'bouquet') return bouquet();
+  if (defId === 'wateringcan') return wateringCan();
   if (defId !== 'flyer') return null;
   // A flyer pinched in the fist, standing up out of the thumb side.
   const g = new THREE.Group();
@@ -59,6 +61,44 @@ export function streetHeld(defId: string): THREE.Object3D | null {
   m.position.set(0, 0.1, 0.02);
   m.rotation.y = Math.PI / 2;
   g.add(m);
+  return g;
+}
+
+/** A bunch of flowers held upright in the fist: stems in tissue paper, blooms on top. */
+function bouquet(): THREE.Object3D {
+  const g = new THREE.Group();
+  const wrap = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.26, 10, 1, true), std([0.93, 0.86, 0.9], 0.9));
+  wrap.rotation.x = Math.PI;
+  wrap.position.y = 0.09;
+  g.add(wrap);
+  const cols: [number, number, number][] = [[0.9, 0.2, 0.3], [0.98, 0.78, 0.2], [0.95, 0.55, 0.7], [0.75, 0.3, 0.75], [1, 1, 0.95]];
+  const leaf = std([0.2, 0.45, 0.18], 0.8);
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4, r = 0.02 + (i % 3) * 0.018;
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.026 + (i % 2) * 0.008, 0), std(cols[i % cols.length], 0.85));
+    b.position.set(Math.cos(a) * r, 0.24 + (i % 4) * 0.015, Math.sin(a) * r);
+    g.add(b);
+    if (i % 3 === 0) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.07, 0.03), leaf); l.position.set(Math.cos(a) * 0.05, 0.2, Math.sin(a) * 0.05); l.rotation.z = Math.cos(a) * 0.6; g.add(l); }
+  }
+  return g;
+}
+
+/** A small green watering can held by its handle, the spout forward. */
+function wateringCan(): THREE.Object3D {
+  const g = new THREE.Group();
+  const tin = std([0.2, 0.5, 0.35], 0.5, 0.4);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.14, 12), tin);
+  body.position.y = -0.1;
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.014, 0.2, 6), tin);
+  spout.position.set(0, -0.06, 0.12);
+  spout.rotation.x = 1.0;
+  const rose = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.012, 0.025, 8), tin);
+  rose.position.set(0, 0.0, 0.2);
+  rose.rotation.x = 1.0;
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.008, 5, 12, Math.PI), tin);
+  handle.rotation.y = Math.PI / 2;
+  handle.position.y = -0.03;
+  g.add(body, spout, rose, handle);
   return g;
 }
 
@@ -542,7 +582,7 @@ function cityMap(fit: BodyFit): THREE.Object3D {
 const textures = new Map<string, THREE.CanvasTexture>();
 
 /** Hand-painted block letters on a board (lines split at '|'), cached per text. */
-function textTexture(text: string, bg: string, fg: string, w: number, h: number): THREE.Texture {
+export function textTexture(text: string, bg: string, fg: string, w: number, h: number): THREE.Texture {
   const key = `${text}|${bg}|${fg}|${w}x${h}`;
   let t = textures.get(key);
   if (t) return t;
