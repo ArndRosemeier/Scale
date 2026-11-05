@@ -24,7 +24,7 @@ import { cityOutfit } from '../../humanoid/client/wardrobe';
 import { hash32 } from '../../core/rng';
 import { pointInPoly } from '../../core/geom2';
 import { statusOf, dealtBy } from '../../shared/status';
-import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, type ActorRole } from '../../sim/actors/Actor';
+import { makeActor, attach, setState, tickActor, AFTERMATH_OWNER, FAME_OWNER, STREET_OWNER, PEOPLE_OWNER, SIDEKICK_OWNER, GRANDMA_OWNER, type ActorRole } from '../../sim/actors/Actor';
 import { Combat } from '../Combat';
 import { PlayerHealth, type HurtKind } from '../PlayerHealth';
 import { Reputation } from '../Reputation';
@@ -1624,7 +1624,7 @@ export class CrimeSystem {
       if (!act) continue;
       // (Soldiers, the aftermath's people, the street characters, fame's people and game/people's
       // have their own budgets: response/forces, game/aftermath, game/street, game/fame, game/people, game/sidekick.)
-      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER && act.owner !== PEOPLE_OWNER && act.owner !== SIDEKICK_OWNER) n++;
+      if (act.role !== 'soldier' && act.owner !== AFTERMATH_OWNER && act.owner !== STREET_OWNER && act.owner !== FAME_OWNER && act.owner !== PEOPLE_OWNER && act.owner !== SIDEKICK_OWNER && act.owner !== GRANDMA_OWNER) n++;
       tickActor(act, dt);
       // Knocked down: up again after a moment. Knocked out (no health left) is out of the fight for
       // good, officers and soldiers too: nobody gets back up from that.

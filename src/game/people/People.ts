@@ -31,7 +31,7 @@ import type { ThreadInfo } from '../story/knowledge';
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role, type Citizen } from '../../sim/Population';
-import { makeActor, release, STREET_OWNER, PEOPLE_OWNER, type Actor, type Mood } from '../../sim/actors/Actor';
+import { makeActor, release, STREET_OWNER, PEOPLE_OWNER, GRANDMA_OWNER, type Actor, type Mood } from '../../sim/actors/Actor';
 import { cityName, streetName } from '../../plan/names';
 import { gameTimeLabel } from '../save/model';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -249,7 +249,7 @@ export class People {
     if (!act || act.owner === TALK_OWNER) return base;
     const t = act.title ?? ROLE_JOB[act.role];
     if (!t) return base;
-    const kind: Job['kind'] = act.role === 'police' || act.role === 'medic' || act.role === 'soldier' ? 'civic' : act.role === 'shopkeeper' ? 'shop' : act.owner === STREET_OWNER ? 'street' : base.kind;
+    const kind: Job['kind'] = act.role === 'police' || act.role === 'medic' || act.role === 'soldier' ? 'civic' : act.role === 'shopkeeper' ? 'shop' : act.owner === STREET_OWNER || act.owner === GRANDMA_OWNER ? 'street' : base.kind;
     return { kind, title: t.toLowerCase() };
   }
 
