@@ -2,9 +2,13 @@
 
 Every push raises the version by 0.001. Newest first.
 
-## 0.305 — 2026-11-06
+## 0.306 — 2026-11-06
 
 - **Memory no longer keeps growing on WebGPU.** Running around the city on the WebGPU renderer (the default since v0.271) made the tab grow without end: on the PC it went from 1.3 to 11.9 GB in two and a half minutes of teleporting, until the browser refused to allocate more. Every piece of city that streamed out (ground, facades, terrain and water tiles, countryside clumps, props) was taken out of the scene and its geometry freed, but three's WebGPU renderer keeps its own record of every mesh it has drawn and only lets go when the mesh or its material is disposed, so all of it stayed in memory. Now a mesh's record ends when its geometry is freed, and records of meshes no longer in the scene and not drawn for 10 s end too. Shaders those meshes used stay compiled, so nothing compiles again when the next cell arrives. WebGL was never affected. Measuring tool for the PC: `tools/memwatch.cjs`.
+
+## 0.305 — 2026-11-06
+
+- **Better-fitting shoes and boots (Actors 0.34.4).** Shoes and boots now sit close to the foot instead of looking a size or two too big. The jagged hole you could see in the leg just above cuffed, biker, viking, riding and medieval boots is closed, and see-through lace (like the lace band of the medieval Long-sleeved gown) no longer lets you look through the body behind it. This comes from the newest release of the character library; nothing else changed.
 
 ## 0.304 — 2026-11-06
 
