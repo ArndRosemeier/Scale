@@ -37,7 +37,8 @@ const log = (s) => { console.log(s); fs.appendFileSync(path.join(out, 'memwatch.
       const geoL = gl._geometries?._geometryDisposeListeners?.size;
       let ua = null;
       try { const r = await performance.measureUserAgentSpecificMemory(); const by = {}; for (const b of r.breakdown) { const k = (b.attribution[0]?.scope || 'other') + ':' + (b.types || []).join('/'); by[k] = (by[k] || 0) + b.bytes; } ua = { totalMB: Math.round(r.bytes / 1048576), ...Object.fromEntries(Object.entries(by).filter(([, v]) => v > 8e6).map(([k, v]) => [k, Math.round(v / 1048576)])) }; } catch { ua = 'n/a (page not cross-origin isolated)'; }
-      return { ua, jsMB: Math.round(performance.memory.usedJSHeapSize / 1048576), ros, detached, geoListeners: geoL, geo: info.memory.geometries, tex: info.memory.textures, objs, top };
+      const P = gl._pipelines; const pipes = P ? `${P.caches.size}/${P.programs.vertex.size}v/${P.programs.fragment.size}f` : undefined;
+      return { ua, released: gl._objects?.releaseStats, pipes, nodeBuilds: gl._nodes?.nodeBuilderCache?.size, jsMB: Math.round(performance.memory.usedJSHeapSize / 1048576), ros, detached, geoListeners: geoL, geo: info.memory.geometries, tex: info.memory.textures, objs, top };
     });
     log(JSON.stringify({ tag, t: T(), heapMB: Math.round(h.usedSize / 1048576), ...m }));
   };

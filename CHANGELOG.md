@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.305 — 2026-11-06
+
+- **Memory no longer keeps growing on WebGPU.** Running around the city on the WebGPU renderer (the default since v0.271) made the tab grow without end: on the PC it went from 1.3 to 11.9 GB in two and a half minutes of teleporting, until the browser refused to allocate more. Every piece of city that streamed out (ground, facades, terrain and water tiles, countryside clumps, props) was taken out of the scene and its geometry freed, but three's WebGPU renderer keeps its own record of every mesh it has drawn and only lets go when the mesh or its material is disposed, so all of it stayed in memory. Now a mesh's record ends when its geometry is freed, and records of meshes no longer in the scene and not drawn for 10 s end too. Shaders those meshes used stay compiled, so nothing compiles again when the next cell arrives. WebGL was never affected. Measuring tool for the PC: `tools/memwatch.cjs`.
+
 ## 0.304 — 2026-11-06
 
 - Behind the scenes: sounds and music are now fetched with the game version attached (`sounds/amb_city_day.ogg?v=0.304`, also the sound list, the music tracks, the title theme and the concert list). The host's edge cache keeps files with fixed names for four hours, so a re-cut sound (like v0.303's day ambience) stayed old for players until then. Now every release fetches fresh copies, and the cache still works between releases (`src/core/versioned.ts`). No change in the game.
