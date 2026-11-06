@@ -196,6 +196,8 @@ export interface SaveData {
   story?: unknown;
   /** The game master's needs, rumour and log (game/gm Director, sanitised by `Director.restore`). */
   gm?: unknown;
+  /** The city's supervillains and their marks on walls (game/villains, sanitised by `restoreState`). */
+  villains?: unknown;
 }
 
 // ------------------------------------------------------------------ sanitising helpers
@@ -344,6 +346,7 @@ export function parseSave(input: string | unknown): SaveData {
     ...(o.costumes && typeof o.costumes === 'object' ? { costumes: o.costumes } : {}),
     ...(o.story && typeof o.story === 'object' ? { story: o.story } : {}),
     ...(o.gm && typeof o.gm === 'object' ? { gm: o.gm } : {}),
+    ...(o.villains && typeof o.villains === 'object' ? { villains: o.villains } : {}),
   };
 }
 

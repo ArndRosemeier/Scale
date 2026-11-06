@@ -4269,6 +4269,57 @@ section('game master', async () => {
   check(shown.every((t) => !/game[ -]master/i.test(t)), 'gm: nothing the player sees names a game master');
 });
 
+section('supervillains', async () => {
+  const V = await import('../src/game/villains/villain');
+  const VT = await import('../src/game/villains/villainText');
+  const ctx = (o: Partial<import('../src/game/villains/villain').RiseContext> = {}) => ({
+    now: 100, bosses: [{ archetype: 'gang', name: 'Rook Malone', cell: 3 }], harm: 0.5, harmCell: 7,
+    sites: [{ kind: 'museum', label: 'City Museum', cell: 5 }], groups: [{ archetype: 'eco', cell: 9 }, { archetype: 'syndicate', cell: 2 }], cells: 20, ...o,
+  });
+  const a = V.makeVillain(1234, 1, ctx()), b = V.makeVillain(1234, 1, ctx());
+  check(JSON.stringify(a) === JSON.stringify(b), 'villains: the same city makes the same villain');
+  const many = Array.from({ length: 40 }, (_, i) => V.makeVillain(1000 + i, 1, ctx()));
+  const aliases = new Set(many.map((v) => v.alias)), themes = new Set(many.map((v) => v.theme)), origins = new Set(many.map((v) => v.origin));
+  check(aliases.size >= 25 && themes.size >= 6 && origins.size === 4, `villains: every seed different (${aliases.size} aliases, ${themes.size} themes, ${origins.size} origins in 40 cities)`);
+  check(many.every((v) => v.powers.length >= 3 && v.powers.length <= 4 && new Set(v.powers).size === v.powers.length && v.signature && v.stage === 'rumour' && v.next > v.risen), 'villains: 3-4 different powers, a signature, start as a rumour');
+  const boss = V.makeVillain(5, 1, ctx(), [], 'boss');
+  check(boss.realName === 'Rook Malone' && boss.crew === 'gang' && boss.base === 3, 'villains: the boss who rose leads their own gang from its home');
+  const out = V.makeVillain(5, 2, ctx(), [boss], 'outsider');
+  check(out.crew === 'eco' && out.base === 9 && out.theme !== boss.theme && out.alias !== boss.alias, 'villains: an outsider takes the weakest free group; no two share a theme or alias');
+  check(V.makeVillain(5, 3, ctx({ bosses: [], sites: [], harm: 0 })).origin === 'outsider', 'villains: with nothing else on offer, an outsider comes');
+  check(many.filter((v) => v.origin === 'failed').every((v) => v.grudge === 'hero'), 'villains: someone the hero failed has it in for the hero');
+  // Room and pressure.
+  check(V.room(0) === 1 && V.room(5) === 2 && V.room(30) === 3, 'villains: one early, up to three later');
+  const S = V.freshState(0);
+  let t = 0;
+  while (!V.step(S, 77, t, 1.5) && t < 500) t++;
+  check(t > 10 && t < 60, `villains: the first rises after a day or two of pressure (${t} h)`);
+  V.risen(S, V.makeVillain(77, 1, ctx({ now: t })), t);
+  let t2 = t + 1;
+  while (!V.step(S, 77, t2, 50) && t2 < t + 200) t2++;
+  check(t2 >= t + 24 * 5 - t % 120 - 1 || t2 - t >= V.RISE.gap, `villains: no second while there is no room, or within the gap (${t2 - t} h later)`);
+  check(V.pressureGain({ crime: 0.8, collapsed: 2, fame: 1, threats: 2, harm: 0.5 }) > V.pressureGain({ crime: 0, collapsed: 0, fame: 0, threats: 0, harm: 0 }), 'villains: crime, collapsed gangs, fame, threats and harm raise the pressure');
+  check(V.pressureGain({ crime: NaN, collapsed: 99, fame: -5, threats: 1e9, harm: 9 }) < 6, 'villains: the pressure gain stays bounded');
+  // Stages.
+  const s1 = S.villains[0];
+  V.advanceStages(S, s1.next + 0.1);
+  check(s1.stage === 'signs' && !Number.isFinite(s1.next), 'villains: after the rumours, their signs');
+  // Saves.
+  const back = V.restoreState(JSON.parse(JSON.stringify(V.saveState(S))));
+  check(JSON.stringify(V.saveState(back)) === JSON.stringify(V.saveState(S)), 'villains: save and restore keep every villain');
+  const bad = V.restoreState({ pressure: 'x', n: -3, villains: [null, { id: 1, alias: 'X', theme: 'nope' }, { id: 2, alias: 'Y', theme: 'frost', powers: ['frost', 'laser'], stage: 'boss', level: 99, color: [2, 0, 0] }, { id: 2, alias: 'Z', theme: 'fire' }] });
+  check(bad.villains.length === 1 && bad.villains[0].powers.join() === 'frost' && bad.villains[0].stage === 'rumour' && bad.villains[0].level === 10 && bad.villains[0].color[0] <= 1 && bad.n === 2 && bad.pressure === 0, 'villains: broken saves are cleaned');
+  // Texts.
+  const w = VT.whisper(a, 'in Mill Quarter', 0.3, false);
+  check(w.includes(a.alias) && w[0] === w[0].toLowerCase() && !/\{|\}/.test(w), `villains: a whisper names them, said as "I heard …" (${w})`);
+  const deep = many.map((v) => VT.whisper({ ...v, known: true }, 'in X', 0.5, true));
+  check(deep.every((x) => !/\{|\}|undefined/.test(x)), 'villains: every origin whisper is filled in');
+  check(VT.threadTitle(a).startsWith('Someone calling themselves') && VT.markSeen(a, 'on Elm Street').includes(V.tagWord(a.alias)), 'villains: the thread is a name only, the mark shows their word');
+  const vsrc = readFileSync('src/game/villains/Villains.ts', 'utf8');
+  check(/g\.villains\?\.heard\(rule\.text\)/.test(readFileSync('src/game/people/People.ts', 'utf8')) && /villains\?\.talkFacts/.test(readFileSync('src/game/gm/GameMaster.ts', 'utf8')) && /g\.mode !== 'sandbox'/.test(vsrc), 'villains: wired into talk, Normal mode only');
+  check(/villains: g\.villains/.test(readFileSync('src/game/save/SaveSystem.ts', 'utf8')), 'villains: saved in save files');
+});
+
 section('story knowledge', async () => {
   const { Knowledge, KNOWLEDGE, plainText, clueTime } = await import('../src/game/story/knowledge');
   const K = new Knowledge();

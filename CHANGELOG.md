@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.300 — 2026-11-06
+
+- **Supervillains begin to rise.** Every city now grows its own villains over time, and no two cities get the same ones. As days pass, crime, a gang that fell apart, your fame, monsters beaten and harm done in your fights all make it likelier that someone rises: a gang boss with a long record who comes back changed, someone who blames you for what happened to them, someone changed by an accident at a landmark or where a monster fell, or an outsider who comes to town with a crew. Each has their own name, theme, powers, motive and turf. One early, up to three later.
+- They start quietly. People you ask for the news may whisper a name ("someone calling themselves the Gilded Fang is going round Mill Quarter"), and later their mark turns up on walls in their crew's turf. What you hear and see goes into your tracker under "Someone calling themselves …". They do not show their face yet; that comes next.
+- Saved with the city and in save files. Admin console: a "Supervillains" section to see them, make one rise, move them on and put a mark on a wall.
+
 ## 0.299 — 2026-11-06
 
 - **A lighting pass.** The city's light was reworked after the one that made MasterWorld look better. The picture has more punch: a small colour grade on top of the tone curve deepens the shade and richens the colours, so the city no longer looks washed out. Sunlight takes its colour from the sky's own air, white at noon, golden in the late afternoon and red as the sun sets, and a clear midday sun now outshines the sky's fill so shadows read under trees, cars and people. The shade is lit by the sky itself (bluer from above, brighter towards the sun), and the undersides of things are darker. Golden hour is warm, nights keep the amber of the street lamps, and the glow around bright things follows how bright they look on screen, softer by day.

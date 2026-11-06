@@ -603,6 +603,7 @@ export class People {
     // Told the game master's rumour: a clue in the group's thread.
     const R = this.g.gm?.dir.state.rumour;
     if (R && rule.text.includes(R.text)) this.g.gm.heard(R.text);
+    this.g.villains?.heard(rule.text);
     // A favour done (or forgotten) is talked about once, then it is over.
     const fv = s.k.favour;
     if (fv && (fv.done !== undefined || fv.lost) && (facts.favour === 'done' || facts.favour === 'lost') && /^(h4[5-7]|f2[12])#/.test(rule.id)) delete s.k.favour;
