@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.308 — 2026-11-06
+
+- **Running is now the normal way to move on foot.** The hero runs without any key held; hold **Shift** to walk (Alt still gives the slow stroll). In flight Shift still boosts, and super speed works as before. Autorun (R) keeps the pace you had: a run, a walk if Shift was held, a stroll with Alt. On the touch stick nothing changed: pushed all the way runs, part way walks. The Keys tab (where Shift can be moved to another key) and the manual say so.
+
 ## 0.307 — 2026-11-06
 
 - Admin console (Ctrl+Shift+F12) has a **Memory** section: **Force GC** runs a garbage collection and shows the JS heap before and after, **Memory report** shows the JS heap, the renderer's geometry and texture counts and, on WebGPU, its render objects and what the memory fix released. A page can't start an exact collection in a normal Chrome; the button pushes the collector into one with a burst of short-lived memory (exact with Chrome started with `--js-flags=--expose-gc`, or use DevTools' "Collect garbage" button). After a collection, buffers and textures nothing uses any more are freed on the GPU side too, so Chrome's task manager (Shift+Esc) shows whether memory was only waiting for collection or is really held.
