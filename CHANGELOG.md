@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.305 — 2026-11-06
+
+- **Better-fitting shoes and boots (Actors 0.34.4).** Shoes and boots now sit close to the foot instead of looking a size or two too big. The jagged hole you could see in the leg just above cuffed, biker, viking, riding and medieval boots is closed, and see-through lace (like the lace band of the medieval Long-sleeved gown) no longer lets you look through the body behind it. This comes from the newest release of the character library; nothing else changed.
+
 ## 0.304 — 2026-11-06
 
 - Behind the scenes: sounds and music are now fetched with the game version attached (`sounds/amb_city_day.ogg?v=0.304`, also the sound list, the music tracks, the title theme and the concert list). The host's edge cache keeps files with fixed names for four hours, so a re-cut sound (like v0.303's day ambience) stayed old for players until then. Now every release fetches fresh copies, and the cache still works between releases (`src/core/versioned.ts`). No change in the game.
