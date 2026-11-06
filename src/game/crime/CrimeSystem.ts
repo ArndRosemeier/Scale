@@ -560,6 +560,11 @@ export class CrimeSystem {
     return out;
   }
 
+  /** Walls to put a tag on near the hero (doors of buildings without a shop front, nearest first). */
+  tagWalls(rMin: number, rMax: number): { x: number; z: number; nx: number; nz: number; bay: number }[] {
+    return this.shops(rMin, rMax, true);
+  }
+
   private getaway(x: number, z: number): GetawayCar | null {
     const tr = this.g.traffic;
     const kinds: VKind[] = ['sedan', 'suv', 'hatch', 'van'];

@@ -2,6 +2,12 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.299 — 2026-11-06
+
+- **Supervillains begin to rise.** Every city now grows its own villains over time, and no two cities get the same ones. As days pass, crime, a gang that fell apart, your fame, monsters beaten and harm done in your fights all make it likelier that someone rises: a gang boss with a long record who comes back changed, someone who blames you for what happened to them, someone changed by an accident at a landmark or where a monster fell, or an outsider who comes to town with a crew. Each has their own name, theme, powers, motive and turf. One early, up to three later.
+- They start quietly. People you ask for the news may whisper a name ("someone calling themselves the Gilded Fang is going round Mill Quarter"), and later their mark turns up on walls in their crew's turf. What you hear and see goes into your tracker under "Someone calling themselves …". They do not show their face yet; that comes next.
+- Saved with the city and in save files. Admin console: a "Supervillains" section to see them, make one rise, move them on and put a mark on a wall.
+
 ## 0.298 — 2026-11-05
 
 - Behind the scenes: a plan for supervillains (docs/SUPERVILLAINS_PLAN.md). Every city grows its own villains over time, each with their own name, origin, motive, style, powers and lair. They can be beaten for good, new ones can rise, and they can fight each other over turf. No change in the game yet.

@@ -183,7 +183,9 @@ export class GameMaster {
    */
   talkFacts(personSeed: number): { heard: string } | null {
     const R = this.dir.state.rumour;
-    if (!this.enabled || !R || R.until < this.g.sky.hoursAbs) return null;
+    if (!this.enabled) return null;
+    // Nothing of its own going round: what people whisper about a rising villain (game/villains).
+    if (!R || R.until < this.g.sky.hoursAbs) return this.g.villains?.talkFacts(personSeed) ?? null;
     return hashToFloat(hash32(personSeed ^ 0x6d2b79f5)) < 0.55 ? { heard: R.text } : null;
   }
 

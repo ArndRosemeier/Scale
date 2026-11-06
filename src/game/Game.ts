@@ -107,6 +107,7 @@ import { TargetHud } from '../ui/TargetHud';
 import { SidekickPanel } from '../ui/SidekickPanel';
 import { Story } from './story/Story';
 import { GameMaster } from './gm/GameMaster';
+import { Villains } from './villains/Villains';
 import { Tracker } from '../ui/Tracker';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { CityNews } from './news/CityNews';
@@ -235,6 +236,8 @@ export class Game {
   tracker!: Tracker;
   /** The game master (game/gm): what of the city's life reaches the hero, when. */
   gm!: GameMaster;
+  /** The city's supervillains (game/villains): who rises, when, their rumours and marks. */
+  villains!: Villains;
   synth!: PowerSynth;
   /** Quiet engine loops on the cars nearest the camera. */
   engines!: CarEngines;
@@ -890,7 +893,7 @@ export class Game {
     this.T('arcade', () => this.arcade?.update(dt));
     this.T('street', () => { this.street?.update(dt); this.florist?.update(dt); this.floater?.update(dt); this.grandma?.update(dt); this.gargoyle?.update(dt); this.ghost?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
     this.T('gentle', () => this.gentle?.update(dt));
-    this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
+    this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.villains?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
@@ -1273,6 +1276,7 @@ export class Game {
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
     this.gm = new GameMaster(this);
+    this.villains = new Villains(this);
     this.wardrobe = new Wardrobe(this);
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);
