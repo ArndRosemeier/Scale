@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.303 — 2026-11-06
+
+- **The short beep in the daytime city background is gone.** The day city ambience is a 24-second loop, and right where it wrapped around it held a half-second tonal "beep" (a distant horn-like tone around 670 Hz), so it came back every 24 s, a couple of times a minute, all day long. It isn't a game sound, so it didn't show up in the sound log or the sound effects list. The loop is re-cut without it (now 22.6 s, seamless, same level); nothing else changed. The night background still has its faint crickets; say if those should go too.
+
 ## 0.302 — 2026-11-06
 
 - **The weather-moody baker.** In the city's most central bakery works a baker who bit into a crystal he found in a flour sack. Since then the weather over his street follows his mood. When he is sad, a little rain cloud hangs over his head and it drizzles or rains on his street. When he is happy, the sun comes out there, even if the rest of the city is grey. If you make him cross (hit him, wreck his shop front), it turns into a thunderstorm. Every day has its own mood: a bad day has a reason he tells you if you ask (his sourdough starter died, a critic called his rye "adequate"), and good days come too. Talk to him to cheer him up: praise his bread, tell a joke, buy a loaf, give him a hug, or say something kind in your own words. Stopping a crime near his street helps too, and harm near his shop makes him sad. Bringing him from gloom to sunshine is a small good deed (a little karma and reputation, once a day). He is at his door from 6:00 to 19:00, and people around town gossip about him. Danger sends him into his shop for a while. Admin console: City › The weather-moody baker.
