@@ -22,12 +22,16 @@ export const LOOK = {
    * where plain AgX had it (the shade still ends up deeper, which is the point).
    */
   exposure: 1.4,
+  /** At night less (the lamps and windows would bleach to white). */
+  exposureNight: 1.12,
 };
 
 /** The colour key over the day, by sun height (sin of its elevation). */
 export const LOOK_KEYS: readonly GradeKey[] = [
-  { at: -0.3, slope: [0.9, 0.96, 1.12], saturation: 0.95 },
-  { at: -0.08, slope: [0.96, 0.97, 1.08], saturation: 1.1 },
+  // Night and dusk stay near neutral: the city's sodium lamps and lit windows carry the warmth (a blue
+  // night key, as MasterWorld's open land has, turned them cold blue-white on Arnd's PC).
+  { at: -0.3, slope: [1.0, 0.99, 0.99], saturation: 1.08 },
+  { at: -0.08, slope: [1.0, 0.985, 0.98], saturation: 1.12 },
   { at: 0.04, slope: [1.06, 1.0, 0.94], saturation: 1.3 },
   { at: 0.25, slope: [1.03, 1.0, 0.97], saturation: 1.28 },
   { at: 0.6, slope: [1, 1, 1], saturation: 1.25 },

@@ -24,13 +24,13 @@ export const RIG = {
   /** A high clear sun: the sun is stronger by this, the sky's fill (map and hemisphere) weaker by these shares. */
   highSun: 0.4, highEnv: 0.6, highHemi: 0.5,
   /** How much of the low sun's dimming by the air the eye adapts away (0 none, 1 all), and the most it may add. */
-  sunAdapt: 0.6, sunAdaptMax: 2.5,
+  sunAdapt: 0.6, sunAdaptMax: 1.8,
   /** Ground albedo (paving, grass, earth): its share of the sunlight thrown back up. */
   groundAlbedo: 0.15,
   /** Bloom from this brightness on screen (after exposure), by day and at night (lit windows and lamps glow softly). */
-  bloomAtDay: 1.6, bloomAtNight: 1.2,
-  bloomStrengthDay: 0.16, bloomStrengthNight: 0.22,
-  bloomRadiusDay: 0.4, bloomRadiusNight: 0.55,
+  bloomAtDay: 2.4, bloomAtNight: 2.0,
+  bloomStrengthDay: 0.14, bloomStrengthNight: 0.15,
+  bloomRadiusDay: 0.4, bloomRadiusNight: 0.45,
 };
 /** The environment map below the horizon, as a share of the horizon: the ground gives back much less than the sky (shader constant). */
 export const ENV_GROUND = 0.45;
@@ -300,7 +300,7 @@ export class SkySystem {
     G.uLampOn.value = smoothstep(0.08, -0.06, sunUp);
 
     // Exposure: compensate darkness a bit at night (and the look's darker mid-tones: LOOK.exposure).
-    this.renderer.toneMappingExposure = lerp(1.6, 0.55, day) * (1 + 0.45 * dull * day) * (1 - 0.45 * wx.dark * day) * LOOK.exposure;
+    this.renderer.toneMappingExposure = lerp(1.6, 0.55, day) * (1 + 0.45 * dull * day) * (1 - 0.45 * wx.dark * day) * lerp(LOOK.exposureNight, LOOK.exposure, day);
 
     // Environment map refresh when the sun moved noticeably.
     const envWx = wx.cover + wx.dark + skyFog;
