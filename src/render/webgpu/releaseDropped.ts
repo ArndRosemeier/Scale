@@ -16,36 +16,42 @@
  *   when they stream out), and
  * - every 10 s, render objects not drawn since the last sweep whose mesh is no longer in a scene
  *   end too (meshes dropped without a dispose, with shared geometry or none of their own). If no
- *   other render object uses such a geometry any more, its GPU buffers are freed as well (the CPU
- *   copy stays, so a mesh put back simply uploads it again).
- * - An ended render object releases its pipeline and node build when it was their last user; three
- *   then forgets the compiled shader, and the next mesh of that kind would compile it again (a
- *   hitch, against the shader budget). Released ones are kept on a list of the most recent instead
+ *   other render object uses such a geometry any more, the renderer's strong reference to it (its
+ *   dispose-listener map) is dropped, so the geometry and its buffers go with the garbage collector
+ *   once the game lets go of it; a mesh put back still finds its buffers. (Dispatching `dispose`
+ *   instead, to free the buffers at once, broke meshes put back: their vertex buffers were gone.)
+ * - An ended render object releases its pipeline when it was its last user; three then forgets the
+ *   compiled shader, and the next mesh of that kind would compile it again (a hitch, against the
+ *   shader budget). Released pipelines and programs are kept on a list of the most recent instead
  *   and only really freed when pushed off its end.
  *
  * Internals (r186): `_objects` (RenderObjects: `_renderObjects`, `get`, `createRenderObject`),
- * `_pipelines` (`_releasePipeline`, `_releaseProgram`), `_nodes.nodeBuilderCache`.
+ * `_pipelines` (`_releasePipeline`, `_releaseProgram`).
  */
 import type * as THREE from 'three/webgpu';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Any = any;
 
-/** Released pipelines, programs and node builds kept compiled (most recently released last). */
-const KEEP_PIPELINES = 256, KEEP_PROGRAMS = 512, KEEP_NODE_BUILDS = 160;
+/** Released pipelines and programs kept compiled (most recently released last). */
+const KEEP_PIPELINES = 256, KEEP_PROGRAMS = 512;
 const SWEEP_MS = 10_000;
 
 /** What was released and kept, and what the sweeps ended (dev: `releaseStats()`). */
 export const releaseStats = { ended: 0, swept: 0, geometriesFreed: 0, sweeps: 0, lastSweepMs: 0 };
 
 export function releaseDroppedRenderObjects(renderer: THREE.WebGPURenderer): boolean {
-  const r = renderer as Any, objects = r._objects, pipelines = r._pipelines, nodes = r._nodes;
+  const r = renderer as Any, objects = r._objects, pipelines = r._pipelines;
   if (!objects?._renderObjects || typeof objects.get !== 'function' || typeof objects.createRenderObject !== 'function') return false;
-  if (typeof pipelines?._releasePipeline !== 'function' || typeof pipelines._releaseProgram !== 'function' || !(nodes?.nodeBuilderCache instanceof Map)) return false;
+  if (typeof pipelines?._releasePipeline !== 'function' || typeof pipelines._releaseProgram !== 'function') return false;
   if (objects.releasesDropped) return true;
+  // (Debug: &rdo=off | geo (end with geometry only) | sweep (sweep only) | nofree (no geometry freeing) | nokeep.)
+  const url = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.name ?? location.href;
+  const mode = new URL(url).searchParams.get('rdo') ?? '';
+  if (mode === 'off') return true;
   objects.releasesDropped = true;
   objects.releaseStats = releaseStats;
-  keepReleasedCompiles(pipelines, nodes);
+  if (mode !== 'nokeep') keepReleasedCompiles(pipelines);
 
   let tick = 0;
   const hook = (ro: Any): void => {
@@ -76,10 +82,11 @@ export function releaseDroppedRenderObjects(renderer: THREE.WebGPURenderer): boo
   objects.get = function (this: Any, ...a: unknown[]) {
     const ro = get.apply(this, a);
     ro.seen = tick;
-    hook(ro);
+    if (mode !== 'sweep') hook(ro);
     return ro;
   };
 
+  const listeners: Map<unknown, unknown> | undefined = r._geometries?._geometryDisposeListeners;
   const inScene = (o: Any): boolean => { while (o.parent) o = o.parent; return o.isScene === true; };
   const sweep = (): void => {
     const t0 = performance.now();
@@ -91,36 +98,29 @@ export function releaseDroppedRenderObjects(renderer: THREE.WebGPURenderer): boo
       ro.dispose();
       releaseStats.swept++;
     }
-    if (ended.size) {
+    if (ended.size && mode !== 'nofree' && listeners) {
       for (const ro of objects._renderObjects) ended.delete(ro.geometry);
-      for (const g of ended) if (g && freeable(g)) { g.dispatchEvent({ type: 'dispose' }); releaseStats.geometriesFreed++; }
+      for (const g of ended) if (g && listeners.delete(g)) releaseStats.geometriesFreed++;
     }
     tick++;
     releaseStats.sweeps++;
     releaseStats.lastSweepMs = +(performance.now() - t0).toFixed(2);
   };
+  objects.sweepNow = sweep;
   // One clock for the renderer's life (the creator's preview renderer is dropped when it closes).
   const ref = new WeakRef(renderer);
-  const id = setInterval(() => { if (ref.deref()) sweep(); else clearInterval(id); }, SWEEP_MS);
+  const id = setInterval(() => { if (mode === 'geo') return; if (ref.deref()) sweep(); else clearInterval(id); }, SWEEP_MS);
   return true;
 }
 
 /**
- * Geometry whose GPU buffers can be freed and uploaded again from the CPU copy: not one whose CPU
- * copy was dropped (gpuOnly), and not one the GPU writes itself (storage buffers, indirect draws).
+ * Released pipelines and programs stay compiled until KEEP_* newer ones push them out. (Not node
+ * builds: a node build owns its material's shared bind groups, which three frees together with the
+ * last render object using them; a kept build would hand the next mesh freed uniform buffers. The
+ * PC showed bare grey ground, no trees, a black screen. A rebuilt node build makes the same shader
+ * code, so it finds its program and pipeline here.)
  */
-function freeable(g: Any): boolean {
-  if (g.userData?.onGpu || g.indirect) return false;
-  if (g.index && !g.index.array) return false;
-  for (const k in g.attributes) {
-    const a = g.attributes[k];
-    if (a.isStorageBufferAttribute || a.isStorageInstancedBufferAttribute || !(a.array ?? a.data?.array)) return false;
-  }
-  return true;
-}
-
-/** Released pipelines, programs and node builds stay compiled until KEEP_* newer ones push them out. */
-function keepReleasedCompiles(pipelines: Any, nodes: Any): void {
+function keepReleasedCompiles(pipelines: Any): void {
   const keep = <T>(cap: number, free: (x: T) => void, unused: (x: T) => boolean) => {
     const list = new Map<T, true>();
     return (x: T): void => {
@@ -138,9 +138,4 @@ function keepReleasedCompiles(pipelines: Any, nodes: Any): void {
   const prog = keep<Any>(KEEP_PROGRAMS, (p) => releaseProgram.call(pipelines, p), (p) => p.usedTimes === 0);
   pipelines._releasePipeline = (p: Any) => pipe(p);
   pipelines._releaseProgram = (p: Any) => prog(p);
-  // Node builds: three deletes the cache entry when the last render object using it ends.
-  const cache: Map<unknown, Any> = nodes.nodeBuilderCache;
-  const del = cache.delete.bind(cache);
-  const build = keep<unknown>(KEEP_NODE_BUILDS, (k) => del(k), (k) => (cache.get(k)?.usedTimes ?? 0) === 0);
-  cache.delete = (k: unknown) => { if (cache.has(k)) build(k); return true; };
 }
