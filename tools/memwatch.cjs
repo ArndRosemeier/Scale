@@ -2,11 +2,11 @@
 // Usage (repo folder, dev server on the port from tools/memwatch.vite.config.mjs running): node tools/memwatch.cjs 5193 12 chrome 1
 // Writes memwatch-out/ next to the script. Needs playwright-core (or playwright) resolvable.
 // renderer info; a sampling heap profile over the run (what is still alive at the end, by allocating stack).
-// node memwatch.cjs <port> <minutes> [chromeChannel|exePath] [size]
+// node memwatch.cjs <port> <minutes> [chromeChannel|exePath|headless] [size] [gpu: webgl|webgpu]
 const { chromium } = (() => { try { return require('playwright-core'); } catch { return require('playwright'); } })();
 const fs = require('fs'), path = require('path'), os = require('os');
-const port = process.argv[2] || '5193', minutes = +(process.argv[3] || 12), chan = process.argv[4] || 'chrome', size = process.argv[5] || '1';
-const out = path.join(__dirname, 'memwatch-out'); fs.mkdirSync(out, { recursive: true });
+const port = process.argv[2] || '5193', minutes = +(process.argv[3] || 12), chan = process.argv[4] || 'chrome', size = process.argv[5] || '1', gpu = process.argv[6] || '';
+const out = path.join(__dirname, 'memwatch-out'); fs.mkdirSync(out, { recursive: true }); fs.rmSync(path.join(out, 'memwatch.log'), { force: true });
 const log = (s) => { console.log(s); fs.appendFileSync(path.join(out, 'memwatch.log'), s + '\n'); };
 (async () => {
   const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'scale-mem-'));
@@ -19,7 +19,7 @@ const log = (s) => { console.log(s); fs.appendFileSync(path.join(out, 'memwatch.
   page.on('pageerror', (e) => log('PAGEERR ' + e.message.slice(0, 200)));
   const cdp = await ctx.newCDPSession(page);
   const t0 = Date.now(), T = () => Math.round((Date.now() - t0) / 1000);
-  await page.goto(`http://localhost:${port}/?seed=42&size=${size}&auto&mute&mode=sandbox`);
+  await page.goto(`http://localhost:${port}/?seed=42&size=${size}&auto&mute&mode=sandbox${gpu ? '&gpu=' + gpu : ''}`);
   await page.waitForFunction(() => window.warmReport && document.querySelector('#loading')?.style.display === 'none', null, { timeout: 1200000, polling: 2000 });
   log(`loaded at ${T()} s, webgpu=${await page.evaluate(() => !!window.game.renderer.webgpu)}`);
   await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /^ok$/i.test(x.textContent.trim())); b?.click(); });
