@@ -8,9 +8,10 @@
  * no slower. Respects the stored volume, mute, music switch and music level, and `?mute` (tests).
  */
 import { storedMusicLevel } from '../Audio';
+import { versioned } from '../../core/versioned';
 
 const BASE = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
-const TRACK = `${BASE}music/title/dusk-awakening.mp3`;
+const TRACK = versioned(`${BASE}music/title/dusk-awakening.mp3`);
 /** The theme is mastered louder than the in-game stems; this sits it at the old menu level. */
 const MENU_LEVEL = 0.34;
 /** Seconds to fade in. */

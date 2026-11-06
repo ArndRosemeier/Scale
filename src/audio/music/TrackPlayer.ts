@@ -13,6 +13,7 @@
  */
 import { rainTint } from './mood';
 import { parseTracks, type TrackInfo } from './tracks';
+import { versioned } from '../../core/versioned';
 
 /** What the owner wants playing (id null: silence). */
 export interface TrackWant {
@@ -137,7 +138,7 @@ export class TrackPlayer {
   private element(info: TrackInfo): HTMLAudioElement {
     const el = new Audio();
     el.preload = 'auto';
-    el.src = `${this.base}music/${info.file}`;
+    el.src = versioned(`${this.base}music/${info.file}`);
     return el;
   }
 
@@ -226,7 +227,7 @@ export class TrackPlayer {
 
   private loadList(): void {
     this.listState = 'loading';
-    fetch(`${this.base}music/tracks.json`)
+    fetch(versioned(`${this.base}music/tracks.json`))
       .then((r) => (r.ok ? r.json() : null))
       .then((o) => {
         this.tracks = parseTracks(o);
@@ -270,7 +271,7 @@ export class TrackPlayer {
     e.tries++;
     this.loadingN++;
     let fetched = false;
-    fetch(`${this.base}music/${info.file}`)
+    fetch(versioned(`${this.base}music/${info.file}`))
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); })
       .then((ab) => { fetched = true; return ctx.decodeAudioData(ab); })
       .then((buf) => { e.buffer = buf; e.state = 'ready'; e.lastUse = ctx.currentTime; })

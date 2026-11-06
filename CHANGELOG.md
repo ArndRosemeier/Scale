@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.304 — 2026-11-06
+
+- Behind the scenes: sounds and music are now fetched with the game version attached (`sounds/amb_city_day.ogg?v=0.304`, also the sound list, the music tracks, the title theme and the concert list). The host's edge cache keeps files with fixed names for four hours, so a re-cut sound (like v0.303's day ambience) stayed old for players until then. Now every release fetches fresh copies, and the cache still works between releases (`src/core/versioned.ts`). No change in the game.
+
 ## 0.303 — 2026-11-06
 
 - **The short beep in the daytime city background is gone.** The day city ambience is a 24-second loop, and right where it wrapped around it held a half-second tonal "beep" (a distant horn-like tone around 670 Hz), so it came back every 24 s, a couple of times a minute, all day long. It isn't a game sound, so it didn't show up in the sound log or the sound effects list. The loop is re-cut without it (now 22.6 s, seamless, same level); nothing else changed. The night background still has its faint crickets; say if those should go too.

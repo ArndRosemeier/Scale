@@ -39,6 +39,7 @@ import { cityName } from '../../plan/names';
 import { musicianCostume, type MusicianPart } from '../street/costume';
 import { SHOW, SHOW_END, concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, type ConcertPlan, type ConcertPhase, type LiveSong, type BandRole } from './plan';
 import { Stage } from './Stage';
+import { versioned } from '../../core/versioned';
 
 const BASE = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
 
@@ -143,7 +144,7 @@ export class Concert {
   private loadLive(): void {
     if (this.liveState !== 'idle') return;
     this.liveState = 'loading';
-    fetch(`${BASE}music/live.json`).then((r) => r.json()).then((j) => { this.live = parseLive(j); this.liveState = 'ready'; }, () => { this.live = parseLive(null); this.liveState = 'ready'; });
+    fetch(versioned(`${BASE}music/live.json`)).then((r) => r.json()).then((j) => { this.live = parseLive(j); this.liveState = 'ready'; }, () => { this.live = parseLive(null); this.liveState = 'ready'; });
   }
 
   update(dt: number): void {
