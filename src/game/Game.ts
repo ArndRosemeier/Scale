@@ -70,6 +70,8 @@ import { setSight, markerOnScreen, screenPoint } from '../render/screen';
 import { makeSight } from './sightline';
 import { AdminConsole } from '../ui/AdminConsole';
 import { ShaderCounter } from '../debug/ShaderCounter';
+import { SoundLog } from '../debug/SoundLog';
+import { listenerDist } from '../audio/hearing';
 import { installFreezeLog } from '../debug/FreezeLog';
 import { Recorder } from '../ui/Recorder';
 import { lightPool } from '../render/lightPool';
@@ -105,6 +107,7 @@ import { TargetHud } from '../ui/TargetHud';
 import { SidekickPanel } from '../ui/SidekickPanel';
 import { Story } from './story/Story';
 import { GameMaster } from './gm/GameMaster';
+import { Villains } from './villains/Villains';
 import { Tracker } from '../ui/Tracker';
 import { CrimeSystem } from './crime/CrimeSystem';
 import { CityNews } from './news/CityNews';
@@ -115,8 +118,14 @@ import { CITY_GROUPS } from './factions/archetypes';
 import { StreetLife } from './street/StreetLife';
 import { Citizens } from './citizens/Citizens';
 import { Baker } from './citizens/baker/Baker';
+import { Florist } from './citizens/florist/Florist';
+import { Floater } from './citizens/floater/Floater';
+import { MagneticGrandma } from './citizens/grandma/MagneticGrandma';
+import { Gargoyle } from './citizens/gargoyle/Gargoyle';
+import { GhostGuide } from './ghost/GhostGuide';
 import { Concert } from './concert/Concert';
 import { Soccer } from './soccer/Soccer';
+import { GentleGiant } from './citizens/giant/GentleGiant';
 import { StationLife } from './metro/StationLife';
 import { ThreatDirector } from './threats/ThreatDirector';
 import { SlimeRealm } from './slimes/SlimeRealm';
@@ -229,6 +238,8 @@ export class Game {
   tracker!: Tracker;
   /** The game master (game/gm): what of the city's life reaches the hero, when. */
   gm!: GameMaster;
+  /** The city's supervillains (game/villains): who rises, when, their rumours and marks. */
+  villains!: Villains;
   synth!: PowerSynth;
   /** Quiet engine loops on the cars nearest the camera. */
   engines!: CarEngines;
@@ -242,10 +253,21 @@ export class Game {
   street: StreetLife | null = null;
   /** The city's well-known citizens: the weather-moody baker … (src/game/citizens). */
   citizens: Citizens | null = null;
+  /** The shrunk florist (game/citizens/florist). */
+  florist: Florist | null = null;
+  /** Leo Lightly, the man who can't land (game/citizens/floater). */
+  floater: Floater | null = null;
+  grandma: MagneticGrandma | null = null;
+  /** The retired cathedral gargoyle: stone by day, down on the square at night (src/game/citizens/gargoyle). */
+  gargoyle: Gargoyle | null = null;
+  /** The ghost tour guide's night tours (src/game/ghost). */
+  ghost: GhostGuide | null = null;
   /** The stadium's evening concert (src/game/concert). */
   concert: Concert | null = null;
   /** The stadium's daytime soccer matches (src/game/soccer). */
   soccer: Soccer | null = null;
+  /** The gentle giant at the stadium (src/game/citizens/giant). */
+  gentle: GentleGiant | null = null;
   /** Commuters on the metro's stairs, platforms and trains near the player. */
   stationLife: StationLife | null = null;
   /** City threats (the threat clock, omens, robot malfunctions) and the city's response to them. */
@@ -879,8 +901,9 @@ export class Game {
     this.T('crime', () => { this.crime.update(dt); this.city.update(dt); });
     this.wardrobe?.update(dt);
     this.T('arcade', () => this.arcade?.update(dt));
-    this.T('street', () => { this.street?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
-    this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); this.citizens?.update(dt); });
+    this.T('street', () => { this.street?.update(dt); this.florist?.update(dt); this.floater?.update(dt); this.grandma?.update(dt); this.gargoyle?.update(dt); this.ghost?.update(dt); this.concert?.update(dt); this.soccer?.update(dt); });
+    this.T('gentle', () => this.gentle?.update(dt));
+    this.T('people', () => { this.story?.update(dt); this.gm?.update(dt); this.villains?.update(dt); this.people?.update(dt); if (!this.freeCam) this.sidekick?.update(dt); this.citizens?.update(dt); });
     if (!this.intro?.active) this.T('fame', () => this.fame?.update(dt));
     this.T('threats', () => { this.threats.update(dt); this.response.update(dt); });
     if (!this.freeCam && !this.intro?.active) this.T('slimes', () => this.slimeRealm.update(dt));
@@ -924,7 +947,7 @@ export class Game {
     this.T('weather', () => this.weather.update(dt));
     this.T('sky', () => this.sky.update(dt, focus, cam));
     this.T('wardens', () => this.wardens?.update(dt));
-    this.renderer.setBloom(lerp(0.16, 0.08, this.sky.underground));
+    { const b = this.sky.bloom; this.renderer.setBloom(b.strength, b.radius, b.threshold); }
     const P = this.player;
     this.T('future', () => this.future.update(dt, this.sky.hoursAbs, focus, { active: !this.freeCam, x: P.pos.x, y: P.pos.y, z: P.pos.z, vx: P.vel.x, vy: P.vel.y, vz: P.vel.z, height: P.height, radius: P.radius, mass: P.mass }, cam));
     this.elements.postFuture();
@@ -1119,6 +1142,9 @@ export class Game {
     this.powers = new PowersScreen(this, this.abilities);
     // Targeting and the elemental powers.
     this.synth = new PowerSynth(() => this.audio.synthOut());
+    this.synth.onPlay = (kind, x, y, z) => this.audio.note(`synth_${kind}`, listenerDist(x, y, z));
+    this.synth.isOff = (id) => this.audio.isOff(id);
+    new SoundLog(this.audio);
     this.engines = new CarEngines(this.audio);
     this.targeting = new Targeting({
       peds: this.peds, traffic: this.traffic, parked: () => this.parkedList, future: this.future, props: this.props, world: this.world,
@@ -1249,15 +1275,22 @@ export class Game {
     this.hostile = new HostilePlayer(this);
     this.aftermath = new Aftermath(this);
     this.street = new StreetLife(this);
+    this.florist = new Florist(this);
+    this.floater = new Floater(this);
+    this.grandma = new MagneticGrandma(this);
+    this.gargoyle = new Gargoyle(this);
+    this.ghost = new GhostGuide(this);
     this.concert = new Concert(this);
     this.soccer = new Soccer(this);
     this.stationLife = new StationLife(this.underground, { spawnAt: (c, x, z, h) => this.peds.spawnAt(c, x, z, h), citizen: (seed) => this.population.synthetic(seed) }, this.macro.metroLines);
     this.slimeRealm = new SlimeRealm(this);
     this.people = new People(this);
     this.gm = new GameMaster(this);
+    this.villains = new Villains(this);
     this.wardrobe = new Wardrobe(this);
     this.arcade = new Arcade(this);
     this.fame = new Fame(this);
+    this.gentle = new GentleGiant(this);
     this.sidekick = new Sidekick(this);
     this.matePanel = new SidekickPanel(this.targeting, this.sidekick);
     this.citizens = new Citizens();
@@ -1438,6 +1471,8 @@ export class Game {
     if (dress) return dress;
     const shard = this.sidekick?.hint();
     if (shard) return shard;
+    const garg = this.gargoyle?.hint();
+    if (garg) return garg;
     const talk = this.people?.hint();
     if (talk) return talk;
     if (this.seatNear()) return 'Press <b>E</b> to sit down';
@@ -1493,6 +1528,8 @@ export class Game {
     if (this.arcade?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Take the glowing stone (the second shard).
     if (this.sidekick?.use()) { this.input.pressed.delete('KeyE'); return; }
+    // Talk to the gargoyle (or look at it, by day).
+    if (this.gargoyle?.use()) { this.input.pressed.delete('KeyE'); return; }
     // Talk to the person in front (or the one targeted).
     if (this.people.use()) { this.input.pressed.delete('KeyE'); return; }
     const seat = this.seatNear();

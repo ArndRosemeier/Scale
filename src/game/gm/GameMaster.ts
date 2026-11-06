@@ -19,7 +19,7 @@ import { Director, GM, NEEDS, followedGroup, hideoutRumour, type GmMove, type Ne
 import { hideoutCell } from '../factions/Hideouts';
 import { BOSS_KINDS } from '../factions/Bosses';
 import { deriveSeed, hashToFloat, hash32 } from '../../core/rng';
-import { clueTime } from '../story/knowledge';
+import { clueTime, type ThreadInfo } from '../story/knowledge';
 import { esc } from '../../ui/esc';
 import { Signs } from './Signs';
 import { Callbacks } from './Callbacks';
@@ -183,8 +183,18 @@ export class GameMaster {
    */
   talkFacts(personSeed: number): { heard: string } | null {
     const R = this.dir.state.rumour;
-    if (!this.enabled || !R || R.until < this.g.sky.hoursAbs) return null;
+    if (!this.enabled) return null;
+    // Nothing of its own going round: what people whisper about a rising villain (game/villains).
+    if (!R || R.until < this.g.sky.hoursAbs) return this.g.villains?.talkFacts(personSeed) ?? null;
     return hashToFloat(hash32(personSeed ^ 0x6d2b79f5)) < 0.55 ? { heard: R.text } : null;
+  }
+
+  /** The rumour going round now and its group's thread (the gargoyle's pigeons always know it), or null. */
+  rumourNow(): { text: string; info: ThreadInfo } | null {
+    const R = this.dir.state.rumour;
+    if (!this.enabled || !R || R.until < this.g.sky.hoursAbs || !this.g.story) return null;
+    const f = this.g.crime.factions.factions.find((x) => `group:${x.archetype}` === R.thread);
+    return f ? { text: R.text, info: this.g.story.group(f) } : null;
   }
 
   /** Someone told the hero the rumour (People.ask): a clue in the group's thread. */

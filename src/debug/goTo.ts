@@ -272,12 +272,18 @@ export class GoTo {
     out.push(scanned('Clothes shop, inside (next)', 'clothes', (s) => this.shop(s, isClothesShop)));
     out.push({ group: 'City', label: 'Fitting mirror (nearest clothes shop)', count: 1, go: () => call(this.dev(), 'mirror') });
     const d = this.dev();
+    if (d.florist) out.push({ group: 'City', label: 'The shrunk florist', count: 1, go: () => call(this.dev(), 'florist.go') });
+    if (d.floater) out.push({ group: 'City', label: 'Leo Lightly, the man who can\'t land', count: 1, go: () => call(this.dev(), 'floater.go') });
+    if (d.giant) out.push({ group: 'City', label: 'The gentle giant (stadium)', count: 1, go: () => call(this.dev(), 'giant.go') });
     if (d.concert) for (const w of ['stage', 'pit', 'stand'] as const) out.push({ group: 'City', label: `Concert: ${w === 'stand' ? 'stands' : w}`, count: 1, go: () => call(this.dev(), 'concert.go', w) });
     // The well-known citizens (game/citizens): the weather-moody baker …
     for (const c of this.g.citizens?.list ?? []) {
       if (!c.where) continue;
       out.push({ group: 'City', label: c.label ?? c.id, count: 1, go: () => { const w = c.where!(); return w ? this.near(w.x, w.z, 6) : 'not found yet'; } });
     }
+    // The magnetic grandma: to her if she is out, else to her neighbourhood (she comes out in the day).
+    const gm = this.g.grandma;
+    if (gm?.home) out.push({ group: 'City', label: 'Magnetic grandma', count: 1, go: () => { const a = gm.her?.a; return a ? this.near(a.x, a.z, 6) : this.near(gm.home!.x, gm.home!.z, 0); } });
     // Villages, towns and farms out in the countryside.
     const rural = d.rural?.list?.(-1, 200) as { id: number; kind: number; name: string; x: number; z: number }[] | undefined;
     if (rural?.length) {

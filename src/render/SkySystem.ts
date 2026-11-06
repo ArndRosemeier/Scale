@@ -8,6 +8,48 @@ import { WEBGPU, gpuKit } from './gpuMode';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { G } from './materials/globals';
 import { clamp, smoothstep, lerp } from '../core/math';
+import { LOOK, lookAt, sunTransmittance } from './look';
+
+/**
+ * The light rig's balance (MasterWorld's lighting pass, ported back): the sky lights the shade mostly
+ * through its environment map (which has a bright side towards the sun and a blue zenith), and only a
+ * share of the flat hemisphere fill is left; the hemisphere's ground colour is the light the sunlit
+ * ground throws back up.
+ */
+export const RIG = {
+  /** The share of the old flat sky fill kept by day (the environment map gives the rest, with direction). */
+  skyHemi: 0.55,
+  /** The environment map's strength on top of the old rig (it takes over part of the hemisphere's sky fill). */
+  skyEnv: 2.2,
+  /** A high clear sun: the sun is stronger by this, the sky's fill (map and hemisphere) weaker by these shares. */
+  highSun: 0.4, highEnv: 0.6, highHemi: 0.5,
+  /** How much of the low sun's dimming by the air the eye adapts away (0 none, 1 all), and the most it may add. */
+  sunAdapt: 0.6, sunAdaptMax: 1.8,
+  /** Ground albedo (paving, grass, earth): its share of the sunlight thrown back up. */
+  groundAlbedo: 0.15,
+  /** Bloom from this brightness on screen (after exposure), by day and at night (lit windows and lamps glow softly). */
+  bloomAtDay: 2.4, bloomAtNight: 2.0,
+  bloomStrengthDay: 0.14, bloomStrengthNight: 0.15,
+  bloomRadiusDay: 0.4, bloomRadiusNight: 0.45,
+};
+/** The environment map below the horizon, as a share of the horizon: the ground gives back much less than the sky (shader constant). */
+export const ENV_GROUND = 0.45;
+
+/**
+ * The sky's light falls with the sun about as fast as the sun's own (Preetham), so a low sun would leave
+ * the shade nearly black; real skies keep more. The env map's strength is raised by the square root of how
+ * much its irradiance fell from midday, at most 3x (sky irradiance by sun height, integrated from the sky
+ * shader offline; MasterWorld's lowSunSky).
+ */
+const SKY_E: [number, number][] = [[0, 0.079], [0.03, 0.221], [0.06, 0.428], [0.1, 0.78], [0.15, 1.287], [0.2, 1.797], [0.3, 2.643], [0.4, 3.239], [0.5, 3.757], [0.6, 4.374], [0.7, 5.175]];
+export function lowSunSky(sunUp: number): number {
+  const up = Math.min(Math.max(sunUp, 0), 0.7);
+  let i = 1;
+  while (i < SKY_E.length - 1 && SKY_E[i]![0] < up) i++;
+  const [a, ea] = SKY_E[i - 1]!, [b, eb] = SKY_E[i]!;
+  const e = ea + ((eb - ea) * (up - a)) / (b - a);
+  return Math.min(3, Math.sqrt(SKY_E[SKY_E.length - 1]![1] / e));
+}
 
 export class SkySystem {
   readonly sky: Sky;
@@ -204,21 +246,35 @@ export class SkySystem {
       sc.updateProjectionMatrix();
     }
     this.sun.shadow.normalBias = 0.02 * ext / 60;
-    const sunCol = new THREE.Color().setRGB(1, lerp(0.95, 0.62, golden), lerp(0.9, 0.42, golden));
+    // A high sun in a clear sky gives most of the light: the sky's share falls, so shadows read at
+    // midday (sun x1.4, sky fill x0.4 at full height). A low or clouded sun keeps the old balance.
+    const high = smoothstep(0.2, 0.7, sunUp) * wx.sun;
     if (sunUp > -0.05) {
-      this.sun.color.copy(sunCol);
-      this.sun.intensity = 3.2 * smoothstep(-0.05, 0.12, sunUp) * wx.sun;
+      // The sky's own air colours the sunlight (white at noon, yellow, orange, red as it sets); the eye
+      // adapts away part of the dimming, so a low sun stays bright enough while keeping its colour.
+      const t = sunTransmittance(sunUp, _tr);
+      this.sun.color.setRGB(t[0] ** 0.8 + 0.03, t[1] ** 0.8 + 0.02, t[2] ** 0.8 + 0.02);
+      const c = this.sun.color, lum = Math.max(0.05, 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+      this.sun.intensity = 3.2 * smoothstep(-0.05, 0.12, sunUp) * wx.sun * (1 + RIG.highSun * high) * Math.min(lum ** -RIG.sunAdapt, RIG.sunAdaptMax);
     } else {
       this.sun.color.setRGB(0.55, 0.65, 0.9);
       this.sun.intensity = 0.25 * night * wx.sun * (0.45 + 0.75 * this.moonLit * moonUp);
     }
     // Under clouds the light is diffuse: less sun, a little more (greyer) sky light; a flash lights everything.
     const dull = 1 - wx.sun;
-    this.hemi.intensity = lerp(0.06, 0.75, day) * (1 + 0.35 * dull) * (1 - 0.4 * wx.dark) + wx.flash * 1.4;
+    // The flat sky fill: a share of the old one by day (the environment map gives the rest, with
+    // direction), all of it at night and under a dull sky.
+    const hemiSky = lerp(1, RIG.skyHemi, day * (1 - 0.6 * dull)) * (1 - RIG.highHemi * high);
+    this.hemi.intensity = lerp(0.06, 0.75, day) * (1 + 0.35 * dull) * (1 - 0.4 * wx.dark) * hemiSky + wx.flash * 1.4;
     this.hemi.color.setRGB(lerp(0.25, 0.75, day), lerp(0.3, 0.84, day), lerp(0.5, 1.0, day));
     this.hemi.color.lerp(_grey.setScalar((this.hemi.color.r + this.hemi.color.g + this.hemi.color.b) / 3), dull * 0.75);
     this.hemi.color.lerp(_flashCol, clamp(wx.flash, 0, 1));
-    this.hemi.groundColor.setRGB(lerp(0.06, 0.38, day), lerp(0.06, 0.34, day), lerp(0.08, 0.28, day));
+    // From below: the light the sunlit ground throws back (its colour is the sun's), over a dim base.
+    {
+      const lit = RIG.groundAlbedo * this.sun.intensity * Math.max(lightDir.y, 0) / Math.max(1e-3, this.hemi.intensity);
+      const sc = this.sun.color;
+      this.hemi.groundColor.setRGB(lerp(0.06, 0.12, day) + sc.r * lit * 1.05, lerp(0.06, 0.11, day) + sc.g * lit, lerp(0.08, 0.1, day) + sc.b * lit * 0.8);
+    }
 
     // Fog colour follows the horizon.
     const fog = this.scene.fog as THREE.FogExp2;
@@ -243,8 +299,8 @@ export class SkySystem {
     G.uEatLit.value = h > 6.5 && h < 22 ? 0.97 : h >= 22 ? 0.8 : h < 1.5 ? 0.45 : 0.06;
     G.uLampOn.value = smoothstep(0.08, -0.06, sunUp);
 
-    // Exposure: compensate darkness a bit at night.
-    this.renderer.toneMappingExposure = lerp(1.6, 0.55, day) * (1 + 0.45 * dull * day) * (1 - 0.45 * wx.dark * day);
+    // Exposure: compensate darkness a bit at night (and the look's darker mid-tones: LOOK.exposure).
+    this.renderer.toneMappingExposure = lerp(1.6, 0.55, day) * (1 + 0.45 * dull * day) * (1 - 0.45 * wx.dark * day) * lerp(LOOK.exposureNight, LOOK.exposure, day);
 
     // Environment map refresh when the sun moved noticeably.
     const envWx = wx.cover + wx.dark + skyFog;
@@ -264,10 +320,12 @@ export class SkySystem {
       }
       this.envBase = lerp(0.05, 0.22, day) * (1 - 0.3 * wx.dark);
     }
+    // The sky map lights the shade (RIG.skyEnv), more so under a low sun (lowSunSky), less under a high clear one.
+    const envDay = this.envBase * lerp(1, RIG.skyEnv * lowSunSky(sunUp), day) * (1 - RIG.highEnv * high);
     // Underground: no sun or sky; a faint neutral fill, dense dark haze, slightly higher exposure.
     const u = this.underground;
     const ind = this.indoor * (1 - u);
-    this.scene.environmentIntensity = (this.envBase + wx.flash * 0.25) * (1 - 0.92 * u) * (1 - 0.6 * ind);
+    this.scene.environmentIntensity = (envDay + wx.flash * 0.25) * (1 - 0.92 * u) * (1 - 0.6 * ind);
     if (ind > 0) {
       this.hemi.intensity *= 1 - 0.7 * ind;
     }
@@ -288,7 +346,17 @@ export class SkySystem {
         this.renderer.toneMappingExposure = lerp(this.renderer.toneMappingExposure, 1.05, dp);
       }
     } else fog.density = fogD;
+    // The colour key follows the sun; underground the lamps set the colour (the day's neutral key).
+    lookAt(sunUp, Math.max(u, 0.6 * ind));
+    // Bloom from a brightness on screen: the threshold follows the exposure.
+    const bd = day * (1 - u);
+    this.bloom.strength = lerp(RIG.bloomStrengthNight, RIG.bloomStrengthDay, bd) * lerp(1, 0.5, u);
+    this.bloom.radius = lerp(RIG.bloomRadiusNight, RIG.bloomRadiusDay, bd);
+    this.bloom.threshold = lerp(RIG.bloomAtNight, RIG.bloomAtDay, bd) / Math.max(1e-3, this.renderer.toneMappingExposure);
   }
+
+  /** The bloom this frame wants (Game hands it to the renderer). */
+  readonly bloom = { strength: RIG.bloomStrengthDay, radius: RIG.bloomRadiusDay, threshold: 2 };
 }
 
 /** Angular radius of the drawn sun and moon discs (~3× the real ones, so they read on screen). */
@@ -313,7 +381,7 @@ export function moonPhase(hoursAbs: number): number {
 
 function makeSky(reversed: boolean, env: boolean): Sky {
   // WebGPU: the same sky as a node material (render/webgpu/sky.ts), same uniforms.
-  if (WEBGPU) return gpuKit().makeSkyNode(reversed, env, SUN_R, MOON_R) as unknown as Sky;
+  if (WEBGPU) return gpuKit().makeSkyNode(reversed, env, SUN_R, MOON_R, ENV_GROUND) as unknown as Sky;
   const sky = new Sky();
   const u = sky.material.uniforms;
   u.turbidity.value = 4;
@@ -374,6 +442,7 @@ function makeSky(reversed: boolean, env: boolean): Sky {
 			texColor += vec3( 0.7, 0.75, 0.9 ) * flash * 0.5 * ( 0.3 + pow( max( dot( direction, flashDir ), 0.0 ), 4.0 ) );
 			float hz = 1.0 - smoothstep( -0.02, 0.4, direction.y );
 			texColor = mix( texColor, fogCol, clamp( skyFog * mix( hz, 1.0, skyFog * skyFog ), 0.0, 1.0 ) );
+			${env ? `texColor *= mix( ${ENV_GROUND.toFixed(3)}, 1.0, smoothstep( -0.12, 0.0, direction.y ) );` : ''}
 			gl_FragColor = vec4( texColor, 1.0 );`);
   if (reversed) {
     sky.material.vertexShader = sky.material.vertexShader.replace('gl_Position.z = gl_Position.w;', 'gl_Position.z = 0.0;');
@@ -382,6 +451,7 @@ function makeSky(reversed: boolean, env: boolean): Sky {
 }
 
 const _grey = new THREE.Color();
+const _tr: [number, number, number] = [1, 1, 1];
 const _nightDir = new THREE.Vector3();
 const _perp = new THREE.Vector3();
 const _flashCol = new THREE.Color(0.8, 0.85, 1.0);

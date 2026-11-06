@@ -309,11 +309,25 @@ const SECTIONS: [string, Btn[]][] = [
     { label: 'Plan a boss job (cased first)', run: (_g, d) => call(d, 'gm.plan', 'syndicate') },
     { label: 'Signs', run: (_g, d) => call(d, 'gm.signs') },
   ]],
+  ['Supervillains', [
+    { label: 'Status', run: (_g, d) => call(d, 'villains.status') },
+    { label: 'Rise one (as the city has it)', run: (_g, d) => call(d, 'villains.rise') },
+    { label: 'Rise: boss who rose', run: (_g, d) => call(d, 'villains.rise', 'boss') },
+    { label: 'Rise: outsider', run: (_g, d) => call(d, 'villains.rise', 'outsider') },
+    { label: 'Next stage', run: (_g, d) => call(d, 'villains.stage') },
+    { label: 'Mark a wall here', run: (_g, d) => call(d, 'villains.mark') },
+    { label: 'Hear a whisper', run: (_g, d) => call(d, 'villains.whisper') },
+  ]],
   ['Street life', [
     ...(['preacher', 'busker', 'statue', 'mime', 'juggler', 'dancer', 'mascot', 'conspiracy', 'pigeons', 'sleepwalker', 'tourist', 'jogger'] as const).map((k) => ({ label: k[0].toUpperCase() + k.slice(1), run: (_g: Game, d: Dev) => call(d, 'street.spawn', k, 7) })),
     { label: 'Who is about', run: (_g, d) => call(d, 'street.list') },
     { label: 'Sites near', run: (_g, d) => call(d, 'street.sites') },
     { label: 'Clear', run: (_g, d) => call(d, 'street.clear') },
+  ]],
+  ['Ghost tour guide', [
+    { label: 'Start a tour here (any hour)', run: (_g, d) => call(d, 'ghost.tour') },
+    { label: 'Where is he', run: (_g, d) => call(d, 'ghost.state') },
+    { label: 'End the tour', run: (_g, d) => call(d, 'ghost.end') },
   ]],
   ['Player', [
     { label: '+100 karma', run: (g) => { g.progress.addKarma(100, 'admin'); return g.progress.sandbox ? 'sandbox has no karma' : g.progress.karma; } },

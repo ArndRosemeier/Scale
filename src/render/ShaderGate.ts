@@ -34,6 +34,8 @@ interface Pending {
 const HIDDEN_LAYER = 30;
 /** A mesh waits at most this long for its program, then it is shown anyway. */
 const GIVE_UP_MS = 8000;
+/** How long a mesh checked without a shadow is watched for its shadow being switched on (ms). */
+const SHADOW_WATCH_MS = 10000;
 
 /** Released by three (no material uses it any more): deleted, it will never report ready. */
 function released(p: { isReady(): boolean }): boolean {
@@ -41,7 +43,7 @@ function released(p: { isReady(): boolean }): boolean {
 }
 
 export class ShaderGate {
-  readonly stats = { checked: 0, passed: 0, standins: 0, hidden: 0, swapped: 0, shadowWaits: 0, late: [] as { what: string; ms: number }[] };
+  readonly stats = { checked: 0, passed: 0, standins: 0, hidden: 0, swapped: 0, shadowWaits: 0, lateShadows: 0, lateShadowNames: [] as string[], late: [] as { what: string; ms: number }[] };
   private seen = new WeakMap<THREE.Object3D, THREE.Material | THREE.Material[]>();
   private queue: THREE.Object3D[] = [];
   private pending: Pending[] = [];
@@ -49,6 +51,13 @@ export class ShaderGate {
   private shadowScene: THREE.Scene;
   private depthMats = new Map<string, THREE.MeshDepthMaterial>();
   private shadowWait: { mesh: THREE.Mesh; progs: { isReady(): boolean }[] }[] = [];
+  /**
+   * Meshes checked while they cast no shadow, watched for a while: their owner may switch the
+   * shadow on just after adding them (a rig's garments get theirs on the rig's next update, which
+   * for some rigs comes a frame after the gate looked). Their shadow-pass programs then compile
+   * here instead of at the first shadow draw.
+   */
+  private shadowLater: { mesh: THREE.Mesh; until: number }[] = [];
   private lights: THREE.Light[] = [];
   private lightCount = -1;
   private lightsAt = -1e9;
@@ -86,6 +95,89 @@ export class ShaderGate {
       for (const o of objs) if ((o as THREE.Light).isLight || o.children.some((c) => (c as THREE.Light).isLight)) gate.lightsDirty = true;
       return r;
     };
+    if (!WEBGPU) this.hookShadowPass();
+  }
+
+  // ------------------------------------------------------------------ shadow priming
+
+  /** Meshes to draw once into the shadow map (see primeShadows), with how often each was tried. */
+  private primeQueue: { mesh: THREE.Mesh; progs: { isReady(): boolean }[]; t0: number }[] = [];
+  /** Shadow priming: meshes drawn, and the frames that drew some. */
+  readonly primeStats = { meshes: 0, frames: 0 };
+
+  /**
+   * Draw these meshes (castShadow ones under `root`, visible or not) once into the shadow map,
+   * writing nothing: one triangle each, colour and depth writes off.
+   *
+   * A compiled program is not the whole cost: the first time it draws with a new kind of vertex
+   * data or into a new kind of target, ANGLE (D3D11) builds that variant of the shader in the GPU
+   * process, which holds up the frame (a skinned figure's shadow, the first time a new rig cast
+   * one: 177 ms on Arnd's PC). The warm-up primes the hidden stand-in people this way, which are
+   * never drawn otherwise, so the people met later find those variants built.
+   */
+  primeShadows(root: THREE.Object3D): void {
+    // (No shadow map, no shadow variants: a start without shadows compiled none either.)
+    if (WEBGPU || !this.renderer.shadowMap.enabled) return;
+    if (this.lightsDirty) this.refreshLights();
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.castShadow) return;
+      // (Their programs first: a draw before they are ready would wait for them.)
+      const progs = this.compileShadow(m, Array.isArray(m.material) ? m.material : [m.material]);
+      this.primeQueue.push({ mesh: m, progs, t0: performance.now() });
+    });
+  }
+
+  /** After three's shadow pass (while its render state is set up), draws the queued primes. */
+  private hookShadowPass(): void {
+    const sm = this.renderer.shadowMap as THREE.WebGLShadowMap & { render: (lights: THREE.Light[], scene: THREE.Scene, camera: THREE.Camera) => void };
+    if (!sm || typeof sm.render !== 'function') return;
+    const orig = sm.render.bind(sm);
+    sm.render = (lights, scene, camera) => {
+      const ran = sm.enabled && (sm.autoUpdate || sm.needsUpdate) && lights.length > 0;
+      orig(lights, scene, camera);
+      if (ran && this.primeQueue.length) this.primeDraws(lights);
+    };
+  }
+
+  private primeDraws(lights: THREE.Light[]): void {
+    const light = lights.find((l) => (l as THREE.DirectionalLight).shadow?.map) as THREE.DirectionalLight | undefined;
+    if (!light || (light as unknown as THREE.PointLight).isPointLight) return;
+    const R = this.renderer, cam = light.shadow.camera;
+    const prev = R.getRenderTarget(), face = R.getActiveCubeFace(), mip = R.getActiveMipmapLevel();
+    R.setRenderTarget(light.shadow.map as unknown as THREE.WebGLRenderTarget);
+    let drawn = 0;
+    try {
+      this.primeQueue = this.primeQueue.filter((q) => {
+        const mesh = q.mesh;
+        if (!this.inScene(mesh)) return false;
+        if (drawn >= 32) return true;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const shown = mats.filter((m) => m && m.visible);
+        // Not compiled yet: next frame (a few seconds at most, then left to the real draw).
+        if (!q.progs.every((p) => released(p) || p.isReady())) return true;
+        const geo = mesh.geometry, dr = geo.drawRange, start = dr.start, count = dr.count;
+        geo.setDrawRange(0, 3);
+        mesh.modelViewMatrix.multiplyMatrices(cam.matrixWorldInverse, mesh.matrixWorld);
+        try {
+          for (const m of shown) {
+            // (Set up per material, as three does: a shared depth material differs per draw.)
+            const d = this.depthFor(mesh, m);
+            const cw = d.colorWrite, dw = d.depthWrite;
+            d.colorWrite = false; d.depthWrite = false;
+            try { R.renderBufferDirect(cam, null as unknown as THREE.Scene, geo, d, mesh, null as unknown as THREE.GeometryGroup); } finally { d.colorWrite = cw; d.depthWrite = dw; }
+          }
+        } finally {
+          geo.setDrawRange(start, count);
+        }
+        drawn++;
+        this.primeStats.meshes++;
+        return false;
+      });
+    } finally {
+      R.setRenderTarget(prev, face, mip);
+    }
+    if (drawn) this.primeStats.frames++;
   }
 
   /** Mark everything currently in the scene as known (after the start-up warm-up). */
@@ -243,6 +335,13 @@ export class ShaderGate {
         return false;
       });
     }
+    if (this.shadowLater.length) {
+      const now = performance.now();
+      this.shadowLater = this.shadowLater.filter((w) => {
+        if (w.mesh.castShadow && this.lateShadow(w.mesh)) return false;
+        return now < w.until;
+      });
+    }
     if (this.shadowWait.length) {
       this.shadowWait = this.shadowWait.filter((w) => {
         if (!w.progs.every((p) => released(p) || p.isReady())) return true;
@@ -253,6 +352,12 @@ export class ShaderGate {
         }
         return false;
       });
+    }
+    // Primes left undrawn (the shadow map off or not updating, programs never ready): given up.
+    if (this.primeQueue.length) {
+      const now = performance.now();
+      if (!this.renderer.shadowMap.enabled) this.primeQueue.length = 0;
+      else this.primeQueue = this.primeQueue.filter((q) => now - q.t0 < GIVE_UP_MS);
     }
     // Background precompiles finished?
     if (this.warm.length) this.warm = this.warm.filter((w) => !this.allReady(w.o));
@@ -298,7 +403,7 @@ export class ShaderGate {
     return `gate: ${this.pending.length} waiting${this.pending.length ? ` (oldest ${(oldest / 1000).toFixed(1)} s: ${describe(this.pending[0].mesh, this.pending[0].real)})` : ''}, ${this.shadowWait.length} shadow, ${this.warm.length} precompiles, ${this.backlog.length} under cap; shaders started last 2 s: ${n2}, last 10 s: ${n10}`;
   }
 
-  get busy(): number { return this.pending.length + this.warm.length + this.gpuPending; }
+  get busy(): number { return this.pending.length + this.warm.length + this.gpuPending + this.primeQueue.length; }
 
   /** What is still waiting for its shader (for the warm-up report). */
   waiting(): string[] {
@@ -334,7 +439,27 @@ export class ShaderGate {
         if (!wasPending) mesh.castShadow = false;
         this.shadowWait.push({ mesh, progs: dprogs });
       }
+    } else if (mesh.isMesh) {
+      this.shadowLater.push({ mesh, until: performance.now() + SHADOW_WATCH_MS });
     }
+  }
+
+  /** A checked mesh started casting a shadow: compile its shadow-pass programs, no shadow until ready. */
+  private lateShadow(mesh: THREE.Mesh): boolean {
+    if (!this.inScene(mesh)) return false; // (not drawn yet: look again next frame)
+    if (this.lightsDirty) this.refreshLights();
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const dprogs = this.compileShadow(mesh, mats);
+    const p = this.pending.find((q) => q.mesh === mesh);
+    if (p) p.castShadow = true; // (restored with it once its real program is ready)
+    if (!dprogs.length) return true;
+    this.stats.lateShadows++;
+    if (this.stats.lateShadowNames.length < 40) this.stats.lateShadowNames.push(describe(mesh, mats[0]));
+    if (this.shadowWait.some((w) => w.mesh === mesh)) return true;
+    mesh.castShadow = false;
+    if (!p) this.shadowCast.set(mesh, true);
+    this.shadowWait.push({ mesh, progs: dprogs });
+    return true;
   }
 
   private gate(mesh: THREE.Mesh, slot: number, real: THREE.Material, progs: Map<THREE.Material, { isReady(): boolean }>): void {
@@ -397,23 +522,37 @@ export class ShaderGate {
     return out;
   }
 
-  /** The depth material the shadow map will use for this mesh/material (same program key). */
+  /**
+   * The depth material the shadow map will use for this mesh/material (same program key), set up
+   * as three's WebGLShadowMap.getDepthMaterial sets it before every shadow draw: side (flipped),
+   * maps, alpha test, clipping, displacement. That includes a mesh's own customDepthMaterial, which
+   * several meshes may share: a rig's shared depth material drew double-sided for the briefs and
+   * the hair but had been compiled with the body's back side, so the double-sided variant was built
+   * at the briefs' first shadow draw (the gentle giant's 0.2 s hitch on Arnd's PC).
+   */
   private depthFor(mesh: THREE.Mesh, m: THREE.Material): THREE.Material {
-    if (mesh.customDepthMaterial) return mesh.customDepthMaterial;
     const src = m as THREE.MeshStandardMaterial;
-    const needsOwn = (src.alphaMap && src.alphaTest > 0) || (src.map && src.alphaTest > 0) || (src.displacementMap && src.displacementScale !== 0) || src.alphaToCoverage;
-    const side = src.shadowSide ?? (src.side === THREE.FrontSide ? THREE.BackSide : src.side === THREE.BackSide ? THREE.FrontSide : THREE.DoubleSide);
-    const key = needsOwn ? `${src.map ? 1 : 0}${src.alphaMap ? 1 : 0}${src.displacementMap ? 1 : 0}|${side}` : `base|${side}`;
-    let d = this.depthMats.get(key);
+    let d = mesh.customDepthMaterial as THREE.MeshDepthMaterial | undefined;
     if (!d) {
-      d = new THREE.MeshDepthMaterial();
-      if (needsOwn) {
-        d.map = src.map ?? null; d.alphaMap = src.alphaMap ?? null; d.alphaTest = src.alphaToCoverage ? 0.5 : src.alphaTest;
-        d.displacementMap = src.displacementMap ?? null; d.displacementScale = src.displacementScale ?? 1; d.displacementBias = src.displacementBias ?? 0;
-      }
-      d.side = side;
-      this.depthMats.set(key, d);
+      const needsOwn = (src.alphaMap && src.alphaTest > 0) || (src.map && src.alphaTest > 0) || (src.displacementMap && src.displacementScale !== 0) || src.alphaToCoverage;
+      // (One per kind three keeps apart: its shared one, or its copy per material that needs its own.)
+      const key = needsOwn ? `${src.map ? 1 : 0}${src.alphaMap ? 1 : 0}${src.displacementMap ? 1 : 0}` : 'base';
+      d = this.depthMats.get(key);
+      if (!d) this.depthMats.set(key, d = new THREE.MeshDepthMaterial());
     }
+    const flip = this.renderer.shadowMap.type !== THREE.VSMShadowMap;
+    d.visible = src.visible;
+    d.wireframe = src.wireframe ?? false;
+    d.side = src.shadowSide ?? (!flip ? src.side : src.side === THREE.FrontSide ? THREE.BackSide : src.side === THREE.BackSide ? THREE.FrontSide : THREE.DoubleSide);
+    d.alphaMap = src.alphaMap ?? null;
+    d.alphaTest = src.alphaToCoverage ? 0.5 : (src.alphaTest ?? 0);
+    d.map = src.map ?? null;
+    d.clipShadows = src.clipShadows ?? false;
+    d.clippingPlanes = src.clippingPlanes ?? null;
+    d.clipIntersection = src.clipIntersection ?? false;
+    d.displacementMap = src.displacementMap ?? null;
+    d.displacementScale = src.displacementScale ?? 1;
+    d.displacementBias = src.displacementBias ?? 0;
     return d;
   }
 

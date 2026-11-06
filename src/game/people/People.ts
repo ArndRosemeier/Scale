@@ -31,7 +31,7 @@ import type { ThreadInfo } from '../story/knowledge';
 import type { Game } from '../Game';
 import { PState, type PedAgent } from '../../sim/Pedestrians';
 import { Role, type Citizen } from '../../sim/Population';
-import { makeActor, release, STREET_OWNER, PEOPLE_OWNER, type Actor, type Mood } from '../../sim/actors/Actor';
+import { makeActor, release, STREET_OWNER, PEOPLE_OWNER, GRANDMA_OWNER, type Actor, type Mood } from '../../sim/actors/Actor';
 import { cityName, streetName } from '../../plan/names';
 import { gameTimeLabel } from '../save/model';
 import type { MapMarker } from '../../ui/map/GameMap';
@@ -251,7 +251,7 @@ export class People {
     if (!act || act.owner === TALK_OWNER) return base;
     const t = act.title ?? ROLE_JOB[act.role];
     if (!t) return base;
-    const kind: Job['kind'] = act.role === 'police' || act.role === 'medic' || act.role === 'soldier' ? 'civic' : act.role === 'shopkeeper' ? 'shop' : act.owner === STREET_OWNER ? 'street' : base.kind;
+    const kind: Job['kind'] = act.role === 'police' || act.role === 'medic' || act.role === 'soldier' ? 'civic' : act.role === 'shopkeeper' ? 'shop' : act.owner === STREET_OWNER || act.owner === GRANDMA_OWNER ? 'street' : base.kind;
     return { kind, title: t.toLowerCase() };
   }
 
@@ -609,6 +609,7 @@ export class People {
     // Told the game master's rumour: a clue in the group's thread.
     const R = this.g.gm?.dir.state.rumour;
     if (R && rule.text.includes(R.text)) this.g.gm.heard(R.text);
+    this.g.villains?.heard(rule.text);
     // A favour done (or forgotten) is talked about once, then it is over.
     const fv = s.k.favour;
     if (fv && (fv.done !== undefined || fv.lost) && (facts.favour === 'done' || facts.favour === 'lost') && /^(h4[5-7]|f2[12])#/.test(rule.id)) delete s.k.favour;

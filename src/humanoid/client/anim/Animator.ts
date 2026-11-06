@@ -60,8 +60,8 @@ export interface AnimInput {
   sneaking: boolean;
 }
 
-type Family = 'ground' | 'swim' | 'climb' | 'air' | 'glide' | 'sit' | 'sleep' | 'dead' | 'stunned';
-const FAMILIES: Family[] = ['ground', 'swim', 'climb', 'air', 'glide', 'sit', 'sleep', 'dead', 'stunned'];
+type Family = 'ground' | 'swim' | 'climb' | 'air' | 'glide' | 'sit' | 'floor' | 'sleep' | 'dead' | 'stunned';
+const FAMILIES: Family[] = ['ground', 'swim', 'climb', 'air', 'glide', 'sit', 'floor', 'sleep', 'dead', 'stunned'];
 function familyOf(m: MoveState): Family {
   switch (m) {
     case 'swim': return 'swim';
@@ -69,6 +69,7 @@ function familyOf(m: MoveState): Family {
     case 'jump': case 'fall': return 'air';
     case 'glide': case 'fly': return 'glide';
     case 'sit': return 'sit';
+    case 'sit_floor': return 'floor';
     case 'sleep': return 'sleep';
     case 'dead': case 'knockdown': return 'dead';
     case 'stunned': return 'stunned';
@@ -98,6 +99,10 @@ interface FingerRig {
 const RELAXED_FINGER = [1.1, 1.15, 1.35, 1.6, 1.85];
 const RELAXED_JOINT = [0.85, 1.45, 1.1];
 const TORCH_RAISED = [1.7, 0.5, -0.4, 0.45, 0.3, -0.9, -0.4] as const;
+/** Floor_Get_Up (CMU 111_06) times: lying on the back, sitting, standing. */
+const FLOOR_GET_UP = [0.03, 0.42, 0.85] as const;
+/** Sit_Floor_Loop (CMU 82_05): the calm stretch played back and forth (its start is a calibration T-pose, later the subject lies down). */
+const FLOOR_LOOP = [0.06, 0.46] as const;
 
 export class Animator {
   readonly map: BoneMap;
@@ -176,6 +181,8 @@ export class Animator {
   private gaitW = new Float32Array(3);
   private talkS = 0;
   private swimU = 0;
+  /** Sitting on the floor: progress through the loop's calm stretch (back and forth). */
+  private floorU = 0;
   // Air and landing (clip families): time in the air, whether it began with a jump, landing.
   private prevFam: Family = 'ground';
   private airT = 0;
@@ -624,7 +631,22 @@ export class Animator {
         this.talkS = approach(this.talkS, inp.anim.talking ? 1 : 0, 3, dt);
         rig.accumulate(idle, this.time / idle.meta.dur, 1 - this.talkS, p);
         rig.accumulate(talk, this.time / talk.meta.dur, this.talkS, p);
-        this.onSeat(p);
+        this.onSeat(p, inp.anim.seat);
+        return true;
+      }
+      case 'floor': {
+        // Down onto the floor and up again: CMU "get up from floor" played by `floor` (backwards going
+        // down), sitting a while: CMU "sitting on ground relaxing", rocking slowly through its calm part.
+        const g = rig.clip('Floor_Get_Up'), loop = rig.clip('Sit_Floor_Loop');
+        if (!g || !loop) return false;
+        const s = clamp(inp.anim.floor ?? 1, 0, 2);
+        const wl = s <= 1 ? smooth(0.8, 1, s) : 1 - smooth(1, 1.25, s);
+        const span = FLOOR_LOOP[1] - FLOOR_LOOP[0];
+        this.floorU += dt / (loop.meta.dur * span);
+        const tri = 1 - Math.abs((this.floorU % 2) - 1);
+        rig.accumulate(loop, FLOOR_LOOP[0] + span * (0.5 - 0.5 * Math.cos(tri * Math.PI)), wl, p);
+        const u = s <= 1 ? FLOOR_GET_UP[2] + (FLOOR_GET_UP[1] - FLOOR_GET_UP[2]) * s : FLOOR_GET_UP[1] + (FLOOR_GET_UP[0] - FLOOR_GET_UP[1]) * (s - 1);
+        rig.accumulate(g, u, 1 - wl, p);
         return true;
       }
       case 'air': {
@@ -654,19 +676,19 @@ export class Animator {
 
   /**
    * Seated: the hips go onto the seat, wherever the clip or pose put them. Seats are made
-   * for people (top about 0.47 m, whatever the sitter's size), and the sitter is placed at
+   * for people (top about 0.47 m, whatever the sitter's size; `seat` says otherwise), and the sitter is placed at
    * the seat's centre facing out, so the hip joints sit a bit behind the centre, a cushion
    * of flesh above the seat. A tall sitter's shins angle forward instead of going through
    * the floor; a short one's feet dangle.
    */
-  private onSeat(p: Pose) {
+  private onSeat(p: Pose, seat = 0.47) {
     const ch = this.ch, k = this.hipH / 0.9;
     const sc = Math.max(1e-4, ch.object.getWorldScale(_v5).y);
     const rest = ch.rest[0];
     const hipOverRoot = this.hipH - rest.y; // hip joints relative to the root bone (local)
-    const hip = 0.47 / sc + 0.09 * k; // hip joints above the floor (local units)
+    const hip = seat / sc + 0.09 * k; // hip joints above the floor (local units)
     p.root.y = hip - hipOverRoot - rest.y;
-    p.root.z = 0.11 / sc + 0.02 * k - rest.z; // (root z points backward)
+    p.root.z = (0.11 * seat) / 0.47 / sc + 0.02 * k - rest.z; // (root z points backward)
     // Knee to ankle hangs about straight down in the seated pose; if that reaches under the
     // floor, swing the shins forward until the ankles clear it.
     const shin = ch.rest[this.map.idx('lowerleg01.L')].y - ch.rest[this.map.idx('foot.L')].y;
@@ -687,8 +709,16 @@ export class Animator {
       case 'glide': return inp.anim.move === 'fly' ? this.flight(p, inp.anim.power?.fly, dt) : this.glide(p, false);
       case 'sit': {
         sitPose(p, 1);
-        this.onSeat(p);
+        this.onSeat(p, inp.anim.seat);
         p.spine(0.02 * Math.sin(this.time * 1.6));
+        return;
+      }
+      case 'floor': {
+        // (No clips: sitting on the ground, knees up; lying down past 1.)
+        const s = clamp(inp.anim.floor ?? 1, 0, 2);
+        if (s > 1) return this.lying(p, s - 1, false);
+        sitPose(p, s);
+        p.root.y -= this.hipH * 0.78 * s;
         return;
       }
       case 'sleep': return this.lying(p, 1, false);

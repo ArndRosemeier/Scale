@@ -132,7 +132,12 @@ export interface LmInterior {
   exits: { node: number; pts: number[] }[];
   /** Where people sit or stand, and who. */
   spots: LmSpot[];
+  /** Ledges up on the outside where a stone gargoyle squats (game/citizens/gargoyle). */
+  perches: LmPerch[];
 }
+
+/** A ledge on the outside (world): feet height y, facing h (PedAgent.heading convention: forward = (−sin h, −cos h)). */
+export interface LmPerch { x: number; y: number; z: number; h: number }
 
 /** Who uses a spot inside a landmark: visitors and the faithful, and the people who work there. */
 export type SpotWho = 'visitor' | 'faithful' | 'priest' | 'server' | 'clerk' | 'client' | 'mayor' | 'aide' | 'councillor' | 'registrar' | 'couple' | 'guest' | 'porter';
@@ -204,7 +209,7 @@ export interface Opt {
 /** Builds parts in a local frame (nested frames for sub-assemblies like planes). */
 export class Kit {
   readonly parts: LmPart[] = [];
-  readonly inside: LmInterior = { rooms: [], lights: [], nav: [], links: [], exits: [], spots: [] };
+  readonly inside: LmInterior = { rooms: [], lights: [], nav: [], links: [], exits: [], spots: [], perches: [] };
   private ox: number;
   private oz: number;
   private oa: number;
@@ -242,6 +247,14 @@ export class Kit {
     const c = Math.cos(rot), s = Math.sin(rot);
     for (const [a, b] of [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]]) m = Math.max(m, this.ground(u + a * hu * c - b * hv * s, v + a * hu * s + b * hv * c));
     return m;
+  }
+
+  /** A perch at a local point (feet height y) facing local direction (du, dv). */
+  perch(u: number, v: number, y: number, du: number, dv: number): void {
+    const [x, z] = this.W(u, v);
+    const c = Math.cos(this.oa), s = Math.sin(this.oa);
+    const fx = du * c - dv * s, fz = du * s + dv * c;
+    this.inside.perches.push({ x, y, z, h: Math.atan2(-fx, -fz) });
   }
 
   /** Run `fn` in a sub-frame at (u, v) turned by rot. */
@@ -491,6 +504,9 @@ function townhall(k: Kit, lm: Landmark, r: Rng): void {
     k.box(0, vb + hd - 0.3, hw, 0.3, B + H, B + H + 1.1, plain, { detail: true });
     for (const s of [-1, 1]) k.box(s * (hw - 0.3), vb, 0.3, hd, B + H, B + H + 1.1, plain, { detail: true });
   }
+  // The front corners up on the roof's edge (on the parapet where there is one): ledges for a
+  // gargoyle (game/citizens/gargoyle lives here in a city without a cathedral).
+  for (const s of [-1, 1]) k.perch(s * (hw - 0.6), fv + 0.6, B + H + (st === 0 || st === 3 ? 1.1 : 0), s * 0.7, -0.7);
   // Wings reaching forward around the square (a U).
   if (P.wings) {
     const ww = Math.min(12, P.w * 0.2), wv = vb - hd - P.wingD / 2;

@@ -45,8 +45,10 @@ import { aliensChecks } from './aliensTest';
 import { burrowerChecks } from './burrowerTest';
 import { leviathanChecks } from './leviathanTest';
 import { rocChecks } from './rocTest';
+import { gargoyleChecks } from './gargoyleTest';
 import { mechChecks } from './mechTest';
 import { bridgeGapChecks } from './bridgeGapTest';
+import { ghostChecks } from './ghostTest';
 import { doorChecks } from './doorsweep';
 import { chatChecks } from './chatTest';
 import { Reputation } from '../src/game/Reputation';
@@ -64,8 +66,14 @@ import { MOOD_TRACKS, CUES, TENSION_HIGH, parseTracks } from '../src/audio/music
 import { angleDiff } from '../src/core/math';
 import { Match, makeTeam, PITCH, STEP as SOCCER_STEP } from '../src/game/soccer/match';
 import { soccerAt, soccerPlan, clubs as soccerClubs, fixture as soccerFixture } from '../src/game/soccer/plan';
+import { giantPlan, dayOf as giantDay, ringWay, GIANT, LEAVE_BY } from '../src/game/citizens/giant/plan';
+import { FIRST as SOCCER_FIRST } from '../src/game/soccer/plan';
+import { worldToSite as siteOf } from '../src/plan/landmarks';
+import { CMU_CLIPS } from '../src/humanoid/actors/clips';
 import { concertAt, concertPlan, parseLive, setList, STAGE, PIT_CAP, SEAT_CAP, SHOW, SHOW_END } from '../src/game/concert/plan';
 import { streetSites, streetCast, kindAt, STREET_KINDS, STREET_KIND_LIST, SLOT_H, SiteKind, type StreetKind } from '../src/game/street/cast';
+import { floristCells, floristHome, floristDay, FLORIST_H, GARDENS } from '../src/game/citizens/florist/plan';
+import { floristLine, type FloristTopic } from '../src/game/citizens/florist/lines';
 import { lineFor, allLines } from '../src/game/street/lines';
 import { Justice, JUSTICE, lockedAway } from '../src/game/crime/Justice';
 import type { HarmEntry } from '../src/game/Consequences';
@@ -2944,6 +2952,47 @@ section('street characters', async () => {
   console.log(`street: ${n} sites in ${cells.length} cells (${(performance.now() - t0).toFixed(0)} ms), ${seen.size} kinds cast`);
 });
 
+// The shrunk florist (game/citizens/florist/plan.ts): her shop found in every city, the same each
+// time; the stand on the pavement beside the door, clear of the walking corridor and of footprints;
+// her gardens on flat roofs of the cell within reach; her hours; her lines.
+section('shrunk florist', async () => {
+  let found = 0, bad = 0, gardens = 0;
+  const notes: string[] = [];
+  for (const seed of [42, 7, 1234]) {
+    const terrain = new Terrain(makeProfile({ seed, size: 0.4 }));
+    const macro = buildMacroPlan(terrain);
+    const C = floristCells(macro, seed);
+    if (JSON.stringify(C) !== JSON.stringify(floristCells(macro, seed))) bad++;
+    for (const id of C) {
+      const p = planCell(macro, macro.cells[id], terrain);
+      const h = floristHome(p, seed), h2 = floristHome(p, seed);
+      if (JSON.stringify(h) !== JSON.stringify(h2)) bad++;
+      if (!h) continue;
+      found++;
+      const b = p.buildings[h.b];
+      if (!b.shopfront || b.eatery) bad++;
+      if (!clearOfWalk(p.streets, h.stand.x, h.stand.z, 0.35)) bad++;
+      if (p.buildings.some((o) => pointInPoly(o.poly, h.stand.x, h.stand.z))) bad++;
+      if (Math.hypot(h.stand.x - h.door.x, h.stand.z - h.door.z) > 2.5) bad++;
+      for (const gd of h.gardens) {
+        const gb = p.buildings[gd.b];
+        if (gb.roof !== 'flat' || !pointInPoly(gb.poly, gd.x, gd.z) || Math.hypot(gd.x - h.stand.x, gd.z - h.stand.z) > 175) bad++;
+      }
+      gardens += h.gardens.length;
+      notes.push(`${seed}: ${h.shop} in cell ${id} (${p.district}), ${h.gardens.length} gardens`);
+      break;
+    }
+  }
+  console.log(notes.join('\n'));
+  check(found === 3, `florist: a shop in every city (${found}/3: ${notes.join('; ')})`);
+  check(bad === 0, `florist: deterministic, the stand beside the door clear of the walk and of footprints, gardens on flat roofs nearby (${bad} faults)`);
+  check(gardens >= 3 && gardens <= 3 * GARDENS, `florist: roof gardens to fly to (${gardens})`);
+  check(floristDay(3) === 'asleep' && floristDay(10) === 'open' && floristDay(19.5) === 'evening' && floristDay(22) === 'asleep' && floristDay(34) === 'open', 'florist: asleep at night, open by day, no flights in the evening');
+  check(FLORIST_H > 0.1 && FLORIST_H < 0.2, 'florist: 15 cm tall');
+  const topics: FloristTopic[] = ['own', 'greet', 'stepped', 'stepped2', 'giant', 'tiny', 'fly', 'hero', 'villain', 'wanted', 'mount', 'garden', 'back', 'rain', 'scared', 'evening', 'morning', 'fan'];
+  check(topics.every((t) => { const l = floristLine(t, () => 0.99, 'Posy', "Posy's Petals"); return !!l && !/[{}]|undefined/.test(l); }), 'florist: a line for every moment, names filled in');
+});
+
 // The stadium concert (game/concert/plan.ts): the evening's hours, the stage on the pitch with the
 // band on its deck, the pit in front (nearest first, on the field, clear of the stage), seats in the
 // stands facing the stage, the set list (opener first, closer last, the same each night per seed),
@@ -3000,6 +3049,39 @@ section('soccer', async () => {
   const [cx, cz] = P.toWorld(0, 0), [px, pz] = P.toWorld(PITCH.L, PITCH.W), [pu, pv] = P.toPitch(px, pz);
   check(Math.hypot(cx - lm.x, cz - lm.z) < 1e-6 && Math.abs(pu - PITCH.L) < 1e-6 && Math.abs(pv - PITCH.W) < 1e-6 && P.onPitch(cx, cz) && !P.onPitch(...P.toWorld(PITCH.L + 5, 0)), 'soccer: pitch frame and site agree');
   check(PITCH.L + 2 < lm.p.ia && P.seats.length > 300 && P.seats.every((q) => q.y > P.field + 1), `soccer: the pitch fits the stadium, ${P.seats.length} seats up in the stands`);
+});
+
+section('gentle giant', async () => {
+  // The day: asleep after the concert until morning, out before the first match, about all day.
+  check(giantDay(2) === 'sleep' && giantDay(9) === 'wake' && giantDay(12) === 'roam' && giantDay(20) === 'concert' && giantDay(23.9) === 'bed', 'gentle giant: day parts');
+  check(LEAVE_BY < SOCCER_FIRST, 'gentle giant: out of the bowl before the first match');
+  for (const [seed, size] of [[42, 0.4], [7, 0.7], [3, 0.5]] as const) {
+    const terrain = new Terrain(makeProfile({ seed, size }));
+    const lm = buildMacroPlan(terrain).landmarks.find((l) => l.kind === 'stadium');
+    if (!lm) continue;
+    const P = giantPlan(lm);
+    const out = lm.p.tiers * lm.p.depth;
+    const site = (x: number, z: number) => siteOf(lm, x, z);
+    // The walk round: past the stands' backs (and the floodlight masts 6 m out), inside the site.
+    let bad = 0;
+    for (let i = 0; i < 64; i++) {
+      const [u, v] = site(...P.ring((i / 64) * Math.PI * 2));
+      const inStands = Math.abs(u) < lm.p.ia + out + 7 && Math.abs(v) < lm.p.ib + out + 7 && (Math.abs(u) / (lm.p.ia + out + 7)) ** 2 + (Math.abs(v) / (lm.p.ib + out + 7)) ** 2 < 1;
+      if (inStands || Math.abs(u) > lm.hu + 1 || Math.abs(v) > lm.hv + 1) bad++;
+    }
+    check(bad === 0, `gentle giant ${seed}: the walk round keeps clear of the stands and on the site (${bad} bad points)`);
+    const [bu, bv] = site(P.bed.x, P.bed.z), [gu] = site(...P.gateIn), [ou] = site(...P.gateOut);
+    check(Math.abs(bu) < lm.p.ia - 10 && Math.abs(bv) < lm.p.ib - 10 && gu > 0 && ou > lm.p.ia + out, `gentle giant ${seed}: the bed on the pitch, the gate at the +u end (no scoreboard over it)`);
+    const t0 = P.angleOf(...P.ring(1.1));
+    check(Math.abs(t0 - 1.1) < 0.02, `gentle giant ${seed}: ring angle round trip (${t0.toFixed(3)})`);
+    const way = ringWay(P, 0.2, -0.4);
+    check(way.length >= 5 && Math.hypot(way[way.length - 1][0] - P.ring(-0.4)[0], way[way.length - 1][1] - P.ring(-0.4)[1]) < 1e-6, `gentle giant ${seed}: ring way ends at its goal`);
+  }
+  check(GIANT.height === 10, 'gentle giant: ten metres');
+  // The CMU takes the animator plays are the files the pack script keeps.
+  const keep = /CMU_KEEP = \[([^\]]*)\]/.exec(readFileSync(new URL('./actors-packs.mjs', import.meta.url), 'utf8'))?.[1] ?? '';
+  const want = Object.values(CMU_CLIPS).map((n) => `'${n.replace('cmu ', '')}.bin'`).sort().join(', ');
+  check(keep.split(',').map((x) => x.trim()).sort().join(', ') === want, `CMU clips kept by tools/actors-packs.mjs match CMU_CLIPS (${keep} vs ${want})`);
 });
 
 section('concert', async () => {
@@ -4214,6 +4296,57 @@ section('game master', async () => {
   check(shown.every((t) => !/game[ -]master/i.test(t)), 'gm: nothing the player sees names a game master');
 });
 
+section('supervillains', async () => {
+  const V = await import('../src/game/villains/villain');
+  const VT = await import('../src/game/villains/villainText');
+  const ctx = (o: Partial<import('../src/game/villains/villain').RiseContext> = {}) => ({
+    now: 100, bosses: [{ archetype: 'gang', name: 'Rook Malone', cell: 3 }], harm: 0.5, harmCell: 7,
+    sites: [{ kind: 'museum', label: 'City Museum', cell: 5 }], groups: [{ archetype: 'eco', cell: 9 }, { archetype: 'syndicate', cell: 2 }], cells: 20, ...o,
+  });
+  const a = V.makeVillain(1234, 1, ctx()), b = V.makeVillain(1234, 1, ctx());
+  check(JSON.stringify(a) === JSON.stringify(b), 'villains: the same city makes the same villain');
+  const many = Array.from({ length: 40 }, (_, i) => V.makeVillain(1000 + i, 1, ctx()));
+  const aliases = new Set(many.map((v) => v.alias)), themes = new Set(many.map((v) => v.theme)), origins = new Set(many.map((v) => v.origin));
+  check(aliases.size >= 25 && themes.size >= 6 && origins.size === 4, `villains: every seed different (${aliases.size} aliases, ${themes.size} themes, ${origins.size} origins in 40 cities)`);
+  check(many.every((v) => v.powers.length >= 3 && v.powers.length <= 4 && new Set(v.powers).size === v.powers.length && v.signature && v.stage === 'rumour' && v.next > v.risen), 'villains: 3-4 different powers, a signature, start as a rumour');
+  const boss = V.makeVillain(5, 1, ctx(), [], 'boss');
+  check(boss.realName === 'Rook Malone' && boss.crew === 'gang' && boss.base === 3, 'villains: the boss who rose leads their own gang from its home');
+  const out = V.makeVillain(5, 2, ctx(), [boss], 'outsider');
+  check(out.crew === 'eco' && out.base === 9 && out.theme !== boss.theme && out.alias !== boss.alias, 'villains: an outsider takes the weakest free group; no two share a theme or alias');
+  check(V.makeVillain(5, 3, ctx({ bosses: [], sites: [], harm: 0 })).origin === 'outsider', 'villains: with nothing else on offer, an outsider comes');
+  check(many.filter((v) => v.origin === 'failed').every((v) => v.grudge === 'hero'), 'villains: someone the hero failed has it in for the hero');
+  // Room and pressure.
+  check(V.room(0) === 1 && V.room(5) === 2 && V.room(30) === 3, 'villains: one early, up to three later');
+  const S = V.freshState(0);
+  let t = 0;
+  while (!V.step(S, 77, t, 1.5) && t < 500) t++;
+  check(t > 10 && t < 60, `villains: the first rises after a day or two of pressure (${t} h)`);
+  V.risen(S, V.makeVillain(77, 1, ctx({ now: t })), t);
+  let t2 = t + 1;
+  while (!V.step(S, 77, t2, 50) && t2 < t + 200) t2++;
+  check(t2 >= t + 24 * 5 - t % 120 - 1 || t2 - t >= V.RISE.gap, `villains: no second while there is no room, or within the gap (${t2 - t} h later)`);
+  check(V.pressureGain({ crime: 0.8, collapsed: 2, fame: 1, threats: 2, harm: 0.5 }) > V.pressureGain({ crime: 0, collapsed: 0, fame: 0, threats: 0, harm: 0 }), 'villains: crime, collapsed gangs, fame, threats and harm raise the pressure');
+  check(V.pressureGain({ crime: NaN, collapsed: 99, fame: -5, threats: 1e9, harm: 9 }) < 6, 'villains: the pressure gain stays bounded');
+  // Stages.
+  const s1 = S.villains[0];
+  V.advanceStages(S, s1.next + 0.1);
+  check(s1.stage === 'signs' && !Number.isFinite(s1.next), 'villains: after the rumours, their signs');
+  // Saves.
+  const back = V.restoreState(JSON.parse(JSON.stringify(V.saveState(S))));
+  check(JSON.stringify(V.saveState(back)) === JSON.stringify(V.saveState(S)), 'villains: save and restore keep every villain');
+  const bad = V.restoreState({ pressure: 'x', n: -3, villains: [null, { id: 1, alias: 'X', theme: 'nope' }, { id: 2, alias: 'Y', theme: 'frost', powers: ['frost', 'laser'], stage: 'boss', level: 99, color: [2, 0, 0] }, { id: 2, alias: 'Z', theme: 'fire' }] });
+  check(bad.villains.length === 1 && bad.villains[0].powers.join() === 'frost' && bad.villains[0].stage === 'rumour' && bad.villains[0].level === 10 && bad.villains[0].color[0] <= 1 && bad.n === 2 && bad.pressure === 0, 'villains: broken saves are cleaned');
+  // Texts.
+  const w = VT.whisper(a, 'in Mill Quarter', 0.3, false);
+  check(w.includes(a.alias) && w[0] === w[0].toLowerCase() && !/\{|\}/.test(w), `villains: a whisper names them, said as "I heard …" (${w})`);
+  const deep = many.map((v) => VT.whisper({ ...v, known: true }, 'in X', 0.5, true));
+  check(deep.every((x) => !/\{|\}|undefined/.test(x)), 'villains: every origin whisper is filled in');
+  check(VT.threadTitle(a).startsWith('Someone calling themselves') && VT.markSeen(a, 'on Elm Street').includes(V.tagWord(a.alias)), 'villains: the thread is a name only, the mark shows their word');
+  const vsrc = readFileSync('src/game/villains/Villains.ts', 'utf8');
+  check(/g\.villains\?\.heard\(rule\.text\)/.test(readFileSync('src/game/people/People.ts', 'utf8')) && /villains\?\.talkFacts/.test(readFileSync('src/game/gm/GameMaster.ts', 'utf8')) && /g\.mode !== 'sandbox'/.test(vsrc), 'villains: wired into talk, Normal mode only');
+  check(/villains: g\.villains/.test(readFileSync('src/game/save/SaveSystem.ts', 'utf8')), 'villains: saved in save files');
+});
+
 section('story knowledge', async () => {
   const { Knowledge, KNOWLEDGE, plainText, clueTime } = await import('../src/game/story/knowledge');
   const K = new Knowledge();
@@ -4553,8 +4686,10 @@ section('aliens', async () => { aliensChecks(check); });
 section('burrower', async () => { burrowerChecks(check); });
 section('leviathan', async () => { leviathanChecks(check); });
 section('roc', async () => { rocChecks(check); });
+section('gargoyle', async () => { gargoyleChecks(check); });
 section('mech', async () => { mechChecks(check); });
 section('fallen bridge spans', async () => { bridgeGapChecks(check); });
+section('ghost tour guide', async () => { ghostChecks(check); });
 
 // Nobody crosses a fallen span: routes go round a cut (RoadNet.setCuts), a car stopped at the broken
 // end turns round, someone walking up to the gap stops and walks back (BridgeBreaks keeps the cuts).
@@ -5069,6 +5204,66 @@ section('hearing: distance', async () => {
   check(farGain(r * HEARING.fadeFrom - 1, r) === 1 && farGain(r, r) === 0 && farGain(r * 0.8, r) > 0 && farGain(r * 0.8, r) < 1, 'a soft fade over the end of the range');
   check(airCutoff(5) === 20000 && airCutoff(200) < 6000 && airCutoff(5000) === HEARING.minCutoff, 'far sounds lose their high end');
   for (const d of [10, 30, 80, 200, 500]) check(airCutoff(d) >= airCutoff(d * 2), `the lowpass closes with distance (${d} m)`);
+});
+
+section('floating man', async () => {
+  const { FLOATER, floaterHome, outingAt, slotOf, spotOf, gustChance, tetherStep } = await import('../src/game/citizens/floater/plan');
+  const { floaterLine, FLOATER_TOPICS } = await import('../src/game/citizens/floater/lines');
+  const macro = buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.4 })));
+  const h = floaterHome(macro), h2 = floaterHome(buildMacroPlan(new Terrain(makeProfile({ seed: 42, size: 0.4 }))));
+  check(h.x === h2.x && h.z === h2.z && h.cell >= 0, 'his home park is the same for the same city');
+  const park = macro.cells.some((c) => c.district === 'park');
+  check(!park || macro.cells[h.cell].district === 'park', 'he lives by a park when the city has one');
+  let days = 0, nights = 0, wet = 0;
+  for (let d = 0; d < 60; d++) { if (outingAt(42, d * 24 + 13.5, 0)) days++; if (outingAt(42, d * 24 + 23, 0) || outingAt(42, d * 24 + 4, 0)) nights++; if (outingAt(42, d * 24 + 13.5, 0.6)) wet++; }
+  check(days > 35 && days < 60 && nights === 0 && wet === 0, `out on most afternoons (${days}/60), never at night (${nights}) or in the rain (${wet})`);
+  let rep = 0;
+  for (let s = 0; s < 500; s++) if (spotOf(42, s, 5) === spotOf(42, s - 1, 5)) rep++;
+  check(rep === 0 && spotOf(42, 7, 1) === 0, 'never the same spot two slots running');
+  check(slotOf(10) === Math.floor(600 / FLOATER.slotMin), 'slots by game minutes');
+  check(gustChance(0.2, 60) === 0 && gustChance(0.95, 60) > 0.25 && gustChance(0.6, 1) < gustChance(0.9, 1), 'gusts only on windy days, more in a gale');
+  // On the string: never farther than the string from the hand, hovering by the hover height.
+  const b = { x: 0, y: 1, z: 0, vx: 0, vy: 0, vz: 0 };
+  let far = 0;
+  for (let i = 0; i < 600; i++) {
+    const hand = { x: i * 0.02, y: 1.1, z: 0 };
+    tetherStep(b, hand, FLOATER.string, FLOATER.hover, { x: -0.8, z: 0.3 }, 1 / 60);
+    if (Math.hypot(b.x - hand.x, b.y - 0.1 - hand.y, b.z - hand.z) > FLOATER.string + 1e-3) far++;
+  }
+  check(far === 0, 'the string holds him at its length');
+  check(Math.abs(b.y - FLOATER.hover) < 0.3 && b.x < 12, `he trails behind the hand at hover height (y ${b.y.toFixed(2)})`);
+  const free = { x: 0, y: 3, z: 0, vx: 0, vy: 0, vz: 0 };
+  for (let i = 0; i < 600; i++) tetherStep(free, null, FLOATER.string, FLOATER.hover, { x: 0, z: 0 }, 1 / 60);
+  check(Math.abs(free.y - FLOATER.hover) < 0.1, 'loose and calm, he settles at his hover height (never lands)');
+  check(FLOATER_TOPICS.every((t) => floaterLine(t, () => 0.5).length > 3), 'every topic has lines');
+});
+
+section('magnetic grandma: home, hours, spots', async () => {
+  const { grandmaHome, grandmaOut, freeSpot, spotFor, spotsClash } = await import('../src/game/citizens/grandma/plan');
+  type Spot = ReturnType<typeof spotFor>;
+  const { Rng } = await import('../src/core/rng');
+  for (const [seed, size] of [[42, 0.4], [7, 0.7], [10, 0.2]] as const) {
+    const macro = buildMacroPlan(new Terrain(makeProfile({ seed, size })));
+    const h = grandmaHome(macro, seed), h2 = grandmaHome(buildMacroPlan(new Terrain(makeProfile({ seed, size }))), seed);
+    check(!!h && JSON.stringify(h) === JSON.stringify(h2), `seed ${seed}: she has one home, the same every time (${h?.district} cell ${h?.cell})`);
+    check(!!h && ['oldtown', 'commercial', 'downtown', 'apartments', 'rowhouses'].includes(h.district), `seed ${seed}: in a shopping or living district`);
+  }
+  check(!grandmaOut(3) && grandmaOut(10) && !grandmaOut(13) && grandmaOut(16) && !grandmaOut(21) && grandmaOut(24 + 10), 'out in the morning and afternoon, home at lunch and night');
+  const fit = { height: 1.62, shoulderWidth: 0.4, chestDepth: 0.24, waistRadius: 0.15, upperArmRadius: 0.045, forearmRadius: 0.035, thighRadius: 0.075, shinRadius: 0.05 };
+  const r = new Rng(5);
+  let okN = true, near = true;
+  for (let k = 0; k < 400; k++) {
+    const s = spotFor(fit, r);
+    const n = Math.hypot(...s.normal);
+    if (Math.abs(n - 1) > 1e-6) okN = false;
+    if (Math.hypot(s.pos[0], s.pos[2]) > 0.4 || Math.abs(s.pos[1]) > 0.5) near = false;
+  }
+  check(okN, 'spots have unit outward normals');
+  check(near, 'spots lie on the body (within 0.4 m of the socket)');
+  const taken: Spot[] = [];
+  for (let k = 0; k < 14; k++) { const s = freeSpot(fit, r, taken); if (s) taken.push(s); }
+  check(taken.length >= 12, `room for a dozen things (${taken.length})`);
+  check(!taken.some((a, i) => taken.some((b, j) => i < j && spotsClash(a, b))), 'no two pieces on the same spot');
 });
 
 await runSections(import.meta.url);

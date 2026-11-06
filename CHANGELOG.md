@@ -2,6 +2,75 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.302 — 2026-11-06
+
+- **The weather-moody baker.** In the city's most central bakery works a baker who bit into a crystal he found in a flour sack. Since then the weather over his street follows his mood. When he is sad, a little rain cloud hangs over his head and it drizzles or rains on his street. When he is happy, the sun comes out there, even if the rest of the city is grey. If you make him cross (hit him, wreck his shop front), it turns into a thunderstorm. Every day has its own mood: a bad day has a reason he tells you if you ask (his sourdough starter died, a critic called his rye "adequate"), and good days come too. Talk to him to cheer him up: praise his bread, tell a joke, buy a loaf, give him a hug, or say something kind in your own words. Stopping a crime near his street helps too, and harm near his shop makes him sad. Bringing him from gloom to sunshine is a small good deed (a little karma and reputation, once a day). He is at his door from 6:00 to 19:00, and people around town gossip about him. Danger sends him into his shop for a while. Admin console: City › The weather-moody baker.
+- **Nearby people no longer stay drawn as stand-in figures.** A person who finished dressing while their graphics were still being prepared stayed hidden for good, and a simple crowd figure was drawn in their place (a hat or costume piece went missing with it). They now show up properly once their graphics are ready.
+
+## 0.301 — 2026-11-06
+
+- **No more hitch when someone new first casts a shadow** (WebGL). The background shader preparation now sets up each piece of clothing's shadow exactly as the game later draws it. Before, a body and its double-sided underwear or hair shared one shadow setting, so the double-sided version was only prepared at the first shadow it drew, holding up that frame (about 0.2 s when the gentle giant first appeared). Loading also draws the hidden stand-in people once into the shadow map, so the graphics card has their shadows ready before play starts.
+
+## 0.300 — 2026-11-06
+
+- **Supervillains begin to rise.** Every city now grows its own villains over time, and no two cities get the same ones. As days pass, crime, a gang that fell apart, your fame, monsters beaten and harm done in your fights all make it likelier that someone rises: a gang boss with a long record who comes back changed, someone who blames you for what happened to them, someone changed by an accident at a landmark or where a monster fell, or an outsider who comes to town with a crew. Each has their own name, theme, powers, motive and turf. One early, up to three later.
+- They start quietly. People you ask for the news may whisper a name ("someone calling themselves the Gilded Fang is going round Mill Quarter"), and later their mark turns up on walls in their crew's turf. What you hear and see goes into your tracker under "Someone calling themselves …". They do not show their face yet; that comes next.
+- Saved with the city and in save files. Admin console: a "Supervillains" section to see them, make one rise, move them on and put a mark on a wall.
+
+## 0.299 — 2026-11-06
+
+- **A lighting pass.** The city's light was reworked after the one that made MasterWorld look better. The picture has more punch: a small colour grade on top of the tone curve deepens the shade and richens the colours, so the city no longer looks washed out. Sunlight takes its colour from the sky's own air, white at noon, golden in the late afternoon and red as the sun sets, and a clear midday sun now outshines the sky's fill so shadows read under trees, cars and people. The shade is lit by the sky itself (bluer from above, brighter towards the sun), and the undersides of things are darker. Golden hour is warm, nights keep the amber of the street lamps, and the glow around bright things follows how bright they look on screen, softer by day.
+
+## 0.298 — 2026-11-05
+
+- Behind the scenes: a plan for supervillains (docs/SUPERVILLAINS_PLAN.md). Every city grows its own villains over time, each with their own name, origin, motive, style, powers and lair. They can be beaten for good, new ones can rise, and they can fight each other over turf. No change in the game yet.
+
+## 0.297 — 2026-11-05
+
+- **A ghost gives night tours.** Ambrose Penhallow, the city's crier until 1887, is a friendly ghost who shows tourists round from dusk to the small hours. Near a cemetery he rises out of the main tomb and leads a small group from grave to grave, then to an old house or two outside the walls; in the old town his tours start at a fountain, a statue or an old lamp. At each stop he tells a short story, and the tourists gasp, laugh, clap and take photos. He glides straight to the next stop, through walls and houses, often mid-sentence, while his group has to walk round ("Oh! Sorry. I keep forgetting you need doors."). At the end he bows and fades away (or sinks back into his tomb).
+- He is see-through, glows faintly at the edges, floats a little off the ground and carries a lantern with a cold green flame. Punches and powers go straight through him, and so do you if you walk into him ("You're standing in my liver"). He invites you along, has a word for you if you fly, are a giant, tiny, famous or notorious, and thanks you if you stay for the whole tour. Anything dangerous nearby ends the tour: the tourists run and he fades away with a sigh.
+- Admin console: a "Ghost tour guide" section starts a tour where you stand, at any hour.
+
+## 0.296 — 2026-11-05
+
+- **The gentle giant of the stadium.** Earlier this year one of the city's crystals made someone grow to about ten metres, and that's all it did: no powers, no side in anything. Now they live with being a walking attraction, a friendly, slightly awkward local celebrity. You'll meet them around the stadium. They walk slowly and carefully round it (they wait when someone is right in front of their feet and say sorry), wave and smile at people, and greet the hero by name. Their steps are soft thuds, so nobody panics. Clothes don't come in their size, so they wear improvised underwear.
+- **They sit on the ground a lot**, so as not to loom, and get up again slowly. The sitting down, sitting and getting up are motion-captured moves from the Actors library's own clips.
+- **Lifts for photos.** Now and then they kneel, let a fan step onto their palm and hold them up, while the fan's friend takes pictures. Then they set the fan down gently.
+- **A press magnet.** Photographers come by every so often, flashes going off, shouting questions. People stop to watch and film, and call out their name.
+- **Their day:** they sleep on the pitch after the concert, leave before the first match, spend the day round the stadium, and sit outside the gate while the concert plays. Explosions, gunfire or monsters nearby give them a fright.
+- Admin console: "Go to" has an entry that takes you to the gentle giant.
+
+## 0.295 — 2026-11-05
+
+- **Switch single sounds off.** The pause menu has a new Sound effects row: Choose… opens a list of every sound in the game (about 170), grouped like the sound mix, each with a checkbox and a short description. Ticking or unticking a box plays that sound once, and ▶ plays it without changing it, so you can find an annoying sound by ear. Unticked sounds stay silent in the game and stay off the next time you play. There is a search box and an All on button.
+
+## 0.294 — 2026-11-05
+
+- **A retired gargoyle lives on the cathedral.** For six hundred years it was a waterspout; since they put in a drainpipe it is retired, and very much alive. By day it squats on a buttress by the cathedral's front as still as stone (fly up to it and it may whisper, or wink). At dusk it wakes, stretches, its eyes light up, and it glides down to its spot on the square beside the steps. At night it gossips with the pigeons (they gather round it), strolls about the square, and passers-by stop to look and take photos. Walk up and press **E** to talk: who it is, the pigeons' gossip (when a rumour about a gang's hideout is going round, the pigeons know it, and it goes into the tracker), and its tours. At 22:00, midnight and 2:00 it gives a free night tour: a few passers-by follow it to the sights nearby while it points and tells stories, and you can tag along. Trouble nearby ("Statue! I'm a statue!") sends it flying back up to its ledge for a while, and it is back up there before dawn. In a city without a cathedral it lives on the town hall's roof. It goes into the People tab of the tracker when you meet it.
+
+## 0.293 — 2026-11-05
+
+- **The shrunk florist.** Earlier this year a crystal made one of the city's florists 15 cm tall. She still runs her flower shop in town: a flower stand on the pavement by the shop door, her own little door in the wall with her sign over it, and a sandwich board asking people to mind their step. By day she waters the buckets, sits on the rim of a flower pot and waves at people. Every few minutes she climbs onto Captain, her big pigeon, and flies off to one of her roof gardens nearby to water the planters, then comes back with a bouquet. She stays home in the rain and goes in through her little door at night. Passers-by step round her, and the curious stop to look or take her picture. Walk onto her and she hops aside with a squeak. A giant, a blast or gunfire nearby sends her up and away on Captain until it is calm. She talks to you when you come close, and she is delighted to meet you if you shrink yourself. Admin console: Go to › The shrunk florist.
+
+## 0.292 — 2026-11-05
+
+- **No more half-naked passers-by.** People a bit further off (and anyone close by for the moment it takes to get their clothes ready) are drawn as light-weight crowd copies. Those copies lost dresses and skirts completely, so women in a dress walked about in nothing but their shoes, and trousers and shorts came out in shreds. Dresses and skirts are now part of the copies, and their trousers and shorts are cuts that hold up at that distance.
+
+## 0.291 — 2026-11-05
+
+- **The magnetic grandma.** Every city has one: a cheerful old lady who was made magnetic by one of the crystals years ago. She is no hero and no villain. In the day (8:30 to 12:30 and 14:00 to 18:30) she does her rounds of the shops in her part of town, and anything made of metal near her flies over and sticks to her coat: forks and teaspoons off café tables, tins from the shop doors, a spanner off the street, keys out of passers-by's pockets (she hands those back) and now and then a whole bicycle, which she carries on her back for a while. When she clanks too much she stops and shakes it all off onto the pavement with a great clatter. People stop to watch and take photos, and she has a word for everyone, the hero included. Anything dangerous nearby ends her day: everything drops and she runs. She's back the next day. The first time you meet her, she goes into the People tab of the tracker with her part of town on the map.
+
+## 0.290 — 2026-11-05
+
+- **Leo Lightly, the man who can't land.** A crystal earlier this year left Leo, a friendly accountant, floating about a metre off the ground for good. He's not a hero or a villain, just someone the whole town knows. By day his kids Mia and Ben tow him round the park nearest the city centre on a string tied to his ankle, like a balloon. He waves at people, chats in speech bubbles, and passers-by stop to film him. He isn't out at night, in the rain, or on the odd day the family stays home.
+- **Windy days.** A gust can tear the string out of Mia's hand and blow Leo onto a roof. The kids run to the street below, and a fire engine comes with its siren. A firefighter climbs the ladder, takes the string, brings him down and hands him back to Mia. You can beat them to it: touch Leo while he's loose and you hold the string. Bring him back to his kids for a little karma and reputation. Hit him and he spins loose too. Knock him down and he floats back up afterwards.
+- Admin console: "Go to" has an entry that takes you to Leo's park.
+
+## 0.289 — 2026-11-05
+
+- **The odd short synthetic tone was the alien discs scanning.** When a Warden disc turns its scan cone on, it plays a soft rising tone. It was set to carry like a big event, so discs hanging high up and far away (often 300 m to over a kilometre) were heard all over town, roughly every 40 s and more often with several discs about, with nothing to see. Now you hear it only within about 180 m, when a disc is over your street.
+- **New: sound log (Shift+F7).** A small box lists the sounds of the last 20 seconds, newest on top, with how far away each one was and its volume category, so any sound you wonder about can be named on the spot. Also listed in Help › Keys.
+
 ## 0.288 — 2026-11-05
 
 - **Old enemies come back** (Normal mode). A gang boss who breaks out of jail turns up in their old turf near you before long, leading one of the gang's crimes. A gang that had collapsed comes back: the news says so in its story in the tracker, and one of its crimes comes up near you.
