@@ -9,6 +9,7 @@
  * whose helper is missing just says so. While open, the game gets no keyboard input.
  */
 import type { Game } from '../game/Game';
+import { forceGc, memoryReport } from '../debug/memory';
 
 type Dev = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -161,6 +162,10 @@ function call(dev: Dev, path: string, ...args: unknown[]): unknown {
 }
 
 const SECTIONS: [string, Btn[]][] = [
+  ['Memory', [
+    { label: 'Force GC', run: (g) => forceGc(g) },
+    { label: 'Memory report', run: (g) => memoryReport(g) },
+  ]],
   ['Strider', [
     { label: 'Spawn (river)', run: (_g, d) => call(d, 'threat.spawn', 'strider', { from: 'river' }) },
     { label: 'Spawn + go there', run: (_g, d) => { const r = call(d, 'threat.spawn', 'strider', { from: 'river' }); call(d, 'threat.strider.player', 120); return r; } },

@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.307 — 2026-11-06
+
+- Admin console (Ctrl+Shift+F12) has a **Memory** section: **Force GC** runs a garbage collection and shows the JS heap before and after, **Memory report** shows the JS heap, the renderer's geometry and texture counts and, on WebGPU, its render objects and what the memory fix released. A page can't start an exact collection in a normal Chrome; the button pushes the collector into one with a burst of short-lived memory (exact with Chrome started with `--js-flags=--expose-gc`, or use DevTools' "Collect garbage" button). After a collection, buffers and textures nothing uses any more are freed on the GPU side too, so Chrome's task manager (Shift+Esc) shows whether memory was only waiting for collection or is really held.
+
 ## 0.306 — 2026-11-06
 
 - **Memory no longer keeps growing on WebGPU.** Running around the city on the WebGPU renderer (the default since v0.271) made the tab grow without end: on the PC it went from 1.3 to 11.9 GB in two and a half minutes of teleporting, until the browser refused to allocate more. Every piece of city that streamed out (ground, facades, terrain and water tiles, countryside clumps, props) was taken out of the scene and its geometry freed, but three's WebGPU renderer keeps its own record of every mesh it has drawn and only lets go when the mesh or its material is disposed, so all of it stayed in memory. Now a mesh's record ends when its geometry is freed, and records of meshes no longer in the scene and not drawn for 10 s end too. Shaders those meshes used stay compiled, so nothing compiles again when the next cell arrives. WebGL was never affected. Measuring tool for the PC: `tools/memwatch.cjs`.
