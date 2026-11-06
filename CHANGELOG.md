@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.301 — 2026-11-06
+
+- **No more hitch when someone new first casts a shadow** (WebGL). The background shader preparation now sets up each piece of clothing's shadow exactly as the game later draws it. Before, a body and its double-sided underwear or hair shared one shadow setting, so the double-sided version was only prepared at the first shadow it drew, holding up that frame (about 0.2 s when the gentle giant first appeared). Loading also draws the hidden stand-in people once into the shadow map, so the graphics card has their shadows ready before play starts.
+
 ## 0.300 — 2026-11-06
 
 - **Supervillains begin to rise.** Every city now grows its own villains over time, and no two cities get the same ones. As days pass, crime, a gang that fell apart, your fame, monsters beaten and harm done in your fights all make it likelier that someone rises: a gang boss with a long record who comes back changed, someone who blames you for what happened to them, someone changed by an accident at a landmark or where a monster fell, or an outsider who comes to town with a crew. Each has their own name, theme, powers, motive and turf. One early, up to three later.
