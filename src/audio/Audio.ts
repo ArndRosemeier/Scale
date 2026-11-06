@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import { Spot, heard, listenerDist, listenerPos } from './hearing';
+import { versioned } from '../core/versioned';
 
 /** A streamed piece placed in the world (Audio.stream). */
 export interface LiveStream {
@@ -158,7 +159,7 @@ export class Audio {
 
   async init(): Promise<void> {
     try {
-      this.manifest = await (await fetch(`${this.base}sounds/manifest.json`)).json();
+      this.manifest = await (await fetch(versioned(`${this.base}sounds/manifest.json`))).json();
     } catch { this.manifest = {}; }
     const start = () => {
       if (this.ctx) { if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => {}); return; }
@@ -198,7 +199,7 @@ export class Audio {
     let p = this.loading.get(id);
     if (p) return p;
     const ctx = this.ctx;
-    p = Promise.all(m.files.map(async (f) => ctx.decodeAudioData(await (await fetch(`${this.base}sounds/${f}`)).arrayBuffer()))).then((bufs) => {
+    p = Promise.all(m.files.map(async (f) => ctx.decodeAudioData(await (await fetch(versioned(`${this.base}sounds/${f}`))).arrayBuffer()))).then((bufs) => {
       this.buffers.set(id, bufs);
       return bufs;
     }).catch(() => []);
@@ -383,7 +384,7 @@ export class Audio {
     if (!this.ctx || !this.enabled) return null;
     const ctx = this.ctx;
     const el = new window.Audio();
-    el.src = url.startsWith('http') || url.startsWith('/') ? url : `${this.base}${url}`;
+    el.src = url.startsWith('http') ? url : versioned(url.startsWith('/') ? url : `${this.base}${url}`);
     el.preload = 'auto';
     el.loop = !!o.loop;
     if (o.offset) el.currentTime = o.offset;
