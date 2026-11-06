@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.299 — 2026-11-06
+
+- **A lighting pass.** The city's light was reworked after the one that made MasterWorld look better. The picture has more punch: a small colour grade on top of the tone curve deepens the shade and richens the colours, so the city no longer looks washed out. Sunlight takes its colour from the sky's own air, white at noon, golden in the late afternoon and red as the sun sets, and a clear midday sun now outshines the sky's fill so shadows read under trees, cars and people. The shade is lit by the sky itself (bluer from above, brighter towards the sun), and the undersides of things are darker. Golden hour is warm, nights keep the amber of the street lamps, and the glow around bright things follows how bright they look on screen, softer by day.
+
 ## 0.298 — 2026-11-05
 
 - Behind the scenes: a plan for supervillains (docs/SUPERVILLAINS_PLAN.md). Every city grows its own villains over time, each with their own name, origin, motive, style, powers and lair. They can be beaten for good, new ones can rise, and they can fight each other over turf. No change in the game yet.

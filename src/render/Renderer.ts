@@ -9,6 +9,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { WEBGPU, WEBGPU_FORCE_GL, gpuKit } from './gpuMode';
+import { GRADED_AGX_GLSL, LOOK } from './look';
 
 type Post = InstanceType<ReturnType<typeof gpuKit>['Post']>;
 
@@ -24,6 +25,7 @@ export class Renderer {
   private composer!: EffectComposer;
   private bloom!: UnrealBloomPass;
   private smaa!: SMAAPass;
+  private output!: OutputPass;
   private post: Post | null = null;
   readonly reversed: boolean;
 
@@ -57,7 +59,8 @@ export class Renderer {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.16, 0.5, 2.0);
     this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
+    this.output = gradedOutput(new OutputPass());
+    this.composer.addPass(this.output);
     this.smaa = new SMAAPass();
     this.composer.addPass(this.smaa);
     this.resize();
@@ -103,13 +106,24 @@ export class Renderer {
     this.smaa.enabled = smaa;
   }
 
-  setBloom(strength: number): void {
-    if (this.post) { this.post.setBloom(strength); return; }
+  /**
+   * The bloom: how strong, how wide, and from what brightness on (in the scene's own HDR units, before
+   * the exposure: SkySystem divides a brightness on screen by the exposure).
+   */
+  setBloom(strength: number, radius?: number, threshold?: number): void {
+    if (this.post) { this.post.setBloom(strength, radius, threshold); return; }
     this.bloom.strength = strength;
+    if (radius !== undefined) this.bloom.radius = radius;
+    if (threshold !== undefined) this.bloom.threshold = threshold;
   }
 
   render(): void {
     if (this.post) { this.post.render(); return; }
+    const u = this.output.material.uniforms;
+    (u.gradeSlope.value as THREE.Vector3).fromArray(LOOK.slope);
+    (u.gradeOffset.value as THREE.Vector3).fromArray(LOOK.offset);
+    u.gradePower.value = LOOK.power;
+    u.gradeSat.value = LOOK.saturation;
     this.composer.render();
   }
 
@@ -178,4 +192,15 @@ export class Renderer {
     const late = new Promise((res) => { timer = window.setTimeout(() => { console.warn('[warm-up] compileAsync still pending after 60 s, going on'); res(null); }, 60000); });
     return Promise.race([p, late]).finally(() => clearTimeout(timer));
   }
+}
+
+/** The output pass with AgX plus the look (render/look.ts) in place of three's plain AgX. */
+function gradedOutput(pass: OutputPass): OutputPass {
+  const m = pass.material;
+  const agx = 'gl_FragColor.rgb = AgXToneMapping( gl_FragColor.rgb );';
+  const head = '#include <tonemapping_pars_fragment>';
+  if (!m.fragmentShader.includes(agx) || !m.fragmentShader.includes(head)) throw new Error('OutputShader changed: graded AgX needs a new hook');
+  m.fragmentShader = m.fragmentShader.replace(head, head + GRADED_AGX_GLSL).replace(agx, 'gl_FragColor.rgb = GradedAgX( gl_FragColor.rgb );');
+  Object.assign(m.uniforms, { gradeSlope: { value: new THREE.Vector3(1, 1, 1) }, gradeOffset: { value: new THREE.Vector3() }, gradePower: { value: 1 }, gradeSat: { value: 1 } });
+  return pass;
 }
