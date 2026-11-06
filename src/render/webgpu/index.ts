@@ -9,6 +9,8 @@ import { gradedAgX, syncGrade } from './grade';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { shaderCap } from '../shaderCap';
+import { releaseDroppedRenderObjects, releaseStats } from './releaseDropped';
+export { releaseStats };
 import { makeSkyNode, makeStarsNode } from './sky';
 import { createFacadeNodeMaterial } from './facade';
 import { createGroundNodeMaterial, createTerrainNodeMaterial, createWaterNodeMaterial } from './ground';
@@ -76,6 +78,8 @@ export function afterInit(renderer: THREE.WebGPURenderer): void {
     shareShadowNodes(renderer) ? '' : 'shared shadow nodes',
     // three.js bug: never-drawn render objects released shared bind groups (the hero lost hair, body or shoes).
     balancedBindingRelease(renderer) ? '' : 'balanced binding release',
+    // Meshes streamed out or dropped kept their render objects (and so their geometry) forever.
+    releaseDroppedRenderObjects(renderer) ? '' : 'release dropped render objects',
   ].filter(Boolean);
   if (missing.length) console.warn(`[webgpu] three internals renamed, not installed: ${missing.join(', ')}`);
 }
