@@ -4,7 +4,8 @@
  */
 import * as THREE from 'three/webgpu';
 import { balancedBindingRelease, keepTextureUpdates, rebindSwitchedTextures, shareShadowNodes } from '@futuremagic/stage/patches';
-import { renderOutput, texture } from 'three/tsl';
+import { renderOutput, texture, toneMappingExposure, vec4 } from 'three/tsl';
+import { gradedAgX, syncGrade } from './grade';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import { shaderCap } from '../shaderCap';
@@ -528,7 +529,8 @@ export class Post {
   private build(): void {
     const col = texture(this.target.texture);
     let out = this.bloomOn ? col.add(this.bloomNode) : col;
-    out = renderOutput(out);
+    // AgX with the look (render/look.ts) in place of three's plain AgX, then sRGB.
+    out = renderOutput(vec4(gradedAgX(out.rgb, toneMappingExposure), 1), THREE.NoToneMapping, THREE.SRGBColorSpace);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pipeline.outputNode = (this.smaaOn ? smaa(out as any) : out) as any;
     this.pipeline.needsUpdate = true;
@@ -541,12 +543,15 @@ export class Post {
     this.build();
   }
 
-  setBloom(strength: number): void {
+  setBloom(strength: number, radius?: number, threshold?: number): void {
     this.bloomNode.strength.value = strength;
+    if (radius !== undefined) this.bloomNode.radius.value = radius;
+    if (threshold !== undefined) this.bloomNode.threshold.value = threshold;
   }
 
   render(): void {
     const r = this.renderer;
+    syncGrade();
     r.getDrawingBufferSize(this.size);
     if (this.target.width !== this.size.x || this.target.height !== this.size.y) this.target.setSize(this.size.x, this.size.y);
     const prev = r.getRenderTarget();

@@ -84,7 +84,7 @@ Each phase one PR (or a few), headless tests in the cloud; a GPU check on Arnd's
 1. **The villain table and the rise** (no body yet): the record, the generator (seeded, pure), pressure and rising over
    time from the city's state, rumours and news, the tracker story, symbols on walls in their turf (the graffiti
    system), the developer view. Saved.
-   *Built in v0.299*: `src/game/villains` (villain.ts pure: record, generator, pressure, room, saves; villainText.ts;
+   *Built in v0.300*: `src/game/villains` (villain.ts pure: record, generator, pressure, room, saves; villainText.ts;
    Villains.ts: hourly pressure from crime, collapsed groups, fame, ended threats and the hero's harm; rise from the city's
    state; whispers through the people's news talk; marks on walls in the crew's turf, seen from 12 m; thread
    `villain:<id>`; `dev.villains.*`, admin console "Supervillains"; selftest "supervillains").
