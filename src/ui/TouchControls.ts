@@ -226,6 +226,7 @@ export class TouchControls {
     this.setStickKeys(want);
     const input = this.game.input;
     input.touchRun = mag >= 0.98;
+    input.touchMove = mag > 0.2;
     input.touchSlow = mag > 0.2 && mag < 0.5;
     this.stickBase.classList.toggle('run', input.touchRun);
   }
@@ -240,7 +241,7 @@ export class TouchControls {
   private endStick(): void {
     this.stick = null;
     this.setStickKeys(new Set());
-    this.game.input.touchRun = this.game.input.touchSlow = false;
+    this.game.input.touchRun = this.game.input.touchSlow = this.game.input.touchMove = false;
     this.stickBase.classList.remove('active', 'run');
     this.stickBase.style.transform = '';
     this.stickKnob.style.transform = '';

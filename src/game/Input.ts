@@ -20,6 +20,8 @@ export class Input {
   /** Touch controls (TouchControls): a look drag in progress, and the stick's run / slow walk. */
   touchLook = false;
   touchRun = false;
+  /** The touch stick is pushed (moving): on foot its push decides walk or run, not Shift. */
+  touchMove = false;
   touchSlow = false;
   /** A tap set the cursor for one frame (picking): it is dropped again at the end of the frame. */
   private tapped = false;
