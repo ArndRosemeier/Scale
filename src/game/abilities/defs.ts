@@ -155,7 +155,7 @@ export const ABILITIES: AbilityDef[] = [
   },
   {
     id: 'flight', name: 'Flight', kind: 'active', group: 'movement', trigger: 'toggle', maxRank: MAX_RANK, key: 'F',
-    desc: 'Take to the sky. Shift to boost, Space / Ctrl to climb and sink. Flying costs no energy, but energy does not recover in the air: land to catch your breath.',
+    desc: 'Take to the sky at full boost (hold Shift to cruise slower), Space / Ctrl to climb and sink. Flying costs no energy, but energy does not recover in the air: land to catch your breath.',
     icon: svg('<path d="M3 13c3-1 5-4 6-8 1 3 1 6-1 9"/><path d="M21 13c-3-1-5-4-6-8-1 3-1 6 1 9"/><path d="M12 8v9"/><path d="M9 19l3-2 3 2"/>'),
     rankText: (r) => `Cruise ${Math.round(FLIGHT_CRUISE * FLIGHT_SPEED[r])} m/s · boost ${Math.round(flightBoost(r))} m/s`,
   },
