@@ -51,6 +51,7 @@ const log = (s) => { console.log(s); fs.appendFileSync(path.join(out, 'memwatch.
     await page.evaluate(({ x, z }) => window.dev.teleport(x, z), { x: Math.cos(a) * d, z: Math.sin(a) * d }).catch((e) => log('tp ' + e.message.slice(0, 100)));
     n++;
     await page.waitForTimeout(6000);
+    if (n % 10 === 0) await page.screenshot({ path: path.join(out, `tp${String(n).padStart(3, '0')}.jpg`), quality: 70, timeout: 60000 }).catch(() => {});
     if (Date.now() > nextSample) { nextSample += 60000; await sample('teleports ' + n, false); }
   }
   await sample('end', true);

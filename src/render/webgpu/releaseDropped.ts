@@ -38,7 +38,7 @@ const KEEP_PIPELINES = 256, KEEP_PROGRAMS = 512;
 const SWEEP_MS = 10_000;
 
 /** What was released and kept, and what the sweeps ended (dev: `releaseStats()`). */
-export const releaseStats = { ended: 0, swept: 0, geometriesFreed: 0, sweeps: 0, lastSweepMs: 0 };
+export const releaseStats = { ended: 0, swept: 0, geometriesFreed: 0, sweeps: 0, lastSweepMs: 0, nodeBuilds: 0, nodeBuildsFreed: 0 };
 
 export function releaseDroppedRenderObjects(renderer: THREE.WebGPURenderer): boolean {
   const r = renderer as Any, objects = r._objects, pipelines = r._pipelines;
@@ -51,7 +51,7 @@ export function releaseDroppedRenderObjects(renderer: THREE.WebGPURenderer): boo
   if (mode === 'off') return true;
   objects.releasesDropped = true;
   objects.releaseStats = releaseStats;
-  if (mode !== 'nokeep') keepReleasedCompiles(pipelines);
+  if (mode !== 'nokeep') { keepReleasedCompiles(pipelines); keepNodeBuilds(r._nodes, r._bindings); }
 
   let tick = 0;
   const hook = (ro: Any): void => {
@@ -138,4 +138,59 @@ function keepReleasedCompiles(pipelines: Any): void {
   const prog = keep<Any>(KEEP_PROGRAMS, (p) => releaseProgram.call(pipelines, p), (p) => p.usedTimes === 0);
   pipelines._releasePipeline = (p: Any) => pipe(p);
   pipelines._releaseProgram = (p: Any) => prog(p);
+}
+
+/** Unused node builds kept (with their shared bind groups) before the oldest is really freed. */
+const KEEP_NODE_BUILDS = 600;
+
+/**
+ * Node builds of materials whose meshes all ended stay built, with their shared bind groups. Without
+ * this, a teleport that streams out every cell of a kind (all the ground, all the facades) ends the
+ * last users of those materials, three forgets their builds, and the new cells wait for rebuilds that
+ * queue behind the shader cap; under fast travel the ground and facades never caught up (PC: bare
+ * grey ground under trees and cars). A node build owns its material's shared bind groups (uniform
+ * buffers, textures), which three frees with the last render object using them, so those are held too
+ * (a group left at zero users is taken up again by the next user) and freed only together with the
+ * build, when KEEP_NODE_BUILDS newer unused ones push it out. Internal (r186): `_nodes.nodeBuilderCache`
+ * (Map key → NodeBuilderState), `_bindings._destroyBindings`, bind groups' `bindings[0].groupNode.shared`.
+ */
+function keepNodeBuilds(nodes: Any, bindings: Any): boolean {
+  const cache: Map<unknown, Any> | undefined = nodes?.nodeBuilderCache;
+  const destroy = bindings?._destroyBindings;
+  if (!(cache instanceof Map) || typeof destroy !== 'function' || typeof bindings.get !== 'function') return false;
+  const shared = (g: Any): boolean => g?.bindings?.[0]?.groupNode?.shared === true;
+  bindings._destroyBindings = function (this: Any, groups: Any[]) {
+    const own: Any[] = [];
+    for (const g of groups) {
+      if (!shared(g)) { own.push(g); continue; }
+      const data = this.get(g);
+      if (data.usedTimes > 0) data.usedTimes--;
+    }
+    if (own.length) destroy.call(this, own);
+  };
+  const set = cache.set.bind(cache), del = cache.delete.bind(cache);
+  cache.set = (k: unknown, v: Any) => { releaseStats.nodeBuilds++; return set(k, v); };
+  const idle = new Map<unknown, true>();
+  const free = (k: unknown): void => {
+    const state = cache.get(k);
+    if (!state || state.usedTimes > 0) return;
+    // Its shared groups, now really freed (the original counts down first: from 1 to 0).
+    const groups = (state.bindings ?? []).filter((g: Any) => shared(g) && bindings.get(g).bindGroup !== undefined && bindings.get(g).usedTimes === 0);
+    for (const g of groups) bindings.get(g).usedTimes = 1;
+    if (groups.length) destroy.call(bindings, groups);
+    del(k);
+    releaseStats.nodeBuildsFreed++;
+  };
+  cache.delete = (k: unknown) => {
+    if (!cache.has(k)) return false;
+    idle.delete(k);
+    idle.set(k, true);
+    while (idle.size > KEEP_NODE_BUILDS) {
+      const old = idle.keys().next().value;
+      idle.delete(old);
+      free(old);
+    }
+    return true;
+  };
+  return true;
 }
