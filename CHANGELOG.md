@@ -2,6 +2,10 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.309 — 2026-11-06
+
+- **Flying is full speed by default too.** Like running on foot, flight now boosts without any key held; hold **Shift** to cruise slower. Autorun/autoflight (R) keeps the pace you had: full speed, or the slower one if Shift was held. In the Keys tab Shift is now "Walk / cruise". Touch stick unchanged (pushed all the way boosts).
+
 ## 0.308 — 2026-11-06
 
 - **Running is now the normal way to move on foot.** The hero runs without any key held; hold **Shift** to walk (Alt still gives the slow stroll). In flight Shift still boosts, and super speed works as before. Autorun (R) keeps the pace you had: a run, a walk if Shift was held, a stroll with Alt. On the touch stick nothing changed: pushed all the way runs, part way walks. The Keys tab (where Shift can be moved to another key) and the manual say so.

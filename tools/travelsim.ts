@@ -1,5 +1,5 @@
 /**
- * Travel speed per rank: flight (boost held) against super jump (W held, Space held for each
+ * Travel speed per rank: flight (full boost, the default without Shift) against super jump (W held, Space held for each
  * leap, pressed again on landing), on an open flat plain with the real Player and AbilitySystem
  * and the energy pool of a Normal game. `npx tsx tools/travelsim.ts`
  */
@@ -48,7 +48,6 @@ export function simTravel(mode: 'flight' | 'jump', rank: number, seconds = 60, r
     inp.hits.clear();
     if (mode === 'flight') {
       if (t < dt) inp.hits.add('KeyF');
-      inp.held.add('ShiftLeft');
     } else {
       if (p.grounded && !wasGround) landT = t;
       if (p.grounded && t - landT >= react && (ab as any).charge < 0) { inp.hits.add('Space'); inp.held.add('Space'); jumps++; }
