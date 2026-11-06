@@ -20,7 +20,8 @@
  *     loading, the first crowd — compile in parallel instead of blocking a frame),
  *  5. renders real frames from several views — all round the start, plus a cutscene's shots —
  *     with every empty instanced batch (cars, crowds, FX with nothing to show yet) drawn once,
- *  6. waits for calm frames.
+ *  6. draws the hidden stand-in people once into the shadow map (ShaderGate.primeShadows),
+ *  7. waits for calm frames.
  *
  * `?warm=0` runs the previous warm-up instead (for A/B measurements).
  */
@@ -38,7 +39,7 @@ export interface WarmHost {
   nextFrame(): Promise<void>;
   /** Starts the game's frame loop. */
   startLoop(): void;
-  gate: { enabled: boolean; readonly busy: number; waiting(): string[] };
+  gate: { enabled: boolean; readonly busy: number; waiting(): string[]; primeShadows?(o: THREE.Object3D): void };
 }
 
 export interface WarmOpts {
@@ -169,7 +170,11 @@ async function current(host: WarmHost, progress: (f: number) => void, opts: Warm
     const t = performance.now();
     while (waiting && performance.now() - t < WAIT_FOR_MS) await host.nextFrame();
   }
-  // 6. Calm frames; meanwhile the gate's parallel compiles finish (not waiting forever on one).
+  // The hidden stand-in people (humanoid/client/warmRigs) are never drawn: each draws once into
+  // the shadow map (nothing written), so the GPU builds those shadow shader variants now and not
+  // when the first such person casts a shadow in play. (The calm frames wait for it: gate.busy.)
+  if (host.gate.primeShadows) scene.traverse((o) => { if (o.name === 'warm-rig') host.gate.primeShadows!(o); });
+  // 7. Calm frames; meanwhile the gate's parallel compiles finish (not waiting forever on one).
   // Waited for on WebGL too: a program still compiling when play starts is drawn after the gate
   // gives up, and the driver then finishes it in that frame (a skinned garment once took 9 s
   // on Arnd's PC right after the start). A longer loading screen is the better deal.
