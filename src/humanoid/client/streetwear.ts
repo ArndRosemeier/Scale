@@ -29,6 +29,7 @@ export function streetWearable(defId: string, v: ItemVisual): WearableSpec | nul
     case 'headphones': return { layers: [rigid('head', (f) => headphones(f, c))] };
     case 'nightcap': return { layers: [rigid('head', (f) => nightcap(f, c, c2))] };
     case 'sweatband': return { layers: [rigid('head', (f) => sweatband(f, c))] };
+    case 'bakerhat': return { layers: [rigid('head', (f) => bakerHat(f, c))] };
     case 'sandwichboard': return { layers: [rigid('chest', (f) => sandwichBoard(f, v.style || 'THE END IS NIGH', c))] };
     case 'guitar': return { layers: [rigid('chest', (f) => guitar(f, c))] };
     case 'bass': return { layers: [rigid('chest', (f) => guitar(f, c, true))] };
@@ -488,6 +489,24 @@ function nightcap(fit: BodyFit, c: C3, c2: C3): THREE.Object3D {
   const pom = new THREE.Mesh(new THREE.SphereGeometry(r * 0.22, 10, 8), std(c2, 1));
   pom.position.set(0, fit.headRadius * 0.4 + r * 1.85, -r * 1.5);
   g.add(cap, pom);
+  return g;
+}
+
+/** A baker's tall white hat: a band round the head and a puffed crown over it. */
+function bakerHat(fit: BodyFit, c: C3): THREE.Object3D {
+  const r = fit.headRadius * 1.04;
+  const g = new THREE.Group();
+  const m = std(c, 0.95);
+  // (Closed and single-sided: the plain material every rigid part uses, no new shader variant.)
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r, r * 0.9, 18, 1), m);
+  band.position.set(0, fit.headRadius * 0.55 + r * 0.17, -0.005);
+  band.rotation.x = -0.12;
+  g.add(band);
+  // The crown: a squashed ball on top, a little wider than the band, with soft pleats (ridged scale).
+  const crown = new THREE.Mesh(new THREE.SphereGeometry(r * 1.2, 16, 10), m);
+  crown.scale.set(1, 0.95, 1);
+  crown.position.set(0, fit.headRadius * 0.55 + r * 1.25, -r * 0.08);
+  g.add(crown);
   return g;
 }
 

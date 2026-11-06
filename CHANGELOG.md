@@ -2,6 +2,11 @@
 
 Every push raises the version by 0.001. Newest first.
 
+## 0.302 — 2026-11-06
+
+- **The weather-moody baker.** In the city's most central bakery works a baker who bit into a crystal he found in a flour sack. Since then the weather over his street follows his mood. When he is sad, a little rain cloud hangs over his head and it drizzles or rains on his street. When he is happy, the sun comes out there, even if the rest of the city is grey. If you make him cross (hit him, wreck his shop front), it turns into a thunderstorm. Every day has its own mood: a bad day has a reason he tells you if you ask (his sourdough starter died, a critic called his rye "adequate"), and good days come too. Talk to him to cheer him up: praise his bread, tell a joke, buy a loaf, give him a hug, or say something kind in your own words. Stopping a crime near his street helps too, and harm near his shop makes him sad. Bringing him from gloom to sunshine is a small good deed (a little karma and reputation, once a day). He is at his door from 6:00 to 19:00, and people around town gossip about him. Danger sends him into his shop for a while. Admin console: City › The weather-moody baker.
+- **Nearby people no longer stay drawn as stand-in figures.** A person who finished dressing while their graphics were still being prepared stayed hidden for good, and a simple crowd figure was drawn in their place (a hat or costume piece went missing with it). They now show up properly once their graphics are ready.
+
 ## 0.301 — 2026-11-06
 
 - **No more hitch when someone new first casts a shadow** (WebGL). The background shader preparation now sets up each piece of clothing's shadow exactly as the game later draws it. Before, a body and its double-sided underwear or hair shared one shadow setting, so the double-sided version was only prepared at the first shadow it drew, holding up that frame (about 0.2 s when the gentle giant first appeared). Loading also draws the hidden stand-in people once into the shadow map, so the graphics card has their shadows ready before play starts.

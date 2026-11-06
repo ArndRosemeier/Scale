@@ -158,6 +158,8 @@ export class People {
   onDeed: ((a: PedAgent, d: Deed) => void) | null = null;
   /** More things to say to the person you talk to (the sidekick's shard offer), after the usual topics. */
   extraOptions: ((a: PedAgent) => { label: string; run: () => void }[]) | null = null;
+  /** Told of typed words' effect on the one you talk to (their opinion change: + kind, - rude). */
+  readonly onWords: ((a: PedAgent, opinion: number) => void)[] = [];
 
   constructor(private g: Game) {
     this.city = cityName(g.settings.seed);
@@ -263,6 +265,9 @@ export class People {
     const t = this.person(a.cit).temper, l = CHAT[t];
     if (!l.length) return null;
     // City news and a word about these streets (game/news); the talkative ones more often.
+    // Now and then a word about one of the city's well-known citizens (game/citizens).
+    const about = Math.random() < 0.22 ? this.g.citizens?.gossip(a.x, a.z) ?? null : null;
+    if (about) return about;
     const city = this.g.city?.chatLine(a.x, a.z) ?? null;
     if (city && Math.random() < (t === 'chatty' || t === 'nosy' ? 0.8 : t === 'grumpy' || t === 'dreamy' ? 0.35 : 0.6)) return city;
     return pick(l);
@@ -563,6 +568,7 @@ export class People {
   private chatEffects(s: Session, e: Effects): void {
     const k = s.k, now = this.g.sky.hoursAbs, when = gameTimeLabel(Math.floor(now / 24), now % 24);
     if (e.opinion) k.chat = Math.max(PEOPLE.chatMin, Math.min(PEOPLE.chatMax, (k.chat ?? 0) + e.opinion));
+    if (e.opinion) for (const f of this.onWords) f(s.a, e.opinion);
     if (e.rep) this.g.crime?.reward({ rep: e.rep, why: 'threatened a citizen' });
     if (e.heroName && e.heroName !== k.heroName) { k.heroName = e.heroName; addNote(k, now, `${when}: the hero said their name is ${e.heroName}`); }
     if (e.heroLike) {

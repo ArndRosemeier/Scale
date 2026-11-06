@@ -2419,6 +2419,33 @@ section('weather', async () => {
   }
 });
 
+section('weather-moody baker', async () => {
+  // The baker (src/game/citizens/baker): his mood is the weather over his street.
+  const { bakerDay, stepMood, nudge, moodWeight, moodWeather, MOOD } = await import('../src/game/citizens/baker/mood');
+  const { WEATHER } = await import('../src/world/weather');
+  const { TROUBLES, JOYS } = await import('../src/game/citizens/baker/lines');
+  const days = Array.from({ length: 200 }, (_, d) => bakerDay(7, d, TROUBLES.length, JOYS.length));
+  check(JSON.stringify(days.slice(0, 20)) === JSON.stringify(Array.from({ length: 20 }, (_, d) => bakerDay(7, d, TROUBLES.length, JOYS.length))), 'baker: days are deterministic per seed');
+  const bad = days.filter((d) => d.kind === 'bad').length, good = days.filter((d) => d.kind === 'good').length;
+  check(bad > 60 && bad < 120 && good > 30, `baker: bad days common, good days too (${bad} bad, ${good} good of 200)`);
+  check(days.every((d) => d.reason < (d.kind === 'bad' ? TROUBLES.length : JOYS.length)), 'baker: every day\'s reason is a line');
+  // Sad: his street gets rain; happy: clear skies, whatever the city does; far away: no effect.
+  const sad = { mood: -0.8, anger: 0 }, happy = { mood: 0.8, anger: 0 }, cross = { mood: -0.5, anger: 0.8 };
+  const t1 = moodWeather(sad, moodWeight(sad, 5), { ...WEATHER.fair });
+  check(t1.rain > 0.4 && t1.sun < 0.3, `baker: sad means rain over his street (rain ${t1.rain.toFixed(2)})`);
+  const t2 = moodWeather(happy, moodWeight(happy, 5), { ...WEATHER.rain });
+  check(t2.rain < 0.05 && t2.sun > 0.9 && t2.cover < 0.15, `baker: happy means sun over his street in the rain (rain ${t2.rain.toFixed(2)})`);
+  const t3 = moodWeather(cross, moodWeight(cross, 5), { ...WEATHER.fair });
+  check(t3.lightning > 0.5, 'baker: cross means thunder');
+  check(moodWeight(sad, MOOD.outer + 1) === 0 && moodWeight({ mood: 0.05, anger: 0 }, 0) === 0, 'baker: no weather of his far away or when he is all right');
+  // Cheering up lifts; it fades back to the day over a few game hours; anger cools.
+  const s = { mood: -0.7, anger: 0.6 };
+  nudge(s, 0.4);
+  check(s.mood > -0.4 && s.anger < 0.6, 'baker: cheering up lifts him and calms him');
+  for (let i = 0; i < 100; i++) stepMood(s, -0.2, 0.1);
+  check(Math.abs(s.mood + 0.2) < 0.02 && s.anger < 0.01, 'baker: back to the day\'s mood after ten game hours');
+});
+
 // ------------------------------------------------------------------ reconstruction site props (src/props/construction.ts)
 section('construction site models', async () => {
   const C = await import('../src/props/construction');
